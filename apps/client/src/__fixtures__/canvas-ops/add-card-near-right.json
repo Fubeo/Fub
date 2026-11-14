@@ -1,0 +1,16 @@
+{
+  "about": "Accanto a «a», di serie a destra a 48: x = 100 + 400 + 48 = 548, la y di «a», la misura di nascita del testo (320×160).",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" }] },
+  "ops": [{ "op": "add_card", "id": "b", "text": "Evaporazione", "near": "a" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" },
+        { "id": "b", "type": "text", "x": 548, "y": 100, "width": 320, "height": 160, "text": "Evaporazione" }
+      ],
+      "edges": []
+    },
+    "created": ["b"]
+  }
+}

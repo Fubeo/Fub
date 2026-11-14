@@ -1,0 +1,14 @@
+{
+  "about": "Senza nodi è Invalid, con la prima riga che non si capisce.",
+  "op": {
+    "op": "from_mermaid",
+    "text": "flowchart TD\n  ]] non è niente [[\n  classDef a fill:#fff"
+  },
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

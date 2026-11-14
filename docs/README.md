@@ -88,6 +88,7 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md) e [il moto](development/motion-smoke-test.md)
 - [Le misure nella WebView](development/webview-measurements.md) e [le misure prese](misure/README.md)
 - [Creare un plugin](development/plugin-authoring.md)
+- [La parità della lavagna](development/canvas-parity.md): l'inventario di ciò che la GUI fa e della sua forma in codice
 - [Stile della documentazione](development/documentation-style.md) e [versionamento e release](development/versioning-and-releases.md)
 
 ## Consultare i contratti
@@ -109,7 +110,11 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Il formato della lavagna](reference/canvas-format.md): il nucleo
   `fub-canvas-core` e le regole di lettura e scrittura delle `.canvas`, e
   le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e
-  la loro inversa
+  la loro inversa, [la lavagna come codice](reference/canvas-code.md): le
+  letture, le misure e i posti, le operazioni d'intento, il loro
+  [schema](reference/canvas-schema.md),
+  [Mermaid e le scalette](reference/canvas-import.md) che diventano una
+  lavagna e [il controllo](reference/canvas-check.md) che dice che cosa cambierebbe
 - [Il server MCP](reference/mcp-server.md)
 - [I tipi delle proprietà](reference/property-types.md): il registro
   `properties.types`, le opzioni di Selezione e Stato e i loro comandi

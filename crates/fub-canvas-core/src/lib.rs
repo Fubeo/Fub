@@ -18,13 +18,20 @@
 //! [`CanvasError`]. Le regole di lettura e scrittura sono in
 //! `docs/reference/canvas-format.md`.
 
+pub mod check;
 pub mod commit;
+pub mod describe;
+mod import;
 pub mod js;
+pub mod layout;
 pub mod model;
 pub mod ops;
 pub mod patch;
+pub mod preview;
 pub mod read;
 pub mod source;
+pub mod spec;
+pub mod summary;
 
 pub use model::{
     Canvas, CanvasColor, CanvasEdge, CanvasEdgeEnd, CanvasEdgeSide, CanvasError, CanvasNode,

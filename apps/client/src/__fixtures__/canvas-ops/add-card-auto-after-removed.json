@@ -1,0 +1,20 @@
+{
+  "about": "La scheda automatica prima non è più nella lista (tolta nello stesso giro): la successiva non va sotto di lei, ma nel posto di prima, a destra del contenuto.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" }] },
+  "ops": [
+    { "op": "add_card", "id": "b", "text": "b" },
+    { "op": "remove", "ids": ["b"] },
+    { "op": "add_card", "id": "c", "text": "c" }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+        { "id": "c", "type": "text", "x": 368, "y": 0, "width": 320, "height": 160, "text": "c" }
+      ],
+      "edges": []
+    },
+    "created": ["b", "c"]
+  }
+}

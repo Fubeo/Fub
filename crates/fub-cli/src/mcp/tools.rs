@@ -11,10 +11,12 @@
 //!   serve `"apply": true`, e un comando che scrive si esegue soltanto se il
 //!   suo piano tocca documenti sotto le radici di scrittura.
 //! - **Le lavagne** (`fub_canvas_*`) passano dai comandi del componente
-//!   «Lavagna» (`canvas.create`, `canvas.apply`). A differenza di
-//!   `fub_invoke` non vogliono tutto il vault leggibile: le radici si
-//!   guardano sulla lavagna, e `fub_canvas_apply` vuole la `base` come
-//!   `fub_write` e parte in prova come `fub_invoke`.
+//!   «Lavagna» (`canvas.create`, `canvas.apply`, e la lettura, il controllo, la
+//!   guida e l'anteprima). A differenza di `fub_invoke` non vogliono tutto il
+//!   vault leggibile: le radici si guardano sulla lavagna, e `fub_canvas_apply`
+//!   vuole la `base` come `fub_write`, parte in prova come `fub_invoke`, e
+//!   controlla la lista con `canvas.check` prima di scrivere: con un problema
+//!   non tocca il file, e non chiede nemmeno la prova.
 //! - **I componenti** (`fub_components*`) seguono le regole di
 //!   `fub-cli componenti` (`crate::componenti`): accendere e spegnere partono
 //!   in prova, e con `"apply": true` vogliono tutto il vault fra le radici
@@ -30,8 +32,8 @@
 //!   riempire il contesto dell'agente.
 
 use fub_abi::{
-    CommandEffect, DocId, IndexQuery, IndexResult, InvokeMode, Page, QueryClause, QueryExpr,
-    QueryLiteral, QueryPredicate, WriteBase,
+    CommandEffect, CommandOutcome, DocId, IndexQuery, IndexResult, InvokeMode, Page, QueryClause,
+    QueryExpr, QueryLiteral, QueryPredicate, WriteBase,
 };
 use serde_json::{json, Value};
 
@@ -44,9 +46,21 @@ use crate::local::{link_target, match_json, outcome_json, search_expr};
 const LIMIT_DEFAULT: u32 = 50;
 
 /// I comandi del componente «Lavagna» (`fub.lavagna`): ids del contratto,
-/// come `note.create`, perché la CLI non dipende da `fub-features`.
+/// come `note.create`, perché la CLI non dipende da `fub-features`. Leggono,
+/// controllano, guardano e scrivono; `canvas.check` e `canvas.preview` non
+/// scrivono, e stanno prima di `canvas.apply` in ogni scrittura.
 const CANVAS_CREATE: &str = "canvas.create";
 const CANVAS_APPLY: &str = "canvas.apply";
+const CANVAS_READ: &str = "canvas.read";
+const CANVAS_CHECK: &str = "canvas.check";
+const CANVAS_GUIDE: &str = "canvas.guide";
+const CANVAS_PREVIEW: &str = "canvas.preview";
+/// Il componente che porta quei comandi, per dire che cosa manca quando è
+/// spento; lo spazio dei nomi del loro effetto; la versione delle loro risposte
+/// di lettura (`canvas.apply` non ne ha una: dice soltanto gli id e la revisione).
+const LAVAGNA_COMPONENT: &str = "fub.lavagna";
+const LAVAGNA_NS: &str = "fub.lavagna";
+const LAVAGNA_VERSION: u64 = 1;
 const LIMIT_MAX: u32 = 200;
 
 /// Il comando del bundle `fub.craft` che risponde l'anteprima, e lo spazio dei
@@ -128,7 +142,7 @@ pub fn specs() -> Value {
         },
         {
             "name": "fub_preview",
-            "description": "L'anteprima di un file delle app Craft (VectorCraft, PhotoCraft, FigCraft, un XMP di LightCraft, un RAW, un PDF, un documento) e i suoi dati: l'immagine se il file ne porta una, e da dove viene. Legge e basta: non avvia mai un'app per farne una.",
+            "description": "L'anteprima di un file delle app Craft (VectorCraft, PhotoCraft, FigCraft, un XMP di LightCraft, un RAW, un PDF, un documento) e i suoi dati: l'immagine se il file ne porta una, e da dove viene. Su una lavagna (.canvas) è il disegno della lavagna, 512 o 1024 pixel secondo size. Legge e basta: non avvia mai un'app per farne una.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -171,6 +185,34 @@ pub fn specs() -> Value {
             "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false }
         },
         {
+            "name": "fub_canvas_guide",
+            "description": "La guida per scrivere una lavagna con fub_canvas_apply: come si legge, si controlla e si scrive, le operazioni con i loro campi, lo schema della lista e gli esempi. Con topic dà solo l'operazione di quel nome. Legge e basta.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "topic": { "type": "string", "description": "Il nome di un'operazione, per esempio move" }
+                },
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": true }
+        },
+        {
+            "name": "fub_canvas_read",
+            "description": "Legge una lavagna (.canvas) e la sua revisione, che è la base di fub_canvas_apply. form: outline (di serie, una riga per scheda con il suo numero), code (la lista di operazioni che la ricrea) o json (il modello). Con ids legge solo quelle schede; con max_chars taglia l'outline. Legge e basta.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "doc": { "type": "string", "description": "Path della lavagna nel vault, per esempio Agente/piano.canvas" },
+                    "form": { "type": "string", "enum": ["outline", "code", "json"], "default": "outline", "description": "Come si legge la lavagna" },
+                    "ids": { "type": ["array", "string"], "items": { "type": "string" }, "description": "Gli id delle schede da leggere, come lista o come testo JSON della lista" },
+                    "max_chars": { "type": "integer", "minimum": 0, "description": "Il limite dell'outline, in caratteri (solo con form outline)" }
+                },
+                "required": ["doc"],
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": true }
+        },
+        {
             "name": "fub_canvas_create",
             "description": "Crea una lavagna nuova e vuota (.canvas). Senza name prende il primo nome libero; un nome già preso è un errore. Restituisce la lavagna e la sua revisione, la base di fub_canvas_apply.",
             "inputSchema": {
@@ -185,7 +227,7 @@ pub fn specs() -> Value {
         },
         {
             "name": "fub_canvas_apply",
-            "description": "Cambia una lavagna con una lista di operazioni, tutte insieme: add_card {node}, connect {edge}, move {ids, dx, dy}, resize {id, width, height}, set {id, fields}, remove {ids}, reorder {ids}. Le schede e gli archi senza id ne ricevono uno nuovo. Parte dalla revisione letta con fub_read o data da fub_canvas_create: se nel frattempo è cambiata torna un conflitto. Senza apply è una prova: restituisce il piano. Con \"apply\": true scrive e restituisce gli id creati e la revisione nuova.",
+            "description": "Cambia una lavagna con una lista di operazioni, tutte o nessuna: `add_card`, `connect`, `move`, `resize`, `set`, `remove`, `reorder`, `color`, `align`, `distribute`, `duplicate`, `reverse`, `group`, `layout`, `insert`, `convert`, `from_mermaid`, `from_outline`. Con move e contents: true un gruppo porta dentro di sé le schede che ha dentro (al più 1000 schede per operazione); con resize e fit: \"content\" l'altezza viene dal contenuto; con reorder e to: \"back\" la scheda va in fondo; color dà un nome, un numero da 1 a 6 o #rrggbb, o null per toglierlo. align allinea le schede a un lato o al centro, distribute le mette a spazi uguali, duplicate le copia (con as gli id delle copie), reverse inverte il verso di un arco, group fa un gruppo attorno alle schede, layout le dispone in griglia, riga, colonna o albero (con kind; senza ids, quelle fuori dai gruppi), insert incolla un frammento copiato ({\"version\": 1, \"nodes\", \"edges\"}) con id nuovi, come un blocco in x, y o accanto a near, convert trasforma una scheda di testo nella scheda di un file già scritto (per esempio con fub_create), from_mermaid fa schede, gruppi e archi già disposti da un flowchart Mermaid (gli id sono quelli di Mermaid, con prefix davanti se un id c'è già), from_outline fa un albero di schede da una scaletta rientrata. Ciò che la lavagna non tiene (una forma, uno stile, una riga che non si capisce) torna fra gli avvisi. I campi di ciascuna sono in fub_canvas_guide. Controlla la lista prima di scrivere: con un problema non scrive, e lo elenca. Parte dalla revisione letta con fub_canvas_read o fub_read, o data da fub_canvas_create: se nel frattempo è cambiata torna un conflitto. Senza apply è una prova: dice che cosa cambierebbe. Con \"apply\": true scrive e restituisce gli id creati e la revisione nuova. Con \"preview\": true mostra anche la lavagna di dopo. Le schede e gli archi senza id ne ricevono uno nuovo.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -193,10 +235,11 @@ pub fn specs() -> Value {
                     "ops": {
                         "type": ["array", "string"],
                         "items": { "type": "object" },
-                        "description": "Le operazioni, come lista o come testo JSON della lista, per esempio [{\"op\": \"add_card\", \"node\": {\"type\": \"text\", \"x\": 0, \"y\": 0, \"width\": 240, \"height\": 100, \"text\": \"Ciao\"}}]"
+                        "description": "Le operazioni, come lista o come testo JSON della lista: la forma di ciascuna è in fub_canvas_guide"
                     },
-                    "base": { "type": "string", "description": "La revisione su cui si applica, da fub_read o fub_canvas_create" },
-                    "apply": { "type": "boolean", "default": false, "description": "Scrivi davvero invece di provare" }
+                    "base": { "type": "string", "description": "La revisione su cui si applica, da fub_canvas_read, fub_read o fub_canvas_create" },
+                    "apply": { "type": "boolean", "default": false, "description": "Scrivi davvero invece di provare" },
+                    "preview": { "type": "boolean", "default": false, "description": "Mostra anche la lavagna di dopo, come immagine" }
                 },
                 "required": ["doc", "ops", "base"],
                 "additionalProperties": false
@@ -333,8 +376,10 @@ pub fn call(c: &Connection, access: &Access, params: &Value) -> Result<Value, Rp
         "fub_preview" => preview(c, access, &args),
         "fub_write" => write(c, access, &args).map(Output::from),
         "fub_create" => create(c, access, &args).map(Output::from),
+        "fub_canvas_guide" => canvas_guide(c, &args).map(Output::from),
+        "fub_canvas_read" => canvas_read(c, access, &args).map(Output::from),
         "fub_canvas_create" => canvas_create(c, access, &args).map(Output::from),
-        "fub_canvas_apply" => canvas_apply(c, access, &args).map(Output::from),
+        "fub_canvas_apply" => canvas_apply(c, access, &args),
         "fub_commands" => commands(c, &args).map(Output::from),
         "fub_invoke" => invoke(c, access, &args).map(Output::from),
         "fub_external_editors" => external_editors(c, access, &args).map(Output::from),
@@ -350,12 +395,23 @@ pub fn call(c: &Connection, access: &Access, params: &Value) -> Result<Value, Rp
         }
     };
     Ok(match outcome {
-        Ok(Output { data, image }) => {
-            // Il testo è il primo contenuto ed è uguale a `structuredContent`;
-            // un'immagine, se c'è, lo segue.
-            let mut content = vec![json!({ "type": "text", "text": data.to_string() })];
+        Ok(Output {
+            data,
+            image,
+            text,
+            refused,
+        }) => {
+            // Il testo è il primo contenuto ed è uguale a `structuredContent`,
+            // salvo un rifiuto che lo dice in una frase; un'immagine, se c'è, lo
+            // segue.
+            let text = text.unwrap_or_else(|| data.to_string());
+            let mut content = vec![json!({ "type": "text", "text": text })];
             content.extend(image);
-            json!({ "content": content, "structuredContent": data })
+            let mut result = json!({ "content": content, "structuredContent": data });
+            if refused {
+                result["isError"] = json!(true);
+            }
+            result
         }
         Err(failure) => json!({
             "content": [{ "type": "text", "text": format!("{}: {}", failure.kind, crate::output::redact(&failure.message)) }],
@@ -366,15 +422,23 @@ pub fn call(c: &Connection, access: &Access, params: &Value) -> Result<Value, Rp
 
 /// Il risultato di uno strumento: i dati, che vanno nel testo e in
 /// `structuredContent`, e un contenuto immagine di MCP quando lo strumento ne
-/// porta uno.
+/// porta uno. Un rifiuto che ha qualcosa da dire in una frase porta `text` al
+/// posto del JSON, e `refused` lo segna con `isError`.
 struct Output {
     data: Value,
     image: Option<Value>,
+    text: Option<String>,
+    refused: bool,
 }
 
 impl From<Value> for Output {
     fn from(data: Value) -> Output {
-        Output { data, image: None }
+        Output {
+            data,
+            image: None,
+            text: None,
+            refused: false,
+        }
     }
 }
 
@@ -845,56 +909,352 @@ fn canvas_create(c: &Connection, access: &Access, args: &Value) -> Result<Value,
     Ok(json!({ "doc": id.as_str(), "revision": revision.as_str() }))
 }
 
-/// `fub_canvas_apply`: le operazioni d'intento portate in una lavagna da
-/// `canvas.apply`, come una modifica sola. La `base` è obbligatoria come per
-/// `fub_write`; le radici si guardano sul documento, non su tutto il vault.
-fn canvas_apply(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failure> {
+/// `fub_canvas_apply`: la lista di operazioni, controllata prima di scrivere.
+///
+/// Il controllo (`canvas.check`) viene prima di tutto, anche della prova: con
+/// un problema il file non si tocca e `canvas.apply` non parte. Una revisione
+/// superata, da sola, è il conflitto di `canvas.apply`. Con la lista buona si
+/// prova o si scrive; con `preview` la lavagna di dopo si disegna prima della
+/// scrittura, con la stessa base, così l'immagine è quella che si scrive.
+fn canvas_apply(c: &Connection, access: &Access, args: &Value) -> Result<Output, Failure> {
     let id = doc(args, "doc")?;
     access.check_read(id.as_str())?;
     access.check_write(id.as_str())?;
     // Il comando le prende come testo (non c'è un parametro JSON): una lista
     // si riscrive, un testo passa com'è e lo legge il comando.
-    let ops = match args.get("ops") {
-        None | Some(Value::Null) => return Err(Failure::bad_args("manca `ops`")),
-        Some(Value::String(text)) => text.clone(),
-        Some(list @ Value::Array(_)) => list.to_string(),
-        Some(_) => {
-            return Err(Failure::bad_args(
-                "`ops` è una lista di operazioni, o il suo testo JSON",
-            ))
-        }
-    };
+    let ops = list_text(args, "ops")?.ok_or_else(|| Failure::bad_args("manca `ops`"))?;
     let base = required(args, "base")?;
     let apply = bool_arg(args, "apply")?;
+    let preview = bool_arg(args, "preview")?;
     let command = json!({ "doc": id.as_str(), "ops": ops, "base": base });
+
+    let check = without_envelope(lavagna_payload(
+        lavagna(c, CANVAS_CHECK, command.clone(), InvokeMode::Apply)?,
+        CANVAS_CHECK,
+    )?);
+    match check["ok"].as_bool() {
+        Some(true) => {}
+        Some(false) => {
+            let problems = check["problems"].clone();
+            let only_stale = problems.as_array().is_some_and(
+                |list| matches!(list.as_slice(), [only] if only["code"] == "stale_base"),
+            );
+            if only_stale {
+                return Err(stale_conflict(c, &command));
+            }
+            return Ok(Output {
+                data: json!({
+                    "doc": id.as_str(),
+                    "written": false,
+                    "ok": false,
+                    "problems": problems,
+                    "warnings": check["warnings"],
+                    "summary": check["summary"],
+                }),
+                image: None,
+                text: Some(refusal_text(&problems)?),
+                refused: true,
+            });
+        }
+        None => {
+            return Err(Failure::local(format!(
+                "{CANVAS_CHECK} non ha detto se la lista si scrive"
+            )))
+        }
+    }
+
+    // La lavagna di dopo, con la stessa base, prima di scrivere.
+    let picture = if preview {
+        Some(drawn_after(c, &command)?)
+    } else {
+        None
+    };
     let mode = if apply {
         InvokeMode::Apply
     } else {
         InvokeMode::DryRun
     };
-    let outcome = c
-        .host
-        .invoke_user_command(c.vault_selector(), CANVAS_APPLY, command, mode)
-        .map_err(plugin)?;
-    if !apply {
-        return Ok(
-            json!({ "doc": id.as_str(), "dry_run": true, "outcome": outcome_json(&outcome) }),
-        );
-    }
-    // L'esito del comando: gli id nati e la revisione dopo.
-    let (created, revision) = match &outcome.effect {
-        CommandEffect::Custom { payload, .. } => (
-            payload.get("created").cloned(),
-            payload.get("revision").and_then(Value::as_str),
-        ),
-        _ => (None, None),
+    let outcome = lavagna(c, CANVAS_APPLY, command, mode)?;
+    let mut data = if apply {
+        let (created, revision) = applied(&outcome)?;
+        json!({
+            "doc": id.as_str(),
+            "dry_run": false,
+            "created": created,
+            "revision": revision,
+            "warnings": check["warnings"],
+            "warnings_omitted": check["warnings_omitted"],
+        })
+    } else {
+        json!({
+            "doc": id.as_str(),
+            "dry_run": true,
+            "check": check,
+            "outcome": outcome_json(&outcome),
+        })
     };
-    let (Some(created @ Value::Array(_)), Some(revision)) = (created, revision) else {
-        return Err(Failure::local(format!(
+    let image = picture.and_then(|(drawn, image)| {
+        data["preview"] = drawn;
+        image
+    });
+    Ok(Output {
+        data,
+        image,
+        text: None,
+        refused: false,
+    })
+}
+
+/// La lista di operazioni, o un parametro di testo che è una lista: una lista
+/// JSON si riscrive come testo, un testo passa com'è e lo legge il comando.
+/// `None` se il parametro manca.
+fn list_text(args: &Value, key: &str) -> Result<Option<String>, Failure> {
+    match args.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(text)) => Ok(Some(text.clone())),
+        Some(list @ Value::Array(_)) => Ok(Some(list.to_string())),
+        Some(_) => Err(Failure::bad_args(format!(
+            "`{key}` è una lista, o il suo testo JSON"
+        ))),
+    }
+}
+
+/// Un comando della lavagna. Col componente spento il comando non c'è: è
+/// `unavailable`, come `craft.preview` senza il bundle `fub.craft`.
+fn lavagna(
+    c: &Connection,
+    command: &str,
+    args: Value,
+    mode: InvokeMode,
+) -> Result<CommandOutcome, Failure> {
+    c.host
+        .invoke_user_command(c.vault_selector(), command, args, mode)
+        .map_err(|error| match error {
+            fub_abi::PluginError::UnknownCommand(_) => Failure::new(
+                3,
+                "unavailable",
+                format!(
+                    "{command} non c'è: il componente {LAVAGNA_COMPONENT} è spento in questo vault"
+                ),
+            ),
+            other => plugin(other),
+        })
+}
+
+/// Il payload di una risposta di lettura della lavagna, se è di questa versione.
+fn lavagna_payload(outcome: CommandOutcome, command: &str) -> Result<Value, Failure> {
+    match outcome.effect {
+        CommandEffect::Custom { ns, payload }
+            if ns == LAVAGNA_NS && payload["version"].as_u64() == Some(LAVAGNA_VERSION) =>
+        {
+            Ok(payload)
+        }
+        _ => Err(Failure::local(format!(
+            "{command} non ha risposto una lavagna della versione {LAVAGNA_VERSION}"
+        ))),
+    }
+}
+
+/// Il payload senza la sua intestazione (`version` e `kind`): la risposta di
+/// MCP porta i dati, non il contratto del comando.
+fn without_envelope(mut payload: Value) -> Value {
+    if let Some(fields) = payload.as_object_mut() {
+        fields.remove("version");
+        fields.remove("kind");
+    }
+    payload
+}
+
+/// Gli id nati e la revisione dopo, dall'esito di `canvas.apply` scritto.
+fn applied(outcome: &CommandOutcome) -> Result<(Value, Value), Failure> {
+    let payload = match &outcome.effect {
+        CommandEffect::Custom { payload, .. } => Some(payload),
+        _ => None,
+    };
+    let created = payload
+        .and_then(|payload| payload.get("created"))
+        .filter(|created| created.is_array());
+    let revision = payload
+        .and_then(|payload| payload.get("revision"))
+        .filter(|revision| revision.is_string());
+    match (created, revision) {
+        (Some(created), Some(revision)) => Ok((created.clone(), revision.clone())),
+        _ => Err(Failure::local(format!(
             "{CANVAS_APPLY} non ha detto gli id creati e la revisione"
+        ))),
+    }
+}
+
+/// La revisione data non è quella del file. `canvas.apply` in prova, con la
+/// stessa base, dice il conflitto di adesso: lo stesso codice e lo stesso testo
+/// di sempre, e nessuna scrittura. Se nel frattempo la revisione è tornata quella
+/// data, il conflitto resta, perché il controllo l'aveva vista superata.
+fn stale_conflict(c: &Connection, command: &Value) -> Failure {
+    match lavagna(c, CANVAS_APPLY, command.clone(), InvokeMode::DryRun) {
+        Err(failure) => failure,
+        Ok(_) => Failure::new(
+            5,
+            "conflict",
+            "la lavagna è cambiata dalla revisione data: rileggi con fub_canvas_read e riprova",
+        ),
+    }
+}
+
+/// La frase di un rifiuto: quanti problemi, e il primo con dove sta e la sua
+/// frase. Il testo dice il primo; il payload porta tutti.
+fn refusal_text(problems: &Value) -> Result<String, Failure> {
+    let list = problems.as_array().map(Vec::as_slice).unwrap_or(&[]);
+    let Some(first) = list.first() else {
+        return Err(Failure::local(format!(
+            "{CANVAS_CHECK} ha detto no senza un problema"
         )));
     };
-    Ok(json!({ "doc": id.as_str(), "dry_run": false, "created": created, "revision": revision }))
+    let code = first["code"].as_str().unwrap_or("?");
+    let place = if code == "stale_base" {
+        "la revisione".to_string()
+    } else if let Some(index) = first["index"].as_u64() {
+        format!("l'operazione {}", index + 1)
+    } else {
+        "la lista".to_string()
+    };
+    let count = match list.len() {
+        1 => "1 problema".to_string(),
+        n => format!("{n} problemi"),
+    };
+    let mut text = format!(
+        "{count}: niente è scritto. Il primo, {place} ({code}): {}",
+        first["message"].as_str().unwrap_or_default()
+    );
+    if let Some(suggestion) = first["suggestion"].as_str() {
+        text.push_str(&format!(" Più vicino: {suggestion}."));
+    }
+    Ok(text)
+}
+
+/// La lavagna di dopo, disegnata da `canvas.preview` con la stessa lista e la
+/// stessa base di `canvas.apply`.
+fn drawn_after(c: &Connection, command: &Value) -> Result<(Value, Option<Value>), Failure> {
+    let payload = lavagna_payload(
+        lavagna(c, CANVAS_PREVIEW, command.clone(), InvokeMode::Apply)?,
+        CANVAS_PREVIEW,
+    )?;
+    Ok(canvas_picture(payload))
+}
+
+/// La parte dell'anteprima di una lavagna che va all'agente: il tipo e le misure
+/// dell'immagine e la lettura delle schede (`info.outline`, con il suo tetto).
+/// Un PNG o un JPEG passa come contenuto di MCP, senza i byte nel testo; un SVG
+/// (senza `draw`) resta nel testo, perché MCP non ha un contenuto per lui.
+fn canvas_picture(mut payload: Value) -> (Value, Option<Value>) {
+    let mut image = payload["image"].take();
+    let media = image["media_type"].as_str().unwrap_or_default().to_owned();
+    let content = if PREVIEW_MEDIA.contains(&media.as_str()) {
+        match image
+            .as_object_mut()
+            .and_then(|fields| fields.remove("data"))
+        {
+            Some(Value::String(data)) => {
+                Some(json!({ "type": "image", "data": data, "mimeType": media }))
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
+    let info = json!({
+        "outline": payload["outline"].take(),
+        "outline_omitted": payload["outline_omitted"].take(),
+    });
+    (json!({ "image": image, "info": info }), content)
+}
+
+/// `fub_canvas_guide`: la guida di `canvas.guide`, e con `topic` la sua operazione.
+fn canvas_guide(c: &Connection, args: &Value) -> Result<Value, Failure> {
+    guide(c, text_arg(args, "topic")?)
+}
+
+/// La guida della lavagna, com'è in `canvas.guide`: il testo, le operazioni, lo
+/// schema e gli esempi. Non legge nessun documento. Serve anche alle risorse
+/// `fub-guida://`.
+pub(super) fn guide(c: &Connection, topic: Option<&str>) -> Result<Value, Failure> {
+    let mut command = json!({});
+    if let Some(topic) = topic {
+        command["topic"] = json!(topic);
+    }
+    let payload = lavagna_payload(
+        lavagna(c, CANVAS_GUIDE, command, InvokeMode::Apply)?,
+        CANVAS_GUIDE,
+    )?;
+    Ok(without_envelope(payload))
+}
+
+/// `fub_canvas_read`: la lavagna come la legge `canvas.read`, con la sua revisione.
+fn canvas_read(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failure> {
+    let id = doc(args, "doc")?;
+    access.check_read(id.as_str())?;
+    let mut command = json!({ "doc": id.as_str() });
+    if let Some(form) = text_arg(args, "form")? {
+        command["form"] = json!(form);
+    }
+    if let Some(ids) = list_text(args, "ids")? {
+        command["ids"] = json!(ids);
+    }
+    match args.get("max_chars") {
+        None | Some(Value::Null) => {}
+        Some(value) => {
+            let max = value
+                .as_u64()
+                .ok_or_else(|| Failure::bad_args("`max_chars` è un intero da 0 in su"))?;
+            command["max_chars"] = json!(max);
+        }
+    }
+    let payload = lavagna_payload(
+        lavagna(c, CANVAS_READ, command, InvokeMode::Apply)?,
+        CANVAS_READ,
+    )?;
+    Ok(without_envelope(payload))
+}
+
+/// Un'anteprima di una lavagna (`.canvas`), come le altre: `canvas.preview` in
+/// sola lettura, con `origin` `"canvas"` e senza `missing` né `limit_bytes`,
+/// che sono di Craft.
+fn canvas_preview(c: &Connection, id: &DocId, size: &str) -> Result<Output, Failure> {
+    let side = if size == "large" { 1024 } else { 512 };
+    let payload = lavagna_payload(
+        lavagna(
+            c,
+            CANVAS_PREVIEW,
+            json!({ "doc": id.as_str(), "size": side }),
+            InvokeMode::Apply,
+        )?,
+        CANVAS_PREVIEW,
+    )?;
+    let revision = payload["revision"].clone();
+    let (picture, image) = canvas_picture(payload);
+    let data = json!({
+        "doc": id.as_str(),
+        "revision": revision,
+        "size": size,
+        "origin": "canvas",
+        "missing": null,
+        "limit_bytes": null,
+        "image": picture["image"],
+        "info": picture["info"],
+    });
+    Ok(Output {
+        data,
+        image,
+        text: None,
+        refused: false,
+    })
+}
+
+/// Un documento è una lavagna se il nome finisce in `.canvas` in minuscole, come
+/// quelli che Fub e Obsidian scrivono. Il routing di `fub_preview` si decide qui,
+/// con il suffisso esatto: il registro dei formati, che legge anche le maiuscole,
+/// non è interrogabile dalla CLI. Un `.CANVAS` va a Craft.
+fn is_canvas(doc: &str) -> bool {
+    doc.ends_with(".canvas")
 }
 
 fn commands(c: &Connection, args: &Value) -> Result<Value, Failure> {
@@ -968,9 +1328,9 @@ fn invoke(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failur
     Ok(json!({ "dry_run": false, "outcome": outcome_json(&outcome) }))
 }
 
-/// `fub_preview`: il `CraftPreview` di `craft.preview`, che legge e basta.
-/// L'immagine, quando c'è, diventa un contenuto immagine di MCP; il testo
-/// porta tutto il resto, senza i byte.
+/// `fub_preview`: il `CraftPreview` di `craft.preview`, che legge e basta, o il
+/// disegno di una lavagna (`canvas.preview`). L'immagine, quando c'è, diventa un
+/// contenuto immagine di MCP; il testo porta tutto il resto, senza i byte.
 fn preview(c: &Connection, access: &Access, args: &Value) -> Result<Output, Failure> {
     let id = doc(args, "doc")?;
     access.check_read(id.as_str())?;
@@ -979,6 +1339,9 @@ fn preview(c: &Connection, access: &Access, args: &Value) -> Result<Output, Fail
         Some(size @ ("small" | "large")) => size,
         Some(_) => return Err(Failure::bad_args("`size` è \"small\" o \"large\"")),
     };
+    if is_canvas(id.as_str()) {
+        return canvas_preview(c, &id, size);
+    }
     // Soltanto `doc` e `size`: niente che chieda all'app di farne una.
     let outcome = c
         .host
@@ -1017,7 +1380,12 @@ fn preview(c: &Connection, access: &Access, args: &Value) -> Result<Output, Fail
         "image": payload["image"],
         "info": payload["info"],
     });
-    Ok(Output { data, image })
+    Ok(Output {
+        data,
+        image,
+        text: None,
+        refused: false,
+    })
 }
 
 /// Toglie i byte dall'immagine dell'anteprima (restano tipo, misure e
@@ -1188,4 +1556,84 @@ fn components_disable(c: &Connection, access: &Access, args: &Value) -> Result<V
     components_apply(c, access, args, |vista| {
         vista.spegni(c, id, also, orfani, &OPZIONI_MCP)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Un'anteprima come la dà `canvas.preview`, con un PNG o con un SVG.
+    fn picture(media: &str) -> Value {
+        json!({
+            "version": 1,
+            "kind": "preview",
+            "doc": "Agente/piano.canvas",
+            "revision": "r1",
+            "image": { "media_type": media, "width": 512, "height": 256, "data": "AAAA" },
+            "outline": [{ "n": 1, "id": "uno", "kind": "text", "clipped": false }],
+            "outline_omitted": 0,
+        })
+    }
+
+    #[test]
+    fn un_png_passa_come_contenuto_e_il_testo_non_ha_i_byte() {
+        let (part, content) = canvas_picture(picture("image/png"));
+        let content = content.expect("un PNG è un contenuto immagine");
+        assert_eq!(content["type"], "image");
+        assert_eq!(content["mimeType"], "image/png");
+        assert_eq!(content["data"], "AAAA");
+        assert!(part["image"].get("data").is_none());
+        assert_eq!(part["image"]["width"], 512);
+        assert_eq!(part["info"]["outline"][0]["id"], "uno");
+        assert_eq!(part["info"]["outline_omitted"], 0);
+    }
+
+    /// Senza `draw` la lavagna arriva come SVG: non è un tipo che MCP porta come
+    /// immagine, quindi resta nel testo, con i suoi byte.
+    #[test]
+    fn un_svg_non_e_un_contenuto_e_resta_nel_testo() {
+        let (part, content) = canvas_picture(picture("image/svg+xml"));
+        assert!(content.is_none());
+        assert_eq!(part["image"]["media_type"], "image/svg+xml");
+        assert_eq!(part["image"]["data"], "AAAA");
+    }
+
+    #[test]
+    fn il_rifiuto_dice_il_primo_problema_e_quanti_sono() {
+        let one = json!([{ "code": "unknown_op", "index": 1, "message": "unknown operation" }]);
+        assert_eq!(
+            refusal_text(&one).unwrap(),
+            "1 problema: niente è scritto. Il primo, l'operazione 2 (unknown_op): unknown operation"
+        );
+        let many = json!([
+            { "code": "stale_base", "index": null, "message": "changed" },
+            { "code": "unknown_op", "index": 0, "message": "unknown", "suggestion": "move" },
+        ]);
+        assert_eq!(
+            refusal_text(&many).unwrap(),
+            "2 problemi: niente è scritto. Il primo, la revisione (stale_base): changed"
+        );
+        let whole = json!([{ "code": "invalid", "index": null, "message": "empty" }]);
+        assert!(refusal_text(&whole).unwrap().contains("la lista (invalid)"));
+        assert!(refusal_text(&json!([])).is_err());
+    }
+
+    #[test]
+    fn una_lavagna_e_un_nome_che_finisce_in_canvas() {
+        assert!(is_canvas("Agente/piano.canvas"));
+        assert!(!is_canvas("Agente/bozza.md"));
+        assert!(!is_canvas("Agente/piano.canvas.md"));
+        // Le maiuscole vanno a Craft: vedi `is_canvas`.
+        assert!(!is_canvas("Agente/PIANO.CANVAS"));
+    }
+
+    #[test]
+    fn la_lista_si_legge_come_lista_o_come_testo() {
+        let text = list_text(&json!({ "ops": "[]" }), "ops").unwrap();
+        assert_eq!(text.as_deref(), Some("[]"));
+        let list = list_text(&json!({ "ops": [1] }), "ops").unwrap();
+        assert_eq!(list.as_deref(), Some("[1]"));
+        assert!(list_text(&json!({}), "ops").unwrap().is_none());
+        assert!(list_text(&json!({ "ops": 3 }), "ops").is_err());
+    }
 }

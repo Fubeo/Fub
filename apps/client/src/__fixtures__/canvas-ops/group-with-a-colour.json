@@ -1,0 +1,15 @@
+{
+  "about": "group con un colore con nome: note-blue diventa il suo esadecimale di file, #0064b0, come in add_card.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" }
+  ] },
+  "ops": [{ "op": "group", "ids": ["a"], "label": "Ciclo", "color": "note-blue", "id": "gr" }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "gr", "type": "group", "label": "Ciclo", "color": "#0064b0", "x": -24, "y": -24, "width": 368, "height": 208 },
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" }
+    ] },
+    "created": ["gr"]
+  }
+}

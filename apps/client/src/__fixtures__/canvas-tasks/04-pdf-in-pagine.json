@@ -1,0 +1,22 @@
+{
+  "about": "Un PDF sparso in pagine: una scheda per pagina, in fila da sinistra a destra. Lavagna vuota.",
+  "prompt": "Metti sulla lavagna le prime quattro pagine della dispensa Scienze/dispensa.pdf, una scheda per pagina, in fila da sinistra a destra.",
+  "before": { "nodes": [], "edges": [] },
+  "ops_today": [
+    { "op": "add_card", "node": { "id": "p1", "type": "file", "file": "Scienze/dispensa.pdf", "subpath": "#page=1", "x": 0, "y": 0, "width": 360, "height": 480 } },
+    { "op": "add_card", "node": { "id": "p2", "type": "file", "file": "Scienze/dispensa.pdf", "subpath": "#page=2", "x": 408, "y": 0, "width": 360, "height": 480 } },
+    { "op": "add_card", "node": { "id": "p3", "type": "file", "file": "Scienze/dispensa.pdf", "subpath": "#page=3", "x": 816, "y": 0, "width": 360, "height": 480 } },
+    { "op": "add_card", "node": { "id": "p4", "type": "file", "file": "Scienze/dispensa.pdf", "subpath": "#page=4", "x": 1224, "y": 0, "width": 360, "height": 480 } }
+  ],
+  "ops": [
+    { "op": "spread_pages", "file": "Scienze/dispensa.pdf", "pages": 4 }
+  ],
+  "needs": ["spread_pages"],
+  "checks": [
+    { "count": { "kind": "pdf", "n": 4 } },
+    { "aligned": { "texts": ["Scienze/dispensa.pdf#page=1", "Scienze/dispensa.pdf#page=2", "Scienze/dispensa.pdf#page=3", "Scienze/dispensa.pdf#page=4"], "axis": "top" } },
+    { "spaced": { "texts": ["Scienze/dispensa.pdf#page=1", "Scienze/dispensa.pdf#page=2", "Scienze/dispensa.pdf#page=3", "Scienze/dispensa.pdf#page=4"], "axis": "x" } },
+    { "has_card": { "file": "Scienze/dispensa.pdf#page=3" } },
+    { "no_overlap": {} }
+  ]
+}

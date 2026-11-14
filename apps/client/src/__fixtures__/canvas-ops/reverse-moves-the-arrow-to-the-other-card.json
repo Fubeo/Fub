@@ -1,0 +1,25 @@
+{
+  "about": "reverse: la freccia da causa a effetto (punta su effetto) diventa da effetto a causa, con la punta su causa. La partenza e l'arrivo si scambiano, i lati vanno con le schede, e il colore e l'etichetta restano. fromEnd (che il file non scrive) si scrive none, come di serie.",
+  "before": {
+    "nodes": [
+      { "id": "causa", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Causa" },
+      { "id": "effetto", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "Effetto" }
+    ],
+    "edges": [
+      { "id": "e1", "fromNode": "causa", "fromSide": "right", "toNode": "effetto", "toSide": "left", "toEnd": "arrow", "color": "4", "label": "porta a" }
+    ]
+  },
+  "ops": [{ "op": "reverse", "ids": ["e1"] }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "causa", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Causa" },
+        { "id": "effetto", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "Effetto" }
+      ],
+      "edges": [
+        { "id": "e1", "fromNode": "effetto", "fromSide": "left", "fromEnd": "none", "toNode": "causa", "toSide": "right", "toEnd": "arrow", "color": "4", "label": "porta a" }
+      ]
+    }
+  }
+}

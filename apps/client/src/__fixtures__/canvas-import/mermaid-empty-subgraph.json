@@ -1,0 +1,46 @@
+{
+  "about": "Un subgraph vuoto diventa un gruppo con la misura di nascita, 480 per 320, accanto al nodo.",
+  "op": {
+    "op": "from_mermaid",
+    "text": "graph LR\n  A[Da fare] --> vuoto\n  subgraph vuoto [Ancora niente]\n  end"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "vuoto",
+          "type": "group",
+          "x": 416,
+          "y": 0,
+          "width": 480,
+          "height": 320,
+          "label": "Ancora niente"
+        },
+        {
+          "id": "A",
+          "type": "text",
+          "x": 0,
+          "y": 80,
+          "width": 320,
+          "height": 160,
+          "text": "Da fare"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "A",
+          "toNode": "vuoto",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "vuoto",
+      "A",
+      "e220a8397b1dcdaf"
+    ],
+    "notes": []
+  }
+}

@@ -178,134 +178,10 @@ un arco in fondo alla lista degli archi.
 
 ## Operazioni
 
-Un agente o la sessione dal tablet non scrivono toppe: scrivono
-**operazioni d'intento** (`CanvasOp`, in `crates/fub-canvas-core/src/ops.rs`),
-come «sposta», «collega», «togli». `compile(canvas, ops, seed)` le traduce
-nelle toppe qui sopra e dà `Compiled { patches, created }`: le toppe, che si
-applicano con `draft` al modello di partenza e hanno la loro inversa, e gli
-id creati.
-
-Le operazioni si compilano in ordine, ognuna sul modello lasciato dalla
-precedente: si può aggiungere una scheda e subito spostarla, ma non collegare
-una scheda tolta prima. Valgono tutte o nessuna: con un errore non esce
-nessuna toppa. Il modello di dopo resta valido: ogni scheda e ogni arco che
-un'operazione mette passa le regole del [formato](canvas-format.md).
-
-Un'operazione è un oggetto JSON con il campo `op`. Un campo che l'operazione
-non conosce, o un numero con una frazione vera dove serve un intero, è un
-errore di lettura: un errore di battitura non diventa uno spostamento di zero.
-
-### `add_card`
-
-Aggiunge una scheda in cima all'ordine. `node` è una scheda come nel file,
-campi sconosciuti compresi; `id` è facoltativo (assente o `null`: lo dà il
-seme).
-
-```json
-{ "op": "add_card", "node": { "type": "text", "x": 0, "y": 0, "width": 260, "height": 120, "text": "Idea" } }
-```
-
-### `move`
-
-Sposta le schede `ids` di `dx`, `dy`. Le coordinate saturano a ±(2^53−1). Un
-gruppo si sposta da solo: le schede dentro restano dove sono, come sulla
-tela. Una lista vuota, o uno spostamento di zero, non dà toppe.
-
-```json
-{ "op": "move", "ids": ["f1"], "dx": 40, "dy": 0 }
-```
-
-### `resize`
-
-Dà alla scheda `id` le misure nuove: almeno 1, e una misura enorme satura a
-2^53−1.
-
-```json
-{ "op": "resize", "id": "f1", "width": 320, "height": 200 }
-```
-
-### `connect`
-
-Aggiunge un arco in fondo alla lista. `edge` è un arco come nel file; `id` è
-facoltativo come in `add_card`. Le due schede devono esserci; un arco da una
-scheda a sé stessa va bene.
-
-```json
-{ "op": "connect", "edge": { "fromNode": "a", "toNode": "b", "toEnd": "arrow" } }
-```
-
-### `remove`
-
-Toglie schede e archi. Gli archi che toccano una scheda tolta vanno via
-prima, nella stessa operazione, e un arco nominato e toccato va via una volta
-sola. L'`at` di ogni scheda tolta è la sua posizione all'inizio della serie
-di `remove-node` di cui fa parte, e quello di ogni arco tolto la sua
-posizione all'inizio della serie di `remove-edge`, anche se la serie viene
-da più operazioni: così l'inversa rimette schede e archi al loro posto.
-
-```json
-{ "op": "remove", "ids": ["b", "e1"] }
-```
-
-### `set`
-
-Cambia i campi di una scheda o di un arco. Un valore sostituisce quello di
-prima al suo posto, o va in fondo se è nuovo; `null` toglie il campo, noto o
-sconosciuto. `id`, e `type` di una scheda, non si cambiano.
-
-```json
-{ "op": "set", "id": "a", "fields": { "color": "4", "text": "nuovo", "fub:tag": null } }
-```
-
-### `reorder`
-
-Porta le schede `ids` in cima all'ordine, nell'ordine dato; le altre restano
-sotto nel loro ordine. Con tutti gli id, `ids` è l'ordine nuovo.
-
-```json
-{ "op": "reorder", "ids": ["b", "a"] }
-```
-
-### Gli id nuovi
-
-Un id nuovo viene dal seme del chiamante (`seed`, un intero a 64 bit senza
-segno): stesso seme e stesso modello, stessi id, così i vettori e l'annulla
-restano deterministici. Il generatore è SplitMix64: a ogni id
-
-```text
-state = state + 0x9E3779B97F4A7C15
-z = state
-z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
-z = (z ^ (z >> 27)) * 0x94D049BB133111EB
-z = z ^ (z >> 31)
-```
-
-con l'aritmetica a 64 bit che si avvolge, e lo stato di partenza uguale al
-seme. L'id è `z` in sedici cifre esadecimali minuscole, come quelli di
-Obsidian: col seme 0 il primo è `e220a8397b1dcdaf`. Un giro di `compile` usa
-un solo generatore, e salta gli id presi: quelli di schede e archi del modello
-di partenza e ogni id entrato nel modello nello stesso giro. Un id dato a mano
-segue la stessa regola: se è preso, è `DuplicateId`. `created` dice, in
-ordine, gli id di ogni scheda e arco aggiunti, dati o generati.
-
-### Gli errori delle operazioni
-
-Ogni errore (`OpError`) dice quale operazione della lista non si compila
-(`index`, da zero).
-
-| Errore | Quando |
-|---|---|
-| `UnknownNode` | `move`, `resize` o `reorder` di un id che non è una scheda; un arco verso una scheda che non c'è |
-| `UnknownEdge` | `remove` o `set` di un id che non è né una scheda né un arco |
-| `DuplicateId` | un id dato che è già preso; un id ripetuto nella lista di `move`, `remove` o `reorder` |
-| `TooMany` | la lavagna avrebbe più di 100 000 schede o 200 000 archi |
-| `Invalid` | una scheda o un arco che il formato non accetta; `set` di `id` o `type`; un id che è sia una scheda sia un arco |
-
-I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file,
-scritti a mano: `before`, `seed` facoltativo (0 se manca), `ops` e `expect`
-con `outcome` (`applied`, `rejected` o `malformed`) e, secondo il caso,
-`after`, `created` ed `error`. `crates/fub-canvas-core/tests/op_vectors.rs` li
-fa girare e controlla anche che l'inversa delle toppe ridia `before`.
+Le operazioni d'intento (`CanvasOp`, in `crates/fub-canvas-core/src/ops.rs`),
+con i loro esempi e i loro errori, stanno in
+[La lavagna come codice](canvas-code.md#le-operazioni). Le toppe che le
+operazioni producono sono descritte sopra, in «Le toppe».
 
 ## Comandi
 
@@ -318,7 +194,7 @@ sola**: un passo d'anteprima, un passo d'annulla. Scrive un documento solo
 | Parametro | Tipo | |
 |---|---|---|
 | `doc` | documento, obbligatorio | il file `.canvas`; un documento di un altro formato è `BadArgs` |
-| `ops` | testo, obbligatorio | un array JSON di operazioni, come sopra; testo che non è un array di operazioni, o un array vuoto, è `BadArgs` |
+| `ops` | testo, obbligatorio | un array JSON di operazioni, come sopra; testo che non è un array di operazioni, o un array vuoto, è `BadArgs`. Un array che la forma non accetta dà, nella frase, il primo problema: codice, percorso e suggerimento |
 | `base` | testo | la revisione su cui valgono le operazioni; se il documento ne ha già un'altra è `Conflict` |
 | `seed` | testo | il seme degli id nuovi, un intero decimale da 0 a 2⁶⁴ − 1 (in stringa, perché un `u64` non sta in un numero JSON) |
 
@@ -340,8 +216,10 @@ degli argomenti) sono `Internal`.
 L'anteprima (`dry_run`) restituisce il piano con l'unica modifica e non
 scrive. L'applicazione restituisce l'annulla (l'inversa che l'host dà della
 modifica) e l'effetto `Custom` con namespace `fub.lavagna` e payload
-`{"created": [...], "revision": "..."}`: gli id nati, nell'ordine di
-`created`, e la revisione del file dopo. Operazioni che non cambiano un byte
+`{"created": [...], "revision": "...", "notes": [...], "notes_omitted": 0}`:
+gli id nati, nell'ordine di `created`, la revisione del file dopo, e le
+[note](canvas-import.md#le-note) di ciò che le operazioni non hanno potuto
+tenere (`{index, code, detail}`, al più 100, e quante ne restano fuori). Operazioni che non cambiano un byte
 non scrivono e non lasciano un annulla; l'effetto dice la revisione corrente.
 
 `canvas.create` («Nuova lavagna», «New whiteboard») fa nascere una lavagna
@@ -364,6 +242,151 @@ file e non scrive; l'applicazione lo crea con `create_document` (che rifiuta
 un path preso nel frattempo) e risponde con `Navigate`. L'annulla è
 `note.trash` sul file: lo porta nel cestino anche se nel frattempo è cambiato,
 e dal cestino si ripristina com'era quando la creazione è stata annullata.
+
+`canvas.read` («Leggi la lavagna», «Read the whiteboard») legge una lavagna e
+non scrive niente (`CommandScope::read_only()`). Le tre forme vengono dal
+nucleo, come descritte in [La lavagna come codice](canvas-code.md#leggere).
+
+| Parametro | Tipo | |
+|---|---|---|
+| `doc` | documento, obbligatorio | il file `.canvas` |
+| `form` | scelta, di serie `outline` | `outline`: una riga per scheda e per arco; `code`: la lista di operazioni che ricrea la lavagna; `json`: il modello, come nel file |
+| `ids` | testo | una lista JSON di id: legge solo quelle schede e gli archi fra loro. Un id che non è una scheda si ignora, e i conti lo dicono; `[]` non legge nessuna scheda |
+| `max_chars` | numero | il limite dell'outline in caratteri, da zero in su; di serie 20 000. Con `code` o `json` è `BadArgs`: una lista tagliata non si ricompila |
+
+L'esito è l'effetto `Custom` con namespace `fub.lavagna` e payload
+`{"version": 1, "kind": "read", "doc", "revision", "form", "counts", "bounds",
+"text"}`, dove `text` c'è per `outline` e `code`, e per `json` c'è `model` al
+suo posto. `revision` è la revisione del file che si è letta: è la `base` di
+`canvas.check` e di `canvas.apply`. `counts` dà `cards`, `edges` e `groups` di
+ciò che si legge; `bounds` è il riquadro (`x`, `y`, `width`, `height`), o `null`
+se non c'è nessuna scheda. L'outline taglia a una riga intera, e l'ultima dice
+quante ne restano, come `…+N`. Un esempio, con la lavagna di tre schede e un
+arco del test di `tests/lavagna.rs` (il gruppo `g` contiene `a` e `b`, la
+revisione è abbreviata):
+
+```json
+{"version": 1, "kind": "read", "doc": "Idee.canvas", "revision": "…", "form": "outline", "counts": {"cards": 3, "edges": 1, "groups": 1}, "bounds": {"x": -20, "y": -40, "width": 560, "height": 160}, "text": "cards 3 edges 1 groups 1 bounds -20 -40 560×160\n1 a text \"Ciao\" 0 0 200×80 in=g\n2 b text \"Poi\" 300 0 200×80 color=4 in=g\n3 g group \"Gruppo\" -20 -40 560×160\ne1 a -> b \"porta a\""}
+```
+
+Un documento che non è una lavagna, o un `.canvas` che non si apre, è
+`BadArgs` con le stesse frasi di `canvas.apply`. Una `form` fuori dalle tre, un
+`ids` che non è una lista JSON di testi, un `max_chars` che non è un intero da
+zero in su e un `max_chars` con `code` o `json` sono `BadArgs`.
+
+`canvas.check` («Controlla le operazioni», «Check the operations») dice che cosa
+cambierebbe una lista di operazioni, prima di scriverla, e non scrive niente.
+Ha i parametri di `canvas.apply`: `doc` e `ops` obbligatori, `base` e `seed`
+facoltativi, con la stessa regola per il seme (di serie la revisione). Un
+documento che non è una lavagna, un `.canvas` che non si apre e un `ops` che
+non è JSON sono `BadArgs`, come in `canvas.apply`; ogni altro difetto della
+lista è un problema nel rapporto, e il comando riesce.
+
+L'esito è l'effetto `Custom` con payload `{"version": 1, "kind": "check",
+"ok", "problems", "warnings", "warnings_omitted", "summary",
+"outline_after"}`. La forma del rapporto è quella di
+[Il controllo](canvas-check.md), con due aggiunte. `warnings_omitted`
+dice quanti avvisi non entrano nei primi cento. Ogni problema porta `text`, la
+chiave del catalogo della sua frase (`canvas.check.p_<codice>`, in italiano e in
+inglese): la frase la rende chi mostra il rapporto, e il payload resta
+strutturato. Quando `base` non è la revisione del file, il rapporto ha in più il
+problema `stale_base`, con indice `null` e percorso `""`: non è un errore, e il
+rapporto non ha riassunto né lettura di dopo. La notifica è un riassunto per
+chi legge: `canvas.check.n_summary` con i conti, o `canvas.check.n_refused` con
+il numero dei problemi.
+
+Con una lista che si scrive, un esempio è la lavagna di `a` alta 160 e della
+scheda `b` nuova a fianco, con `a` spostata di 40 (il test
+`controllare_dice_il_riassunto_e_non_scrive` lo fissa intero):
+
+```json
+{"version": 1, "kind": "check", "ok": true, "problems": [], "warnings": [{"code": "overlap", "ids": ["a", "b"]}], "warnings_omitted": 0, "summary": {"cards_added": [{"id": "b", "text": "Poi"}], "cards_removed": [], "cards_changed": [{"id": "a", "text": "Ciao", "moved": {"from": {"x": 0, "y": 0}, "to": {"x": 40, "y": 0}}}], "edges_added": [], "edges_removed": [], "edges_changed": [], "order_changed": false}, "outline_after": "cards 2 edges 0 groups 0 bounds 40 0 260×160\n1 a text \"Ciao\" 40 0 200×160\n2 b text \"Poi\" 100 0 200×160"}
+```
+
+Con una lista che non si scrive, `ok` è `false`, `summary` e `outline_after` sono
+`null`, e ogni problema ha il suo codice, la posizione (`index`, da zero),
+`path` e `text`, per esempio `{"code": "unknown_op", "index": 0, "path":
+"/0/op", "message": "no operation has this name", "text": {"key":
+"canvas.check.p_unknown_op"}}`. I codici sono quelli del [controllo](canvas-check.md) e
+dello [schema](canvas-schema.md).
+
+`canvas.guide` («Guida alla lavagna», «Whiteboard guide») dà la guida per scrivere
+una lavagna con le operazioni, e non legge nessun documento. Il payload ha
+`kind: "guide"` e questi campi:
+
+| Campo | Contenuto |
+|---|---|
+| `text` | la guida, il testo di `crates/fub-features/src/lavagna/guida.md` (al più 150 righe), sempre |
+| `ops` | una voce per operazione: `name`, `summary` (la frase del nucleo), `fields` con `name`, `kind`, `required`, `doc` e, dove c'è, `default` e `values` |
+| `schema` | lo schema JSON della lista di operazioni, quello di `spec::json_schema` |
+| `examples` | gli esempi di ciascuna operazione, come oggetti JSON |
+
+Il parametro `topic` (il nome di un'operazione) limita `ops`, il ramo di
+`schema` e `examples` a quella sola operazione. Un `topic` vuoto è come non
+averlo. Un `topic` che non è un'operazione è `BadArgs`, e la frase dà i nomi
+vicini, con la distanza dello [schema](canvas-schema.md); senza vicini dà tutti i nomi. Per
+esempio `canvas.guide` con `topic` `move` dà `ops` con una sola voce, `name`
+`move`, uno schema con un solo ramo e solo gli esempi di `move`.
+
+`canvas.preview` («Anteprima della lavagna», «Whiteboard preview») disegna una
+lavagna come immagine, per vederne la forma (una freccia storta, due schede una
+sopra l'altra), e non scrive niente (`CommandScope::read_only()`). Il disegno è
+del nucleo (`fub_canvas_core::preview`): schede coi loro colori, gruppi
+tratteggiati con la loro etichetta, archi con le punte e l'etichetta a metà. Il
+PNG lo fa `fub-features` con la feature `draw`, coi caratteri che `draw`
+incorpora (Inter, Literata, JetBrains Mono): mai quelli di sistema, così la
+stessa lavagna dà gli stessi pixel su ogni macchina. Senza `draw` l'immagine è
+l'SVG come testo.
+
+| Parametro | Tipo | |
+|---|---|---|
+| `doc` | documento, obbligatorio | il file `.canvas`; un documento di un altro formato è `BadArgs` |
+| `ops` | testo | una lista JSON di operazioni: si disegna la lavagna di dopo, senza scriverla. Le regole sono quelle di `canvas.check`: una lista che non si scrive è `BadArgs`, con la posizione (da uno), il codice e il motivo del primo problema; un testo che non è JSON è `BadArgs` come in `canvas.apply` |
+| `base` | testo | la revisione che la lista ha letto; se il file ne ha un'altra è `Conflict`, come in `canvas.apply` |
+| `seed` | testo | il seme degli id nuovi, come in `canvas.apply`; di serie la revisione |
+| `size` | numero | il lato lungo in pixel, un intero da zero in su; di serie 1024, fuori da 64 a 2048 si stringe. Un numero che non è un intero, o negativo, è `BadArgs` |
+
+L'esito è l'effetto `Custom` con namespace `fub.lavagna` e payload
+`{"version": 1, "kind": "preview", "doc", "revision", "image", "outline",
+"outline_omitted"}`. `image` ha `media_type` (`image/png`, con `draw`;
+`image/svg+xml` senza), `width`, `height` in pixel e `data`: il PNG in base64,
+oppure l'SVG come testo. Il lato corto non scende sotto 64 pixel, e una lavagna
+vuota è un quadrato di 64.
+
+`outline` elenca le schede in ordine di modello (gruppi compresi), al più
+2 000; `outline_omitted` dice quante ne restano. Ogni voce ha `n`, il numero
+che la scheda porta nel disegno e che `canvas.read` dà alla sua riga, `id`,
+`kind` (le specie di `outline`: `text`, `note`, `group`…) e `clipped`. Con `ops`
+il numero è quello della lavagna di dopo.
+
+`clipped` è vero quando il testo della scheda non si vede per intero: o non
+entra nell'altezza, e l'ultima riga che si vede finisce con «…», o la scheda è
+troppo bassa per mostrarlo (meno di 12 pixel nell'immagine). Il nucleo non
+misura il font: un carattere più largo della stima esce dalla scheda, e il
+disegno lo taglia senza che `clipped` lo dica.
+
+Il testo è quello vero, tolti i segni del Markdown (titoli, citazioni, liste,
+caselle, recinti del codice, collegamenti, enfasi). Le righe si spezzano a
+caratteri, con la stima di [Misure e posti](canvas-code.md#misure-e-posti): una
+scheda alta quanto la stima di una scheda nuova ha tutte le sue righe. Una
+scheda file mostra il nome senza cartelle e col suo sottopercorso, un link il
+suo indirizzo, in JetBrains Mono. Un carattere che i tre font non hanno resta un
+segno sostitutivo del font, senza errore. Il testo sta in sezioni CDATA, così
+`<`, `&` e le virgolette restano come sono, senza entità; un carattere che XML
+non ammette diventa U+FFFD.
+
+I colori delle sei schede di serie sono valori fissi (un tono leggero per il
+riempimento, uno pieno per il tratto); un esadecimale si disegna com'è, e una
+scheda senza colore è grigia. Il margine attorno al contenuto è di 16 unità per
+lato.
+
+Errori: `canvas.preview.e_ops` (la lista non si disegna), `canvas.preview.e_size`
+(il lato non è un intero da zero in su), `canvas.preview.e_base` (la lavagna è
+cambiata: è un `Conflict`) e `canvas.preview.e_png` (il disegno non si è potuto
+rasterizzare, un difetto interno). Il disegno copre tutte le schede della
+lavagna, che il nucleo accetta fino a 100 000; solo l'elenco si ferma a 2 000. Una
+lavagna di diecimila schede si disegna sotto i due secondi in release, e con le
+schede piccole non mostra testo né numeri.
 
 ## WebAssembly
 

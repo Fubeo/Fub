@@ -1,0 +1,18 @@
+{
+  "about": "Sottolineare un titolo a pennarello: una riga dritta sotto la scheda. Serve l'inchiostro in codice (N4), quindi con main non si può.",
+  "prompt": "Sottolinea a pennarello, in vermiglio, il titolo «Ciclo dell'acqua»: una riga dritta sotto la scheda.",
+  "before": {
+    "nodes": [
+      { "id": "t", "type": "text", "text": "Ciclo dell'acqua", "x": 400, "y": 320, "width": 320, "height": 160 }
+    ],
+    "edges": []
+  },
+  "ops_today": null,
+  "ops": [
+    { "op": "draw", "on": "t", "shape": { "kind": "line", "x1": 24, "y1": 152, "x2": 296, "y2": 152 }, "pen": "marker", "color": "vermilion" }
+  ],
+  "needs": ["draw"],
+  "checks": [
+    { "strokes": { "on_text": "Ciclo dell'acqua", "n": 1 } }
+  ]
+}

@@ -984,6 +984,15 @@ La più recente in cima: data · piano · decisione · perché.
 - 2026-11-02 · K3 · Scheda grafica e archivio dei caratteri non entrano in K3:
   nessun motore acceso li usa e `wgpu` sarebbe una dipendenza nuova; arrivano
   col primo motore che li chiede · domanda D-1 per l'utente.
+
+- 2026-11-05 · lavagna-in-codice · le risposte dell'utente: D1 (a), D2
+  (a), D3 (a), D4 (a), D5 (b), D6 (a). Con D5 (b) l'anteprima scrive il
+  testo vero delle schede con i caratteri che `draw` incorpora già
+  (`draw.rs`, `FACES`: Inter, Literata, JetBrains Mono, SIL OFL 1.1), mai
+  quelli di sistema · perché: l'utente vuole la qualità maggiore; il
+  costo in byte che la domanda temeva è già pagato da `draw`, quindi niente
+  dipendenze né caratteri nuovi, e la stessa lavagna dà gli stessi pixel
+  ovunque.
 - 2026-11-05 · caricamento · scelta dell'utente (A): il banco del moto non
   conta come residuo la `transform: scale(1, 1)` che CodeMirror lascia sui
   suoi strati (`.cm-layer`) dopo la cascata d'avvio, che scala il riquadro a
@@ -2070,3 +2079,27 @@ La più recente in cima: data · piano · decisione · perché.
   dati di T12 spinge l'ultima del DOM sotto la banda); la pastiglia del titolo non
   fa più crescere la riga del cursore (salto di 7–9 px, già su `main`) · le
   baseline di T25 si prendono dopo, con questi cambi dentro.
+- 2026-11-13 · parità · T1 toglie `{ "gesture": "marquee" }` dalla voce `main.select`: in main trascinare nel vuoto sposta la vista, non sceglie. Nemmeno N6 lo fa (la Selezione nel vuoto chiama `#beginPan`), anche se il suo suggerimento `canvas.options.select_hint` dice «trascina nel vuoto per sceglierne più d'una»: è un difetto di N6, tracciato come N6 T20b. Quando N6 lo porta, la voce `N6.select.marquee` entra in `n6.json` col suo gesto · l'inventario registra ciò che c'è, non ciò che un suggerimento promette.
+- 2026-11-13 · nucleo · T2 si scosta dal piano in punti piccoli, tenuti: `CardKind` sta in `layout.rs`; `place_near` riceve specie, testo e contenuto e torna `Option<Rect>`; `group_rect` torna `Option<Rect>`; una misura non finita torna a quella di serie. La specie di un file segue `cardKindOf` di N6 (il `#` del sottopercorso si toglie, un nome che comincia col punto non ha estensione) e la regola ha la sua riga in `a_named_rule_is_declared.rs`. `drop-layout.ts` di N6 arrotonda all'intero le misure di immagini e PDF, il piano dice `snap`: si allinea in T9 e T24 · la GUI e il codice devono dare la stessa scheda.
+- 2026-11-14 · decisioni · L'ADR di questo piano diventa la 0244 (era 0241): 0241 è di N4 (`0241-inchiostro-sulla-lavagna.md`), 0242 e 0243 di N6; i tre rami andranno in `main` e due file con lo stesso numero si scontrerebbero.
+- 2026-11-14 · nucleo · T10 tenuto con i suoi scostamenti (varianti newtype, `width`/`height` facoltativi in `resize`, `set` che normalizza e rifiuta `#abc` in ingresso, `pdf_first_page`). Le tre code del suo rapporto (anteprima che non misura i file, descrizione MCP, tetto di `move` con `contents`) diventano T10b, scritto dall'orchestratore per la regola di autonomia: anteprima e scrittura devono dare la stessa lavagna.
+- 2026-11-14 · nucleo · T11, `reverse`: la freccia cambia verso (scelta a del coder). L'operazione inverte nodi e lati e tiene le punte per ruolo (`fromEnd` alla partenza, `toEnd` all'arrivo), così «Inverti la direzione» fa ciò che dice; lo scambio letterale di `engine.ts` (#reverse) scambiava anche le punte e la freccia restava dov'era. In T23 la GUI passa all'operazione del nucleo e cambia ciò che si vede (R8).
+- 2026-11-14 · T12 · `N6.card.drop_many` passa nella parità da `by_hand` a
+  `code`: R4 non ammette `target_ops` che compilano, e il gruppo oltre 12
+  schede lo compone T24 (`layout` poi `group`) · la voce dice ciò che il nucleo
+  sa fare oggi.
+- 2026-11-14 · T12 · La griglia del nucleo adotta la regola di N6 (la colonna
+  dopo parte al primo multiplo di 8 che lascia almeno 24), non il contrario:
+  nuovo task T12a · è il comportamento che l'utente vede già nel rilascio dei
+  file, e tiene le schede sulla griglia di 8 della tela.
+- 2026-11-14 · T12a · Il nucleo non porta il minimo di 40 px di `roundSize` di N6:
+  `layout` conta la scheda con la sua misura vera · `roundSize` vale per le
+  misure di nascita delle schede nuove, che sono già ≥ 40 quando T24 le passa a
+  `layout`; una scheda più piccola scritta a mano nel file resta com'è, e la
+  griglia non deve gonfiarla.
+- 2026-11-14 · T13 · Il frammento di `insert` lo legge il compilatore: i suoi errori
+  sono `Invalid`, e un campo della radice che non conosce (anche `fub:ink`) è
+  `Invalid` invece di sparire · i tratti liberi di un frammento non si perdono in
+  silenzio; T24 li incolla con le operazioni dell'inchiostro.
+- 2026-11-14 · T20 · `from_outline` si dispone di serie verso destra (`right`), non verso il basso: lo chiedono i compiti 02 e 19 del corpus, che sono come un modello scrive una scaletta · i compiti sono il riferimento del piano per la forma attesa.
+- 2026-11-14 · T20 · L'esito di `canvas.apply` porta sempre `notes` e `notes_omitted` (campi aggiunti): un client che rifiuta i campi sconosciuti li vedrebbe, ma i client di Fub (GUI, CLI, MCP) li leggono o li ignorano · ciò che l'importazione perde si dice sempre, anche quando è niente.

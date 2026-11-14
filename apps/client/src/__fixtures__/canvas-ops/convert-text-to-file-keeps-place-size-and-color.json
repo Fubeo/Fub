@@ -1,0 +1,77 @@
+{
+  "about": "convert di ap: la scheda resta al suo posto nell'ordine, con id, posto, misure, colore e campi sconosciuti; il testo esce, entra il file. L'arco resta.",
+  "before": {
+    "nodes": [
+      {
+        "id": "ap",
+        "type": "text",
+        "x": 8,
+        "y": 16,
+        "width": 320,
+        "height": 240,
+        "text": "Appunti acqua",
+        "color": "#ff8800",
+        "fub:nota": "resta"
+      },
+      {
+        "id": "ci",
+        "type": "text",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Ciclo dell'acqua"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "fromNode": "ap",
+        "toNode": "ci",
+        "toEnd": "arrow"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "convert",
+      "id": "ap",
+      "file": "Idee/acqua.md"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "ap",
+          "type": "file",
+          "x": 8,
+          "y": 16,
+          "width": 320,
+          "height": 240,
+          "file": "Idee/acqua.md",
+          "color": "#ff8800",
+          "fub:nota": "resta"
+        },
+        {
+          "id": "ci",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Ciclo dell'acqua"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "fromNode": "ap",
+          "toNode": "ci",
+          "toEnd": "arrow"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "about": "layout con x e senza y: l'origine va data con tutte e due le coordinate, o con nessuna.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "a"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "layout",
+      "kind": "row",
+      "x": 100
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

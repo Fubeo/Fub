@@ -1,0 +1,16 @@
+{
+  "about": "Sotto «a», a 24: y = 100 + 160 + 24 = 284. Un testo sopra o sotto prende la larghezza di «a» (400), e la sua altezza si stima su quella.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" }] },
+  "ops": [{ "op": "add_card", "id": "b", "text": "Sotto", "near": "a", "side": "bottom" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" },
+        { "id": "b", "type": "text", "x": 100, "y": 284, "width": 400, "height": 160, "text": "Sotto" }
+      ],
+      "edges": []
+    },
+    "created": ["b"]
+  }
+}

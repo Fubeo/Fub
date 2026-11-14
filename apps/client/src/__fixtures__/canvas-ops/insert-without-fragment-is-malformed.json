@@ -1,0 +1,27 @@
+{
+  "about": "insert senza fragment: non si legge.",
+  "before": {
+    "nodes": [
+      {
+        "id": "lez",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Lezione"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "insert",
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "expect": {
+    "outcome": "malformed"
+  }
+}

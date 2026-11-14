@@ -1,0 +1,13 @@
+{
+  "about": "Un testo di sei righe è alto 176 (24 per riga più 32, agganciato a 8): la stima di nascita cresce con le righe, la larghezza resta 320.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "r", "text": "a\nb\nc\nd\ne\nf" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "r", "type": "text", "x": 0, "y": 0, "width": 320, "height": 176, "text": "a\nb\nc\nd\ne\nf" }],
+      "edges": []
+    },
+    "created": ["r"]
+  }
+}

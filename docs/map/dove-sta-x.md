@@ -24,6 +24,10 @@
 | le annotazioni PDF (`.fubann`) | `docs/reference/annotation-format.md` |
 | JSON Canvas (`.canvas`) | `crates/fub-format-canvas/schema/canvas-v1.schema.json` |
 | il modello e le regole della lavagna | `crates/fub-canvas-core/` e `docs/reference/canvas-format.md` |
+| la lavagna letta come codice (`outline`, `code`, `json`) | `crates/fub-canvas-core/src/describe.rs` e `docs/reference/canvas-code.md` |
+| lo schema delle operazioni della lavagna, i problemi di forma (`validate`) | `crates/fub-canvas-core/src/spec.rs` e `docs/reference/canvas-schema.md` |
+| la lettura di Mermaid e delle scalette (`from_mermaid`, `from_outline`) e la loro disposizione | `crates/fub-canvas-core/src/import/`, `src/ops/import.rs` e `docs/reference/canvas-import.md` |
+| il controllo di una lista prima di scriverla (`check`) e il suo riassunto | `crates/fub-canvas-core/src/check.rs`, `summary.rs` e `docs/reference/canvas-check.md` |
 | la proiezione dei documenti ricchi | `docs/reference/rich-projection.md` |
 | il protocollo della sessione live | `docs/reference/live-session.md` |
 | le porte IPC del motore del disegno | `docs/reference/drawing-ipc.md` |
@@ -53,6 +57,7 @@
 | il disegno sul motore (chi possiede che cosa) | [Il disegno sul motore](../architecture/disegno.md) |
 | la tavolozza dell'inchiostro | `apps/client/src/ink/palette.ts` (Okabe–Ito) |
 | i sei colori della lavagna | `apps/client/src/editors/canvas/engine.ts` |
+| l'inventario della parità della lavagna (le voci e i test) | `apps/client/src/__fixtures__/canvas-parity/`, con le regole in `docs/development/canvas-parity.md` |
 | il limite dei 64 MiB per i media | `apps/client/src/editors/media/media-types.ts` |
 | il sanificatore dell'HTML | `apps/client/src/ui/sanitize.ts` |
 | le molle del moto | `apps/client/src/moto/spring.ts` |

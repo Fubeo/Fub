@@ -259,6 +259,8 @@ fn inizializzazione_elenco_e_errori_del_protocollo() {
             "fub_preview",
             "fub_write",
             "fub_create",
+            "fub_canvas_guide",
+            "fub_canvas_read",
             "fub_canvas_create",
             "fub_canvas_apply",
             "fub_commands",
@@ -374,10 +376,25 @@ fn ogni_strumento_che_legge() {
     assert_eq!(create["writes"], true);
     assert!(create["params"].is_array());
 
-    // Le risorse: le note come fub://open?note=…, a pagine.
+    // Le risorse: in testa le tre della guida della lavagna (il componente è
+    // acceso di serie), poi le note come fub://open?note=…, a pagine.
     let list = server.request("resources/list", json!({}));
     let resources = list["result"]["resources"].as_array().unwrap();
-    assert_eq!(resources.len(), 5);
+    assert_eq!(resources.len(), 8);
+    assert_eq!(
+        resources[..3]
+            .iter()
+            .map(|r| r["uri"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "fub-guida://lavagna",
+            "fub-guida://lavagna/schema",
+            "fub-guida://lavagna/esempi"
+        ]
+    );
+    assert_eq!(resources[0]["mimeType"], "text/markdown");
+    assert_eq!(resources[1]["mimeType"], "application/json");
+    assert_eq!(resources[2]["mimeType"], "application/json");
     let prezzi = resources
         .iter()
         .find(|r| r["name"] == "Note/prezzi.md")
@@ -949,6 +966,519 @@ fn il_cancello_della_lavagna() {
     assert_eq!(text, expected.replacen("\"x\":360", "\"x\":370", 1));
 }
 
+/// Una lista che `fub_canvas_apply` rifiuta con i suoi problemi: il testo della
+/// risposta e il suo `structuredContent`, con `isError`.
+fn rejected(server: &mut Server, arguments: Value) -> (String, Value) {
+    let reply = server.request(
+        "tools/call",
+        json!({ "name": "fub_canvas_apply", "arguments": arguments }),
+    );
+    let result = &reply["result"];
+    assert_eq!(result["isError"], true, "doveva essere rifiutata: {reply}");
+    (
+        result["content"][0]["text"].as_str().unwrap().to_string(),
+        result["structuredContent"].clone(),
+    )
+}
+
+/// Una lavagna `Agente/piano.canvas` con il vettore del cancello. Ritorna la
+/// risposta della scrittura, con la revisione dopo.
+fn board(server: &mut Server) -> Value {
+    let made = server.ok("fub_canvas_create", json!({ "name": "Agente/piano" }));
+    server.ok(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/piano.canvas", "ops": agent_board()["ops"], "base": made["revision"], "apply": true }),
+    )
+}
+
+/// La lettura e la guida: `fub_canvas_read` dà la lavagna con la sua revisione
+/// nelle forme di `canvas.read`, `fub_canvas_guide` la guida con le operazioni.
+#[test]
+fn le_lavagne_si_leggono_e_si_guidano() {
+    let f = fixture();
+    let mut server = writer(&f);
+    let done = board(&mut server);
+    let after = agent_board()["expect"]["after"].clone();
+    let cards = after["nodes"].as_array().unwrap().len();
+
+    let read = server.ok("fub_canvas_read", json!({ "doc": "Agente/piano.canvas" }));
+    assert_eq!(read["doc"], "Agente/piano.canvas");
+    assert_eq!(read["revision"], done["revision"]);
+    assert_eq!(read["form"], "outline");
+    assert_eq!(read["counts"]["cards"], cards);
+    assert!(read.get("version").is_none() && read.get("kind").is_none());
+    let text = read["text"].as_str().unwrap();
+    assert!(text.contains("obiettivo"), "{text}");
+    let file = server.ok("fub_read", json!({ "doc": "Agente/piano.canvas" }));
+    assert_eq!(read["revision"], file["revision"]);
+
+    // `code` è la lista che ricrea la lavagna, `json` il modello.
+    let code = server.ok(
+        "fub_canvas_read",
+        json!({ "doc": "Agente/piano.canvas", "form": "code" }),
+    );
+    let ops: Value = serde_json::from_str(code["text"].as_str().unwrap()).unwrap();
+    assert!(ops.is_array(), "{ops}");
+    let model = server.ok(
+        "fub_canvas_read",
+        json!({ "doc": "Agente/piano.canvas", "form": "json" }),
+    );
+    assert_eq!(model["model"]["nodes"].as_array().unwrap().len(), cards);
+
+    // `ids`, come lista o come testo JSON, legge solo quelle schede.
+    let one = server.ok(
+        "fub_canvas_read",
+        json!({ "doc": "Agente/piano.canvas", "ids": ["passo-1"] }),
+    );
+    assert_eq!(one["counts"]["cards"], 1);
+    let one_text = server.ok(
+        "fub_canvas_read",
+        json!({ "doc": "Agente/piano.canvas", "ids": "[\"passo-1\"]" }),
+    );
+    assert_eq!(one_text["counts"]["cards"], 1);
+    // `max_chars` taglia l'outline.
+    let short = server.ok(
+        "fub_canvas_read",
+        json!({ "doc": "Agente/piano.canvas", "max_chars": 20 }),
+    );
+    assert!(short["text"].as_str().unwrap().chars().count() < text.chars().count());
+
+    // Argomenti sbagliati, e un documento che non è una lavagna.
+    assert!(server
+        .refused(
+            "fub_canvas_read",
+            json!({ "doc": "Agente/piano.canvas", "form": "vola" })
+        )
+        .starts_with("bad_args"));
+    assert!(server
+        .refused(
+            "fub_canvas_read",
+            json!({ "doc": "Agente/piano.canvas", "ids": 3 })
+        )
+        .starts_with("bad_args: `ids`"));
+    assert!(server
+        .refused(
+            "fub_canvas_read",
+            json!({ "doc": "Agente/piano.canvas", "max_chars": "dodici" })
+        )
+        .starts_with("bad_args: `max_chars`"));
+    assert!(server
+        .refused("fub_canvas_read", json!({ "doc": "Agente/bozza.md" }))
+        .starts_with("bad_args"));
+
+    // La guida: il testo, le operazioni, lo schema e gli esempi.
+    let guide = server.ok("fub_canvas_guide", json!({}));
+    assert!(!guide["text"].as_str().unwrap().is_empty());
+    let mut names: Vec<&str> = guide["ops"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|op| op["name"].as_str().unwrap())
+        .collect();
+    names.sort();
+    assert_eq!(
+        names,
+        [
+            "add_card",
+            "align",
+            "color",
+            "connect",
+            "convert",
+            "distribute",
+            "duplicate",
+            "from_mermaid",
+            "from_outline",
+            "group",
+            "insert",
+            "layout",
+            "move",
+            "remove",
+            "reorder",
+            "resize",
+            "reverse",
+            "set"
+        ]
+    );
+    assert!(guide["schema"].is_object());
+    assert!(!guide["examples"].as_array().unwrap().is_empty());
+    assert!(guide.get("version").is_none() && guide.get("kind").is_none());
+    let one_op = server.ok("fub_canvas_guide", json!({ "topic": "move" }));
+    assert_eq!(one_op["ops"].as_array().unwrap().len(), 1);
+    assert_eq!(one_op["ops"][0]["name"], "move");
+    let unknown = server.refused("fub_canvas_guide", json!({ "topic": "vola" }));
+    assert!(unknown.starts_with("bad_args"), "{unknown}");
+}
+
+/// Il controllo viene prima di tutto: una lista con problemi non tocca il file,
+/// né con `apply` né in prova; una revisione superata è il conflitto di sempre.
+#[test]
+fn fub_canvas_apply_controlla_prima_di_scrivere() {
+    let f = fixture();
+    let mut server = writer(&f);
+    let done = board(&mut server);
+    let path = f.vault.join("Agente/piano.canvas");
+    let written = std::fs::read_to_string(&path).unwrap();
+    let base = done["revision"].clone();
+
+    // Cinquecento operazioni sbagliate: il testo dice la prima, il payload tutte.
+    let many = json!(vec![json!({ "op": "vola" }); 500]);
+    for apply in [true, false] {
+        let (text, data) = rejected(
+            &mut server,
+            json!({ "doc": "Agente/piano.canvas", "ops": many, "base": base, "apply": apply, "preview": true }),
+        );
+        assert!(
+            text.starts_with(
+                "500 problemi: niente è scritto. Il primo, l'operazione 1 (unknown_op)"
+            ),
+            "{text}"
+        );
+        assert_eq!(data["problems"].as_array().unwrap().len(), 500);
+        assert_eq!(data["problems"][499]["index"], 499);
+        assert_eq!(data["written"], false);
+        assert_eq!(data["ok"], false);
+        assert!(data.get("dry_run").is_none() && data.get("preview").is_none());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), written);
+    }
+
+    // Una base vecchia da sola è il conflitto di `canvas.apply`, con la stessa
+    // parola e lo stesso codice; la lavagna non cambia.
+    let stale = server.refused(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/piano.canvas", "ops": [{ "op": "remove", "ids": ["passo-2"] }], "base": "vecchia", "apply": true }),
+    );
+    assert!(stale.starts_with("conflict:"), "{stale}");
+    assert!(stale.contains("rileggi"), "{stale}");
+    assert!(server
+        .refused(
+            "fub_canvas_apply",
+            json!({ "doc": "Agente/piano.canvas", "ops": [{ "op": "remove", "ids": ["passo-2"] }], "base": "vecchia" })
+        )
+        .starts_with("conflict:"));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), written);
+
+    // Con un altro problema accanto, la base vecchia è uno dei problemi.
+    let (text, data) = rejected(
+        &mut server,
+        json!({ "doc": "Agente/piano.canvas", "ops": [{ "op": "vola" }], "base": "vecchia", "apply": true }),
+    );
+    assert!(text.starts_with("2 problemi"), "{text}");
+    assert_eq!(data["problems"][0]["code"], "stale_base");
+    assert_eq!(data["problems"][1]["code"], "unknown_op");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), written);
+}
+
+/// Con la lista buona: la prova dice che cosa cambierebbe, `apply` scrive con i
+/// suoi avvisi, e `preview` mostra la lavagna di dopo prima di scrivere.
+#[test]
+fn fub_canvas_apply_con_la_prova_e_l_anteprima() {
+    let f = fixture();
+    let mut server = writer(&f);
+    let made = server.ok("fub_canvas_create", json!({ "name": "Agente/prova" }));
+    let path = f.vault.join("Agente/prova.canvas");
+    let empty = std::fs::read_to_string(&path).unwrap();
+    let card = json!([{ "op": "add_card", "node": { "id": "uno", "type": "text", "x": 0, "y": 0, "width": 240, "height": 100, "text": "Ciao" } }]);
+
+    // La prova: il controllo, il piano, e il file uguale.
+    let dry = server.ok(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/prova.canvas", "ops": card, "base": made["revision"] }),
+    );
+    assert_eq!(dry["dry_run"], true);
+    assert_eq!(dry["check"]["ok"], true);
+    assert!(dry["check"]["summary"].is_object());
+    assert!(dry["outcome"].to_string().contains("Agente/prova.canvas"));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), empty);
+
+    // La prova con l'immagine di dopo: un PNG come contenuto, e la lettura delle
+    // schede con il numero, senza i byte nel testo.
+    let (content, data) = {
+        let reply = server.request(
+            "tools/call",
+            json!({ "name": "fub_canvas_apply", "arguments": { "doc": "Agente/prova.canvas", "ops": card, "base": made["revision"], "preview": true } }),
+        );
+        assert_ne!(reply["result"]["isError"], true, "{reply}");
+        (
+            reply["result"]["content"].clone(),
+            reply["result"]["structuredContent"].clone(),
+        )
+    };
+    assert_eq!(content[1]["type"], "image");
+    assert_eq!(content[1]["mimeType"], "image/png");
+    assert!(content[1]["data"]
+        .as_str()
+        .unwrap()
+        .starts_with("iVBORw0KGgo"));
+    assert_eq!(data["preview"]["image"]["media_type"], "image/png");
+    assert!(data["preview"]["image"].get("data").is_none());
+    let outline = data["preview"]["info"]["outline"].as_array().unwrap();
+    assert!(
+        outline.iter().any(|entry| entry["id"] == "uno"),
+        "{outline:?}"
+    );
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), empty);
+
+    // La scrittura: la risposta di adesso, con gli avvisi del controllo.
+    let done = server.ok(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/prova.canvas", "ops": card, "base": made["revision"], "apply": true }),
+    );
+    assert_eq!(done["dry_run"], false);
+    assert_eq!(done["created"], json!(["uno"]));
+    assert!(done["warnings"].is_array(), "{done}");
+    assert!(done.get("check").is_none());
+    assert!(std::fs::read_to_string(&path).unwrap().contains("\"Ciao\""));
+}
+
+/// `fub_preview` su una lavagna disegna la lavagna: 512 pixel di lato lungo di
+/// serie, 1024 con `large`, con la stessa revisione di `fub_read`.
+#[test]
+fn fub_preview_disegna_una_lavagna() {
+    let f = fixture();
+    let mut server = writer(&f);
+    board(&mut server);
+    let file = server.ok("fub_read", json!({ "doc": "Agente/piano.canvas" }));
+
+    for (size, side) in [("small", 512), ("large", 1024)] {
+        let reply = server.request(
+            "tools/call",
+            json!({ "name": "fub_preview", "arguments": { "doc": "Agente/piano.canvas", "size": size } }),
+        );
+        let result = &reply["result"];
+        assert_ne!(result["isError"], true, "{reply}");
+        let data = &result["structuredContent"];
+        assert_eq!(data["origin"], "canvas");
+        assert_eq!(data["size"], size);
+        assert_eq!(data["revision"], file["revision"]);
+        assert!(data["missing"].is_null() && data["limit_bytes"].is_null());
+        let width = data["image"]["width"].as_u64().unwrap();
+        let height = data["image"]["height"].as_u64().unwrap();
+        assert_eq!(width.max(height), side, "{data}");
+        assert!(data["image"].get("data").is_none());
+        assert_eq!(result["content"][1]["mimeType"], "image/png");
+        assert!(data["info"]["outline"].is_array());
+    }
+}
+
+/// Le risorse della guida: in testa alla prima pagina, e assenti dalla seconda.
+/// Il `cursor` resta l'offset delle note, a pagine da 100.
+#[test]
+fn le_guide_sono_in_testa_alla_prima_pagina_e_basta() {
+    let f = fixture();
+    for n in 0..100 {
+        std::fs::write(f.vault.join(format!("Note/nota-{n:03}.md")), "# Nota\n").unwrap();
+    }
+    let mut server = writer(&f);
+    let first = server.request("resources/list", json!({}));
+    let resources = first["result"]["resources"].as_array().unwrap();
+    assert_eq!(resources.len(), 103);
+    assert!(resources[..3].iter().all(|r| r["uri"]
+        .as_str()
+        .unwrap()
+        .starts_with("fub-guida://lavagna")));
+    assert!(resources[3..]
+        .iter()
+        .all(|r| !r["uri"].as_str().unwrap().starts_with("fub-guida://")));
+    assert_eq!(first["result"]["nextCursor"], "100");
+
+    let second = server.request("resources/list", json!({ "cursor": "100" }));
+    let rest = second["result"]["resources"].as_array().unwrap();
+    assert_eq!(rest.len(), 5);
+    assert!(rest
+        .iter()
+        .all(|r| !r["uri"].as_str().unwrap().starts_with("fub-guida://")));
+    assert!(second["result"].get("nextCursor").is_none());
+}
+
+/// Le tre guide si leggono come risorse, e ogni altro `fub-guida://` è
+/// `invalid_params`.
+#[test]
+fn la_guida_si_legge_come_risorsa() {
+    let f = fixture();
+    let mut server = writer(&f);
+    let guide = server.ok("fub_canvas_guide", json!({}));
+    let read =
+        |server: &mut Server, uri: &str| server.request("resources/read", json!({ "uri": uri }));
+
+    let text = read(&mut server, "fub-guida://lavagna");
+    let contents = &text["result"]["contents"][0];
+    assert_eq!(contents["mimeType"], "text/markdown");
+    assert_eq!(contents["text"], guide["text"]);
+    let schema = read(&mut server, "fub-guida://lavagna/schema");
+    assert_eq!(
+        schema["result"]["contents"][0]["mimeType"],
+        "application/json"
+    );
+    let parsed: Value =
+        serde_json::from_str(schema["result"]["contents"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(parsed, guide["schema"]);
+    let examples = read(&mut server, "fub-guida://lavagna/esempi");
+    let parsed: Value =
+        serde_json::from_str(examples["result"]["contents"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(parsed, guide["examples"]);
+
+    for uri in [
+        "fub-guida://lavagna/vola",
+        "fub-guida://",
+        "fub-guida://lavagna?x=1",
+        "fub-guida://altro",
+    ] {
+        assert_eq!(read(&mut server, uri)["error"]["code"], -32602, "{uri}");
+    }
+}
+
+/// La descrizione di `fub_canvas_apply` nomina ogni operazione di `canvas.guide`,
+/// e nessuna che la guida non ha: un'operazione nuova senza il suo nome fa
+/// fallire questa prova.
+#[test]
+fn la_descrizione_di_fub_canvas_apply_nomina_le_operazioni_della_guida() {
+    let f = fixture();
+    let mut server = writer(&f);
+    let guide = server.ok("fub_canvas_guide", json!({}));
+    let names: Vec<String> = guide["ops"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|op| op["name"].as_str().unwrap().to_string())
+        .collect();
+    let tools = server.request("tools/list", json!({}));
+    let apply = tools["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "fub_canvas_apply")
+        .unwrap();
+    let description = apply["description"].as_str().unwrap();
+    for name in &names {
+        assert!(
+            description.contains(&format!("`{name}`")),
+            "manca {name}: {description}"
+        );
+    }
+    // I campi che T10 ha aggiunto: la guida li ha, e la descrizione dice come si
+    // scrivono (senza backtick, che è riservato ai nomi delle operazioni).
+    let fields_of = |op: &str| -> Vec<String> {
+        guide["ops"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["name"] == op)
+            .unwrap_or_else(|| panic!("la guida non ha {op}"))["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|field| field["name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    for (op, field, shape) in [
+        ("move", "contents", "contents: true"),
+        ("resize", "fit", "fit: \"content\""),
+        ("reorder", "to", "to: \"back\""),
+    ] {
+        assert!(
+            fields_of(op).iter().any(|name| name == field),
+            "la guida non ha {op}.{field}"
+        );
+        assert!(description.contains(shape), "manca {shape}: {description}");
+    }
+    // Ciò che sta fra backtick e ha la forma di un nome è un'operazione.
+    for token in description.split('`').skip(1).step_by(2) {
+        if token.bytes().all(|b| b.is_ascii_lowercase() || b == b'_') {
+            assert!(
+                names.iter().any(|name| name == token),
+                "`{token}` non è un'operazione"
+            );
+        }
+    }
+}
+
+/// Con la lavagna spenta non ci sono né le sue guide né i suoi comandi: ogni
+/// strumento dice `unavailable`, e la lista non ha le tre risorse.
+#[test]
+fn con_la_lavagna_spenta_nessuno_strumento_di_lavagna_risponde() {
+    let f = fixture();
+    std::fs::write(f.vault.join("Agente/tela.canvas"), EMPTY_CANVAS).unwrap();
+    {
+        let mut server = vault_writer(&f);
+        server.ok(
+            "fub_components_disable",
+            json!({ "id": "fub.lavagna", "apply": true }),
+        );
+    }
+    let mut server = writer(&f);
+    for (tool, arguments) in [
+        ("fub_canvas_read", json!({ "doc": "Agente/tela.canvas" })),
+        ("fub_canvas_guide", json!({})),
+        ("fub_preview", json!({ "doc": "Agente/tela.canvas" })),
+        (
+            "fub_canvas_apply",
+            json!({ "doc": "Agente/tela.canvas", "ops": [{ "op": "remove", "ids": ["x"] }], "base": "x", "apply": true }),
+        ),
+    ] {
+        let refused = server.refused(tool, arguments);
+        assert!(refused.starts_with("unavailable:"), "{tool}: {refused}");
+    }
+    let list = server.request("resources/list", json!({}));
+    assert!(list["result"]["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|r| !r["uri"].as_str().unwrap().starts_with("fub-guida://")));
+    assert_eq!(
+        server.request("resources/read", json!({ "uri": "fub-guida://lavagna" }))["error"]["code"],
+        -32602
+    );
+    assert_eq!(
+        std::fs::read_to_string(f.vault.join("Agente/tela.canvas")).unwrap(),
+        EMPTY_CANVAS
+    );
+}
+
+/// Senza radici di scrittura la lavagna si legge e si guida, e `fub_canvas_apply`
+/// è `denied` prima del controllo, anche con una lista che non si legge. Una
+/// lavagna fuori dalle radici di lettura è `denied`, come una nota.
+#[test]
+fn senza_radici_di_scrittura_la_lavagna_si_legge_e_non_si_scrive() {
+    let f = fixture();
+    {
+        let mut server = vault_writer(&f);
+        board(&mut server);
+    }
+    let path = f.vault.join("Agente/piano.canvas");
+    let written = std::fs::read_to_string(&path).unwrap();
+
+    let mut server = Server::start(&f.vault, &f.config, &[]).initialized();
+    server.ok("fub_canvas_read", json!({ "doc": "Agente/piano.canvas" }));
+    server.ok("fub_canvas_guide", json!({}));
+    let denied = server.refused(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/piano.canvas", "ops": "non json", "base": "x", "apply": true }),
+    );
+    assert!(denied.starts_with("denied:"), "{denied}");
+    let denied = server.refused(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/piano.canvas", "ops": [{ "op": "vola" }], "base": "x" }),
+    );
+    assert!(denied.starts_with("denied:"), "{denied}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), written);
+    // Il vault è di un server solo alla volta: questo si chiude prima del prossimo.
+    drop(server);
+
+    // Con la lettura che copre solo Agente, una lavagna in Note è negata.
+    std::fs::write(f.vault.join("Note/tela.canvas"), EMPTY_CANVAS).unwrap();
+    let mut narrow = Server::start(
+        &f.vault,
+        &f.config,
+        &[("--automation-read-root", &f.vault.join("Agente"))],
+    )
+    .initialized();
+    let denied = narrow.refused("fub_canvas_read", json!({ "doc": "Note/tela.canvas" }));
+    assert!(denied.starts_with("denied:"), "{denied}");
+    let denied = narrow.refused("fub_preview", json!({ "doc": "Note/tela.canvas" }));
+    assert!(denied.starts_with("denied:"), "{denied}");
+    narrow.ok("fub_canvas_read", json!({ "doc": "Agente/piano.canvas" }));
+}
+
 /// I rifiuti di `fub_canvas_create` e `fub_canvas_apply`: radici che non
 /// coprono la cartella, una base vecchia, operazioni sbagliate, un documento
 /// che non è una lavagna. Nessuno scrive un byte.
@@ -1007,15 +1537,13 @@ fn le_lavagne_rifiutano_senza_scrivere() {
     assert!(stale.starts_with("conflict:"), "{stale}");
     assert_eq!(std::fs::read_to_string(&path).unwrap(), written);
 
-    // Operazioni sbagliate: argomenti sbagliati.
+    // Un testo che non è JSON, o un valore che non è una lista: argomenti
+    // sbagliati, come prima del controllo.
     let base = first["revision"].clone();
     for ops in [
         json!("non json"),
-        json!([]),
-        json!([{ "op": "vola" }]),
         json!(3),
         json!({ "op": "remove", "ids": ["uno"] }),
-        json!([{ "op": "remove", "ids": ["nessuno"] }]),
     ] {
         let bad = server.refused(
             "fub_canvas_apply",
@@ -1023,6 +1551,27 @@ fn le_lavagne_rifiutano_senza_scrivere() {
         );
         assert!(bad.starts_with("bad_args:"), "{ops}: {bad}");
     }
+    // Una lista che il controllo rifiuta: niente scrittura, e il primo problema
+    // nel testo, tutti nel payload.
+    for (ops, code) in [
+        (json!([]), "invalid"),
+        (json!([{ "op": "vola" }]), "unknown_op"),
+        (
+            json!([{ "op": "remove", "ids": ["nessuno"] }]),
+            "unknown_edge",
+        ),
+    ] {
+        let (text, data) = rejected(
+            &mut server,
+            json!({ "doc": "Agente/tela.canvas", "ops": ops, "base": base, "apply": true }),
+        );
+        assert!(text.starts_with("1 problema: niente è scritto"), "{text}");
+        assert!(text.contains(code), "{text}");
+        assert_eq!(data["written"], false);
+        assert_eq!(data["ok"], false);
+        assert_eq!(data["problems"][0]["code"], code, "{data}");
+    }
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), written);
     assert!(server
         .refused(
             "fub_canvas_apply",

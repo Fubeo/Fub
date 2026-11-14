@@ -1,0 +1,25 @@
+{
+  "about": "layout con una disposizione che non c'è: le operazioni non si leggono.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "a"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "layout",
+      "kind": "spirale"
+    }
+  ],
+  "expect": {
+    "outcome": "malformed"
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "about": "layout row di t e del gruppo g: il gruppo va a x 344 (320 + 24) e porta con sé c1 e c2, che restano dentro di lui, spostate della stessa quantità.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "t"
+      },
+      {
+        "id": "g",
+        "type": "group",
+        "x": 0,
+        "y": 240,
+        "width": 400,
+        "height": 200,
+        "label": "G"
+      },
+      {
+        "id": "c1",
+        "type": "text",
+        "x": 24,
+        "y": 264,
+        "width": 100,
+        "height": 60,
+        "text": "c1"
+      },
+      {
+        "id": "c2",
+        "type": "text",
+        "x": 200,
+        "y": 264,
+        "width": 100,
+        "height": 60,
+        "text": "c2"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "layout",
+      "ids": [
+        "t",
+        "g"
+      ],
+      "kind": "row"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "t",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "t"
+        },
+        {
+          "id": "g",
+          "type": "group",
+          "x": 344,
+          "y": 0,
+          "width": 400,
+          "height": 200,
+          "label": "G"
+        },
+        {
+          "id": "c1",
+          "type": "text",
+          "x": 368,
+          "y": 24,
+          "width": 100,
+          "height": 60,
+          "text": "c1"
+        },
+        {
+          "id": "c2",
+          "type": "text",
+          "x": 544,
+          "y": 24,
+          "width": 100,
+          "height": 60,
+          "text": "c2"
+        }
+      ]
+    }
+  }
+}

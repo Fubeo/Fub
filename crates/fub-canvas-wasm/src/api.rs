@@ -96,7 +96,9 @@ impl From<OpError> for Failure {
             OpError::UnknownNode { id, .. } => ("UnknownNode", Some(id)),
             OpError::UnknownEdge { id, .. } => ("UnknownEdge", Some(id)),
             OpError::DuplicateId { id, .. } => ("DuplicateId", Some(id)),
-            OpError::TooMany { .. } => ("TooMany", None),
+            // Il tetto di `move` è un «troppe» come gli altri: il tipo resta
+            // quello che la tela conosce, e il messaggio dice il resto.
+            OpError::TooMany { .. } | OpError::TooManyMoved { .. } => ("TooMany", None),
             OpError::Invalid { .. } => ("Invalid", None),
         };
         failure

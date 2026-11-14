@@ -1,0 +1,22 @@
+{
+  "about": "color con un #rrggbb in maiuscolo lo scrive in minuscolo, e con null toglie il colore di una scheda che ne aveva uno.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a", "color": "1" },
+      { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b", "color": "3" }
+    ]
+  },
+  "ops": [
+    { "op": "color", "ids": ["a"], "color": "#FF8800" },
+    { "op": "color", "ids": ["b"], "color": null }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a", "color": "#ff8800" },
+        { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" }
+      ]
+    }
+  }
+}

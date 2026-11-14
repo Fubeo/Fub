@@ -1,0 +1,133 @@
+{
+  "about": "layout tree con direction right: la radice a sinistra, gli strati vanno a destra (320 + 96 per strato: x 0, 416, 832). c1 e c2 stanno a y 0 e 184, r centrata fra loro (y 92).",
+  "before": {
+    "nodes": [
+      {
+        "id": "r",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "r"
+      },
+      {
+        "id": "c1",
+        "type": "text",
+        "x": 400,
+        "y": 400,
+        "width": 320,
+        "height": 160,
+        "text": "c1"
+      },
+      {
+        "id": "c2",
+        "type": "text",
+        "x": 800,
+        "y": 400,
+        "width": 320,
+        "height": 160,
+        "text": "c2"
+      },
+      {
+        "id": "g1",
+        "type": "text",
+        "x": 400,
+        "y": 800,
+        "width": 320,
+        "height": 160,
+        "text": "g1"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "fromNode": "r",
+        "toNode": "c1"
+      },
+      {
+        "id": "e2",
+        "fromNode": "r",
+        "toNode": "c2"
+      },
+      {
+        "id": "e3",
+        "fromNode": "c1",
+        "toNode": "g1"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "layout",
+      "ids": [
+        "r",
+        "c1",
+        "c2",
+        "g1"
+      ],
+      "kind": "tree",
+      "direction": "right"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "r",
+          "type": "text",
+          "x": 0,
+          "y": 92,
+          "width": 320,
+          "height": 160,
+          "text": "r"
+        },
+        {
+          "id": "c1",
+          "type": "text",
+          "x": 416,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "c1"
+        },
+        {
+          "id": "c2",
+          "type": "text",
+          "x": 416,
+          "y": 184,
+          "width": 320,
+          "height": 160,
+          "text": "c2"
+        },
+        {
+          "id": "g1",
+          "type": "text",
+          "x": 832,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "g1"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "fromNode": "r",
+          "toNode": "c1"
+        },
+        {
+          "id": "e2",
+          "fromNode": "r",
+          "toNode": "c2"
+        },
+        {
+          "id": "e3",
+          "fromNode": "c1",
+          "toNode": "g1"
+        }
+      ]
+    }
+  }
+}

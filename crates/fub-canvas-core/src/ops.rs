@@ -1,5 +1,7 @@
 //! Le operazioni d'intento sulla lavagna (`CanvasOp`): «aggiungi», «sposta»,
-//! «ridimensiona», «collega», «togli», «cambia», «porta sopra». Un agente o
+//! «ridimensiona», «collega», «togli», «cambia», «porta sopra», «allinea»,
+//! «distribuisci», «duplica», «inverti», «raggruppa», «dispone», «incolla»,
+//! «trasforma in file», «da Mermaid», «da una scaletta». Un agente o
 //! la sessione dal tablet pensano così, non in toppe con l'immagine di
 //! prima: [`compile`] traduce una lista di operazioni nelle toppe di
 //! [`crate::patch`], che sono la sola forma con cui una lavagna cambia.
@@ -11,13 +13,17 @@
 //!
 //! Il modello di dopo resta valido: ogni scheda e ogni arco che
 //! un'operazione mette passa le regole di [`Canvas::validate`], e i limiti
-//! [`MAX_NODES`] e [`MAX_EDGES`] danno [`OpError::TooMany`]. `compile` si
-//! aspetta un modello di partenza valido, come quello che dà
-//! [`crate::parse`].
+//! [`crate::model::MAX_NODES`] e [`crate::model::MAX_EDGES`] danno
+//! [`OpError::TooMany`]; il tetto di `move` con `contents` dà
+//! [`OpError::TooManyMoved`]. `compile` si aspetta un modello di partenza
+//! valido, come quello che dà [`crate::parse`].
+//!
+//! Ciò che un'operazione non ha potuto tenere (la forma di un nodo Mermaid, una
+//! riga di stili) non è un errore: è una nota in [`Compiled::notes`].
 //!
 //! Gli id nuovi vengono da un seme del chiamante ([`IdSource`]): stesso
 //! seme, stessi id. Le regole e un esempio per operazione sono nella sezione
-//! «Operazioni» di `docs/reference/canvas-operations.md`.
+//! «Le operazioni» di `docs/reference/canvas-code.md`.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -27,10 +33,33 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
-use crate::model::{
-    Canvas, CanvasEdge, CanvasError, CanvasNode, MAX_EDGES, MAX_NODES, MAX_SAFE_INTEGER,
-};
+use crate::model::{Canvas, CanvasEdge, CanvasError, CanvasNode, MAX_SAFE_INTEGER};
 use crate::patch::{self, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null};
+
+mod adjust;
+mod align;
+mod card;
+pub(crate) mod color;
+mod connect;
+mod convert;
+mod duplicate;
+mod group;
+mod import;
+mod insert;
+mod layout;
+mod reverse;
+
+pub use adjust::{ColorArgs, Fit, MoveArgs, ReorderArgs, ReorderTo, ResizeArgs};
+pub use align::{AlignArgs, AlignTo, DistributeArgs, DistributeAxis};
+pub use card::AddCardArgs;
+pub use connect::{AutoWord, ConnectArgs, Ends, SidePair, Sides};
+pub use convert::ConvertArgs;
+pub use duplicate::DuplicateArgs;
+pub use group::GroupArgs;
+pub use import::{FromMermaidArgs, FromOutlineArgs};
+pub use insert::{InsertArgs, MAX_INSERTED};
+pub use layout::{LayoutArgs, LayoutDirection, LayoutKind};
+pub use reverse::ReverseArgs;
 
 /// Un'operazione d'intento. La forma JSON ha il campo `op` per primo, in
 /// `snake_case`; un campo che l'operazione non conosce è un errore di
@@ -38,75 +67,177 @@ use crate::patch::{self, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CanvasOp {
-    /// Aggiunge una scheda in cima all'ordine. `node` è una scheda come nel
-    /// file; `id` è facoltativo (assente o `null`: lo dà il seme).
-    AddCard { node: Map<String, Value> },
-    /// Sposta le schede `ids` di `dx`, `dy`. Un gruppo si sposta da solo: le
-    /// schede dentro restano dove sono, come sulla tela.
-    Move {
-        ids: Vec<String>,
-        #[serde(deserialize_with = "saturating_integer")]
-        dx: i64,
-        #[serde(deserialize_with = "saturating_integer")]
-        dy: i64,
-    },
-    /// Dà alla scheda `id` le misure `width` × `height`.
-    Resize {
-        id: String,
-        #[serde(deserialize_with = "saturating_integer")]
-        width: i64,
-        #[serde(deserialize_with = "saturating_integer")]
-        height: i64,
-    },
-    /// Aggiunge un arco in fondo alla lista. `edge` è un arco come nel file;
-    /// `id` è facoltativo come in `add_card`.
-    Connect { edge: Map<String, Value> },
+    /// Aggiunge una scheda in cima all'ordine: la scheda come nel file
+    /// (`node`), o la forma breve. Le regole sono in `ops/card.rs`.
+    AddCard(AddCardArgs),
+    /// Sposta le schede `ids`; con `contents` un gruppo porta le schede dentro
+    /// di sé. Le regole sono in `ops/adjust.rs`.
+    Move(MoveArgs),
+    /// Dà alla scheda le misure, o con `fit` la misura del suo contenuto. Le
+    /// regole sono in `ops/adjust.rs`.
+    Resize(ResizeArgs),
+    /// Aggiunge un arco in fondo alla lista: l'arco come nel file (`edge`), o
+    /// la forma breve fra due schede. Le regole sono in `ops/connect.rs`.
+    Connect(ConnectArgs),
     /// Toglie schede e archi. Gli archi che toccano una scheda tolta vanno
     /// via prima, nella stessa operazione.
     Remove { ids: Vec<String> },
     /// Cambia i campi di una scheda o di un arco; un campo `null` lo toglie.
-    /// `id` (e `type` di una scheda) non si cambiano.
+    /// `id` (e `type` di una scheda) non si cambiano. Il `color` accetta i nomi
+    /// di `add_card`.
     Set {
         id: String,
+        #[serde(deserialize_with = "set_fields")]
         fields: Map<String, Value>,
     },
-    /// Porta le schede `ids` in cima all'ordine, nell'ordine dato; le altre
-    /// restano sotto nel loro ordine. Con tutti gli id, è l'ordine nuovo.
-    Reorder { ids: Vec<String> },
+    /// Porta le schede in cima all'ordine (o in fondo, con `to: back`). Le
+    /// regole sono in `ops/adjust.rs`.
+    Reorder(ReorderArgs),
+    /// Colora più schede e archi in una volta. Le regole sono in `ops/adjust.rs`.
+    Color(ColorArgs),
+    /// Allinea le schede al lato comune, come i bottoni della barra. Le regole
+    /// sono in `ops/align.rs`.
+    Align(AlignArgs),
+    /// Distribuisce le schede lungo un asse. Le regole sono in `ops/align.rs`.
+    Distribute(DistributeArgs),
+    /// Copia le schede e gli archi che le collegano fra loro. Le regole sono in
+    /// `ops/duplicate.rs`.
+    Duplicate(DuplicateArgs),
+    /// Inverte gli archi: la partenza diventa l'arrivo. Le regole sono in
+    /// `ops/reverse.rs`.
+    Reverse(ReverseArgs),
+    /// Mette le schede in un gruppo, sotto di loro. Le regole sono in
+    /// `ops/group.rs`.
+    Group(GroupArgs),
+    /// Dispone le schede in griglia, in riga, in colonna o ad albero. Le regole
+    /// sono in `ops/layout.rs`.
+    Layout(LayoutArgs),
+    /// Incolla un frammento degli appunti (`{version: 1, nodes, edges}`) con id
+    /// nuovi, come un blocco. Le regole sono in `ops/insert.rs`.
+    Insert(InsertArgs),
+    /// Una scheda di testo diventa una scheda di file, allo stesso posto. Le
+    /// regole sono in `ops/convert.rs`.
+    Convert(ConvertArgs),
+    /// Un diagramma Mermaid (`flowchart`) diventa schede, gruppi e archi, già
+    /// disposti. Il lettore è in `import/mermaid.rs`, le regole in
+    /// `ops/import.rs`.
+    FromMermaid(FromMermaidArgs),
+    /// Una scaletta rientrata diventa un albero di schede. Il lettore è in
+    /// `import/outline.rs`, le regole in `ops/import.rs`.
+    FromOutline(FromOutlineArgs),
 }
 
-/// Il risultato di [`compile`]: le toppe e gli id creati.
+impl CanvasOp {
+    /// Il nome dell'operazione nella forma JSON, cioè il campo `op`. È la
+    /// stessa stringa di [`crate::spec::OPS`]. Il `match` non ha `_`: una
+    /// variante nuova senza nome non compila.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::AddCard(_) => "add_card",
+            Self::Move(_) => "move",
+            Self::Resize(_) => "resize",
+            Self::Connect(_) => "connect",
+            Self::Remove { .. } => "remove",
+            Self::Set { .. } => "set",
+            Self::Reorder(_) => "reorder",
+            Self::Color(_) => "color",
+            Self::Align(_) => "align",
+            Self::Distribute(_) => "distribute",
+            Self::Duplicate(_) => "duplicate",
+            Self::Reverse(_) => "reverse",
+            Self::Group(_) => "group",
+            Self::Layout(_) => "layout",
+            Self::Insert(_) => "insert",
+            Self::Convert(_) => "convert",
+            Self::FromMermaid(_) => "from_mermaid",
+            Self::FromOutline(_) => "from_outline",
+        }
+    }
+}
+
+/// Il risultato di [`compile`]: le toppe, gli id creati e le note.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Compiled {
     /// Le toppe, nell'ordine in cui si applicano.
     pub patches: Vec<CanvasPatch>,
-    /// Gli id di ogni scheda e arco aggiunti (`add_card`, `connect`), dati
-    /// o generati, nell'ordine delle operazioni.
+    /// Gli id di ogni scheda e arco aggiunti (`add_card`, `connect`,
+    /// `duplicate`, `group`, `insert`, `from_mermaid`, `from_outline`), dati o
+    /// generati, nell'ordine delle operazioni.
     pub created: Vec<String>,
+    /// Ciò che le operazioni non hanno potuto tenere, nell'ordine delle
+    /// operazioni: al più [`MAX_NOTES`]. Senza note il campo non si scrive.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<CompileNote>,
+    /// Quante note non entrano in `notes`. Zero non si scrive.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub notes_omitted: usize,
+}
+
+/// Quante note porta al più un [`Compiled`]: le altre si contano in
+/// [`Compiled::notes_omitted`].
+pub const MAX_NOTES: usize = crate::import::MAX_NOTES;
+
+/// Una cosa che un'operazione non ha potuto tenere. Non è un errore: le
+/// operazioni si compilano, e la nota lo dice.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompileNote {
+    /// La posizione dell'operazione nella lista, da zero.
+    pub index: usize,
+    pub code: NoteCode,
+    /// Che cosa e dove, in inglese come gli errori: `line 3: the circle shape
+    /// of "A" becomes a rectangle`.
+    pub detail: String,
+}
+
+/// I codici delle note.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoteCode {
+    /// La forma di un nodo (un cerchio, un rombo) diventa un rettangolo.
+    ShapeDropped,
+    /// Uno stile (un arco tratteggiato o spesso, una classe) non si tiene.
+    StyleDropped,
+    /// Una riga che non si capisce, o di soli stili (`classDef`, `style`,
+    /// `linkStyle`, `click`), si salta.
+    LineSkipped,
+    /// Un rientro della scaletta che non cade su un livello vale il più vicino.
+    IndentRounded,
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
 }
 
 /// Perché una lista di operazioni non si compila. `index` è la posizione
 /// dell'operazione nella lista, da zero.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum OpError {
-    /// L'operazione vuole una scheda che non c'è (`move`, `resize`,
-    /// `reorder`, gli estremi di un arco).
+    /// L'operazione vuole una scheda che non c'è (`move`, `resize`, `reorder`,
+    /// `align`, `distribute`, `duplicate`, `group`, `convert`, il `near` di
+    /// `insert`, gli estremi di un arco).
     #[error("canvas op {index}: there is no node {id:?}")]
     UnknownNode { index: usize, id: String },
-    /// `remove` o `set` di un id che non è né una scheda né un arco.
+    /// `remove`, `set` o `color` di un id che non è né una scheda né un arco; e
+    /// `reverse` di un id che non è un arco (anche se è una scheda).
     #[error("canvas op {index}: there is no node or edge {id:?}")]
     UnknownEdge { index: usize, id: String },
     /// Un id dato che c'è già (nel modello di partenza o creato nello stesso
     /// giro), o un id ripetuto nella lista `ids` di un'operazione.
     #[error("canvas op {index}: id {id:?} is already taken or repeated")]
     DuplicateId { index: usize, id: String },
-    /// La lavagna avrebbe più schede o archi del limite.
+    /// La lavagna avrebbe più schede o archi del limite, o un `insert` porta
+    /// più schede di [`MAX_INSERTED`].
     #[error("canvas op {index}: a canvas holds at most {limit} {what}")]
     TooMany {
         index: usize,
         what: &'static str,
         limit: usize,
     },
+    /// Un `move` con `contents` tocca più schede del tetto (quelle di `ids` e
+    /// quelle che i gruppi portano con sé): la lista si divide in più `move`.
+    #[error("canvas op {index}: `move` with `contents` moves at most {limit} cards")]
+    TooManyMoved { index: usize, limit: usize },
     /// L'operazione porterebbe a una scheda o a un arco non validi, o non si
     /// può fare così com'è (un campo vietato, un id ambiguo).
     #[error("canvas op {index}: {reason}")]
@@ -121,6 +252,7 @@ impl OpError {
             | Self::UnknownEdge { index, .. }
             | Self::DuplicateId { index, .. }
             | Self::TooMany { index, .. }
+            | Self::TooManyMoved { index, .. }
             | Self::Invalid { index, .. } => *index,
         }
     }
@@ -164,6 +296,8 @@ pub fn compile(canvas: &Canvas, ops: &[CanvasOp], seed: u64) -> Result<Compiled,
     Ok(Compiled {
         patches: compiler.patches,
         created: compiler.created,
+        notes: compiler.notes,
+        notes_omitted: compiler.notes_omitted,
     })
 }
 
@@ -182,6 +316,13 @@ struct Compiler {
     /// Le posizioni degli archi all'inizio della serie di `remove-edge` in
     /// corso, come `run_start` per le schede.
     edge_run_start: Option<HashMap<String, usize>>,
+    /// L'ultima scheda messa in fondo alla lista automatica di `add_card`: la
+    /// prossima va sotto di lei, se è ancora nel modello.
+    auto_last: Option<String>,
+    /// Le note delle operazioni compilate finora, al più [`MAX_NOTES`].
+    notes: Vec<CompileNote>,
+    /// Le note che non entrano in `notes`.
+    notes_omitted: usize,
 }
 
 impl Compiler {
@@ -200,18 +341,45 @@ impl Compiler {
             ids: IdSource::new(seed),
             run_start: None,
             edge_run_start: None,
+            auto_last: None,
+            notes: Vec::new(),
+            notes_omitted: 0,
+        }
+    }
+
+    /// Una nota dell'operazione `index`, se c'è posto; se no si conta.
+    fn note(&mut self, index: usize, code: NoteCode, detail: String) {
+        if self.notes.len() < MAX_NOTES {
+            self.notes.push(CompileNote {
+                index,
+                code,
+                detail,
+            });
+        } else {
+            self.notes_omitted += 1;
         }
     }
 
     fn op(&mut self, index: usize, op: &CanvasOp) -> Result<(), OpError> {
         let patches = match op {
-            CanvasOp::AddCard { node } => self.add_card(index, node)?,
-            CanvasOp::Move { ids, dx, dy } => self.move_nodes(index, ids, *dx, *dy)?,
-            CanvasOp::Resize { id, width, height } => self.resize(index, id, *width, *height)?,
-            CanvasOp::Connect { edge } => self.connect(index, edge)?,
+            CanvasOp::AddCard(card) => self.add_card(index, card)?,
+            CanvasOp::Move(args) => self.move_nodes(index, args)?,
+            CanvasOp::Resize(args) => self.resize(index, args)?,
+            CanvasOp::Connect(link) => self.connect(index, link)?,
             CanvasOp::Remove { ids } => self.remove(index, ids)?,
             CanvasOp::Set { id, fields } => self.set(index, id, fields)?,
-            CanvasOp::Reorder { ids } => self.reorder(index, ids)?,
+            CanvasOp::Reorder(args) => self.reorder(index, args)?,
+            CanvasOp::Color(args) => self.color(index, args)?,
+            CanvasOp::Align(args) => self.align(index, args)?,
+            CanvasOp::Distribute(args) => self.distribute(index, args)?,
+            CanvasOp::Duplicate(args) => self.duplicate(index, args)?,
+            CanvasOp::Reverse(args) => self.reverse(index, args)?,
+            CanvasOp::Group(args) => self.group(index, args)?,
+            CanvasOp::Layout(args) => self.layout(index, args)?,
+            CanvasOp::Insert(args) => self.insert(index, args)?,
+            CanvasOp::Convert(args) => self.convert(index, args)?,
+            CanvasOp::FromMermaid(args) => self.import_mermaid(index, args)?,
+            CanvasOp::FromOutline(args) => self.import_outline(index, args)?,
         };
         if patches.is_empty() {
             return Ok(());
@@ -249,6 +417,13 @@ impl Compiler {
             })
     }
 
+    /// Le schede `ids` com'erano nel modello, nell'ordine dato. Un id ripetuto è
+    /// `DuplicateId`; un id che non è una scheda è `UnknownNode`.
+    fn cards(&self, index: usize, ids: &[String]) -> Result<Vec<CanvasNode>, OpError> {
+        distinct(index, ids)?;
+        ids.iter().map(|id| self.node(index, id).cloned()).collect()
+    }
+
     fn has_node(&self, id: &str) -> bool {
         self.working.nodes.iter().any(|node| node.id == id)
     }
@@ -258,119 +433,37 @@ impl Compiler {
     }
 
     /// L'id di un elemento nuovo: quello dato, se è libero, o il prossimo
-    /// libero del seme.
+    /// libero del seme. Un `id` che non è un testo non si legge.
     fn claim_id(&mut self, index: usize, given: Option<&Value>) -> Result<String, OpError> {
-        let id = match given {
-            None | Some(Value::Null) => loop {
-                let id = self.ids.next_id();
-                if !self.taken.contains(&id) {
-                    break id;
-                }
-            },
-            Some(Value::String(id)) => {
-                if self.taken.contains(id) {
-                    return Err(OpError::DuplicateId {
-                        index,
-                        id: id.clone(),
-                    });
-                }
-                id.clone()
-            }
-            Some(_) => {
-                return Err(OpError::Invalid {
-                    index,
-                    reason: "`id` must be a string".to_owned(),
-                })
-            }
-        };
-        Ok(id)
+        match given {
+            None | Some(Value::Null) => Ok(self.fresh_id()),
+            Some(Value::String(id)) => self.claim_text(index, id),
+            Some(_) => Err(OpError::Invalid {
+                index,
+                reason: "`id` must be a string".to_owned(),
+            }),
+        }
     }
 
-    fn add_card(
-        &mut self,
-        index: usize,
-        node: &Map<String, Value>,
-    ) -> Result<Vec<CanvasPatch>, OpError> {
-        if self.working.nodes.len() >= MAX_NODES {
-            return Err(OpError::TooMany {
+    /// Il prossimo id del seme che non è preso.
+    fn fresh_id(&mut self) -> String {
+        loop {
+            let id = self.ids.next_id();
+            if !self.taken.contains(&id) {
+                return id;
+            }
+        }
+    }
+
+    /// Un id dato a mano: `DuplicateId` se è già preso.
+    fn claim_text(&mut self, index: usize, id: &str) -> Result<String, OpError> {
+        if self.taken.contains(id) {
+            return Err(OpError::DuplicateId {
                 index,
-                what: "nodes",
-                limit: MAX_NODES,
+                id: id.to_owned(),
             });
         }
-        let id = self.claim_id(index, node.get("id"))?;
-        let mut fields = node.clone();
-        fields.insert("id".to_owned(), Value::String(id.clone()));
-        let node: CanvasNode = from_fields(index, "node", fields)?;
-        check_node(index, &node)?;
-        self.taken.insert(id.clone());
-        self.created.push(id);
-        Ok(vec![CanvasPatch::UpsertNode {
-            before: None,
-            after: node,
-            at: None,
-        }])
-    }
-
-    fn move_nodes(
-        &mut self,
-        index: usize,
-        ids: &[String],
-        dx: i64,
-        dy: i64,
-    ) -> Result<Vec<CanvasPatch>, OpError> {
-        distinct(index, ids)?;
-        let mut patches = Vec::new();
-        for id in ids {
-            let mut node = self.node(index, id)?.clone();
-            node.x = saturate(node.x.saturating_add(dx));
-            node.y = saturate(node.y.saturating_add(dy));
-            check_node(index, &node)?;
-            patches.extend(upsert_node_patch(&self.working, &node));
-        }
-        Ok(patches)
-    }
-
-    fn resize(
-        &mut self,
-        index: usize,
-        id: &str,
-        width: i64,
-        height: i64,
-    ) -> Result<Vec<CanvasPatch>, OpError> {
-        let mut node = self.node(index, id)?.clone();
-        node.width = width;
-        node.height = height;
-        check_node(index, &node)?;
-        Ok(upsert_node_patch(&self.working, &node)
-            .into_iter()
-            .collect())
-    }
-
-    fn connect(
-        &mut self,
-        index: usize,
-        edge: &Map<String, Value>,
-    ) -> Result<Vec<CanvasPatch>, OpError> {
-        if self.working.edges.len() >= MAX_EDGES {
-            return Err(OpError::TooMany {
-                index,
-                what: "edges",
-                limit: MAX_EDGES,
-            });
-        }
-        let id = self.claim_id(index, edge.get("id"))?;
-        let mut fields = edge.clone();
-        fields.insert("id".to_owned(), Value::String(id.clone()));
-        let edge: CanvasEdge = from_fields(index, "edge", fields)?;
-        self.check_edge(index, &edge)?;
-        self.taken.insert(id.clone());
-        self.created.push(id);
-        Ok(vec![CanvasPatch::UpsertEdge {
-            before: None,
-            after: edge,
-            at: None,
-        }])
+        Ok(id.to_owned())
     }
 
     /// Toglie schede e archi: prima gli archi (quelli nominati e quelli che
@@ -491,6 +584,10 @@ impl Compiler {
         id: &str,
         fields: &Map<String, Value>,
     ) -> Result<Vec<CanvasPatch>, OpError> {
+        // Un colore scritto con un nome diventa il valore del file, come in
+        // `add_card`: `set` non legge i nomi da solo.
+        let fields = color::canonical_fields(index, fields)?;
+        let fields = fields.as_ref();
         match (self.has_node(id), self.has_edge(id)) {
             (true, true) => Err(ambiguous(index, id)),
             (true, false) => {
@@ -536,30 +633,6 @@ impl Compiler {
                 id: id.to_owned(),
             }),
         }
-    }
-
-    fn reorder(&mut self, index: usize, ids: &[String]) -> Result<Vec<CanvasPatch>, OpError> {
-        distinct(index, ids)?;
-        for id in ids {
-            self.node(index, id)?;
-        }
-        let lifted: HashSet<&str> = ids.iter().map(String::as_str).collect();
-        let before: Vec<String> = self
-            .working
-            .nodes
-            .iter()
-            .map(|node| node.id.clone())
-            .collect();
-        let after: Vec<String> = before
-            .iter()
-            .filter(|id| !lifted.contains(id.as_str()))
-            .cloned()
-            .chain(ids.iter().cloned())
-            .collect();
-        if after == before {
-            return Ok(Vec::new());
-        }
-        Ok(vec![CanvasPatch::Reorder { before, after }])
     }
 
     /// Un arco va bene se le sue schede ci sono e se passa le regole del
@@ -717,4 +790,49 @@ fn saturating_integer<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64,
     }
 
     deserializer.deserialize_any(Saturating)
+}
+
+/// I campi di `set`: un oggetto, il cui `color` (se c'è e non è `null`) è un
+/// colore che la tavola legge, come in `add_card`. Così un colore sbagliato è un
+/// errore di lettura, come negli altri comandi che scrivono un colore.
+fn set_fields<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Map<String, Value>, D::Error> {
+    let fields = Map::<String, Value>::deserialize(deserializer)?;
+    match fields.get("color") {
+        None | Some(Value::Null) => Ok(fields),
+        Some(Value::String(text)) if color::parse(text).is_some() => Ok(fields),
+        Some(other) => Err(de::Error::custom(format_args!("unknown color {other}"))),
+    }
+}
+
+/// Lo stesso di [`saturating_integer`], o assente: `null` vale come assente (R7).
+fn saturating_option<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<i64>, D::Error> {
+    #[derive(Deserialize)]
+    struct Saturated(#[serde(deserialize_with = "saturating_integer")] i64);
+
+    Ok(Option::<Saturated>::deserialize(deserializer)?.map(|Saturated(value)| value))
+}
+
+/// Un motivo di rifiuto di un'operazione di forma breve, con la sua posizione.
+fn refuse(index: usize, reason: impl Into<String>) -> OpError {
+    OpError::Invalid {
+        index,
+        reason: reason.into(),
+    }
+}
+
+/// Un valore calcolato dal nucleo (un posto, una misura) come intero del
+/// modello. Un valore non intero, o fuori dai limiti del modello, non entra.
+fn whole(index: usize, value: f64) -> Result<i64, OpError> {
+    let bound = MAX_SAFE_INTEGER as f64;
+    if value.is_finite() && value.fract() == 0.0 && value.abs() <= bound {
+        // Dentro ±(2^53−1) un `f64` intero è esatto: il cast non arrotonda.
+        #[allow(clippy::cast_possible_truncation)]
+        let integer = value as i64;
+        Ok(integer)
+    } else {
+        Err(refuse(
+            index,
+            "a position or a size is not a whole number within the model limits",
+        ))
+    }
 }

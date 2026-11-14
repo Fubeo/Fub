@@ -1,0 +1,12 @@
+{
+  "about": "reverse di una scheda: causa è una scheda, non un arco. reverse lavora solo sugli archi: UnknownEdge.",
+  "before": {
+    "nodes": [
+      { "id": "causa", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Causa" },
+      { "id": "effetto", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "Effetto" }
+    ],
+    "edges": [{ "id": "e1", "fromNode": "causa", "toNode": "effetto", "toEnd": "arrow" }]
+  },
+  "ops": [{ "op": "reverse", "ids": ["causa"] }],
+  "expect": { "outcome": "rejected", "error": { "kind": "UnknownEdge", "index": 0, "id": "causa" } }
+}

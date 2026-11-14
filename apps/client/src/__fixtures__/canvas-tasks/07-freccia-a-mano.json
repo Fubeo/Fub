@@ -1,0 +1,23 @@
+{
+  "about": "Una freccia a mano fra due schede: da destra di una a sinistra dell'altra, con la punta.",
+  "prompt": "Collega con una freccia «Causa» a «Effetto», che parta dalla destra di Causa e arrivi alla sinistra di Effetto.",
+  "before": {
+    "nodes": [
+      { "id": "causa", "type": "text", "text": "Causa", "x": 0, "y": 0, "width": 320, "height": 160 },
+      { "id": "effetto", "type": "text", "text": "Effetto", "x": 400, "y": 0, "width": 320, "height": 160 }
+    ],
+    "edges": []
+  },
+  "ops_today": [
+    { "op": "connect", "edge": { "fromNode": "causa", "toNode": "effetto", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } }
+  ],
+  "ops": [
+    { "op": "connect", "from": "causa", "to": "effetto", "sides": "auto" }
+  ],
+  "needs": [],
+  "checks": [
+    { "has_edge": { "from_text": "Causa", "to_text": "Effetto" } },
+    { "count": { "kind": "edge", "n": 1 } },
+    { "no_overlap": {} }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "about": "Una lavagna di riepilogo con una nota e un link: solo forme di main, quindi piano e oggi coincidono e needs è vuoto.",
+  "prompt": "Fai un riepilogo: una scheda «Riepilogo», sotto di lei la nota Idee/acqua.md, e a destra della nota il link https://example.org/acqua, con una freccia dalla nota al link.",
+  "before": { "nodes": [], "edges": [] },
+  "ops_today": [
+    { "op": "add_card", "node": { "id": "r", "type": "text", "text": "Riepilogo", "x": 0, "y": 0, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "n", "type": "file", "file": "Idee/acqua.md", "x": 0, "y": 216, "width": 320, "height": 240 } },
+    { "op": "add_card", "node": { "id": "l", "type": "link", "url": "https://example.org/acqua", "x": 368, "y": 216, "width": 320, "height": 120 } },
+    { "op": "connect", "edge": { "fromNode": "r", "toNode": "n", "fromSide": "bottom", "toSide": "top", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "n", "toNode": "l", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } }
+  ],
+  "ops": [
+    { "op": "add_card", "node": { "id": "r", "type": "text", "text": "Riepilogo", "x": 0, "y": 0, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "n", "type": "file", "file": "Idee/acqua.md", "x": 0, "y": 216, "width": 320, "height": 240 } },
+    { "op": "add_card", "node": { "id": "l", "type": "link", "url": "https://example.org/acqua", "x": 368, "y": 216, "width": 320, "height": 120 } },
+    { "op": "connect", "edge": { "fromNode": "r", "toNode": "n", "fromSide": "bottom", "toSide": "top", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "n", "toNode": "l", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } }
+  ],
+  "needs": [],
+  "checks": [
+    { "count": { "kind": "note", "n": 1 } },
+    { "count": { "kind": "web", "n": 1 } },
+    { "has_edge": { "from_text": "Riepilogo", "to_text": "Idee/acqua.md" } },
+    { "has_edge": { "from_text": "Idee/acqua.md", "to_text": "https://example.org/acqua" } },
+    { "no_overlap": {} }
+  ]
+}

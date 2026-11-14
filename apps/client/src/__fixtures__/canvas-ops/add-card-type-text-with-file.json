@@ -1,0 +1,6 @@
+{
+  "about": "Un `type` che non va col campo dato (una scheda di testo con un `file`) è Invalid: il campo non si ignora.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "a", "type": "text", "file": "b.png" }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

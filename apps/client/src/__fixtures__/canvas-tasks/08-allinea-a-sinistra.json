@@ -1,0 +1,24 @@
+{
+  "about": "Allineare a sinistra tre schede: quelle più a destra scendono al bordo della più a sinistra.",
+  "prompt": "Allinea a sinistra le tre schede «Scoperte», «Ipotesi» e «Verifica»: tutte col bordo di quella più a sinistra.",
+  "before": {
+    "nodes": [
+      { "id": "sco", "type": "text", "text": "Scoperte", "x": 400, "y": 0, "width": 320, "height": 160 },
+      { "id": "ipo", "type": "text", "text": "Ipotesi", "x": 440, "y": 216, "width": 320, "height": 160 },
+      { "id": "ver", "type": "text", "text": "Verifica", "x": 424, "y": 432, "width": 320, "height": 160 }
+    ],
+    "edges": []
+  },
+  "ops_today": [
+    { "op": "move", "ids": ["ipo"], "dx": -40, "dy": 0 },
+    { "op": "move", "ids": ["ver"], "dx": -24, "dy": 0 }
+  ],
+  "ops": [
+    { "op": "align", "ids": ["sco", "ipo", "ver"], "to": "left" }
+  ],
+  "needs": [],
+  "checks": [
+    { "aligned": { "texts": ["Scoperte", "Ipotesi", "Verifica"], "axis": "left" } },
+    { "no_overlap": {} }
+  ]
+}

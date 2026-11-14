@@ -1,0 +1,11 @@
+{
+  "about": "fit content su una nota: una nota non ha una misura del contenuto (non è testo di scheda, né immagine, né PDF), quindi è rifiutato.",
+  "before": {
+    "nodes": [{ "id": "n", "type": "file", "x": 0, "y": 0, "width": 320, "height": 240, "file": "Corsi/appunti.md" }]
+  },
+  "ops": [{ "op": "resize", "id": "n", "fit": "content" }],
+  "expect": {
+    "outcome": "rejected",
+    "error": { "kind": "Invalid", "index": 0 }
+  }
+}

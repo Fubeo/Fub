@@ -1,0 +1,31 @@
+{
+  "about": "convert di una scheda che non è un testo (un file): Invalid.",
+  "before": {
+    "nodes": [
+      {
+        "id": "f",
+        "type": "file",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 200,
+        "file": "a.md"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "convert",
+      "id": "f",
+      "file": "Idee/altro.md"
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "about": "group di un arco: e1 è un arco, e un gruppo tiene solo schede. UnknownNode.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+    ],
+    "edges": [{ "id": "e1", "fromNode": "a", "toNode": "b" }]
+  },
+  "ops": [{ "op": "group", "ids": ["e1"] }],
+  "expect": { "outcome": "rejected", "error": { "kind": "UnknownNode", "index": 0, "id": "e1" } }
+}

@@ -1,0 +1,37 @@
+{
+  "about": "Un albero da una scaletta con rientri: la gerarchia diventa archi, le foglie stanno in colonna.",
+  "prompt": "Fammi un albero da questa scaletta, con i rientri come gerarchia: Progetto; sotto, Ricerca (con Interviste e Sondaggio); sotto, Sviluppo (con Prototipo e Test).",
+  "before": { "nodes": [], "edges": [] },
+  "ops_today": [
+    { "op": "add_card", "node": { "id": "pr", "type": "text", "text": "Progetto", "x": 0, "y": 276, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "ri", "type": "text", "text": "Ricerca", "x": 368, "y": 92, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "in", "type": "text", "text": "Interviste", "x": 736, "y": 0, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "so", "type": "text", "text": "Sondaggio", "x": 736, "y": 184, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "sv", "type": "text", "text": "Sviluppo", "x": 368, "y": 460, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "pt", "type": "text", "text": "Prototipo", "x": 736, "y": 368, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "te", "type": "text", "text": "Test", "x": 736, "y": 552, "width": 320, "height": 160 } },
+    { "op": "connect", "edge": { "fromNode": "pr", "toNode": "ri", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "pr", "toNode": "sv", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "ri", "toNode": "in", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "ri", "toNode": "so", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "sv", "toNode": "pt", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "sv", "toNode": "te", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } }
+  ],
+  "ops": [
+    { "op": "from_outline", "text": "Progetto\n  Ricerca\n    Interviste\n    Sondaggio\n  Sviluppo\n    Prototipo\n    Test" }
+  ],
+  "needs": [],
+  "checks": [
+    { "count": { "kind": "text", "n": 7 } },
+    { "count": { "kind": "edge", "n": 6 } },
+    { "has_edge": { "from_text": "Progetto", "to_text": "Ricerca" } },
+    { "has_edge": { "from_text": "Progetto", "to_text": "Sviluppo" } },
+    { "has_edge": { "from_text": "Ricerca", "to_text": "Interviste" } },
+    { "has_edge": { "from_text": "Ricerca", "to_text": "Sondaggio" } },
+    { "has_edge": { "from_text": "Sviluppo", "to_text": "Prototipo" } },
+    { "has_edge": { "from_text": "Sviluppo", "to_text": "Test" } },
+    { "aligned": { "texts": ["Interviste", "Sondaggio", "Prototipo", "Test"], "axis": "left" } },
+    { "spaced": { "texts": ["Interviste", "Sondaggio", "Prototipo", "Test"], "axis": "y" } },
+    { "no_overlap": {} }
+  ]
+}

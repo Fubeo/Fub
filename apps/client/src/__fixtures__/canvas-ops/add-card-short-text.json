@@ -1,0 +1,13 @@
+{
+  "about": "La forma breve: un testo in fondo a una lavagna vuota va in 0,0 con le misure di nascita (320×160), senza colore.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "a", "text": "Ciclo dell'acqua" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Ciclo dell'acqua" }],
+      "edges": []
+    },
+    "created": ["a"]
+  }
+}

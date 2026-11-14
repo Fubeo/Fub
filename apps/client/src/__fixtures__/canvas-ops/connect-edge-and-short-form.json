@@ -1,0 +1,11 @@
+{
+  "about": "L'arco come nel file e la forma breve nella stessa operazione non si mescolano: è Invalid.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+    ]
+  },
+  "ops": [{ "op": "connect", "edge": { "fromNode": "a", "toNode": "b" }, "from": "a" }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

@@ -1,0 +1,20 @@
+{
+  "about": "«c» sta accanto a «b», che è nata con `x` e `y` nello stesso giro: `near` trova le schede già compilate, anche quelle della lista.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" }] },
+  "ops": [
+    { "op": "add_card", "id": "b", "text": "b", "x": 500, "y": 0 },
+    { "op": "add_card", "id": "c", "text": "c", "near": "b", "side": "right" }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+        { "id": "b", "type": "text", "x": 500, "y": 0, "width": 320, "height": 160, "text": "b" },
+        { "id": "c", "type": "text", "x": 868, "y": 0, "width": 320, "height": 160, "text": "c" }
+      ],
+      "edges": []
+    },
+    "created": ["b", "c"]
+  }
+}

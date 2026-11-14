@@ -1,0 +1,30 @@
+{
+  "about": "Una griglia di immagini: sei foto in tre colonne, con lo stesso spazio fra una e l'altra.",
+  "prompt": "Metti sulla lavagna le sei foto della gita (Foto/gita-01.jpg fino a Foto/gita-06.jpg) in una griglia di tre colonne.",
+  "before": { "nodes": [], "edges": [] },
+  "ops_today": [
+    { "op": "add_card", "node": { "id": "f1", "type": "file", "file": "Foto/gita-01.jpg", "x": 0, "y": 0, "width": 480, "height": 360 } },
+    { "op": "add_card", "node": { "id": "f2", "type": "file", "file": "Foto/gita-02.jpg", "x": 528, "y": 0, "width": 480, "height": 360 } },
+    { "op": "add_card", "node": { "id": "f3", "type": "file", "file": "Foto/gita-03.jpg", "x": 1056, "y": 0, "width": 480, "height": 360 } },
+    { "op": "add_card", "node": { "id": "f4", "type": "file", "file": "Foto/gita-04.jpg", "x": 0, "y": 408, "width": 480, "height": 360 } },
+    { "op": "add_card", "node": { "id": "f5", "type": "file", "file": "Foto/gita-05.jpg", "x": 528, "y": 408, "width": 480, "height": 360 } },
+    { "op": "add_card", "node": { "id": "f6", "type": "file", "file": "Foto/gita-06.jpg", "x": 1056, "y": 408, "width": 480, "height": 360 } }
+  ],
+  "ops": [
+    { "op": "add_card", "id": "f1", "file": "Foto/gita-01.jpg" },
+    { "op": "add_card", "id": "f2", "file": "Foto/gita-02.jpg" },
+    { "op": "add_card", "id": "f3", "file": "Foto/gita-03.jpg" },
+    { "op": "add_card", "id": "f4", "file": "Foto/gita-04.jpg" },
+    { "op": "add_card", "id": "f5", "file": "Foto/gita-05.jpg" },
+    { "op": "add_card", "id": "f6", "file": "Foto/gita-06.jpg" },
+    { "op": "layout", "ids": ["f1", "f2", "f3", "f4", "f5", "f6"], "kind": "grid" }
+  ],
+  "needs": [],
+  "checks": [
+    { "count": { "kind": "image", "n": 6 } },
+    { "aligned": { "texts": ["Foto/gita-01.jpg", "Foto/gita-04.jpg"], "axis": "left" } },
+    { "aligned": { "texts": ["Foto/gita-01.jpg", "Foto/gita-02.jpg", "Foto/gita-03.jpg"], "axis": "top" } },
+    { "spaced": { "texts": ["Foto/gita-01.jpg", "Foto/gita-02.jpg", "Foto/gita-03.jpg"], "axis": "x" } },
+    { "no_overlap": {} }
+  ]
+}

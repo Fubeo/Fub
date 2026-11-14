@@ -1,0 +1,79 @@
+{
+  "about": "layout grid su tre schede 330×250 (misure non multiple di 8): ceil(√3) = 2 colonne e 2 righe. La colonna dopo parte a 360 (330 + 24 = 354, il primo multiplo di 8), la riga sotto a 280 (250 + 24 = 274). L'origine è l'angolo delle schede, (0, 0), e tutte le posizioni restano sulla griglia di 8, come in N6.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 330,
+        "height": 250,
+        "text": "a"
+      },
+      {
+        "id": "b",
+        "type": "text",
+        "x": 500,
+        "y": 0,
+        "width": 330,
+        "height": 250,
+        "text": "b"
+      },
+      {
+        "id": "c",
+        "type": "text",
+        "x": 0,
+        "y": 400,
+        "width": 330,
+        "height": 250,
+        "text": "c"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "layout",
+      "ids": [
+        "a",
+        "b",
+        "c"
+      ],
+      "kind": "grid"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 330,
+          "height": 250,
+          "text": "a"
+        },
+        {
+          "id": "b",
+          "type": "text",
+          "x": 360,
+          "y": 0,
+          "width": 330,
+          "height": 250,
+          "text": "b"
+        },
+        {
+          "id": "c",
+          "type": "text",
+          "x": 0,
+          "y": 280,
+          "width": 330,
+          "height": 250,
+          "text": "c"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "about": "Inventario della parità della lavagna: ogni azione che una persona fa dalla GUI (main, N4, N6) e la forma in codice che la fa. Stati: code (un'operazione la fa, con la stessa regola), composed (operazioni più un'altra porta, in `port`), port (la fa un'altra porta, nessuna operazione), by_hand (si fa con le operazioni che ci sono, ma chi scrive calcola a mano ciò che la GUI decide: `computes`), missing (nessuna operazione la fa), view (non scrive il file), exception (resta fuori, `note` dice perché). `ops` compila su `board`; `target_ops` è la forma che porta il task `task`. Regole in PLAN.md, sezione «La parità».",
+  "merged": ["main"],
+  "board": {
+    "nodes": [
+      {
+        "id": "g1",
+        "type": "group",
+        "label": "Lezione 4",
+        "x": -40,
+        "y": -80,
+        "width": 800,
+        "height": 400
+      },
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Perché la media è bassa?",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "text": "Ripasso",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      },
+      {
+        "id": "f1",
+        "type": "file",
+        "file": "Corsi/voti.xlsx",
+        "x": 0,
+        "y": 400,
+        "width": 480,
+        "height": 304,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": { "kind": "card", "width": 480, "height": 304 },
+              "ink": "1 s100 cxyt 4000,6000,0 400,0,8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "p1",
+        "type": "file",
+        "file": "Corsi/dispensa.pdf",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480
+      },
+      {
+        "id": "l1",
+        "type": "link",
+        "url": "https://example.org",
+        "x": 1000,
+        "y": 0,
+        "width": 320,
+        "height": 120
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "fromNode": "t1",
+        "fromSide": "right",
+        "toNode": "t2",
+        "toSide": "left",
+        "toEnd": "arrow"
+      }
+    ],
+    "fub:ink": {
+      "v": 1,
+      "strokes": [
+        {
+          "id": "s1",
+          "tool": "pen",
+          "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
+          "color": "#0072b2",
+          "anchor": { "kind": "free" },
+          "ink": "1 s100 cxyt 150000,0,0 400,400,8"
+        }
+      ]
+    }
+  },
+  "ops_without_gui": ["from_mermaid", "from_outline"]
+}

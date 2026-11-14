@@ -1,0 +1,14 @@
+{
+  "about": "Senza id, la forma breve prende il primo id libero del seme 7: 63cbe1e459320dd7, lo stesso di connect.json.",
+  "before": {},
+  "seed": 7,
+  "ops": [{ "op": "add_card", "text": "Idea" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "63cbe1e459320dd7", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Idea" }],
+      "edges": []
+    },
+    "created": ["63cbe1e459320dd7"]
+  }
+}

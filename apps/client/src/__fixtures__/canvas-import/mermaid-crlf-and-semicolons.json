@@ -1,0 +1,63 @@
+{
+  "about": "Righe con CRLF, istruzioni separate da `;` e commenti `%%`.",
+  "op": {
+    "op": "from_mermaid",
+    "text": "graph TD;\r\n%% un commento\r\n  A[Uno] --> B[Due];\r\n  B --> C[Tre];\r\n"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "A",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Uno"
+        },
+        {
+          "id": "B",
+          "type": "text",
+          "x": 0,
+          "y": 256,
+          "width": 320,
+          "height": 160,
+          "text": "Due"
+        },
+        {
+          "id": "C",
+          "type": "text",
+          "x": 0,
+          "y": 512,
+          "width": 320,
+          "height": 160,
+          "text": "Tre"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "A",
+          "toNode": "B",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "fromNode": "B",
+          "toNode": "C",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "A",
+      "B",
+      "C",
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4"
+    ],
+    "notes": []
+  }
+}

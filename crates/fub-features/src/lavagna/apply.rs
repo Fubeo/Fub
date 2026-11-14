@@ -17,31 +17,19 @@ use fub_abi::model::{DocId, Span};
 use fub_abi::text::{Arg, Text};
 use fub_abi::traits::HostApi;
 use fub_canvas_core::commit::{CommitError, Core};
-use fub_canvas_core::ops::{compile, CanvasOp, OpError};
-use fub_canvas_core::CanvasError;
-use serde_json::json;
+use fub_canvas_core::ops::{compile, CanvasOp, Compiled, OpError};
+use fub_canvas_core::spec;
+use serde_json::{json, Value};
 
 use super::*;
-
-/// L'id del formato delle lavagne (`fub_format_canvas::model::FORMAT_ID`):
-/// la feature non dipende dal formato, ne nomina soltanto l'id del contratto.
-const CANVAS_FORMAT: &str = "canvas";
 
 pub(super) fn canvas_apply(
     args: Args<'_>,
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let doc = args
-        .document(DOC)
-        .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_DOC)))?;
-    let is_canvas = host
-        .format_of(&doc)
-        .is_some_and(|format| format.descriptor.id == CANVAS_FORMAT);
-    if !is_canvas {
-        return Err(PluginError::BadArgs(about(E_NOT_CANVAS, &doc, Vec::new())));
-    }
-    let ops = operations(args.text(OPS).unwrap_or(""))?;
+    let doc = canvas_doc(&args, host)?;
+    let mut ops = operations(args.text(OPS).unwrap_or(""))?;
     let seed = args.text(SEED).map(seed).transpose()?;
 
     let revision = host.document_revision(&doc)?;
@@ -55,12 +43,12 @@ pub(super) fn canvas_apply(
     // Senza un seme gli id nascono dalla revisione: anteprima e applicazione
     // sulla stessa revisione danno gli stessi id.
     let seed = seed.unwrap_or_else(|| Fnv1a::hash(revision.0.as_bytes()));
+    measure_ops(&*host, core.canvas(), &mut ops);
     let compiled = compile(core.canvas(), &ops, seed).map_err(operation)?;
     let committed = core
         .commit(&compiled.patches)
         .map_err(|error| committing(&doc, error))?;
     let edit = committed.edit;
-    let created = compiled.created;
 
     let count = Arg::text("count", ops.len().to_string());
     if edit.start == edit.end && edit.text.is_empty() {
@@ -72,7 +60,7 @@ pub(super) fn canvas_apply(
             )))
         } else {
             CommandOutcome::notify(about(N_UNCHANGED, &doc, Vec::new()))
-                .with_effect(effect(&created, &revision))
+                .with_effect(effect(&compiled, &revision))
         };
         return Ok(outcome);
     }
@@ -98,58 +86,62 @@ pub(super) fn canvas_apply(
     );
     Ok(CommandOutcome::notify(about(N_APPLIED, &doc, Vec::new()))
         .undoable(undo)
-        .with_effect(effect(&created, &report.revision)))
+        .with_effect(effect(&compiled, &report.revision)))
 }
 
-/// Che cosa ha fatto il comando, per chi lo ha chiamato: gli id nati e la
-/// revisione della lavagna dopo.
-fn effect(created: &[String], revision: &Revision) -> CommandEffect {
+/// Che cosa ha fatto il comando, per chi lo ha chiamato: gli id nati, la
+/// revisione della lavagna dopo e le note del nucleo (ciò che le operazioni non
+/// hanno potuto tenere, come la forma di un nodo Mermaid), con quante non ci
+/// stanno.
+fn effect(compiled: &Compiled, revision: &Revision) -> CommandEffect {
     CommandEffect::Custom {
         ns: LAVAGNA_NS.into(),
-        payload: json!({ "created": created, "revision": revision.0 }),
+        payload: json!({
+            "created": compiled.created,
+            "revision": revision.0,
+            "notes": compiled.notes,
+            "notes_omitted": compiled.notes_omitted,
+        }),
     }
-}
-
-/// Una frase che nomina il documento, più altri argomenti.
-fn about(key: &str, doc: &DocId, mut args: Vec<Arg>) -> Text {
-    args.insert(0, Arg::text("doc", doc.as_str()));
-    Text::message(key, args)
 }
 
 /// La lista delle operazioni: un array JSON, non vuoto.
 fn operations(raw: &str) -> Result<Vec<CanvasOp>, PluginError> {
-    let ops: Vec<CanvasOp> = serde_json::from_str(raw).map_err(|error| {
-        PluginError::BadArgs(Text::message(
-            E_OPS_JSON,
-            vec![Arg::text("reason", error.to_string())],
-        ))
-    })?;
+    let ops: Vec<CanvasOp> = serde_json::from_str(raw)
+        .map_err(|error| ops_json(error.to_string(), first_problem(raw)))?;
     if ops.is_empty() {
         return Err(PluginError::BadArgs(Text::key(E_OPS_EMPTY)));
     }
     Ok(ops)
 }
 
-/// Il seme dato: un intero decimale a 64 bit senza segno, come lo porta il
-/// JSON (in stringa, perché un `u64` non ci sta in un numero JSON).
-fn seed(raw: &str) -> Result<u64, PluginError> {
-    raw.trim()
-        .parse::<u64>()
-        .map_err(|_| PluginError::BadArgs(Text::message(E_SEED, vec![Arg::text("seed", raw)])))
-}
-
-/// Una lavagna che il nucleo non sa leggere (R1–R10 di `canvas-format.md`).
-fn opening(doc: &DocId, error: &CanvasError) -> PluginError {
-    let key = match error {
-        CanvasError::Limit { .. } => E_OPEN_LIMIT,
-        CanvasError::Json(_) => E_OPEN_JSON,
-        CanvasError::Invalid(_) => E_OPEN_INVALID,
+/// Il primo problema che la forma trova nella lista, come `codice · percorso ·
+/// suggerimento`. «-» se il testo non è JSON, o se la forma non ne trova: il
+/// motivo è allora quello di serde.
+fn first_problem(raw: &str) -> String {
+    let Ok(value) = serde_json::from_str::<Value>(raw) else {
+        return "-".to_owned();
     };
-    PluginError::BadArgs(about(
-        key,
-        doc,
-        vec![Arg::text("reason", error.to_string())],
-    ))
+    let Some(problem) = spec::validate(&value).into_iter().next() else {
+        return "-".to_owned();
+    };
+    let problem = serde_json::to_value(problem).unwrap_or(Value::Null);
+    let parts = [
+        problem["code"].as_str(),
+        problem["path"].as_str(),
+        problem["suggestion"].as_str(),
+    ];
+    let text = parts
+        .into_iter()
+        .flatten()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ");
+    if text.is_empty() {
+        "-".to_owned()
+    } else {
+        text
+    }
 }
 
 /// Un'operazione rifiutata: la posizione si conta da uno, come la legge chi
@@ -166,6 +158,10 @@ fn operation(error: OpError) -> PluginError {
             } else {
                 E_OP_TOO_MANY_NODES
             },
+            vec![Arg::text("limit", limit.to_string())],
+        ),
+        OpError::TooManyMoved { limit, .. } => (
+            E_OP_TOO_MANY_MOVED,
             vec![Arg::text("limit", limit.to_string())],
         ),
         OpError::Invalid { reason, .. } => (E_OP_INVALID, vec![Arg::text("reason", reason)]),
@@ -244,6 +240,13 @@ mod tests {
             panic!("troppi archi è un argomento sbagliato");
         };
         assert_eq!(key(&text), Some(E_OP_TOO_MANY_EDGES));
+        let PluginError::BadArgs(text) = operation(OpError::TooManyMoved {
+            index: 0,
+            limit: 1000,
+        }) else {
+            panic!("un tetto di move è un argomento sbagliato");
+        };
+        assert_eq!(key(&text), Some(E_OP_TOO_MANY_MOVED));
     }
 
     /// Una lavagna come la scrive Obsidian: tab, campi nel suo ordine (il
