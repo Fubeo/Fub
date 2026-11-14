@@ -409,14 +409,7 @@ impl JobLock {
 /// collegamento o una cartella al suo posto farebbe bloccare a due processi
 /// due file diversi, e «sync already running» non varrebbe più.
 fn open_regular_lock(path: &Path) -> std::io::Result<std::fs::File> {
-    crate::regular_file::open_regular(
-        path,
-        std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false),
-    )
+    crate::regular_file::open_regular(path, crate::regular_file::Access::Lock)
 }
 
 /// Stato durevole del job (file atomici sotto la root TRUSTED).
@@ -720,7 +713,10 @@ const KDF_REFUSALS: [&str; 4] = [
 
 /// L'errore di una risposta del server che non è un successo. Un server di
 /// un'altra versione che non conosce i parametri KDF della busta è
-/// `Unserved` con un testo per chi legge, non un `400` muto.
+/// `BadArgs` con un testo per chi legge, non un `400` muto: è
+/// un'incompatibilità che resta finché qualcuno non aggiorna, come «sync non
+/// configurato», e non un `Unserved` (rete assente, da ritentare). Una nuova
+/// variante di `PluginError` cambierebbe il contratto di `fub-abi` e il WIT.
 fn status_error(path: &str, status: u16, body: &[u8]) -> PluginError {
     let code = serde_json::from_slice::<serde_json::Value>(body)
         .ok()
@@ -730,7 +726,7 @@ fn status_error(path: &str, status: u16, body: &[u8]) -> PluginError {
             .as_deref()
             .is_some_and(|code| KDF_REFUSALS.contains(&code))
     {
-        return PluginError::Unserved(fub_abi::text::Text::key("host.sync.kdf_unsupported"));
+        return PluginError::BadArgs(fub_abi::text::Text::key("host.sync.kdf_unsupported"));
     }
     let path_base = path.split('?').next().unwrap_or(path);
     let detail = format!("sync {path_base} -> {status}");
@@ -832,14 +828,15 @@ mod conflict_copy_tests {
 mod kdf_refusal_tests {
     /// Un client nuovo davanti a un server di prima: la busta `ver=2` torna
     /// `400 stale wrap version` (o `bad wrap version`), e chi legge riceve un
-    /// errore tipizzato col suo testo, non un `400` senza parole.
+    /// errore tipizzato col suo testo, non un `400` senza parole. Non è
+    /// `Unserved`: chi riprova quando la rete torna non deve riprovare questo.
     #[test]
     fn a_server_that_does_not_know_the_kdf_version_is_a_typed_error() {
         for code in super::KDF_REFUSALS {
             let body = serde_json::to_vec(&serde_json::json!({ "error": code })).unwrap();
             let error = super::status_error("/v1/sync/invite", 400, &body);
             match error {
-                fub_abi::PluginError::Unserved(fub_abi::text::Text::Message(message)) => {
+                fub_abi::PluginError::BadArgs(fub_abi::text::Text::Message(message)) => {
                     assert_eq!(message.key, "host.sync.kdf_unsupported", "{code}");
                 }
                 other => panic!("{code}: {other:?}"),
