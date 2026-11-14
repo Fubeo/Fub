@@ -477,6 +477,11 @@ si rimuove mai. Un secondo processo riceve `Conflict` con la chiave
 lo stesso host il lease è condiviso: riaprire un vault già aperto, o aprirlo in
 due chiamate concorrenti, non si esclude da solo. Snapshot e azzeramento della
 demo tengono il lease dalla chiusura alla riapertura.
+L'azzeramento apre la cartella della demo senza seguire un collegamento al
+suo posto, legge `.fub-demo.json` da quella cartella aperta e la svuota
+attraverso lo stesso handle; poi toglie per nome la radice rimasta vuota. Una
+cartella messa al posto della demo dopo il controllo non si svuota, e la
+rimozione finale la rifiuta perché non è vuota.
 
 Con il vault aperto nell'app desktop, la CLI e l'host nativo del clipper non
 trovano soltanto `busy`: chiedono all'app per il canale di controllo, e l'app
