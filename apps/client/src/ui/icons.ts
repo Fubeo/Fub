@@ -56,6 +56,13 @@ const SVG: Record<string, string> = {
   // --- gli appunti: la riga in cima ai menu ------------------------------
   cut: '<path d="M3.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0"/><path d="M15.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0"/><path d="M7.8 16.2L17 3"/><path d="M16.2 16.2L7 3"/>',
   copy: '<path d="M9 9h11v11H9z"/><path d="M15 9V4H4v11h5"/>',
+  // --- i segni dei formati: le scelte in riga di «Copia come» -------------
+  // Disegnati apposta, senza parole, perché i tastini restino stretti in ogni
+  // lingua: la M con la freccia in giù, le parentesi angolari con la barra,
+  // il foglio di sole righe.
+  "copy-markdown": '<path d="M2.7 17.25v-10.5l4.35 5.1 4.35-5.1v10.5"/><path d="M18.3 6.75v9.9M15 13.5l3.3 3.6 3.3-3.6"/>',
+  "copy-html": '<path d="M6.9 6.9 2.4 12l4.5 5.1M17.1 6.9l4.5 5.1-4.5 5.1M13.95 4.8l-3.9 14.4"/>',
+  "copy-text": '<rect x="3.75" y="3" width="16.5" height="18" rx="3"/><path d="M7.95 8.4h8.1M7.95 12h8.1M7.95 15.6h4.5"/>',
   trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>',
   // --- le view di sincronizzazione e pubblicazione (fub-host) -------------
   sync: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/>',
