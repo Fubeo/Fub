@@ -5,7 +5,8 @@
 //!
 //! - **Il protocollo è piccolo e scritto qui**: inizializzazione, strumenti
 //!   (`tools.rs`) e risorse, cioè le note del vault come
-//!   `fub://open?note=…`. Le notifiche non hanno risposta.
+//!   `fub://open?note=…` e, con la lavagna accesa, la sua guida come
+//!   `fub-guida://lavagna…`. Le notifiche non hanno risposta.
 //! - **Le radici** (`access.rs`) si risolvono una volta, all'avvio, sul
 //!   vault aperto: ogni strumento e ogni risorsa passa da loro.
 //! - **Niente segreti in uscita**: un messaggio d'errore passa da `redact`,
@@ -29,9 +30,35 @@ const PROTOCOLS: &[&str] = &["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-
 /// Quante note per pagina di `resources/list`.
 const RESOURCES_PAGE: u32 = 100;
 
+/// Le risorse della guida della lavagna: l'URI, il nome, il tipo e la frase. Ci
+/// sono quando `canvas.guide` risponde, cioè con il componente «Lavagna» acceso,
+/// e stanno in testa alla prima pagina. Lo schema e gli esempi sono a parte
+/// perché `fub://` è il link dell'app, e il suo parser rifiuta le rotte che non
+/// conosce.
+const GUIDE_RESOURCES: [(&str, &str, &str, &str); 3] = [
+    (
+        "fub-guida://lavagna",
+        "Guida della lavagna",
+        "text/markdown",
+        "Come si legge, si controlla e si scrive una lavagna",
+    ),
+    (
+        "fub-guida://lavagna/schema",
+        "Schema della lavagna",
+        "application/json",
+        "Lo schema della lista di operazioni",
+    ),
+    (
+        "fub-guida://lavagna/esempi",
+        "Esempi della lavagna",
+        "application/json",
+        "Esempi di operazioni, da copiare e cambiare",
+    ),
+];
+
 /// Che cosa dice `initialize` a chi legge: le regole che un agente deve
 /// sapere prima della prima chiamata.
-const INSTRUCTIONS: &str = "Il vault di Fub: note Markdown e altri file. Cerca con fub_search e fub_query, leggi con fub_read. Per cambiare una nota passa a fub_write la revisione letta: se nel frattempo è cambiata torna un conflitto, rileggi e riprova. Le note nuove si fanno con fub_create. Le lavagne nascono con fub_canvas_create e cambiano con fub_canvas_apply: una lista di operazioni sulla revisione letta, senza apply una prova, con \"apply\": true scritta. fub_invoke senza apply mostra il piano, con \"apply\": true lo esegue. I componenti si vedono con fub_components e fub_components_why; fub_components_enable e fub_components_disable senza apply mostrano l'effetto, con \"apply\": true lo applicano, e vogliono una radice di scrittura. Si scrive soltanto sotto le radici di scrittura.";
+const INSTRUCTIONS: &str = "Il vault di Fub: note Markdown e altri file. Cerca con fub_search e fub_query, leggi con fub_read. Per cambiare una nota passa a fub_write la revisione letta: se nel frattempo è cambiata torna un conflitto, rileggi e riprova. Le note nuove si fanno con fub_create. Le lavagne nascono con fub_canvas_create e cambiano con fub_canvas_apply: una lista di operazioni sulla revisione letta, senza apply una prova, con \"apply\": true scritta. Una lavagna si legge con fub_canvas_read, e la sua guida (le operazioni, lo schema, gli esempi) è fub_canvas_guide; fub_canvas_apply controlla la lista prima di scrivere, e con \"preview\": true mostra la lavagna di dopo. fub_invoke senza apply mostra il piano, con \"apply\": true lo esegue. I componenti si vedono con fub_components e fub_components_why; fub_components_enable e fub_components_disable senza apply mostrano l'effetto, con \"apply\": true lo applicano, e vogliono una radice di scrittura. Si scrive soltanto sotto le radici di scrittura.";
 
 /// Un errore JSON-RPC: il messaggio non è arrivato a uno strumento.
 #[derive(Debug)]
@@ -208,19 +235,65 @@ fn resources_list(c: &Connection, access: &Access, params: &Value) -> Result<Val
         return Err(RpcError::new(-32603, text));
     }
     let page = &data["structuredContent"];
-    let resources: Vec<Value> = page["items"]
+    let notes: Vec<Value> = page["items"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(|item| item["doc"].as_str())
         .map(|doc| json!({ "uri": resource_uri(doc), "name": doc, "mimeType": mime_of(doc) }))
         .collect();
-    let next = offset + resources.len() as u32;
+    // Il `cursor` è l'offset delle note: la guida non ci entra, sta in testa alla
+    // prima pagina e basta.
+    let next = offset + notes.len() as u32;
+    let more = !notes.is_empty() && u64::from(next) < page["total"].as_u64().unwrap_or(0);
+    let mut resources = if offset == 0 {
+        guide_resources(c)?
+    } else {
+        Vec::new()
+    };
+    resources.extend(notes);
     let mut result = json!({ "resources": resources });
-    if !resources.is_empty() && u64::from(next) < page["total"].as_u64().unwrap_or(0) {
+    if more {
         result["nextCursor"] = json!(next.to_string());
     }
     Ok(result)
+}
+
+/// Le tre risorse della guida, se il componente «Lavagna» è acceso. Spento, la
+/// lavagna non ha guida: niente risorse, e `resources/read` le rifiuta.
+fn guide_resources(c: &Connection) -> Result<Vec<Value>, RpcError> {
+    match tools::guide(c, None) {
+        Ok(_) => Ok(GUIDE_RESOURCES
+            .iter()
+            .map(|(uri, name, mime, description)| {
+                json!({ "uri": uri, "name": name, "mimeType": mime, "description": description })
+            })
+            .collect()),
+        Err(failure) if failure.kind == "unavailable" => Ok(Vec::new()),
+        Err(failure) => Err(RpcError::from_failure(&failure)),
+    }
+}
+
+/// La guida della lavagna per `resources/read`: il testo, o lo schema, o gli
+/// esempi, come JSON con l'indentazione.
+fn guide_read(c: &Connection, uri: &str, mime: &str) -> Result<Value, RpcError> {
+    let guide = tools::guide(c, None).map_err(|failure| {
+        if failure.kind == "unavailable" {
+            RpcError::invalid_params(
+                "la guida della lavagna non c'è: il componente Lavagna è spento in questo vault",
+            )
+        } else {
+            RpcError::from_failure(&failure)
+        }
+    })?;
+    let text = match uri {
+        "fub-guida://lavagna" => guide["text"].as_str().unwrap_or_default().to_string(),
+        "fub-guida://lavagna/schema" => {
+            serde_json::to_string_pretty(&guide["schema"]).unwrap_or_default()
+        }
+        _ => serde_json::to_string_pretty(&guide["examples"]).unwrap_or_default(),
+    };
+    Ok(json!({ "contents": [{ "uri": uri, "mimeType": mime, "text": text }] }))
 }
 
 fn resources_read(c: &Connection, access: &Access, params: &Value) -> Result<Value, RpcError> {
@@ -228,6 +301,16 @@ fn resources_read(c: &Connection, access: &Access, params: &Value) -> Result<Val
         .get("uri")
         .and_then(Value::as_str)
         .ok_or_else(|| RpcError::invalid_params("manca `uri`"))?;
+    // Le tre guide si riconoscono per il testo esatto; ogni altro `fub-guida://`
+    // è sconosciuto, e non passa dal parser di `fub://`.
+    if let Some((_, _, mime, _)) = GUIDE_RESOURCES.iter().find(|(guide, ..)| *guide == uri) {
+        return guide_read(c, uri, mime);
+    }
+    if uri.starts_with("fub-guida://") {
+        return Err(RpcError::invalid_params(
+            "le guide di Fub sono fub-guida://lavagna, fub-guida://lavagna/schema e fub-guida://lavagna/esempi",
+        ));
+    }
     // Lo stesso parser degli URI di Fub: traversal e chiavi ignote rifiutati.
     let note = match fub_host::automation::parse_fub_uri(uri) {
         Ok(fub_host::automation::FubUri::Open {
