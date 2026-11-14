@@ -613,7 +613,10 @@ fn a_file_replaced_with_the_same_size_and_date_teaches_nothing() {
 /// prima, senza dirlo a nessuno: un'altra identità, un altro timbro.
 fn replace_keeping_the_date(root: &Utf8Path, rel: &str, bytes: &[u8]) {
     let path = root.join(rel);
-    let mtime = fs::metadata(&path).expect("il file").modified().expect("data");
+    let mtime = fs::metadata(&path)
+        .expect("il file")
+        .modified()
+        .expect("data");
     let other = root.join("sostituto.tmp");
     fs::write(&other, bytes).expect("il file nuovo");
     fs::OpenOptions::new()

@@ -340,8 +340,16 @@ fn the_fingerprints_learned_go_to_the_vault_that_was_asked() {
             .unwrap(),
         SameContent::NotFound
     );
-    assert_eq!(reads.load(Ordering::SeqCst), 1, "il candidato si legge una volta");
-    assert_eq!(host.current(), Some(b.clone()), "il gancio ha cambiato vault");
+    assert_eq!(
+        reads.load(Ordering::SeqCst),
+        1,
+        "il candidato si legge una volta"
+    );
+    assert_eq!(
+        host.current(),
+        Some(b.clone()),
+        "il gancio ha cambiato vault"
+    );
 
     // L'impronta è arrivata ad A, che l'aveva chiesta: la seconda domanda la
     // conosce, vede che è un'altra, e non rilegge il file.

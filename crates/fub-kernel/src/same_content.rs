@@ -394,7 +394,7 @@ fn holds(
                 size: now.size,
                 mtime: now.mtime,
                 change_stamp: now.change_stamp,
-                identity: now.identity.clone(),
+                identity: now.identity,
                 observed_at: started,
                 fingerprint: computed.clone(),
             });
