@@ -1895,3 +1895,4 @@ La più recente in cima: data · piano · decisione · perché.
   persone finché la pagina del giorno (T39) non dà i giorni; Rinomina e Sposta sono
   una sola azione perché tutte e due passano da `note.rename`; Alt-Invio apre a lato
   (prima di T20) e la finestra nuova resta nei menu di scheda e albero.
+- 2026-11-14 · editor · T50: Ctrl + inserisce prima della selezione tante righe (o colonne) quante sono scelte, e la cella attiva è l'àncora · è la regola del foglio (`home.insertRows` del motore, come Excel) e la conformance vuole lo stesso gesto sui tre adattatori; il prototipo (righe 861, 884) ne mette una dopo. Il Tocca si allarga a `editors/rich/cell-selection.ts` e `panels/format-bar.ts` (con i test) per i gesti nel documento e la barra al tocco, che il «Fatto quando» e i casi limite chiedono · decisione dell'orchestratore; nessun task in corso tocca quei file, T11 li prende dopo.
