@@ -20,7 +20,7 @@
   "ops": [
     { "op": "from_outline", "text": "Progetto\n  Ricerca\n    Interviste\n    Sondaggio\n  Sviluppo\n    Prototipo\n    Test" }
   ],
-  "needs": ["from_outline"],
+  "needs": [],
   "checks": [
     { "count": { "kind": "text", "n": 7 } },
     { "count": { "kind": "edge", "n": 6 } },

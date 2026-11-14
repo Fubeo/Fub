@@ -119,6 +119,37 @@ fn ops() -> String {
     .to_string()
 }
 
+/// `from_mermaid` scrive le schede e gli archi, e le note del nucleo (la forma
+/// del nodo che diventa un rettangolo) arrivano nell'esito.
+#[test]
+fn canvas_apply_mette_le_note_nell_esito() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    let ops = json!([
+        { "op": "from_mermaid", "text": "flowchart LR\n  P((Uno)) --> Q[Due]", "near": "a", "side": "bottom" }
+    ])
+    .to_string();
+    let outcome = apply(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops, "seed": "7" }),
+        InvokeMode::Apply,
+    )
+    .expect("le operazioni si applicano");
+    let canvas: Value = serde_json::from_str(&source(&ws, BOARD)).expect("la lavagna è JSON");
+    assert_eq!(canvas["nodes"].as_array().map(Vec::len), Some(3));
+    assert_eq!(canvas["edges"].as_array().map(Vec::len), Some(1));
+    let payload = custom(&outcome);
+    assert_eq!(payload["created"][0], "P");
+    assert_eq!(payload["created"][1], "Q");
+    let notes = payload["notes"].as_array().expect("le note");
+    assert_eq!(notes.len(), 1);
+    assert_eq!(notes[0]["index"], 0);
+    assert_eq!(notes[0]["code"], "shape_dropped");
+    assert!(notes[0]["detail"]
+        .as_str()
+        .is_some_and(|detail| detail.contains("circle")));
+    assert_eq!(payload["notes_omitted"], 0);
+}
+
 #[test]
 fn le_operazioni_arrivano_nel_file_e_l_annulla_ridà_i_byte_di_prima() {
     let (_vault, mut ws) = with_board(BEFORE);
@@ -162,6 +193,8 @@ fn le_operazioni_arrivano_nel_file_e_l_annulla_ridà_i_byte_di_prima() {
         ws.document_revision(&doc).expect("revisione").0,
         "la revisione detta è quella del file"
     );
+    assert_eq!(payload["notes"], json!([]), "nessuna nota");
+    assert_eq!(payload["notes_omitted"], 0);
 
     // L'annulla: i passi dell'esito, come li esegue il kernel.
     let undo = outcome.undo.expect("si annulla");
@@ -1155,12 +1188,14 @@ fn la_guida_senza_topic_da_il_testo_e_tutte_le_operazioni() {
             "group",
             "layout",
             "insert",
-            "convert"
+            "convert",
+            "from_mermaid",
+            "from_outline"
         ]
     );
     assert_eq!(
         payload["schema"]["items"]["oneOf"].as_array().map(Vec::len),
-        Some(16)
+        Some(18)
     );
     let examples = payload["examples"].as_array().expect("gli esempi");
     assert!(examples.len() >= 7, "almeno un esempio per operazione");
@@ -1192,7 +1227,7 @@ fn la_guida_con_un_topic_da_solo_la_sua_voce() {
 
     // Un topic vuoto è come non averlo.
     let blank = guide_cmd(&mut ws, json!({ "topic": "  " })).expect("la guida");
-    assert_eq!(custom(&blank)["ops"].as_array().map(Vec::len), Some(16));
+    assert_eq!(custom(&blank)["ops"].as_array().map(Vec::len), Some(18));
 }
 
 #[test]

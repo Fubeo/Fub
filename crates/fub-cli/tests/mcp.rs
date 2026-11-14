@@ -1086,6 +1086,8 @@ fn le_lavagne_si_leggono_e_si_guidano() {
             "convert",
             "distribute",
             "duplicate",
+            "from_mermaid",
+            "from_outline",
             "group",
             "insert",
             "layout",

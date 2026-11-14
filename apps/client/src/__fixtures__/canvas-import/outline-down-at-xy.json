@@ -1,0 +1,66 @@
+{
+  "about": "Il verso `down`: la radice in alto e i figli in riga sotto, con il blocco in `x`, `y`. Gli id vengono dal seme.",
+  "op": {
+    "op": "from_outline",
+    "text": "Tesi\n  Capitolo uno\n  Capitolo due",
+    "direction": "down",
+    "x": 0,
+    "y": 600
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "type": "text",
+          "x": 172,
+          "y": 600,
+          "width": 320,
+          "height": 160,
+          "text": "Tesi"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "type": "text",
+          "x": 0,
+          "y": 856,
+          "width": 320,
+          "height": 160,
+          "text": "Capitolo uno"
+        },
+        {
+          "id": "06c45d188009454f",
+          "type": "text",
+          "x": 344,
+          "y": 856,
+          "width": 320,
+          "height": 160,
+          "text": "Capitolo due"
+        }
+      ],
+      "edges": [
+        {
+          "id": "f88bb8a8724c81ec",
+          "fromNode": "e220a8397b1dcdaf",
+          "toNode": "6e789e6aa1b965f4",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "1b39896a51a8749b",
+          "fromNode": "e220a8397b1dcdaf",
+          "toNode": "06c45d188009454f",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4",
+      "06c45d188009454f",
+      "f88bb8a8724c81ec",
+      "1b39896a51a8749b"
+    ],
+    "notes": []
+  }
+}

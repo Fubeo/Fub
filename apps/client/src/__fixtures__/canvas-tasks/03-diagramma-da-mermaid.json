@@ -13,7 +13,7 @@
   "ops": [
     { "op": "from_mermaid", "text": "flowchart LR\n  A[Evaporazione] --> B[Condensazione] --> C[Precipitazione] --> A" }
   ],
-  "needs": ["from_mermaid"],
+  "needs": [],
   "checks": [
     { "count": { "kind": "text", "n": 3 } },
     { "count": { "kind": "edge", "n": 3 } },

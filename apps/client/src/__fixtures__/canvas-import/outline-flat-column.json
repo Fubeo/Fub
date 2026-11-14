@@ -1,0 +1,57 @@
+{
+  "about": "Una scaletta senza rientri: le schede in colonna, a sinistra, dall'alto in basso.",
+  "op": {
+    "op": "from_outline",
+    "text": "Introduzione\nMetodi\nRisultati\nConclusioni"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Introduzione"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "type": "text",
+          "x": 0,
+          "y": 184,
+          "width": 320,
+          "height": 160,
+          "text": "Metodi"
+        },
+        {
+          "id": "06c45d188009454f",
+          "type": "text",
+          "x": 0,
+          "y": 368,
+          "width": 320,
+          "height": 160,
+          "text": "Risultati"
+        },
+        {
+          "id": "f88bb8a8724c81ec",
+          "type": "text",
+          "x": 0,
+          "y": 552,
+          "width": 320,
+          "height": 160,
+          "text": "Conclusioni"
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4",
+      "06c45d188009454f",
+      "f88bb8a8724c81ec"
+    ],
+    "notes": []
+  }
+}

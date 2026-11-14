@@ -1,0 +1,14 @@
+{
+  "about": "Una scaletta senza testo (solo righe vuote e segni) è Invalid.",
+  "op": {
+    "op": "from_outline",
+    "text": "\n   \n-\n"
+  },
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

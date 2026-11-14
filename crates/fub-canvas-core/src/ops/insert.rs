@@ -56,8 +56,9 @@ pub struct InsertArgs {
     pub side: Option<CanvasEdgeSide>,
 }
 
-/// Il posto del frammento, come lo chiede chi scrive.
-enum Place<'a> {
+/// Il posto di un blocco di schede (un frammento, un diagramma), come lo chiede
+/// chi scrive.
+pub(super) enum Place<'a> {
     At(i64, i64),
     Near(&'a str, CanvasEdgeSide),
     Auto,
@@ -65,8 +66,14 @@ enum Place<'a> {
 
 impl<'a> Place<'a> {
     /// `x` e `y` vanno insieme e non con `near`; `side` va con `near`.
-    fn of(index: usize, args: &'a InsertArgs) -> Result<Self, OpError> {
-        match (args.x, args.y, args.near.as_deref()) {
+    pub(super) fn new(
+        index: usize,
+        x: Option<i64>,
+        y: Option<i64>,
+        near: Option<&'a str>,
+        side: Option<CanvasEdgeSide>,
+    ) -> Result<Self, OpError> {
+        match (x, y, near) {
             (Some(_), None, _) | (None, Some(_), _) => {
                 Err(refuse(index, "`x` and `y` go together: give both or none"))
             }
@@ -75,16 +82,14 @@ impl<'a> Place<'a> {
                 "a fragment has one place: `x` and `y`, or `near`",
             )),
             (Some(x), Some(y), None) => {
-                if args.side.is_some() {
+                if side.is_some() {
                     return Err(refuse(index, "`side` goes with `near`"));
                 }
                 Ok(Self::At(x, y))
             }
-            (None, None, Some(near)) => {
-                Ok(Self::Near(near, args.side.unwrap_or(CanvasEdgeSide::Right)))
-            }
+            (None, None, Some(near)) => Ok(Self::Near(near, side.unwrap_or(CanvasEdgeSide::Right))),
             (None, None, None) => {
-                if args.side.is_some() {
+                if side.is_some() {
                     return Err(refuse(index, "`side` goes with `near`"));
                 }
                 Ok(Self::Auto)
@@ -101,7 +106,7 @@ impl Compiler {
         index: usize,
         args: &InsertArgs,
     ) -> Result<Vec<CanvasPatch>, OpError> {
-        let place = Place::of(index, args)?;
+        let place = Place::new(index, args.x, args.y, args.near.as_deref(), args.side)?;
         let (nodes, edges) = read_fragment(index, &args.fragment)?;
         if nodes.len() > MAX_INSERTED {
             return Err(OpError::TooMany {
@@ -140,34 +145,8 @@ impl Compiler {
             })
             .collect::<Result<_, OpError>>()?;
         let frame = frame(&cards);
-        let (to_x, to_y) = match place {
-            Place::At(x, y) => (i128::from(x), i128::from(y)),
-            Place::Near(near, side) => {
-                let size = ((frame.2 - frame.0) as f64, (frame.3 - frame.1) as f64);
-                let rect = layout::place_sized_near(&self.working, near, side, None, size)
-                    .ok_or_else(|| OpError::UnknownNode {
-                        index,
-                        id: near.to_owned(),
-                    })?;
-                (
-                    i128::from(whole(index, rect.x)?),
-                    i128::from(whole(index, rect.y)?),
-                )
-            }
-            Place::Auto => {
-                let after = self
-                    .auto_last
-                    .as_deref()
-                    .and_then(|id| self.working.nodes.iter().find(|node| node.id == id))
-                    .map(Rect::of_node);
-                let (x, y) = layout::auto_place(&self.working, after);
-                // La lista automatica non continua sotto una scheda che il
-                // frammento può coprire: la prossima scheda automatica va
-                // accanto a tutto, frammento compreso.
-                self.auto_last = None;
-                (i128::from(whole(index, x)?), i128::from(whole(index, y)?))
-            }
-        };
+        let size = ((frame.2 - frame.0) as f64, (frame.3 - frame.1) as f64);
+        let (to_x, to_y) = self.block_origin(index, &place, size)?;
         let (dx, dy) = (to_x - frame.0, to_y - frame.1);
         for card in &mut cards {
             card.x = shifted(index, card.x, dx)?;
@@ -221,6 +200,47 @@ impl Compiler {
             }))
             .collect();
         Ok(patches)
+    }
+}
+
+impl Compiler {
+    /// Dove va l'angolo in alto a sinistra di un blocco di misura `size`: in
+    /// `x`, `y`; accanto a `near`, con le regole di `add_card` e la misura del
+    /// blocco; o nel posto automatico. Dopo un blocco nel posto automatico la
+    /// lista automatica riparte.
+    pub(super) fn block_origin(
+        &mut self,
+        index: usize,
+        place: &Place<'_>,
+        size: (f64, f64),
+    ) -> Result<(i128, i128), OpError> {
+        match *place {
+            Place::At(x, y) => Ok((i128::from(x), i128::from(y))),
+            Place::Near(near, side) => {
+                let rect = layout::place_sized_near(&self.working, near, side, None, size)
+                    .ok_or_else(|| OpError::UnknownNode {
+                        index,
+                        id: near.to_owned(),
+                    })?;
+                Ok((
+                    i128::from(whole(index, rect.x)?),
+                    i128::from(whole(index, rect.y)?),
+                ))
+            }
+            Place::Auto => {
+                let after = self
+                    .auto_last
+                    .as_deref()
+                    .and_then(|id| self.working.nodes.iter().find(|node| node.id == id))
+                    .map(Rect::of_node);
+                let (x, y) = layout::auto_place(&self.working, after);
+                // La lista automatica non continua sotto una scheda che il
+                // blocco può coprire: la prossima scheda automatica va accanto
+                // a tutto, blocco compreso.
+                self.auto_last = None;
+                Ok((i128::from(whole(index, x)?), i128::from(whole(index, y)?)))
+            }
+        }
     }
 }
 
@@ -356,7 +376,7 @@ fn frame(cards: &[CanvasNode]) -> (i128, i128, i128, i128) {
 
 /// Una coordinata spostata del blocco. Fuori da ±(2^53−1) il frammento non
 /// entra: saturare la sposterebbe da sola, e il blocco si romperebbe.
-fn shifted(index: usize, at: i64, by: i128) -> Result<i64, OpError> {
+pub(super) fn shifted(index: usize, at: i64, by: i128) -> Result<i64, OpError> {
     let moved = i128::from(at) + by;
     if moved.abs() > i128::from(MAX_SAFE_INTEGER) {
         return Err(refuse(

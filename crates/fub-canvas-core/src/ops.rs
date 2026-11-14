@@ -1,7 +1,7 @@
 //! Le operazioni d'intento sulla lavagna (`CanvasOp`): «aggiungi», «sposta»,
 //! «ridimensiona», «collega», «togli», «cambia», «porta sopra», «allinea»,
 //! «distribuisci», «duplica», «inverti», «raggruppa», «dispone», «incolla»,
-//! «trasforma in file». Un agente o
+//! «trasforma in file», «da Mermaid», «da una scaletta». Un agente o
 //! la sessione dal tablet pensano così, non in toppe con l'immagine di
 //! prima: [`compile`] traduce una lista di operazioni nelle toppe di
 //! [`crate::patch`], che sono la sola forma con cui una lavagna cambia.
@@ -17,6 +17,9 @@
 //! [`OpError::TooMany`]; il tetto di `move` con `contents` dà
 //! [`OpError::TooManyMoved`]. `compile` si aspetta un modello di partenza
 //! valido, come quello che dà [`crate::parse`].
+//!
+//! Ciò che un'operazione non ha potuto tenere (la forma di un nodo Mermaid, una
+//! riga di stili) non è un errore: è una nota in [`Compiled::notes`].
 //!
 //! Gli id nuovi vengono da un seme del chiamante ([`IdSource`]): stesso
 //! seme, stessi id. Le regole e un esempio per operazione sono nella sezione
@@ -41,6 +44,7 @@ mod connect;
 mod convert;
 mod duplicate;
 mod group;
+mod import;
 mod insert;
 mod layout;
 mod reverse;
@@ -52,6 +56,7 @@ pub use connect::{AutoWord, ConnectArgs, Ends, SidePair, Sides};
 pub use convert::ConvertArgs;
 pub use duplicate::DuplicateArgs;
 pub use group::GroupArgs;
+pub use import::{FromMermaidArgs, FromOutlineArgs};
 pub use insert::{InsertArgs, MAX_INSERTED};
 pub use layout::{LayoutArgs, LayoutDirection, LayoutKind};
 pub use reverse::ReverseArgs;
@@ -113,6 +118,13 @@ pub enum CanvasOp {
     /// Una scheda di testo diventa una scheda di file, allo stesso posto. Le
     /// regole sono in `ops/convert.rs`.
     Convert(ConvertArgs),
+    /// Un diagramma Mermaid (`flowchart`) diventa schede, gruppi e archi, già
+    /// disposti. Il lettore è in `import/mermaid.rs`, le regole in
+    /// `ops/import.rs`.
+    FromMermaid(FromMermaidArgs),
+    /// Una scaletta rientrata diventa un albero di schede. Il lettore è in
+    /// `import/outline.rs`, le regole in `ops/import.rs`.
+    FromOutline(FromOutlineArgs),
 }
 
 impl CanvasOp {
@@ -137,19 +149,64 @@ impl CanvasOp {
             Self::Layout(_) => "layout",
             Self::Insert(_) => "insert",
             Self::Convert(_) => "convert",
+            Self::FromMermaid(_) => "from_mermaid",
+            Self::FromOutline(_) => "from_outline",
         }
     }
 }
 
-/// Il risultato di [`compile`]: le toppe e gli id creati.
+/// Il risultato di [`compile`]: le toppe, gli id creati e le note.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Compiled {
     /// Le toppe, nell'ordine in cui si applicano.
     pub patches: Vec<CanvasPatch>,
     /// Gli id di ogni scheda e arco aggiunti (`add_card`, `connect`,
-    /// `duplicate`, `group`, `insert`), dati o generati, nell'ordine delle
-    /// operazioni.
+    /// `duplicate`, `group`, `insert`, `from_mermaid`, `from_outline`), dati o
+    /// generati, nell'ordine delle operazioni.
     pub created: Vec<String>,
+    /// Ciò che le operazioni non hanno potuto tenere, nell'ordine delle
+    /// operazioni: al più [`MAX_NOTES`]. Senza note il campo non si scrive.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<CompileNote>,
+    /// Quante note non entrano in `notes`. Zero non si scrive.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub notes_omitted: usize,
+}
+
+/// Quante note porta al più un [`Compiled`]: le altre si contano in
+/// [`Compiled::notes_omitted`].
+pub const MAX_NOTES: usize = crate::import::MAX_NOTES;
+
+/// Una cosa che un'operazione non ha potuto tenere. Non è un errore: le
+/// operazioni si compilano, e la nota lo dice.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompileNote {
+    /// La posizione dell'operazione nella lista, da zero.
+    pub index: usize,
+    pub code: NoteCode,
+    /// Che cosa e dove, in inglese come gli errori: `line 3: the circle shape
+    /// of "A" becomes a rectangle`.
+    pub detail: String,
+}
+
+/// I codici delle note.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoteCode {
+    /// La forma di un nodo (un cerchio, un rombo) diventa un rettangolo.
+    ShapeDropped,
+    /// Uno stile (un arco tratteggiato o spesso, una classe) non si tiene.
+    StyleDropped,
+    /// Una riga che non si capisce, o di soli stili (`classDef`, `style`,
+    /// `linkStyle`, `click`), si salta.
+    LineSkipped,
+    /// Un rientro della scaletta che non cade su un livello vale il più vicino.
+    IndentRounded,
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
 }
 
 /// Perché una lista di operazioni non si compila. `index` è la posizione
@@ -239,6 +296,8 @@ pub fn compile(canvas: &Canvas, ops: &[CanvasOp], seed: u64) -> Result<Compiled,
     Ok(Compiled {
         patches: compiler.patches,
         created: compiler.created,
+        notes: compiler.notes,
+        notes_omitted: compiler.notes_omitted,
     })
 }
 
@@ -260,6 +319,10 @@ struct Compiler {
     /// L'ultima scheda messa in fondo alla lista automatica di `add_card`: la
     /// prossima va sotto di lei, se è ancora nel modello.
     auto_last: Option<String>,
+    /// Le note delle operazioni compilate finora, al più [`MAX_NOTES`].
+    notes: Vec<CompileNote>,
+    /// Le note che non entrano in `notes`.
+    notes_omitted: usize,
 }
 
 impl Compiler {
@@ -279,6 +342,21 @@ impl Compiler {
             run_start: None,
             edge_run_start: None,
             auto_last: None,
+            notes: Vec::new(),
+            notes_omitted: 0,
+        }
+    }
+
+    /// Una nota dell'operazione `index`, se c'è posto; se no si conta.
+    fn note(&mut self, index: usize, code: NoteCode, detail: String) {
+        if self.notes.len() < MAX_NOTES {
+            self.notes.push(CompileNote {
+                index,
+                code,
+                detail,
+            });
+        } else {
+            self.notes_omitted += 1;
         }
     }
 
@@ -300,6 +378,8 @@ impl Compiler {
             CanvasOp::Layout(args) => self.layout(index, args)?,
             CanvasOp::Insert(args) => self.insert(index, args)?,
             CanvasOp::Convert(args) => self.convert(index, args)?,
+            CanvasOp::FromMermaid(args) => self.from_mermaid(index, args)?,
+            CanvasOp::FromOutline(args) => self.from_outline(index, args)?,
         };
         if patches.is_empty() {
             return Ok(());

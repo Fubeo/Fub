@@ -1,0 +1,72 @@
+{
+  "about": "Con `prefix` gli id di Mermaid prendono il prefisso, e il blocco va sotto la scheda `near`.",
+  "before": {
+    "nodes": [
+      {
+        "id": "A",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "C'era già"
+      }
+    ],
+    "edges": []
+  },
+  "op": {
+    "op": "from_mermaid",
+    "text": "graph LR\n  A[Uno] --> B[Due]",
+    "near": "A",
+    "side": "bottom",
+    "prefix": "m-"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "A",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "C'era già"
+        },
+        {
+          "id": "m-A",
+          "type": "text",
+          "x": 0,
+          "y": 184,
+          "width": 320,
+          "height": 160,
+          "text": "Uno"
+        },
+        {
+          "id": "m-B",
+          "type": "text",
+          "x": 416,
+          "y": 184,
+          "width": 320,
+          "height": 160,
+          "text": "Due"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "m-A",
+          "toNode": "m-B",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "m-A",
+      "m-B",
+      "e220a8397b1dcdaf"
+    ],
+    "notes": []
+  }
+}

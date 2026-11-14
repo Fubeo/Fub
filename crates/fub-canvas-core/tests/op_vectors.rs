@@ -124,7 +124,9 @@ fn check(name: &str, vector: &Value) -> String {
         }
         "applied" => {
             let ops = ops.unwrap_or_else(|e| panic!("{name}: le operazioni non si leggono: {e}"));
-            let Compiled { patches, created } = compile(&before, &ops, seed)
+            let Compiled {
+                patches, created, ..
+            } = compile(&before, &ops, seed)
                 .unwrap_or_else(|e| panic!("{name}: le operazioni non si compilano: {e}"));
             let after = draft(&before, &patches)
                 .unwrap_or_else(|e| panic!("{name}: le toppe non si applicano: {e}"));
@@ -220,6 +222,8 @@ fn ogni_operazione_ha_un_vettore() {
         "layout",
         "insert",
         "convert",
+        "from_mermaid",
+        "from_outline",
     ] {
         assert!(seen.contains(op), "nessun vettore usa {op:?}");
     }
@@ -489,7 +493,13 @@ fn le_operazioni_si_riscrivono_uguali() {
         {"op": "insert", "fragment": {"version": 1, "nodes": [], "edges": []}},
         {"op": "insert", "fragment": {"version": 1, "nodes": [], "edges": []}, "near": "a", "side": "top"},
         {"op": "insert", "fragment": {"version": 1, "nodes": [], "edges": []}, "x": 8, "y": -8},
-        {"op": "convert", "id": "a", "file": "Idee/a.md"}
+        {"op": "convert", "id": "a", "file": "Idee/a.md"},
+        {"op": "from_mermaid", "text": "graph LR\nA-->B"},
+        {"op": "from_mermaid", "text": "graph LR\nA-->B", "x": 0, "y": 8, "prefix": "m-"},
+        {"op": "from_mermaid", "text": "graph LR\nA-->B", "near": "a", "side": "left"},
+        {"op": "from_outline", "text": "a\n  b"},
+        {"op": "from_outline", "text": "a\n  b", "direction": "down", "x": 0, "y": 8, "prefix": "s-"},
+        {"op": "from_outline", "text": "a\n  b", "near": "a", "side": "bottom"}
     ]);
     let read: Vec<CanvasOp> = serde_json::from_value(ops.clone()).expect("si leggono");
     assert_eq!(serde_json::to_value(&read).expect("si scrivono"), ops);

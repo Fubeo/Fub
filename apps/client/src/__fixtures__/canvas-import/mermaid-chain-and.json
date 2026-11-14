@@ -1,0 +1,111 @@
+{
+  "about": "Una catena con `&`: ogni nodo di un gruppo va a ogni nodo del gruppo dopo.",
+  "op": {
+    "op": "from_mermaid",
+    "text": "graph TD\n  A & B --> C & D --> E"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "A",
+          "type": "text",
+          "x": 172,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "A"
+        },
+        {
+          "id": "B",
+          "type": "text",
+          "x": 516,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "B"
+        },
+        {
+          "id": "C",
+          "type": "text",
+          "x": 0,
+          "y": 256,
+          "width": 320,
+          "height": 160,
+          "text": "C"
+        },
+        {
+          "id": "D",
+          "type": "text",
+          "x": 344,
+          "y": 256,
+          "width": 320,
+          "height": 160,
+          "text": "D"
+        },
+        {
+          "id": "E",
+          "type": "text",
+          "x": 0,
+          "y": 512,
+          "width": 320,
+          "height": 160,
+          "text": "E"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "A",
+          "toNode": "C",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "fromNode": "A",
+          "toNode": "D",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "06c45d188009454f",
+          "fromNode": "B",
+          "toNode": "C",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "f88bb8a8724c81ec",
+          "fromNode": "B",
+          "toNode": "D",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "1b39896a51a8749b",
+          "fromNode": "C",
+          "toNode": "E",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "53cb9f0c747ea2ea",
+          "fromNode": "D",
+          "toNode": "E",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4",
+      "06c45d188009454f",
+      "f88bb8a8724c81ec",
+      "1b39896a51a8749b",
+      "53cb9f0c747ea2ea"
+    ],
+    "notes": []
+  }
+}

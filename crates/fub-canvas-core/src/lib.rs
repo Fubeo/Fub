@@ -21,6 +21,7 @@
 pub mod check;
 pub mod commit;
 pub mod describe;
+mod import;
 pub mod js;
 pub mod layout;
 pub mod model;

@@ -574,6 +574,97 @@ pub const OPS: &[OpSpec] = &[
         ],
         examples: &[r#"{"op":"convert","id":"t2","file":"Idee/Evaporazione.md"}"#],
     },
+    OpSpec {
+        name: "from_mermaid",
+        summary_it: "Un diagramma Mermaid (`flowchart` o `graph`) diventa schede di testo, gruppi (`subgraph`) e archi, già disposti ad albero nel verso dell'intestazione, come un blocco in `x`, `y`, accanto a `near` o nel posto automatico. Ciò che la lavagna non tiene (forme, stili) torna nelle note.",
+        fields: &[
+            required(
+                "text",
+                FieldKind::Text,
+                "Il diagramma, al più 256 KiB e 2000 nodi: nodi (`A[testo]`, `A(testo)`, `A{testo}`…), archi (`-->`, `---`, `-.->`, `==>`, `<-->`, `-- testo -->`, `-->|testo|`, anche in catena e con `&`), `subgraph id [titolo]` … `end`, commenti `%%`.",
+            ),
+            optional(
+                "x",
+                FieldKind::Number,
+                "Dove va il bordo sinistro del blocco. Va con `y`, e non con `near`.",
+            ),
+            optional(
+                "y",
+                FieldKind::Number,
+                "Dove va il bordo alto del blocco. Va con `x`, e non con `near`.",
+            ),
+            optional(
+                "near",
+                FieldKind::Id,
+                "La scheda accanto alla quale va il blocco.",
+            ),
+            FieldSpec {
+                name: "side",
+                kind: FieldKind::Enum(SIDES),
+                required: false,
+                default: Some("\"right\""),
+                doc_it: "Il lato di `near` dove va il blocco.",
+            },
+            optional(
+                "prefix",
+                FieldKind::Text,
+                "Il testo davanti a ogni id di Mermaid: con `m-`, il nodo `A` è la scheda `m-A`. Serve quando un id c'è già.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"from_mermaid","text":"flowchart LR\n  A[Evaporazione] --> B[Condensazione] --> C[Precipitazione] --> A"}"#,
+            r#"{"op":"from_mermaid","text":"graph TD\n  subgraph s [Fasi]\n    A[Inizio] -->|poi| B[Fine]\n  end","near":"f1","side":"bottom","prefix":"m-"}"#,
+        ],
+    },
+    OpSpec {
+        name: "from_outline",
+        summary_it: "Una scaletta rientrata diventa un albero di schede di testo: una riga è una scheda, e un arco va dal genitore a ogni figlio. Il blocco va in `x`, `y`, accanto a `near` o nel posto automatico.",
+        fields: &[
+            required(
+                "text",
+                FieldKind::Text,
+                "La scaletta, al più 256 KiB e 2000 righe: un livello è 2 spazi o un tab, e i segni `-`, `*`, `+`, `1.` si tolgono. Le righe vuote non contano.",
+            ),
+            FieldSpec {
+                name: "direction",
+                kind: FieldKind::Enum(LAYOUT_DIRECTIONS),
+                required: false,
+                default: Some("\"right\""),
+                doc_it: "Il verso dell'albero: `right` (la radice a sinistra e i figli in colonna, di serie), `down`, `up` o `left`.",
+            },
+            optional(
+                "x",
+                FieldKind::Number,
+                "Dove va il bordo sinistro del blocco. Va con `y`, e non con `near`.",
+            ),
+            optional(
+                "y",
+                FieldKind::Number,
+                "Dove va il bordo alto del blocco. Va con `x`, e non con `near`.",
+            ),
+            optional(
+                "near",
+                FieldKind::Id,
+                "La scheda accanto alla quale va il blocco.",
+            ),
+            FieldSpec {
+                name: "side",
+                kind: FieldKind::Enum(SIDES),
+                required: false,
+                default: Some("\"right\""),
+                doc_it: "Il lato di `near` dove va il blocco.",
+            },
+            optional(
+                "prefix",
+                FieldKind::Text,
+                "Con `prefix` l'id di una scheda è `prefix` più il numero della sua riga (`s-3`); senza, gli id vengono dal seme.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"from_outline","text":"Progetto\n  Ricerca\n  Sviluppo"}"#,
+            r#"{"op":"from_outline","text":"- Tesi\n  - Metodi\n  - Risultati","direction":"down","x":0,"y":600,"prefix":"s-"}"#,
+        ],
+    },
 ];
 
 /// La lavagna su cui girano gli esempi di [`OPS`]: due schede di testo, una

@@ -1,0 +1,48 @@
+{
+  "about": "Il verso RL da destra a sinistra, con il blocco in `x`, `y`.",
+  "op": {
+    "op": "from_mermaid",
+    "text": "graph RL\n  A[Primo] --> B[Secondo]",
+    "x": 800,
+    "y": 400
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "A",
+          "type": "text",
+          "x": 1216,
+          "y": 400,
+          "width": 320,
+          "height": 160,
+          "text": "Primo"
+        },
+        {
+          "id": "B",
+          "type": "text",
+          "x": 800,
+          "y": 400,
+          "width": 320,
+          "height": 160,
+          "text": "Secondo"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "A",
+          "toNode": "B",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "A",
+      "B",
+      "e220a8397b1dcdaf"
+    ],
+    "notes": []
+  }
+}
