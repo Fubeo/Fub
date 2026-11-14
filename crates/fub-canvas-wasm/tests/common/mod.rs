@@ -255,10 +255,10 @@ pub fn every_vector(via: &mut impl Via) {
     }
 }
 
-/// Quanti vettori dell'inchiostro: gli stessi 28 di
+/// Quanti vettori dell'inchiostro: gli stessi 32 di
 /// `crates/fub-canvas-core/tests/ink_vectors.rs` e di
 /// `apps/client/src/editors/canvas/wasm/ink-vectors.test.ts`.
-pub const INK_VECTORS: usize = 28;
+pub const INK_VECTORS: usize = 32;
 
 /// Ogni vettore di `canvas-ink/`: `ink_layers` dà i livelli attesi (quelli
 /// che legge il nucleo nativo), la stessa risposta finché il testo non
@@ -328,6 +328,158 @@ pub fn ink_layers_follow_commits(via: &mut impl Via) {
     via.commit(handle, &bytes(&committed["inverse"]))
         .expect("annulla");
     assert_eq!(via.ink_layers(handle).expect("annullata"), empty);
+    via.close(handle).expect("close");
+}
+
+/// Un tratto valido ancorato a una scheda di 640 × 420.
+pub fn card_stroke(id: &str) -> Value {
+    let mut stroke = free_stroke(id);
+    stroke["anchor"] = json!({ "kind": "card", "width": 640, "height": 420 });
+    stroke
+}
+
+/// Il modello di prima più il `changed` di un commit: le schede riscritte al
+/// loro posto, le chiavi della radice riscritte dove stavano.
+pub fn apply_changed(model: &Value, changed: &Value) -> (Value, usize) {
+    let mut model = model.clone();
+    let mut spliced = 0;
+    let splice = |layer: &mut Value, change: &Value| {
+        let start = change["start"].as_u64().expect("start") as usize;
+        let remove = change["remove"].as_u64().expect("remove") as usize;
+        let insert = change["insert"].as_array().expect("insert").clone();
+        let strokes = layer["strokes"]
+            .as_array_mut()
+            .expect("il livello ha strokes");
+        assert!(
+            start + remove <= strokes.len(),
+            "{change} fuori dalla lista"
+        );
+        strokes.splice(start..start + remove, insert);
+    };
+    for entry in changed["nodes"].as_array().expect("changed.nodes") {
+        let at = entry["at"].as_u64().expect("at") as usize;
+        if let Some(node) = entry.get("node") {
+            model["nodes"][at] = node.clone();
+        } else {
+            assert_eq!(
+                model["nodes"][at]["id"], entry["id"],
+                "la scheda al suo posto"
+            );
+            splice(&mut model["nodes"][at]["fub:ink"], &entry["strokes"]);
+            spliced += 1;
+        }
+    }
+    for (key, value) in changed["root"].as_object().expect("changed.root") {
+        assert!(
+            model.get(key).is_some(),
+            "la chiave {key} nasce: non è un ritocco"
+        );
+        model[key] = value.clone();
+    }
+    if let Some(board) = changed.get("board") {
+        splice(&mut model["fub:ink"], board);
+        spliced += 1;
+    }
+    (model, spliced)
+}
+
+/// I commit di un tratto, uno dopo l'altro: il loro `changed` sul modello di
+/// prima è il modello di dopo (chiavi nell'ordine comprese), il tratto UTF-16
+/// ricostruisce il sorgente, e `ink_layers` e il modello sono quelli di una
+/// lavagna aperta da capo sullo stesso testo. Un commit che cambia altro non
+/// ha `changed`, e i tratti dopo di lui tornano a seguire il modello.
+pub fn stroke_commits_follow_the_model(via: &mut impl Via) {
+    let mut source = serde_json::to_string_pretty(&json!({
+        "nodes": [
+            { "id": "a", "type": "text", "x": 0, "y": 0, "width": 640, "height": 420,
+              "text": "😀 prima € é", "fub:ink": { "v": 1, "strokes": [card_stroke("a-0")] } },
+            { "id": "b", "type": "text", "x": 700, "y": 0, "width": 640, "height": 420,
+              "text": "𝄞 senza inchiostro" },
+            { "id": "c", "type": "text", "x": 0, "y": 500, "width": 640, "height": 420, "text": "ñ" },
+        ],
+        "edges": [],
+        "fub:ink": { "v": 1, "strokes": [free_stroke("f-0")] },
+        "x-dopo": "😀",
+    }))
+    .expect("si scrive")
+    .replace('\n', "\r\n");
+    source.insert(0, '\u{feff}');
+    let (handle, opened) = via.open(source.as_bytes()).expect("si apre");
+    let mut model = opened["canvas"].clone();
+    // I livelli letti prima dei commit: da qui la facciata li tiene.
+    via.ink_layers(handle).expect("i livelli");
+    let ink = |layer: Value, at: usize, before: Value, after: Value| {
+        bytes(
+            &json!([{ "kind": "ink", "layer": layer, "at": at, "before": before, "after": after }]),
+        )
+    };
+    let mut requests = vec![
+        ink(json!({ "node": "a" }), 1, Value::Null, card_stroke("a-1")),
+        ink(json!("board"), 1, Value::Null, free_stroke("f-1")),
+        // Il primo tratto di una scheda senza livello: la chiave nasce nella
+        // scheda, che resta al suo posto.
+        ink(json!({ "node": "b" }), 0, Value::Null, card_stroke("b-0")),
+        ink(json!({ "node": "a" }), 0, card_stroke("a-0"), Value::Null),
+        // Uno spostamento: non è un tratto.
+        bytes(
+            &json!([{ "kind": "upsert-node", "before": model["nodes"][2].clone(),
+            "after": { "id": "c", "type": "text", "x": 9, "y": 500, "width": 640, "height": 420, "text": "ñ" } }]),
+        ),
+        ink(json!({ "node": "c" }), 0, Value::Null, card_stroke("c-0")),
+        ink(json!("board"), 0, free_stroke("f-0"), Value::Null),
+    ];
+    let mut inverses = Vec::new();
+    let mut ink_commits = 0;
+    let mut spliced = 0;
+    let mut step = 0;
+    while step < requests.len() {
+        let request = requests[step].clone();
+        step += 1;
+        let committed = via.commit(handle, &request).expect("commit");
+        source = apply_utf16(&source, &committed["edit"]);
+        let now = via.model(handle).expect("model")["canvas"].clone();
+        let only_ink = serde_json::from_slice::<Value>(&request).expect("json")[0]["kind"] == "ink";
+        match committed.get("changed") {
+            Some(changed) => {
+                assert!(
+                    only_ink,
+                    "{changed}: changed per un commit che non è di tratti"
+                );
+                let (patched, splices) = apply_changed(&model, changed);
+                spliced += splices;
+                assert_eq!(patched, now, "il changed del passo {step}");
+                assert_eq!(
+                    serde_json::to_string(&patched).expect("si scrive"),
+                    serde_json::to_string(&now).expect("si scrive"),
+                    "l'ordine delle chiavi al passo {step}"
+                );
+                ink_commits += 1;
+            }
+            None => assert!(!only_ink, "il passo {step} di tratti non ha changed"),
+        }
+        model = now;
+        let (fresh, reopened) = via.open(source.as_bytes()).expect("il testo si riapre");
+        assert_eq!(reopened["canvas"], model, "il modello del passo {step}");
+        assert_eq!(
+            via.ink_layers(handle).expect("i livelli"),
+            via.ink_layers(fresh).expect("i livelli da capo"),
+            "i livelli del passo {step}"
+        );
+        via.close(fresh).expect("close");
+        inverses.push(bytes(&committed["inverse"]));
+        // Finita la lista, l'annulla di ogni passo, dall'ultimo.
+        if step == requests.len() && requests.len() < 2 * inverses.len() {
+            requests.extend(inverses.drain(..).rev());
+        }
+    }
+    assert!(
+        ink_commits >= 10,
+        "solo {ink_commits} commit hanno seguito il modello"
+    );
+    // I più dicono solo la lista dei tratti; il livello che nasce o sparisce
+    // in una scheda la dà intera.
+    assert!(spliced >= 8, "solo {spliced} cambi della lista dei tratti");
+    assert_eq!(model, opened["canvas"], "l'annulla di tutto");
     via.close(handle).expect("close");
 }
 

@@ -68,6 +68,13 @@ export interface MarkdownMountOptions {
     show?(id: string, where: "app" | "explorer"): void;
   };
   readonly imageMenu?: boolean;
+  /**
+   * Alla chiusura la resa resta nel contenitore, ferma: si spengono
+   * ascoltatori, componenti e lavoro in volo, ma i nodi non si tolgono. Serve
+   * a chi mostra l'ultima immagine di una resa che non vive più (la scheda di
+   * nota ferma della lavagna). Senza, la chiusura svuota il contenitore.
+   */
+  readonly keepOnTeardown?: boolean;
 }
 
 const MAX_EMBED_DEPTH = 5;
@@ -546,7 +553,7 @@ export function mountMarkdown(
     life.close();
     if (mounts.get(container) === dispose) {
       mounts.delete(container);
-      container.replaceChildren();
+      if (!options.keepOnTeardown) container.replaceChildren();
     }
   };
   mounts.set(container, dispose);

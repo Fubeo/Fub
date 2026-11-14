@@ -71,6 +71,13 @@ export interface SurfaceMountContext {
    * brings back on its tab) carries it.
    */
   readonly page?: number;
+  /**
+   * The surface is mounted inside a board card (N6 T42): it keeps only what
+   * writes the document's content (a sheet's values and formulas) and leaves
+   * out its own bars, tabs, dialogs and structure commands. Absent means
+   * `false`: a pane always mounts the whole editor.
+   */
+  readonly compact?: boolean;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */
@@ -272,6 +279,23 @@ export interface SurfaceStatus {
 }
 
 /**
+ * The cell a grid surface has active, as data: its A1 name and what it holds
+ * as written (the formula, or the value as typed). A host that does not show
+ * the surface's own formula bar (a board card, N6 T42) shows these instead.
+ */
+export interface SurfaceActiveCell {
+  readonly name: string;
+  readonly formula: string;
+}
+
+export interface SurfaceActiveCellSource {
+  /** The active cell now; `null` before a workbook is shown. */
+  read(): SurfaceActiveCell | null;
+  /** Called when the active cell or what it holds may have changed. */
+  subscribe(listener: () => void): () => void;
+}
+
+/**
  * How far the document can be written, as the chip by its path says it.
  * `reduced` and `stopped` say that it is written with fewer means than usual:
  * a drawing without its engine, switched off (or not in this build) or
@@ -392,6 +416,12 @@ export interface EditorSurface {
    */
   zone?(step: 1 | -1): boolean;
   /**
+   * The surface keeps a history of its own places: a board's view jumps (T56).
+   * Back and Forward ask the focused surface first, and the pane's own history
+   * only when it answers `false` (nothing to go back to, or no history here).
+   */
+  readonly jumps?: { back(): boolean; forward(): boolean };
+  /**
    * The surface draws its own bar of commands (the document ribbon): the
    * shell's format bar then stays out of the way, while the selection
    * bubble and the `fub.editor.action` commands keep working.
@@ -403,6 +433,8 @@ export interface EditorSurface {
   readonly panels?: SurfacePanels;
   /** The document's entries in the status band. */
   readonly status?: SurfaceStatus;
+  /** The active cell of a grid, for a host that hides the formula bar. */
+  readonly activeCell?: SurfaceActiveCellSource;
   /** How far the document can be written, by its path. */
   readonly standing?: SurfaceStanding;
   /**

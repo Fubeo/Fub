@@ -2,6 +2,23 @@
 
 use super::*;
 
+/// Una busta che il server accetta, all'invito e al caricamento della chiave.
+///
+/// La regola di transizione dei parametri KDF: il server accetta ogni coppia
+/// di versione e iterazioni che [`crate::crypto::kdf_iterations`] conosce
+/// (oggi `ver=1`/210.000 e `ver=2`/600.000) e nessun'altra, così un client
+/// che scrive ancora `ver=1` e uno che scrive già `ver=2` parlano allo stesso
+/// server. Una coppia sconosciuta è `unsupported wrap version`: il client la
+/// traduce in un errore tipizzato con un testo per chi legge. Ogni altro
+/// difetto di forma è `bad wrapped vdk`.
+fn check_wrap(wrapped: &crate::crypto::WrappedVdk) -> Result<(), HttpResponse> {
+    use crate::crypto::WrapShapeError;
+    crate::crypto::unwrap_vdk_shape_ok(wrapped).map_err(|error| match error {
+        WrapShapeError::UnsupportedKdf => HttpResponse::err(400, "unsupported wrap version"),
+        _ => HttpResponse::err(400, "bad wrapped vdk"),
+    })
+}
+
 pub(super) fn handle_invite(
     state: &mut ServiceState,
     auth: Option<&str>,
@@ -43,19 +60,24 @@ pub(super) fn handle_invite(
     if let Err(r) = authorize(state, &resource, &account, Role::Admin) {
         return r;
     }
+    // Un Admin invita soltanto ruoli sotto il suo; l'Owner anche Admin.
+    let own = state
+        .acls
+        .get(&resource)
+        .and_then(|acl| acl.role_of(&account));
+    if !crate::acl::may_grant(own, req.role) {
+        return HttpResponse::err(403, "role too low");
+    }
     if let Err(r) = step_up_mfa(state, &account, req.code.as_deref()) {
         return r;
     }
     // Validate an attached wrapped-VDK envelope structurally (opaque to the
-    // server: current KDF version, well-formed base64, 12 B nonce). The
+    // server: a known KDF version, well-formed base64, 12 B nonce). The
     // envelope is produced client-side with `crypto::wrap_vdk` from the
     // explicit vault passphrase — never the account password.
     if let Some(w) = &req.wrapped_vdk {
-        if w.kdf.ver != crate::crypto::KDF_VERSION {
-            return HttpResponse::err(400, "stale wrap version");
-        }
-        if crate::crypto::unwrap_vdk_shape_ok(w).is_err() {
-            return HttpResponse::err(400, "bad wrapped vdk");
+        if let Err(r) = check_wrap(w) {
+            return r;
         }
     }
     let dir = sync_dir_of(state);
@@ -288,11 +310,8 @@ pub(super) fn handle_vault_key_store(
     if let Err(r) = authorize(state, &resource, &account, Role::Owner) {
         return r;
     }
-    if req.wrapped.kdf.ver != crate::crypto::KDF_VERSION {
-        return HttpResponse::err(400, "stale wrap version");
-    }
-    if crate::crypto::unwrap_vdk_shape_ok(&req.wrapped).is_err() {
-        return HttpResponse::err(400, "bad wrapped vdk");
+    if let Err(r) = check_wrap(&req.wrapped) {
+        return r;
     }
     let dir = sync_dir_of(state);
     let mut shares = match load_shares(&dir) {

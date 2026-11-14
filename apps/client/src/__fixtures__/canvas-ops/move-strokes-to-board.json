@@ -1,0 +1,109 @@
+{
+  "about": "Un tratto della scheda n (angolo 100, 50) portato sulla radice con (-20, -10) diventa libero: (70, 40) → (150, 80). Il livello della radice nasce; l'altro tratto della scheda resta.",
+  "before": {
+    "nodes": [
+      {
+        "id": "n",
+        "type": "text",
+        "x": 100,
+        "y": 50,
+        "width": 200,
+        "height": 100,
+        "text": "voti",
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 200,
+                "height": 100
+              },
+              "ink": "1 s100 cxy 7000,4000 1000,500"
+            },
+            {
+              "id": "k1",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 200,
+                "height": 100
+              },
+              "ink": "1 s100 cxy 500,500 10,0"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "move_strokes",
+      "layer": {
+        "node": "n"
+      },
+      "ids": [
+        "s1"
+      ],
+      "dx": -20,
+      "dy": -10,
+      "to": "board"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "n",
+          "type": "text",
+          "x": 100,
+          "y": 50,
+          "width": 200,
+          "height": 100,
+          "text": "voti",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "k1",
+                "tool": "pen",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 200,
+                  "height": 100
+                },
+                "ink": "1 s100 cxy 500,500 10,0"
+              }
+            ]
+          }
+        }
+      ],
+      "edges": [],
+      "fub:ink": {
+        "v": 1,
+        "strokes": [
+          {
+            "id": "s1",
+            "tool": "pen",
+            "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+            "color": "#0072b2",
+            "anchor": {
+              "kind": "free"
+            },
+            "ink": "1 s100 cxy 15000,8000 1000,500"
+          }
+        ]
+      }
+    }
+  }
+}

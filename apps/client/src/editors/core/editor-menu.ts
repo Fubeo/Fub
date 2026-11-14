@@ -96,6 +96,9 @@ export interface SurfaceMenuItem {
   readonly find?: { readonly where: "vault" | "tags"; readonly query: string };
   /// Una scelta fra più (`radio`) invece di una spunta.
   readonly radio?: boolean;
+  /// I colori del pallino prima del nome, come `MenuItem.swatches`: la voce è
+  /// un colore da scegliere (il colore di una scheda della lavagna).
+  readonly swatches?: readonly string[];
 }
 
 /// Una voce, l'id di una voce, o `MENU_RULE`.

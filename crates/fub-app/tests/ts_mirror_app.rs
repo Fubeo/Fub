@@ -29,6 +29,7 @@ use fub_host::componenti::{
 };
 use fub_host::open_with::{ExternalEditor, OpenHow, OpenedWith};
 use fub_host::registry::BundleKind;
+use fub_host::resources::ResourceWriteReceipt;
 use fub_host::support::{
     ConfigFileKind, ConfigReport, ConfigStatus, DemoOpened, DiagnosticSummary, ExportConsent,
     MachineSummary, RecoverAction, RecoverOutcome, SupportPreview, VaultSummary,
@@ -433,6 +434,20 @@ fn expected() -> Value {
                 detail: "restored".into(), restart_required: true }),
             to_value(RecoverOutcome { backup: None,
                 detail: "nothing to back up".into(), restart_required: false }),
+        ],
+        // La ricevuta di `resource_write`: un file scritto e un file che c'era
+        // già con gli stessi byte (`reuse: "same-content"`).
+        "ResourceWriteReceipt": [
+            to_value(ResourceWriteReceipt {
+                id: fub_abi::model::DocId::new("Allegati/foto.png"),
+                revision: fub_abi::edit::Revision::of_bytes(b"\x89PNG"),
+                reused: false,
+            }),
+            to_value(ResourceWriteReceipt {
+                id: fub_abi::model::DocId::new("Allegati/foto 1.png"),
+                revision: fub_abi::edit::Revision::of_bytes(b"\x89PNG"),
+                reused: true,
+            }),
         ],
     })
 }

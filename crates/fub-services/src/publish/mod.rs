@@ -452,9 +452,10 @@ pub fn handle_site_admin_prehashed(
     }) {
         return HttpResponse::err(400, "cannot revoke site owner");
     }
-    // La gerarchia dei vault (`acl::check_revoke`): chi non è il proprietario
-    // tocca soltanto ruoli sotto il proprio, quindi un Admin non revoca né
-    // declassa un altro Admin per restare il solo a governare il sito.
+    // La gerarchia dei vault (`acl::check_revoke`, `acl::may_grant`): chi non
+    // è il proprietario tocca soltanto ruoli sotto il proprio, quindi un Admin
+    // non revoca né declassa un altro Admin per restare il solo a governare il
+    // sito, e non nomina altri Admin.
     if let Some(record) = &existing {
         let own = site_role(state, record, &account);
         let outranks = |target: &str| {
@@ -463,10 +464,9 @@ pub fn handle_site_admin_prehashed(
                     .is_none_or(|role| own.is_some_and(|own| own > role))
         };
         if request.revoke.as_deref().is_some_and(|id| !outranks(id))
-            || request
-                .grant
-                .as_ref()
-                .is_some_and(|grant| !outranks(&grant.account_id))
+            || request.grant.as_ref().is_some_and(|grant| {
+                !outranks(&grant.account_id) || !crate::acl::may_grant(own, grant.role)
+            })
         {
             return HttpResponse::err(403, "role too low");
         }

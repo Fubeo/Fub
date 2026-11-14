@@ -294,6 +294,7 @@ function itemOf(
     disabled,
     danger: entry.danger,
     ...(checked === undefined ? {} : { choice: entry.radio ? "radio" as const : "checkbox" as const, checked }),
+    ...(entry.swatches?.length ? { swatches: entry.swatches } : {}),
   };
   if (entry.items !== undefined) {
     const items: MenuItem[] = [];

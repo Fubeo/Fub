@@ -263,6 +263,30 @@ globalThis.__fubLiveBench = Object.freeze({
 /// `fub-format-xlsx` produce davvero (`tests/ts_grid.rs`).
 const WORKBOOK_DOC = params.get("workbook") === "1" ? "Dati/Conti.xlsx" : null;
 
+/// Le lavagne delle scene `lavagna-*` del banco dell'accessibilità (T61,
+/// `?lavagna=1`): una vuota e una con un gruppo, tre schede di testo, una nota
+/// e i fili, etichettati e no. Solo quelle scene le hanno: l'albero e i
+/// conteggi delle altre restano quelli delle loro baseline.
+const BOARDS: Readonly<Record<string, string>> = params.get("lavagna") === "1"
+  ? {
+      "Lavagne/Vuota.canvas": JSON.stringify({ nodes: [], edges: [] }, null, "\t"),
+      "Lavagne/Statistica.canvas": JSON.stringify({
+        nodes: [
+          { id: "gruppo", type: "group", x: 0, y: 0, width: 600, height: 320, label: "Media e varianza" },
+          { id: "varianza", type: "text", x: 32, y: 48, width: 240, height: 120, text: "# Varianza\nQuanto i dati si allontanano dalla media." },
+          { id: "media", type: "file", x: 320, y: 48, width: 240, height: 160, file: "Benvenuto.md" },
+          { id: "istogramma", type: "text", x: 680, y: 48, width: 240, height: 120, text: "Istogramma", color: "4" },
+          { id: "dubbio", type: "text", x: 680, y: 240, width: 240, height: 80, text: "Perché il quadrato?" },
+        ],
+        edges: [
+          { id: "f1", fromNode: "varianza", toNode: "media", label: "vedi" },
+          { id: "f2", fromNode: "istogramma", toNode: "varianza", label: "si vede qui" },
+          { id: "f3", fromNode: "dubbio", toNode: "varianza" },
+        ],
+      }, null, "\t"),
+    }
+  : {};
+
 /// Gli stati della barra dei fogli che la cartella generata non ha
 /// (`?grid=table|readonly`, insieme a `?workbook=1`): una copia delle sue
 /// finestre con una tabella dal nome lunghissimo sulla cella scelta, che
@@ -1595,6 +1619,8 @@ const options: Options = {
     ...(DRAWING === null ? {} : { [DRAWING.doc]: DRAWING.text }),
     // Il testo di una cartella è il suo giornale, vuoto sul disco.
     ...(WORKBOOK_DOC === null ? {} : { [WORKBOOK_DOC]: "" }),
+    // Le lavagne delle scene `lavagna-*`.
+    ...BOARDS,
     // Il testo di un documento di videoscrittura è la sua proiezione.
     ...(RICH_DOC === null ? {} : { [RICH_DOC.doc]: RICH_DOC.text }),
     // La nota della Live, per le scene che la chiedono.

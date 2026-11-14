@@ -355,6 +355,19 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-kernel/src/same_content.rs::extension_of",
+            (
+                Family::ContextualCase,
+                "è il «tipo» con cui lo stesso contenuto (T101) confronta due nomi del vault fra \
+                 loro: l'estensione grezza, piegata in minuscolo e confrontata uguale, senza \
+                 interrogare il registro. `.md` e `.markdown` sono quindi due tipi, anche se il \
+                 registro li servisse con lo stesso formato: è prudente di proposito, perché \
+                 riusare un file non deve cambiare l'estensione del collegamento che lo nomina. \
+                 Prende l'estensione del solo nome, come `media.rs`, perché un file senza \
+                 estensione in una cartella col punto non diventi un tipo.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/transfer.rs::extension",
             (
                 Family::ContextualCase,
@@ -606,12 +619,21 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-ink/src/inkml.rs::hex_color",
+            (
+                Family::AsciiCase,
+                "porta il colore del pennello InkML in minuscolo, la forma di `fub-ink`, in lettura \
+                 e prima di scriverlo, dopo aver controllato sei cifre esadecimali ASCII. \
+                 Normalizza un numero, non confronta nomi.",
+            ),
+        ),
+        (
             "crates/fub-ink/src/inkml.rs::brush_of",
             (
                 Family::AsciiCase,
-                "legge il colore del pennello InkML in minuscolo, la forma di `fub-ink`, dopo \
-                 aver controllato sei cifre esadecimali ASCII. Normalizza un numero, non \
-                 confronta nomi.",
+                "legge i valori `rectangle` di `tip` e `true` di `ignorePressure` del pennello \
+                 InkML senza badare al caso, come li scrivono Word e OneNote: sono parole \
+                 chiuse di un vocabolario ASCII, non nomi di file o di chiavi.",
             ),
         ),
         (
@@ -1835,6 +1857,28 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  stretta — là la chiave è del registro dei formati e la piegatura è larga.",
             ),
         ),
+        (
+            "crates/fub-canvas-core/src/parts.rs::of",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se un estratto \
+                 `fub:parts` le va bene (`.pdf`, `.md`, `.png`, …): sono token di formato, ASCII \
+                 per definizione. Diverge da `parse.rs::is_media_path` perché il nucleo della \
+                 lavagna non vede `fub-format-canvas`, e la lista è quella di `cardKindOf` \
+                 nella shell, che i vettori di `canvas-parts/` tengono uguale.",
+            ),
+        ),
+        (
+            "crates/fub-canvas-core/src/ops.rs::scales",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se il suo inchiostro \
+                 scala con lei (le immagini e il PDF, `.png`, `.pdf`, …) quando `move_strokes` \
+                 porta i tratti da un livello all'altro: sono token di formato, ASCII per \
+                 definizione. Diverge da `parts.rs::of` perché la lista è un'altra, quella di \
+                 `inkFitMode` nella shell, che i vettori di `canvas-ink-fit/` tengono uguale.",
+            ),
+        ),
         // -- CasoAscii: importatori (estensioni e nomi di formato) -------------
         (
             "crates/fub-importers/src/archive.rs::route_entry",
@@ -2012,7 +2056,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-scene/src/analysis.rs::active_content",
+            "crates/fub-scene/src/analysis.rs::is_active_attr",
             (
                 Family::AsciiCase,
                 "riconosce i gestori di evento `on*` senza badare al caso, per l'avviso S005: \

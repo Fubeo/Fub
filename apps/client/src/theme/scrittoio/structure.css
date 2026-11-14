@@ -1230,6 +1230,19 @@ body {
   flex: none;
 }
 
+/* La cartella dei file trascinati (T52): un nome lunghissimo si accorcia con
+   i puntini; lo zoom e le schede restano. Un testo ha bisogno di un blocco, non
+   della riga flessibile della voce. */
+#status-band [data-surface-item="folder"] {
+  display: inline-block;
+  min-width: 0;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 /* La banda stretta. Con «Si scrive» e la modalità a destra, sotto gli 800 px
    la lingua del documento si fa da parte (la dice già il correttore), e ciò
    che sta a sinistra si taglia invece di passare sotto la parte destra. */
@@ -2964,6 +2977,273 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   flex: none;
 }
 
+/* La testata: la riga delle opzioni dello strumento (T50; come
+   .draw-header). */
+.canvas-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;
+}
+.canvas-options {
+  flex: 1 1 auto;
+}
+.canvas-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+.canvas-group[hidden],
+.canvas-options-item[hidden] {
+  display: none;
+}
+.canvas-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+}
+@media (pointer: coarse) {
+  .canvas-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+/* Un pulsante con un nome scritto (la penna): il testo accanto. */
+.canvas-button[data-label] {
+  gap: var(--space-3, 6px);
+  padding: 0 var(--space-4, 8px);
+  white-space: nowrap;
+}
+.canvas-options-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Il corpo: la colonna degli strumenti e l'area della lavagna (come
+   .draw-body). */
+.canvas-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+/* La colonna, a sinistra della lavagna: scorre in verticale quando la
+   finestra è bassa (come .draw-rail). */
+.canvas-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-width: 0;
+  border-inline-end-width: 1px;
+}
+/* L'area: la vista e ciò che le sta sopra (come .draw-stage). */
+.canvas-area {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.canvas-area > .canvas-viewport {
+  flex: 1;
+  min-width: 0;
+}
+/* La lavagna vuota (T62): al centro della vista, sopra di lei. Le sue righe non
+   prendono il puntatore, così il doppio clic nel vuoto arriva alla vista; i
+   pulsanti sì. */
+.canvas-blank {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+.canvas-blank[hidden],
+.canvas-blank-actions[hidden] {
+  display: none;
+}
+.canvas-blank-lines {
+  margin: 0;
+}
+.canvas-blank-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  pointer-events: auto;
+}
+/* La barra della selezione (T51), sopra ciò che è scelto (come .draw-arrange;
+   il posto lo scrive la tela in linea con bubblePlace). */
+.canvas-selection-bar {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  box-sizing: border-box;
+  max-width: calc(100% - 16px);
+}
+.canvas-selection-bar[hidden] {
+  display: none;
+}
+/* Il navigatore (T55), in basso a destra della vista (come .draw-navigator;
+   una sola <canvas>). */
+.canvas-navigator {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 168px;
+  height: 120px;
+  cursor: pointer;
+  touch-action: none;
+}
+.canvas-navigator[hidden] {
+  display: none;
+}
+.canvas-navigator-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Cerca nella lavagna (T60): in alto a destra, sopra la vista. Il campo si
+   stringe per primo quando la vista è stretta. */
+.canvas-find {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: calc(100% - 16px);
+}
+.canvas-find[hidden],
+.canvas-find-scope[hidden] {
+  display: none;
+}
+.canvas-find-input {
+  box-sizing: border-box;
+  width: 16rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.canvas-find-count {
+  flex: none;
+  min-width: 7ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.canvas-find-scope {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-find .canvas-button {
+  flex: none;
+}
+/* Una scheda velata dalla ricerca non prende il puntatore. */
+.canvas-node[data-card-veiled] {
+  pointer-events: none;
+}
+/* Stretta (finestra fino a 700 px o riquadro fino a 480): la colonna va
+   sotto la lavagna e si stende in riga (come .draw-editor[data-narrow]). */
+.canvas-surface[data-narrow] .canvas-body {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.canvas-surface[data-narrow] .canvas-area {
+  grid-column: 1;
+  grid-row: 1;
+}
+.canvas-surface[data-narrow] .canvas-rail {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  flex-direction: row;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-inline-end-width: 0;
+  border-block-start-width: 1px;
+}
+/* «Righello» (T87) e «Il dito scrive» (T64) in fondo alla colonna, in tutti e
+   due gli spazi; «Completo», nello spazio Semplice (T65; come
+   .draw-rail-full), gli sta sotto. Stretta, tutti in fondo alla riga, uno
+   accanto all'altro; «Completo» subito dopo le caselle va al capo da solo. */
+.canvas-rail-ruler,
+.canvas-rail-finger {
+  flex: none;
+}
+.canvas-rail-ruler {
+  margin-block-start: auto;
+}
+.canvas-rail-ruler + .canvas-rail-finger {
+  margin-block-start: var(--space-2, 4px);
+}
+.canvas-surface[data-narrow] .canvas-rail-ruler {
+  margin-block-start: 0;
+  margin-inline-start: auto;
+}
+.canvas-surface[data-narrow] .canvas-rail-ruler + .canvas-rail-finger {
+  margin-block-start: 0;
+  margin-inline-start: var(--space-2, 4px);
+}
+.canvas-rail-full {
+  flex: none;
+  min-height: 44px;
+  white-space: nowrap;
+}
+.canvas-rail-finger + .canvas-rail-full {
+  margin-block-start: var(--space-2, 4px);
+}
+.canvas-rail-full:first-child,
+.canvas-rail > .kit-rail + .canvas-rail-full {
+  margin-block-start: auto;
+}
+.canvas-surface[data-narrow] .canvas-rail-full {
+  margin-block-start: 0;
+  margin-inline-start: var(--space-2, 4px);
+}
+.canvas-surface[data-narrow] .canvas-rail > .kit-rail + .canvas-rail-full {
+  margin-block-start: 0;
+  margin-inline-start: auto;
+}
+/* Senza interfaccia (Ctrl+., T65): restano la lavagna e le schede; va via
+   anche la barra di N4 (`.canvas-toolbar`), finché c'è. */
+.canvas-surface[data-bare] .canvas-header,
+.canvas-surface[data-bare] .canvas-toolbar,
+.canvas-surface[data-bare] .canvas-rail,
+.canvas-surface[data-bare] .canvas-selection-bar,
+.canvas-surface[data-bare] .canvas-navigator {
+  display: none;
+}
+/* Lo spazio Semplice (T65): i pulsanti della riga e della barra della
+   selezione sono bersagli da 44 px; le caselle della colonna le dà il kit
+   con data-size. */
+.canvas-surface[data-workspace="simple"] .canvas-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
 .canvas-viewport {
   position: relative;
   flex: 1;
@@ -2972,13 +3252,45 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   touch-action: none;
   overscroll-behavior: none;
 }
+/* Gli strumenti della colonna: la Mano prende la lavagna, il Testo la
+   scrive, Collega tira un filo. Il mouse che scrive (sotto) vince. */
+.canvas-viewport[data-tool="hand"] {
+  cursor: grab;
+}
+.canvas-viewport[data-tool="hand"]:not([data-ink]):active {
+  cursor: grabbing;
+}
+.canvas-viewport[data-tool="text"] {
+  cursor: text;
+}
+.canvas-viewport[data-tool="connect"] {
+  cursor: alias;
+}
+/* Spazio tenuto: la mano, con ogni strumento e sopra le schede. */
+.canvas-viewport[data-space-pan],
+.canvas-viewport[data-space-pan] * {
+  cursor: grab;
+}
+.canvas-viewport[data-space-pan]:active,
+.canvas-viewport[data-space-pan]:active * {
+  cursor: grabbing;
+}
 /* Il mouse che scrive (D tenuto o «Scrivi col mouse»): la croce, come
-   l'inchiostro delle note. */
-.canvas-viewport[data-ink="pen"] {
+   l'inchiostro delle note, su un velo sopra le schede (T20d). Non sul
+   viewport: `cursor` si eredita, e cambiarlo lì ricalcolava lo stile di ogni
+   elemento della lavagna (62–80 ms con un foglio vivo). Il velo si mostra
+   togliendo `data-idle`; nascosto non prende il puntatore. */
+.canvas-pen-veil {
+  position: absolute;
+  inset: 0;
   cursor: crosshair;
+  touch-action: none;
+}
+.canvas-pen-veil[data-idle] {
+  visibility: hidden;
 }
 /* Con lo strumento Gomma del menu della penna: la cella. */
-.canvas-viewport[data-ink="eraser"] {
+.canvas-pen-veil[data-tool="eraser"] {
   cursor: cell;
 }
 
@@ -3066,6 +3378,87 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overflow: visible;
 }
 
+/* Le prese del filo scelto (T91): un livello sopra lo stage, con la stessa
+   camera. Il livello non prende il puntatore; le prese sì, così vincono sui
+   punti delle schede che le coprono. */
+.canvas-edge-handles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-edge-reconnect {
+  pointer-events: auto;
+}
+
+/* La griglia (T71): i punti nella vista, sotto le schede. Il livello non
+   prende il puntatore; la posizione e il passo li scrive la tela. */
+.canvas-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Le guide di un gesto (T71): un solo elemento sopra le schede, con una linea
+   per guida. La tela ne dà la posizione e la lunghezza sullo schermo; qui
+   c'è solo lo spessore di un pixel. */
+.canvas-guides {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-guide {
+  position: absolute;
+  pointer-events: none;
+}
+
+.canvas-guide[data-axis="v"] {
+  width: 1px;
+}
+
+.canvas-guide[data-axis="h"] {
+  height: 1px;
+}
+
+/* Dove nasceranno le schede di un trascinamento: rettangoli tratteggiati
+   sopra la scena, nelle coordinate della lavagna. Solo la forma: l'aspetto è
+   della pelle. */
+.canvas-drop-ghosts {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.canvas-drop-ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border-width: 1px;
+  border-style: dashed;
+  pointer-events: none;
+}
+
+/* Oltre i dodici file, la cornice del gruppo che li terrà, col numero in
+   mezzo (prototipo T25). */
+.canvas-drop-ghost-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-drop-ghost-name {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
 /* L'inchiostro della lavagna: la scia sopra lo stage, l'asciutto dentro la
    scheda e sullo stage. Il colore è del tratto (`fill`), non del tema. */
 .canvas-ink-wet,
@@ -3094,6 +3487,203 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overflow: visible;
 }
 
+/* Il Lazo della lavagna (T86): sopra l'inchiostro libero dello stage, il giro
+   in corso, il contorno dei tratti scelti e la cornice attorno a loro, in
+   coordinate della lavagna. I segni restano sottili a ogni zoom; il colore è
+   della pelle. */
+.canvas-lasso {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-lasso-path,
+.canvas-lasso-frame,
+.canvas-lasso-chosen > path {
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas-lasso-path,
+.canvas-lasso-frame {
+  stroke-dasharray: 5 4;
+}
+
+/* Il rettangolo del trascinamento nel vuoto con la Selezione (N6 T20b): uno
+   strato sopra le schede, in coordinate della lavagna, che non prende il
+   puntatore; il contorno resta sottile a ogni zoom. */
+.canvas-marquee {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-marquee-box {
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Il righello (T87): un fratello della vista, sopra di lei, che non prende il
+   puntatore; la riga è larga quanto basta a passare da un bordo all'altro a
+   ogni angolo, con il centro e l'angolo dalla lavagna (`--canvas-ruler-x`,
+   `--canvas-ruler-y` in pixel della vista, `--canvas-ruler-angle`). Il corpo
+   (`.canvas-ruler-grip`) prende il puntatore; le due fasce lungo i bordi,
+   larghe quanto la portata della penna (16 px), lo lasciano alla vista, dove
+   il tratto comincia e segue il bordo. */
+.canvas-ruler {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.canvas-ruler-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 400vmax;
+  height: var(--canvas-ruler-width, 72px);
+  border-block-width: 1px;
+  border-block-style: solid;
+  transform: translate(var(--canvas-ruler-x, 0px), var(--canvas-ruler-y, 0px)) rotate(var(--canvas-ruler-angle, 0deg)) translate(-50%, -50%);
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.canvas-ruler-grip {
+  position: absolute;
+  inset-block: 16px;
+  inset-inline: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: move;
+  touch-action: none;
+  pointer-events: auto;
+}
+.canvas-ruler-angle {
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* L'etichetta accanto alla penna, mentre si scrive (T69): sopra a destra
+   della punta, mai sotto; `data-flip-x` e `data-flip-y` la portano a
+   sinistra o sotto quando lì non c'è posto. Il punto della punta arriva
+   dalla lavagna (`--canvas-ink-x`, `--canvas-ink-y`, in pixel della vista). */
+.canvas-ink-label {
+  --canvas-ink-label-gap: 16px;
+  --canvas-ink-dx: var(--canvas-ink-label-gap);
+  --canvas-ink-dy: calc(-1 * var(--canvas-ink-label-gap) - 100%);
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  /* Segue la punta a ogni movimento: un suo strato, senza ridipingere la lavagna sotto. */
+  will-change: transform;
+  transform: translate(calc(var(--canvas-ink-x, 0px) + var(--canvas-ink-dx)), calc(var(--canvas-ink-y, 0px) + var(--canvas-ink-dy)));
+}
+
+.canvas-ink-label[data-flip-x] {
+  --canvas-ink-dx: calc(-1 * var(--canvas-ink-label-gap) - 100%);
+}
+
+.canvas-ink-label[data-flip-y] {
+  --canvas-ink-dy: var(--canvas-ink-label-gap);
+}
+
+/* A penna su: al suo posto e misurata, ma non si vede. */
+.canvas-ink-label[data-idle] {
+  visibility: hidden;
+}
+
+/* Il bordo tratteggiato della scheda a cui il tratto si attaccherà (T69):
+   quattro lati sottili sullo stage, a 4 px dalla scheda, come il contorno
+   del prototipo. Non è il contorno della scheda: mostrarlo o toglierlo
+   ridipinge i lati e non tutto il contenuto. Il riquadro della scheda arriva
+   dalla lavagna (`--canvas-frame-x`, `-y`, `-w`, `-h`, in unità della
+   lavagna); il colore è della pelle.
+
+   Il contenitore è uno strato composto suo (`will-change: opacity`) portato
+   sull'angolo della scheda con `transform`, sopra ogni scheda dello stage
+   (`z-index: 2`, sopra anche la scheda in scrittura): nessuna scheda dipinta
+   dopo lo copre, così il browser non deve dare uno strato anche a lei.
+   All'inizio del tratto sulla stessa scheda del tratto prima cambia solo
+   l'opacità dello strato: niente da ridipingere sotto i lati, neanche il
+   foglio vivo (T20f). Non `will-change: transform`: lo strato non si
+   ridisegnerebbe più allo zoom nuovo e i lati verrebbero sfocati. */
+.canvas-ink-frames {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  pointer-events: none;
+  transform: translate(var(--canvas-frame-x, 0px), var(--canvas-frame-y, 0px));
+  will-change: opacity;
+}
+
+/* Senza una scheda bersaglio: al suo posto, ma non si vede. Non `[hidden]`: le regole
+   `:has()` della shell leggono quell'attributo, e cambiarlo qui farebbe
+   ricalcolare lo stile di tutta la finestra all'inizio di ogni tratto. Non
+   `visibility`: l'opacità di uno strato composto cambia senza ridipingerlo. */
+.canvas-ink-frames[data-idle] {
+  opacity: 0;
+}
+
+.canvas-ink-frame {
+  --canvas-frame-gap: 4px;
+  --canvas-frame-size: 2px;
+  --canvas-frame-out: calc(var(--canvas-frame-gap) + var(--canvas-frame-size));
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border-width: 0;
+  border-style: dashed;
+  pointer-events: none;
+}
+
+.canvas-ink-frame[data-side="top"],
+.canvas-ink-frame[data-side="bottom"] {
+  width: calc(var(--canvas-frame-w, 0px) + 2 * var(--canvas-frame-out));
+  height: var(--canvas-frame-size);
+}
+
+.canvas-ink-frame[data-side="left"],
+.canvas-ink-frame[data-side="right"] {
+  width: var(--canvas-frame-size);
+  height: calc(var(--canvas-frame-h, 0px) + 2 * var(--canvas-frame-out));
+}
+
+/* I lati dall'angolo della scheda, che il contenitore ha già raggiunto. */
+.canvas-ink-frame[data-side="top"] {
+  border-top-width: var(--canvas-frame-size);
+  transform: translate(calc(-1 * var(--canvas-frame-out)), calc(-1 * var(--canvas-frame-out)));
+}
+
+.canvas-ink-frame[data-side="bottom"] {
+  border-bottom-width: var(--canvas-frame-size);
+  transform: translate(calc(-1 * var(--canvas-frame-out)), calc(var(--canvas-frame-h, 0px) + var(--canvas-frame-gap)));
+}
+
+.canvas-ink-frame[data-side="left"] {
+  border-left-width: var(--canvas-frame-size);
+  transform: translate(calc(-1 * var(--canvas-frame-out)), calc(-1 * var(--canvas-frame-out)));
+}
+
+.canvas-ink-frame[data-side="right"] {
+  border-right-width: var(--canvas-frame-size);
+  transform: translate(calc(var(--canvas-frame-w, 0px) + var(--canvas-frame-gap)), calc(-1 * var(--canvas-frame-out)));
+}
+
 .canvas-node {
   position: absolute;
   top: 0;
@@ -3103,6 +3693,13 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   min-width: 0;
   min-height: 0;
   pointer-events: auto;
+}
+
+/* Un gruppo è un recinto: il suo sfondo sta sotto i fili (che sono nello
+   stage, prima di ogni scheda), così un filo che lo attraversa si vede (T91).
+   Le schede no: restano sopra i fili, nell'ordine del file. */
+.canvas-node-group {
+  z-index: -1;
 }
 
 .canvas-node-handle {
@@ -3137,6 +3734,337 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overscroll-behavior: contain;
 }
 
+/* D-21 (a), il titolo sopra (T39). Le schede di file e di pagina web portano
+   il titolo fuori dal bordo, sopra: la scheda è tutta contenuto, e il nodo
+   non cambia misura né posto. La riga è larga quanto la scheda; il titolo si
+   taglia per primo, i numeri e i pulsanti restano. Le schede di testo e i
+   gruppi non cambiano. */
+.canvas-node-file > .canvas-node-handle,
+.canvas-node-link > .canvas-node-handle {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+}
+.canvas-node-file > .canvas-node-handle > .canvas-node-title,
+.canvas-node-link > .canvas-node-handle > .canvas-node-title {
+  flex: 0 1 auto;
+}
+.canvas-node-file > .canvas-node-handle > .canvas-connect,
+.canvas-node-link > .canvas-node-handle > .canvas-connect {
+  margin-left: auto;
+}
+/* Il contenuto è un mondo a sé: i suoi livelli (le testate ferme del foglio,
+   quelli dell'editor) restano sotto l'inchiostro della scheda, le maniglie
+   e i punti. */
+.canvas-node-file > .canvas-card-body,
+.canvas-node-link > .canvas-card-body {
+  border-radius: inherit;
+  isolation: isolate;
+}
+
+/* La scheda-estratto (T75, prototipo T28): la testata sopra la scheda
+   (D-21 (a), T39) porta il nome della fonte, le parti e ↗; il corpo mostra
+   solo le sezioni scelte, una sotto l'altra. Le parti non si accorciano
+   mai: si accorcia il nome del file. Il titolo grande di ogni sezione è già
+   nel titolo in piccolo sopra di lei: non si ripete. */
+.canvas-node-file > .canvas-node-handle > .canvas-excerpt-parts {
+  flex: none;
+  margin-inline-start: var(--space-3, 6px);
+  white-space: nowrap;
+}
+.canvas-node-file > .canvas-node-handle > .canvas-node-title {
+  min-width: 2em;
+}
+.canvas-excerpt-open {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+}
+.canvas-excerpt-section + .canvas-excerpt-section {
+  margin-top: var(--space-5, 12px);
+  padding-top: var(--space-4, 8px);
+}
+.canvas-excerpt-section-title {
+  display: block;
+  margin-bottom: var(--space-2, 4px);
+}
+.canvas-excerpt-section-body > :is(h1, h2, h3, h4, h5, h6):first-child {
+  display: none;
+}
+.canvas-excerpt-missing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 6px);
+  padding: var(--space-4, 8px) var(--space-5, 12px);
+}
+.canvas-excerpt-section + .canvas-excerpt-missing {
+  margin-top: var(--space-5, 12px);
+}
+.canvas-excerpt-missing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3, 6px);
+}
+
+/* Il lettore (T76, prototipo T28): copre l'area della lavagna (non la
+   finestra), con i titoli a lato e la nota grande; a 700 px solo la nota.
+   «+ Aggiungi all'estratto» sta nell'angolo della sezione dove si legge. */
+.canvas-reader {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.canvas-reader-head {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: var(--space-4, 8px);
+  padding: var(--space-4, 8px) var(--space-6, 16px);
+}
+.canvas-reader-title {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: var(--space-4, 8px);
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.canvas-reader-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.canvas-reader-hint {
+  flex: none;
+  white-space: nowrap;
+}
+.canvas-reader-outline {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-4, 8px) var(--space-3, 6px);
+}
+.canvas-reader-outline-row {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-2, 4px) var(--space-4, 8px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-reader-outline-row[data-depth="2"] {
+  padding-left: calc(var(--space-4, 8px) + 14px);
+}
+.canvas-reader-outline-row[data-depth="3"] {
+  padding-left: calc(var(--space-4, 8px) + 28px);
+}
+.canvas-reader-doc {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-6, 16px);
+}
+.canvas-reader-outline[hidden] + .canvas-reader-doc {
+  grid-column: 1 / -1;
+}
+.canvas-reader-page {
+  max-width: 640px;
+  margin: 0 auto;
+}
+.canvas-reader-section {
+  position: relative;
+  padding: var(--space-3, 6px) var(--space-6, 16px);
+}
+.canvas-reader-add {
+  position: absolute;
+  top: var(--space-3, 6px);
+  right: var(--space-4, 8px);
+}
+.canvas-surface[data-narrow] .canvas-reader {
+  grid-template-columns: minmax(0, 1fr);
+}
+.canvas-surface[data-narrow] .canvas-reader-outline,
+.canvas-surface[data-narrow] .canvas-reader-hint {
+  display: none;
+}
+
+/* Entrare e uscire (N6 T14). Fuori da una scheda attiva il contenuto di una
+   vista non prende il puntatore e non scorre: il clic sceglie la scheda e la
+   rotella sposta la lavagna. Dentro sì, e il corpo scorre. I link e i
+   pulsanti lo prendono sempre (Ctrl+clic segue un link, «Apri»), e così
+   l'immagine, il cui doppio clic apre il visore, e la scheda Craft, il cui
+   doppio clic apre il file (T18). Il segnaposto di un file mancante resta
+   com'è. */
+.canvas-node[data-card-kind]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body {
+  overflow: hidden;
+}
+
+.canvas-node[data-card-kind]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body > * {
+  pointer-events: none;
+}
+
+.canvas-node[data-card-kind]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body :is(a, button),
+.canvas-node[data-card-kind="image"]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body > *,
+.canvas-node[data-card-kind="craft"]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body > * {
+  pointer-events: auto;
+}
+
+/* Scrivere in una scheda di nota (N6 T41, prototipo T27). La barra di
+   formattazione sta nella riga delle opzioni: un elemento della riga, largo
+   quanto resta; nasconde da sola i gruppi che non stanno (`fit()` di
+   format-bar.ts) e li mette nel suo «…». */
+.canvas-options-item[data-option="format"] {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.canvas-options > .kit-options-row:has(> .canvas-options-item[data-option="format"]) {
+  flex: 1 1 auto;
+}
+.canvas-options .format-bar {
+  flex: 1 1 auto;
+  height: 32px;
+}
+
+/* La scheda che scrive sta sopra le altre, come quella che si trascina. */
+.canvas-node[data-card-editing] {
+  z-index: 1;
+}
+
+/* L'editor della nota prende il corpo della scheda e scorre lì dentro; la
+   scheda non cambia misura. */
+.canvas-card-note > .cm-editor {
+  height: 100%;
+}
+.canvas-card-note > .cm-editor > .cm-scroller {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+/* Nella scheda niente colonna dei numeri di riga né delle pieghe, anche
+   quando i riquadri la mostrano: la nota sulla lavagna resta la nota letta,
+   col cursore (prototipo T27). */
+.canvas-card-note > .cm-editor .cm-gutters {
+  display: none;
+}
+
+/* Il conflitto e gli avvisi della nota (la bozza ritrovata, T96) in cima al
+   corpo, sopra il testo, che spingono giù; il testo continua a scorrere
+   sotto. */
+.canvas-card-note[data-card-notice] {
+  display: flex;
+  flex-direction: column;
+}
+.canvas-card-note[data-card-notice] > .cm-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.canvas-card-note > .conflict-banner,
+.canvas-card-note > .sheet-notices {
+  flex: none;
+}
+
+/* Lo stato del salvataggio e «Sola lettura» nella riga del titolo: una
+   parola che non si stringe mai; il titolo si taglia prima. */
+.canvas-node-handle > .save-state,
+.canvas-node-handle > .canvas-card-lock {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  white-space: nowrap;
+}
+
+/* La testata (T22, prototipo T25): «↩ 2» quante note la citano, «×2» quante
+   copie ha sulla lavagna, e «Esc per uscire» della scheda attiva. Non si
+   stringono mai: in una testata stretta si taglia il titolo. */
+.canvas-node-cites,
+.canvas-node-twins,
+.canvas-exit-hint {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  white-space: nowrap;
+}
+.canvas-node-twins {
+  min-height: 20px;
+}
+
+/* L'ombra che dice «continua» (T22): fuori dalla scheda attiva la nota è
+   alta quanto il corpo e lo taglia; la pelle la sfuma sul fondo. Dentro, il
+   corpo scorre e l'ombra non c'è. */
+.canvas-node:not([data-card-active]) > .canvas-card-body > .canvas-card-note {
+  box-sizing: border-box;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* «File mancante» (T16, prototipo T25): il messaggio e i due pulsanti al
+   centro della scheda. */
+.canvas-card-missing {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 100%;
+}
+.canvas-card-missing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3, 6px);
+}
+
+/* Scrivere nelle celle di un foglio (N6 T42, prototipo T27). La griglia del
+   foglio prende il corpo della scheda in modo compatto: niente nastro, né
+   linguette, né la sua barra della formula, che la tela mostra nella riga
+   delle opzioni (il contesto della scheda). */
+[data-card-editor="compact"] > .grid-surface > .grid-ribbon-host,
+[data-card-editor="compact"] > .grid-surface > .grid-sheets,
+[data-card-editor="compact"] > .grid-surface > .grid-formula-bar {
+  display: none;
+}
+.canvas-options-item[data-option="formula"] {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.canvas-options > .kit-options-row:has(> .canvas-options-item[data-option="formula"]) {
+  flex: 1 1 auto;
+}
+.canvas-options .grid-formula-bar {
+  flex: 1 1 auto;
+  align-items: stretch;
+  height: 32px;
+}
+.canvas-options .grid-formula-editor {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.canvas-formula-text {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+/* La cella in scrittura: l'editor della cella sta sopra la cella e sopra i
+   contorni dei riferimenti. */
+.canvas-card-sheet .grid-cell-editor {
+  z-index: 5;
+  min-width: 0;
+  overflow: hidden;
+}
+.canvas-card-sheet .grid-cell-editor .cm-scroller {
+  overflow: hidden;
+}
+
 .canvas-text-editor,
 .canvas-field-editor {
   width: 100%;
@@ -3154,6 +4082,124 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   touch-action: none;
 }
 
+/* Le quattro maniglie agli angoli della scheda scelta (T66): l'area di presa
+   è di 20 px sullo schermo a ogni ingrandimento, centrata sull'angolo; il
+   segno dentro è di 10 px. */
+.canvas-resize[data-corner] {
+  z-index: 1;
+  right: auto;
+  bottom: auto;
+  width: calc(20px / var(--canvas-zoom, 1));
+  height: calc(20px / var(--canvas-zoom, 1));
+}
+.canvas-resize[data-corner="nw"],
+.canvas-resize[data-corner="sw"] {
+  left: calc(-10px / var(--canvas-zoom, 1));
+}
+.canvas-resize[data-corner="ne"],
+.canvas-resize[data-corner="se"] {
+  left: calc(100% - 10px / var(--canvas-zoom, 1));
+}
+.canvas-resize[data-corner="nw"],
+.canvas-resize[data-corner="ne"] {
+  top: calc(-10px / var(--canvas-zoom, 1));
+}
+.canvas-resize[data-corner="sw"],
+.canvas-resize[data-corner="se"] {
+  top: calc(100% - 10px / var(--canvas-zoom, 1));
+}
+.canvas-resize[data-corner="nw"],
+.canvas-resize[data-corner="se"] {
+  cursor: nwse-resize;
+}
+.canvas-resize[data-corner="ne"],
+.canvas-resize[data-corner="sw"] {
+  cursor: nesw-resize;
+}
+
+/* Le maniglie si prendono solo dove si vedono: sulla scheda scelta, e con
+   più schede scelte solo sulla cornice della scelta, che scala tutto. Sotto
+   24 px sullo schermo resta quella in basso a destra (`data-handles="one"`). */
+.canvas-node:not(.selected) > .canvas-resize[data-corner],
+.canvas-stage[data-selection="many"] > .canvas-node > .canvas-resize[data-corner],
+.canvas-node[data-handles="one"] > .canvas-resize:not([data-corner="se"]),
+.canvas-selection-frame[data-handles="one"] > .canvas-resize:not([data-corner="se"]) {
+  display: none;
+}
+
+/* Da lontano (T54, A-22). Fra 0,15 e 0,35 una scheda vista da vicino in
+   questa seduta mostra l'ultima immagine ferma che ha avuto (`still`);
+   una mai vista, il titolo grande (`far`). Sotto 0,15 tutte sono un blocco
+   col titolo (`block`). Il titolo grande c'è sempre nel nodo e si mostra
+   solo col livello: a fine gesto la tela cambia un attributo per scheda e
+   basta. La misura del carattere sullo schermo non cambia con
+   l'ingrandimento (`--canvas-detail-zoom`, scritto anche lui a fine gesto).
+   L'inchiostro della scheda viene dopo nel nodo e resta sopra. */
+.canvas-node-far {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.canvas-node[data-card-detail="far"] > .canvas-node-far,
+.canvas-node[data-card-detail="block"] > .canvas-node-far {
+  display: flex;
+}
+.canvas-node[data-card-detail] > .canvas-node-handle,
+.canvas-node[data-card-detail] > .canvas-resize,
+.canvas-node[data-card-detail] > .canvas-port,
+.canvas-node[data-card-detail="far"] > .canvas-card-body,
+.canvas-node[data-card-detail="block"] > .canvas-card-body,
+.canvas-node[data-card-detail="still"] .canvas-card-pdf-status {
+  display: none;
+}
+/* Da lontano il titolo sta al centro, su tre righe al più, e si taglia coi
+   puntini: in una scheda piccola sullo schermo non esce mai a pezzi. */
+.canvas-node[data-card-detail="far"]:not(.canvas-node-group) > .canvas-node-far {
+  top: 50%;
+  bottom: auto;
+  display: -webkit-box;
+  max-height: 100%;
+  transform: translateY(-50%);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+/* Il blocco (sotto 0,15): il titolo su una riga sola, al centro, e si taglia
+   coi puntini; il colore è la carta del nodo. */
+.canvas-node[data-card-detail="block"]:not(.canvas-node-group) > .canvas-node-far {
+  top: 50%;
+  bottom: auto;
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transform: translateY(-50%);
+}
+/* I gruppi, da lontano, mostrano il nome grande in alto a sinistra a tutti e
+   due i livelli. */
+.canvas-node-group > .canvas-node-far {
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.canvas-selection-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.canvas-selection-frame > .canvas-resize {
+  pointer-events: auto;
+}
+
 .canvas-edge-hit {
   pointer-events: stroke;
   stroke-width: 16;
@@ -3164,6 +4210,551 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 .canvas-edge-arrow,
 .canvas-edge-label {
   pointer-events: none;
+}
+
+/* I quattro punti a metà dei lati, al passaggio (T67): da lì parte un filo.
+   Restano di 16 px sullo schermo a ogni zoom. */
+.canvas-port {
+  position: absolute;
+  z-index: 1;
+  width: calc(16px / var(--canvas-zoom, 1));
+  height: calc(16px / var(--canvas-zoom, 1));
+  cursor: crosshair;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+}
+
+.canvas-port[data-side="top"] {
+  top: 0;
+  left: 50%;
+}
+
+.canvas-port[data-side="right"] {
+  top: 50%;
+  left: 100%;
+}
+
+.canvas-port[data-side="bottom"] {
+  top: 100%;
+  left: 50%;
+}
+
+.canvas-port[data-side="left"] {
+  top: 50%;
+  left: 0;
+}
+
+/* Le prese del filo scelto, il filo che si tira e i cursori dei fili (T67). */
+.canvas-edge-reconnect {
+  cursor: grab;
+  pointer-events: all;
+}
+
+.canvas-edge-draft {
+  fill: none;
+  pointer-events: none;
+}
+
+.canvas-viewport[data-edge-hover],
+.canvas-edge-hit {
+  cursor: pointer;
+}
+
+.canvas-viewport[data-connecting],
+.canvas-viewport[data-connecting] * {
+  cursor: crosshair;
+}
+
+/* L'ispettore della lavagna (T58): le parti dentro il pannello. */
+.canvas-inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.canvas-inspector-filter {
+  display: flex;
+}
+.canvas-inspector-filter > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.canvas-inspector-filter > select {
+  flex: none;
+}
+.canvas-inspector-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.canvas-inspector-row {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--row-h, 28px);
+  text-align: start;
+  cursor: default;
+}
+.canvas-inspector-row > svg {
+  flex: none;
+}
+.canvas-inspector-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-inspector-kind {
+  flex: none;
+}
+.canvas-inspector-row[data-depth="1"] {
+  padding-inline-start: 28px;
+}
+.canvas-inspector-row[data-depth="2"] {
+  padding-inline-start: 44px;
+}
+.canvas-inspector-row[data-depth="3"] {
+  padding-inline-start: 60px;
+}
+.canvas-inspector-row[data-depth="4"] {
+  padding-inline-start: 76px;
+}
+/* Oltre le cinquecento righe se ne disegnano solo alcune, al loro posto. */
+.canvas-inspector-list[data-virtual] {
+  position: relative;
+  display: block;
+}
+.canvas-inspector-list[data-virtual] > .canvas-inspector-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--row-h, 28px);
+}
+
+/* Le fonti (T77): una riga per file, con la barra delle pagine o delle
+   sezioni. */
+.canvas-sources-list {
+  display: flex;
+  flex-direction: column;
+}
+.canvas-sources-file {
+  display: flex;
+  flex-direction: column;
+}
+.canvas-sources-head {
+  display: flex;
+  align-items: baseline;
+}
+.canvas-sources-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-sources-count {
+  flex: none;
+}
+.canvas-sources-bar {
+  display: flex;
+  height: 16px;
+}
+.canvas-sources-piece {
+  flex: 1 1 0;
+  min-width: 2px;
+  padding: 0;
+}
+/* Un file mancante, un PDF di cui non si sa ancora quante pagine ha, una
+   nota senza titoli. */
+.canvas-sources-loose,
+.canvas-sources-state {
+  flex: none;
+}
+.canvas-sources-head > .canvas-sources-loose,
+.canvas-sources-head > .canvas-sources-state,
+.canvas-sources-loose ~ .canvas-sources-count,
+.canvas-sources-state ~ .canvas-sources-count {
+  margin-inline-start: var(--space-3, 6px);
+}
+.canvas-sources-piece[data-whole] {
+  flex-basis: 100%;
+}
+.canvas-sources-empty {
+  margin: 0;
+}
+/* Oltre quaranta file se ne disegnano solo alcuni, al loro posto. */
+.canvas-sources-list[data-virtual] {
+  position: relative;
+  display: block;
+}
+.canvas-sources-list[data-virtual] > .canvas-sources-file {
+  position: absolute;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+}
+
+/* Il selettore delle sezioni (T74, `parts-picker.ts`): un `kit-popover`
+   attaccato alla scheda appena rilasciata. In alto il titolo e il campo; in
+   mezzo la lista e l'anteprima; in fondo il piede che dice che cosa farà
+   Invio. La posizione accanto o sotto la scheda la scrive il codice. Il
+   margine interno vince su quello del popover (due classi). */
+.kit-popover.canvas-parts-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 8px);
+  box-sizing: border-box;
+  width: 560px;
+  height: 420px;
+  max-height: calc(100% - 16px);
+  overflow: hidden;
+  padding: var(--space-5, 12px);
+}
+.canvas-parts-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-3, 6px);
+}
+.canvas-parts-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-parts-close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+.canvas-parts-close > svg {
+  width: 16px;
+  height: 16px;
+}
+.canvas-parts-field {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-2, 4px);
+}
+.canvas-parts-field > input {
+  box-sizing: border-box;
+  width: 100%;
+}
+.canvas-parts-field-hint {
+  flex: none;
+  min-height: 1lh;
+  margin: 0;
+}
+.canvas-parts-body {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: var(--space-5, 12px);
+  min-height: 0;
+}
+.canvas-parts-list {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+}
+.canvas-parts-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4, 8px);
+}
+.canvas-parts-row[data-depth="2"] {
+  padding-left: calc(var(--space-4, 8px) + 20px);
+}
+.canvas-parts-row[data-depth="3"] {
+  padding-left: calc(var(--space-4, 8px) + 40px);
+}
+.canvas-parts-check {
+  display: inline-grid;
+  flex: none;
+  place-content: center;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+}
+.canvas-parts-check::before {
+  width: 10px;
+  height: 10px;
+  content: "";
+}
+.canvas-parts-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-parts-preview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 6px);
+  min-height: 0;
+  overflow: hidden;
+}
+.canvas-parts-preview > .canvas-card-note-content {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.canvas-parts-preview-title {
+  flex: none;
+  margin: 0;
+}
+.canvas-parts-foot {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3, 6px) var(--space-5, 12px);
+}
+.canvas-parts-keys {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+.canvas-parts-count {
+  flex: none;
+}
+/* Dove a destra non c'è posto (e sempre a 700 px) il selettore va sotto la
+   scheda, largo come la lavagna: una colonna sola, senza l'anteprima. La
+   larghezza e l'altezza le scrive il codice. */
+.kit-popover.canvas-parts-picker[data-narrow] {
+  width: auto;
+  height: 360px;
+}
+.canvas-parts-picker[data-narrow] .canvas-parts-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+.canvas-parts-picker[data-narrow] .canvas-parts-preview {
+  display: none;
+}
+
+/* La scheda PDF (A-20, T39): la pagina intera, al centro, la più grande che
+   entra con le sue proporzioni (`--page-ratio`, scritta dalla scheda); le
+   frecce ai lati e il numero della pagina in basso, sopra la pagina. Il
+   rettangolo della pagina è quello su cui si attacca l'inchiostro. */
+.canvas-card-pdf {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  container-type: size;
+}
+.canvas-card-pdf-page {
+  display: block;
+  flex: none;
+  width: min(100cqw, 100cqh * var(--page-ratio, 0.7071));
+  height: min(100cqh, 100cqw / var(--page-ratio, 0.7071));
+}
+.canvas-card-pdf-previous,
+.canvas-card-pdf-next {
+  position: absolute;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  transform: translateY(-50%);
+}
+.canvas-card-pdf-previous {
+  left: var(--space-4, 8px);
+}
+.canvas-card-pdf-next {
+  right: var(--space-4, 8px);
+}
+.canvas-card-pdf-status {
+  position: absolute;
+  bottom: var(--space-4, 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* La scheda dei file Craft (T18, l'impianto del prototipo T26): l'anteprima
+   intera nella scheda, «Apri» e «Apri con…» in una barra che galleggia in
+   basso. Senza anteprima è una scheda di file: il nome, i dati, il perché, e
+   i pulsanti sotto, nel flusso. */
+.canvas-card-craft {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.canvas-card-craft-actions {
+  position: absolute;
+  bottom: var(--space-4, 8px);
+  left: 50%;
+  display: flex;
+  gap: var(--space-1, 2px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.canvas-card-craft:not([data-card-state="picture"]) {
+  flex-direction: column;
+  align-items: stretch;
+}
+.canvas-card-craft:not([data-card-state="picture"]) > .canvas-card-craft-actions {
+  position: static;
+  align-self: flex-start;
+  flex: none;
+  transform: none;
+}
+.canvas-card-craft-file {
+  min-height: 0;
+  overflow: hidden;
+}
+.canvas-card-craft-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La scheda d'immagine (T5, l'impianto del prototipo T26): l'immagine intera
+   nella scheda, con le sue proporzioni. */
+.canvas-card-image {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.canvas-card-picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* La zona di un'immagine (T78). Un raster la mostra già tagliata nel suo
+   <canvas>; un SVG resta un <img> vivo, mostrato a pezzi: il riquadro ha le
+   proporzioni della zona ruotata (la più grande che entra nella scheda),
+   la cornice dentro è la zona dritta, ruotata al centro, e l'immagine intera
+   vi si sposta. Le misure arrivano in linea come variabili. */
+.canvas-card-image[data-card-crop] {
+  container-type: size;
+}
+.canvas-card-zone {
+  position: relative;
+  flex: none;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  container-type: size;
+}
+.canvas-card-zone[data-ratio] {
+  width: min(100cqw, 100cqh * var(--zone-ratio, 1));
+  height: min(100cqh, 100cqw / var(--zone-ratio, 1));
+}
+.canvas-card-zone-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100cqw;
+  height: 100cqh;
+  transform: translate(-50%, -50%);
+}
+.canvas-card-zone[data-turn="90"] > .canvas-card-zone-frame { width: 100cqh; height: 100cqw; transform: translate(-50%, -50%) rotate(90deg); }
+.canvas-card-zone[data-turn="180"] > .canvas-card-zone-frame { transform: translate(-50%, -50%) rotate(180deg); }
+.canvas-card-zone[data-turn="270"] > .canvas-card-zone-frame { width: 100cqh; height: 100cqw; transform: translate(-50%, -50%) rotate(270deg); }
+.canvas-card-zone-frame > .canvas-card-picture {
+  position: absolute;
+  top: calc(-100% * var(--zone-y, 0) / var(--zone-h, 1));
+  left: calc(-100% * var(--zone-x, 0) / var(--zone-w, 1));
+  width: calc(100% / var(--zone-w, 1));
+  max-width: none;
+  height: calc(100% / var(--zone-h, 1));
+  object-fit: fill;
+}
+
+/* Il ritaglio di un'immagine (T78): sopra il contenuto della scheda
+   l'immagine intera, ruotata, la zona con le maniglie e, sotto la scheda,
+   la barra. Il corpo della scheda tiene il ritaglio; la sua immagine resta
+   sotto, nascosta. Dove sta il ritaglio dentro il corpo (il margine) e dove
+   stanno immagine e zona lo scrive crop.ts in linea. */
+.canvas-node[data-card-cropping] > .canvas-card-body {
+  position: relative;
+  overflow: visible;
+}
+.canvas-node[data-card-cropping] .canvas-card-image {
+  visibility: hidden;
+}
+.canvas-crop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  touch-action: none;
+  pointer-events: auto;
+}
+.canvas-crop-picture {
+  position: absolute;
+  display: block;
+}
+.canvas-crop-box {
+  position: absolute;
+  box-sizing: border-box;
+  cursor: move;
+}
+/* L'area di presa di una maniglia: 24 px sullo schermo a ogni zoom, centrata
+   sull'angolo, come le maniglie della scheda (T66); il segno lo disegna la
+   pelle. */
+.canvas-crop-handle {
+  position: absolute;
+  width: calc(24px / var(--canvas-zoom, 1));
+  height: calc(24px / var(--canvas-zoom, 1));
+  box-sizing: border-box;
+  translate: -50% -50%;
+}
+.canvas-crop-handle[data-corner="nw"] { top: 0; left: 0; cursor: nwse-resize; }
+.canvas-crop-handle[data-corner="ne"] { top: 0; left: 100%; cursor: nesw-resize; }
+.canvas-crop-handle[data-corner="sw"] { top: 100%; left: 0; cursor: nesw-resize; }
+.canvas-crop-handle[data-corner="se"] { top: 100%; left: 100%; cursor: nwse-resize; }
+/* Il piede del ritaglio: fuori dalla lavagna che scala, nella zona della
+   vista come la barra della selezione; crop.ts lo posa in linea sotto la
+   scheda (o sopra) e dentro la vista. */
+.canvas-crop-foot {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2, 4px);
+  max-width: calc(100% - 16px);
+  pointer-events: auto;
+}
+.canvas-crop-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 4px);
+  padding: var(--space-2, 4px);
+  white-space: nowrap;
+}
+.canvas-crop-note {
+  max-width: 320px;
+  margin: 0;
 }
 
 .base-surface {

@@ -1,0 +1,16 @@
+{
+  "name": "read-version-missing",
+  "description": "Senza v il campo non è di Fub: si conserva.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"t1\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": { \"size\": \"l\" } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "t1",
+        "state": "kept",
+        "reason": "version",
+        "size": "m",
+        "align": "start"
+      }
+    ]
+  }
+}

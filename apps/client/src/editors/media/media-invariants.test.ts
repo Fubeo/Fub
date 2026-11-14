@@ -22,7 +22,7 @@ import { makePdfJsLoader, pdfIdWithoutFragment, pdfPageFromFragment, type PdfJsM
 import { mountSlideDeck, splitRenderedSlides } from "../../ui/slides";
 import { printDocument } from "./print-view";
 import { createViewStateCrashDeposit } from "./recorder-store";
-import { RESOURCE_WRITE_HEADER, writeResource, type TauriInvoke } from "./transport";
+import { RESOURCE_WRITE_HEADER, ReuseSupport, writeResource, type TauriInvoke } from "./transport";
 
 describe("le specie media vengono dal nome, come di la'", () => {
   it("immagini, audio, video e PDF per estensione, senza distinguere il caso", () => {
@@ -256,8 +256,9 @@ describe("il deposito viaggia grezzo con metadati in header", () => {
     const header = seenOptions?.headers?.[RESOURCE_WRITE_HEADER] ?? "";
     const meta = JSON.parse(decodeURIComponent(header));
     expect(meta).toEqual({ id: "allegati/foto.png", vault: "vault", expected: null });
-    // La ricevuta e' id+revision, niente handle/len/mime.
-    expect(receipt).toEqual({ id: "allegati/foto.png", revision: "sha256:x" });
+    // La ricevuta e' id+revision (+ `reused`, falso per un host che non lo
+    // manda), niente handle/len/mime.
+    expect(receipt).toEqual({ id: "allegati/foto.png", revision: "sha256:x", reused: false });
     expect("handle" in receipt).toBe(false);
   });
 
@@ -273,6 +274,74 @@ describe("il deposito viaggia grezzo con metadati in header", () => {
       decodeURIComponent(capture.options?.headers?.[RESOURCE_WRITE_HEADER] ?? ""),
     );
     expect(meta.expected).toBe("sha256:abc");
+  });
+
+  it("reuse aggiunge il solo campo `reuse` e la ricevuta dice il file che c'era", async () => {
+    const metas: unknown[] = [];
+    const invoke: TauriInvoke = async <T>(_cmd: string, _args?: unknown, options?: { headers?: Record<string, string> }): Promise<T> => {
+      metas.push(JSON.parse(decodeURIComponent(options?.headers?.[RESOURCE_WRITE_HEADER] ?? "")));
+      return { id: "Allegati/a.png", revision: "sha256:a", reused: true } as T;
+    };
+    const receipt = await writeResource(invoke, "Lavagna/b.png", new Uint8Array([1]), null, "v", { reuse: "same-content" });
+    expect(metas).toEqual([{ id: "Lavagna/b.png", vault: "v", expected: null, reuse: "same-content" }]);
+    expect(receipt).toEqual({ id: "Allegati/a.png", revision: "sha256:a", reused: true });
+  });
+
+  it("reuse con expected è bad_args prima di chiamare l'host", async () => {
+    const invoke = vi.fn(async <T>(): Promise<T> => ({ id: "a.png", revision: "r", reused: false }) as T);
+    await expect(writeResource(invoke as TauriInvoke, "a.png", new Uint8Array([1]), "sha256:abc", undefined, { reuse: "same-content" }))
+      .rejects.toMatchObject({ kind: "bad_args" });
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("un host di prima che rifiuta `reuse` è un «non so»: si deposita senza", async () => {
+    const metas: Record<string, unknown>[] = [];
+    const invoke: TauriInvoke = async <T>(_cmd: string, _args?: unknown, options?: { headers?: Record<string, string> }): Promise<T> => {
+      const meta = JSON.parse(decodeURIComponent(options?.headers?.[RESOURCE_WRITE_HEADER] ?? "")) as Record<string, unknown>;
+      metas.push(meta);
+      if ("reuse" in meta) throw { kind: "bad_args", message: "resource_write metadata has an unknown field `reuse`" };
+      return { id: "Lavagna/b.png", revision: "sha256:b" } as T;
+    };
+    const receipt = await writeResource(invoke, "Lavagna/b.png", new Uint8Array([1]), null, undefined, { reuse: "same-content" });
+    expect(metas).toEqual([
+      { id: "Lavagna/b.png", vault: null, expected: null, reuse: "same-content" },
+      { id: "Lavagna/b.png", vault: null, expected: null },
+    ]);
+    expect(receipt).toEqual({ id: "Lavagna/b.png", revision: "sha256:b", reused: false });
+  });
+
+  it("il rifiuto di `reuse` si ricorda per la seduta: i depositi dopo vanno subito senza (T32b)", async () => {
+    const metas: Record<string, unknown>[] = [];
+    const invoke: TauriInvoke = async <T>(_cmd: string, _args?: unknown, options?: { headers?: Record<string, string> }): Promise<T> => {
+      const meta = JSON.parse(decodeURIComponent(options?.headers?.[RESOURCE_WRITE_HEADER] ?? "")) as Record<string, unknown>;
+      metas.push(meta);
+      if ("reuse" in meta) throw { kind: "bad_args", message: "resource_write metadata has an unknown field `reuse`" };
+      return { id: String(meta["id"]), revision: "sha256:b" } as T;
+    };
+    const support = new ReuseSupport();
+    await writeResource(invoke, "a.png", new Uint8Array([1]), null, undefined, { reuse: "same-content" }, support);
+    await writeResource(invoke, "b.png", new Uint8Array([2]), null, undefined, { reuse: "same-content" }, support);
+    expect(metas.filter((meta) => "reuse" in meta)).toHaveLength(1);
+    expect(metas.map((meta) => meta["id"])).toEqual(["a.png", "a.png", "b.png"]);
+    // Il padrone lo azzera: si torna a chiedere.
+    support.reset();
+    await writeResource(invoke, "c.png", new Uint8Array([3]), null, undefined, { reuse: "same-content" }, support);
+    expect(metas.filter((meta) => "reuse" in meta)).toHaveLength(2);
+  });
+
+  it("un `bad_args` anche senza `reuse` non è un host di prima: non si ricorda", async () => {
+    const invoke = vi.fn(async <T>(): Promise<T> => { throw { kind: "bad_args", message: "id rifiutato" }; });
+    const support = new ReuseSupport();
+    await expect(writeResource(invoke as TauriInvoke, "a.png", new Uint8Array([1]), null, undefined, { reuse: "same-content" }, support))
+      .rejects.toMatchObject({ kind: "bad_args" });
+    expect(support.refused).toBe(false);
+  });
+
+  it("un altro errore con reuse arriva a chi chiama, senza un secondo deposito", async () => {
+    const invoke = vi.fn(async <T>(): Promise<T> => { throw { kind: "already_exists", message: "preso" }; });
+    await expect(writeResource(invoke as TauriInvoke, "a.png", new Uint8Array([1]), null, undefined, { reuse: "same-content" }))
+      .rejects.toMatchObject({ kind: "already_exists" });
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 });
 

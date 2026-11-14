@@ -1,0 +1,15 @@
+{
+  "name": "read-kind-future",
+  "description": "Una specie di una versione futura di Fub si conserva e si mostra il subpath.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Conti.xlsx\", \"subpath\": \"#Foglio1\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"cells\", \"sheet\": \"Foglio1\", \"range\": \"A1:C9\" } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "kept",
+        "reason": "kind",
+        "shows": "#Foglio1"
+      }
+    ]
+  }
+}

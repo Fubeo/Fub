@@ -183,7 +183,7 @@ describe("l'adattatore di pdf.js", () => {
       version: "6.3.289",
       GlobalWorkerOptions: { workerSrc: "" },
       getDocument: () => ({
-        promise: Promise.resolve({ numPages: 2, getPage: async () => page, destroy: async () => {} }),
+        promise: Promise.resolve({ numPages: 2, getPage: async () => page }),
         destroy: async () => {},
       }),
     } as unknown as PdfJsModule;
