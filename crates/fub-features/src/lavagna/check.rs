@@ -59,6 +59,9 @@ pub(super) fn canvas_check(
     let seed = seed.unwrap_or_else(|| Fnv1a::hash(revision.0.as_bytes()));
     let source = host.read_document(&doc)?;
     let core = Core::open(source).map_err(|error| opening(&doc, &error))?;
+    // Le misure dei file entrano prima del controllo, come nella scrittura: il
+    // rapporto dice quello che `canvas.apply` farebbe.
+    let list = measure_list(&*host, core.canvas(), list);
     let report = check(core.canvas(), &list, seed);
 
     let stale = base.is_some_and(|base| Revision::new(base) != revision);

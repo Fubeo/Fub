@@ -1,0 +1,13 @@
+{
+  "about": "set con un colore dato come nome scrive il valore del file: «cyan» diventa \"5\", come in color e in add_card.",
+  "before": {
+    "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a", "color": "1" }]
+  },
+  "ops": [{ "op": "set", "id": "a", "fields": { "color": "cyan" } }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a", "color": "5" }]
+    }
+  }
+}

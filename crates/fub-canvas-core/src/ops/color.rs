@@ -1,13 +1,21 @@
-//! I colori che una scheda o un arco prendono nella forma breve: un nome di
-//! «I colori» del piano, il numero del file (`"1"`…`"6"`), o `#rrggbb`.
+//! I colori che una scheda o un arco prendono nella forma breve: un nome della
+//! tavola qui sotto, il numero del file (`"1"`…`"6"`), o `#rrggbb`.
 //!
 //! È la sola copia della tavola: `add_card`, `connect`, la lettura in forma
 //! `code` (`describe`) e il controllo della forma (`spec`) la usano tutti. Un
 //! colore che [`parse`] non legge è un errore di lettura, e non si scrive.
 
-use serde::{de, Deserialize, Deserializer};
+use std::borrow::Cow;
 
+use serde::{de, Deserialize, Deserializer};
+use serde_json::{Map, Value};
+
+use super::{refuse, OpError};
 use crate::model::{CanvasColor, PresetColor};
+
+/// Il motivo di un colore che la tavola non legge, come lo dà ogni operazione
+/// che lo scrive (`add_card`, `connect`, `color`, `set`).
+pub(crate) const NOT_A_COLOR: &str = "the color is not a name, a number or #rrggbb";
 
 /// Un colore della tavola: un preset di JSON Canvas, o un esadecimale fisso.
 #[derive(Clone, Copy)]
@@ -93,6 +101,43 @@ fn preset_name(preset: PresetColor) -> &'static str {
         PresetColor::Cyan => "cyan",
         PresetColor::Purple => "purple",
     }
+}
+
+/// Il valore che il file scrive per un colore della tavola: `"1"`…`"6"`, o
+/// `#rrggbb` in minuscolo. Un nome (`"cyan"`) diventa il suo valore (`"5"`).
+pub(crate) fn file_value(text: &str) -> Option<String> {
+    parse(text).map(|color| match color {
+        CanvasColor::Preset(preset) => preset_number(preset).to_owned(),
+        CanvasColor::Hex(hex) => hex,
+    })
+}
+
+fn preset_number(preset: PresetColor) -> &'static str {
+    match preset {
+        PresetColor::Red => "1",
+        PresetColor::Orange => "2",
+        PresetColor::Yellow => "3",
+        PresetColor::Green => "4",
+        PresetColor::Cyan => "5",
+        PresetColor::Purple => "6",
+    }
+}
+
+/// I campi di un `set` con il colore scritto come il file lo vuole: un nome, un
+/// numero o `#rrggbb` diventano il loro valore di JSON Canvas. Gli altri campi
+/// non cambiano; un colore che la tavola non legge è `Invalid`; `null`, che toglie
+/// il colore, passa com'è.
+pub(crate) fn canonical_fields<'a>(
+    index: usize,
+    fields: &'a Map<String, Value>,
+) -> Result<Cow<'a, Map<String, Value>>, OpError> {
+    let Some(Value::String(text)) = fields.get("color") else {
+        return Ok(Cow::Borrowed(fields));
+    };
+    let value = file_value(text).ok_or_else(|| refuse(index, NOT_A_COLOR))?;
+    let mut canonical = fields.clone();
+    canonical.insert("color".to_owned(), Value::String(value));
+    Ok(Cow::Owned(canonical))
 }
 
 /// Il colore di una scheda o di un arco come testo: un colore che [`parse`]

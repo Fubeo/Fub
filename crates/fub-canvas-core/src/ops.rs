@@ -31,10 +31,12 @@ use thiserror::Error;
 use crate::model::{Canvas, CanvasEdge, CanvasError, CanvasNode, MAX_SAFE_INTEGER};
 use crate::patch::{self, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null};
 
+mod adjust;
 mod card;
 pub(crate) mod color;
 mod connect;
 
+pub use adjust::{ColorArgs, Fit, MoveArgs, ReorderArgs, ReorderTo, ResizeArgs};
 pub use card::AddCardArgs;
 pub use connect::{AutoWord, ConnectArgs, Ends, SidePair, Sides};
 
@@ -47,23 +49,12 @@ pub enum CanvasOp {
     /// Aggiunge una scheda in cima all'ordine: la scheda come nel file
     /// (`node`), o la forma breve. Le regole sono in `ops/card.rs`.
     AddCard(AddCardArgs),
-    /// Sposta le schede `ids` di `dx`, `dy`. Un gruppo si sposta da solo: le
-    /// schede dentro restano dove sono, come sulla tela.
-    Move {
-        ids: Vec<String>,
-        #[serde(deserialize_with = "saturating_integer")]
-        dx: i64,
-        #[serde(deserialize_with = "saturating_integer")]
-        dy: i64,
-    },
-    /// Dà alla scheda `id` le misure `width` × `height`.
-    Resize {
-        id: String,
-        #[serde(deserialize_with = "saturating_integer")]
-        width: i64,
-        #[serde(deserialize_with = "saturating_integer")]
-        height: i64,
-    },
+    /// Sposta le schede `ids`; con `contents` un gruppo porta le schede dentro
+    /// di sé. Le regole sono in `ops/adjust.rs`.
+    Move(MoveArgs),
+    /// Dà alla scheda le misure, o con `fit` la misura del suo contenuto. Le
+    /// regole sono in `ops/adjust.rs`.
+    Resize(ResizeArgs),
     /// Aggiunge un arco in fondo alla lista: l'arco come nel file (`edge`), o
     /// la forma breve fra due schede. Le regole sono in `ops/connect.rs`.
     Connect(ConnectArgs),
@@ -71,14 +62,18 @@ pub enum CanvasOp {
     /// via prima, nella stessa operazione.
     Remove { ids: Vec<String> },
     /// Cambia i campi di una scheda o di un arco; un campo `null` lo toglie.
-    /// `id` (e `type` di una scheda) non si cambiano.
+    /// `id` (e `type` di una scheda) non si cambiano. Il `color` accetta i nomi
+    /// di `add_card`.
     Set {
         id: String,
+        #[serde(deserialize_with = "set_fields")]
         fields: Map<String, Value>,
     },
-    /// Porta le schede `ids` in cima all'ordine, nell'ordine dato; le altre
-    /// restano sotto nel loro ordine. Con tutti gli id, è l'ordine nuovo.
-    Reorder { ids: Vec<String> },
+    /// Porta le schede in cima all'ordine (o in fondo, con `to: back`). Le
+    /// regole sono in `ops/adjust.rs`.
+    Reorder(ReorderArgs),
+    /// Colora più schede e archi in una volta. Le regole sono in `ops/adjust.rs`.
+    Color(ColorArgs),
 }
 
 impl CanvasOp {
@@ -88,12 +83,13 @@ impl CanvasOp {
     pub fn name(&self) -> &'static str {
         match self {
             Self::AddCard(_) => "add_card",
-            Self::Move { .. } => "move",
-            Self::Resize { .. } => "resize",
+            Self::Move(_) => "move",
+            Self::Resize(_) => "resize",
             Self::Connect(_) => "connect",
             Self::Remove { .. } => "remove",
             Self::Set { .. } => "set",
-            Self::Reorder { .. } => "reorder",
+            Self::Reorder(_) => "reorder",
+            Self::Color(_) => "color",
         }
     }
 }
@@ -233,12 +229,13 @@ impl Compiler {
     fn op(&mut self, index: usize, op: &CanvasOp) -> Result<(), OpError> {
         let patches = match op {
             CanvasOp::AddCard(card) => self.add_card(index, card)?,
-            CanvasOp::Move { ids, dx, dy } => self.move_nodes(index, ids, *dx, *dy)?,
-            CanvasOp::Resize { id, width, height } => self.resize(index, id, *width, *height)?,
+            CanvasOp::Move(args) => self.move_nodes(index, args)?,
+            CanvasOp::Resize(args) => self.resize(index, args)?,
             CanvasOp::Connect(link) => self.connect(index, link)?,
             CanvasOp::Remove { ids } => self.remove(index, ids)?,
             CanvasOp::Set { id, fields } => self.set(index, id, fields)?,
-            CanvasOp::Reorder { ids } => self.reorder(index, ids)?,
+            CanvasOp::Reorder(args) => self.reorder(index, args)?,
+            CanvasOp::Color(args) => self.color(index, args)?,
         };
         if patches.is_empty() {
             return Ok(());
@@ -316,41 +313,6 @@ impl Compiler {
             });
         }
         Ok(id.to_owned())
-    }
-
-    fn move_nodes(
-        &mut self,
-        index: usize,
-        ids: &[String],
-        dx: i64,
-        dy: i64,
-    ) -> Result<Vec<CanvasPatch>, OpError> {
-        distinct(index, ids)?;
-        let mut patches = Vec::new();
-        for id in ids {
-            let mut node = self.node(index, id)?.clone();
-            node.x = saturate(node.x.saturating_add(dx));
-            node.y = saturate(node.y.saturating_add(dy));
-            check_node(index, &node)?;
-            patches.extend(upsert_node_patch(&self.working, &node));
-        }
-        Ok(patches)
-    }
-
-    fn resize(
-        &mut self,
-        index: usize,
-        id: &str,
-        width: i64,
-        height: i64,
-    ) -> Result<Vec<CanvasPatch>, OpError> {
-        let mut node = self.node(index, id)?.clone();
-        node.width = width;
-        node.height = height;
-        check_node(index, &node)?;
-        Ok(upsert_node_patch(&self.working, &node)
-            .into_iter()
-            .collect())
     }
 
     /// Toglie schede e archi: prima gli archi (quelli nominati e quelli che
@@ -471,6 +433,10 @@ impl Compiler {
         id: &str,
         fields: &Map<String, Value>,
     ) -> Result<Vec<CanvasPatch>, OpError> {
+        // Un colore scritto con un nome diventa il valore del file, come in
+        // `add_card`: `set` non legge i nomi da solo.
+        let fields = color::canonical_fields(index, fields)?;
+        let fields = fields.as_ref();
         match (self.has_node(id), self.has_edge(id)) {
             (true, true) => Err(ambiguous(index, id)),
             (true, false) => {
@@ -516,30 +482,6 @@ impl Compiler {
                 id: id.to_owned(),
             }),
         }
-    }
-
-    fn reorder(&mut self, index: usize, ids: &[String]) -> Result<Vec<CanvasPatch>, OpError> {
-        distinct(index, ids)?;
-        for id in ids {
-            self.node(index, id)?;
-        }
-        let lifted: HashSet<&str> = ids.iter().map(String::as_str).collect();
-        let before: Vec<String> = self
-            .working
-            .nodes
-            .iter()
-            .map(|node| node.id.clone())
-            .collect();
-        let after: Vec<String> = before
-            .iter()
-            .filter(|id| !lifted.contains(id.as_str()))
-            .cloned()
-            .chain(ids.iter().cloned())
-            .collect();
-        if after == before {
-            return Ok(Vec::new());
-        }
-        Ok(vec![CanvasPatch::Reorder { before, after }])
     }
 
     /// Un arco va bene se le sue schede ci sono e se passa le regole del
@@ -697,6 +639,18 @@ fn saturating_integer<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64,
     }
 
     deserializer.deserialize_any(Saturating)
+}
+
+/// I campi di `set`: un oggetto, il cui `color` (se c'è e non è `null`) è un
+/// colore che la tavola legge, come in `add_card`. Così un colore sbagliato è un
+/// errore di lettura, come negli altri comandi che scrivono un colore.
+fn set_fields<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Map<String, Value>, D::Error> {
+    let fields = Map::<String, Value>::deserialize(deserializer)?;
+    match fields.get("color") {
+        None | Some(Value::Null) => Ok(fields),
+        Some(Value::String(text)) if color::parse(text).is_some() => Ok(fields),
+        Some(other) => Err(de::Error::custom(format_args!("unknown color {other}"))),
+    }
 }
 
 /// Lo stesso di [`saturating_integer`], o assente: `null` vale come assente (R7).

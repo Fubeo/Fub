@@ -245,18 +245,14 @@ casi con i numeri stanno in `apps/client/src/__fixtures__/canvas-layout.json`.
 
 ## Le operazioni
 
-Un agente o la sessione dal tablet non scrivono toppe: scrivono
-**operazioni d'intento** (`CanvasOp`, in `crates/fub-canvas-core/src/ops.rs`),
-come «sposta», «collega», «togli». `compile(canvas, ops, seed)` le traduce
-nelle [toppe](canvas-operations.md#le-toppe) e dà `Compiled { patches, created }`: le toppe, che si
-applicano con `draft` al modello di partenza e hanno la loro inversa, e gli
-id creati.
+Un agente o la sessione dal tablet scrivono **operazioni d'intento**
+(`CanvasOp`, in `crates/fub-canvas-core/src/ops.rs`), come «sposta» o
+«collega», non toppe. `compile(canvas, ops, seed)` le traduce nelle
+[toppe](canvas-operations.md#le-toppe) e dà `Compiled { patches, created }`.
 
-Le operazioni si compilano in ordine, ognuna sul modello lasciato dalla
-precedente: si può aggiungere una scheda e subito spostarla, ma non collegare
-una scheda tolta prima. Valgono tutte o nessuna: con un errore non esce
-nessuna toppa. Il modello di dopo resta valido: ogni scheda e ogni arco che
-un'operazione mette passa le regole del [formato](canvas-format.md).
+Le operazioni si compilano in ordine, ognuna sul modello della precedente (si
+può aggiungere una scheda e subito spostarla), e valgono tutte o nessuna. Il
+modello di dopo resta valido, secondo il [formato](canvas-format.md).
 
 Un'operazione è un oggetto JSON con il campo `op`. Un campo che l'operazione
 non conosce, o un numero con una frazione vera dove serve un intero, è un
@@ -286,32 +282,35 @@ la frase che dice quale.
 
 ### `move`
 
-Sposta le schede `ids` di `dx`, `dy`. Le coordinate saturano a ±(2^53−1). Un
-gruppo si sposta da solo: le schede dentro restano dove sono, come sulla
-tela. Una lista vuota, o uno spostamento di zero, non dà toppe.
+Sposta le schede `ids` di `dx`, `dy`, con coordinate che saturano a ±(2^53−1).
+Un gruppo si sposta da solo: le schede dentro restano dove sono. Con
+`contents: true` il gruppo porta con sé le schede che ci stanno dentro (anche
+quelle di un gruppo nel gruppo), una volta sola; su una scheda che non è un
+gruppo non fa niente. Una lista vuota, o uno spostamento di zero, non dà toppe.
 
 ```json
-{ "op": "move", "ids": ["f1"], "dx": 40, "dy": 0 }
+{ "op": "move", "ids": ["g1"], "dx": 40, "dy": 0, "contents": true }
 ```
 
 ### `resize`
 
-Dà alla scheda `id` le misure nuove: almeno 1, e una misura enorme satura a
-2^53−1.
+Dà alla scheda `id` le misure, almeno 1 (saturano a 2^53−1); `width` o `height`
+da soli cambiano solo quella. Con `fit: "content"` la larghezza resta e l'altezza
+viene dal contenuto: la stima di «Misure e posti» per un testo, le proporzioni di
+un'immagine o di un PDF (`content_size`, o il file se si legge, fino a 32 MiB).
+Una nota, un file o un gruppo non hanno misura: è `Invalid`.
 
 ```json
-{ "op": "resize", "id": "f1", "width": 320, "height": 200 }
+{ "op": "resize", "id": "f1", "fit": "content" }
 ```
 
 ### `connect`
 
-Aggiunge un arco in fondo alla lista, in una di due forme. `edge` è un arco
-come nel file, `id` dentro l'arco è facoltativo. In forma breve `from` e `to`
-sono le due schede, che devono esserci; `id`, `label` e `color` come in
-`add_card`. `sides` è `"auto"` (i lati più vicini, come in «Lati più vicini»)
-o `{from, to}` con i lati scelti: di serie nessun lato. `ends` è `arrow` (di
-serie, una punta alla scheda di arrivo), `none` o `both`. Un arco da una scheda
-a sé stessa va bene.
+Aggiunge un arco in fondo alla lista, in due forme. `edge` è un arco come nel
+file (`id` facoltativo); `from` e `to` sono le due schede, che devono esserci, e
+`id`, `label` e `color` sono come in `add_card`. `sides` è `"auto"` (i lati più
+vicini) o `{from, to}`: di serie nessun lato. `ends` è `arrow` (di serie), `none`
+o `both`. Un arco da una scheda a sé stessa va bene.
 
 ```json
 { "op": "connect", "from": "a", "to": "b", "sides": "auto", "label": "porta a" }
@@ -334,7 +333,8 @@ da più operazioni: così l'inversa rimette schede e archi al loro posto.
 
 Cambia i campi di una scheda o di un arco. Un valore sostituisce quello di
 prima al suo posto, o va in fondo se è nuovo; `null` toglie il campo, noto o
-sconosciuto. `id`, e `type` di una scheda, non si cambiano.
+sconosciuto. `id`, e `type` di una scheda, non si cambiano. Il `color` accetta
+i nomi di `add_card` e lo scrive come valore del file (`cyan` diventa `"5"`).
 
 ```json
 { "op": "set", "id": "a", "fields": { "color": "4", "text": "nuovo", "fub:tag": null } }
@@ -342,11 +342,20 @@ sconosciuto. `id`, e `type` di una scheda, non si cambiano.
 
 ### `reorder`
 
-Porta le schede `ids` in cima all'ordine, nell'ordine dato; le altre restano
-sotto nel loro ordine. Con tutti gli id, `ids` è l'ordine nuovo.
+Porta le schede `ids` in cima all'ordine, nell'ordine dato, o con `to: "back"` in
+fondo, sotto le altre. Con tutti gli id, `ids` è l'ordine nuovo.
 
 ```json
-{ "op": "reorder", "ids": ["b", "a"] }
+{ "op": "reorder", "ids": ["b", "a"], "to": "back" }
+```
+
+### `color`
+
+Colora più schede e archi in una volta: `color` è un nome come in `add_card`,
+`"1"`…`"6"`, `#rrggbb`, o `null` che toglie il colore (il campo c'è sempre).
+
+```json
+{ "op": "color", "ids": ["t1", "t2", "e1"], "color": "cyan" }
 ```
 
 ### Gli id nuovi
@@ -365,11 +374,9 @@ z = z ^ (z >> 31)
 
 con l'aritmetica a 64 bit che si avvolge, e lo stato di partenza uguale al
 seme. L'id è `z` in sedici cifre esadecimali minuscole, come quelli di
-Obsidian: col seme 0 il primo è `e220a8397b1dcdaf`. Un giro di `compile` usa
-un solo generatore, e salta gli id presi: quelli di schede e archi del modello
-di partenza e ogni id entrato nel modello nello stesso giro. Un id dato a mano
-segue la stessa regola: se è preso, è `DuplicateId`. `created` dice, in
-ordine, gli id di ogni scheda e arco aggiunti, dati o generati.
+Obsidian: col seme 0 il primo è `e220a8397b1dcdaf`. Un giro di `compile` salta
+gli id presi (di schede, archi o del giro stesso); un id dato a mano, se è preso,
+è `DuplicateId`. `created` dice gli id aggiunti, in ordine.
 
 ### Gli errori delle operazioni
 
@@ -379,31 +386,29 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 | Errore | Quando |
 |---|---|
 | `UnknownNode` | `move`, `resize` o `reorder` di un id che non è una scheda; un arco verso una scheda che non c'è |
-| `UnknownEdge` | `remove` o `set` di un id che non è né una scheda né un arco |
-| `DuplicateId` | un id dato che è già preso; un id ripetuto nella lista di `move`, `remove` o `reorder` |
+| `UnknownEdge` | `remove`, `set` o `color` di un id che non è né una scheda né un arco |
+| `DuplicateId` | un id dato che è già preso; un id ripetuto nella lista di `move`, `remove`, `reorder` o `color` |
 | `TooMany` | la lavagna avrebbe più di 100 000 schede o 200 000 archi |
-| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un id che è sia una scheda sia un arco |
+| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco |
 
-I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file,
-scritti a mano: `before`, `seed` facoltativo (0 se manca), `ops` e `expect`
-con `outcome` (`applied`, `rejected` o `malformed`) e, secondo il caso,
-`after`, `created` ed `error`. `crates/fub-canvas-core/tests/op_vectors.rs` li
-fa girare e controlla anche che l'inversa delle toppe ridia `before`.
+I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file
+(`before`, `seed`, `ops`, `expect`); `tests/op_vectors.rs` li fa girare e
+controlla che l'inversa delle toppe ridia `before`.
 
 ## Lo schema
 
-Lo schema delle operazioni sta nel nucleo, in `crates/fub-canvas-core/src/spec.rs`.
-`OPS` ha una voce per operazione: il nome, una riga di riepilogo, i campi con
-il loro tipo e se sono obbligatori, e gli esempi. Coincide con serde campo per
-campo, e `crates/fub-canvas-core/tests/spec.rs` lo controlla. Un'operazione
-nuova entra in `OPS` nello stesso task che la aggiunge.
+Lo schema sta nel nucleo, in `crates/fub-canvas-core/src/spec.rs`: `OPS` ha una
+voce per operazione (nome, riepilogo, campi con tipo e obbligatorietà, esempi),
+e coincide con serde campo per campo (`tests/spec.rs`). Un'operazione nuova
+entra in `OPS` nello stesso task.
 
 I tipi dei campi sono `id`, `ids` (una lista di id), `number` (un intero: anche
 `1.0` e `1e2` lo sono, `1.5` no), `text`, `bool`, `enum` (una stringa presa da
 un elenco), `node` (una scheda), `edge` (un arco), `color` (un nome, `"1"`…`"6"`
 o `#rrggbb`, o `null`), `sides` (`"auto"` o `{from, to}`), `pair` (due numeri,
-`[w, h]`), `object`, `points` (una lista di liste di numeri) e `any`. Un campo
-facoltativo `null` vale come assente, per la forma e per serde.
+`[w, h]`), `object`, `patch` (i campi nuovi di `set`, col suo `color`), `points`
+(una lista di liste di numeri) e `any`. Un campo facoltativo `null` vale come
+assente, per la forma e per serde.
 
 **Lo schema JSON.** `json_schema()` dà lo schema JSON 2020-12 della lista: una
 lista non vuota, e un `oneOf` con un ramo per operazione. Ogni ramo ha `op`

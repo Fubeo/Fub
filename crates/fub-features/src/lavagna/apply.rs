@@ -29,7 +29,7 @@ pub(super) fn canvas_apply(
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
     let doc = canvas_doc(&args, host)?;
-    let ops = operations(args.text(OPS).unwrap_or(""))?;
+    let mut ops = operations(args.text(OPS).unwrap_or(""))?;
     let seed = args.text(SEED).map(seed).transpose()?;
 
     let revision = host.document_revision(&doc)?;
@@ -43,6 +43,7 @@ pub(super) fn canvas_apply(
     // Senza un seme gli id nascono dalla revisione: anteprima e applicazione
     // sulla stessa revisione danno gli stessi id.
     let seed = seed.unwrap_or_else(|| Fnv1a::hash(revision.0.as_bytes()));
+    measure_ops(&*host, core.canvas(), &mut ops);
     let compiled = compile(core.canvas(), &ops, seed).map_err(operation)?;
     let committed = core
         .commit(&compiled.patches)

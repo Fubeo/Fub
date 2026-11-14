@@ -23,6 +23,8 @@ mod apply;
 mod check;
 mod create;
 mod guide;
+#[cfg(feature = "draw")]
+mod prefill;
 mod preview;
 mod read;
 
@@ -34,7 +36,9 @@ use fub_abi::error::PluginError;
 use fub_abi::model::DocId;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{CommandProvider, HostApi};
-use fub_canvas_core::CanvasError;
+use fub_canvas_core::ops::CanvasOp;
+use fub_canvas_core::{Canvas, CanvasError};
+use serde_json::Value;
 
 /// L'id del componente, lo stesso della sua riga nella mappa.
 pub const LAVAGNA_ID: &str = "fub.lavagna";
@@ -256,6 +260,28 @@ fn seed(raw: &str) -> Result<u64, PluginError> {
         .map_err(|_| PluginError::BadArgs(Text::message(E_SEED, vec![Arg::text("seed", raw)])))
 }
 
+/// Le misure del contenuto che le operazioni chiedono e non portano: il
+/// `content_size` di un'immagine o di un PDF (vedi `prefill`). Senza `draw` non
+/// si legge nessun file, e le operazioni restano come sono.
+#[cfg(feature = "draw")]
+fn measure_ops(host: &dyn HostApi, canvas: &Canvas, ops: &mut [CanvasOp]) {
+    prefill::fill_ops(host, canvas, ops);
+}
+
+#[cfg(not(feature = "draw"))]
+fn measure_ops(_host: &dyn HostApi, _canvas: &Canvas, _ops: &mut [CanvasOp]) {}
+
+/// Come [`measure_ops`], su una lista JSON com'è scritta (per `canvas.check`).
+#[cfg(feature = "draw")]
+fn measure_list(host: &dyn HostApi, canvas: &Canvas, list: Value) -> Value {
+    prefill::fill_list(host, canvas, list)
+}
+
+#[cfg(not(feature = "draw"))]
+fn measure_list(_host: &dyn HostApi, _canvas: &Canvas, list: Value) -> Value {
+    list
+}
+
 /// Una lavagna che il nucleo non sa leggere (R1–R10 di `canvas-format.md`).
 fn opening(doc: &DocId, error: &CanvasError) -> PluginError {
     let key = match error {
@@ -292,8 +318,8 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ("canvas.apply.ops.title", "Operazioni", "Operations"),
     (
         "canvas.apply.ops.desc",
-        "Una lista JSON di operazioni (add_card, move, resize, connect, remove, set, reorder).",
-        "A JSON list of operations (add_card, move, resize, connect, remove, set, reorder).",
+        "Una lista JSON di operazioni (add_card, move, resize, connect, remove, set, reorder, color).",
+        "A JSON list of operations (add_card, move, resize, connect, remove, set, reorder, color).",
     ),
     ("canvas.apply.base.title", "Revisione di partenza", "Base revision"),
     (

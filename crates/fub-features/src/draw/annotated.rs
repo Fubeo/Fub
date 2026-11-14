@@ -67,7 +67,7 @@ mod redact;
 mod sheets;
 mod write;
 
-use geometry::Geometry;
+pub(super) use geometry::Geometry;
 use layers::Layers;
 use overlay::unit_to_annotations;
 use redact::{page_list, ranges, Redacted};
@@ -99,7 +99,7 @@ pub(super) const UNSAFE: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<', '>', '
 
 /// Quanto può decomprimersi un flusso di oggetti o di riferimenti mentre il
 /// PDF si legge: oltre, è una bomba e non un PDF.
-const STREAM_MAX: usize = 64 * 1024 * 1024;
+pub(super) const STREAM_MAX: usize = 64 * 1024 * 1024;
 
 const E_NONE_SELECTED: &str = "e_annotated_none_selected";
 const E_DPI: &str = "e_annotated_dpi";

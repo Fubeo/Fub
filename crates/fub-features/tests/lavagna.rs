@@ -861,6 +861,69 @@ fn ogni_codice_di_problema_ha_il_suo_problema() {
 }
 
 #[test]
+fn un_valore_fuori_dall_elenco_e_bad_value_con_il_nome_vicino() {
+    // Un elenco (`to` di `reorder`, `fit` di `resize`, un colore di `color` o di
+    // `set`) dà `bad_value`. Un nome a una lettera di distanza dà la correzione;
+    // un valore lontano dà solo il problema.
+    let (_vault, mut ws) = with_board(BEFORE);
+    let cases = [
+        (
+            json!([{ "op": "reorder", "ids": ["a"], "to": "bak" }]),
+            "/0/to",
+            Some("back"),
+            json!({ "op": "reorder", "ids": ["a"], "to": "back" }),
+        ),
+        (
+            json!([{ "op": "resize", "id": "a", "fit": "contnt" }]),
+            "/0/fit",
+            Some("content"),
+            json!({ "op": "resize", "id": "a", "fit": "content" }),
+        ),
+        (
+            json!([{ "op": "color", "ids": ["a"], "color": "gren" }]),
+            "/0/color",
+            Some("green"),
+            json!({ "op": "color", "ids": ["a"], "color": "green" }),
+        ),
+        (
+            json!([{ "op": "set", "id": "a", "fields": { "color": "gren" } }]),
+            "/0/fields/color",
+            Some("green"),
+            json!({ "op": "set", "id": "a", "fields": { "color": "green" } }),
+        ),
+    ];
+    for (ops, path, near, fix) in cases {
+        let outcome = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops.to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto, non un errore");
+        let payload = custom(&outcome);
+        assert_eq!(payload["ok"], false, "{ops}");
+        let problems = payload["problems"].as_array().expect("i problemi");
+        assert_eq!(problems.len(), 1, "{ops}: {problems:?}");
+        assert_eq!(problems[0]["code"], "bad_value", "{ops}");
+        assert_eq!(problems[0]["path"], path, "{ops}");
+        assert_eq!(problems[0]["suggestion"].as_str(), near, "{ops}");
+        assert_eq!(problems[0]["fix"], fix, "{ops}");
+    }
+    // Un colore senza nome vicino: il problema, senza suggerimento né correzione.
+    let outcome = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": json!([{ "op": "color", "ids": ["a"], "color": "7" }]).to_string() }),
+        InvokeMode::Apply,
+    )
+    .expect("un rapporto");
+    let problem = &custom(&outcome)["problems"][0];
+    assert_eq!(problem["code"], "bad_value", "{problem}");
+    assert!(
+        problem.get("suggestion").is_none() && problem.get("fix").is_none(),
+        "{problem}"
+    );
+}
+
+#[test]
 fn troppe_schede_sono_il_problema_too_many() {
     let (_vault, mut ws) = with_board(&many_cards(100_000));
     let ops = json!([{ "op": "add_card", "node": { "id": "nuova", "type": "text", "x": 0, "y": 0, "width": 10, "height": 10, "text": "" } }]);
@@ -999,11 +1062,11 @@ fn la_guida_senza_topic_da_il_testo_e_tutte_le_operazioni() {
         .collect();
     assert_eq!(
         names,
-        ["add_card", "move", "resize", "connect", "remove", "set", "reorder"]
+        ["add_card", "move", "resize", "connect", "remove", "set", "reorder", "color"]
     );
     assert_eq!(
         payload["schema"]["items"]["oneOf"].as_array().map(Vec::len),
-        Some(7)
+        Some(8)
     );
     let examples = payload["examples"].as_array().expect("gli esempi");
     assert!(examples.len() >= 7, "almeno un esempio per operazione");
@@ -1035,7 +1098,7 @@ fn la_guida_con_un_topic_da_solo_la_sua_voce() {
 
     // Un topic vuoto è come non averlo.
     let blank = guide_cmd(&mut ws, json!({ "topic": "  " })).expect("la guida");
-    assert_eq!(custom(&blank)["ops"].as_array().map(Vec::len), Some(7));
+    assert_eq!(custom(&blank)["ops"].as_array().map(Vec::len), Some(8));
 }
 
 #[test]
@@ -1202,6 +1265,7 @@ fn senza_draw_l_immagine_e_l_svg_come_testo() {
 mod con_draw {
     use super::*;
     use base64::Engine as _;
+    use lopdf::{dictionary, Document, Object};
 
     const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -1279,5 +1343,168 @@ mod con_draw {
         );
         let (image, _pixels) = picture(&mut ws, json!({ "doc": BOARD }));
         assert_eq!(image["media_type"], "image/png");
+    }
+
+    /// Un PNG vero di `width` × `height` pixel, tutto bianco.
+    fn png_file(width: u32, height: u32) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut encoder = png::Encoder::new(&mut out, width, height);
+        encoder.set_color(png::ColorType::Rgb);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().expect("l'intestazione del PNG");
+        writer
+            .write_image_data(&vec![0xff; (width * height * 3) as usize])
+            .expect("i pixel del PNG");
+        writer.finish().expect("il PNG si chiude");
+        out
+    }
+
+    /// Un PDF vero di una pagina, larga `width` e alta `height` punti.
+    fn pdf_file(width: f32, height: f32) -> Vec<u8> {
+        let mut document = Document::with_version("1.5");
+        let pages = document.new_object_id();
+        let page = document.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages,
+            "MediaBox" => vec![0.into(), 0.into(), width.into(), height.into()],
+        });
+        document.objects.insert(
+            pages,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => vec![page.into()],
+                "Count" => 1,
+            }),
+        );
+        let catalog = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+        document.trailer.set("Root", catalog);
+        let mut out = Vec::new();
+        document.save_to(&mut out).expect("il PDF si scrive");
+        out
+    }
+
+    /// Un vault con questi file, e accanto la lavagna `BEFORE`.
+    fn vault_with(files: &[(&str, Vec<u8>)]) -> (Vault, Workspace) {
+        let vault = Vault::new();
+        for (path, bytes) in files {
+            let target = vault.root.join(path);
+            if let Some(folder) = target.parent() {
+                std::fs::create_dir_all(folder).expect("la cartella si crea");
+            }
+            std::fs::write(&target, bytes).expect("il file si scrive");
+        }
+        std::fs::write(vault.root.join(BOARD), BEFORE).expect("la lavagna si scrive");
+        let mut ws = vault.open();
+        ws.reindex().expect("reindex");
+        (vault, ws)
+    }
+
+    /// La scheda `id` com'è nel file.
+    fn card(ws: &Workspace, id: &str) -> Value {
+        let canvas: Value = serde_json::from_str(&source(ws, BOARD)).expect("la lavagna è JSON");
+        canvas["nodes"]
+            .as_array()
+            .expect("le schede")
+            .iter()
+            .find(|node| node["id"] == id)
+            .cloned()
+            .expect("la scheda c'è")
+    }
+
+    #[test]
+    fn un_file_vero_da_la_sua_misura_alla_scheda_e_al_ridimensionamento() {
+        // Un PNG di 4×2 pixel e una pagina A4 (595×842 punti) nel vault:
+        // `add_card` ne prende le proporzioni, e `resize` con `fit` quella del file.
+        let (_vault, mut ws) = vault_with(&[
+            ("schemi/foto.png", png_file(4, 2)),
+            ("Corsi/dispensa.pdf", pdf_file(595.0, 842.0)),
+        ]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "foto", "file": "schemi/foto.png", "x": 400, "y": 0 },
+                { "op": "add_card", "id": "dispensa", "file": "Corsi/dispensa.pdf", "x": 400, "y": 300 },
+                { "op": "resize", "id": "foto", "width": 240, "fit": "content" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("le operazioni si applicano");
+        // 4×2 con il lato lungo di 480 dà 480×240; poi con 240 di larghezza, 240×120.
+        let foto = card(&ws, "foto");
+        assert_eq!(
+            (&foto["width"], &foto["height"]),
+            (&json!(240), &json!(120)),
+            "{foto}"
+        );
+        // La pagina A4 con 360 di larghezza dà 360×512: 842 · 360 / 595, agganciato a 8.
+        let dispensa = card(&ws, "dispensa");
+        assert_eq!(
+            (&dispensa["width"], &dispensa["height"]),
+            (&json!(360), &json!(512)),
+            "{dispensa}"
+        );
+    }
+
+    #[test]
+    fn controllare_legge_le_misure_dei_file_come_la_scrittura() {
+        let (_vault, mut ws) = vault_with(&[("schemi/foto.png", png_file(4, 2))]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "foto", "file": "schemi/foto.png", "x": 400, "y": 0 }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("l'immagine si aggiunge");
+        let before = source(&ws, BOARD);
+        // Il controllo ridimensiona con `fit`: il file dà le proporzioni, e
+        // l'altezza è quella che la scrittura darebbe (240×120).
+        let outcome = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "resize", "id": "foto", "width": 240, "fit": "content" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto");
+        let payload = custom(&outcome);
+        assert_eq!(payload["ok"], true, "{payload}");
+        assert_eq!(
+            payload["summary"]["cards_changed"][0]["resized"]["to"],
+            json!({ "width": 240, "height": 120 }),
+            "{payload}"
+        );
+        assert_eq!(source(&ws, BOARD), before, "controllare non scrive");
+    }
+
+    #[test]
+    fn un_file_che_non_si_misura_lascia_le_misure_di_serie() {
+        // Un'immagine rotta; un PNG di 4×2 pixel con 33 MiB dopo la fine, che si
+        // legge ma supera il limite; un file che non c'è. Tutti e tre prendono le
+        // misure di serie di un'immagine: 480×360.
+        let mut too_big = png_file(4, 2);
+        too_big.extend(std::iter::repeat_n(0u8, 33 * 1024 * 1024));
+        let (_vault, mut ws) = vault_with(&[
+            ("rotta.png", b"non e' un'immagine".to_vec()),
+            ("grande.png", too_big),
+        ]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "rotta", "file": "rotta.png", "x": 400, "y": 0 },
+                { "op": "add_card", "id": "grande", "file": "grande.png", "x": 400, "y": 300 },
+                { "op": "add_card", "id": "manca", "file": "non-c-e.png", "x": 400, "y": 600 }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("le schede si aggiungono lo stesso");
+        for id in ["rotta", "grande", "manca"] {
+            let node = card(&ws, id);
+            assert_eq!(
+                (&node["width"], &node["height"]),
+                (&json!(480), &json!(360)),
+                "{node}"
+            );
+        }
     }
 }

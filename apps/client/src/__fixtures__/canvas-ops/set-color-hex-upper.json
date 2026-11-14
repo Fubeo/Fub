@@ -1,0 +1,13 @@
+{
+  "about": "set con un #rrggbb in maiuscolo lo scrive in minuscolo, come il file e add_card: #FF8800 diventa #ff8800.",
+  "before": {
+    "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }]
+  },
+  "ops": [{ "op": "set", "id": "a", "fields": { "color": "#FF8800" } }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a", "color": "#ff8800" }]
+    }
+  }
+}

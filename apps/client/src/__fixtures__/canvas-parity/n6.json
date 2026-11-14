@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "N6",
-  "max_missing": 12,
+  "max_missing": 10,
   "entries": [
     {
       "id": "N6.card.drop_vault",
@@ -59,12 +59,9 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T44" }, { "plan": "N6 T46" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [{ "op": "resize", "id": "t1", "width": 480, "height": 200 }],
-      "computes": "la misura del testo",
-      "target_ops": [{ "op": "resize", "id": "t1", "fit": "content" }],
-      "task": "T10",
-      "note": "La GUI misura il testo nel DOM; il codice stima con la regola di `text_size` (eccezione dom-text-fit: può differire di qualche riga)."
+      "state": "code",
+      "ops": [{ "op": "resize", "id": "t1", "fit": "content" }],
+      "note":"La GUI misura il testo nel DOM; il codice stima con la regola di `text_size` (eccezione dom-text-fit: può differire di qualche riga)."
     },
     {
       "id": "N6.text.new_below",
@@ -94,9 +91,7 @@
       "gui": [{ "plan": "N6 T47" }],
       "writes": "file",
       "state": "code",
-      "ops": [{ "op": "set", "id": "t1", "fields": { "color": "#0064b0" } }],
-      "target_ops": [{ "op": "color", "ids": ["t1"], "color": "note-blue" }],
-      "task": "T10"
+      "ops": [{ "op": "color", "ids": ["t1"], "color": "note-blue" }]
     },
     {
       "id": "N6.group.selection",
@@ -130,11 +125,9 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T66" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [{ "op": "resize", "id": "p1", "width": 360, "height": 480 }],
-      "computes": "la misura del contenuto",
-      "target_ops": [{ "op": "resize", "id": "p1", "fit": "content" }],
-      "task": "T10"
+      "state": "code",
+      "ops": [{ "op": "resize", "id": "p1", "fit": "content", "content_size": [595, 842] }],
+      "note": "`content_size` è una pagina A4 (595×842 punti) data a mano, perché la lavagna di prova non ha il file: col file nel vault la misura la legge `canvas.apply`."
     },
     {
       "id": "N6.edge.nearest",

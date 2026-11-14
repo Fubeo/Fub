@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "main",
-  "max_missing": 7,
+  "max_missing": 5,
   "entries": [
     {
       "id": "main.card.add_text",
@@ -127,11 +127,9 @@
       "source": "main",
       "gui": [{ "gesture": "drag-group" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [{ "op": "move", "ids": ["g1", "t1", "t2"], "dx": 40, "dy": 0 }],
-      "computes": "quali schede stanno tutte dentro il gruppo",
-      "target_ops": [{ "op": "move", "ids": ["g1"], "dx": 40, "dy": 0, "contents": true }],
-      "task": "T10"
+      "state": "code",
+      "ops": [{ "op": "move", "ids": ["g1"], "dx": 40, "dy": 0, "contents": true }],
+      "note": "Il gruppo porta dentro di sé le schede che ci stanno (`contents`): una volta sola, anche se sono in `ids`."
     },
     {
       "id": "main.card.resize",
@@ -158,10 +156,8 @@
       ],
       "writes": "file",
       "state": "code",
-      "ops": [{ "op": "set", "id": "t1", "fields": { "color": "1" } }],
-      "target_ops": [{ "op": "color", "ids": ["t1", "t2"], "color": "red" }],
-      "task": "T10",
-      "note": "Già in codice; T10 aggiunge i nomi e più schede in un'operazione."
+      "ops": [{ "op": "color", "ids": ["t1", "t2"], "color": "red" }],
+      "note": "`color` colora più schede in un'operazione, con il nome del colore."
     },
     {
       "id": "main.color.none",
@@ -235,11 +231,8 @@
       "source": "main",
       "gui": [{ "menu": "canvas.send_back" }, { "toolbar": "send-back" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [{ "op": "reorder", "ids": ["t1", "g1", "t2", "f1", "p1", "l1"] }],
-      "computes": "l'ordine di tutte le altre schede",
-      "target_ops": [{ "op": "reorder", "ids": ["t1"], "to": "back" }],
-      "task": "T10"
+      "state": "code",
+      "ops": [{ "op": "reorder", "ids": ["t1"], "to": "back" }]
     },
     {
       "id": "main.align",
