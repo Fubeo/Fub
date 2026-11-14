@@ -791,6 +791,27 @@ describe("il testo non salvato resta (#237)", () => {
     expect(host.files()[BENVENUTO]).toBe(outside);
   });
 
+  it("T63 · un fatto che non rende vecchia la domanda (lettura fallita, eco tardiva) la lascia chiedere, senza salvare", async () => {
+    const { host, sessions } = await unsavedNote();
+    const { closing, asking } = await closeAndAsk();
+    for (const outcome of [{ kind: "unavailable" }, { kind: "stale" }, { kind: "untracked" }, { kind: "reloaded", text: "", changed: false }] as const) {
+      const change = vi.spyOn(sessions, "handleExternalChange").mockResolvedValueOnce(outcome);
+      const flush = vi.spyOn(sessions, "flush");
+      try {
+        host.writeFromOutside(BENVENUTO, `# Benvenuto\n${outcome.kind}\n`);
+        await waitFor(`il cambio ${outcome.kind} arrivato`, () => change.mock.calls.length > 0);
+        await settle();
+        expect(asking(), outcome.kind).toHaveLength(1);
+        expect(flush, outcome.kind).not.toHaveBeenCalled();
+      } finally {
+        change.mockRestore();
+        flush.mockRestore();
+      }
+    }
+    asking()[0]!.querySelector<HTMLButtonElement>('button[data-action="cancel"]')!.click();
+    await closing;
+  });
+
   it("T63 · una seconda domanda sulla stessa nota sostituisce la prima, che non riapre niente", async () => {
     const { sessions } = await unsavedNote();
     const layouts = await import("../state/layout");
@@ -865,6 +886,8 @@ describe("il testo non salvato resta (#237)", () => {
       expect(logged).toHaveBeenCalled();
       expect(layouts.panesWithDoc(BENVENUTO)).toEqual([paneId]);
       expect(sessions.text(BENVENUTO)).toContain(TYPED);
+      // Il salvataggio non è partito, e lo si dice col suo motivo.
+      expect(toastsAbout("non è stato salvato")).toEqual(["«Benvenuto» non è stato salvato: la porta è caduta"]);
     } finally {
       flush.mockRestore();
       logged.mockRestore();

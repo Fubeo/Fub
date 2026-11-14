@@ -1848,7 +1848,13 @@ async function keepOrDiscardUnsaved(doc: string, paneId: string): Promise<void> 
     try {
       await documentSessions.flush(target);
     } catch (error) {
+      // Il salvataggio non è nemmeno partito: la persona lo deve sapere, con
+      // l'avviso di sempre e il suo «Riprova».
       console.error(error);
+      showStateNotice(target, "save", () => notify(t("document.save_failed", { doc: pageName(target), reason: errorText(error) }), "guasto", {
+        label: t("app.retry"),
+        run: saveNow,
+      }));
     }
     drawPaneConflict(target);
     view.drawSave();
@@ -3484,8 +3490,16 @@ function written(paneId: string, change: EditorChange): void {
 async function applyExternalChange(id: string, outcome: ExternalChangeResult): Promise<void> {
   if (outcome.kind === "echo") return;
   // La nota cambiata da fuori mentre «Modifiche non salvate» chiede: la
-  // domanda si ritira e la nota torna (`keepOrDiscardUnsaved`).
-  withdrawUnsavedQuestion(id, { kind: "reopen", doc: id, conflict: true });
+  // domanda è vecchia, si ritira e la nota torna (`keepOrDiscardUnsaved`).
+  // Solo per i fatti che la rendono vecchia: un testo nuovo sotto quello non
+  // salvato (il conflitto, da mostrare subito) o una rilettura che ha cambiato
+  // il testo. Una lettura fallita, un'eco tardiva o un file che nessuno segue
+  // non cambiano ciò che la persona sta scegliendo.
+  if (outcome.kind === "warning") {
+    withdrawUnsavedQuestion(id, { kind: "reopen", doc: id, conflict: true });
+  } else if (outcome.kind === "reloaded" && outcome.changed) {
+    withdrawUnsavedQuestion(id, { kind: "reopen", doc: id, conflict: false });
+  }
   invalidateDocumentCaches(id);
   if (outcome.kind === "warning") {
     // Già in conflitto, la barra lo dice: il fatto nuovo è lo stesso fatto.
