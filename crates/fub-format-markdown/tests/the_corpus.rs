@@ -1236,7 +1236,9 @@ fn model_dues(model: &DocumentModel) -> Vec<Value> {
                         if item.task.is_some() {
                             let text = task_text(&item.blocks);
                             if let Some(due) = task_due(&text) {
-                                out.push(json!({"span": &text[due.from..due.to], "date": due.iso()}));
+                                out.push(
+                                    json!({"span": &text[due.from..due.to], "date": due.iso()}),
+                                );
                             }
                         }
                         walk(&item.blocks, out);

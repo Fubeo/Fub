@@ -85,7 +85,7 @@ Il nome della nota d'origine, accanto al compito, apre la nota.
 
 Nella nota, in Live e in Lettura, il `📅` con la sua data diventa una
 pastiglia: grigia di solito, **arancione** quando il compito è aperto e la
-scadenza è vicina, cioè passata, di oggi o dei sei giorni seguenti (la regola
+scadenza è vicina, cioè passata, del giorno corrente o dei sei seguenti (la regola
 `due_is_near`, con la gemella `dueIsNear`: la stessa della pastiglia nella vista
 e nel recinto). La
 pastiglia mostra la data com'è scritta: il file non cambia. Un compito fatto

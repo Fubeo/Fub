@@ -858,7 +858,9 @@ fn a_note_outside_the_fence_path_is_not_read() {
         .unwrap();
     assert_eq!(task_labels(&tree), vec!["Consegnato".to_string()]);
     assert!(
-        !messages(&tree).iter().any(|m| m.contains("non si sono lette")),
+        !messages(&tree)
+            .iter()
+            .any(|m| m.contains("non si sono lette")),
         "la nota fuori dal percorso non si legge: {:?}",
         messages(&tree)
     );

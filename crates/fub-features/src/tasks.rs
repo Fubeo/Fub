@@ -729,7 +729,9 @@ fn fence_tree(
     // Il limite del plugin vale dopo l'ordine, come il tetto: «i primi cinque
     // per scadenza», non cinque qualunque. Un limite che taglia non è un vault
     // con troppi compiti, e non si dice.
-    let cap = query.limit.map_or(READ_LIMIT, |limit| limit.min(READ_LIMIT));
+    let cap = query
+        .limit
+        .map_or(READ_LIMIT, |limit| limit.min(READ_LIMIT));
     let gathered = match query.matching() {
         None => Gathered::default(),
         Some(matching) => match gather(
