@@ -63,6 +63,7 @@ Ogni problema ha:
 | `unknown_edge` | non c'è né una scheda né un arco con questo id |
 | `duplicate_id` | l'id è già preso, o è ripetuto |
 | `too_many` | la lavagna avrebbe troppe schede o troppi archi |
+| `too_many_moved` | un `move` con `contents` tocca più di 1 000 schede: si divide la lista |
 | `invalid` | la lista è vuota, o un'operazione è rifiutata dal formato: il motivo è in `message` |
 | `stale_base` | la lavagna è cambiata dalla revisione data |
 

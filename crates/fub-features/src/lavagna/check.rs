@@ -34,6 +34,7 @@ pub(super) const CODES: &[&str] = &[
     "unknown_edge",
     "duplicate_id",
     "too_many",
+    "too_many_moved",
     "stale_base",
 ];
 
@@ -166,5 +167,6 @@ fn code_name(code: Code) -> &'static str {
         Code::UnknownEdge => "unknown_edge",
         Code::DuplicateId => "duplicate_id",
         Code::TooMany => "too_many",
+        Code::TooManyMoved => "too_many_moved",
     }
 }

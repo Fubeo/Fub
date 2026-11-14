@@ -70,7 +70,9 @@ fn describe(error: &OpError) -> Value {
         OpError::DuplicateId { index, id } => {
             json!({"kind": "DuplicateId", "index": index, "id": id})
         }
-        OpError::TooMany { index, .. } => json!({"kind": "TooMany", "index": index}),
+        OpError::TooMany { index, .. } | OpError::TooManyMoved { index, .. } => {
+            json!({"kind": "TooMany", "index": index})
+        }
         OpError::Invalid { index, .. } => json!({"kind": "Invalid", "index": index}),
     }
 }
@@ -256,6 +258,115 @@ fn la_scheda_oltre_il_limite_e_too_many() {
     let after = draft(&canvas, &one.patches).expect("le toppe si applicano");
     assert_eq!(after.nodes.len(), 100_000);
     after.validate().expect("il modello di dopo è valido");
+}
+
+/// Un gruppo `g` grande quanto la lavagna, con `inside` schede di testo dentro
+/// (`c0`, `c1`…): il `move` con `contents` le porta tutte.
+fn canvas_with_group(inside: usize) -> Canvas {
+    let mut group = text_node("g".to_owned());
+    group.node_type = CanvasNodeType::Group;
+    group.text = None;
+    group.width = 10_000;
+    group.height = 10_000;
+    let mut nodes = vec![group];
+    for i in 0..inside {
+        let mut card = text_node(format!("c{i}"));
+        card.x = i64::try_from(i % 100).expect("una colonna") * 20 + 10;
+        card.y = i64::try_from(i / 100).expect("una riga") * 20 + 10;
+        nodes.push(card);
+    }
+    let canvas = Canvas {
+        nodes,
+        ..Canvas::default()
+    };
+    canvas.validate().expect("il gruppo e le schede vanno bene");
+    canvas
+}
+
+fn move_ops(value: Value) -> Vec<CanvasOp> {
+    serde_json::from_value(json!([value])).expect("la lista si legge")
+}
+
+/// Il tetto di `move` con `contents` conta le schede che tocca: quelle di `ids`
+/// e quelle dei gruppi, una volta sola. Mille vanno bene, mille e una no.
+#[test]
+fn move_con_contents_tocca_al_piu_mille_schede_e_oltre_e_too_many_moved() {
+    let ops = move_ops(json!({ "op": "move", "ids": ["g"], "dx": 5, "dy": 0, "contents": true }));
+    // Il gruppo e 999 schede dentro: 1000 toccate, al tetto.
+    let canvas = canvas_with_group(999);
+    let compiled = compile(&canvas, &ops, 0).expect("mille schede entrano");
+    assert_eq!(compiled.patches.len(), 1000);
+    let after = draft(&canvas, &compiled.patches).expect("le toppe si applicano");
+    after.validate().expect("il modello di dopo è valido");
+    let moved = after
+        .nodes
+        .iter()
+        .zip(&canvas.nodes)
+        .filter(|(new, old)| new.x == old.x + 5)
+        .count();
+    assert_eq!(moved, 1000, "ogni scheda si sposta una volta sola");
+
+    // Il gruppo e 1000 schede dentro: 1001, oltre il tetto.
+    let canvas = canvas_with_group(1000);
+    let error = compile(&canvas, &ops, 0).expect_err("oltre il tetto non si compila");
+    assert_eq!(
+        error,
+        OpError::TooManyMoved {
+            index: 0,
+            limit: 1000
+        }
+    );
+    assert!(error.to_string().contains("at most 1000 cards"), "{error}");
+
+    // `c0` è in `ids` e dentro il gruppo: conta una volta sola, quindi con 999
+    // schede dentro il totale è ancora 1000, e con 1000 è 1001.
+    let listed = move_ops(json!({
+        "op": "move", "ids": ["g", "c0"], "dx": 5, "dy": 0, "contents": true
+    }));
+    assert!(compile(&canvas_with_group(999), &listed, 0).is_ok());
+    assert!(matches!(
+        compile(&canvas, &listed, 0),
+        Err(OpError::TooManyMoved { index: 0, .. })
+    ));
+}
+
+/// Il tetto è di `contents`: uno spostamento senza `contents` non ne ha, e con
+/// `contents` le `ids` da sole contano prima di cercare i gruppi.
+#[test]
+fn move_senza_contents_non_ha_il_tetto_e_con_contents_le_ids_oltre_il_tetto_si_rifiutano() {
+    let canvas = Canvas {
+        nodes: (0..1001).map(|i| text_node(format!("t{i}"))).collect(),
+        ..Canvas::default()
+    };
+    let ids: Vec<String> = (0..1001).map(|i| format!("t{i}")).collect();
+    let plain = move_ops(json!({ "op": "move", "ids": ids, "dx": 1, "dy": 0 }));
+    let compiled = compile(&canvas, &plain, 0).expect("senza contents non c'è tetto");
+    assert_eq!(compiled.patches.len(), 1001);
+
+    let with_contents =
+        move_ops(json!({ "op": "move", "ids": ids, "dx": 1, "dy": 0, "contents": true }));
+    assert_eq!(
+        compile(&canvas, &with_contents, 0).expect_err("oltre il tetto"),
+        OpError::TooManyMoved {
+            index: 0,
+            limit: 1000
+        }
+    );
+}
+
+/// L'errore dice la posizione dell'operazione che lo causa, e la lista non dà
+/// toppe a metà: con un errore non esce niente.
+#[test]
+fn il_tetto_dice_la_posizione_dell_operazione() {
+    let canvas = canvas_with_group(1000);
+    let ops: Vec<CanvasOp> = serde_json::from_value(json!([
+        { "op": "move", "ids": ["c0"], "dx": 1, "dy": 0 },
+        { "op": "move", "ids": ["g"], "dx": 5, "dy": 0, "contents": true }
+    ]))
+    .expect("la lista si legge");
+    let error = compile(&canvas, &ops, 0).expect_err("la seconda operazione è oltre il tetto");
+    assert_eq!(error.index(), 1);
+    assert!(matches!(error, OpError::TooManyMoved { .. }), "{error:?}");
 }
 
 /// SplitMix64 col seme 0 dà per primo 0xe220a8397b1dcdaf, il valore di

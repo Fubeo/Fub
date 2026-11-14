@@ -101,6 +101,7 @@ const E_OP_UNKNOWN_EDGE: &str = "canvas.apply.e_op_unknown_edge";
 const E_OP_DUPLICATE: &str = "canvas.apply.e_op_duplicate";
 const E_OP_TOO_MANY_NODES: &str = "canvas.apply.e_op_too_many_nodes";
 const E_OP_TOO_MANY_EDGES: &str = "canvas.apply.e_op_too_many_edges";
+const E_OP_TOO_MANY_MOVED: &str = "canvas.apply.e_op_too_many_moved";
 const E_OP_INVALID: &str = "canvas.apply.e_op_invalid";
 const E_COMMIT_STALE: &str = "canvas.apply.e_commit_stale";
 const E_COMMIT_INVALID: &str = "canvas.apply.e_commit_invalid";
@@ -416,6 +417,11 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "Operation {position}: a whiteboard holds at most {limit} connections.",
     ),
     (
+        E_OP_TOO_MANY_MOVED,
+        "Operazione {position}: «move» con «contents» sposta al massimo {limit} schede.",
+        "Operation {position}: \"move\" with \"contents\" moves at most {limit} cards.",
+    ),
+    (
         E_OP_INVALID,
         "Operazione {position}: {reason}",
         "Operation {position}: {reason}",
@@ -704,6 +710,11 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "The whiteboard would have too many cards or edges.",
     ),
     (
+        "canvas.check.p_too_many_moved",
+        "Un «move» con «contents» sposta troppe schede in una volta: si divide la lista.",
+        "A \"move\" with \"contents\" moves too many cards at once: split the list.",
+    ),
+    (
         "canvas.check.p_stale_base",
         "La lavagna è cambiata dalla revisione indicata: rileggila.",
         "The whiteboard changed since the given revision: read it again.",
@@ -836,6 +847,7 @@ mod tests {
             E_OP_DUPLICATE,
             E_OP_TOO_MANY_NODES,
             E_OP_TOO_MANY_EDGES,
+            E_OP_TOO_MANY_MOVED,
             E_OP_INVALID,
             E_COMMIT_STALE,
             E_COMMIT_INVALID,

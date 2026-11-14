@@ -154,6 +154,10 @@ fn operation(error: OpError) -> PluginError {
             },
             vec![Arg::text("limit", limit.to_string())],
         ),
+        OpError::TooManyMoved { limit, .. } => (
+            E_OP_TOO_MANY_MOVED,
+            vec![Arg::text("limit", limit.to_string())],
+        ),
         OpError::Invalid { reason, .. } => (E_OP_INVALID, vec![Arg::text("reason", reason)]),
     };
     args.insert(0, position);
@@ -230,6 +234,13 @@ mod tests {
             panic!("troppi archi è un argomento sbagliato");
         };
         assert_eq!(key(&text), Some(E_OP_TOO_MANY_EDGES));
+        let PluginError::BadArgs(text) = operation(OpError::TooManyMoved {
+            index: 0,
+            limit: 1000,
+        }) else {
+            panic!("un tetto di move è un argomento sbagliato");
+        };
+        assert_eq!(key(&text), Some(E_OP_TOO_MANY_MOVED));
     }
 
     /// Una lavagna come la scrive Obsidian: tab, campi nel suo ordine (il

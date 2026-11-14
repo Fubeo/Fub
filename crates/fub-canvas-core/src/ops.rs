@@ -12,9 +12,9 @@
 //! Il modello di dopo resta valido: ogni scheda e ogni arco che
 //! un'operazione mette passa le regole di [`Canvas::validate`], e i limiti
 //! [`crate::model::MAX_NODES`] e [`crate::model::MAX_EDGES`] danno
-//! [`OpError::TooMany`]. `compile` si
-//! aspetta un modello di partenza valido, come quello che dà
-//! [`crate::parse`].
+//! [`OpError::TooMany`]; il tetto di `move` con `contents` dà
+//! [`OpError::TooManyMoved`]. `compile` si aspetta un modello di partenza
+//! valido, come quello che dà [`crate::parse`].
 //!
 //! Gli id nuovi vengono da un seme del chiamante ([`IdSource`]): stesso
 //! seme, stessi id. Le regole e un esempio per operazione sono nella sezione
@@ -126,6 +126,10 @@ pub enum OpError {
         what: &'static str,
         limit: usize,
     },
+    /// Un `move` con `contents` tocca più schede del tetto (quelle di `ids` e
+    /// quelle che i gruppi portano con sé): la lista si divide in più `move`.
+    #[error("canvas op {index}: `move` with `contents` moves at most {limit} cards")]
+    TooManyMoved { index: usize, limit: usize },
     /// L'operazione porterebbe a una scheda o a un arco non validi, o non si
     /// può fare così com'è (un campo vietato, un id ambiguo).
     #[error("canvas op {index}: {reason}")]
@@ -140,6 +144,7 @@ impl OpError {
             | Self::UnknownEdge { index, .. }
             | Self::DuplicateId { index, .. }
             | Self::TooMany { index, .. }
+            | Self::TooManyMoved { index, .. }
             | Self::Invalid { index, .. } => *index,
         }
     }

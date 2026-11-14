@@ -18,6 +18,12 @@ use crate::layout::{self, CardKind};
 use crate::model::{CanvasNode, CanvasNodeType};
 use crate::patch::{upsert_edge_patch, upsert_node_patch, CanvasPatch};
 
+/// Le schede che un `move` con `contents` tocca in tutto: quelle di `ids` e
+/// quelle che i gruppi portano con sé. Un gruppo scorre tutta la lavagna per
+/// trovare le sue schede, e ogni scheda si cerca per id: oltre questo tetto
+/// l'operazione si rifiuta, e la lista si divide.
+const MAX_MOVED: usize = 1_000;
+
 /// Gli argomenti di `move`. Le schede `ids` si spostano di `dx` e `dy`; con
 /// `contents: true` ogni gruppo di `ids` porta con sé le schede dentro di lui.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -122,7 +128,16 @@ impl Compiler {
         distinct(index, &args.ids)?;
         let mut moved = args.ids.clone();
         if args.contents == Some(true) {
+            // Il tetto prima di scandire la lavagna: le `ids` sono già schede
+            // toccate, e ogni gruppo costa una scansione. Poi quello sul totale,
+            // che include le schede dei gruppi.
+            if moved.len() > MAX_MOVED {
+                return Err(too_many_moved(index));
+            }
             moved.extend(self.contents_of(&args.ids));
+            if moved.len() > MAX_MOVED {
+                return Err(too_many_moved(index));
+            }
         }
         let mut patches = Vec::new();
         for id in &moved {
@@ -291,6 +306,14 @@ impl Compiler {
             }
         }
         Ok(patches)
+    }
+}
+
+/// Il rifiuto di un `move` con `contents` oltre [`MAX_MOVED`].
+fn too_many_moved(index: usize) -> OpError {
+    OpError::TooManyMoved {
+        index,
+        limit: MAX_MOVED,
     }
 }
 

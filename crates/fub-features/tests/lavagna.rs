@@ -16,6 +16,7 @@ use fub_abi::command::{CommandEffect, CommandOutcome, InvokeMode, UndoStep};
 use fub_abi::edit::WriteBase;
 use fub_abi::event::Actor;
 use fub_abi::model::DocId;
+use fub_abi::text::Text;
 use fub_abi::traits::CommandProvider;
 use fub_abi::PluginError;
 use fub_canvas_core::ops::{compile, CanvasOp};
@@ -936,6 +937,82 @@ fn troppe_schede_sono_il_problema_too_many() {
     let problems = custom(&outcome)["problems"].clone();
     assert_eq!(problems[0]["code"], "too_many", "{problems}");
     assert_eq!(problems[0]["index"], 0);
+}
+
+/// Un gruppo `g` grande quanto la lavagna, con `count` schede di testo dentro.
+fn group_with_cards(count: usize) -> String {
+    let mut nodes = vec![
+        r#"{"id": "g", "type": "group", "x": 0, "y": 0, "width": 10000, "height": 10000, "label": "Gruppo"}"#
+            .to_owned(),
+    ];
+    nodes.extend((0..count).map(|i| {
+        format!(
+            r#"{{"id": "n{i}", "type": "text", "x": {}, "y": {}, "width": 10, "height": 10, "text": ""}}"#,
+            (i % 100) * 20 + 10,
+            (i / 100) * 20 + 10
+        )
+    }));
+    format!(r#"{{"nodes": [{}], "edges": []}}"#, nodes.join(", "))
+}
+
+#[test]
+fn un_move_con_contents_oltre_il_tetto_e_too_many_moved_e_non_scrive() {
+    // Il gruppo e 1000 schede dentro: 1001 toccate, oltre il tetto di mille.
+    let (_vault, mut ws) = with_board(&group_with_cards(1000));
+    let before = source(&ws, BOARD);
+    let ops =
+        json!([{ "op": "move", "ids": ["g"], "dx": 5, "dy": 0, "contents": true }]).to_string();
+
+    let outcome = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops }),
+        InvokeMode::Apply,
+    )
+    .expect("un rapporto");
+    let problems = custom(&outcome)["problems"].clone();
+    assert_eq!(problems[0]["code"], "too_many_moved", "{problems}");
+    assert_eq!(problems[0]["index"], 0);
+    assert_eq!(
+        problems[0]["text"],
+        json!({ "key": "canvas.check.p_too_many_moved" })
+    );
+
+    // `canvas.apply` dice lo stesso come errore degli argomenti, e il file non cambia.
+    let error = plugin_error(
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops }),
+            InvokeMode::Apply,
+        )
+        .expect_err("oltre il tetto non si scrive"),
+    );
+    // Il Workspace rende la frase del catalogo: la posizione da uno, il limite.
+    let PluginError::BadArgs(Text::Literal(line)) = error else {
+        panic!("un tetto è un argomento sbagliato, reso come frase");
+    };
+    assert_eq!(
+        line,
+        "Operazione 1: «move» con «contents» sposta al massimo 1000 schede."
+    );
+    assert_eq!(source(&ws, BOARD), before, "il file non cambia");
+}
+
+#[test]
+fn un_move_con_contents_entro_il_tetto_si_scrive() {
+    // Il gruppo e 999 schede dentro: 1000 toccate, al tetto, e il gruppo le porta tutte.
+    let (_vault, mut ws) = with_board(&group_with_cards(999));
+    let ops =
+        json!([{ "op": "move", "ids": ["g"], "dx": 5, "dy": 0, "contents": true }]).to_string();
+    apply(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops }),
+        InvokeMode::Apply,
+    )
+    .expect("mille schede entrano");
+    let canvas: Value = serde_json::from_str(&source(&ws, BOARD)).expect("la lavagna è JSON");
+    let nodes = canvas["nodes"].as_array().expect("le schede");
+    assert_eq!(nodes[0]["x"], 5, "il gruppo si è mosso");
+    assert_eq!(nodes[1]["x"], 15, "la prima scheda dentro si è mossa di 5");
 }
 
 #[test]

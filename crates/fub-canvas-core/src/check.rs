@@ -125,6 +125,8 @@ pub enum Code {
     DuplicateId,
     /// La lavagna avrebbe più schede o archi del limite.
     TooMany,
+    /// Un `move` con `contents` tocca più schede del tetto: la lista si divide.
+    TooManyMoved,
 }
 
 impl Code {
@@ -207,6 +209,12 @@ impl Problem {
                 Code::TooMany,
                 format!("/{index}"),
                 format!("a canvas holds at most {limit} {what}"),
+                None,
+            ),
+            OpError::TooManyMoved { limit, .. } => (
+                Code::TooManyMoved,
+                format!("/{index}"),
+                format!("`move` with `contents` moves at most {limit} cards"),
                 None,
             ),
             OpError::Invalid { reason, .. } => {

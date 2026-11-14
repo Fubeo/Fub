@@ -285,8 +285,9 @@ la frase che dice quale.
 Sposta le schede `ids` di `dx`, `dy`, con coordinate che saturano a ±(2^53−1).
 Un gruppo si sposta da solo: le schede dentro restano dove sono. Con
 `contents: true` il gruppo porta con sé le schede che ci stanno dentro (anche
-quelle di un gruppo nel gruppo), una volta sola; su una scheda che non è un
-gruppo non fa niente. Una lista vuota, o uno spostamento di zero, non dà toppe.
+quelle di un gruppo nel gruppo), una volta sola, fino a 1 000 schede toccate in
+tutto (`TooManyMoved` oltre); su una scheda che non è un gruppo non fa niente.
+Una lista vuota, o uno spostamento di zero, non dà toppe.
 
 ```json
 { "op": "move", "ids": ["g1"], "dx": 40, "dy": 0, "contents": true }
@@ -388,7 +389,7 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 | `UnknownNode` | `move`, `resize` o `reorder` di un id che non è una scheda; un arco verso una scheda che non c'è |
 | `UnknownEdge` | `remove`, `set` o `color` di un id che non è né una scheda né un arco |
 | `DuplicateId` | un id dato che è già preso; un id ripetuto nella lista di `move`, `remove`, `reorder` o `color` |
-| `TooMany` | la lavagna avrebbe più di 100 000 schede o 200 000 archi |
+| `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
 | `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file
@@ -450,9 +451,8 @@ Le regole:
 - Il `fix` corregge solo ciò che si sa correggere. Con `{"op": "add-card"}` il
   `fix` è `{"op": "add_card"}`: una scheda senza `node` né forma breve non si
   scrive, e la compilazione lo dice con `invalid` su `/0`.
-- `validate` è lineare: 100 000 operazioni si controllano. Non c'è un tetto al
-  loro numero; i tetti di [`OpError::TooMany`](#gli-errori-delle-operazioni) sono
-  sulle schede e sugli archi.
+- `validate` è lineare: 100 000 operazioni si controllano, senza tetto al loro
+  numero; i tetti sono quelli di [`OpError`](#gli-errori-delle-operazioni).
 
 Un esempio, con la lista `[{"op": "add-card"}]`:
 
@@ -471,7 +471,7 @@ ogni esempio si legga e compili sulla lavagna d'esempio di `spec.rs`, che
 con gli avvisi che la GUI farebbe vedere a occhio. Sta in
 `crates/fub-canvas-core/src/check.rs`. Fa i passi nell'ordine della scrittura:
 la forma (`validate`), poi la lettura di serde, poi `compile`. Il rapporto ha
-cinque campi:
+sei campi:
 
 | Campo | Vuol dire |
 |---|---|
@@ -493,7 +493,7 @@ nessuna.
 | `unknown_node` | `move`, `resize`, `reorder`, o un estremo di `connect`, con un id che non è una scheda | le schede col nome vicino |
 | `unknown_edge` | `remove` o `set` con un id che non è né una scheda né un arco | le schede e gli archi col nome vicino |
 | `duplicate_id` | un id dato che c'è già, o ripetuto nella stessa operazione | — |
-| `too_many` | la lavagna avrebbe più di 100 000 schede o 200 000 archi | — |
+| `too_many`, `too_many_moved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi; `too_many_moved` è un `move` con `contents` che tocca più di 1 000 schede | — |
 | `invalid` | una scheda o un arco che il formato non accetta, col motivo in `message`; un'operazione che la forma accetta e serde no, con la frase fissa `the operation does not match its schema` | — |
 
 I nomi vicini sono quelli di «Lo schema»: distanza al più 2, maiuscole ASCII
