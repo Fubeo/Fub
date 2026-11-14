@@ -35,7 +35,7 @@ prova sono nella tabella qui sotto.
 | la lavagna | `crates/fub-canvas-core/` | il modello di una `.canvas` e la sua lettura, puro: lo usano il formato, i comandi e la WebView | `cargo test -p fub-canvas-core` |
 | la lavagna nella WebView | `crates/fub-canvas-wasm/` | la facciata WebAssembly del nucleo: un'interfaccia C scritta a mano, testo e JSON dentro e fuori | `cargo test -p fub-canvas-wasm` |
 | l'inchiostro | `crates/fub-ink/` | campioni, pressione, stabilizzatore, InkML; il gemello caldo sta in `apps/client/src/ink/` | `cargo test -p fub-ink` |
-| il codec dei tratti | `crates/fub-ink-codec/` | `fub:ink` e `fub:brush`, i tratti quantizzati e i pennelli: lo usano i disegni e la lavagna | `cargo test -p fub-ink-codec` |
+| il codec dei tratti | `crates/fub-ink-codec/` | `fub:ink` e `fub:brush`, i tratti quantizzati e i pennelli, e le penne e la tavolozza copiate dalla GUI (`pens.rs`, con lo specchio `ink-pens.json`): lo usano i disegni e la lavagna | `cargo test -p fub-ink-codec` |
 | i disegni | `crates/fub-scene/` | lettura del formato scena e delle annotazioni PDF | `cargo test -p fub-scene` |
 | il motore del disegno | `crates/fub-disegno/` | l'adattatore di VectorCraft, l'unico crate che lo nomina: apertura, mappa, sincronia, differenza, gesti, comandi, perdite | `cargo check -p fub-disegno` |
 | lo strato dei motori | `crates/fub-motori/` | motori costruiti alla prima richiesta, il loro gruppo di thread, il budget delle cache, il registro | `cargo test -p fub-motori` |

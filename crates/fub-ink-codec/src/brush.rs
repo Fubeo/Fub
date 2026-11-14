@@ -383,6 +383,85 @@ impl Nib1Brush {
     }
 }
 
+impl InkBrush {
+    /// Scrive il `fub:brush` canonico, come `formatInkBrush` di `brush.ts`: il
+    /// nome dell'algoritmo, le chiavi note tutte e nell'ordine della specifica,
+    /// poi le sconosciute nel loro ordine. I numeri sono il più corto che si
+    /// rilegge identico, senza esponente (`formatShortest` di `number.ts`).
+    ///
+    /// Non si scrive ciò che poi non si rileggerebbe uguale: un valore fuori
+    /// dal suo intervallo o non finito dà l'errore della rilettura, e una
+    /// coppia sconosciuta che non si riscrive com'è (una chiave nota, uno
+    /// spazio, un `=` nella chiave) dà `Entry`.
+    pub fn encode(&self) -> Result<String, BrushError> {
+        let text = self.compose();
+        match InkBrush::parse(&text) {
+            Ok(back) if back == *self => Ok(text),
+            Ok(_) => Err(BrushError::Entry),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Il testo del pennello, senza controllarlo.
+    fn compose(&self) -> String {
+        let bit = |value: bool| if value { "1" } else { "0" };
+        let (mut text, unknown) = match self {
+            InkBrush::Pf1(b) => (
+                format!(
+                    "{PF1} size={} thinning={} smoothing={} streamline={} taperStart={} \
+                     taperEnd={} capStart={} capEnd={} sim={}",
+                    shortest(b.size),
+                    shortest(b.thinning),
+                    shortest(b.smoothing),
+                    shortest(b.streamline),
+                    shortest(b.taper_start),
+                    shortest(b.taper_end),
+                    bit(b.cap_start),
+                    bit(b.cap_end),
+                    bit(b.sim),
+                ),
+                &b.unknown,
+            ),
+            InkBrush::Nib1(b) => (
+                format!(
+                    "{NIB1} size={} tip={} angle={} fixation={} thinning={} tilt={} \
+                     smoothing={} streamline={} sim={}",
+                    shortest(b.size),
+                    shortest(b.tip),
+                    shortest(b.angle),
+                    shortest(b.fixation),
+                    shortest(b.thinning),
+                    bit(b.tilt),
+                    shortest(b.smoothing),
+                    shortest(b.streamline),
+                    bit(b.sim),
+                ),
+                &b.unknown,
+            ),
+        };
+        for (key, value) in unknown {
+            text.push(' ');
+            text.push_str(key);
+            text.push('=');
+            text.push_str(value);
+        }
+        text
+    }
+}
+
+/// Il numero più corto che si rilegge identico, senza esponente, e mai `-0`:
+/// è `formatShortest` di `number.ts`. Le cifre sono le stesse di `String` in
+/// ECMAScript (tutte e due scrivono le cifre più corte che tornano allo
+/// stesso double), e `Display` di Rust non usa mai l'esponente. Un numero non
+/// finito si scrive com'è e la rilettura lo rifiuta.
+fn shortest(value: f64) -> String {
+    if value == 0.0 {
+        "0".to_owned()
+    } else {
+        format!("{value}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -397,6 +476,68 @@ mod tests {
             "1 ", "1..2",
         ] {
             assert!(!is_number(invalid), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn i_numeri_si_scrivono_come_format_shortest() {
+        assert_eq!(shortest(0.0), "0");
+        assert_eq!(shortest(-0.0), "0");
+        assert_eq!(shortest(0.25), "0.25");
+        assert_eq!(shortest(2.0), "2");
+        assert_eq!(shortest(-1.5), "-1.5");
+        assert_eq!(shortest(0.1 + 0.2), "0.30000000000000004");
+        assert_eq!(shortest(1e21), "1000000000000000000000");
+        assert_eq!(shortest(1e-7), "0.0000001");
+    }
+
+    #[test]
+    fn un_pennello_si_scrive_canonico_e_si_rilegge_uguale() {
+        let pf1 = InkBrush::parse("pf1 sim=0 size=3 pen=ballpoint").expect("si legge");
+        assert_eq!(
+            pf1.encode().as_deref(),
+            Ok(
+                "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 \
+                capStart=1 capEnd=1 sim=0 pen=ballpoint"
+            )
+        );
+        let nib1 = InkBrush::parse("nib1 x=1").expect("si legge");
+        assert_eq!(
+            nib1.encode().as_deref(),
+            Ok(
+                "nib1 size=12 tip=1 angle=35 fixation=0.9 thinning=0.3 tilt=1 smoothing=0.6 \
+                streamline=0.5 sim=0 x=1"
+            )
+        );
+    }
+
+    #[test]
+    fn non_si_scrive_un_pennello_che_non_si_rileggerebbe() {
+        let wide = |thinning: f64| {
+            InkBrush::Pf1(Brush {
+                thinning,
+                ..Brush::default()
+            })
+        };
+        assert_eq!(wide(2.0).encode(), Err(BrushError::Range("thinning")));
+        assert_eq!(wide(f64::NAN).encode(), Err(BrushError::Number("thinning")));
+        let zero = InkBrush::Nib1(Nib1Brush {
+            size: 0.0,
+            ..Nib1Brush::default()
+        });
+        assert_eq!(zero.encode(), Err(BrushError::Range("size")));
+        for (key, value) in [
+            ("size", "3"),
+            ("a b", "1"),
+            ("a=b", "1"),
+            ("a", "1 2"),
+            ("", "1"),
+        ] {
+            let odd = InkBrush::Pf1(Brush {
+                unknown: vec![(key.to_owned(), value.to_owned())],
+                ..Brush::default()
+            });
+            assert!(odd.encode().is_err(), "{key:?}={value:?}");
         }
     }
 }
