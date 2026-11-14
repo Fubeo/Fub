@@ -29,6 +29,15 @@
 // 7. **Un tratto a penna**: la pressione, trenta movimenti, il rilascio.
 // 8. **Annulla**: un Ctrl+Z.
 //
+// Ogni corsa si fa tre volte (`REPEATS`, in `large-rules.mjs`), ognuna dallo
+// stesso stato: tre `+` e tre `-` tornano alla vista di prima, e così la
+// corsa da vicino; dopo la rotella un passo non misurato riporta il
+// rettangolo dov'era, dopo Ctrl+rotella i passi contrari riportano lo zoom
+// (il banco controlla che la vista torni al pixel); Esc toglie la scelta, V
+// non misurato torna alla Selezione, Annulla toglie il tratto. Così ogni
+// corsa dopo la prima parte dalla vista lasciata dall'ultimo giro della
+// precedente, come prima.
+//
 // # Che cosa misura
 //
 // L'apertura, dal clic sul file nell'albero al fotogramma in cui ogni oggetto
@@ -83,6 +92,21 @@
 // - **scrive**, il rilascio del tratto e Annulla: dipinto entro il tempo del
 //   suo disegno (`BUDGETS`), perché ricava di nuovo dal testo la scena,
 //   l'indice degli oggetti e il loro albero, e costa col disegno.
+//
+// Un passo è un evento solo, e un compito del runner che cade nel suo
+// fotogramma (il garbage collector, lo scheduler di una macchina condivisa)
+// lo porta da solo sopra la soglia: in CI il tasto V a 49 900 elementi
+// misurava 57 ms in un giro e 184 in un altro, con tre compiti lunghi nella
+// finestra; e un compito di 74 ms del runner, fuori da ogni passo, ha fatto
+// rossa una scelta. Così ogni passo si giudica sulla **mediana** dei suoi tre
+// campioni, e allo stesso modo l'assestamento peggiore di ogni giro e il
+// compito lungo peggiore fuori dai passi (0 per un giro che non ne ha): uno
+// storto non sposta la mediana, una lentezza vera tocca tutti i giri e la
+// porta sopra. Le soglie sono le stesse; il referto ha ogni campione
+// (`samplesMs`), il peggiore di ogni giro (`worstLongTaskMs`,
+// `worstSettleMs`) e ogni giro intero (`runs`). L'apertura si misura una
+// volta: la sua soglia sta sopra la macchina piena, e i compiti lunghi che
+// si porta dietro non hanno una soglia.
 //
 // Hanno il tempo del loro disegno anche l'apertura e l'**assestamento**:
 // nelle scene grandi la vista che si muove porta con sé gli strati già
@@ -179,9 +203,10 @@
 // va il doppio del previsto e un clic accanto al rettangolo devono fargli
 // vedere il passo sbagliato; un passo della rotella che tiene occupata la
 // pagina 80 ms deve passare la soglia del passo e quella dei compiti lunghi;
-// un tasto che la tiene occupata 130 ms, un rilascio che la tiene occupata
-// 30 ms più del suo tempo e un compito di 80 ms senza nessun evento devono
-// passare le loro. Sul primo disegno che si assesta, un assestamento che
+// un tasto che la tiene occupata 130 ms in tutti e tre i giri degli
+// strumenti, e un rilascio che la tiene occupata 30 ms più del suo tempo e
+// un compito di 80 ms senza nessun evento in tutti e tre i giri del tratto,
+// devono passare le loro. Sul primo disegno che si assesta, un assestamento che
 // tiene occupata la pagina 30 ms più del suo tempo deve passare la sua; sul
 // primo che ridisegna un passo, un passo della rotella lungo quanto la vista
 // che la tiene occupata 30 ms più dell'assestamento.
@@ -193,6 +218,7 @@ import * as os from "node:os";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { openStage, openPage, OUTPUT } from "./stage.mjs";
+import { REPEATS, judgeSamples, median, worst } from "./large-rules.mjs";
 
 /// I disegni che il banco apre se non gli si dice altro, coi loro tempi:
 /// l'apertura, un passo che scrive e un assestamento della vista, in
@@ -574,6 +600,73 @@ async function prepare(page, key) {
   await frames(page, 2);
 }
 
+/// Una corsa fatta `n` volte, ognuna dallo stesso stato: `reset` ve la
+/// riporta fra un giro e l'altro, non dopo l'ultimo. Le corse dei passi che
+/// rispondono si giudicano sulla mediana dei giri (`large-rules.mjs`).
+async function repeated(page, n, run, reset) {
+  const runs = [];
+  for (let k = 0; k < n; k++) {
+    if (k > 0) await reset();
+    runs.push(await run());
+  }
+  return group(runs);
+}
+
+/// I giri di una corsa, insieme: i passi coi loro campioni e, per ogni giro,
+/// il compito lungo peggiore fuori dai passi e l'assestamento peggiore (0 se
+/// non ce n'è), che `verdict` giudica sulla mediana.
+function group(runs) {
+  return {
+    repeats: runs.length,
+    runs,
+    steps: mergeSteps(runs),
+    worstLongTaskMs: runs.map(worstOutsideTask),
+    worstSettleMs: runs.map((run) => worst(run.settles.map((step) => step.stepMs))),
+  };
+}
+
+/// Il compito lungo più lungo di un giro fuori dai passi che rispondono,
+/// scrivono o ridisegnano e dagli assestamenti; 0 se non ce n'è.
+const worstOutsideTask = (run) => worst(run.longTasks.filter((task) => !task.inStep && !task.inSettle).map((task) => task.durationMs));
+
+/// Dopo il giro, la vista dev'essere tornata `home`: lo zoom scritto e il
+/// rettangolo, al pixel.
+function checkHome(label, home, now) {
+  const a = targetOf(home, label);
+  const b = targetOf(now, label);
+  if (now.zoom !== home.zoom || !a.every((value, i) => near(value, b[i]))) {
+    throw new WrongStep(`${label}: la vista non torna quella di prima del giro: ${home.zoom}% e ${shown(a)}, poi ${now.zoom}% e ${shown(b)}`);
+  }
+}
+
+/// Riporta il rettangolo dov'era prima dei giri della rotella, con un passo
+/// solo, non misurato.
+async function panBack(page, home) {
+  const now = await probe(page, "read");
+  const [hx, hy] = centerOf(targetOf(home, "rotella"));
+  const [cx, cy] = centerOf(targetOf(now, "rotella"));
+  await page.mouse.wheel(Math.round(cx - hx), Math.round(cy - hy));
+  await page.evaluate((ms) => new Promise((resolve) => setTimeout(resolve, ms)), TAIL_MS);
+  checkHome("rotella", home, await probe(page, "read"));
+}
+
+/// Riporta lo zoom di Ctrl+rotella dov'era, con i passi contrari, non
+/// misurati, attorno allo stesso punto: il puntatore è ancora lì.
+async function wheelZoomBack(page, home, moves = WHEEL_ZOOM_MOVES) {
+  const net = moves.reduce((n, inwards) => n + (inwards ? 1 : -1), 0);
+  await page.keyboard.down("Control");
+  try {
+    for (let k = 0; k < Math.abs(net); k++) {
+      await page.mouse.wheel(0, net > 0 ? ZOOM_WHEEL : -ZOOM_WHEEL);
+      await frames(page, 2);
+    }
+  } finally {
+    await page.keyboard.up("Control");
+  }
+  await page.evaluate((ms) => new Promise((resolve) => setTimeout(resolve, ms)), TAIL_MS);
+  checkHome("Ctrl+rotella", home, await probe(page, "read"));
+}
+
 /// La prima corsa: tre `+` e tre `-`, attorno al centro della vista, che
 /// tornano alla vista di prima.
 async function zoomRun(page) {
@@ -626,7 +719,8 @@ async function panRun(page, { steps = PAN_STEPS, travel = null, scale = 1 } = {}
 
 /// La terza corsa: Ctrl+rotella col puntatore sul rettangolo, quattro passi
 /// avanti, due indietro, due avanti; la prova dell'assestamento ne fa uno.
-async function wheelZoomRun(page, moves = [true, true, true, true, false, false, true, true]) {
+const WHEEL_ZOOM_MOVES = [true, true, true, true, false, false, true, true];
+async function wheelZoomRun(page, moves = WHEEL_ZOOM_MOVES) {
   const run = newRun();
   const first = await probe(page, "read");
   const [ax, ay] = first.area;
@@ -718,10 +812,16 @@ async function selectRun(page, fixture, at = null) {
   const summary = await finish(page, run);
   // Le proprietà stanno nella scheda «Design» dell'ispettore dello
   // Scrittoio, che si apre dopo la misura. Il pannello si aggiorna quando la
-  // pagina ha tempo: si guarda dopo la coda.
+  // pagina ha tempo: si guarda dopo la coda. Poi si torna alla scheda di
+  // prima, perché la corsa che si ripete trovi l'ispettore com'era.
+  const shownTab = await page.evaluate(() => document.querySelector('.inspector-tab[aria-selected="true"]')?.id ?? null);
   await page.click(`.inspector-tab[id$="${DESIGN_TAB}"]`);
   await frames(page, 2);
   const props = (await probe(page, "read")).props;
+  if (shownTab !== null && !shownTab.endsWith(DESIGN_TAB)) {
+    await page.click(`.inspector-tab[id="${shownTab}"]`);
+    await frames(page, 2);
+  }
   await page.focus(".draw-editor .draw-surface");
   const box = fixture.target.box;
   if (!props.every((value, i) => value !== null && Math.abs(value - box[i]) < 0.01)) {
@@ -743,6 +843,23 @@ async function toolRun(page) {
     if (seen.tool !== tool) throw new WrongStep(`${label}: lo strumento è ${seen.tool} invece di ${tool}`);
   }
   return finish(page, run);
+}
+
+/// Gli strumenti coi tasti, `REPEATS` volte: fra un giro e l'altro V, non
+/// misurato, torna alla Selezione; l'ultimo giro lascia la Penna.
+const repeatedTools = (page) => repeated(page, REPEATS, () => toolRun(page), () => prepare(page, "v"));
+
+/// Il tratto e Annulla, `REPEATS` volte: Annulla toglie il tratto, e il giro
+/// dopo parte dal disegno di prima, con la Penna.
+async function repeatedStroke(page, fixture, options = {}) {
+  const strokes = [];
+  const undos = [];
+  for (let k = 0; k < REPEATS; k++) {
+    const stroke = await strokeRun(page, fixture, options);
+    strokes.push(stroke.summary);
+    undos.push(await undoRun(page, stroke));
+  }
+  return { stroke: group(strokes), undo: group(undos) };
 }
 
 /// Il tratto: la pressione, trenta movimenti, il rilascio, che scrive.
@@ -880,25 +997,65 @@ function summarize(probe, run) {
   };
 }
 
-/// Ciò che una corsa sbaglia contro le soglie del suo disegno.
+/// I giri di una corsa: uno solo, o quelli di `repeated`.
+const summariesOf = (run) => run.runs ?? [run];
+
+/// I passi di più giri della stessa corsa, uno per posizione, coi campioni
+/// di ogni giro e la loro mediana. I giri devono aver fatto gli stessi passi.
+function mergeSteps(runs) {
+  const [head] = runs;
+  return head.steps.map((step, i) => {
+    const samples = runs.map((run) => run.steps[i]);
+    if (samples.some((other) => other?.label !== step.label || other.kind !== step.kind)) {
+      throw new Error(`${step.label}: i giri della corsa non hanno fatto gli stessi passi`);
+    }
+    return {
+      label: step.label,
+      type: step.type,
+      kind: step.kind,
+      medianMs: round(median(samples.map((other) => other.stepMs))),
+      samplesMs: samples.map((other) => other.stepMs),
+      redrawn: samples.map((other) => other.redrawn),
+    };
+  });
+}
+
+/// La soglia di un passo: quella della sua specie, o quella
+/// dell'assestamento se ridisegna la vista.
+function limitOf(step, budget) {
+  if (step.kind === "write") return budget.writeMs;
+  const kind = step.kind === "response" ? RESPONSE_LIMIT_MS : MOVE_LIMIT_MS;
+  return step.redrawn ? Math.max(kind, budget.settleMs) : kind;
+}
+
+/// Ciò che una corsa sbaglia contro le soglie del suo disegno. Una corsa
+/// ripetuta giudica sulla mediana dei suoi giri ogni passo, l'assestamento
+/// peggiore di ogni giro e il compito lungo peggiore fuori dai passi.
 function verdict(name, run, budget) {
   const failures = [];
-  for (const step of run.steps) {
-    if (step.kind === "write") {
-      if (!(step.stepMs <= budget.writeMs)) failures.push(`${name}: ${step.label} dipinto dopo ${step.stepMs} ms, oltre i ${budget.writeMs}`);
-      continue;
+  const runs = summariesOf(run);
+  for (const [i, step] of runs[0].steps.entries()) {
+    const samples = runs.map((other) => other.steps[i]);
+    const judged = judgeSamples(samples.map((other) => other.stepMs), samples.map((other) => limitOf(other, budget)));
+    if (judged.pass) continue;
+    const what = samples.some((other) => other.redrawn) ? `${step.label}, che ridisegna la vista,` : step.label;
+    const limits = [...new Set(judged.limitsMs)].join(" e ");
+    if (samples.length === 1) failures.push(`${name}: ${what} dipinto dopo ${step.stepMs} ms, oltre i ${limits}`);
+    else failures.push(`${name}: ${what} dipinto dopo ${round(judged.medianMs)} ms in mediana (campioni ${judged.samplesMs.join(", ")} ms), oltre i ${limits}`);
+  }
+  if (runs.length === 1) {
+    for (const step of run.settles) {
+      if (!(step.stepMs <= budget.settleMs)) failures.push(`${name}: l'assestamento della vista dipinto dopo ${step.stepMs} ms, oltre i ${budget.settleMs}`);
     }
-    const kind = step.kind === "response" ? RESPONSE_LIMIT_MS : MOVE_LIMIT_MS;
-    const limit = step.redrawn ? Math.max(kind, budget.settleMs) : kind;
-    const what = step.redrawn ? `${step.label}, che ridisegna la vista,` : step.label;
-    if (!(step.stepMs <= limit)) failures.push(`${name}: ${what} dipinto dopo ${step.stepMs} ms, oltre i ${limit}`);
+    for (const task of run.longTasks) {
+      if (!task.inStep && !task.inSettle && task.durationMs > LONG_TASK_MS) failures.push(`${name}: un compito lungo di ${task.durationMs} ms fuori dai passi che rispondono, scrivono o ridisegnano e dagli assestamenti, a ${task.startMs} ms dall'inizio della corsa`);
+    }
+    return failures;
   }
-  for (const step of run.settles) {
-    if (!(step.stepMs <= budget.settleMs)) failures.push(`${name}: l'assestamento della vista dipinto dopo ${step.stepMs} ms, oltre i ${budget.settleMs}`);
-  }
-  for (const task of run.longTasks) {
-    if (!task.inStep && !task.inSettle && task.durationMs > LONG_TASK_MS) failures.push(`${name}: un compito lungo di ${task.durationMs} ms fuori dai passi che rispondono, scrivono o ridisegnano e dagli assestamenti, a ${task.startMs} ms dall'inizio della corsa`);
-  }
+  const settles = judgeSamples(run.worstSettleMs, budget.settleMs);
+  if (!settles.pass) failures.push(`${name}: l'assestamento della vista dipinto dopo ${round(settles.medianMs)} ms in mediana (il peggiore di ogni giro: ${settles.samplesMs.join(", ")} ms), oltre i ${budget.settleMs}`);
+  const tasks = judgeSamples(run.worstLongTaskMs, LONG_TASK_MS);
+  if (!tasks.pass) failures.push(`${name}: un compito lungo di ${round(tasks.medianMs)} ms in mediana fuori dai passi che rispondono, scrivono o ridisegnano e dagli assestamenti (il peggiore di ogni giro: ${tasks.samplesMs.join(", ")} ms)`);
   return failures;
 }
 
@@ -952,12 +1109,13 @@ async function selfTest(page, fixture, budget) {
     failures: slow,
   };
 
-  // Il tasto lento: uno strumento che risponde oltre la soglia di un comando.
+  // Il tasto lento: uno strumento che risponde oltre la soglia di un comando,
+  // in ogni giro della corsa ripetuta, come la fanno le corse vere.
   const slowKey = RESPONSE_LIMIT_MS + 30;
   await probe(page, "plant", "keydown", slowKey);
   let responding;
   try {
-    responding = verdict("prova", await toolRun(page), budget);
+    responding = verdict("prova", await repeatedTools(page), budget);
   } finally {
     await probe(page, "plant", "keydown", 0);
   }
@@ -967,18 +1125,18 @@ async function selfTest(page, fixture, budget) {
     failures: responding,
   };
 
-  // Il rilascio lento, e un compito lungo nel mezzo del tratto, senza eventi.
-  // `toolRun` finisce con la Penna.
+  // Il rilascio lento, e un compito lungo nel mezzo del tratto, senza eventi,
+  // in ogni giro del tratto ripetuto, come lo fanno le corse vere. Ogni giro
+  // finisce con Annulla. `repeatedTools` finisce con la Penna.
   const late = budget.writeMs + 30;
   await probe(page, "plant", "pointerup", late);
   let writing;
   try {
-    const stroke = await strokeRun(page, fixture, { lone: planted });
-    writing = verdict("prova", stroke.summary, budget);
+    const repeatedRuns = await repeatedStroke(page, fixture, { lone: planted });
+    writing = verdict("prova", repeatedRuns.stroke, budget);
   } finally {
     await probe(page, "plant", "pointerup", 0);
   }
-  await prepare(page, "Control+z");
   result.slowWrite = {
     plantedMs: late,
     loneMs: planted,
@@ -1105,24 +1263,31 @@ async function measure(stage, config, elements, first, report, tests) {
     const tool = (await probe(page, "read")).tool;
     if (tool !== "select") throw new WrongStep(`lo strumento Selezione non si sceglie con V: è ${tool}`);
     result.runs = {};
-    result.runs.zoom = await zoomRun(page);
-    result.runs.pan = await panRun(page);
-    result.runs.wheelZoom = await wheelZoomRun(page);
-    result.runs.near = await nearRun(page);
-    result.runs.select = await selectRun(page, fixture);
+    // Ogni corsa si fa `REPEATS` volte, ognuna dallo stesso stato (vedi in
+    // testa): lo zoom e la corsa da vicino tornano da sé, la rotella e
+    // Ctrl+rotella con passi non misurati, la scelta con Esc, gli strumenti
+    // con V, il tratto con Annulla.
+    result.runs.zoom = await repeated(page, REPEATS, () => zoomRun(page), async () => {});
+    const panHome = await probe(page, "read");
+    result.runs.pan = await repeated(page, REPEATS, () => panRun(page), () => panBack(page, panHome));
+    const wheelHome = await probe(page, "read");
+    result.runs.wheelZoom = await repeated(page, REPEATS, () => wheelZoomRun(page), () => wheelZoomBack(page, wheelHome));
+    result.runs.near = await repeated(page, REPEATS, () => nearRun(page), async () => {});
+    result.runs.select = await repeated(page, REPEATS, () => selectRun(page, fixture), () => prepare(page, "Escape"));
     await prepare(page, "Escape");
-    result.runs.tools = await toolRun(page);
-    const stroke = await strokeRun(page, fixture);
-    result.runs.stroke = stroke.summary;
-    result.runs.undo = await undoRun(page, stroke);
+    result.runs.tools = await repeatedTools(page);
+    const drawn = await repeatedStroke(page, fixture);
+    result.runs.stroke = drawn.stroke;
+    result.runs.undo = drawn.undo;
     const budget = BUDGETS.get(elements) ?? null;
     const trial = budget ?? { openMs: Infinity, writeMs: 1000, settleMs: 1000 };
     if (first) result.selfTest = await selfTest(page, fixture, trial);
-    if (!tests.settle && Object.values(result.runs).some((run) => run.settles.length > 0)) {
+    const all = Object.values(result.runs).flatMap(summariesOf);
+    if (!tests.settle && all.some((run) => run.settles.length > 0)) {
       result.settleTest = await settleTest(page, trial);
       tests.settle = true;
     }
-    if (!tests.redraw && Object.values(result.runs).some((run) => run.redrawMs.count > 0)) {
+    if (!tests.redraw && all.some((run) => run.redrawMs.count > 0)) {
       result.redrawTest = await redrawTest(page, trial);
       tests.redraw = true;
     }
@@ -1144,7 +1309,7 @@ async function main() {
   const started = Date.now();
   const config = args();
   const report = {
-    config: { ...config, budgets: Object.fromEntries(BUDGETS), moveLimitMs: MOVE_LIMIT_MS, responseLimitMs: RESPONSE_LIMIT_MS, longTaskMs: LONG_TASK_MS, tailMs: TAIL_MS, quietMs: QUIET_MS },
+    config: { ...config, budgets: Object.fromEntries(BUDGETS), moveLimitMs: MOVE_LIMIT_MS, responseLimitMs: RESPONSE_LIMIT_MS, repeats: REPEATS, longTaskMs: LONG_TASK_MS, tailMs: TAIL_MS, quietMs: QUIET_MS },
     environment: environment(),
     drawings: {},
     pass: false,
@@ -1160,7 +1325,16 @@ async function main() {
       report.drawings[elements] = result;
       const slowed = config.cpu > 1 ? `, CPU rallentata ${config.cpu} volte` : "";
       console.log(`${elements} elementi, ${result.fixture.objects} oggetti${slowed}: dipinto in ${ms(result.open.openMs)}, quieto in ${ms(result.open.quietMs)}`);
-      for (const [name, run] of Object.entries(result.runs)) {
+      for (const [name, group] of Object.entries(result.runs)) {
+        if (group.runs) {
+          // Una corsa ripetuta: il passo con la mediana più alta, coi suoi campioni.
+          const slowest = group.steps.reduce((a, b) => (b.medianMs > a.medianMs ? b : a));
+          const tasks = group.runs.reduce((n, run) => n + run.longTasks.length, 0);
+          const settled = group.worstSettleMs.some((value) => value > 0) ? `; assestamento peggiore per giro ${group.worstSettleMs.join(", ")} ms` : "";
+          console.log(`  ${NAMES[name]}  ${group.steps.length} passi, ${group.repeats} giri: in mediana al più ${ms(slowest.medianMs)} (${slowest.label}: ${slowest.samplesMs.join(", ")} ms)${settled}; compiti lunghi ${tasks}, il peggiore fuori dai passi per giro ${group.worstLongTaskMs.join(", ")} ms`);
+          continue;
+        }
+        const run = group;
         const parts = [];
         if (run.moveMs.count > 0) parts.push(`segue in p50 ${ms(run.moveMs.p50)}, max ${ms(run.moveMs.max)}`);
         if (run.responseMs.count > 0) parts.push(`risponde in ${ms(run.responseMs.max)}`);

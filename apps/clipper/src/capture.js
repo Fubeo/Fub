@@ -31,10 +31,32 @@
     var e = new Error("unavailable: UTF-8 encoder required"); e.code = "unavailable"; throw e;
   }
 
+  // The authority (between "://" and the first / ? #) never carries "@":
+  // `https://user:token@host/` would put the credentials in the note's
+  // frontmatter and in every transport. Same rule as the receiver
+  // (`fub_host::automation::validate_source_url`).
   function isHttpUrl(s) {
     if (typeof s !== "string" || s.length === 0 || s.length > URL_MAX) return false;
     if (/\s/.test(s)) return false;
-    return /^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(s);
+    if (!/^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(s)) return false;
+    var authority = s.slice(s.indexOf("://") + 3).split(/[/?#]/)[0];
+    return authority.indexOf("@") === -1;
+  }
+
+  // The page address without user name and password, before it reaches the
+  // conversion, the templates or the capture. Anything else is unchanged.
+  function withoutCredentials(s) {
+    if (typeof s !== "string" || !/^https?:\/\//i.test(s)) return s;
+    var authority = s.slice(s.indexOf("://") + 3).split(/[/?#]/)[0];
+    if (authority.indexOf("@") === -1) return s;
+    try {
+      var u = new URL(s);
+      u.username = "";
+      u.password = "";
+      return u.href;
+    } catch (e) {
+      return "";
+    }
   }
 
   function isRelativePath(s) {
@@ -234,6 +256,7 @@
     MODES: MODES,
     utf8bytes: utf8bytes,
     isHttpUrl: isHttpUrl,
+    withoutCredentials: withoutCredentials,
     isRelativePath: isRelativePath,
     validateTarget: validateTarget,
     validateProperties: validateProperties,

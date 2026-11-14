@@ -46,6 +46,14 @@ describe("scorciatoie di Excel", () => {
     // Ctrl+Maiusc+«-» è togliere i bordi, non le righe.
     expect(shortcutCommand(key("Minus", { ctrlKey: true, shiftKey: true }), { ...CELL, wholeRows: true }))
       .toEqual({ id: "home.borders", params: JSON.stringify({ preset: "none" }) });
+    // Sulla tastiera italiana «+» ha un tasto suo: vale come nelle tabelle.
+    expect(shortcutCommand(key("BracketRight", { key: "+", ctrlKey: true }), { ...CELL, wholeRows: true })?.id).toBe("home.insertRows");
+  });
+
+  it("Ctrl+D e Ctrl+R riempiono come in ogni tabella, Maiusc no", () => {
+    expect(shortcutCommand(key("KeyD", { key: "d", ctrlKey: true }), CELL)?.id).toBe("edit.fillDown");
+    expect(shortcutCommand(key("KeyR", { key: "r", metaKey: true }), CELL)?.id).toBe("edit.fillRight");
+    expect(shortcutCommand(key("KeyD", { key: "D", ctrlKey: true, shiftKey: true }), CELL)).toBeNull();
   });
 
   it("le scorciatoie delle finestre di Excel chiedono la loro finestra", () => {

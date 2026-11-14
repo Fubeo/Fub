@@ -45,7 +45,7 @@ flowchart LR
 | [Explorer e cartelle](product/explorer-and-folders.md) | l'albero, le appuntate, gli spazi |
 | [Editor e anteprima](product/editor-and-preview.md) | le superfici di scrittura |
 | [Scrittura](product/editor-writing.md) | le modalità di una nota, i livelli di presenza e l'incolla degli indirizzi |
-| [Blocchi](product/editor-blocks.md) | i blocchi di Scrittura |
+| [Blocchi](product/editor-blocks.md) e [Tabelle](product/editor-tables.md) | i blocchi di Scrittura; i gesti delle tabelle in note, documenti e fogli |
 | [Tasto destro, mini-barra e «/»](product/editor-menus.md) | i menu degli editor |
 | [Basi (file `.base`)](product/bases.md) | le viste, i filtri, i limiti e che cosa si scrive sul file |
 | [La riga dei dati](product/editor-note-facts.md) | modifica, collegamenti ed etichette sotto il titolo |

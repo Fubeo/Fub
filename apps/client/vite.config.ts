@@ -268,6 +268,11 @@ export default defineConfig({
           // pittura delle celle e i suoi oggetti. Cambia col foglio, non con
           // la shell; la barra multifunzione e le finestre restano differite.
           if (/\/src\/editors\/grid\/[^/]+\.ts$/.test(id)) return "grid-editor";
+          // La Tabella: tasti, selezione, comandi, appunti, cornice e moto
+          // delle tabelle, comuni alle note, ai documenti e ai fogli. Cambia
+          // coi gesti delle tabelle, non con l'editor che la monta, e da sola
+          // non pesa sul chunk dei documenti.
+          if (/\/src\/tabella\//.test(id)) return "tabella";
           // Scrittura, il nucleo del testo ricco, con ProseMirror: la usano
           // i documenti e il testo dei disegni, che la carica dopo il
           // montaggio. Da sola non pesa sul primo disegno e resta in cache
