@@ -154,6 +154,20 @@ impl UreqNetwork {
     }
 }
 
+/// `url` come si può mostrare in un errore: schema, host, porta e percorso,
+/// senza credenziali (`user:pass@`), query e frammento.
+fn shown_url(url: &str) -> String {
+    let base = url.split(['?', '#']).next().unwrap_or("");
+    let Some((scheme, rest)) = base.split_once("://") else {
+        return base.to_owned();
+    };
+    let (authority, path) = rest.find('/').map_or((rest, ""), |at| rest.split_at(at));
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    format!("{scheme}://{host}{path}")
+}
+
 impl UreqNetwork {
     fn fetch_with(
         &self,
@@ -161,7 +175,11 @@ impl UreqNetwork {
         cancelled: Option<&AtomicBool>,
     ) -> Result<HttpResponse, PluginError> {
         let started = Instant::now();
-        let io = |and: ureq::Error| PluginError::Io(format!("{}: {and}", request.url).into());
+        // Gli errori finiscono nel log e al plugin: l'indirizzo vi entra senza
+        // query, frammento e credenziali, dove un chiamante può aver messo un
+        // segreto.
+        let shown = shown_url(&request.url);
+        let io = |and: ureq::Error| PluginError::Io(format!("{shown}: {and}").into());
         let mut builder = ureq::http::Request::builder()
             .method(request.method.as_str())
             .uri(&request.url);
@@ -173,15 +191,15 @@ impl UreqNetwork {
             .unwrap_or(&self.agent);
         let mut response = match &request.body {
             Some(body) => {
-                let req = builder.body(&body[..]).map_err(|and| {
-                    PluginError::BadArgs(format!("{}: {and}", request.url).into())
-                })?;
+                let req = builder
+                    .body(&body[..])
+                    .map_err(|and| PluginError::BadArgs(format!("{shown}: {and}").into()))?;
                 agent.run(req).map_err(io)?
             }
             None => {
-                let req = builder.body(()).map_err(|and| {
-                    PluginError::BadArgs(format!("{}: {and}", request.url).into())
-                })?;
+                let req = builder
+                    .body(())
+                    .map_err(|and| PluginError::BadArgs(format!("{shown}: {and}").into()))?;
                 agent.run(req).map_err(io)?
             }
         };
@@ -205,12 +223,12 @@ impl UreqNetwork {
                 };
                 let mut body = Vec::new();
                 reader.read_to_end(&mut body).map_err(|and| {
-                    PluginError::Io(format!("{}: the response body could not be read (host ceiling is {MAX_BODY} bytes): {and}", request.url).into())
+                    PluginError::Io(format!("{shown}: the response body could not be read (host ceiling is {MAX_BODY} bytes): {and}").into())
                 })?;
                 body
             }
             None => response.body_mut().with_config().limit(MAX_BODY).read_to_vec().map_err(|and| {
-                PluginError::Io(format!("{}: the response body could not be read (host ceiling is {MAX_BODY} bytes): {and}", request.url).into())
+                PluginError::Io(format!("{shown}: the response body could not be read (host ceiling is {MAX_BODY} bytes): {and}").into())
             })?,
         };
         Ok(HttpResponse {
@@ -305,6 +323,24 @@ mod tests {
             "a transport fault is I/O, not a caller defect: {err}"
         );
     }
+    /// L'errore nomina dove si è andati, non i segreti dell'indirizzo: né la
+    /// query, né il frammento, né le credenziali.
+    #[test]
+    fn errors_name_the_address_without_its_secrets() {
+        assert_eq!(
+            shown_url("https://u:p@api.esempio.org:8443/v1/x?token=segreto#f"),
+            "https://api.esempio.org:8443/v1/x"
+        );
+        assert_eq!(shown_url("http://h?x=1"), "http://h");
+        assert_eq!(shown_url("non un url?x"), "non un url");
+        let err = UreqNetwork::new()
+            .fetch(HttpRequest::get("http://127.0.0.1:1/nothing?token=segreto"))
+            .expect_err("nobody listens there");
+        let text = err.to_string();
+        assert!(!text.contains("segreto"), "{text}");
+        assert!(text.contains("127.0.0.1:1/nothing"), "{text}");
+    }
+
     /// Una risposta già in trasferimento vede l'annullamento prima di leggere
     /// il chunk successivo: il reader restituisce `Interrupted` senza attendere
     /// il tetto globale.
