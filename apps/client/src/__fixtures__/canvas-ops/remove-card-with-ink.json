@@ -1,0 +1,27 @@
+{
+  "about": "Togliere una scheda porta via il suo inchiostro (D-3 a), con l'arco che la tocca; l'inchiostro libero della radice resta. L'inversa rimette la scheda con il livello.",
+  "before": {
+    "nodes": [
+      { "id": "f1", "type": "file", "file": "voti.xlsx", "x": 0, "y": 0, "width": 640, "height": 420,
+        "fub:ink": { "v": 1, "strokes": [
+          { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 640, "height": 420 }, "ink": "1 s100 cxy 4000,2500 120,40 95,-10" }
+        ] } },
+      { "id": "n2", "type": "text", "x": 700, "y": 40, "width": 280, "height": 90, "text": "Perché?" }
+    ],
+    "edges": [{ "id": "e1", "fromNode": "n2", "toNode": "f1" }],
+    "fub:ink": { "v": 1, "strokes": [
+      { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "free" }, "ink": "1 s100 cxy 100,100 10,0" }
+    ] }
+  },
+  "ops": [{ "op": "remove", "ids": ["f1"] }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "n2", "type": "text", "x": 700, "y": 40, "width": 280, "height": 90, "text": "Perché?" }],
+      "edges": [],
+      "fub:ink": { "v": 1, "strokes": [
+        { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "free" }, "ink": "1 s100 cxy 100,100 10,0" }
+      ] }
+    }
+  }
+}
