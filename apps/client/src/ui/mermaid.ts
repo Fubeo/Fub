@@ -1,6 +1,7 @@
 import type { Mermaid } from "mermaid";
 import { api } from "../host/ipc";
 import { errorText } from "../host/errors";
+import { fetchLocal } from "../editors/core/local-fetch";
 import { onLanguage, t } from "../i18n/strings";
 import { writeClipboardText } from "../platform/clipboard";
 import { on } from "../state/store";
@@ -238,7 +239,7 @@ function embeddedFont(font: DiagramFont): Promise<string | null> {
   if (typeof document.fonts?.load !== "function" || typeof fetch !== "function") return Promise.resolve(null);
   let pending = fontData.get(font);
   if (!pending) {
-    pending = fetch(DIAGRAM_FONTS[font].file)
+    pending = fetchLocal(DIAGRAM_FONTS[font].file)
       .then((response) => response.ok ? response.arrayBuffer() : Promise.reject(new Error(String(response.status))))
       .then((buffer) => base64Of(new Uint8Array(buffer)))
       .catch(() => {

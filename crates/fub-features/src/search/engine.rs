@@ -912,32 +912,13 @@ impl SearchIndex {
     }
 }
 
-/// La scadenza di una task: la data dopo `📅` nel paragrafo della voce, come
-/// la scrive il plugin Tasks (`📅 2026-10-19`).
+/// La scadenza di una task, come la scrive il plugin Tasks (`📅 2026-10-19`):
+/// la regola è del contratto ([`fub_abi::rules::tasks`]), la stessa della vista
+/// dei compiti e della pastiglia nel testo. Una data che non si legge non è una
+/// scadenza da cercare.
 pub(super) fn item_due(blocks: &[Block]) -> Option<String> {
-    let Some(Block::Paragraph { inlines, .. }) = blocks.first() else {
-        return None;
-    };
-    let text: String = inlines
-        .iter()
-        .map(|inline| match inline {
-            fub_abi::model::Inline::Text(s) => s.as_str(),
-            _ => " ",
-        })
-        .collect();
-    let after = text.rsplit_once('📅')?.1.trim_start();
-    let date = after.get(..10)?;
-    let b = date.as_bytes();
-    let shaped = b.iter().enumerate().all(|(at, c)| match at {
-        4 | 7 => *c == b'-',
-        _ => c.is_ascii_digit(),
-    });
-    (shaped
-        && after[10..]
-            .chars()
-            .next()
-            .is_none_or(|c| !c.is_ascii_digit()))
-    .then(|| date.to_string())
+    let text = fub_abi::rules::tasks::task_text(blocks);
+    fub_abi::rules::tasks::task_due(&text)?.iso()
 }
 
 fn term_query(field: Field, value: &str) -> Box<dyn Query> {

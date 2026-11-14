@@ -824,7 +824,10 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // Monitor montato una volta dal punto di montaggio (I08): qui solo il frame.
       const frame = document.createElement("iframe");
       frame.className = "ui-webview";
-      frame.src = node.url;
+      // Il nodo è del solo codice fidato (`UiNode::validate_untrusted`) e la
+      // CSP non apre frame; un indirizzo che non è `https:` resta comunque
+      // fuori, e il frame vuoto è `about:blank`.
+      if (/^https:\/\//i.test(node.url)) frame.src = node.url;
       frame.style.height = `${node.height}px`;
       frame.setAttribute("sandbox", "allow-scripts");
       // Un `<iframe>` senza titolo è, per chi lo incontra navigando, «frame»

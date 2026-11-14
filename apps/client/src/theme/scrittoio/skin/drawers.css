@@ -614,3 +614,71 @@
   cursor: progress;
   opacity: 0.7;
 }
+
+/* ── I compiti nell'ispettore ────────────────────────────────────────────
+   La vista «Compiti» (`data-view-id="tasks"`) dichiara un compito come una
+   colonna: la casella col testo, e sotto una riga con la scadenza e la nota.
+   Qui la riga di dettagli rientra sotto il testo, in piccolo, e la nota è un
+   rimando sommesso invece di un bottone. Le intestazioni dei gruppi (Scaduti,
+   Questa settimana…) sono etichette in maiuscoletto, non titoli. */
+.declared-view[data-view-id="tasks"] .ui-section > summary {
+  min-height: 0;
+  padding-top: var(--space-6);
+  padding-bottom: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.declared-view[data-view-id="tasks"] .ui-section > .ui-children {
+  padding: 0 0 var(--space-2);
+}
+.declared-view[data-view-id="tasks"] .ui-children > .ui-stack[data-dir="column"] {
+  margin: 0 calc(var(--space-4) * -1);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+}
+.declared-view[data-view-id="tasks"] .ui-children > .ui-stack[data-dir="column"]:hover {
+  background: var(--bg-hover);
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox {
+  align-items: flex-start;
+  min-height: 0;
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox input {
+  margin-top: 1px;
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox .ui-field-label {
+  overflow-wrap: anywhere;
+}
+/* Sotto il testo: la casella più lo spazio fra casella e testo. */
+.declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack[data-dir="row"] {
+  margin-left: calc(13px + var(--space-4));
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack .ui-button {
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  text-align: left;
+  white-space: normal;
+}
+/* La scadenza vicina: il componente la dice `primary` (il contratto non ha un
+   intento «avviso»), e qui veste l'avviso, come la pastiglia arancio nel
+   testo; la scaduta resta `danger`, rossa. */
+.declared-view[data-view-id="tasks"] .ui-badge.intent-primary {
+  background: var(--warning-wash);
+  color: var(--text);
+}
+/* Fra la scadenza e la nota un respiro: lo spazio della pila è un pixel. */
+.declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack .ui-badge + .ui-button {
+  margin-left: var(--space-2);
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack .ui-button:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
