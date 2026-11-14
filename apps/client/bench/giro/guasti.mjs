@@ -241,14 +241,49 @@ async function barraDelConflitto(pagina) {
 /// un anello: il suo segno è il cursore che lampeggia, che il palco del
 /// banco nasconde perché le foto non ballino (`stage.mjs`); lì conta che il
 /// fuoco sia nell'editor del riquadro che si dice a fuoco.
+///
+/// Un contorno conta solo se ne resta un pezzo a schermo: uno che sborda da
+/// un elemento grande quanto il contenitore, che taglia ciò che esce
+/// (`overflow` non visibile), ha lo stile giusto ma non si vede.
 function fuoco(pagina) {
   return pagina.evaluate(() => {
     const el = document.activeElement;
     if (!el || el === document.body) return { ok: false, dove: "nessuno: il fuoco è sul corpo della pagina" };
+    const contornoAschermo = (nodo, stile) => {
+      const r = nodo.getBoundingClientRect();
+      const dentro = parseFloat(stile.outlineOffset) || 0;
+      const fuori = dentro + parseFloat(stile.outlineWidth);
+      const allarga = (d) => ({ l: r.left - d, t: r.top - d, r: r.right + d, b: r.bottom + d });
+      const interno = allarga(dentro);
+      const esterno = allarga(fuori);
+      // Ciò che resta a schermo: la finestra, ristretta da ogni antenato che
+      // taglia ciò che esce.
+      const taglio = { l: 0, t: 0, r: innerWidth, b: innerHeight };
+      for (let su = nodo.parentElement; su; su = su.parentElement) {
+        const s = getComputedStyle(su);
+        if (s.overflowX === "visible" && s.overflowY === "visible") continue;
+        const a = su.getBoundingClientRect();
+        taglio.l = Math.max(taglio.l, a.left);
+        taglio.t = Math.max(taglio.t, a.top);
+        taglio.r = Math.min(taglio.r, a.right);
+        taglio.b = Math.min(taglio.b, a.bottom);
+      }
+      const v = {
+        l: Math.max(taglio.l, esterno.l),
+        t: Math.max(taglio.t, esterno.t),
+        r: Math.min(taglio.r, esterno.r),
+        b: Math.min(taglio.b, esterno.b),
+      };
+      if (v.r <= v.l || v.b <= v.t) return false;
+      // La banda del contorno sta fra il bordo interno e quello esterno: si
+      // vede se ciò che resta a schermo va oltre il bordo interno da un lato.
+      return v.l < interno.l - 0.5 || v.t < interno.t - 0.5 || v.r > interno.r + 0.5 || v.b > interno.b + 0.5;
+    };
     const anello = (nodo) => {
       if (!nodo) return false;
       const stile = getComputedStyle(nodo);
-      return (stile.outlineStyle !== "none" && parseFloat(stile.outlineWidth) > 0) || stile.boxShadow !== "none";
+      if (stile.boxShadow !== "none") return true;
+      return stile.outlineStyle !== "none" && parseFloat(stile.outlineWidth) > 0 && contornoAschermo(nodo, stile);
     };
     const nome = `${el.tagName.toLowerCase()}${el.className ? `.${String(el.className).split(" ")[0]}` : ""}` +
       `${el.getAttribute("role") ? `[${el.getAttribute("role")}]` : ""} «${(el.textContent ?? "").trim().slice(0, 40)}»`;
@@ -796,9 +831,8 @@ const conflittoDuranteLaChiusura = {
     await scriviDaFuori(pagina, NOTA, `${disco}\n${FUORI_DURANTE}\n`);
     await pagina.waitForTimeout(1_000);
     await giro.foto("arriva-il-conflitto");
-    // ATTESO DAL PIANO (PA T30): il conflitto vince, la finestra si chiude e
-    // la nota torna con la barra del conflitto. VISTO: la finestra resta e
-    // chiede ancora; il controllo lo fa vedere invece di nasconderlo.
+    // Il conflitto vince: la finestra si chiude come «Tienila aperta» e la
+    // nota torna con la barra del conflitto (PA T63).
     verifica(
       (await finestra.count()) === 0,
       "arrivato il conflitto, la finestra «Modifiche non salvate» resta aperta e chiede ancora (il piano vuole che si chiuda)",
@@ -821,6 +855,14 @@ const ripristinoConTestoNonSalvato = {
   nome: "ripristinare una versione con testo non salvato: il testo resta, e la shell lo dice",
   async fai(pagina, giro) {
     verifica(versioneVecchia !== null, "il gruppo non ha preso la versione vecchia della nota");
+    // Il compito prima lascia la nota col conflitto aperto: la persona lo
+    // decide tenendo il suo testo, e si riparte da una nota salvata.
+    await barraDelConflitto(pagina);
+    await pagina.locator('.pane.focus .conflict-banner button:text-is("Mantieni il mio testo")').click();
+    const prima = await conferma(pagina, `Conflitto su ${NOTA}`);
+    await prima.locator('button[data-action="confirm"]').click();
+    await prima.waitFor({ state: "detached" });
+    await aspettaStato(pagina, "salvato");
     await scriviInFondo(pagina, PRIMA_DEL_RIPRISTINO);
     // Il ripristino: l'host riscrive il file con la versione vecchia.
     await scriviDaFuori(pagina, NOTA, versioneVecchia);
