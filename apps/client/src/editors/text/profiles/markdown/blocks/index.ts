@@ -8,6 +8,7 @@ import { blockModel } from "./model";
 import { blockMotionExtension } from "./motion";
 import { blockSelectionExtension, escapeLeaves } from "./selection";
 import { pageHeaderExtension } from "./page";
+import { headingPillOff } from "../hints";
 
 export type { BlocksOptions } from "./handles";
 export { pageArrives } from "./motion";
@@ -21,6 +22,8 @@ export function blocksMode(options: BlocksOptions = {}): Extension {
     blockSelectionExtension,
     blockKeysExtension,
     blockHandles,
+    // La maniglia prende il margine del titolo: niente pastiglia «H1» lì.
+    headingPillOff.of(true),
     pageHeaderExtension,
     // Il blocco vivo (N13): i gesti si vedono accadere.
     blockMotionExtension,

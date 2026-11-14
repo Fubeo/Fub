@@ -42,12 +42,15 @@ Ogni elemento del foglio ha un livello, e il livello decide quando si vede:
 - **a riposo**, sempre: il testo, la testata con copertina, icona e titolo, la
   riga dei dati, le proprietà;
 - **al passaggio** del puntatore o del fuoco: il «+» e la maniglia del blocco,
-  gli strumenti della testata, la pastiglia del livello di un titolo;
+  gli strumenti della testata;
 - **a richiesta**, dopo un gesto (un clic, un tasto, un carattere): la linea
   dove cade un blocco trascinato, la maniglia di un'immagine scelta, i menu.
 
 Un elemento che compare al passaggio non sposta mai il testo: sta nel margine
-o in uno spazio che c'era già. Nel DOM l'elemento dichiara il suo livello con
+o in uno spazio che c'era già. Due elementi non si contendono lo stesso posto:
+coi blocchi la pastiglia del livello di un titolo («H1» nel margine) non c'è,
+perché quel margine è di «+» e maniglia; il livello si cambia da «Trasforma
+in» del menu del blocco o dalla barra di formato. Nel DOM l'elemento dichiara il suo livello con
 `data-presence="hover"` o `data-presence="request"` (`markPresence` in
 `editors/core/presence.ts`); quello a riposo non porta niente. La scena
 `scrittura-a-riposo` del banco passa il puntatore su un blocco e sulla testata,

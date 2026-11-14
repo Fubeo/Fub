@@ -3,12 +3,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { history, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { markdownGrammar } from "./grammar";
 import { pendingGuide, spaceClosing } from "./pending";
 import { markdownEditingExtensions } from "./commands";
-import { liveHints } from "./hints";
+import { headingPillOff, liveHints } from "./hints";
+import { blocksMode } from "./blocks";
 
 // I gesti della guida nella vista (B2, B3): → e Tab accettano, Esc spegne,
 // Backspace toglie la chiusura appena scritta. `|` è il cursore.
@@ -142,6 +143,28 @@ describe("i cenni (B5, B6)", () => {
     expect(view.state.doc.toString()).toBe("### Cose da fare\n\naltro");
     view.dispatch({ selection: { anchor: view.state.doc.length } });
     expect(document.querySelector(".cm-fub-heading-pill-button")).toBeNull();
+  });
+
+  it("coi blocchi la pastiglia non c'è: il margine del titolo è della maniglia", () => {
+    // In Scrittura «+» e maniglia stanno sulla riga del cursore, nello stesso
+    // margine: la pastiglia ci finiva sotto. Senza i blocchi torna.
+    const blocks = new Compartment();
+    const view = new EditorView({
+      parent: document.body,
+      state: EditorState.create({
+        doc: "# Benvenuto in Fub\n\naltro",
+        selection: { anchor: 3 },
+        extensions: [markdown({ base: markdownGrammar }), liveHints(() => true), blocks.of(blocksMode())],
+      }),
+    });
+    views.push(view);
+    ensureSyntaxTree(view.state, view.state.doc.length, 1000);
+    view.focus();
+    view.dispatch({});
+    expect(view.state.facet(headingPillOff)).toBe(true);
+    expect(document.querySelector(".cm-fub-heading-pill-button")).toBeNull();
+    view.dispatch({ effects: blocks.reconfigure([]) });
+    expect(document.querySelector(".cm-fub-heading-pill-button")?.textContent).toBe("H1");
   });
 
   it("la pastiglia del titolo non prende altezza nella riga", () => {

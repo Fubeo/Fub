@@ -3,7 +3,7 @@
 // dice che cosa scrivere. Nessuno dei due è nel file né in ciò che si copia, e
 // i lettori di schermo leggono la pastiglia come un pulsante, il segnaposto no.
 import { syntaxTree } from "@codemirror/language";
-import { type EditorState, type Extension, type Line } from "@codemirror/state";
+import { type EditorState, type Extension, Facet, type Line } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import { createList, openPopover, type PopoverHandle } from "../../../../kit";
 import { openLifetime } from "../../../../ui/lifetime";
@@ -53,6 +53,12 @@ class PlaceholderWidget extends WidgetType {
 
 const ATTR_LEVEL = "data-fub-level";
 
+/// Spegne la pastiglia del livello. La accendono i blocchi (`blocks/index.ts`):
+/// «+» e maniglia stanno nello stesso margine, sulla stessa riga, e la
+/// pastiglia ci finirebbe sotto; il livello si cambia da «Trasforma in» del
+/// menu del blocco e dalla barra di formato.
+export const headingPillOff = Facet.define<boolean, boolean>({ combine: (values) => values.some(Boolean) });
+
 class HeadingPillWidget extends WidgetType {
   constructor(readonly level: number) { super(); }
   eq(other: HeadingPillWidget): boolean { return other.level === this.level; }
@@ -88,7 +94,7 @@ function decorate(view: EditorView, slash: () => boolean): DecorationSet {
   if (opaque(state, line)) return Decoration.none;
   const out = [];
   const level = lineHeading(state, line);
-  if (level > 0) out.push(Decoration.widget({ widget: new HeadingPillWidget(level), side: -1 }).range(line.from));
+  if (level > 0 && !state.facet(headingPillOff)) out.push(Decoration.widget({ widget: new HeadingPillWidget(level), side: -1 }).range(line.from));
   const hint = view.hasFocus ? placeholderFor(line.text, slash()) : null;
   if (hint) {
     const text = hint.key === "live.hint.heading"
@@ -108,7 +114,8 @@ export function liveHints(slash: () => boolean = () => false): Extension {
       readonly life = openLifetime();
       constructor(readonly view: EditorView) { this.decorations = decorate(view, slash); }
       update(update: ViewUpdate): void {
-        if (update.docChanged || update.selectionSet || update.focusChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+        if (update.docChanged || update.selectionSet || update.focusChanged || syntaxTree(update.startState) !== syntaxTree(update.state)
+          || update.startState.facet(headingPillOff) !== update.state.facet(headingPillOff)) {
           this.decorations = decorate(update.view, slash);
         }
       }
