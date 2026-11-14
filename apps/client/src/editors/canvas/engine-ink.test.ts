@@ -6,6 +6,7 @@
 // Con «Il dito scrive» (T64) un dito scrive e due dita spostano.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n/strings";
+import editorsSkin from "../../theme/scrittoio/skin/editors.css?raw";
 import structure from "../../theme/scrittoio/structure.css?raw";
 import { parseInkBrush, penOf } from "../../ink/brush";
 import { quantizeInk, type InkSample } from "../../ink/sample";
@@ -1337,27 +1338,124 @@ describe("il menu della penna", () => {
   });
 });
 
-describe("a chi appartiene il tratto (T69)", () => {
-  /** La penna giù su `target` nel punto `world`: dà chi la muove e chi la alza. */
-  function penDown(host: HTMLElement, target: Element, world: readonly [number, number], init: PointerEventInit = {}) {
-    const cam = camera(host);
-    const at = ([x, y]: readonly [number, number]) => ({ clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y });
-    let last = world;
-    target.dispatchEvent(pointerEvent("pointerdown", { ...PEN, ...at(world), ...init, button: 0, buttons: 1, pressure: 0.5, timeStamp: clock }));
-    return {
-      move(point: readonly [number, number], more: PointerEventInit = {}) {
-        clock += 8;
-        last = point;
-        target.dispatchEvent(pointerEvent("pointermove", { ...PEN, ...at(point), ...init, ...more, button: -1, buttons: 1, pressure: 0.5, timeStamp: clock }));
-      },
-      lift() {
-        clock += 4;
-        document.dispatchEvent(pointerEvent("pointerup", { ...PEN, ...at(last), ...init, button: 0, buttons: 0, pressure: 0, timeStamp: clock }));
-        clock += 100;
-      },
-    };
-  }
+/** La penna giù su `target` nel punto `world`: dà chi la muove e chi la alza. */
+function penDown(host: HTMLElement, target: Element, world: readonly [number, number], init: PointerEventInit = {}) {
+  const cam = camera(host);
+  const at = ([x, y]: readonly [number, number]) => ({ clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y });
+  let last = world;
+  target.dispatchEvent(pointerEvent("pointerdown", { ...PEN, ...at(world), ...init, button: 0, buttons: 1, pressure: 0.5, timeStamp: clock }));
+  return {
+    move(point: readonly [number, number], more: PointerEventInit = {}) {
+      clock += 8;
+      last = point;
+      target.dispatchEvent(pointerEvent("pointermove", { ...PEN, ...at(point), ...init, ...more, button: -1, buttons: 1, pressure: 0.5, timeStamp: clock }));
+    },
+    lift() {
+      clock += 4;
+      document.dispatchEvent(pointerEvent("pointerup", { ...PEN, ...at(last), ...init, button: 0, buttons: 0, pressure: 0, timeStamp: clock }));
+      clock += 100;
+    },
+  };
+}
 
+describe("la scheda tiene l'aspetto del passaggio sotto il velo e il tratto (T20f)", () => {
+  const veilOf = (host: HTMLElement) => host.querySelector<HTMLElement>(".canvas-viewport > .canvas-pen-veil")!;
+  const held = (host: HTMLElement) =>
+    [...host.querySelectorAll<HTMLElement>(".canvas-node[data-hover-held]")].map((el) => el.dataset.node);
+  /** Il puntatore che passa su `target` (un confine: il browser manda `pointerover`). */
+  const over = (target: Element, kind: typeof MOUSE | typeof PEN = MOUSE) =>
+    target.dispatchEvent(pointerEvent("pointerover", { ...kind, clientX: 50, clientY: 50, button: -1, buttons: 0 }));
+  const inside = (host: HTMLElement, id: string) => card(host, id).firstElementChild ?? card(host, id);
+
+  it("il velo che compare sopra la scheda: la scheda tiene il passaggio finché il puntatore non passa davvero altrove", () => {
+    const { host } = mounted();
+    const viewport = viewportOf(host);
+    over(inside(host, "t"));
+    // Il passaggio vero: niente da tenere.
+    expect(held(host)).toEqual([]);
+    keyD(viewport, "keydown");
+    over(veilOf(host));
+    expect(held(host)).toEqual(["t"]);
+    // Un tratto sulla stessa scheda: la cattura porta il passaggio alla vista, e non conta.
+    const cam = camera(host);
+    veilOf(host).dispatchEvent(pointerEvent("pointerdown", { ...MOUSE, clientX: 40 * cam.zoom + cam.x, clientY: 40 * cam.zoom + cam.y, button: 0, buttons: 1, timeStamp: clock }));
+    over(viewport);
+    expect(held(host)).toEqual(["t"]);
+    clock += 8;
+    veilOf(host).dispatchEvent(pointerEvent("pointermove", { ...MOUSE, clientX: 90 * cam.zoom + cam.x, clientY: 55 * cam.zoom + cam.y, button: -1, buttons: 1, timeStamp: clock }));
+    clock += 4;
+    document.dispatchEvent(pointerEvent("pointerup", { ...MOUSE, clientX: 90 * cam.zoom + cam.x, clientY: 55 * cam.zoom + cam.y, button: 0, buttons: 0, timeStamp: clock }));
+    clock += 100;
+    expect(held(host)).toEqual(["t"]);
+    // Rilasciata la cattura il passaggio torna al velo: sempre la stessa scheda.
+    over(veilOf(host));
+    expect(held(host)).toEqual(["t"]);
+    // D lasciato, il puntatore di nuovo sulla scheda: il passaggio vero la riprende.
+    keyD(window, "keyup");
+    over(inside(host, "t"));
+    expect(held(host)).toEqual([]);
+    // Sul vuoto e fuori dalla vista: nessuna scheda.
+    keyD(viewport, "keydown");
+    over(veilOf(host));
+    expect(held(host)).toEqual(["t"]);
+    viewport.dispatchEvent(pointerEvent("pointerleave", { ...MOUSE, bubbles: false, clientX: -5, clientY: 50, buttons: 0 }));
+    expect(held(host)).toEqual([]);
+    keyD(window, "keyup");
+    over(viewport);
+    over(veilOf(host));
+    expect(held(host)).toEqual([]);
+  });
+
+  it("sotto il velo un tratto su un'altra scheda lascia la scheda tenuta all'alzata", () => {
+    const { host, changes } = mounted();
+    over(inside(host, "t"));
+    keyD(viewportOf(host), "keydown");
+    over(veilOf(host));
+    expect(held(host)).toEqual(["t"]);
+    // Il puntatore è andato sull'immagine sotto il velo, senza `pointerover`.
+    mouse(host, veilOf(host), across(300, 0));
+    expect(strokesOf(lastChange(changes).text, "img")).toHaveLength(1);
+    expect(held(host)).toEqual([]);
+  });
+
+  it("la penna: la scheda sotto la punta tiene il passaggio per tutto il tratto, e lo lascia al passaggio vero o fuori", () => {
+    const { host, changes } = mounted();
+    const viewport = viewportOf(host);
+    over(inside(host, "t"), PEN);
+    expect(held(host)).toEqual([]);
+    const stroke = penDown(host, card(host, "t"), [40, 40]);
+    expect(held(host)).toEqual(["t"]);
+    // La cattura sulla vista: il passaggio va alla vista, la scheda resta com'era.
+    over(viewport, PEN);
+    stroke.move([60, 50]);
+    stroke.move([90, 55]);
+    expect(held(host)).toEqual(["t"]);
+    stroke.lift();
+    expect(strokesOf(lastChange(changes).text, "t")).toHaveLength(1);
+    expect(held(host)).toEqual(["t"]);
+    // La penna sospesa di nuovo sulla scheda: il passaggio vero.
+    over(inside(host, "t"), PEN);
+    expect(held(host)).toEqual([]);
+    // Un altro tratto, poi la penna che esce dal raggio.
+    penDown(host, card(host, "t"), [40, 60]).lift();
+    expect(held(host)).toEqual(["t"]);
+    viewport.dispatchEvent(pointerEvent("pointerleave", { ...PEN, bubbles: false, clientX: 50, clientY: 50, buttons: 0 }));
+    expect(held(host)).toEqual([]);
+  });
+
+  it("ogni regola della pelle che mostra qualcosa al passaggio sulla scheda vale anche con `data-hover-held`", () => {
+    const skin = editorsSkin;
+    const rules = [...skin.matchAll(/([^{}]+)\{[^}]*\}/g)].map(([, selectors]) => selectors!.split(",").map((s) => s.replace(/\/\*[\s\S]*?\*\//g, "").trim()));
+    const hovering = rules.flat().filter((selector) => /^\.canvas-node[\w-]*(\[[^\]]+\])*:hover/.test(selector));
+    expect(hovering.length).toBeGreaterThanOrEqual(3);
+    for (const selector of hovering) {
+      const twin = selector.replace(":hover", "[data-hover-held]");
+      expect(rules.some((list) => list.includes(selector) && list.includes(twin)), twin).toBe(true);
+    }
+  });
+});
+
+describe("a chi appartiene il tratto (T69)", () => {
   const label = (host: HTMLElement) => host.querySelector<HTMLElement>(".canvas-ink-label:not([data-idle])");
   /** Le schede col bordo tratteggiato: il contenitore dei lati sullo stage dice di chi è. */
   const targets = (host: HTMLElement) =>
@@ -1512,6 +1610,52 @@ describe("a chi appartiene il tratto (T69)", () => {
     expect(frames.hasAttribute("data-idle")).toBe(true);
     expect(observer.takeRecords().filter(marked)).toEqual([]);
     observer.disconnect();
+  });
+
+  it("un tratto sulla scheda del tratto prima cambia solo `data-idle` del bordo: niente misure riscritte (T20f)", () => {
+    const { host } = mounted();
+    pen(host, card(host, "t"), across(0, 0));
+    const frames = host.querySelector<HTMLElement>(".canvas-stage > .canvas-ink-frames")!;
+    const observer = new MutationObserver(() => {});
+    observer.observe(frames, { subtree: true, attributes: true, childList: true });
+    const written = () => observer.takeRecords().map((record) => `${record.type}:${record.attributeName ?? ""}`);
+    // La stessa scheda: il bordo si mostra e si nasconde, nient'altro.
+    const again = penDown(host, card(host, "t"), [120, 40]);
+    again.move([150, 50]);
+    expect(targets(host)).toEqual(["t"]);
+    again.lift();
+    expect(written()).toEqual(["attributes:data-idle", "attributes:data-idle"]);
+    // Un'altra scheda: la scheda e le misure nuove, una volta.
+    const other = penDown(host, card(host, "img"), [340, 40]);
+    other.move([360, 50]);
+    other.move([390, 55]);
+    expect(targets(host)).toEqual(["img"]);
+    expect(written()).toEqual(["attributes:data-node", "attributes:style", "attributes:data-idle"]);
+    expect(["x", "y", "w", "h"].map((key) => frames.style.getPropertyValue(`--canvas-frame-${key}`))).toEqual(["300px", "0px", "200px", "100px"]);
+    other.lift();
+    observer.disconnect();
+  });
+
+  it("il bordo è uno strato suo sopra le schede, portato con `transform` e mostrato con l'opacità (T20f)", () => {
+    const rule = (selector: string) => {
+      const match = new RegExp(`(?:^|\\n)${selector.replace(/[.[\]]/g, "\\$&")} \\{([^}]*)\\}`).exec(structure);
+      if (!match) throw new Error(`manca la regola ${selector}`);
+      return match[1]!;
+    };
+    const frames = rule(".canvas-ink-frames");
+    expect(frames).toMatch(/will-change: opacity;/);
+    // `will-change: transform` fermerebbe lo strato alla scala di quando nasce: lati sfocati allo zoom nuovo.
+    expect(frames).not.toMatch(/will-change: transform/);
+    expect(frames).toMatch(/transform: translate\(var\(--canvas-frame-x, 0px\), var\(--canvas-frame-y, 0px\)\);/);
+    expect(rule(".canvas-ink-frames[data-idle]")).toMatch(/^\s*opacity: 0;\s*$/);
+    // Sopra ogni scheda: una scheda dipinta dopo lo coprirebbe e chiederebbe uno strato anche lei.
+    const above = Number(/z-index: (\d+);/.exec(frames)?.[1]);
+    const cards = [...structure.matchAll(/(?:^|\n)([^{}\n]*\.canvas-node[^{}]*)\{([^}]*)\}/g)]
+      .map(([, , body]) => /z-index: (-?\d+);/.exec(body!)?.[1])
+      .filter((z): z is string => z !== undefined)
+      .map(Number);
+    expect(cards.length).toBeGreaterThan(0);
+    expect(Math.max(...cards)).toBeLessThan(above);
   });
 
   it("nessuna regola `:has()` dei fogli di stile legge `data-idle`: mostrare il bordo non ricalcola la shell (T20c)", () => {

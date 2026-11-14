@@ -130,6 +130,19 @@ schede.
   bersaglio del tratto si cerca per coordinate e non cambia; il menu, il
   dito, il doppio clic e la rotella vedono ciò che c'è sotto il velo
   (`#targetOf`, `#elementAt`), e sotto il velo nessun filo si scurisce.
+- **L'inizio del tratto senza pittura.** Il bordo tratteggiato della scheda
+  bersaglio (`.canvas-ink-frames`) è uno strato composto suo
+  (`will-change: opacity`), sopra ogni scheda dello stage (`z-index: 2`) e
+  portato sull'angolo della scheda con `transform`: un tratto che comincia
+  sulla scheda del tratto prima cambia solo `data-idle`, cioè l'opacità
+  dello strato, e la lavagna sotto non si ridipinge; `#placeInkFrame`
+  scrive le misure solo quando cambiano. Il velo che compare e la cattura
+  del tratto tolgono `:hover` alla scheda sotto il puntatore: la scheda che
+  l'aveva (letta ai `pointerover`, mai a ogni movimento) tiene l'aspetto del
+  passaggio con `data-hover-held` finché il puntatore non passa davvero
+  altrove, così le prese, → e i pulsanti della scheda viva non cambiano e la
+  scheda non si ridipinge. Sotto il velo il puntatore può lasciarla senza
+  saperlo: all'alzata di un tratto che non era suo la scheda la lascia.
 - **Il dito.** Un dito sposta la vista, anche sopra le schede; testata,
   maniglie, `[data-connect]` e controlli fanno come col mouse (in sola
   lettura la testata sposta la vista). Due dita pizzicano (`pinchCamera` di

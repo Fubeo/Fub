@@ -3581,19 +3581,32 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
    del prototipo. Non è il contorno della scheda: mostrarlo o toglierlo
    ridipinge i lati e non tutto il contenuto. Il riquadro della scheda arriva
    dalla lavagna (`--canvas-frame-x`, `-y`, `-w`, `-h`, in unità della
-   lavagna); il colore è della pelle. */
+   lavagna); il colore è della pelle.
+
+   Il contenitore è uno strato composto suo (`will-change: opacity`) portato
+   sull'angolo della scheda con `transform`, sopra ogni scheda dello stage
+   (`z-index: 2`, sopra anche la scheda in scrittura): nessuna scheda dipinta
+   dopo lo copre, così il browser non deve dare uno strato anche a lei.
+   All'inizio del tratto sulla stessa scheda del tratto prima cambia solo
+   l'opacità dello strato: niente da ridipingere sotto i lati, neanche il
+   foglio vivo (T20f). Non `will-change: transform`: lo strato non si
+   ridisegnerebbe più allo zoom nuovo e i lati verrebbero sfocati. */
 .canvas-ink-frames {
   position: absolute;
   top: 0;
   left: 0;
+  z-index: 2;
   pointer-events: none;
+  transform: translate(var(--canvas-frame-x, 0px), var(--canvas-frame-y, 0px));
+  will-change: opacity;
 }
 
 /* Senza una scheda bersaglio: al suo posto, ma non si vede. Non `[hidden]`: le regole
    `:has()` della shell leggono quell'attributo, e cambiarlo qui farebbe
-   ricalcolare lo stile di tutta la finestra all'inizio di ogni tratto. */
+   ricalcolare lo stile di tutta la finestra all'inizio di ogni tratto. Non
+   `visibility`: l'opacità di uno strato composto cambia senza ridipingerlo. */
 .canvas-ink-frames[data-idle] {
-  visibility: hidden;
+  opacity: 0;
 }
 
 .canvas-ink-frame {
@@ -3621,24 +3634,25 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   height: calc(var(--canvas-frame-h, 0px) + 2 * var(--canvas-frame-out));
 }
 
+/* I lati dall'angolo della scheda, che il contenitore ha già raggiunto. */
 .canvas-ink-frame[data-side="top"] {
   border-top-width: var(--canvas-frame-size);
-  transform: translate(calc(var(--canvas-frame-x, 0px) - var(--canvas-frame-out)), calc(var(--canvas-frame-y, 0px) - var(--canvas-frame-out)));
+  transform: translate(calc(-1 * var(--canvas-frame-out)), calc(-1 * var(--canvas-frame-out)));
 }
 
 .canvas-ink-frame[data-side="bottom"] {
   border-bottom-width: var(--canvas-frame-size);
-  transform: translate(calc(var(--canvas-frame-x, 0px) - var(--canvas-frame-out)), calc(var(--canvas-frame-y, 0px) + var(--canvas-frame-h, 0px) + var(--canvas-frame-gap)));
+  transform: translate(calc(-1 * var(--canvas-frame-out)), calc(var(--canvas-frame-h, 0px) + var(--canvas-frame-gap)));
 }
 
 .canvas-ink-frame[data-side="left"] {
   border-left-width: var(--canvas-frame-size);
-  transform: translate(calc(var(--canvas-frame-x, 0px) - var(--canvas-frame-out)), calc(var(--canvas-frame-y, 0px) - var(--canvas-frame-out)));
+  transform: translate(calc(-1 * var(--canvas-frame-out)), calc(-1 * var(--canvas-frame-out)));
 }
 
 .canvas-ink-frame[data-side="right"] {
   border-right-width: var(--canvas-frame-size);
-  transform: translate(calc(var(--canvas-frame-x, 0px) + var(--canvas-frame-w, 0px) + var(--canvas-frame-gap)), calc(var(--canvas-frame-y, 0px) - var(--canvas-frame-out)));
+  transform: translate(calc(var(--canvas-frame-w, 0px) + var(--canvas-frame-gap)), calc(-1 * var(--canvas-frame-out)));
 }
 
 .canvas-node {

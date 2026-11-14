@@ -1737,6 +1737,18 @@ export class CanvasEngine {
   #veilPointer = false;
   /** Ciò che c'è sotto il velo per un evento che l'ha preso, cercato una volta. */
   readonly #underVeil = new WeakMap<Event, EventTarget>();
+  /**
+   * La scheda che ha il `:hover` vero, letta a ogni `pointerover` che non è del
+   * velo né della cattura di un tratto (T20f): è quella a cui il velo che
+   * compare o la cattura del tratto tolgono il passaggio.
+   */
+  #hoverCard: HTMLElement | null = null;
+  /**
+   * La scheda che tiene l'aspetto del passaggio (`data-hover-held`) mentre il
+   * velo o la cattura del tratto le tolgono `:hover`: perderlo all'inizio del
+   * tratto ridipingeva tutta la scheda, anche un foglio vivo (T20f).
+   */
+  #heldCard: HTMLElement | null = null;
   // --- a chi appartiene il tratto (T69) ---
   /** Un tratto della punta è appena cominciato: lo spessore e la vista, finché il primo movimento non apre l'etichetta. */
   #inkStarting: { readonly size: number; readonly view: DOMRect } | null = null;
@@ -2284,6 +2296,14 @@ export class CanvasEngine {
     }, { signal, capture: true });
     this.#viewport.addEventListener("pointerleave", (event) => {
       if (event.pointerType === "pen") this.#setVeilPointer(false);
+    }, { signal });
+    // La scheda sotto il puntatore tiene l'aspetto del passaggio quando il
+    // velo o la cattura del tratto le tolgono `:hover` (T20f).
+    this.#viewport.addEventListener("pointerover", (event) => this.#pointerOver(event), { signal, capture: true });
+    this.#viewport.addEventListener("pointerleave", (event) => {
+      if (event.pointerType === "touch") return;
+      this.#hoverCard = null;
+      this.#holdHover(null);
     }, { signal });
     this.#life.listen(window, "keydown", (event) => {
       if (event.key === "Alt") this.#setAltHeld(true);
@@ -3322,6 +3342,37 @@ export class CanvasEngine {
   }
 
   /**
+   * Il puntatore passa su un altro elemento della vista (T20f). Sul velo della
+   * croce la scheda di prima tiene l'aspetto del passaggio: il velo gliel'ha
+   * tolto, ma il puntatore non se n'è andato. Durante un tratto il passaggio
+   * va alla vista per la cattura, e non conta. Altrove il passaggio è quello
+   * vero: la scheda sotto (o nessuna) e niente più da tenere, nello stesso
+   * fotogramma in cui `:hover` torna, così la scheda non cambia aspetto.
+   * Solo ai confini, mai a ogni movimento, e senza ricerche per punto.
+   */
+  #pointerOver(event: PointerEvent): void {
+    if (event.pointerType === "touch") return;
+    const target = event.target;
+    if (target === this.#penVeil) {
+      this.#holdHover(this.#hoverCard);
+      return;
+    }
+    if (this.#penDown) return;
+    this.#hoverCard = target instanceof Element && this.#stage.contains(target)
+      ? target.closest<HTMLElement>(".canvas-node")
+      : null;
+    this.#holdHover(null);
+  }
+
+  /** La scheda `card` tiene l'aspetto del passaggio (`data-hover-held`); `null` lo lascia. */
+  #holdHover(card: HTMLElement | null): void {
+    if (card === this.#heldCard) return;
+    this.#heldCard?.removeAttribute("data-hover-held");
+    this.#heldCard = card;
+    card?.setAttribute("data-hover-held", "");
+  }
+
+  /**
    * L'elemento in cima nel punto `clientX`, `clientY` della finestra come se
    * il velo della croce non ci fosse: le ricerche per punto della lavagna
    * (il menu, il filo, il deposito) guardano le schede, non il velo.
@@ -4058,6 +4109,8 @@ export class CanvasEngine {
     this.#inkTargetClose();
     if (this.#destroyed) return;
     this.#inkStarting = { size, view: this.#viewport.getBoundingClientRect() };
+    // La cattura porta il passaggio alla vista: la scheda sotto la punta tiene il suo aspetto (T20f).
+    this.#holdHover(this.#hoverCard);
   }
 
   /**
@@ -4160,18 +4213,22 @@ export class CanvasEngine {
    * Mette il bordo tratteggiato attorno a `holder`, nelle coordinate della
    * lavagna (lo stage lo porta con la camera), o lo toglie se il tratto è
    * libero. Lo stacco e lo spessore sono in `structure.css`, il colore nella pelle.
+   *
+   * Il contenitore è uno strato composto suo (T20f): si scrive solo ciò che è
+   * cambiato, così un tratto che comincia sulla scheda del tratto prima cambia
+   * solo `data-idle`, cioè l'opacità dello strato, e non ridipinge niente.
    */
   #placeInkFrame(frames: HTMLElement, holder: CanvasNode | null): void {
     if (!holder) {
       frames.setAttribute("data-idle", "");
       return;
     }
-    // I lati ereditano la misura dal contenitore: quattro scritture, non sedici.
-    frames.dataset.node = holder.id;
-    frames.style.setProperty("--canvas-frame-x", `${holder.x}px`);
-    frames.style.setProperty("--canvas-frame-y", `${holder.y}px`);
-    frames.style.setProperty("--canvas-frame-w", `${holder.width}px`);
-    frames.style.setProperty("--canvas-frame-h", `${holder.height}px`);
+    if (frames.dataset.node !== holder.id) frames.dataset.node = holder.id;
+    // I lati ereditano la misura dal contenitore: quattro proprietà, non sedici.
+    setPixels(frames, "--canvas-frame-x", holder.x);
+    setPixels(frames, "--canvas-frame-y", holder.y);
+    setPixels(frames, "--canvas-frame-w", holder.width);
+    setPixels(frames, "--canvas-frame-h", holder.height);
     if (!frames.isConnected) this.#stage.append(frames);
     frames.removeAttribute("data-idle");
   }
@@ -4233,6 +4290,10 @@ export class CanvasEngine {
     this.#inkTarget = null;
     target.frames.setAttribute("data-idle", "");
     target.label.setAttribute("data-idle", "");
+    // Sotto il velo il puntatore può aver lasciato la scheda tenuta senza un
+    // `pointerover`: se il tratto non era suo, a penna su la lascia (T20f).
+    const held = this.#heldCard;
+    if (held && held.dataset.node !== target.holder) this.#holdHover(null);
   }
 
   /** Alt tenuto o lasciato: a penna giù l'etichetta lo dice subito, anche se la punta è ferma. */
@@ -11874,6 +11935,16 @@ function inkHolderText(holder: CanvasNode | null): string {
   if (!holder) return t("canvas.ink.free");
   const name = cardMenuName(holder);
   return name ? t("canvas.ink.attach", { name }) : t("canvas.ink.attach_card");
+}
+
+/**
+ * Scrive la proprietà `name` di `element` a `value` pixel solo se è cambiata:
+ * leggere lo stile in linea non chiede il layout, e non tutti i motori
+ * riconoscono uguale una scrittura col valore di prima (rifarebbero lo stile).
+ */
+function setPixels(element: HTMLElement, name: string, value: number): void {
+  const text = `${value}px`;
+  if (element.style.getPropertyValue(name) !== text) element.style.setProperty(name, text);
 }
 
 /** Il nome di un file senza le cartelle: `Corsi/foto.png` → `foto.png`. */
