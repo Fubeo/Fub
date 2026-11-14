@@ -145,9 +145,12 @@ formato, e `canvas.*` sono del componente `fub.lavagna`.
 - `fub_canvas_read { doc, form?, ids?, max_chars? }` dà la lavagna come
   `canvas.read`. `form` è `outline` (di serie: una riga per scheda, col suo
   numero), `code` (la lista di operazioni che la ricrea) o `json` (il
-  modello). `ids` limita la lettura alle schede date, come lista o come testo
-  JSON; `max_chars` taglia l'outline. Il risultato ha `doc`, `revision` (la
-  base di `fub_canvas_apply`), `form`, `counts`, `bounds` e `text` o `model`.
+  modello com'è nel file, `fub:ink` compreso, e `ink_read`, i tratti
+  decodificati, solo da leggere). `ids` limita la lettura alle schede date,
+  come lista o come testo JSON; `max_chars` taglia l'outline, o i punti di
+  `ink_read` con `json` (non vale con `code`). Il risultato ha `doc`,
+  `revision` (la base di `fub_canvas_apply`), `form`, `counts`, `bounds` e
+  `text`, oppure `model` e `ink_read`.
   Vuole la lavagna fra le radici di lettura.
 - `fub_canvas_apply` controlla la lista con `canvas.check` prima di tutto,
   anche in prova. Con un problema non chiama `canvas.apply` e il file non

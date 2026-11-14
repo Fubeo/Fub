@@ -161,7 +161,9 @@ il colore con il suo nome); altrimenti sono il loro valore JSON del file, come
 `json(&Canvas, &DescribeOptions) -> Result<Value, SourceError>` dà il modello
 com'è, come lo scrive il file: `nodes` ed `edges` sempre, anche vuoti, poi la
 radice sconosciuta. Con `ids` la radice sconosciuta non c'è, perché non è di
-una scheda. I livelli d'inchiostro escono letti, coi tratti decodificati.
+una scheda. I livelli `fub:ink` restano com'è nel file; accanto,
+`ink_read(&Canvas, &DescribeOptions) -> Value` dà i tratti decodificati, solo
+da leggere ([In codice](canvas-ink.md#in-codice)).
 
 ### Le opzioni
 
@@ -172,8 +174,8 @@ una scheda. I livelli d'inchiostro escono letti, coi tratti decodificati.
   Vale per le tre forme.
 - `max_chars` taglia l'outline. Si taglia a righe intere, e l'ultima riga
   dice quante ne restano: `…+N`. La prima riga esce sempre, anche se da sola
-  supera il limite. Del modello taglia solo i punti d'inchiostro. Il codice non
-  si taglia: una lista tagliata non si compila.
+  supera il limite. Di `ink_read` taglia solo i punti. Il codice e il modello
+  non si tagliano: una lista tagliata non si compila.
 
 ## Il giro
 

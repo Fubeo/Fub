@@ -14,7 +14,7 @@ use std::path::PathBuf;
 
 use std::collections::HashSet;
 
-use fub_canvas_core::describe::{code, json, outline, DescribeOptions};
+use fub_canvas_core::describe::{code, ink_read, json, outline, DescribeOptions};
 use fub_canvas_core::ink::LayerRef;
 use fub_canvas_core::ink::INK_KEY;
 use fub_canvas_core::ops::{compile, CanvasOp, OpError};
@@ -480,7 +480,9 @@ fn vectors(folder: &str) -> Vec<(String, Value)> {
 
 /// Compila il codice di `canvas` su una lavagna vuota e confronta schede e archi
 /// con quelli di `canvas`, nell'ordine, e il livello libero se il codice lo
-/// porta. Il resto della radice sconosciuta non si confronta.
+/// porta. Il resto della radice sconosciuta non si confronta. Si confronta il
+/// testo JSON, non i valori: con `preserve_order` l'uguaglianza di due oggetti
+/// ignora l'ordine delle chiavi, e il giro lo deve tenere.
 fn round_trip(canvas: &Canvas) -> Result<(), String> {
     let ops = code(canvas, &DescribeOptions::default());
     let board_ink = carries_board_ink(&ops);
@@ -491,17 +493,26 @@ fn round_trip(canvas: &Canvas) -> Result<(), String> {
         .map_err(|error| format!("le toppe non si applicano: {error:?}"))?;
     let seen = canvas_value(&board).map_err(|error| format!("{error:?}"))?;
     let expected = canvas_value(canvas).map_err(|error| format!("{error:?}"))?;
-    if seen["nodes"] != expected["nodes"] || seen["edges"] != expected["edges"] {
+    if written(&seen["nodes"]) != written(&expected["nodes"])
+        || written(&seen["edges"]) != written(&expected["edges"])
+    {
         return Err(format!(
             "schede o archi diversi\n  dato:   {seen}\n  atteso: {expected}"
         ));
     }
-    if board_ink && seen.get(INK_KEY) != expected.get(INK_KEY) {
+    let text = |value: &Value| value.get(INK_KEY).map(Value::to_string);
+    if board_ink && text(&seen) != text(&expected) {
         return Err(format!(
             "inchiostro libero diverso\n  dato:   {seen}\n  atteso: {expected}"
         ));
     }
     Ok(())
+}
+
+/// Il valore scritto come testo JSON: due testi uguali hanno anche le chiavi
+/// nello stesso ordine, due `Value` uguali no.
+fn written(value: &Value) -> String {
+    value.to_string()
 }
 
 /// Il codice porta l'inchiostro libero: una `add_strokes` sulla radice.
@@ -660,7 +671,9 @@ fn ids_leave_out_the_free_ink() {
     assert!(!lines.contains("ink board"), "{lines}");
     assert!(lines.contains("ink=1"), "{lines}");
     assert!(!carries_board_ink(&code(&canvas, &ids(&["f1"]))));
-    assert!(json(&canvas, &ids(&["f1"])).unwrap().get(INK_KEY).is_none());
+    let read = ink_read(&canvas, &ids(&["f1"]));
+    assert_eq!(read.as_array().unwrap().len(), 1);
+    assert_eq!(read[0]["layer"], j!({"node": "f1"}));
 }
 
 #[test]
@@ -680,8 +693,8 @@ fn the_ink_of_an_image_follows_the_card_as_it_is_now() {
     let image = board(&source("foto.PNG"));
     let lines = outline(&image, &DescribeOptions::default());
     assert!(lines.ends_with("ink=1 60 20 10×0"), "{lines}");
-    let model = json(&image, &DescribeOptions::default()).unwrap();
-    let stroke = &model["nodes"][0][INK_KEY]["strokes"][0];
+    let read = ink_read(&image, &DescribeOptions::default());
+    let stroke = &read[0]["strokes"][0];
     assert_eq!(stroke["points"], j!([[60, 20], [70, 20]]));
     assert_eq!(stroke["size"], 3);
 
@@ -745,48 +758,123 @@ fn code_keeps_a_layer_that_add_strokes_cannot_write_inside_the_card() {
 }
 
 #[test]
-fn json_reads_the_strokes_decoded_and_keeps_those_not_drawn_with_the_reason() {
-    let model = json(
+fn ink_read_gives_the_strokes_decoded_and_the_reason_of_those_not_drawn() {
+    let read = ink_read(
         &ink_vector("board-and-card.json"),
         &DescribeOptions::default(),
-    )
-    .unwrap();
+    );
     assert_eq!(
-        model["nodes"][0][INK_KEY],
-        j!({"v": 1, "strokes": [{
+        read[0],
+        j!({"layer": {"node": "f1"}, "state": "ok", "strokes": [{
             "id": "s-mh0k2q1x-4f9a-1", "color": "#0072b2", "size": 3, "tool": "pen",
             "pen": "ballpoint",
             "bounds": {"x": 120.5, "y": 30.1, "width": 0.6, "height": 0.1},
             "points": [[120.5, 30.2], [120.8, 30.2], [121.1, 30.1]]}]})
     );
+    assert_eq!(read[1]["layer"], "board");
     assert_eq!(
-        model[INK_KEY]["strokes"][0]["points"],
+        read[1]["strokes"][0]["points"],
         j!([[40, 25], [41.2, 25.4], [42.2, 25.3]])
     );
 
-    let model = json(
+    // Un tratto che non si disegna dice solo l'id e la ragione: un suo campo
+    // sconosciuto `bad` non si confonde con la ragione, perché resta nel modello.
+    let read = ink_read(
         &ink_vector("free-on-card.json"),
         &DescribeOptions::default(),
-    )
-    .unwrap();
-    let strokes = &model["nodes"][0][INK_KEY]["strokes"];
-    assert_eq!(strokes[0]["bad"], "anchor");
-    assert_eq!(
-        strokes[0]["ink"],
-        "1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8"
     );
-    assert!(strokes[1].get("points").is_some());
+    assert_eq!(read[0]["strokes"][0], j!({"id": "s-1", "bad": "anchor"}));
+    assert!(read[0]["strokes"][1].get("points").is_some());
 
-    // Un livello estraneo resta com'è nel file.
-    let canvas = ink_vector("layer-version-two.json");
+    // Un livello estraneo non elenca tratti.
+    let read = ink_read(
+        &ink_vector("layer-version-two.json"),
+        &DescribeOptions::default(),
+    );
     assert_eq!(
-        json(&canvas, &DescribeOptions::default()).unwrap(),
-        canvas_value(&canvas).unwrap()
+        read,
+        j!([{"layer": {"node": "n1"}, "state": "foreign", "strokes": []}])
+    );
+    // Una lavagna senza inchiostro ha una lettura vuota.
+    assert_eq!(ink_read(&board(SMALL), &DescribeOptions::default()), j!([]));
+}
+
+#[test]
+fn json_keeps_the_ink_as_the_file_writes_it() {
+    for name in [
+        "board-and-card.json",
+        "free-on-card.json",
+        "layer-version-two.json",
+    ] {
+        let canvas = ink_vector(name);
+        assert_eq!(
+            json(&canvas, &DescribeOptions::default())
+                .unwrap()
+                .to_string(),
+            canvas_value(&canvas).unwrap().to_string(),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn a_card_read_as_json_and_sent_back_with_set_keeps_its_ink() {
+    // Un modello legge la lavagna, cambia il testo di una scheda e la rimanda
+    // intera con `set`: l'inchiostro resta quello del file, byte per byte.
+    let canvas = ink_vector("board-and-card.json");
+    let model = json(&canvas, &DescribeOptions::default()).unwrap();
+    let mut fields = model["nodes"][0].as_object().unwrap().clone();
+    fields.remove("id");
+    fields.remove("type");
+    fields.insert("x".to_owned(), j!(40));
+    let ops: Vec<CanvasOp> =
+        serde_json::from_value(j!([{"op": "set", "id": "f1", "fields": fields}])).unwrap();
+    let compiled = compile(&canvas, &ops, 1).expect("set va");
+    let mut after = canvas.clone();
+    patch::apply(&mut after, &compiled.patches).unwrap();
+    let before = canvas_value(&canvas).unwrap();
+    let after = canvas_value(&after).unwrap();
+    assert_eq!(after["nodes"][0]["x"], 40);
+    assert_eq!(
+        after["nodes"][0][INK_KEY].to_string(),
+        before["nodes"][0][INK_KEY].to_string()
     );
 }
 
 #[test]
-fn json_cuts_a_hundred_thousand_samples_to_max_chars() {
+fn code_keeps_inside_the_card_a_layer_that_is_not_its_last_field() {
+    // `add_strokes` rimetterebbe il livello in fondo: con un campo dopo, il
+    // livello resta nella scheda intera, e il giro tiene l'ordine.
+    let canvas = board(
+        &j!({"nodes": [{"id": "a", "type": "text", "text": "a", "x": 0, "y": 0,
+            "width": 320, "height": 160,
+            INK_KEY: {"v": 1, "strokes": [{"id": "s1", "tool": "pen", "brush": BALLPOINT,
+                "color": "#0072b2", "anchor": {"kind": "card", "width": 320, "height": 160},
+                "ink": "1 s10 cxy 100,200 100,0"}]},
+            "fub:tag": "x"}], "edges": []})
+        .to_string(),
+    );
+    let values = values_of(&code(&canvas, &DescribeOptions::default()));
+    assert_eq!(values.len(), 1);
+    assert!(values[0]["node"].get(INK_KEY).is_some());
+    assert_eq!(round_trip(&canvas), Ok(()));
+
+    // Un tratto coi campi in un altro ordine da quello di Fub: lo stesso.
+    let canvas = board(
+        &j!({"nodes": [{"id": "a", "type": "text", "text": "a", "x": 0, "y": 0,
+            "width": 320, "height": 160,
+            INK_KEY: {"v": 1, "strokes": [{"tool": "pen", "id": "s1", "brush": BALLPOINT,
+                "color": "#0072b2", "anchor": {"kind": "card", "width": 320, "height": 160},
+                "ink": "1 s10 cxy 100,200 100,0"}]}}], "edges": []})
+        .to_string(),
+    );
+    let values = values_of(&code(&canvas, &DescribeOptions::default()));
+    assert_eq!(values.len(), 1);
+    assert_eq!(round_trip(&canvas), Ok(()));
+}
+
+#[test]
+fn ink_read_cuts_a_hundred_thousand_samples_to_max_chars() {
     // Undici tratti liberi da 10 000 campioni: 110 000 in tutto.
     let deltas = vec!["1,1"; 9_999].join(" ");
     let strokes: Vec<Value> = (0..11)
@@ -798,9 +886,18 @@ fn json_cuts_a_hundred_thousand_samples_to_max_chars() {
     let canvas =
         board(&j!({"nodes": [], "edges": [], INK_KEY: {"v": 1, "strokes": strokes}}).to_string());
     let points = |stroke: &Value| stroke["points"].as_array().unwrap().len();
+    let read_with = |max_chars| {
+        ink_read(
+            &canvas,
+            &DescribeOptions {
+                ids: None,
+                max_chars,
+            },
+        )
+    };
 
-    let whole = json(&canvas, &DescribeOptions::default()).unwrap();
-    let total: usize = whole[INK_KEY]["strokes"]
+    let whole = read_with(None);
+    let total: usize = whole[0]["strokes"]
         .as_array()
         .unwrap()
         .iter()
@@ -809,23 +906,16 @@ fn json_cuts_a_hundred_thousand_samples_to_max_chars() {
     assert_eq!(total, 110_000);
 
     let limit = 20_000;
-    let cut = json(
-        &canvas,
-        &DescribeOptions {
-            ids: None,
-            max_chars: Some(limit),
-        },
-    )
-    .unwrap();
+    let cut = read_with(Some(limit));
     assert!(cut.to_string().chars().count() <= limit);
-    let strokes = cut[INK_KEY]["strokes"].as_array().unwrap();
+    let strokes = cut[0]["strokes"].as_array().unwrap();
     assert_eq!(strokes.len(), 11, "i tratti restano tutti");
     let shown: usize = strokes.iter().map(points).sum();
     let omitted: u64 = strokes
         .iter()
         .map(|stroke| stroke["points_omitted"].as_u64().unwrap_or(0))
         .sum();
-    assert!(shown > 0);
+    assert!(shown > 1_000, "{shown}");
     assert_eq!(shown as u64 + omitted, 110_000);
     // Il riquadro resta quello di tutti i punti.
     assert_eq!(
@@ -836,16 +926,9 @@ fn json_cuts_a_hundred_thousand_samples_to_max_chars() {
     assert_eq!(strokes[0]["points"][1], j!([0.1, 0.1]));
     assert_eq!(points(&strokes[10]), 0);
 
-    // Un limite più piccolo del modello senza punti: i tratti escono senza punti.
-    let tiny = json(
-        &canvas,
-        &DescribeOptions {
-            ids: None,
-            max_chars: Some(10),
-        },
-    )
-    .unwrap();
-    assert!(tiny[INK_KEY]["strokes"]
+    // Un limite più piccolo della lettura senza punti: i tratti escono senza.
+    let tiny = read_with(Some(10));
+    assert!(tiny[0]["strokes"]
         .as_array()
         .unwrap()
         .iter()

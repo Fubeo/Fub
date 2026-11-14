@@ -6,8 +6,10 @@
 //!   riquadro di quelli che si disegnano ([`summary`]);
 //! - nel codice, i tratti come `add_strokes`, con le stringhe esatte del file,
 //!   quando l'operazione ricrea il livello uguale ([`strokes_op`]);
-//! - nel JSON, i tratti decodificati, coi punti arrotondati a 0,1 e tagliati a
-//!   `max_chars` ([`read_layers_into`]).
+//! - nella lettura dell'inchiostro, accanto al modello, i tratti
+//!   decodificati, coi punti arrotondati a 0,1 e tagliati a `max_chars`
+//!   ([`read_layers`]). Il modello tiene `fub:ink` com'è nel file: una scheda
+//!   letta e rimandata con `set` non perde l'inchiostro.
 //!
 //! I punti di un tratto di una scheda sono nelle coordinate della scheda com'è
 //! adesso, con 0,0 nell'angolo in alto a sinistra: la misura di riferimento
@@ -20,7 +22,6 @@ use fub_ink_codec::{InkBrush, PEN_KEY};
 use serde_json::{Map, Number, Value};
 
 use crate::ink::{DrawnStroke, InkAnchor, InkLayer, LayerRef, StrokeState};
-use crate::layout::{card_kind, CardKind};
 use crate::model::{CanvasNode, CanvasNodeType, MAX_SAFE_INTEGER};
 use crate::ops::CanvasOp;
 
@@ -46,16 +47,15 @@ impl Fit {
         dy: 0.0,
     };
 
-    /// Il modo della scheda: `scale` per una scheda `file` d'immagine o di PDF,
-    /// che scala senza deformarsi e si centra; `fixed` per le altre, che
-    /// restano alla misura di riferimento. Un tratto libero non si porta.
+    /// Il modo della scheda ([`scales`]): `scale` scala senza deformarsi e si
+    /// centra, `fixed` resta alla misura di riferimento. Un tratto libero non
+    /// si porta. È `inkFit` di `apps/client/src/editors/canvas/ink-fit.ts`,
+    /// provato coi suoi vettori (`canvas-ink-fit/`).
     fn of(node: Option<&CanvasNode>, anchor: InkAnchor) -> Fit {
         let (Some(node), InkAnchor::Card { width, height }) = (node, anchor) else {
             return Fit::IDENTITY;
         };
-        let scales = node.node_type == CanvasNodeType::File
-            && matches!(card_kind(node), CardKind::Image | CardKind::Pdf);
-        if !scales {
+        if !scales(node) {
             return Fit::IDENTITY;
         }
         // Le misure di una scheda sono interi entro ±(2^53−1): il cast è esatto.
@@ -79,6 +79,37 @@ impl Fit {
     fn point(self, [x, y]: [f64; 2]) -> [f64; 2] {
         [self.dx + self.s * x, self.dy + self.s * y]
     }
+}
+
+/// Le estensioni che fanno scalare l'inchiostro: le immagini di `mimeForExt`
+/// (`apps/client/src/editors/media/media-types.ts`) e il PDF.
+const SCALING_EXTENSIONS: [&str; 13] = [
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif", "heic", "tif", "tiff", "pdf",
+];
+
+/// Il modo `scale`: una scheda `file` il cui file è un'immagine o un PDF.
+///
+/// È `inkFitMode` della resa, che fa fede: l'estensione è quella di `extOf`
+/// (l'ultima parte del nome dopo un punto, in minuscolo; un nome come `.png`
+/// non ne ha) e un `#` nel campo `file` non taglia niente. Per questo non è
+/// [`crate::layout::card_kind`], che toglie dal primo `#` come la specie della
+/// scheda nella GUI: `foto#1.png` è una scheda `file` che scala.
+fn scales(node: &CanvasNode) -> bool {
+    if node.node_type != CanvasNodeType::File {
+        return false;
+    }
+    let Some(path) = node.file.as_deref() else {
+        return false;
+    };
+    let name = path.rsplit('/').next().unwrap_or(path);
+    if name.starts_with('.') && !name[1..].contains('.') {
+        return false;
+    }
+    let Some(point) = name.rfind('.') else {
+        return false;
+    };
+    let extension = name[point + 1..].to_ascii_lowercase();
+    SCALING_EXTENSIONS.contains(&extension.as_str())
 }
 
 /// Un riquadro: l'angolo in alto a sinistra, la larghezza e l'altezza.
@@ -256,15 +287,22 @@ pub(super) fn summary(value: &Value, layer: &LayerRef, node: Option<&CanvasNode>
 }
 
 /// I tratti del livello come una `add_strokes`, se l'operazione ricrea il
-/// livello uguale: un livello valido con `v` scritto `1`, nessun campo in più,
+/// livello uguale, chiavi nello stesso ordine: un livello valido con `v`
+/// scritto `1`, nessun campo in più, scritto nell'ordine in cui lo scrive Fub,
 /// almeno un tratto e ogni tratto che si disegna. Ogni tratto va com'è nel
 /// file: le stringhe `brush` e `ink` esatte, `at` e i campi sconosciuti. Gli
 /// altri livelli restano dove sono (`None`): quello di una scheda nella
 /// scheda intera, com'è nel file.
 pub(super) fn strokes_op(value: &Value, layer: LayerRef) -> Option<CanvasOp> {
     let ink = InkLayer::from_value(value).ok()?;
+    // `add_strokes` scrive il livello `{"v": 1, "strokes": [...]}` e ogni
+    // tratto nell'ordine di `InkStroke::to_value`: il livello del file deve
+    // essere già scritto così, byte per byte, o il giro ne cambia l'ordine. Si
+    // confronta il testo: l'uguaglianza dei valori ignora l'ordine delle chiavi.
+    let (written, read) = (ink.to_value().to_string(), value.to_string());
     let carried = ink.version().as_u64() == Some(1)
         && ink.extra.is_empty()
+        && written == read
         && !ink.strokes.is_empty()
         && ink
             .strokes
@@ -285,135 +323,127 @@ pub(super) fn strokes_op(value: &Value, layer: LayerRef) -> Option<CanvasOp> {
     Some(CanvasOp::AddStrokes { layer, strokes })
 }
 
-/// Dove sta un livello nel valore JSON della lavagna.
-#[derive(Copy, Clone)]
-enum Holder {
-    /// La scheda in questa posizione di `nodes`.
-    Node(usize),
-    /// La radice.
-    Board,
-}
-
-/// Un tratto del livello letto.
+/// Un tratto letto.
 enum Read {
     Drawn(Decoded),
-    /// Il tratto com'è nel file, con `bad` che dice perché non si disegna.
-    Kept(Value),
+    /// Un tratto che non si disegna: l'id e la ragione.
+    Kept {
+        id: String,
+        reason: &'static str,
+    },
 }
 
-/// Un livello valido, letto.
+/// Un livello letto: dove sta e, se è valido, i suoi tratti; `None` se è
+/// estraneo.
 struct ReadLayer {
-    holder: Holder,
-    /// `v` com'era scritto e i campi in più del livello, nel loro ordine.
-    v: Number,
-    extra: Map<String, Value>,
-    strokes: Vec<Read>,
+    layer: LayerRef,
+    strokes: Option<Vec<Read>>,
 }
 
 impl ReadLayer {
-    fn of(
-        holder: Holder,
-        value: &Value,
-        layer: &LayerRef,
-        node: Option<&CanvasNode>,
-    ) -> Option<Self> {
-        let ink = InkLayer::from_value(value).ok()?;
-        let strokes = ink
+    fn of(value: &Value, layer: LayerRef, node: Option<&CanvasNode>) -> Self {
+        let strokes = InkLayer::from_value(value).ok().map(|ink| {
+            ink.strokes
+                .iter()
+                .map(|stroke| match stroke.state(&layer) {
+                    StrokeState::Drawn(drawn) => Read::Drawn(Decoded::of(&stroke.id, &drawn, node)),
+                    StrokeState::Kept(reason) => Read::Kept {
+                        id: stroke.id.clone(),
+                        reason: reason.as_str(),
+                    },
+                })
+                .collect()
+        });
+        ReadLayer { layer, strokes }
+    }
+
+    /// Il livello letto come oggetto JSON: `layer`, `state` (`ok` o
+    /// `foreign`) e `strokes`. `shown` dà i punti da mostrare per ogni tratto
+    /// che si disegna, nell'ordine.
+    fn value(&self, shown: &mut impl Iterator<Item = usize>) -> Value {
+        let strokes: Vec<Value> = self
             .strokes
             .iter()
-            .map(|stroke| match stroke.state(layer) {
-                StrokeState::Drawn(drawn) => Read::Drawn(Decoded::of(&stroke.id, &drawn, node)),
-                StrokeState::Kept(reason) => {
-                    let mut kept = stroke.to_value();
-                    if let Value::Object(fields) = &mut kept {
-                        fields.insert(BAD.to_owned(), Value::from(reason.as_str()));
-                    }
-                    Read::Kept(kept)
+            .flatten()
+            .map(|stroke| match stroke {
+                Read::Drawn(decoded) => decoded.value(shown.next().unwrap_or(usize::MAX)),
+                Read::Kept { id, reason } => {
+                    let mut map = Map::new();
+                    map.insert("id".to_owned(), Value::String(id.clone()));
+                    map.insert(BAD.to_owned(), Value::from(*reason));
+                    Value::Object(map)
                 }
             })
             .collect();
-        Some(ReadLayer {
-            holder,
-            v: ink.version().clone(),
-            extra: ink.extra.clone(),
-            strokes,
-        })
-    }
-
-    /// Il livello come oggetto JSON: `v`, `strokes`, poi i campi in più. `shown`
-    /// dà i punti da mostrare per ogni tratto che si disegna, nell'ordine.
-    fn value(&self, shown: &mut impl Iterator<Item = usize>) -> Value {
-        let strokes = self
-            .strokes
-            .iter()
-            .map(|stroke| match stroke {
-                Read::Drawn(decoded) => decoded.value(shown.next().unwrap_or(usize::MAX)),
-                Read::Kept(kept) => kept.clone(),
-            })
-            .collect();
-        let mut map = Map::with_capacity(2 + self.extra.len());
-        map.insert("v".to_owned(), Value::Number(self.v.clone()));
+        let state = if self.strokes.is_some() {
+            "ok"
+        } else {
+            "foreign"
+        };
+        let mut map = Map::new();
+        map.insert(
+            "layer".to_owned(),
+            serde_json::to_value(&self.layer).unwrap_or(Value::Null),
+        );
+        map.insert("state".to_owned(), Value::from(state));
         map.insert("strokes".to_owned(), Value::Array(strokes));
-        for (key, value) in &self.extra {
-            map.insert(key.clone(), value.clone());
-        }
         Value::Object(map)
     }
 
     fn drawn(&self) -> impl Iterator<Item = &Decoded> {
-        self.strokes.iter().filter_map(|stroke| match stroke {
-            Read::Drawn(decoded) => Some(decoded),
-            Read::Kept(_) => None,
-        })
+        self.strokes
+            .iter()
+            .flatten()
+            .filter_map(|stroke| match stroke {
+                Read::Drawn(decoded) => Some(decoded),
+                Read::Kept { .. } => None,
+            })
     }
 }
 
-/// Mette nel valore JSON della lavagna, al posto di ogni livello valido, il
-/// livello letto: i tratti che si disegnano decodificati, quelli che non si
-/// disegnano com'erano con `bad`. Un livello estraneo resta com'è.
+/// La lettura dei livelli d'inchiostro: un oggetto per livello, quelli delle
+/// schede `nodes` nel loro ordine, poi `board` (il livello della radice) se la
+/// lettura lo mostra. È solo da leggere: il modello tiene `fub:ink` com'è nel
+/// file.
 ///
-/// `nodes` sono le schede di `model["nodes"]`, nello stesso ordine; `board` è
-/// il livello della radice, se la lettura lo mostra. Con `max_chars`, se il
-/// JSON compatto supera quei caratteri si tolgono punti dalla fine, a partire
-/// dall'ultimo tratto letto: i tratti restano tutti, col loro riquadro intero, e
-/// `points_omitted` dice quanti punti mancano. Il resto del modello non si
-/// taglia, e se già da solo supera il limite esce senza punti.
-pub(super) fn read_layers_into(
-    model: &mut Value,
+/// Con `max_chars`, se la lettura scritta come JSON compatto supera quei
+/// caratteri si mostrano i primi punti nell'ordine dei tratti finché ci
+/// stanno: i tratti restano tutti, col loro riquadro intero, e
+/// `points_omitted` dice quanti punti mancano. Se la lettura senza punti
+/// supera già il limite, esce senza punti.
+pub(super) fn read_layers(
     nodes: &[&CanvasNode],
     board: Option<&Value>,
     max_chars: Option<usize>,
-) {
+) -> Value {
     let mut layers: Vec<ReadLayer> = nodes
         .iter()
-        .enumerate()
-        .filter_map(|(position, node)| {
+        .filter_map(|node| {
             let value = node.extra.get(crate::ink::INK_KEY)?;
-            let layer = LayerRef::Node(node.id.clone());
-            ReadLayer::of(Holder::Node(position), value, &layer, Some(node))
+            Some(ReadLayer::of(
+                value,
+                LayerRef::Node(node.id.clone()),
+                Some(node),
+            ))
         })
         .collect();
     if let Some(value) = board {
-        layers.extend(ReadLayer::of(Holder::Board, value, &LayerRef::Board, None));
-    }
-    if layers.is_empty() {
-        return;
+        layers.push(ReadLayer::of(value, LayerRef::Board, None));
     }
     let totals: Vec<usize> = layers
         .iter()
         .flat_map(ReadLayer::drawn)
         .map(|decoded| decoded.points.len())
         .collect();
-    write_layers(model, &layers, &totals);
+    let whole = layers_value(&layers, &totals);
     let Some(limit) = max_chars else {
-        return;
+        return whole;
     };
-    if chars(model) <= limit {
-        return;
+    if chars(&whole) <= limit {
+        return whole;
     }
     let mut shown = vec![0; totals.len()];
-    write_layers(model, &layers, &shown);
-    let mut budget = limit.saturating_sub(chars(model));
+    let mut budget = limit.saturating_sub(chars(&layers_value(&layers, &shown)));
     'fill: for (decoded, shown) in layers.iter().flat_map(ReadLayer::drawn).zip(&mut shown) {
         for (index, point) in decoded.points.iter().enumerate() {
             let comma = usize::from(index > 0);
@@ -425,25 +455,14 @@ pub(super) fn read_layers_into(
             *shown += 1;
         }
     }
-    write_layers(model, &layers, &shown);
+    layers_value(&layers, &shown)
 }
 
-/// Scrive i livelli letti nel modello, coi punti `shown` di ogni tratto che si
+/// I livelli letti come array JSON, coi punti `shown` di ogni tratto che si
 /// disegna, nell'ordine dei livelli.
-fn write_layers(model: &mut Value, layers: &[ReadLayer], shown: &[usize]) {
+fn layers_value(layers: &[ReadLayer], shown: &[usize]) -> Value {
     let mut shown = shown.iter().copied();
-    for layer in layers {
-        let value = layer.value(&mut shown);
-        let slot = match layer.holder {
-            Holder::Node(position) => model
-                .get_mut("nodes")
-                .and_then(|nodes| nodes.get_mut(position)),
-            Holder::Board => Some(&mut *model),
-        };
-        if let Some(Value::Object(holder)) = slot {
-            holder.insert(crate::ink::INK_KEY.to_owned(), value);
-        }
-    }
+    Value::Array(layers.iter().map(|layer| layer.value(&mut shown)).collect())
 }
 
 /// I caratteri del valore scritto come JSON compatto.
@@ -485,5 +504,78 @@ fn number(value: f64) -> Value {
         Value::from(integer)
     } else {
         Number::from_f64(value).map_or(Value::Null, Value::Number)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    /// I vettori di `canvas-ink-fit/`, la prova di `ink-fit.ts` della resa:
+    /// `Fit` deve dare lo stesso modo, lo stesso fattore, lo stesso spostamento
+    /// e gli stessi punti.
+    #[test]
+    fn fit_follows_the_vectors_of_the_render() {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/client/src/__fixtures__/canvas-ink-fit");
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+            .collect();
+        files.sort();
+        assert!(files.len() >= 23, "{} vettori", files.len());
+        for path in files {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            let vector: Value =
+                serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            let mut card = vector["card"].as_object().unwrap().clone();
+            card.insert("id".to_owned(), Value::from("c"));
+            card.insert("x".to_owned(), Value::from(0));
+            card.insert("y".to_owned(), Value::from(0));
+            card.insert("width".to_owned(), vector["size"]["width"].clone());
+            card.insert("height".to_owned(), vector["size"]["height"].clone());
+            let node: CanvasNode = serde_json::from_value(Value::Object(card))
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            let anchor = InkAnchor::Card {
+                width: vector["ref"]["width"].as_f64().unwrap(),
+                height: vector["ref"]["height"].as_f64().unwrap(),
+            };
+            let fit = Fit::of(Some(&node), anchor);
+            let expect = &vector["expect"];
+            let mode = if scales(&node) { "scale" } else { "fixed" };
+            assert_eq!(mode, expect["mode"], "{name}");
+            assert_eq!(fit.s, expect["s"].as_f64().unwrap(), "{name}: s");
+            assert_eq!(fit.dx, expect["x"].as_f64().unwrap(), "{name}: x");
+            assert_eq!(fit.dy, expect["y"].as_f64().unwrap(), "{name}: y");
+            for case in expect["points"].as_array().into_iter().flatten() {
+                let from = [
+                    case["from"][0].as_f64().unwrap(),
+                    case["from"][1].as_f64().unwrap(),
+                ];
+                let to = [
+                    case["to"][0].as_f64().unwrap(),
+                    case["to"][1].as_f64().unwrap(),
+                ];
+                assert_eq!(fit.point(from), to, "{name}: {from:?}");
+            }
+        }
+    }
+
+    /// Il `#` nel campo `file` non taglia il nome, come `extOf` della resa: la
+    /// specie della scheda (`card_kind`) lo taglia, il modo dell'inchiostro no.
+    #[test]
+    fn a_hash_in_the_file_name_does_not_cut_the_extension() {
+        let node = |file: &str| -> CanvasNode {
+            serde_json::from_value(serde_json::json!({"id": "c", "type": "file", "file": file,
+                "x": 0, "y": 0, "width": 10, "height": 10}))
+            .unwrap()
+        };
+        assert!(scales(&node("Foto/foto#1.png")));
+        assert!(!scales(&node("Foto/foto.png#1")));
+        assert!(scales(&node("Foto/.a.png")));
+        assert!(!scales(&node("Foto/.png")));
+        assert!(!scales(&node("Foto/foto.")));
     }
 }

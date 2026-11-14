@@ -4,11 +4,13 @@
 //! - [`outline`]: una riga per scheda e per arco, per leggere in fretta;
 //! - [`code`]: la lista di operazioni che ricrea la lavagna. Compilata su una
 //!   lavagna vuota con [`crate::ops::compile`], dà la stessa lavagna;
-//! - [`json`]: il modello com'è, come lo scrive il file.
+//! - [`json`]: il modello com'è, come lo scrive il file, `fub:ink` compreso.
+//!   Accanto, [`ink_read`] dà i tratti decodificati: è solo da leggere, e non
+//!   sta nel modello, così una scheda letta e rimandata non perde l'inchiostro.
 //!
-//! Le tre forme prendono le stesse [`DescribeOptions`]: `ids` tiene solo quelle
-//! schede e gli archi fra loro, `max_chars` taglia l'[`outline`] e i punti
-//! d'inchiostro del [`json`]. Nessuna parola in una lingua: le chiavi sono i
+//! Le forme prendono le stesse [`DescribeOptions`]: `ids` tiene solo quelle
+//! schede e gli archi fra loro, `max_chars` taglia l'[`outline`] e i punti di
+//! [`ink_read`]. Nessuna parola in una lingua: le chiavi sono i
 //! nomi dei campi del formato. Le regole stanno in
 //! `docs/reference/canvas-code.md`, e quelle dell'inchiostro in
 //! `docs/reference/canvas-ink.md` («In codice»): le legge il modulo `ink`.
@@ -41,8 +43,9 @@ pub struct DescribeOptions {
     pub ids: Option<Vec<String>>,
     /// Quanti caratteri al più dà l'[`outline`]. Si taglia a una riga intera e
     /// l'ultima riga dice quante ne restano, `…+N`. La prima riga esce sempre.
-    /// Nel [`json`] si tagliano soltanto i punti dei tratti d'inchiostro. Il
-    /// [`code`] non si taglia: una lista di operazioni tagliata non si compila.
+    /// Di [`ink_read`] si tagliano soltanto i punti dei tratti. Il [`code`] e
+    /// il [`json`] non si tagliano: una lista di operazioni tagliata non si
+    /// compila, e un modello tagliato non è il file.
     pub max_chars: Option<usize>,
 }
 
@@ -163,10 +166,14 @@ pub fn code(canvas: &Canvas, options: &DescribeOptions) -> Vec<CanvasOp> {
 /// altrimenti intera, come nel file; un livello che non va in `add_strokes`
 /// resta dentro la scheda intera.
 fn card_ops(node: &CanvasNode, ops: &mut Vec<CanvasOp>) {
+    // `add_strokes` rimette il livello in fondo ai campi della scheda: lo porta
+    // solo se è già l'ultimo, così il giro non cambia l'ordine delle chiavi.
     let strokes = node
         .extra
-        .get(INK_KEY)
-        .and_then(|value| ink::strokes_op(value, LayerRef::Node(node.id.clone())));
+        .iter()
+        .next_back()
+        .filter(|(key, _)| key.as_str() == INK_KEY)
+        .and_then(|(_, value)| ink::strokes_op(value, LayerRef::Node(node.id.clone())));
     let bare;
     let card_node = if strokes.is_some() {
         let mut without = node.clone();
@@ -303,25 +310,11 @@ fn short_link(edge: &CanvasEdge) -> Option<ConnectArgs> {
 
 /// Il modello com'è, come valore JSON: `nodes` ed `edges` sempre, poi la radice
 /// sconosciuta. Con `ids` ci sono solo quelle schede e gli archi fra loro, e
-/// la radice sconosciuta no: non è di una scheda.
-///
-/// L'inchiostro è letto: in ogni livello valido, ogni tratto che si disegna è
-/// `{id, color, size, tool, pen?, bounds, points}`, con i punti nelle
-/// coordinate di chi lo tiene arrotondati a 0,1, e ogni tratto che non si
-/// disegna resta com'è nel file con `bad`, la ragione. Un livello estraneo
-/// resta com'è. `max_chars` taglia soltanto i punti (`points_omitted`). Le
-/// stringhe esatte dei tratti le dà [`code`].
+/// la radice sconosciuta no: non è di una scheda. I livelli `fub:ink` restano
+/// com'è nel file; la loro lettura è [`ink_read`].
 pub fn json(canvas: &Canvas, options: &DescribeOptions) -> Result<Value, SourceError> {
     if options.ids.is_none() {
-        let mut model = canvas_value(canvas)?;
-        let nodes: Vec<&CanvasNode> = canvas.nodes.iter().collect();
-        ink::read_layers_into(
-            &mut model,
-            &nodes,
-            canvas.extra.get(INK_KEY),
-            options.max_chars,
-        );
-        return Ok(model);
+        return canvas_value(canvas);
     }
     let view = View::of(canvas, options);
     let part = Canvas {
@@ -329,10 +322,28 @@ pub fn json(canvas: &Canvas, options: &DescribeOptions) -> Result<Value, SourceE
         edges: view.edges.iter().map(|&edge| edge.clone()).collect(),
         extra: Map::new(),
     };
-    let mut model = canvas_value(&part)?;
+    canvas_value(&part)
+}
+
+/// La lettura dell'inchiostro, da mettere accanto al [`json`]: un oggetto per
+/// livello, `{layer, state, strokes}`, quelli delle schede nell'ordine del
+/// modello, poi quello della radice (senza `ids`). `layer` è `"board"` o
+/// `{"node": id}`, `state` è `ok` o `foreign` (un livello estraneo non elenca
+/// tratti). Un tratto che si disegna è `{id, color, size, tool, pen?, bounds,
+/// points}`, con i punti nelle coordinate di chi lo tiene arrotondati a 0,1;
+/// uno che non si disegna è `{id, bad}`, con la ragione.
+///
+/// È solo da leggere: non è il formato del file, e nessuna operazione la
+/// prende. `max_chars` ne taglia soltanto i punti (`points_omitted`). Le
+/// stringhe esatte dei tratti le danno [`json`] e [`code`].
+pub fn ink_read(canvas: &Canvas, options: &DescribeOptions) -> Value {
+    let view = View::of(canvas, options);
     let nodes: Vec<&CanvasNode> = view.nodes.iter().map(|&(_, node)| node).collect();
-    ink::read_layers_into(&mut model, &nodes, None, options.max_chars);
-    Ok(model)
+    let board = match options.ids {
+        None => canvas.extra.get(INK_KEY),
+        Some(_) => None,
+    };
+    ink::read_layers(&nodes, board, options.max_chars)
 }
 
 /// La riga dei conti: `cards 3 edges 1 groups 0 bounds 0 0 688×544`.
