@@ -2292,3 +2292,16 @@ La più recente in cima: data · piano · decisione · perché.
     formato di fub-kernel (`switch_profile` sposta il livello macchina in
     `profiles[vecchio]`). Non viene mai applicato ed è tolto da export e copia.
     Issue pronta in `~/.cache/fub-prealpha/issue-chiavi-locali-profili.md`.
+- 2026-11-14 · T38 · «Tutti i componenti» è un dialogo a tutta finestra sopra
+  le Impostazioni, non una linguetta: una linguetta vorrebbe un tipo di Tab nuovo
+  nel layout salvato, e chiudere le Impostazioni annulla l'anteprima del tema.
+  - Il CSS sta in `src/dev/catalogo/catalogo.css`, caricato con `import()`, che
+    in produzione diventa un `<link>` sotto `style-src 'self'`. Non sta in
+    `skin/settings.css`: la pelle arriva all'avvio. Quindi un tema non veste la
+    cornice della pagina, e gli hook `dev-catalog*` della lista del piano cadono.
+  - Le stringhe della pagina stanno in un catalogo caricato con la pagina. In
+    `i18n/catalog.ts` resta solo l'etichetta del bottone.
+  - Una vita per ogni apertura, figlia di quella delle Impostazioni: chiuse le
+    Impostazioni, si chiude anche la pagina.
+  - Il riquadro di un hook fuori dal flusso si riconosce dalla geometria, non da
+    `getComputedStyle`, che in happy-dom esauriva la memoria.

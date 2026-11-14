@@ -5011,7 +5011,7 @@ Fatto quando: le scene `catalog` e `kit` del banco danno le stesse foto di
 prima (CI); un Vitest apre e chiude la pagina due volte senza resti; il
 bundle iniziale ha la stessa misura (±1 KB).
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build
-Stato: [ ] da fare
+Stato: [x] integrato 2026-11-14 (coder/pa-t38 @ d958f7742) · un giro di revisione (9 punti: kit con popover, dialogo e scheda sopra la pagina, race dell'`import()`, gemelli tolti se la costruzione lancia, testi in inglese, fuoco, a11y, descrizione di `developer.mode` coi tre bottoni); check verde tranne timeout da carico rilanciati da soli e la baseline di `file-nuovo-tipo` (T43, dal runner) · foto del banco catalog/kit uguali · differenze in DECISIONS
 
 ## T39 · I caratteri del tema
 
