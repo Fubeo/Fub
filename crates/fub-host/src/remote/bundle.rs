@@ -390,29 +390,8 @@ impl JobLock {
     fn acquire(root: &Path) -> Result<Self, PluginError> {
         std::fs::create_dir_all(root)
             .map_err(|_| PluginError::Io("sync state root unavailable".into()))?;
-        let path = root.join("sync-pass.lock");
-        // Come il lock dello scrittore del vault (`automation::lock_vault_writer`):
-        // un collegamento al posto del file farebbe bloccare a due processi due
-        // file diversi, e «sync already running» non varrebbe più.
-        let not_regular =
-            |meta: &std::fs::Metadata| !meta.is_file() || meta.file_type().is_symlink();
-        if std::fs::symlink_metadata(&path).is_ok_and(|meta| not_regular(&meta)) {
-            return Err(PluginError::PermissionDenied(
-                "sync lock is not a regular file".into(),
-            ));
-        }
-        let file = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&path)
+        let file = open_regular_lock(&root.join("sync-pass.lock"))
             .map_err(|_| PluginError::Io("sync lock unavailable".into()))?;
-        if file.metadata().is_ok_and(|meta| !meta.is_file()) {
-            return Err(PluginError::PermissionDenied(
-                "sync lock is not a regular file".into(),
-            ));
-        }
         file.try_lock().map_err(|error| match error {
             std::fs::TryLockError::WouldBlock => {
                 PluginError::Cancelled("sync already running".into())
@@ -423,6 +402,34 @@ impl JobLock {
         })?;
         Ok(Self { _file: file })
     }
+}
+
+/// Apre (o crea) il lock del passo di sync, solo se è un file regolare. Come
+/// il lock dello scrittore del vault (`automation::lock_vault_writer`): un
+/// collegamento o una cartella al suo posto farebbe bloccare a due processi
+/// due file diversi, e «sync already running» non varrebbe più.
+fn open_regular_lock(path: &Path) -> std::io::Result<std::fs::File> {
+    let refused = || {
+        std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "sync lock is not a regular file",
+        )
+    };
+    if std::fs::symlink_metadata(path)
+        .is_ok_and(|meta| !meta.is_file() || meta.file_type().is_symlink())
+    {
+        return Err(refused());
+    }
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(refused());
+    }
+    Ok(file)
 }
 
 /// Stato durevole del job (file atomici sotto la root TRUSTED).
@@ -837,7 +844,7 @@ mod recovery_tests {
         std::fs::create_dir(dir.path().join("sync-pass.lock")).unwrap();
         assert!(matches!(
             JobLock::acquire(dir.path()),
-            Err(fub_abi::PluginError::PermissionDenied(_))
+            Err(fub_abi::PluginError::Io(_))
         ));
         #[cfg(unix)]
         {
@@ -847,7 +854,7 @@ mod recovery_tests {
             std::os::unix::fs::symlink(&target, other.path().join("sync-pass.lock")).unwrap();
             assert!(matches!(
                 JobLock::acquire(other.path()),
-                Err(fub_abi::PluginError::PermissionDenied(_))
+                Err(fub_abi::PluginError::Io(_))
             ));
         }
     }
