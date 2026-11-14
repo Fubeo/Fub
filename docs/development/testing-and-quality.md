@@ -229,7 +229,40 @@ Tutti i comandi girano da `apps/client/`; gli script sorgente sono in
 | `npm run bench:graph-scale` | il grafo a 2k/10k nodi: tempi, heap, soak |
 | `npm run bench:large` | i disegni grandi (da 200 a 49 900 elementi) nell'app vera |
 | `npm run bench:tree` | l'albero di un vault da 5.000 file: primo disegno, apertura, scorrimento, ricerca, a velocità normale e con la pagina quattro volte più lenta |
+| `npm run bench:giro` | il giro della pre-alpha: i compiti di una persona, di fila, con una foto per compito (vedi sotto) |
 | `npm run bench:webview` | le misure nella WebView vera (vedi [webview-measurements.md](webview-measurements.md)) |
+
+### Il giro della pre-alpha
+
+Il giro fa sul banco, di fila e sulla stessa pagina, i compiti che una persona
+fa nella pre-alpha: la shell vera col finto host e il vault del banco, gesti
+con la tastiera e col puntatore, il moto ridotto e la lingua italiana del
+palco (`bench/stage.mjs`). Ogni compito controlla il risultato nel DOM o nel
+finto host (per esempio il Markdown che arriva a `writeDocument`, non solo
+l'assenza di errori) e lascia una foto.
+
+```bash
+cd apps/client
+npm run bench:giro -- --out=$TMPDIR/giro              # a 1280×800
+npm run bench:giro -- --out=$TMPDIR/giro --telefono   # mobile.html a 390×844
+npm run bench:giro -- --solo=avvio --luce=light       # un gruppo, nella luce giorno
+```
+
+Il corridore è `bench/giro.mjs`; i gruppi, in ordine, sono in
+`bench/giro/elenco.mjs`, uno per file accanto. Oggi c'è il gruppo `avvio`:
+il primo avvio senza vault fino alla scrivania senza lo strato d'avvio,
+l'apertura del vault, una cartella e una nota dall'albero, un titolo, una lista
+e un grassetto scritti in Live, le quattro modalità sulla stessa nota (questo
+non al telefono). Al primo compito che fallisce il giro si ferma, dice quale e
+perché, fotografa la pagina (`…-errore.png`) ed esce con 1. Foto e referto
+(`giro.json`) vanno in `--out` (di serie `bench/.output/giro/`); la porta segue
+`FUB_BENCH_PORT` o `--port`.
+
+Che cosa **non** prova: i pixel (le foto non hanno baseline, si guardano: per
+i pixel c'è `bench:verify`), il motore vero (risponde il finto host, non
+`fub-host`, né un componente WASM), il sistema operativo (finestre, dialoghi,
+WebView e installer: il selettore di cartella risponde il vault del banco).
+Quelli restano al giro a mano sugli installer.
 
 Varianti usate dalle prove di accettazione della Graph View e dei disegni
 grandi:
