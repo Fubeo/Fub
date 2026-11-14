@@ -264,6 +264,8 @@ function slashTooltip(view: EditorView): TooltipView {
   void loadDiagramTemplates();
   const current = () => view.state.field(slashField, false)?.open ?? null;
   let placed = false;
+  // L'altezza del pannello secondo il CSS, prima che `positioned` lo accorci.
+  let natural = 0;
   const events: SlashPanelCore = {
     choose(choice) {
       const open = current();
@@ -315,7 +317,9 @@ function slashTooltip(view: EditorView): TooltipView {
       // Qui CodeMirror sta scrivendo la sua misura (il pannello sotto la
       // riga, alto quanto il CSS) e non lascia leggere il layout: la riga e
       // l'area del documento si leggono nella misura che segue, che sposta e
-      // accorcia il pannello secondo `slashPlacement`.
+      // accorcia il pannello secondo `slashPlacement`. Le due misure possono
+      // finire nello stesso giro di CodeMirror, in un ordine o nell'altro:
+      // la nostra non conta su ciò che l'altra ha appena scritto.
       const open = current();
       const first = !placed;
       placed = true;
@@ -324,26 +328,31 @@ function slashTooltip(view: EditorView): TooltipView {
         read: () => {
           const dom = panel.dom;
           const caret = open ? view.coordsAtPos(open.from) : null;
-          if (!caret || dom.classList.contains("is-sheet")) return { caret: null, caretX: 0, natural: 0, bounds: null };
+          if (!caret || dom.classList.contains("is-sheet")) return { caret: null, caretX: 0, origin: NaN, bounds: null };
           const area = view.scrollDOM.getBoundingClientRect();
+          const rect = dom.getBoundingClientRect();
+          // L'altezza naturale è quella del CSS, letta solo quando nessuno
+          // l'ha accorciata qui: un'altezza scritta da noi non è naturale.
+          if (!dom.style.height) natural = parseFloat(getComputedStyle(dom).height) || natural;
           return {
             caret,
-            caretX: first ? caret.left - dom.getBoundingClientRect().left : 0,
-            natural: parseFloat(getComputedStyle(dom).height) || 0,
+            caretX: first ? caret.left - rect.left : 0,
+            // Dove sta lo zero di `style.top` (fixed o absolute), in
+            // coordinate della finestra: non cambia con ciò che si scrive.
+            origin: rect.top - parseFloat(dom.style.top) * view.scaleY,
             // Uno stacco anche dai bordi dell'area, come dalla riga.
             bounds: { top: Math.max(area.top, 0) + SLASH_GAP, bottom: Math.min(area.bottom, window.innerHeight) - SLASH_GAP },
           };
         },
-        write: ({ caret, caretX, natural, bounds }) => {
+        write: ({ caret, caretX, origin, bounds }) => {
           const dom = panel.dom;
           let above = dom.classList.contains("cm-tooltip-above");
-          if (caret && bounds) {
+          // CodeMirror nasconde il pannello quando la riga esce dall'area
+          // (lo manda a -10000 px): resta nascosto finché non la rimisura.
+          const hidden = parseFloat(dom.style.top) <= -10000;
+          if (caret && bounds && !hidden) {
             const place = slashPlacement(caret, natural, bounds);
-            // CodeMirror l'ha messo a `caret.bottom + SLASH_GAP`: lo si sposta
-            // di quanto manca, nella sua stessa unità (fixed o absolute).
-            const from = caret.bottom + SLASH_GAP;
-            const top = parseFloat(dom.style.top);
-            if (Number.isFinite(top)) dom.style.top = `${top + (place.top - from) / view.scaleY}px`;
+            if (Number.isFinite(origin)) dom.style.top = `${(place.top - origin) / view.scaleY}px`;
             dom.style.height = place.height < natural ? `${place.height / view.scaleY}px` : "";
             dom.classList.toggle("cm-tooltip-above", place.above);
             dom.classList.toggle("cm-tooltip-below", !place.above);
