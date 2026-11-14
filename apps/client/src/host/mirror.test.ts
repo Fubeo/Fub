@@ -18,6 +18,7 @@ import type {
   ComponentWrite,
   ComponentsApplied,
   ComponentsMap,
+  ThemeFolderInstall,
   ThemeFont,
   ThemeInfo,
   ThemePayload,
@@ -1907,6 +1908,39 @@ describe("mirror TS↔Rust", () => {
       expect(typeof file).toBe("string");
       expect(themeIconsFileHolds(file), file).toBe(true);
     }
+  });
+
+  it("l'installazione da cartella porta i suoi tre esiti, ognuno coi suoi campi", () => {
+    const samples = appFixture.ThemeFolderInstall as ThemeFolderInstall[];
+    const fields: Record<ThemeFolderInstall["outcome"], string[]> = {
+      installed: keysOf<Extract<ThemeFolderInstall, { outcome: "installed" }>>({
+        outcome: true, id: true, name: true, version: true, replaced: true,
+      }),
+      collision: keysOf<Extract<ThemeFolderInstall, { outcome: "collision" }>>({
+        outcome: true, id: true, name: true, version: true, installed_version: true,
+      }),
+      replace_failed: keysOf<Extract<ThemeFolderInstall, { outcome: "replace_failed" }>>({
+        outcome: true, id: true, name: true, version: true, error: true,
+      }),
+    };
+    for (const sample of samples) {
+      switch (sample.outcome) {
+        case "installed":
+          expect(typeof sample.replaced).toBe("boolean");
+          break;
+        case "collision":
+          expect(sample.installed_version === null || typeof sample.installed_version === "string").toBe(true);
+          break;
+        case "replace_failed":
+          touchPluginErrorKind(sample.error.kind);
+          expect(Object.keys(sample.error).sort()).toEqual(RECORD_KEYS.PluginError);
+          break;
+        default:
+          assertNever(sample);
+      }
+      expect(Object.keys(sample).sort()).toEqual(fields[sample.outcome]);
+    }
+    expect(new Set(samples.map((sample) => sample.outcome))).toEqual(new Set(Object.keys(fields)));
   });
 
   it("«Apri con» porta i tre modi di consegna e le tre righe del menu", () => {

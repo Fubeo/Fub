@@ -47,6 +47,7 @@ import type {
   Locale,
   PluginError,
   SettingValue,
+  ThemeFolderInstall,
   ThemeInfo,
   ThemeLight,
   ThemePayload,
@@ -492,6 +493,12 @@ export const api = {
   listThemes: () => invoke<ThemeInfo[]>("list_themes"),
   readTheme: (id: string, light: ThemeLight) =>
     invoke<ThemePayload>("read_theme", { id, light }),
+  // Installa un tema dalla cartella scelta con `pickFolder`. Solo con
+  // `developer.mode` acceso: lo decide l'host, che altrimenti risponde
+  // `permission_denied`. Senza `replace` un id già installato torna come
+  // `collision`, e niente si tocca.
+  installThemeFromFolder: (source: string, replace: boolean) =>
+    invoke<ThemeFolderInstall>("install_theme_from_folder", { source, replace }),
   // Chi questo host sa montare, e chi è acceso: non è `VaultInfo.plugins`, che
   // elenca chi è dichiarato nel kernel — un componente spento non lo è.
   listBundles: () => invoke<BundleInfo[]>("list_bundles"),

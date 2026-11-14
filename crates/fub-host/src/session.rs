@@ -2397,6 +2397,39 @@ impl Host {
         crate::theme::read_theme(dir, id, light).map_err(Into::into)
     }
 
+    /// Installa un tema dalla cartella di chi lo scrive
+    /// ([`crate::theme::install_theme_from_folder`]), solo con la modalità
+    /// sviluppatore accesa ([`crate::settings::DEVELOPER_MODE`]).
+    ///
+    /// La regola sta qui e non nel bottone che la shell nasconde: la chiave si
+    /// rilegge a ogni chiamata, quindi spegnerla mentre la finestra di scelta
+    /// è aperta (o fra la collisione e «Sostituisci») ferma la richiesta che
+    /// arriva dopo. Spenta, o illeggibile, vuol dire no: `PermissionDenied`.
+    pub fn install_theme_from_folder(
+        &self,
+        source: &camino::Utf8Path,
+        replace: bool,
+    ) -> Result<crate::theme::ThemeFolderInstall, PluginError> {
+        let on = matches!(
+            self.machine.effective(crate::settings::DEVELOPER_MODE),
+            Ok((fub_abi::settings::SettingValue::Toggle(true), _))
+        );
+        if !on {
+            return Err(PluginError::PermissionDenied(
+                format!(
+                    "installing a theme from a folder needs `{}` on",
+                    crate::settings::DEVELOPER_MODE
+                )
+                .into(),
+            ));
+        }
+        let dir = self
+            .config_dir
+            .as_deref()
+            .ok_or_else(|| PluginError::Unserved("theme inventory unavailable".into()))?;
+        crate::theme::install_theme_from_folder(dir, source, replace).map_err(Into::into)
+    }
+
     /// I vault conosciuti: prima i preferiti, poi i recenti.
     pub fn known_vaults(&self) -> Vec<VaultEntry> {
         self.vaults.handle().list()

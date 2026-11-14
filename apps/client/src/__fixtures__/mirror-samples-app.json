@@ -245,6 +245,32 @@
       "trust": "community"
     }
   ],
+  "ThemeFolderInstall": [
+    {
+      "outcome": "installed",
+      "id": "acme.carta",
+      "name": "Carta",
+      "version": "0.4.0",
+      "replaced": true
+    },
+    {
+      "outcome": "collision",
+      "id": "acme.carta",
+      "name": "Carta",
+      "version": "0.4.0",
+      "installed_version": "0.3.2"
+    },
+    {
+      "outcome": "replace_failed",
+      "id": "acme.carta",
+      "name": "Carta",
+      "version": "0.4.0",
+      "error": {
+        "kind": "io",
+        "message": "I/O error: No space left on device"
+      }
+    }
+  ],
   "ThemePayload": [
     {
       "manifest": {

@@ -284,6 +284,28 @@ fn expected() -> Value {
             manifest: extending_manifest(),
             trust: "community",
         })],
+        // I tre esiti dell'installazione da cartella: la finestra della shell
+        // li dice in tre modi diversi, e il mirror deve vederli tutti.
+        "ThemeFolderInstall": [
+            to_value(fub_host::theme::ThemeFolderInstall::Installed {
+                id: "acme.carta".into(),
+                name: "Carta".into(),
+                version: "0.4.0".into(),
+                replaced: true,
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Collision {
+                id: "acme.carta".into(),
+                name: "Carta".into(),
+                version: "0.4.0".into(),
+                installed_version: Some("0.3.2".into()),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::ReplaceFailed {
+                id: "acme.carta".into(),
+                name: "Carta".into(),
+                version: "0.4.0".into(),
+                error: PluginError::Io("I/O error: No space left on device".into()),
+            }),
+        ],
         "ThemePayload": [to_value(ThemePayload {
             manifest: fub_abi::theme::ThemeManifest {
                 id: "acme.paper".into(),

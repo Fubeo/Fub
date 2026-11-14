@@ -122,6 +122,116 @@ pub fn install_theme(config_dir: &Utf8Path, source: &Utf8Path) -> Result<Utf8Pat
     install_theme_internal(config_dir, source, None)
 }
 
+/// Com'è andata un'installazione da cartella (`install_theme_from_folder`).
+///
+/// Un rifiuto della cartella (manifest assente, link simbolico, limiti) è un
+/// errore tipizzato, e qui non c'è. Qui ci sono i tre esiti che chi disegna
+/// deve dire in modo diverso: installato; un tema con lo stesso id c'è già, e
+/// niente è stato toccato; la sostituzione ha tolto il vecchio ma il nuovo si
+/// è fermato. Il terzo non è un errore della chiamata: il disco è cambiato (il
+/// vecchio non c'è più), e la finestra deve poterlo dire con le parole giuste.
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum ThemeFolderInstall {
+    /// Il tema è in `<config>/themes/<id>/`; `replaced` dice se ne ha preso
+    /// il posto di uno con lo stesso id.
+    Installed {
+        id: String,
+        name: String,
+        version: String,
+        replaced: bool,
+    },
+    /// Un tema con questo id è già installato: la cartella nuova è già passata
+    /// dalle porte di [`install_theme`], e niente è stato toccato.
+    /// `installed_version` è `null` quando quello installato non si legge più.
+    Collision {
+        id: String,
+        name: String,
+        version: String,
+        installed_version: Option<String>,
+    },
+    /// Il vecchio è stato tolto e il nuovo non si è installato: `error` dice
+    /// perché. La cartella sorgente resta dov'è.
+    ReplaceFailed {
+        id: String,
+        name: String,
+        version: String,
+        error: PluginError,
+    },
+}
+
+/// Installa un tema dalla cartella di chi lo scrive, con le porte di
+/// [`install_theme`] e niente di più: è [`install_theme`] stessa, preceduta
+/// dalla stessa validazione (radice canonica, [`ThemeBundle::load`], la serie
+/// riservata) così una collisione si dice **prima** di toccare il disco.
+///
+/// Con `replace` un tema con lo stesso id si sostituisce: prima si valida la
+/// cartella nuova, poi si toglie il vecchio ([`uninstall_theme`]) e si installa
+/// il nuovo. Se il nuovo si ferma dopo che il vecchio è stato tolto l'esito è
+/// [`ThemeFolderInstall::ReplaceFailed`]. Se a fermarsi è la rimozione, il
+/// vecchio resta ed è un errore.
+///
+/// Chi può chiederlo (la modalità sviluppatore) lo decide l'host, non questa
+/// funzione: vedi `Host::install_theme_from_folder`.
+pub fn install_theme_from_folder(
+    config_dir: &Utf8Path,
+    source: &Utf8Path,
+    replace: bool,
+) -> Result<ThemeFolderInstall, ThemeError> {
+    let source_id = source.file_name().unwrap_or_default().to_string();
+    let source_root = canonical_theme_root(source, &source_id)?;
+    let manifest = ThemeBundle::load(&source_root)?.manifest;
+    if manifest.id == SERIES_ID {
+        return Err(ThemeError::InvalidId(SERIES_ID.to_string()));
+    }
+    let ThemeManifest {
+        id, name, version, ..
+    } = manifest;
+    let present = match open_themes_root(config_dir, &id)? {
+        None => false,
+        Some(root) => match root.dir.symlink_metadata(&id) {
+            Ok(_) => true,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+            Err(error) => {
+                return Err(ThemeError::Io(format!(
+                    "{}: {error}",
+                    crate::config::themes_dir(config_dir).join(&id)
+                )))
+            }
+        },
+    };
+    if present && !replace {
+        let installed_version = list_themes(config_dir)
+            .into_iter()
+            .find(|theme| theme.manifest.id == id)
+            .map(|theme| theme.manifest.version);
+        return Ok(ThemeFolderInstall::Collision {
+            id,
+            name,
+            version,
+            installed_version,
+        });
+    }
+    if present {
+        uninstall_theme(config_dir, &id)?;
+    }
+    match install_theme(config_dir, &source_root) {
+        Ok(_) => Ok(ThemeFolderInstall::Installed {
+            id,
+            name,
+            version,
+            replaced: present,
+        }),
+        Err(error) if present => Ok(ThemeFolderInstall::ReplaceFailed {
+            id,
+            name,
+            version,
+            error: error.into(),
+        }),
+        Err(error) => Err(error),
+    }
+}
+
 pub fn install_theme_checked(
     config_dir: &Utf8Path,
     source: &Utf8Path,

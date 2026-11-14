@@ -1685,6 +1685,13 @@
     "prefs-preview-sheet",
     "prefs-preview-title",
     "prefs-preview-link",
+    "tema-diagnosi",
+    "tema-diagnosi-lista",
+    "tema-diagnosi-riga",
+    "tema-diagnosi-file",
+    "tema-diagnosi-dove",
+    "tema-diagnosi-codice",
+    "tema-diagnosi-perche",
     "settings-actions",
     "settings-btn",
     "settings-btn--danger",
@@ -3303,6 +3310,13 @@
     "prefs-preview-sheet": "cornice",
     "prefs-preview-title": "cornice",
     "prefs-preview-link": "cornice",
+    "tema-diagnosi": "cornice",
+    "tema-diagnosi-lista": "cornice",
+    "tema-diagnosi-riga": "cornice",
+    "tema-diagnosi-file": "cornice",
+    "tema-diagnosi-dove": "cornice",
+    "tema-diagnosi-codice": "cornice",
+    "tema-diagnosi-perche": "cornice",
     "settings-actions": "cornice",
     "settings-btn": "cornice",
     "settings-btn--danger": "cornice",
@@ -7477,6 +7491,22 @@
       ]
     },
     {
+      "name": "theme-diagnosis",
+      "part": "settings",
+      "hooks": [
+        "tema-diagnosi",
+        "tema-diagnosi-lista",
+        "tema-diagnosi-riga",
+        "tema-diagnosi-file",
+        "tema-diagnosi-dove",
+        "tema-diagnosi-codice",
+        "tema-diagnosi-perche"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "settings-actions",
       "part": "settings",
       "hooks": [
@@ -8936,10 +8966,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 71,
-    "hooks": 1616,
+    "hooks": 1623,
     "state_names": 7,
-    "assigned_states": 763,
-    "components": 229,
+    "assigned_states": 764,
+    "components": 230,
     "preference_tokens": 194
   }
 }

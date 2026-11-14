@@ -65,6 +65,8 @@ vi.mock("../theme/theme", () => ({
     if (entry) entry.value = light;
   },
   themeCatalog: async () => box.themes,
+  themeRejections: () => [],
+  reloadThemeCatalog: async () => box.themes,
 }));
 vi.mock("../host/dialog", () => ({
   confirm: (message: string) => {

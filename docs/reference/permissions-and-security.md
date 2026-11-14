@@ -118,6 +118,20 @@ documento come `data-opt-<nome>` e, per i numeri, `--opt-<nome>`. La pubblicazio
 sovrascrive un id esistente. I limiti correnti sono 64 KiB per il manifest,
 4 MiB per ciascun foglio/skin, 1.024 asset, 64 MiB per asset e 256 MiB totali.
 
+Oltre al catalogo firmato, un tema si installa da una cartella scelta dalla
+persona (`install_theme_from_folder`), ma solo con la modalità sviluppatore
+accesa (`developer.mode`: interruttore di macchina, spento di default, non
+scrivibile da programma). La regola sta nell'host
+(`Host::install_theme_from_folder`), che rilegge la chiave a ogni chiamata e
+risponde `permission_denied` se è spenta; il bottone che la shell nasconde non
+è la difesa. L'installazione passa dalle stesse porte di `install_theme`
+(manifest validato, serie riservata, niente symlink né traversal, limiti,
+rename atomico) e il tema ha la fiducia di ogni tema non di serie. Un id già
+installato non si tocca: l'esito è `collision`, e solo una seconda chiamata
+con `replace` lo sostituisce, validando la cartella nuova prima di togliere la
+vecchia. Se il nuovo si ferma dopo la rimozione l'esito è `replace_failed`: la
+cartella sorgente resta dov'è.
+
 Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount. Una
 preview dalle Impostazioni non cambia la scelta persistente: annullamento o
 chiusura rimontano il tema autorevole precedente; un bundle non leggibile o

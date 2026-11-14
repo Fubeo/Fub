@@ -65,6 +65,7 @@ commands.allow = [
   "craft_render",
   "list_themes",
   "read_theme",
+  "install_theme_from_folder",
   "plugin_budget_snapshot",
   "plugin_limited_mode",
   "catalog_search",

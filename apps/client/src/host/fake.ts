@@ -78,6 +78,7 @@ import type {
   SettingValue,
   SyntaxForm,
   TextEdit,
+  ThemeFolderInstall,
   ThemeInfo,
   ThemePayload,
   UiNode,
@@ -300,6 +301,11 @@ export interface Options {
   themes?: ThemeInfo[];
   /// Fascio per luce, indicizzato come `${id}:${light}`.
   themePayloads?: Record<string, ThemePayload>;
+  /// Le cartelle che «Installa da cartella…» può scegliere, per path: il tema
+  /// che la cartella contiene, o il `PluginError` con cui l'host vero la
+  /// rifiuterebbe (manifest assente, link simbolico, limiti). `replaceError`
+  /// fa fermare l'installazione nuova dopo che la vecchia è stata tolta.
+  themeFolders?: Record<string, ThemeFolderFake | PluginError>;
   /// Inventario installato della macchina, compresi elementi spenti o senza
   /// consenso: il fake non li ricava dai bundle runtime.
   installedPlugins?: InstalledPluginInfo[];
@@ -609,8 +615,36 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const calls: Call[] = [];
   const view = options.view ?? [];
   const bundles = options.bundles ?? [];
-  const themes = options.themes ?? [];
-  const themePayloads = options.themePayloads ?? {};
+  const themes = [...(options.themes ?? [])];
+  const themePayloads: Record<string, ThemePayload> = { ...options.themePayloads };
+  const themeFolders = options.themeFolders ?? {};
+
+  /// L'installazione da cartella come la fa l'host: la modalità sviluppatore
+  /// si rilegge a ogni chiamata, una collisione senza `replace` non tocca
+  /// niente, una sostituzione fallita ha già tolto il vecchio.
+  function installThemeFolder(source: string, replace: boolean): ThemeFolderInstall {
+    const developer = settings.find((entry) => entry.spec.key === DEVELOPER_MODE_KEY);
+    if (developer?.value !== true) {
+      throw { kind: "permission_denied", message: "installing a theme from a folder needs `developer.mode` on" };
+    }
+    const folder = themeFolders[source];
+    if (folder === undefined) throw { kind: "io", message: `I/O error: ${source}: no such folder` };
+    if ("kind" in folder) throw folder;
+    const { manifest } = folder.info;
+    const { id, name, version } = manifest;
+    const at = themes.findIndex((theme) => theme.manifest.id === id);
+    if (at >= 0 && !replace) {
+      return { outcome: "collision", id, name, version, installed_version: themes[at]!.manifest.version };
+    }
+    if (at >= 0) {
+      themes.splice(at, 1);
+      for (const key of Object.keys(themePayloads)) if (key.startsWith(`${id}:`)) delete themePayloads[key];
+      if (folder.replaceError) return { outcome: "replace_failed", id, name, version, error: folder.replaceError };
+    }
+    themes.push(folder.info);
+    Object.assign(themePayloads, folder.payloads);
+    return { outcome: "installed", id, name, version, replaced: at >= 0 };
+  }
   const installedPlugins = new Map(
     (options.installedPlugins ?? []).map((plugin) => [
       plugin.installation,
@@ -2006,6 +2040,12 @@ export function createFakeHost(options: Options = {}): FakeHost {
         }
         return gate("readTheme", [id, light], Promise.resolve(payload));
       },
+      installThemeFromFolder: (source, replace) =>
+        gate(
+          "installThemeFromFolder",
+          [source, replace],
+          new Promise<ThemeFolderInstall>((resolve) => resolve(installThemeFolder(source, replace))),
+        ),
       setPluginEnabled: (id, enabled) =>
         gate("setPluginEnabled", [id, enabled], Promise.resolve([])),
       componentsMap: (vault) =>
@@ -2484,6 +2524,67 @@ function titled(source: string, title: string): string {
   const text = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const root = new RegExp(`(<${"svg"}\\b[^>]*>)(\\s*<title>[\\s\\S]*?</title>)?`);
   return source.replace(root, (_, head: string, old: string | undefined) => (old === undefined ? `${head}\n  <title>${text}</title>` : `${head}${old.replace(/<title>[\s\S]*<\/title>/, () => `<title>${text}</title>`)}`));
+}
+
+/// La chiave della modalità sviluppatore (`fub_host::settings::DEVELOPER_MODE`).
+const DEVELOPER_MODE_KEY = "developer.mode";
+
+/// Una cartella di tema per `themeFolders`: ciò che `extendingTheme` e i suoi
+/// fratelli restituiscono, più l'errore di una sostituzione fallita a metà.
+export interface ThemeFolderFake {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+  replaceError?: PluginError;
+}
+
+/// La riga di `developer.mode` come la dichiara il core: interruttore della
+/// macchina, spento di default, nel gruppo «Sviluppo».
+export function developerModeSetting(on: boolean): SettingEntry {
+  return {
+    spec: {
+      key: DEVELOPER_MODE_KEY,
+      label: "Modalità sviluppatore",
+      description:
+        "Per chi scrive un tema: installa da una cartella, collega una cartella che cambia mentre la scrivi, apre «Tutti i componenti».",
+      group: "Sviluppo",
+      scope: "machine",
+      kind: { kind: "toggle", default: false },
+      program_writable: false,
+    },
+    value: on,
+    source: on ? "machine" : "default",
+  };
+}
+
+/// Una cartella di tema che il loader accetta: parte dalla serie senza fogli
+/// suoi (le due luci prendono quelli di serie) e la pelle ritocca un pezzo.
+export function folderTheme(id = "acme.carta", name = "Carta", version = "1.0.0"): ThemeFolderFake {
+  const manifest: ThemeInfo["manifest"] = { ...extendingTheme(id).info.manifest, name, version };
+  const skin = ".shell-tooltip { white-space: nowrap; }\n";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
+}
+
+/// Un tema che il loader della shell rifiuta: passa le porte dell'host (il
+/// finto non le ha), ma la pelle usa un hook che l'anatomia non dichiara e un
+/// `@font-face`, e il manifest parla `theme-1`. La diagnosi ha una riga per
+/// motivo.
+export function rejectedTheme(id = "acme.rotto", version = "1.0.0"): ThemeFolderFake {
+  const base = extendingTheme(id);
+  const manifest: ThemeInfo["manifest"] = { ...base.info.manifest, name: "Rotto", version, engine: "theme-1" };
+  const skin = ".rotto-titolo { color: red; }\n@font-face { font-family: Rotto; }\n";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
 }
 
 /// Un tema installato che parte dalla serie (`extends`), pronto per le opzioni

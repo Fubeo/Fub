@@ -117,6 +117,32 @@ non deve poter spegnere gli altri. Le forme, i rifiuti tipati, l'avviso del
 rimontaggio e lo scenario dell'host finto sono nel
 [contratto dei componenti](components-contract.md).
 
+## Temi
+
+`list_themes` elenca i temi installati che l'host sa consegnare, e
+`read_theme` consegna una luce di uno (manifest, foglio, pelle, asset per
+nome): il filesystem non attraversa il confine. Il loader della shell
+rivalida il fascio; un tema che rifiuta resta fuori dal catalogo, e Aspetto
+mostra i motivi così come li scrive `validateThemeBundle`, una riga per
+motivo (file, riga:colonna, codice, perché).
+
+`install_theme_from_folder(source, replace)` installa un tema dalla cartella
+scelta con `pickFolder`, e solo con `developer.mode` acceso: spento,
+`permission_denied` (la regola è dell'host). Gira fuori dal thread principale.
+Una cartella rifiutata è un errore tipato (`bad_args`, `io`, `unserved`); gli
+esiti sono `ThemeFolderInstall`, unione con il campo `outcome`:
+
+| `outcome` | Campi | Che cosa vuol dire |
+|---|---|---|
+| `installed` | `id`, `name`, `version`, `replaced` | il tema è installato; `replaced` se ha preso il posto di uno con lo stesso id |
+| `collision` | `id`, `name`, `version`, `installed_version` | un id già installato, niente toccato; `installed_version` è `null` se quello installato non si legge |
+| `replace_failed` | `id`, `name`, `version`, `error` | con `replace`, il vecchio è stato tolto e il nuovo si è fermato (`error` è un `PluginError`) |
+
+Il catalogo firmato ha le sue porte (`catalog_install_theme`,
+`catalog_update_theme`, `catalog_rollback_theme`, `catalog_revoke_theme`). Le
+regole di sicurezza dei temi sono in
+[permessi e sicurezza](permissions-and-security.md#temi-installati).
+
 ## Apri con e anteprime Craft
 
 Tre comandi dell'app servono «Apri con» un'app Craft e l'anteprima fatta dalla

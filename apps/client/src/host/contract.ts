@@ -147,6 +147,30 @@ export interface ThemePayload {
   assets: Record<string, readonly number[]>;
 }
 
+/**
+ * Com'è andata un'installazione da cartella (`install_theme_from_folder`,
+ * `fub_host::theme::ThemeFolderInstall`). Una cartella rifiutata, o la
+ * modalità sviluppatore spenta, è un `PluginError` e non sta qui.
+ *
+ * - `installed`: il tema è installato; `replaced` se ha preso il posto di uno
+ *   con lo stesso id;
+ * - `collision`: un tema con lo stesso id c'è già e niente è stato toccato; la
+ *   cartella nuova è già controllata. `installed_version` è `null` quando
+ *   quello installato non si legge più;
+ * - `replace_failed`: il vecchio è stato tolto e il nuovo si è fermato
+ *   (`error`); la cartella sorgente resta dov'è.
+ */
+export type ThemeFolderInstall =
+  | { outcome: "installed"; id: string; name: string; version: string; replaced: boolean }
+  | {
+      outcome: "collision";
+      id: string;
+      name: string;
+      version: string;
+      installed_version: string | null;
+    }
+  | { outcome: "replace_failed"; id: string; name: string; version: string; error: PluginError };
+
 export interface VaultInfo {
   root: string;
   // `documents` NON C'È PIÙ (§14.4): l'apertura portava l'elenco intero delle

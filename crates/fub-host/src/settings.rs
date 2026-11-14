@@ -411,6 +411,14 @@ pub const LOG_VERBOSE: &str = "log.verbose";
 /// niente esce dall'app.
 pub const PERF_PROBE: &str = "perf.probe";
 
+/// La modalità sviluppatore: apre a chi scrive un tema i gesti che un tema
+/// finito non chiede, a cominciare da «Installa da cartella…». Di **macchina**
+/// (è uno strumento di questo PC, non una preferenza su un vault), spenta di
+/// default, e **non** scrivibile da un programma: un componente che potesse
+/// accenderla aprirebbe da sé la porta che lei tiene chiusa. La regola la
+/// applica l'host (`Host::install_theme_from_folder`), non il bottone nascosto.
+pub const DEVELOPER_MODE: &str = "developer.mode";
+
 /// Preferenze locali della replica; identità, pairing e chiavi non sono impostazioni.
 pub const SYNC_SERVER_URL: &str = "sync.server_url";
 pub const SYNC_PAUSED: &str = "sync.paused";
@@ -607,6 +615,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
     settings.push(perf_probe_spec());
+    settings.push(developer_mode_spec());
     #[cfg(feature = "http-client")]
     settings.extend(service_settings());
     settings.extend(live_settings());
@@ -1435,6 +1444,18 @@ fn perf_probe_spec() -> SettingSpec {
     .for_machine()
 }
 
+/// La modalità sviluppatore come [`SettingSpec`]: vedi [`DEVELOPER_MODE`].
+fn developer_mode_spec() -> SettingSpec {
+    SettingSpec::new(
+        DEVELOPER_MODE,
+        Text::key(C_DEVELOPER_MODE),
+        SettingKind::Toggle { default: false },
+    )
+    .describing(Text::key(C_DEVELOPER_MODE_DESC))
+    .grouped(Text::key(C_GROUP_DEVELOPMENT))
+    .for_machine()
+}
+
 /// Le chiavi delle stringhe del core. Le `locale.*` non stanno qui: stanno
 /// accanto alle impostazioni che descrivono, in `fub_kernel::locale`, e
 /// arrivano al montaggio come secondo catalogo della stessa lingua.
@@ -1671,6 +1692,9 @@ const C_LOG_VERBOSE: &str = "core.log.verbose";
 const C_LOG_VERBOSE_DESC: &str = "core.log.verbose.desc";
 const C_PERF_PROBE: &str = "core.perf.probe";
 const C_PERF_PROBE_DESC: &str = "core.perf.probe.desc";
+const C_GROUP_DEVELOPMENT: &str = "core.group.development";
+const C_DEVELOPER_MODE: &str = "core.developer.mode";
+const C_DEVELOPER_MODE_DESC: &str = "core.developer.mode.desc";
 const C_GROUP_SYNC: &str = "core.group.sync";
 const C_SYNC_SERVER_URL: &str = "core.sync.server_url";
 const C_SYNC_SERVER_URL_DESC: &str = "core.sync.server_url.desc";
@@ -2388,6 +2412,13 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Misura quanto passa da un tasto, un clic o un tratto di penna al \
              fotogramma che lo mostra, e conta i fotogrammi lunghi. I numeri \
              restano su questo computer: servono ai banchi di misura.",
+        )
+        .with(C_GROUP_DEVELOPMENT, "Sviluppo")
+        .with(C_DEVELOPER_MODE, "Modalità sviluppatore")
+        .with(
+            C_DEVELOPER_MODE_DESC,
+            "Per chi scrive un tema: installa da una cartella, collega una \
+             cartella che cambia mentre la scrivi, apre «Tutti i componenti».",
         );
     for level in fub_kernel::log::Level::ALL {
         it = it.with(
@@ -3017,6 +3048,13 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Measures the time from a key, a click or a pen stroke to the frame \
              that shows it, and counts the long frames. The numbers stay on this \
              computer: they feed the measurement benches.",
+        )
+        .with(C_GROUP_DEVELOPMENT, "Development")
+        .with(C_DEVELOPER_MODE, "Developer mode")
+        .with(
+            C_DEVELOPER_MODE_DESC,
+            "For theme authors: install from a folder, link a folder that \
+             changes while you write it, open «All components».",
         );
     for level in fub_kernel::log::Level::ALL {
         en = en.with(
@@ -3368,6 +3406,22 @@ mod tests {
         assert!(core_machine_settings()
             .iter()
             .any(|spec| spec.key == PERF_PROBE));
+    }
+
+    #[test]
+    fn developer_mode_is_a_machine_switch_off_by_default_that_no_program_writes() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == DEVELOPER_MODE)
+            .expect("il core dichiara la modalità sviluppatore");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+        assert_eq!(spec.kind, SettingKind::Toggle { default: false });
+        // Un programma che potesse accenderla aprirebbe da sé
+        // l'installazione da cartella.
+        assert!(!spec.program_writable);
+        assert!(core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == DEVELOPER_MODE));
     }
 
     #[test]

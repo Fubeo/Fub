@@ -517,10 +517,33 @@ async function reread(): Promise<void> {
   await apply();
 }
 
+/**
+ * Un tema installato che la shell ha lasciato fuori dal catalogo: il cancello
+ * l'ha rifiutato (`validateThemeBundle`, i motivi così come sono) o il fascio
+ * non si è letto. `light` è la luce controllata, `null` se il fascio non è
+ * arrivato; `at` è l'ora del tentativo (`Date.now`).
+ */
+export interface ThemeRejection {
+  readonly id: string;
+  readonly name: string;
+  readonly light: Theme | null;
+  readonly reasons: readonly string[];
+  readonly at: number;
+}
+
+/// I rifiuti dell'ultima lettura del catalogo: li mostra Aspetto come diagnosi.
+let catalogRejections: readonly ThemeRejection[] = [];
+/// Il giro di lettura del catalogo: una lettura superata da una rilettura non
+/// scrive più niente.
+let catalogRound = 0;
+
 async function readCatalog(): Promise<ThemeInfo[]> {
   if (catalogLoaded) return installedThemes;
   if (!catalogRequest) {
-    catalogRequest = api
+    const round = ++catalogRound;
+    const payloads = new Map<string, ThemePayload>();
+    const rejected: ThemeRejection[] = [];
+    const request: Promise<ThemeInfo[]> = api
       .listThemes()
       .then(async (themes) => {
         const verified = await Promise.all(
@@ -537,28 +560,65 @@ async function readCatalog(): Promise<ThemeInfo[]> {
                 const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
                 const reasons = validateThemeBundle(themeBundle(payload, light, contrast), light);
                 if (reasons.length > 0) {
-                  reportThemeTrouble({ type: "theme", theme: info.manifest.name, reasons });
+                  if (round === catalogRound) {
+                    reportThemeTrouble({ type: "theme", theme: info.manifest.name, reasons });
+                  }
+                  rejected.push({ id: info.manifest.id, name: info.manifest.name, light, reasons, at: Date.now() });
                   return null;
                 }
-                catalogPayloads.set(`${info.manifest.id}:${light}`, payload);
+                payloads.set(`${info.manifest.id}:${light}`, payload);
               }
               return info;
             } catch (error) {
-              reportLoadFailure(info.manifest.id, errorDetail(error));
+              const detail = errorDetail(error);
+              if (round === catalogRound) reportLoadFailure(info.manifest.id, detail);
+              rejected.push({
+                id: info.manifest.id,
+                name: info.manifest.name,
+                light: null,
+                reasons: [`fascio non leggibile: ${detail}`],
+                at: Date.now(),
+              });
               return null;
             }
           }),
         );
+        // Superata da una rilettura: il risultato è di quella.
+        if (round !== catalogRound) return readCatalog();
         installedThemes = verified.filter((info): info is ThemeInfo => info !== null);
+        catalogPayloads = payloads;
+        catalogRejections = rejected;
         catalogLoaded = true;
         return installedThemes;
       })
       .catch((error: unknown) => {
-        catalogRequest = null;
+        if (round === catalogRound) catalogRequest = null;
         throw error;
       });
+    catalogRequest = request;
   }
   return catalogRequest;
+}
+
+/**
+ * I temi che l'ultima lettura del catalogo ha lasciato fuori, coi motivi:
+ * la diagnosi di Aspetto. Vuoto finché il catalogo non è letto.
+ */
+export function themeRejections(): readonly ThemeRejection[] {
+  return catalogRejections;
+}
+
+/**
+ * Rilegge il catalogo dei temi dopo un'installazione: un tema nuovo entra (o
+ * resta fuori coi suoi motivi), e se quello sostituito è in uso si rimonta
+ * col fascio nuovo. Una lettura in volo è superata: risponde questa.
+ */
+export async function reloadThemeCatalog(): Promise<ThemeInfo[]> {
+  catalogRound += 1;
+  catalogLoaded = false;
+  catalogRequest = null;
+  await reread();
+  return readCatalog();
 }
 
 /** I temi installati già validati dal backend, per il pannello dedicato. */
@@ -715,10 +775,12 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
   selectionGeneration++;
   loadCache();
   catalogEpoch += 1;
+  catalogRound += 1;
   catalogLoaded = false;
   catalogRequest = null;
   installedThemes = [];
   catalogPayloads = new Map<string, ThemePayload>();
+  catalogRejections = [];
   mountedVariant = "";
   mountedPreferenceText = "";
   settingEntries = [];

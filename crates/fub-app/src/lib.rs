@@ -1558,6 +1558,23 @@ fn read_theme(
     host.read_theme(&id, light)
 }
 
+/// Installa un tema dalla cartella che la persona ha scelto (`pickFolder`):
+/// la modalità sviluppatore e le porte dell'installazione le applica l'host
+/// (`Host::install_theme_from_folder`). Con `replace` un tema con lo stesso id
+/// si sostituisce; senza, la collisione torna come esito e niente si tocca.
+/// La copia legge e scrive il disco: fuori dal thread principale.
+#[tauri::command]
+async fn install_theme_from_folder(
+    app: AppHandle,
+    source: String,
+    replace: bool,
+) -> Result<fub_host::theme::ThemeFolderInstall, PluginError> {
+    off_main(app, move |host| {
+        host.install_theme_from_folder(Utf8Path::new(&source), replace)
+    })
+    .await
+}
+
 fn parse_installation(installation: &str) -> Result<u64, PluginError> {
     if installation.is_empty() || !installation.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err(PluginError::BadArgs(
@@ -3194,6 +3211,7 @@ pub fn run() {
             list_bundles,
             list_themes,
             read_theme,
+            install_theme_from_folder,
             list_installed_plugins,
             plugin_budget_snapshot,
             plugin_limited_mode,

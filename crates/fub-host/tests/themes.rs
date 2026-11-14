@@ -1573,3 +1573,211 @@ fn icons_need_theme_2() {
     let error = fub_host::theme::install_theme(&config, &root).expect_err("theme-1 has no icons");
     malformed_because(error, "icons need `theme-2`");
 }
+
+// --- installare da una cartella, con la modalità sviluppatore ---------------
+
+/// L'host con la modalità sviluppatore accesa o spenta, scritta come la
+/// scrive la persona dalle Impostazioni.
+fn developer(config: &Utf8Path, on: bool) -> Host {
+    let host = installed(config);
+    host.set_setting_for_user(
+        None,
+        fub_host::settings::DEVELOPER_MODE,
+        fub_abi::settings::SettingValue::Toggle(on),
+    )
+    .expect("la modalità sviluppatore è un'impostazione della macchina");
+    host
+}
+
+fn write_versioned_theme(root: &Utf8Path, id: &str, version: &str) {
+    write_theme(root, id, "theme-2", "");
+    let manifest = std::fs::read_to_string(root.join("manifest.json")).unwrap();
+    std::fs::write(
+        root.join("manifest.json"),
+        manifest.replace(r#""version": "1.0.0""#, &format!(r#""version": "{version}""#)),
+    )
+    .unwrap();
+}
+
+fn themes_dir_is_empty(config: &Utf8Path) -> bool {
+    fub_host::config::themes_dir(config)
+        .read_dir()
+        .map(|mut it| it.next().is_none())
+        .unwrap_or(true)
+}
+
+/// Con la chiave accesa, una cartella temporanea diventa un tema installato:
+/// stesso posto e stessa fiducia di ogni tema che non è di serie.
+#[test]
+fn a_theme_installs_from_a_folder_with_developer_mode_on() {
+    let (_config_dir, config) = folders();
+    let (_dir, root) = folders();
+    write_versioned_theme(&root, "acme.carta", "0.3.2");
+    let host = developer(&config, true);
+
+    let outcome = host
+        .install_theme_from_folder(&root, false)
+        .expect("installs from the folder");
+    assert_eq!(
+        outcome,
+        fub_host::theme::ThemeFolderInstall::Installed {
+            id: "acme.carta".into(),
+            name: "Prova".into(),
+            version: "0.3.2".into(),
+            replaced: false,
+        }
+    );
+    assert!(fub_host::config::themes_dir(&config)
+        .join("acme.carta/manifest.json")
+        .is_file());
+    let listed = host.themes().unwrap();
+    let carta = listed
+        .iter()
+        .find(|theme| theme.manifest.id == "acme.carta")
+        .expect("listed");
+    assert_eq!(carta.trust, "community");
+    assert!(root.join("manifest.json").is_file(), "the source stays where it is");
+}
+
+/// Spenta (il default), l'host rifiuta: la regola non è il bottone nascosto.
+/// Accesa e poi spenta, rifiuta di nuovo: la chiave si rilegge a ogni chiamata.
+#[test]
+fn installing_from_a_folder_is_refused_with_developer_mode_off() {
+    let (_config_dir, config) = folders();
+    let (_dir, root) = folders();
+    write_versioned_theme(&root, "acme.carta", "0.3.2");
+
+    let error = installed(&config)
+        .install_theme_from_folder(&root, false)
+        .expect_err("off by default");
+    assert!(matches!(error, fub_abi::PluginError::PermissionDenied(_)), "{error:?}");
+    assert!(themes_dir_is_empty(&config));
+
+    let host = developer(&config, true);
+    host.set_setting_for_user(
+        None,
+        fub_host::settings::DEVELOPER_MODE,
+        fub_abi::settings::SettingValue::Toggle(false),
+    )
+    .unwrap();
+    let error = host
+        .install_theme_from_folder(&root, false)
+        .expect_err("turned off while the picker was open");
+    assert!(matches!(error, fub_abi::PluginError::PermissionDenied(_)), "{error:?}");
+    assert!(themes_dir_is_empty(&config));
+}
+
+/// Un id già installato: l'esito lo dice con le due versioni e non tocca
+/// niente; con `replace` il nuovo prende il posto del vecchio. Spegnere la
+/// chiave fra le due domande ferma la seconda e lascia il vecchio.
+#[test]
+fn an_installed_id_collides_and_replace_swaps_it() {
+    let (_config_dir, config) = folders();
+    let (_old_dir, old) = folders();
+    let (_new_dir, new) = folders();
+    write_versioned_theme(&old, "acme.carta", "0.3.2");
+    write_versioned_theme(&new, "acme.carta", "0.4.0");
+    std::fs::write(new.join("skin.css"), ".surface { color: red; }\n").unwrap();
+    let host = developer(&config, true);
+    host.install_theme_from_folder(&old, false).unwrap();
+
+    let outcome = host.install_theme_from_folder(&new, false).unwrap();
+    assert_eq!(
+        outcome,
+        fub_host::theme::ThemeFolderInstall::Collision {
+            id: "acme.carta".into(),
+            name: "Prova".into(),
+            version: "0.4.0".into(),
+            installed_version: Some("0.3.2".into()),
+        }
+    );
+    let installed_skin = fub_host::config::themes_dir(&config).join("acme.carta/skin.css");
+    assert_eq!(
+        std::fs::read_to_string(&installed_skin).unwrap(),
+        ".surface { color: inherit; }\n",
+        "a collision touches nothing"
+    );
+
+    let outcome = host.install_theme_from_folder(&new, true).unwrap();
+    assert_eq!(
+        outcome,
+        fub_host::theme::ThemeFolderInstall::Installed {
+            id: "acme.carta".into(),
+            name: "Prova".into(),
+            version: "0.4.0".into(),
+            replaced: true,
+        }
+    );
+    assert_eq!(std::fs::read_to_string(&installed_skin).unwrap(), ".surface { color: red; }\n");
+    assert_eq!(
+        host.themes().unwrap()[0].manifest.version,
+        "0.4.0",
+        "the inventory reads the new one"
+    );
+
+    host.set_setting_for_user(
+        None,
+        fub_host::settings::DEVELOPER_MODE,
+        fub_abi::settings::SettingValue::Toggle(false),
+    )
+    .unwrap();
+    let error = host
+        .install_theme_from_folder(&old, true)
+        .expect_err("off between the collision and «Sostituisci»");
+    assert!(matches!(error, fub_abi::PluginError::PermissionDenied(_)));
+    assert_eq!(std::fs::read_to_string(&installed_skin).unwrap(), ".surface { color: red; }\n");
+}
+
+/// Una cartella che non è un tema si ferma prima di toccare `themes/`, anche
+/// con `replace`: la sostituzione valida la cartella nuova prima di togliere
+/// il vecchio.
+#[test]
+fn a_folder_that_is_not_a_theme_is_refused_before_touching_the_installed_one() {
+    let (_config_dir, config) = folders();
+    let (_old_dir, old) = folders();
+    let (_empty_dir, empty) = folders();
+    write_versioned_theme(&old, "acme.carta", "0.3.2");
+    let host = developer(&config, true);
+    host.install_theme_from_folder(&old, false).unwrap();
+
+    std::fs::write(empty.join("skin.css"), ".surface {}\n").unwrap();
+    let error = host
+        .install_theme_from_folder(&empty, true)
+        .expect_err("no manifest.json");
+    assert!(
+        matches!(error, fub_abi::PluginError::BadArgs(_) | fub_abi::PluginError::Io(_)),
+        "{error:?}"
+    );
+    assert!(fub_host::config::themes_dir(&config)
+        .join("acme.carta/manifest.json")
+        .is_file());
+}
+
+/// Un link simbolico dentro la cartella è un traversal, come per
+/// `install_theme`: niente resta in `themes/`.
+#[cfg(unix)]
+#[test]
+fn a_symlink_inside_the_folder_is_refused() {
+    let (_config_dir, config) = folders();
+    let (_dir, root) = folders();
+    write_versioned_theme(&root, "acme.carta", "0.3.2");
+    std::os::unix::fs::symlink("/etc", root.join("escape")).unwrap();
+
+    let error = developer(&config, true)
+        .install_theme_from_folder(&root, false)
+        .expect_err("symlink refused");
+    assert!(matches!(error, fub_abi::PluginError::BadArgs(_)), "{error:?}");
+    assert!(themes_dir_is_empty(&config));
+}
+
+/// La serie resta riservata anche da cartella.
+#[test]
+fn the_series_id_is_reserved_from_a_folder_too() {
+    let (_config_dir, config) = folders();
+    let (_dir, root) = folders();
+    write_theme(&root, fub_host::theme::SERIES_ID, "theme-2", "");
+    let error = developer(&config, true)
+        .install_theme_from_folder(&root, true)
+        .expect_err("reserved");
+    assert!(matches!(error, fub_abi::PluginError::BadArgs(_)), "{error:?}");
+}

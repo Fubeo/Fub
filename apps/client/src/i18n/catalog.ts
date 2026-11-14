@@ -1439,6 +1439,33 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.preview_none": "Nessuna anteprima attiva.",
 "settings.themes.preview_active": "Anteprima attiva: {theme}. La scelta salvata non è cambiata.",
 "settings.themes.preview_failed": "Anteprima tema non disponibile: {reason}",
+// --- installare un tema da una cartella, e la diagnosi (PA T36) ------------
+"settings.themes.none_installed": "Nessun tema installato. Installane uno da una cartella.",
+"settings.themes.install_folder": "Installa da cartella…",
+"settings.themes.install_pick": "Scegli la cartella del tema",
+"settings.themes.installed": "«{name}» installato: lo trovi fra i temi installati.",
+"settings.themes.replaced": "«{name}» sostituito con la versione {version}.",
+"settings.themes.developer_off":
+  "La modalità sviluppatore è spenta: accendila nel gruppo «Sviluppo» per installare da una cartella.",
+"settings.themes.install_failed": "Il tema non si è installato: {reason}",
+"settings.themes.replace.title": "«{name}» è già installato",
+"settings.themes.replace.body":
+  "La cartella {folder} ha lo stesso id, «{id}», con la versione {version} (installata: {installed}). La cartella nuova è già controllata: si può sostituire.",
+"settings.themes.replace.body_unknown":
+  "La cartella {folder} ha lo stesso id, «{id}», con la versione {version}; quella installata non si legge più. La cartella nuova è già controllata: si può sostituire.",
+"settings.themes.replace.in_use": "Il tema è in uso, quindi si rimonta subito.",
+"settings.themes.replace.ok": "Sostituisci",
+"settings.themes.replace_failed.title": "«{name}» non si è installato",
+"settings.themes.replace_failed.body":
+  "Il tema vecchio è stato tolto, il nuovo si è fermato: {reason}. La cartella {folder} resta dov'è, quindi non hai perso niente: installalo di nuovo.",
+"settings.themes.replace_failed.in_use": "Per ora torna Scrittoio.",
+"settings.themes.replace_failed.ok": "Ho capito",
+"settings.themes.diagnosis.title.one": "«{name}» è rifiutato: {n} motivo",
+"settings.themes.diagnosis.title": "«{name}» è rifiutato: {n} motivi",
+"settings.themes.diagnosis.when": "Tentativo delle {time}. Il tema resta fuori dai temi installati.",
+"settings.themes.diagnosis.copy": "Copia la diagnosi",
+"settings.themes.diagnosis.copied": "Diagnosi copiata.",
+"settings.themes.diagnosis.copy_failed": "La diagnosi non si è copiata: {reason}",
 // --- i tasti che il vault propone (§23.13) -----------------------------
 //
 // Il testo dice che **non sono attive**, e lo dice per primo: chi legge deve
@@ -4624,6 +4651,32 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.preview_none": "No active preview.",
 "settings.themes.preview_active": "Preview active: {theme}. The saved choice has not changed.",
 "settings.themes.preview_failed": "Theme preview unavailable: {reason}",
+"settings.themes.none_installed": "No theme installed. Install one from a folder.",
+"settings.themes.install_folder": "Install from folder…",
+"settings.themes.install_pick": "Choose the theme folder",
+"settings.themes.installed": "«{name}» installed: you will find it among the installed themes.",
+"settings.themes.replaced": "«{name}» replaced with version {version}.",
+"settings.themes.developer_off":
+  "Developer mode is off: turn it on in the «Development» group to install from a folder.",
+"settings.themes.install_failed": "The theme was not installed: {reason}",
+"settings.themes.replace.title": "«{name}» is already installed",
+"settings.themes.replace.body":
+  "The folder {folder} has the same id, «{id}», with version {version} (installed: {installed}). The new folder has already been checked: it can replace it.",
+"settings.themes.replace.body_unknown":
+  "The folder {folder} has the same id, «{id}», with version {version}; the installed one can no longer be read. The new folder has already been checked: it can replace it.",
+"settings.themes.replace.in_use": "The theme is in use, so it is remounted right away.",
+"settings.themes.replace.ok": "Replace",
+"settings.themes.replace_failed.title": "«{name}» was not installed",
+"settings.themes.replace_failed.body":
+  "The old theme was removed, the new one stopped: {reason}. The folder {folder} stays where it is, so nothing is lost: install it again.",
+"settings.themes.replace_failed.in_use": "For now Scrittoio is back.",
+"settings.themes.replace_failed.ok": "Got it",
+"settings.themes.diagnosis.title.one": "«{name}» is rejected: {n} reason",
+"settings.themes.diagnosis.title": "«{name}» is rejected: {n} reasons",
+"settings.themes.diagnosis.when": "Attempt at {time}. The theme stays out of the installed themes.",
+"settings.themes.diagnosis.copy": "Copy the diagnosis",
+"settings.themes.diagnosis.copied": "Diagnosis copied.",
+"settings.themes.diagnosis.copy_failed": "The diagnosis was not copied: {reason}",
 "settings.vault_keys.title": "This vault proposes {count} shortcuts",
 "settings.vault_keys.hint":
   "A vault carries its own shortcuts with it, and these come from outside: until you look at them they press nothing, and the combinations declared by the commands are what counts.",
