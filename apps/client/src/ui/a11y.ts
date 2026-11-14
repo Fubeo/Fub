@@ -97,7 +97,30 @@ export function notActivatable(el: HTMLElement): void {
 /// «comanda l'ultima» non si può scrivere in una superficie che le altre non le
 /// vede. Si svuota da sé — ogni trappola si toglie quando la si scioglie — e a
 /// shell ferma è vuota.
-const trapStack: object[] = [];
+const trapStack: Trap[] = [];
+
+/// Una trappola aperta: la superficie, e dove il fuoco torna quando si scioglie.
+interface Trap {
+  root: HTMLElement;
+  previous: HTMLElement | null;
+}
+
+/// La superficie intrappolata `root` è stata aperta da dentro `container`:
+/// sciogliendosi renderà il fuoco lì. Dice di chi è un menu montato fuori.
+export function focusReturnsInto(root: HTMLElement, container: HTMLElement): boolean {
+  return trapStack.some((trap) => trap.root === root && trap.previous !== null && container.contains(trap.previous));
+}
+
+/// Chi aveva il fuoco in `from` lo vuole adesso in `to`: ogni trappola aperta
+/// che, sciogliendosi, lo renderebbe dentro `from` lo rende a `to`. Serve a
+/// chi cambia sotto una superficie aperta (l'editor che passa alla Lettura
+/// mentre una finestra chiede): la superficie si tiene il fuoco finché è
+/// aperta, e chiusa non lo riporta su un elemento ormai nascosto.
+export function redirectFocusReturn(from: HTMLElement, to: HTMLElement): void {
+  for (const trap of trapStack) {
+    if (trap.previous && trap.previous !== to && from.contains(trap.previous)) trap.previous = to;
+  }
+}
 
 export function focusableElements(root: HTMLElement): HTMLElement[] {
   const selector =
@@ -159,9 +182,9 @@ export function focusZone(zone: HTMLElement): void {
 /// in `theme/scrittoio/structure.css` accanto ai piani.
 export function trapFocus(root: HTMLElement, close: () => void): Teardown {
   const lifetime = openLifetime();
-  // Il segnaposto di *questa* trappola nella pila. Un oggetto vuoto basta: serve
-  // solo la sua identità, e due trappole sulla stessa `root` sono due.
-  const io = {};
+  // *Questa* trappola nella pila: conta la sua identità (due trappole sulla
+  // stessa `root` sono due), e porta dove il fuoco tornerà.
+  const io: Trap = { root, previous: document.activeElement as HTMLElement | null };
   trapStack.push(io);
   lifetime.add(() => {
     // `filter`, non `pop`: chi apre e chi chiude non sono obbligati a farlo in
@@ -171,14 +194,14 @@ export function trapFocus(root: HTMLElement, close: () => void): Teardown {
     const where = trapStack.lastIndexOf(io);
     if (where >= 0) trapStack.splice(where, 1);
   });
-  const previous = document.activeElement as HTMLElement | null;
   // Il fuoco torna da dove era partito. È la metà che si dimentica: senza,
   // chiudere una modale rimanda chi naviga da tastiera all'inizio del
   // documento, e deve rifare tutta la strada per tornare dov'era. Sta *prima*
   // dell'ascoltatore perché `chiudi()` disfa in ordine inverso: così a spostare
   // il fuoco è l'ultimo passo, quando la trappola non è più attaccata.
+  // Si legge alla chiusura: `redirectFocusReturn` può averlo spostato.
   lifetime.add(() => {
-    if (previous?.isConnected) previous.focus();
+    if (io.previous?.isConnected) io.previous.focus();
   });
 
   const onKey = (e: KeyboardEvent) => {

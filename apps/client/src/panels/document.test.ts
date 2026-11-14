@@ -739,6 +739,180 @@ describe("il testo non salvato resta (#237)", () => {
     await expectRecoverable(host, sessions);
   });
 
+  /// Le finestre «Modifiche non salvate» a schermo.
+  async function closeQuestions(): Promise<() => HTMLElement[]> {
+    const { t } = await import("../i18n/strings");
+    const title = t("document.close_unsaved.title");
+    return () => [...document.querySelectorAll<HTMLElement>("dialog, [role=dialog], [role=alertdialog]")]
+      .filter((el) => el.isConnected && (el.textContent ?? "").includes(title));
+  }
+
+  /// Chiude la linguetta di «Benvenuto.md» e aspetta che la finestra chieda.
+  async function closeAndAsk(): Promise<{ closing: Promise<void>; paneId: string; asking: () => HTMLElement[] }> {
+    const layouts = await import("../state/layout");
+    const controller = await import("../state/document-controller");
+    const asking = await closeQuestions();
+    const paneId = layouts.layout.focus;
+    const index = layouts.pane(paneId)!.tabs.findIndex((tab) => tab.k === "doc" && tab.doc === BENVENUTO);
+    const shown = asking().length;
+    const closing = controller.closeTabAt(paneId, index);
+    await waitFor("la finestra «Modifiche non salvate»", () => asking().length === shown + 1 || (shown > 0 && asking().length === shown));
+    return { closing, paneId, asking };
+  }
+
+  /// Tolti i guasti: il disco e la bozza tornano buoni.
+  function repair(): void {
+    repairWrite?.();
+    repairDraft?.();
+    repairWrite = repairDraft = null;
+  }
+
+  it("T63 · un cambio da fuori mentre «Modifiche non salvate» chiede la chiude come «Tienila aperta»", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const { closing, paneId, asking } = await closeAndAsk();
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+
+    // Mentre chiede, il disco torna buono e un'altra applicazione cambia la nota.
+    repair();
+    const outside = "# Benvenuto\nscritto da un'altra applicazione\n";
+    host.writeFromOutside(BENVENUTO, outside);
+
+    await waitFor("la finestra chiusa dal cambio da fuori", () => asking().length === 0);
+    await closing;
+    await settle();
+    // La nota è tornata dov'era, col testo battuto e la barra del conflitto;
+    // il disco ha ancora il testo dell'altra applicazione.
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([paneId]);
+    expect(shows(TYPED)).toBe(true);
+    expect(sessions.text(BENVENUTO)).toContain(TYPED);
+    await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
+    expect(sessions.inspect(BENVENUTO)).toMatchObject({ dirty: true, result: "conflitto" });
+    expect(host.files()[BENVENUTO]).toBe(outside);
+  });
+
+  it("T63 · un fatto che non rende vecchia la domanda (lettura fallita, eco tardiva) la lascia chiedere, senza salvare", async () => {
+    const { host, sessions } = await unsavedNote();
+    const { closing, asking } = await closeAndAsk();
+    for (const outcome of [{ kind: "unavailable" }, { kind: "stale" }, { kind: "untracked" }, { kind: "reloaded", text: "", changed: false }] as const) {
+      const change = vi.spyOn(sessions, "handleExternalChange").mockResolvedValueOnce(outcome);
+      const flush = vi.spyOn(sessions, "flush");
+      try {
+        host.writeFromOutside(BENVENUTO, `# Benvenuto\n${outcome.kind}\n`);
+        await waitFor(`il cambio ${outcome.kind} arrivato`, () => change.mock.calls.length > 0);
+        await settle();
+        expect(asking(), outcome.kind).toHaveLength(1);
+        expect(flush, outcome.kind).not.toHaveBeenCalled();
+      } finally {
+        change.mockRestore();
+        flush.mockRestore();
+      }
+    }
+    asking()[0]!.querySelector<HTMLButtonElement>('button[data-action="cancel"]')!.click();
+    await closing;
+  });
+
+  it("T63 · una seconda domanda sulla stessa nota sostituisce la prima, che non riapre niente", async () => {
+    const { sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const first = await closeAndAsk();
+    const firstDialog = first.asking()[0]!;
+    // La nota si riapre e si richiude mentre la prima domanda è ancora lì.
+    await open(BENVENUTO);
+    await waitFor("l'editor della nota riaperta", () => shows(TYPED));
+    const second = await closeAndAsk();
+    await first.closing;
+    await waitFor("la prima finestra ritirata", () => !firstDialog.isConnected && second.asking().length === 1);
+    // La prima non ha riaperto la nota né disegnato un conflitto.
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expect(visible(".conflict-banner")).toHaveLength(0);
+
+    // «Scarta» della seconda vale: la nota resta chiusa e il testo se ne va.
+    second.asking()[0]!.querySelector<HTMLButtonElement>('button[data-action="confirm"]')!.click();
+    await second.closing;
+    await settle();
+    expect(second.asking()).toHaveLength(0);
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expect(sessions.inspect(BENVENUTO)).toBeUndefined();
+  });
+
+  it("T63 · una rinomina da fuori mentre la finestra chiede la ritira, e la nota torna col nome nuovo", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const { closing, paneId, asking } = await closeAndAsk();
+    const NUOVO = "Benvenuto rinominato.md";
+    host.renameFromOutside(BENVENUTO, NUOVO);
+
+    await waitFor("la finestra chiusa dalla rinomina", () => asking().length === 0);
+    await closing;
+    await settle();
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expect(layouts.panesWithDoc(NUOVO)).toEqual([paneId]);
+    expect(sessions.text(NUOVO)).toContain(TYPED);
+    await waitFor("l'editor col testo battuto", () => shows(TYPED));
+  });
+
+  it("T63 · un'eliminazione da fuori mentre la finestra chiede la ritira, e il testo resta da ricreare", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const { closing, asking } = await closeAndAsk();
+    await (host.module.api as unknown as { invokeCommand: (id: string, args: unknown) => Promise<unknown> })
+      .invokeCommand("note.trash", { doc: BENVENUTO });
+
+    await waitFor("la finestra chiusa dall'eliminazione", () => asking().length === 0);
+    await closing;
+    await settle();
+    // Niente da riaprire: il file non c'è più, e il testo è nell'avviso con «Ricrea».
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expect(sessions.inspect(BENVENUTO)).toBeUndefined();
+    const { t } = await import("../i18n/strings");
+    const recreate = t("document.recreate");
+    expect([...document.querySelectorAll("button")].some((button) => button.textContent?.trim() === recreate)).toBe(true);
+  });
+
+  it("T63 · se il salvataggio dopo il cambio da fuori rifiuta, la nota torna lo stesso e niente resta appeso", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const { closing, paneId, asking } = await closeAndAsk();
+    const flush = vi.spyOn(sessions, "flush").mockRejectedValueOnce(new Error("la porta è caduta"));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      repair();
+      host.writeFromOutside(BENVENUTO, "# Benvenuto\nda fuori\n");
+      await waitFor("la finestra chiusa dal cambio da fuori", () => asking().length === 0);
+      await expect(closing).resolves.toBeUndefined();
+      await settle();
+      expect(flush).toHaveBeenCalledWith(BENVENUTO);
+      expect(logged).toHaveBeenCalled();
+      expect(layouts.panesWithDoc(BENVENUTO)).toEqual([paneId]);
+      expect(sessions.text(BENVENUTO)).toContain(TYPED);
+      // Il salvataggio non è partito, e lo si dice col suo motivo.
+      expect(toastsAbout("non è stato salvato")).toEqual(["«Benvenuto» non è stato salvato: la porta è caduta"]);
+    } finally {
+      flush.mockRestore();
+      logged.mockRestore();
+    }
+  });
+
+  it("T63 · chiusa con Ctrl+W mentre si scriveva, la nota che torna ha il fuoco nel testo", async () => {
+    await unsavedNote();
+    await open("Altra.md");
+    await open(BENVENUTO);
+    await waitFor("l'editor col testo battuto", () => shows(TYPED));
+    const controller = await import("../state/document-controller");
+    const editor = mountedTextEditors().find((view) => view.state.doc.toString().includes(TYPED))!;
+    editor.focus();
+    expect(editor.hasFocus).toBe(true);
+    const asking = await closeQuestions();
+    const closing = controller.closeCurrentTab();
+    await waitFor("la finestra «Modifiche non salvate»", () => asking().length === 1);
+    asking()[0]!.querySelector<HTMLButtonElement>('button[data-action="cancel"]')!.click();
+    await closing;
+    await settle();
+    const back = mountedTextEditors().find((view) => view.state.doc.toString().includes(TYPED));
+    expect(back?.hasFocus).toBe(true);
+  });
+
   it("R02 · un ripristino dalla cronologia tiene il testo e dice che il file è cambiato", async () => {
     const { host, sessions } = await unsavedNote();
     const restored = "# Benvenuto\nla versione di ieri\n";
@@ -761,6 +935,178 @@ describe("il testo non salvato resta (#237)", () => {
     expect(sessions.inspect(BENVENUTO)).toMatchObject({ dirty: true, result: "conflitto" });
     expect(sessions.text(BENVENUTO)).toContain(TYPED);
     expect(host.files()[BENVENUTO]).toBe(restored);
+  });
+
+  /// Gli avvisi a galla che nominano la nota.
+  const toastsAbout = (name: string) =>
+    [...document.querySelectorAll<HTMLElement>("#toasts > .toast .toast-text")]
+      .map((text) => text.textContent ?? "")
+      .filter((text) => text.includes(name));
+
+  it("un conflitto sulla nota a schermo si dice una volta, nella barra: niente fascia né avviso a galla", async () => {
+    const { host, sessions } = await unsavedNote();
+    repair();
+    host.writeFromOutside(BENVENUTO, "# Benvenuto\nda un'altra applicazione\n");
+    await settle();
+    await sessions.flush(BENVENUTO);
+    await settle();
+    await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
+    expect(visible('.sheet-notice[data-notice="changed_on_disk"], .sheet-notice[data-notice="overwritten"]')).toEqual([]);
+    expect(toastsAbout("Benvenuto")).toEqual([]);
+  });
+
+  it("la finestra che conferma una scelta del conflitto chiede in una frase, e nomina la nota col titolo", async () => {
+    const { host, sessions } = await unsavedNote();
+    repair();
+    host.writeFromOutside(BENVENUTO, "# Benvenuto\nda un'altra applicazione\n");
+    await settle();
+    await sessions.flush(BENVENUTO);
+    await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
+    visible('.conflict-banner button[data-choice="mine"]')[0]!.click();
+    const dialogs = () => [...document.querySelectorAll<HTMLElement>("dialog, [role=dialog], [role=alertdialog]")]
+      .filter((el) => el.isConnected && (el.textContent ?? "").includes("Mantenere il tuo testo?"));
+    await waitFor("la finestra della scelta", () => dialogs().length === 1);
+    const dialog = dialogs()[0]!;
+    expect(dialog.querySelector(".kit-dialog-title")?.textContent).toBe("Mantenere il tuo testo?");
+    const said = dialog.textContent ?? "";
+    expect(said).toContain("Fub riscrive «Benvenuto» col testo che hai qui: la modifica arrivata da fuori si perde.");
+    expect(said).not.toContain(BENVENUTO);
+    // Il bottone dice la stessa scelta della barra, non il nome di un comando.
+    expect(dialog.querySelector('button[data-action="confirm"]')?.textContent).toBe("Mantieni il mio testo");
+    dialogs()[0]!.querySelector<HTMLButtonElement>('button[data-action="cancel"]')!.click();
+    await settle();
+  });
+
+  it("fuori schermo, il cambio da fuori e il conflitto che segue fanno un avviso solo, col titolo; aperta la nota, resta la barra", async () => {
+    const { host, sessions } = await unsavedNote();
+    await open("Altra.md");
+    // Il disco è ancora guasto: la nota resta sporca, e il cambio da fuori
+    // è un avvertimento, non una rilettura.
+    host.writeFromOutside(BENVENUTO, "# Benvenuto\nda un'altra applicazione\n");
+    await waitFor("l'avviso del cambio da fuori", () => toastsAbout("cambiat").length === 1);
+    repair();
+    await sessions.flush(BENVENUTO);
+    await settle();
+    expect(sessions.inspect(BENVENUTO)).toMatchObject({ result: "conflitto" });
+    expect(toastsAbout("Benvenuto")).toHaveLength(1);
+    // Il conflitto è il fatto più forte: prende il posto del cambio da fuori.
+    expect(toastsAbout("Benvenuto")[0]).toContain("«Benvenuto» è cambiato su disco da quando l'hai aperto");
+    expect(toastsAbout("Benvenuto.md")).toEqual([]);
+    await open(BENVENUTO);
+    await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
+    expect(toastsAbout("Benvenuto")).toEqual([]);
+  });
+
+  it("la bozza che non si scrive è un fatto della sessione: un avviso solo, che se ne va quando le bozze tornano a scriversi", async () => {
+    const { sessions } = await unsavedNote();
+    await sessions.flushDraft(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso della bozza", () => toastsAbout("non arriva più sul disco").length === 1);
+    // Il disco della nota resta guasto; la bozza torna a scriversi.
+    repairDraft?.();
+    repairDraft = null;
+    appendToTextEditor(" ancora");
+    await sessions.flushDraft(BENVENUTO);
+    await settle();
+    expect(sessions.saveState(BENVENUTO)).not.toBe("salvato");
+    expect(toastsAbout("non arriva più sul disco")).toEqual([]);
+  });
+
+  it("la sola lettura segue la nota rinominata: un avviso solo, col nome nuovo, che non si ripete", async () => {
+    const host = await start("off");
+    await open(BENVENUTO);
+    const { documentSessions: sessions } = await import("../state/document-session");
+    const layouts = await import("../state/layout");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    repairWrite = host.fault("writeDocument", { kind: "permission_denied", message: "file in sola lettura" });
+    appendToTextEditor(`\n${TYPED}`);
+    await waitFor("il testo nella sessione", () => sessions.isDirty(BENVENUTO));
+    await sessions.flush(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso della sola lettura", () => toastsAbout("in sola lettura").length === 1);
+    const toastOf = () => [...document.querySelectorAll<HTMLElement>("#toasts > .toast")].find((toast) => (toast.textContent ?? "").includes("in sola lettura"));
+    const before = toastOf();
+    const { recentNotices } = await import("../ui/notify");
+    const told = () => recentNotices().filter((notice) => notice.text.includes("in sola lettura")).length;
+    const toldBefore = told();
+    const NUOVO = "Benvenuto rinominato.md";
+    host.renameFromOutside(BENVENUTO, NUOVO);
+    await waitFor("la nota col nome nuovo", () => layouts.panesWithDoc(NUOVO).length === 1);
+    await settle();
+    expect(toastsAbout("in sola lettura")).toHaveLength(1);
+    expect(toastsAbout("in sola lettura")[0]).toContain("«Benvenuto rinominato» è in sola lettura");
+    // Lo stesso avviso, riscritto: non si rifà, non si riannuncia, lo storico
+    // non lo conta due volte.
+    expect(toastOf()).toBe(before);
+    expect(told()).toBe(toldBefore);
+    appendToTextEditor(" ancora");
+    await sessions.flush(NUOVO).catch(() => {});
+    await settle();
+    expect(toastsAbout("in sola lettura")).toHaveLength(1);
+  });
+
+  it("la pagina di una cartella si nomina come la cartella, negli avvisi come nella finestra", async () => {
+    const PAGE = "Progetti/_index.md";
+    const host = await start("off", "PdfCraft", { [PAGE]: "# Progetti\n" });
+    await open(PAGE);
+    const { documentSessions: sessions } = await import("../state/document-session");
+    await waitFor("l'editor della pagina", () => mountedTextEditors().length > 0);
+    repairWrite = host.fault("writeDocument", "disco pieno");
+    appendToTextEditor(`\n${TYPED}`);
+    await waitFor("il testo nella sessione", () => sessions.isDirty(PAGE));
+    await sessions.flush(PAGE).catch(() => {});
+    await waitFor("l'avviso del salvataggio fallito", () => toastsAbout("non è stato salvato").length === 1);
+    expect(toastsAbout("non è stato salvato")[0]).toContain("«Progetti» non è stato salvato");
+    // «Riprova» col disco ancora guasto: lo dice col nome della cartella.
+    const retry = [...document.querySelectorAll<HTMLElement>("#toasts > .toast")]
+      .find((toast) => (toast.textContent ?? "").includes("non è stato salvato"))!
+      .querySelector<HTMLButtonElement>(".toast-action")!;
+    retry.click();
+    await waitFor("l'avviso di Salva adesso", () => toastsAbout("Non è stato possibile salvare").length === 1);
+    expect(toastsAbout("Non è stato possibile salvare")[0]).toContain("salvare Progetti:");
+  });
+
+  it("la bozza che non si scrive si ridice quando la shell si rimonta, finché la rete manca", async () => {
+    const { sessions } = await unsavedNote();
+    await sessions.flushDraft(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso della bozza", () => toastsAbout("non arriva più sul disco").length === 1);
+    // Un nuovo montaggio della finestra: il vecchio ritira i suoi avvisi, il
+    // nuovo rilegge lo stato della collezione, che resta senza rete.
+    const shell = await import("../desktop-shell");
+    (await shell.startup)();
+    await settle();
+    expect(toastsAbout("non arriva più sul disco")).toEqual([]);
+    await shell.mountDesktopShell();
+    await settle();
+    await waitFor("l'avviso della bozza ridetto", () => toastsAbout("non arriva più sul disco").length === 1);
+  });
+
+  it("la bozza che non si scrive non si dice più quando non c'è testo da proteggere", async () => {
+    const { sessions } = await unsavedNote();
+    await sessions.flushDraft(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso della bozza", () => toastsAbout("non arriva più sul disco").length === 1);
+    // Il disco della nota torna buono, la bozza no: la nota si salva, e non
+    // resta niente di non salvato.
+    repairWrite?.();
+    repairWrite = null;
+    await sessions.flush(BENVENUTO);
+    await settle();
+    expect(sessions.dirtyIds()).toEqual([]);
+    expect(toastsAbout("non arriva più sul disco")).toEqual([]);
+  });
+
+  it("un salvataggio che non riesce si dice una volta, col titolo, e l'avviso se ne va quando la nota è salvata", async () => {
+    const { sessions } = await unsavedNote();
+    await sessions.flush(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso del salvataggio fallito", () => toastsAbout("non è stato salvato").length === 1);
+    appendToTextEditor(" ancora");
+    await sessions.flush(BENVENUTO).catch(() => {});
+    await settle();
+    expect(toastsAbout("non è stato salvato")).toHaveLength(1);
+    expect(toastsAbout("non è stato salvato")[0]).toContain("«Benvenuto» non è stato salvato");
+    repair();
+    await sessions.flush(BENVENUTO);
+    await settle();
+    expect(sessions.saveState(BENVENUTO)).toBe("salvato");
+    expect(toastsAbout("Benvenuto")).toEqual([]);
   });
 });
 

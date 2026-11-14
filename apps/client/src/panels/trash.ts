@@ -70,8 +70,9 @@ export async function trashWithConfirm(id: string): Promise<void> {
     undo
       ? {
         label: t("app.undo"),
-        run: () => undoLastOperation().catch((error: unknown) =>
-          notify(t("trash.undo_failed", { reason: errorText(error) }), "guasto")),
+        run: () => undoLastOperation().catch((error: unknown) => {
+          notify(t("trash.undo_failed", { reason: errorText(error) }), "guasto");
+        }),
       }
       : undefined,
   );

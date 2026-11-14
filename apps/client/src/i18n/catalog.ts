@@ -2287,14 +2287,18 @@ export const IT = { // --- la scocca -------------------------------------------
 "table.grid.add_row_here": "Aggiungi una riga",
 "table.grid.add_column_here": "Aggiungi una colonna",
 "document.pane.menu": "Azioni del riquadro",
-"document.conflict.title": "Conflitto su {doc}",
+"document.conflict.title": "Conflitto su «{doc}»",
 "document.conflict.body": "Il file è cambiato su disco. Scegli quale testo tenere: nessuna scelta è automatica.",
 "document.conflict.keep_mine": "Mantieni il mio testo",
 "document.conflict.use_disk": "Usa la versione su disco",
 "document.conflict.cancel": "Decidi dopo",
 "document.conflict.compare": "Confronta",
-"document.conflict.compare_title": "{doc}: il tuo testo e quello su disco",
-"document.conflict.pending": "Conflitto su {doc}: la scelta aspetta, niente è stato scritto.",
+"document.conflict.compare_title": "«{doc}»: il tuo testo e quello su disco",
+"document.conflict.pending": "Conflitto su «{doc}»: la scelta aspetta, niente è stato scritto.",
+"document.conflict.mine.title": "Mantenere il tuo testo?",
+"document.conflict.mine.body": "Fub riscrive «{doc}» col testo che hai qui: la modifica arrivata da fuori si perde.",
+"document.conflict.theirs.title": "Usare la versione su disco?",
+"document.conflict.theirs.body": "Fub ricarica «{doc}» com'è sul disco: le modifiche che non hai salvato si perdono.",
 "document.conflict.resume": "Scegli ora",
 "document.conflict.reading": "Stai leggendo la tua versione, non ancora salvata",
 "compare.legend": "Le righe con − ci sono solo su disco, quelle con + solo nel tuo testo.",
@@ -2381,17 +2385,17 @@ export const IT = { // --- la scocca -------------------------------------------
 "notice.dismiss": "Chiudi",
 "notice.removed": "«{doc}» è stato rimosso da fuori: la linguetta si è chiusa.",
 "document.overwritten":
-  "{doc} è stato cambiato da un'altra applicazione mentre avevi modifiche non salvate: niente è stato sovrascritto, e al prossimo salvataggio sceglierai quale testo tenere.",
+  "«{doc}» è stato cambiato da un'altra applicazione mentre avevi modifiche non salvate: niente è stato sovrascritto, e al prossimo salvataggio sceglierai quale testo tenere.",
 "document.changed_on_disk":
-  "{doc} è cambiato su disco mentre avevi modifiche non salvate: le tue restano, e al salvataggio sceglierai quale testo tenere.",
+  "«{doc}» è cambiato su disco mentre avevi modifiche non salvate: le tue restano, e al salvataggio sceglierai quale testo tenere.",
 "document.deleted_dirty":
-  "{doc} è stato cancellato da fuori mentre avevi modifiche non salvate: il testo è conservato in bozza. Puoi ricrearlo adesso o recuperarlo al prossimo avvio.",
+  "«{doc}» è stato cancellato da fuori mentre avevi modifiche non salvate: il testo è conservato in bozza. Puoi ricrearlo adesso o recuperarlo al prossimo avvio.",
 "document.recreate": "Ricrea la nota",
-"document.save_failed": "{doc} non è stato salvato: {reason}",
+"document.save_failed": "«{doc}» non è stato salvato: {reason}",
 // Il file non ha il permesso di scrittura (PA T59): Fub non lo sovrascrive.
 // Non è un guasto del disco, e la frase dice che cosa fare.
 "document.save_read_only":
-  "{doc} è in sola lettura: Fub non lo sovrascrive. Quello che hai scritto resta qui; quando il file si potrà di nuovo scrivere, premi Riprova.",
+  "«{doc}» è in sola lettura: Fub non lo sovrascrive. Quello che hai scritto resta qui; quando il file si potrà di nuovo scrivere, premi Riprova.",
 // Dice **perché il gesto non è partito**, e nomina il documento appeso: chi
 // legge ha appena chiesto di spostare una nota e deve capire che il rifiuto
 // riguarda un salvataggio, non la rinomina.
@@ -2411,9 +2415,9 @@ export const IT = { // --- la scocca -------------------------------------------
 // sola frase che distingue questo caso da «non ci sono riuscito», e senza di
 // essa chi legge crede di aver perso il proprio testo.
 "document.save_conflict":
-  "{doc} è cambiato su disco da quando l'hai aperto: non è stato scritto niente, e le tue modifiche sono ancora qui. Scegli quale testo tenere nella barra sopra la nota.",
+  "«{doc}» è cambiato su disco da quando l'hai aperto: non è stato scritto niente, e le tue modifiche sono ancora qui. Scegli quale testo tenere nella barra sopra la nota.",
 "document.conflict_none": "Nessun conflitto da risolvere su questo documento.",
-"document.reload_failed": "{doc} non è stato riletto dal disco: il testo e il suo stato restano quelli di prima.",
+"document.reload_failed": "«{doc}» non è stato riletto dal disco: il testo e il suo stato restano quelli di prima.",
 "document.close_unsaved.title": "Modifiche non salvate",
 "document.close_unsaved": "«{doc}» non si è potuta salvare. Scartare le modifiche, o tenerla aperta per riprovare?",
 "document.close_unsaved.discard": "Scarta le modifiche",
@@ -5430,14 +5434,18 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "table.grid.add_row_here": "Add a row",
 "table.grid.add_column_here": "Add a column",
 "document.pane.menu": "Pane actions",
-"document.conflict.title": "Conflict on {doc}",
+"document.conflict.title": "Conflict on “{doc}”",
 "document.conflict.body": "The file changed on disk. Choose which text to keep: nothing is automatic.",
 "document.conflict.keep_mine": "Keep my text",
 "document.conflict.use_disk": "Use the version on disk",
 "document.conflict.cancel": "Decide later",
 "document.conflict.compare": "Compare",
-"document.conflict.compare_title": "{doc}: your text and the one on disk",
-"document.conflict.pending": "Conflict on {doc}: the choice is waiting, nothing was written.",
+"document.conflict.compare_title": "“{doc}”: your text and the one on disk",
+"document.conflict.pending": "Conflict on “{doc}”: the choice is waiting, nothing was written.",
+"document.conflict.mine.title": "Keep your text?",
+"document.conflict.mine.body": "Fub rewrites “{doc}” with the text you have here: the change that arrived from outside is lost.",
+"document.conflict.theirs.title": "Use the version on disk?",
+"document.conflict.theirs.body": "Fub reloads “{doc}” as it is on disk: the changes you have not saved are lost.",
 "document.conflict.resume": "Choose now",
 "document.conflict.reading": "You are reading your version, not saved yet",
 "compare.legend": "Lines marked − exist only on disk, lines marked + only in your text.",
@@ -5517,14 +5525,14 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "notice.dismiss": "Dismiss",
 "notice.removed": "“{doc}” was removed from outside: its tab has closed.",
 "document.overwritten":
-  "{doc} was changed by another application while you had unsaved changes: nothing was overwritten, and at the next save you will choose which text to keep.",
-"document.changed_on_disk": "{doc} changed on disk while you had unsaved changes: yours stay, and when saving you will choose which text to keep.",
+  "“{doc}” was changed by another application while you had unsaved changes: nothing was overwritten, and at the next save you will choose which text to keep.",
+"document.changed_on_disk": "“{doc}” changed on disk while you had unsaved changes: yours stay, and when saving you will choose which text to keep.",
 "document.deleted_dirty":
-  "{doc} was deleted from outside while you had unsaved changes: the text is kept as a draft. You can recreate it now or recover it at the next start.",
+  "“{doc}” was deleted from outside while you had unsaved changes: the text is kept as a draft. You can recreate it now or recover it at the next start.",
 "document.recreate": "Recreate the note",
-"document.save_failed": "{doc} was not saved: {reason}",
+"document.save_failed": "“{doc}” was not saved: {reason}",
 "document.save_read_only":
-  "{doc} is read-only: Fub won't overwrite it. What you wrote stays here; once the file can be written again, press Retry.",
+  "“{doc}” is read-only: Fub won't overwrite it. What you wrote stays here; once the file can be written again, press Retry.",
 "document.close_unhooked":
   "Fub cannot listen for the window closing: use «Save now» before you close, because the last keystroke may not be on disk yet.",
 "document.close_failed": "Close cancelled: {reason}. Documents remain open.",
@@ -5533,9 +5541,9 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "document.unsaved_blocks":
   "{doc} is not on disk: the operation stops here, because moving the file would leave the unsaved text behind.",
 "document.save_conflict":
-  "{doc} changed on disk since you opened it: nothing was written, and your edits are still here. Choose which text to keep in the bar above the note.",
+  "“{doc}” changed on disk since you opened it: nothing was written, and your edits are still here. Choose which text to keep in the bar above the note.",
 "document.conflict_none": "No conflict to resolve for this document.",
-"document.reload_failed": "{doc} could not be reread from disk: its text and state are unchanged.",
+"document.reload_failed": "“{doc}” could not be reread from disk: its text and state are unchanged.",
 "document.close_unsaved.title": "Unsaved changes",
 "document.close_unsaved": "“{doc}” could not be saved. Discard the changes, or keep it open to try again?",
 "document.close_unsaved.discard": "Discard changes",

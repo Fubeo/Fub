@@ -10,6 +10,7 @@
 //
 // Chi importava da qui continua a farlo: ciò che è passato al controller è
 // riesportato sotto, con gli stessi nomi.
+import { pageName } from "../rules/mirrored";
 import { promptText } from "../ui/dialogs";
 import { openCompare } from "../ui/compare";
 import { pageIcon } from "../state/page-icons";
@@ -1427,7 +1428,7 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
     box.dataset.collapsed = "";
     box.setAttribute("role", "status");
     const line = document.createElement("span");
-    line.textContent = t("document.conflict.pending", { doc: docTitle(current) });
+    line.textContent = t("document.conflict.pending", { doc: pageName(current) });
     const reopen = document.createElement("button");
     reopen.type = "button";
     reopen.className = "link-button";
@@ -1442,7 +1443,7 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
   delete box.dataset.collapsed;
   box.setAttribute("role", "alert");
   const title = document.createElement("strong");
-  title.textContent = t("document.conflict.title", { doc: docTitle(current) });
+  title.textContent = t("document.conflict.title", { doc: pageName(current) });
   const body = document.createElement("p");
   body.textContent = t("document.conflict.body");
   body.setAttribute("data-doc", current);
@@ -1473,15 +1474,15 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
   cancel.type = "button";
   cancel.className = "link-button";
   cancel.textContent = t("document.conflict.cancel");
+  // La conferma chiede in una frase che cosa succede e che cosa si perde; il
+  // bottone ripete la scelta della barra, con le sue stesse parole.
   const ask = async (choice: "mine" | "theirs"): Promise<void> => {
-    const detail = choice === "mine"
-      ? t("commands.doc.conflict.mine.desc")
-      : t("commands.doc.conflict.theirs.desc");
+    const doc = pageName(current);
     const ok = await confirm(
-      `${t(choice === "mine" ? "commands.doc.conflict.mine" : "commands.doc.conflict.theirs")}\n${current}\n${detail}`,
+      t(choice === "mine" ? "document.conflict.mine.body" : "document.conflict.theirs.body", { doc }),
       {
-        title: t("document.conflict.title", { doc: current }),
-        okLabel: t(choice === "mine" ? "commands.doc.conflict.mine" : "commands.doc.conflict.theirs"),
+        title: t(choice === "mine" ? "document.conflict.mine.title" : "document.conflict.theirs.title"),
+        okLabel: t(choice === "mine" ? "document.conflict.keep_mine" : "document.conflict.use_disk"),
         danger: choice === "theirs",
       },
     );
@@ -1494,8 +1495,8 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
     // Il testo su disco si legge adesso, non da una copia: è quello che la
     // scelta «usa la versione su disco» metterebbe al posto del mio.
     void api.readDocument(current, documentSessions.vaultFor(current)).then(
-      (source) => openCompare(t("document.conflict.compare_title", { doc: docTitle(current) }), source.text, documentSessions.text(current) ?? ""),
-      (error: unknown) => notify(t("document.reload_failed", { doc: current }) + ` ${errorText(error)}`, "guasto"),
+      (source) => openCompare(t("document.conflict.compare_title", { doc: pageName(current) }), source.text, documentSessions.text(current) ?? ""),
+      (error: unknown) => notify(t("document.reload_failed", { doc: pageName(current) }) + ` ${errorText(error)}`, "guasto"),
     );
   });
   mine.addEventListener("click", () => void ask("mine"));
@@ -1538,7 +1539,7 @@ function noticeLines(doc: string | null, pane: string): SheetLine[] {
     lines.push({
       id: "removed",
       tone: "warning",
-      text: t("notice.removed", { doc: docTitle(removed.doc) }),
+      text: t("notice.removed", { doc: pageName(removed.doc) }),
       ...(recreate
         ? {
             actions: [{
@@ -1566,7 +1567,7 @@ function noticeLines(doc: string | null, pane: string): SheetLine[] {
 }
 
 function noticeLinesOf(doc: string): SheetLine[] {
-  const name = docTitle(doc);
+  const name = pageName(doc);
   const lines: SheetLine[] = [];
   const saveState = documentSessions.saveState(doc);
   if (saveState === "fallito") {

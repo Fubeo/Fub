@@ -9,6 +9,7 @@ import { api } from "../../../../host/ipc";
 import { state } from "../../../../state/store";
 import { closeCommandPalette } from "../../../../ui/palette";
 import { declareClipboard } from "../../../../platform/clipboard";
+import { trapFocus } from "../../../../ui/a11y";
 
 interface TestEditor {
   ed: MarkdownSurface;
@@ -79,6 +80,120 @@ describe("la superficie Markdown", () => {
     expect(ed.buffer.getDoc()).toBe("# Titolo\n\n- [ ] da fare\n");
     expect(view().state.selection.main.anchor).toBe(anchor);
     expect(parent.dataset.markdownMode).toBe("live_preview");
+    ed.destroy();
+  });
+  it("cambiando modo porta il fuoco dove si continua con la tastiera", () => {
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("# Titolo\n\nuna riga da leggere\n");
+    view().dispatch({ selection: { anchor: 5 } });
+    view().focus();
+    expect(view().hasFocus).toBe(true);
+
+    // In Lettura l'editor sparisce: il fuoco va sul riquadro di lettura, non
+    // sul corpo della pagina.
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(reading());
+
+    // Al ritorno in scrittura il fuoco torna all'editor, al cursore di prima.
+    ed.setMode("live_preview");
+    expect(view().hasFocus).toBe(true);
+    expect(view().state.selection.main.anchor).toBe(5);
+    ed.destroy();
+  });
+  it("cambiando modo da un menu aperto dall'editor, il menu tiene il fuoco, e chiuso lo rende alla Lettura", () => {
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("testo");
+    view().focus();
+    // Un menu del testo: montato fuori dal riquadro, col fuoco che torna
+    // all'editor quando si chiude.
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    const item = document.createElement("button");
+    menu.append(item);
+    document.body.append(menu);
+    const release = trapFocus(menu, () => {});
+    item.focus();
+    expect(document.activeElement).toBe(item);
+
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(item);
+    release();
+    // Non torna all'editor nascosto: va dove si legge adesso.
+    expect(document.activeElement).toBe(reading());
+    menu.remove();
+    ed.destroy();
+  });
+  it("cambiando modo il menu del testo aperto dall'editor si chiude: le sue voci non toccano l'editor nascosto", async () => {
+    const { showContextMenu } = await import("../../../../ui/menu");
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("testo");
+    view().focus();
+    const cut = vi.fn();
+    showContextMenu({ x: 10, y: 10 }, [{ label: "Taglia", run: cut }], { pointer: false });
+    const menu = document.getElementById("context-menu")!;
+    expect(menu.contains(document.activeElement)).toBe(true);
+
+    ed.setMode("reading");
+    // Il menu è chiuso: il fuoco è passato alla Lettura, e la voce non agisce.
+    expect(document.activeElement).toBe(reading());
+    menu.querySelector<HTMLElement>('[role="menuitem"]')?.click();
+    expect(cut).not.toHaveBeenCalled();
+    menu.remove();
+    ed.destroy();
+  });
+  it("cambiando modo non chiude un menu aperto da un'altra parte della finestra", async () => {
+    const { closeContextMenu, showContextMenu } = await import("../../../../ui/menu");
+    const { ed } = editor();
+    ed.buffer.setDoc("testo");
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    const other = vi.fn();
+    showContextMenu({ x: 10, y: 10 }, [{ label: "Rinomina", run: other }], { pointer: false });
+    const menu = document.getElementById("context-menu")!;
+    const item = document.activeElement;
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(item);
+    expect(menu.isConnected).toBe(true);
+    closeContextMenu();
+    outside.remove();
+    ed.destroy();
+  });
+  it("cambiando modo con una finestra aperta sopra l'editor, la finestra tiene il fuoco; chiusa, va al modo nuovo", () => {
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("testo");
+    view().focus();
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    const ok = document.createElement("button");
+    dialog.append(ok);
+    document.body.append(dialog);
+    const release = trapFocus(dialog, () => {});
+    ok.focus();
+
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(ok);
+    ed.setMode("source");
+    expect(document.activeElement).toBe(ok);
+    ed.setMode("reading");
+    release();
+    expect(document.activeElement).toBe(reading());
+    dialog.remove();
+    ed.destroy();
+  });
+  it("cambiando modo non ruba il fuoco a chi lo ha fuori dalla superficie", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("testo");
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(outside);
+    ed.setMode("source");
+    expect(document.activeElement).toBe(outside);
+    expect(view().hasFocus).toBe(false);
+    outside.remove();
     ed.destroy();
   });
   it("in lettura raccoglie le battute di un altro riquadro in un ridisegno solo", () => {
