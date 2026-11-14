@@ -71,4 +71,4 @@ Nuove decisioni usano il [template](template.md).
 | [0238 — Un caso o una funzione del confine non cresce](0238-un-caso-o-una-funzione-del-confine-non-cresce.md) | accolta | contratto | — |
 | [0239 — Il disegno passa dal motore vettoriale, e il file lo scrive il client](0239-il-disegno-sul-motore-vettoriale.md) | accolta | contratto | — |
 | [0240 — La pelle che eredita](0240-la-pelle-che-eredita.md) | accolta | frontend | — |
-| [0241 — L'inchiostro della lavagna sta nel `.canvas`, con la stringa dei disegni e la misura della scheda](0241-inchiostro-sulla-lavagna.md) | proposta | contratto | — |
+| [0241 — L'inchiostro della lavagna sta nel `.canvas`, con la stringa dei disegni e la misura della scheda](0241-inchiostro-sulla-lavagna.md) | accolta | contratto | — |

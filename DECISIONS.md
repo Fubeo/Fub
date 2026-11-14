@@ -2256,3 +2256,12 @@ La più recente in cima: data · piano · decisione · perché.
   sezioni sulla lavagna a penna passano in `docs/architecture/ink-on-canvas.md`
   perché `ink-and-tools.md` superava la soglia di 450 righe; in `overview.md` il
   blocco Mermaid di `fub-ink-codec` è unito al precedente · nessuna soglia alzata.
+- 2026-11-14 · T24 · La prova con Obsidian l'ha fatta l'orchestratore, su
+  indicazione dell'utente («Non aspettare la mia approvazione, te vai! Io avevo già
+  approvato il piano. Se è conforme, allora ci sei»): Obsidian 1.13.7 di questo PC,
+  avviato isolato (HOME temporanea, `xvfb-run`, senza GPU, porta CDP 9333), vault
+  di prova vuoto nello scratchpad, «Spostami» trascinata e «Ridimensionami» tirata
+  dall'angolo col mouse (eventi veri, non scritture nel file), lavagna chiusa.
+  `confronta.mjs` → uscita 0, 8 livelli uguali per valore (n3 400×300 → 500×360,
+  n4 1400,500 → 1100,760). Primo caso di T24: ADR 0241 accolta, sezione «Obsidian»
+  riscritta senza la copia B · D-12 non serve.

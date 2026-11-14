@@ -1861,8 +1861,7 @@ oppure D-12 ha la risposta e i suoi task sono nel piano; la riga è in
 DECISIONS.md.
 Prova: node .github/scripts/check-doc-links.mjs; grep -n "Stato"
 docs/decisions/0241-inchiostro-sulla-lavagna.md
-Stato: [ ] da fare
-Aspetta: l'uscita della prova con Obsidian (il kit di T7), che incolla l'utente.
+Stato: [x] fatto (2026-11-14) · Obsidian 1.13.7, uscita 0, 8 livelli uguali per valore; ADR 0241 accolta; vedi DECISIONS.md
 
 ## T23a · Dove va il tempo sotto la penna, e la correzione
 

@@ -233,14 +233,21 @@ fissa, la prima che vale in quest'ordine:
 
 ## Obsidian
 
-Obsidian apre la stessa lavagna e non conosce i campi `fub:ink`.
+Obsidian apre la stessa lavagna e non conosce i campi `fub:ink`: non disegna
+l'inchiostro, ma quando riscrive il file lo conserva.
 
-- **Che cosa si sa:** niente. Se Obsidian, quando riscrive il file, conserva
-  i livelli, li riordina o li perde lo dice soltanto una prova con Obsidian
-  vero, e finché non c'è l'[ADR 0241](../decisions/0241-inchiostro-sulla-lavagna.md)
-  resta proposta. Un riordino delle chiavi, o `640.0` al posto di `640`, non
-  conta: i livelli si confrontano per valore.
-- **Come si prova:** col kit in `tools/prova-obsidian/`
+- **Che cosa si è visto:** il 2026-11-14, con Obsidian 1.13.7, la lavagna di
+  prova aperta in un vault vuoto, una scheda spostata e una ridimensionata,
+  poi salvata da Obsidian: ogni livello è rimasto uguale per valore, sulle
+  schede (anche quelle mosse), sulla radice, sul livello estraneo (`v: 2`,
+  coi campi sconosciuti dentro un tratto) e sul `fub:ink` dell'arco. Un
+  riordino delle chiavi, o `640.0` al posto di `640`, non conta: i livelli si
+  confrontano per valore. Il resoconto è nella «Verifica» dell'[ADR
+  0241](../decisions/0241-inchiostro-sulla-lavagna.md).
+- **Che cosa ne segue:** la forma di questa pagina è l'unica copia
+  dell'inchiostro. Fub non scrive un disegno in più per gli altri programmi.
+- **Come si rifà la prova** (per esempio con una versione nuova di Obsidian):
+  col kit in `tools/prova-obsidian/`
   ([istruzioni](../../tools/prova-obsidian/README.md)). Si copia la lavagna di
   prova in un vault di prova vuoto, la si apre in Obsidian, si sposta una
   scheda e se ne ridimensiona un'altra, si salva e si lancia `confronta.mjs`
@@ -248,12 +255,6 @@ Obsidian apre la stessa lavagna e non conosce i campi `fub:ink`.
   (scheda per scheda, la radice e il `fub:ink` dell'arco), se c'è ancora, se
   è uguale per valore o che cosa è cambiato, e se la scheda si è spostata o
   ridimensionata; esce con 0 solo se ogni livello è intatto.
-- **Che cosa decide:** se ogni livello resta uguale per valore, la forma di
-  questa pagina resta l'unica copia dell'inchiostro (strada A). Se Obsidian
-  perde o cambia i livelli, anche solo sulle schede che sposta, la decisione
-  diventa A più una copia B: un SVG accanto alla lavagna, che gli altri
-  programmi sanno mostrare (fra le alternative dell'ADR 0241), scritto da Fub
-  in più; i campi `fub:ink` restano la fonte.
 
 ## Toppa e operazioni
 
