@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 const require = createRequire(import.meta.url);
 const Capture = require("../src/capture.js");
@@ -553,5 +554,25 @@ describe("channel: native authenticated, imports unauthenticated, errors structu
     await Channel.sendArtifact(a, { browserNs: bn });
     await Channel.sendArtifact(a, { browserNs: bn });
     assert.deepEqual(seen, [a.envelope.nonce, a.envelope.nonce]);
+  });
+});
+
+describe("manifests: optional host permissions stay narrow", () => {
+  const manifest = (name) => JSON.parse(readFileSync(new URL("../" + name, import.meta.url), "utf8"));
+  // Host part of a match pattern, path ignored: the browsers ignore it for
+  // host permissions, and MV3 writes `https://*/` where MV2 writes `/*`.
+  const hosts = (patterns) => patterns.map((p) => p.replace(/^([a-z*]+:\/\/[^/]*)\/.*$/, "$1")).sort();
+
+  it("Firefox asks for the same hosts as Chromium, never <all_urls>", () => {
+    const chromium = manifest("manifest.json");
+    const firefox = manifest("manifest.firefox.json");
+    for (const m of [chromium, firefox]) {
+      const all = [].concat(m.permissions || [], m.optional_permissions || [], m.host_permissions || [], m.optional_host_permissions || []);
+      assert.ok(!all.includes("<all_urls>"), "no manifest asks for <all_urls>");
+      assert.ok(!all.some((p) => /^(\*|http):\/\/\*/.test(p)), "no wildcard host on plain http or on every scheme");
+    }
+    assert.deepEqual(chromium.host_permissions, []);
+    const origins = (firefox.optional_permissions || []).filter((p) => p.includes("://"));
+    assert.deepEqual(hosts(origins), hosts(chromium.optional_host_permissions));
   });
 });

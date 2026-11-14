@@ -288,6 +288,14 @@ nome che non è un manifest dell'host resta com'è; `--uninstall` toglie
 soltanto ciò che l'host ha scritto. Quando l'invio ripiega, il popup scrive i
 due comandi con l'id vero dell'estensione.
 
+L'estensione non ha permessi di host all'installazione. Quelli che può
+chiedere dopo, uno per uno dalle opzioni, per l'assistente e per le immagini
+da scaricare, sono i siti `https` e il loopback `http` (`127.0.0.1`,
+`localhost`), uguali nel manifest di Chromium (MV3) e in quello di Firefox
+(MV2); mai `<all_urls>`. Il permesso del browser non basta: una richiesta a un
+sito remoto parte soltanto se l'utente ha concesso quell'origine anche nelle opzioni
+(`apps/clipper/src/interpreter.js`).
+
 La conversione della pagina in Markdown (`apps/clipper/src/convert.js`, gemella
 di `crates/fub-importers/src/html.rs`, che la usano anche gli importatori e il
 salvataggio del visore) legge un `href` come lo legge il browser: senza
