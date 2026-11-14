@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "main",
-  "max_missing": 1,
+  "max_missing": 0,
   "entries": [
     {
       "id": "main.card.add_text",
@@ -74,11 +74,9 @@
       "source": "main",
       "gui": [{ "gesture": "convert-to-note" }],
       "writes": "file",
-      "state": "missing",
-      "computes": "`set` non cambia il tipo: la GUI scrive una toppa che lo fa",
-      "target_ops": [{ "op": "convert", "id": "t1", "file": "Corsi/Perché la media è bassa.md" }],
-      "port": "note.create (la nota col testo), poi l'operazione",
-      "task": "T13"
+      "state": "composed",
+      "ops": [{ "op": "convert", "id": "t1", "file": "Corsi/Perché la media è bassa.md" }],
+      "port": "note.create (la nota col testo), poi l'operazione"
     },
     {
       "id": "main.card.edit",

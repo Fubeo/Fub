@@ -218,6 +218,8 @@ fn ogni_operazione_ha_un_vettore() {
         "reverse",
         "group",
         "layout",
+        "insert",
+        "convert",
     ] {
         assert!(seen.contains(op), "nessun vettore usa {op:?}");
     }
@@ -483,7 +485,11 @@ fn le_operazioni_si_riscrivono_uguali() {
         {"op": "reverse", "ids": ["e1"]},
         {"op": "group", "ids": ["a"], "id": "g", "label": "Gruppo", "color": "red"},
         {"op": "layout", "kind": "grid"},
-        {"op": "layout", "ids": ["a", "b"], "kind": "tree", "gap": 32, "x": 0, "y": 96, "direction": "left"}
+        {"op": "layout", "ids": ["a", "b"], "kind": "tree", "gap": 32, "x": 0, "y": 96, "direction": "left"},
+        {"op": "insert", "fragment": {"version": 1, "nodes": [], "edges": []}},
+        {"op": "insert", "fragment": {"version": 1, "nodes": [], "edges": []}, "near": "a", "side": "top"},
+        {"op": "insert", "fragment": {"version": 1, "nodes": [], "edges": []}, "x": 8, "y": -8},
+        {"op": "convert", "id": "a", "file": "Idee/a.md"}
     ]);
     let read: Vec<CanvasOp> = serde_json::from_value(ops.clone()).expect("si leggono");
     assert_eq!(serde_json::to_value(&read).expect("si scrivono"), ops);
@@ -625,5 +631,38 @@ fn layout_con_duemila_schede_resta_sotto_il_secondo() {
     assert!(
         elapsed < std::time::Duration::from_secs(1),
         "il layout di 2000 schede ci ha messo {elapsed:?}"
+    );
+}
+
+/// Un frammento di `count` schede di testo, una accanto all'altra.
+fn fragment_of(count: usize) -> Value {
+    let nodes: Vec<Value> = (0..count)
+        .map(|i| json!({"id": format!("n{i}"), "type": "text", "x": i * 20, "y": 0, "width": 10, "height": 10, "text": ""}))
+        .collect();
+    json!({"version": 1, "nodes": nodes, "edges": []})
+}
+
+/// `insert` porta al più diecimila schede: diecimila entrano, ognuna con un id
+/// suo; diecimila e una sono `TooMany`. Troppo grande per un vettore su file.
+#[test]
+fn insert_porta_al_piu_diecimila_schede_e_oltre_e_too_many() {
+    let canvas = Canvas::default();
+    let ops = move_ops(json!({"op": "insert", "fragment": fragment_of(10_000), "x": 0, "y": 0}));
+    let compiled = compile(&canvas, &ops, 0).expect("diecimila schede entrano");
+    assert_eq!(compiled.created.len(), 10_000);
+    let distinct: std::collections::HashSet<&String> = compiled.created.iter().collect();
+    assert_eq!(distinct.len(), 10_000, "ogni scheda ha un id suo");
+    let after = draft(&canvas, &compiled.patches).expect("le toppe si applicano");
+    after.validate().expect("il modello di dopo è valido");
+
+    let ops = move_ops(json!({"op": "insert", "fragment": fragment_of(10_001), "x": 0, "y": 0}));
+    let error = compile(&canvas, &ops, 0).expect_err("oltre il limite non si compila");
+    assert_eq!(
+        error,
+        OpError::TooMany {
+            index: 0,
+            what: "nodes in one insert",
+            limit: 10_000
+        }
     );
 }

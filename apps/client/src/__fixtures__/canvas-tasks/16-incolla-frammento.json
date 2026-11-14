@@ -22,9 +22,9 @@
         "edges": [
           { "id": "x", "fromNode": "d", "toNode": "r", "fromSide": "right", "toSide": "left", "toEnd": "arrow" }
         ]
-    } }
+    }, "near": "lez", "side": "bottom" }
   ],
-  "needs": ["insert"],
+  "needs": [],
   "checks": [
     { "has_card": { "text": "Domanda" } },
     { "has_card": { "text": "Risposta" } },

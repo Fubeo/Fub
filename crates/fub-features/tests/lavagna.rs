@@ -1153,12 +1153,14 @@ fn la_guida_senza_topic_da_il_testo_e_tutte_le_operazioni() {
             "duplicate",
             "reverse",
             "group",
-            "layout"
+            "layout",
+            "insert",
+            "convert"
         ]
     );
     assert_eq!(
         payload["schema"]["items"]["oneOf"].as_array().map(Vec::len),
-        Some(14)
+        Some(16)
     );
     let examples = payload["examples"].as_array().expect("gli esempi");
     assert!(examples.len() >= 7, "almeno un esempio per operazione");
@@ -1190,7 +1192,7 @@ fn la_guida_con_un_topic_da_solo_la_sua_voce() {
 
     // Un topic vuoto è come non averlo.
     let blank = guide_cmd(&mut ws, json!({ "topic": "  " })).expect("la guida");
-    assert_eq!(custom(&blank)["ops"].as_array().map(Vec::len), Some(14));
+    assert_eq!(custom(&blank)["ops"].as_array().map(Vec::len), Some(16));
 }
 
 #[test]

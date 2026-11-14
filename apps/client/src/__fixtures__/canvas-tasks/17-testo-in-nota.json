@@ -18,7 +18,7 @@
   "ops": [
     { "op": "convert", "id": "ap", "file": "Idee/acqua.md" }
   ],
-  "needs": ["convert"],
+  "needs": [],
   "checks": [
     { "has_card": { "file": "Idee/acqua.md" } },
     { "count": { "kind": "text", "n": 1 } },
