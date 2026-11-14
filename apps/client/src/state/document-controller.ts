@@ -2119,8 +2119,6 @@ const deniedSaves = new Set<string>();
 interface StateNotices {
   save?: NoticeHandle;
   outside?: NoticeHandle;
-  /// La bozza non si scrive più: finisce quando il testo è sul disco.
-  draft?: NoticeHandle;
 }
 const stateNotices = new Map<string, StateNotices>();
 
@@ -2134,16 +2132,23 @@ function showStateNotice(doc: string, slot: keyof StateNotices, show: () => Noti
 function withdrawStateNotices(doc: string, slot?: keyof StateNotices): void {
   const own = stateNotices.get(doc);
   if (!own) return;
-  for (const key of slot ? [slot] : (["save", "outside", "draft"] as const)) {
+  for (const key of slot ? [slot] : (["save", "outside"] as const)) {
     own[key]?.withdraw();
     delete own[key];
   }
-  if (!own.save && !own.outside && !own.draft) stateNotices.delete(doc);
+  if (!own.save && !own.outside) stateNotices.delete(doc);
 }
 
 function withdrawAllStateNotices(): void {
   for (const doc of [...stateNotices.keys()]) withdrawStateNotices(doc);
+  blindDraftNotice?.withdraw();
+  blindDraftNotice = undefined;
 }
+
+/// Le bozze non arrivano più sul disco: è un fatto di tutte le sessioni (la
+/// rete sotto il testo non salvato), non di una nota, come dice la frase.
+/// Uno solo, finché una bozza non torna a scriversi (`draft-restored`).
+let blindDraftNotice: NoticeHandle | undefined;
 
 /// La nota è la tab attiva di almeno un riquadro: ciò che la barra e il foglio
 /// dicono lo si vede, e un avviso a galla lo ripeterebbe.
@@ -2202,7 +2207,13 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
     return;
   }
   if (event.kind === "draft-blind") {
-    showStateNotice(event.id, "draft", () => notify(t("draft.blind"), "guasto"));
+    blindDraftNotice?.withdraw();
+    blindDraftNotice = notify(t("draft.blind"), "guasto");
+    return;
+  }
+  if (event.kind === "draft-restored") {
+    blindDraftNotice?.withdraw();
+    blindDraftNotice = undefined;
     return;
   }
   if (event.kind === "save-failed") {

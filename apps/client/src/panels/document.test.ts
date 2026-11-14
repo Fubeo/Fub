@@ -951,6 +951,20 @@ describe("il testo non salvato resta (#237)", () => {
     expect(toastsAbout("Benvenuto")).toEqual([]);
   });
 
+  it("la bozza che non si scrive è un fatto della sessione: un avviso solo, che se ne va quando le bozze tornano a scriversi", async () => {
+    const { sessions } = await unsavedNote();
+    await sessions.flushDraft(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso della bozza", () => toastsAbout("non arriva più sul disco").length === 1);
+    // Il disco della nota resta guasto; la bozza torna a scriversi.
+    repairDraft?.();
+    repairDraft = null;
+    appendToTextEditor(" ancora");
+    await sessions.flushDraft(BENVENUTO);
+    await settle();
+    expect(sessions.saveState(BENVENUTO)).not.toBe("salvato");
+    expect(toastsAbout("non arriva più sul disco")).toEqual([]);
+  });
+
   it("un salvataggio che non riesce si dice una volta, col titolo, e l'avviso se ne va quando la nota è salvata", async () => {
     const { sessions } = await unsavedNote();
     await sessions.flush(BENVENUTO).catch(() => {});
@@ -965,8 +979,6 @@ describe("il testo non salvato resta (#237)", () => {
     await settle();
     expect(sessions.saveState(BENVENUTO)).toBe("salvato");
     expect(toastsAbout("Benvenuto")).toEqual([]);
-    // Anche quello della bozza che non si scriveva: il testo adesso è sul disco.
-    expect(toastsAbout("non arriva più sul disco")).toEqual([]);
   });
 });
 

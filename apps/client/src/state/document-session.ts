@@ -199,6 +199,9 @@ export type DocumentSessionEvent =
   | { kind: "saved"; id: string }
   | { kind: "save-failed"; id: string; error: unknown; outcome: "conflitto" | "fallito" }
   | { kind: "draft-blind"; id: string }
+  /// Dopo un `draft-blind`, la prima bozza che torna a scriversi: la rete
+  /// sotto il testo non salvato c'è di nuovo (`id` è la nota di quella bozza).
+  | { kind: "draft-restored"; id: string }
   | { kind: "deletion-changed"; id: string; pending: boolean };
 
 type SessionListener = (event: DocumentSessionEvent) => void | Promise<void>;
@@ -209,7 +212,7 @@ type SessionHooks = {
   /// Il testo della sessione è il giornale delle celle di una cartella
   /// (`text_kind` `grid_journal`): salvarlo lo mette nei byte.
   journal(): boolean;
-  draftSucceeded(): void;
+  draftSucceeded(id: string): void;
   draftFailed(id: string): void;
 };
 
@@ -1042,7 +1045,7 @@ export class DocumentSession implements DraftBuffer {
           return;
         }
         this.#draftOutcome = { generation, succeeded: true };
-        this.#hooks.draftSucceeded();
+        this.#hooks.draftSucceeded(id);
       } catch {
         if (
           !this.#isOpen() ||
@@ -1838,8 +1841,10 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const session: DocumentSession = new DocumentSession(OWNER_TOKEN, id, text, base, api, {
       emit: (event) => this.#emit(event),
       journal: (): boolean => this.#journals.has(session),
-      draftSucceeded: () => {
+      draftSucceeded: (doc) => {
+        if (!this.#blindDraft) return;
         this.#blindDraft = false;
+        this.#emit({ kind: "draft-restored", id: doc });
       },
       draftFailed: (doc) => {
         if (this.#blindDraft) return;
