@@ -1,7 +1,29 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
-import { decodeDestination, escapeLinkLabel, linkDestination, normalizeLabel, routeHref } from "./link-syntax";
+import { describe, expect, it, vi } from "vitest";
+import { decodeDestination, decodeEntities, decodeNamedEntity, escapeLinkLabel, linkDestination, normalizeLabel, routeHref } from "./link-syntax";
 import { renderMarkdown } from "./render";
+
+describe("le entità nominate", () => {
+  it("il browser risolve soltanto un riferimento solo, e ogni altro testo resta com'è senza DOM", () => {
+    const created = vi.spyOn(document, "createElement");
+    try {
+      for (const text of ["&amp;&lt;", "&rarr;<b>x</b>", "<img src=x onerror=alert(1)>", "&rarr", "rarr;", " &rarr;"]) {
+        expect(decodeNamedEntity(text)).toBe(text);
+      }
+      expect(created).not.toHaveBeenCalled();
+      expect(decodeNamedEntity("&amp;")).toBe("&");
+      expect(created).not.toHaveBeenCalled();
+      expect(decodeNamedEntity("&rarr;")).toBe("→");
+      expect(created).toHaveBeenCalledWith("textarea");
+    } finally {
+      created.mockRestore();
+    }
+  });
+
+  it("un testo con entità numeriche e nominate si risolve come prima", () => {
+    expect(decodeEntities("a&amp;b &rarr; &#x41;&#66; &ignota; &#0;")).toBe("a&b → AB &ignota; �");
+  });
+});
 
 /// Il testo e l'indirizzo del primo link della resa.
 function rendered(markdown: string): { text: string; href: string | null } | null {

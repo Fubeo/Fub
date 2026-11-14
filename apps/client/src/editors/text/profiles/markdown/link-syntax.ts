@@ -77,6 +77,9 @@ const NAMED_ENTITIES: Record<string, string> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
 };
 
+/// Un riferimento nominato solo, `&nome;` e nient'altro.
+const NAMED_REFERENCE = /^&[A-Za-z][A-Za-z0-9]{1,31};$/;
+
 /// Le entità HTML di un testo: le numeriche sempre, le nominate con il
 /// browser quando c'è e con le più comuni quando non c'è.
 export function decodeEntities(text: string): string {
@@ -85,13 +88,25 @@ export function decodeEntities(text: string): string {
       const code = body[1] === "x" || body[1] === "X" ? Number.parseInt(body.slice(2), 16) : Number.parseInt(body.slice(1), 10);
       return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? "�" : String.fromCodePoint(code);
     }
-    const known = NAMED_ENTITIES[body];
-    if (known !== undefined) return known;
-    if (typeof document === "undefined") return whole;
-    const probe = document.createElement("textarea");
-    probe.innerHTML = whole;
-    return probe.value;
+    return decodeNamedEntity(whole);
   });
+}
+
+/// Il carattere di un riferimento nominato come `&rarr;`. I più comuni
+/// vengono dalla tabella; gli altri (HTML ne nomina più di duemila) li
+/// risolve il browser, ma soltanto per un testo che è un riferimento solo. Il
+/// controllo sta qui, accanto al ramo DOM, e non dipende dall'espressione di
+/// chi chiama: qualunque altro testo torna com'è, senza toccare il DOM. Non è
+/// un varco per l'HTML: quello è `ui/sanitize.ts`.
+export function decodeNamedEntity(reference: string): string {
+  if (!NAMED_REFERENCE.test(reference)) return reference;
+  const known = NAMED_ENTITIES[reference.slice(1, -1)];
+  if (known !== undefined) return known;
+  if (typeof document === "undefined") return reference;
+  // Un `<textarea>` legge ciò che riceve come RCDATA: nessun tag vi nasce.
+  const probe = document.createElement("textarea");
+  probe.innerHTML = reference;
+  return probe.value;
 }
 
 /// La chiave di un'etichetta di riferimento o di nota: spazi compressi e il

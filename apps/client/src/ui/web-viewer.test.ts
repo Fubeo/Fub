@@ -73,6 +73,28 @@ describe("visore web", () => {
     expect(viewerSite("javascript:alert(1)")).toBeNull();
   });
 
+  it("un host con un carattere di controllo non è un sito, come per `viewer_host` in Rust", () => {
+    for (const control of ["\u0000", "\u0001", "\u001f", "\u007f", "\u0085"]) {
+      expect(viewerSite(`https://esem${control}pio.it/`)).toBeNull();
+    }
+  });
+
+  it("senza visore il browser di sistema riceve soltanto un indirizzo http(s)", async () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    try {
+      for (const url of ["javascript:alert(1)", "data:text/html,x", "file:///etc/passwd"]) {
+        expect(await openWebPage(url)).toBe(false);
+        openWebLink(url, false);
+      }
+      expect(open).not.toHaveBeenCalled();
+      expect(await openWebPage("https://esempio.it/")).toBe(true);
+      openWebLink("http://esempio.it/", false);
+      expect(open.mock.calls.map((call) => call[0])).toEqual(["https://esempio.it/", "http://esempio.it/"]);
+    } finally {
+      open.mockRestore();
+    }
+  });
+
   it("un sito nuovo si apre dopo il sì, che lo ricorda; la volta dopo non si chiede", async () => {
     const p = ports(true);
     const viewer = mountWebViewer(openLifetime(), document.body, p);
@@ -104,6 +126,22 @@ describe("visore web", () => {
     const viewer = mountWebViewer(openLifetime(), document.body, p);
     expect(await viewer.open("http://esempio.it/")).toBe(false);
     expect(p.openExternal).toHaveBeenCalledWith("http://esempio.it/");
+    expect(p.confirm).not.toHaveBeenCalled();
+    expect(fake.open).not.toHaveBeenCalled();
+  });
+
+  it("con il visore montato il browser di sistema riceve soltanto un indirizzo http(s)", async () => {
+    const p = ports(true);
+    const viewer = mountWebViewer(openLifetime(), document.body, p);
+    await settle();
+    for (const url of ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,x", "ftp://esempio.it/"]) {
+      expect(await viewer.open(url)).toBe(false);
+      expect(await openWebPage(url)).toBe(false);
+      viewer.openLink(url, false);
+      openWebLink(url, true);
+    }
+    await settle();
+    expect(p.openExternal).not.toHaveBeenCalled();
     expect(p.confirm).not.toHaveBeenCalled();
     expect(fake.open).not.toHaveBeenCalled();
   });

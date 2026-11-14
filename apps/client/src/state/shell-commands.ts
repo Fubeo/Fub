@@ -64,6 +64,9 @@ export async function openBookmarkTarget(target: BookmarkTarget): Promise<void> 
   if (target.k === "web") {
     // Mai iframe nella shell fidata: si apre nel browser esterno via
     // ancora con rel/opener chiuso; se il bridge manca, si mostra l’URL.
+    // Chi legge i segnalibri ammette già solo http(s); qui la stessa regola
+    // tiene fuori anche un bersaglio arrivato da un'altra strada.
+    if (!/^https?:\/\//i.test(target.url)) return;
     const anchor = document.createElement("a");
     anchor.href = target.url;
     anchor.target = "_blank";

@@ -11,7 +11,7 @@ vi.mock("../host/query", () => ({ vaultFolders: () => Promise.resolve({ items: [
 const { zip } = await import("../__fixtures__/zip");
 const { forwardNotice } = await import("../state/kernel");
 const { state } = await import("../state/store");
-const { airtableBase, notionId, openNoteImport, planOf, queuedJob, savedTokens, sourceJson, tally } = await import("./note-import");
+const { airtableBase, newJobId, notionId, openNoteImport, planOf, queuedJob, savedTokens, sourceJson, tally } = await import("./note-import");
 
 const settle = async () => {
   for (let i = 0; i < 6; i++) await new Promise((resolve) => setTimeout(resolve, 0));
@@ -44,6 +44,22 @@ const manifest = {
 };
 
 describe("le regole della finestra d'import", () => {
+  it("l'id di un job nuovo viene dal generatore crittografico, nella forma dello staging", () => {
+    const random = vi.spyOn(Math, "random");
+    const uuid = vi.spyOn(crypto, "randomUUID");
+    try {
+      const id = newJobId();
+      expect(uuid).toHaveBeenCalledOnce();
+      expect(random).not.toHaveBeenCalled();
+      expect(id).toMatch(/^shell-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      expect(id.length).toBeLessThanOrEqual(128);
+      expect(newJobId()).not.toBe(id);
+    } finally {
+      random.mockRestore();
+      uuid.mockRestore();
+    }
+  });
+
   it("l'id del job viene dall'esito tipizzato, non dalla frase", () => {
     expect(queuedJob(queued("7"))).toBe("7");
     expect(queuedJob({ notify: "import.prepare queued (job 7)", effect: { kind: "done" }, undo: null, partial: null } as CommandOutcome)).toBeNull();
