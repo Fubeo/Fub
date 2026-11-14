@@ -1443,7 +1443,7 @@ l'inchiostro non hanno `needs` se non `erase_along`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas/anchor-vectors.test.ts
 src/editors/canvas/wasm
-Stato: [ ] da fare
+Stato: [x] fatto (coder/lic-t16 @ 7a10df4e3) · un solo punto di conversione PenTool→InkTool (`PenTool::as_str()`); un gruppo vale come `on`; `on` pagina/cella resta a T19; niente `at`, sim=0; stella r/2, ellisse ≥64 parti, ali max(12, 3·size) a 30°; ForeignLayer di draw punta a /i/on o /i
 
 ## T17 · Leggere l'inchiostro
 

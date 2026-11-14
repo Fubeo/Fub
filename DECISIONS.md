@@ -2315,3 +2315,14 @@ La più recente in cima: data · piano · decisione · perché.
   tiene il taglio al `#` (vettori di canvas-layout), il fit dell'inchiostro no,
   come nella GUI: scritto in canvas-ink.md. Revisione media: un solo difetto (la
   descrizione di max_chars), corretto.
+- 2026-11-15 · T16 · `draw` scrive il tool del tratto con `PenTool::as_str()`
+  di `fub-ink-codec`: è l'unico punto di conversione, e lo rilegge come `InkTool`
+  solo il controllo di `add_strokes` (un test lega le parole di tutte le penne).
+  Un gruppo vale come `on`, come in engine.ts:1656 (ogni livello non estraneo).
+  `on` come pagina o cella resta a T19 (malformato fino ad allora). Nessun `at`
+  sui tratti (il nucleo non ha orologio); pressione costante, `sim=0`. Le forme
+  sono scelte del nucleo (stella r/2, ellisse con almeno 64 parti dall'alto, ali
+  della freccia max(12, 3·size) a 30°). Revisione media: path di ForeignLayer
+  (/i/on o /i), regola dell'ancora detta giusta in spec, `draw` in
+  canvas-operations.md, corretti. canvas-code.md è a 550 righe, sulla soglia:
+  la prossima aggiunta accorcia o divide la pagina.
