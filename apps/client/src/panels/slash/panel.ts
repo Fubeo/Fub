@@ -523,6 +523,8 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
     drawStepHead();
     tabs.hidden = true;
     body.replaceChildren(opened.dom);
+    // La scelta del passo in vista, ora che il passo ha le sue misure.
+    keepStepChoiceInView();
     foot.replaceChildren(
       footKey(["←", "→", "↑", "↓"], t("slash.panel.keys.move")),
       footKey(["↵"], t("slash.panel.keys.enter")),
@@ -535,7 +537,54 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
     if (!step) return;
     count.textContent = step.hint();
     events.active(step.active());
+    keepStepChoiceInView();
   }
+
+  /// Il passo, come l'elenco, non scorre da sé (`overflow: hidden`): il fuoco
+  /// resta nell'editor e la scelta, mossa dalle frecce, resta in vista
+  /// facendolo scorrere qui. Un contenitore che scorre senza niente di
+  /// raggiungibile sarebbe una tappa del Tab per Chromium e un errore per axe.
+  function keepStepChoiceInView(): void {
+    if (!step || !step.dom.isConnected) return;
+    const id = step.active();
+    const choice = id ? document.getElementById(id) : null;
+    if (!choice || !step.dom.contains(choice)) return;
+    const box = step.dom.getBoundingClientRect();
+    const at = choice.getBoundingClientRect();
+    if (at.top < box.top) step.dom.scrollTop -= box.top - at.top + 8;
+    else if (at.bottom > box.bottom) step.dom.scrollTop += at.bottom - box.bottom + 8;
+  }
+
+  // La rotella e il dito fanno scorrere il passo, come l'elenco; un
+  // trascinamento non è un tocco, e il clic che lo chiude non sceglie.
+  let stepDrag: { id: number; y: number; top: number; moved: boolean } | null = null;
+  let stepDragged = false;
+  life.listen(body, "wheel", (event) => {
+    if (!step) return;
+    event.preventDefault();
+    step.dom.scrollTop += event.deltaMode === 1 ? event.deltaY * 40 : event.deltaY;
+  }, { passive: false });
+  life.listen(body, "pointerdown", (event) => {
+    if (!step) return;
+    stepDragged = false;
+    if (event.pointerType !== "mouse") stepDrag = { id: event.pointerId, y: event.clientY, top: step.dom.scrollTop, moved: false };
+  });
+  life.listen(body, "pointermove", (event) => {
+    if (!step || !stepDrag || event.pointerId !== stepDrag.id) return;
+    const dy = event.clientY - stepDrag.y;
+    if (Math.abs(dy) > 8) stepDrag.moved = true;
+    if (stepDrag.moved) step.dom.scrollTop = stepDrag.top - dy;
+  });
+  life.listen(body, "pointerup", (event) => {
+    if (stepDrag?.moved && event.pointerId === stepDrag.id) stepDragged = true;
+    stepDrag = null;
+  });
+  life.listen(body, "pointercancel", () => void (stepDrag = null));
+  life.listen(body, "click", (event) => {
+    if (!step || !stepDragged) return;
+    stepDragged = false;
+    event.stopPropagation();
+  }, { capture: true });
 
   const leaveStep = (): void => {
     if (!step) return;

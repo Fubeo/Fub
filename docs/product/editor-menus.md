@@ -112,8 +112,9 @@ selezione con la barra accesa), `menu` (solo col tasto destro) e `off`.
 ## Il «/» nel testo
 
 Il **«/»** scritto a inizio riga o dopo uno spazio apre il pannello dei blocchi
-sotto la riga. Se sotto non ci sta intero si accorcia, e l'elenco scorre
-dentro, fino a 220 px; solo se sotto non c'è neanche quello si apre sopra la
+sotto la riga. Se sotto non ci sta intero si accorcia, e l'elenco o il passo
+scorrono dentro (con la scelta delle frecce, la rotella e il dito: il fuoco
+resta nell'editor), fino a 220 px; solo se sotto non c'è neanche quello si apre sopra la
 riga. Non esce mai dall'area del documento: testata, barra degli strumenti e
 barra della finestra restano scoperte (`slashPlacement` in
 `editors/text/profiles/markdown/slash.ts`). Sul telefono è un foglio in fondo

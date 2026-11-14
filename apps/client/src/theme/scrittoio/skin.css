@@ -14893,7 +14893,9 @@ h6.ui-heading {
   gap: var(--space-5);
   min-height: 0;
   padding: var(--space-6);
-  overflow: auto;
+  /* Come l'elenco: scorre con la scelta, la rotella e il dito (panel.ts),
+     non da sé. */
+  overflow: hidden;
 }
 .slash-panel .slash-step-grid {
   display: grid;
