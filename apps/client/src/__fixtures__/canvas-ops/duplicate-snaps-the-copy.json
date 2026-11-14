@@ -1,0 +1,15 @@
+{
+  "about": "duplicate con spostamento zero: la copia non è uguale all'originale, ma si aggancia a 8 (5 diventa 8, 3 diventa 0), come la GUI. Il primo id del seme va alla copia.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 5, "y": 3, "width": 100, "height": 60, "text": "a" }
+  ] },
+  "ops": [{ "op": "duplicate", "ids": ["a"], "dx": 0, "dy": 0 }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "a", "type": "text", "x": 5, "y": 3, "width": 100, "height": 60, "text": "a" },
+      { "id": "e220a8397b1dcdaf", "type": "text", "x": 8, "y": 0, "width": 100, "height": 60, "text": "a" }
+    ] },
+    "created": ["e220a8397b1dcdaf"]
+  }
+}

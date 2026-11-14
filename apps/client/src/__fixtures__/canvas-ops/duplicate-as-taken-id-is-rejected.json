@@ -1,0 +1,9 @@
+{
+  "about": "duplicate con un id di as già preso dalla lavagna (b): DuplicateId, come un add_card con un id che c'è.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+    { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" }
+  ] },
+  "ops": [{ "op": "duplicate", "ids": ["a"], "as": ["b"] }],
+  "expect": { "outcome": "rejected", "error": { "kind": "DuplicateId", "index": 0, "id": "b" } }
+}

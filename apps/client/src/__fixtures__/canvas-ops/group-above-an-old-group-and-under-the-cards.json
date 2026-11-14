@@ -1,0 +1,17 @@
+{
+  "about": "group di una scheda già dentro un gruppo: il gruppo nuovo sta sopra il vecchio e sotto la scheda (la lista è [vecchio, nuovo, scheda]). Il rettangolo (0, 16, 152, 112) è quello di t con margine 24, agganciato.",
+  "before": { "nodes": [
+    { "id": "g0", "type": "group", "label": "Vecchio", "x": 0, "y": 0, "width": 400, "height": 300 },
+    { "id": "t", "type": "text", "x": 20, "y": 40, "width": 100, "height": 60, "text": "t" }
+  ] },
+  "ops": [{ "op": "group", "ids": ["t"], "label": "Nuovo" }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "g0", "type": "group", "label": "Vecchio", "x": 0, "y": 0, "width": 400, "height": 300 },
+      { "id": "e220a8397b1dcdaf", "type": "group", "label": "Nuovo", "x": 0, "y": 16, "width": 152, "height": 112 },
+      { "id": "t", "type": "text", "x": 20, "y": 40, "width": 100, "height": 60, "text": "t" }
+    ] },
+    "created": ["e220a8397b1dcdaf"]
+  }
+}

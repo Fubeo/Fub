@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "N6",
-  "max_missing": 10,
+  "max_missing": 9,
   "entries": [
     {
       "id": "N6.card.drop_vault",
@@ -99,25 +99,8 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T51" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": {
-            "id": "g2",
-            "type": "group",
-            "label": "",
-            "x": -24,
-            "y": 376,
-            "width": 968,
-            "height": 528
-          }
-        },
-        { "op": "reorder", "ids": ["g1", "t1", "t2", "g2", "f1", "p1", "l1"] }
-      ],
-      "computes": "il rettangolo con il margine e il posto nell'ordine (sotto le schede)",
-      "target_ops": [{ "op": "group", "ids": ["f1", "p1"] }],
-      "task": "T11"
+      "state": "code",
+      "ops": [{ "op": "group", "ids": ["f1", "p1"] }]
     },
     {
       "id": "N6.resize.fit",

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "main",
-  "max_missing": 5,
+  "max_missing": 1,
   "entries": [
     {
       "id": "main.card.add_text",
@@ -183,23 +183,8 @@
       "source": "main",
       "gui": [{ "menu": "canvas.duplicate" }, { "toolbar": "duplicate" }, { "key": "Mod+D" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": {
-            "type": "text",
-            "text": "Perché la media è bassa?",
-            "x": 32,
-            "y": 32,
-            "width": 320,
-            "height": 160
-          }
-        }
-      ],
-      "computes": "la copia dei campi, il posto +32 agganciato, gli id nuovi",
-      "target_ops": [{ "op": "duplicate", "ids": ["t1", "t2"] }],
-      "task": "T11",
+      "state": "code",
+      "ops": [{ "op": "duplicate", "ids": ["t1", "t2"] }],
       "note": "La GUI di main non copia gli archi fra le schede duplicate; `duplicate` li copia (D1)."
     },
     {
@@ -254,11 +239,8 @@
         { "toolbar": "bottom" }
       ],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [{ "op": "move", "ids": ["t2"], "dx": -400, "dy": 0 }],
-      "computes": "i bordi o i centri comuni, agganciati a 8",
-      "target_ops": [{ "op": "align", "ids": ["t2", "f1"], "to": "left" }],
-      "task": "T11"
+      "state": "code",
+      "ops": [{ "op": "align", "ids": ["t2", "f1"], "to": "left" }]
     },
     {
       "id": "main.distribute",
@@ -271,11 +253,8 @@
         { "toolbar": "distribute-y" }
       ],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [{ "op": "move", "ids": ["t2"], "dx": 104, "dy": 0 }],
-      "computes": "gli spazi uguali fra i centri",
-      "target_ops": [{ "op": "distribute", "ids": ["t1", "t2", "l1"], "axis": "x" }],
-      "task": "T11"
+      "state": "code",
+      "ops": [{ "op": "distribute", "ids": ["t1", "t2", "l1"], "axis": "x" }]
     },
     {
       "id": "main.select",
@@ -374,24 +353,8 @@
       "source": "main",
       "gui": [{ "menu": "canvas.edge.reverse" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "set",
-          "id": "e1",
-          "fields": {
-            "fromNode": "t2",
-            "fromSide": "left",
-            "toNode": "t1",
-            "toSide": "right",
-            "fromEnd": "arrow",
-            "toEnd": null
-          }
-        }
-      ],
-      "computes": "lo scambio di estremi, lati e punte",
-      "target_ops": [{ "op": "reverse", "ids": ["e1"] }],
-      "task": "T11"
+      "state": "code",
+      "ops": [{ "op": "reverse", "ids": ["e1"] }]
     },
     {
       "id": "main.edge.label",

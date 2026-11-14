@@ -1,0 +1,25 @@
+{
+  "about": "reverse due volte sullo stesso arco: torna com'era. Le punte sono già scritte nel file, quindi il giro non ne aggiunge.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+    ],
+    "edges": [
+      { "id": "e1", "fromNode": "a", "fromSide": "right", "fromEnd": "none", "toNode": "b", "toSide": "left", "toEnd": "arrow" }
+    ]
+  },
+  "ops": [{ "op": "reverse", "ids": ["e1"] }, { "op": "reverse", "ids": ["e1"] }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+        { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+      ],
+      "edges": [
+        { "id": "e1", "fromNode": "a", "fromSide": "right", "fromEnd": "none", "toNode": "b", "toSide": "left", "toEnd": "arrow" }
+      ]
+    }
+  }
+}

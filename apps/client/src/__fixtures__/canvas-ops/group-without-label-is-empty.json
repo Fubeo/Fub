@@ -1,0 +1,15 @@
+{
+  "about": "group senza etichetta: il gruppo ha label vuota, come la GUI, e il rettangolo (-24, -24, 368, 208) del suo testo.",
+  "before": { "nodes": [
+    { "id": "t", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "t" }
+  ] },
+  "ops": [{ "op": "group", "ids": ["t"] }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "e220a8397b1dcdaf", "type": "group", "label": "", "x": -24, "y": -24, "width": 368, "height": 208 },
+      { "id": "t", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "t" }
+    ] },
+    "created": ["e220a8397b1dcdaf"]
+  }
+}

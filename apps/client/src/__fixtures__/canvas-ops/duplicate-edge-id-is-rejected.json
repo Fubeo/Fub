@@ -1,0 +1,12 @@
+{
+  "about": "duplicate con l'id di un arco (e1): si copiano schede, e un arco non è una scheda, quindi UnknownNode.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+      { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" }
+    ],
+    "edges": [{ "id": "e1", "fromNode": "a", "toNode": "b" }]
+  },
+  "ops": [{ "op": "duplicate", "ids": ["a", "e1"] }],
+  "expect": { "outcome": "rejected", "error": { "kind": "UnknownNode", "index": 0, "id": "e1" } }
+}

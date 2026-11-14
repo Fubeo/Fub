@@ -16,7 +16,7 @@
   "ops": [
     { "op": "align", "ids": ["sco", "ipo", "ver"], "to": "left" }
   ],
-  "needs": ["align"],
+  "needs": [],
   "checks": [
     { "aligned": { "texts": ["Scoperte", "Ipotesi", "Verifica"], "axis": "left" } },
     { "no_overlap": {} }

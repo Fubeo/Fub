@@ -1078,7 +1078,21 @@ fn le_lavagne_si_leggono_e_si_guidano() {
     names.sort();
     assert_eq!(
         names,
-        ["add_card", "color", "connect", "move", "remove", "reorder", "resize", "set"]
+        [
+            "add_card",
+            "align",
+            "color",
+            "connect",
+            "distribute",
+            "duplicate",
+            "group",
+            "move",
+            "remove",
+            "reorder",
+            "resize",
+            "reverse",
+            "set"
+        ]
     );
     assert!(guide["schema"].is_object());
     assert!(!guide["examples"].as_array().unwrap().is_empty());

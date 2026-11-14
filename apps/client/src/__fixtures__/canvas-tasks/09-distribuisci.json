@@ -5,17 +5,17 @@
     "nodes": [
       { "id": "pri", "type": "text", "text": "Prima", "x": 0, "y": 0, "width": 320, "height": 160 },
       { "id": "sec", "type": "text", "text": "Seconda", "x": 400, "y": 0, "width": 320, "height": 160 },
-      { "id": "ter", "type": "text", "text": "Terza", "x": 1000, "y": 0, "width": 320, "height": 160 }
+      { "id": "ter", "type": "text", "text": "Terza", "x": 1008, "y": 0, "width": 320, "height": 160 }
     ],
     "edges": []
   },
   "ops_today": [
-    { "op": "move", "ids": ["sec"], "dx": 100, "dy": 0 }
+    { "op": "move", "ids": ["sec"], "dx": 104, "dy": 0 }
   ],
   "ops": [
     { "op": "distribute", "ids": ["pri", "sec", "ter"], "axis": "x" }
   ],
-  "needs": ["distribute"],
+  "needs": [],
   "checks": [
     { "spaced": { "texts": ["Prima", "Seconda", "Terza"], "axis": "x" } },
     { "aligned": { "texts": ["Prima", "Seconda", "Terza"], "axis": "top" } },

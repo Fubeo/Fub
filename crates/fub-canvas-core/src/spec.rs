@@ -117,6 +117,10 @@ const ENDS: &[&str] = &["arrow", "none", "both"];
 const LAYERS: &[&str] = &["front", "back"];
 /// Il modo di prendere la misura da un contenuto, con `resize`.
 const FITS: &[&str] = &["content"];
+/// Il lato comune di `align`: i sei bottoni della barra.
+const ALIGN_SIDES: &[&str] = &["left", "center", "right", "top", "middle", "bottom"];
+/// L'asse dei centri di `distribute`.
+const AXES: &[&str] = &["x", "y"];
 
 /// Le operazioni del nucleo, una voce per variante di [`CanvasOp`], nello
 /// stesso ordine. Un'operazione nuova entra qui nello stesso task.
@@ -379,6 +383,97 @@ pub const OPS: &[OpSpec] = &[
         examples: &[
             r#"{"op":"color","ids":["t1","t2"],"color":"red"}"#,
             r#"{"op":"color","ids":["e1"],"color":null}"#,
+        ],
+    },
+    OpSpec {
+        name: "align",
+        summary_it: "Allinea le schede `ids` allo stesso bordo o centro, come i bottoni della barra: `left`, `center`, `right`, `top`, `middle`, `bottom`.",
+        fields: &[
+            required("ids", FieldKind::Ids, "Le schede da allineare. Con meno di due non si sposta niente."),
+            required(
+                "to",
+                FieldKind::Enum(ALIGN_SIDES),
+                "Il lato comune. `left`, `right` e `center` allineano in orizzontale, `top`, `bottom` e `middle` in verticale. Il bordo è quello più esterno del gruppo, agganciato a 8.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"align","ids":["t1","t2"],"to":"top"}"#,
+            r#"{"op":"align","ids":["t1","t2","f1"],"to":"left"}"#,
+        ],
+    },
+    OpSpec {
+        name: "distribute",
+        summary_it: "Distribuisce le schede `ids` lungo `axis`: le estreme restano dove sono, quelle di mezzo hanno i centri a passi uguali.",
+        fields: &[
+            required("ids", FieldKind::Ids, "Le schede da distribuire. Con meno di tre non si sposta niente."),
+            required(
+                "axis",
+                FieldKind::Enum(AXES),
+                "`x` per i centri in orizzontale, `y` in verticale. Le posizioni si agganciano a 8.",
+            ),
+        ],
+        examples: &[r#"{"op":"distribute","ids":["t1","t2","f1"],"axis":"x"}"#],
+    },
+    OpSpec {
+        name: "duplicate",
+        summary_it: "Copia le schede `ids` e gli archi che le collegano fra loro, sfalsate di 32 (o di `dx` e `dy`). Gli id delle copie vengono dal seme, o da `as`.",
+        fields: &[
+            required("ids", FieldKind::Ids, "Le schede da copiare. Un gruppo senza le sue schede si copia da solo."),
+            FieldSpec {
+                name: "dx",
+                kind: FieldKind::Number,
+                required: false,
+                default: Some("32"),
+                doc_it: "Lo spostamento in orizzontale delle copie, in unità della lavagna. La posizione si aggancia a 8.",
+            },
+            FieldSpec {
+                name: "dy",
+                kind: FieldKind::Number,
+                required: false,
+                default: Some("32"),
+                doc_it: "Lo spostamento in verticale delle copie, come `dx`.",
+            },
+            optional(
+                "as",
+                FieldKind::Ids,
+                "Gli id delle copie, nell'ordine di `ids`: un id per scheda. Se manca li dà il seme.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"duplicate","ids":["t1","t2"],"dx":0,"dy":216,"as":["t3","t4"]}"#,
+            r#"{"op":"duplicate","ids":["f1"]}"#,
+        ],
+    },
+    OpSpec {
+        name: "reverse",
+        summary_it: "Inverte gli archi `ids`: la partenza diventa l'arrivo, e la punta resta sull'arrivo, così la freccia cambia verso.",
+        fields: &[required("ids", FieldKind::Ids, "Gli archi da invertire.")],
+        examples: &[r#"{"op":"reverse","ids":["e1"]}"#],
+    },
+    OpSpec {
+        name: "group",
+        summary_it: "Mette le schede `ids` in un gruppo col rettangolo che le racchiude e un margine di 24, appena sotto la più bassa di loro.",
+        fields: &[
+            required("ids", FieldKind::Ids, "Le schede da raggruppare. Almeno una."),
+            optional(
+                "id",
+                FieldKind::Id,
+                "L'id del gruppo nuovo. Se manca lo dà il seme.",
+            ),
+            optional(
+                "label",
+                FieldKind::Text,
+                "L'etichetta del gruppo. Di serie vuota.",
+            ),
+            optional(
+                "color",
+                FieldKind::Color,
+                "Il colore del gruppo, come in `add_card`.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"group","ids":["t1","t2"],"label":"Ciclo"}"#,
+            r#"{"op":"group","ids":["f1"]}"#,
         ],
     },
 ];

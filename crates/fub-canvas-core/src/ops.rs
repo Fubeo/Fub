@@ -1,5 +1,6 @@
 //! Le operazioni d'intento sulla lavagna (`CanvasOp`): «aggiungi», «sposta»,
-//! «ridimensiona», «collega», «togli», «cambia», «porta sopra». Un agente o
+//! «ridimensiona», «collega», «togli», «cambia», «porta sopra», «allinea»,
+//! «distribuisci», «duplica», «inverti», «raggruppa». Un agente o
 //! la sessione dal tablet pensano così, non in toppe con l'immagine di
 //! prima: [`compile`] traduce una lista di operazioni nelle toppe di
 //! [`crate::patch`], che sono la sola forma con cui una lavagna cambia.
@@ -32,13 +33,21 @@ use crate::model::{Canvas, CanvasEdge, CanvasError, CanvasNode, MAX_SAFE_INTEGER
 use crate::patch::{self, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null};
 
 mod adjust;
+mod align;
 mod card;
 pub(crate) mod color;
 mod connect;
+mod duplicate;
+mod group;
+mod reverse;
 
 pub use adjust::{ColorArgs, Fit, MoveArgs, ReorderArgs, ReorderTo, ResizeArgs};
+pub use align::{AlignArgs, AlignTo, DistributeArgs, DistributeAxis};
 pub use card::AddCardArgs;
 pub use connect::{AutoWord, ConnectArgs, Ends, SidePair, Sides};
+pub use duplicate::DuplicateArgs;
+pub use group::GroupArgs;
+pub use reverse::ReverseArgs;
 
 /// Un'operazione d'intento. La forma JSON ha il campo `op` per primo, in
 /// `snake_case`; un campo che l'operazione non conosce è un errore di
@@ -74,6 +83,20 @@ pub enum CanvasOp {
     Reorder(ReorderArgs),
     /// Colora più schede e archi in una volta. Le regole sono in `ops/adjust.rs`.
     Color(ColorArgs),
+    /// Allinea le schede al lato comune, come i bottoni della barra. Le regole
+    /// sono in `ops/align.rs`.
+    Align(AlignArgs),
+    /// Distribuisce le schede lungo un asse. Le regole sono in `ops/align.rs`.
+    Distribute(DistributeArgs),
+    /// Copia le schede e gli archi che le collegano fra loro. Le regole sono in
+    /// `ops/duplicate.rs`.
+    Duplicate(DuplicateArgs),
+    /// Inverte gli archi: la partenza diventa l'arrivo. Le regole sono in
+    /// `ops/reverse.rs`.
+    Reverse(ReverseArgs),
+    /// Mette le schede in un gruppo, sotto di loro. Le regole sono in
+    /// `ops/group.rs`.
+    Group(GroupArgs),
 }
 
 impl CanvasOp {
@@ -90,6 +113,11 @@ impl CanvasOp {
             Self::Set { .. } => "set",
             Self::Reorder(_) => "reorder",
             Self::Color(_) => "color",
+            Self::Align(_) => "align",
+            Self::Distribute(_) => "distribute",
+            Self::Duplicate(_) => "duplicate",
+            Self::Reverse(_) => "reverse",
+            Self::Group(_) => "group",
         }
     }
 }
@@ -108,11 +136,12 @@ pub struct Compiled {
 /// dell'operazione nella lista, da zero.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum OpError {
-    /// L'operazione vuole una scheda che non c'è (`move`, `resize`,
-    /// `reorder`, gli estremi di un arco).
+    /// L'operazione vuole una scheda che non c'è (`move`, `resize`, `reorder`,
+    /// `align`, `distribute`, `duplicate`, `group`, gli estremi di un arco).
     #[error("canvas op {index}: there is no node {id:?}")]
     UnknownNode { index: usize, id: String },
-    /// `remove` o `set` di un id che non è né una scheda né un arco.
+    /// `remove`, `set` o `color` di un id che non è né una scheda né un arco; e
+    /// `reverse` di un id che non è un arco (anche se è una scheda).
     #[error("canvas op {index}: there is no node or edge {id:?}")]
     UnknownEdge { index: usize, id: String },
     /// Un id dato che c'è già (nel modello di partenza o creato nello stesso
@@ -241,6 +270,11 @@ impl Compiler {
             CanvasOp::Set { id, fields } => self.set(index, id, fields)?,
             CanvasOp::Reorder(args) => self.reorder(index, args)?,
             CanvasOp::Color(args) => self.color(index, args)?,
+            CanvasOp::Align(args) => self.align(index, args)?,
+            CanvasOp::Distribute(args) => self.distribute(index, args)?,
+            CanvasOp::Duplicate(args) => self.duplicate(index, args)?,
+            CanvasOp::Reverse(args) => self.reverse(index, args)?,
+            CanvasOp::Group(args) => self.group(index, args)?,
         };
         if patches.is_empty() {
             return Ok(());
@@ -276,6 +310,13 @@ impl Compiler {
                 index,
                 id: id.to_owned(),
             })
+    }
+
+    /// Le schede `ids` com'erano nel modello, nell'ordine dato. Un id ripetuto è
+    /// `DuplicateId`; un id che non è una scheda è `UnknownNode`.
+    fn cards(&self, index: usize, ids: &[String]) -> Result<Vec<CanvasNode>, OpError> {
+        distinct(index, ids)?;
+        ids.iter().map(|id| self.node(index, id).cloned()).collect()
     }
 
     fn has_node(&self, id: &str) -> bool {

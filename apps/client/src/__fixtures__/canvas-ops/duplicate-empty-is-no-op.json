@@ -1,0 +1,13 @@
+{
+  "about": "duplicate di nessuna scheda: niente copie, niente toppe, e nessun id creato.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }
+  ] },
+  "ops": [{ "op": "duplicate", "ids": [] }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }
+    ] }
+  }
+}

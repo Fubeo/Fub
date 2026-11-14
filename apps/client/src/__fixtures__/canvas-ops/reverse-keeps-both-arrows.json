@@ -1,0 +1,25 @@
+{
+  "about": "reverse di un arco con due punte: restano due punte, ciascuna sul suo ruolo, e cambiano solo le schede e i lati.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+    ],
+    "edges": [
+      { "id": "e1", "fromNode": "a", "fromSide": "right", "fromEnd": "arrow", "toNode": "b", "toSide": "left", "toEnd": "arrow" }
+    ]
+  },
+  "ops": [{ "op": "reverse", "ids": ["e1"] }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+        { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+      ],
+      "edges": [
+        { "id": "e1", "fromNode": "b", "fromSide": "left", "fromEnd": "arrow", "toNode": "a", "toSide": "right", "toEnd": "arrow" }
+      ]
+    }
+  }
+}
