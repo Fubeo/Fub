@@ -979,7 +979,7 @@ Fatto quando: un test per prefisso, per azione e per il niente trovato; un
 test che l'anteprima non parte prima della pausa.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/launcher src/panels/quick-switcher.dom.test.ts
-Stato: [ ] da fare
+Stato: [~] PR #357 (feat/ctrl-o-prefissi) · Q1 consigliata · `@` solo Persone finché non c'è T39; niente Sbircia prima di T20; Rinomina e Sposta un'azione sola su `note.rename`; la finestra nuova esce dal lanciatore (resta nel menu di scheda e albero); stile dei gruppi e del pulsante «Azioni» in T82
 
 ## T14 · La riga dei suggerimenti
 
@@ -1152,7 +1152,7 @@ riscritto byte per byte; l'esito della prova con Obsidian scritto in
 `Stato`.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-format-base -p
 fub-features base
-Stato: [ ] da fare
+Stato: [~] PR #356 (feat/base-calendario) · prova con Obsidian 1.13.7 fatta dall'orchestratore (2026-11-14): la forma nativa dà «Unknown view type», il ripiego si vede come tabella e Obsidian conserva `fub:` ma toglie i commenti YAML quando cambia vista → resta il ripiego (`disk_form` invariato), Q3 non serve; il client tratta calendario e linea come tipo sconosciuto fino a T17/T34 (opzione a: nessun controllo in `respond`)
 
 ## T17 · Base: Calendario col trascinamento
 
@@ -1365,7 +1365,7 @@ l'opzione, mette le note. Dopo il task l'orchestratore chiede il giro
 `fuzz_completo` (CLAUDE.md).
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-format-markdown
 -p fub-abi -p fub-importers; cargo nextest run -p fub-features search
-Stato: [ ] da fare
+Stato: [~] PR #355 (feat/commenti-criticmarkup), check rapido verde dopo main 5d233c366 · commento dentro `^[…]` resta testo della nota (il file non cambia); `comment:` campo a parte, schema ricerca v9; export con `{"comments": true}` · dopo il merge: `fuzz_completo`
 
 ## T21 · Commenti: lettura e scrittura nell'editor
 

@@ -1883,3 +1883,15 @@ La più recente in cima: data · piano · decisione · perché.
   T23 in `main`; T23b corre accanto e chiude prima di T26 · scelta
   dell'orchestratore con l'autonomia data dall'utente il 2026-11-13 («fai
   sempre la scelta che porterà al massimo della qualità»).
+- 2026-11-14 · T17a · La prova con Obsidian l'ha fatta l'orchestratore (l'utente:
+  «Non aspettare la mia approvazione, te vai!»), con Obsidian 1.13.7 isolato (HOME
+  temporanea, `xvfb-run`): la forma nativa dà «Unknown view type: calendar» e
+  `timeline`, il ripiego `type: table` + `fub.view` si vede come tabella. Resta il
+  ripiego; Q3 non si chiede. Obsidian, quando cambia vista, riscrive il `.base`
+  togliendo i commenti YAML e riordinando le chiavi (scritto in `bases.md`). Alla
+  domanda del coder (rifiutare calendar/timeline anche in `respond`) l'orchestratore
+  sceglie a): un file misto mostra la tabella e l'errore solo sulla vista non disegnata.
+- 2026-11-14 · T13 · Differenze accolte dall'orchestratore: `@` cerca solo le
+  persone finché la pagina del giorno (T39) non dà i giorni; Rinomina e Sposta sono
+  una sola azione perché tutte e due passano da `note.rename`; Alt-Invio apre a lato
+  (prima di T20) e la finestra nuova resta nei menu di scheda e albero.
