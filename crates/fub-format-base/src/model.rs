@@ -94,6 +94,9 @@ impl BaseDefinition {
         let mut definition: BaseDefinition =
             serde_json::from_value(value).map_err(|error| BaseError::Invalid(error.to_string()))?;
         definition.version = BASE_SCHEMA_VERSION;
+        for view in &mut definition.views {
+            view.resolve();
+        }
         definition.validate()?;
         Ok(definition)
     }
@@ -262,12 +265,38 @@ pub struct BaseViewDef {
     pub search: Option<String>,
     #[serde(default)]
     pub map: Option<MapDef>,
+    /// Il blocco `fub:`: le chiavi di una vista di calendario o di linea del
+    /// tempo, che Obsidian ignora (vedi [`FubViewDef`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fub: Option<FubViewDef>,
     #[serde(default, flatten)]
     pub extra: serde_json::Map<String, Value>,
 }
 
 impl BaseViewDef {
+    /// Il tipo di vista che Fub legge. Una vista scritta `type: table` con
+    /// `fub.view` è un calendario o una linea del tempo (la forma di ripiego
+    /// di [`disk_form`]); con un altro `type` la chiave `fub.view` non vale.
+    pub fn resolve(&mut self) {
+        if self.view_type == ViewType::Table {
+            if let Some(view) = self.fub.as_ref().and_then(|fub| fub.view) {
+                self.view_type = view.into();
+            }
+        }
+    }
+
     fn validate(&self) -> Result<(), BaseError> {
+        if let Some(fub) = &self.fub {
+            for (name, key) in [
+                ("date", &fub.date),
+                ("start", &fub.start),
+                ("end", &fub.end),
+            ] {
+                if key.as_ref().is_some_and(|key| key.trim().is_empty()) {
+                    return Err(BaseError::Invalid(format!("fub.{name} senza proprietà")));
+                }
+            }
+        }
         if self.order.len() > MAX_COLUMNS {
             return Err(BaseError::Limit {
                 what: "view columns",
@@ -344,6 +373,65 @@ pub enum ViewType {
     List,
     Kanban,
     Map,
+    /// Un mese di note nei giorni della proprietà `fub.date`.
+    Calendar,
+    /// Le note come barre fra `fub.start` e `fub.end`.
+    Timeline,
+}
+
+/// Il tipo che la forma di ripiego porta in `fub.view`: solo calendario e
+/// linea del tempo, perché gli altri tipi Obsidian li legge da sé.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FubView {
+    Calendar,
+    Timeline,
+}
+
+impl From<FubView> for ViewType {
+    fn from(view: FubView) -> Self {
+        match view {
+            FubView::Calendar => ViewType::Calendar,
+            FubView::Timeline => ViewType::Timeline,
+        }
+    }
+}
+
+/// Il blocco `fub:` di una vista: le chiavi che Fub aggiunge a una vista
+/// che Obsidian non conosce. Obsidian ignora la chiave intera; Fub legge
+/// `view` solo con `type: table`, e le chiavi della data in ogni forma.
+/// Le chiavi che questa versione non conosce restano in `extra`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct FubViewDef {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<FubView>,
+    /// Il nome della proprietà data del calendario.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    /// Il nome della proprietà d'inizio della linea del tempo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<String>,
+    /// Il nome della proprietà di fine della linea del tempo, facoltativa.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<String>,
+    #[serde(default, flatten)]
+    pub extra: serde_json::Map<String, Value>,
+}
+
+/// La forma su disco di un tipo di vista: il valore di `type` e, se il tipo
+/// non lo porta da sé, `fub.view`.
+///
+/// È il ripiego di Q3 (T17a): finché la prova con Obsidian non dice che
+/// Obsidian regge `calendar` e `timeline`, Fub scrive `table` con `fub.view`.
+/// Passare alla forma nativa è cambiare queste due righe in
+/// `(ViewType::Calendar, None)` e `(ViewType::Timeline, None)`: la lettura
+/// accetta già entrambe le forme.
+pub fn disk_form(view_type: ViewType) -> (ViewType, Option<FubView>) {
+    match view_type {
+        ViewType::Calendar => (ViewType::Table, Some(FubView::Calendar)),
+        ViewType::Timeline => (ViewType::Table, Some(FubView::Timeline)),
+        other => (other, None),
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -499,5 +587,116 @@ mod tests {
             BaseDefinition::parse(&duplicate),
             Err(BaseError::Invalid(_))
         ));
+    }
+
+    fn view_of(source: &str) -> BaseViewDef {
+        BaseDefinition::parse(source).unwrap().views.remove(0)
+    }
+
+    /// La stessa vista nelle due forme dà lo stesso modello: la nativa
+    /// (`type: calendar`) e il ripiego (`type: table` con `fub.view`).
+    #[test]
+    fn calendario_e_linea_del_tempo_nelle_due_forme() {
+        let native =
+            view_of("views:\n  - name: C\n    type: calendar\n    fub: {date: scadenza}\n");
+        let fallback = view_of(
+            "views:\n  - name: C\n    type: table\n    fub: {view: calendar, date: scadenza}\n",
+        );
+        assert_eq!(native.view_type, ViewType::Calendar);
+        assert_eq!(fallback.view_type, ViewType::Calendar);
+        // La forma nativa non porta `view`: il resto del blocco è lo stesso.
+        for view in [&native, &fallback] {
+            assert_eq!(
+                view.fub.as_ref().and_then(|fub| fub.date.as_deref()),
+                Some("scadenza")
+            );
+        }
+
+        let timeline = view_of(
+            "views:\n  - name: L\n    type: table\n    fub: {view: timeline, start: inizio, end: fine}\n",
+        );
+        assert_eq!(timeline.view_type, ViewType::Timeline);
+        let fub = timeline.fub.expect("il blocco fub");
+        assert_eq!(
+            (fub.start.as_deref(), fub.end.as_deref()),
+            (Some("inizio"), Some("fine"))
+        );
+    }
+
+    /// Un Fub vecchio legge la forma di ripiego come tabella, e la forma
+    /// senza `fub:` resta una tabella com'era.
+    #[test]
+    fn tabella_senza_fub_resta_tabella() {
+        assert_eq!(
+            view_of("views:\n  - name: T\n    type: table\n").view_type,
+            ViewType::Table
+        );
+        assert!(view_of("views:\n  - name: T\n    type: table\n")
+            .fub
+            .is_none());
+    }
+
+    /// `fub.view` vale solo con `type: table`: con un altro tipo è ignorato.
+    #[test]
+    fn fub_view_con_un_altro_tipo_non_vale() {
+        let cards = view_of("views:\n  - name: C\n    type: cards\n    fub: {view: calendar}\n");
+        assert_eq!(cards.view_type, ViewType::Cards);
+    }
+
+    /// Un tipo di vista che questa versione non conosce è un errore, come
+    /// prima; un `fub.view` sconosciuto anche.
+    #[test]
+    fn tipo_sconosciuto_resta_un_errore() {
+        assert!(matches!(
+            BaseDefinition::parse("views:\n  - name: G\n    type: gallery\n"),
+            Err(BaseError::Invalid(_))
+        ));
+        assert!(matches!(
+            BaseDefinition::parse(
+                "views:\n  - name: G\n    type: table\n    fub: {view: gallery}\n"
+            ),
+            Err(BaseError::Invalid(_))
+        ));
+    }
+
+    /// Un calendario senza la chiave della data si legge: la valutazione
+    /// dirà che manca, il file non diventa illeggibile.
+    #[test]
+    fn calendario_senza_data_si_legge() {
+        let view = view_of("views:\n  - name: C\n    type: calendar\n");
+        assert_eq!(view.view_type, ViewType::Calendar);
+        assert!(view.fub.is_none());
+    }
+
+    /// Una chiave `fub` che non è una proprietà (vuota o non testo) non si
+    /// accetta, e le chiavi di `fub` che questa versione non conosce restano.
+    #[test]
+    fn chiavi_fub_vuote_o_di_tipo_sbagliato_si_rifiutano() {
+        for source in [
+            "views:\n  - {name: C, type: calendar, fub: {date: ' '}}\n",
+            "views:\n  - {name: C, type: calendar, fub: {date: 5}}\n",
+        ] {
+            assert!(
+                matches!(BaseDefinition::parse(source), Err(BaseError::Invalid(_))),
+                "{source}"
+            );
+        }
+        let view =
+            view_of("views:\n  - {name: C, type: calendar, fub: {date: due, colore: blu}}\n");
+        assert!(view.fub.expect("fub").extra.contains_key("colore"));
+    }
+
+    #[test]
+    fn forma_su_disco_dei_tipi_nuovi_e_di_quelli_vecchi() {
+        assert_eq!(
+            disk_form(ViewType::Calendar),
+            (ViewType::Table, Some(FubView::Calendar))
+        );
+        assert_eq!(
+            disk_form(ViewType::Timeline),
+            (ViewType::Table, Some(FubView::Timeline))
+        );
+        assert_eq!(disk_form(ViewType::Table), (ViewType::Table, None));
+        assert_eq!(disk_form(ViewType::Kanban), (ViewType::Kanban, None));
     }
 }
