@@ -1,0 +1,21 @@
+{
+  "about": "`sides: \"auto\"` con «b» a destra di «a»: dal lato destro di «a» al sinistro di «b», i lati più vicini fra i centri.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+    ]
+  },
+  "ops": [{ "op": "connect", "from": "a", "to": "b", "sides": "auto" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+        { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+      ],
+      "edges": [{ "id": "e220a8397b1dcdaf", "fromNode": "a", "toNode": "b", "fromSide": "right", "toSide": "left", "toEnd": "arrow" }]
+    },
+    "created": ["e220a8397b1dcdaf"]
+  }
+}

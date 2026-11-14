@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "main",
-  "max_missing": 13,
+  "max_missing": 7,
   "entries": [
     {
       "id": "main.card.add_text",
@@ -9,16 +9,8 @@
       "source": "main",
       "gui": [{ "menu": "canvas.add.text" }, { "toolbar": "add-text" }, { "gesture": "dblclick-empty" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": { "type": "text", "text": "Idea", "x": 1400, "y": 0, "width": 320, "height": 160 }
-        }
-      ],
-      "computes": "il posto (la GUI: il centro della vista) e le misure 320×160",
-      "target_ops": [{ "op": "add_card", "text": "Idea" }],
-      "task": "T9"
+      "state": "code",
+      "ops": [{ "op": "add_card", "text": "Idea" }]
     },
     {
       "id": "main.card.add_file",
@@ -26,23 +18,8 @@
       "source": "main",
       "gui": [{ "menu": "canvas.add.file" }, { "toolbar": "add-file" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": {
-            "type": "file",
-            "file": "Corsi/appunti.md",
-            "x": 1400,
-            "y": 0,
-            "width": 320,
-            "height": 160
-          }
-        }
-      ],
-      "computes": "il posto e le misure",
-      "target_ops": [{ "op": "add_card", "file": "Corsi/appunti.md" }],
-      "task": "T9",
+      "state": "code",
+      "ops": [{ "op": "add_card", "file": "Corsi/appunti.md" }],
       "note": "La GUI di main dà 320×160 a ogni file; il codice dà le misure di nascita per tipo (D-11 di N6), come la GUI dopo N6 T9."
     },
     {
@@ -51,23 +28,8 @@
       "source": "main",
       "gui": [{ "menu": "canvas.add.link" }, { "toolbar": "add-link" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": {
-            "type": "link",
-            "url": "https://example.org/a",
-            "x": 1400,
-            "y": 0,
-            "width": 320,
-            "height": 120
-          }
-        }
-      ],
-      "computes": "il posto e le misure 320×120",
-      "target_ops": [{ "op": "add_card", "url": "https://example.org/a" }],
-      "task": "T9"
+      "state": "code",
+      "ops": [{ "op": "add_card", "url": "https://example.org/a" }]
     },
     {
       "id": "main.card.add_group",
@@ -75,16 +37,8 @@
       "source": "main",
       "gui": [{ "menu": "canvas.add.group" }, { "toolbar": "add-group" }, { "menu": "canvas.add" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": { "type": "group", "label": "Nuovo", "x": 1400, "y": 0, "width": 480, "height": 320 }
-        }
-      ],
-      "computes": "il posto e le misure 480×320",
-      "target_ops": [{ "op": "add_card", "label": "Nuovo" }],
-      "task": "T9"
+      "state": "code",
+      "ops": [{ "op": "add_card", "label": "Nuovo" }]
     },
     {
       "id": "main.card.drop_files",
@@ -92,20 +46,8 @@
       "source": "main",
       "gui": [{ "gesture": "drop-files" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": { "type": "file", "file": "Corsi/a.md", "x": 1400, "y": 0, "width": 320, "height": 160 }
-        },
-        {
-          "op": "add_card",
-          "node": { "type": "file", "file": "Corsi/b.md", "x": 1432, "y": 32, "width": 320, "height": 160 }
-        }
-      ],
-      "computes": "il posto e le misure di ogni scheda",
-      "target_ops": [{ "op": "add_card", "file": "Corsi/a.md" }, { "op": "add_card", "file": "Corsi/b.md" }],
-      "task": "T9",
+      "state": "code",
+      "ops": [{ "op": "add_card", "file": "Corsi/a.md" }, { "op": "add_card", "file": "Corsi/b.md" }],
       "note": "I byte di un file che viene da fuori entrano con il deposito degli allegati: eccezione external-bytes. Il codice mette in fila file già nel vault."
     },
     {
@@ -114,23 +56,8 @@
       "source": "main",
       "gui": [{ "gesture": "paste-text" }, { "gesture": "drop-text" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": {
-            "type": "text",
-            "text": "Testo incollato",
-            "x": 1400,
-            "y": 0,
-            "width": 320,
-            "height": 160
-          }
-        }
-      ],
-      "computes": "il posto e le misure; testo o link",
-      "target_ops": [{ "op": "add_card", "text": "Testo incollato" }],
-      "task": "T9"
+      "state": "code",
+      "ops": [{ "op": "add_card", "text": "Testo incollato" }]
     },
     {
       "id": "main.card.replace_file",
@@ -437,10 +364,7 @@
       "gui": [{ "gesture": "connect-handle" }],
       "writes": "file",
       "state": "code",
-      "ops": [{ "op": "connect", "edge": { "fromNode": "t2", "toNode": "f1", "toEnd": "arrow" } }],
-      "target_ops": [{ "op": "connect", "from": "t2", "to": "f1" }],
-      "task": "T9",
-      "note": "Già in codice; T9 accorcia la forma."
+      "ops": [{ "op": "connect", "from": "t2", "to": "f1" }]
     },
     {
       "id": "main.edge.reconnect",

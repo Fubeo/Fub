@@ -1,0 +1,20 @@
+{
+  "about": "Schede senza posto in una lista: la prima va a destra del contenuto (x = 320 + 48, y in alto), la seconda sotto la prima a 24, con la sua x.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" }] },
+  "ops": [
+    { "op": "add_card", "id": "b", "text": "b" },
+    { "op": "add_card", "id": "c", "text": "c" }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+        { "id": "b", "type": "text", "x": 368, "y": 0, "width": 320, "height": 160, "text": "b" },
+        { "id": "c", "type": "text", "x": 368, "y": 184, "width": 320, "height": 160, "text": "c" }
+      ],
+      "edges": []
+    },
+    "created": ["b", "c"]
+  }
+}

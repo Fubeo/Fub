@@ -1,0 +1,6 @@
+{
+  "about": "Un id dato a mano che è già preso è DuplicateId anche nella forma breve: la scheda esistente non si tocca.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" }] },
+  "ops": [{ "op": "add_card", "id": "a", "text": "altra" }],
+  "expect": { "outcome": "rejected", "error": { "kind": "DuplicateId", "index": 0, "id": "a" } }
+}

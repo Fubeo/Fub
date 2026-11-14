@@ -15,12 +15,12 @@ use std::collections::HashSet;
 
 use serde_json::{Map, Value};
 
-use crate::layout::{card_kind, inside, CardKind};
+use crate::layout::{self, card_kind, inside, CardKind};
 use crate::model::{
     Canvas, CanvasColor, CanvasEdge, CanvasEdgeEnd, CanvasEdgeSide, CanvasNode, CanvasNodeType,
     PresetColor,
 };
-use crate::ops::CanvasOp;
+use crate::ops::{color, AddCardArgs, CanvasOp, ConnectArgs, Ends, SidePair, Sides};
 use crate::source::{canvas_value, edge_value, node_value, SourceError};
 
 /// Quanti caratteri di un testo entrano in una riga dell'outline, il `…`
@@ -111,21 +111,145 @@ pub fn outline(canvas: &Canvas, options: &DescribeOptions) -> String {
 }
 
 /// Le operazioni che ricreano la lavagna: prima una `add_card` per scheda, nel
-/// suo ordine, poi una `connect` per arco. Ogni scheda e ogni arco sono il loro
-/// valore JSON del file, con `x` e `y` sempre, e i campi sconosciuti dentro.
+/// suo ordine, poi una `connect` per arco. Ogni scheda e ogni arco vanno nella
+/// forma breve quando ogni suo campo ci sta, e altrimenti sono il loro valore
+/// JSON del file, con i campi sconosciuti dentro.
 ///
 /// Compilate su una lavagna vuota (`compile`, seme qualunque), ridanno le schede
-/// e gli archi nello stesso ordine. La radice sconosciuta della lavagna non
-/// ci sta: nessuna operazione la scrive, e la dà [`json`].
+/// e gli archi nello stesso ordine e con gli stessi campi. La radice sconosciuta
+/// della lavagna non ci sta: nessuna operazione la scrive, e la dà [`json`].
 pub fn code(canvas: &Canvas, options: &DescribeOptions) -> Vec<CanvasOp> {
     let view = View::of(canvas, options);
-    let cards = view.nodes.iter().map(|&(_, node)| CanvasOp::AddCard {
-        node: object(node_value(node)),
-    });
-    let links = view.edges.iter().map(|edge| CanvasOp::Connect {
-        edge: object(edge_value(edge)),
-    });
+    let cards = view.nodes.iter().map(|&(_, node)| card_op(node));
+    let links = view.edges.iter().map(|&edge| link_op(edge));
     cards.chain(links).collect()
+}
+
+/// La scheda come `add_card`: la forma breve se ci sta, altrimenti la scheda
+/// intera del file.
+fn card_op(node: &CanvasNode) -> CanvasOp {
+    let card = short_card(node).unwrap_or_else(|| AddCardArgs {
+        node: Some(object(node_value(node))),
+        ..AddCardArgs::default()
+    });
+    CanvasOp::AddCard(card)
+}
+
+/// La forma breve di una scheda, se ogni suo campo ci sta. L'`id`, `x` e `y`
+/// ci sono sempre; `width` e `height` solo se non sono quelle di nascita; il
+/// tipo lo dice il contenuto, tranne che per un gruppo. Non ci sta una scheda
+/// con un campo sconosciuto, uno sfondo, un colore che la tavola non scrive, o
+/// un gruppo senza etichetta (la forma breve gli darebbe `""`).
+fn short_card(node: &CanvasNode) -> Option<AddCardArgs> {
+    if !node.extra.is_empty() || node.background.is_some() || node.background_style.is_some() {
+        return None;
+    }
+    let color = match &node.color {
+        None => None,
+        Some(color) => Some(color::written(color)?),
+    };
+    let mut card = AddCardArgs {
+        id: Some(node.id.clone()),
+        x: Some(node.x),
+        y: Some(node.y),
+        color,
+        ..AddCardArgs::default()
+    };
+    match node.node_type {
+        CanvasNodeType::Text => {
+            if node.file.is_some()
+                || node.subpath.is_some()
+                || node.url.is_some()
+                || node.label.is_some()
+            {
+                return None;
+            }
+            card.text = Some(node.text.clone()?);
+        }
+        CanvasNodeType::File => {
+            if node.text.is_some() || node.url.is_some() || node.label.is_some() {
+                return None;
+            }
+            card.file = Some(node.file.clone()?);
+            card.subpath = node.subpath.clone();
+        }
+        CanvasNodeType::Link => {
+            if node.text.is_some()
+                || node.file.is_some()
+                || node.subpath.is_some()
+                || node.label.is_some()
+            {
+                return None;
+            }
+            card.url = Some(node.url.clone()?);
+        }
+        CanvasNodeType::Group => {
+            if node.text.is_some()
+                || node.file.is_some()
+                || node.subpath.is_some()
+                || node.url.is_some()
+            {
+                return None;
+            }
+            card.kind = Some(CanvasNodeType::Group);
+            card.label = Some(node.label.clone()?);
+        }
+    }
+    let text = match node.node_type {
+        CanvasNodeType::Text => node.text.as_deref(),
+        _ => None,
+    };
+    let (born_width, born_height) = layout::born_size(card_kind(node), text, None);
+    if node.width as f64 != born_width {
+        card.width = Some(node.width);
+    }
+    if node.height as f64 != born_height {
+        card.height = Some(node.height);
+    }
+    Some(card)
+}
+
+/// L'arco come `connect`: la forma breve se ci sta, altrimenti l'arco del file.
+fn link_op(edge: &CanvasEdge) -> CanvasOp {
+    let link = short_link(edge).unwrap_or_else(|| ConnectArgs {
+        edge: Some(object(edge_value(edge))),
+        ..ConnectArgs::default()
+    });
+    CanvasOp::Connect(link)
+}
+
+/// La forma breve di un arco, se ogni suo campo ci sta. L'`id`, `from` e `to`
+/// ci sono sempre; i lati solo se ci sono; le punte come `ends`, che di serie
+/// è una punta alla fine. Non ci sta un campo sconosciuto, un colore che la
+/// tavola non scrive, o una coppia di punte che `ends` non dice.
+fn short_link(edge: &CanvasEdge) -> Option<ConnectArgs> {
+    if !edge.extra.is_empty() {
+        return None;
+    }
+    let color = match &edge.color {
+        None => None,
+        Some(color) => Some(color::written(color)?),
+    };
+    let sides = match (edge.from_side, edge.to_side) {
+        (None, None) => None,
+        (from, to) => Some(Sides::Pair(SidePair { from, to })),
+    };
+    let ends = match (edge.from_end, edge.to_end) {
+        (None, Some(CanvasEdgeEnd::Arrow)) => None,
+        (None, Some(CanvasEdgeEnd::None)) => Some(Ends::None),
+        (Some(CanvasEdgeEnd::Arrow), Some(CanvasEdgeEnd::Arrow)) => Some(Ends::Both),
+        _ => return None,
+    };
+    Some(ConnectArgs {
+        id: Some(edge.id.clone()),
+        from: Some(edge.from_node.clone()),
+        to: Some(edge.to_node.clone()),
+        label: edge.label.clone(),
+        color,
+        sides,
+        ends,
+        ..ConnectArgs::default()
+    })
 }
 
 /// Il modello com'è, come valore JSON: `nodes` ed `edges` sempre, poi la radice

@@ -1,0 +1,13 @@
+{
+  "about": "Un'etichetta da sola fa un gruppo, 480×320, in fondo alla lista vuota.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "g", "label": "Temi" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "g", "type": "group", "x": 0, "y": 0, "width": 480, "height": 320, "label": "Temi" }],
+      "edges": []
+    },
+    "created": ["g"]
+  }
+}

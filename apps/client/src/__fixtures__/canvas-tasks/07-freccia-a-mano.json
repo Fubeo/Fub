@@ -14,7 +14,7 @@
   "ops": [
     { "op": "connect", "from": "causa", "to": "effetto", "sides": "auto" }
   ],
-  "needs": ["connect.from", "connect.sides", "connect.to"],
+  "needs": [],
   "checks": [
     { "has_edge": { "from_text": "Causa", "to_text": "Effetto" } },
     { "count": { "kind": "edge", "n": 1 } },

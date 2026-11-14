@@ -1870,6 +1870,18 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  e la specie di una scheda, e non identifica né un nome né un path.",
             ),
         ),
+        (
+            "crates/fub-canvas-core/src/ops/color.rs::parse_hex",
+            (
+                Family::AsciiCase,
+                "abbassa le cifre di un `#rrggbb` per scriverlo in minuscolo come nel file \
+                 (`#FF8800` diventa `#ff8800`). Le cifre sono già controllate con \
+                 `is_ascii_hexdigit`, quindi sono ASCII per costruzione: la corsia ASCII dà la \
+                 stessa risposta della contestuale. Non decide se il colore esiste: lo decide \
+                 `parse`, con la tavola dei nomi e questo controllo; un nome non è un esadecimale \
+                 e non passa di qui.",
+            ),
+        ),
         // -- CasoAscii: miscellanea (canali con la loro ragione) ---------------
         (
             "crates/fub-app/src/mobile.rs::classify",

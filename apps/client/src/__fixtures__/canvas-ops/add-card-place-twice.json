@@ -1,0 +1,6 @@
+{
+  "about": "Un posto dato due volte (`x` e `y`, e anche `near`) è Invalid: la scheda ha un posto solo.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" }] },
+  "ops": [{ "op": "add_card", "id": "b", "text": "b", "x": 0, "y": 200, "near": "a" }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

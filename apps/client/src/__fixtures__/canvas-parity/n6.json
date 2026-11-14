@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "N6",
-  "max_missing": 19,
+  "max_missing": 12,
   "entries": [
     {
       "id": "N6.card.drop_vault",
@@ -9,23 +9,8 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T9" }, { "plan": "N6 T15" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": {
-            "type": "file",
-            "file": "Corsi/foto.png",
-            "x": 1400,
-            "y": 0,
-            "width": 480,
-            "height": 360
-          }
-        }
-      ],
-      "computes": "le misure di nascita per tipo (D-11)",
-      "target_ops": [{ "op": "add_card", "file": "Corsi/foto.png", "content_size": [4032, 3024] }],
-      "task": "T9"
+      "state": "code",
+      "ops": [{ "op": "add_card", "file": "Corsi/foto.png", "content_size": [4032, 3024] }]
     },
     {
       "id": "N6.card.drop_many",
@@ -87,16 +72,8 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T44" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": { "type": "text", "text": "Poi", "x": 0, "y": 184, "width": 320, "height": 160 }
-        }
-      ],
-      "computes": "il posto sotto, a 24, con la stessa larghezza",
-      "target_ops": [{ "op": "add_card", "text": "Poi", "near": "t1", "side": "bottom" }],
-      "task": "T9"
+      "state": "code",
+      "ops": [{ "op": "add_card", "text": "Poi", "near": "t1", "side": "bottom" }]
     },
     {
       "id": "N6.text.new_right",
@@ -104,37 +81,11 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T44" }],
       "writes": "file",
-      "state": "by_hand",
+      "state": "code",
       "ops": [
-        {
-          "op": "add_card",
-          "node": {
-            "id": "n",
-            "type": "text",
-            "text": "Perché",
-            "x": 1368,
-            "y": 0,
-            "width": 320,
-            "height": 160
-          }
-        },
-        {
-          "op": "connect",
-          "edge": {
-            "fromNode": "l1",
-            "fromSide": "right",
-            "toNode": "n",
-            "toSide": "left",
-            "toEnd": "arrow"
-          }
-        }
-      ],
-      "computes": "il posto a destra e i lati dell'arco",
-      "target_ops": [
         { "op": "add_card", "id": "n", "text": "Perché", "near": "l1", "side": "right" },
-        { "op": "connect", "from": "l1", "to": "n" }
-      ],
-      "task": "T9"
+        { "op": "connect", "from": "l1", "to": "n", "sides": { "from": "right", "to": "left" } }
+      ]
     },
     {
       "id": "N6.color.names",
@@ -191,22 +142,8 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T67" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "connect",
-          "edge": {
-            "fromNode": "t1",
-            "fromSide": "bottom",
-            "toNode": "f1",
-            "toSide": "top",
-            "toEnd": "arrow"
-          }
-        }
-      ],
-      "computes": "i lati più vicini",
-      "target_ops": [{ "op": "connect", "from": "t1", "to": "f1", "sides": "auto" }],
-      "task": "T9"
+      "state": "code",
+      "ops": [{ "op": "connect", "from": "t1", "to": "f1", "sides": "auto" }]
     },
     {
       "id": "N6.edge.drop_empty",
@@ -214,29 +151,11 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T67" }],
       "writes": "file",
-      "state": "by_hand",
+      "state": "code",
       "ops": [
-        {
-          "op": "add_card",
-          "node": { "id": "n", "type": "text", "text": "", "x": 0, "y": 728, "width": 320, "height": 160 }
-        },
-        {
-          "op": "connect",
-          "edge": {
-            "fromNode": "f1",
-            "fromSide": "bottom",
-            "toNode": "n",
-            "toSide": "top",
-            "toEnd": "arrow"
-          }
-        }
-      ],
-      "computes": "il posto della scheda nuova e i lati",
-      "target_ops": [
-        { "op": "add_card", "id": "n", "type": "text", "near": "f1", "side": "bottom" },
+        { "op": "add_card", "id": "n", "text": "", "near": "f1", "side": "bottom" },
         { "op": "connect", "from": "f1", "to": "n", "sides": "auto" }
-      ],
-      "task": "T9"
+      ]
     },
     {
       "id": "N6.clipboard.paste",
@@ -333,24 +252,9 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T70" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": {
-            "type": "text",
-            "text": "(il testo letto)",
-            "x": 1400,
-            "y": 0,
-            "width": 480,
-            "height": 400
-          }
-        }
-      ],
-      "computes": "le misure del testo",
-      "target_ops": [{ "op": "add_card", "text": "(il testo letto)", "near": "f1", "side": "right" }],
-      "port": "fub_read del file",
-      "task": "T9"
+      "state": "composed",
+      "ops": [{ "op": "add_card", "text": "(il testo letto)", "near": "f1", "side": "right" }],
+      "port": "fub_read del file"
     },
     {
       "id": "N6.card.relink",
@@ -543,24 +447,8 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T84" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": {
-            "type": "file",
-            "file": "Corsi/dispensa.pdf",
-            "subpath": "#page=5",
-            "x": 1400,
-            "y": 0,
-            "width": 360,
-            "height": 480
-          }
-        }
-      ],
-      "computes": "le misure di nascita del PDF",
-      "target_ops": [{ "op": "add_card", "file": "Corsi/dispensa.pdf", "subpath": "#page=5" }],
-      "task": "T9"
+      "state": "code",
+      "ops": [{ "op": "add_card", "file": "Corsi/dispensa.pdf", "subpath": "#page=5" }]
     },
     {
       "id": "N6.guides",

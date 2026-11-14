@@ -28,7 +28,7 @@
     { "op": "connect", "from": "c", "to": "i4", "sides": "auto" },
     { "op": "connect", "from": "i2", "to": "i5", "sides": "auto" }
   ],
-  "needs": ["add_card.id", "add_card.near", "add_card.side", "add_card.text", "connect.from", "connect.sides", "connect.to"],
+  "needs": [],
   "checks": [
     { "count": { "kind": "text", "n": 6 } },
     { "has_card": { "text": "Ciclo dell'acqua" } },

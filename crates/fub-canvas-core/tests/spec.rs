@@ -98,6 +98,9 @@ fn sample(kind: FieldKind) -> Value {
         FieldKind::Enum(values) => json!(values[0]),
         FieldKind::Node | FieldKind::Edge | FieldKind::Object => json!({}),
         FieldKind::Points => json!([[0, 1]]),
+        FieldKind::Color => json!("red"),
+        FieldKind::Sides => json!("auto"),
+        FieldKind::Pair => json!([1, 2]),
         FieldKind::Any => Value::Null,
     }
 }
@@ -106,11 +109,12 @@ fn sample(kind: FieldKind) -> Value {
 fn wrong(kind: FieldKind) -> Option<Value> {
     match kind {
         FieldKind::Any => None,
-        FieldKind::Id | FieldKind::Text | FieldKind::Enum(_) => Some(json!(1)),
+        FieldKind::Id | FieldKind::Text | FieldKind::Enum(_) | FieldKind::Color => Some(json!(1)),
         FieldKind::Ids | FieldKind::Bool | FieldKind::Number | FieldKind::Points => {
             Some(json!("a"))
         }
-        FieldKind::Node | FieldKind::Edge | FieldKind::Object => Some(json!(1)),
+        FieldKind::Node | FieldKind::Edge | FieldKind::Object | FieldKind::Sides => Some(json!(1)),
+        FieldKind::Pair => Some(json!("a")),
     }
 }
 

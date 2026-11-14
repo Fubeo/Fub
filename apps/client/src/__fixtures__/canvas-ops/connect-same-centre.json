@@ -1,0 +1,21 @@
+{
+  "about": "Due schede con lo stesso centro: i centri non dicono nulla, e il caso va a destra e sinistra (right→left), come la regola dei lati.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "d", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "d" }
+    ]
+  },
+  "ops": [{ "op": "connect", "from": "a", "to": "d", "sides": "auto" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+        { "id": "d", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "d" }
+      ],
+      "edges": [{ "id": "e220a8397b1dcdaf", "fromNode": "a", "toNode": "d", "fromSide": "right", "toSide": "left", "toEnd": "arrow" }]
+    },
+    "created": ["e220a8397b1dcdaf"]
+  }
+}

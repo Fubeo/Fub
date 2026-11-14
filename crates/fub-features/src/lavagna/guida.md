@@ -77,9 +77,31 @@ che serve. Un avviso non impedisce di scrivere: dice dove guardare.
 
 ## I colori
 
-Un colore è un numero da «1» a «6» (rosso, arancio, giallo, verde, ciano,
-viola), come nel file, oppure un esadecimale come «#ff8800». Il colore cambia
-solo l'aspetto: non tocca le misure né i posti.
+Un colore è un nome («red», «orange», «yellow», «green», «cyan», «purple»,
+oppure «note-grey» fino a «note-red»), un numero da «1» a «6» (rosso… viola),
+come nel file, o un esadecimale come «#ff8800». Il colore cambia solo l'aspetto:
+non tocca le misure né i posti.
+
+## Le forme brevi
+
+`add_card` e `connect` si scrivono in due forme: la scheda o l'arco come nel
+file (`node`, `edge`), oppure la forma breve, che dice solo ciò che scegli. Il
+resto lo calcola la lavagna come la GUI: le misure di nascita, il posto, i lati
+più vicini.
+
+- **Una scheda di testo** va in fondo alla lista: `{"op": "add_card", "text": "Idea"}`.
+  È larga 320, e alta quanto il testo richiede.
+- **Accanto a un'altra**: `{"op": "add_card", "text": "Poi", "near": "t1", "side": "bottom"}`.
+  `side` è `right` di serie, poi `bottom`, `left` o `top`; `gap` cambia la
+  distanza. Il posto si può dare anche con `x` e `y`, insieme.
+- **Un file, un collegamento, un gruppo**: `file`, `url`, `label` (un'etichetta
+  da sola fa un gruppo). Per un'immagine o un PDF, `content_size` con i pixel o i
+  punti della prima pagina dà le misure giuste.
+- **Un arco**: `{"op": "connect", "from": "t1", "to": "t2", "sides": "auto"}`.
+  `sides` è `auto`, o `{"from": "right", "to": "left"}`; di serie nessun lato.
+  `ends` è `arrow` di serie, poi `none` o `both`.
+- **Non si mescolano**: un `node` con un `text`, un `x` senza `y`, un `near` con
+  un `x`, o un `text` con un `file`, sono `invalid`, e il messaggio dice quale.
 
 ## Il riassunto
 
@@ -101,8 +123,9 @@ il riassunto è vuoto e non c'è niente da annullare.
 
 `canvas.guide` dà i nomi delle operazioni, i loro campi, lo schema JSON e gli
 esempi. Con `topic` (il nome di un'operazione) dà solo la sua voce, il suo
-schema e i suoi esempi. Una scheda o un arco nuovo si scrive come nel file: il
-campo `id` è facoltativo, e gli altri campi sono quelli che lo schema elenca.
+schema e i suoi esempi. Una scheda o un arco nuovo si scrive come nel file, o in
+forma breve («Le forme brevi»): in tutte e due il campo `id` è facoltativo, e
+gli altri campi sono quelli che lo schema elenca.
 
 I campi che Fub non conosce restano: una lavagna scritta da un'altra app si
 cambia senza perdere i suoi dati, e cambiano solo i byte delle parti toccate.
