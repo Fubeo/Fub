@@ -985,7 +985,8 @@ describe("il testo non salvato resta (#237)", () => {
     await settle();
     expect(sessions.inspect(BENVENUTO)).toMatchObject({ result: "conflitto" });
     expect(toastsAbout("Benvenuto")).toHaveLength(1);
-    expect(toastsAbout("Benvenuto")[0]).toContain("«Benvenuto»");
+    // Il conflitto è il fatto più forte: prende il posto del cambio da fuori.
+    expect(toastsAbout("Benvenuto")[0]).toContain("«Benvenuto» è cambiato su disco da quando l'hai aperto");
     expect(toastsAbout("Benvenuto.md")).toEqual([]);
     await open(BENVENUTO);
     await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
@@ -1004,6 +1005,29 @@ describe("il testo non salvato resta (#237)", () => {
     await settle();
     expect(sessions.saveState(BENVENUTO)).not.toBe("salvato");
     expect(toastsAbout("non arriva più sul disco")).toEqual([]);
+  });
+
+  it("la sola lettura segue la nota rinominata: un avviso solo, col nome nuovo, che non si ripete", async () => {
+    const host = await start("off");
+    await open(BENVENUTO);
+    const { documentSessions: sessions } = await import("../state/document-session");
+    const layouts = await import("../state/layout");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    repairWrite = host.fault("writeDocument", { kind: "permission_denied", message: "file in sola lettura" });
+    appendToTextEditor(`\n${TYPED}`);
+    await waitFor("il testo nella sessione", () => sessions.isDirty(BENVENUTO));
+    await sessions.flush(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso della sola lettura", () => toastsAbout("in sola lettura").length === 1);
+    const NUOVO = "Benvenuto rinominato.md";
+    host.renameFromOutside(BENVENUTO, NUOVO);
+    await waitFor("la nota col nome nuovo", () => layouts.panesWithDoc(NUOVO).length === 1);
+    await settle();
+    expect(toastsAbout("in sola lettura")).toHaveLength(1);
+    expect(toastsAbout("in sola lettura")[0]).toContain("«Benvenuto rinominato» è in sola lettura");
+    appendToTextEditor(" ancora");
+    await sessions.flush(NUOVO).catch(() => {});
+    await settle();
+    expect(toastsAbout("in sola lettura")).toHaveLength(1);
   });
 
   it("la pagina di una cartella si nomina come la cartella, negli avvisi come nella finestra", async () => {

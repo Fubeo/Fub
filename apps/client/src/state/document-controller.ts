@@ -1167,10 +1167,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     });
     if (outcome.kind !== "collision") {
       moveSheetNotices(from, to);
-      // Gli avvisi a galla nominano la nota col titolo di prima: si ritirano.
-      // Lo stato resta (la riga del foglio e la barra lo leggono dalla
-      // sessione), e il prossimo fatto si dice col nome nuovo.
-      withdrawStateNotices(from);
+      // Gli avvisi a galla seguono la nota, col nome nuovo.
+      moveStateNotices(from, to);
       renameInDocumentCaches(from, to);
       // Il prestito segue il file col nome nuovo, come le schede qui sotto.
       renameLend(from, to);
@@ -1851,7 +1849,8 @@ async function keepOrDiscardUnsaved(doc: string, paneId: string): Promise<void> 
       // Il salvataggio non è nemmeno partito: la persona lo deve sapere, con
       // l'avviso di sempre e il suo «Riprova».
       console.error(error);
-      showStateNotice(target, "save", () => notify(t("document.save_failed", { doc: pageName(target), reason: errorText(error) }), "guasto", {
+      const reason = errorText(error);
+      showStateNotice(target, "save", (name) => notify(t("document.save_failed", { doc: pageName(name), reason }), "guasto", {
         label: t("app.retry"),
         run: saveNow,
       }));
@@ -2123,15 +2122,30 @@ const deniedSaves = new Set<string>();
 /// (`settleStateNotices`): un avviso che dice «non salvato» sotto una nota
 /// salvata mente.
 interface StateNotices {
-  save?: NoticeHandle;
-  outside?: NoticeHandle;
+  save?: StateNotice;
+  outside?: StateNotice;
+}
+
+/// Un avviso di stato col modo di rifarlo per un altro nome della nota: alla
+/// rinomina lo stato la segue, e l'avviso la nomina col nome nuovo. `fact`
+/// dice quanto pesa ciò che dice `outside`: il conflitto (non è stato scritto
+/// niente, e si deve scegliere) prende il posto del cambio da fuori.
+interface StateNotice {
+  readonly handle: NoticeHandle;
+  readonly make: (doc: string) => NoticeHandle;
+  readonly fact?: "change" | "conflict";
 }
 const stateNotices = new Map<string, StateNotices>();
 
-function showStateNotice(doc: string, slot: keyof StateNotices, show: () => NoticeHandle): void {
+function showStateNotice(
+  doc: string,
+  slot: keyof StateNotices,
+  make: (doc: string) => NoticeHandle,
+  fact?: StateNotice["fact"],
+): void {
   const own = stateNotices.get(doc) ?? {};
-  own[slot]?.withdraw();
-  own[slot] = show();
+  own[slot]?.handle.withdraw();
+  own[slot] = fact ? { handle: make(doc), make, fact } : { handle: make(doc), make };
   stateNotices.set(doc, own);
 }
 
@@ -2139,10 +2153,28 @@ function withdrawStateNotices(doc: string, slot?: keyof StateNotices): void {
   const own = stateNotices.get(doc);
   if (!own) return;
   for (const key of slot ? [slot] : (["save", "outside"] as const)) {
-    own[key]?.withdraw();
+    own[key]?.handle.withdraw();
     delete own[key];
   }
   if (!own.save && !own.outside) stateNotices.delete(doc);
+}
+
+/// La nota cambia nome: i suoi avvisi di stato la seguono, rifatti col nome
+/// nuovo, e così la sola lettura già detta (che non si ripete a ogni pausa).
+function moveStateNotices(from: string, to: string): void {
+  if (deniedSaves.delete(from)) deniedSaves.add(to);
+  const own = stateNotices.get(from);
+  if (!own) return;
+  stateNotices.delete(from);
+  withdrawStateNotices(to);
+  const moved: StateNotices = {};
+  for (const key of ["save", "outside"] as const) {
+    const notice = own[key];
+    if (!notice) continue;
+    notice.handle.withdraw();
+    moved[key] = { ...notice, handle: notice.make(to) };
+  }
+  stateNotices.set(to, moved);
 }
 
 function withdrawAllStateNotices(): void {
@@ -2225,10 +2257,10 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   if (event.kind === "save-failed") {
     if (event.outcome === "conflitto") {
       // A schermo basta la barra del conflitto; fuori schermo un avviso, uno
-      // solo anche se il file era già stato detto cambiato da fuori.
+      // solo: prende il posto di quello del cambio da fuori, che diceva meno.
       const doc = event.id;
-      if (!docOnScreen(doc) && !stateNotices.get(doc)?.outside) {
-        showStateNotice(doc, "outside", () => notify(t("document.save_conflict", { doc: pageName(doc) }), "guasto"));
+      if (!docOnScreen(doc) && stateNotices.get(doc)?.outside?.fact !== "conflict") {
+        showStateNotice(doc, "outside", (name) => notify(t("document.save_conflict", { doc: pageName(name) }), "guasto"), "conflict");
       }
     } else if (isErrorKind(event.error, "permission_denied")) {
       // Il file è in sola lettura (PA T59), o l'host lo tiene tale per un
@@ -2237,10 +2269,10 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
       const doc = event.id;
       if (!deniedSaves.has(doc)) {
         deniedSaves.add(doc);
-        showStateNotice(doc, "save", () => notify(t("document.save_read_only", { doc: pageName(doc) }), "guasto", {
+        showStateNotice(doc, "save", (name) => notify(t("document.save_read_only", { doc: pageName(name) }), "guasto", {
           label: t("app.retry"),
           run: () => {
-            deniedSaves.delete(doc);
+            deniedSaves.delete(name);
             return saveNow();
           },
         }));
@@ -2251,7 +2283,8 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
       // Un avviso per nota: il tentativo dopo che fallisce ancora prende il
       // posto del precedente, col motivo di adesso.
       const doc = event.id;
-      showStateNotice(doc, "save", () => notify(t("document.save_failed", { doc: pageName(doc), reason: errorText(event.error) }), "guasto", {
+      const reason = errorText(event.error);
+      showStateNotice(doc, "save", (name) => notify(t("document.save_failed", { doc: pageName(name), reason }), "guasto", {
         label: t("app.retry"),
         run: saveNow,
       }));
@@ -3509,9 +3542,9 @@ async function applyExternalChange(id: string, outcome: ExternalChangeResult): P
       const overwritten = outcome.cause === "altra_app";
       addSheetNotice(id, overwritten ? "overwritten" : "changed_on_disk");
       if (!docOnScreen(id)) {
-        showStateNotice(id, "outside", () => overwritten
-          ? notify(t("document.overwritten", { doc: pageName(id) }), "guasto")
-          : notify(t("document.changed_on_disk", { doc: pageName(id) }), "info"));
+        showStateNotice(id, "outside", (name) => overwritten
+          ? notify(t("document.overwritten", { doc: pageName(name) }), "guasto")
+          : notify(t("document.changed_on_disk", { doc: pageName(name) }), "info"), "change");
       }
     }
     drawPaneConflict(id);
