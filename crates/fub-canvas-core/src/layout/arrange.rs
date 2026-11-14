@@ -131,33 +131,70 @@ pub fn distribute(rects: &[Rect], axis: Axis) -> Vec<(f64, f64)> {
     positions
 }
 
+/// Il passo della griglia della lavagna: lo stesso di `layout::snap` (8, come
+/// `CANVAS_SNAP` di `engine.ts` e `DROP_SNAP` di N6). Il test di parità
+/// controlla che le posizioni restino fisse per `snap`.
+const GRID_SNAP: f64 = 8.0;
+
+/// Dove comincia la colonna (o la riga) che segue una di inizio `start`, lunga
+/// `length`, con `gap` fra le due.
+type Next = fn(start: f64, length: f64, gap: f64) -> f64;
+
+/// Lo spazio esatto, di `row` e `column`: la successiva comincia `gap` dopo la
+/// fine della precedente.
+fn exact_gap(start: f64, length: f64, gap: f64) -> f64 {
+    start + (length + gap)
+}
+
+/// Lo spazio della griglia, come `nextStart` di N6: la successiva comincia al
+/// primo multiplo di 8 che lascia almeno `gap` dopo la fine della precedente.
+fn next_on_grid(start: f64, length: f64, gap: f64) -> f64 {
+    // `+ 0.0` toglie lo zero negativo: `ceil` di `-0.75` è `-0.0`.
+    ((start + length + gap) / GRID_SNAP).ceil() * GRID_SNAP + 0.0
+}
+
 /// La griglia di schede di misure `sizes` (larghezza, altezza): `ceil(√n)`
-/// colonne, ciascuna larga quanto la sua scheda più larga, ciascuna riga alta
-/// quanto la sua più alta, con `gap` fra colonne e fra righe. Le schede si
-/// riempiono per righe, da sinistra a destra, e stanno in cima alla propria
-/// cella; la prima sta in `origin`. Di serie `gap` vale 24.
+/// colonne, riempite per righe, da sinistra a destra. Ogni colonna è larga
+/// quanto la sua scheda più larga, ogni riga alta quanto la sua più alta, e le
+/// schede stanno in cima alla propria cella. La colonna o la riga dopo parte al
+/// primo multiplo di 8 che lascia almeno `gap` dalla precedente, come la griglia
+/// di N6 (`dropLayout`): la disposizione resta sulla griglia di 8 della lavagna.
+/// La prima scheda sta in `origin`, che chi chiama ha già agganciato a 8. Le
+/// misure frazionarie si arrotondano all'intero più vicino. Di serie `gap` vale
+/// 24.
 pub fn grid(sizes: &[(f64, f64)], gap: f64, origin: (f64, f64)) -> Vec<(f64, f64)> {
     let count = sizes.len();
     let root = count.isqrt();
     let columns = if root * root == count { root } else { root + 1 };
-    lattice(sizes, columns, gap, origin)
+    let whole: Vec<(f64, f64)> = sizes
+        .iter()
+        .map(|&(width, height)| (width.round(), height.round()))
+        .collect();
+    lattice(&whole, columns, gap, origin, next_on_grid)
 }
 
 /// Una riga di schede, affiancate nell'ordine dato, tutte in cima alla riga.
-/// Di serie `gap` vale 24.
+/// Lo spazio è `gap` esatto, senza passo di 8. Di serie `gap` vale 24.
 pub fn row(sizes: &[(f64, f64)], gap: f64, origin: (f64, f64)) -> Vec<(f64, f64)> {
-    lattice(sizes, sizes.len(), gap, origin)
+    lattice(sizes, sizes.len(), gap, origin, exact_gap)
 }
 
 /// Una colonna di schede, una sotto l'altra nell'ordine dato, tutte a sinistra.
-/// Di serie `gap` vale 24.
+/// Lo spazio è `gap` esatto, senza passo di 8. Di serie `gap` vale 24.
 pub fn column(sizes: &[(f64, f64)], gap: f64, origin: (f64, f64)) -> Vec<(f64, f64)> {
-    lattice(sizes, 1, gap, origin)
+    lattice(sizes, 1, gap, origin, exact_gap)
 }
 
 /// Le schede in `columns` colonne, riempite per righe. Una colonna è larga
-/// quanto la sua scheda più larga, una riga alta quanto la sua più alta.
-fn lattice(sizes: &[(f64, f64)], columns: usize, gap: f64, origin: (f64, f64)) -> Vec<(f64, f64)> {
+/// quanto la sua scheda più larga, una riga alta quanto la sua più alta; `next`
+/// dice dove comincia la colonna (o la riga) dopo.
+fn lattice(
+    sizes: &[(f64, f64)],
+    columns: usize,
+    gap: f64,
+    origin: (f64, f64),
+    next: Next,
+) -> Vec<(f64, f64)> {
     if sizes.is_empty() || columns == 0 {
         return Vec::new();
     }
@@ -170,22 +207,22 @@ fn lattice(sizes: &[(f64, f64)], columns: usize, gap: f64, origin: (f64, f64)) -
         widths[column] = widths[column].max(width);
         heights[row] = heights[row].max(height);
     }
-    let lefts = running_starts(origin.0, &widths, gap);
-    let tops = running_starts(origin.1, &heights, gap);
+    let lefts = running_starts(origin.0, &widths, gap, next);
+    let tops = running_starts(origin.1, &heights, gap, next);
     (0..sizes.len())
         .map(|index| (lefts[index % columns], tops[index / columns]))
         .collect()
 }
 
-/// Dove comincia ciascuna di `lengths`, partendo da `start` e con `gap` fra
-/// l'una e la successiva.
-fn running_starts(start: f64, lengths: &[f64], gap: f64) -> Vec<f64> {
+/// Dove comincia ciascuna di `lengths`, partendo da `start`: ognuna comincia
+/// dove dice `next`, dopo la precedente.
+fn running_starts(start: f64, lengths: &[f64], gap: f64, next: Next) -> Vec<f64> {
     let mut at = start;
     lengths
         .iter()
         .map(|&length| {
             let here = at;
-            at += length + gap;
+            at = next(here, length, gap);
             here
         })
         .collect()
