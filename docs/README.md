@@ -44,7 +44,7 @@ flowchart LR
 | [Recupero e versioni](product/vault-recupero-e-versioni.md) | cestino, rinomine, versioni, snapshot |
 | [Explorer e cartelle](product/explorer-and-folders.md) | l'albero, le appuntate, gli spazi |
 | [Editor e anteprima](product/editor-and-preview.md) | le superfici di scrittura |
-| [Scrittura](product/editor-writing.md) | le modalità di una nota e i livelli di presenza |
+| [Scrittura](product/editor-writing.md) | le modalità di una nota, i livelli di presenza e l'incolla degli indirizzi |
 | [Blocchi](product/editor-blocks.md) | i blocchi di Scrittura |
 | [Tasto destro, mini-barra e «/»](product/editor-menus.md) | i menu degli editor |
 | [Basi (file `.base`)](product/bases.md) | le viste, i filtri, i limiti e che cosa si scrive sul file |
