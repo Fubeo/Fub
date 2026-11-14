@@ -80,6 +80,7 @@
 - Come si scrivono i documenti di Word nel vault? → [product/word-documents.md](../product/word-documents.md)
 - Come si annotano i PDF del vault? → [product/pdf-annotations.md](../product/pdf-annotations.md)
 - Come sono fatti i file delle app Craft (disegni, immagini, foto)? → [product/craft-files.md](../product/craft-files.md)
+- Che cosa mostra una scheda della lavagna, come ci si scrive e dove vanno i file portati dentro? → [product/lavagna.md](../product/lavagna.md)
 - Come si cercano informazioni e si seguono link e grafo nel vault? → [product/search-links-and-graph.md](../product/search-links-and-graph.md)
 - Come si porta dentro e fuori dal vault (import/export)? → [product/import-and-export.md](../product/import-and-export.md)
 - Come si creano un documento Word o una cartella Excel dal vault? → [product/new-documents.md](../product/new-documents.md)

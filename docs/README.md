@@ -52,6 +52,7 @@ flowchart LR
 | [Documenti di Word](product/word-documents.md) | la videoscrittura nel vault |
 | [Annotazioni dei PDF](product/pdf-annotations.md) | scrivere accanto ai PDF |
 | [File delle app Craft](product/craft-files.md) | disegni, immagini e foto delle app Craft |
+| [La lavagna](product/lavagna.md) | schede, fili, inchiostro ed estratti nei file `.canvas` |
 | [Ricerca, link e grafo](product/search-links-and-graph.md) | trovare e seguire |
 | [Compiti](product/tasks-and-reminders.md) | i compiti del vault per scadenza, e come si spuntano |
 | [Importare ed esportare](product/import-and-export.md) | dentro e fuori dal vault |
@@ -59,9 +60,8 @@ flowchart LR
 | [Budget prestazionali](product/performance-budget.md) | i numeri e i gate della CI |
 | [Criteri di accettazione](product/acceptance.md) | quando una modifica è accettabile |
 
-I disegni sono una famiglia di pagine, con l'indice dentro
-[Disegni](product/drawing.md): dalla penna alle tavole, dall'import
-all'export, dalla sessione dal tablet ai disegni grandi.
+I disegni sono una famiglia di pagine, con l'indice in [Disegni](product/drawing.md):
+dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 
 ## Capire l'architettura
 
