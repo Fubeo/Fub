@@ -411,8 +411,11 @@ Dispone le schede `ids` in una di quattro forme, come quando si lasciano cadere 
 file insieme: `grid` (`ceil(√n)` colonne, riempite per righe), `row` (una riga),
 `column` (una colonna) o `tree` (un albero a strati, con gli archi fra le schede
 date). Le schede vanno nell'ordine dato. `gap` è lo spazio fra due schede vicine (di
-serie 24, non negativo); fra gli strati di un albero è fisso a 96. L'origine è `x` e
-`y`, insieme; senza, è l'angolo in alto a sinistra delle schede date. Si aggancia a 8 in ogni caso.
+serie 24, non negativo); fra gli strati di un albero è fisso a 96. In `grid` la colonna
+o la riga dopo parte al primo multiplo di 8 che lascia almeno `gap` dalla precedente,
+come la griglia di N6: con 24, una scheda larga 330 lascia la colonna dopo a 360, non a
+354. `row` e `column` lasciano `gap` esatto. L'origine è `x` e `y`, insieme; senza, è
+l'angolo in alto a sinistra delle schede date. Si aggancia a 8 in ogni caso.
 `direction` (`down` di serie, `right`, `up`, `left`) vale solo per `tree`.
 
 Un gruppo nella lista si muove come un blocco, con le schede che ci stanno dentro; una
