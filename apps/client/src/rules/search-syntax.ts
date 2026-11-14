@@ -16,6 +16,8 @@ import type {
 export const MAX_CLAUSES = 32;
 export const MAX_LITERALS = 32;
 export const MAX_DEPTH = 32;
+/// Il predicato di `comment:` (`COMMENT_PREDICATE_NS` di là).
+export const COMMENT_PREDICATE_NS = "fub:comment";
 
 export type SearchFaultKind =
   | "unclosed-quote"
@@ -386,6 +388,12 @@ const OPERATORS: Record<string, (value: string, quoted: boolean) => QueryPredica
   file: (value, quoted) => textPredicate(value, quoted ? "phrase" : "terms", ["name"], false),
   content: (value, quoted) => textPredicate(value, quoted ? "phrase" : "terms", ["body"], false),
   heading: (value, quoted) => textPredicate(value, quoted ? "phrase" : "terms", ["heading"], false),
+  // Nei messaggi dei commenti: un `custom` perché il campo non è nella WIT
+  // (`fub_abi::rules::search_syntax::COMMENT_PREDICATE_NS`).
+  comment: (value, quoted) => {
+    const { kind: _, ...text } = textPredicate(value, quoted ? "phrase" : "terms", [], false) as { kind: "text" } & TextQuery;
+    return { kind: "custom", ns: COMMENT_PREDICATE_NS, predicate: text };
+  },
   "match-case": (value, quoted) => textPredicate(value, quoted ? "phrase" : "terms", [], true),
   "ignore-case": (value, quoted) => {
     const predicate = textPredicate(value, quoted ? "phrase" : "terms", [], false);

@@ -99,6 +99,13 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-13 · N4 T23a · L'orchestratore scrive da solo il task che profila e
+  corregge i 174 ms a penna sopra il foglio vivo, invece di chiedere
+  all'utente la forma del task (come diceva la voce del 2026-11-11). Perché:
+  il 2026-11-13 l'utente ha dato autonomia sulle scelte tecniche («fai sempre
+  la scelta che porterà al massimo della qualità»), e vuole l'app
+  «estremamente fluida»; la meta di 33 ms non si alza. Il costo che sta nelle
+  schede di N6 diventa un task del piano di N6, non una correzione in N4.
 - 2026-11-13 · K5 T30 · il piano si chiude col sì dell'utente; restano fuori, come issue o limiti noti: il tetto alle istanze dei motori per vault (`issue-istanze-motore.md`), i `detail` delle parti solo in italiano, il campo «Testo» per un `<text>` senza `tspan`, `ripristina` fuori da `catch_panic`, le proposte a monte per VectorCraft (bozza non inviata) e il test instabile `close_a_vault_and_latest_round_in_which_and_again_open` visto una volta sotto carico · non cambiano il comportamento che K5 promette, e ognuno è più piccolo o più largo del piano.
 - 2026-11-13 · K5 T30 · la prova sull'app vera ha trovato gli errori delle sei porte del disegno consegnati con la chiave del catalogo (un oggetto sul filo): il client leggeva ogni `unserved` come un guasto, e un disegno riaperto a motore spento restava «fermo» anche dopo la riaccensione. Corretto nel proprietario, `fub-app` (`drawing_port` passa da `for_the_shell`, come Componenti), non rilassando `asPluginError` nel client; il `BadArgs` di un sync resta un fermo della sessione (con «Riprova») e si sono corretti commento e docs che dicevano il contrario · il contratto vuole messaggi già tradotti, e cambiare il comportamento della sessione in T30 non serviva: un `BadArgs` del sync è solo un difetto, e il fermo è la strada sicura.
 - 2026-11-13 · K5 T23 · accettati i due `kind` nuovi del chip (`reduced`, `stopped`) in `editors/core/registry.ts` al posto di `body`, e il ramo resta con `bench/scene.test.ts` rosso finché le 6 baseline delle scene nuove non arrivano dal runner (primo passo di T30) · Perché: il prototipo approvato usa quei due segni (vuoto e rosso), e le baseline si fanno solo sul runner Linux.
@@ -120,6 +127,37 @@ La più recente in cima: data · piano · decisione · perché.
 - 2026-11-12 · K5 T13 · riaccesi i disegni, il Motore del disegno resta spento se il risolutore di K2 lo aveva spento con loro: il risolutore non ricorda lo stato di prima, e cambiarne le regole è fuori da K5. Il piano diceva «torna com'era prima»; vale il codice, scritto nel test di `fub-host/tests/componenti.rs`. Accettati anche `fub-disegno` per percorso in `fub-host` e i test della lavagna sotto la feature `lavagna`. Il caso di `fub.draw` in `plugins.disabled` va a T29 (nota nel piano) · Perché: una regola sola per le righe che ne richiedono un'altra, e il motore si riaccende con un clic nella pagina Componenti.
 - 2026-11-12 · K5 T11 · i caratteri non arrivano ancora alla `FontDb` del motore: costruirla dai `Caratteri` di T7 vuole `vectorcraft-text` come dipendenza diretta di `fub-disegno` (`Cargo.toml` e `Cargo.lock`, fuori dal `Tocca` di T11). Lo fa T17, a cui si aggiungono `crates/fub-disegno/Cargo.toml`, `Cargo.lock` e la sola `FontDb` in `src/motore.rs`; fino ad allora il motore usa i suoi caratteri di ripiego. Altre differenze di T11 accettate: `sincronizza`, `gesto` e `comando` rendono `Result<…, PluginError>`; l'import toglie le etichette e segna i livelli con `data-vc-layer`; un import rifiutato apre una copia vuota in sola lettura; nessun `.tsv` di differenze ammesse ancora (il lettore c'è, i file li scrivono T14–T17) · Perché: i caratteri servono solo al testo, che è T17, e la crate è già nel grafo (nessuna libreria nuova).
 - 2026-11-12 · K5 T27 · `hayro` passa da 0.5 a 0.6 in `fub-features` (rasterizzatore del PDF redatto e annotato): legge JPEG 2000 e fax e disegna con le stesse versioni del motore, e toglie quattro doppie; il motivo della 0.5 (un compilatore più nuovo) non vale con Rust 1.95; feature come prima (`embed-fonts` sì, `embed-cmaps` no). Provato uguale byte per byte su un PDF redatto semplice; su PDF complessi (JPEG 2000, JBIG2) i pixel possono cambiare. Il tetto `librerie_doppie` scende a 55 · Perché: D-3 (a), «allineo dove posso», e un rasterizzatore in comune col motore costa meno da tenere.
+- 2026-11-11 · N4 T23 · La seconda misura non chiude la voce del cancello:
+  174 ms a penna sul foglio vivo (meta 33), 47 fotogrammi lunghi su 215, di cui
+  11 col tratto in movimento, 10 al rilascio e 26 senza evento del puntatore;
+  con la GPU sullo schermo vero il numero non scende (168, 180 ms). Come dice
+  T23 serve un task prima di T25 che profili il disegno della scheda viva
+  sotto la scia e il commit del tratto; il limite degli agenti non prevede un
+  pianificatore per N4, quindi la forma del task si chiede all'utente.
+  Per N6: al fit della lavagna di S8 (zoom 0,33) la scheda del foglio resta un
+  segnaposto, perché `LIVE_ZOOM_MIN` è 0,35; S8 ingrandisce fuori dalla misura
+  · fonte: `docs/misure/lavagna-inchiostro-foglio-2026-11-11.md`.
+- 2026-11-09 · N4 T15 · Nessun task prima di T23 per i 205 ms a penna e
+  gli 879 ms alla posa della scheda (S8, caso simile, Xvfb in software).
+  Perché: la posa costa perché `#render` rifà tutte le schede, e N6 T11 la
+  rende a chiavi prima di tutto il resto; una correzione qui andrebbe
+  buttata. Il ridisegno sotto la scia pesa per la tabella di testo, che T23
+  sostituisce col foglio vivo. T23 rimisura dopo N6 T11 e, se resta oltre
+  33 ms, si chiede al pianificatore un task prima di T25, come dice T23.
+- 2026-11-09 · N4 (PA T2, fusione di `main`) · `operation.ts` è quello di
+  `main` (le toppe le applica il nucleo in WebAssembly) con i tipi della
+  toppa `ink` e i costruttori `addStrokePatch`, `eraseStrokePatch`,
+  `eraseStrokePatches`; `inkStep` e la copia TS se ne vanno, come diceva
+  T17. Le prove dei costruttori, di `ink-record` e dei 28 vettori
+  dell'inchiostro leggono e scrivono col nucleo (`openCore`,
+  `openCoreNow`); una toppa illeggibile il nucleo la rifiuta come
+  `request`, non `invalid` come la copia TS. L'ADR dell'inchiostro diventa
+  la 0241 (la 0238 è di `main`, la 0239 di K5, la 0240 di `main`); i
+  vettori `ink-*` delle toppe vanno da 87 a 103, dopo gli 86 di `main`, e i
+  test dei vettori li ordinano per numero; `fub-canvas-wasm` dà `kind` ai
+  due errori nuovi (`UnknownStroke` con `id`, `ForeignLayer`) · è la
+  fusione più piccola che lascia verdi i due lati; `ink_layers` nel
+  `.wasm` e la fine di `readInkLayers` restano a T17.
 - 2026-11-09 · K5 T9 · `cargo fmt --all` segue le dipendenze a percorso e
   con `fub-disegno` nel workspace controlla anche le copie di VectorCraft e
   craft-libs: il `rustfmt.toml` dell'upstream entra fra i file gestiti
@@ -1212,6 +1250,75 @@ La più recente in cima: data · piano · decisione · perché.
   approvata · D-9 (b) è il consiglio dell'orchestratore contro quello del
   pianificatore (a): N3 cambia già il modello della lavagna, e un file
   dell'utente che non si apre è il difetto più grave.
+- 2026-11-03 · N4 · D-13 (a), nuova: il cursore dello spessore anche nei
+  disegni e nei documenti, non solo sulla lavagna; il task lo scrive il
+  pianificatore · parole dell'utente («si»): la stessa penna si usa allo
+  stesso modo in tutta Fub.
+- 2026-11-03 · N4 · terzo merge di `piano/n3-logica-in-rust` (fino a N3 T17
+  e alla fusione di main con #303, `async-executor` 1.14.1) dentro
+  `piano/n4-inchiostro`; PLAN.md resta quello di N4 e DECISIONS.md tiene le
+  righe di tutti e due · senza main la versione ritirata 1.14.0 teneva rosso
+  il controllo delle librerie, e N4 riceve main solo attraverso N3.
+- 2026-11-02 · N4 · T20: l'utente approva il prototipo delle penne con una
+  modifica: lo spessore si sceglie con un cursore (la penna da 0,5 a 20
+  pixel, l'evidenziatore da 4 a 48), non con Sottile, Medio e Spesso;
+  A19–A23 valgono; nei disegni e nei documenti restano i tre spessori finché
+  l'utente non dice altro · l'ha chiesto guardando il prototipo, e un
+  cursore dà più scelta; il prototipo ora fa anche scrivere col mouse,
+  perché l'utente voleva provare le penne e non solo guardarle.
+- 2026-11-02 · N4 · Le risposte dell'utente a D-1…D-11: il posto
+  dell'inchiostro si decide dopo la prova con Obsidian (fino ad allora il
+  `.canvas`; D-12 se si perde); il menu delle penne e la gomma che taglia
+  già in N4, dopo il prototipo; due impostazioni spente di serie (ricorda
+  «Scrivi col mouse», il dito sposta le schede); su immagini e PDF
+  l'inchiostro scala senza deformarsi, sulle altre schede resta fermo; due
+  misure, la seconda sul foglio vero con N6; N4 in `main` solo dopo N3, con
+  la CI completa · D-1, D-4–D-7, D-9, D-10 e merge-n3n4 sono diverse dalla
+  prima opzione con cui il piano era andato avanti: task nuovi T17–T25, T4
+  e T5 da rivedere.
+- 2026-11-02 · N4 · T11: la toppa ink nel client sta in `operation.ts`, con
+  i costruttori dei tratti e `eraseStrokePatches` per la gomma; i vettori di
+  T10 passano anche dal lato della shell. `operation.ts` e `ink-record.ts`
+  si importano a vicenda, ma usano i valori dell'altro solo dentro le
+  funzioni, mai al caricamento del modulo, quindi il ciclo non rompe
+  l'ordine ESM. Perché: la tela e il nucleo devono costruire la stessa
+  toppa.
+- 2026-11-02 · N4 · T10: la toppa `ink` e le operazioni
+  `add_strokes`/`erase_strokes` stanno nel nucleo; l'id di un tratto nuovo
+  nasce dal seme dell'operazione, così due giri con lo stesso seme danno lo
+  stesso file. Due errori nuovi, `E_OP_UNKNOWN_STROKE` ed
+  `E_OP_FOREIGN_LAYER`, con le frasi anche in `fub-features` (lavagna.rs e
+  lavagna/apply.rs), che altrimenti non compilava. `source.rs` non si tocca:
+  il test prova che gli array annidati si accoppiano già per id. I vettori
+  ink sono numerati 46–62, dopo il 45 di N3, per non avere doppioni dopo la
+  fusione. Misura: su una scheda con 2000 tratti spostare la scheda dà una
+  toppa d'annulla di circa 6 MB mentre il file cambia di 1 byte; un tratto
+  nuovo aggiunge circa 1,5 KB al file. Perché: un agente deve poter
+  aggiungere e cancellare tratti con la stessa strada dell'annulla.
+- 2026-11-02 · N4 · T8: l'inchiostro fub:ink sta in fub-canvas-core (modulo
+  ink), che ora dipende anche da fub-ink-codec; i campi noti di un tratto
+  sono Option<Value>, così un tratto non valido si conserva com'era e il suo
+  stato si calcola a parte (Drawn o Kept con il perché); la versione del
+  livello resta il Number del file (1.0 resta 1.0). Aggiunti
+  InkAnchor::card_of/to_value e InkLayer::is_bare per T10. Perché: leggere
+  l'inchiostro non deve mai riscrivere ciò che non si capisce, e 28 vettori
+  danno lo stesso esito del TypeScript.
+- 2026-11-02 · N4 · T6: il codec dell'inchiostro in un crate suo,
+  `fub-ink-codec`, spostato con git mv; fub-scene lo riesporta e non dipende
+  più da fub-ink (`SCENE_ALLOWED_DIRECT=[fub-ink-codec, quick-xml, serde]`,
+  `INK_ALLOWED_DEPENDENTS=[fub-ink-codec, fub-format-rich]`,
+  `INK_CODEC_ALLOWED_DIRECT=[fub-ink]`, clienti `[fub-scene,
+  fub-canvas-core]`); in overview.md un quinto diagramma, perché il primo
+  era già a 20 nodi · la lavagna e il disegno leggono l'inchiostro dallo
+  stesso codec senza tirarsi dietro la scena. Nel check, fub-cli
+  `second_process_cannot_take_writer_and_sigint_exits_repl` è caduto per il
+  timeout di 10 s sotto carico e passa da solo (3 su 3); i commenti TS
+  dicono ancora «di fub-scene».
+- 2026-11-02 · N4 · secondo merge di `piano/n3-logica-in-rust` (fino a N3
+  T7, il commit e i vettori delle toppe) dentro `piano/n4-inchiostro`;
+  PLAN.md resta quello di N4 e DECISIONS.md tiene le righe di tutti e due:
+  senza il merge la PR #298 era in conflitto con la sua base e la CI non
+  partiva.
 - 2026-11-02 · N3 · Le risposte dell'utente a D-1…D-8 e a merge-n3n4: le non
   ovvie sono tre. D-5 (c): il testo di una scheda si registra a pause di
   circa 250 ms, Esc registra invece di buttare (la D-10 nuova chiede
@@ -1283,6 +1390,76 @@ La più recente in cima: data · piano · decisione · perché.
   un'immagine con le chiavi in un altro ordine e uno sfondo di 9000 byte ora
   si aprono; manca un vettore «unstable»; una lista di toppe vuota fa in
   Rust un commit che non cambia niente, in TS dà null.
+- 2026-11-02 · N4 T9 · la lettura e la scrittura dei record nel client
+  (`editors/canvas/ink-record.ts`): `readInkLayers` nell'ordine dei vettori
+  di T5, `inkLayerWritable`, `defaultInkLook(zoom, pressure)` con la biro di
+  4 px dello schermo, `strokeRecord` coi rifiuti `full`, `failed`, `empty`,
+  `toDry` e `dryStroke` con la cache dei percorsi; `ink-vectors.test.ts`
+  legge i 28 vettori · lo strato chiama `look()` all'inizio del tratto: T12
+  deve applicare `joined` ai pezzi `continued`.
+- 2026-11-02 · N4 T7 · il kit della prova con Obsidian in
+  `tools/prova-obsidian/` (una lavagna con l'inchiostro, `confronta.mjs` che
+  confronta per valore prima e dopo, coi suoi test `node --test`) e la
+  sezione «Obsidian» in `canvas-ink.md`; si confronta anche il `fub:ink` di
+  un arco come prova sui campi sconosciuti; il test del kit non entra in CI,
+  si lancia a mano · i nomi dei menu di Obsidian nel README sono in inglese
+  e non verificati su un Obsidian vero.
+- 2026-11-02 · N4 · merge di `piano/n3-logica-in-rust` (fino a T8) dentro
+  `piano/n4-inchiostro`, con un merge e non un rebase: PLAN.md resta quello
+  di N4, DECISIONS.md e `docs/README.md` tengono le righe di tutti e due ·
+  senza, la PR #298 era in conflitto con la sua base e la CI non partiva; va
+  rifatto quando N3 cambia di nuovo PLAN.md o DECISIONS.md.
+- 2026-11-02 · N4 T5 · la forma `fub:ink` in `docs/reference/canvas-ink.md`
+  con 28 vettori, uno per file, in
+  `apps/client/src/__fixtures__/canvas-ink/`; ADR 0238 «proposta» (0236 è di
+  K3, 0237 di N3 T15); le ragioni si guardano nell'ordine tool, anchor,
+  color, brush, ink; un canale sconosciuto vale `ink`; id vuoto, tratto non
+  oggetto, `fub:ink` non oggetto o `v` assente fanno il livello estraneo,
+  con `strokes: []`; i livelli nell'ordine di `nodes`, poi la radice; i
+  campi sconosciuti dell'ancora restano dopo kind, width, height · T8 in
+  Rust e T9 in TypeScript leggono gli stessi vettori e devono dire le stesse
+  ragioni.
+- 2026-11-02 · N4 T4 · lo strato d'inchiostro
+  (`editors/canvas/ink-layer.ts`, `ink-paint.ts`): una penna alla volta,
+  perché la sessione fa un tratto alla volta (la seconda è fermata e
+  ignorata); i suoi eventi si fermano con `stopImmediatePropagation` prima
+  della lavagna, i click solo con `detail > 0`; un SVG annidato per ogni
+  gruppo consecutivo di tratti con la stessa misura; `InkPathCache` con
+  `sweep()`; `INK_ASPECT = "none"` (D-9 a); `data-ink-stroke` sui tratti per
+  la gomma di T13 · la lavagna non vede mai un tratto come un trascinamento;
+  rischio: l'SVG sta in `inset: 0` e un bordo vero della scheda (T16) lo
+  sposterebbe.
+- 2026-11-02 · N4 T3 · la scheda sotto il tratto
+  (`editors/canvas/anchor.ts`): solo geometria sulle coordinate della
+  lavagna, il riquadro del tratto allargato di metà spessore, nessun `NaN`
+  (punti non finiti saltati, riquadro che trabocca = tratto libero) · lo
+  chiede lo strato una volta sola, quando la penna si alza.
+- 2026-11-02 · N4 T1 · la politica del mouse in `fub-ink` (`roles.rs`,
+  `setMousePolicy`): `ink` di serie, `ignore` lascia il tasto principale a
+  chi sta sotto; vale dal prossimo appoggio; un puntatore di tipo
+  sconosciuto segue il mouse · la regola di serie resta com'era per i
+  disegni, e la lavagna può tenere il mouse per selezionare.
+- 2026-11-02 · N4 T2 · `PenQuiet` (`ink/quiet.ts`) con la coda per chiave letta viva mentre gira (un `defer` da un lavoro toglie il vecchio della stessa chiave e gira subito; un `enter` da un lavoro ferma il giro), `dispose` azzera il conto; `idleSchedule` (`ink/dom/idle.ts`) usa la `Lifetime` di `ui/lifetime.ts` con un solo smontaggio per tutte le richieste in attesa · così un lavoro vecchio non gira mai dopo uno nuovo della stessa chiave, e una lavagna aperta a lungo non accumula smontaggi; più errori nello stesso giro: si rilancia il primo e gli altri si perdono, come in `dom/pointer-adapter.ts`.
+- 2026-11-02 · N4 · piano: il formato `fub:ink` sulla lavagna (campi nel
+  `.canvas`, strada A, con la stringa dei punti della §5 dei disegni e la
+  misura della scheda al momento del tratto) è un'assunzione del
+  pianificatore, scritta di notte: l'utente la conferma (D-1, D-2) prima
+  dell'ondata 2, perché altri programmi leggeranno il file e cambiarlo dopo
+  vuol dire una `v: 2` e una conversione.
+- 2026-11-02 · N4 · piano: il codice dei punti e dei pennelli (`ink.rs`,
+  `brush.rs` di `fub-scene`) passa in un crate piccolo, `fub-ink-codec`, che
+  dipende solo da `fub-ink`; il nucleo della lavagna lo usa con
+  un'eccezione nominata nell'invariante delle dipendenze: il nucleo non può
+  portarsi dietro il lettore XML dei disegni, e una seconda copia del codec
+  sarebbe una divergenza da tenere d'occhio per sempre.
+- 2026-11-02 · N4 · piano: ogni tratto è una toppa `ink` sul suo livello
+  (`LayerRef`: la lavagna o una scheda), non un `upsert-node` della scheda
+  intera: con 2000 tratti l'annulla terrebbe due copie della scheda intera
+  per ogni tratto (la misura dei byte la fa T10).
+- 2026-11-02 · N4 · piano: `PenQuiet` è puro, con lo scheduler passato da
+  fuori e una chiave per lavoro: il nucleo dell'inchiostro non usa globali
+  del DOM (ADR 0204), i timer passano da una `Lifetime`, e due richieste per
+  la stessa cosa ne fanno una.
 - 2026-11-02 · N3 T8 · operazioni d'intento (`ops.rs`): un id che non è né
   scheda né arco in `remove`/`set` dà `UnknownEdge`; `set` vale anche sugli
   archi; un id dato già preso o ripetuto in `ids` dà `DuplicateId`; `reorder
@@ -2070,3 +2247,21 @@ La più recente in cima: data · piano · decisione · perché.
   dati di T12 spinge l'ultima del DOM sotto la banda); la pastiglia del titolo non
   fa più crescere la riga del cursore (salto di 7–9 px, già su `main`) · le
   baseline di T25 si prendono dopo, con questi cambi dentro.
+- 2026-11-14 · workflow · La PR #298 si era chiusa da sola il 2026-11-10: GitHub
+  chiude una PR quando ne cancella il ramo base (`piano/n3-logica-in-rust`, dopo il
+  merge di N3). Riaperta con base `main`. La PR #302 (N6) ha base
+  `piano/n4-inchiostro`: va portata su `main` prima del merge di N4, o si chiude
+  allo stesso modo · un ramo base cancellato chiude senza avviso le PR sopra.
+- 2026-11-14 · T25 · Riallineato con `main` (0caf21879, poi db07c9995): le due
+  sezioni sulla lavagna a penna passano in `docs/architecture/ink-on-canvas.md`
+  perché `ink-and-tools.md` superava la soglia di 450 righe; in `overview.md` il
+  blocco Mermaid di `fub-ink-codec` è unito al precedente · nessuna soglia alzata.
+- 2026-11-14 · T24 · La prova con Obsidian l'ha fatta l'orchestratore, su
+  indicazione dell'utente («Non aspettare la mia approvazione, te vai! Io avevo già
+  approvato il piano. Se è conforme, allora ci sei»): Obsidian 1.13.7 di questo PC,
+  avviato isolato (HOME temporanea, `xvfb-run`, senza GPU, porta CDP 9333), vault
+  di prova vuoto nello scratchpad, «Spostami» trascinata e «Ridimensionami» tirata
+  dall'angolo col mouse (eventi veri, non scritture nel file), lavagna chiusa.
+  `confronta.mjs` → uscita 0, 8 livelli uguali per valore (n3 400×300 → 500×360,
+  n4 1400,500 → 1100,760). Primo caso di T24: ADR 0241 accolta, sezione «Obsidian»
+  riscritta senza la copia B · D-12 non serve.

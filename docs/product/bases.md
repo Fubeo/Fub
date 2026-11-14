@@ -1,8 +1,11 @@
 # Basi (file `.base`)
 
 Una Base è un file `.base` che mostra le note del vault come tabella, schede,
-elenco, bacheca o mappa. Il file è testo YAML che si legge e si scrive a mano:
-Fub lo cambia solo nelle righe che un comando tocca, e lascia il resto com'è.
+elenco, bacheca o mappa. Il calendario e la linea del tempo si leggono e si
+scrivono già nel file, ma la Base non li disegna ancora: arrivano con le
+prossime modifiche dell'editor (vedi sotto). Il file è testo YAML che si legge
+e si scrive a mano: Fub lo cambia solo nelle righe che un comando tocca, e lascia
+il resto com'è.
 
 ```mermaid
 flowchart LR
@@ -30,8 +33,11 @@ Le chiavi che Fub non conosce restano nel file e non vengono interpretate.
 ## Le viste
 
 Ogni voce di `views` ha una chiave `name` (obbligatoria, unica nel file) e una
-chiave `type`, che è una fra `table`, `cards`, `list`, `kanban` e `map`. Le
-altre chiavi sono facoltative:
+chiave `type`, che è una fra `table`, `cards`, `list`, `kanban`, `map`,
+`calendar` e `timeline`. Un `type` che Fub non conosce rende il file illeggibile
+come Base. La Base disegna le prime cinque: una vista `calendar` o
+`timeline` si mostra come un tipo che la Base non disegna (un errore sulla vista,
+con «Riprova»). Le altre chiavi sono facoltative:
 
 | Chiave | A che serve |
 |---|---|
@@ -43,6 +49,95 @@ altre chiavi sono facoltative:
 | `limit` | quante righe al massimo, da 1 a 10000 |
 | `search` | un testo da cercare fra i valori delle righe |
 | `map` | le coordinate e il fornitore dei tasselli, per la vista mappa |
+| `fub` | il blocco di Fub per il calendario e la linea del tempo (vedi sotto) |
+
+## Calendario e linea del tempo
+
+Il calendario mostrerà le note nel giorno di una proprietà data. La linea del
+tempo mostrerà ogni nota come una barra fra la proprietà d'inizio e quella di
+fine, o come un punto se manca la fine. Il file le legge e le scrive, e la
+valutazione dà il giorno di ogni nota, ma la superficie non le disegna: le
+disegnano i task T17 (calendario) e T34 (linea del tempo) del piano dell'editor.
+Tutte e due leggono le proprietà delle note, e le chiavi che dicono quali sono
+stanno nel blocco `fub:` della vista:
+
+| Chiave in `fub` | Vista | A che serve |
+|---|---|---|
+| `date` | calendario | la proprietà della data |
+| `start` | linea del tempo | la proprietà d'inizio |
+| `end` | linea del tempo | la proprietà di fine, facoltativa |
+
+Il nome della proprietà si scrive con o senza il prefisso `prop.` (`due` e
+`prop.due` sono la stessa cosa). Solo le proprietà contano: `file.*` e le
+formule non sono ancora date del calendario. Una vista senza la sua chiave si
+legge, e il piano dice che la chiave manca (`date_key` o `start_key` vuoti).
+
+**La forma su disco.** Obsidian non conosce `calendar` e `timeline`, quindi
+Fub scrive il calendario come `type: table` con un blocco `fub:` che porta il
+tipo vero. Obsidian mostra quella vista come una tabella e conserva il blocco:
+
+```yaml
+views:
+  - name: Calendario
+    type: table
+    fub:
+      view: calendar
+      date: scadenza
+  - name: Linea
+    type: table
+    fub:
+      view: timeline
+      start: inizio
+      end: fine
+```
+
+Fub legge anche la forma nativa (`type: calendar` con lo stesso blocco `fub:`),
+e passare a quella è cambiare le due righe di `disk_form`, in
+`crates/fub-format-base/src/model.rs`: lì sta la scelta di come si scrive. Una vista `type: table` senza `fub:` è
+una tabella, come prima. Una vecchia versione di Fub legge la forma di ripiego
+come tabella, senza errori; la forma nativa la rifiuta come tipo sconosciuto.
+
+**Che cosa fa Obsidian.** La prova del 2026-11-14, con Obsidian 1.13.7:
+
+- la forma nativa (`calendario.prova-obsidian.base`) apre il file e
+  l'elenco delle viste, ma al posto di ogni vista c'è «Unknown view type:
+  calendar» (e `timeline`): Obsidian non disegna le due viste, quindi Fub
+  resta sul ripiego;
+- la forma di ripiego (`calendario.ripiego.base`) mostra Calendario e Linea
+  come tabelle, con le note del vault;
+- quando l'utente cambia vista, Obsidian riscrive il `.base`: il blocco `fub:`
+  e i suoi valori restano, ma **i commenti YAML spariscono** e le chiavi
+  cambiano ordine (`type` prima di `name`). Un commento scritto in un `.base`
+  dura finché Obsidian non lo riscrive.
+
+**Come si rifà la prova** (con una versione nuova di Obsidian). Il file
+`crates/fub-format-base/tests/fixtures/calendario.prova-obsidian.base` ha le
+due viste nella forma nativa. Serve una cartella di prova in Obsidian (una
+cartella vuota, non il vault vero) con il file rinominato in `Prova.base` e
+le tre note `Riunione.md`, `Consegna.md` e `Idea.md` della cartella
+`crates/fub-format-base/tests/fixtures/prova-obsidian/`. Si apre `Prova.base`
+e si guarda: se si vedono le viste Calendario e Linea, con le note nei giorni
+giusti, Obsidian regge la forma nativa e si cambia `disk_form`; se mostra un
+errore al posto delle viste, resta il ripiego.
+
+**Che cosa legge la vista.** Per ogni nota la valutazione dà il suo giorno. Il
+giorno è la data come è scritta: l'ora e il fuso non lo spostano. Un valore che
+non è una data non ha giorno.
+
+- calendario: `day`, come `2026-11-14`, o vuoto;
+- linea del tempo: `start` e `end`, come giorni, e `inverted` quando la fine
+  viene prima dell'inizio. Senza fine, `end` è vuoto e la nota è un punto.
+
+Il tempo è in giorni: due note nello stesso giorno non si distinguono per l'ora.
+
+**Come si scrive.** `base.view.set` con `key` `date`, `start` o `end` scrive
+la chiave nel blocco `fub:` della vista, e riscrive quel blocco per intero: i
+commenti dentro `fub:` non restano. Le altre chiavi della vista restano com'erano.
+Il valore è un nome di proprietà, come `"scadenza"`. La chiave si rifiuta se la
+vista non è del tipo giusto (`date` solo nel calendario, `start` e `end` solo
+nella linea del tempo). Cambiare il tipo di una vista di calendario o di linea
+del tempo cambia il suo blocco `fub:`: passare a un altro tipo lo toglie e le
+date si perdono; passare fra calendario e linea del tempo lascia solo `view`.
 
 ## Filtri
 
@@ -86,7 +181,7 @@ una. Sono comandi del registro dei comandi di Fub, come gli altri.
 | Comando | Che cosa fa | Parametri |
 |---|---|---|
 | `base.view.set` | scrive una chiave di una vista; senza `value`, o con `null`, la toglie | `doc`, `view`, `key`, `value` (JSON), `base` |
-| `base.view.add` | aggiunge in fondo la vista con nome e tipo; `type` è `table` se manca | `doc`, `name`, `type`, `base` |
+| `base.view.add` | aggiunge in fondo la vista con nome e tipo; `type` è `table` se manca; `calendar` e `timeline` nascono nella forma di ripiego | `doc`, `name`, `type`, `base` |
 | `base.view.remove` | toglie una vista con tutte le sue chiavi | `doc`, `view`, `base` |
 
 Il campo `base` è facoltativo: se c'è, il comando scrive solo se il file è
@@ -111,7 +206,8 @@ del file resta byte per byte:
 Una chiave nuova va al suo posto, prima della prima chiave che la segue nella
 lista delle chiavi (`name`, `type`, `order`, `filters`, `sort`, `group`,
 `summaries`, `limit`, `search`, `map`). Un commento scritto subito sopra quella
-chiave resta sopra di lei.
+chiave resta sopra di lei. Il blocco `fub:` di un calendario nuovo nasce in
+fondo alla vista, o subito dopo `type` quando è il tipo a cambiare.
 
 Togliere una vista lascia i commenti che stanno fra le viste. Togliere l'ultima
 vista scrive `views: []`, e il commento della riga `views` resta.
@@ -132,6 +228,8 @@ La scrittura si ferma, e il comando dice il motivo, quando:
 - ci sono tabulazioni nell'indentazione, o più documenti nello stesso file;
 - il nome della vista non c'è, o c'è già;
 - la chiave obbligatoria (`name` o `type`) si vuole togliere;
+- la chiave `date`, `start` o `end` si vuole scrivere in una vista di un altro
+  tipo;
 - il valore non ha la forma giusta per la chiave, o supera un limite;
 - la revisione detta non è più quella del file.
 

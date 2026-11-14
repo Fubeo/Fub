@@ -77,7 +77,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
   e la [superficie dei fogli](architecture/grid-surface.md), con gli
   [editor dei componenti](architecture/component-editors.md)
-- [Inchiostro e strumenti](architecture/ink-and-tools.md) e
+- [Inchiostro e strumenti](architecture/ink-and-tools.md),
+  [l'inchiostro sulla lavagna](architecture/ink-on-canvas.md) e
   [il disegno sul motore](architecture/disegno.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md), i [provider WASM](architecture/wasm-providers.md) e [capability e sandbox](architecture/plugin-security.md)
 - [Lo strato dei motori](architecture/motori.md)
@@ -110,7 +111,11 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   `fub-canvas-core` e le regole di lettura e scrittura delle `.canvas`, e
   le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e
   la loro inversa
+- [L'inchiostro della lavagna](reference/canvas-ink.md), i campi `fub:ink`
+  di un `.canvas`
 - [Il server MCP](reference/mcp-server.md)
+- [Le convenzioni scritte nelle note](reference/note-conventions.md): i
+  commenti con la discussione (`{==passo==}{>>messaggio<<}`)
 - [I tipi delle proprietà](reference/property-types.md): il registro
   `properties.types`, le opzioni di Selezione e Stato e i loro comandi
 - [I formati dei file Craft](reference/craft-formats.md), gli

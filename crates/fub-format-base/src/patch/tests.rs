@@ -484,3 +484,52 @@ fn le_chiavi_sconosciute_della_vista_restano_com_erano() {
         "views:\n  - name: A\n    type: table\n    colore_mio: blu\n    limit: 2\n"
     );
 }
+
+/// La data nasce in un blocco `fub:` in fondo alla vista, e togliendola il
+/// blocco sparisce: il file torna com'era, byte per byte.
+#[test]
+fn la_data_nasce_in_un_blocco_fub_e_togliendola_il_blocco_sparisce() {
+    let source = "views:\n  - name: C\n    type: calendar\n    limit: 5\n";
+    let dated = edited(source, &set("C", ViewKey::Date, json!("due")));
+    assert_eq!(
+        dated,
+        "views:\n  - name: C\n    type: calendar\n    limit: 5\n    fub:\n      date: due\n"
+    );
+    assert_eq!(edited(&dated, &unset("C", ViewKey::Date)), source);
+}
+
+/// Cambiare il tipo mette `fub:` subito dopo `type`, prima delle altre chiavi
+/// della vista, come lo scrive la forma di ripiego.
+#[test]
+fn il_blocco_fub_nasce_dopo_il_tipo_e_prima_delle_altre_chiavi() {
+    let source = "views:\n  - name: C\n    type: cards\n    limit: 5\n";
+    let out = edited(source, &set("C", ViewKey::Type, json!("timeline")));
+    assert_eq!(
+        out,
+        "views:\n  - name: C\n    type: table\n    fub:\n      view: timeline\n    limit: 5\n"
+    );
+}
+
+/// Un blocco `fub:` scritto in flusso non si riscrive: la chiave data lo dice.
+#[test]
+fn un_blocco_fub_in_flusso_si_rifiuta_senza_scrivere() {
+    let source = "views:\n  - name: C\n    type: table\n    fub: {view: calendar, date: due}\n";
+    assert!(matches!(
+        refused(source, &set("C", ViewKey::Date, json!("altra"))),
+        PatchError::Flow {
+            place: Place::Key(ViewKey::Date)
+        }
+    ));
+}
+
+/// Cambiare il tipo sull'ultima riga di un file senza a capo: il blocco
+/// `fub:` si aggiunge in fondo, e il file resta senza a capo finale.
+#[test]
+fn cambiare_tipo_sull_ultima_riga_senza_a_capo_non_corrompe_il_file() {
+    let source = "views:\n  - name: C\n    type: cards";
+    let out = edited(source, &set("C", ViewKey::Type, json!("calendar")));
+    assert_eq!(
+        out,
+        "views:\n  - name: C\n    type: table\n    fub:\n      view: calendar"
+    );
+}

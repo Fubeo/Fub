@@ -35,6 +35,7 @@ prova sono nella tabella qui sotto.
 | la lavagna | `crates/fub-canvas-core/` | il modello di una `.canvas` e la sua lettura, puro: lo usano il formato, i comandi e la WebView | `cargo test -p fub-canvas-core` |
 | la lavagna nella WebView | `crates/fub-canvas-wasm/` | la facciata WebAssembly del nucleo: un'interfaccia C scritta a mano, testo e JSON dentro e fuori | `cargo test -p fub-canvas-wasm` |
 | l'inchiostro | `crates/fub-ink/` | campioni, pressione, stabilizzatore, InkML; il gemello caldo sta in `apps/client/src/ink/` | `cargo test -p fub-ink` |
+| il codec dei tratti | `crates/fub-ink-codec/` | `fub:ink` e `fub:brush`, i tratti quantizzati e i pennelli: lo usano i disegni e la lavagna | `cargo test -p fub-ink-codec` |
 | i disegni | `crates/fub-scene/` | lettura del formato scena e delle annotazioni PDF | `cargo test -p fub-scene` |
 | il motore del disegno | `crates/fub-disegno/` | l'adattatore di VectorCraft, l'unico crate che lo nomina: apertura, mappa, sincronia, differenza, gesti, comandi, perdite | `cargo check -p fub-disegno` |
 | lo strato dei motori | `crates/fub-motori/` | motori costruiti alla prima richiesta, il loro gruppo di thread, il budget delle cache, il registro | `cargo test -p fub-motori` |
@@ -50,6 +51,7 @@ prova sono nella tabella qui sotto.
 | l'estensione | `apps/clipper/` | il clipper del browser (MV3, Firefox, Safari) | `node apps/clipper/smoke-headless.mjs` |
 | i motori | `vendor/` | WordCraft e GridCraft copiati, patch numerate, `UPSTREAM.md` | `node tools/vendor-craft/vendor.mjs check` |
 | le prove dei motori | `tools/motori-prova/` | le misure di K0: peso, RAM, tempi, librerie doppie | `node tools/motori-prova/misura.mjs --out DIR` |
+| la prova con Obsidian | `tools/prova-obsidian/` | una lavagna con l'inchiostro e lo script che confronta prima e dopo; i passi nel `README.md` | `node --test tools/prova-obsidian/confronta.test.mjs` |
 | i componenti WASM | `esempi/` | un esempio per cosa da dimostrare, fuori dal workspace | li compila il test di `fub-wasm-host` |
 | la CI | `.github/` | workflow e i guard Node dell'elenco `ci-required` | `node .github/scripts/<guard>.mjs` |
 | i dati di prova | `tests/fixtures/`, `apps/client/src/__fixtures__/` | vault e fixture; i generati si rigenerano con `UPDATE_MIRROR=1` | il test che li usa |

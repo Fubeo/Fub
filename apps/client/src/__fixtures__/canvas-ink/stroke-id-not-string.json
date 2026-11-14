@@ -1,0 +1,30 @@
+{
+  "name": "stroke-id-not-string",
+  "description": "Un id che è un numero, un id vuoto, o un tratto che non è un oggetto: il livello è estraneo.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"text\", \"text\": \"x\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 200,\n      \"fub:ink\": { \"v\": 1, \"strokes\": [\n        { \"id\": 7, \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"card\", \"width\": 300, \"height\": 200 }, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" }\n      ] } },\n    { \"id\": \"n2\", \"type\": \"text\", \"text\": \"y\", \"x\": 400, \"y\": 0, \"width\": 300, \"height\": 200,\n      \"fub:ink\": { \"v\": 1, \"strokes\": [\n        { \"id\": \"\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"card\", \"width\": 300, \"height\": 200 }, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" }\n      ] } },\n    { \"id\": \"n3\", \"type\": \"text\", \"text\": \"z\", \"x\": 800, \"y\": 0, \"width\": 300, \"height\": 200,\n      \"fub:ink\": { \"v\": 1, \"strokes\": [ \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" ] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "layers": [
+      {
+        "layer": {
+          "node": "n1"
+        },
+        "state": "foreign",
+        "strokes": []
+      },
+      {
+        "layer": {
+          "node": "n2"
+        },
+        "state": "foreign",
+        "strokes": []
+      },
+      {
+        "layer": {
+          "node": "n3"
+        },
+        "state": "foreign",
+        "strokes": []
+      }
+    ]
+  }
+}

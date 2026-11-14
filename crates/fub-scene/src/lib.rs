@@ -19,9 +19,10 @@
 //! scena, e in più il documento annotato, le pagine e le note.
 //!
 //! [`Ink`] e [`InkBrush`] (`pf1` in [`Brush`], `nib1` in [`Nib1Brush`]) sono
-//! il codec di `fub:ink` e la lettura di `fub:brush`
-//! (§5): la scena li usa per dire se un tratto si ridisegna, e chi scrive un
-//! tratto li usa per quantizzarlo. [`rulers`] legge l'unità e le guide del
+//! il codec di `fub:ink` e la lettura di `fub:brush` (§5). Stanno nel crate
+//! `fub-ink-codec`, che li presta anche alla lavagna, e qui si riespongono: la
+//! scena li usa per dire se un tratto si ridisegna, e chi scrive un tratto li
+//! usa per quantizzarlo. [`rulers`] legge l'unità e le guide del
 //! documento (formato della scena, unità e guide).
 //!
 //! Il crate è puro. Non dipende dall'ABI di Fub né dal kernel, non fa I/O e
@@ -32,16 +33,19 @@ use std::fmt;
 
 use serde::Serialize;
 
+// Il codec dei tratti sta in `fub-ink-codec`, perché lo usa anche la lavagna
+// (ADR 0204): qui si riespone, e l'API del crate resta quella di prima.
+use fub_ink_codec::brush;
+pub use fub_ink_codec::ink;
+
 mod accessibility;
 mod analysis;
 mod annotation;
-mod brush;
 mod classify;
 pub mod connectors;
 mod diagnostics;
 pub mod export;
 mod geometry;
-pub mod ink;
 pub mod labels;
 pub mod parametric;
 pub mod repeat;

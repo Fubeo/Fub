@@ -613,7 +613,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         syntax: None,
         renderers: None,
         exports: None,
-        settings: None,
+        settings: Some(lavagna::settings),
         provides: &[],
         requires: &[],
         wiring: HostWiring::None,

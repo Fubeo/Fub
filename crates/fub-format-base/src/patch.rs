@@ -24,8 +24,8 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::model::{
-    BaseDefinition, BaseError, FilterDef, GroupDef, MapDef, SortDef, SummaryDef, ViewType,
-    MAX_BASE_SOURCE_BYTES,
+    disk_form, BaseDefinition, BaseError, BaseViewDef, FilterDef, GroupDef, MapDef, SortDef,
+    SummaryDef, ViewType, MAX_BASE_SOURCE_BYTES,
 };
 
 #[cfg(test)]
@@ -34,6 +34,10 @@ mod tests;
 /// Una chiave di vista che una toppa può scrivere. L'ordine è quello di
 /// [`BaseViewDef`](crate::model::BaseViewDef): una chiave nuova va al posto
 /// che le spetta fra quelle che ci sono già.
+///
+/// `Date`, `Start` e `End` non stanno al livello della vista: vivono nel
+/// blocco `fub:` (vedi [`FubViewDef`](crate::model::FubViewDef)), e la toppa
+/// riscrive quel blocco per intero.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ViewKey {
     Name,
@@ -46,10 +50,13 @@ pub enum ViewKey {
     Limit,
     Search,
     Map,
+    Date,
+    Start,
+    End,
 }
 
 impl ViewKey {
-    const ALL: [ViewKey; 10] = [
+    const ALL: [ViewKey; 13] = [
         ViewKey::Name,
         ViewKey::Type,
         ViewKey::Order,
@@ -60,9 +67,12 @@ impl ViewKey {
         ViewKey::Limit,
         ViewKey::Search,
         ViewKey::Map,
+        ViewKey::Date,
+        ViewKey::Start,
+        ViewKey::End,
     ];
 
-    /// Il nome della chiave nel file.
+    /// Il nome della chiave nel file (dentro `fub:` per `date`, `start`, `end`).
     pub fn as_str(self) -> &'static str {
         match self {
             ViewKey::Name => "name",
@@ -75,12 +85,35 @@ impl ViewKey {
             ViewKey::Limit => "limit",
             ViewKey::Search => "search",
             ViewKey::Map => "map",
+            ViewKey::Date => "date",
+            ViewKey::Start => "start",
+            ViewKey::End => "end",
         }
     }
 
     /// La chiave che ha questo nome, se è una che una toppa scrive.
     pub fn parse(name: &str) -> Option<ViewKey> {
         ViewKey::ALL.into_iter().find(|key| key.as_str() == name)
+    }
+
+    /// Come [`ViewKey::parse`], ma solo per le chiavi di primo livello della
+    /// vista: un `date` scritto a mano fuori da `fub:` non è una chiave nota.
+    fn parse_top(name: &str) -> Option<ViewKey> {
+        ViewKey::parse(name).filter(|key| !key.in_fub())
+    }
+
+    /// Le chiavi che vivono dentro il blocco `fub:`.
+    fn in_fub(self) -> bool {
+        matches!(self, ViewKey::Date | ViewKey::Start | ViewKey::End)
+    }
+
+    /// Il tipo di vista che la chiave vuole, se ne vuole uno.
+    fn needs(self) -> Option<ViewType> {
+        match self {
+            ViewKey::Date => Some(ViewType::Calendar),
+            ViewKey::Start | ViewKey::End => Some(ViewType::Timeline),
+            _ => None,
+        }
     }
 
     fn rank(self) -> usize {
@@ -108,6 +141,9 @@ impl ViewKey {
             ViewKey::Limit => fits::<u32>(value),
             ViewKey::Search => fits::<String>(value),
             ViewKey::Map => fits::<MapDef>(value),
+            ViewKey::Date | ViewKey::Start | ViewKey::End => {
+                value.as_str().is_some_and(|name| !name.trim().is_empty())
+            }
         }
     }
 }
@@ -121,7 +157,8 @@ fn fits<T: DeserializeOwned>(value: &Value) -> bool {
 #[derive(Clone, Debug, PartialEq)]
 pub enum BaseChange {
     /// Scrive la chiave `key` della vista `view`. Senza valore (o con `null`)
-    /// la toglie.
+    /// la toglie. Cambiare `Type` scrive anche il blocco `fub:` della forma
+    /// di ripiego (vedi [`disk_form`]), e togliere `fub` le chiavi della data.
     SetKey {
         view: String,
         key: ViewKey,
@@ -152,6 +189,10 @@ pub enum PatchError {
     RequiredKey(ViewKey),
     #[error("il valore non va bene per la chiave {0:?}")]
     BadValue(ViewKey),
+    /// La chiave vale solo per un altro tipo di vista (`date` per il
+    /// calendario, `start` ed `end` per la linea del tempo).
+    #[error("la chiave {0:?} non va in questo tipo di vista")]
+    NotForView(ViewKey),
     /// Un costrutto della riga che la toppa non sa cambiare senza riscrivere.
     #[error("riga {line}: {construct:?}")]
     Unsafe { line: usize, construct: Construct },
@@ -233,34 +274,52 @@ pub fn apply(source: &str, change: &BaseChange) -> Result<Vec<TextEdit>, PatchEr
                     return Err(PatchError::DuplicateView(name.to_string()));
                 }
             }
-            let current = now.get(index).and_then(|view| view.get(key.as_str()));
-            if current == value.as_ref() {
-                return Ok(Vec::new());
-            }
+            let current = now.get(index).ok_or(PatchError::Verify)?;
+            let writes = match key {
+                ViewKey::Type => type_writes(
+                    current,
+                    value.as_ref().ok_or(PatchError::RequiredKey(*key))?,
+                )?,
+                ViewKey::Date | ViewKey::Start | ViewKey::End => time_writes(current, *key, value)?,
+                _ => vec![KeyWrite {
+                    name: key.as_str(),
+                    key: *key,
+                    value,
+                }],
+            };
             let items = views.items(now.len())?;
+            let item = items.get(index).ok_or(PatchError::Verify)?;
             let map = expected_views(&mut expected)?
                 .get_mut(index)
                 .and_then(Value::as_object_mut)
                 .ok_or(PatchError::Verify)?;
-            match &value {
-                Some(value) => {
-                    map.insert(key.as_str().to_string(), value.clone());
+            let mut splices = Vec::new();
+            for write in writes {
+                // Una chiave che già ha il suo valore non si riscrive: così
+                // una modifica a vuoto non tocca il file.
+                if current.get(write.name) == write.value.as_ref() {
+                    continue;
                 }
-                None => {
-                    map.remove(key.as_str());
+                match &write.value {
+                    Some(value) => {
+                        map.insert(write.name.to_string(), value.clone());
+                    }
+                    None => {
+                        map.remove(write.name);
+                    }
                 }
+                splices.extend(set_key_splices(&doc, item, &write)?);
             }
-            let item = items.get(index).ok_or(PatchError::Verify)?;
-            set_key_splices(&doc, item, *key, value)?
+            splices
         }
         BaseChange::AddView { name, view_type } => {
             check_value(ViewKey::Name, &Value::String(name.clone()))?;
             if taken(&now, name, None) {
                 return Err(PatchError::DuplicateView(name.clone()));
             }
-            let view = json!({ "name": name, "type": view_type });
-            expected_views_or_create(&mut expected)?.push(view);
-            add_view_splices(&doc, &views, name, *view_type)?
+            let view = new_view(name, *view_type);
+            expected_views_or_create(&mut expected)?.push(view.clone());
+            add_view_splices(&doc, &views, &view)?
         }
         BaseChange::RemoveView { view } => {
             let index = position(&now, view)?;
@@ -675,7 +734,7 @@ impl<'a> Doc<'a> {
             .enumerate()
             .filter(|(_, other)| other.line != item.start)
             .find(|(_, other)| {
-                ViewKey::parse(&other.name).is_some_and(|other| other.rank() > key.rank())
+                ViewKey::parse_top(&other.name).is_some_and(|other| other.rank() > key.rank())
             })
             .map(|(position, _)| position);
         match next {
@@ -699,16 +758,19 @@ impl<'a> Doc<'a> {
     /// chiude prima, così il file resta fatto di righe.
     fn insert_at(&self, at: usize, mut rows: Vec<String>) -> Splice {
         if at > 0 && !self.lines[at - 1].ends_with('\n') {
-            // È la fine del file senza a capo: il capo che manca va fra le due
-            // righe, e l'ultima riga nuova resta senza, come l'ultima di prima.
+            // È la fine del file senza a capo: il capo che manca va in testa
+            // alle righe nuove, e l'ultima riga nuova resta senza, come
+            // l'ultima di prima. È un inserimento a fine file, senza toccare
+            // la riga prima: così non si sovrappone a una modifica di quella
+            // riga (il `type` dell'ultima vista che cambia tipo).
             if let Some(last) = rows.last_mut() {
                 let cut = last.len() - ending(last).len();
                 last.truncate(cut);
             }
-            let mut with = vec![format!("{}{}", self.lines[at - 1], self.eol)];
+            let mut with = vec![self.eol.to_string()];
             with.extend(rows);
             Splice {
-                start: at - 1,
+                start: at,
                 end: at,
                 with,
             }
@@ -737,15 +799,116 @@ impl<'a> Doc<'a> {
     }
 }
 
+/// Una chiave da scrivere in una vista: il nome nel file, la chiave che la
+/// chiede (per dove nasce fra le altre e per gli errori) e il valore, dove
+/// `None` la toglie.
+struct KeyWrite {
+    name: &'static str,
+    key: ViewKey,
+    value: Option<Value>,
+}
+
+/// Le chiavi che scrive cambiare il tipo: `type` e il blocco `fub:` della
+/// forma su disco. Un tipo che la vista ha già non scrive niente.
+fn type_writes(current: &Value, value: &Value) -> Result<Vec<KeyWrite>, PatchError> {
+    let target: ViewType =
+        serde_json::from_value(value.clone()).map_err(|_| PatchError::BadValue(ViewKey::Type))?;
+    if kind_of(current) == Some(target) {
+        return Ok(Vec::new());
+    }
+    let (disk, fub) = disk_form(target);
+    Ok(vec![
+        KeyWrite {
+            name: "type",
+            key: ViewKey::Type,
+            value: Some(serde_json::to_value(disk).map_err(|_| PatchError::Verify)?),
+        },
+        KeyWrite {
+            name: "fub",
+            key: ViewKey::Type,
+            value: fub.map(|view| json!({ "view": view })),
+        },
+    ])
+}
+
+/// La chiave `date`, `start` o `end`: scrive il blocco `fub:` della vista
+/// con la chiave cambiata. Solo il tipo di vista che la chiave vuole la
+/// accetta. Il blocco nuovo tiene le sue chiavi, e togliendo l'ultima il
+/// blocco sparisce.
+fn time_writes(
+    current: &Value,
+    key: ViewKey,
+    value: Option<Value>,
+) -> Result<Vec<KeyWrite>, PatchError> {
+    if kind_of(current) != key.needs() {
+        return Err(PatchError::NotForView(key));
+    }
+    let mut fub = current
+        .get("fub")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    match value {
+        Some(value) => {
+            fub.insert(key.as_str().to_string(), value);
+        }
+        None => {
+            fub.remove(key.as_str());
+        }
+    }
+    let fub = ordered_fub(fub);
+    Ok(vec![KeyWrite {
+        name: "fub",
+        key,
+        value: (!fub.is_empty()).then(|| Value::Object(fub)),
+    }])
+}
+
+/// Il blocco `fub:` nell'ordine che ha di solito: prima `view`, poi le chiavi
+/// della data, poi quelle che questa versione non conosce, come stanno.
+fn ordered_fub(fub: serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    const FIRST: [&str; 4] = ["view", "date", "start", "end"];
+    let mut out = serde_json::Map::new();
+    for name in FIRST {
+        if let Some(value) = fub.get(name) {
+            out.insert(name.to_string(), value.clone());
+        }
+    }
+    for (name, value) in &fub {
+        if !FIRST.contains(&name.as_str()) {
+            out.insert(name.clone(), value.clone());
+        }
+    }
+    out
+}
+
+/// Il tipo che Fub legge in una vista del file, con la forma di ripiego
+/// risolta.
+fn kind_of(view: &Value) -> Option<ViewType> {
+    let mut definition: BaseViewDef = serde_json::from_value(view.clone()).ok()?;
+    definition.resolve();
+    Some(definition.view_type)
+}
+
+/// La vista nuova come la scrive la forma su disco: nome, tipo e, se la
+/// forma lo chiede, il blocco `fub:`.
+fn new_view(name: &str, view_type: ViewType) -> Value {
+    let (disk, fub) = disk_form(view_type);
+    let mut view = json!({ "name": name, "type": disk });
+    if let (Some(fub), Some(map)) = (fub, view.as_object_mut()) {
+        map.insert("fub".to_string(), json!({ "view": fub }));
+    }
+    view
+}
+
 fn set_key_splices(
     doc: &Doc<'_>,
     item: &Item,
-    key: ViewKey,
-    value: Option<Value>,
+    write: &KeyWrite,
 ) -> Result<Vec<Splice>, PatchError> {
     let (col, keys) = doc.keys(item)?;
-    let found = keys.iter().position(|other| other.name == key.as_str());
-    match (found, value) {
+    let found = keys.iter().position(|other| other.name == write.name);
+    match (found, &write.value) {
         (Some(position), value) => {
             let (start, end) = doc.key_span(&keys, position, item.end);
             let existing = &keys[position];
@@ -760,7 +923,7 @@ fn set_key_splices(
             };
             if matches!(head, Some('[' | '{')) {
                 return Err(PatchError::Flow {
-                    place: Place::Key(key),
+                    place: Place::Key(write.key),
                 });
             }
             match value {
@@ -774,7 +937,7 @@ fn set_key_splices(
                     let rows = render_key(
                         &existing.raw,
                         prefix,
-                        &value,
+                        value,
                         comment_of(on_line),
                         existing.col,
                     )?;
@@ -788,24 +951,18 @@ fn set_key_splices(
         }
         (None, None) => Ok(Vec::new()),
         (None, Some(value)) => {
-            let at = doc.insertion_point(item, &keys, key);
-            let rows = render_key(key.as_str(), &" ".repeat(col), &value, "", col)?;
+            let at = doc.insertion_point(item, &keys, write.key);
+            let rows = render_key(write.name, &" ".repeat(col), value, "", col)?;
             Ok(vec![doc.insert_at(at, terminate(rows, doc.eol, doc.eol))])
         }
     }
 }
 
-fn add_view_splices(
-    doc: &Doc<'_>,
-    views: &Views,
-    name: &str,
-    view_type: ViewType,
-) -> Result<Vec<Splice>, PatchError> {
-    let view = json!({ "name": name, "type": view_type });
+fn add_view_splices(doc: &Doc<'_>, views: &Views, view: &Value) -> Result<Vec<Splice>, PatchError> {
     match views {
         Views::Absent => {
             let mut rows = vec!["views:".to_string()];
-            rows.extend(item_rows(2, &view)?);
+            rows.extend(item_rows(2, view)?);
             Ok(vec![doc.insert_at(
                 doc.lines.len(),
                 terminate(rows, doc.eol, doc.eol),
@@ -814,7 +971,7 @@ fn add_view_splices(
         Views::Empty { key, colon } => {
             let comment = comment_of(&content(doc.lines[*key])[colon + 1..]);
             let mut rows = vec![format!("views:{comment}")];
-            rows.extend(item_rows(2, &view)?);
+            rows.extend(item_rows(2, view)?);
             Ok(vec![Splice {
                 start: *key,
                 end: key + 1,
@@ -827,7 +984,7 @@ fn add_view_splices(
                 construct: Construct::ViewsShape,
             })?;
             let last = items.last().map_or(first.end, |item| item.end);
-            let rows = item_rows(first.dash, &view)?;
+            let rows = item_rows(first.dash, view)?;
             Ok(vec![doc.insert_at(last, terminate(rows, doc.eol, doc.eol))])
         }
     }
