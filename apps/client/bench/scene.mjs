@@ -945,6 +945,11 @@ export const SCENE = onPage("shell", [
       // vista: secondo chi vince, la nota resta in cima o scende di 78 px. Il
       // banco aspetta la testata e riparte dalla cima, ogni volta.
       await page.waitForSelector(".pane.focus .cm-fub-page-title");
+      // Scrittura si apre già coi Blocchi, senza passare dal menu della banda:
+      // il moto d'apertura della nota può essere ancora in corsa, e un gesto
+      // di Playwright su un riquadro che si muove lo fa scorrere per portarlo
+      // in vista. Si parte a scena ferma, come per il «/».
+      await page.waitForFunction(() => document.getAnimations().length === 0);
       await page.evaluate(() => { document.querySelector(".pane.focus .cm-scroller").scrollTop = 0; });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       if (gesture === "hover") return;
