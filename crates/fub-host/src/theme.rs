@@ -138,9 +138,8 @@ use files::{
 };
 pub use install::{
     install_theme, install_theme_checked, install_theme_from_folder, set_theme_revoked,
-    set_theme_revoked_with_provenance, ThemeFolderInstall,
-    theme_catalog_provenance, theme_revocation_provenance, theme_revoked, uninstall_theme,
-    update_theme,
+    set_theme_revoked_with_provenance, theme_catalog_provenance, theme_revocation_provenance,
+    theme_revoked, uninstall_theme, update_theme, ThemeFolderInstall,
 };
 pub use pointer::theme_tree_digest;
 use pointer::{

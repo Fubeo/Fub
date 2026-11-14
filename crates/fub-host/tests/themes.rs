@@ -1594,7 +1594,10 @@ fn write_versioned_theme(root: &Utf8Path, id: &str, version: &str) {
     let manifest = std::fs::read_to_string(root.join("manifest.json")).unwrap();
     std::fs::write(
         root.join("manifest.json"),
-        manifest.replace(r#""version": "1.0.0""#, &format!(r#""version": "{version}""#)),
+        manifest.replace(
+            r#""version": "1.0.0""#,
+            &format!(r#""version": "{version}""#),
+        ),
     )
     .unwrap();
 }
@@ -1636,7 +1639,10 @@ fn a_theme_installs_from_a_folder_with_developer_mode_on() {
         .find(|theme| theme.manifest.id == "acme.carta")
         .expect("listed");
     assert_eq!(carta.trust, "community");
-    assert!(root.join("manifest.json").is_file(), "the source stays where it is");
+    assert!(
+        root.join("manifest.json").is_file(),
+        "the source stays where it is"
+    );
 }
 
 /// Spenta (il default), l'host rifiuta: la regola non è il bottone nascosto.
@@ -1650,7 +1656,10 @@ fn installing_from_a_folder_is_refused_with_developer_mode_off() {
     let error = installed(&config)
         .install_theme_from_folder(&root, false)
         .expect_err("off by default");
-    assert!(matches!(error, fub_abi::PluginError::PermissionDenied(_)), "{error:?}");
+    assert!(
+        matches!(error, fub_abi::PluginError::PermissionDenied(_)),
+        "{error:?}"
+    );
     assert!(themes_dir_is_empty(&config));
 
     let host = developer(&config, true);
@@ -1663,7 +1672,10 @@ fn installing_from_a_folder_is_refused_with_developer_mode_off() {
     let error = host
         .install_theme_from_folder(&root, false)
         .expect_err("turned off while the picker was open");
-    assert!(matches!(error, fub_abi::PluginError::PermissionDenied(_)), "{error:?}");
+    assert!(
+        matches!(error, fub_abi::PluginError::PermissionDenied(_)),
+        "{error:?}"
+    );
     assert!(themes_dir_is_empty(&config));
 }
 
@@ -1708,7 +1720,10 @@ fn an_installed_id_collides_and_replace_swaps_it() {
             replaced: true,
         }
     );
-    assert_eq!(std::fs::read_to_string(&installed_skin).unwrap(), ".surface { color: red; }\n");
+    assert_eq!(
+        std::fs::read_to_string(&installed_skin).unwrap(),
+        ".surface { color: red; }\n"
+    );
     assert_eq!(
         host.themes().unwrap()[0].manifest.version,
         "0.4.0",
@@ -1725,7 +1740,10 @@ fn an_installed_id_collides_and_replace_swaps_it() {
         .install_theme_from_folder(&old, true)
         .expect_err("off between the collision and «Sostituisci»");
     assert!(matches!(error, fub_abi::PluginError::PermissionDenied(_)));
-    assert_eq!(std::fs::read_to_string(&installed_skin).unwrap(), ".surface { color: red; }\n");
+    assert_eq!(
+        std::fs::read_to_string(&installed_skin).unwrap(),
+        ".surface { color: red; }\n"
+    );
 }
 
 /// Una cartella che non è un tema si ferma prima di toccare `themes/`, anche
@@ -1745,7 +1763,10 @@ fn a_folder_that_is_not_a_theme_is_refused_before_touching_the_installed_one() {
         .install_theme_from_folder(&empty, true)
         .expect_err("no manifest.json");
     assert!(
-        matches!(error, fub_abi::PluginError::BadArgs(_) | fub_abi::PluginError::Io(_)),
+        matches!(
+            error,
+            fub_abi::PluginError::BadArgs(_) | fub_abi::PluginError::Io(_)
+        ),
         "{error:?}"
     );
     assert!(fub_host::config::themes_dir(&config)
@@ -1766,7 +1787,10 @@ fn a_symlink_inside_the_folder_is_refused() {
     let error = developer(&config, true)
         .install_theme_from_folder(&root, false)
         .expect_err("symlink refused");
-    assert!(matches!(error, fub_abi::PluginError::BadArgs(_)), "{error:?}");
+    assert!(
+        matches!(error, fub_abi::PluginError::BadArgs(_)),
+        "{error:?}"
+    );
     assert!(themes_dir_is_empty(&config));
 }
 
@@ -1779,5 +1803,8 @@ fn the_series_id_is_reserved_from_a_folder_too() {
     let error = developer(&config, true)
         .install_theme_from_folder(&root, true)
         .expect_err("reserved");
-    assert!(matches!(error, fub_abi::PluginError::BadArgs(_)), "{error:?}");
+    assert!(
+        matches!(error, fub_abi::PluginError::BadArgs(_)),
+        "{error:?}"
+    );
 }
