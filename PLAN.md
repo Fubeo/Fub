@@ -1959,7 +1959,7 @@ della CI completa sono verdi, il resoconto della revisione è nel rapporto
 con ogni punto corretto o motivato, ogni riga del cancello ha la sua prova,
 e l'utente ha detto sì al merge.
 Prova: gh pr checks 298; scripts/check.sh
-Stato: [~] ramo riallineato con `main` (8eb3d3122), PR #298 con base `main` segnata pronta: CI completa in corso; poi la revisione riga per riga; il merge lo dice l'utente
+Stato: [~] PR #298 base `main`, pronta, CI completa verde su 0e70240c6 (2026-11-14; rilanciati una volta `close_a_vault_and_latest_round…`, instabile noto con testo d'issue in `~/.cache/fub-prealpha/issue-vault-closed-flaky.md`, e un giro annullato di «contrasto e tastiera») · revisione mirata dell'orchestratore: la toppa d'inchiostro (`patch.rs`) confronta il tratto intero prima di sostituirlo, rifiuta uno strato estraneo e tiene i campi sconosciuti (`extra`) di strato e tratto; nessuna scrittura su file diversi dalla lavagna (l'inchiostro su un `.xlsx` sta nel `.canvas`); gli ascoltatori nuovi passano da `life.listen`/`own.listen`; testi per l'utente senza gergo. Prima del merge: T24 (prova con Obsidian dell'utente), togliere `PLAN.md` e `PLAN-ui/` in un commit, il sì dell'utente
 
 ## Non verificato stanotte
 
