@@ -1,0 +1,31 @@
+{
+  "about": "convert di un gruppo: Invalid.",
+  "before": {
+    "nodes": [
+      {
+        "id": "g",
+        "type": "group",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 200,
+        "label": "G"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "convert",
+      "id": "g",
+      "file": "Idee/altro.md"
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

@@ -109,7 +109,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   `fub-canvas-core` e le regole di lettura e scrittura delle `.canvas`, e
   le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e
   la loro inversa, [la lavagna come codice](reference/canvas-code.md): le
-  letture, le misure e i posti, le operazioni d'intento, e
+  letture, le misure e i posti, le operazioni d'intento, il loro
+  [schema](reference/canvas-schema.md) e
   [il controllo](reference/canvas-check.md) che dice che cosa cambierebbe
 - [Il server MCP](reference/mcp-server.md)
 - [I formati dei file Craft](reference/craft-formats.md), gli

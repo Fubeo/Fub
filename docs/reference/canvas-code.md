@@ -2,15 +2,15 @@
 
 > **Ambito:** la lavagna come codice: le tre letture di una lavagna (`outline`,
 > `code`, `json`), le misure e i posti che il nucleo decide per una scheda, le
-> operazioni d'intento con cui una lavagna si scrive e il loro schema. Il
-> controllo che dice che cosa cambierebbe prima di scrivere è in
+> operazioni d'intento con cui una lavagna si scrive. Lo schema delle
+> operazioni sta in [la sua pagina](canvas-schema.md), e il controllo che
+> dice che cosa cambierebbe prima di scrivere in
 > [la sua pagina](canvas-check.md).
 > **Fonti autorevoli:** `crates/fub-canvas-core/src/describe.rs` (le letture),
 > `crates/fub-canvas-core/src/layout.rs` e `layout/arrange.rs` (misure e posti),
-> `crates/fub-canvas-core/src/ops.rs` e `ops/` (le operazioni),
-> `crates/fub-canvas-core/src/spec.rs` (lo schema e la forma), i loro test in
-> `crates/fub-canvas-core/tests/describe.rs`, `layout_vectors.rs`,
-> `op_vectors.rs` e `spec.rs`, e i vettori in
+> `crates/fub-canvas-core/src/ops.rs` e `ops/` (le operazioni), i loro test in
+> `crates/fub-canvas-core/tests/describe.rs`, `layout_vectors.rs` e
+> `op_vectors.rs`, e i vettori in
 > `apps/client/src/__fixtures__/canvas-layout.json`, `canvas-ops/` e
 > `canvas-read/`.
 
@@ -428,6 +428,45 @@ pixel (un albero con misure dispari) si arrotonda, la metà sale.
 { "op": "layout", "ids": ["f1", "f2", "f3", "f4", "f5", "f6"], "kind": "grid" }
 ```
 
+### `insert`
+
+Incolla un frammento copiato, come «Incolla» della GUI. `fragment` è la forma degli
+appunti della lavagna (`application/x-fub-canvas+json`): `{"version": 1, "nodes":
+[…], "edges": […]}`, con le schede nell'ordine del file e ogni scheda e arco col suo
+`id`. Ogni scheda e ogni arco prende un id nuovo dal seme, prima le schede poi gli
+archi, nell'ordine del frammento, e gli archi seguono le schede; il resto (campi
+sconosciuti compresi) resta com'era. Le schede entrano in cima all'ordine.
+
+Il frammento si sposta come un blocco: l'angolo in alto a sinistra del suo riquadro
+va in `x`, `y` (insieme, senza aggancio, come nella GUI); se no accanto a `near`, sul
+lato `side` (di serie `right`), con le regole di `add_card` (le distanze di serie, lo
+scivolamento oltre una scheda che occupa il posto) e la misura del riquadro; se no nel
+posto automatico di `add_card`. Dopo un `insert` senza posto, la lista automatica
+riparte: la prossima scheda automatica va accanto a tutto, frammento compreso. Un
+frammento senza schede né archi non dà toppe; ne porta al più 10 000 (`TooMany`
+oltre).
+
+Un arco con un estremo fuori dal frammento, una versione che non è 1, un id ripetuto
+nel frammento, un campo della radice che non è `version`, `nodes` o `edges` (i tratti
+liberi, `fub:ink`, non entrano: la GUI li incolla con le operazioni dell'inchiostro),
+un posto dato due volte o `side` senza `near` sono `Invalid`.
+
+```json
+{ "op": "insert", "fragment": { "version": 1, "nodes": [{ "id": "a", "type": "text", "text": "Domanda", "x": 0, "y": 0, "width": 320, "height": 160 }], "edges": [] }, "near": "t1", "side": "bottom" }
+```
+
+### `convert`
+
+Trasforma la scheda di testo `id` nella scheda del file `file`, come «Trasforma in
+nota» della GUI: la scheda tiene id, posto nell'ordine, posizione, misure, colore e
+campi sconosciuti, quindi gli archi restano; il testo esce dalla scheda. Il file lo
+scrive prima un'altra porta (`fub_create`, `note.create` della GUI): `convert` non
+scrive file. Una scheda che non è un testo, o un `file` vuoto, è `Invalid`.
+
+```json
+{ "op": "convert", "id": "t2", "file": "Idee/Evaporazione.md" }
+```
+
 ### Gli id nuovi
 
 Un id nuovo viene dal seme del chiamante (`seed`, un intero a 64 bit senza
@@ -455,11 +494,11 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 
 | Errore | Quando |
 |---|---|
-| `UnknownNode` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group` o `layout` di un id che non è una scheda; un arco verso una scheda che non c'è |
+| `UnknownNode` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout` o `convert` di un id che non è una scheda; il `near` di `insert`; un arco verso una scheda che non c'è |
 | `UnknownEdge` | `remove`, `set` o `color` di un id che non è né una scheda né un arco; `reverse` di un id che non è un arco |
 | `DuplicateId` | un id dato che è già preso (anche in `as`); un id ripetuto nella lista di `move`, `remove`, `reorder`, `color`, `align`, `distribute`, `duplicate` o `layout` |
-| `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie o il gruppo; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
-| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo |
+| `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie, il gruppo o il frammento; un `insert` porta più di 10 000 schede; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
+| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file
 (`before`, `seed`, `ops`, `expect`); `tests/op_vectors.rs` li fa girare e
@@ -467,72 +506,10 @@ controlla che l'inversa delle toppe ridia `before`.
 
 ## Lo schema
 
-Lo schema sta nel nucleo, in `crates/fub-canvas-core/src/spec.rs`: `OPS` ha una
-voce per operazione (nome, riepilogo, campi con tipo e obbligatorietà, esempi),
-e coincide con serde campo per campo (`tests/spec.rs`). Un'operazione nuova
-entra in `OPS` nello stesso task.
-
-I tipi dei campi sono `id`, `ids` (una lista di id), `number` (un intero: anche
-`1.0` e `1e2` lo sono, `1.5` no), `text`, `bool`, `enum` (una stringa presa da
-un elenco), `node` (una scheda), `edge` (un arco), `color` (un nome, `"1"`…`"6"`
-o `#rrggbb`, o `null`), `sides` (`"auto"` o `{from, to}`), `pair` (due numeri,
-`[w, h]`), `object`, `patch` (i campi nuovi di `set`, col suo `color`), `points`
-(una lista di liste di numeri) e `any`. Un campo facoltativo `null` vale come
-assente, per la forma e per serde.
-
-**Lo schema JSON.** `json_schema()` dà lo schema JSON 2020-12 della lista: una
-lista non vuota, e un `oneOf` con un ramo per operazione. Ogni ramo ha `op`
-costante, `additionalProperties: false`, i campi obbligatori e gli esempi.
-
-**I problemi di forma.** `validate` dà i problemi di una lista prima della
-lettura, con `{code, index, path, message, suggestion?, fix?}`. Il controllo
-([Il controllo della lavagna](canvas-check.md)) li riusa:
-
-| Campo | Vuol dire |
-|---|---|
-| `code` | il codice, nella tabella sotto |
-| `index` | la posizione dell'operazione nella lista, da zero; `null` se il problema riguarda la lista intera |
-| `path` | dove sta, come puntatore JSON (RFC 6901): `/2/dx` |
-| `message` | una frase fissa in inglese, come gli errori di `OpError`; le frasi per le persone le fa il catalogo di `fub-features` |
-| `suggestion` | il nome o i nomi più vicini, a distanza di Levenshtein al più 2 |
-| `fix` | l'operazione intera con la correzione; c'è solo quando la correzione è una sola e il posto è libero |
-
-| Codice | Quando | `message` |
-|---|---|---|
-| `invalid` | la lista è vuota. Serde la legge: è la sola differenza, voluta | `the list has no operations` |
-| `unknown_op` | manca `op`, o il suo valore non è il nome di un'operazione | `no operation has this name` |
-| `unknown_field` | un campo che l'operazione non ha | `the operation has no such field` |
-| `missing_field` | un campo obbligatorio che manca | `a required field is missing` |
-| `wrong_type` | un tipo JSON sbagliato. Vale anche per la lista che non è una lista, e per un'operazione che non è un oggetto | `the value has the wrong JSON type` |
-| `bad_value` | un valore fuori dall'elenco ammesso | `the value is not one of the allowed values` |
-
-Le regole:
-
-- Un'operazione con il nome sbagliato non ha i suoi campi controllati: non si
-  sa quali sono.
-- I nomi vicini si cercano ignorando le maiuscole ASCII: `Add-Card` è vicino a
-  `add_card`. Serde resta sensibile alle maiuscole, quindi il nome sbagliato non
-  si legge, e il `fix` lo corregge.
-- Il `fix` c'è solo se il vicino è uno, e se il campo corretto non è già
-  nell'operazione: con `dx` già scritto, `dX` ha il suggerimento ma non il `fix`.
-- Una stringa al posto di una lista di id ha il `fix` con la lista: `"ids": "t1"`
-  diventa `"ids": ["t1"]`.
-- Il `fix` corregge solo ciò che si sa correggere. Con `{"op": "add-card"}` il
-  `fix` è `{"op": "add_card"}`: una scheda senza `node` né forma breve non si
-  scrive, e la compilazione lo dice con `invalid` su `/0`.
-- `validate` è lineare: 100 000 operazioni si controllano, senza tetto al loro
-  numero; i tetti sono quelli di [`OpError`](#gli-errori-delle-operazioni).
-
-Un esempio, con la lista `[{"op": "add-card"}]`:
-
-```json
-[{"code": "unknown_op", "index": 0, "path": "/0/op", "message": "no operation has this name", "suggestion": "add_card", "fix": {"op": "add_card"}}]
-```
-
-I test di `tests/spec.rs` controllano che `OPS` abbia una voce per variante, che
-ogni esempio si legga e compili sulla lavagna d'esempio di `spec.rs`, che
-`validate` non trovi problemi se e solo se serde legge la lista, sui vettori di
-`canvas-ops/` e sul corpus `canvas-tasks/` quando c'è.
+Lo schema delle operazioni (`spec.rs`: i campi e i loro tipi, lo schema JSON della
+lista, i problemi di forma di `validate`) sta in
+[Lo schema delle operazioni](canvas-schema.md). Un'operazione nuova entra in `OPS`
+nello stesso task.
 
 ## Il controllo
 

@@ -9,8 +9,9 @@
 > `apps/client/src/__fixtures__/canvas-ops/`.
 
 Questa pagina dice che cosa si legge di una lista prima di scriverla. Le
-operazioni, la loro forma e il loro schema stanno in
-[La lavagna come codice](canvas-code.md); le toppe e il loro annulla in
+operazioni e la loro forma stanno in
+[La lavagna come codice](canvas-code.md), il loro schema in
+[Lo schema delle operazioni](canvas-schema.md); le toppe e il loro annulla in
 [le operazioni sulla lavagna](canvas-operations.md).
 
 `check` dice che cosa cambierebbe una lista di operazioni prima di scriverla,
@@ -31,18 +32,19 @@ sei campi:
 Con `ok: false` non c'è né riassunto né lettura: le operazioni valgono tutte o
 nessuna.
 
-**I codici della compilazione.** Si aggiungono a quelli di «Lo schema». Il
+**I codici della compilazione.** Si aggiungono a quelli dello
+[schema](canvas-schema.md#i-problemi-di-forma). Il
 `path` è il puntatore JSON all'id che non va, quando c'è.
 
 | Codice | Quando | `suggestion` |
 |---|---|---|
-| `unknown_node` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout`, o un estremo di `connect`, con un id che non è una scheda | le schede col nome vicino |
+| `unknown_node` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout`, `convert`, il `near` di `insert` o un estremo di `connect`, con un id che non è una scheda | le schede col nome vicino |
 | `unknown_edge` | `remove`, `set` o `color` con un id che non è né una scheda né un arco; `reverse` con un id che non è un arco | le schede e gli archi col nome vicino |
 | `duplicate_id` | un id dato che c'è già, o ripetuto nella stessa operazione | — |
-| `too_many`, `too_many_moved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi; `too_many_moved` è un `move` con `contents` che tocca più di 1 000 schede | — |
+| `too_many`, `too_many_moved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, o un `insert` porta più di 10 000 schede; `too_many_moved` è un `move` con `contents` che tocca più di 1 000 schede | — |
 | `invalid` | una scheda o un arco che il formato non accetta, col motivo in `message`; un'operazione che la forma accetta e serde no, con la frase fissa `the operation does not match its schema` | — |
 
-I nomi vicini sono quelli di «Lo schema»: distanza al più 2, maiuscole ASCII
+I nomi vicini sono quelli dello schema: distanza al più 2, maiuscole ASCII
 ignorate (`T1` ha il vicino `t1`). Sono al più tre, alla distanza minima, nell'ordine
 della lavagna. Gli errori della compilazione non hanno mai il `fix`: un id vicino
 non è mai la correzione sicura.

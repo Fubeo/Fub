@@ -1,0 +1,67 @@
+{
+  "about": "insert accanto a lez senza side: a destra, a 48, alla y di lez.",
+  "before": {
+    "nodes": [
+      {
+        "id": "lez",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Lezione"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "insert",
+      "fragment": {
+        "version": 1,
+        "nodes": [
+          {
+            "id": "d",
+            "type": "text",
+            "x": 500,
+            "y": 500,
+            "width": 200,
+            "height": 100,
+            "text": "Domanda"
+          }
+        ],
+        "edges": []
+      },
+      "near": "lez"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "lez",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Lezione"
+        },
+        {
+          "id": "e220a8397b1dcdaf",
+          "type": "text",
+          "x": 368,
+          "y": 0,
+          "width": 200,
+          "height": 100,
+          "text": "Domanda"
+        }
+      ],
+      "edges": []
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

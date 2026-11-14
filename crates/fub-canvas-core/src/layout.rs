@@ -283,12 +283,32 @@ pub fn place_near(
     let node = canvas.nodes.iter().find(|node| node.id.as_str() == near)?;
     let anchor = Rect::of_node(node);
     let above_or_below = matches!(side, CanvasEdgeSide::Top | CanvasEdgeSide::Bottom);
-    let gap = gap.unwrap_or(if above_or_below { STACK_GAP } else { SIDE_GAP });
     let (mut width, mut height) = born_size(kind, text, content);
     if above_or_below && kind == CardKind::Text {
         width = anchor.width;
         height = estimate_text_height(text.unwrap_or(""), width);
     }
+    place_sized_near(canvas, near, side, gap, (width, height))
+}
+
+/// Il rettangolo di misura `size` messo accanto alla scheda `near`, con le
+/// regole di [`place_near`] (il lato, la distanza di serie, lo scivolamento) ma
+/// con la misura data: è il posto di un blocco di schede (`insert`), che non ha
+/// una misura di nascita.
+///
+/// Dà `None` se `near` non c'è nella lavagna: lo dice il chiamante.
+pub(crate) fn place_sized_near(
+    canvas: &Canvas,
+    near: &str,
+    side: CanvasEdgeSide,
+    gap: Option<f64>,
+    size: (f64, f64),
+) -> Option<Rect> {
+    let node = canvas.nodes.iter().find(|node| node.id.as_str() == near)?;
+    let anchor = Rect::of_node(node);
+    let above_or_below = matches!(side, CanvasEdgeSide::Top | CanvasEdgeSide::Bottom);
+    let gap = gap.unwrap_or(if above_or_below { STACK_GAP } else { SIDE_GAP });
+    let (width, height) = size;
     let (x, y) = match side {
         CanvasEdgeSide::Right => (anchor.right() + gap, anchor.y),
         CanvasEdgeSide::Left => (anchor.x - gap - width, anchor.y),

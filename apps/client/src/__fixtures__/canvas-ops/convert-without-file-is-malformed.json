@@ -1,0 +1,26 @@
+{
+  "about": "convert senza file: non si legge.",
+  "before": {
+    "nodes": [
+      {
+        "id": "lez",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Lezione"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "convert",
+      "id": "lez"
+    }
+  ],
+  "expect": {
+    "outcome": "malformed"
+  }
+}

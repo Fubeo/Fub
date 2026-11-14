@@ -1,0 +1,50 @@
+{
+  "about": "Un arco del frammento verso una scheda che non è nel frammento (anche se è nella lavagna): Invalid, e il motivo nomina l'arco.",
+  "before": {
+    "nodes": [
+      {
+        "id": "lez",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Lezione"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "insert",
+      "fragment": {
+        "version": 1,
+        "nodes": [
+          {
+            "id": "d",
+            "type": "text",
+            "x": 0,
+            "y": 0,
+            "width": 320,
+            "height": 160,
+            "text": "Domanda"
+          }
+        ],
+        "edges": [
+          {
+            "id": "fuori",
+            "fromNode": "d",
+            "toNode": "lez"
+          }
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

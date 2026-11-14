@@ -1,0 +1,87 @@
+{
+  "about": "insert di un gruppo e di una scheda dentro: le schede entrano in cima nell'ordine del frammento (il gruppo sotto, la scheda sopra), spostate dello stesso tanto.",
+  "before": {
+    "nodes": [
+      {
+        "id": "lez",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Lezione"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "insert",
+      "fragment": {
+        "version": 1,
+        "nodes": [
+          {
+            "id": "g",
+            "type": "group",
+            "x": -24,
+            "y": -24,
+            "width": 368,
+            "height": 208,
+            "label": "Capitolo"
+          },
+          {
+            "id": "c",
+            "type": "text",
+            "x": 0,
+            "y": 0,
+            "width": 320,
+            "height": 160,
+            "text": "Dentro"
+          }
+        ],
+        "edges": []
+      },
+      "x": 0,
+      "y": 400
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "lez",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Lezione"
+        },
+        {
+          "id": "e220a8397b1dcdaf",
+          "type": "group",
+          "x": 0,
+          "y": 400,
+          "width": 368,
+          "height": 208,
+          "label": "Capitolo"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "type": "text",
+          "x": 24,
+          "y": 424,
+          "width": 320,
+          "height": 160,
+          "text": "Dentro"
+        }
+      ],
+      "edges": []
+    },
+    "created": [
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4"
+    ]
+  }
+}

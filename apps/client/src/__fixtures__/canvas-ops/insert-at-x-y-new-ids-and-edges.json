@@ -1,0 +1,108 @@
+{
+  "about": "insert in x, y: l'angolo del riquadro del frammento (10, 20) va in 1400, 0, senza aggancio; le schede (anche quella che nel frammento si chiama come una della lavagna) e l'arco prendono gli id del seme 0, prima le schede nell'ordine del frammento, poi l'arco, che segue le schede. Il campo sconosciuto della scheda resta.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Già qui"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "insert",
+      "fragment": {
+        "version": 1,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "text",
+            "x": 10,
+            "y": 20,
+            "width": 320,
+            "height": 160,
+            "text": "Domanda",
+            "fub:nota": "resta"
+          },
+          {
+            "id": "t2",
+            "type": "text",
+            "x": 410,
+            "y": 23,
+            "width": 320,
+            "height": 160,
+            "text": "Risposta",
+            "color": "4"
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "fromNode": "t1",
+            "toNode": "t2",
+            "toEnd": "arrow",
+            "label": "porta a"
+          }
+        ]
+      },
+      "x": 1400,
+      "y": 0
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "t1",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Già qui"
+        },
+        {
+          "id": "e220a8397b1dcdaf",
+          "type": "text",
+          "x": 1400,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Domanda",
+          "fub:nota": "resta"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "type": "text",
+          "x": 1800,
+          "y": 3,
+          "width": 320,
+          "height": 160,
+          "text": "Risposta",
+          "color": "4"
+        }
+      ],
+      "edges": [
+        {
+          "id": "06c45d188009454f",
+          "fromNode": "e220a8397b1dcdaf",
+          "toNode": "6e789e6aa1b965f4",
+          "toEnd": "arrow",
+          "label": "porta a"
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4",
+      "06c45d188009454f"
+    ]
+  }
+}

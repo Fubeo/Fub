@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "N6",
-  "max_missing": 8,
+  "max_missing": 6,
   "entries": [
     {
       "id": "N6.card.drop_vault",
@@ -112,45 +112,8 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T68" }],
       "writes": "file",
-      "state": "by_hand",
+      "state": "code",
       "ops": [
-        {
-          "op": "add_card",
-          "node": {
-            "id": "c1",
-            "type": "text",
-            "text": "Perché la media è bassa?",
-            "x": 1400,
-            "y": 0,
-            "width": 320,
-            "height": 160
-          }
-        },
-        {
-          "op": "add_card",
-          "node": {
-            "id": "c2",
-            "type": "text",
-            "text": "Ripasso",
-            "x": 1800,
-            "y": 0,
-            "width": 320,
-            "height": 160
-          }
-        },
-        {
-          "op": "connect",
-          "edge": {
-            "fromNode": "c1",
-            "fromSide": "right",
-            "toNode": "c2",
-            "toSide": "left",
-            "toEnd": "arrow"
-          }
-        }
-      ],
-      "computes": "gli id nuovi, gli archi rimappati, lo spostamento",
-      "target_ops": [
         {
           "op": "insert",
           "fragment": {
@@ -181,7 +144,7 @@
           "y": 0
         }
       ],
-      "task": "T13"
+      "note": "Il nucleo dà gli id nuovi, riattacca gli archi e sposta il blocco (`insert`, T13); i tratti liberi degli appunti (`fub:ink` della radice) non entrano in `insert`: la GUI li incolla con le operazioni dell'inchiostro."
     },
     {
       "id": "N6.convert.extract",
@@ -189,11 +152,9 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T70" }],
       "writes": "file",
-      "state": "missing",
-      "computes": "`set` non cambia il tipo",
-      "target_ops": [{ "op": "convert", "id": "t2", "file": "Corsi/Ripasso.md" }],
-      "port": "note.create, poi l'operazione",
-      "task": "T13"
+      "state": "composed",
+      "ops": [{ "op": "convert", "id": "t2", "file": "Corsi/Ripasso.md" }],
+      "port": "note.create (o fub_create) scrive la nota col testo, poi l'operazione"
     },
     {
       "id": "N6.convert.copy_here",

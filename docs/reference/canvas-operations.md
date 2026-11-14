@@ -305,8 +305,8 @@ Con una lista che non si scrive, `ok` è `false`, `summary` e `outline_after` so
 `null`, e ogni problema ha il suo codice, la posizione (`index`, da zero),
 `path` e `text`, per esempio `{"code": "unknown_op", "index": 0, "path":
 "/0/op", "message": "no operation has this name", "text": {"key":
-"canvas.check.p_unknown_op"}}`. I codici sono quelli di «Il controllo» e di
-«Lo schema».
+"canvas.check.p_unknown_op"}}`. I codici sono quelli del [controllo](canvas-check.md) e
+dello [schema](canvas-schema.md).
 
 `canvas.guide` («Guida alla lavagna», «Whiteboard guide») dà la guida per scrivere
 una lavagna con le operazioni, e non legge nessun documento. Il payload ha
@@ -322,7 +322,7 @@ una lavagna con le operazioni, e non legge nessun documento. Il payload ha
 Il parametro `topic` (il nome di un'operazione) limita `ops`, il ramo di
 `schema` e `examples` a quella sola operazione. Un `topic` vuoto è come non
 averlo. Un `topic` che non è un'operazione è `BadArgs`, e la frase dà i nomi
-vicini, con la distanza di «Lo schema»; senza vicini dà tutti i nomi. Per
+vicini, con la distanza dello [schema](canvas-schema.md); senza vicini dà tutti i nomi. Per
 esempio `canvas.guide` con `topic` `move` dà `ops` con una sola voce, `name`
 `move`, uno schema con un solo ramo e solo gli esempi di `move`.
 
