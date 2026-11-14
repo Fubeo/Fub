@@ -1240,7 +1240,7 @@ Fatto quando: `tasks_e2e.rs` con `MemoryHost` coi fusi prova i quattro
 gruppi e la spunta; le build con e senza la feature passano.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features tasks;
 cargo build -p fub-features --no-default-features
-Stato: [ ] da fare
+Stato: [x] fatto · EC T19a in main (#349, 240b6fdbd) · la feature `tasks` accesa di serie come dice il piano; nella CI completa due correzioni: il test di sola lettura con `set_readonly` (valeva solo su Unix) e il banco dei compiti dichiarato fra i chiamanti di `plugin_data_dir`; le baseline dei Componenti rifatte dal runner (la riga «Compiti»). La WebView è caduta due volte su C1 («Failed to initialize GTK») ed è verde al rilancio; in locale la stessa serie passa: testo della issue in ~/.cache/fub-prealpha/issue-webview-gtk-c1.md. Da fare: unificare la regola della scadenza `📅` (`tasks.rs` `due_of` e `search/engine.rs` `item_due`) in `fub-abi/rules`
 
 ## T19 · La vista Compiti e il recinto ```tasks
 
