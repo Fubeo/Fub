@@ -49,17 +49,71 @@
   color: var(--accent);
   font-weight: var(--weight-bold);
 }
-.cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-selected {
-  background: var(--accent-veil);
+/* Il puntatore sulle celle resta la freccia: la tabella non è un foglio di
+   calcolo che chiede una croce. */
+.cm-editor .cm-content .tb-grid .tb-cell {
+  cursor: default;
 }
-/* La testata scelta tiene il suo fondo sotto il velo, o sparirebbe la riga
-   d'intestazione proprio mentre la si seleziona. */
+/* La selezione, la cella attiva e il taglio sono riquadri sopra le celle
+   (`tb-sel`, `tb-act`, `tb-cut`), che scivolano al posto nuovo: le celle non
+   si colorano da sole. La testata scelta tiene il suo fondo sotto il velo. */
+.cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-selected {
+  background: transparent;
+}
 .cm-editor .cm-content .tb-grid:focus-within .tb-head.is-selected {
-  background: linear-gradient(var(--accent-veil), var(--accent-veil)), var(--sheet-2);
+  background: var(--sheet-2);
 }
 .cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-active {
-  border-radius: 2px;
+  box-shadow: none;
+}
+.cm-editor .cm-content .tb-grid .tb-sel,
+.cm-editor .cm-content .tb-grid .tb-act,
+.cm-editor .cm-content .tb-grid .tb-cut {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  border-radius: 3px;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+/* Più celle scelte, o più intervalli: il velo d'accento con un filo. Una
+   cella sola ha soltanto l'anello della cella attiva. */
+.cm-editor .cm-content .tb-grid .tb-sel.is-multi {
+  background: var(--accent-veil);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.cm-editor .cm-content .tb-grid .tb-act {
   box-shadow: inset 0 0 0 2px var(--accent);
+}
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-sel,
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-act {
+  visibility: hidden;
+}
+/* Il segno del taglio: le celle tagliate restano tratteggiate finché non si
+   incolla, anche quando la tabella perde il fuoco. */
+.cm-editor .cm-content .tb-grid .tb-cut {
+  border: 1.5px dashed var(--accent);
+  border-radius: 0;
+}
+/* Le maniglie del tocco agli angoli della selezione: si tirano per
+   allargarla. Soltanto dove il puntatore è un dito. */
+.cm-editor .cm-content .tb-grid .tb-handle {
+  display: none;
+}
+@media (hover: none) and (pointer: coarse) {
+  .cm-editor .cm-content .tb-grid .tb-handle:not([hidden]) {
+    position: absolute;
+    z-index: 3;
+    display: block;
+    left: 0;
+    top: 0;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border: 2px solid var(--doc-bg);
+    border-radius: 50%;
+    background: var(--accent);
+  }
 }
 .cm-editor .cm-content .tb-add {
   padding: var(--space-1) var(--space-4);
@@ -85,6 +139,9 @@
 /* La maniglia di riempimento all'angolo della selezione, e le celle che il
    riempimento raggiungerà mentre la si tira. */
 .cm-editor .cm-content .tb-grid .tb-fill {
+  z-index: 3;
+  left: 0;
+  top: 0;
   border-color: var(--doc-bg);
   border-radius: 1px;
   background: var(--accent);

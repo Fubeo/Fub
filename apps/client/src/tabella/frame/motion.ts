@@ -11,6 +11,9 @@
 
 import { animate, motionLevel, prepareExit, type Ghost } from "../../moto";
 
+/// La selezione e la cella attiva che scivolano al posto nuovo (ms).
+export const SELECT_MS = 120;
+export const SELECT_EASE = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 /// Oltre queste celle la tabella non si muove: il costo crescerebbe con lei.
 export const STILL_CELLS = 600;
 /// Righe e colonne che si fanno spazio, e quelle nuove che entrano (ms).

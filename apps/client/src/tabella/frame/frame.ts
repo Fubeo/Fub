@@ -39,7 +39,8 @@ import { editingIntent, sheetIntent, type TableFormat } from "../keys";
 import { dataEdge, isMultiCell, nextInRange, type Cell, type Move, type Range, type Shape } from "../navigation";
 import { fillCopy, fillRange, rangeBetween, wholeRange, withRange } from "../selection";
 import { fillSeries } from "../series";
-import { motionAllowed, offsetWithin, playChange, snapshotChange, type ChangeSnapshot } from "./motion";
+import { animate } from "../../moto";
+import { motionAllowed, offsetWithin, playChange, SELECT_EASE, SELECT_MS, snapshotChange, type ChangeSnapshot } from "./motion";
 
 /// Ciò che la cornice chiede a chi ospita la tabella.
 export interface TableFrameHost {
@@ -168,6 +169,8 @@ export class TableFrame {
     this.#handles = [overlay(`${C}-handle`), overlay(`${C}-handle`)];
     this.#handles[0].dataset.end = "start";
     this.#handles[1].dataset.end = "end";
+    // Il dito che tira una maniglia non scorre la pagina.
+    for (const handle of this.#handles) handle.style.touchAction = "none";
     this.element.append(this.#grid, this.#drawAdders());
     this.#life.listen(this.#grid, "keydown", (event) => this.#keydown(event));
     this.#life.listen(this.#grid, "mousedown", (event) => this.#mousedown(event));
@@ -494,23 +497,34 @@ export class TableFrame {
   }
 
   /// Posa un riquadro su `range` (o lo nasconde): la prima volta senza
-  /// scivolare, poi scivola dal posto di prima.
+  /// scivolare, poi scivola dal posto di prima in `SELECT_MS`. Il posto è
+  /// dell'impaginazione (`left`, `top`, `width`, `height`); il moto è soltanto
+  /// `transform`, con `moto`, perché nella pagina le transizioni del CSS
+  /// sono spente (`skin/motion.css`).
   #place(element: HTMLElement, range: Range | null): void {
     const box = range ? this.#box(range) : null;
     if (!box) {
       element.hidden = true;
       return;
     }
-    const first = element.hidden;
-    if (first) element.style.transition = "none";
-    element.style.transform = `translate(${box.left}px, ${box.top}px)`;
+    const was = element.hidden ? null : {
+      left: element.offsetLeft,
+      top: element.offsetTop,
+      width: element.offsetWidth,
+      height: element.offsetHeight,
+    };
+    element.style.left = `${box.left}px`;
+    element.style.top = `${box.top}px`;
     element.style.width = `${box.width}px`;
     element.style.height = `${box.height}px`;
     element.hidden = false;
-    if (first) {
-      void element.offsetWidth;
-      element.style.transition = "";
-    }
+    if (!was || !this.#moves() || box.width <= 0 || box.height <= 0) return;
+    const x = was.left - box.left;
+    const y = was.top - box.top;
+    const scaleX = was.width / box.width;
+    const scaleY = was.height / box.height;
+    if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5 && Math.abs(scaleX - 1) < 0.01 && Math.abs(scaleY - 1) < 0.01) return;
+    animate(element, { from: { x, y, scaleX, scaleY }, duration: SELECT_MS, easing: SELECT_EASE });
   }
 
   /// I riquadri della selezione, della cella attiva e del taglio, la
@@ -530,6 +544,8 @@ export class TableFrame {
       this.#otherBoxes.push(box);
     }
     while (this.#otherBoxes.length > this.#others.length) this.#otherBoxes.pop()!.remove();
+    // Ridisegnare la tabella toglie i riquadri dalla griglia: tornano qui.
+    for (const box of this.#otherBoxes) if (box.parentNode !== this.#grid) this.#grid.insertBefore(box, this.#selectionBox);
     this.#otherBoxes.forEach((box, index) => this.#place(box, this.#others[index]!));
     const writable = this.hasFocus() && this.#editing === null && !this.#host.readOnly();
     const corner = this.#box({ r0: range.r1, c0: range.c1, r1: range.r1, c1: range.c1 });
