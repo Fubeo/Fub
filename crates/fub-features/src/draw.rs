@@ -405,6 +405,8 @@ use embed::{
 };
 use export::{check_target, not_utf8, unreadable, Drawing, File, Format, Outcome, Page};
 pub use export::{DrawioExport, ExcalidrawExport, JpegExport, PdfExport, PngExport, SvgExport};
+/// Il PNG di un SVG che un altro comando ha scritto: l'anteprima della lavagna.
+pub(crate) use write::svg_png;
 use write::{write_pdf, write_raster, write_svg};
 
 #[cfg(test)]

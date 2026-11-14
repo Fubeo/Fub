@@ -1,14 +1,15 @@
 // Senza la cargo feature `lavagna` il modulo non è compilato, e un test che lo
 // nomina non avrebbe un soggetto.
 #![cfg(feature = "lavagna")]
-//! **`canvas.apply`, `canvas.create`, `canvas.read`, `canvas.check` e
-//! `canvas.guide` end-to-end**, attraverso il kernel vero e il formato vero
-//! delle lavagne: le operazioni arrivano nel file come una modifica sola, il
-//! piano non scrive niente, e l'annulla riporta i byte di prima; una lavagna
-//! nuova prende il nome libero, è la lavagna vuota del nucleo, e l'annulla la
-//! manda nel cestino. Leggere e controllare non scrivono mai: il controllo dà
-//! un problema per codice, la lettura le tre forme, e la guida il testo, i
-//! nomi, lo schema e gli esempi.
+//! **`canvas.apply`, `canvas.create`, `canvas.read`, `canvas.check`,
+//! `canvas.guide` e `canvas.preview` end-to-end**, attraverso il kernel vero e
+//! il formato vero delle lavagne: le operazioni arrivano nel file come una
+//! modifica sola, il piano non scrive niente, e l'annulla riporta i byte di
+//! prima; una lavagna nuova prende il nome libero, è la lavagna vuota del
+//! nucleo, e l'annulla la manda nel cestino. Leggere e controllare non scrivono
+//! mai: il controllo dà un problema per codice, la lettura le tre forme, la
+//! guida il testo, i nomi, lo schema e gli esempi, e l'anteprima il disegno
+//! (un PNG con `draw`, l'SVG senza) con l'elenco delle schede.
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandEffect, CommandOutcome, InvokeMode, UndoStep};
@@ -18,7 +19,9 @@ use fub_abi::model::DocId;
 use fub_abi::traits::CommandProvider;
 use fub_abi::PluginError;
 use fub_canvas_core::ops::{compile, CanvasOp};
-use fub_features::lavagna::{CANVAS_CHECK, CANVAS_CREATE, CANVAS_GUIDE, CANVAS_READ};
+use fub_features::lavagna::{
+    CANVAS_CHECK, CANVAS_CREATE, CANVAS_GUIDE, CANVAS_PREVIEW, CANVAS_READ,
+};
 use fub_features::{LavagnaCommands, CANVAS_APPLY, LAVAGNA_ID, LAVAGNA_NS};
 use fub_format_canvas::CanvasProvider;
 use fub_format_markdown::MarkdownProvider;
@@ -709,7 +712,7 @@ fn leggere_e_controllare_rifiutano_come_apply_un_documento_che_non_e_una_lavagna
     ws.write_document(&DocId::new("Nota.md"), "# Nota\n", WriteBase::Dictated)
         .expect("la nota si scrive");
     let args = json!({ "doc": "Nota.md", "ops": ops() });
-    for name in [CANVAS_READ, CANVAS_CHECK, CANVAS_APPLY] {
+    for name in [CANVAS_READ, CANVAS_CHECK, CANVAS_PREVIEW, CANVAS_APPLY] {
         let error = ws
             .invoke_command(name, args.clone(), InvokeMode::Apply, Actor::User)
             .expect_err("una nota non è una lavagna");
@@ -725,7 +728,7 @@ fn leggere_e_controllare_rifiutano_come_apply_un_documento_che_non_e_una_lavagna
 fn una_lavagna_che_non_si_apre_e_un_errore_di_argomenti_per_tutti_e_tre() {
     let (_vault, mut ws) = with_board("{\"nodes\": [");
     let args = json!({ "doc": BOARD, "ops": ops() });
-    for name in [CANVAS_READ, CANVAS_CHECK, CANVAS_APPLY] {
+    for name in [CANVAS_READ, CANVAS_CHECK, CANVAS_PREVIEW, CANVAS_APPLY] {
         let error = ws
             .invoke_command(name, args.clone(), InvokeMode::Apply, Actor::User)
             .expect_err("non si apre");
@@ -966,9 +969,9 @@ fn una_lista_che_non_si_legge_non_cambia_il_file() {
 }
 
 #[test]
-fn i_tre_comandi_che_leggono_non_scrivono() {
+fn i_comandi_che_leggono_non_scrivono() {
     let specs = LavagnaCommands.commands();
-    for id in [CANVAS_READ, CANVAS_CHECK, CANVAS_GUIDE] {
+    for id in [CANVAS_READ, CANVAS_CHECK, CANVAS_GUIDE, CANVAS_PREVIEW] {
         let spec = specs
             .iter()
             .find(|spec| spec.id == id)
@@ -1047,5 +1050,234 @@ fn un_topic_sconosciuto_e_un_errore_di_argomenti() {
             matches!(error, PluginError::BadArgs(_)),
             "{topic}: {error:?}"
         );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// canvas.preview
+// ---------------------------------------------------------------------------
+
+fn preview_cmd(ws: &mut Workspace, args: Value) -> Result<CommandOutcome, PluginError> {
+    ws.invoke_command(CANVAS_PREVIEW, args, InvokeMode::Apply, Actor::User)
+}
+
+/// Il tipo dell'immagine che la build dà: un PNG con `draw`, altrimenti l'SVG.
+fn image_media() -> &'static str {
+    if cfg!(feature = "draw") {
+        "image/png"
+    } else {
+        "image/svg+xml"
+    }
+}
+
+/// Il lato lungo di un'immagine, dalla sua misura nel payload.
+fn long_side(image: &Value) -> Option<u64> {
+    image["width"]
+        .as_u64()
+        .zip(image["height"].as_u64())
+        .map(|(w, h)| w.max(h))
+}
+
+#[test]
+fn il_disegno_non_scrive_e_dice_la_forma() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let before = source(&ws, BOARD);
+    let outcome = preview_cmd(&mut ws, json!({ "doc": BOARD })).expect("si disegna");
+
+    let payload = custom(&outcome);
+    assert_eq!(payload["kind"], "preview");
+    assert_eq!(payload["version"], 1);
+    assert_eq!(payload["image"]["media_type"], image_media());
+    assert_eq!(
+        long_side(&payload["image"]),
+        Some(1024),
+        "il lato lungo di serie"
+    );
+
+    // Le tre schede di READ_BOARD, col numero che la lettura dà loro.
+    let outline = payload["outline"].as_array().expect("l'elenco");
+    let ids: Vec<&str> = outline
+        .iter()
+        .map(|card| card["id"].as_str().expect("un id"))
+        .collect();
+    assert_eq!(ids, ["a", "b", "g"]);
+    assert_eq!(outline[2]["kind"], "group");
+    assert_eq!(payload["outline_omitted"], 0);
+    assert_eq!(source(&ws, BOARD), before, "il file non cambia");
+}
+
+#[test]
+fn con_le_operazioni_disegna_la_lavagna_di_dopo_senza_scriverla() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    let before = source(&ws, BOARD);
+    let read = read_cmd(&mut ws, json!({ "doc": BOARD }), InvokeMode::Apply).expect("si legge");
+    let revision = custom(&read)["revision"].clone();
+
+    let outcome = preview_cmd(&mut ws, json!({ "doc": BOARD, "ops": ops() })).expect("si disegna");
+    let payload = custom(&outcome);
+    let ids: Vec<&str> = payload["outline"]
+        .as_array()
+        .expect("l'elenco")
+        .iter()
+        .map(|card| card["id"].as_str().expect("un id"))
+        .collect();
+    assert_eq!(
+        ids,
+        ["a", "b"],
+        "la scheda nuova c'è, nella lavagna di dopo"
+    );
+    assert_eq!(payload["revision"], revision, "la revisione non cambia");
+    assert_eq!(source(&ws, BOARD), before, "il file non cambia");
+}
+
+#[test]
+fn una_lista_che_non_si_disegna_e_un_argomento_sbagliato() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    let unknown = json!([{ "op": "move", "ids": ["manca"], "dx": 1, "dy": 0 }]).to_string();
+    for ops in [unknown, "non json".to_owned(), "[]".to_owned()] {
+        let error = preview_cmd(&mut ws, json!({ "doc": BOARD, "ops": ops }))
+            .expect_err("la lista non si disegna");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{ops}: {error:?}");
+    }
+}
+
+#[test]
+fn una_base_vecchia_e_un_conflitto_come_in_apply() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let error = preview_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "base": "revisione-vecchia" }),
+    )
+    .expect_err("la lavagna è cambiata");
+    assert!(matches!(error, PluginError::Conflict(_)), "{error:?}");
+}
+
+#[test]
+fn la_misura_si_stringe_e_un_numero_che_non_e_intero_e_un_errore() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let big = preview_cmd(&mut ws, json!({ "doc": BOARD, "size": 10_000 })).expect("si stringe");
+    assert_eq!(long_side(&custom(&big)["image"]), Some(2048));
+
+    let small = preview_cmd(&mut ws, json!({ "doc": BOARD, "size": 0 })).expect("si stringe");
+    assert_eq!(long_side(&custom(&small)["image"]), Some(64));
+
+    for bad in [json!(1.5), json!(-3)] {
+        let error = preview_cmd(&mut ws, json!({ "doc": BOARD, "size": bad.clone() }))
+            .expect_err("un lato non è un intero da zero in su");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{bad}: {error:?}");
+    }
+}
+
+#[test]
+fn una_lavagna_vuota_si_disegna_come_un_quadrato_di_64() {
+    let (_vault, mut ws) = with_board(EMPTY_BOARD);
+    let outcome = preview_cmd(&mut ws, json!({ "doc": BOARD })).expect("si disegna");
+    let image = &custom(&outcome)["image"];
+    assert_eq!(
+        (image["width"].as_u64(), image["height"].as_u64()),
+        (Some(64), Some(64))
+    );
+    assert_eq!(
+        custom(&outcome)["outline"].as_array().map(Vec::len),
+        Some(0)
+    );
+}
+
+#[cfg(not(feature = "draw"))]
+#[test]
+fn senza_draw_l_immagine_e_l_svg_come_testo() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let outcome = preview_cmd(&mut ws, json!({ "doc": BOARD })).expect("si disegna");
+    let data = custom(&outcome)["image"]["data"]
+        .as_str()
+        .expect("il testo dell'SVG");
+    assert!(data.starts_with("<svg "), "{}", &data[..data.len().min(80)]);
+    assert!(
+        data.contains("<![CDATA[Ciao]]></text>"),
+        "il testo della scheda c'è nell'SVG"
+    );
+}
+
+#[cfg(feature = "draw")]
+mod con_draw {
+    use super::*;
+    use base64::Engine as _;
+
+    const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+
+    /// Il PNG di un disegno in base64: la sua misura e i suoi pixel in RGBA.
+    fn decode(data: &str) -> (u32, u32, Vec<u8>) {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .expect("il PNG è in base64");
+        let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
+            .read_info()
+            .expect("un PNG si legge");
+        let mut buffer = vec![0; reader.output_buffer_size().expect("una misura")];
+        let info = reader.next_frame(&mut buffer).expect("i pixel");
+        buffer.truncate(info.buffer_size());
+        (info.width, info.height, buffer)
+    }
+
+    /// Il disegno, con i suoi pixel, e la misura dichiarata nel payload che coincide.
+    fn picture(ws: &mut Workspace, args: Value) -> (Value, Vec<u8>) {
+        let outcome = preview_cmd(ws, args).expect("si disegna");
+        let image = custom(&outcome)["image"].clone();
+        let (width, height, pixels) = decode(image["data"].as_str().expect("i dati"));
+        assert_eq!(image["media_type"], "image/png");
+        assert_eq!(
+            (image["width"].as_u64(), image["height"].as_u64()),
+            (Some(u64::from(width)), Some(u64::from(height)))
+        );
+        (image, pixels)
+    }
+
+    #[test]
+    fn il_png_ha_la_firma_e_due_chiamate_danno_gli_stessi_byte() {
+        let (_vault, mut ws) = with_board(READ_BOARD);
+        let raw = |ws: &mut Workspace| {
+            let outcome = preview_cmd(ws, json!({ "doc": BOARD })).expect("si disegna");
+            let data = custom(&outcome)["image"]["data"]
+                .as_str()
+                .expect("i dati")
+                .to_owned();
+            base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .expect("base64")
+        };
+        let first = raw(&mut ws);
+        let second = raw(&mut ws);
+        assert_eq!(first[..8], PNG_SIGNATURE, "la firma del PNG");
+        assert_eq!(first, second, "la stessa lavagna dà gli stessi byte");
+    }
+
+    #[test]
+    fn una_scheda_con_testo_ha_pixel_di_testo_non_solo_del_suo_colore() {
+        // Una scheda rossa di serie col testo scuro: il rosso c'è, e c'è anche
+        // l'inchiostro del testo, cioè pixel scuri che non sono né il rosso né il
+        // bianco del fondo.
+        let (_vault, mut ws) = with_board(
+            r#"{"nodes":[{"id":"a","type":"text","x":0,"y":0,"width":320,"height":160,"color":"1","text":"Ciao mondo, come va"}],"edges":[]}"#,
+        );
+        let (_image, pixels) = picture(&mut ws, json!({ "doc": BOARD }));
+        let red = [0xfb, 0xe1, 0xe1];
+        let ink = pixels
+            .chunks_exact(4)
+            .filter(|px| u32::from(px[0]) + u32::from(px[1]) + u32::from(px[2]) < 300)
+            .count();
+        let card = pixels.chunks_exact(4).filter(|px| px[..3] == red).count();
+        assert!(card > 1000, "la scheda rossa si vede: {card} pixel");
+        assert!(ink > 50, "il testo si vede: {ink} pixel scuri");
+    }
+
+    #[test]
+    fn un_carattere_che_i_font_non_hanno_resta_un_segno_e_non_un_errore() {
+        // Emoji, scrittura da destra a sinistra e un controllo: il disegno esce
+        // lo stesso, con i caratteri di Fub e senza un carattere di sistema.
+        let (_vault, mut ws) = with_board(
+            r#"{"nodes":[{"id":"a","type":"text","x":0,"y":0,"width":320,"height":160,"text":"emoji 👋 ebraico שלום \u0007 fine"}],"edges":[]}"#,
+        );
+        let (image, _pixels) = picture(&mut ws, json!({ "doc": BOARD }));
+        assert_eq!(image["media_type"], "image/png");
     }
 }

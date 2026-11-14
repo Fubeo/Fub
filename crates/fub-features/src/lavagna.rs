@@ -23,6 +23,7 @@ mod apply;
 mod check;
 mod create;
 mod guide;
+mod preview;
 mod read;
 
 use fub_abi::command::{
@@ -55,6 +56,10 @@ pub const CANVAS_CHECK: &str = "canvas.check";
 /// La guida per scrivere una lavagna: il testo, i nomi delle operazioni, lo
 /// schema e gli esempi. Non legge nessun documento.
 pub const CANVAS_GUIDE: &str = "canvas.guide";
+
+/// Disegna una lavagna, com'è o com'era dopo una lista di operazioni, senza
+/// scriverla: un PNG con `draw`, altrimenti l'SVG come testo.
+pub const CANVAS_PREVIEW: &str = "canvas.preview";
 
 /// Il namespace dell'effetto che dice che cosa ha fatto `canvas.apply`.
 pub const LAVAGNA_NS: &str = LAVAGNA_ID;
@@ -126,6 +131,12 @@ const E_READ_MAX_CHARS_FORM: &str = "canvas.read.e_max_chars_form";
 const E_READ_WRITE: &str = "canvas.read.e_write";
 const E_GUIDE_TOPIC: &str = "canvas.guide.e_topic";
 
+const SIZE: &str = "size";
+const E_PREVIEW_OPS: &str = "canvas.preview.e_ops";
+const E_PREVIEW_SIZE: &str = "canvas.preview.e_size";
+const E_PREVIEW_BASE: &str = "canvas.preview.e_base";
+const E_PREVIEW_PNG: &str = "canvas.preview.e_png";
+
 /// I comandi della lavagna.
 pub struct LavagnaCommands;
 
@@ -172,6 +183,14 @@ impl CommandProvider for LavagnaCommands {
                 .describing(Text::key(format!("{CANVAS_GUIDE}.desc")))
                 .with_param(parameter(CANVAS_GUIDE, TOPIC, ParamKind::Text))
                 .with_scope(CommandScope::read_only()),
+            CommandSpec::new(CANVAS_PREVIEW, Text::key(format!("{CANVAS_PREVIEW}.title")))
+                .describing(Text::key(format!("{CANVAS_PREVIEW}.desc")))
+                .with_param(parameter(CANVAS_PREVIEW, DOC, ParamKind::Document).required())
+                .with_param(parameter(CANVAS_PREVIEW, OPS, ParamKind::Text))
+                .with_param(parameter(CANVAS_PREVIEW, BASE, ParamKind::Text))
+                .with_param(parameter(CANVAS_PREVIEW, SEED, ParamKind::Text))
+                .with_param(parameter(CANVAS_PREVIEW, SIZE, ParamKind::Number))
+                .with_scope(CommandScope::read_only()),
         ]
     }
 
@@ -188,6 +207,7 @@ impl CommandProvider for LavagnaCommands {
             CANVAS_READ => read::canvas_read(Args::new(&args), host),
             CANVAS_CHECK => check::canvas_check(Args::new(&args), host),
             CANVAS_GUIDE => guide::canvas_guide(Args::new(&args)),
+            CANVAS_PREVIEW => preview::canvas_preview(Args::new(&args), host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
@@ -687,6 +707,70 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "Non c'è un'operazione «{topic}»: prova con {near}.",
         "There is no operation \"{topic}\": try {near}.",
     ),
+    (
+        "canvas.preview.title",
+        "Anteprima della lavagna",
+        "Whiteboard preview",
+    ),
+    (
+        "canvas.preview.desc",
+        "Disegna una lavagna come immagine, per vederne la forma: un PNG con draw, altrimenti l'SVG come testo. Con le operazioni disegna la lavagna di dopo, senza scriverla. Non scrive niente.",
+        "Draws a whiteboard as an image, to see its shape: a PNG with draw, otherwise the SVG as text. With operations it draws the whiteboard after them, without writing it. Writes nothing.",
+    ),
+    ("canvas.preview.doc.title", "Lavagna", "Whiteboard"),
+    (
+        "canvas.preview.doc.desc",
+        "Il file .canvas da disegnare.",
+        "The .canvas file to draw.",
+    ),
+    ("canvas.preview.ops.title", "Operazioni", "Operations"),
+    (
+        "canvas.preview.ops.desc",
+        "Una lista JSON di operazioni: si disegna la lavagna di dopo, senza scriverla. Assente = la lavagna com'è.",
+        "A JSON list of operations: draws the whiteboard after them, without writing it. Absent = the whiteboard as it is.",
+    ),
+    (
+        "canvas.preview.base.title",
+        "Revisione di partenza",
+        "Base revision",
+    ),
+    (
+        "canvas.preview.base.desc",
+        "La revisione che la lista ha letto: se la lavagna è cambiata, l'anteprima non si fa.",
+        "The revision the list read: if the whiteboard changed, the preview is not made.",
+    ),
+    ("canvas.preview.seed.title", "Seme", "Seed"),
+    (
+        "canvas.preview.seed.desc",
+        "Il seme degli id nuovi, come in canvas.apply. Assente = la revisione.",
+        "The seed of the new ids, as in canvas.apply. Absent = the revision.",
+    ),
+    ("canvas.preview.size.title", "Lato lungo", "Long side"),
+    (
+        "canvas.preview.size.desc",
+        "I pixel del lato lungo, da 64 a 2048. Assente = 1024.",
+        "The pixels of the long side, from 64 to 2048. Absent = 1024.",
+    ),
+    (
+        E_PREVIEW_OPS,
+        "La lista non si può disegnare: l'operazione {position} dà «{code}» ({reason}).",
+        "The list cannot be drawn: operation {position} gives \"{code}\" ({reason}).",
+    ),
+    (
+        E_PREVIEW_SIZE,
+        "size vuole un intero da zero in su.",
+        "size wants a whole number from zero up.",
+    ),
+    (
+        E_PREVIEW_BASE,
+        "La lavagna è cambiata dalla revisione indicata: l'anteprima non si fa, rileggila.",
+        "The whiteboard changed since the given revision: the preview is not made, read it again.",
+    ),
+    (
+        E_PREVIEW_PNG,
+        "Il disegno non si è potuto rasterizzare: {reason}.",
+        "The drawing could not be rasterized: {reason}.",
+    ),
 ];
 
 /// Le stringhe del componente.
@@ -756,6 +840,10 @@ mod tests {
             E_READ_MAX_CHARS_FORM,
             E_READ_WRITE,
             E_GUIDE_TOPIC,
+            E_PREVIEW_OPS,
+            E_PREVIEW_SIZE,
+            E_PREVIEW_BASE,
+            E_PREVIEW_PNG,
         ];
         for catalog in &catalogs {
             for key in keys {
@@ -958,5 +1046,33 @@ mod tests {
             names.contains("add_card") && names.contains("reorder"),
             "{names}"
         );
+    }
+
+    /// `canvas.preview` rifiuta con le sue chiavi: una lista che non si disegna
+    /// dice l'operazione e il codice del primo problema, un lato che non è un
+    /// intero dice la sua chiave. Le chiavi si vedono solo qui: il kernel le rende.
+    #[test]
+    fn il_disegno_rifiuta_con_le_sue_chiavi() {
+        let unknown = refusal(
+            CANVAS_PREVIEW,
+            json!({ "doc": "Idee.canvas", "ops": json!([{ "op": "move", "ids": ["manca"], "dx": 1, "dy": 0 }]).to_string() }),
+        );
+        assert_eq!(message(&unknown).key, "canvas.preview.e_ops");
+        assert_eq!(arg(&unknown, "position"), "1");
+        assert_eq!(arg(&unknown, "code"), "unknown_node");
+
+        // Una lista vuota non ha un'operazione: la posizione è «-».
+        let empty = refusal(CANVAS_PREVIEW, json!({ "doc": "Idee.canvas", "ops": "[]" }));
+        assert_eq!(message(&empty).key, "canvas.preview.e_ops");
+        assert_eq!(arg(&empty, "position"), "-");
+
+        let size = refusal(CANVAS_PREVIEW, json!({ "doc": "Idee.canvas", "size": 1.5 }));
+        assert_eq!(message(&size).key, "canvas.preview.e_size");
+
+        let not_json = refusal(
+            CANVAS_PREVIEW,
+            json!({ "doc": "Idee.canvas", "ops": "non json" }),
+        );
+        assert_eq!(message(&not_json).key, "canvas.apply.e_ops_json");
     }
 }
