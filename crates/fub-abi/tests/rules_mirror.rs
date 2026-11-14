@@ -44,6 +44,7 @@ use fub_abi::rules::folders::for_note;
 use fub_abi::rules::keys;
 use fub_abi::rules::path::{relative_ref, resolution_key, resolve_against};
 use fub_abi::rules::path_policy::{check, normalized, Naming};
+use fub_abi::rules::tasks::task_due;
 use fub_abi::rules::theme_font::{
     theme_font_fault, MAX_THEME_FONTS, MAX_THEME_FONT_BYTES, MAX_THEME_FONT_FAMILY,
     MAX_THEME_FONT_FILE_NAME, MAX_THEME_FONT_TOTAL_BYTES, RESERVED_FONT_FAMILIES,
@@ -360,6 +361,42 @@ fn task_checked_cases() -> Vec<Value> {
             })
         })
         .collect()
+}
+
+/// La scadenza di un compito: l'ultima `📅`, la data che segue, e il tratto
+/// che occupa. I casi ostili sono quelli su cui due letture dissentono: la
+/// data che non esiste, la `📅` senza niente dopo, una parola al posto della
+/// data, la data attaccata al segno o seguita da una virgola, una cifra di
+/// troppo, una `📅` prima dell'ultima, il testo con caratteri fuori dal BMP
+/// prima del segno (dove byte e unità UTF-16 contano diverso).
+fn task_due_cases() -> Vec<Value> {
+    [
+        "Pagare 📅 2026-10-19",
+        "Ricorda 📅 2026-10-01 poi 📅 2026-10-19 ✅",
+        "Senza scadenza",
+        "Refuso 📅 2026-02-30",
+        "Bisestile 📅 2028-02-29",
+        "Vuoto 📅",
+        "Spazi 📅   ",
+        "Parola 📅 domani e poi",
+        "Attaccata 📅2026-10-19, con la virgola",
+        "Tabulazione 📅\t2026-10-19",
+        "Troppe cifre 📅 2026-10-199",
+        "Mese tredici 📅 2026-13-01",
+        "Emoji 🎉🎉 prima 📅 2026-10-19 dopo",
+        "📅 2026-10-19",
+    ]
+    .into_iter()
+    .map(|text| {
+        let out = task_due(text).map(|due| {
+            json!({
+                "span": &text[due.from..due.to],
+                "date": due.iso(),
+            })
+        });
+        json!({"text": text, "out": out})
+    })
+    .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -1120,6 +1157,7 @@ fn expected() -> Value {
         "relative_ref": relative_ref_cases(),
         "resolve_against": resolve_against_cases(),
         "task_checked": task_checked_cases(),
+        "task_due": task_due_cases(),
         "topic_matches": topic_matches_cases(),
         "folder_contains": folder_contains_cases(),
         "folder_for_note": folder_for_note_cases(),

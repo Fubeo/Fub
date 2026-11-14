@@ -11,6 +11,7 @@ import {
   resolveAgainst,
   scanTags,
   taskChecked,
+  taskDue,
   THEME_FONT_LIMITS,
   THEME_ICON_LIMITS,
   themeFontFault,
@@ -64,6 +65,12 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   name_fault: (c) => nameFault(c.path, c.naming),
   normalized_name: (c) => normalizedName(c.path),
   task_checked: (c) => taskChecked(c.symbol ?? null),
+  // La scadenza di un compito: il tratto si confronta come testo, perché Rust
+  // conta in byte e qui si conta in unità UTF-16.
+  task_due: (c) => {
+    const due = taskDue(c.text);
+    return due && { span: (c.text as string).slice(due.from, due.to), date: due.date };
+  },
   // Il riconoscimento di un `#tag` (§4.4): la regola sale nel contratto
   // perché una superficie di scrittura la deve sapere senza avere il parser.
   scan_tags: (c) => scanTags(c.text),

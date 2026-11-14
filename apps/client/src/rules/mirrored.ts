@@ -384,6 +384,52 @@ export function taskChecked(symbol: string | null): boolean {
   return symbol === "x" || symbol === "X";
 }
 
+/// Il segno che introduce la scadenza di un compito. Gemello di
+/// `fub_abi::rules::tasks::DUE_MARK`.
+export const DUE_MARK = "📅";
+
+/// La scadenza trovata nel testo di un compito: il tratto che occupa (segno
+/// compreso, in unità UTF-16 della stringa) e la data, `null` se non si legge.
+export interface TaskDue {
+  from: number;
+  to: number;
+  date: string | null;
+}
+
+/// La scadenza di un testo, se ha una `📅`.
+///
+/// Gemella di `fub_abi::rules::tasks::task_due`: l'ultima `📅`; dopo, spazi e
+/// tabulazioni saltati; dieci caratteri `AAAA-MM-GG` non seguiti da un'altra
+/// cifra. Se esistono come giorno sono la data; altrimenti la scadenza c'è e non
+/// si legge, e il tratto arriva alla fine della parola che doveva esserlo.
+export function taskDue(text: string): TaskDue | null {
+  const from = text.lastIndexOf(DUE_MARK);
+  if (from < 0) return null;
+  const markEnd = from + DUE_MARK.length;
+  let start = markEnd;
+  while (text[start] === " " || text[start] === "\t") start++;
+  const after = text.slice(start);
+  const date = after.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date) && !/^\d/.test(after.slice(10))) {
+    return { from, to: start + 10, date: civilDate(date) ? date : null };
+  }
+  const word = after.search(/[ \t]/);
+  const length = word < 0 ? after.length : word;
+  return { from, to: length === 0 ? markEnd : start + length, date: null };
+}
+
+/// `AAAA-MM-GG` è un giorno che esiste? Gemella di
+/// `fub_abi::rules::tasks::civil_day` (che risponde coi giorni dall'epoca).
+function civilDate(text: string): boolean {
+  const year = Number(text.slice(0, 4));
+  const month = Number(text.slice(5, 7));
+  const day = Number(text.slice(8, 10));
+  if (month < 1 || month > 12 || day < 1) return false;
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]!;
+  return day <= days;
+}
+
 /// Questo topic sta sotto questo prefisso?
 ///
 /// Gemella di `fub_abi::rules::events::topic_matches` (§10.1). I separatori

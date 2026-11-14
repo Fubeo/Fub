@@ -2869,6 +2869,103 @@
       "out": false
     }
   ],
+  "task_due": [
+    {
+      "text": "Pagare 📅 2026-10-19",
+      "out": {
+        "span": "📅 2026-10-19",
+        "date": "2026-10-19"
+      }
+    },
+    {
+      "text": "Ricorda 📅 2026-10-01 poi 📅 2026-10-19 ✅",
+      "out": {
+        "span": "📅 2026-10-19",
+        "date": "2026-10-19"
+      }
+    },
+    {
+      "text": "Senza scadenza",
+      "out": null
+    },
+    {
+      "text": "Refuso 📅 2026-02-30",
+      "out": {
+        "span": "📅 2026-02-30",
+        "date": null
+      }
+    },
+    {
+      "text": "Bisestile 📅 2028-02-29",
+      "out": {
+        "span": "📅 2028-02-29",
+        "date": "2028-02-29"
+      }
+    },
+    {
+      "text": "Vuoto 📅",
+      "out": {
+        "span": "📅",
+        "date": null
+      }
+    },
+    {
+      "text": "Spazi 📅   ",
+      "out": {
+        "span": "📅",
+        "date": null
+      }
+    },
+    {
+      "text": "Parola 📅 domani e poi",
+      "out": {
+        "span": "📅 domani",
+        "date": null
+      }
+    },
+    {
+      "text": "Attaccata 📅2026-10-19, con la virgola",
+      "out": {
+        "span": "📅2026-10-19",
+        "date": "2026-10-19"
+      }
+    },
+    {
+      "text": "Tabulazione 📅\t2026-10-19",
+      "out": {
+        "span": "📅\t2026-10-19",
+        "date": "2026-10-19"
+      }
+    },
+    {
+      "text": "Troppe cifre 📅 2026-10-199",
+      "out": {
+        "span": "📅 2026-10-199",
+        "date": null
+      }
+    },
+    {
+      "text": "Mese tredici 📅 2026-13-01",
+      "out": {
+        "span": "📅 2026-13-01",
+        "date": null
+      }
+    },
+    {
+      "text": "Emoji 🎉🎉 prima 📅 2026-10-19 dopo",
+      "out": {
+        "span": "📅 2026-10-19",
+        "date": "2026-10-19"
+      }
+    },
+    {
+      "text": "📅 2026-10-19",
+      "out": {
+        "span": "📅 2026-10-19",
+        "date": "2026-10-19"
+      }
+    }
+  ],
   "topic_matches": [
     {
       "prefix": "com.acme",

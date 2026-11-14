@@ -147,7 +147,11 @@ pub const SEARCH_ID: &str = "fub.search";
 /// v8: `task_due`, le scadenze `📅` delle task aperte per `QueryPredicate::TaskDue`.
 /// v9: `comments`, i messaggi dei commenti per `comment:`
 /// ([`COMMENT_PREDICATE_NS`]).
-const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(9);
+/// v10: `task_due` letto con la regola del contratto
+/// ([`fub_abi::rules::tasks`]): la data scritta in `code` conta, una data che
+/// non esiste (`2026-02-30`) no. I campi sono gli stessi, i valori no: un indice
+/// di prima risponderebbe ai `due:` con le date di prima.
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(10);
 
 /// **La forma che quel numero versiona** (§15.3,
 /// [0106](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)).
