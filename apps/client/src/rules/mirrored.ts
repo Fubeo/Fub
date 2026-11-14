@@ -418,6 +418,20 @@ export function taskDue(text: string): TaskDue | null {
   return { from, to: length === 0 ? markEnd : start + length, date: null };
 }
 
+/// Quanti giorni da oggi una scadenza resta vicina. Gemello di
+/// `fub_abi::rules::tasks::NEAR_DAYS`.
+export const NEAR_DAYS = 7;
+
+/// La scadenza `date` è vicina a `today` (tutte e due `AAAA-MM-GG`): passata,
+/// di oggi o entro [`NEAR_DAYS`] giorni. Gemella di
+/// `fub_abi::rules::tasks::due_is_near`, che conta in giorni dall'epoca.
+export function dueIsNear(date: string, today: string): boolean {
+  const [year, month, day] = today.split("-").map(Number) as [number, number, number];
+  const limit = new Date(Date.UTC(year, month - 1, day + NEAR_DAYS));
+  const iso = `${String(limit.getUTCFullYear()).padStart(4, "0")}-${String(limit.getUTCMonth() + 1).padStart(2, "0")}-${String(limit.getUTCDate()).padStart(2, "0")}`;
+  return date < iso;
+}
+
 /// `AAAA-MM-GG` è un giorno che esiste? Gemella di
 /// `fub_abi::rules::tasks::civil_day` (che risponde coi giorni dall'epoca).
 function civilDate(text: string): boolean {

@@ -11,10 +11,16 @@
 //!
 //! # Su quale testo
 //!
-//! Sul **primo paragrafo** della voce, senza la sintassi ([`task_text`]): il
-//! testo dentro `code` e l'etichetta di un link contano, la destinazione di un
-//! link no, un tag conta col suo `#`, un a capo morbido è uno spazio. Le
-//! sottovoci non sono il compito.
+//! Sul **primo paragrafo** della voce, righe che lo continuano comprese, senza
+//! la sintassi ([`task_text`]): conta ciò che si legge. Il testo dentro `code`
+//! e l'etichetta di un link contano, la destinazione no; un wikilink senza
+//! alias conta con l'interno che mostra (`[[Mario]]` è «Mario», `[[Nota#Sez]]`
+//! è «Nota#Sez»), con l'alias conta l'alias; un evidenziato conta col suo
+//! testo; un'immagine, un embed, una formula, un commento e un richiamo di
+//! nota non sono parole del compito; un tag conta col suo `#`; un a capo
+//! morbido è uno spazio. Così
+//! `📅 [[2026-10-19]]`, la forma che scrive chi collega le note del giorno, è
+//! una scadenza che si legge. Le sottovoci non sono il compito.
 //!
 //! # La regola
 //!
@@ -27,15 +33,32 @@
 //!   `None`): una `📅` scritta male non è un compito senza data, è un compito
 //!   con un refuso, e chi lo mostra deve poterlo dire.
 //!
+//! # Quando è vicina
+//!
+//! Una scadenza leggibile di un compito aperto è **vicina** se cade prima di
+//! [`NEAR_DAYS`] giorni da oggi: passata, di oggi o dei sei giorni seguenti
+//! ([`due_is_near`]). Vicina si mostra arancio, dovunque: la pastiglia nel
+//! testo e quella della vista dicono la stessa cosa della stessa data.
+//!
 //! [`TaskDue::from`]..[`TaskDue::to`] è il tratto che la scadenza occupa nel
 //! testo, segno compreso: è ciò che una superficie disegna come pastiglia, e
 //! ciò che una vista toglie dal testo quando la data la mostra a parte.
 
 use crate::locale::{civil_from_days, days_from_civil, days_in_month};
-use crate::model::{Block, Inline};
+use crate::model::{Block, Inline, LinkTarget};
 
 /// Il segno che introduce la scadenza.
 pub const DUE_MARK: &str = "📅";
+
+/// Quanti giorni da oggi una scadenza resta vicina: oggi più i sei seguenti.
+pub const NEAR_DAYS: i64 = 7;
+
+/// La scadenza `day` è vicina a `today` (giorni dall'epoca): passata, di oggi
+/// o entro [`NEAR_DAYS`] giorni. Chi la mostra la guarda solo per un compito
+/// aperto: uno fatto non ha più fretta.
+pub fn due_is_near(day: i64, today: i64) -> bool {
+    day < today + NEAR_DAYS
+}
 
 /// La scadenza trovata in un testo.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -137,15 +160,36 @@ fn push_plain(inlines: &[Inline], out: &mut String) {
             | Inline::Superscript(inner)
             | Inline::Subscript(inner)
             | Inline::Strikethrough(inner) => push_plain(inner, out),
+            // Un'immagine o un embed si vedono per ciò che incorporano, non
+            // come testo: il loro alias è una didascalia o una misura.
+            Inline::Link { embed: true, .. } => {}
             Inline::Link {
                 label: Some(label), ..
             } => push_plain(label, out),
+            // Senza alias, di un wikilink si legge l'interno; di un link
+            // Markdown senza etichetta (`[](url)`) non si legge niente.
+            Inline::Link {
+                label: None,
+                target,
+                ..
+            } => {
+                if let LinkTarget::Wiki { .. } = target {
+                    out.push_str(&target.wiki_inner().unwrap_or_default());
+                }
+            }
             Inline::TagRef { name, .. } => {
                 out.push('#');
                 out.push_str(name);
             }
             Inline::SoftBreak | Inline::HardBreak => out.push(' '),
-            Inline::Link { label: None, .. } | Inline::Custom { .. } => {}
+            // Un evidenziato si legge; una formula, un commento o un richiamo
+            // di nota no: non sono parole del compito.
+            Inline::Custom {
+                custom_kind, attrs, ..
+            } if custom_kind == crate::model::custom_kind::HIGHLIGHT => {
+                out.push_str(attrs["text"].as_str().unwrap_or_default());
+            }
+            Inline::Custom { .. } => {}
         }
     }
 }
@@ -199,6 +243,45 @@ mod tests {
         }
         let day = civil_day("2026-10-19").expect("esiste");
         assert_eq!(iso_day(day), "2026-10-19");
+    }
+
+    #[test]
+    fn near_is_past_today_or_the_six_days_after() {
+        let today = civil_day("2026-11-14").expect("esiste");
+        assert!(due_is_near(today - 30, today), "passata");
+        assert!(due_is_near(today, today), "oggi");
+        assert!(due_is_near(today + 6, today), "fra sei giorni");
+        assert!(!due_is_near(today + 7, today), "fra sette giorni è lontana");
+    }
+
+    fn wiki(page: &str, label: Option<&str>, embed: bool) -> Inline {
+        Inline::Link {
+            target: LinkTarget::wiki(page),
+            label: label.map(|text| vec![Inline::Text(text.into())]),
+            embed,
+            span: crate::model::Span::new(0, 1),
+        }
+    }
+
+    #[test]
+    fn a_wikilink_reads_as_what_it_shows() {
+        let inlines = vec![
+            Inline::Text("Chiama ".into()),
+            wiki("Mario", None, false),
+            Inline::Text(" e ".into()),
+            wiki("Persone/Anna", Some("Anna"), false),
+            Inline::Text(" ".into()),
+            wiki("foto.png", None, true),
+            Inline::Text(" 📅 ".into()),
+            wiki("2026-10-19", None, false),
+        ];
+        let text = plain_text(&inlines);
+        assert_eq!(text, "Chiama Mario e Anna  📅 2026-10-19");
+        assert_eq!(
+            task_due(&text).and_then(|due| due.iso()).as_deref(),
+            Some("2026-10-19"),
+            "la data del giorno collegata è una scadenza che si legge"
+        );
     }
 
     #[test]
