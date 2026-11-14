@@ -245,6 +245,69 @@
       "trust": "community"
     }
   ],
+  "ThemeFolderCheck": [
+    {
+      "manifest": {
+        "id": "acme.carta",
+        "name": "Carta",
+        "version": "1.0.0",
+        "engine": "theme-2",
+        "lights": [
+          "light",
+          "dark"
+        ],
+        "asset_namespace": "theme://acme.carta/",
+        "motion": [
+          "opacity",
+          "transform"
+        ],
+        "extends": "fub.serie",
+        "fonts": [
+          {
+            "family": "Carta Serif",
+            "file": "fonts/carta.woff2",
+            "weight": 400,
+            "style": "italic"
+          }
+        ],
+        "icons": "icons.json"
+      },
+      "payloads": [
+        {
+          "manifest": {
+            "id": "acme.carta",
+            "name": "Carta",
+            "version": "1.0.0",
+            "engine": "theme-2",
+            "lights": [
+              "light",
+              "dark"
+            ],
+            "asset_namespace": "theme://acme.carta/",
+            "motion": [
+              "opacity",
+              "transform"
+            ],
+            "extends": "fub.serie",
+            "fonts": [
+              {
+                "family": "Carta Serif",
+                "file": "fonts/carta.woff2",
+                "weight": 400,
+                "style": "italic"
+              }
+            ],
+            "icons": "icons.json"
+          },
+          "light": "dark",
+          "sheet": null,
+          "skin": ".carta { color: inherit; }",
+          "assets": {}
+        }
+      ],
+      "digest": "9f2c4d6e8a0b1c3d5e7f9a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d"
+    }
+  ],
   "ThemeFolderInstall": [
     {
       "outcome": "installed",

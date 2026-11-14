@@ -1558,19 +1558,39 @@ fn read_theme(
     host.read_theme(&id, light)
 }
 
-/// Installa un tema dalla cartella che la persona ha scelto (`pickFolder`):
-/// la modalità sviluppatore e le porte dell'installazione le applica l'host
-/// (`Host::install_theme_from_folder`). Con `replace` un tema con lo stesso id
-/// si sostituisce; senza, la collisione torna come esito e niente si tocca.
-/// La copia legge e scrive il disco: fuori dal thread principale.
+/// Legge la cartella che la persona ha scelto (`pickFolder`) senza
+/// installarla: il manifest, il fascio di ogni luce e l'impronta dei byte
+/// (`Host::check_theme_folder`), così la shell fa girare i suoi cancelli CSS
+/// prima che niente arrivi nella configurazione. Solo con la modalità
+/// sviluppatore accesa (la regola è dell'host). Legge il disco: fuori dal
+/// thread principale.
+#[tauri::command]
+async fn check_theme_folder(
+    app: AppHandle,
+    source: String,
+) -> Result<fub_host::theme::ThemeFolderCheck, PluginError> {
+    off_main(app, move |host| {
+        let result = host.check_theme_folder(Utf8Path::new(&source));
+        for_the_shell(host, None, result)
+    })
+    .await
+}
+
+/// Installa la cartella che `check_theme_folder` ha letto, con la sua
+/// impronta (`digest`): la modalità sviluppatore, le porte dell'installazione
+/// e il confronto dei byte li applica l'host (`Host::install_theme_from_folder`).
+/// Con `replace` un tema con lo stesso id si sostituisce; senza, la collisione
+/// torna come esito e niente si tocca. La copia legge e scrive il disco: fuori
+/// dal thread principale.
 #[tauri::command]
 async fn install_theme_from_folder(
     app: AppHandle,
     source: String,
     replace: bool,
+    digest: String,
 ) -> Result<fub_host::theme::ThemeFolderInstall, PluginError> {
     off_main(app, move |host| {
-        let result = host.install_theme_from_folder(Utf8Path::new(&source), replace);
+        let result = host.install_theme_from_folder(Utf8Path::new(&source), replace, &digest);
         for_the_shell(host, None, result)
     })
     .await
@@ -3212,6 +3232,7 @@ pub fn run() {
             list_bundles,
             list_themes,
             read_theme,
+            check_theme_folder,
             install_theme_from_folder,
             list_installed_plugins,
             plugin_budget_snapshot,

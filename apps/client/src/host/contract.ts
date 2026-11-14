@@ -148,17 +148,32 @@ export interface ThemePayload {
 }
 
 /**
+ * La cartella di un tema letta senza installarla (`check_theme_folder`,
+ * `fub_host::theme::ThemeFolderCheck`): il manifest, il fascio di ogni luce
+ * dichiarata (come `read_theme` lo dà per un tema installato) e l'impronta
+ * dei byte. La shell fa girare i suoi cancelli sui fasci; l'installazione
+ * chiede la stessa impronta e si ferma (`conflict`) se la cartella è cambiata.
+ */
+export interface ThemeFolderCheck {
+  manifest: ThemeManifest;
+  payloads: ThemePayload[];
+  digest: string;
+}
+
+/**
  * Com'è andata un'installazione da cartella (`install_theme_from_folder`,
- * `fub_host::theme::ThemeFolderInstall`). Una cartella rifiutata, o la
- * modalità sviluppatore spenta, è un `PluginError` e non sta qui.
+ * `fub_host::theme::ThemeFolderInstall`). Una cartella rifiutata, la cartella
+ * cambiata dopo il controllo, una sostituzione che si ferma rimettendo il
+ * vecchio, o la modalità sviluppatore spenta, è un `PluginError` e non sta qui.
  *
  * - `installed`: il tema è installato; `replaced` se ha preso il posto di uno
  *   con lo stesso id;
  * - `collision`: un tema con lo stesso id c'è già e niente è stato toccato; la
  *   cartella nuova è già controllata. `installed_version` è `null` quando
  *   quello installato non si legge più;
- * - `replace_failed`: il vecchio è stato tolto e il nuovo si è fermato
- *   (`error`); la cartella sorgente resta dov'è.
+ * - `replace_failed`: il nuovo si è fermato e il vecchio non è riuscito a
+ *   tornare al suo nome (`error` dice dove è rimasto, dentro la cartella dei
+ *   temi); la cartella sorgente resta dov'è.
  */
 export type ThemeFolderInstall =
   | { outcome: "installed"; id: string; name: string; version: string; replaced: boolean }

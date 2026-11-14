@@ -2397,32 +2397,55 @@ impl Host {
         crate::theme::read_theme(dir, id, light).map_err(Into::into)
     }
 
-    /// Installa un tema dalla cartella di chi lo scrive
-    /// ([`crate::theme::install_theme_from_folder`]), solo con la modalità
-    /// sviluppatore accesa ([`crate::settings::DEVELOPER_MODE`]).
-    ///
-    /// La regola sta qui e non nel bottone che la shell nasconde: la chiave si
-    /// rilegge a ogni chiamata, quindi spegnerla mentre la finestra di scelta
-    /// è aperta (o fra la collisione e «Sostituisci») ferma la richiesta che
-    /// arriva dopo. Spenta, o illeggibile, vuol dire no: `PermissionDenied`.
-    pub fn install_theme_from_folder(
-        &self,
-        source: &camino::Utf8Path,
-        replace: bool,
-    ) -> Result<crate::theme::ThemeFolderInstall, PluginError> {
+    /// La modalità sviluppatore ([`crate::settings::DEVELOPER_MODE`]), riletta
+    /// a ogni chiamata: spenta, o illeggibile, vuol dire no.
+    fn developer_mode_on(&self) -> Result<(), PluginError> {
         let on = matches!(
             self.machine.effective(crate::settings::DEVELOPER_MODE),
             Ok((fub_abi::settings::SettingValue::Toggle(true), _))
         );
-        if !on {
-            return Err(PluginError::PermissionDenied(fub_abi::Text::key(
+        if on {
+            Ok(())
+        } else {
+            Err(PluginError::PermissionDenied(fub_abi::Text::key(
                 "host.theme_folder.developer_off",
-            )));
+            )))
         }
+    }
+
+    /// Legge la cartella di chi scrive un tema senza installarla
+    /// ([`crate::theme::check_theme_folder`]), solo con la modalità
+    /// sviluppatore accesa: la shell ci fa girare i suoi cancelli CSS prima di
+    /// chiedere [`Host::install_theme_from_folder`] con la stessa impronta.
+    pub fn check_theme_folder(
+        &self,
+        source: &camino::Utf8Path,
+    ) -> Result<crate::theme::ThemeFolderCheck, PluginError> {
+        self.developer_mode_on()?;
+        crate::theme::check_theme_folder(source).map_err(folder_error)
+    }
+
+    /// Installa un tema dalla cartella di chi lo scrive
+    /// ([`crate::theme::install_theme_from_folder`]), solo con la modalità
+    /// sviluppatore accesa ([`crate::settings::DEVELOPER_MODE`]) e solo coi
+    /// byte che [`Host::check_theme_folder`] ha dato (`digest`).
+    ///
+    /// La regola sta qui e non nel bottone che la shell nasconde: la chiave si
+    /// rilegge a ogni chiamata, quindi spegnerla mentre la finestra di scelta
+    /// è aperta (o fra la collisione e «Sostituisci») ferma la richiesta che
+    /// arriva dopo: `PermissionDenied`, che su questa strada vuol dire solo
+    /// questo (vedi `folder_error`).
+    pub fn install_theme_from_folder(
+        &self,
+        source: &camino::Utf8Path,
+        replace: bool,
+        digest: &str,
+    ) -> Result<crate::theme::ThemeFolderInstall, PluginError> {
+        self.developer_mode_on()?;
         let dir = self.config_dir.as_deref().ok_or_else(|| {
             PluginError::Unserved(fub_abi::Text::key("host.theme_folder.unavailable"))
         })?;
-        crate::theme::install_theme_from_folder(dir, source, replace).map_err(Into::into)
+        crate::theme::install_theme_from_folder(dir, source, replace, digest).map_err(folder_error)
     }
 
     /// I vault conosciuti: prima i preferiti, poi i recenti.
@@ -5182,6 +5205,19 @@ pub fn document_text(format: Option<&DocumentFormat>) -> DocumentText {
         DocumentText::GridJournal
     } else {
         DocumentText::Source
+    }
+}
+
+/// L'errore di una cartella di tema come lo legge chi la sta scrivendo. Un
+/// manifest che dichiara permessi è un manifest sbagliato (`BadArgs`), non un
+/// permesso negato: su questa strada `PermissionDenied` resta solo la modalità
+/// sviluppatore spenta, e la shell la riconosce dal `kind`.
+fn folder_error(error: crate::theme::ThemeError) -> PluginError {
+    match error {
+        crate::theme::ThemeError::Permissions { .. } => {
+            PluginError::BadArgs(error.to_string().into())
+        }
+        other => other.into(),
     }
 }
 

@@ -322,9 +322,11 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("list_bundles", Why::AppSurface),
     ("list_themes", Why::AppSurface),
     ("read_theme", Why::AppSurface),
-    // Installare un tema da una cartella scelta dalla persona: scrive nella
-    // configurazione della macchina, e solo con `developer.mode` acceso
-    // (la regola è dell'host).
+    // Installare un tema da una cartella scelta dalla persona: prima la si
+    // legge senza scrivere (i cancelli CSS sono della shell), poi si scrive
+    // nella configurazione della macchina coi byte controllati; tutte e due
+    // solo con `developer.mode` acceso (la regola è dell'host).
+    ("check_theme_folder", Why::AppSurface),
     ("install_theme_from_folder", Why::AppSurface),
     ("set_plugin_enabled", Why::AppSurface),
     // Il ciclo di vita dei motori, che sono del processo e non di un vault:

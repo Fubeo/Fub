@@ -59,6 +59,10 @@ pub enum ThemeError {
     AlreadyInstalled(String),
     /// Il disco ha detto di no: leggere, scrivere, rinominare.
     Io(String),
+    /// La cartella sorgente è cambiata dopo che è stata controllata: i byte da
+    /// installare non sono più quelli dell'impronta (vedi
+    /// [`check_theme_folder`](super::check_theme_folder)). Porta il path.
+    Changed(String),
 }
 
 impl std::fmt::Display for ThemeError {
@@ -86,6 +90,10 @@ impl std::fmt::Display for ThemeError {
                 write!(f, "theme already installed: {and}")
             }
             ThemeError::Io(and) => write!(f, "I/O error: {and}"),
+            ThemeError::Changed(and) => write!(
+                f,
+                "the theme folder `{and}` changed after it was checked: check it again"
+            ),
         }
     }
 }
@@ -101,7 +109,8 @@ impl std::error::Error for ThemeError {}
 /// la forma è un [`BadArgs`](PluginError::BadArgs), i permessi sono un
 /// [`PermissionDenied`](PluginError::PermissionDenied), e i guasti del disco
 /// restano quel che sono — [`AlreadyExists`](PluginError::AlreadyExists) per la
-/// collisione, [`Io`](PluginError::Io) per il resto.
+/// collisione, [`Conflict`](PluginError::Conflict) per una cartella cambiata
+/// dopo il controllo, [`Io`](PluginError::Io) per il resto.
 impl From<ThemeError> for PluginError {
     fn from(and: ThemeError) -> Self {
         match and {
@@ -112,6 +121,7 @@ impl From<ThemeError> for PluginError {
             }
             ThemeError::AlreadyInstalled(_) => PluginError::AlreadyExists(and.to_string().into()),
             ThemeError::Io(_) => PluginError::Io(and.to_string().into()),
+            ThemeError::Changed(_) => PluginError::Conflict(and.to_string().into()),
         }
     }
 }

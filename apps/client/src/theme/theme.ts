@@ -1,7 +1,7 @@
 // Luce, contrasto e preferenze personali: una risoluzione, un foglio montato.
 import { api } from "../host/ipc";
 import { settings } from "../host/query";
-import type { SettingEntry, ThemeInfo, ThemePayload } from "../host/contract";
+import type { SettingEntry, ThemeFolderCheck, ThemeInfo, ThemePayload } from "../host/contract";
 import { asPluginError, errorText } from "../host/errors";
 import { onEvent } from "../state/kernel";
 import { emit, on } from "../state/store";
@@ -606,6 +606,28 @@ async function readCatalog(): Promise<ThemeInfo[]> {
  */
 export function themeRejections(): readonly ThemeRejection[] {
   return catalogRejections;
+}
+
+/**
+ * Il cancello del catalogo sulla cartella di un tema **prima** di installarla
+ * (`check_theme_folder`): gli stessi controlli di `readCatalog`, sullo stesso
+ * fascio e col contrasto di adesso, così un tema che il catalogo lascerebbe
+ * fuori non arriva mai nella cartella dei temi. Una voce per luce rifiutata,
+ * coi motivi così come sono; vuoto vuol dire che il catalogo lo prenderebbe.
+ */
+export function vetThemeFolder(check: ThemeFolderCheck): { light: Theme; reasons: string[] }[] {
+  const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
+  const rejected: { light: Theme; reasons: string[] }[] = [];
+  for (const light of check.manifest.lights) {
+    const payload = check.payloads.find((candidate) => candidate.light === light);
+    if (payload === undefined || payload.manifest.id !== check.manifest.id) {
+      rejected.push({ light, reasons: [`fascio non leggibile: ${check.manifest.id}:${light}`] });
+      continue;
+    }
+    const reasons = validateThemeBundle(themeBundle(payload, light, contrast), light);
+    if (reasons.length > 0) rejected.push({ light, reasons });
+  }
+  return rejected;
 }
 
 /**

@@ -126,17 +126,32 @@ rivalida il fascio; un tema che rifiuta resta fuori dal catalogo, e Aspetto
 mostra i motivi così come li scrive `validateThemeBundle`, una riga per
 motivo (file, riga:colonna, codice, perché).
 
-`install_theme_from_folder(source, replace)` installa un tema dalla cartella
-scelta con `pickFolder`, e solo con `developer.mode` acceso: spento,
-`permission_denied` (la regola è dell'host). Gira fuori dal thread principale.
-Una cartella rifiutata è un errore tipato (`bad_args`, `io`, `unserved`); gli
-esiti sono `ThemeFolderInstall`, unione con il campo `outcome`:
+Installare un tema dalla cartella scelta con `pickFolder` sono due comandi,
+tutti e due solo con `developer.mode` acceso (spento, `permission_denied`: la
+regola è dell'host) e fuori dal thread principale:
+
+1. `check_theme_folder(source)` legge la cartella senza scrivere niente e
+   risponde `ThemeFolderCheck`: `manifest`, `payloads` (un `ThemePayload` per
+   luce dichiarata, come `read_theme`) e `digest`, l'impronta dei byte. La
+   shell fa girare sui fasci lo stesso cancello del catalogo: un tema che
+   rifiuterebbe non si installa, e Aspetto ne mostra i motivi;
+2. `install_theme_from_folder(source, replace, digest)` installa con
+   l'impronta del controllo: se i byte copiati non sono più quelli,
+   `conflict` e niente si scrive.
+
+Una cartella rifiutata è un errore tipato (`bad_args`, `io`, `unserved`,
+`conflict`); su questa strada `permission_denied` vuol dire solo la modalità
+spenta (un manifest con permessi è `bad_args`). Gli esiti dell'installazione
+sono `ThemeFolderInstall`, unione con il campo `outcome`:
 
 | `outcome` | Campi | Che cosa vuol dire |
 |---|---|---|
 | `installed` | `id`, `name`, `version`, `replaced` | il tema è installato; `replaced` se ha preso il posto di uno con lo stesso id |
 | `collision` | `id`, `name`, `version`, `installed_version` | un id già installato, niente toccato; `installed_version` è `null` se quello installato non si legge |
-| `replace_failed` | `id`, `name`, `version`, `error` | con `replace`, il vecchio è stato tolto e il nuovo si è fermato (`error` è un `PluginError`) |
+| `replace_failed` | `id`, `name`, `version`, `error` | con `replace`, il nuovo non è entrato e il vecchio non è tornato al suo nome; `error` (un `PluginError`) dice dove è rimasto |
+
+Una sostituzione che si ferma rimettendo il vecchio al suo posto è un errore,
+non un esito: il disco è com'era.
 
 Il catalogo firmato ha le sue porte (`catalog_install_theme`,
 `catalog_update_theme`, `catalog_rollback_theme`, `catalog_revoke_theme`). Le

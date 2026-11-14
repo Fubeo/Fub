@@ -197,48 +197,57 @@ pub fn read_theme(
             theme.manifest.id
         )));
     }
-    if !theme.manifest.lights.contains(&light) {
+    theme_payload(&dir, theme.manifest, light)
+}
+
+/// Il fascio di una luce letto da una cartella di tema già validata
+/// ([`ThemeBundle::load`]): lo stesso per un tema installato ([`read_theme`]) e
+/// per la cartella di chi lo scrive, prima di installarla
+/// ([`check_theme_folder`](super::check_theme_folder)).
+pub(super) fn theme_payload(
+    dir: &Utf8Path,
+    manifest: ThemeManifest,
+    light: ThemeLight,
+) -> Result<ThemePayload, ThemeError> {
+    let id = manifest.id.clone();
+    let id = id.as_str();
+    if !manifest.lights.contains(&light) {
         return Err(ThemeError::Malformed(format!(
             "theme `{id}` does not offer requested light"
         )));
     }
     // Senza `extends` il foglio di ogni luce offerta è d'obbligo; con
     // `extends` può mancare, e la shell userà quello di serie.
-    let required = theme.manifest.extends.is_none();
-    let sheet_path = sheet_path(&dir, light);
-    let sheet = read_theme_text(&sheet_path, &dir, id, MAX_THEME_CSS_BYTES, required)?;
+    let required = manifest.extends.is_none();
+    let sheet_path = sheet_path(dir, light);
+    let sheet = read_theme_text(&sheet_path, dir, id, MAX_THEME_CSS_BYTES, required)?;
     if required && sheet.is_none() {
         return Err(ThemeError::Malformed(format!(
             "missing sheet `{sheet_path}`"
         )));
     }
     let skin_path = dir.join("skin.css");
-    let skin = read_theme_text(&skin_path, &dir, id, MAX_THEME_CSS_BYTES, false)?;
-    let mut needed = referenced_assets(
-        sheet.as_deref(),
-        skin.as_deref(),
-        &theme.manifest.asset_namespace,
-    );
+    let skin = read_theme_text(&skin_path, dir, id, MAX_THEME_CSS_BYTES, false)?;
+    let mut needed =
+        referenced_assets(sheet.as_deref(), skin.as_deref(), &manifest.asset_namespace);
     // I file dei caratteri viaggiano col fascio anche se nessun CSS li nomina:
     // la regola `@font-face` la scrive la shell.
     needed.extend(
-        theme
-            .manifest
+        manifest
             .fonts
             .iter()
-            .map(|font| format!("{}{}", theme.manifest.asset_namespace, font.file)),
+            .map(|font| format!("{}{}", manifest.asset_namespace, font.file)),
     );
     // Il set di icone anche: lo legge la shell, nessun CSS lo nomina.
     needed.extend(
-        theme
-            .manifest
+        manifest
             .icons
             .iter()
-            .map(|file| format!("{}{file}", theme.manifest.asset_namespace)),
+            .map(|file| format!("{}{file}", manifest.asset_namespace)),
     );
-    let assets = asset_inventory(&dir, &theme.manifest.asset_namespace, &needed)?;
+    let assets = asset_inventory(dir, &manifest.asset_namespace, &needed)?;
     Ok(ThemePayload {
-        manifest: theme.manifest,
+        manifest,
         light,
         sheet,
         skin,

@@ -284,6 +284,20 @@ fn expected() -> Value {
             manifest: extending_manifest(),
             trust: "community",
         })],
+        // La cartella di un tema letta prima di installarla: il fascio di ogni
+        // luce (qui uno solo, che eredita) e l'impronta che l'installazione
+        // chiede di nuovo.
+        "ThemeFolderCheck": [to_value(fub_host::theme::ThemeFolderCheck {
+            manifest: extending_manifest(),
+            payloads: vec![ThemePayload {
+                manifest: extending_manifest(),
+                light: ThemeLight::Dark,
+                sheet: None,
+                skin: Some(".carta { color: inherit; }".into()),
+                assets: Default::default(),
+            }],
+            digest: "9f2c4d6e8a0b1c3d5e7f9a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d".into(),
+        })],
         // I tre esiti dell'installazione da cartella: la finestra della shell
         // li dice in tre modi diversi, e il mirror deve vederli tutti.
         "ThemeFolderInstall": [

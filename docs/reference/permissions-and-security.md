@@ -124,13 +124,21 @@ accesa (`developer.mode`: interruttore di macchina, spento di default, non
 scrivibile da programma). La regola sta nell'host
 (`Host::install_theme_from_folder`), che rilegge la chiave a ogni chiamata e
 risponde `permission_denied` se è spenta; il bottone che la shell nasconde non
-è la difesa. L'installazione passa dalle stesse porte di `install_theme`
+è la difesa. Prima di scrivere, la shell legge la cartella con
+`check_theme_folder` (stessa chiave, niente scritture) e la passa dal cancello
+del catalogo: un tema che la shell rifiuterebbe non arriva in `themes/`.
+L'installazione chiede l'impronta del controllo e la confronta con i byte
+copiati nella staging: una cartella cambiata nel frattempo è `conflict`, e non
+si pubblica. Per il resto passa dalle stesse porte di `install_theme`
 (manifest validato, serie riservata, niente symlink né traversal, limiti,
 rename atomico) e il tema ha la fiducia di ogni tema non di serie. Un id già
 installato non si tocca: l'esito è `collision`, e solo una seconda chiamata
-con `replace` lo sostituisce, validando la cartella nuova prima di togliere la
-vecchia. Se il nuovo si ferma dopo la rimozione l'esito è `replace_failed`: la
-cartella sorgente resta dov'è.
+con `replace` lo sostituisce. La sostituzione non toglie il vecchio prima:
+la copia nuova si verifica accanto, il vecchio si sposta da parte (una
+cartella `.tmp-` che la scansione salta), il nuovo prende il suo nome, e solo
+allora il vecchio si cancella. Se il nuovo non entra il vecchio torna, ed è un
+errore; `replace_failed` resta per il caso in cui il vecchio non riesce a
+tornare, e l'errore dice dove è rimasto.
 
 Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount. Una
 preview dalle Impostazioni non cambia la scelta persistente: annullamento o

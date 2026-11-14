@@ -18,6 +18,7 @@ import type {
   ComponentWrite,
   ComponentsApplied,
   ComponentsMap,
+  ThemeFolderCheck,
   ThemeFolderInstall,
   ThemeFont,
   ThemeInfo,
@@ -983,6 +984,7 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     permissions: true,
   }),
   ThemeInfo: keysOf<ThemeInfo>({ manifest: true, trust: true }),
+  ThemeFolderCheck: keysOf<ThemeFolderCheck>({ manifest: true, payloads: true, digest: true }),
   ThemePayload: keysOf<ThemePayload>({
     manifest: true,
     light: true,

@@ -78,6 +78,7 @@ import type {
   SettingValue,
   SyntaxForm,
   TextEdit,
+  ThemeFolderCheck,
   ThemeFolderInstall,
   ThemeInfo,
   ThemePayload,
@@ -303,8 +304,8 @@ export interface Options {
   themePayloads?: Record<string, ThemePayload>;
   /// Le cartelle che «Installa da cartella…» può scegliere, per path: il tema
   /// che la cartella contiene, o il `PluginError` con cui l'host vero la
-  /// rifiuterebbe (manifest assente, link simbolico, limiti). `replaceError`
-  /// fa fermare l'installazione nuova dopo che la vecchia è stata tolta.
+  /// rifiuterebbe (manifest assente, link simbolico, limiti). L'impronta è dei
+  /// fasci: cambiarli fra il controllo e l'installazione è la cartella cambiata.
   themeFolders?: Record<string, ThemeFolderFake | PluginError>;
   /// Inventario installato della macchina, compresi elementi spenti o senza
   /// consenso: il fake non li ricava dai bundle runtime.
@@ -619,27 +620,60 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const themePayloads: Record<string, ThemePayload> = { ...options.themePayloads };
   const themeFolders = options.themeFolders ?? {};
 
-  /// L'installazione da cartella come la fa l'host: la modalità sviluppatore
-  /// si rilegge a ogni chiamata, una collisione senza `replace` non tocca
-  /// niente, una sostituzione fallita ha già tolto il vecchio.
-  function installThemeFolder(source: string, replace: boolean): ThemeFolderInstall {
+  function developerOn(): void {
     const developer = settings.find((entry) => entry.spec.key === DEVELOPER_MODE_KEY);
     if (developer?.value !== true) {
       throw { kind: "permission_denied", message: "Per installare un tema da una cartella accendi la modalità sviluppatore." };
     }
+  }
+
+  function themeFolder(source: string): ThemeFolderFake {
     const folder = themeFolders[source];
     if (folder === undefined) throw { kind: "io", message: `I/O error: ${source}: no such folder` };
     if ("kind" in folder) throw folder;
+    return folder;
+  }
+
+  /// La cartella letta senza installarla, come `check_theme_folder`: un fascio
+  /// per luce dichiarata e l'impronta.
+  function checkThemeFolder(source: string): ThemeFolderCheck {
+    developerOn();
+    const folder = themeFolder(source);
+    const { manifest } = folder.info;
+    const payloads = manifest.lights.map((light) => {
+      const payload = folder.payloads[`${manifest.id}:${light}`];
+      if (payload === undefined) throw { kind: "bad_args", message: `missing sheet for ${light}` };
+      return payload;
+    });
+    return { manifest, payloads, digest: folderDigest(folder) };
+  }
+
+  /// L'installazione da cartella come la fa l'host: la modalità sviluppatore
+  /// si rilegge a ogni chiamata, l'impronta deve essere quella del controllo,
+  /// una collisione senza `replace` non tocca niente. Una sostituzione che si
+  /// ferma (`replaceError`) lascia il vecchio; con `replaceLost` il vecchio non
+  /// torna, ed è l'esito `replace_failed`.
+  function installThemeFolder(source: string, replace: boolean, digest: string): ThemeFolderInstall {
+    developerOn();
+    const folder = themeFolder(source);
     const { manifest } = folder.info;
     const { id, name, version } = manifest;
     const at = themes.findIndex((theme) => theme.manifest.id === id);
     if (at >= 0 && !replace) {
       return { outcome: "collision", id, name, version, installed_version: themes[at]!.manifest.version };
     }
+    if (digest !== folderDigest(folder)) {
+      throw { kind: "conflict", message: `the theme folder \`${source}\` changed after it was checked: check it again` };
+    }
+    if (at >= 0 && folder.replaceError) {
+      if (!folder.replaceLost) throw folder.replaceError;
+      themes.splice(at, 1);
+      for (const key of Object.keys(themePayloads)) if (key.startsWith(`${id}:`)) delete themePayloads[key];
+      return { outcome: "replace_failed", id, name, version, error: folder.replaceError };
+    }
     if (at >= 0) {
       themes.splice(at, 1);
       for (const key of Object.keys(themePayloads)) if (key.startsWith(`${id}:`)) delete themePayloads[key];
-      if (folder.replaceError) return { outcome: "replace_failed", id, name, version, error: folder.replaceError };
     }
     themes.push(folder.info);
     Object.assign(themePayloads, folder.payloads);
@@ -2040,11 +2074,17 @@ export function createFakeHost(options: Options = {}): FakeHost {
         }
         return gate("readTheme", [id, light], Promise.resolve(payload));
       },
-      installThemeFromFolder: (source, replace) =>
+      checkThemeFolder: (source) =>
+        gate(
+          "checkThemeFolder",
+          [source],
+          new Promise<ThemeFolderCheck>((resolve) => resolve(checkThemeFolder(source))),
+        ),
+      installThemeFromFolder: (source, replace, digest) =>
         gate(
           "installThemeFromFolder",
-          [source, replace],
-          new Promise<ThemeFolderInstall>((resolve) => resolve(installThemeFolder(source, replace))),
+          [source, replace, digest],
+          new Promise<ThemeFolderInstall>((resolve) => resolve(installThemeFolder(source, replace, digest))),
         ),
       setPluginEnabled: (id, enabled) =>
         gate("setPluginEnabled", [id, enabled], Promise.resolve([])),
@@ -2534,7 +2574,21 @@ const DEVELOPER_MODE_KEY = "developer.mode";
 export interface ThemeFolderFake {
   info: ThemeInfo;
   payloads: Record<string, ThemePayload>;
+  /// La sostituzione si ferma con questo errore, e il vecchio resta.
   replaceError?: PluginError;
+  /// Con `replaceError`: il vecchio non torna (`replace_failed`).
+  replaceLost?: boolean;
+}
+
+/// L'impronta finta di una cartella: cambia quando cambiano i suoi fasci.
+function folderDigest(folder: ThemeFolderFake): string {
+  const text = JSON.stringify(folder.payloads);
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return `fake-${hash.toString(16)}`;
 }
 
 /// La riga di `developer.mode` come la dichiara il core: interruttore della
@@ -2545,7 +2599,7 @@ export function developerModeSetting(on: boolean): SettingEntry {
       key: DEVELOPER_MODE_KEY,
       label: "Modalità sviluppatore",
       description:
-        "Per chi scrive un tema: installa da una cartella, collega una cartella che cambia mentre la scrivi, apre «Tutti i componenti».",
+        "Per chi scrive un tema: in «Temi installati» compare «Installa da cartella…», che lo controlla e lo installa dalla sua cartella.",
       group: "Sviluppo",
       scope: "machine",
       kind: { kind: "toggle", default: false },
