@@ -317,6 +317,27 @@ const SHEET_GEOMETRY = `
 const sheetGeometry = (session) => session.execute(SHEET_GEOMETRY, [SHEET_NODES, 240]);
 const count = (session, css) => session.execute("return document.querySelectorAll(arguments[0]).length;", [css]);
 
+/// S1: il clic che mette il cursore nel riquadro, su una riga che si vede. Il
+/// centro del `.cm-content` di una nota di 5.000 righe sta fuori dalla vista e
+/// sotto la barra della nota: `session.click` su quel centro dà «element click
+/// intercepted» (T46, due giri su tre sotto Xvfb).
+async function clickVisibleLine(session) {
+  const at = await session.execute(`
+    const top = 160, bottom = innerHeight - 40;
+    const line = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].find((l) => {
+      const r = l.getBoundingClientRect();
+      return r.top >= top && r.bottom <= bottom && r.width > 0;
+    });
+    const r = line?.getBoundingClientRect();
+    return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;
+  `);
+  if (!at) throw new Error("nessuna riga della nota si vede nella finestra");
+  await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
+    { type: "pointerMove", x: at.x, y: at.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
+  ] }]);
+  await session.releaseActions();
+}
+
 /// S9, il tasto fino al fotogramma (T46): una scheda di nota della stessa
 /// lavagna, una delle venti note vive (`scheda-0`, `S2/Nota 00001.md`).
 const SHEET_NOTE_CARD = "scheda-0";
@@ -610,7 +631,7 @@ const SCENARIOS = {
   /// Scrivere 200 caratteri in una nota di 5.000 righe.
   async S1(session) {
     await openByName(session, "Lunga", "Una nota lunga");
-    await session.click(".pane.focus .cm-content");
+    await clickVisibleLine(session);
     await chord(session, CTRL, END);
     await start(session);
     await session.keys("Il corso di analisi del lunedì, in aula. ".repeat(5).slice(0, 200));
