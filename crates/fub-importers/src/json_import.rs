@@ -227,6 +227,13 @@ pub(crate) fn convert(
     );
     if let Some(obj) = value.as_object() {
         for (k, v) in obj {
+            // The keys come from the file: one that is not a plain identifier
+            // would inject YAML (a newline, a `:`), and `title`/`source_file`
+            // are already written above. The whole object stays in the fenced
+            // body, so nothing is lost.
+            if !crate::common::is_ident(k) || k == "title" || k == "source_file" {
+                continue;
+            }
             if let Some(s) = v.as_str() {
                 if s.len() <= 500 && !s.contains('\n') {
                     fm.push_str(&format!("{k}: {}\n", crate::common::yaml_scalar(s)));
@@ -439,5 +446,32 @@ impl ImportProvider for JsonImport {
             }
         }
         Ok(report)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The root keys of a generic JSON become frontmatter keys: a key that
+    /// is not an identifier, or one that repeats `title`, stays in the body
+    /// only and cannot add or override frontmatter fields.
+    #[test]
+    fn hostile_root_keys_do_not_reach_the_frontmatter() {
+        let value = serde_json::json!({
+            "ok": "sì",
+            "x\ntags: [pwn]": "a",
+            "a: b": 1,
+            "title": "altro",
+            "source_file": "/etc/passwd",
+        });
+        let notes = convert(&value, "dati.json").unwrap();
+        let markdown = &notes[0].markdown;
+        let (front, body) = markdown[4..].split_once("\n---\n").unwrap();
+        assert_eq!(
+            front, "title: dati\nsource_file: dati.json\nok: sì",
+            "{markdown}"
+        );
+        assert!(body.contains("tags: [pwn]"));
     }
 }
