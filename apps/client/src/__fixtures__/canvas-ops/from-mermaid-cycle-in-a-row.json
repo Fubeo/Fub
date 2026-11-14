@@ -1,0 +1,75 @@
+{
+  "about": "Il ciclo dell'acqua da sinistra a destra, in catena: tre schede in riga e tre archi, il ciclo si spezza sull'arco che torna.",
+  "before": {
+    "nodes": [],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "from_mermaid",
+      "text": "flowchart LR\n  A[Evaporazione] --> B[Condensazione] --> C[Precipitazione] --> A"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "A",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Evaporazione"
+        },
+        {
+          "id": "B",
+          "type": "text",
+          "x": 416,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Condensazione"
+        },
+        {
+          "id": "C",
+          "type": "text",
+          "x": 832,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Precipitazione"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "A",
+          "toNode": "B",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "fromNode": "B",
+          "toNode": "C",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "06c45d188009454f",
+          "fromNode": "C",
+          "toNode": "A",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "A",
+      "B",
+      "C",
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4",
+      "06c45d188009454f"
+    ]
+  }
+}

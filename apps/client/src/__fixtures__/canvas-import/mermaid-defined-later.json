@@ -1,0 +1,46 @@
+{
+  "about": "Un nodo nominato prima di essere definito: vale, e il testo arriva dopo.",
+  "op": {
+    "op": "from_mermaid",
+    "text": "graph TD\n  A[Domanda] --> B\n  B[Risposta arrivata dopo]"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "A",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Domanda"
+        },
+        {
+          "id": "B",
+          "type": "text",
+          "x": 0,
+          "y": 256,
+          "width": 320,
+          "height": 160,
+          "text": "Risposta arrivata dopo"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "A",
+          "toNode": "B",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "A",
+      "B",
+      "e220a8397b1dcdaf"
+    ],
+    "notes": []
+  }
+}

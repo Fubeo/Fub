@@ -11,7 +11,7 @@
   "ops": [
     { "op": "from_outline", "text": "Introduzione\nMetodi\nRisultati\nConclusioni" }
   ],
-  "needs": ["from_outline"],
+  "needs": [],
   "checks": [
     { "count": { "kind": "text", "n": 4 } },
     { "aligned": { "texts": ["Introduzione", "Metodi", "Risultati", "Conclusioni"], "axis": "left" } },

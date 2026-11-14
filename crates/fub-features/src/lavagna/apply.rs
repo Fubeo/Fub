@@ -17,7 +17,7 @@ use fub_abi::model::{DocId, Span};
 use fub_abi::text::{Arg, Text};
 use fub_abi::traits::HostApi;
 use fub_canvas_core::commit::{CommitError, Core};
-use fub_canvas_core::ops::{compile, CanvasOp, OpError};
+use fub_canvas_core::ops::{compile, CanvasOp, Compiled, OpError};
 use fub_canvas_core::spec;
 use serde_json::{json, Value};
 
@@ -49,7 +49,6 @@ pub(super) fn canvas_apply(
         .commit(&compiled.patches)
         .map_err(|error| committing(&doc, error))?;
     let edit = committed.edit;
-    let created = compiled.created;
 
     let count = Arg::text("count", ops.len().to_string());
     if edit.start == edit.end && edit.text.is_empty() {
@@ -61,7 +60,7 @@ pub(super) fn canvas_apply(
             )))
         } else {
             CommandOutcome::notify(about(N_UNCHANGED, &doc, Vec::new()))
-                .with_effect(effect(&created, &revision))
+                .with_effect(effect(&compiled, &revision))
         };
         return Ok(outcome);
     }
@@ -87,15 +86,22 @@ pub(super) fn canvas_apply(
     );
     Ok(CommandOutcome::notify(about(N_APPLIED, &doc, Vec::new()))
         .undoable(undo)
-        .with_effect(effect(&created, &report.revision)))
+        .with_effect(effect(&compiled, &report.revision)))
 }
 
-/// Che cosa ha fatto il comando, per chi lo ha chiamato: gli id nati e la
-/// revisione della lavagna dopo.
-fn effect(created: &[String], revision: &Revision) -> CommandEffect {
+/// Che cosa ha fatto il comando, per chi lo ha chiamato: gli id nati, la
+/// revisione della lavagna dopo e le note del nucleo (ciò che le operazioni non
+/// hanno potuto tenere, come la forma di un nodo Mermaid), con quante non ci
+/// stanno.
+fn effect(compiled: &Compiled, revision: &Revision) -> CommandEffect {
     CommandEffect::Custom {
         ns: LAVAGNA_NS.into(),
-        payload: json!({ "created": created, "revision": revision.0 }),
+        payload: json!({
+            "created": compiled.created,
+            "revision": revision.0,
+            "notes": compiled.notes,
+            "notes_omitted": compiled.notes_omitted,
+        }),
     }
 }
 

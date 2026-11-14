@@ -7,7 +7,9 @@
 //! problema di uno dei tre dà `ok: false`, e il rapporto non ha né riassunto né
 //! lettura di dopo: le operazioni valgono tutte o nessuna. Con `ok: true` gli
 //! avvisi si cercano solo sulle schede che le operazioni toccano: una scheda che
-//! c'era già e che nessuno tocca non compare.
+//! c'era già e che nessuno tocca non compare. Le note della compilazione
+//! (ciò che un'operazione non ha potuto tenere, [`ops::Compiled::notes`]) sono
+//! avvisi anche loro, per primi.
 //!
 //! Le regole e i codici stanno in `docs/reference/canvas-code.md`, «Il
 //! controllo».
@@ -20,7 +22,7 @@ use serde_json::Value;
 use crate::describe::{self, DescribeOptions};
 use crate::layout::{estimate_text_height, inside, overlaps, Rect};
 use crate::model::{Canvas, CanvasNode, CanvasNodeType};
-use crate::ops::{self, CanvasOp, OpError};
+use crate::ops::{self, CanvasOp, CompileNote, NoteCode, OpError};
 use crate::patch;
 use crate::spec::{self, ProblemCode};
 use crate::summary::{summarize, Summary};
@@ -177,7 +179,7 @@ impl Problem {
         }
     }
 
-    fn compile(error: &OpError, raw: &Value, canvas: &Canvas) -> Self {
+    fn compile(error: &OpError, raw: &Value, canvas: &Canvas, ops: &[CanvasOp], seed: u64) -> Self {
         let index = error.index();
         let (code, path, message, suggestion) = match error {
             OpError::UnknownNode { id, .. } => (
@@ -203,7 +205,7 @@ impl Problem {
                 Code::DuplicateId,
                 locate(raw, index, id),
                 "the id is already taken or repeated".to_owned(),
-                None,
+                free_prefix(canvas, ops, index, seed),
             ),
             OpError::TooMany { what, limit, .. } => (
                 Code::TooMany,
@@ -233,17 +235,44 @@ impl Problem {
 }
 
 /// Un avviso su una scheda che la lista tocca, con le schede coinvolte: dove
-/// guardare nella lettura di dopo.
+/// guardare nella lettura di dopo. Un avviso che viene da una nota della
+/// compilazione dice l'operazione (`index`) e che cosa non si è tenuto
+/// (`detail`), e non ha schede.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Warning {
     pub code: WarningCode,
     /// Le schede coinvolte: per `overlap` le due che si coprono, per
-    /// `half_in_group` la scheda e il gruppo, per `text_overflow` la scheda.
+    /// `half_in_group` la scheda e il gruppo, per `text_overflow` la scheda; per
+    /// una nota nessuna.
     pub ids: Vec<String>,
     /// Per `text_overflow`: l'altezza che la stima di [`estimate_text_height`]
     /// vuole, più di quella data.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub estimated_height: Option<i64>,
+    /// Per una nota: la posizione dell'operazione nella lista, da zero.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index: Option<usize>,
+    /// Per una nota: che cosa e dove, in inglese come gli errori.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+impl Warning {
+    /// L'avviso di una nota della compilazione.
+    fn of_note(note: &CompileNote) -> Self {
+        Self {
+            code: match note.code {
+                NoteCode::ShapeDropped => WarningCode::ShapeDropped,
+                NoteCode::StyleDropped => WarningCode::StyleDropped,
+                NoteCode::LineSkipped => WarningCode::LineSkipped,
+                NoteCode::IndentRounded => WarningCode::IndentRounded,
+            },
+            ids: Vec::new(),
+            estimated_height: None,
+            index: Some(note.index),
+            detail: Some(note.detail.clone()),
+        }
+    }
 }
 
 /// I codici degli avvisi di [`check`].
@@ -256,6 +285,14 @@ pub enum WarningCode {
     HalfInGroup,
     /// Il testo di una scheda non ci sta nell'altezza che ha.
     TextOverflow,
+    /// Nota: la forma di un nodo Mermaid diventa un rettangolo.
+    ShapeDropped,
+    /// Nota: uno stile di Mermaid (un arco tratteggiato, una classe) non si tiene.
+    StyleDropped,
+    /// Nota: una riga che non si capisce, o di soli stili, si salta.
+    LineSkipped,
+    /// Nota: un rientro della scaletta vale il livello più vicino.
+    IndentRounded,
 }
 
 /// Controlla `raw`, una lista di operazioni, sulla lavagna `canvas`, con gli id
@@ -274,7 +311,9 @@ pub fn check(canvas: &Canvas, raw: &Value, seed: u64) -> CheckReport {
     };
     let compiled = match ops::compile(canvas, &ops, seed) {
         Ok(compiled) => compiled,
-        Err(error) => return CheckReport::refused(vec![Problem::compile(&error, raw, canvas)]),
+        Err(error) => {
+            return CheckReport::refused(vec![Problem::compile(&error, raw, canvas, &ops, seed)])
+        }
     };
     let after = match patch::draft(canvas, &compiled.patches) {
         Ok(after) => after,
@@ -285,7 +324,7 @@ pub fn check(canvas: &Canvas, raw: &Value, seed: u64) -> CheckReport {
         }
     };
     let summary = summarize(canvas, &compiled);
-    let (warnings, warnings_omitted) = warnings(&after, &touched(&summary));
+    let (warnings, warnings_omitted) = warnings(&after, &touched(&summary), &compiled);
     CheckReport {
         ok: true,
         problems: Vec::new(),
@@ -319,8 +358,13 @@ fn touched(summary: &Summary) -> HashSet<&str> {
 /// Gli avvisi della lavagna di dopo, solo per le coppie che hanno almeno una
 /// scheda toccata. Il rapporto ne porta al più [`MAX_WARNINGS`], nell'ordine
 /// del testo, delle coperture e dei gruppi; il conto di quelli che restano
-/// fuori è esatto e si dà a parte. Ogni coppia si conta una volta sola.
-fn warnings(after: &Canvas, touched: &HashSet<&str>) -> (Vec<Warning>, usize) {
+/// fuori è esatto e si dà a parte. Ogni coppia si conta una volta sola. Le note
+/// della compilazione vengono prima di tutti, nel loro ordine.
+fn warnings(
+    after: &Canvas,
+    touched: &HashSet<&str>,
+    compiled: &ops::Compiled,
+) -> (Vec<Warning>, usize) {
     let nodes = &after.nodes;
     let touched_flags: Vec<bool> = nodes
         .iter()
@@ -335,6 +379,8 @@ fn warnings(after: &Canvas, touched: &HashSet<&str>) -> (Vec<Warning>, usize) {
                 code: WarningCode::TextOverflow,
                 ids: vec![node.id.clone()],
                 estimated_height: Some(height),
+                index: None,
+                detail: None,
             })
         })
         .collect();
@@ -376,17 +422,23 @@ fn warnings(after: &Canvas, touched: &HashSet<&str>) -> (Vec<Warning>, usize) {
         }
     }
 
-    let total = texts.len() + covered.total + straddling.total;
-    let mut warnings = texts;
+    let notes = compiled.notes.len() + compiled.notes_omitted;
+    let total = notes + texts.len() + covered.total + straddling.total;
+    let mut warnings: Vec<Warning> = compiled.notes.iter().map(Warning::of_note).collect();
+    warnings.extend(texts);
     warnings.extend(covered.first.into_iter().map(|(first, second)| Warning {
         code: WarningCode::Overlap,
         ids: vec![nodes[first].id.clone(), nodes[second].id.clone()],
         estimated_height: None,
+        index: None,
+        detail: None,
     }));
     warnings.extend(straddling.first.into_iter().map(|(card, group)| Warning {
         code: WarningCode::HalfInGroup,
         ids: vec![nodes[card].id.clone(), nodes[group].id.clone()],
         estimated_height: None,
+        index: None,
+        detail: None,
     }));
     warnings.truncate(MAX_WARNINGS);
     let omitted = total - warnings.len();
@@ -529,6 +581,34 @@ fn nearest<'a>(given: &str, names: impl Iterator<Item = &'a str>) -> Option<Stri
         }
     }
     (!near.is_empty()).then(|| near.join(", "))
+}
+
+/// Quanti `prefix` si provano al più per un suggerimento.
+const MAX_PREFIX_TRIES: usize = 20;
+
+/// Per un `DuplicateId` di `from_mermaid` o `from_outline`: un `prefix` con cui
+/// l'operazione `index` si compila, se ce n'è uno fra i primi
+/// [`MAX_PREFIX_TRIES`] (`m1-`, `m2-`, … per Mermaid, `s1-`, … per la scaletta).
+/// Per le altre operazioni nessuno.
+fn free_prefix(canvas: &Canvas, ops: &[CanvasOp], index: usize, seed: u64) -> Option<String> {
+    let letter = match ops.get(index)? {
+        CanvasOp::FromMermaid(_) => 'm',
+        CanvasOp::FromOutline(_) => 's',
+        _ => return None,
+    };
+    (1..=MAX_PREFIX_TRIES).find_map(|n| {
+        let prefix = format!("{letter}{n}-");
+        let mut tried = ops[..=index].to_vec();
+        match tried.last_mut()? {
+            CanvasOp::FromMermaid(args) => args.prefix = Some(prefix.clone()),
+            CanvasOp::FromOutline(args) => args.prefix = Some(prefix.clone()),
+            _ => return None,
+        }
+        match ops::compile(canvas, &tried, seed) {
+            Ok(_) => Some(prefix),
+            Err(_) => None,
+        }
+    })
 }
 
 /// Il puntatore JSON del primo valore uguale a `text` nell'operazione `index`,

@@ -142,6 +142,7 @@
 - Quali toppe cambiano il modello di una lavagna, e quali errori possono fallire? → [reference/canvas-operations.md](../reference/canvas-operations.md)
 - Come si legge una lavagna come codice, con le sue misure e i suoi posti, e come si scrive con operazioni d'intento? → [reference/canvas-code.md](../reference/canvas-code.md)
 - Che cosa dice il controllo di una lista di operazioni prima di scriverla (problemi, riassunto, avvisi)? → [reference/canvas-check.md](../reference/canvas-check.md)
+- Quale parte di Mermaid e delle scalette leggono `from_mermaid` e `from_outline`, come si dispone il risultato e che cosa dicono le note? → [reference/canvas-import.md](../reference/canvas-import.md)
 - Quali campi ha ogni operazione della lavagna, qual è lo schema JSON della lista e quali problemi di forma dà `validate`? → [reference/canvas-schema.md](../reference/canvas-schema.md)
 - Quali operazioni modificano un disegno di FubDraw (versione 1)? → [reference/scene-operations.md](../reference/scene-operations.md)
 

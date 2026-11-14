@@ -26,6 +26,7 @@
 | il modello e le regole della lavagna | `crates/fub-canvas-core/` e `docs/reference/canvas-format.md` |
 | la lavagna letta come codice (`outline`, `code`, `json`) | `crates/fub-canvas-core/src/describe.rs` e `docs/reference/canvas-code.md` |
 | lo schema delle operazioni della lavagna, i problemi di forma (`validate`) | `crates/fub-canvas-core/src/spec.rs` e `docs/reference/canvas-schema.md` |
+| la lettura di Mermaid e delle scalette (`from_mermaid`, `from_outline`) e la loro disposizione | `crates/fub-canvas-core/src/import/`, `src/ops/import.rs` e `docs/reference/canvas-import.md` |
 | il controllo di una lista prima di scriverla (`check`) e il suo riassunto | `crates/fub-canvas-core/src/check.rs`, `summary.rs` e `docs/reference/canvas-check.md` |
 | la proiezione dei documenti ricchi | `docs/reference/rich-projection.md` |
 | il protocollo della sessione live | `docs/reference/live-session.md` |
