@@ -340,8 +340,10 @@ static OFFICIALS: &[OfficialFeature] = &[
         view: Some(|| Box::new(TasksView)),
         commands: None,
         index: None,
-        syntax: None,
-        renderers: None,
+        // Il recinto ```tasks```: dichiararlo è ciò che lo fa leggere reso, e
+        // col componente spento resta codice.
+        syntax: Some(tasks::syntax_rules),
+        renderers: Some(tasks::renderers),
         exports: None,
         settings: None,
         provides: &[],

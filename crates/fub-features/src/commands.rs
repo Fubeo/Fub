@@ -302,6 +302,8 @@ const A_NOTES: &str = "notes";
 const A_FAILED: &str = "failed";
 const A_FOLDER: &str = "folder";
 const A_AT: &str = "at";
+/// La revisione che chi chiede una spunta ha letto (`note.task.toggle`).
+const A_REVISION: &str = "revision";
 const A_WHAT: &str = "what";
 /// I due conti di un esito parziale (§23.14): quante cose c'erano davanti e
 /// quante sono cambiate. Stanno insieme perché una da sola non si legge —

@@ -169,6 +169,20 @@ pub(super) fn notes_task_toggle(
         Some(base) => base,
         None => host.document_revision(&doc)?,
     };
+    // Chi ha letto la nota prima di chiedere la spunta (la vista dei compiti, un
+    // recinto) dice quale revisione ha letto: se la nota non è più quella, la
+    // posizione può nominare un altro compito, e non si scrive niente. È il
+    // controllo e la scrittura nello stesso passo: l'edit qui sotto porta questa
+    // stessa revisione, e l'host lo rifiuta se il file cambia ancora.
+    if let Some(expected) = args.text(A_REVISION) {
+        if revision.0 != expected {
+            return Err(PluginError::Conflict(one(
+                AND_TASK_CHANGED,
+                A_DOC,
+                doc.as_str(),
+            )));
+        }
+    }
     if recurring.is_some() && host.document_revision(&doc)? != revision {
         return Err(PluginError::Conflict(one(
             AND_TASK_CHANGED,
