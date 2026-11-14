@@ -413,7 +413,7 @@ che si cancella sempre (vedi
 «Mostra nella cartella del sistema», «Apri con un'altra app» e «Stampa…»
 passano un percorso a un programma del sistema (`xdg-open` e `dbus-send` su
 Linux, `open` su macOS, `explorer.exe` su Windows): come argomento, mai
-attraverso una shell, e per percorso assoluto, mai cercato nel `PATH`
+attraverso una shell, e per percorso assoluto, senza cercarlo nel `PATH`
 (`crates/fub-app/src/print.rs`). Su Unix il programma si prende dalle
 cartelle che scrive l'amministratore (`/usr/bin`, `/bin`, `/usr/local/bin` e
 quelle di NixOS e Guix; su macOS solo `/usr/bin`), ed è buono se è un file
@@ -421,6 +421,15 @@ regolare, eseguibile e non riscrivibile dal gruppo o dagli altri; su Windows
 viene dalla cartella di sistema (`SystemRoot`). Se non c'è, l'esito è
 «nessun programma» e la shell lo dice. Un file del vault che si eseguirebbe
 aprendolo si mostra e non si apre.
+
+La regola vale per il **primo** programma, non per quelli che lancia lui.
+`xdg-open` è uno script che cerca `gio`, `kde-open` e i loro pari nel `PATH`
+ereditato, come fa l'`Exec=` dei file `.desktop`; il `PATH` del figlio resta
+quello dell'utente, perché restringerlo romperebbe le app in `~/.local/bin`.
+Chi scrive in una cartella di quel `PATH` sceglie quindi l'app che apre il
+file. Su Windows anche `SystemRoot` viene dall'ambiente di chi avvia Fub: la
+via robusta, `GetSystemWindowsDirectoryW`, vorrebbe una dipendenza nuova di
+`fub-app`, che è una scelta di supply chain del maintainer.
 
 ## Supply chain
 

@@ -169,7 +169,10 @@ pub(crate) fn system_program(name: &str) -> Option<PathBuf> {
 
 /// Il percorso assoluto di `name` nella cartella di Windows: `explorer.exe`
 /// sta lì. La cartella è quella che il sistema dà in `SystemRoot`, se è un
-/// percorso assoluto, e altrimenti `C:\Windows`.
+/// percorso assoluto, e altrimenti `C:\Windows`. `SystemRoot` viene
+/// dall'ambiente di chi avvia l'app, come il `PATH`: è il rischio residuo
+/// scritto in `docs/reference/permissions-and-security.md`, finché `fub-app`
+/// non ha una dipendenza che chiami `GetSystemWindowsDirectoryW`.
 #[cfg(windows)]
 pub(crate) fn system_program(name: &str) -> Option<PathBuf> {
     let root = std::env::var_os("SystemRoot")
