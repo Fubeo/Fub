@@ -549,6 +549,9 @@
     "cm-fub-link-card-url",
     "cm-fub-link-card-note",
     "cm-fub-link-card-fetch",
+    "cm-fub-address-choice",
+    "cm-fub-address-choice-link",
+    "cm-fub-address-choice-card",
     "fub-color-gray",
     "fub-color-brown",
     "fub-color-orange",
@@ -2174,6 +2177,9 @@
     "cm-fub-link-card-url": "contenuto",
     "cm-fub-link-card-note": "contenuto",
     "cm-fub-link-card-fetch": "contenuto",
+    "cm-fub-address-choice": "contenuto",
+    "cm-fub-address-choice-link": "contenuto",
+    "cm-fub-address-choice-card": "contenuto",
     "fub-color-gray": "contenuto",
     "fub-color-brown": "contenuto",
     "fub-color-orange": "contenuto",
@@ -4813,6 +4819,21 @@
         "hover",
         "focused",
         "disabled"
+      ]
+    },
+    {
+      "name": "document-address-choice",
+      "part": "document",
+      "hooks": [
+        "cm-fub-address-choice",
+        "cm-fub-address-choice-link",
+        "cm-fub-address-choice-card"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
       ]
     },
     {
@@ -8937,10 +8958,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1623,
+    "hooks": 1626,
     "state_names": 7,
-    "assigned_states": 770,
-    "components": 227,
+    "assigned_states": 774,
+    "components": 228,
     "preference_tokens": 189
   }
 }
