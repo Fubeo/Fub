@@ -121,7 +121,8 @@ impl Compiler {
         batch.validate().map_err(|error| invalid(index, &error))?;
         // Gli id dati in `created`: prima le schede, poi gli archi.
         self.created.extend(ids.iter().cloned());
-        self.created.extend(edges.iter().map(|edge| edge.id.clone()));
+        self.created
+            .extend(edges.iter().map(|edge| edge.id.clone()));
         let patches = cards
             .into_iter()
             .map(|card| CanvasPatch::UpsertNode {
