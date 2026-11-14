@@ -2335,7 +2335,7 @@ aggiunto (esistono solo dopo la loro fusione).
 Fatto quando: `check-doc-links`, `check-doc-orphans` e `check-doc-size`
 passano.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso (coder/n6-t23, da 39fe615ae, 2026-11-14)
+Stato: [x] fatto · coder/n6-t23 (afaec4b6e), integrato in 332dddbfa (2026-11-14) · `docs/product/lavagna.md` (340 righe); la riga delle pagine future stava in `docs/project/status.md`, non nel README; il foglio nasce 480×300 (il codice batte la riga di DECISIONS su T9, 480×304); «Che cosa non fa ancora» rimanda a `status.md` per T79–T85 e T88. L'orchestratore ha aggiunto «Ritaglia e ruota» al menu della scheda in `canvas-input.md` e i colori in `dove-sta-x.md` (`colors.ts`)
 
 ## T24 · La seconda misura di N4 su questo ramo
 

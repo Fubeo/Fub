@@ -54,7 +54,7 @@
 | le stringhe dell'editor dei disegni | `apps/client/src/editors/spatial/strings.ts`, con le voci per area (italiano e inglese insieme) in `strings/` |
 | il disegno sul motore (chi possiede che cosa) | [Il disegno sul motore](../architecture/disegno.md) |
 | la tavolozza dell'inchiostro | `apps/client/src/ink/palette.ts` (Okabe–Ito) |
-| i sei colori della lavagna | `apps/client/src/editors/canvas/engine.ts` |
+| i colori della lavagna (i sei di JSON Canvas, i nove delle note, «Altro…») | `apps/client/src/editors/canvas/colors.ts` |
 | le schede vive della lavagna (`liveCardIds`, `LIVE_ZOOM_MIN`, `MAX_LIVE_CARDS`) e il contratto dei renderer | `apps/client/src/editors/canvas/cards.ts`; i renderer in `apps/client/src/editors/canvas/cards/` e `apps/client/src/editors/grid/card.ts` |
 | il limite dei 64 MiB per i media | `apps/client/src/editors/media/media-types.ts` |
 | il sanificatore dell'HTML | `apps/client/src/ui/sanitize.ts` |
