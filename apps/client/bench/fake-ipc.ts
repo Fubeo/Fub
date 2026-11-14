@@ -682,6 +682,26 @@ const BENCH_COMMANDS: CommandSpec[] = [
   command("stats.open", "Statistiche del documento", "Parole, caratteri, collegamenti", null),
 ];
 
+/// Con `?nuovo=tutto` il kernel finto dichiara i comandi che creano un file di
+/// ogni tipo e la nota da un modello, come l'host con tutte le feature: il menu
+/// «Nuovo» del «+» (S34) ha tutte le sue voci. Senza, ha la nota e la cartella.
+/// I comandi che creano un file chiedono il nome e la cartella, come quelli
+/// veri: scelti dal menu aprono il modulo della palette, non un'invocazione.
+const NEW_FILE_COMMANDS: CommandSpec[] = params.get("nuovo") === "tutto"
+  ? [
+    newFileCommand("document.create", "Nuovo documento", "Crea un documento di Word vuoto e lo apre"),
+    newFileCommand("sheet.create", "Nuovo foglio", "Crea una cartella di Excel vuota e la apre"),
+    newFileCommand("drawing.create", "Nuovo disegno", "Crea un disegno, vuoto o da un modello, e lo apre"),
+    newFileCommand("canvas.create", "Nuova lavagna", "Crea una lavagna vuota e la apre"),
+    command("note.from_template", "Nota da un modello", "Crea una nota da un modello del vault", null, true),
+  ]
+  : [];
+
+function newFileCommand(id: string, title: string, description: string): CommandSpec {
+  const text = (name: string, label: string) => ({ name, title: label, description: "", kind: { kind: "text" as const }, required: false });
+  return { ...command(id, title, description, null, true), params: [text("name", "Nome"), text("folder", "Cartella")] };
+}
+
 /// La barra di formattazione la fotografa il telefono (`mobile.html`), dove
 /// sta sopra la tastiera, e la finestra principale con `?formatbar=1`. Nelle
 /// altre pagine i comandi sono quelli del banco, e le loro foto con loro.
@@ -1696,6 +1716,7 @@ const options: Options = {
     // perché portano anche la superficie `slash` che le gemelle della barra
     // non hanno. Da soli, ognuno dà ciò che dava.
     ...BENCH_COMMANDS,
+    ...NEW_FILE_COMMANDS,
     ...SLASH_COMMANDS,
     ...(ON_MOBILE ? FORMAT_COMMANDS.filter((format) => !SLASH_COMMANDS.some((slash) => slash.id === format.id)) : []),
     // Il PDF annotato ha «Annota», il comando della feature `draw`.

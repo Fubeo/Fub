@@ -52,7 +52,7 @@ import type {
   UiOption,
 } from "../host/contract";
 import { onEvent } from "../state/kernel";
-import { state } from "../state/store";
+import { on, state } from "../state/store";
 import { $ } from "../ui/dom";
 import { trapFocus } from "../ui/a11y";
 import { notify } from "../ui/notify";
@@ -78,6 +78,7 @@ import {
   currentThemeId,
   currentThemePreview,
   previewTheme,
+  refreshThemeLink,
   selectTheme,
   themeCatalog,
 } from "../theme/theme";
@@ -89,7 +90,14 @@ import { marcuzzoElement } from "../ui/marcuzzo";
 import { SOURCE_URL, checkMessage, mountUpdateCheck, type UpdateChecker } from "./about";
 import { vaultNameEditor } from "./vault-rename";
 import { reducedMotion } from "../theme/reduced-motion";
-import { DEVELOPER_MODE_KEY, installFolderButton, renderDiagnosis, themeDiagnoses } from "./theme-folder";
+import {
+  DEVELOPER_MODE_KEY,
+  installFolderButton,
+  linkFolderButton,
+  renderDiagnosis,
+  renderLinkedFolder,
+  themeDiagnoses,
+} from "./theme-folder";
 import { loadCatalogPage } from "../dev/catalogo/carica";
 import {
   CSS_SNIPPETS_KEY, DEFAULT_CSS_SNIPPETS, cancelCssSnippetsPreview,
@@ -469,6 +477,11 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     if (!lifetime.closed && !panelEl.hidden) void render();
   });
   if (typeof stopSetting === "function") lifetime.add(stopSetting);
+  // Il tema collegato si rimonta a ogni salvataggio dell'autore: la riga
+  // «Ricaricato alle…» e la diagnosi si ridisegnano con lui.
+  lifetime.add(on("theme-link", () => {
+    if (!lifetime.closed && !panelEl.hidden) void render();
+  }));
   // Chiudere il vault mentre il pannello è aperto lascerebbe un form che parla
   // di un vault che non c'è: le impostazioni sono per-vault. Ma una scelta della
   // pagina «Componenti» che accende o spegne un formato (la lavagna) rimonta il
@@ -962,6 +975,11 @@ async function renderForm(): Promise<HTMLElement[]> {
       // installati: è da lì che se ne installa uno.
       const developer = entries.some((entry) => entry.spec.key === DEVELOPER_MODE_KEY && entry.value === true);
       if (themes.length > 0 || developer) parts.body.append(renderThemeCatalog(themes, developer));
+      // La cartella collegata si chiede all'host a ogni disegno: è lui che la
+      // guarda, e la storia dei rimontaggi resta in `theme/theme.ts`.
+      const link = developer ? await refreshThemeLink().catch(() => null) : null;
+      const owner = settingsLifetime;
+      if (link !== null && owner) parts.body.append(renderLinkedFolder({ lifetime: owner, rerender: render }, link));
       for (const diagnosis of themeDiagnoses()) parts.body.append(renderDiagnosis(diagnosis));
     }
     nodes.push(parts.section);
@@ -1356,7 +1374,10 @@ function renderThemeCatalog(themes: ThemeInfo[], developer: boolean): HTMLElemen
   // Il gesto di chi scrive un tema; l'host lo rifiuta comunque a chiave spenta.
   if (developer) {
     const owner = settingsLifetime;
-    if (owner) actions.append(installFolderButton({ lifetime: owner, rerender: render }), catalogPageButton());
+    if (owner) {
+      const host = { lifetime: owner, rerender: render };
+      actions.append(installFolderButton(host), linkFolderButton(host), catalogPageButton());
+    }
   }
   refreshPreviewState();
 

@@ -17,7 +17,7 @@ import { platformSupports } from "../../../platform/capabilities";
 import { pageName } from "../../../rules/mirrored";
 import { focusEditor } from "../../../state/document-controller";
 import { identifier, trapFocus } from "../../../ui/a11y";
-import { allCommands, ariaBinding, displayBinding, matchesBinding } from "../../../ui/commands";
+import { allCommands, ariaBinding, displayBinding, matchesBinding, registerTemplateOpener } from "../../../ui/commands";
 import { highlighted, markedTerms } from "../../../ui/highlight";
 import { FORMAT_ICON, formatKindOf } from "../../../ui/format-kind";
 import { iconEl } from "../../../ui/icons";
@@ -144,6 +144,9 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
   let closeOpen: (() => void) | null = null;
   /// Il passaggio di modo di quello aperto.
   let switchOpen: ((mode: Mode, text?: string) => void) | null = null;
+  /// La cartella dove nasce una nota da un modello: quella del menu «Nuovo»
+  /// che ha aperto il lanciatore, "" (la radice) per ogni altra apertura.
+  let templateFolder = "";
 
   const build = (first: Mode, text: string | undefined): void => {
     const origin = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
@@ -350,7 +353,7 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     };
 
     const choose = (row: Row, way: OpenWay): void => {
-      const next = step(row, way, { mode, text: input.value });
+      const next = step(row, way, { mode, text: input.value }, templateFolder);
       if (next.kind === "go") setMode(next.mode, next.text);
       else leaveFor(next.run);
     };
@@ -673,11 +676,16 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     animate(veil, { from: { opacity: 0 }, duration: DURATION.short, whenReduced: "fade", lifetime: life });
   };
 
+  const show = (mode: Mode, text: string | undefined, folder: string): void => {
+    if (lifetime.closed) return;
+    templateFolder = folder;
+    if (switchOpen) switchOpen(mode, text);
+    else build(mode, text);
+  };
+
   const launcher: Launcher = {
     open(mode, text) {
-      if (lifetime.closed) return;
-      if (switchOpen) switchOpen(mode, text);
-      else build(mode, text);
+      show(mode, text, "");
     },
     close() {
       closeOpen?.();
@@ -688,6 +696,8 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
   };
 
   declareLauncherCommands(lifetime, launcher);
+  // «Nuovo ▸ Nota da un modello…» di una cartella: i modelli, e la nota nasce lì.
+  lifetime.add(registerTemplateOpener((folder) => show("templates", undefined, folder)));
   // Il piede dei menu contestuali: quando le voci non bastano, «Cerca fra tutti
   // i comandi» apre qui i comandi con ciò che si è scritto.
   lifetime.add(

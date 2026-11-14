@@ -31,6 +31,10 @@ Una cartella in cui il sistema non lascia creare file risponde con l'errore di
 I/O del kernel, e non nasce niente. La prova a vuoto nomina il file senza
 scriverlo; l'annullamento lo manda nel cestino.
 
+Nella shell i due comandi sono «Documento (.docx)» e «Foglio (.xlsx)» del
+[menu «Nuovo»](editor-menus.md#il-menu-nuovo), quando il loro editor è
+acceso; la palette chiede il nome, con la cartella già scritta.
+
 I comandi appartengono ai bundle `fub.rich` e `fub.xlsx`: spento il bundle, o
 compilato l'host senza la feature, non sono dichiarati.
 

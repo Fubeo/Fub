@@ -44,11 +44,14 @@ import { FORMAT_ICON, formatKindOf, formatTagOf } from "../ui/format-kind";
 import { craftServed } from "../state/craft-previews";
 import { mountTreeThumbnails, type TreeThumbnails } from "../state/tree-thumbnails";
 import { iconEl } from "../ui/icons";
-import { pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
+import { closeContextMenu, pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
+import { newNoteInActiveSpace } from "../state/new-note";
 import { drawPageMark, pageMarkText, readPageMark } from "../ui/page-mark";
 import { selectInspectorTab } from "../ui/views";
 import {
+  newEntries,
   newKinds,
+  registerNewKindHost,
   canImportDrawing,
   canImportFile,
   hasKernelCommand,
@@ -179,14 +182,26 @@ export function mountExplorer(lifetime: Lifetime): void {
   // gli attributi di `index.html`, che seguono la lingua.
   newNoteEl.replaceChildren(iconEl("compose") ?? "");
   sortButtonEl.replaceChildren(iconEl("sort") ?? "");
-  lifetime.listen(newNoteEl, "click", () => void newNote());
-  lifetime.listen(sortButtonEl, "click", () => {
-    sortButtonEl.setAttribute("aria-expanded", "true");
-    showContextMenu(sortButtonEl, sortItems(), {
-      label: t("explorer.sort"),
-      onClose: () => sortButtonEl.setAttribute("aria-expanded", "false"),
-    });
-  });
+  // Il «+» chiede il tipo (S34): apre sotto di sé il menu «Nuovo» dello
+  // spazio attivo. Ctrl+N resta la nota diretta, senza menu. La nota e la
+  // cartella le fa l'albero, per ogni porta del menu (anche il menu File):
+  // senza una cartella scelta la nota nasce dove la fa nascere Ctrl+N.
+  lifetime.add(registerNewKindHost({
+    note: (folder) => void (folder === undefined ? newNoteInActiveSpace() : newNote(folder === "" ? null : folder)),
+    folder: (folder) => startNewFolder(folder ?? state.activeSpace ?? ""),
+  }));
+  // Il «+» e «Ordina» sono interruttori: il secondo clic chiude il menu che
+  // il primo ha aperto.
+  lifetime.listen(newNoteEl, "click", (e) => toggleButtonMenu(newNoteEl, () => openNewMenu(e.detail > 0)));
+  lifetime.listen(sortButtonEl, "click", () =>
+    toggleButtonMenu(sortButtonEl, () => {
+      sortButtonEl.setAttribute("aria-expanded", "true");
+      showContextMenu(sortButtonEl, sortItems(), {
+        label: t("explorer.sort"),
+        onClose: () => sortButtonEl.setAttribute("aria-expanded", "false"),
+      });
+    }),
+  );
   // Il titolo del pannello è la radice di ciò che si vede (il vault o lo
   // spazio attivo), e così lo spazio vuoto sotto l'ultima riga: il loro
   // contestuale crea lì, importa e ordina l'albero.
@@ -1428,12 +1443,8 @@ function folderMenu(at: MouseEvent, path: string): void {
       { label: t("explorer.new_note_here"), hint: chordOf("shell.note.new"), run: () => void newNote(path) },
       {
         label: t("explorer.new_menu"),
-        items: [
-          { label: t("explorer.new.folder"), run: () => startNewFolder(path) },
-          // Il disegno nasce se il kernel sa farli: la cartella arriva alla
-          // galleria già scelta.
-          ...(newKinds().includes("drawing") ? [{ label: t("explorer.new.drawing"), run: () => void newDrawing(path) }] : []),
-        ],
+        // L'elenco del «+» (S34), con la cartella dove il file nasce già scelta.
+        items: newEntries(path),
       },
       importItems(path),
       { separator: true, label: t("explorer.rename"), hint: "F2", run: () => void renameFolderRow(path) },
@@ -1466,15 +1477,41 @@ function folderMenu(at: MouseEvent, path: string): void {
   );
 }
 
+/// Il menu «Nuovo» del «+» del titolo, sotto il pulsante: i tipi che si possono
+/// creare adesso, nello spazio attivo. Il fuoco parte dal «+», così Esc ci
+/// torna anche dopo un clic del mouse (che su WebKit non lo dà al pulsante).
+function openNewMenu(pointer: boolean): void {
+  newNoteEl.focus({ preventScroll: true });
+  newNoteEl.setAttribute("aria-expanded", "true");
+  showContextMenu(newNoteEl, newEntries(), {
+    label: t("explorer.new_menu"),
+    pointer,
+    onClose: () => newNoteEl.setAttribute("aria-expanded", "false"),
+  });
+}
+
+/// Apre il menu di un pulsante del titolo, o lo chiude se è già aperto. Il
+/// pulsante dice «true» soltanto finché il suo menu è aperto (`onClose` lo
+/// rimette a «false»): senza questa domanda il secondo clic riaprirebbe il
+/// menu, e la chiusura del primo lascerebbe il pulsante a «false» col menu
+/// aperto.
+function toggleButtonMenu(button: HTMLElement, open: () => void): void {
+  if (button.getAttribute("aria-expanded") === "true") {
+    closeContextMenu();
+    button.setAttribute("aria-expanded", "false");
+    return;
+  }
+  open();
+}
+
 /// Il contestuale del titolo del pannello e dello spazio vuoto sotto l'ultima
 /// riga: crea e importa nella radice di ciò che si vede (il vault o lo spazio
 /// attivo), e ordina l'albero.
 function rootMenu(at: MouseEvent): void {
   const root = state.activeSpace ?? "";
   showContextMenu(at, [
-    { label: t("explorer.new_note"), hint: chordOf("shell.note.new"), run: () => void newNote(state.activeSpace) },
-    { label: t("explorer.new_folder"), run: () => startNewFolder(root) },
-    ...(newKinds().includes("drawing") ? [{ label: t("explorer.new_drawing_menu"), run: () => void newDrawing(root) }] : []),
+    { label: t("explorer.new_note"), hint: chordOf("shell.note.new"), run: () => void newNoteInActiveSpace() },
+    { label: t("explorer.new_menu"), items: newEntries() },
     { separator: true, label: t("explorer.sort"), items: sortItems() },
     { label: t("explorer.collapse_all"), run: () => collapseAll() },
     { separator: true, ...importItems(root) },
@@ -2054,6 +2091,10 @@ async function newNote(folder: string | null = state.activeSpace): Promise<void>
 /// arriva come errore tipizzato da mostrare. Il campo resta finché il comando
 /// non risponde, così un secondo Invio non parte due volte.
 function startNewFolder(parent: string): void {
+  // Il campo vive nell'albero: con il pannello chiuso, o su Cerca, finirebbe
+  // in una lista nascosta e resterebbe appeso (il menu File lo apre da ovunque).
+  revealSidePanel("sidebar");
+  showPanel("files");
   const field = document.createElement("input");
   field.className = "new-folder";
   field.setAttribute("aria-label", t("explorer.new_folder"));

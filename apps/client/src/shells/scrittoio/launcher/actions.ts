@@ -77,8 +77,9 @@ export function toSearchPanel(text: string): (() => void | Promise<void>) | null
 }
 
 /// Il passo che una riga comanda. `asked` è ciò che si stava chiedendo: una
-/// ricerca conclusa aprendo un risultato è una ricerca da ricordare.
-export function step(row: Row, way: OpenWay, asked: Reading): Step {
+/// ricerca conclusa aprendo un risultato è una ricerca da ricordare. `folder`
+/// è dove nasce una nota da un modello ("" è la radice, e non si passa).
+export function step(row: Row, way: OpenWay, asked: Reading, folder = ""): Step {
   switch (row.kind) {
     case "note":
       return {
@@ -123,7 +124,7 @@ export function step(row: Row, way: OpenWay, asked: Reading): Step {
       return {
         kind: "run",
         run: async () => {
-          const outcome = await api.invokeCommand(TEMPLATE_COMMAND, { template: row.doc });
+          const outcome = await api.invokeCommand(TEMPLATE_COMMAND, folder === "" ? { template: row.doc } : { template: row.doc, folder });
           if (outcome.notify) paletteHost.notify(outcome.notify, outcome.partial ? "guasto" : "info");
           await paletteHost.onEffect(outcome.effect);
         },

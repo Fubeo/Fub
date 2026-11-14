@@ -67,6 +67,10 @@ vi.mock("../theme/theme", () => ({
   themeCatalog: async () => box.themes,
   themeRejections: () => [],
   reloadThemeCatalog: async () => box.themes,
+  // Il tema collegato (PA T37): qui nessuna cartella è collegata.
+  linkedTheme: () => null,
+  refreshThemeLink: async () => null,
+  themeLinkChanged: async () => {},
 }));
 vi.mock("../host/dialog", () => ({
   confirm: (message: string) => {
@@ -86,6 +90,7 @@ vi.mock("../ui/commands", async (importOriginal) => {
     allCommands: () => [],
     keybindingKey: (id: string) => id,
     newKinds: () => ["note"],
+    newKindLabel: () => "Nota",
     registerComponentRow: actual.registerComponentRow,
     showComponent: actual.showComponent,
   };

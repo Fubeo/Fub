@@ -31,13 +31,12 @@ import { writeClipboardText } from "./platform/clipboard";
 import { closeCommandPalette, openCommandPalette, startCommand } from "./ui/palette";
 import {
   allCommands,
-  canCreateDrawing,
   canImportDrawing,
   displayBinding,
   loadKeyOverrides,
   mountKeyOverrides,
   NEW_DRAWING,
-  newDrawing,
+  newEntries,
   pickDrawingImport,
   registerCommandForm,
   registerCommandStarter,
@@ -1073,12 +1072,10 @@ async function init(): Promise<Teardown> {
       label: t("palette.open_view", { title: spec.title }),
       run: () => openPrimaryView(spec.id),
     })),
-    // «Nuovo disegno…» e «Importa disegno…» accanto a «Nuova nota», se il
-    // kernel ha il comando.
-    creations: () => [
-      ...(canCreateDrawing() ? [{ label: t("menu.file.new_drawing"), run: () => void newDrawing() }] : []),
-      ...(canImportDrawing() ? [{ label: t("menu.file.import_drawing"), run: () => void pickDrawingImport() }] : []),
-    ],
+    // «Nuovo ▸»: l'elenco del «+» dell'albero (S34), dove nasce col gesto diretto.
+    creations: () => newEntries().map((entry) => (entry.kind === "note" ? { ...entry, echoes: true } : entry)),
+    // «Importa disegno…» dopo «Nuovo ▸», se il kernel ha il comando.
+    imports: () => (canImportDrawing() ? [{ label: t("menu.file.import_drawing"), run: () => void pickDrawingImport() }] : []),
     vault: vaultGestures,
   }));
   refreshTitlebarShortcuts();

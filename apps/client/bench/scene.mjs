@@ -129,6 +129,19 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector("#context-menu:not([hidden])");
     },
   },
+  // S34: il «+» del titolo dell'albero chiede il tipo. Aperto dalla tastiera,
+  // col fuoco sulla prima voce, e con tutti i comandi che creano un file
+  // (`?nuovo=tutto`), come la toppa `menu-nuovo` del prototipo.
+  {
+    id: "file-nuovo-tipo",
+    title: "«Nuovo» chiede il tipo: il menu del «+» dell'albero",
+    query: "nuovo=tutto",
+    prepare: async (page) => {
+      await page.focus("#new-note");
+      await page.keyboard.press("Enter");
+      await page.waitForFunction(() => document.activeElement?.closest('#context-menu[aria-label="Nuovo"]') != null);
+    },
+  },
   // Il tasto destro: un menu per posto, aperto col mouse, con la testata, i
   // gruppi e il piede che invita a scrivere.
   ...[
