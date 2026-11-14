@@ -19,7 +19,7 @@ import { Decoration, type DecorationSet, EditorView, keymap, type KeyBinding } f
 import { getCM } from "@replit/codemirror-vim";
 import { liveStrings } from "../strings";
 import { blockGesture } from "../block-gesture";
-import { blockModel, type Block } from "./model";
+import { blockModel, blockStartingAt, innermostAt, type Block } from "./model";
 import { type BlockRun, siblingsOf } from "./move";
 import { modelOf } from "./transform";
 
@@ -32,16 +32,6 @@ export interface BlockSelection {
 }
 
 export const setBlockSelection = StateEffect.define<BlockSelection | null>();
-
-/// Il blocco che comincia in `pos` alla profondità `depth`.
-function blockStartingAt(blocks: readonly Block[], pos: number, depth: number): number {
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i]!;
-    if (block.from > pos) break;
-    if (block.from === pos && block.depth === depth) return i;
-  }
-  return -1;
-}
 
 /// La tratta di fratelli della selezione, in ordine di documento.
 export function runOfSelection(blocks: readonly Block[], selection: BlockSelection): (BlockRun & { anchor: number; head: number }) | null {
@@ -100,14 +90,7 @@ function selectedText(count: number): string {
 
 /// Il blocco più interno sotto il cursore principale.
 export function cursorBlock(state: EditorState, blocks: readonly Block[]): number {
-  const head = state.selection.main.head;
-  let found = -1;
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i]!;
-    if (block.from > head) break;
-    if (head <= block.to) found = i;
-  }
-  return found;
+  return innermostAt(blocks, state.selection.main.head);
 }
 
 /// Le righe vuote che vanno via con la tratta: quelle dopo, o, se è
