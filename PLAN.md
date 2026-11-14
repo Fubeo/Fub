@@ -4182,7 +4182,7 @@ Casi limite: una persona su Windows senza permessi di amministratore
 Fatto quando: la pagina c'è e le guardie passano. Il «Fatto quando» 7 si
 chiude quando l'issue ha cinque risultati.
 Prova: scripts/check.sh --rapido
-Stato: [ ] rinviato (2026-11-09, l'utente: la prova con cinque persone per ora non si fa; alla release proveranno i primi utenti). Non blocca T22 né T24
+Stato: [ ] rinviato (2026-11-09, l'utente: la prova con cinque persone per ora non si fa; alla release proveranno i primi utenti). Non blocca T22 né T24 · 2026-11-14, l'utente: rinviata ancora, senza data
 
 ## T18 · I documenti della pre-alpha
 
