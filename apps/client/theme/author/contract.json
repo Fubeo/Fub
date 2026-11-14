@@ -1122,6 +1122,7 @@
     "canvas-lasso-path",
     "canvas-lasso-frame",
     "canvas-lasso-chosen",
+    "canvas-marquee-box",
     "canvas-ruler-bar",
     "canvas-ruler-grip",
     "canvas-ruler-angle",
@@ -2832,6 +2833,7 @@
     "canvas-lasso-path": "segno",
     "canvas-lasso-frame": "segno",
     "canvas-lasso-chosen": "segno",
+    "canvas-marquee-box": "segno",
     "canvas-ruler-bar": "cornice",
     "canvas-ruler-grip": "cornice",
     "canvas-ruler-angle": "cornice",
@@ -6287,6 +6289,16 @@
       ]
     },
     {
+      "name": "canvas-marquee",
+      "part": "editors",
+      "hooks": [
+        "canvas-marquee-box"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "canvas-ruler",
       "part": "editors",
       "hooks": [
@@ -9365,10 +9377,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1708,
+    "hooks": 1709,
     "state_names": 7,
-    "assigned_states": 818,
-    "components": 242,
+    "assigned_states": 819,
+    "components": 243,
     "preference_tokens": 189
   }
 }
