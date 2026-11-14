@@ -169,9 +169,11 @@ describe("il gesto che perde il rilascio si chiude come un rilascio (T20a)", () 
         const closed = cameraOf(host);
         expect(closed.x - start.x).toBeCloseTo(60, 6);
         expect(closed.y - start.y).toBeCloseTo(30, 6);
-        // Il rilascio tardivo e un movimento senza tasto non spostano più niente.
-        pointer(viewport, "pointerup", { pointerId: 1, button: 1, buttons: 0, ...at(420, 260) });
+        // Chiuso, il gesto non segue più il puntatore, anche se il rilascio non arriva mai.
         pointer(viewport, "pointermove", { pointerId: 1, buttons: 0, ...at(500, 300) });
+        expect(cameraOf(host)).toEqual(closed);
+        // Il rilascio che arriva dopo non sposta né chiude di nuovo.
+        pointer(viewport, "pointerup", { pointerId: 1, button: 1, buttons: 0, ...at(420, 260) });
         expect(cameraOf(host)).toEqual(closed);
         engine.destroy();
       });
@@ -259,7 +261,7 @@ describe("il gesto che perde il rilascio si chiude come un rilascio (T20a)", () 
     engine.destroy();
   });
 
-  it("il movimento del dito senza tasto non chiude il suo gesto: il dito lo chiude solo la cattura persa o la finestra", () => {
+  it("il movimento del dito senza tasto non chiude il suo gesto: il dito lo chiudono il rilascio, il pointercancel o la finestra", () => {
     const { engine, host } = mounted(BOARD);
     const viewport = viewportOf(host);
     pointer(viewport, "pointerdown", { pointerId: 5, pointerType: "touch", button: 0, buttons: 1, ...at(600, 400) });
