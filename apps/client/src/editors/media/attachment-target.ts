@@ -164,9 +164,15 @@ export async function depositOrReuse(
     throw new Error(t("errors.attachment.too_large", { name }));
   }
   // La domanda «c'è già?» si fa una volta sola, col primo candidato: la sua
-  // risposta non dipende dal nome. Dopo un `already_exists` l'host ha già
-  // risposto «no» (o «non so»), quindi i nomi seguenti sono scritture semplici
-  // «solo se nuovo», senza rifare la ricerca a ogni nome.
+  // risposta dipende dai byte, dall'estensione (uguale per tutti i candidati)
+  // e da ciò che il vault contiene, non dal nome. Dopo un `already_exists`
+  // l'host ha risposto «no» o «non so», e nessuno dei due cambierebbe col
+  // nome dopo: «l'indice non è pronto» non arriva mai da un vault aperto
+  // (l'anagrafe c'è prima che il vault si possa usare), e i limiti (troppi
+  // candidati, byte da leggere) danno lo stesso «non so» a ogni domanda con
+  // questi byte. Rifarla a ogni nome costerebbe una ricerca per nome occupato
+  // e risponderebbe lo stesso: i nomi seguenti sono scritture «solo se
+  // nuovo».
   let asked = false;
   for (const candidate of attachmentCandidates(deposit, name)) {
     const options: ResourceWriteOptions | undefined = asked ? undefined : { reuse: "same-content" };

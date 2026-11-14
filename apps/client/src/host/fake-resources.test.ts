@@ -169,6 +169,30 @@ describe("resourceWrite con reuse risponde come l'host vero", () => {
     expect(events).toEqual([]);
   });
 
+  it("come l'host vero: solo la stessa estensione, e mai un contenuto vuoto", async () => {
+    const bytes = new Uint8Array([7, 7, 7, 7]);
+    const { module } = createFakeHost({
+      resources: {
+        "Allegati/foto.png": { bytes },
+        "Allegati/vuoto.png": { bytes: new Uint8Array() },
+        LICENSE: { bytes: new Uint8Array([9, 9]) },
+      },
+    });
+    const { api } = module;
+    // Il controllo positivo: la stessa estensione, maiuscole a parte, si ritrova.
+    await expect(api.resourceWrite("Lavagna/copia.PNG", bytes.slice(), null, undefined, { reuse: "same-content" }))
+      .resolves.toMatchObject({ id: "Allegati/foto.png", reused: true });
+    // Gli stessi byte con un'altra estensione non sono quel file: si scrive.
+    await expect(api.resourceWrite("Lavagna/foto.jpg", bytes.slice(), null, undefined, { reuse: "same-content" }))
+      .resolves.toMatchObject({ id: "Lavagna/foto.jpg", reused: false });
+    // Un contenuto vuoto non si ritrova mai, nemmeno fra i vuoti del suo tipo.
+    await expect(api.resourceWrite("Lavagna/nuovo.png", new Uint8Array(), null, undefined, { reuse: "same-content" }))
+      .resolves.toMatchObject({ id: "Lavagna/nuovo.png", reused: false });
+    // Un nome senza estensione trova solo un nome senza estensione.
+    await expect(api.resourceWrite("Altro/COPYING", new Uint8Array([9, 9]), null, undefined, { reuse: "same-content" }))
+      .resolves.toMatchObject({ id: "LICENSE", reused: true });
+  });
+
   it("oltre 64 candidati della stessa misura non sa, e scrive", async () => {
     const resources: Record<string, { bytes: Uint8Array }> = {};
     for (let n = 0; n < 65; n += 1) resources[`Pile/${String(n).padStart(3, "0")}.bin`] = { bytes: new Uint8Array([n, 0, 0, 0]) };

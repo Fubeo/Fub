@@ -234,12 +234,12 @@ describe("depositCanvasFiles (dal computer)", () => {
   });
 
   it("40 foto di cui 10 già nel vault: una notifica sola col numero, e le altre 30 si copiano", async () => {
-    const existing = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`Foto/f${i}.png`, new Uint8Array([65 + i, 66, 67])]));
+    const existing = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`Foto/f${i}.jpg`, new Uint8Array([65 + i, 66, 67])]));
     const vault = depositVault({ files: existing });
     const photos = Array.from({ length: 40 }, (_, i) => (i < 10 ? file(`IMG_${i}.jpg`, 65 + i, 66, 67) : file(`IMG_${i}.jpg`, 100 + i, 101, 102)));
     const paths = await depositCanvasFiles(photos, "Lavagne/studio.canvas", vault.deps);
     expect(paths).toHaveLength(40);
-    expect(paths.slice(0, 10)).toEqual(Array.from({ length: 10 }, (_, i) => `Foto/f${i}.png`));
+    expect(paths.slice(0, 10)).toEqual(Array.from({ length: 10 }, (_, i) => `Foto/f${i}.jpg`));
     expect(vault.notices.map((notice) => notice.message)).toEqual(["10 file già nel vault, uso quelli", "Copiati in attachments/"]);
     expect(vaultReads(vault.host)).toEqual([]);
   });
