@@ -3183,7 +3183,7 @@ export async function presentPrint(r: Pane, doc: string): Promise<void> {
       (forms) => new Set(declaredFences(forms).map((info) => info.toLowerCase())),
       () => new Set<string>(),
     );
-    const stop = await printDocument(doc, docTitle(doc), renderPrint, (container, rendered) =>
+    const stop = await printDocument(doc, pageName(doc), renderPrint, (container, rendered) =>
       mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light" }));
     if (r.shown?.k !== "doc" || r.shown.doc !== doc) {
       stop();
@@ -3791,7 +3791,7 @@ export async function chooseExport(paneId: string): Promise<void> {
   else if (offered.length === 1) chosen = offered[0]!;
   else {
     chosen = await pickFromList({
-      title: t("document.export.title", { doc: docTitle(doc) }),
+      title: t("document.export.title", { doc: pageName(doc) }),
       placeholder: t("document.export.placeholder"),
       items: offered.map((item) => ({ label: item.label(), detail: item.detail(), value: item })),
     });
@@ -3807,7 +3807,7 @@ export async function chooseExport(paneId: string): Promise<void> {
 export async function runExport(doc: string, chosen: SurfaceExport): Promise<void> {
   const unsaved = await flushPendingSave();
   if (unsaved.includes(doc)) {
-    notify(t("document.export.unsaved", { doc: docTitle(doc) }), "guasto");
+    notify(t("document.export.unsaved", { doc: pageName(doc) }), "guasto");
     return;
   }
   const request = {
@@ -3821,7 +3821,7 @@ export async function runExport(doc: string, chosen: SurfaceExport): Promise<voi
     notify(t("document.export.failed", { reason: errorText(error) }), "guasto");
     return;
   }
-  notify(t("document.export.started", { doc: docTitle(doc), what: chosen.label() }), "info");
+  notify(t("document.export.started", { doc: pageName(doc), what: chosen.label() }), "info");
   showActivity();
 }
 
@@ -3860,7 +3860,7 @@ async function saveNow(): Promise<void> {
   const pending = await flushPendingSave();
   view.drawSave();
   if (pending.length > 0) {
-    notify(t("document.save_now_failed", { doc: pending.map(docTitle).join(", ") }), "guasto");
+    notify(t("document.save_now_failed", { doc: pending.map(pageName).join(", ") }), "guasto");
   }
 }
 
@@ -3909,7 +3909,7 @@ export async function reveal(doc: string, location: SurfaceLocation): Promise<vo
   // documento, o nessuno: il punto non è di quel testo.
   if (activeDoc() !== doc || r?.shown?.k !== "doc" || r.shown.doc !== doc || !r.surface) return;
   if (!r.surface.reveal?.(location)) {
-    notify(t("document.reveal_unavailable", { doc: docTitle(doc) }), "info");
+    notify(t("document.reveal_unavailable", { doc: pageName(doc) }), "info");
   }
 }
 

@@ -1051,6 +1051,13 @@ describe("il testo non salvato resta (#237)", () => {
     await sessions.flush(PAGE).catch(() => {});
     await waitFor("l'avviso del salvataggio fallito", () => toastsAbout("non è stato salvato").length === 1);
     expect(toastsAbout("non è stato salvato")[0]).toContain("«Progetti» non è stato salvato");
+    // «Riprova» col disco ancora guasto: lo dice col nome della cartella.
+    const retry = [...document.querySelectorAll<HTMLElement>("#toasts > .toast")]
+      .find((toast) => (toast.textContent ?? "").includes("non è stato salvato"))!
+      .querySelector<HTMLButtonElement>(".toast-action")!;
+    retry.click();
+    await waitFor("l'avviso di Salva adesso", () => toastsAbout("Non è stato possibile salvare").length === 1);
+    expect(toastsAbout("Non è stato possibile salvare")[0]).toContain("salvare Progetti:");
   });
 
   it("la bozza che non si scrive si ridice quando la shell si rimonta, finché la rete manca", async () => {
