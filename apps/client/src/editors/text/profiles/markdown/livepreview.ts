@@ -413,7 +413,9 @@ export function computeDecorations(
   // Il giorno di chi guarda, per dire se una scadenza è vicina, e le
   // pastiglie delle scadenze, che si posano per ultime (`wholePill`).
   const today = localDay();
-  const pills: LiveDeco[] = [];
+  // Le pastiglie, ognuna col tratto del suo compito: la riga della casella e
+  // quelle che la continuano.
+  const pills: { pill: LiveDeco; from: number; to: number }[] = [];
 
   // Le formule fra dollari si leggono per contenitore con la regola della
   // Lettura (`containerMath`): un `$` aperto su una riga può chiudere sulla
@@ -1010,13 +1012,17 @@ export function computeDecorations(
       const due = projectedDue(liveProjection(tree, source, row.from, paragraphEnd, taskEnd));
       if (due) {
         const look = dueLook(due, checked, today);
-        pills.push({ from: due.source[0], to: due.source[1], kind: "task-due", data: look === "plain" ? undefined : look });
+        pills.push({
+          pill: { from: due.source[0], to: due.source[1], kind: "task-due", data: look === "plain" ? undefined : look },
+          from: row.from,
+          to: Math.max(taskEnd, row.to),
+        });
       }
     }
   }
 
   keepPunctuation(doc, out);
-  for (const pill of pills) out.push(wholePill(pill, out));
+  out.push(...wholePills(pills, out));
   // A pari tratto la pastiglia viene prima, cioè fuori: CodeMirror annida per
   // primo il segno che trova per primo.
   out.sort((a, b) => a.from - b.from || a.to - b.to || Number(b.kind === "task-due") - Number(a.kind === "task-due"));
@@ -1077,6 +1083,31 @@ export function wholePill(pill: LiveDeco, others: readonly LiveDeco[]): LiveDeco
     grow();
   }
   return { ...pill, from, to };
+}
+
+/// Le pastiglie intere (`wholePill`), guardando per ognuna soltanto i segni
+/// del suo compito: un segno in riga non esce dal paragrafo, e il paragrafo
+/// di un compito comincia alla riga della casella. I segni si ordinano una
+/// volta, e ogni pastiglia ne legge solo il tratto suo: nella battuta da 4 ms
+/// non si scorre tutto il viewport per ogni compito.
+export function wholePills(
+  pills: readonly { pill: LiveDeco; from: number; to: number }[],
+  decos: readonly LiveDeco[],
+): LiveDeco[] {
+  if (pills.length === 0) return [];
+  const sorted = decos.filter((d) => d.from < d.to && !LINE_KINDS.has(d.kind)).sort((a, b) => a.from - b.from);
+  return pills.map(({ pill, from, to }) => {
+    let low = 0;
+    let high = sorted.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (sorted[middle]!.from < from) low = middle + 1;
+      else high = middle;
+    }
+    const near: LiveDeco[] = [];
+    for (let at = low; at < sorted.length && sorted[at]!.from <= to; at++) near.push(sorted[at]!);
+    return wholePill(pill, near);
+  });
 }
 
 const REPLACED: ReadonlySet<LiveDecoKind> = new Set(["hide", "math", "image", "link-pill", "footnote-back"]);
