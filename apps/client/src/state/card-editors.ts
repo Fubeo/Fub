@@ -86,6 +86,13 @@ export interface CardEditorDeps {
   /// da sé quando un avviso si chiude altrove; `drawn` arriva dopo ogni
   /// disegno.
   readonly notices?: (box: HTMLElement, path: () => string, drawn: () => void) => CardNotices;
+  /// L'ultima scheda ha lasciato il documento, nessun riquadro lo mostra, e la
+  /// sessione non si è potuta salvare (`release` → `unsaved`): la bozza è
+  /// scritta, ma la sessione è l'unica copia viva del lavoro. La shell chiede
+  /// come dopo la chiusura di un riquadro (`keepOrDiscardUnsaved`, T102):
+  /// tenerla, riaprendo la nota, o scartarla. Assente: la sessione resta
+  /// aperta con la sua bozza.
+  readonly unsaved?: (path: string) => Promise<void>;
 }
 
 /// Gli avvisi disegnati dentro una scheda (`CardEditorDeps.notices`).
@@ -327,14 +334,32 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
   /// Dopo che una scheda ha lasciato il documento: se nessun riquadro e
   /// nessun'altra scheda lo tiene, la sessione decide da sé se chiudersi.
   /// Salva e chiude; se non può salvare (un conflitto, un disco che rifiuta)
-  /// resta aperta con la sua bozza, come dopo la chiusura di un riquadro.
-  async function settle(path: string): Promise<void> {
-    if (deps.shownInPane(path) || holds(path)) return;
+  /// resta aperta con la sua bozza e la shell chiede che farne, come dopo la
+  /// chiusura di un riquadro (`unsaved`, T102): mai testo perso in silenzio.
+  /// Senza `ask` (la shell che se ne va, `destroyAll`) non si chiede: la
+  /// bozza è già scritta, e la chiusura della finestra ha la sua domanda.
+  async function settle(path: string, ask = true): Promise<void> {
+    if (!unwatched(path)) return;
+    let outcome: CloseResult;
     try {
-      await sessions.release(path);
+      outcome = await sessions.release(path);
+    } catch (error) {
+      console.error(error);
+      return;
+    }
+    // Nel frattempo un riquadro o una scheda può averla ripresa: allora la
+    // sessione è di nuovo guardata, e la domanda non serve.
+    if (outcome.kind !== "unsaved" || !ask || !deps.unsaved || !unwatched(path)) return;
+    try {
+      await deps.unsaved(path);
     } catch (error) {
       console.error(error);
     }
+  }
+
+  /// Se nessun riquadro e nessuna scheda tiene il documento `path`.
+  function unwatched(path: string): boolean {
+    return !deps.shownInPane(path) && !holds(path);
   }
 
   function holds(path: string): boolean {
@@ -342,7 +367,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
     return false;
   }
 
-  function destroy(editor: OpenCardEditor): void {
+  function destroy(editor: OpenCardEditor, ask = true): void {
     if (editor.destroyed) return;
     // Il testo che la superficie tiene ancora va alla sessione prima di
     // staccarsi, come per un riquadro.
@@ -365,7 +390,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         console.error(error);
       }
     }
-    void settle(docOf(editor));
+    void settle(docOf(editor), ask);
   }
 
   function handle(editor: OpenCardEditor): CardEditor {
@@ -595,6 +620,16 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
 
   function destroyText(editor: OpenTextEditor): void {
     if (editor.destroyed) return;
+    // Il testo che la superficie tiene ancora (una composizione a metà) va a
+    // `onText` prima di staccarsi, come per una scheda di file (`destroy`):
+    // `written` lo porta finché l'editor non è segnato come smontato.
+    if (!editor.stopped) {
+      try {
+        editor.surface.buffer?.commitPending?.();
+      } catch (error) {
+        console.error(error);
+      }
+    }
     try {
       editor.last = editor.surface.buffer?.getDoc() ?? editor.last;
     } catch (error) {
@@ -770,7 +805,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
       }
     },
     destroyAll() {
-      for (const editor of [...open.values()]) destroy(editor);
+      for (const editor of [...open.values()]) destroy(editor, false);
       for (const editor of [...texts.values()]) destroyText(editor);
     },
   };

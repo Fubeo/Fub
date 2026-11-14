@@ -561,6 +561,9 @@ function cardEditorsHub(): CardEditorHub {
     toolbar: cardToolbar,
     conflict: (box, path) => view.drawCardConflict(box, path),
     notices: (box, path, drawn) => view.drawCardNotices(box, path, drawn),
+    // Una scheda chiusa sopra un salvataggio fallito: la domanda di un
+    // riquadro, e «Tieni» riapre la nota nel riquadro col fuoco (T102).
+    unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
   });
   return cardEditorHub;
 }
@@ -2067,8 +2070,9 @@ async function keepOrDiscardUnsaved(doc: string, paneId: string): Promise<void> 
     cancelLabel: t("document.close_unsaved.keep"),
     danger: true,
   }).catch(() => false);
-  // Nel frattempo qualcuno può averla riaperta: allora ha già un riquadro.
-  if (panesWithDoc(doc).length > 0) return;
+  // Nel frattempo qualcuno può averla riaperta: allora ha già un riquadro, o
+  // una scheda della lavagna ci scrive, e scartarla le toglierebbe il testo.
+  if (panesWithDoc(doc).length > 0 || cardEditors.holds(doc)) return;
   if (discard) {
     documentSessions.discardUnsaved(doc);
     return;
