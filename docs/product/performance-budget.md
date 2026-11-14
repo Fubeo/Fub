@@ -228,6 +228,8 @@ tabella), con trenta battute e venti spostamenti del cursore di 200 caratteri:
 ```bash
 cd apps/client
 node bench/interaction.mjs --only=battuta
+# le cifre qui sotto: sui core P e con priorità bassa
+taskset -c 0-7 nice -n 19 node bench/interaction.mjs --only=battuta
 ```
 
 Il budget è una **mediana di 4 ms** e un **novantesimo percentile di 8 ms**
@@ -255,6 +257,18 @@ la Live e i Blocchi le stanno sopra di circa un millisecondo e mezzo (prima
 erano tre). Fra un giro e l'altro la stessa nota varia di più di quanto valga
 una correzione: il numero da guardare è la distanza dalla Sorgente, non la
 cifra di un giro solo.
+
+Sui soli core P (`taskset -c 0-7 nice -n 19`, sei giri alternati, carico da
+3,6 a 9,7) la nota di 7.201 righe dà, mediana · novantesimo: Sorgente 3,9 ·
+5,9 ms, Live 4,9 · 9,8 (prima 6,3 · 10,8), Blocchi 5,5 · 10,5 (prima 6,6 ·
+10,5). Le righe nascoste tolte dal campo dei blocchi (qui sotto) sono venute
+dopo: con carico da 10 a 25 la Sorgente fa 3,7 · 4,8, la Live 6,6 · 11,4
+(prima 8,8 · 12,3), i Blocchi 7,1 · 12,8 (prima 8,6 · 13,2). Della distanza
+che resta dalla Sorgente, il profilo di una battuta nella Live mostra
+soprattutto l'evidenziazione della sintassi di CodeMirror, che riceve il tratto
+visibile spezzato dai blocchi resi in sei pezzi e scorre l'albero dall'inizio
+per ognuno (0,56 ms contro 0,14 della Sorgente), e il confronto delle
+decorazioni che restano nel campo dei blocchi (i 400 widget di blocco).
 
 Una battuta lavora soltanto vicino alle posizioni del cambio, mai con un giro
 sui blocchi di primo livello:
@@ -287,7 +301,13 @@ sui blocchi di primo livello:
   altri tengono quello che sapevano;
 - **il modello dei Blocchi** cerca il punto da rifare e i gruppi che tornano
   uguali per posizione, con una ricerca binaria, e scorre l'albero soltanto
-  dal punto della modifica al primo gruppo uguale.
+  dal punto della modifica al primo gruppo uguale. Un modello letto da un
+  albero a metà si rifà da capo quando l'albero arriva in fondo;
+- **le righe nascoste dopo i blocchi resi** della Live (quelle con altezza
+  zero, `cm-markdown-gap`) non stanno nel campo dei blocchi ma in un plugin
+  della vista che dà soltanto quelle del tratto visibile: CodeMirror confronta
+  due volte a ogni aggiornamento tutte le decorazioni a punto della vista, e
+  prima erano 1.600 sulla nota grande (fino a 1,3 ms per battuta).
 
 Un blocco tornato tiene il suo widget: il suo `eq` non guarda la posizione, e
 dopo l'aggiornamento della vista le coordinate `data-md-*` del DOM tornano al
