@@ -665,10 +665,15 @@ const theme = EditorView.baseTheme({
     fontSize: "0.85em",
     cursor: "pointer",
   },
+  // Il titolo è un `<input>`, e un campo taglia ciò che esce dalla sua
+  // scatola: l'altezza la dà la riga del titolo, non quella dei campi della
+  // pelle (`--control-h`, più bassa di una riga a 2,1em), sennò la cima
+  // delle lettere resta fuori.
   ".cm-fub-page-title": {
     display: "block",
     boxSizing: "border-box",
     width: "100%",
+    height: "auto",
     margin: "0",
     padding: "0",
     border: "none",
