@@ -48,9 +48,11 @@ import { settings } from "../host/query";
 import { type Key, t } from "../i18n/strings";
 import { onEvent } from "../state/kernel";
 import { components } from "../state/components";
-import { UI_SPATIAL } from "../editors/core/component-surfaces";
+import { UI_CANVAS, UI_GRID, UI_RICH, UI_SPATIAL } from "../editors/core/component-surfaces";
+import { errorText } from "../host/errors";
 import { state } from "../state/store";
 import type { Lifetime } from "./lifetime";
+import { notify } from "./notify";
 import { SHELL_KEYS, type ShellCommandId } from "./shell-keys.generated";
 
 /// La chiave d'impostazione che tiene la scorciatoia di un comando.
@@ -254,14 +256,179 @@ export function canCreateDrawing(): boolean {
   return hasKernelCommand(NEW_DRAWING) && (components()?.uiOn(UI_SPATIAL) ?? true);
 }
 
-/// Che cosa si crea adesso dai menu «Nuovo», nel loro ordine: la nota c'è
-/// sempre (il testo è del nucleo), il disegno alle condizioni delle sue porte.
-/// L'esploratore e il riquadro della pagina «Componenti» leggono da qui, così
-/// il riquadro dice le voci che il menu mostra davvero.
-export type NewKind = "note" | "drawing";
+// # Il menu «Nuovo»
+//
+// Il «+» dell'albero (anche al telefono), «Nuovo ▸» di una cartella e del
+// titolo dell'albero e il menu File offrono lo stesso elenco di tipi, nello
+// stesso ordine: sta qui, così nessuna porta ne dimentica uno e il riquadro
+// della pagina «Componenti» dice le voci che il menu mostra davvero. Ogni voce
+// c'è soltanto se si può fare, come «Nuovo disegno…»: la nota e la cartella
+// sempre (il testo e l'albero sono del nucleo); un documento, un foglio, un
+// disegno e una lavagna se il kernel dichiara il loro comando e il loro editor
+// è acceso (K2); «da un modello» se c'è il lanciatore dei modelli e il kernel
+// sa fare una nota da un modello. Chi apre un menu rilegge l'elenco.
 
+/// Che cosa si crea dai menu «Nuovo».
+export type NewKind = "note" | "document" | "sheet" | "drawing" | "canvas" | "template" | "folder";
+
+/// Il comando del kernel che fa una nota da un modello: senza, il lanciatore
+/// dei modelli non ha niente da fare.
+export const NOTE_FROM_TEMPLATE = "note.from_template";
+
+/// Il comando di shell che apre il lanciatore sui modelli (lo Scrittoio).
+const TEMPLATES_LAUNCHER = "shell.launcher.templates";
+
+/// Il comando di shell della nota nuova: la sua scorciatoia sta accanto a «Nota».
+const NOTE_NEW = "shell.note.new";
+
+interface NewKindSpec {
+  readonly kind: NewKind;
+  readonly label: Key;
+  /// Il comando del kernel che fa nascere il file, e l'editor che lo apre:
+  /// servono tutti e due.
+  readonly command?: string;
+  readonly ui?: string;
+  /// Una riga prima della voce: da qui non si crea un file vuoto.
+  readonly separator?: boolean;
+}
+
+/// L'elenco, nell'ordine di S34.
+const NEW_KINDS: readonly NewKindSpec[] = [
+  { kind: "note", label: "new.kind.note" },
+  { kind: "document", label: "new.kind.document", command: "document.create", ui: UI_RICH },
+  { kind: "sheet", label: "new.kind.sheet", command: "sheet.create", ui: UI_GRID },
+  { kind: "drawing", label: "new.kind.drawing", command: NEW_DRAWING, ui: UI_SPATIAL },
+  { kind: "canvas", label: "new.kind.canvas", command: "canvas.create", ui: UI_CANVAS },
+  { kind: "template", label: "new.kind.template", separator: true },
+  { kind: "folder", label: "new.kind.folder" },
+];
+
+/// Il nome di un tipo come lo dice il menu.
+export function newKindLabel(kind: NewKind): string {
+  return t(NEW_KINDS.find((each) => each.kind === kind)!.label);
+}
+
+/// Il lanciatore dei modelli, se la cornice ne ha uno che adesso si apre.
+function templatesLauncher(): (() => void | Promise<void>) | null {
+  const entry = allCommands().find((candidate) => candidate.id === TEMPLATES_LAUNCHER);
+  return entry?.run && !entry.unavailable ? entry.run : null;
+}
+
+/// Chi apre il lanciatore dei modelli con la cartella dove la nota nascerà:
+/// il lanciatore dello Scrittoio, che la passa a `note.from_template`.
+/// Senza, «Nota da un modello…» apre il lanciatore com'è (la radice).
+export type TemplateOpener = (folder: string) => void;
+
+let templateOpener: TemplateOpener | null = null;
+
+/// Dice chi apre i modelli in una cartella; restituisce chi lo toglie.
+export function registerTemplateOpener(open: TemplateOpener): () => void {
+  templateOpener = open;
+  return () => {
+    if (templateOpener === open) templateOpener = null;
+  };
+}
+
+/// Il comando e l'editor del tipo ci sono ancora (K2)?
+function kindOn(each: NewKindSpec): boolean {
+  if (each.kind === "template") return hasKernelCommand(NOTE_FROM_TEMPLATE);
+  if (each.command === undefined) return true;
+  return hasKernelCommand(each.command) && (each.ui === undefined || (components()?.uiOn(each.ui) ?? true));
+}
+
+function canCreate(each: NewKindSpec): boolean {
+  if (each.kind === "template") return templatesLauncher() !== null && kindOn(each);
+  return kindOn(each);
+}
+
+/// Che cosa si crea adesso, nell'ordine del menu.
 export function newKinds(): NewKind[] {
-  return canCreateDrawing() ? ["note", "drawing"] : ["note"];
+  return NEW_KINDS.filter(canCreate).map((each) => each.kind);
+}
+
+/// Chi fa nascere una nota e una cartella: l'esploratore, che ha il campo del
+/// nome della cartella e apre la cartella dove la nota nasce. `folder` è la
+/// cartella scelta ("" è la radice del vault); `undefined` vuol dire «dove la
+/// fa nascere Ctrl+N» per la nota (anche accanto alla nota aperta, con
+/// `files.new-note-folder` a `./`) e la radice di ciò che si vede per la
+/// cartella.
+export interface NewKindHost {
+  note(folder: string | undefined): void;
+  folder(folder: string | undefined): void;
+}
+
+let newHost: NewKindHost | null = null;
+
+/// Dice chi fa le note e le cartelle; restituisce chi lo toglie.
+export function registerNewKindHost(host: NewKindHost): () => void {
+  newHost = host;
+  return () => {
+    if (newHost === host) newHost = null;
+  };
+}
+
+/// Una voce del menu «Nuovo», con la forma di una voce di `ui/menu.ts`.
+export interface NewEntry {
+  readonly kind: NewKind;
+  readonly label: string;
+  readonly hint?: string;
+  readonly separator?: boolean;
+  readonly run: () => void;
+}
+
+/// Le voci del menu «Nuovo». Con `folder` il file nasce in quella cartella
+/// ("" è la radice): è il menu di una cartella dell'albero. Senza, nasce dove
+/// lo fa nascere il gesto diretto: la nota come Ctrl+N, il resto nello spazio
+/// attivo. Sono il «+», il titolo dell'albero e il menu File.
+///
+/// La nota e la cartella mancano soltanto in una cornice senza albero, che non
+/// le sa fare. Una voce scelta quando non si può più fare, a menu aperto, lo
+/// dice con un avviso invece di non fare niente: il suo comando o il suo
+/// editor si sono spenti, o questa finestra non ha più chi la fa partire.
+export function newEntries(folder?: string): NewEntry[] {
+  const kinds = newKinds();
+  return NEW_KINDS.filter((each) => kinds.includes(each.kind))
+    .filter((each) => (each.kind !== "note" && each.kind !== "folder") || newHost !== null)
+    .map((each): NewEntry => {
+      const label = t(each.label);
+      const hint = each.kind === "note" ? displayBinding(allCommands().find((entry) => entry.id === NOTE_NEW)?.binding ?? null) : "";
+      return {
+        kind: each.kind,
+        label,
+        ...(hint ? { hint } : {}),
+        ...(each.separator ? { separator: true } : {}),
+        run: () => {
+          const outcome = startNew(each, folder);
+          if (outcome === "off") notify(t("new.kind.unavailable", { kind: label }), "guasto");
+          else if (outcome === "unreachable") notify(t("new.kind.unreachable", { kind: label }), "guasto");
+        },
+      };
+    });
+}
+
+/// Com'è andata una voce: partita; il suo comando o il suo editor si sono
+/// spenti; c'è tutto, ma questa finestra non ha chi la fa partire.
+type NewOutcome = "started" | "off" | "unreachable";
+
+/// Fa partire la voce `each`.
+function startNew(each: NewKindSpec, folder: string | undefined): NewOutcome {
+  if (!kindOn(each)) return "off";
+  if (each.kind === "note" || each.kind === "folder") {
+    if (newHost === null) return "unreachable";
+    newHost[each.kind](folder);
+    return "started";
+  }
+  if (each.kind === "template") {
+    const opener = templateOpener;
+    const launch = templatesLauncher();
+    if (opener === null && launch === null) return "unreachable";
+    void Promise.resolve()
+      .then(() => (opener ? opener(folder ?? "") : launch!()))
+      .catch((error: unknown) => notify(t("new.kind.failed", { kind: t(each.label), reason: errorText(error) }), "guasto"));
+    return "started";
+  }
+  const place = folder ?? state.activeSpace ?? "";
+  return launchCommand(each.command!, place === "" ? {} : { folder: place }) ? "started" : "unreachable";
 }
 
 /// Apre «Nuovo disegno…»: il modulo proprio del comando, la galleria, o la

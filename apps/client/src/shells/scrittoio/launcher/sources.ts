@@ -24,12 +24,13 @@ import { activeDoc, layout } from "../../../state/layout";
 import { paletteHost } from "../../../state/palette-host";
 import { existingRecentNotes, recentSearches } from "../../../state/recent";
 import { openVaultRoot, state, vaultArg } from "../../../state/store";
-import { allCommands, type CommandEntry } from "../../../ui/commands";
+import { allCommands, NOTE_FROM_TEMPLATE, type CommandEntry } from "../../../ui/commands";
 import { filterCommands, orderCommands, paletteHistoryForTest, viewEntries } from "../../../ui/palette";
 import { filterByText, linePlace, lineTarget, type Mode } from "./model";
 
-/// Il comando del kernel che crea una nota da un modello.
-export const TEMPLATE_COMMAND = "note.from_template";
+/// Il comando del kernel che crea una nota da un modello: lo stesso id che
+/// decide se il menu «Nuovo» offre «Nota da un modello…».
+export const TEMPLATE_COMMAND = NOTE_FROM_TEMPLATE;
 /// La cartella dei modelli: la stessa di `fub-features` (`template.rs`), che
 /// oggi non la pubblica né come impostazione né come specchio.
 export const TEMPLATES_FOLDER = "Templates";

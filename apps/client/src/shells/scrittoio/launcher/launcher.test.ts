@@ -13,6 +13,8 @@ import {
 } from "../../../ui/commands";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu, menuFind, showContextMenu } from "../../../ui/menu";
+import { newEntries } from "../../../ui/commands";
+import type { CommandSpec } from "../../../host/contract";
 import { setSearchPort } from "../../../state/search-port";
 import { state } from "../../../state/store";
 import type { Listing, Row } from "./sources";
@@ -634,6 +636,28 @@ describe("scegliere una riga", () => {
       "host notify fatto",
       "effect navigate",
     ]);
+  });
+
+  it("«Nuovo ▸ Nota da un modello…» di una cartella fa nascere la nota lì; un'apertura qualunque torna alla radice", async () => {
+    const before = state.commandSpecs;
+    state.commandSpecs = [{ id: "note.from_template", title: "t", description: "d", scope: { reach: "global" } } as unknown as CommandSpec];
+    try {
+      world.answer = () => listed([{ kind: "template", key: "m:1", doc: "Templates/Riunione.md" }]);
+      newEntries("Scienze").find((entry) => entry.kind === "template")!.run();
+      await vi.waitFor(() => expect(titles()).toEqual(["Riunione"]));
+      press(field(), "Enter");
+      await settle();
+      expect(world.log[0]).toBe('invoke note.from_template {"template":"Templates/Riunione.md","folder":"Scienze"}');
+
+      world.log.length = 0;
+      launcher.open("templates");
+      expect(titles()).toEqual(["Riunione"]);
+      press(field(), "Enter");
+      await settle();
+      expect(world.log[0]).toBe('invoke note.from_template {"template":"Templates/Riunione.md"}');
+    } finally {
+      state.commandSpecs = before;
+    }
   });
 });
 
