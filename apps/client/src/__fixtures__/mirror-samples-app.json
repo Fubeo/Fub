@@ -383,17 +383,36 @@
     {
       "outcome": "blocked",
       "why": "pointer",
-      "path": "/home/chi/.config/fub/themes/acme.carta"
+      "path": "/home/chi/.config/fub/themes/acme.carta",
+      "installed": true
     },
     {
       "outcome": "blocked",
       "why": "link",
-      "path": "/home/chi/.config/fub/themes/acme.carta"
+      "path": "/home/chi/.config/fub/themes/acme.carta",
+      "installed": true
     },
     {
       "outcome": "blocked",
       "why": "layout",
-      "path": "/home/chi/.config/fub/themes"
+      "path": "/home/chi/.config/fub/themes",
+      "installed": false
+    },
+    {
+      "outcome": "unreadable",
+      "side": "folder",
+      "error": {
+        "kind": "io",
+        "message": "/home/chi/temi/carta/skin.css: Input/output error"
+      }
+    },
+    {
+      "outcome": "unreadable",
+      "side": "themes",
+      "error": {
+        "kind": "io",
+        "message": "/home/chi/.config/fub/themes: Input/output error"
+      }
     },
     {
       "outcome": "refused",

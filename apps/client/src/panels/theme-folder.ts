@@ -54,6 +54,8 @@ export interface Diagnosis {
   readonly text: readonly string[];
   /// Il tentativo voleva sostituire un tema installato, che resta com'era.
   readonly kept?: boolean;
+  /// Il tema non è rifiutato: è ciò che c'è già fra i temi di Fub a fermarlo.
+  readonly blocked?: boolean;
 }
 
 /// I file che un canale del loader descrive. `foglio` e `contrasto` parlano
@@ -175,9 +177,9 @@ export function renderDiagnosis(diagnosis: Diagnosis): HTMLElement {
   title.setAttribute("role", "heading");
   title.setAttribute("aria-level", "4");
   const count = diagnosis.rows.length;
-  title.textContent = plural(count, "settings.themes.diagnosis.title.one", "settings.themes.diagnosis.title", {
-    name: diagnosis.name,
-  });
+  title.textContent = diagnosis.blocked
+    ? plural(count, "settings.themes.diagnosis.blocked.one", "settings.themes.diagnosis.blocked", { name: diagnosis.name })
+    : plural(count, "settings.themes.diagnosis.title.one", "settings.themes.diagnosis.title", { name: diagnosis.name });
   const when = document.createElement("div");
   when.className = "muted";
   when.textContent = t(diagnosis.kept ? "settings.themes.diagnosis.when_kept" : "settings.themes.diagnosis.when", {
@@ -272,16 +274,17 @@ async function failed(host: ThemeFolderHost, error: unknown): Promise<void> {
 async function stopped(
   host: ThemeFolderHost,
   folder: string,
-  outcome: Extract<ThemeFolderInstall, { outcome: "changed" | "unchecked" | "failed" }>,
+  outcome: Extract<ThemeFolderInstall, { outcome: "changed" | "unchecked" | "failed" | "unreadable" }>,
   replace: boolean,
 ): Promise<void> {
   refusal = null;
+  const name = { folder: folderName(folder) };
   const what =
     outcome.outcome === "failed"
       ? t(DISK_CAUSE[outcome.cause])
-      : t(outcome.outcome === "changed" ? "settings.themes.changed" : "settings.themes.unchecked", {
-          folder: folderName(folder),
-        });
+      : outcome.outcome === "unreadable"
+        ? t(outcome.side === "folder" ? "settings.themes.unreadable.folder" : "settings.themes.unreadable.themes", name)
+        : t(outcome.outcome === "changed" ? "settings.themes.changed" : "settings.themes.unchecked", name);
   notify(replace ? `${what} ${t("settings.themes.install_kept")}` : what, "guasto");
   await host.rerender();
 }
@@ -455,8 +458,12 @@ export async function installThemeFolder(host: ThemeFolderHost): Promise<void> {
     }
     case "blocked": {
       // Non è un difetto della cartella: è ciò che c'è già fra i temi di Fub.
-      const why = t(BLOCKED[outcome.why], { path: outcome.path });
-      await showRefusal(host, wholeTheme(manifest.name, `blocked_${outcome.why}`, why, false));
+      // Il tema installato con lo stesso id, se è lui, resta com'era.
+      const why = t(BLOCKED[outcome.why], { name: manifest.name, path: outcome.path });
+      await showRefusal(host, {
+        ...wholeTheme(manifest.name, `blocked_${outcome.why}`, why, outcome.installed),
+        blocked: true,
+      });
       return;
     }
     case "refused":
@@ -465,6 +472,7 @@ export async function installThemeFolder(host: ThemeFolderHost): Promise<void> {
     case "changed":
     case "unchecked":
     case "failed":
+    case "unreadable":
       await stopped(host, folder, outcome, replace);
       return;
     case "collision":

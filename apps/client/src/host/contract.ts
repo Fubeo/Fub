@@ -216,6 +216,13 @@ export type DiskCause = "full" | "denied" | "other";
 export type ThemeBlock = "pointer" | "link" | "layout";
 
 /**
+ * Da quale parte un'installazione da cartella non è riuscita a leggere
+ * (`fub_host::theme::ThemeSide`): la cartella scelta o la cartella dei temi
+ * di Fub.
+ */
+export type ThemeSide = "folder" | "themes";
+
+/**
  * Com'è andata un'installazione da cartella (`install_theme_from_folder`,
  * `fub_host::theme::ThemeFolderInstall`). Ogni fermata è un esito; un
  * `PluginError` resta solo per la modalità sviluppatore spenta
@@ -229,7 +236,12 @@ export type ThemeBlock = "pointer" | "link" | "layout";
  * - `revoked`: il tema installato con lo stesso id è revocato dal catalogo, e
  *   una cartella non lo sostituisce; niente è stato toccato;
  * - `blocked`: ciò che c'è nella cartella dei temi di Fub non si tocca (`why`),
- *   e `path` è dove, da mostrare; niente è stato toccato;
+ *   e `path` è dove, da mostrare; `installed` se è il tema già installato con
+ *   lo stesso id (che resta com'era), no se è la cartella dei temi; niente è
+ *   stato toccato;
+ * - `unreadable`: una lettura non è riuscita (`side`: la cartella scelta, con
+ *   i byte del controllo, o la cartella dei temi); niente è scritto, e non è
+ *   un guasto di scrittura. `error` è il guasto così com'è, mai da mostrare;
  * - `replace_failed`: il nuovo si è fermato e il vecchio non è riuscito a
  *   tornare al suo nome. `kept` è il nome della cartella, dentro la cartella
  *   dei temi, dove il vecchio è rimasto: la shell lo dice con le sue parole.
@@ -254,7 +266,8 @@ export type ThemeFolderInstall =
       installed_version: string | null;
     }
   | { outcome: "revoked"; id: string; name: string; version: string }
-  | { outcome: "blocked"; why: ThemeBlock; path: string }
+  | { outcome: "blocked"; why: ThemeBlock; path: string; installed: boolean }
+  | { outcome: "unreadable"; side: ThemeSide; error: PluginError }
   | { outcome: "replace_failed"; id: string; name: string; version: string; kept: string; error: PluginError }
   | { outcome: "refused"; refusal: ThemeFolderRefusal }
   | { outcome: "changed" }

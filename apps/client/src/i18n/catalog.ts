@@ -1451,6 +1451,10 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.disk.full": "Il disco è pieno: il tema non si è installato.",
 "settings.themes.disk.denied": "Il sistema non lascia scrivere nella cartella dei temi: il tema non si è installato.",
 "settings.themes.disk.other": "Il disco non ha lasciato scrivere il tema: non si è installato.",
+"settings.themes.unreadable.folder":
+  "Fub non riesce a leggere la cartella «{folder}»: il tema non si è installato e non ho scritto niente. Riprova.",
+"settings.themes.unreadable.themes":
+  "Fub non riesce a leggere la sua cartella dei temi: il tema non si è installato e non ho scritto niente.",
 "settings.themes.unchecked":
   "Il controllo di «{folder}» non vale più: ne è arrivato uno più recente, o è già stato usato. Non ho scritto niente: scegli di nuovo la cartella.",
 "settings.themes.replace.title": "«{name}» è già installato",
@@ -1467,6 +1471,8 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.replace_failed.ok": "Ho capito",
 "settings.themes.diagnosis.title.one": "«{name}» è rifiutato: {n} motivo",
 "settings.themes.diagnosis.title": "«{name}» è rifiutato: {n} motivi",
+"settings.themes.diagnosis.blocked.one": "«{name}» è bloccato: {n} motivo",
+"settings.themes.diagnosis.blocked": "«{name}» è bloccato: {n} motivi",
 "settings.themes.diagnosis.when": "Tentativo delle {time}. Il tema resta fuori dai temi installati.",
 "settings.themes.diagnosis.when_kept": "Tentativo delle {time}. Il tema installato resta com'era.",
 "settings.themes.refused.one": "«{name}» non è installato: {n} motivo, lo trovi sotto «Temi installati».",
@@ -1485,7 +1491,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.refusal.malformed": "Il tema non è ben formato: {detail}",
 "settings.themes.refusal.revoked": "«{name}» è stato ritirato dal catalogo e Fub non lo installa, nemmeno da una cartella.",
 "settings.themes.blocked.pointer":
-  "Il tema già installato con lo stesso id ha il file della versione rotto, o che non si apre: potrebbe essere ritirato dal catalogo, quindi Fub non lo sostituisce. Toglilo a mano da {path} e riprova.",
+  "«{name}» è già installato, ma Fub non riesce a leggere se il catalogo lo ha ritirato, quindi non lo sostituisce: potrebbe essere un tema ritirato. Prova prima a reinstallarlo o ad aggiornarlo dal catalogo. Se non basta, puoi togliere a mano la cartella {path}: così però Fub dimentica anche se il tema era stato ritirato.",
 "settings.themes.blocked.link":
   "Al posto di {path} c'è un collegamento: Fub non scrive attraverso un collegamento. Toglilo e riprova.",
 "settings.themes.blocked.layout": "{path} non è una cartella che Fub sa usare per i temi: sistemala a mano e riprova.",
@@ -4685,6 +4691,10 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.disk.full": "The disk is full: the theme was not installed.",
 "settings.themes.disk.denied": "The system does not allow writing to the themes folder: the theme was not installed.",
 "settings.themes.disk.other": "The disk did not allow writing the theme: it was not installed.",
+"settings.themes.unreadable.folder":
+  "Fub cannot read the folder «{folder}»: the theme was not installed and nothing was written. Try again.",
+"settings.themes.unreadable.themes":
+  "Fub cannot read its themes folder: the theme was not installed and nothing was written.",
 "settings.themes.unchecked":
   "The check of «{folder}» is no longer valid: a newer one arrived, or it was already used. Nothing was written: choose the folder again.",
 "settings.themes.replace.title": "«{name}» is already installed",
@@ -4701,6 +4711,8 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.replace_failed.ok": "Got it",
 "settings.themes.diagnosis.title.one": "«{name}» is rejected: {n} reason",
 "settings.themes.diagnosis.title": "«{name}» is rejected: {n} reasons",
+"settings.themes.diagnosis.blocked.one": "«{name}» is blocked: {n} reason",
+"settings.themes.diagnosis.blocked": "«{name}» is blocked: {n} reasons",
 "settings.themes.diagnosis.when": "Attempt at {time}. The theme stays out of the installed themes.",
 "settings.themes.diagnosis.when_kept": "Attempt at {time}. The installed theme stays as it was.",
 "settings.themes.refused.one": "«{name}» is not installed: {n} reason, you will find it under «Installed themes».",
@@ -4719,7 +4731,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.refusal.malformed": "The theme is not well formed: {detail}",
 "settings.themes.refusal.revoked": "«{name}» was withdrawn from the catalog and Fub does not install it, not even from a folder.",
 "settings.themes.blocked.pointer":
-  "The theme already installed with the same id has a broken version file, or one that does not open: it might be withdrawn from the catalog, so Fub does not replace it. Remove it by hand from {path} and try again.",
+  "«{name}» is already installed, but Fub cannot read whether the catalog has withdrawn it, so it does not replace it: it might be a withdrawn theme. First try reinstalling or updating it from the catalog. If that does not help, you can remove the folder {path} by hand: Fub then also forgets whether the theme was withdrawn.",
 "settings.themes.blocked.link":
   "There is a link in place of {path}: Fub does not write through a link. Remove it and try again.",
 "settings.themes.blocked.layout": "{path} is not a folder Fub can use for themes: fix it by hand and try again.",

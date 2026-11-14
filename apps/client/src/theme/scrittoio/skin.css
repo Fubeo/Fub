@@ -19321,15 +19321,17 @@ h6.ui-heading {
   padding: 0;
   list-style: none;
 }
+/* Il codice non si spezza mai: la sua colonna tiene il più lungo
+   («blocked_pointer»), e lo stacco dal testo è lo stesso `gap` in ogni riga. */
 .tema-diagnosi-riga {
   display: grid;
-  grid-template-columns: 7em 4em 8em minmax(0, 1fr);
+  grid-template-columns: 7em 4em 10em minmax(0, 1fr);
   align-items: baseline;
   gap: var(--space-3);
   font-size: var(--text-sm);
 }
 .tema-diagnosi-riga--tema {
-  grid-template-columns: 8em minmax(0, 1fr);
+  grid-template-columns: 10em minmax(0, 1fr);
 }
 .tema-diagnosi-file,
 .tema-diagnosi-dove,
@@ -19347,18 +19349,24 @@ h6.ui-heading {
 }
 .tema-diagnosi-codice {
   color: var(--danger);
+  white-space: nowrap;
 }
 .tema-diagnosi-perche {
   color: var(--text);
   overflow-wrap: anywhere;
 }
+/* Stretto, il file, il punto e il codice stanno su una riga, e il perché
+   sotto, largo quanto la riga: il codice resta intero. */
 @media (max-width: 560px) {
   .tema-diagnosi-riga {
-    grid-template-columns: 7em minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    row-gap: var(--space-1);
   }
-  /* Un motivo di tutto il tema ha già due colonne: resta com'è. */
   .tema-diagnosi-riga--tema {
-    grid-template-columns: 8em minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tema-diagnosi-perche {
+    grid-column: 1 / -1;
   }
 }
 

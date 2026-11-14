@@ -738,7 +738,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   ): ThemeFolderInstall {
     const { id, name, version } = manifest;
     const block = options.blockedThemes?.[id];
-    if (block !== undefined) return { outcome: "blocked", why: block, path: `/config/themes/${id}` };
+    if (block !== undefined) return { outcome: "blocked", why: block, path: `/config/themes/${id}`, installed: true };
     const at = themes.findIndex((theme) => theme.manifest.id === id);
     if (at < 0 && revokedThemes.has(id)) return { outcome: "revoked", id, name, version };
     if (at >= 0 && !replace) {

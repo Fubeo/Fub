@@ -20,6 +20,7 @@ import type {
   ComponentsMap,
   DiskCause,
   ThemeBlock,
+  ThemeSide,
   ThemeFolderCheck,
   ThemeFolderInstall,
   ThemeFolderLight,
@@ -1974,7 +1975,10 @@ describe("mirror TS↔Rust", () => {
       revoked: keysOf<Extract<ThemeFolderInstall, { outcome: "revoked" }>>({
         outcome: true, id: true, name: true, version: true,
       }),
-      blocked: keysOf<Extract<ThemeFolderInstall, { outcome: "blocked" }>>({ outcome: true, why: true, path: true }),
+      blocked: keysOf<Extract<ThemeFolderInstall, { outcome: "blocked" }>>({
+        outcome: true, why: true, path: true, installed: true,
+      }),
+      unreadable: keysOf<Extract<ThemeFolderInstall, { outcome: "unreadable" }>>({ outcome: true, side: true, error: true }),
       replace_failed: keysOf<Extract<ThemeFolderInstall, { outcome: "replace_failed" }>>({
         outcome: true, id: true, name: true, version: true, kept: true, error: true,
       }),
@@ -1987,6 +1991,8 @@ describe("mirror TS↔Rust", () => {
     const seenCauses = new Set<string>();
     const blocks: Record<ThemeBlock, true> = { pointer: true, link: true, layout: true };
     const seenBlocks = new Set<string>();
+    const sides: Record<ThemeSide, true> = { folder: true, themes: true };
+    const seenSides = new Set<string>();
     for (const sample of samples) {
       switch (sample.outcome) {
         case "installed":
@@ -2001,6 +2007,12 @@ describe("mirror TS↔Rust", () => {
           expect(blocks[sample.why]).toBe(true);
           seenBlocks.add(sample.why);
           expect(typeof sample.path).toBe("string");
+          expect(typeof sample.installed).toBe("boolean");
+          break;
+        case "unreadable":
+          expect(sides[sample.side]).toBe(true);
+          seenSides.add(sample.side);
+          touchPluginErrorKind(sample.error.kind);
           break;
         case "replace_failed":
           // Un nome dentro la cartella dei temi, non un percorso.
@@ -2027,6 +2039,7 @@ describe("mirror TS↔Rust", () => {
     expect(new Set(samples.map((sample) => sample.outcome))).toEqual(new Set(Object.keys(fields)));
     expect(seenCauses).toEqual(new Set(Object.keys(causes)));
     expect(seenBlocks).toEqual(new Set(Object.keys(blocks)));
+    expect(seenSides).toEqual(new Set(Object.keys(sides)));
   });
 
   it("«Apri con» porta i tre modi di consegna e le tre righe del menu", () => {

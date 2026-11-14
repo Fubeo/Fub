@@ -136,6 +136,8 @@ riceve solo l'impronta, installa soltanto quella cartella e consuma il
 permesso. Una collisione lo rinnova solo per la risposta «Sostituisci», una
 volta; il «no», il rifiuto del cancello della shell e ogni nuova apertura
 della finestra lo scartano (`discard_theme_folder`, o l'apertura stessa).
+Dopo una collisione anche una richiesta senza `replace` vale come il «no»:
+consuma il permesso, e un «Sostituisci» che arriva dopo è `unchecked`.
 Senza permesso l'esito è `unchecked`, e niente si scrive. Ogni controllo e
 ogni scarto aprono una generazione nuova del permesso: un controllo lento, o
 il rinnovo dopo una collisione, non tornano sopra un controllo o un «no»
@@ -160,8 +162,14 @@ sorgente **una volta**, copiandola nella staging e prendendone l'impronta
 nello stesso passaggio, e confronta l'impronta con quella del controllo: i
 byte pubblicati sono quelli dell'impronta, l'esito parla solo dei byte
 controllati, e una cartella cambiata (o tolta, o rinominata) nel frattempo è
-`changed` e non si pubblica. Le porte si ripassano sulla staging; per il resto
-l'installazione passa dalle stesse regole di `install_theme` (serie
+`changed` e non si pubblica. Le porte si ripassano sulla staging, e la sonda
+della destinazione si rifà subito prima di pubblicare, sotto lo
+stesso lucchetto per id che prendono la revoca, l'aggiornamento e la
+disinstallazione (un lucchetto del processo, non del file system): una
+revoca arrivata durante la copia ferma la sostituzione (`revoked`). Una
+lettura che non riesce con la cartella invariata è `unreadable` (dalla parte
+della cartella scelta o di quella dei temi), non un guasto di scrittura. Per
+il resto l'installazione passa dalle stesse regole di `install_theme` (serie
 riservata, rename atomico) e il tema ha la fiducia di ogni tema non di
 serie.
 

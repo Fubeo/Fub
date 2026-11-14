@@ -439,11 +439,13 @@ describe("installare un tema da una cartella", () => {
     await vi.waitFor(() => expect(diagnoses()).toHaveLength(1));
     expect(dialog()).toBeNull();
     const [block] = diagnoses();
-    expect(block!.querySelector(".setting-label")!.textContent).toBe("«Carta» è rifiutato: 1 motivo");
+    expect(block!.querySelector(".setting-label")!.textContent).toBe("«Carta» è bloccato: 1 motivo");
+    // È il tema installato con lo stesso id a fermarlo, e resta com'era.
+    expect(block!.querySelector(".muted")!.textContent).toMatch(/Il tema installato resta com'era\.$/);
     expect(rowsOf(block!)).toEqual([
       [
         "blocked_pointer",
-        "Il tema già installato con lo stesso id ha il file della versione rotto, o che non si apre: potrebbe essere ritirato dal catalogo, quindi Fub non lo sostituisce. Toglilo a mano da /config/themes/acme.carta e riprova.",
+        "«Carta» è già installato, ma Fub non riesce a leggere se il catalogo lo ha ritirato, quindi non lo sostituisce: potrebbe essere un tema ritirato. Prova prima a reinstallarlo o ad aggiornarlo dal catalogo. Se non basta, puoi togliere a mano la cartella /config/themes/acme.carta: così però Fub dimentica anche se il tema era stato ritirato.",
       ],
     ]);
     expect(block!.querySelector(".tema-diagnosi-riga")!.classList.contains("tema-diagnosi-riga--tema")).toBe(true);
