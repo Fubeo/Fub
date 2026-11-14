@@ -59,6 +59,10 @@ e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
   task aperta la cui scadenza (`📅 AAAA-MM-GG` nel suo testo, la scrittura del
   plugin Tasks) cade quel giorno o da quel lato della data. Diventano la foglia
   `task_due`; l'indice full-text tiene le scadenze delle task aperte (schema v8).
+  La scadenza la legge la regola unica di `fub_abi::rules::tasks` (la stessa
+  della vista Compiti e della pastiglia nel testo): conta il testo dentro un
+  codice, e una data che non esiste, come `2026-02-30`, non è una scadenza
+  (schema v10).
 
 Un recinto ```` ```query ```` in una nota porta una ricerca con la stessa
 sintassi: in Lettura mostra al suo posto le prime 50 note trovate, come link, e

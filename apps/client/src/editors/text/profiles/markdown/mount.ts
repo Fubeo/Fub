@@ -7,7 +7,7 @@ import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifet
 import { mountMermaidBlocks } from "../../../../ui/mermaid";
 import type { DiagramLight } from "../../../../ui/mermaid-styles";
 import { mountMathBlocks } from "./math";
-import { claimQueryBlocks, fillQueryBlock, markTaskDues } from "./query-block";
+import { claimQueryBlocks, embedTasksBlocks, fillQueryBlock, markTaskDues } from "./query-block";
 import { craftPlaceholder, showEmbeddedCraft } from "../../../craft/figure";
 import { hydrateVaultMedia, scenePlaceholder, showEmbeddedDrawing, showRemoteImages, vaultImageSource } from "./media";
 import { openLightbox } from "../../../../ui/lightbox";
@@ -592,6 +592,7 @@ export function mountMarkdown(
       }
     }
     const queries = claimQueryBlocks(container);
+    embedTasksBlocks(container, mountedLife);
     enhanceContent(container, parts, options, mountedLife);
     hasEmbeds = !!container.querySelector(".embed[data-embed-page]");
     const hasImages = !!container.querySelector("img[data-vault-src]");

@@ -26,9 +26,18 @@ orario e il primo giorno della settimana della macchina. A mezzanotte del
 proprio fuso il giorno cambia: al disegno successivo il compito del giorno
 prima è in «Scaduti», anche se nessun file è cambiato.
 
-La scadenza è la data scritta dopo l'ultimo `📅`, nel formato `AAAA-MM-GG`. Una
-data che non esiste, come `2026-02-30`, non sparisce: il compito va in «Senza
-data» con l'etichetta «Data non leggibile».
+La scadenza è la data scritta dopo l'ultimo `📅` del testo del compito, nel
+formato `AAAA-MM-GG`. Il testo del compito è il primo paragrafo della sua voce
+senza la sintassi: conta anche il testo dentro un codice o nell'etichetta di un
+link, non l'indirizzo di un link, e non le sottovoci. Una data che non esiste,
+come `2026-02-30`, non sparisce: il compito va in «Senza data» con l'etichetta
+«Data non leggibile». La regola è una sola, in `fub_abi::rules::tasks`, con la
+gemella TypeScript `taskDue` in `apps/client/src/rules/mirrored.ts` legata alla
+stessa fixture: la usano la ricerca (`due:`), la vista, il recinto e la
+pastiglia nel testo.
+
+Nella vista il testo del compito si legge senza la data, che sta sotto in una
+pastiglia accanto al nome della nota: rossa se il compito è scaduto.
 
 Un compito annidato in un'altra lista, o dentro una citazione, conta come
 qualunque altro. Un compito già fatto (`- [x]`) non compare.
@@ -41,14 +50,17 @@ nota e la successiva nasce sopra di lei, come fa il plugin Tasks.
 
 Il riquadro accanto al testo spunta il compito. La spunta usa lo stesso comando
 di sempre, `note.task.toggle`: cambia il carattere fra le parentesi e nient'altro
-del compito. La nota d'origine si scrive con la sua revisione, quindi una
-modifica fatta nel frattempo non viene sovrascritta.
+del compito. La vista passa al comando la revisione della nota che ha letto
+(l'argomento `revision`): se la nota non è più quella, il comando risponde con
+un conflitto e non scrive, e la scrittura stessa porta quella revisione, quindi
+una modifica fatta nel frattempo non viene sovrascritta.
 
 Due casi non scrivono niente e lo dicono nella vista:
 
 - **La nota è cambiata sotto la vista.** Se in quella posizione non c'è più lo
-  stesso compito, con lo stesso simbolo e lo stesso testo, la vista si
-  ridisegna e chiede di ricontrollare.
+  stesso compito, con lo stesso simbolo e lo stesso testo, o se la nota è
+  cambiata anche altrove dopo che la vista l'ha letta, la vista si ridisegna e
+  chiede di ricontrollare.
 - **La nota è in sola lettura.** Il compito resta com'è.
 
 Il nome della nota d'origine, accanto al compito, apre la nota.
@@ -66,10 +78,11 @@ Il nome della nota d'origine, accanto al compito, apre la nota.
 
 Nella nota, in Live e in Lettura, il `📅` con la sua data diventa una
 pastiglia: grigia di solito, **arancione** quando il compito è aperto e la
-scadenza cade prima di sette giorni dal giorno corrente (scaduti compresi). La pastiglia
-mostra la data com'è scritta: il file non cambia. Un compito fatto resta
-grigio; una data che non esiste (`2026-02-30`) resta testo semplice. In Live,
-dove sta il cursore, torna il testo semplice.
+scadenza cade prima di sette giorni dal giorno corrente (scaduti compresi). La
+pastiglia mostra la data com'è scritta: il file non cambia. Un compito fatto
+resta grigio. Una data che non si legge (`2026-02-30`, `📅 domani`) ha la
+pastiglia tratteggiata in rosso, e passandoci sopra dice come si scrive. In Live
+la pastiglia resta anche sulla riga del cursore: la data si scrive dentro.
 
 ## Il recinto ```` ```tasks ````
 
@@ -82,46 +95,54 @@ not done
 due before tomorrow
 path includes Progetti
 tag includes #lavoro
+sort by due
 ```
 
 Ogni riga restringe la lista (valgono tutte insieme). Le righe capite:
 
-| Riga | Cosa tiene |
+| Riga | Cosa fa |
 | --- | --- |
-| `not done` | i compiti aperti |
-| `done` | i compiti fatti |
-| `due before <data>`, `due after <data>`, `due on <data>`, `due <data>` | i compiti aperti con la scadenza prima, dopo o in quel giorno |
-| `path includes <testo>` | i compiti delle note il cui percorso contiene il testo |
-| `tag includes <tag>` | i compiti con quel tag, o con un suo figlio (`#lavoro/fub`) |
+| `not done` | tiene i compiti aperti |
+| `done` | tiene i compiti fatti |
+| `due before <data>`, `due after <data>`, `due on <data>`, `due <data>` | tiene i compiti, aperti o fatti, con la scadenza prima, dopo o in quel giorno |
+| `path includes <testo>` | tiene i compiti delle note il cui percorso contiene il testo, letterale e senza badare alle maiuscole |
+| `tag includes <tag>` | tiene i compiti con quel tag, o con un suo figlio (`#lavoro/fub`) |
+| `sort by due`, `sort by path`, con `reverse` in fondo | mette in ordine per scadenza (i compiti senza data in fondo) o per nota |
+| `limit <n>`, `limit to <n> tasks` | tiene i primi `n`, dopo l'ordine |
 
 La data è `AAAA-MM-GG`, oppure `today`, `tomorrow`, `yesterday`. Le righe
 vuote e quelle che iniziano con `#` non contano. Senza una riga sullo stato il
 recinto mostra aperti e fatti, come il plugin. Una riga che Fub non capisce
-(`sort by`, `group by`, `hide`…) non ferma il recinto: è saltata e il recinto
-lo scrive sopra la lista. Un recinto vuoto non mostra tutto il vault: dice come
-si scrive.
+(`group by`, `hide`…) non ferma il recinto: è saltata, e il recinto scrive quale
+sopra la lista. Un recinto senza righe che scelgono dei compiti non mostra tutto
+il vault: dice cosa scriverci. Senza un ordine la lista va per scadenza.
 
-Le righe diventano una ricerca di Fub (`task:todo`, `due:<`, `path:`, `tag:`):
-la ricerca trova le note, e il recinto legge i compiti di ognuna. La lista è
-ordinata per scadenza, poi per nota e posizione. Il riquadro accanto a un
-compito lo spunta con `note.task.toggle`, come nella vista: se la nota nel
-frattempo è cambiata in quel punto non scrive e lo dice; dopo la spunta il
-recinto si ridisegna. Il nome della nota apre la nota.
+Il recinto lo dichiara e lo disegna il componente «Compiti»: una regola di
+sintassi riconosce il recinto (così la resa lo tratta come un blocco e non come
+codice), e la vista `tasks_query` del componente, con le righe del recinto come
+parametro, lo disegna con gli stessi nodi della vista dell'ispettore. Le righe
+diventano una ricerca nell'indice (stato, tag e scadenza), e il componente
+controlla ogni compito trovato contro tutte le righe, percorso compreso. Il
+riquadro accanto a un compito lo spunta come nella vista, con la revisione letta;
+il nome della nota apre la nota. Il recinto si ridisegna quando l'indice cambia,
+come la vista dell'ispettore: una spunta, o un'altra nota che cambia, si vede da
+sola.
 
-Il recinto legge al più **50** note e disegna al più **100** compiti: quando
-taglia lo scrive. Se il componente «Compiti» è spento il recinto lo dice invece
-di cercare. Il recinto non si aggiorna da solo quando cambia un'altra nota: si
-aggiorna quando la nota che lo contiene si ridisegna.
+Il recinto legge al più **10.000** compiti e ne disegna al più **100**: quando
+taglia lo scrive. Se il componente «Compiti» è spento il recinto non è
+dichiarato e resta un blocco di codice.
 
-La traduzione delle righe e la lettura dei compiti di una nota sono in
-`apps/client/src/editors/text/profiles/markdown/tasks-query.ts`; il disegno del
-recinto e la pastiglia in Lettura in `query-block.ts`, la pastiglia in Live in
-`livepreview.ts`.
+La lettura delle righe è in `crates/fub-features/src/tasks/query.rs`, il
+disegno in `crates/fub-features/src/tasks.rs`. Nella shell il recinto riceve il
+posto in `apps/client/src/editors/text/profiles/markdown/query-block.ts`, che
+monta la vista attraverso `apps/client/src/ui/embedded-views.ts`; la pastiglia è
+in `task-due.ts` (con `query-block.ts` per la Lettura e `livepreview.ts` per la
+Live).
 
 ## Il componente
 
 «Compiti» è un componente di Fub, con la sua riga nella pagina **Componenti**
 delle impostazioni, dove si spegne. Nel codice è la cargo feature `tasks` di
-`fub-features`, che accende la ricerca: la vista è in
-`crates/fub-features/src/tasks.rs`, e la sua prova end-to-end è
+`fub-features`, che accende la ricerca: la vista e il recinto sono in
+`crates/fub-features/src/tasks.rs`, e la loro prova end-to-end è
 `crates/fub-features/tests/tasks_e2e.rs`.

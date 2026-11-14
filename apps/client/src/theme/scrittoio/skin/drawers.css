@@ -616,12 +616,11 @@
 }
 
 /* ── I compiti nell'ispettore ────────────────────────────────────────────
-   La vista «Compiti» (`data-view-id="tasks"`) dichiara righe di tre celle:
-   la casella con il testo, la scadenza e la nota. Fuori da una tabella ogni
-   riga sarebbe una tabella a sé e il testo si stringerebbe in colonna: qui la
-   riga va a capo, il testo prende tutta la larghezza e sotto, rientrate sotto
-   la casella, stanno scadenza e nota in piccolo. Le intestazioni dei gruppi
-   (Scaduti, Questa settimana…) sono etichette in maiuscoletto, non titoli. */
+   La vista «Compiti» (`data-view-id="tasks"`) dichiara un compito come una
+   colonna: la casella col testo, e sotto una riga con la scadenza e la nota.
+   Qui la riga di dettagli rientra sotto il testo, in piccolo, e la nota è un
+   rimando sommesso invece di un bottone. Le intestazioni dei gruppi (Scaduti,
+   Questa settimana…) sono etichette in maiuscoletto, non titoli. */
 .declared-view[data-view-id="tasks"] .ui-section > summary {
   min-height: 0;
   padding-top: var(--space-6);
@@ -635,30 +634,13 @@
 .declared-view[data-view-id="tasks"] .ui-section > .ui-children {
   padding: 0 0 var(--space-2);
 }
-.declared-view[data-view-id="tasks"] .ui-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1) var(--space-3);
+.declared-view[data-view-id="tasks"] .ui-children > .ui-stack[data-dir="column"] {
   margin: 0 calc(var(--space-4) * -1);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-control);
 }
-.declared-view[data-view-id="tasks"] .ui-row:hover {
+.declared-view[data-view-id="tasks"] .ui-children > .ui-stack[data-dir="column"]:hover {
   background: var(--bg-hover);
-}
-.declared-view[data-view-id="tasks"] .ui-row > td {
-  display: block;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-}
-.declared-view[data-view-id="tasks"] .ui-row > td:first-child {
-  flex: 1 0 100%;
-}
-/* Sotto la casella: 16px di casella più lo spazio fra casella e testo. */
-.declared-view[data-view-id="tasks"] .ui-row > td:nth-child(2) {
-  margin-left: calc(16px + var(--space-4));
 }
 .declared-view[data-view-id="tasks"] .ui-checkbox {
   align-items: flex-start;
@@ -670,11 +652,14 @@
 .declared-view[data-view-id="tasks"] .ui-checkbox .ui-field-label {
   overflow-wrap: anywhere;
 }
-/* La nota d'origine è un rimando, non un bottone: testo piccolo e sommesso
-   che si sottolinea sotto il puntatore. */
-.declared-view[data-view-id="tasks"] .ui-row .ui-button {
+/* Sotto il testo: la casella più lo spazio fra casella e testo. */
+.declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack[data-dir="row"] {
+  margin-left: calc(13px + var(--space-4));
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack .ui-button {
   min-height: 0;
   padding: 0;
+  border: none;
   background: transparent;
   color: var(--muted);
   font-size: var(--text-sm);
@@ -682,7 +667,11 @@
   text-align: left;
   white-space: normal;
 }
-.declared-view[data-view-id="tasks"] .ui-row .ui-button:hover {
+/* Fra la scadenza e la nota un respiro: lo spazio della pila è un pixel. */
+.declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack .ui-badge + .ui-button {
+  margin-left: var(--space-2);
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack .ui-button:hover {
   color: var(--text);
   text-decoration: underline;
 }

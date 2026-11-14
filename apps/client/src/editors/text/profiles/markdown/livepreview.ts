@@ -27,7 +27,7 @@ import type { SyntaxNode, Tree } from "@lezer/common";
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
 import { t } from "../../../../i18n/strings";
-import { dueIsNear, localDay, taskDue } from "./tasks-query";
+import { dueLook, liveProjection, localDay, projectedDue } from "./task-due";
 import { isAllowedLink } from "../../../../ui/sanitize";
 import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
@@ -171,7 +171,8 @@ export type LiveDecoKind =
   | "tag"
   | "done"
   // la scadenza `📅 AAAA-MM-GG` di un compito: una pastiglia, arancio quando è
-  // vicina (`data` "near"), grigia altrimenti
+  // vicina (`data` "near"), segnata quando la data non si legge (`data`
+  // "bad"), grigia altrimenti
   | "task-due"
   | "quote-mark"
   | "sup"
@@ -997,11 +998,13 @@ export function computeDecorations(
         out.push({ from: paragraphEnd + 1, to: row.to, kind: "done" });
       }
       // La scadenza è una pastiglia anche sulla riga attiva: un segno sul
-      // testo, che resta com'è e si scrive dentro la pastiglia.
-      const due = taskDue(text);
-      if (due && row.from + due.from >= paragraphEnd && isFree(row.from + due.from, row.from + due.to)) {
-        const near = !checked && due.day !== null && dueIsNear(due.day, today);
-        out.push({ from: row.from + due.from, to: row.from + due.to, kind: "task-due", data: near ? "near" : undefined });
+      // testo, che resta com'è e si scrive dentro la pastiglia. La regola
+      // legge il testo del compito senza la sintassi (`task-due.ts`), come la
+      // ricerca e la vista: una data dentro un codice conta, un indirizzo no.
+      const due = projectedDue(liveProjection(syntaxTree(state), text, row.from, paragraphEnd, row.to));
+      if (due) {
+        const look = dueLook(due, checked, today);
+        out.push({ from: due.source[0], to: due.source[1], kind: "task-due", data: look === "plain" ? undefined : look });
       }
     }
   }
@@ -1484,7 +1487,12 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
       });
     }
     case "task-due":
-      return d.data === "near" ? dueNearMark : dueMark;
+      if (d.data === "near") return dueNearMark;
+      // Il titolo dice perché, nella lingua dell'interfaccia di adesso.
+      if (d.data === "bad") {
+        return Decoration.mark({ class: "cm-fub-due cm-fub-due-bad", attributes: { title: liveStrings.t("tasks.due.unreadable") } });
+      }
+      return dueMark;
     case "tag":
       return Decoration.mark({
         class: "cm-fub-tag",
