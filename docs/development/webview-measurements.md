@@ -273,7 +273,8 @@ variabile tolta) il banco si ferma, come dice la sezione che segue.
 
    Il job `webview` della CI non ha `WAYLAND_DISPLAY` e non cambia. La guardia
    è in `bench/webview/display.mjs`, con la sua prova in
-   `bench/webview/display.test.ts`: `npx vitest run bench/webview/display.test.ts`.
+   `bench/webview/display.test.mjs`: `npx vitest run bench/webview/display.test.mjs`
+   (in `.mjs` perché usa Node, e il `tsc` del client non ha i suoi tipi).
 
 Il referto va in `apps/client/bench/.output/webview/referto.json`. Il comando
 esce con 1 se un valore supera la soglia scelta.
