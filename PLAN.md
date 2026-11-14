@@ -4617,7 +4617,7 @@ Casi limite: il conflitto che arriva mentre la finestra di R01 è aperta
 resta).
 Fatto quando: `npm run bench:giro -- --solo=guasti` è verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --solo=guasti --out=$TMPDIR/giro
-Stato: [ ] da fare
+Stato: [~] coder/pa-t30 @ ebd7ef3c5 · 15 compiti in `giro/guasti.mjs`, check verde, `--telefono` verde; il giro trova due difetti (fuoco perso con Ctrl+E in Lettura; «Modifiche non salvate» che resta aperta sotto un cambio da fuori): diventano T63, sullo stesso ramo · fuori Tocca `bench/fake-ipc.ts` (Cestino vero del finto, `window.bench.writeFromOutside`)
 
 ## T31 · L'APK di prova parte in un emulatore della CI
 
@@ -6325,3 +6325,35 @@ senza la variabile il gancio non c'è.
 Prova: scripts/check.sh --rapido; i test di `fub-app` del gancio; i test del
 banco; le 10 corse di R1 (5 con, 5 senza)
 Stato: [x] fatto · fc4333a6..db322aaa · un'estensione web del banco (WebKitGTK 4.1 non ha un'API per la raccolta), caricata solo da una build con la feature `bench-gc`, che il job `webview` accende e il rilascio no; 5+5 corse R1 a macchina libera: col gancio la pendenza resta fra 1,8 e 3,2 MiB, senza va da 0,7 a 17,5
+
+## T63 · I due difetti trovati dal giro dei guasti
+
+Perché: il giro di T30 (2026-11-14) ha trovato due difetti nella shell. (1)
+Con Ctrl+E, passando alla Lettura, il fuoco cade sul corpo della pagina e
+nessun anello si vede: `setMode` in
+`editors/text/profiles/markdown/surface.ts` non mette il fuoco sul riquadro
+di lettura, che pure ha `tabIndex 0`. (2) Se un cambio da fuori arriva
+mentre «Modifiche non salvate» chiede, la finestra resta aperta e continua a
+chiedere. T30 vuole invece che si chiuda e che la nota torni con la barra
+del conflitto. Il testo non si perde.
+Tocca: `apps/client/src/editors/text/profiles/markdown/surface.ts` (solo il
+fuoco in `setMode`) e il suo test; il punto della shell che apre «Modifiche
+non salvate» (`state/document-controller.ts`, `keepOrDiscardUnsaved` e
+dintorni) e il suo test; `bench/giro/guasti.mjs` solo se un controllo va
+adattato alla correzione, mai allentato.
+Non toccare: `src/host/fake.ts`; il resto della modalità di lettura; i testi
+della finestra.
+Dipende da: T30 (il giro che lo prova).
+Cosa fare:
+- Prima, per ogni difetto, un test che fallisce sulla base.
+- Il cambio di modalità porta il fuoco dove si può continuare con la
+  tastiera: nella Lettura sul riquadro di lettura, con l'anello visibile; al
+  ritorno in scrittura sull'editor, al cursore di prima.
+- Un cambio da fuori che arriva mentre la finestra chiede la chiude come
+  «Tienila aperta»: la nota resta (o torna) aperta col suo testo e con la
+  barra del conflitto, e niente si scarta senza una scelta.
+Fatto quando: i due test sono rossi sulla base e verdi dopo; il giro
+`--solo=guasti` e il giro intero sono verdi senza controlli allentati.
+Prova: npx vitest run dei due test; giro `--solo=guasti`; scripts/check.sh
+--rapido
+Stato: [~] in corso (coder/pa-t30, dopo il commit del giro, 2026-11-14)
