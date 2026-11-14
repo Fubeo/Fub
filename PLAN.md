@@ -1272,7 +1272,7 @@ Fatto quando: `tasks-query.test.ts` per ogni riga capita e per quella
 sconosciuta; un test DOM del recinto e della spunta; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/tasks-query.test.ts
-Stato: [~] in corso (feat/vista-compiti, da main 9030bcd8b, 2026-11-14)
+Stato: [~] feat/vista-compiti @ dbf49b215, rimandato al coder (2026-11-14) dopo la revisione `code-review medium` e le foto: i compiti filtrati dal provider con una porta generica (niente letture e parse di 50 note nel client), la regola 📅 una sola in `fub-abi/rules` con la gemella in `rules/mirrored.ts`, il recinto dichiarato dalla SyntaxForm, la spunta atomica (oggi può spuntare un altro compito se la nota cambia), l'aggiornamento con gli eventi dell'indice, il recinto senza filtri utili trattato come vuoto, `path includes` letterale, `sort by due`, pagina e codice allineati, il titolo della nota sotto i compiti, niente data doppia nell'ispettore, messaggio umano per la riga non capita · Tocca allargato a tasks.rs, fub-search, fub-abi/rules, mirrored.ts e la spunta nell'host
 
 ## T20 · Sbirciata, Alt clic, link come scheda
 
