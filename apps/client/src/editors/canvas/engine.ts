@@ -1595,6 +1595,12 @@ export class CanvasEngine {
   readonly #touches = new Map<number, { readonly startX: number; readonly startY: number; readonly at: number; x: number; y: number; swallowed: boolean }>();
   /** Le dita che scrivevano, prese dal dito appena posato (`#touchDown`): `#gestureDown` le conta nel tocco. */
   #adopted: number[] = [];
+  /**
+   * I puntatori premuti sulla vista, per id: l'ultimo evento che la vista ha
+   * visto di ciascuno, e se il tasto era giù all'appoggio (`held`). Un gesto
+   * che perde il rilascio si chiude da qui, dove il puntatore era (T20a).
+   */
+  readonly #pressed = new Map<number, { last: PointerEvent; held: boolean }>();
   // --- il menu radiale e i gesti (T63) ---
   /** «Il tasto della penna» dalle Impostazioni (`canvas.pen_button`): vale dall'appoggio dopo. */
   #penButtonSetting: PenButtonAction = DEFAULT_PREFERENCES.penButton;
@@ -2147,11 +2153,15 @@ export class CanvasEngine {
     // lui, che si monta dopo. Un dito che lo strato prende per scrivere non
     // arriva qui sotto, e resta `swallowed`.
     this.#viewport.addEventListener("pointerdown", (event) => {
+      // Ogni puntatore giù si ricorda, anche quello che lo strato della penna
+      // prende per sé: il suo rilascio perso lo chiude dal punto dov'era (T20a).
+      this.#pressed.set(event.pointerId, { last: event, held: event.buttons !== 0 });
       if (event.pointerType !== "touch") return;
       const { clientX: x, clientY: y } = event;
       this.#touches.set(event.pointerId, { startX: x, startY: y, at: event.timeStamp, x, y, swallowed: true });
     }, { capture: true, signal });
     this.#viewport.addEventListener("pointermove", (event) => {
+      this.#pointerMoved(event);
       const touch = event.pointerType === "touch" ? this.#touches.get(event.pointerId) : undefined;
       if (touch) {
         touch.x = event.clientX;
@@ -2174,14 +2184,16 @@ export class CanvasEngine {
       if (event.pointerType === "touch") this.#gestureMove(event);
       this.#pointerMove(event);
     }, { signal });
-    // A fine gesto (e dopo ogni tasto) la banda di stato si rilegge: dentro un
-    // gesto `#statusSettle` non dice niente.
-    this.#viewport.addEventListener("pointerup", (event) => {
-      this.#pointerUp(event);
-      // Dopo il tocco breve della lavagna: il doppio tocco mette la scheda
-      // dopo che il primo ha tolto la scelta (T63).
-      if (event.pointerType === "touch") this.#gestureUp(event, false);
-      this.#statusSettle();
+    // Il rilascio vero: la fine del gesto è quella di `#gestureEnd`, che passa
+    // anche dalle chiusure senza rilascio (T20a).
+    this.#viewport.addEventListener("pointerup", (event) => this.#gestureEnd(event, false), { signal });
+    // La cattura persa è un rilascio che non arriva più: il gesto si chiude come
+    // se il puntatore si fosse alzato, una volta sola (T20a). Un dito no: la
+    // cattura gliela tolgono lo strato della penna e il browser quando il dito
+    // passa a scrivere o a far da navigazione (T64), e il suo gesto lo chiudono
+    // il rilascio, il `pointercancel` o la finestra.
+    this.#viewport.addEventListener("lostpointercapture", (event) => {
+      if (event.pointerType !== "touch") this.#gestureLost(event);
     }, { signal });
     // La vista che cambia misura, o che torna in vista da un'altra linguetta
     // (da zero alla sua misura), rifà la scelta delle schede vive. La vista
@@ -2237,6 +2249,9 @@ export class CanvasEngine {
     });
     this.#life.listen(window, "blur", () => this.#releaseInkKey());
     this.#life.listen(document, "visibilitychange", () => this.#releaseInkKey());
+    // La finestra che perde il fuoco: i rilasci dei puntatori giù non
+    // arriveranno, e ogni gesto aperto si chiude come un rilascio (T20a).
+    this.#life.listen(window, "blur", () => this.#gesturesLost());
     // Muoversi (T53). Spazio lasciato ovunque, o la finestra che perde il
     // fuoco: il tasto principale torna allo strumento. Con la finestra che
     // perde il fuoco l'inerzia e lo scorrimento al bordo si fermano, e un
@@ -8974,14 +8989,84 @@ export class CanvasEngine {
    * chiude il suo tocco, che non è più un tocco.
    */
   #pointerEnded(event: PointerEvent): void {
-    if (event.pointerType === "touch") this.#touches.delete(event.pointerId);
-    if (event.pointerId === this.#menuHeld) {
-      this.#menuHeld = null;
-      this.#menuEchoUntil = performance.now() + MENU_ECHO_MS;
-    }
+    this.#pointerLeft(event);
     if (event.pointerType === "touch" && !(event.target instanceof Node && this.#viewport.contains(event.target))) {
       this.#gestureUp(event, true);
     }
+  }
+
+  /**
+   * Il puntatore `event` si è alzato davvero: il rilascio vero, dal documento,
+   * prima della vista. Si toglie dal ricordo (`#pressed`), dalle dita che il
+   * tocco teneva e dal menu che aveva aperto. Una chiusura senza rilascio non
+   * lo chiama: un dito che ha perso la cattura può essere ancora giù.
+   */
+  #pointerLeft(event: PointerEvent): void {
+    this.#pressed.delete(event.pointerId);
+    if (event.pointerType === "touch") this.#touches.delete(event.pointerId);
+    this.#menuLet(event.pointerId);
+  }
+
+  /** Il menu che il puntatore `pointerId` teneva non è più suo: il silenzio del menu di sistema resta per poco (`MENU_ECHO_MS`). */
+  #menuLet(pointerId: number): void {
+    if (pointerId !== this.#menuHeld) return;
+    this.#menuHeld = null;
+    this.#menuEchoUntil = performance.now() + MENU_ECHO_MS;
+  }
+
+  /**
+   * Un movimento di un puntatore premuto: ne ricorda il punto. Senza tasto, il
+   * rilascio non è arrivato (il browser l'ha perso, o è caduto fuori dalla
+   * finestra): la pressione è finita e il gesto del puntatore si chiude adesso
+   * (T20a). Il dito no: non ha un tasto da lasciare, e il suo contatto lo
+   * chiudono il rilascio, il `pointercancel` o la finestra.
+   */
+  #pointerMoved(event: PointerEvent): void {
+    const seen = this.#pressed.get(event.pointerId);
+    if (seen === undefined) return;
+    seen.last = event;
+    if (event.buttons === 0 && seen.held && event.pointerType !== "touch") {
+      seen.held = false;
+      this.#gestureLost(event);
+    }
+  }
+
+  /**
+   * Il gesto di `event` si chiude senza il suo rilascio, con l'ultimo evento
+   * del puntatore: un movimento senza tasto, o la cattura persa (solo col mouse
+   * e la penna: il browser e lo strato della penna tolgono la cattura a un dito
+   * che passa a scrivere o a far da navigazione, T64), o la finestra che perde
+   * il fuoco. Passa dalla stessa fine del rilascio (`#gestureEnd`) e non fa
+   * niente se il gesto non c'è più: un rilascio che arriva dopo non trova niente
+   * da chiudere. Il ricordo del puntatore (`#pressed`, `#touches`) resta, perché
+   * il suo rilascio vero lo toglie.
+   */
+  #gestureLost(event: PointerEvent): void {
+    if (!this.#gestureOpen(event.pointerId)) return;
+    this.#gestureEnd(event, true);
+    this.#menuLet(event.pointerId);
+    if (this.#viewport.hasPointerCapture?.(event.pointerId)) this.#viewport.releasePointerCapture(event.pointerId);
+  }
+
+  /** La finestra perde il fuoco: ogni puntatore premuto si chiude come se si fosse alzato (`#gestureLost`). */
+  #gesturesLost(): void {
+    for (const { last } of [...this.#pressed.values()]) this.#gestureLost(last);
+  }
+
+  /**
+   * Un gesto della lavagna è aperto per il puntatore `pointerId`: lo spostamento
+   * della vista, il trascinamento di una scheda o di un tratto del Lazo, il
+   * ridimensionamento, il filo, il giro del Lazo, il pizzico e il dito, il tocco
+   * lungo, il menu radiale che il puntatore tiene. Il tratto della penna no:
+   * lo chiude l'adattatore (`ink/dom/pointer-adapter.ts`).
+   */
+  #gestureOpen(pointerId: number): boolean {
+    return this.#pan?.pointerId === pointerId || this.#tap?.pointerId === pointerId
+      || this.#drag?.pointerId === pointerId || this.#resize?.pointerId === pointerId
+      || this.#connect?.pointerId === pointerId || this.#lasso?.pointerId === pointerId
+      || this.#strokeDrag?.pointerId === pointerId || this.#edgeScroll?.pointerId === pointerId
+      || this.#longPress?.pointerId === pointerId || this.#pinch?.a === pointerId || this.#pinch?.b === pointerId
+      || this.#fingers.has(pointerId) || this.#menuHeld === pointerId;
   }
 
   /**
@@ -9522,14 +9607,23 @@ export class CanvasEngine {
   }
 
   /**
-   * Il rilascio di un puntatore. Se chiude uno spostamento, un pizzico, un
-   * trascinamento o un ridimensionamento (A-7), le schede vive si rifanno
-   * sulla vista e sulle schede di adesso.
+   * La fine del gesto di un puntatore: il suo rilascio (`lost` falso) o una
+   * chiusura senza rilascio (`lost` vero, da `#gestureLost`), per una sola
+   * strada. Se chiude uno spostamento, un pizzico, un trascinamento o un
+   * ridimensionamento (A-7), le schede vive si rifanno sulla vista e sulle
+   * schede di adesso. Un tocco chiuso senza rilascio non conta come tocco
+   * breve (`#gestureUp` lo tratta come annullato).
    */
-  #pointerUp(event: PointerEvent): void {
+  #gestureEnd(event: PointerEvent, lost: boolean): void {
     const moving = this.#gestureMoving();
     this.#pointerRelease(event);
     if (moving) this.#refreshLive();
+    // Dopo il tocco breve della lavagna: il doppio tocco mette la scheda
+    // dopo che il primo ha tolto la scelta (T63).
+    if (event.pointerType === "touch") this.#gestureUp(event, lost);
+    // A fine gesto (e dopo ogni tasto) la banda di stato si rilegge: dentro un
+    // gesto `#statusSettle` non dice niente.
+    this.#statusSettle();
   }
 
   #pointerRelease(event: PointerEvent): void {
