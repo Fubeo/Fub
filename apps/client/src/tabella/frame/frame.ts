@@ -197,9 +197,11 @@ export class TableFrame {
     return { anchor: this.#anchor, focus: this.#focus };
   }
 
-  /// La cella attiva: dove si scrive, e da dove partono Invio e Tab.
+  /// La cella attiva: dove si scrive, e da dove partono Invio e Tab. Come
+  /// nei fogli di calcolo è l'àncora, finché Invio o Tab non la fanno girare
+  /// dentro la selezione.
   get active(): Cell {
-    return this.#active ?? this.#focus;
+    return this.#active ?? this.#anchor;
   }
 
   get range(): Range {

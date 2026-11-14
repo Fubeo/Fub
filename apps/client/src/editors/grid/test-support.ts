@@ -64,6 +64,8 @@ interface Plan {
   /** Celle che il provider dice cambiate oltre a quelle scritte. */
   readonly invalidated?: readonly GridCellKey[];
   readonly onClose?: (instance: string) => void;
+  /** I comandi del catalogo che la sessione dice serviti, tutti attivi. */
+  readonly commands?: readonly string[];
 }
 
 /**
@@ -110,7 +112,7 @@ export function bytesHost(plan: Plan = {}) {
         hidden: [],
         notices: [],
         conflicts: [],
-        commands: [],
+        commands: (plan.commands ?? []).map((id) => ({ id, enabled: true, reason: null })),
         book: structuredClone(xlsx.session.book) as GridBytesSession["book"],
       };
     },

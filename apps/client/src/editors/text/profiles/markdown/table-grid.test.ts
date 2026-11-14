@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../../i18n/strings";
 import { declareClipboard } from "../../../../platform/clipboard";
 import { closeContextMenu } from "../../../../ui/menu";
-import { caseApplies, playCase, TABLE_CONFORMANCE } from "../../../../tabella/conformance";
+import { caseApplies, expectedOf, playCase, seenOf, TABLE_CONFORMANCE, type ConformanceClipboard, type ConformanceTarget } from "../../../../tabella/conformance";
 import { TableGrid, tableMenu, type TableGridHost } from "./table-grid";
 import type { TableData } from "./table-model";
 
@@ -77,7 +77,9 @@ describe("la griglia", () => {
     key(root, "ArrowDown", { shiftKey: true });
     expect(grid.selection).toEqual({ anchor: { row: 0, col: 1 }, focus: { row: 1, col: 1 } });
     expect(cell(0, 1).classList.contains("is-selected")).toBe(true);
-    expect(cell(1, 1).classList.contains("is-active")).toBe(true);
+    // Come nei fogli di calcolo la cella attiva resta l'àncora.
+    expect(cell(0, 1).classList.contains("is-active")).toBe(true);
+    expect(cell(1, 1).classList.contains("is-active")).toBe(false);
     expect(cell(1, 0).classList.contains("is-selected")).toBe(false);
   });
 
@@ -366,23 +368,45 @@ describe("le azioni della barra sulla griglia", () => {
 
 describe("la prova comune della Tabella, sul Markdown", () => {
   const caps = { insertRows: true, deleteRows: true, moveRows: true, insertColumns: true, deleteColumns: true, moveColumns: true, sort: true, align: true, merge: false, headerRows: 1 };
+  const target: ConformanceTarget = { mode: "sheet", caps, bounded: true, delegates: false };
+  const clipboard = (kind: "cut" | "copy" | "paste", store: ConformanceClipboard) => {
+    const event = new Event(kind, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        setData: (type: string, value: string) => {
+          if (type === "text/plain") store.text = value;
+          if (type === "text/html") store.html = value;
+        },
+        getData: (type: string) => (type === "text/plain" ? store.text : type === "text/html" ? store.html : ""),
+      },
+    });
+    (document.activeElement ?? document.body).dispatchEvent(event);
+  };
   for (const test of TABLE_CONFORMANCE) {
-    it.runIf(caseApplies(test, caps))(test.name, () => {
+    it.runIf(caseApplies(test, target))(test.name, async () => {
       const { grid } = mount(test.rows.map((row) => [...row]));
       grid.focus("first");
-      const seen = playCase(test, {
+      const seen = await playCase(test, {
         key: (name, init) => key(document.activeElement ?? document.body, name, init),
         command: (id) => void grid.runAction(id),
+        clipboard,
         cells: () => grid.data.rows.map((row) => [...row]),
-        active: () => ({ row: grid.selection.focus.row, column: grid.selection.focus.col }),
+        active: () => ({ row: grid.active.row, column: grid.active.col }),
         range: () => {
           const { anchor, focus } = grid.selection;
           return { r0: Math.min(anchor.row, focus.row), c0: Math.min(anchor.col, focus.col), r1: Math.max(anchor.row, focus.row), c1: Math.max(anchor.col, focus.col) };
         },
+        cut: () => {
+          const marked = [...grid.element.querySelectorAll<HTMLElement>(".tb-cell.is-cut")];
+          if (marked.length === 0) return null;
+          const rows = marked.map((cell) => Number(cell.dataset.row));
+          const columns = marked.map((cell) => Number(cell.dataset.col));
+          return { r0: Math.min(...rows), c0: Math.min(...columns), r1: Math.max(...rows), c1: Math.max(...columns) };
+        },
+        ranges: () => grid.element.querySelectorAll(".tb-sel").length,
       });
-      if (test.cells) expect(seen.cells).toEqual(test.cells);
-      if (test.active) expect(seen.active).toEqual(test.active);
-      if (test.range) expect(seen.range).toEqual(test.range);
+      const expected = expectedOf(test, target);
+      expect(seenOf(seen, expected)).toEqual(expected);
     });
   }
 });

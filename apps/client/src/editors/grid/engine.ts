@@ -638,6 +638,18 @@ export class GridEngine {
   }
 
   /// Il modo della cella: «Pronto», «Inserisci» o «Modifica».
+  /// Le celle tagliate in attesa di un incolla, sul foglio di adesso, o
+  /// `null`: lo stesso segno della Tabella (`TableFrame.cutRange`).
+  cutRange(): { r0: number; c0: number; r1: number; c1: number } | null {
+    const mark = this.#cutMark;
+    return mark && mark.sheet === this.#sheet().id ? tableRange(mark.range) : null;
+  }
+
+  /// Quanti intervalli sono scelti (Ctrl+clic, Maiusc+F8).
+  rangeCount(): number {
+    return this.#others.length + 1;
+  }
+
   editMode(): GridEditMode {
     return this.#editing?.mode ?? "ready";
   }

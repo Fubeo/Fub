@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextCell, nextInRange, type Shape } from "./navigation";
+import { dataEdge, nextCell, nextInRange, type Shape } from "./navigation";
 
 /// Una tabella di `rows` × `columns` con alcune righe e colonne nascoste.
 function shape(rows: number, columns: number, hidden: { rows?: number[]; columns?: number[] } = {}): Shape {
@@ -65,5 +65,27 @@ describe("nextInRange", () => {
     expect(nextInRange(range, { row: 2, column: 1 }, "right", table)).toEqual({ row: 2, column: 3 });
     expect(nextInRange(range, { row: 2, column: 3 }, "right", table)).toEqual({ row: 2, column: 1 });
     expect(nextInRange(range, { row: 2, column: 1 }, "down", table)).toEqual({ row: 2, column: 3 });
+  });
+});
+
+describe("Ctrl con una freccia", () => {
+  // Una riga: piene le celle 0, 1, 2 e 5, vuote 3 e 4, poi 6 e 7.
+  const filled = (index: number) => [0, 1, 2, 5].includes(index);
+  const right = (index: number) => Math.min(7, index + 1);
+  const left = (index: number) => Math.max(0, index - 1);
+
+  it("da una cella piena accanto a una piena va all'ultima del blocco", () => {
+    expect(dataEdge(0, right, filled)).toBe(2);
+    expect(dataEdge(2, left, filled)).toBe(0);
+  });
+
+  it("altrimenti va alla prima piena, o al bordo", () => {
+    expect(dataEdge(2, right, filled)).toBe(5);
+    expect(dataEdge(5, right, filled)).toBe(7);
+    expect(dataEdge(7, right, filled)).toBe(7);
+  });
+
+  it("una tabella di una cella resta dov'è", () => {
+    expect(dataEdge(0, () => 0, () => true)).toBe(0);
   });
 });

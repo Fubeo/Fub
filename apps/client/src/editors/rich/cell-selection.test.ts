@@ -5,7 +5,8 @@
 // celle scelte Canc, gli appunti e «Unisci celle».
 import { afterEach, describe, expect, it } from "vitest";
 import { RichEngine } from "./engine";
-import { selectedCells } from "./cell-selection";
+import { cellAt, selectedCells } from "./cell-selection";
+import { caseApplies, expectedOf, playCase, seenOf, TABLE_CONFORMANCE, type ConformanceTarget } from "../../tabella/conformance";
 import { parseProjection, type Block, type Para, type Table, type TextInline } from "./projection";
 
 let engines: RichEngine[] = [];
@@ -124,4 +125,38 @@ describe("le tabelle del documento", () => {
     expect(data.get("text/plain")).toBe("a\nc\n");
     expect(data.get("text/html")).toContain("<table");
   });
+});
+
+describe("la prova comune della Tabella, sul documento", () => {
+  const target: ConformanceTarget = {
+    mode: "document",
+    caps: { insertRows: true, deleteRows: false, moveRows: false, insertColumns: false, deleteColumns: false, moveColumns: false, sort: false, align: false, merge: true, headerRows: 0 },
+    bounded: true,
+    delegates: false,
+  };
+  for (const test of TABLE_CONFORMANCE) {
+    it.runIf(caseApplies(test, target))(test.name, async () => {
+      const e = engine(test.rows.map((row) => [...row]));
+      // Il cursore parte alla fine del testo della prima cella.
+      const first = test.rows[0]![0]!;
+      e.select(at(e, first) + first.length);
+      const seen = await playCase(test, {
+        key: (name, init) => void press(name, init),
+        command: (id) => void e.run(id),
+        cells: () => grid(e),
+        active: () => {
+          const here = cellAt(e.state.selection.$head)!;
+          return { row: here.box.row, column: here.box.column };
+        },
+        range: () => {
+          const chosen = selectedCells(e.state);
+          if (chosen) return chosen.range;
+          const here = cellAt(e.state.selection.$head)!;
+          return { r0: here.box.row, c0: here.box.column, r1: here.box.row, c1: here.box.column };
+        },
+      });
+      const expected = expectedOf(test, target);
+      expect(seenOf(seen, expected)).toEqual(expected);
+    });
+  }
 });

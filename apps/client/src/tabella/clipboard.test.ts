@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { clipboardData, clipboardRows, htmlTableRows, pasteTargets } from "./clipboard";
+import { clipboardData, clipboardRows, cutDestination, cutMoves, htmlTableRows, pasteTargets } from "./clipboard";
 
 describe("pasteTargets", () => {
   it("da una cella sola, il blocco una volta dall'angolo", () => {
@@ -44,5 +44,19 @@ describe("tabelle HTML", () => {
 
   it("l'HTML in uscita non lascia passare marcature", () => {
     expect(clipboardData([[{ input: "", shown: "<b>&" }]]).html).toContain("<td>&lt;b&gt;&amp;</td>");
+  });
+});
+
+describe("il segno del taglio", () => {
+  const mark = { range: { r0: 1, c0: 0, r1: 2, c1: 0 }, text: "Ada\nBea\n" };
+
+  it("sposta se gli appunti e le celle dicono ancora il taglio", () => {
+    expect(cutMoves(mark, "Ada\r\nBea\r\n", "Ada\nBea\n")).toBe(true);
+    expect(cutMoves(mark, "altro", "Ada\nBea\n")).toBe(false);
+    expect(cutMoves(mark, "Ada\nBea\n", "Cleo\nBea\n")).toBe(false);
+  });
+
+  it("va all'angolo della selezione, grande quanto il taglio", () => {
+    expect(cutDestination(mark.range, { r0: 3, c0: 1, r1: 5, c1: 4 })).toEqual({ r0: 3, c0: 1, r1: 4, c1: 1 });
   });
 });
