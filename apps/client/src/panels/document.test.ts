@@ -955,7 +955,7 @@ describe("il testo non salvato resta (#237)", () => {
     expect(toastsAbout("Benvenuto")).toEqual([]);
   });
 
-  it("la finestra che conferma una scelta del conflitto nomina la nota col titolo, non col percorso", async () => {
+  it("la finestra che conferma una scelta del conflitto chiede in una frase, e nomina la nota col titolo", async () => {
     const { host, sessions } = await unsavedNote();
     repair();
     host.writeFromOutside(BENVENUTO, "# Benvenuto\nda un'altra applicazione\n");
@@ -964,11 +964,15 @@ describe("il testo non salvato resta (#237)", () => {
     await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
     visible('.conflict-banner button[data-choice="mine"]')[0]!.click();
     const dialogs = () => [...document.querySelectorAll<HTMLElement>("dialog, [role=dialog], [role=alertdialog]")]
-      .filter((el) => el.isConnected && (el.textContent ?? "").includes("Conflitto su"));
+      .filter((el) => el.isConnected && (el.textContent ?? "").includes("Mantenere il tuo testo?"));
     await waitFor("la finestra della scelta", () => dialogs().length === 1);
-    const said = dialogs()[0]!.textContent ?? "";
-    expect(said).toContain("Conflitto su Benvenuto");
+    const dialog = dialogs()[0]!;
+    expect(dialog.querySelector(".kit-dialog-title")?.textContent).toBe("Mantenere il tuo testo?");
+    const said = dialog.textContent ?? "";
+    expect(said).toContain("Fub riscrive «Benvenuto» col testo che hai qui: la modifica arrivata da fuori si perde.");
     expect(said).not.toContain(BENVENUTO);
+    // Il bottone dice la stessa scelta della barra, non il nome di un comando.
+    expect(dialog.querySelector('button[data-action="confirm"]')?.textContent).toBe("Mantieni il mio testo");
     dialogs()[0]!.querySelector<HTMLButtonElement>('button[data-action="cancel"]')!.click();
     await settle();
   });

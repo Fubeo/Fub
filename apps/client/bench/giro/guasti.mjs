@@ -228,7 +228,7 @@ async function barraDelConflitto(pagina) {
   const barra = pagina.locator('.pane.focus .conflict-banner[role="alert"]');
   await barra.waitFor();
   const titolo = (await barra.locator("strong").textContent())?.trim() ?? "";
-  verifica(titolo === `Conflitto su ${NOME}`, `la barra del conflitto dice «${titolo}»`);
+  verifica(titolo === `Conflitto su «${NOME}»`, `la barra del conflitto dice «${titolo}»`);
   const azioni = (await barra.locator(".conflict-actions button").allTextContents()).map((a) => a.trim());
   const attese = ["Confronta", "Mantieni il mio testo", "Usa la versione su disco", "Decidi dopo"];
   verifica(JSON.stringify(azioni) === JSON.stringify(attese), `la barra offre ${JSON.stringify(azioni)}`);
@@ -396,7 +396,7 @@ const conflittoUsaDisco = {
     const confronto = pagina.locator(".modale.shell-dialog");
     await confronto.waitFor();
     const righe = await confronto.innerText();
-    verifica(righe.includes(`${NOME}: il tuo testo e quello su disco`), "il confronto non dice che cosa confronta");
+    verifica(righe.includes(`«${NOME}»: il tuo testo e quello su disco`), "il confronto non dice che cosa confronta");
     verifica(righe.includes(`− ${FUORI}`), "il confronto non segna con − la riga che c'è solo su disco");
     verifica(righe.split("\n").some((riga) => riga.startsWith("+ ") && riga.includes(MIA)), "il confronto non segna con + la frase che c'è solo nel mio testo");
     await giro.foto("confronta");
@@ -408,7 +408,7 @@ const conflittoUsaDisco = {
     const ridotta = pagina.locator(".pane.focus .conflict-banner[data-collapsed]");
     await ridotta.waitFor();
     const riga = (await ridotta.innerText()).trim();
-    verifica(riga.includes(`Conflitto su ${NOME}: la scelta aspetta, niente è stato scritto.`), `ridotta, la barra dice «${riga}»`);
+    verifica(riga.includes(`Conflitto su «${NOME}»: la scelta aspetta, niente è stato scritto.`), `ridotta, la barra dice «${riga}»`);
     verifica((await leggi(pagina, NOTA)) === dopoIlPrimoConflitto, "«Decidi dopo» ha scritto sul disco");
     verifica((await testoDelRiquadro(pagina)).includes(MIA), "«Decidi dopo» ha tolto il mio testo dal riquadro");
     await giro.foto("decidi-dopo");
@@ -417,14 +417,14 @@ const conflittoUsaDisco = {
 
     // «Usa la versione su disco» chiede prima: «Annulla» non tocca niente.
     await barra.locator('button:text-is("Usa la versione su disco")').click();
-    let finestra = await conferma(pagina, `Conflitto su ${NOME}`);
+    let finestra = await conferma(pagina, "Usare la versione su disco?");
     await finestra.locator('button[data-action="cancel"]:text-is("Annulla")').click();
     await finestra.waitFor({ state: "detached" });
     verifica((await statoSalvataggio(pagina)) === "conflitto", "«Annulla» ha chiuso il conflitto");
     verifica((await testoDelRiquadro(pagina)).includes(MIA), "«Annulla» ha tolto il mio testo dal riquadro");
     verifica((await leggi(pagina, NOTA)) === dopoIlPrimoConflitto, "«Annulla» ha scritto sul disco");
     await barra.locator('button:text-is("Usa la versione su disco")').click();
-    finestra = await conferma(pagina, `Conflitto su ${NOME}`);
+    finestra = await conferma(pagina, "Usare la versione su disco?");
     await giro.foto("usa-disco-chiede");
     await finestra.locator('button[data-action="confirm"]').click();
     await finestra.waitFor({ state: "detached" });
@@ -449,7 +449,12 @@ const conflittoTieniMio = {
     await scriviDaFuori(pagina, NOTA, `${disco}\n${FUORI_ANCORA}\n`);
     const barra = await barraDelConflitto(pagina);
     await barra.locator('button:text-is("Mantieni il mio testo")').click();
-    const finestra = await conferma(pagina, `Conflitto su ${NOME}`);
+    const finestra = await conferma(pagina, "Mantenere il tuo testo?");
+    const frase = (await finestra.locator(".kit-dialog-description").textContent())?.trim() ?? "";
+    verifica(
+      frase === `Fub riscrive «${NOME}» col testo che hai qui: la modifica arrivata da fuori si perde.`,
+      `la conferma dice «${frase}»`,
+    );
     await giro.foto("chiede");
     await finestra.locator('button[data-action="confirm"]').click();
     await finestra.waitFor({ state: "detached" });
@@ -894,7 +899,7 @@ const ripristinoConTestoNonSalvato = {
     // decide tenendo il suo testo, e si riparte da una nota salvata.
     await barraDelConflitto(pagina);
     await pagina.locator('.pane.focus .conflict-banner button:text-is("Mantieni il mio testo")').click();
-    const prima = await conferma(pagina, `Conflitto su ${NOME}`);
+    const prima = await conferma(pagina, "Mantenere il tuo testo?");
     await prima.locator('button[data-action="confirm"]').click();
     await prima.waitFor({ state: "detached" });
     await aspettaStato(pagina, "salvato");
@@ -909,7 +914,7 @@ const ripristinoConTestoNonSalvato = {
     verifica((await leggi(pagina, NOTA)) === versioneVecchia, "il testo non salvato ha coperto la versione ripristinata senza chiedere");
     await giro.foto("ripristinata");
     await pagina.locator('.pane.focus .conflict-banner button:text-is("Mantieni il mio testo")').click();
-    const finestra = await conferma(pagina, `Conflitto su ${NOME}`);
+    const finestra = await conferma(pagina, "Mantenere il tuo testo?");
     await finestra.locator('button[data-action="confirm"]').click();
     await finestra.waitFor({ state: "detached" });
     await aspettaStato(pagina, "salvato");

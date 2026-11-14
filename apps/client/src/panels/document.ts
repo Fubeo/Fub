@@ -1474,15 +1474,15 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
   cancel.type = "button";
   cancel.className = "link-button";
   cancel.textContent = t("document.conflict.cancel");
+  // La conferma chiede in una frase che cosa succede e che cosa si perde; il
+  // bottone ripete la scelta della barra, con le sue stesse parole.
   const ask = async (choice: "mine" | "theirs"): Promise<void> => {
-    const detail = choice === "mine"
-      ? t("commands.doc.conflict.mine.desc")
-      : t("commands.doc.conflict.theirs.desc");
+    const doc = pageName(current);
     const ok = await confirm(
-      `${t(choice === "mine" ? "commands.doc.conflict.mine" : "commands.doc.conflict.theirs")}\n${pageName(current)}\n${detail}`,
+      t(choice === "mine" ? "document.conflict.mine.body" : "document.conflict.theirs.body", { doc }),
       {
-        title: t("document.conflict.title", { doc: pageName(current) }),
-        okLabel: t(choice === "mine" ? "commands.doc.conflict.mine" : "commands.doc.conflict.theirs"),
+        title: t(choice === "mine" ? "document.conflict.mine.title" : "document.conflict.theirs.title"),
+        okLabel: t(choice === "mine" ? "document.conflict.keep_mine" : "document.conflict.use_disk"),
         danger: choice === "theirs",
       },
     );
