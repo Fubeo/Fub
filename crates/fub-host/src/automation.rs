@@ -60,14 +60,7 @@ pub(crate) fn lock_vault_writer(root: &std::path::Path) -> std::io::Result<Vault
     let path = writer_lock_path(root)?;
     // Un collegamento o una cartella al posto del lock farebbe bloccare a due
     // processi due file diversi: la regola vale all'apertura, non prima.
-    let file = crate::regular_file::open_regular(
-        &path,
-        std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false),
-    )?;
+    let file = crate::regular_file::open_regular(&path, crate::regular_file::Access::Lock)?;
     // Il lock di std è `flock` su Unix e `LockFileEx` su Windows, e muore col
     // processo; l'handle aperto possiede il lease. La contesa è `WouldBlock`
     // su ogni piattaforma: `fs2` su Windows dava l'errore grezzo 33, e un

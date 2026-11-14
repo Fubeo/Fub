@@ -352,7 +352,7 @@ fn load_pairs_best_effort() -> Vec<fub_host::automation::PairEntry> {
     // e su Unix del solo proprietario sul file aperto: un controllo sul path
     // prima di leggere lascerebbe a un collegamento la finestra in mezzo.
     let Ok(mut file) =
-        fub_host::regular_file::open_regular(&path, std::fs::OpenOptions::new().read(true))
+        fub_host::regular_file::open_regular(&path, fub_host::regular_file::Access::Read)
     else {
         return Vec::new();
     };

@@ -95,6 +95,24 @@ fn a_linked_pairing_file_is_refused() {
     assert!(pairing(&global, &OutputFormat::Json, PairAction::List, |_| {}).is_err());
 }
 
+/// Una cartella al posto del file degli abbinamenti è `denied` (uscita 4) su
+/// ogni sistema, non «illeggibile»: su Windows l'apertura dice soltanto
+/// «accesso negato», e il rifiuto guarda che cosa c'è al path.
+#[test]
+fn a_directory_in_place_of_the_pairing_file_is_denied() {
+    let vault = tempfile::tempdir().unwrap();
+    let config = tempfile::tempdir().unwrap();
+    std::fs::create_dir(config.path().join("clipper-pairing.json")).unwrap();
+    let global = global_on(vault.path(), config.path());
+    let failure = pairing(&global, &OutputFormat::Json, PairAction::List, |_| {}).unwrap_err();
+    assert_eq!(
+        (failure.code, failure.kind),
+        (4, "denied"),
+        "{}",
+        failure.message
+    );
+}
+
 /// Un file degli abbinamenti che non si lascia leggere non è un file
 /// assente: `pair` lo riscriveva con il solo abbinamento nuovo, e tutte le
 /// estensioni già abbinate perdevano il permesso di scrivere.

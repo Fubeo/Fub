@@ -45,8 +45,7 @@ pub fn load_pairs(global: &GlobalArgs) -> Result<Vec<fub_host::automation::PairE
     // La regola vale all'apertura (`fub_host::regular_file`), non in un
     // controllo prima: fra le due cose un collegamento può prendere il posto
     // del file.
-    let opened =
-        fub_host::regular_file::open_regular(&path, std::fs::OpenOptions::new().read(true));
+    let opened = fub_host::regular_file::open_regular(&path, fub_host::regular_file::Access::Read);
     let mut file = match opened {
         Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
