@@ -409,6 +409,21 @@ pub use export::{DrawioExport, ExcalidrawExport, JpegExport, PdfExport, PngExpor
 pub(crate) use write::svg_png;
 use write::{write_pdf, write_raster, write_svg};
 
+/// La misura della prima pagina di un PDF, come si mostra (punti, con la
+/// rotazione), per le misure di una scheda PDF della lavagna. `None` se il PDF
+/// è cifrato, non si apre o non ha pagine: la scheda prende le misure di serie.
+pub(crate) fn pdf_first_page(bytes: &[u8]) -> Option<(f64, f64)> {
+    let options = lopdf::LoadOptions::with_max_decompressed_size(annotated::STREAM_MAX);
+    let document = lopdf::Document::load_mem_with_options(bytes, options).ok()?;
+    // Un PDF che si apre senza password è già decifrato: se `/Encrypt` c'è
+    // ancora, la password serve, come nell'esportazione delle annotazioni.
+    if document.trailer.has(b"Encrypt") {
+        return None;
+    }
+    let first = *document.get_pages().values().next()?;
+    Some(annotated::Geometry::of(&document, first).size())
+}
+
 #[cfg(test)]
 use embed::{raster, FACES};
 
