@@ -164,9 +164,11 @@ byte pubblicati sono quelli dell'impronta, l'esito parla solo dei byte
 controllati, e una cartella cambiata (o tolta, o rinominata) nel frattempo è
 `changed` e non si pubblica. Le porte si ripassano sulla staging, e la sonda
 della destinazione si rifà subito prima di pubblicare, sotto lo
-stesso lucchetto per id che prendono la revoca, l'aggiornamento e la
-disinstallazione (un lucchetto del processo, non del file system): una
-revoca arrivata durante la copia ferma la sostituzione (`revoked`). Una
+stesso lucchetto per id che prendono l'installazione dal catalogo, la
+revoca, l'aggiornamento e la disinstallazione (un lucchetto del processo,
+non del file system): una revoca arrivata durante la copia ferma la
+sostituzione (`revoked`), e un'installazione dal catalogo dello stesso id
+non pubblica a metà di uno scambio. Una
 lettura che non riesce con la cartella invariata è `unreadable` (dalla parte
 della cartella scelta o di quella dei temi), non un guasto di scrittura. Per
 il resto l'installazione passa dalle stesse regole di `install_theme` (serie

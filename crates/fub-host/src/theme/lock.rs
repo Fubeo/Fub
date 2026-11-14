@@ -1,8 +1,11 @@
 //! Il lucchetto per id di un tema installato, in questo processo: chi cambia
-//! ciò che sta sotto `themes/<id>/` (la revoca, l'aggiornamento, la
-//! disinstallazione, la sostituzione da cartella) lo prende, così la lettura
-//! del puntatore e la scrittura che ne dipende non si mescolano con quella di
-//! un altro.
+//! ciò che sta sotto `themes/<id>/` (l'installazione dal catalogo, la
+//! revoca, l'aggiornamento, la disinstallazione, la sostituzione da cartella)
+//! lo prende, così la lettura del puntatore e la scrittura che ne dipende non
+//! si mescolano con quella di un altro.
+//!
+//! È l'ultimo lucchetto preso: chi lo tiene non ne chiede altri, e non lo
+//! chiede di nuovo per lo stesso tema (non è rientrante).
 //!
 //! Vale dentro il processo di Fub, dove stanno sia il catalogo sia
 //! l'installazione da cartella. Non è un lucchetto sul file system: un altro

@@ -45,6 +45,10 @@ fn install_theme_internal(
     }
 
     let themes_root = themes_root(config_dir, &theme.manifest.id)?;
+    // Dal controllo «non c'è ancora» fino alla pubblicazione, sotto il
+    // lucchetto del tema: una sostituzione da cartella che ha appena messo da
+    // parte il vecchio tema non trova il posto preso a metà del suo scambio.
+    let _guard = lock_theme(config_dir, &theme.manifest.id);
     sweep_dropped(&themes_root);
     let dest = themes_root.path.join(&theme.manifest.id);
     match themes_root.dir.symlink_metadata(&theme.manifest.id) {
@@ -55,6 +59,7 @@ fn install_theme_internal(
 
     let (staging_name, _) = create_staging(&themes_root)?;
     let staging = themes_root.path.join(&staging_name);
+    after_absent_check();
 
     let result = (|| {
         copy_tree(&source_root, &staging, &source_root)?;
@@ -93,6 +98,21 @@ fn install_theme_internal(
         let _ = themes_root.dir.remove_dir_all(&staging_name);
     }
     result.map(|()| dest)
+}
+
+// Un aggancio fra il controllo «non c'è ancora» e la pubblicazione, per il
+// test di unità della corsa con la sostituzione da cartella: esiste solo lì.
+#[cfg(test)]
+thread_local! {
+    pub(super) static AFTER_ABSENT_CHECK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn after_absent_check() {
+    #[cfg(test)]
+    if let Some(hook) = AFTER_ABSENT_CHECK.with(|hook| hook.borrow_mut().take()) {
+        hook();
+    }
 }
 
 pub fn install_theme(config_dir: &Utf8Path, source: &Utf8Path) -> Result<Utf8PathBuf, ThemeError> {

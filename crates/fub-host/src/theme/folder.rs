@@ -784,6 +784,57 @@ mod race_tests {
         assert_eq!(names, vec!["acme.carta".to_string()], "no staging left");
     }
 
+    /// Un'installazione dal catalogo tiene il lucchetto del tema dal controllo
+    /// «non c'è ancora» alla pubblicazione: un'installazione da cartella dello
+    /// stesso id, partita in mezzo, aspetta, poi trova il tema del catalogo e
+    /// si ferma alla domanda. Senza il lucchetto pubblicherebbe nel buco, e il
+    /// catalogo fallirebbe a metà (o, durante uno scambio, lascerebbe il
+    /// vecchio tema fra le copie messe da parte).
+    #[test]
+    fn a_catalog_install_holds_the_theme_until_it_publishes() {
+        let config_dir = tempfile::tempdir().unwrap();
+        let config = Utf8PathBuf::from_path_buf(config_dir.path().to_path_buf()).unwrap();
+        let (_catalog_dir, catalog) = folder("0.3.2");
+        let (_new_dir, new) = folder("0.4.0");
+        let pending = checked(&new);
+        let (sent, got) = std::sync::mpsc::channel();
+        let folder_install = std::sync::Arc::new(std::sync::Mutex::new(None));
+        super::super::install::AFTER_ABSENT_CHECK.with(|hook| {
+            let config = config.clone();
+            let folder_install = folder_install.clone();
+            *hook.borrow_mut() = Some(Box::new(move || {
+                let thread = std::thread::spawn(move || {
+                    let outcome = install_theme_from_folder(&config, &pending, false);
+                    let _ = sent.send(());
+                    outcome
+                });
+                // Con il lucchetto la cartella aspetta: niente arriva qui.
+                let early = got.recv_timeout(std::time::Duration::from_millis(1500));
+                *folder_install.lock().unwrap() = Some((thread, early.is_ok()));
+            }));
+        });
+        let installed = install_theme(&config, &catalog);
+        super::super::install::AFTER_ABSENT_CHECK.with(|hook| hook.borrow_mut().take());
+        let (thread, early) = folder_install.lock().unwrap().take().expect("the hook ran");
+        let outcome = thread.join().unwrap();
+        assert!(!early, "the folder install did not wait: {outcome:?}");
+        installed.expect("the catalog install publishes");
+        assert!(
+            matches!(outcome, ThemeFolderInstall::Collision { .. }),
+            "{outcome:?}"
+        );
+        let themes = crate::config::themes_dir(&config);
+        assert_eq!(
+            std::fs::read_to_string(themes.join("acme.carta/skin.css")).unwrap(),
+            ".v0-3-2 {}\n"
+        );
+        let names: Vec<_> = std::fs::read_dir(&themes)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect();
+        assert_eq!(names, vec!["acme.carta".to_string()], "no staging left");
+    }
+
     /// Una lettura della cartella che non riesce, con la cartella che ha
     /// ancora i byte del controllo, è `Unreadable` dalla parte della
     /// cartella: non un guasto di scrittura, e non una cartella cambiata.
