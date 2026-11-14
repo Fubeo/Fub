@@ -10,6 +10,7 @@ import { openLifetime } from "../../../../ui/lifetime";
 import { lineHeading, MARKDOWN_ACTIONS, markdownActionState } from "./actions";
 import { frontmatterRange } from "./render";
 import { liveStrings } from "./strings";
+import { markPresence } from "../../../core/presence";
 
 const OPAQUE = new Set(["FencedCode", "CodeBlock", "HTMLBlock", "CommentBlock"]);
 
@@ -58,6 +59,7 @@ class HeadingPillWidget extends WidgetType {
   toDOM(): HTMLElement {
     const holder = document.createElement("span");
     holder.className = "cm-fub-heading-pill";
+    markPresence(holder, "hover");
     const button = document.createElement("button");
     button.type = "button";
     button.className = "cm-fub-heading-pill-button";

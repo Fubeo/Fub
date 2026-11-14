@@ -14,7 +14,7 @@ import { liveStrings } from "../strings";
 import { blocksMode } from "./index";
 import { blockModel } from "./model";
 import { moveSiblings, siblingsOf } from "./move";
-import { blockAt, gesturePhrase, inferGesture, placeName } from "./motion";
+import { blockAt, gesturePhrase, inferGesture, pageArrives, placeName } from "./motion";
 
 // Il blocco vivo (N13): che cosa si muove, quando, e che cosa si dice.
 
@@ -176,18 +176,25 @@ describe("lo spostamento all'indietro", () => {
 });
 
 describe("che cosa si muove", () => {
-  it("la pagina arriva: copertina, icona e titolo uno dopo l'altro, mai col moto ridotto", async () => {
-    mount("---\nicon: 🌿\n---\nUno", 20);
-    await frame();
-    await new Promise((done) => setTimeout(done, 40));
-    const parts = moto.runs.filter((run) => run.el.className.startsWith("cm-fub-page-"));
-    expect(parts.length).toBeGreaterThan(0);
-    expect(parts.every((run) => run.spec.spring === "wide")).toBe(true);
+  it("la pagina arriva col gesto che porta a Scrittura: copertina, icona e titolo uno dopo l'altro, mai col moto ridotto", async () => {
+    const pageRuns = () => moto.runs.filter((run) => run.el.className.startsWith("cm-fub-page-"));
+    const settle = async () => {
+      await frame();
+      await new Promise((done) => setTimeout(done, 40));
+    };
+    // Una nota che si apre mostra la pagina ferma.
+    const view = mount("---\nicon: 🌿\n---\nUno", 20);
+    await settle();
+    expect(pageRuns()).toEqual([]);
+    view.dispatch({ effects: pageArrives.of(null) });
+    await settle();
+    expect(pageRuns().length).toBeGreaterThan(0);
+    expect(pageRuns().every((run) => run.spec.spring === "wide")).toBe(true);
     moto.runs = [];
     moto.level = "reduced";
-    mount("---\nicon: 🌿\n---\nUno", 20);
-    await frame();
-    await new Promise((done) => setTimeout(done, 40));
+    const still = mount("---\nicon: 🌿\n---\nUno", 20);
+    still.dispatch({ effects: pageArrives.of(null) });
+    await settle();
     expect(moto.runs).toEqual([]);
   });
 

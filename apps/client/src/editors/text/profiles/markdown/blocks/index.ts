@@ -1,6 +1,6 @@
-// I Blocchi (H1–H8, C4): la Live con la politica `mai` più l'interfaccia dei
-// blocchi — modello, maniglie, menu, trascinamento, selezione, tasti e moto. È un
-// pezzo a parte, che la superficie carica la prima volta che serve.
+// I Blocchi (H1–H8, C4): l'interfaccia dei blocchi dentro Scrittura —
+// modello, maniglie, menu, trascinamento, selezione, tasti, testata e moto. La
+// superficie li monta con l'editor della nota.
 import { type Extension } from "@codemirror/state";
 import { blockHandles, type BlocksOptions, blocksOptions } from "./handles";
 import { blockKeysExtension } from "./keys";
@@ -10,6 +10,7 @@ import { blockSelectionExtension } from "./selection";
 import { pageHeaderExtension } from "./page";
 
 export type { BlocksOptions } from "./handles";
+export { pageArrives } from "./motion";
 
 export function blocksMode(options: BlocksOptions = {}): Extension {
   return [

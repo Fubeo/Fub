@@ -186,6 +186,44 @@ describe("il pannello del «/»", () => {
     }
   });
 
+  it("il passo non scorre da sé: le frecce lo fanno scorrere e il giorno scelto resta in vista", () => {
+    const { made, key } = panel();
+    made.update("data", EMPTY);
+    key("Enter");
+    const step = made.dom.querySelector<HTMLElement>(".slash-step.is-date")!;
+    expect(step).not.toBeNull();
+    // Un passo accorciato: si vede da 0 a 150; le settimane del calendario
+    // partono da 80, una ogni 34 px, e scorrono col passo.
+    const rect = (top: number, height: number) => new DOMRect(0, top, 300, height);
+    const days = () => [...step.querySelectorAll<HTMLElement>("[role=option]")];
+    const box = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this === step) return rect(0, 150);
+      const index = days().indexOf(this);
+      return index < 0 ? rect(0, 0) : rect(80 + Math.floor(index / 7) * 34 - step.scrollTop, 30);
+    });
+    try {
+      const inView = () => {
+        const day = step.querySelector<HTMLElement>(".is-selected")!.getBoundingClientRect();
+        return day.top >= 0 && day.bottom <= 150;
+      };
+      // Domani, venerdì 30 ottobre, è nell'ultima settimana del mese.
+      key("ArrowLeft");
+      key("ArrowRight");
+      expect(step.querySelector(".is-selected")?.textContent).toBe("30");
+      expect(inView()).toBe(true);
+      key("ArrowRight");
+      expect(step.querySelector(".is-selected")?.textContent).toBe("31");
+      expect(inView()).toBe(true);
+      expect(step.scrollTop).toBeGreaterThan(0);
+      // Tornando alla prima settimana il passo risale.
+      for (let i = 0; i < 4; i++) key("ArrowUp");
+      expect(step.querySelector(".is-selected")?.textContent).toBe("3");
+      expect(inView()).toBe(true);
+    } finally {
+      box.mockRestore();
+    }
+  });
+
   it("chiuso, non risponde più", () => {
     const { made, key } = panel();
     made.update("", EMPTY);

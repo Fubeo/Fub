@@ -7,7 +7,7 @@ import { Facet } from "@codemirror/state";
 /// blocco col cursore nel prefisso. `riga` mostra ogni segno della riga del
 /// cursore. Una faccetta, come `propertiesDisplay`: il motore la cambia in un
 /// compartimento, così selezione e undo restano. Vince il valore di
-/// precedenza più alta: i Blocchi lo fissano a `mai` sopra le Preferenze.
+/// precedenza più alta. In Scrittura, coi Blocchi dentro, vale la preferenza.
 export type RevealPolicy = "mai" | "elemento" | "riga";
 
 export const liveReveal = Facet.define<RevealPolicy, RevealPolicy>({

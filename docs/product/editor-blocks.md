@@ -1,26 +1,23 @@
 # Blocchi
 
-> **Per chi:** chi scrive nelle note Markdown e chi modifica la superficie dei
-> Blocchi.
-> **Risultato:** sapere cosa aggiunge la modalità Blocchi alla Live, come si
+> **Per chi:** chi scrive nelle note Markdown e chi modifica i blocchi di
+> Scrittura.
+> **Risultato:** sapere cosa aggiungono i blocchi alla Scrittura, come si
 > spostano, si trasformano e si collegano i blocchi, e cosa finisce nel file.
 
 ## Che cos'è
 
-**Blocchi** è una modalità della nota Markdown accanto a Sorgente, Live e
-Lettura, e si sceglie anche come modalità dei riquadri nuovi
-(`editor.default-mode` = `blocks`). Scrive come la Live con la rivelazione
-`mai`: i segni Markdown non si vedono, nemmeno col cursore dentro. In più dà a
-ogni blocco una maniglia, un menu, il trascinamento e una selezione di blocchi.
-Il file resta Markdown puro: nessun blocco ha un id nascosto né un formato a
-parte, e Sorgente mostra gli stessi byte.
+I **blocchi** stanno dentro la modalità [Scrittura](editor-writing.md) della
+nota Markdown: danno a ogni blocco una maniglia, un menu, il trascinamento e
+una selezione di blocchi, e in cima la testata della pagina. Quanto si vede dei
+segni Markdown lo dice `editor.live-reveal`, come in tutta Scrittura. Il file
+resta Markdown puro: nessun blocco ha un id nascosto né un formato a parte, e
+Sorgente mostra gli stessi byte.
 
-Ci si arriva dal menu Vista («Blocchi») o con **Mod+Shift+B**
-(`shell.mode.blocks`), che c'è soltanto sulle note; «Passa a Live» dai Blocchi
-porta alla Live, e Mod+E dalla Lettura torna ai Blocchi se venivi da lì.
-
-Il codice della modalità è un pezzo a parte, caricato la prima volta che un
-riquadro passa a Blocchi. Finché arriva, il riquadro scrive come la Live.
+Blocchi non è più una modalità a sé. Un riquadro salvato in `blocks`, e
+**Mod+Shift+B** (`shell.mode.blocks`, soltanto sulle note), portano a
+Scrittura. Il codice dei blocchi si carica con l'editor della nota, non come un
+pezzo a parte.
 
 ## I blocchi
 
@@ -120,8 +117,8 @@ Ogni gesto si dice anche nella regione viva dei Blocchi («Blocco spostato: ora
 è il terzo», «Ora è Titolo 2», «Aperto»).
 
 **Cursore morbido** (`editor.soft-cursor`, spento di norma) fa scivolare il
-cursore fra le righe quando ci si muove senza scrivere; vale soltanto nei
-Blocchi, e mai col moto ridotto.
+cursore fra le righe quando ci si muove senza scrivere; vale soltanto in
+Scrittura, e mai col moto ridotto.
 
 ## Gli id di blocco
 

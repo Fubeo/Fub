@@ -43,13 +43,11 @@ export function orderedModes(modes: readonly SurfaceMode[]): SurfaceMode[] {
   return [...modes].sort((left, right) => ROLE_ORDER[left.contextMode] - ROLE_ORDER[right.contextMode]);
 }
 
-/// Il comando che porta a `mode`, come lo cercano i comandi della shell: i
-/// Blocchi per id, gli altri per ruolo, e del ruolo la prima modalità (la
-/// Live è la prima che non è Blocchi). Le altre di uno stesso ruolo non ne
-/// hanno uno.
+/// Il comando che porta a `mode`, come lo cercano i comandi della shell: per
+/// ruolo, e del ruolo la prima modalità dichiarata. Le altre di uno stesso
+/// ruolo non ne hanno uno.
 function commandOf(mode: SurfaceMode, modes: readonly SurfaceMode[]): string | null {
-  if (mode.id === "blocks") return "shell.mode.blocks";
-  const first = modes.find((candidate) => candidate.contextMode === mode.contextMode && candidate.id !== "blocks");
+  const first = modes.find((candidate) => candidate.contextMode === mode.contextMode);
   if (first !== mode) return null;
   switch (mode.contextMode) {
     case "live_preview":

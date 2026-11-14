@@ -15,14 +15,11 @@ banda, sul telefono «…». Sul telefono resta il nome; in piedi il foglio è l
 
 ## Modalità
 
-Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
-
-- **sorgente**, con la sintassi esplicita;
-- **live preview**, che mantiene l'editing e riduce il rumore della sintassi;
-- **[blocchi](editor-blocks.md)**, la Live con maniglie, menu e spostamenti per blocco;
-- **lettura**, che mostra la resa senza cursore di testo.
-
-La superficie plain text offre soltanto **sorgente**. Un file `.svg` si apre
+Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre
+**Scrittura** (con i [blocchi](editor-blocks.md) dentro), **Sorgente** e
+**Lettura**: sono descritte in [Scrittura](editor-writing.md), coi livelli di
+presenza degli elementi sul foglio. Dove questa pagina dice «Live» intende
+Scrittura, la modalità `live_preview`. La superficie plain text offre soltanto **sorgente**. Un file `.svg` si apre
 come testo in **Sorgente**, **Diviso** (predefinita, con l'anteprima accanto
 o sotto) e **Anteprima**, o come [disegno](drawing.md) con la feature `draw`
 dell'host. L'anteprima si ridisegna dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
@@ -30,7 +27,7 @@ l'ultima buona, attenuata, sotto il motivo con riga e colonna. I documenti
 `.xlsx` usano invece la famiglia Grid. Il commutatore è la voce in fondo alla
 banda di stato, [sul telefono un tondo](../architecture/shell-behaviours.md);
 con una sola modalità non c'è, né i comandi di modalità, che trovano la
-modalità per ruolo (Live, sulla tela, riporta alle carte). Il riquadro ricorda
+modalità per ruolo (Scrittura, sulla tela, riporta alle carte). Il riquadro ricorda
 la modalità scelta per ogni famiglia di superfici: una nota in Sorgente non fa
 aprire la tela seguente come JSON, e la tela non cambia la modalità in cui si
 riapre la nota. Le scorciatoie seguono il riquadro attivo. In un campo in cui
