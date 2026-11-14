@@ -134,6 +134,7 @@
 - Qual è il contratto delle due porte IPC dei componenti? → [reference/components-contract.md](../reference/components-contract.md)
 - Quali file Fub scrive a livello macchina e dentro un vault (layout su disco)? → [reference/on-disk-layout.md](../reference/on-disk-layout.md)
 - Come si fidano bundle, capability, confini del vault e runtime WASM? → [reference/permissions-and-security.md](../reference/permissions-and-security.md)
+- Con quali regole si installa o si collega un tema da una cartella? → [reference/theme-folder-security.md](../reference/theme-folder-security.md)
 - Qual è il JSON che `read_document`/`write_document` si scambiano per un documento di videoscrittura? → [reference/rich-projection.md](../reference/rich-projection.md)
 - Com'è fatto il protocollo della sessione live di FubDraw, versione 1? → [reference/live-session.md](../reference/live-session.md)
 - Come funziona il server MCP di `fub-cli` (trasporto, strumenti, radici di scrittura)? → [reference/mcp-server.md](../reference/mcp-server.md)

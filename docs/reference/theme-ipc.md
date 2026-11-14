@@ -94,7 +94,7 @@ osservatore vivo guarda la cartella: l'host la guarda solo se è `ready`, e
 `false` vuol dire che i salvataggi non arrivano (la cartella non era pronta,
 o il sistema non ha più osservatori). Aspetto lo dice con cosa fare. La
 chiave `developer.theme-folder` non viaggia coi profili di macchina (vedi
-[permessi e sicurezza](permissions-and-security.md#temi-installati)). Gli
+[temi da una cartella](theme-folder-security.md#il-tema-collegato)). Gli
 stati:
 
 | `state` | Campi | Che cosa vuol dire |
@@ -117,4 +117,5 @@ l'ultimo buono. Un evento dopo «Scollega» o con la modalità spenta non parte.
 Il catalogo firmato ha le sue porte (`catalog_install_theme`,
 `catalog_update_theme`, `catalog_rollback_theme`, `catalog_revoke_theme`). Le
 regole di sicurezza dei temi sono in
-[permessi e sicurezza](permissions-and-security.md#temi-installati).
+[permessi e sicurezza](permissions-and-security.md#temi-installati) e, per una
+cartella, in [temi da una cartella](theme-folder-security.md).
