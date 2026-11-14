@@ -1,14 +1,16 @@
 # I tasti e i gesti della lavagna
 
 > **Ambito:** come la tela della lavagna prende la tastiera, il puntatore e
-> la rotella: entrare in una scheda e uscirne, scrivere in una nota, la rotella, il catalogo dei
-> comandi e i loro tasti, i fili, le maniglie, la lavagna vuota, la colonna
+> la rotella: entrare in una scheda e uscirne, scrivere in una nota, la rotella,
+> il trascinamento nel vuoto, il catalogo dei comandi e i loro tasti, i fili, le
+> maniglie, la lavagna vuota, la colonna
 > degli strumenti, la riga delle opzioni, la barra della selezione e la
 > banda di stato.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts`,
-> `engine-cards.test.ts` e `engine-lost-release.test.ts`; per i comandi,
+> `engine-cards.test.ts`, `engine-lost-release.test.ts` e `engine-marquee.test.ts`
+> (il rettangolo, con `marquee.test.ts` per la geometria); per i comandi,
 > `apps/client/src/editors/canvas/chrome/commands.ts`, `command-search.ts`,
 > `rail.ts`, `options.ts`, `selection-bar.ts` e le loro prove; per la lavagna vuota,
 > `chrome/empty.ts` ed `chrome/empty.test.ts`; per la banda, `chrome/status.ts` e
@@ -171,10 +173,31 @@ dallo scatto dopo, senza riaprire la lavagna.
 - **Sopra una scheda non attiva** la rotella è della lavagna. **Dentro una
   scheda attiva** scorre la scheda, e Ctrl+rotella ingrandisce la lavagna.
 
+## Il trascinamento nel vuoto
+
+Col mouse e con la Selezione, il trascinamento sinistro che parte dal vuoto
+della lavagna disegna un rettangolo (`editors/canvas/marquee.ts`, la
+geometria; il gesto in `engine.ts`) e sceglie le schede che tocca, con gli
+archi fra due di loro. Maiusc aggiunge alla scelta che c'è; senza Maiusc la
+sostituisce. Il rettangolo si disegna al movimento, la scelta si aggiorna una
+volta per fotogramma, e al rilascio resta dov'è. Esc lo annulla: la scelta
+torna com'era. Un clic senza spostamento (fino a 3 px) toglie la scelta come
+prima, e con Maiusc la lascia. Una scheda sotto il punto di partenza prende il
+gesto, e il rettangolo non parte dal suo corpo. In sola lettura sceglie e
+basta. Il Lazo non cambia: sceglie anche i tratti a mano libera, il
+rettangolo no.
+
+L'impostazione «Trascinare nel vuoto» (`canvas.drag_empty`, Impostazioni ›
+Lavagna, di questo computer) dice che cosa fa: «sceglie», di serie, o «sposta la
+vista», il comportamento di prima. Il suggerimento della Selezione dice il gesto
+che c'è. Spazio tenuto, il tasto di mezzo, la rotella, la Mano, il dito e la
+penna nel vuoto spostano sempre la vista.
+
 ## Un gesto che perde il rilascio
 
 Un gesto della lavagna (lo spostamento della vista, il trascinamento di una
-scheda, il ridimensionamento, il filo, il Lazo, il pizzico e il dito) si
+scheda, il ridimensionamento, il filo, il Lazo, il rettangolo della Selezione,
+il pizzico e il dito) si
 chiude come se il puntatore si fosse alzato, una sola volta, quando il
 rilascio non arriva: la cattura del puntatore persa, un movimento senza tasto
 del mouse o della penna, o la finestra che perde il fuoco (Alt+Tab, un'altra
