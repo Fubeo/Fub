@@ -21,6 +21,10 @@ specifici); i comandi si lanciano dalla radice del repo.
   (derivate da upstream a SHA + patch, con `upstream.lock`); comandi:
   `node tools/vendor-craft/vendor.mjs check` (tutti i motori), poi `update` /
   `verify-upstream` / `gate` per singolo motore.
+- `disegno-cancello/` — il cancello del disegno di K5: ogni disegno del corpus
+  si apre nel motore, si modifica con tre gesti e si confronta a pixel prima e
+  dopo; `node tools/disegno-cancello/cancello.mjs` (esce con 1 se un file non
+  passa).
 - `fubdraw-inventory.mjs` — inventario della chiusura di FubDraw (ADR 0231):
   segue gli import dai tre ingressi Vite e lista i moduli raggiunti;
   `node tools/fubdraw-inventory.mjs` (con `--orfani` elenca i moduli di

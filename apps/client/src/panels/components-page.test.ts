@@ -413,7 +413,7 @@ describe("il riquadro «Fub con questi componenti»", () => {
       ".vectorcraft .pcraft .figcraft .xmp": "in «File delle app Craft»",
     });
     expect(weight()).toEqual([
-      "36componenti attivi, 4 di supporto",
+      "38componenti attivi, 4 di supporto",
       "0spenti: Fub non li avvia e non ne carica il codice",
     ]);
     // I comandi arrivano anche dopo la mappa: il riquadro segue.
@@ -434,7 +434,7 @@ describe("il riquadro «Fub con questi componenti»", () => {
       ".vectorcraft .pcraft .figcraft .xmp": "in «File delle app Craft»",
     });
     expect(weight()).toEqual([
-      "26componenti attivi, 0 di supporto",
+      "28componenti attivi, 0 di supporto",
       "10spenti: Fub non li avvia e non ne carica il codice",
     ]);
   });
@@ -446,7 +446,7 @@ describe("il riquadro «Fub con questi componenti»", () => {
     expect(profile("tutto").getAttribute("aria-pressed")).toBe("true");
     expect(Object.values(opens()).every((where) => where.startsWith("in «"))).toBe(true);
     expect(weight()).toEqual([
-      "36componenti attivi, 4 di supporto",
+      "38componenti attivi, 4 di supporto",
       "0spenti: Fub non li avvia e non ne carica il codice",
     ]);
   });
@@ -460,9 +460,67 @@ describe("il riquadro «Fub con questi componenti»", () => {
     expect(opens()[".canvas"]).toBe("solo come file");
     // Il PDF porta con sé la penna, che è di supporto.
     expect(weight()).toEqual([
-      "28componenti attivi, 1 di supporto",
+      "30componenti attivi, 1 di supporto",
       "8spenti: Fub non li avvia e non ne carica il codice",
     ]);
+  });
+});
+
+describe("la riga da aprire («Accendi…»)", () => {
+  it("apre il gruppo chiuso, toglie la ricerca che la nasconde, porta il fuoco sull'interruttore e la segna", async () => {
+    const page = await mount();
+    const find = $<HTMLInputElement>("#components-find")!;
+    find.value = "ricerca";
+    find.dispatchEvent(new Event("input"));
+    expect(row("fub.penna").hidden).toBe(true);
+    expect($('[data-group="supporto"]')!.hidden).toBe(true);
+
+    expect(await page.focusRow("fub.penna")).toBe(true);
+    expect(find.value).toBe("");
+    expect(row("fub.penna").hidden).toBe(false);
+    expect($('[data-group="supporto"] .components-rows')!.hidden).toBe(false);
+    expect(document.activeElement).toBe(toggle("fub.penna"));
+    expect(row("fub.penna").classList).toContain("components-row--found");
+    // Non accende né spegne niente: apre soltanto.
+    expect(toggle("fub.penna").checked).toBe(true);
+    expect(box.asked).toEqual([]);
+  });
+
+  it("una ricerca che la mostra già resta com'è", async () => {
+    const page = await mount();
+    const find = $<HTMLInputElement>("#components-find")!;
+    find.value = "penna";
+    find.dispatchEvent(new Event("input"));
+    expect(await page.focusRow("fub.penna")).toBe(true);
+    expect(find.value).toBe("penna");
+    expect(document.activeElement).toBe(toggle("fub.penna"));
+  });
+
+  it("il segno resta a un ridisegno e va via al primo gesto dell'utente", async () => {
+    const page = await mount();
+    expect(await page.focusRow("fub.search")).toBe(true);
+    await page.show();
+    expect(row("fub.search").classList).toContain("components-row--found");
+    expect(document.activeElement).toBe(toggle("fub.search"));
+    document.dispatchEvent(new Event("pointerdown"));
+    expect($(".components-row--found")).toBeNull();
+    expect(await page.focusRow("fub.search")).toBe(true);
+    toggle("fub.search").dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    expect($(".components-row--found")).toBeNull();
+  });
+
+  it("dà falso per un id che la mappa non ha, e non segna niente", async () => {
+    const page = await mount();
+    expect(await page.focusRow("fub.nessuno")).toBe(false);
+    expect($(".components-row--found")).toBeNull();
+  });
+
+  it("chiuse le impostazioni mentre aspetta la mappa, non apre niente", async () => {
+    const page = await mount();
+    const pending = page.focusRow("fub.search");
+    page.reset();
+    expect(await pending).toBe(false);
+    expect($(".components-row--found")).toBeNull();
   });
 });
 

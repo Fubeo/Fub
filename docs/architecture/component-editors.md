@@ -36,6 +36,14 @@ salvataggio non riesce, l'editor resta registrato con l'errore della sessione
 finché le modifiche non sono al sicuro. Quando il componente torna, il riquadro
 si rimonta nel suo editor.
 
+Una superficie che deve portare l'utente all'interruttore di un componente
+(«Accendi…» del disegno) chiama `showComponent(id)` di
+`apps/client/src/ui/commands.ts`. La porta la registrano le impostazioni:
+aprono la scheda «Componenti», portano in vista la riga con il fuoco sul suo
+interruttore e la segnano finché l'utente non fa altro. Non accendono niente:
+accende l'utente. Senza impostazioni montate `showComponent` dà falso; un id che
+la mappa non ha apre la scheda e basta.
+
 ## Dove si trova
 
 - `apps/client/src/editors/core/bootstrap.ts`

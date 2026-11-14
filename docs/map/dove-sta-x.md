@@ -26,6 +26,8 @@
 | il modello e le regole della lavagna | `crates/fub-canvas-core/` e `docs/reference/canvas-format.md` |
 | la proiezione dei documenti ricchi | `docs/reference/rich-projection.md` |
 | il protocollo della sessione live | `docs/reference/live-session.md` |
+| le porte IPC del motore del disegno | `docs/reference/drawing-ipc.md` |
+| le porte IPC dei fogli di calcolo | `docs/reference/grid-ipc.md` |
 | gli strumenti del server MCP | `docs/reference/mcp-server.md` |
 | la cattura del clipper | `apps/clipper/capture-v1.schema.json` |
 | il layout su disco di `.fub/` | `docs/reference/on-disk-layout.md` |
@@ -48,6 +50,7 @@
 | il lessico dei menu | `apps/client/src/i18n/lexicon.ts` |
 | le stringhe della shell | `apps/client/src/i18n/catalog.ts` |
 | le stringhe dell'editor dei disegni | `apps/client/src/editors/spatial/strings.ts`, con le voci per area (italiano e inglese insieme) in `strings/` |
+| il disegno sul motore (chi possiede che cosa) | [Il disegno sul motore](../architecture/disegno.md) |
 | la tavolozza dell'inchiostro | `apps/client/src/ink/palette.ts` (Okabe–Ito) |
 | i sei colori della lavagna | `apps/client/src/editors/canvas/engine.ts` |
 | il limite dei 64 MiB per i media | `apps/client/src/editors/media/media-types.ts` |

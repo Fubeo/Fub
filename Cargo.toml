@@ -28,6 +28,9 @@ members = [
     # non dipende dagli adattatori: sono loro a iscriversi da lui.
     "crates/fub-motori",
     "crates/fub-scene",
+    # L'adattatore del motore del disegno (piano K5): l'unico membro che nomina
+    # `vectorcraft-*`.
+    "crates/fub-disegno",
     "crates/fub-format-svg",
     "crates/fub-format-rich",
     "crates/fub-format-xlsx",
@@ -85,6 +88,11 @@ exclude = [
     "vendor/wordcraft",
     # La copia di GridCraft, con la stessa forma (vendor/gridcraft/UPSTREAM.md).
     "vendor/gridcraft",
+    # La copia di VectorCraft, con la stessa forma (vendor/vectorcraft/UPSTREAM.md),
+    # e le due librerie di craft-libs che prende per percorso.
+    "vendor/vectorcraft",
+    "vendor/craft-docpath",
+    "vendor/craft-vectorcraft-format",
 ]
 
 [workspace.package]
@@ -216,6 +224,19 @@ gridcraft-xlsx = { path = "vendor/gridcraft/crates/xlsx", version = "0.11.1" }
 gridcraft-chart = { path = "vendor/gridcraft/crates/chart", version = "0.11.1" }
 gridcraft-pdf = { path = "vendor/gridcraft/crates/pdf", version = "0.11.1" }
 gridcraft-engine = { path = "vendor/gridcraft/crates/engine", version = "0.11.1" }
+# Il motore del disegno di VectorCraft, vendorizzato (vendor/vectorcraft/UPSTREAM.md).
+# Li prende soltanto `fub-disegno`. Il motore senza le feature di serie: niente
+# caratteri di VectorCraft (i caratteri li dà `fub-motori`), niente importatori
+# di altre app né plug-in; senza questa riga un `default-features = false` nel
+# crate non conterebbe.
+vectorcraft-engine = { path = "vendor/vectorcraft/crates/engine", default-features = false, version = "0.20.0" }
+vectorcraft-tools = { path = "vendor/vectorcraft/crates/tools", version = "0.20.0" }
+vectorcraft-svg = { path = "vendor/vectorcraft/crates/svg", version = "0.20.0" }
+vectorcraft-doc = { path = "vendor/vectorcraft/crates/doc", version = "0.20.0" }
+vectorcraft-geom = { path = "vendor/vectorcraft/crates/geom", version = "0.20.0" }
+# La `FontDb` del motore, che `fub-disegno` riempie con i caratteri di Fub:
+# senza `bundled-fonts`, come il motore.
+vectorcraft-text = { path = "vendor/vectorcraft/crates/text", default-features = false, version = "0.20.0" }
 # Le dipendenze che Fub ha in comune con la copia di WordCraft: le versioni
 # sono le stesse di vendor/wordcraft/Cargo.toml (`vendor.mjs check`). `image`
 # non accende niente qui: ogni crate dice quali decodificatori vuole.
@@ -224,6 +245,12 @@ cfb = "0.15"
 # Anche dei disegni di `fub-features`: l'impronta dei PDF annotati e dei caratteri.
 sha2 = "0.11"
 image = { version = "0.25.10", default-features = false }
+# Il rasterizzatore dei disegni. Lo prendono due crate: `fub-features`, per
+# l'export (dietro `draw`), e `fub-testkit`, per l'oracolo a pixel dei test
+# (dietro `pixel`). Senza i default, che sono `system-fonts` e `memmap-fonts`:
+# chi lo prende dice da sé quali feature vuole, e nessuno dei due legge i
+# caratteri del sistema.
+resvg = { version = "0.45.1", default-features = false }
 # Il YAML del frontmatter. Era scritta a mano in due crate con la stessa
 # versione, ed è la coppia che `check-cargo-versioni.mjs` esiste per
 # prendere: due `Cargo.toml` da toccare per un `cargo update` sono uno di

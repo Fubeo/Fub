@@ -178,6 +178,22 @@ describe("dopo", () => {
     expect(lazy.status!.items().map((item) => item.id)).toContain("zoom");
   });
 
+  it("il chip dello stato arriva con la superficie: prima non dice niente, e chi lo seguiva lo sa", async () => {
+    const lazy = mount();
+    lazy.buffer!.setDoc(SOURCE);
+    let told = 0;
+    lazy.standing!.subscribe(() => (told += 1));
+    expect(lazy.standing!.current()).toBeNull();
+    await arrive();
+    expect(told).toBeGreaterThan(0);
+    // Senza la sessione del documento il motore non si apre: le parti non si
+    // sanno, e il chip non c'è.
+    expect(lazy.standing!.current()).toBeNull();
+    const before = told;
+    lazy.setMode("read");
+    expect(told).toBeGreaterThan(before);
+  });
+
   it("tutto passa alla superficie vera", async () => {
     const lazy = mount();
     await arrive();

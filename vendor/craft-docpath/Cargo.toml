@@ -1,0 +1,26 @@
+# Il workspace del crate `craft-docpath` di craft-libs copiato (vedi
+# UPSTREAM.md). È di Fub, non dell'upstream: il manifest del crate resta
+# quello dell'upstream ed eredita da qui versione, edizione, licenza e lint.
+#
+# Sta fuori dal workspace di Fub (`exclude` nel Cargo.toml radice). Lo prende
+# per percorso `vendor/vectorcraft/Cargo.toml`, che lo compila con il motore;
+# i test del crate non girano in CI (vedi UPSTREAM.md).
+[workspace]
+resolver = "3"
+members = ["crates/docpath"]
+
+[workspace.package]
+# La versione dell'upstream: `tools/vendor-craft/vendor.mjs` la riporta qui.
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.95"
+repository = "https://github.com/storytold/craft-libs"
+
+# Codice di terzi: gli avvisi li corregge l'upstream, non una copia.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+warnings = "allow"
+
+[workspace.lints.clippy]
+all = "allow"

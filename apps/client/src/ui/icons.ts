@@ -52,6 +52,7 @@ const SVG: Record<string, string> = {
   query: '<path d="M5 5h14v10H9l-4 4z"/><path d="M8 9h8M8 12h6"/>',
   dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
   template: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/>',
+  tasks: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12.5l2.7 2.7L16 9.5"/>',
   // --- gli appunti: la riga in cima ai menu ------------------------------
   cut: '<path d="M3.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0"/><path d="M15.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0"/><path d="M7.8 16.2L17 3"/><path d="M16.2 16.2L7 3"/>',
   copy: '<path d="M9 9h11v11H9z"/><path d="M15 9V4H4v11h5"/>',
