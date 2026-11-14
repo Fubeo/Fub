@@ -385,6 +385,38 @@ impl RootedFsStorage {
         }
     }
 
+    /// I nomi del file **già aperto**: su Unix dai suoi metadati, su Windows
+    /// dal suo handle. [`Self::link_count`] su Windows riapre il path, e fra
+    /// la prima apertura e la seconda il nome può portare a un altro file:
+    /// chi ha già un handle conta su quello.
+    fn handle_link_count(file: &cap_std::fs::File, metadata: &Metadata) -> io::Result<u64> {
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt;
+            let _ = file;
+            Ok(metadata.nlink())
+        }
+        #[cfg(windows)]
+        {
+            use std::mem::MaybeUninit;
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::Storage::FileSystem::{
+                GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+            };
+            let _ = metadata;
+            let mut info = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
+            // SAFETY: `info` è storage valido per la syscall e l'handle resta
+            // vivo per l'intera chiamata (lo tiene `file`, preso in prestito).
+            let ok =
+                unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, info.as_mut_ptr()) };
+            if ok == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: un ritorno non-zero inizializza la struttura.
+            Ok(unsafe { info.assume_init() }.nNumberOfLinks as u64)
+        }
+    }
+
     /// Rende durevoli i nomi dentro `dir`: la rinomina che pubblica una
     /// scrittura, uno spostamento, una rimozione.
     ///
@@ -799,7 +831,7 @@ impl VaultStorage for RootedFsStorage {
         options.append(true).create(true);
         let mut file = self.dir.open_with(self.rel(path)?, &options)?;
         let opened = file.metadata()?;
-        if !opened.is_file() || self.link_count(path, &opened)? != 1 {
+        if !opened.is_file() || Self::handle_link_count(&file, &opened)? != 1 {
             return Err(refuse("append rifiutato su un target non regolare"));
         }
         #[cfg(unix)]
