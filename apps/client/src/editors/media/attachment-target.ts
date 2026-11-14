@@ -166,13 +166,14 @@ export async function depositOrReuse(
   // La domanda «c'è già?» si fa una volta sola, col primo candidato: la sua
   // risposta dipende dai byte, dall'estensione (uguale per tutti i candidati)
   // e da ciò che il vault contiene, non dal nome. Dopo un `already_exists`
-  // l'host ha risposto «no» o «non so», e nessuno dei due cambierebbe col
-  // nome dopo: «l'indice non è pronto» non arriva mai da un vault aperto
-  // (l'anagrafe c'è prima che il vault si possa usare), e i limiti (troppi
-  // candidati, byte da leggere) danno lo stesso «non so» a ogni domanda con
-  // questi byte. Rifarla a ogni nome costerebbe una ricerca per nome occupato
-  // e risponderebbe lo stesso: i nomi seguenti sono scritture «solo se
-  // nuovo».
+  // l'host ha risposto «no» o «non so». «L'indice non è pronto» non arriva
+  // mai da un vault aperto (l'anagrafe c'è prima che il vault si possa usare,
+  // e un rebuild la rimette nello stesso prestito); troppi candidati danno lo
+  // stesso «non so» a ogni domanda con questi byte; il budget di lettura
+  // finito non è stabile, perché le impronte imparate rendono la domanda dopo
+  // più economica, ma il secondo giro lo fa l'host dentro la stessa domanda
+  // (`Host::same_content`). Rifarla qui a ogni nome costerebbe una ricerca per
+  // nome occupato: i nomi seguenti sono scritture «solo se nuovo».
   let asked = false;
   for (const candidate of attachmentCandidates(deposit, name)) {
     const options: ResourceWriteOptions | undefined = asked ? undefined : { reuse: "same-content" };

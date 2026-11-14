@@ -3,7 +3,7 @@
 // modello — e che i banchi usano per mostrare immagini vere.
 
 import { describe, expect, it, vi } from "vitest";
-import type { KernelEvent, LinkTarget } from "./contract";
+import type { KernelEvent, LinkTarget, SettingEntry } from "./contract";
 import { createFakeHost } from "./fake";
 import resourceWriteScenario from "../__fixtures__/resource-write-scenario.json";
 
@@ -191,6 +191,33 @@ describe("resourceWrite con reuse risponde come l'host vero", () => {
     // Un nome senza estensione trova solo un nome senza estensione.
     await expect(api.resourceWrite("Altro/COPYING", new Uint8Array([9, 9]), null, undefined, { reuse: "same-content" }))
       .resolves.toMatchObject({ id: "LICENSE", reused: true });
+  });
+
+  it("come l'host vero: i file esclusi non sono candidati", async () => {
+    const bytes = new Uint8Array([5, 5, 5]);
+    const write = (api: ReturnType<typeof createFakeHost>["module"]["api"], id: string) =>
+      api.resourceWrite(id, bytes.slice(), null, undefined, { reuse: "same-content" });
+    const hidden = { ".obsidian/x.png": { bytes }, "Note/.nascosta.png": { bytes }, "NODE_MODULES/p/y.png": { bytes }, "Foto/z.png~": { bytes } };
+    // Struttura, nascosti e cartelle escluse di serie (anche con le maiuscole):
+    // nessuno è «già nel vault».
+    const plain = createFakeHost({ resources: hidden });
+    await expect(write(plain.module.api, "Lavagna/a.png")).resolves.toMatchObject({ id: "Lavagna/a.png", reused: false });
+    // Un file che si chiama come una cartella esclusa è un file del vault.
+    const named = createFakeHost({ resources: { "Foto/target.png": { bytes } } });
+    await expect(write(named.module.api, "Lavagna/b.png")).resolves.toMatchObject({ id: "Foto/target.png", reused: true });
+    // Le impostazioni del vault spostano la preferenza, non la struttura.
+    const setting = (key: string, value: SettingEntry["value"]): SettingEntry => ({
+      spec: { key, label: key, description: "", group: "", scope: "vault", kind: { kind: "toggle", default: false }, program_writable: false },
+      value,
+      source: "vault",
+    } as SettingEntry);
+    const declared = createFakeHost({
+      resources: { "Bozze/c.png": { bytes }, ".fub/d.png": { bytes }, ".trash/e.png": { bytes } },
+      settings: [setting("files.excluded-folders", ["bozze"]), setting("files.show-hidden", true)],
+    });
+    await expect(write(declared.module.api, "Lavagna/c.png")).resolves.toMatchObject({ id: "Lavagna/c.png", reused: false });
+    const shown = createFakeHost({ resources: { "Note/.nascosta.png": { bytes } }, settings: [setting("files.show-hidden", true)] });
+    await expect(write(shown.module.api, "Lavagna/d.png")).resolves.toMatchObject({ id: "Note/.nascosta.png", reused: true });
   });
 
   it("oltre 64 candidati della stessa misura non sa, e scrive", async () => {
