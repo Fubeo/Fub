@@ -80,6 +80,15 @@ fn extending_manifest() -> fub_abi::theme::ThemeManifest {
     }
 }
 
+/// Una cartella rifiutata, col motivo dato: il campione del mirror per ogni
+/// `ThemeFolderRefusal`.
+fn folder_refusal(refusal: fub_host::theme::ThemeFolderRefusal) -> Value {
+    to_value(fub_host::theme::ThemeFolderCheck::Refused {
+        folder: "/home/chi/temi/rotto".into(),
+        refusal,
+    })
+}
+
 fn expected() -> Value {
     // La costruzione con TUTTI i campi è la guardia di esaustività: un campo
     // aggiunto a una struct non compila finché non è anche qui.
@@ -284,6 +293,116 @@ fn expected() -> Value {
             manifest: extending_manifest(),
             trust: "community",
         })],
+        // La cartella di un tema letta prima di installarla, nei suoi tre
+        // esiti: chiusa la finestra di scelta; pronta, col fascio di ogni luce
+        // (qui uno solo, che eredita: la pelle e i byte solo per il carattere,
+        // una volta per tutte le luci; l'immagine per nome, nella luce) e l'impronta che l'installazione chiede di nuovo;
+        // rifiutata, con un motivo tipizzato. Il mirror vede ogni motivo.
+        "ThemeFolderCheck": [
+            to_value(fub_host::theme::ThemeFolderCheck::Cancelled),
+            to_value(fub_host::theme::ThemeFolderCheck::Ready {
+                folder: "/home/chi/temi/carta".into(),
+                manifest: Box::new(extending_manifest()),
+                skin: Some(".carta { color: inherit; }".into()),
+                assets: [("theme://acme.carta/carta.woff2".to_string(), vec![0x77, 0x4f, 0x46, 0x32])]
+                    .into_iter()
+                    .collect(),
+                lights: vec![fub_host::theme::ThemeFolderLight {
+                    light: ThemeLight::Dark,
+                    sheet: None,
+                    named: vec!["theme://acme.carta/carta.png".into()],
+                }],
+                digest: "sha256:9f2c4d6e8a0b1c3d5e7f9a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d".into(),
+            }),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::NotATheme),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::Engine {
+                declared: "theme-9".into(),
+            }),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::Permissions),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::InvalidId {
+                id: "Acme Carta".into(),
+            }),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::Series),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::Traversal {
+                path: "font/fuori.woff2".into(),
+            }),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::CatalogState {
+                file: ".fub-current.json".into(),
+            }),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::Malformed {
+                detail: "missing `id`".into(),
+            }),
+        ],
+        // Gli esiti dell'installazione da cartella: la finestra della shell
+        // li dice in modi diversi, e il mirror deve vederli tutti.
+        "ThemeFolderInstall": [
+            to_value(fub_host::theme::ThemeFolderInstall::Installed {
+                id: "acme.carta".into(),
+                name: "Carta".into(),
+                version: "0.4.0".into(),
+                replaced: true,
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Collision {
+                id: "acme.carta".into(),
+                name: "Carta".into(),
+                version: "0.4.0".into(),
+                installed_version: Some("0.3.2".into()),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Revoked {
+                id: "acme.carta".into(),
+                name: "Carta".into(),
+                version: "0.4.0".into(),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Blocked {
+                why: fub_host::theme::ThemeBlock::Pointer,
+                path: "/home/chi/.config/fub/themes/acme.carta".into(),
+                installed: true,
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Blocked {
+                why: fub_host::theme::ThemeBlock::Link,
+                path: "/home/chi/.config/fub/themes/acme.carta".into(),
+                installed: true,
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Blocked {
+                why: fub_host::theme::ThemeBlock::Layout,
+                path: "/home/chi/.config/fub/themes".into(),
+                installed: false,
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Unreadable {
+                side: fub_host::theme::ThemeSide::Folder,
+                error: fub_abi::PluginError::Io("/home/chi/temi/carta/skin.css: Input/output error".into()),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Unreadable {
+                side: fub_host::theme::ThemeSide::Themes,
+                error: fub_abi::PluginError::Io("/home/chi/.config/fub/themes: Input/output error".into()),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Refused {
+                refusal: fub_host::theme::ThemeFolderRefusal::Traversal {
+                    path: "escape".into(),
+                },
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Changed),
+            to_value(fub_host::theme::ThemeFolderInstall::Unchecked),
+            to_value(fub_host::theme::ThemeFolderInstall::Failed {
+                cause: fub_host::theme::DiskCause::Full,
+                error: PluginError::Io("I/O error: /config/themes/.tmp-1-2: No space left on device".into()),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Failed {
+                cause: fub_host::theme::DiskCause::Denied,
+                error: PluginError::Io("I/O error: /config/themes: Permission denied".into()),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Failed {
+                cause: fub_host::theme::DiskCause::Other,
+                error: PluginError::Io("I/O error: /config/themes: Input/output error".into()),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::ReplaceFailed {
+                id: "acme.carta".into(),
+                name: "Carta".into(),
+                version: "0.4.0".into(),
+                kept: ".tmp-old-4242-1700000000000000000".into(),
+                error: PluginError::Io("I/O error: No space left on device".into()),
+            }),
+        ],
         "ThemePayload": [to_value(ThemePayload {
             manifest: fub_abi::theme::ThemeManifest {
                 id: "acme.paper".into(),

@@ -78,6 +78,12 @@ import type {
   SettingValue,
   SyntaxForm,
   TextEdit,
+  DiskCause,
+  ThemeBlock,
+  ThemeFolderCheck,
+  ThemeFolderInstall,
+  ThemeFolderLight,
+  ThemeFolderRefusal,
   ThemeInfo,
   ThemePayload,
   UiNode,
@@ -300,6 +306,22 @@ export interface Options {
   themes?: ThemeInfo[];
   /// Fascio per luce, indicizzato come `${id}:${light}`.
   themePayloads?: Record<string, ThemePayload>;
+  /// Le cartelle che «Installa da cartella…» può scegliere, per path: il tema
+  /// che la cartella contiene, il rifiuto tipizzato con cui l'host vero la
+  /// rifiuterebbe (manifest assente, link simbolico, stato del catalogo), o il
+  /// `PluginError` del disco. L'impronta è dei fasci: cambiarli fra il
+  /// controllo e l'installazione è la cartella cambiata.
+  themeFolders?: Record<string, ThemeFolderFake | ThemeFolderRefusal | PluginError>;
+  /// La finestra nativa di scelta della cartella: il path scelto, `null` se la
+  /// persona la chiude. Senza, la finestra si chiude sempre.
+  pickThemeFolder?: () => string | null;
+  /// Temi installati revocati dal catalogo: non stanno in `themes` (l'host non
+  /// li elenca), e «Installa da cartella…» con lo stesso id è `revoked`.
+  revokedThemes?: string[];
+  /// Ciò che nella cartella dei temi blocca un id (`blocked`): il file della
+  /// versione che non si legge, un collegamento, una forma che non è una
+  /// cartella. Lo dice la sonda, prima di leggere la cartella scelta.
+  blockedThemes?: Record<string, ThemeBlock>;
   /// Inventario installato della macchina, compresi elementi spenti o senza
   /// consenso: il fake non li ricava dai bundle runtime.
   installedPlugins?: InstalledPluginInfo[];
@@ -648,8 +670,140 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const calls: Call[] = [];
   const view = options.view ?? [];
   const bundles = options.bundles ?? [];
-  const themes = options.themes ?? [];
-  const themePayloads = options.themePayloads ?? {};
+  const themes = [...(options.themes ?? [])];
+  const themePayloads: Record<string, ThemePayload> = { ...options.themePayloads };
+  const themeFolders = options.themeFolders ?? {};
+  /// Gli id dei temi installati che il catalogo ha revocato: l'host non li
+  /// elenca, e una cartella non li sostituisce.
+  const revokedThemes = new Set(options.revokedThemes ?? []);
+
+  function developerOn(): void {
+    const developer = settings.find((entry) => entry.spec.key === DEVELOPER_MODE_KEY);
+    if (developer?.value !== true) {
+      throw { kind: "permission_denied", message: "Per installare un tema da una cartella accendi la modalità sviluppatore." };
+    }
+  }
+
+  /// La cartella controllata, come la tiene l'host: il permesso, che vale una
+  /// volta, di installarla. Dopo una collisione vale solo per «Sostituisci».
+  let checkedFolder: { source: string; digest: string; manifest: ThemeInfo["manifest"]; replaceOnly: boolean } | null =
+    null;
+
+  function themeFolder(source: string): ThemeFolderFake | ThemeFolderRefusal {
+    const folder = themeFolders[source];
+    if (folder === undefined) throw { kind: "io", message: `I/O error: ${source}: no such folder` };
+    if ("kind" in folder) throw folder;
+    return folder;
+  }
+
+  /// Gli asset che il cancello della shell legge da sé (caratteri, icone),
+  /// come `fub_host::theme::discover::shell_assets`.
+  function shellAssets(manifest: ThemeInfo["manifest"]): Set<string> {
+    return new Set([
+      ...(manifest.fonts ?? []).map((font) => `${manifest.asset_namespace}${font.file}`),
+      ...(manifest.icons ? [`${manifest.asset_namespace}${manifest.icons}`] : []),
+    ]);
+  }
+
+  /// Ciò che di una luce cambia: il foglio e gli altri asset per nome, come
+  /// `fub_host::theme::ThemeFolderLight`.
+  function folderLight(manifest: ThemeInfo["manifest"], payload: ThemePayload): ThemeFolderLight {
+    const read = shellAssets(manifest);
+    const named = Object.keys(payload.assets).filter((name) => !read.has(name));
+    return { light: payload.light, sheet: payload.sheet, named };
+  }
+
+  /// La finestra di scelta e la lettura senza installare, come
+  /// `check_theme_folder`: aprirla scarta il permesso di prima, la modalità si
+  /// controlla prima della finestra, poi un fascio per luce dichiarata e
+  /// l'impronta, o il rifiuto tipizzato. Una cartella pronta diventa la
+  /// cartella controllata.
+  function checkThemeFolder(): ThemeFolderCheck {
+    checkedFolder = null;
+    developerOn();
+    const source = options.pickThemeFolder?.() ?? null;
+    if (source === null) return { outcome: "cancelled" };
+    const folder = themeFolder(source);
+    if ("reason" in folder) return { outcome: "refused", folder: source, refusal: folder };
+    const { manifest } = folder.info;
+    const payloads = manifest.lights.map((light) => {
+      const payload = folder.payloads[`${manifest.id}:${light}`];
+      if (payload === undefined) throw { kind: "bad_args", message: `missing sheet for ${light}` };
+      return payload;
+    });
+    const read = shellAssets(manifest);
+    // La pelle e i byte che il cancello legge, una volta per tutte le luci.
+    const assets: Record<string, readonly number[]> = {};
+    for (const payload of payloads) {
+      for (const [name, bytes] of Object.entries(payload.assets)) if (read.has(name)) assets[name] = bytes;
+    }
+    const lights = payloads.map((payload) => folderLight(manifest, payload));
+    const skin = payloads[0]?.skin ?? null;
+    const digest = folderDigest(folder);
+    checkedFolder = { source, digest, manifest, replaceOnly: false };
+    return { outcome: "ready", folder: source, manifest, skin, assets, lights, digest };
+  }
+
+  /// L'installazione da cartella come la fa l'host
+  /// (`Host::install_theme_from_folder`): la modalità sviluppatore si rilegge
+  /// a ogni chiamata, il permesso del controllo si consuma (un'impronta che
+  /// non è la sua è `unchecked` e non lo tocca), una collisione senza
+  /// `replace` lo rinnova solo per «Sostituisci».
+  function installThemeFolder(replace: boolean, digest: string): ThemeFolderInstall {
+    developerOn();
+    const checked = checkedFolder;
+    if (checked === null || checked.digest !== digest) return { outcome: "unchecked" };
+    checkedFolder = null;
+    if (checked.replaceOnly && !replace) return { outcome: "unchecked" };
+    const outcome = publishThemeFolder(checked.source, checked.manifest, replace, digest);
+    if (outcome.outcome === "collision" && !replace && checkedFolder === null) {
+      checkedFolder = { ...checked, replaceOnly: true };
+    }
+    return outcome;
+  }
+
+  /// Come `fub_host::theme::install_theme_from_folder`: **prima** la sonda
+  /// della destinazione col manifest del controllo (ciò che blocca, la revoca,
+  /// la collisione), poi la cartella e la sua impronta. Una cartella che non
+  /// si legge più non ha i byte del controllo (`changed`). Una sostituzione
+  /// che si ferma (`replaceError`) lascia il vecchio, ed è `failed` col suo
+  /// perché (`replaceCause`); con `replaceLost` il vecchio non torna, ed è
+  /// `replace_failed`.
+  function publishThemeFolder(
+    source: string,
+    manifest: ThemeInfo["manifest"],
+    replace: boolean,
+    digest: string,
+  ): ThemeFolderInstall {
+    const { id, name, version } = manifest;
+    const block = options.blockedThemes?.[id];
+    if (block !== undefined) return { outcome: "blocked", why: block, path: `/config/themes/${id}`, installed: true };
+    const at = themes.findIndex((theme) => theme.manifest.id === id);
+    if (at < 0 && revokedThemes.has(id)) return { outcome: "revoked", id, name, version };
+    if (at >= 0 && !replace) {
+      return { outcome: "collision", id, name, version, installed_version: themes[at]!.manifest.version };
+    }
+    const folder = themeFolders[source];
+    if (folder === undefined || "kind" in folder || "reason" in folder || digest !== folderDigest(folder)) {
+      return { outcome: "changed" };
+    }
+    if (folder.installRefusal) return { outcome: "refused", refusal: folder.installRefusal };
+    if (at >= 0 && folder.replaceError) {
+      if (!folder.replaceLost) {
+        return { outcome: "failed", cause: folder.replaceCause ?? "other", error: folder.replaceError };
+      }
+      themes.splice(at, 1);
+      for (const key of Object.keys(themePayloads)) if (key.startsWith(`${id}:`)) delete themePayloads[key];
+      return { outcome: "replace_failed", id, name, version, kept: ".tmp-old-1-2", error: folder.replaceError };
+    }
+    if (at >= 0) {
+      themes.splice(at, 1);
+      for (const key of Object.keys(themePayloads)) if (key.startsWith(`${id}:`)) delete themePayloads[key];
+    }
+    themes.push(folder.info);
+    Object.assign(themePayloads, folder.payloads);
+    return { outcome: "installed", id, name, version, replaced: at >= 0 };
+  }
   const installedPlugins = new Map(
     (options.installedPlugins ?? []).map((plugin) => [
       plugin.installation,
@@ -2053,6 +2207,22 @@ export function createFakeHost(options: Options = {}): FakeHost {
         }
         return gate("readTheme", [id, light], Promise.resolve(payload));
       },
+      checkThemeFolder: () =>
+        gate(
+          "checkThemeFolder",
+          [],
+          new Promise<ThemeFolderCheck>((resolve) => resolve(checkThemeFolder())),
+        ),
+      discardThemeFolder: () => {
+        checkedFolder = null;
+        return gate("discardThemeFolder", [], Promise.resolve());
+      },
+      installThemeFromFolder: (replace, digest) =>
+        gate(
+          "installThemeFromFolder",
+          [replace, digest],
+          new Promise<ThemeFolderInstall>((resolve) => resolve(installThemeFolder(replace, digest))),
+        ),
       setPluginEnabled: (id, enabled) =>
         gate("setPluginEnabled", [id, enabled], Promise.resolve([])),
       componentsMap: (vault) =>
@@ -2531,6 +2701,86 @@ function titled(source: string, title: string): string {
   const text = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const root = new RegExp(`(<${"svg"}\\b[^>]*>)(\\s*<title>[\\s\\S]*?</title>)?`);
   return source.replace(root, (_, head: string, old: string | undefined) => (old === undefined ? `${head}\n  <title>${text}</title>` : `${head}${old.replace(/<title>[\s\S]*<\/title>/, () => `<title>${text}</title>`)}`));
+}
+
+/// La chiave della modalità sviluppatore (`fub_host::settings::DEVELOPER_MODE`).
+const DEVELOPER_MODE_KEY = "developer.mode";
+
+/// Una cartella di tema per `themeFolders`: ciò che `extendingTheme` e i suoi
+/// fratelli restituiscono, più l'errore di una sostituzione fallita a metà.
+export interface ThemeFolderFake {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+  /// La sostituzione si ferma con questo errore, e il vecchio resta.
+  replaceError?: PluginError;
+  /// Il perché tipizzato di `replaceError` (`failed.cause`); di default
+  /// `other`.
+  replaceCause?: DiskCause;
+  /// Le porte dell'installazione rifiutano i byte controllati (`refused`).
+  installRefusal?: ThemeFolderRefusal;
+  /// Con `replaceError`: il vecchio non torna (`replace_failed`).
+  replaceLost?: boolean;
+}
+
+/// L'impronta finta di una cartella: cambia quando cambiano i suoi fasci.
+function folderDigest(folder: ThemeFolderFake): string {
+  const text = JSON.stringify(folder.payloads);
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return `fake-${hash.toString(16)}`;
+}
+
+/// La riga di `developer.mode` come la dichiara il core: interruttore della
+/// macchina, spento di default, nel gruppo «Sviluppo».
+export function developerModeSetting(on: boolean): SettingEntry {
+  return {
+    spec: {
+      key: DEVELOPER_MODE_KEY,
+      label: "Modalità sviluppatore",
+      description:
+        "Per chi scrive un tema: in «Temi installati» compare «Installa da cartella…», che lo controlla e lo installa dalla sua cartella.",
+      group: "Sviluppo",
+      scope: "machine",
+      kind: { kind: "toggle", default: false },
+      program_writable: false,
+    },
+    value: on,
+    source: on ? "machine" : "default",
+  };
+}
+
+/// Una cartella di tema che il loader accetta: parte dalla serie senza fogli
+/// suoi (le due luci prendono quelli di serie) e la pelle ritocca un pezzo.
+export function folderTheme(id = "acme.carta", name = "Carta", version = "1.0.0"): ThemeFolderFake {
+  const manifest: ThemeInfo["manifest"] = { ...extendingTheme(id).info.manifest, name, version };
+  const skin = ".shell-tooltip { white-space: nowrap; }\n";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
+}
+
+/// Un tema che il loader della shell rifiuta: passa le porte dell'host (il
+/// finto non le ha), ma la pelle usa un hook che l'anatomia non dichiara e un
+/// `@font-face`, e il manifest parla `theme-1`. La diagnosi ha una riga per
+/// motivo.
+export function rejectedTheme(id = "acme.rotto", version = "1.0.0"): ThemeFolderFake {
+  const base = extendingTheme(id);
+  const manifest: ThemeInfo["manifest"] = { ...base.info.manifest, name: "Rotto", version, engine: "theme-1" };
+  const skin = ".rotto-titolo { color: red; }\n@font-face { font-family: Rotto; }\n";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
 }
 
 /// Un tema installato che parte dalla serie (`extends`), pronto per le opzioni

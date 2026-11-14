@@ -59,6 +59,18 @@ pub enum ThemeError {
     AlreadyInstalled(String),
     /// Il disco ha detto di no: leggere, scrivere, rinominare.
     Io(String),
+    /// Il disco ha detto di no mentre l'installazione scriveva nella cartella
+    /// dei temi, con il perché che la persona può capire e risolvere
+    /// ([`DiskCause`]). `detail` è il guasto così com'è, per il log.
+    Disk { cause: DiskCause, detail: String },
+    /// La cartella sorgente è cambiata dopo che è stata controllata: i byte da
+    /// installare non sono più quelli dell'impronta (vedi
+    /// [`check_theme_folder`](super::check_theme_folder)). Porta il path.
+    Changed(String),
+    /// La cartella sorgente porta lo stato del catalogo che scrive solo Fub
+    /// (il puntatore alla versione, le generazioni): `file` è il nome nella
+    /// radice. Un tema non lo porta con sé.
+    CatalogState { file: String },
 }
 
 impl std::fmt::Display for ThemeError {
@@ -85,12 +97,59 @@ impl std::fmt::Display for ThemeError {
             ThemeError::AlreadyInstalled(and) => {
                 write!(f, "theme already installed: {and}")
             }
-            ThemeError::Io(and) => write!(f, "I/O error: {and}"),
+            ThemeError::Io(and) | ThemeError::Disk { detail: and, .. } => {
+                write!(f, "I/O error: {and}")
+            }
+            ThemeError::Changed(and) => write!(
+                f,
+                "the theme folder `{and}` changed after it was checked: check it again"
+            ),
+            ThemeError::CatalogState { file } => write!(
+                f,
+                "`{file}` is catalog state that only Fub writes, not part of a theme: will not install"
+            ),
         }
     }
 }
 
 impl std::error::Error for ThemeError {}
+
+/// Perché il disco non ha lasciato scrivere un tema, come lo dice chi
+/// disegna: la classe dell'errore del sistema, non la sua frase (che è in
+/// inglese e porta i percorsi della macchina).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiskCause {
+    /// Non c'è più spazio, o la quota è finita.
+    Full,
+    /// Il sistema non lascia scrivere: i permessi, un disco in sola lettura.
+    Denied,
+    /// Un altro guasto del disco.
+    Other,
+}
+
+impl DiskCause {
+    /// La classe di un errore del sistema.
+    pub fn of(error: &io::Error) -> Self {
+        match error.kind() {
+            io::ErrorKind::StorageFull | io::ErrorKind::QuotaExceeded => DiskCause::Full,
+            io::ErrorKind::PermissionDenied | io::ErrorKind::ReadOnlyFilesystem => {
+                DiskCause::Denied
+            }
+            _ => DiskCause::Other,
+        }
+    }
+}
+
+impl ThemeError {
+    /// Un guasto del disco mentre si scrive in `at`, con la sua classe.
+    pub(super) fn disk(at: impl std::fmt::Display, error: io::Error) -> Self {
+        ThemeError::Disk {
+            cause: DiskCause::of(&error),
+            detail: format!("{at}: {error}"),
+        }
+    }
+}
 
 /// L'errore di un tema arriva a chi l'ha chiesto nella lingua del confine.
 ///
@@ -101,17 +160,20 @@ impl std::error::Error for ThemeError {}
 /// la forma è un [`BadArgs`](PluginError::BadArgs), i permessi sono un
 /// [`PermissionDenied`](PluginError::PermissionDenied), e i guasti del disco
 /// restano quel che sono — [`AlreadyExists`](PluginError::AlreadyExists) per la
-/// collisione, [`Io`](PluginError::Io) per il resto.
+/// collisione, [`Conflict`](PluginError::Conflict) per una cartella cambiata
+/// dopo il controllo, [`Io`](PluginError::Io) per il resto.
 impl From<ThemeError> for PluginError {
     fn from(and: ThemeError) -> Self {
         match and {
             ThemeError::Engine { .. } => PluginError::Unserved(and.to_string().into()),
             ThemeError::Permissions { .. } => PluginError::PermissionDenied(and.to_string().into()),
-            ThemeError::Malformed(_) | ThemeError::InvalidId(_) | ThemeError::Traversal { .. } => {
-                PluginError::BadArgs(and.to_string().into())
-            }
+            ThemeError::Malformed(_)
+            | ThemeError::InvalidId(_)
+            | ThemeError::Traversal { .. }
+            | ThemeError::CatalogState { .. } => PluginError::BadArgs(and.to_string().into()),
             ThemeError::AlreadyInstalled(_) => PluginError::AlreadyExists(and.to_string().into()),
-            ThemeError::Io(_) => PluginError::Io(and.to_string().into()),
+            ThemeError::Io(_) | ThemeError::Disk { .. } => PluginError::Io(and.to_string().into()),
+            ThemeError::Changed(_) => PluginError::Conflict(and.to_string().into()),
         }
     }
 }

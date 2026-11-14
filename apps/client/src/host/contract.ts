@@ -147,6 +147,133 @@ export interface ThemePayload {
   assets: Record<string, readonly number[]>;
 }
 
+/**
+ * Perché la cartella scelta non è un tema che Fub installa
+ * (`fub_host::theme::ThemeFolderRefusal`), coi campi per dirlo. La shell lo
+ * dice con le sue parole; `malformed.detail` è il motivo dell'host così com'è.
+ */
+export type ThemeFolderRefusal =
+  | { reason: "not_a_theme" }
+  | { reason: "engine"; declared: string }
+  | { reason: "permissions" }
+  | { reason: "invalid_id"; id: string }
+  | { reason: "series" }
+  | { reason: "traversal"; path: string }
+  | { reason: "catalog_state"; file: string }
+  | { reason: "malformed"; detail: string };
+
+/**
+ * Il fascio di una luce della cartella, come lo chiede il cancello della shell
+ * (`fub_host::theme::ThemeFolderLight`): i byte solo degli asset che il
+ * cancello legge (i caratteri, il set di icone), gli altri asset per nome.
+ */
+export interface ThemeFolderLight {
+  light: ThemeLight;
+  sheet: string | null;
+  named: string[];
+}
+
+/**
+ * La cartella di un tema scelta nella finestra nativa e letta senza
+ * installarla (`check_theme_folder`, `fub_host::theme::ThemeFolderCheck`).
+ * La webview non dà il path: lo sceglie la persona, e l'host tiene la
+ * cartella controllata.
+ *
+ * - `cancelled`: la finestra di scelta è stata chiusa;
+ * - `ready`: passa le porte dell'host; il manifest, il fascio di ogni luce
+ *   dichiarata e l'impronta che l'installazione chiede di nuovo. `folder` è
+ *   il path scelto, da mostrare;
+ * - `refused`: la cartella non è un tema installabile, e perché.
+ */
+export type ThemeFolderCheck =
+  | { outcome: "cancelled" }
+  | {
+      outcome: "ready";
+      folder: string;
+      manifest: ThemeManifest;
+      skin: string | null;
+      assets: Record<string, readonly number[]>;
+      lights: ThemeFolderLight[];
+      digest: string;
+    }
+  | { outcome: "refused"; folder: string; refusal: ThemeFolderRefusal };
+
+/**
+ * Perché il disco non ha lasciato scrivere un tema (`fub_host::theme::DiskCause`):
+ * pieno (o la quota finita), negato (i permessi, un disco in sola lettura), un
+ * altro guasto.
+ */
+export type DiskCause = "full" | "denied" | "other";
+
+/**
+ * Perché un'installazione da cartella non tocca ciò che c'è già nella cartella
+ * dei temi di Fub (`fub_host::theme::ThemeBlock`): il tema installato con lo
+ * stesso id ha il file della versione del catalogo che non si legge
+ * (`pointer`: potrebbe dire «ritirato»), al suo posto o al posto della
+ * cartella dei temi c'è un collegamento (`link`), o non è una cartella che Fub
+ * sa usare (`layout`).
+ */
+export type ThemeBlock = "pointer" | "link" | "layout";
+
+/**
+ * Da quale parte un'installazione da cartella non è riuscita a leggere
+ * (`fub_host::theme::ThemeSide`): la cartella scelta o la cartella dei temi
+ * di Fub.
+ */
+export type ThemeSide = "folder" | "themes";
+
+/**
+ * Com'è andata un'installazione da cartella (`install_theme_from_folder`,
+ * `fub_host::theme::ThemeFolderInstall`). Ogni fermata è un esito; un
+ * `PluginError` resta solo per la modalità sviluppatore spenta
+ * (`permission_denied`) e la configurazione che manca (`unserved`).
+ *
+ * - `installed`: il tema è installato; `replaced` se ha preso il posto di uno
+ *   con lo stesso id;
+ * - `collision`: un tema con lo stesso id c'è già e niente è stato toccato; la
+ *   cartella nuova è già controllata. `installed_version` è `null` quando
+ *   quello installato non si legge più;
+ * - `revoked`: il tema installato con lo stesso id è revocato dal catalogo, e
+ *   una cartella non lo sostituisce; niente è stato toccato;
+ * - `blocked`: ciò che c'è nella cartella dei temi di Fub non si tocca (`why`),
+ *   e `path` è dove, da mostrare; `installed` se è il tema già installato con
+ *   lo stesso id (che resta com'era), no se è la cartella dei temi; niente è
+ *   stato toccato;
+ * - `unreadable`: una lettura non è riuscita (`side`: la cartella scelta, con
+ *   i byte del controllo, o la cartella dei temi); niente è scritto, e non è
+ *   un guasto di scrittura. `error` è il guasto così com'è, mai da mostrare;
+ * - `replace_failed`: il nuovo si è fermato e il vecchio non è riuscito a
+ *   tornare al suo nome. `kept` è il nome della cartella, dentro la cartella
+ *   dei temi, dove il vecchio è rimasto: la shell lo dice con le sue parole.
+ *   `error` è il guasto del disco così com'è, per «Copia la diagnosi» e il
+ *   log, mai da mostrare; la cartella sorgente resta dov'è;
+ * - `refused`: le porte dell'installazione hanno rifiutato i byte controllati,
+ *   come un rifiuto del controllo; niente è scritto;
+ * - `changed`: la cartella non ha più i byte del controllo; niente è scritto;
+ * - `unchecked`: non c'è un controllo con questa impronta (uno più recente ha
+ *   preso il suo posto, o è già stato usato o scartato); niente è scritto;
+ * - `failed`: il disco non ha lasciato scrivere e niente è cambiato (con
+ *   `replace`, quello installato è com'era). `cause` è il perché da dire;
+ *   `error` è il guasto così com'è, mai da mostrare.
+ */
+export type ThemeFolderInstall =
+  | { outcome: "installed"; id: string; name: string; version: string; replaced: boolean }
+  | {
+      outcome: "collision";
+      id: string;
+      name: string;
+      version: string;
+      installed_version: string | null;
+    }
+  | { outcome: "revoked"; id: string; name: string; version: string }
+  | { outcome: "blocked"; why: ThemeBlock; path: string; installed: boolean }
+  | { outcome: "unreadable"; side: ThemeSide; error: PluginError }
+  | { outcome: "replace_failed"; id: string; name: string; version: string; kept: string; error: PluginError }
+  | { outcome: "refused"; refusal: ThemeFolderRefusal }
+  | { outcome: "changed" }
+  | { outcome: "unchecked" }
+  | { outcome: "failed"; cause: DiskCause; error: PluginError };
+
 export interface VaultInfo {
   root: string;
   // `documents` NON C'È PIÙ (§14.4): l'apertura portava l'elenco intero delle

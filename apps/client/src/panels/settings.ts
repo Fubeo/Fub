@@ -89,6 +89,7 @@ import { marcuzzoElement } from "../ui/marcuzzo";
 import { SOURCE_URL, checkMessage, mountUpdateCheck, type UpdateChecker } from "./about";
 import { vaultNameEditor } from "./vault-rename";
 import { reducedMotion } from "../theme/reduced-motion";
+import { DEVELOPER_MODE_KEY, installFolderButton, renderDiagnosis, themeDiagnoses } from "./theme-folder";
 import {
   CSS_SNIPPETS_KEY, DEFAULT_CSS_SNIPPETS, cancelCssSnippetsPreview,
   cssSnippetCatalog, disableCssSnippet, parseCssSnippets, previewCssSnippets,
@@ -947,8 +948,12 @@ async function renderForm(): Promise<HTMLElement[]> {
       if (entry.spec.key === FRAME_KEY) await decorateFrame(item, entry);
       parts.body.append(item);
     }
-    if (themes.length > 0 && group.rows.some((entry) => entry.spec.key === THEME_KEY)) {
-      parts.body.append(renderThemeCatalog(themes));
+    if (group.rows.some((entry) => entry.spec.key === THEME_KEY)) {
+      // Con la modalità sviluppatore il blocco c'è anche senza temi
+      // installati: è da lì che se ne installa uno.
+      const developer = entries.some((entry) => entry.spec.key === DEVELOPER_MODE_KEY && entry.value === true);
+      if (themes.length > 0 || developer) parts.body.append(renderThemeCatalog(themes, developer));
+      for (const diagnosis of themeDiagnoses()) parts.body.append(renderDiagnosis(diagnosis));
     }
     nodes.push(parts.section);
   }
@@ -1243,10 +1248,15 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
   return parts.section;
 }
 
-function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
+function renderThemeCatalog(themes: ThemeInfo[], developer: boolean): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "setting-row setting-block";
-  const text = blockHead(panel, t("settings.themes.title"), t("settings.themes.preview_hint"));
+  panel.dataset.themeCatalog = "";
+  const text = blockHead(
+    panel,
+    t("settings.themes.title"),
+    t(themes.length > 0 ? "settings.themes.preview_hint" : "settings.themes.none_installed"),
+  );
   panel.dataset.search = normalizeSearch([
     t("settings.themes.title"),
     t("settings.themes.preview_hint"),
@@ -1333,18 +1343,27 @@ function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
   cancelButton.addEventListener("click", () => {
     void write(() => cancelThemePreview());
   });
-  actions.append(applyButton, cancelButton, status);
+  if (themes.length > 0) actions.append(applyButton, cancelButton);
+  // Il gesto di chi scrive un tema; l'host lo rifiuta comunque a chiave spenta.
+  if (developer) {
+    const owner = settingsLifetime;
+    if (owner) actions.append(installFolderButton({ lifetime: owner, rerender: render }));
+  }
   refreshPreviewState();
 
-  text.append(
-    row(
-      "setting-source",
-      t("settings.themes.source", {
-        ids: themes.map((theme) => theme.manifest.id).join(", "),
-      }),
-    ),
-  );
-  panel.append(control, actions);
+  if (themes.length > 0) {
+    text.append(
+      row(
+        "setting-source",
+        t("settings.themes.source", {
+          ids: themes.map((theme) => theme.manifest.id).join(", "),
+        }),
+      ),
+    );
+    panel.append(control);
+  }
+  panel.append(actions);
+  if (themes.length > 0) panel.append(status);
   return panel;
 }
 

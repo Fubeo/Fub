@@ -1439,6 +1439,62 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.preview_none": "Nessuna anteprima attiva.",
 "settings.themes.preview_active": "Anteprima attiva: {theme}. La scelta salvata non è cambiata.",
 "settings.themes.preview_failed": "Anteprima tema non disponibile: {reason}",
+// --- installare un tema da una cartella, e la diagnosi (PA T36) ------------
+"settings.themes.none_installed": "Nessun tema installato. Installane uno da una cartella.",
+"settings.themes.install_folder": "Installa da cartella…",
+"settings.themes.installed": "«{name}» installato: lo trovi fra i temi installati.",
+"settings.themes.replaced": "«{name}» sostituito con la versione {version}.",
+"settings.themes.developer_off":
+  "La modalità sviluppatore è spenta: accendila nel gruppo «Sviluppo» per installare da una cartella.",
+"settings.themes.install_failed": "Il tema non si è installato: {reason}",
+"settings.themes.install_kept": "Quello installato resta com'era.",
+"settings.themes.disk.full": "Il disco è pieno: il tema non si è installato.",
+"settings.themes.disk.denied": "Il sistema non lascia scrivere nella cartella dei temi: il tema non si è installato.",
+"settings.themes.disk.other": "Il disco non ha lasciato scrivere il tema: non si è installato.",
+"settings.themes.unreadable.folder":
+  "Fub non riesce a leggere la cartella «{folder}»: il tema non si è installato e non ho scritto niente. Riprova.",
+"settings.themes.unreadable.themes":
+  "Fub non riesce a leggere la sua cartella dei temi: il tema non si è installato e non ho scritto niente.",
+"settings.themes.unchecked":
+  "Il controllo di «{folder}» non vale più: ne è arrivato uno più recente, o è già stato usato. Non ho scritto niente: scegli di nuovo la cartella.",
+"settings.themes.replace.title": "«{name}» è già installato",
+"settings.themes.replace.body":
+  "La cartella {folder} ha lo stesso id, «{id}», con la versione {version} (installata: {installed}). La cartella nuova è già controllata: si può sostituire.",
+"settings.themes.replace.body_unknown":
+  "La cartella {folder} ha lo stesso id, «{id}», con la versione {version}; quella installata non si legge più. La cartella nuova è già controllata: si può sostituire.",
+"settings.themes.replace.in_use": "Il tema è in uso, quindi si rimonta subito.",
+"settings.themes.replace.ok": "Sostituisci",
+"settings.themes.replace_failed.title": "«{name}» non si è installato",
+"settings.themes.replace_failed.body":
+  "Il nuovo non è entrato, e il vecchio non è tornato al suo posto: è rimasto nella cartella dei temi, col nome «{kept}». La cartella {folder} resta dov'è: installalo di nuovo.",
+"settings.themes.replace_failed.in_use": "Per ora torna Scrittoio; la tua scelta resta, e torna quando lo installi di nuovo.",
+"settings.themes.replace_failed.ok": "Ho capito",
+"settings.themes.diagnosis.title.one": "«{name}» è rifiutato: {n} motivo",
+"settings.themes.diagnosis.title": "«{name}» è rifiutato: {n} motivi",
+"settings.themes.diagnosis.blocked.one": "«{name}» è bloccato: {n} motivo",
+"settings.themes.diagnosis.blocked": "«{name}» è bloccato: {n} motivi",
+"settings.themes.diagnosis.when": "Tentativo delle {time}. Il tema resta fuori dai temi installati.",
+"settings.themes.diagnosis.when_kept": "Tentativo delle {time}. Il tema installato resta com'era.",
+"settings.themes.refused.one": "«{name}» non è installato: {n} motivo, lo trovi sotto «Temi installati».",
+"settings.themes.refused": "«{name}» non è installato: {n} motivi, li trovi sotto «Temi installati».",
+"settings.themes.changed": "La cartella «{folder}» è cambiata dopo il controllo: non ho scritto niente. Riprova.",
+"settings.themes.diagnosis.copy": "Copia la diagnosi",
+"settings.themes.diagnosis.copied": "Diagnosi copiata.",
+"settings.themes.diagnosis.copy_failed": "La diagnosi non si è copiata: {reason}",
+"settings.themes.refusal.not_a_theme": "Nella cartella non c'è manifest.json: non è la cartella di un tema.",
+"settings.themes.refusal.engine": "Il manifest dichiara il motore «{declared}», che questo Fub non conosce.",
+"settings.themes.refusal.permissions": "Il manifest dichiara dei permessi: un tema non ne ha.",
+"settings.themes.refusal.invalid_id": "L'id «{id}» non si può usare come nome di una cartella.",
+"settings.themes.refusal.series": "L'id «fub.serie» è del tema di serie: scegline un altro.",
+"settings.themes.refusal.traversal": "È un collegamento, o porta fuori dalla cartella: un tema è fatto solo di file suoi.",
+"settings.themes.refusal.catalog_state": "È lo stato del catalogo che scrive Fub, non parte del tema: toglilo dalla cartella.",
+"settings.themes.refusal.malformed": "Il tema non è ben formato: {detail}",
+"settings.themes.refusal.revoked": "«{name}» è stato ritirato dal catalogo e Fub non lo installa, nemmeno da una cartella.",
+"settings.themes.blocked.pointer":
+  "«{name}» è già installato, ma Fub non riesce a leggere se il catalogo lo ha ritirato, quindi non lo sostituisce: potrebbe essere un tema ritirato. Prova prima a reinstallarlo o ad aggiornarlo dal catalogo. Se non basta, puoi togliere a mano la cartella {path}: così però Fub dimentica anche se il tema era stato ritirato.",
+"settings.themes.blocked.link":
+  "Al posto di {path} c'è un collegamento: Fub non scrive attraverso un collegamento. Toglilo e riprova.",
+"settings.themes.blocked.layout": "{path} non è una cartella che Fub sa usare per i temi: sistemala a mano e riprova.",
 // --- i tasti che il vault propone (§23.13) -----------------------------
 //
 // Il testo dice che **non sono attive**, e lo dice per primo: chi legge deve
@@ -4628,6 +4684,61 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.preview_none": "No active preview.",
 "settings.themes.preview_active": "Preview active: {theme}. The saved choice has not changed.",
 "settings.themes.preview_failed": "Theme preview unavailable: {reason}",
+"settings.themes.none_installed": "No theme installed. Install one from a folder.",
+"settings.themes.install_folder": "Install from folder…",
+"settings.themes.installed": "«{name}» installed: you will find it among the installed themes.",
+"settings.themes.replaced": "«{name}» replaced with version {version}.",
+"settings.themes.developer_off":
+  "Developer mode is off: turn it on in the «Development» group to install from a folder.",
+"settings.themes.install_failed": "The theme was not installed: {reason}",
+"settings.themes.install_kept": "The installed one stays as it was.",
+"settings.themes.disk.full": "The disk is full: the theme was not installed.",
+"settings.themes.disk.denied": "The system does not allow writing to the themes folder: the theme was not installed.",
+"settings.themes.disk.other": "The disk did not allow writing the theme: it was not installed.",
+"settings.themes.unreadable.folder":
+  "Fub cannot read the folder «{folder}»: the theme was not installed and nothing was written. Try again.",
+"settings.themes.unreadable.themes":
+  "Fub cannot read its themes folder: the theme was not installed and nothing was written.",
+"settings.themes.unchecked":
+  "The check of «{folder}» is no longer valid: a newer one arrived, or it was already used. Nothing was written: choose the folder again.",
+"settings.themes.replace.title": "«{name}» is already installed",
+"settings.themes.replace.body":
+  "The folder {folder} has the same id, «{id}», with version {version} (installed: {installed}). The new folder has already been checked: it can replace it.",
+"settings.themes.replace.body_unknown":
+  "The folder {folder} has the same id, «{id}», with version {version}; the installed one can no longer be read. The new folder has already been checked: it can replace it.",
+"settings.themes.replace.in_use": "The theme is in use, so it is remounted right away.",
+"settings.themes.replace.ok": "Replace",
+"settings.themes.replace_failed.title": "«{name}» was not installed",
+"settings.themes.replace_failed.body":
+  "The new one did not go in, and the old one did not go back to its place: it stayed in the themes folder, named «{kept}». The folder {folder} stays where it is: install it again.",
+"settings.themes.replace_failed.in_use": "For now Scrittoio is back; your choice stays, and comes back when you install it again.",
+"settings.themes.replace_failed.ok": "Got it",
+"settings.themes.diagnosis.title.one": "«{name}» is rejected: {n} reason",
+"settings.themes.diagnosis.title": "«{name}» is rejected: {n} reasons",
+"settings.themes.diagnosis.blocked.one": "«{name}» is blocked: {n} reason",
+"settings.themes.diagnosis.blocked": "«{name}» is blocked: {n} reasons",
+"settings.themes.diagnosis.when": "Attempt at {time}. The theme stays out of the installed themes.",
+"settings.themes.diagnosis.when_kept": "Attempt at {time}. The installed theme stays as it was.",
+"settings.themes.refused.one": "«{name}» is not installed: {n} reason, you will find it under «Installed themes».",
+"settings.themes.refused": "«{name}» is not installed: {n} reasons, you will find them under «Installed themes».",
+"settings.themes.changed": "The folder «{folder}» changed after the check: nothing was written. Try again.",
+"settings.themes.diagnosis.copy": "Copy the diagnosis",
+"settings.themes.diagnosis.copied": "Diagnosis copied.",
+"settings.themes.diagnosis.copy_failed": "The diagnosis was not copied: {reason}",
+"settings.themes.refusal.not_a_theme": "There is no manifest.json in the folder: it is not a theme folder.",
+"settings.themes.refusal.engine": "The manifest declares the engine «{declared}», which this Fub does not know.",
+"settings.themes.refusal.permissions": "The manifest declares permissions: a theme has none.",
+"settings.themes.refusal.invalid_id": "The id «{id}» cannot be used as a folder name.",
+"settings.themes.refusal.series": "The id «fub.serie» belongs to the built-in theme: choose another one.",
+"settings.themes.refusal.traversal": "It is a link, or it leads out of the folder: a theme is made only of its own files.",
+"settings.themes.refusal.catalog_state": "It is catalog state that Fub writes, not part of the theme: remove it from the folder.",
+"settings.themes.refusal.malformed": "The theme is not well formed: {detail}",
+"settings.themes.refusal.revoked": "«{name}» was withdrawn from the catalog and Fub does not install it, not even from a folder.",
+"settings.themes.blocked.pointer":
+  "«{name}» is already installed, but Fub cannot read whether the catalog has withdrawn it, so it does not replace it: it might be a withdrawn theme. First try reinstalling or updating it from the catalog. If that does not help, you can remove the folder {path} by hand: Fub then also forgets whether the theme was withdrawn.",
+"settings.themes.blocked.link":
+  "There is a link in place of {path}: Fub does not write through a link. Remove it and try again.",
+"settings.themes.blocked.layout": "{path} is not a folder Fub can use for themes: fix it by hand and try again.",
 "settings.vault_keys.title": "This vault proposes {count} shortcuts",
 "settings.vault_keys.hint":
   "A vault carries its own shortcuts with it, and these come from outside: until you look at them they press nothing, and the combinations declared by the commands are what counts.",

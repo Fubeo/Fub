@@ -125,26 +125,34 @@ mod assets;
 mod bundle;
 mod discover;
 mod files;
+mod folder;
 mod install;
+mod lock;
 mod pointer;
 
-use assets::{asset_inventory, validate_asset_limits, MAX_THEME_ASSET_BYTES};
-pub use bundle::{series_manifest, ThemeBundle, ThemeError, ThemeInfo, ThemePayload};
+use assets::{asset_inventory, asset_listing, validate_asset_limits, MAX_THEME_ASSET_BYTES};
+pub use bundle::{series_manifest, DiskCause, ThemeBundle, ThemeError, ThemeInfo, ThemePayload};
 use discover::selected_theme_dir;
 pub use discover::{discover_themes, list_themes, read_theme};
 use files::{
     canonical_theme_root, check_id, create_nofollow, open_regular, open_themes_root,
     read_theme_bytes, read_theme_text, verify_themes_root,
 };
+pub use folder::{
+    check_theme_folder, install_theme_from_folder, CheckedThemeFolder, ThemeBlock,
+    ThemeFolderCheck, ThemeFolderGrant, ThemeFolderInstall, ThemeFolderLight, ThemeFolderRefusal,
+    ThemeSide,
+};
 pub use install::{
     install_theme, install_theme_checked, set_theme_revoked, set_theme_revoked_with_provenance,
     theme_catalog_provenance, theme_revocation_provenance, theme_revoked, uninstall_theme,
     update_theme,
 };
+use lock::lock_theme;
 pub use pointer::theme_tree_digest;
 use pointer::{
-    publish_theme_pointer, read_theme_pointer, write_theme_pointer, ThemePointer, ThemeVersion,
-    POINTER_FILE,
+    copy_tree_digest, publish_theme_pointer, read_theme_pointer, write_theme_pointer, ThemePointer,
+    ThemeVersion, POINTER_FILE,
 };
 
 /// L'id del tema di serie. È l'unico id che l'host conosce per nome, per le

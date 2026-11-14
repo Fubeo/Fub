@@ -18,6 +18,13 @@ import type {
   ComponentWrite,
   ComponentsApplied,
   ComponentsMap,
+  DiskCause,
+  ThemeBlock,
+  ThemeSide,
+  ThemeFolderCheck,
+  ThemeFolderInstall,
+  ThemeFolderLight,
+  ThemeFolderRefusal,
   ThemeFont,
   ThemeInfo,
   ThemePayload,
@@ -1344,7 +1351,7 @@ describe("mirror TS↔Rust", () => {
     }
     for (const type of [
       "ComponentWhy", "ComponentOrphans", "ComponentAction", "ComponentRefusal", "ComponentsApplied",
-      "ConfigFileKind", "ConfigStatus", "RecoverAction",
+      "ConfigFileKind", "ConfigStatus", "RecoverAction", "ThemeFolderCheck", "ThemeFolderInstall",
       "LiveEvent", "ShellMessage", "LeaveReason", "ReleaseReason", "EndReason", "NackReason",
     ]) {
       expect(appFixture[type], `manca il type ${type} nella fixture dell'app`).toBeTruthy();
@@ -1907,6 +1914,132 @@ describe("mirror TS↔Rust", () => {
       expect(typeof file).toBe("string");
       expect(themeIconsFileHolds(file), file).toBe(true);
     }
+  });
+
+  it("il controllo di una cartella di tema porta i suoi tre esiti e ogni motivo di rifiuto", () => {
+    const samples = appFixture.ThemeFolderCheck as ThemeFolderCheck[];
+    const fields: Record<ThemeFolderCheck["outcome"], string[]> = {
+      cancelled: keysOf<Extract<ThemeFolderCheck, { outcome: "cancelled" }>>({ outcome: true }),
+      ready: keysOf<Extract<ThemeFolderCheck, { outcome: "ready" }>>({
+        outcome: true, folder: true, manifest: true, skin: true, assets: true, lights: true, digest: true,
+      }),
+      refused: keysOf<Extract<ThemeFolderCheck, { outcome: "refused" }>>({ outcome: true, folder: true, refusal: true }),
+    };
+    const lightKeys = keysOf<ThemeFolderLight>({ light: true, sheet: true, named: true });
+    const refusalFields: Record<ThemeFolderRefusal["reason"], string[]> = {
+      not_a_theme: ["reason"],
+      engine: keysOf<Extract<ThemeFolderRefusal, { reason: "engine" }>>({ reason: true, declared: true }),
+      permissions: ["reason"],
+      invalid_id: keysOf<Extract<ThemeFolderRefusal, { reason: "invalid_id" }>>({ reason: true, id: true }),
+      series: ["reason"],
+      traversal: keysOf<Extract<ThemeFolderRefusal, { reason: "traversal" }>>({ reason: true, path: true }),
+      catalog_state: keysOf<Extract<ThemeFolderRefusal, { reason: "catalog_state" }>>({ reason: true, file: true }),
+      malformed: keysOf<Extract<ThemeFolderRefusal, { reason: "malformed" }>>({ reason: true, detail: true }),
+    };
+    const reasons = new Set<string>();
+    for (const sample of samples) {
+      switch (sample.outcome) {
+        case "cancelled":
+          break;
+        case "ready":
+          expect(sample.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+          expect(sample.skin === null || typeof sample.skin === "string").toBe(true);
+          for (const bytes of Object.values(sample.assets)) expect(Array.isArray(bytes)).toBe(true);
+          for (const light of sample.lights) {
+            expect(Object.keys(light).sort()).toEqual(lightKeys);
+            for (const name of light.named) expect(typeof name).toBe("string");
+          }
+          break;
+        case "refused":
+          reasons.add(sample.refusal.reason);
+          expect(Object.keys(sample.refusal).sort()).toEqual(refusalFields[sample.refusal.reason]);
+          break;
+        default:
+          assertNever(sample);
+      }
+      expect(Object.keys(sample).sort()).toEqual(fields[sample.outcome]);
+    }
+    expect(new Set(samples.map((sample) => sample.outcome))).toEqual(new Set(Object.keys(fields)));
+    expect(reasons).toEqual(new Set(Object.keys(refusalFields)));
+  });
+
+  it("l'installazione da cartella porta i suoi esiti, ognuno coi suoi campi", () => {
+    const samples = appFixture.ThemeFolderInstall as ThemeFolderInstall[];
+    const fields: Record<ThemeFolderInstall["outcome"], string[]> = {
+      installed: keysOf<Extract<ThemeFolderInstall, { outcome: "installed" }>>({
+        outcome: true, id: true, name: true, version: true, replaced: true,
+      }),
+      collision: keysOf<Extract<ThemeFolderInstall, { outcome: "collision" }>>({
+        outcome: true, id: true, name: true, version: true, installed_version: true,
+      }),
+      revoked: keysOf<Extract<ThemeFolderInstall, { outcome: "revoked" }>>({
+        outcome: true, id: true, name: true, version: true,
+      }),
+      blocked: keysOf<Extract<ThemeFolderInstall, { outcome: "blocked" }>>({
+        outcome: true, why: true, path: true, installed: true,
+      }),
+      unreadable: keysOf<Extract<ThemeFolderInstall, { outcome: "unreadable" }>>({ outcome: true, side: true, error: true }),
+      replace_failed: keysOf<Extract<ThemeFolderInstall, { outcome: "replace_failed" }>>({
+        outcome: true, id: true, name: true, version: true, kept: true, error: true,
+      }),
+      refused: keysOf<Extract<ThemeFolderInstall, { outcome: "refused" }>>({ outcome: true, refusal: true }),
+      changed: keysOf<Extract<ThemeFolderInstall, { outcome: "changed" }>>({ outcome: true }),
+      unchecked: keysOf<Extract<ThemeFolderInstall, { outcome: "unchecked" }>>({ outcome: true }),
+      failed: keysOf<Extract<ThemeFolderInstall, { outcome: "failed" }>>({ outcome: true, cause: true, error: true }),
+    };
+    const causes: Record<DiskCause, true> = { full: true, denied: true, other: true };
+    const seenCauses = new Set<string>();
+    const blocks: Record<ThemeBlock, true> = { pointer: true, link: true, layout: true };
+    const seenBlocks = new Set<string>();
+    const sides: Record<ThemeSide, true> = { folder: true, themes: true };
+    const seenSides = new Set<string>();
+    for (const sample of samples) {
+      switch (sample.outcome) {
+        case "installed":
+          expect(typeof sample.replaced).toBe("boolean");
+          break;
+        case "collision":
+          expect(sample.installed_version === null || typeof sample.installed_version === "string").toBe(true);
+          break;
+        case "revoked":
+          break;
+        case "blocked":
+          expect(blocks[sample.why]).toBe(true);
+          seenBlocks.add(sample.why);
+          expect(typeof sample.path).toBe("string");
+          expect(typeof sample.installed).toBe("boolean");
+          break;
+        case "unreadable":
+          expect(sides[sample.side]).toBe(true);
+          seenSides.add(sample.side);
+          touchPluginErrorKind(sample.error.kind);
+          break;
+        case "replace_failed":
+          // Un nome dentro la cartella dei temi, non un percorso.
+          expect(sample.kept).toMatch(/^\.tmp-old-[^/\\]+$/);
+          touchPluginErrorKind(sample.error.kind);
+          expect(Object.keys(sample.error).sort()).toEqual(RECORD_KEYS.PluginError);
+          break;
+        case "refused":
+          expect(typeof sample.refusal.reason).toBe("string");
+          break;
+        case "changed":
+        case "unchecked":
+          break;
+        case "failed":
+          expect(causes[sample.cause]).toBe(true);
+          seenCauses.add(sample.cause);
+          touchPluginErrorKind(sample.error.kind);
+          break;
+        default:
+          assertNever(sample);
+      }
+      expect(Object.keys(sample).sort()).toEqual(fields[sample.outcome]);
+    }
+    expect(new Set(samples.map((sample) => sample.outcome))).toEqual(new Set(Object.keys(fields)));
+    expect(seenCauses).toEqual(new Set(Object.keys(causes)));
+    expect(seenBlocks).toEqual(new Set(Object.keys(blocks)));
+    expect(seenSides).toEqual(new Set(Object.keys(sides)));
   });
 
   it("«Apri con» porta i tre modi di consegna e le tre righe del menu", () => {

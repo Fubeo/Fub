@@ -411,6 +411,14 @@ pub const LOG_VERBOSE: &str = "log.verbose";
 /// niente esce dall'app.
 pub const PERF_PROBE: &str = "perf.probe";
 
+/// La modalità sviluppatore: apre a chi scrive un tema i gesti che un tema
+/// finito non chiede, a cominciare da «Installa da cartella…». Di **macchina**
+/// (è uno strumento di questo PC, non una preferenza su un vault), spenta di
+/// default, e **non** scrivibile da un programma: un componente che potesse
+/// accenderla aprirebbe da sé la porta che lei tiene chiusa. La regola la
+/// applica l'host (`Host::install_theme_from_folder`), non il bottone nascosto.
+pub const DEVELOPER_MODE: &str = "developer.mode";
+
 /// Preferenze locali della replica; identità, pairing e chiavi non sono impostazioni.
 pub const SYNC_SERVER_URL: &str = "sync.server_url";
 pub const SYNC_PAUSED: &str = "sync.paused";
@@ -607,6 +615,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
     settings.push(perf_probe_spec());
+    settings.push(developer_mode_spec());
     #[cfg(feature = "http-client")]
     settings.extend(service_settings());
     settings.extend(live_settings());
@@ -1435,6 +1444,18 @@ fn perf_probe_spec() -> SettingSpec {
     .for_machine()
 }
 
+/// La modalità sviluppatore come [`SettingSpec`]: vedi [`DEVELOPER_MODE`].
+fn developer_mode_spec() -> SettingSpec {
+    SettingSpec::new(
+        DEVELOPER_MODE,
+        Text::key(C_DEVELOPER_MODE),
+        SettingKind::Toggle { default: false },
+    )
+    .describing(Text::key(C_DEVELOPER_MODE_DESC))
+    .grouped(Text::key(C_GROUP_DEVELOPMENT))
+    .for_machine()
+}
+
 /// Le chiavi delle stringhe del core. Le `locale.*` non stanno qui: stanno
 /// accanto alle impostazioni che descrivono, in `fub_kernel::locale`, e
 /// arrivano al montaggio come secondo catalogo della stessa lingua.
@@ -1671,6 +1692,9 @@ const C_LOG_VERBOSE: &str = "core.log.verbose";
 const C_LOG_VERBOSE_DESC: &str = "core.log.verbose.desc";
 const C_PERF_PROBE: &str = "core.perf.probe";
 const C_PERF_PROBE_DESC: &str = "core.perf.probe.desc";
+const C_GROUP_DEVELOPMENT: &str = "core.group.development";
+const C_DEVELOPER_MODE: &str = "core.developer.mode";
+const C_DEVELOPER_MODE_DESC: &str = "core.developer.mode.desc";
 const C_GROUP_SYNC: &str = "core.group.sync";
 const C_SYNC_SERVER_URL: &str = "core.sync.server_url";
 const C_SYNC_SERVER_URL_DESC: &str = "core.sync.server_url.desc";
@@ -1941,6 +1965,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with("host.craft_render.no_cli", "Fub non trova il programma a riga di comando dell'app.")
         .with("host.craft_render.ticket", "Fub non è riuscito a preparare l'anteprima: riprova.")
+        .with(
+            "host.theme_folder.developer_off",
+            "Per installare un tema da una cartella accendi la modalità sviluppatore.",
+        )
+        .with("host.theme_folder.unavailable", "Fub non ha una cartella per i temi su questo computer.")
+        .with("host.theme_folder.pick_title", "Scegli la cartella del tema")
+        .with(
+            "host.theme_folder.pick_failed",
+            "La finestra per scegliere la cartella non ha risposto: riprova.",
+        )
+        .with(
+            "host.theme_folder.unreadable_path",
+            "Fub non sa leggere il percorso di questa cartella: spostala in una con un nome semplice.",
+        )
         .with(
             "host.craft_render.over_limit",
             "Il file supera il peso massimo per un'anteprima fatta dall'app.",
@@ -2388,6 +2426,13 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Misura quanto passa da un tasto, un clic o un tratto di penna al \
              fotogramma che lo mostra, e conta i fotogrammi lunghi. I numeri \
              restano su questo computer: servono ai banchi di misura.",
+        )
+        .with(C_GROUP_DEVELOPMENT, "Sviluppo")
+        .with(C_DEVELOPER_MODE, "Modalità sviluppatore")
+        .with(
+            C_DEVELOPER_MODE_DESC,
+            "Per chi scrive un tema: in «Temi installati» compare «Installa da \
+             cartella…», che lo controlla e lo installa dalla sua cartella.",
         );
     for level in fub_kernel::log::Level::ALL {
         it = it.with(
@@ -2579,6 +2624,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with("host.craft_render.no_cli", "Fub cannot find the app's command-line program.")
         .with("host.craft_render.ticket", "Fub could not prepare the preview: try again.")
+        .with(
+            "host.theme_folder.developer_off",
+            "To install a theme from a folder, turn on developer mode.",
+        )
+        .with("host.theme_folder.unavailable", "Fub has no theme folder on this computer.")
+        .with("host.theme_folder.pick_title", "Choose the theme folder")
+        .with(
+            "host.theme_folder.pick_failed",
+            "The window to choose the folder did not answer: try again.",
+        )
+        .with(
+            "host.theme_folder.unreadable_path",
+            "Fub cannot read the path of this folder: move it to one with a plain name.",
+        )
         .with(
             "host.craft_render.over_limit",
             "The file is over the maximum size for a preview made by the app.",
@@ -3017,6 +3076,13 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Measures the time from a key, a click or a pen stroke to the frame \
              that shows it, and counts the long frames. The numbers stay on this \
              computer: they feed the measurement benches.",
+        )
+        .with(C_GROUP_DEVELOPMENT, "Development")
+        .with(C_DEVELOPER_MODE, "Developer mode")
+        .with(
+            C_DEVELOPER_MODE_DESC,
+            "For theme authors: «Install from folder…» appears under \
+             «Installed themes», and checks and installs a theme from its folder.",
         );
     for level in fub_kernel::log::Level::ALL {
         en = en.with(
@@ -3368,6 +3434,22 @@ mod tests {
         assert!(core_machine_settings()
             .iter()
             .any(|spec| spec.key == PERF_PROBE));
+    }
+
+    #[test]
+    fn developer_mode_is_a_machine_switch_off_by_default_that_no_program_writes() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == DEVELOPER_MODE)
+            .expect("il core dichiara la modalità sviluppatore");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+        assert_eq!(spec.kind, SettingKind::Toggle { default: false });
+        // Un programma che potesse accenderla aprirebbe da sé
+        // l'installazione da cartella.
+        assert!(!spec.program_writable);
+        assert!(core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == DEVELOPER_MODE));
     }
 
     #[test]
