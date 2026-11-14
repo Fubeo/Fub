@@ -4061,7 +4061,7 @@ non aspettare le animazioni); la shell in inglese (non serve).
 Fatto quando: `npm run bench:giro -- --out=$TMPDIR/giro` è verde con i
 compiti 1–5 e le loro foto, anche con `--telefono` per 1–4.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --out=$TMPDIR/giro
-Stato: [ ] da fare
+Stato: [~] in corso (coder/pa-t14, da 3f68c4a66, 2026-11-14)
 
 ## T15 · Il simulatore accanto all'app
 
@@ -4917,7 +4917,7 @@ fiducia, «Sostituisci» e la lista della diagnosi con un tema rifiutato del
 finto host; mirror e fixture rigenerati.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test themes;
 cd apps/client && npx vitest run src/panels/
-Stato: [ ] da fare
+Stato: [~] in corso (coder/pa-t36, da 3f68c4a66, 2026-11-14)
 
 ## T37 · Collegare una cartella, e il tema cambia al salvataggio
 
