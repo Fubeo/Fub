@@ -80,6 +80,21 @@ fn a_note_created_during_the_prompt_is_not_overwritten() {
     );
 }
 
+/// Un collegamento al posto del file degli abbinamenti non si legge
+/// attraverso, come nel cancello del native host.
+#[cfg(unix)]
+#[test]
+fn a_linked_pairing_file_is_refused() {
+    let vault = tempfile::tempdir().unwrap();
+    let config = tempfile::tempdir().unwrap();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let target = elsewhere.path().join("pairs.json");
+    std::fs::write(&target, br#"{"pairs":[]}"#).unwrap();
+    std::os::unix::fs::symlink(&target, config.path().join("clipper-pairing.json")).unwrap();
+    let global = global_on(vault.path(), config.path());
+    assert!(pairing(&global, &OutputFormat::Json, PairAction::List, |_| {}).is_err());
+}
+
 /// Un file degli abbinamenti che non si lascia leggere non è un file
 /// assente: `pair` lo riscriveva con il solo abbinamento nuovo, e tutte le
 /// estensioni già abbinate perdevano il permesso di scrivere.

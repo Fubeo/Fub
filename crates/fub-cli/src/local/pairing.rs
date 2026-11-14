@@ -40,6 +40,17 @@ pub fn load_pairs(global: &GlobalArgs) -> Result<Vec<fub_host::automation::PairE
     // Soltanto un file assente è «nessun abbinamento»: un file che non si
     // legge, letto come vuoto, sarebbe riscritto dal prossimo `pair` con il
     // solo abbinamento nuovo.
+    // Come il cancello del native host: un collegamento o un file che non è
+    // regolare non è il file degli abbinamenti, e non si legge attraverso.
+    if std::fs::symlink_metadata(&path)
+        .is_ok_and(|meta| !meta.is_file() || meta.file_type().is_symlink())
+    {
+        return Err(Failure::new(
+            4,
+            "denied",
+            "pairing: il file non è un file regolare",
+        ));
+    }
     let raw = match std::fs::read_to_string(&path) {
         Ok(raw) => raw,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
