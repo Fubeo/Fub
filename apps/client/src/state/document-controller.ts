@@ -1125,6 +1125,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   const removed = (id: string, recreate: (text: string, vault: string | undefined) => Promise<unknown>): void => {
     const vault = openVaultRoot();
     const shownIn = panesWithDoc(id);
+    withdrawUnsavedQuestion(id, { kind: "removed" });
     const outcome = documentSessions.handleExternalRemoval(id);
     clearSheetNotices(id);
     invalidateDocumentCaches(id);
@@ -1152,6 +1153,13 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   };
   const renamed = (from: string, to: string): void => {
     const outcome = documentSessions.rename(from, to);
+    // «Modifiche non salvate» su `from` non può più scartare né tenere quel
+    // nome: si ritira, e la nota torna col nome che la sessione ha adesso.
+    withdrawUnsavedQuestion(from, {
+      kind: "reopen",
+      doc: outcome.kind === "collision" ? from : to,
+      conflict: false,
+    });
     if (outcome.kind !== "collision") {
       moveSheetNotices(from, to);
       renameInDocumentCaches(from, to);
@@ -1588,13 +1596,23 @@ export async function closeCurrentTab(): Promise<void> {
   const p = activePane();
   const tab = activeTab(id);
   if (p.active < 0) return;
+  // Chi scriveva e chiude una nota che non si è potuta salvare se la ritrova
+  // davanti («Tienila aperta», o un cambio da fuori): il fuoco torna nel testo.
+  const typing = tab?.k === "doc" && (panes.get(id)?.editorEl.contains(document.activeElement) ?? false);
   closeTab(id, p.active);
-  const nextActive = paneState(id)?.active ?? -1;
   await releaseTab(id, tab);
   await synchronize();
   const pane = panes.get(id);
   if (!pane) return;
-  if (nextActive >= 0) view.focusTab(pane, nextActive);
+  const focusText = pane.surface?.focus;
+  if (typing && tab?.k === "doc" && activeDoc(id) === tab.doc && focusText) {
+    focusText.call(pane.surface);
+    return;
+  }
+  // La linguetta attiva di adesso: durante il rilascio la nota chiusa può
+  // essere tornata, e l'indice di prima indicherebbe un'altra linguetta.
+  const active = paneState(id)?.active ?? -1;
+  if (active >= 0) view.focusTab(pane, active);
   else pane.root.focus();
 }
 
@@ -1752,9 +1770,31 @@ async function dismissIfUnwatched(doc: string, paneId: string = layout.focus): P
   if (outcome.kind === "unsaved") await keepOrDiscardUnsaved(doc, paneId);
 }
 
-/// Le domande «Modifiche non salvate» aperte, per documento: un cambio da
-/// fuori sulla nota le ritira (`applyExternalChange`).
+/// Perché una domanda «Modifiche non salvate» si ritira prima della risposta.
+///
+/// - `replaced`: una domanda nuova sullo stesso documento ha preso il suo
+///   posto; decide quella, e questa non fa niente.
+/// - `removed`: il file è sparito da fuori; il testo è già nell'avviso con
+///   «Ricrea» (`removed` qui sotto), e non c'è più una nota da riaprire.
+/// - `reopen`: il file è cambiato o ha cambiato nome da fuori. Come «Tienila
+///   aperta»: la nota torna, a `doc` (il nome nuovo, per una rinomina); con
+///   `conflict` si tenta subito il salvataggio, che trova il disco cambiato e
+///   mette la barra del conflitto.
+type UnsavedWithdrawal =
+  | { kind: "replaced" }
+  | { kind: "removed" }
+  | { kind: "reopen"; doc: string; conflict: boolean };
+
+/// Le domande «Modifiche non salvate» aperte, per documento.
 const unsavedQuestions = new Map<string, AbortController>();
+
+/// Ritira la domanda aperta su `doc`, se c'è, col suo motivo.
+function withdrawUnsavedQuestion(doc: string, why: UnsavedWithdrawal): void {
+  const question = unsavedQuestions.get(doc);
+  if (!question) return;
+  unsavedQuestions.delete(doc);
+  question.abort(why);
+}
 
 /// La linguetta è già chiusa, ma il buffer non si è potuto salvare: la sessione
 /// è ancora viva, ed è l'unica copia del lavoro. Si chiede, e senza una
@@ -1762,13 +1802,12 @@ const unsavedQuestions = new Map<string, AbortController>();
 ///
 /// Se mentre si chiede il file cambia da fuori, la domanda è vecchia: scartare
 /// vorrebbe dire scegliere fra due testi che la persona non ha visto. La
-/// finestra si chiude come «Tienila aperta», la nota torna, e il salvataggio
-/// che segue trova il disco cambiato e mette la barra del conflitto: la scelta
-/// resta sua.
+/// finestra si chiude come «Tienila aperta» e la scelta resta sua
+/// (`UnsavedWithdrawal`).
 async function keepOrDiscardUnsaved(doc: string, paneId: string): Promise<void> {
-  const withdraw = new AbortController();
-  unsavedQuestions.get(doc)?.abort();
-  unsavedQuestions.set(doc, withdraw);
+  withdrawUnsavedQuestion(doc, { kind: "replaced" });
+  const question = new AbortController();
+  unsavedQuestions.set(doc, question);
   let discard: boolean;
   try {
     discard = await confirm(t("document.close_unsaved", { doc: pageName(doc) }), {
@@ -1776,26 +1815,33 @@ async function keepOrDiscardUnsaved(doc: string, paneId: string): Promise<void> 
       okLabel: t("document.close_unsaved.discard"),
       cancelLabel: t("document.close_unsaved.keep"),
       danger: true,
-    }, withdraw.signal).catch(() => false);
+    }, question.signal).catch(() => false);
   } finally {
-    if (unsavedQuestions.get(doc) === withdraw) unsavedQuestions.delete(doc);
+    if (unsavedQuestions.get(doc) === question) unsavedQuestions.delete(doc);
   }
-  const changedOutside = withdraw.signal.aborted;
+  const why = question.signal.aborted ? (question.signal.reason as UnsavedWithdrawal) : null;
+  if (why?.kind === "replaced" || why?.kind === "removed") return;
+  const target = why?.kind === "reopen" ? why.doc : doc;
   // Nel frattempo qualcuno può averla riaperta: allora ha già un riquadro.
-  if (panesWithDoc(doc).length > 0) return;
-  if (discard && !changedOutside) {
+  if (panesWithDoc(target).length > 0) return;
+  if (discard && why === null) {
     documentSessions.discardUnsaved(doc);
     return;
   }
-  openIn(paneState(paneId) ? paneId : layout.focus, doc);
+  openIn(paneState(paneId) ? paneId : layout.focus, target);
   await synchronize();
   view.drawSave();
   // Il conflitto si vede al primo salvataggio: lo si tenta subito, invece di
   // aspettare la battuta dopo. Se il disco è ancora guasto il testo resta nel
-  // buffer, come prima.
-  if (changedOutside && panesWithDoc(doc).length > 0) {
-    await documentSessions.flush(doc);
-    drawPaneConflict(doc);
+  // buffer, come prima; e un salvataggio che rifiuta non toglie la barra né
+  // lo stato, che si disegnano comunque.
+  if (why?.conflict && panesWithDoc(target).length > 0) {
+    try {
+      await documentSessions.flush(target);
+    } catch (error) {
+      console.error(error);
+    }
+    drawPaneConflict(target);
     view.drawSave();
   }
 }
@@ -3344,11 +3390,11 @@ function written(paneId: string, change: EditorChange): void {
 
 async function applyExternalChange(id: string, outcome: ExternalChangeResult): Promise<void> {
   if (outcome.kind === "echo") return;
+  // La nota cambiata da fuori mentre «Modifiche non salvate» chiede: la
+  // domanda si ritira e la nota torna (`keepOrDiscardUnsaved`).
+  withdrawUnsavedQuestion(id, { kind: "reopen", doc: id, conflict: true });
   invalidateDocumentCaches(id);
   if (outcome.kind === "warning") {
-    // La nota cambiata da fuori mentre «Modifiche non salvate» chiede: la
-    // domanda si ritira e la nota torna (`keepOrDiscardUnsaved`).
-    unsavedQuestions.get(id)?.abort();
     if (outcome.cause === "altra_app") {
       addSheetNotice(id, "overwritten");
       notify(t("document.overwritten", { doc: id }), "guasto");

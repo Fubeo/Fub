@@ -232,10 +232,15 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
 - **Una linguetta o un riquadro che si chiude.** Il controller passa da
   `dismissIfUnwatched`: davanti a `unsaved` chiede con il dialogo
   `document.close_unsaved` se scartare le modifiche o tenere la nota, e senza
-  una risposta esplicita la nota torna aperta dov'era. Un cambio da fuori
-  sulla nota mentre il dialogo chiede lo ritira come «Tienila aperta» (il
-  segnale di ritiro di `platform/confirm`): la nota torna, il salvataggio
-  tentato subito trova il disco cambiato e mostra la barra del conflitto.
+  una risposta esplicita la nota torna aperta dov'era. Un fatto nuovo ritira
+  la domanda (il segnale di ritiro di `platform/confirm`) col suo motivo: un
+  cambio da fuori la chiude come «Tienila aperta», e il salvataggio tentato
+  subito trova il disco cambiato e mostra la barra del conflitto; una
+  rinomina da fuori riapre la nota col nome nuovo; un'eliminazione da fuori
+  non riapre niente, perché il testo è già nell'avviso con «Ricrea»; una
+  seconda domanda sulla stessa nota prende il posto della prima, che non fa
+  niente. Chiusa con Ctrl+W mentre si scriveva, la nota che torna riprende il
+  fuoco nel testo.
 - **Uno spazio di lavoro che toglie la nota, una finestra del documento che si
   chiude, un'apertura che finisce con la linguetta già chiusa.** Questi
   rilasci (`state/shell-layout.ts`, `state/document-bridge.ts`, il `finally`

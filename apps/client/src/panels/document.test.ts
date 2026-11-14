@@ -739,24 +739,42 @@ describe("il testo non salvato resta (#237)", () => {
     await expectRecoverable(host, sessions);
   });
 
-  it("T63 · un cambio da fuori mentre «Modifiche non salvate» chiede la chiude come «Tienila aperta»", async () => {
-    const { host, sessions } = await unsavedNote();
+  /// Le finestre «Modifiche non salvate» a schermo.
+  async function closeQuestions(): Promise<() => HTMLElement[]> {
     const { t } = await import("../i18n/strings");
+    const title = t("document.close_unsaved.title");
+    return () => [...document.querySelectorAll<HTMLElement>("dialog, [role=dialog], [role=alertdialog]")]
+      .filter((el) => el.isConnected && (el.textContent ?? "").includes(title));
+  }
+
+  /// Chiude la linguetta di «Benvenuto.md» e aspetta che la finestra chieda.
+  async function closeAndAsk(): Promise<{ closing: Promise<void>; paneId: string; asking: () => HTMLElement[] }> {
     const layouts = await import("../state/layout");
     const controller = await import("../state/document-controller");
-    const title = t("document.close_unsaved.title");
-    const asking = () => [...document.querySelectorAll<HTMLElement>("dialog, [role=dialog], [role=alertdialog]")]
-      .filter((el) => el.isConnected && (el.textContent ?? "").includes(title));
+    const asking = await closeQuestions();
     const paneId = layouts.layout.focus;
     const index = layouts.pane(paneId)!.tabs.findIndex((tab) => tab.k === "doc" && tab.doc === BENVENUTO);
+    const shown = asking().length;
     const closing = controller.closeTabAt(paneId, index);
-    await waitFor("la finestra «Modifiche non salvate»", () => asking().length === 1);
-    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    await waitFor("la finestra «Modifiche non salvate»", () => asking().length === shown + 1 || (shown > 0 && asking().length === shown));
+    return { closing, paneId, asking };
+  }
 
-    // Mentre chiede, il disco torna buono e un'altra applicazione cambia la nota.
+  /// Tolti i guasti: il disco e la bozza tornano buoni.
+  function repair(): void {
     repairWrite?.();
     repairDraft?.();
     repairWrite = repairDraft = null;
+  }
+
+  it("T63 · un cambio da fuori mentre «Modifiche non salvate» chiede la chiude come «Tienila aperta»", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const { closing, paneId, asking } = await closeAndAsk();
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+
+    // Mentre chiede, il disco torna buono e un'altra applicazione cambia la nota.
+    repair();
     const outside = "# Benvenuto\nscritto da un'altra applicazione\n";
     host.writeFromOutside(BENVENUTO, outside);
 
@@ -771,6 +789,105 @@ describe("il testo non salvato resta (#237)", () => {
     await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
     expect(sessions.inspect(BENVENUTO)).toMatchObject({ dirty: true, result: "conflitto" });
     expect(host.files()[BENVENUTO]).toBe(outside);
+  });
+
+  it("T63 · una seconda domanda sulla stessa nota sostituisce la prima, che non riapre niente", async () => {
+    const { sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const first = await closeAndAsk();
+    const firstDialog = first.asking()[0]!;
+    // La nota si riapre e si richiude mentre la prima domanda è ancora lì.
+    await open(BENVENUTO);
+    await waitFor("l'editor della nota riaperta", () => shows(TYPED));
+    const second = await closeAndAsk();
+    await first.closing;
+    await waitFor("la prima finestra ritirata", () => !firstDialog.isConnected && second.asking().length === 1);
+    // La prima non ha riaperto la nota né disegnato un conflitto.
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expect(visible(".conflict-banner")).toHaveLength(0);
+
+    // «Scarta» della seconda vale: la nota resta chiusa e il testo se ne va.
+    second.asking()[0]!.querySelector<HTMLButtonElement>('button[data-action="confirm"]')!.click();
+    await second.closing;
+    await settle();
+    expect(second.asking()).toHaveLength(0);
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expect(sessions.inspect(BENVENUTO)).toBeUndefined();
+  });
+
+  it("T63 · una rinomina da fuori mentre la finestra chiede la ritira, e la nota torna col nome nuovo", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const { closing, paneId, asking } = await closeAndAsk();
+    const NUOVO = "Benvenuto rinominato.md";
+    host.renameFromOutside(BENVENUTO, NUOVO);
+
+    await waitFor("la finestra chiusa dalla rinomina", () => asking().length === 0);
+    await closing;
+    await settle();
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expect(layouts.panesWithDoc(NUOVO)).toEqual([paneId]);
+    expect(sessions.text(NUOVO)).toContain(TYPED);
+    await waitFor("l'editor col testo battuto", () => shows(TYPED));
+  });
+
+  it("T63 · un'eliminazione da fuori mentre la finestra chiede la ritira, e il testo resta da ricreare", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const { closing, asking } = await closeAndAsk();
+    await (host.module.api as unknown as { invokeCommand: (id: string, args: unknown) => Promise<unknown> })
+      .invokeCommand("note.trash", { doc: BENVENUTO });
+
+    await waitFor("la finestra chiusa dall'eliminazione", () => asking().length === 0);
+    await closing;
+    await settle();
+    // Niente da riaprire: il file non c'è più, e il testo è nell'avviso con «Ricrea».
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expect(sessions.inspect(BENVENUTO)).toBeUndefined();
+    const { t } = await import("../i18n/strings");
+    const recreate = t("document.recreate");
+    expect([...document.querySelectorAll("button")].some((button) => button.textContent?.trim() === recreate)).toBe(true);
+  });
+
+  it("T63 · se il salvataggio dopo il cambio da fuori rifiuta, la nota torna lo stesso e niente resta appeso", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const { closing, paneId, asking } = await closeAndAsk();
+    const flush = vi.spyOn(sessions, "flush").mockRejectedValueOnce(new Error("la porta è caduta"));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      repair();
+      host.writeFromOutside(BENVENUTO, "# Benvenuto\nda fuori\n");
+      await waitFor("la finestra chiusa dal cambio da fuori", () => asking().length === 0);
+      await expect(closing).resolves.toBeUndefined();
+      await settle();
+      expect(flush).toHaveBeenCalledWith(BENVENUTO);
+      expect(logged).toHaveBeenCalled();
+      expect(layouts.panesWithDoc(BENVENUTO)).toEqual([paneId]);
+      expect(sessions.text(BENVENUTO)).toContain(TYPED);
+    } finally {
+      flush.mockRestore();
+      logged.mockRestore();
+    }
+  });
+
+  it("T63 · chiusa con Ctrl+W mentre si scriveva, la nota che torna ha il fuoco nel testo", async () => {
+    await unsavedNote();
+    await open("Altra.md");
+    await open(BENVENUTO);
+    await waitFor("l'editor col testo battuto", () => shows(TYPED));
+    const controller = await import("../state/document-controller");
+    const editor = mountedTextEditors().find((view) => view.state.doc.toString().includes(TYPED))!;
+    editor.focus();
+    expect(editor.hasFocus).toBe(true);
+    const asking = await closeQuestions();
+    const closing = controller.closeCurrentTab();
+    await waitFor("la finestra «Modifiche non salvate»", () => asking().length === 1);
+    asking()[0]!.querySelector<HTMLButtonElement>('button[data-action="cancel"]')!.click();
+    await closing;
+    await settle();
+    const back = mountedTextEditors().find((view) => view.state.doc.toString().includes(TYPED));
+    expect(back?.hasFocus).toBe(true);
   });
 
   it("R02 · un ripristino dalla cronologia tiene il testo e dice che il file è cambiato", async () => {
