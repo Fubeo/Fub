@@ -1,4 +1,4 @@
-# 0241 — La lavagna si scrive in operazioni con la forma breve
+# 0244 — La lavagna si scrive in operazioni con la forma breve
 
 - **Stato:** accolta
 - **Data:** 2026-11-14
