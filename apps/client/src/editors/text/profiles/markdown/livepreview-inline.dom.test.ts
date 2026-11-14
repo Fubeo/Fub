@@ -5,7 +5,7 @@ import { type DecorationSet, EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
-import { liveInlineVisited, livePreview, pageIconsChanged } from "./livepreview";
+import { liveGapLines, liveInlineVisited, livePreview, pageIconsChanged } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 
 // Le decorazioni in riga della Live (segni nascosti, stili, pastiglie) si
@@ -169,5 +169,39 @@ describe("le decorazioni in riga della Live a ogni battuta", () => {
     }
     view.dispatch({ selection: { anchor: text.indexOf("compito 1") } });
     expect(liveInlineVisited(view)).toBeLessThanOrEqual(12);
+  });
+});
+
+// Le righe vuote dopo un blocco reso si nascondono: il campo le sa in tutta la
+// nota, la vista ne prende soltanto quelle del suo tratto, e le disegna.
+describe("le righe nascoste dopo i blocchi resi", () => {
+  it("sono quelle del campo nel tratto della vista, anche dopo una battuta", () => {
+    const section = (i: number) => `## Sezione ${i}\n\n| a | b |\n| --- | --- |\n| ${i} | ${i + 1} |\n\n\nTesto ${i}.\n`;
+    const text = Array.from({ length: 300 }, (_, i) => section(i)).join("\n");
+    const view = liveView(text, "mai", text.indexOf("Testo 150"));
+    const check = () => {
+      const all = liveGapLines(view.state)!;
+      expect(all.size).toBeGreaterThan(300);
+      const { from, to } = view.viewport;
+      const expected: number[] = [];
+      all.between(from, to, (start) => {
+        expected.push(start);
+      });
+      const drawn: number[] = [];
+      for (const source of view.state.facet(EditorView.decorations)) {
+        if (typeof source !== "function") continue;
+        (source(view) as DecorationSet).between(0, view.state.doc.length, (start, _end, value) => {
+          if (value.spec.class === "cm-markdown-gap") drawn.push(start);
+        });
+      }
+      expect(expected.length).toBeGreaterThan(0);
+      expect(drawn).toEqual(expected);
+      const lines = [...view.contentDOM.querySelectorAll(".cm-line.cm-markdown-gap")].map((line) => view.posAtDOM(line));
+      expect(lines).toEqual(expected.filter((at) => at >= view.visibleRanges[0]!.from && at <= view.visibleRanges[view.visibleRanges.length - 1]!.to));
+    };
+    check();
+    view.dispatch({ changes: { from: view.state.selection.main.head, insert: "a" }, selection: { anchor: view.state.selection.main.head + 1 } });
+    finish(view);
+    check();
   });
 });

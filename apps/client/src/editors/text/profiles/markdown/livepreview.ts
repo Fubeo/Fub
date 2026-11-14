@@ -2048,9 +2048,49 @@ class CandidateMark extends RangeValue {
 }
 
 /// Il campo dei blocchi resi di una Live, per chi conta il suo lavoro.
-const liveBlocksField = Facet.define<StateField<{ readonly visited: number }>, StateField<{ readonly visited: number }> | undefined>({
+interface LiveBlocksValue {
+  readonly visited: number;
+  readonly gaps: DecorationSet;
+}
+const liveBlocksField = Facet.define<StateField<LiveBlocksValue>, StateField<LiveBlocksValue> | undefined>({
   combine: (fields) => fields[0],
 });
+
+/// Le righe vuote che la Live nasconde dopo i blocchi resi, in tutto il
+/// documento: la vista ne disegna soltanto quelle del suo tratto. Per i test.
+export function liveGapLines(state: EditorState): DecorationSet | null {
+  const field = state.facet(liveBlocksField);
+  return field ? state.field(field, false)?.gaps ?? null : null;
+}
+
+/// Le righe nascoste del tratto della vista. Fuori dal tratto non si
+/// disegnano, e una decorazione di riga non cambia le altezze che la vista
+/// stima: così il confronto delle decorazioni a ogni aggiornamento resta
+/// proporzionale al tratto, non a tutte le righe nascoste della nota.
+const gapLines = ViewPlugin.fromClass(class {
+  decorations: DecorationSet = Decoration.none;
+  private source: DecorationSet | null = null;
+  constructor(view: EditorView) {
+    this.build(view);
+  }
+  update(update: ViewUpdate): void {
+    if (update.viewportChanged || liveGapLines(update.state) !== this.source) this.build(update.view);
+  }
+  private build(view: EditorView): void {
+    const source = liveGapLines(view.state);
+    this.source = source;
+    if (!source) {
+      this.decorations = Decoration.none;
+      return;
+    }
+    const { from, to } = view.viewport;
+    const ranges: Range<Decoration>[] = [];
+    source.between(from, to, (start, _end, value) => {
+      ranges.push(value.range(start));
+    });
+    this.decorations = Decoration.set(ranges);
+  }
+}, { decorations: (value) => value.decorations });
 
 /// Quanti blocchi l'ultimo aggiornamento della Live ha guardato: tutti quando
 /// si rifà da capo, quelli vicini alla modifica e alla selezione per una
@@ -2216,6 +2256,11 @@ export function livePreview(
     /// quelli che la modifica o la selezione toccano.
     candidates: RangeSet<CandidateMark>;
     decorations: DecorationSet;
+    /// Le righe vuote nascoste dopo i blocchi resi (`cm-markdown-gap`). Non
+    /// stanno con i blocchi: CodeMirror confronta a ogni aggiornamento, punto
+    /// per punto, tutte le decorazioni del campo, e queste righe la vista le
+    /// prende soltanto nel suo tratto (`gapLines`).
+    gaps: DecorationSet;
     /// `false`: la resa di un documento grande appena aperto, fin dove il
     /// parser è arrivato (`renderMarkdownStatePrefix`); `parseRest` la
     /// completa senza fermare la pagina.
@@ -2441,14 +2486,18 @@ export function livePreview(
     const { source, blocks: all } = document;
     const marks: Range<CandidateMark>[] = [];
     const ranges: Range<Decoration>[] = [];
+    const gaps: Range<Decoration>[] = [];
     for (let index = 0; index < all.length; index++) {
       const candidate = candidateOf(all[index]!, all[index + 1] ?? null, source, policy);
       if (!candidate) continue;
       const { decision, ranges: own } = decide(state, document, candidate.from, candidate.to, candidate.value);
       marks.push(candidate.value.decided(decision).range(candidate.from, candidate.to));
-      for (const range of own) ranges.push(range);
+      for (const range of own) (range.value === GAP ? gaps : ranges).push(range);
     }
-    return { document, candidates: RangeSet.of(marks), decorations: Decoration.set(ranges, true), complete, visited: all.length };
+    return {
+      document, candidates: RangeSet.of(marks), decorations: Decoration.set(ranges, true), gaps: Decoration.set(gaps, true),
+      complete, visited: all.length,
+    };
   }
   /// L'aggiornamento di una battuta o di un cursore che si muove: candidati e
   /// decorazioni di prima, spostati dalla modifica, e rifatti soltanto dove
@@ -2457,10 +2506,11 @@ export function livePreview(
   function patchBlocks(value: RenderState, transaction: Transaction, document: MarkdownDocument): RenderState | null {
     const { state } = transaction;
     const changed = transaction.docChanged;
-    let { candidates, decorations } = value;
+    let { candidates, decorations, gaps } = value;
     const added: Range<CandidateMark>[] = [];
     const dropped = new Set<CandidateMark>();
     const ranges: Range<Decoration>[] = [];
+    const gapRanges: Range<Decoration>[] = [];
     const cleared: { from: number; to: number }[] = [];
     let visited = 0;
     if (changed) {
@@ -2468,6 +2518,7 @@ export function livePreview(
       if (!span) return null;
       candidates = candidates.map(transaction.changes);
       decorations = decorations.map(transaction.changes);
+      gaps = gaps.map(transaction.changes);
       const { source } = document;
       const policy = state.facet(liveReveal);
       const { blocks: near, following } = blocksAround(document, span.from, span.to);
@@ -2482,7 +2533,7 @@ export function livePreview(
         if (!candidate) continue;
         const { decision, ranges: own } = decide(state, document, candidate.from, candidate.to, candidate.value);
         added.push(candidate.value.decided(decision).range(candidate.from, candidate.to));
-        for (const range of own) ranges.push(range);
+        for (const range of own) (range.value === GAP ? gapRanges : ranges).push(range);
       }
       cleared.push({ from, to });
     }
@@ -2505,7 +2556,7 @@ export function livePreview(
         if (decision === mark.decision) return;
         dropped.add(mark);
         added.push(mark.decided(decision).range(from, to));
-        for (const range of own) ranges.push(range);
+        for (const range of own) (range.value === GAP ? gapRanges : ranges).push(range);
         cleared.push({ from, to });
       });
     }
@@ -2513,10 +2564,12 @@ export function livePreview(
     for (const { from, to } of cleared) {
       candidates = candidates.update({ filterFrom: from, filterTo: to, filter: (_from, _to, mark) => !dropped.has(mark) });
       decorations = decorations.update({ filterFrom: from, filterTo: to, filter: (start) => start < from || start >= to });
+      gaps = gaps.update({ filterFrom: from, filterTo: to, filter: (start) => start < from || start >= to });
     }
     candidates = candidates.update({ add: added, sort: true });
     decorations = decorations.update({ add: ranges, sort: true });
-    return { document, candidates, decorations, complete: value.complete, visited };
+    gaps = gaps.update({ add: gapRanges, sort: true });
+    return { document, candidates, decorations, gaps, complete: value.complete, visited };
   }
   /// Le decorazioni in riga dei tratti `ranges` (i visibili, o i loro pezzi
   /// da rifare): quelle che `computeDecorations` vi trova, fuori dai blocchi
@@ -2817,7 +2870,7 @@ export function livePreview(
     }
   });
   return [
-    theme, figureTheme(), footnoteLabelsField, blocks, parseRest, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), edgeSpaces(), keepMarks(), signsOnFirstLetter(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
+    theme, figureTheme(), footnoteLabelsField, blocks, gapLines, parseRest, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), edgeSpaces(), keepMarks(), signsOnFirstLetter(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
     propertiesExtension(),
     callbacks.linkCard ? linkCardGestures(callbacks.linkCard) : [],
   ];

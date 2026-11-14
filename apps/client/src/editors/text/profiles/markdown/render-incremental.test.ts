@@ -13,7 +13,7 @@ import {
   renderPatch,
   visitedBlocks,
 } from "./render";
-import { livePreview, liveBlocksVisited } from "./livepreview";
+import { livePreview, liveBlocksVisited, liveGapLines } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import type { MarkdownDocument } from "./render-types";
 
@@ -311,7 +311,10 @@ function liveState(doc: string, selection: EditorSelection, policy: RevealPolicy
 /// widget per il suo tipo e la sorgente del suo blocco.
 function decorationsOf(state: EditorState): string[] {
   const found: string[] = [];
-  for (const source of state.facet(EditorView.decorations)) {
+  // Le righe nascoste dopo i blocchi la vista le prende dal campo, soltanto
+  // nel suo tratto: qui contano tutte.
+  const gaps = liveGapLines(state);
+  for (const source of [...state.facet(EditorView.decorations), ...(gaps ? [gaps] : [])]) {
     if (typeof source === "function") continue;
     (source as DecorationSet).between(0, state.doc.length, (from, to, value) => {
       const widget = value.spec.widget as { constructor: { name: string }; block?: { source: string } } | undefined;
