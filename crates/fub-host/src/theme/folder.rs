@@ -184,6 +184,16 @@ fn read_folder(root: &Utf8Path, folder: String) -> Result<ThemeFolderCheck, Them
     })
 }
 
+/// Da quale parte un'installazione da cartella non è riuscita a leggere.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeSide {
+    /// La cartella scelta da chi scrive il tema.
+    Folder,
+    /// La cartella dei temi di Fub.
+    Themes,
+}
+
 /// Perché un'installazione da cartella non tocca ciò che c'è già nella
 /// cartella dei temi di Fub: non è un tema che si possa sostituire, e
 /// nemmeno un posto dove scrivere. Non è un difetto della cartella scelta.
@@ -234,10 +244,20 @@ pub enum ThemeFolderInstall {
         version: String,
     },
     /// Ciò che c'è nella cartella dei temi di Fub non si tocca: `why` dice
-    /// perché, `path` è dove (la cartella dei temi o il tema installato), da
-    /// mostrare. Niente è stato toccato; il tema da installare è quello del
+    /// perché, `path` è dove, da mostrare. `installed` dice se è il tema già
+    /// installato con lo stesso id (che resta com'era) o la cartella dei temi
+    /// stessa. Niente è stato toccato; il tema da installare è quello del
     /// controllo, che la shell conosce già.
-    Blocked { why: ThemeBlock, path: String },
+    Blocked {
+        why: ThemeBlock,
+        path: String,
+        installed: bool,
+    },
+    /// Una lettura non è riuscita, e niente è cambiato: la cartella scelta
+    /// (`folder`, con gli stessi byte del controllo: non è cambiata, il disco
+    /// non la legge) o la cartella dei temi di Fub (`themes`). Non è un
+    /// guasto di scrittura. `error` è il guasto così com'è, mai da mostrare.
+    Unreadable { side: ThemeSide, error: PluginError },
     /// Il nuovo non è entrato e il vecchio non è tornato al suo nome. `kept`
     /// è il nome della cartella, dentro `themes/`, dove il vecchio è rimasto
     /// (una `.tmp-old-…` che la scansione salta e che niente cancella da
@@ -308,32 +328,8 @@ pub fn install_theme_from_folder(
         }
     };
     sweep_dropped(&themes_root);
-    let dest = themes_root.path.join(id);
-    let present = match themes_root.dir.symlink_metadata(id) {
-        Ok(metadata) if metadata.file_type().is_symlink() => {
-            return ThemeFolderInstall::Blocked {
-                why: ThemeBlock::Link,
-                path: dest.to_string(),
-            }
-        }
-        Ok(metadata) => Some(metadata.is_dir()),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-        Err(error) => return failed(ThemeError::Io(format!("{dest}: {error}")), &dest),
-    };
-    if let Some(is_dir) = present {
-        match installed_theme(&dest, id, is_dir) {
-            Installed::Blocked(why) => {
-                return ThemeFolderInstall::Blocked {
-                    why,
-                    path: dest.to_string(),
-                }
-            }
-            Installed::Revoked => return outcome(manifest, Outcome::Revoked),
-            Installed::Live { version } if !replace => {
-                return outcome(manifest, Outcome::Collision(version))
-            }
-            Installed::Live { .. } => {}
-        }
+    if let Err(stop) = probe(&themes_root, manifest, replace) {
+        return *stop;
     }
 
     let source = checked.source.as_path();
@@ -348,7 +344,17 @@ pub fn install_theme_from_folder(
     let staging = themes_root.path.join(&staging_name);
     let result = match copy_tree_digest(&source_root, &staging) {
         Ok(copied) if copied == checked.digest => {
-            publish_folder(&themes_root, &staging_name, stamp, manifest, present)
+            before_publish();
+            // La copia può essere durata a lungo: la sonda si rifà sotto lo
+            // stesso lucchetto della revoca e dell'aggiornamento, così ciò
+            // che si sostituisce è ciò che si è appena letto.
+            let _guard = lock_theme(config_dir, id);
+            match probe(&themes_root, manifest, replace) {
+                Ok(present) => {
+                    publish_folder(&themes_root, &staging_name, stamp, manifest, present)
+                }
+                Err(stop) => *stop,
+            }
         }
         Ok(_) => ThemeFolderInstall::Changed,
         Err(error) => stopped(error, source, &checked.digest),
@@ -357,6 +363,68 @@ pub fn install_theme_from_folder(
         let _ = themes_root.dir.remove_dir_all(&staging_name);
     }
     result
+}
+
+/// La sonda di ciò che c'è sotto l'id, senza scrivere: `Ok` con `None` se
+/// non c'è niente, `Some(is_dir)` se c'è un tema che si può sostituire;
+/// `Err` con l'esito che ferma (ciò che blocca, la revoca, la collisione
+/// senza `replace`).
+fn probe(
+    themes_root: &files::ThemesRoot,
+    manifest: &ThemeManifest,
+    replace: bool,
+) -> Result<Option<bool>, Box<ThemeFolderInstall>> {
+    let id = manifest.id.as_str();
+    let dest = themes_root.path.join(id);
+    let present = match themes_root.dir.symlink_metadata(id) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(Box::new(ThemeFolderInstall::Blocked {
+                why: ThemeBlock::Link,
+                path: dest.to_string(),
+                installed: true,
+            }))
+        }
+        Ok(metadata) => Some(metadata.is_dir()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => {
+            return Err(Box::new(failed(
+                ThemeError::Io(format!("{dest}: {error}")),
+                &dest,
+            )))
+        }
+    };
+    if let Some(is_dir) = present {
+        match installed_theme(&dest, id, is_dir) {
+            Installed::Blocked(why) => {
+                return Err(Box::new(ThemeFolderInstall::Blocked {
+                    why,
+                    path: dest.to_string(),
+                    installed: true,
+                }))
+            }
+            Installed::Revoked => return Err(Box::new(outcome(manifest, Outcome::Revoked))),
+            Installed::Live { version } if !replace => {
+                return Err(Box::new(outcome(manifest, Outcome::Collision(version))))
+            }
+            Installed::Live { .. } => {}
+        }
+    }
+    Ok(present)
+}
+
+// Un aggancio fra la copia e la pubblicazione, per i test di unità della
+// corsa con la revoca: esiste solo lì.
+#[cfg(test)]
+thread_local! {
+    static BEFORE_PUBLISH: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn before_publish() {
+    #[cfg(test)]
+    if let Some(hook) = BEFORE_PUBLISH.with(|hook| hook.borrow_mut().take()) {
+        hook();
+    }
 }
 
 /// Gli esiti che nominano il tema da installare.
@@ -449,6 +517,7 @@ fn blocked(error: ThemeError, at: &Utf8Path) -> Result<ThemeFolderInstall, Theme
     Ok(ThemeFolderInstall::Blocked {
         why,
         path: at.to_string(),
+        installed: false,
     })
 }
 
@@ -462,6 +531,12 @@ fn failed(error: ThemeError, root: &Utf8Path) -> ThemeFolderInstall {
         ThemeError::Changed(_) => ThemeFolderInstall::Changed,
         ThemeError::Disk { cause, .. } => ThemeFolderInstall::Failed {
             cause,
+            error: error.into(),
+        },
+        // Dalla parte di Fub ogni scrittura è `Disk`: un `Io` è una lettura
+        // (la sonda, la staging appena scritta).
+        ThemeError::Io(_) => ThemeFolderInstall::Unreadable {
+            side: ThemeSide::Themes,
             error: error.into(),
         },
         error => match refusal(error, root) {
@@ -488,6 +563,13 @@ fn stopped(error: ThemeError, source: &Utf8Path, digest: &str) -> ThemeFolderIns
         }
         _ => error,
     };
+    if let ThemeError::Io(_) = error {
+        // La cartella ha ancora i byte del controllo: il disco non la legge.
+        return ThemeFolderInstall::Unreadable {
+            side: ThemeSide::Folder,
+            error: error.into(),
+        };
+    }
     let root = source
         .canonicalize_utf8()
         .unwrap_or_else(|_| source.to_owned());
@@ -622,5 +704,109 @@ mod grant_tests {
         ));
         assert_eq!(grant.take("sha256:bb"), None);
         assert!(grant.take("sha256:aa").is_some());
+    }
+}
+
+#[cfg(test)]
+mod race_tests {
+    use super::*;
+
+    fn folder(version: &str) -> (tempfile::TempDir, Utf8PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        std::fs::write(
+            root.join("manifest.json"),
+            format!(
+                r#"{{"id": "acme.carta", "name": "Carta", "version": "{version}", "engine": "theme-2", "lights": ["light", "dark"], "asset_namespace": "theme://acme.carta/", "motion": ["opacity", "transform"]}}"#
+            ),
+        )
+        .unwrap();
+        std::fs::write(root.join("sheet-light.css"), "body { color: #333; }\n").unwrap();
+        std::fs::write(root.join("sheet-dark.css"), "body { color: #ddd; }\n").unwrap();
+        std::fs::write(
+            root.join("skin.css"),
+            format!(".v{} {{}}\n", version.replace('.', "-")),
+        )
+        .unwrap();
+        (dir, root)
+    }
+
+    fn checked(root: &Utf8Path) -> CheckedThemeFolder {
+        let ThemeFolderCheck::Ready {
+            digest, manifest, ..
+        } = check_theme_folder(root).unwrap()
+        else {
+            panic!("the folder passes the check");
+        };
+        CheckedThemeFolder {
+            source: root.to_owned(),
+            digest,
+            manifest,
+            replace_only: false,
+        }
+    }
+
+    /// Il catalogo revoca il tema installato mentre la copia della cartella
+    /// nuova è in corso: «Sostituisci» non cancella la revoca. La sonda si
+    /// rifà, sotto il lucchetto della revoca, subito prima dello scambio.
+    #[test]
+    fn a_revocation_during_the_copy_is_not_replaced() {
+        let config_dir = tempfile::tempdir().unwrap();
+        let config = Utf8PathBuf::from_path_buf(config_dir.path().to_path_buf()).unwrap();
+        let (_old_dir, old) = folder("0.3.2");
+        let (_new_dir, new) = folder("0.4.0");
+        assert!(matches!(
+            install_theme_from_folder(&config, &checked(&old), false),
+            ThemeFolderInstall::Installed { .. }
+        ));
+        let revoke = config.clone();
+        BEFORE_PUBLISH.with(|hook| {
+            *hook.borrow_mut() = Some(Box::new(move || {
+                set_theme_revoked(&revoke, "acme.carta", true).unwrap();
+            }));
+        });
+        let outcome = install_theme_from_folder(&config, &checked(&new), true);
+        BEFORE_PUBLISH.with(|hook| hook.borrow_mut().take());
+        assert!(
+            matches!(outcome, ThemeFolderInstall::Revoked { .. }),
+            "{outcome:?}"
+        );
+        assert!(theme_revoked(&config, "acme.carta"));
+        let themes = crate::config::themes_dir(&config);
+        assert_eq!(
+            std::fs::read_to_string(themes.join("acme.carta/skin.css")).unwrap(),
+            ".v0-3-2 {}\n"
+        );
+        let names: Vec<_> = std::fs::read_dir(&themes)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect();
+        assert_eq!(names, vec!["acme.carta".to_string()], "no staging left");
+    }
+
+    /// Una lettura della cartella che non riesce, con la cartella che ha
+    /// ancora i byte del controllo, è `Unreadable` dalla parte della
+    /// cartella: non un guasto di scrittura, e non una cartella cambiata.
+    #[test]
+    fn a_read_that_fails_on_an_unchanged_folder_is_unreadable() {
+        let (_dir, root) = folder("0.4.0");
+        let digest = theme_tree_digest(&root).unwrap();
+        let outcome = stopped(
+            ThemeError::Io(format!("{root}/skin.css: Input/output error")),
+            &root,
+            &digest,
+        );
+        assert!(
+            matches!(
+                outcome,
+                ThemeFolderInstall::Unreadable {
+                    side: ThemeSide::Folder,
+                    ..
+                }
+            ),
+            "{outcome:?}"
+        );
+        let outcome = stopped(ThemeError::Io("gone".into()), &root, "sha256:altro");
+        assert_eq!(outcome, ThemeFolderInstall::Changed);
     }
 }

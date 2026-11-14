@@ -2486,7 +2486,11 @@ impl Host {
     /// chiamata lo consuma. Una collisione lo rinnova solo per la risposta
     /// «Sostituisci» (`replace`), una volta; il «no», un rifiuto del cancello
     /// della shell o una scelta nuova lo scartano
-    /// ([`Host::forget_theme_folder`]). Senza permesso, o con un'impronta che
+    /// ([`Host::forget_theme_folder`]). Dopo una collisione una chiamata
+    /// senza `replace` vale come quel «no»: consuma il permesso e risponde
+    /// `Unchecked`, e un «Sostituisci» che arriva dopo trova `Unchecked` anche
+    /// lui. La persona sceglie di nuovo la cartella, come dopo un «no» nella
+    /// finestra. Senza permesso, o con un'impronta che
     /// non è la sua, l'esito è `Unchecked` e niente si scrive; un'impronta
     /// diversa non tocca il permesso di un controllo più recente.
     ///
@@ -2506,6 +2510,7 @@ impl Host {
             return Ok(crate::theme::ThemeFolderInstall::Unchecked);
         };
         if pending.replace_only && !replace {
+            // Il «no» alla domanda: il permesso preso non torna.
             return Ok(crate::theme::ThemeFolderInstall::Unchecked);
         }
         let outcome = crate::theme::install_theme_from_folder(dir, &pending, replace);

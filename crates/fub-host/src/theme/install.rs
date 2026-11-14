@@ -387,6 +387,7 @@ pub fn update_theme(
     if expected_id == SERIES_ID {
         return Err(ThemeError::InvalidId(expected_id.into()));
     }
+    let _guard = lock_theme(config_dir, expected_id);
     let source_id = source.file_name().unwrap_or_default();
     let source_root = canonical_theme_root(source, source_id)?;
     let manifest = ThemeBundle::load(&source_root)?.manifest;
@@ -522,6 +523,7 @@ pub fn theme_revoked(config_dir: &Utf8Path, id: &str) -> bool {
 
 pub fn set_theme_revoked(config_dir: &Utf8Path, id: &str, revoked: bool) -> Result<(), ThemeError> {
     check_id(id)?;
+    let _guard = lock_theme(config_dir, id);
     let root = canonical_theme_root(&crate::config::themes_dir(config_dir).join(id), id)?;
     let previous_pointer = read_theme_pointer(&root, id)?;
     let mut pointer = previous_pointer.clone().unwrap_or(ThemePointer {
@@ -548,6 +550,7 @@ pub fn set_theme_revoked_with_provenance(
     provenance: serde_json::Value,
 ) -> Result<(), ThemeError> {
     check_id(id)?;
+    let _guard = lock_theme(config_dir, id);
     let incoming = provenance_generation(&provenance)?;
     let root = canonical_theme_root(&crate::config::themes_dir(config_dir).join(id), id)?;
     let previous_pointer = read_theme_pointer(&root, id)?;
@@ -596,6 +599,7 @@ pub fn uninstall_theme(config_dir: &Utf8Path, id: &str) -> Result<(), ThemeError
     if id == SERIES_ID {
         return Err(ThemeError::InvalidId(SERIES_ID.to_string()));
     }
+    let _guard = lock_theme(config_dir, id);
     let themes_dir = crate::config::themes_dir(config_dir);
     let Some(root) = open_themes_root(config_dir, id)? else {
         return Err(ThemeError::Io(format!(

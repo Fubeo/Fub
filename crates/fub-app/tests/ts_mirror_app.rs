@@ -356,14 +356,25 @@ fn expected() -> Value {
             to_value(fub_host::theme::ThemeFolderInstall::Blocked {
                 why: fub_host::theme::ThemeBlock::Pointer,
                 path: "/home/chi/.config/fub/themes/acme.carta".into(),
+                installed: true,
             }),
             to_value(fub_host::theme::ThemeFolderInstall::Blocked {
                 why: fub_host::theme::ThemeBlock::Link,
                 path: "/home/chi/.config/fub/themes/acme.carta".into(),
+                installed: true,
             }),
             to_value(fub_host::theme::ThemeFolderInstall::Blocked {
                 why: fub_host::theme::ThemeBlock::Layout,
                 path: "/home/chi/.config/fub/themes".into(),
+                installed: false,
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Unreadable {
+                side: fub_host::theme::ThemeSide::Folder,
+                error: fub_abi::PluginError::Io("/home/chi/temi/carta/skin.css: Input/output error".into()),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Unreadable {
+                side: fub_host::theme::ThemeSide::Themes,
+                error: fub_abi::PluginError::Io("/home/chi/.config/fub/themes: Input/output error".into()),
             }),
             to_value(fub_host::theme::ThemeFolderInstall::Refused {
                 refusal: fub_host::theme::ThemeFolderRefusal::Traversal {

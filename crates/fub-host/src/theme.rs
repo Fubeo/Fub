@@ -127,6 +127,7 @@ mod discover;
 mod files;
 mod folder;
 mod install;
+mod lock;
 mod pointer;
 
 use assets::{asset_inventory, asset_listing, validate_asset_limits, MAX_THEME_ASSET_BYTES};
@@ -140,12 +141,14 @@ use files::{
 pub use folder::{
     check_theme_folder, install_theme_from_folder, CheckedThemeFolder, ThemeBlock,
     ThemeFolderCheck, ThemeFolderGrant, ThemeFolderInstall, ThemeFolderLight, ThemeFolderRefusal,
+    ThemeSide,
 };
 pub use install::{
     install_theme, install_theme_checked, set_theme_revoked, set_theme_revoked_with_provenance,
     theme_catalog_provenance, theme_revocation_provenance, theme_revoked, uninstall_theme,
     update_theme,
 };
+use lock::lock_theme;
 pub use pointer::theme_tree_digest;
 use pointer::{
     copy_tree_digest, publish_theme_pointer, read_theme_pointer, write_theme_pointer, ThemePointer,

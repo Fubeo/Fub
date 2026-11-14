@@ -1964,6 +1964,7 @@ fn assert_blocked(
             ThemeFolderInstall::Blocked {
                 why,
                 path: path.to_string(),
+                installed: true,
             },
             "replace: {replace}"
         );
@@ -2077,6 +2078,7 @@ fn a_symlink_in_the_themes_folder_is_blocked_not_refused() {
             ThemeFolderInstall::Blocked {
                 why: ThemeBlock::Link,
                 path: themes.to_string(),
+                installed: false,
             }
         );
     }
@@ -2100,6 +2102,7 @@ fn a_themes_folder_that_is_a_file_is_blocked() {
         ThemeFolderInstall::Blocked {
             why: ThemeBlock::Layout,
             path: themes.to_string(),
+            installed: false,
         }
     );
     assert_eq!(std::fs::read_to_string(&themes).unwrap(), "not a folder");

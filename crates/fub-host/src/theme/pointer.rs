@@ -225,25 +225,10 @@ fn tree_digest(root: &Utf8Path, sink: Option<&Utf8Path>) -> Result<String, Theme
             }
             None => None,
         };
-        let mut buffer = [0u8; 64 * 1024];
-        let mut total = 0u64;
-        loop {
-            let read = file
-                .read(&mut buffer)
-                .map_err(|e| ThemeError::Io(format!("{path}: {e}")))?;
-            if read == 0 {
-                break;
-            }
-            digest.update(&buffer[..read]);
-            total += read as u64;
-            if let Some((out, to)) = copy.as_mut() {
-                out.write_all(&buffer[..read])
-                    .map_err(|and| ThemeError::disk(to.as_path(), and))?;
-            }
-        }
-        if total != size {
-            return Err(ThemeError::Changed(path.to_string()));
-        }
+        let sink = copy
+            .as_mut()
+            .map(|(out, to)| (out as &mut dyn Write, to.as_path()));
+        framed_copy(&mut file, size, &mut digest, sink, path)?;
     }
     let bytes = digest.finish();
     let mut hex = String::with_capacity(71);
@@ -253,4 +238,69 @@ fn tree_digest(root: &Utf8Path, sink: Option<&Utf8Path>) -> Result<String, Theme
         write!(hex, "{byte:02x}").expect("hex");
     }
     Ok(hex)
+}
+
+/// Legge `size` byte da `from` nell'impronta e, se c'è, nella copia. Si ferma
+/// **appena** i byte superano `size`: un file che cresce mentre lo si copia
+/// non riempie la staging. Uno che finisce prima, o va oltre, è
+/// [`ThemeError::Changed`].
+fn framed_copy(
+    from: &mut impl Read,
+    size: u64,
+    digest: &mut ring::digest::Context,
+    mut sink: Option<(&mut dyn Write, &Utf8Path)>,
+    path: &Utf8Path,
+) -> Result<(), ThemeError> {
+    let mut buffer = [0u8; 64 * 1024];
+    let mut total = 0u64;
+    loop {
+        let read = from
+            .read(&mut buffer)
+            .map_err(|e| ThemeError::Io(format!("{path}: {e}")))?;
+        if read == 0 {
+            break;
+        }
+        total += read as u64;
+        if total > size {
+            return Err(ThemeError::Changed(path.to_string()));
+        }
+        digest.update(&buffer[..read]);
+        if let Some((out, to)) = sink.as_mut() {
+            out.write_all(&buffer[..read])
+                .map_err(|and| ThemeError::disk(*to, and))?;
+        }
+    }
+    if total != size {
+        return Err(ThemeError::Changed(path.to_string()));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod framed_copy_tests {
+    use super::*;
+
+    /// Un lettore molto più lungo della misura, come un file che cresce: la
+    /// copia si ferma al primo blocco oltre la misura dichiarata, e scrive al più
+    /// quella misura.
+    #[test]
+    fn a_file_that_grows_while_copied_stops_at_its_size() {
+        let mut endless = io::repeat(b'x').take(1 << 20);
+        let mut digest = ring::digest::Context::new(&ring::digest::SHA256);
+        let mut out = Vec::new();
+        let path = Utf8Path::new("/tema/crescente.png");
+        let result = framed_copy(&mut endless, 10, &mut digest, Some((&mut out, path)), path);
+        assert!(matches!(result, Err(ThemeError::Changed(_))), "{result:?}");
+        assert!(out.len() <= 10, "{}", out.len());
+    }
+
+    /// Un file più corto della misura dichiarata è cambiato anche lui.
+    #[test]
+    fn a_file_shorter_than_its_size_is_changed() {
+        let mut short: &[u8] = b"abc";
+        let mut digest = ring::digest::Context::new(&ring::digest::SHA256);
+        let path = Utf8Path::new("/tema/corto.css");
+        let result = framed_copy(&mut short, 10, &mut digest, None, path);
+        assert!(matches!(result, Err(ThemeError::Changed(_))), "{result:?}");
+    }
 }
