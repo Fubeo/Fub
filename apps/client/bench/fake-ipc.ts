@@ -59,6 +59,7 @@ import type {
   Span,
   UiNode,
   ViewSpec,
+  ViewUpdate,
 } from "../src/host/contract";
 import { inShellLanguage } from "./fake-english";
 import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
@@ -1759,7 +1760,9 @@ else if (AVVIO === "guasto") host.fault("initialVault", "il ponte non risponde")
 /// guidarlo da fuori: emettere un evento del kernel, guastare una porta,
 /// frenarla. Sono i tre gesti che una scena non può fare cliccando — un avviso
 /// non ha un bottone che lo produca — e senza di loro tre scene su diciotto non
-/// esisterebbero.
+/// esisterebbero. Il quarto, la scrittura da fuori, è del giro sul banco: un
+/// evento emesso da qui ha l'origine di una scrittura della shell, e la shell
+/// lo prenderebbe per l'eco di un suo salvataggio; quello del watcher no.
 ///
 /// Sta su `window` e non in un `export` perché chi la chiama è Playwright, cioè
 /// codice che non condivide il grafo dei moduli con la pagina.
@@ -1774,6 +1777,10 @@ declare global {
       emit: typeof host.emit;
       fault: typeof host.fault;
       throttle: typeof host.throttle;
+      /// Riscrive un file come l'altra applicazione o il sync: i byte
+      /// cambiano e l'evento arriva dal watcher (il giro sul banco,
+      /// `bench/giro/guasti.mjs`).
+      writeFromOutside: typeof host.writeFromOutside;
       calls: typeof host.calls;
       light: "dark" | "light";
       /// Solo nello Scrittoio: dichiara le voci di un tema (vedi sotto).
@@ -1786,6 +1793,7 @@ globalThis.window.bench = {
   emit: host.emit,
   fault: host.fault,
   throttle: host.throttle,
+  writeFromOutside: host.writeFromOutside,
   calls: host.calls,
   light: LIGHT,
 };
@@ -1875,6 +1883,62 @@ if (ON_SHELL) {
 }
 
 const behind = host.module.api;
+
+/// **Il cestino vero del finto**, fuori dalla scena dei tre file: ciò che il
+/// finto host ha cestinato (`note.trash`) nella forma del provider `trash`
+/// (fub-features, `trash.rs`), una riga per voce col nome della nota e
+/// «Ripristina», e sotto «Svuota il cestino». Serve al giro sul banco
+/// (`bench/giro/guasti.mjs`), che cestina una nota, la ritrova qui e la
+/// rimette. Il finto non sa quando una voce è stata cestinata: la riga non ha
+/// la data che il provider scrive sotto il nome. Vuoto, il pannello resta lo
+/// stato vuoto della scenografia, quello che le foto conoscono.
+function liveTrash(): UiNode | undefined {
+  if (TRASH_FULL) return undefined;
+  const entries = host.trash();
+  if (entries.length === 0) return undefined;
+  const pageName = (id: string) => id.slice(id.lastIndexOf("/") + 1).replace(/\.md$/, "");
+  return {
+    node: "stack",
+    dir: "column",
+    gap: 1,
+    children: [
+      {
+        node: "list",
+        items: entries.map(({ id, original }): UiNode => ({
+          node: "stack",
+          key: id,
+          dir: "row",
+          gap: 1,
+          children: [
+            { node: "list_item", title: pageName(original), subtitle: null, action: null, selected: false },
+            { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
+          ],
+        })),
+      },
+      { node: "button", label: "Svuota il cestino", intent: "danger", action: { action: "empty", payload: null } },
+    ],
+  };
+}
+
+/// I comandi che cambiano il cestino del finto.
+const TRASH_COMMANDS: ReadonlySet<string> = new Set(["note.trash", "trash.os", "folder.trash", "trash.restore", "trash.empty"]);
+
+/// Un'azione sul cestino vero del finto: «Ripristina» passa dal comando
+/// `trash.restore` e porta alla nota, come il provider; «Svuota» dal comando
+/// `trash.empty`. `undefined` se il cestino è quello della scenografia.
+async function liveTrashAction(action: string, payload: unknown): Promise<ViewUpdate | undefined> {
+  if (TRASH_FULL || host.trash().length === 0) return undefined;
+  if (action === "restore") {
+    const { entry, original } = payload as { entry: string; original: string };
+    await api.invokeCommand("trash.restore", { entry });
+    return { kind: "navigate", doc_id: original };
+  }
+  if (action === "empty") {
+    await api.invokeCommand("trash.empty");
+    return { kind: "replace", root: liveTrash() ?? TREES.trash! };
+  }
+  return undefined;
+}
 
 /// Le specie di query che rispondono testo dell'host: le altre portano il
 /// vault, che non si traduce.
@@ -1981,7 +2045,16 @@ export const api: typeof host.module.api = {
       const payload = treeScenePreview(doc, (args as { size?: unknown }).size === "large" ? "large" : "small");
       if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
     }
-    return behind.invokeCommand(id, args, ...rest);
+    const outcome = await behind.invokeCommand(id, args, ...rest);
+    // Dopo un comando che cambia il cestino il kernel vero rifà l'indice, e il
+    // provider `trash` si fa ridisegnare a ogni giro dell'indice (`refresh`
+    // di `trash.rs`). Il finto l'indice non l'ha: i due eventi partono qui,
+    // perché l'albero ritrovi la nota rimessa e il pannello si aggiorni.
+    if (TRASH_COMMANDS.has(id)) {
+      host.emit({ type: "index_updated" });
+      host.emit({ type: "view_invalidated", view: "trash", instance: null });
+    }
+    return outcome;
   },
   queryIndex: (q) => timedQuery(q, async () => {
     // Le note con un'icona (`icon:` nel frontmatter), come le legge l'indice:
@@ -2029,7 +2102,7 @@ export const api: typeof host.module.api = {
   listViews: async (vault) => inShellLanguage(await behind.listViews(vault)),
   listCommands: async (vault) => inShellLanguage(await behind.listCommands(vault)),
   renderView: (view, instance, params) => {
-    const tree = treeOf(view);
+    const tree = (view === "trash" ? liveTrash() : undefined) ?? treeOf(view);
     return tree ? Promise.resolve(tree) : behind.renderView(view, instance, params);
   },
   // Un'azione di una view della scenografia non fa niente e **lo dice
@@ -2038,11 +2111,13 @@ export const api: typeof host.module.api = {
   // far morire una foto. Tranne il salto dell'indice: come il provider vero,
   // segna scelto il titolo a cui si è andati, e il banco del moto vede la
   // sagoma della voce scelta scorrere.
-  viewAction: (view, instance, params, action, payload, fields) => {
+  viewAction: async (view, instance, params, action, payload, fields) => {
+    const live = view === "trash" ? await liveTrashAction(action, payload) : undefined;
+    if (live) return live;
     const tree = treeOf(view);
     if (!tree) return behind.viewAction(view, instance, params, action, payload, fields);
     const root = view === "outline" && action === "goto" ? choose(tree, payload) : tree;
-    return Promise.resolve({ kind: "replace" as const, root });
+    return { kind: "replace" as const, root };
   },
   listBundles: () => Promise.resolve(inShellLanguage(BUNDLE)),
   knownVaults: () => Promise.resolve(KNOWN_VAULTS),
