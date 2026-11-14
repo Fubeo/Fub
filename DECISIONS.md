@@ -2304,3 +2304,14 @@ La più recente in cima: data · piano · decisione · perché.
   come i menu, e NaN vale la misura di serie. Lo specchio copre solo l'intervallo,
   il test Rust copre il resto. Resta aperto per T16: `PenTool` ripete `InkTool`
   di `fub-canvas-core` (stesse stringhe), da non convertire a mano due volte.
+- 2026-11-14 · T17 · Nel json `fub:ink` resta com'è nel file: la lettura
+  decodificata è `describe::ink_read`, nel campo `ink_read` del payload di
+  canvas.read, così una scheda presa dal modello e rimandata con `set` non perde
+  l'inchiostro (test byte per byte). Niente rifiuto difensivo in `set`/`add_card`:
+  un tratto che sembra una lettura non si distingue da uno vero che non si disegna.
+  max_chars con json taglia solo i punti di `ink_read` (`points_omitted`), il
+  modello mai. Nel `code` `add_strokes` porta un livello solo se il testo scritto
+  da Fub è uguale a quello del file; il resto sta nella scheda intera. `kind_of_path`
+  tiene il taglio al `#` (vettori di canvas-layout), il fit dell'inchiostro no,
+  come nella GUI: scritto in canvas-ink.md. Revisione media: un solo difetto (la
+  descrizione di max_chars), corretto.
