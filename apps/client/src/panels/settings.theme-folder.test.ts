@@ -255,9 +255,14 @@ describe("installare un tema da una cartella", () => {
 
     await vi.waitFor(() => expect(dialog()?.getAttribute("role")).toBe("alertdialog"));
     expect(dialog()!.querySelector(".kit-dialog-title")!.textContent).toBe("«Carta» non si è installato");
-    expect(dialog()!.querySelector(".kit-dialog-description")!.textContent).toBe(
-      "Il nuovo non è entrato e il vecchio non è tornato al suo posto: I/O error: kept in /config/themes/.tmp-old-1-2. Il vecchio è ancora sul disco, dove dice il messaggio, e la cartella /temi/carta resta dov'è: installalo di nuovo.",
+    const body = dialog()!.querySelector(".kit-dialog-description")!.textContent!;
+    expect(body).toBe(
+      "Il nuovo non è entrato, e il vecchio non è tornato al suo posto: è rimasto nella cartella dei temi, col nome «.tmp-old-1-2». La cartella /temi/carta resta dov'è: installalo di nuovo.",
     );
+    // Il guasto del disco dell'host (inglese, coi percorsi della macchina) non
+    // arriva nella finestra: la dice la shell, col nome tipizzato.
+    expect(body).not.toContain(failing.replaceError.message);
+    expect(body).not.toContain("I/O error");
     dialog()!.querySelector<HTMLButtonElement>('[data-action="ok"]')!.click();
     await vi.waitFor(() => expect(dialog()).toBeNull());
     expect(catalogOptions()).toEqual([]);

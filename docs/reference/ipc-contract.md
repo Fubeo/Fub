@@ -148,7 +148,7 @@ sono `ThemeFolderInstall`, unione con il campo `outcome`:
 |---|---|---|
 | `installed` | `id`, `name`, `version`, `replaced` | il tema è installato; `replaced` se ha preso il posto di uno con lo stesso id |
 | `collision` | `id`, `name`, `version`, `installed_version` | un id già installato, niente toccato; `installed_version` è `null` se quello installato non si legge |
-| `replace_failed` | `id`, `name`, `version`, `error` | con `replace`, il nuovo non è entrato e il vecchio non è tornato al suo nome; `error` (un `PluginError`) dice dove è rimasto |
+| `replace_failed` | `id`, `name`, `version`, `kept`, `error` | con `replace`, il nuovo non è entrato e il vecchio non è tornato al suo nome; `kept` è il nome della cartella, dentro quella dei temi, dove è rimasto (la shell lo dice con le sue parole); `error` (un `PluginError`) è il guasto del disco, per il log e la diagnosi copiata |
 
 Una sostituzione che si ferma rimettendo il vecchio al suo posto è un errore,
 non un esito: il disco è com'era.

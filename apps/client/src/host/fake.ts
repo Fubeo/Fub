@@ -669,7 +669,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!folder.replaceLost) throw folder.replaceError;
       themes.splice(at, 1);
       for (const key of Object.keys(themePayloads)) if (key.startsWith(`${id}:`)) delete themePayloads[key];
-      return { outcome: "replace_failed", id, name, version, error: folder.replaceError };
+      return { outcome: "replace_failed", id, name, version, kept: ".tmp-old-1-2", error: folder.replaceError };
     }
     if (at >= 0) {
       themes.splice(at, 1);

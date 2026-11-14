@@ -317,6 +317,7 @@ fn expected() -> Value {
                 id: "acme.carta".into(),
                 name: "Carta".into(),
                 version: "0.4.0".into(),
+                kept: ".tmp-old-4242-1700000000000000000".into(),
                 error: PluginError::Io("I/O error: No space left on device".into()),
             }),
         ],

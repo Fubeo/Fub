@@ -172,8 +172,10 @@ export interface ThemeFolderCheck {
  *   cartella nuova è già controllata. `installed_version` è `null` quando
  *   quello installato non si legge più;
  * - `replace_failed`: il nuovo si è fermato e il vecchio non è riuscito a
- *   tornare al suo nome (`error` dice dove è rimasto, dentro la cartella dei
- *   temi); la cartella sorgente resta dov'è.
+ *   tornare al suo nome. `kept` è il nome della cartella, dentro la cartella
+ *   dei temi, dove il vecchio è rimasto: la shell lo dice con le sue parole.
+ *   `error` è il guasto del disco così com'è, per «Copia la diagnosi» e il
+ *   log, mai da mostrare; la cartella sorgente resta dov'è.
  */
 export type ThemeFolderInstall =
   | { outcome: "installed"; id: string; name: string; version: string; replaced: boolean }
@@ -184,7 +186,7 @@ export type ThemeFolderInstall =
       version: string;
       installed_version: string | null;
     }
-  | { outcome: "replace_failed"; id: string; name: string; version: string; error: PluginError };
+  | { outcome: "replace_failed"; id: string; name: string; version: string; kept: string; error: PluginError };
 
 export interface VaultInfo {
   root: string;

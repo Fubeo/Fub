@@ -138,7 +138,8 @@ la copia nuova si verifica accanto, il vecchio si sposta da parte (una
 cartella `.tmp-` che la scansione salta), il nuovo prende il suo nome, e solo
 allora il vecchio si cancella. Se il nuovo non entra il vecchio torna, ed è un
 errore; `replace_failed` resta per il caso in cui il vecchio non riesce a
-tornare, e l'errore dice dove è rimasto.
+tornare, e il suo campo `kept` dice sotto quale nome è rimasto nella cartella
+dei temi. Niente la cancella da sola.
 
 Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount. Una
 preview dalle Impostazioni non cambia la scelta persistente: annullamento o

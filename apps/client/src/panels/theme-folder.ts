@@ -321,7 +321,9 @@ function tellReplaceFailed(
   outcome: Extract<ThemeFolderInstall, { outcome: "replace_failed" }>,
   wasInUse: boolean,
 ): Promise<void> {
-  const body = t("settings.themes.replace_failed.body", { reason: errorText(outcome.error), folder: source });
+  // Il guasto del disco (`outcome.error`) è in inglese e porta percorsi della
+  // macchina: la finestra dice l'esito con le sue parole, e il nome tipizzato.
+  const body = t("settings.themes.replace_failed.body", { kept: outcome.kept, folder: source });
   const dialog = openDialog<void>({
     title: t("settings.themes.replace_failed.title", { name: outcome.name }),
     description: wasInUse ? `${body} ${t("settings.themes.replace_failed.in_use")}` : body,

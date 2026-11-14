@@ -1922,7 +1922,7 @@ describe("mirror TS↔Rust", () => {
         outcome: true, id: true, name: true, version: true, installed_version: true,
       }),
       replace_failed: keysOf<Extract<ThemeFolderInstall, { outcome: "replace_failed" }>>({
-        outcome: true, id: true, name: true, version: true, error: true,
+        outcome: true, id: true, name: true, version: true, kept: true, error: true,
       }),
     };
     for (const sample of samples) {
@@ -1934,6 +1934,8 @@ describe("mirror TS↔Rust", () => {
           expect(sample.installed_version === null || typeof sample.installed_version === "string").toBe(true);
           break;
         case "replace_failed":
+          // Un nome dentro la cartella dei temi, non un percorso.
+          expect(sample.kept).toMatch(/^\.tmp-old-[^/\\]+$/);
           touchPluginErrorKind(sample.error.kind);
           expect(Object.keys(sample.error).sort()).toEqual(RECORD_KEYS.PluginError);
           break;

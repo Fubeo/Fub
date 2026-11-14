@@ -126,9 +126,9 @@ fn install_theme_internal(
             let lost = swap_theme(&themes_root, &staging_name, &theme.manifest.id, stamp)?;
             return match lost {
                 None => Ok(()),
-                Some(error) => {
+                Some((error, kept)) => {
                     if let Some(folder) = folder.as_deref_mut() {
-                        folder.old_lost = true;
+                        folder.kept = Some(kept);
                     }
                     Err(error)
                 }
@@ -157,12 +157,13 @@ pub fn install_theme(config_dir: &Utf8Path, source: &Utf8Path) -> Result<Utf8Pat
 
 /// Come pubblica un'installazione da cartella: i byte attesi (il `digest` di
 /// [`check_theme_folder`]) e se un tema con lo stesso id si sostituisce.
-/// `old_lost` torna vero solo se la sostituzione ha tolto il vecchio e non è
-/// riuscita a rimetterlo.
+/// `kept` torna col nome della cartella (dentro `themes/`) dove il vecchio è
+/// rimasto, solo se la sostituzione lo ha spostato e non è riuscita a
+/// rimetterlo.
 struct FolderPublish<'a> {
     digest: &'a str,
     replace: bool,
-    old_lost: bool,
+    kept: Option<String>,
 }
 
 // Uno scambio guastato apposta, per i test dell'unico esito che il disco non
@@ -187,15 +188,16 @@ fn swap_fault(step: u8) -> io::Result<()> {
 /// perderlo: il vecchio si sposta da parte (una cartella `.tmp-` che la
 /// scansione salta), il nuovo prende il suo nome, e solo allora il vecchio si
 /// cancella. Se il nuovo non entra il vecchio torna al suo posto e l'errore è
-/// `Err`. `Ok(Some(_))` è il caso che resta: il nuovo non è entrato e il
-/// vecchio non è tornato. Il vecchio non è perso: resta nella cartella da
-/// parte dentro `themes/`, e l'errore dice dove, perché il chiamante lo dica.
+/// `Err`. `Ok(Some((errore, nome)))` è il caso che resta: il nuovo non è
+/// entrato e il vecchio non è tornato. Il vecchio non è perso: resta nella
+/// cartella da parte dentro `themes/`, e `nome` è il suo nome lì dentro,
+/// perché il chiamante lo dica.
 fn swap_theme(
     themes_root: &files::ThemesRoot,
     staging_name: &str,
     id: &str,
     stamp: u128,
-) -> Result<Option<ThemeError>, ThemeError> {
+) -> Result<Option<(ThemeError, String)>, ThemeError> {
     let dest = themes_root.path.join(id);
     let staging = themes_root.path.join(staging_name);
     let aside_name = format!("{STAGING_PREFIX}old-{}-{stamp}", std::process::id());
@@ -213,9 +215,12 @@ fn swap_theme(
             let failed = ThemeError::Io(format!("{dest}: {and}"));
             match swap_fault(2).and_then(|()| std::fs::rename(&aside, &dest)) {
                 Ok(()) => Err(failed),
-                Err(back) => Ok(Some(ThemeError::Io(format!(
-                    "{dest}: {and}; the previous theme could not go back ({back}) and is kept in {aside}"
-                )))),
+                Err(back) => Ok(Some((
+                    ThemeError::Io(format!(
+                        "{dest}: {and}; the previous theme could not go back ({back}) and is kept in {aside}"
+                    )),
+                    aside_name,
+                ))),
             }
         }
     }
@@ -293,13 +298,16 @@ pub enum ThemeFolderInstall {
         version: String,
         installed_version: Option<String>,
     },
-    /// Il nuovo non è entrato e il vecchio non è tornato al suo nome: `error`
-    /// dice perché, e dove il vecchio è rimasto (dentro `themes/`, da parte).
-    /// La cartella sorgente resta dov'è.
+    /// Il nuovo non è entrato e il vecchio non è tornato al suo nome. `kept`
+    /// è il nome della cartella, dentro `themes/`, dove il vecchio è rimasto
+    /// (una `.tmp-old-…` che la scansione salta): è ciò che la shell dice, con
+    /// le sue parole. `error` è il guasto del disco così com'è, per il log e
+    /// per chi copia la diagnosi. La cartella sorgente resta dov'è.
     ReplaceFailed {
         id: String,
         name: String,
         version: String,
+        kept: String,
         error: PluginError,
     },
 }
@@ -361,7 +369,7 @@ pub fn install_theme_from_folder(
     let mut publish = FolderPublish {
         digest,
         replace,
-        old_lost: false,
+        kept: None,
     };
     match install_theme_internal(config_dir, &source_root, None, Some(&mut publish)) {
         Ok(_) => Ok(ThemeFolderInstall::Installed {
@@ -370,13 +378,16 @@ pub fn install_theme_from_folder(
             version,
             replaced: present,
         }),
-        Err(error) if publish.old_lost => Ok(ThemeFolderInstall::ReplaceFailed {
-            id,
-            name,
-            version,
-            error: error.into(),
-        }),
-        Err(error) => Err(error),
+        Err(error) => match publish.kept {
+            Some(kept) => Ok(ThemeFolderInstall::ReplaceFailed {
+                id,
+                name,
+                version,
+                kept,
+                error: error.into(),
+            }),
+            None => Err(error),
+        },
     }
 }
 
@@ -796,7 +807,11 @@ mod folder_swap_tests {
         let (config_dir, result) = replace_with_fault(2);
         let config = Utf8Path::from_path(config_dir.path()).unwrap();
         let Ok(ThemeFolderInstall::ReplaceFailed {
-            id, version, error, ..
+            id,
+            version,
+            kept,
+            error,
+            ..
         }) = result
         else {
             panic!("expected ReplaceFailed, got {result:?}");
@@ -809,6 +824,9 @@ mod folder_swap_tests {
             .map(|entry| entry.unwrap().file_name().into_string().unwrap())
             .find(|name| name.starts_with(&format!("{STAGING_PREFIX}old-")))
             .expect("the old theme is set aside");
+        // Il nome tipizzato, relativo a `themes/`: è ciò che la shell dice.
+        assert_eq!(kept, aside);
+        assert!(!kept.contains('/'), "{kept}");
         assert!(format!("{error:?}").contains(&aside), "{error:?}");
         assert_eq!(
             std::fs::read_to_string(themes.join(&aside).join("skin.css")).unwrap(),

@@ -1457,7 +1457,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.replace.ok": "Sostituisci",
 "settings.themes.replace_failed.title": "«{name}» non si è installato",
 "settings.themes.replace_failed.body":
-  "Il nuovo non è entrato e il vecchio non è tornato al suo posto: {reason}. Il vecchio è ancora sul disco, dove dice il messaggio, e la cartella {folder} resta dov'è: installalo di nuovo.",
+  "Il nuovo non è entrato, e il vecchio non è tornato al suo posto: è rimasto nella cartella dei temi, col nome «{kept}». La cartella {folder} resta dov'è: installalo di nuovo.",
 "settings.themes.replace_failed.in_use": "Per ora torna Scrittoio.",
 "settings.themes.replace_failed.ok": "Ho capito",
 "settings.themes.diagnosis.title.one": "«{name}» è rifiutato: {n} motivo",
@@ -4672,7 +4672,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.replace.ok": "Replace",
 "settings.themes.replace_failed.title": "«{name}» was not installed",
 "settings.themes.replace_failed.body":
-  "The new one did not go in and the old one did not go back: {reason}. The old one is still on disk, where the message says, and the folder {folder} stays where it is: install it again.",
+  "The new one did not go in, and the old one did not go back to its place: it stayed in the themes folder, named «{kept}». The folder {folder} stays where it is: install it again.",
 "settings.themes.replace_failed.in_use": "For now Scrittoio is back.",
 "settings.themes.replace_failed.ok": "Got it",
 "settings.themes.diagnosis.title.one": "«{name}» is rejected: {n} reason",
