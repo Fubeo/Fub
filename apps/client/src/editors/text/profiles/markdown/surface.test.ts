@@ -123,6 +123,42 @@ describe("la superficie Markdown", () => {
     menu.remove();
     ed.destroy();
   });
+  it("cambiando modo il menu del testo aperto dall'editor si chiude: le sue voci non toccano l'editor nascosto", async () => {
+    const { showContextMenu } = await import("../../../../ui/menu");
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("testo");
+    view().focus();
+    const cut = vi.fn();
+    showContextMenu({ x: 10, y: 10 }, [{ label: "Taglia", run: cut }], { pointer: false });
+    const menu = document.getElementById("context-menu")!;
+    expect(menu.contains(document.activeElement)).toBe(true);
+
+    ed.setMode("reading");
+    // Il menu è chiuso: il fuoco è passato alla Lettura, e la voce non agisce.
+    expect(document.activeElement).toBe(reading());
+    menu.querySelector<HTMLElement>('[role="menuitem"]')?.click();
+    expect(cut).not.toHaveBeenCalled();
+    menu.remove();
+    ed.destroy();
+  });
+  it("cambiando modo non chiude un menu aperto da un'altra parte della finestra", async () => {
+    const { closeContextMenu, showContextMenu } = await import("../../../../ui/menu");
+    const { ed } = editor();
+    ed.buffer.setDoc("testo");
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    const other = vi.fn();
+    showContextMenu({ x: 10, y: 10 }, [{ label: "Rinomina", run: other }], { pointer: false });
+    const menu = document.getElementById("context-menu")!;
+    const item = document.activeElement;
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(item);
+    expect(menu.isConnected).toBe(true);
+    closeContextMenu();
+    outside.remove();
+    ed.destroy();
+  });
   it("cambiando modo con una finestra aperta sopra l'editor, la finestra tiene il fuoco; chiusa, va al modo nuovo", () => {
     const { ed, view, reading } = editor();
     ed.buffer.setDoc("testo");

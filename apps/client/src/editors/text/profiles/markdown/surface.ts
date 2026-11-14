@@ -28,6 +28,7 @@ import { notify } from "../../../../ui/notify";
 import { errorText } from "../../../../host/errors";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../../../platform/clipboard";
 import { closeSlashPalette, openSlashPalette, slashPaletteHolds } from "../../../../ui/palette";
+import { closeContextMenuFrom } from "../../../../ui/menu";
 import { redirectFocusReturn } from "../../../../ui/a11y";
 import type {
   BufferedSurface,
@@ -814,11 +815,26 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     if (hadFocus) take();
   }
 
+  /// L'elemento dove si scrive (il contenuto dell'editor), per chi deve
+  /// rendergli il fuoco più tardi; `null` a motore già chiuso.
+  function writingElement(): HTMLElement | null {
+    const found: { element: HTMLElement | null } = { element: null };
+    engine.runViewCommand((view) => {
+      found.element = view.contentDOM;
+      return false;
+    });
+    return found.element;
+  }
+
   function setMode(next: MarkdownMode): void {
     // Il fuoco segue il modo solo se era già della superficie: chi lo ha
     // fuori (la palette dei comandi, un altro riquadro) se lo tiene. Si
-    // guarda prima di chiudere il menu «/», che lo sposterebbe.
-    const hadFocus = ownsFocus();
+    // guarda prima di chiudere il menu «/», che lo sposterebbe. Il menu del
+    // testo aperto da qui si chiude: le sue voci (Taglia, Incolla, Trasforma)
+    // agirebbero sul modo di prima; se aveva il fuoco, il fuoco era nostro.
+    const ownedBefore = ownsFocus();
+    const menuHadFocus = closeContextMenuFrom(parent);
+    const hadFocus = ownedBefore || menuHadFocus;
     closeSlashPalette(parent);
     if (next === mode) return;
     readingPoint = null;
@@ -854,11 +870,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         });
       }
       // Si torna a scrivere dal cursore di prima, che la lettura non ha mosso.
-      let writing: HTMLElement | null = null;
-      engine.runViewCommand((view) => {
-        writing = view.contentDOM;
-        return false;
-      });
+      const writing = writingElement();
       if (writing) focusTo(writing, hadFocus, () => engine.focus());
       else if (hadFocus) engine.focus();
       return;

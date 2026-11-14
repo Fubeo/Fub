@@ -105,11 +105,17 @@ interface Trap {
   previous: HTMLElement | null;
 }
 
+/// La superficie intrappolata `root` è stata aperta da dentro `container`:
+/// sciogliendosi renderà il fuoco lì. Dice di chi è un menu montato fuori.
+export function focusReturnsInto(root: HTMLElement, container: HTMLElement): boolean {
+  return trapStack.some((trap) => trap.root === root && trap.previous !== null && container.contains(trap.previous));
+}
+
 /// Chi aveva il fuoco in `from` lo vuole adesso in `to`: ogni trappola aperta
 /// che, sciogliendosi, lo renderebbe dentro `from` lo rende a `to`. Serve a
 /// chi cambia sotto una superficie aperta (l'editor che passa alla Lettura
-/// mentre un suo menu o una finestra chiede): la superficie si tiene il fuoco
-/// finché è aperta, e chiusa non lo riporta su un elemento ormai nascosto.
+/// mentre una finestra chiede): la superficie si tiene il fuoco finché è
+/// aperta, e chiusa non lo riporta su un elemento ormai nascosto.
 export function redirectFocusReturn(from: HTMLElement, to: HTMLElement): void {
   for (const trap of trapStack) {
     if (trap.previous && trap.previous !== to && from.contains(trap.previous)) trap.previous = to;
