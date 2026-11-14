@@ -4,7 +4,11 @@
 // tastiera italiana Ctrl+Maiusc+5 è la percentuale anche se il tasto scrive
 // «%» soltanto con Maiusc. Annulla, ripeti, gli appunti e lo spostamento
 // restano della griglia. Le scorciatoie che in Excel aprono una finestra di
-// dialogo la chiedono alla shell (`shortcutDialog`).
+// dialogo la chiedono alla shell (`shortcutDialog`). Ctrl+D, Ctrl+R, Ctrl+«+»
+// e Ctrl+«−» si riconoscono come in ogni tabella (`tabella/keys.ts`); il
+// foglio li esegue coi comandi del suo catalogo.
+
+import { fillKey, structureKey } from "../../tabella/keys";
 
 export interface ShortcutCommand {
   readonly id: string;
@@ -41,8 +45,6 @@ const CONTROL: Readonly<Record<string, ShortcutCommand>> = {
   Digit5: plain("home.strikethrough"),
   Digit9: plain("home.hideRows"),
   Digit0: plain("home.hideColumns"),
-  KeyD: plain("edit.fillDown"),
-  KeyR: plain("edit.fillRight"),
 };
 
 /// Con Ctrl (o Cmd) e Maiusc, nei formati che Excel dà a queste scorciatoie.
@@ -99,11 +101,10 @@ export function shortcutDialog(event: KeyboardEvent, context: ShortcutContext): 
     if (event.code === "F2" && event.shiftKey) return dialog("note");
     return null;
   }
-  const plus = event.code === "NumpadAdd" || (event.shiftKey && event.code === "Equal");
-  const minus = event.code === "NumpadSubtract" || (!event.shiftKey && event.code === "Minus");
-  if (plus || minus) {
+  const structure = structureKey(event);
+  if (structure) {
     if (context.wholeRows || context.wholeColumns) return null;
-    return dialog(plus ? "insertCells" : "deleteCells");
+    return dialog(structure === "insert" ? "insertCells" : "deleteCells");
   }
   return (event.shiftKey ? CONTROL_SHIFT_DIALOGS : CONTROL_DIALOGS)[event.code] ?? null;
 }
@@ -115,13 +116,15 @@ export function shortcutCommand(event: KeyboardEvent, context: ShortcutContext):
   if (!control || event.altKey) return null;
   // Ctrl+«+» e Ctrl+«-»: in Excel inseriscono e tolgono righe o colonne
   // intere senza chiedere niente; su un intervallo chiedono come.
-  const plus = event.code === "NumpadAdd" || (event.shiftKey && event.code === "Equal");
-  const minus = event.code === "NumpadSubtract" || (!event.shiftKey && event.code === "Minus");
-  if (plus || minus) {
+  const structure = structureKey(event);
+  if (structure) {
+    const plus = structure === "insert";
     if (context.wholeRows) return plain(plus ? "home.insertRows" : "home.deleteRows");
     if (context.wholeColumns) return plain(plus ? "home.insertColumns" : "home.deleteColumns");
     return null;
   }
+  const fill = fillKey(event);
+  if (fill) return plain(fill === "down" ? "edit.fillDown" : "edit.fillRight");
   if (event.shiftKey && event.code === "Digit4") return code(context.currency);
   return (event.shiftKey ? CONTROL_SHIFT : CONTROL)[event.code] ?? null;
 }

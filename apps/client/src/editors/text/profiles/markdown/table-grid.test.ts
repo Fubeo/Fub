@@ -261,7 +261,7 @@ describe("la griglia", () => {
     expect(reading.items).toEqual([]);
   });
 
-  it("taglia dal menu svuota le celle che ha copiato, anche se la selezione si sposta prima degli appunti", async () => {
+  it("taglia dal menu segna le celle copiate, e l'incolla dopo le sposta in un passo", async () => {
     let release: () => void = () => {};
     const copied: string[] = [];
     const undeclare = declareClipboard((text) => {
@@ -269,7 +269,7 @@ describe("la griglia", () => {
       return new Promise<void>((resolve) => (release = resolve));
     });
     try {
-      const { grid, cell, writes } = mount(ROWS);
+      const { grid, root, cell, writes } = mount(ROWS);
       grid.focus({ row: 1, col: 0 });
       mouse(cell(1, 0), "contextmenu", { button: 2 });
       [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")]
@@ -279,7 +279,15 @@ describe("la griglia", () => {
       await Promise.resolve();
       await Promise.resolve();
       expect(copied).toEqual(["Ada\n"]);
-      expect(writes[writes.length - 1]!.rows).toEqual([["Nome", "Voto"], ["", "10"], ["Bea", "9"]]);
+      // Il taglio non svuota: segna, finché non si incolla.
+      expect(writes).toHaveLength(0);
+      expect(cell(1, 0).classList.contains("is-cut")).toBe(true);
+      const paste = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(paste, "clipboardData", { value: { getData: (type: string) => (type === "text/plain" ? "Ada\n" : "") } });
+      root.dispatchEvent(paste);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]!.rows).toEqual([["Nome", "Voto"], ["", "10"], ["Bea", "Ada"]]);
+      expect(cell(1, 0).classList.contains("is-cut")).toBe(false);
     } finally {
       undeclare();
     }

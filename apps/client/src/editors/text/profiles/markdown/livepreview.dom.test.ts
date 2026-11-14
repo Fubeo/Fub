@@ -333,12 +333,12 @@ describe("tabelle in Live", () => {
     }
   });
 
-  it("una riga aggiunta dalla griglia riscrive la tabella in forma canonica", () => {
+  it("una riga aggiunta dalla griglia riscrive la tabella incolonnata", () => {
     const { parent, engine, cleanup } = editorWith("|a|b|\n|---|---|\n|1|2|\n\nFine");
     try {
       const add = parent.querySelector<HTMLButtonElement>('.tb-add[data-add="row"]')!;
       add.click();
-      expect(engine.getDoc()).toBe("| a | b |\n| --- | --- |\n| 1 | 2 |\n|  |  |\n\nFine");
+      expect(engine.getDoc()).toBe("| a   | b   |\n| --- | --- |\n| 1   | 2   |\n|     |     |\n\nFine");
       expect(parent.querySelectorAll(".tb-grid tbody tr").length).toBe(3);
     } finally {
       cleanup();
