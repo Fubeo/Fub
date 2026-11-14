@@ -288,32 +288,35 @@ fn ids_with_no_card_in_the_board_are_ignored_and_the_counts_say_so() {
 }
 
 #[test]
-fn code_lists_the_cards_then_the_edges_with_x_and_y() {
+fn code_lists_the_cards_then_the_edges_in_short_form() {
     let ops = code(&board(SMALL), &DescribeOptions::default());
     let values: Vec<Value> = ops
         .iter()
         .map(|op| serde_json::to_value(op).unwrap())
         .collect();
+    // Le misure di nascita non si scrivono; x e y sì; il colore è il nome.
     assert_eq!(
         values,
         [
-            j!({"op": "add_card", "node": {"id": "t1", "type": "text", "x": 0, "y": 0,
-                "width": 320, "height": 160, "text": "Ciclo dell'acqua", "color": "5"}}),
-            j!({"op": "add_card", "node": {"id": "t2", "type": "text", "x": 368, "y": 0,
-                "width": 320, "height": 160, "text": "Evaporazione"}}),
-            j!({"op": "add_card", "node": {"id": "f1", "type": "file", "x": 0, "y": 184,
-                "width": 320, "height": 360, "file": "Scienze/nuvole.png"}}),
-            j!({"op": "connect", "edge": {"id": "e1", "fromNode": "t1", "toNode": "t2",
-                "toEnd": "arrow", "label": "usa"}}),
+            j!({"op": "add_card", "id": "t1", "text": "Ciclo dell'acqua", "x": 0, "y": 0,
+                "color": "cyan"}),
+            j!({"op": "add_card", "id": "t2", "text": "Evaporazione", "x": 368, "y": 0}),
+            j!({"op": "add_card", "id": "f1", "file": "Scienze/nuvole.png", "x": 0, "y": 184,
+                "width": 320}),
+            j!({"op": "connect", "id": "e1", "from": "t1", "to": "t2", "label": "usa"}),
         ]
     );
 }
 
 #[test]
-fn code_keeps_the_unknown_fields_of_a_card_and_an_edge() {
+fn code_writes_the_whole_card_when_a_field_has_no_short_form() {
     let canvas = board(
         r##"{
-          "nodes": [{"id":"a","type":"text","x":0,"y":0,"width":10,"height":10,"text":"a","xVendor":{"k":1}}],
+          "nodes": [
+            {"id":"a","type":"text","x":0,"y":0,"width":10,"height":10,"text":"a","xVendor":{"k":1}},
+            {"id":"b","type":"text","x":0,"y":0,"width":320,"height":160,"text":"b","color":"#ABCDEF"},
+            {"id":"g","type":"group","x":0,"y":0,"width":480,"height":320}
+          ],
           "edges": [{"id":"e","fromNode":"a","toNode":"a","xEdge":[true]}]
         }"##,
     );
@@ -321,8 +324,12 @@ fn code_keeps_the_unknown_fields_of_a_card_and_an_edge() {
         .iter()
         .map(|op| serde_json::to_value(op).unwrap())
         .collect();
+    // Un campo sconosciuto, un colore maiuscolo e un gruppo senza etichetta
+    // (la forma breve gli darebbe `""`) restano nella forma intera.
     assert_eq!(values[0]["node"]["xVendor"], j!({"k": 1}));
-    assert_eq!(values[1]["edge"]["xEdge"], j!([true]));
+    assert_eq!(values[1]["node"]["color"], "#ABCDEF");
+    assert_eq!(values[2]["node"]["type"], "group");
+    assert_eq!(values[3]["edge"]["xEdge"], j!([true]));
 }
 
 #[test]
@@ -330,9 +337,9 @@ fn code_with_ids_is_the_cards_asked_and_their_edges() {
     let canvas = board(SMALL);
     let ops = code(&canvas, &ids(&["t1", "t2"]));
     assert_eq!(ops.len(), 3);
-    assert!(matches!(ops[0], CanvasOp::AddCard { .. }));
-    assert!(matches!(ops[1], CanvasOp::AddCard { .. }));
-    assert!(matches!(ops[2], CanvasOp::Connect { .. }));
+    assert!(matches!(ops[0], CanvasOp::AddCard(_)));
+    assert!(matches!(ops[1], CanvasOp::AddCard(_)));
+    assert!(matches!(ops[2], CanvasOp::Connect(_)));
     let only_f1 = code(&canvas, &ids(&["f1"]));
     assert_eq!(only_f1.len(), 1);
 }

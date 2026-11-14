@@ -11,7 +11,8 @@
 //!
 //! Il modello di dopo resta valido: ogni scheda e ogni arco che
 //! un'operazione mette passa le regole di [`Canvas::validate`], e i limiti
-//! [`MAX_NODES`] e [`MAX_EDGES`] danno [`OpError::TooMany`]. `compile` si
+//! [`crate::model::MAX_NODES`] e [`crate::model::MAX_EDGES`] danno
+//! [`OpError::TooMany`]. `compile` si
 //! aspetta un modello di partenza valido, come quello che dà
 //! [`crate::parse`].
 //!
@@ -27,10 +28,15 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
-use crate::model::{
-    Canvas, CanvasEdge, CanvasError, CanvasNode, MAX_EDGES, MAX_NODES, MAX_SAFE_INTEGER,
-};
+use crate::model::{Canvas, CanvasEdge, CanvasError, CanvasNode, MAX_SAFE_INTEGER};
 use crate::patch::{self, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null};
+
+mod card;
+pub(crate) mod color;
+mod connect;
+
+pub use card::AddCardArgs;
+pub use connect::{AutoWord, ConnectArgs, Ends, SidePair, Sides};
 
 /// Un'operazione d'intento. La forma JSON ha il campo `op` per primo, in
 /// `snake_case`; un campo che l'operazione non conosce è un errore di
@@ -38,9 +44,9 @@ use crate::patch::{self, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CanvasOp {
-    /// Aggiunge una scheda in cima all'ordine. `node` è una scheda come nel
-    /// file; `id` è facoltativo (assente o `null`: lo dà il seme).
-    AddCard { node: Map<String, Value> },
+    /// Aggiunge una scheda in cima all'ordine: la scheda come nel file
+    /// (`node`), o la forma breve. Le regole sono in `ops/card.rs`.
+    AddCard(AddCardArgs),
     /// Sposta le schede `ids` di `dx`, `dy`. Un gruppo si sposta da solo: le
     /// schede dentro restano dove sono, come sulla tela.
     Move {
@@ -58,9 +64,9 @@ pub enum CanvasOp {
         #[serde(deserialize_with = "saturating_integer")]
         height: i64,
     },
-    /// Aggiunge un arco in fondo alla lista. `edge` è un arco come nel file;
-    /// `id` è facoltativo come in `add_card`.
-    Connect { edge: Map<String, Value> },
+    /// Aggiunge un arco in fondo alla lista: l'arco come nel file (`edge`), o
+    /// la forma breve fra due schede. Le regole sono in `ops/connect.rs`.
+    Connect(ConnectArgs),
     /// Toglie schede e archi. Gli archi che toccano una scheda tolta vanno
     /// via prima, nella stessa operazione.
     Remove { ids: Vec<String> },
@@ -81,10 +87,10 @@ impl CanvasOp {
     /// variante nuova senza nome non compila.
     pub fn name(&self) -> &'static str {
         match self {
-            Self::AddCard { .. } => "add_card",
+            Self::AddCard(_) => "add_card",
             Self::Move { .. } => "move",
             Self::Resize { .. } => "resize",
-            Self::Connect { .. } => "connect",
+            Self::Connect(_) => "connect",
             Self::Remove { .. } => "remove",
             Self::Set { .. } => "set",
             Self::Reorder { .. } => "reorder",
@@ -199,6 +205,9 @@ struct Compiler {
     /// Le posizioni degli archi all'inizio della serie di `remove-edge` in
     /// corso, come `run_start` per le schede.
     edge_run_start: Option<HashMap<String, usize>>,
+    /// L'ultima scheda messa in fondo alla lista automatica di `add_card`: la
+    /// prossima va sotto di lei, se è ancora nel modello.
+    auto_last: Option<String>,
 }
 
 impl Compiler {
@@ -217,15 +226,16 @@ impl Compiler {
             ids: IdSource::new(seed),
             run_start: None,
             edge_run_start: None,
+            auto_last: None,
         }
     }
 
     fn op(&mut self, index: usize, op: &CanvasOp) -> Result<(), OpError> {
         let patches = match op {
-            CanvasOp::AddCard { node } => self.add_card(index, node)?,
+            CanvasOp::AddCard(card) => self.add_card(index, card)?,
             CanvasOp::Move { ids, dx, dy } => self.move_nodes(index, ids, *dx, *dy)?,
             CanvasOp::Resize { id, width, height } => self.resize(index, id, *width, *height)?,
-            CanvasOp::Connect { edge } => self.connect(index, edge)?,
+            CanvasOp::Connect(link) => self.connect(index, link)?,
             CanvasOp::Remove { ids } => self.remove(index, ids)?,
             CanvasOp::Set { id, fields } => self.set(index, id, fields)?,
             CanvasOp::Reorder { ids } => self.reorder(index, ids)?,
@@ -275,58 +285,37 @@ impl Compiler {
     }
 
     /// L'id di un elemento nuovo: quello dato, se è libero, o il prossimo
-    /// libero del seme.
+    /// libero del seme. Un `id` che non è un testo non si legge.
     fn claim_id(&mut self, index: usize, given: Option<&Value>) -> Result<String, OpError> {
-        let id = match given {
-            None | Some(Value::Null) => loop {
-                let id = self.ids.next_id();
-                if !self.taken.contains(&id) {
-                    break id;
-                }
-            },
-            Some(Value::String(id)) => {
-                if self.taken.contains(id) {
-                    return Err(OpError::DuplicateId {
-                        index,
-                        id: id.clone(),
-                    });
-                }
-                id.clone()
-            }
-            Some(_) => {
-                return Err(OpError::Invalid {
-                    index,
-                    reason: "`id` must be a string".to_owned(),
-                })
-            }
-        };
-        Ok(id)
+        match given {
+            None | Some(Value::Null) => Ok(self.fresh_id()),
+            Some(Value::String(id)) => self.claim_text(index, id),
+            Some(_) => Err(OpError::Invalid {
+                index,
+                reason: "`id` must be a string".to_owned(),
+            }),
+        }
     }
 
-    fn add_card(
-        &mut self,
-        index: usize,
-        node: &Map<String, Value>,
-    ) -> Result<Vec<CanvasPatch>, OpError> {
-        if self.working.nodes.len() >= MAX_NODES {
-            return Err(OpError::TooMany {
+    /// Il prossimo id del seme che non è preso.
+    fn fresh_id(&mut self) -> String {
+        loop {
+            let id = self.ids.next_id();
+            if !self.taken.contains(&id) {
+                return id;
+            }
+        }
+    }
+
+    /// Un id dato a mano: `DuplicateId` se è già preso.
+    fn claim_text(&mut self, index: usize, id: &str) -> Result<String, OpError> {
+        if self.taken.contains(id) {
+            return Err(OpError::DuplicateId {
                 index,
-                what: "nodes",
-                limit: MAX_NODES,
+                id: id.to_owned(),
             });
         }
-        let id = self.claim_id(index, node.get("id"))?;
-        let mut fields = node.clone();
-        fields.insert("id".to_owned(), Value::String(id.clone()));
-        let node: CanvasNode = from_fields(index, "node", fields)?;
-        check_node(index, &node)?;
-        self.taken.insert(id.clone());
-        self.created.push(id);
-        Ok(vec![CanvasPatch::UpsertNode {
-            before: None,
-            after: node,
-            at: None,
-        }])
+        Ok(id.to_owned())
     }
 
     fn move_nodes(
@@ -362,32 +351,6 @@ impl Compiler {
         Ok(upsert_node_patch(&self.working, &node)
             .into_iter()
             .collect())
-    }
-
-    fn connect(
-        &mut self,
-        index: usize,
-        edge: &Map<String, Value>,
-    ) -> Result<Vec<CanvasPatch>, OpError> {
-        if self.working.edges.len() >= MAX_EDGES {
-            return Err(OpError::TooMany {
-                index,
-                what: "edges",
-                limit: MAX_EDGES,
-            });
-        }
-        let id = self.claim_id(index, edge.get("id"))?;
-        let mut fields = edge.clone();
-        fields.insert("id".to_owned(), Value::String(id.clone()));
-        let edge: CanvasEdge = from_fields(index, "edge", fields)?;
-        self.check_edge(index, &edge)?;
-        self.taken.insert(id.clone());
-        self.created.push(id);
-        Ok(vec![CanvasPatch::UpsertEdge {
-            before: None,
-            after: edge,
-            at: None,
-        }])
     }
 
     /// Toglie schede e archi: prima gli archi (quelli nominati e quelli che
@@ -734,4 +697,37 @@ fn saturating_integer<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64,
     }
 
     deserializer.deserialize_any(Saturating)
+}
+
+/// Lo stesso di [`saturating_integer`], o assente: `null` vale come assente (R7).
+fn saturating_option<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<i64>, D::Error> {
+    #[derive(Deserialize)]
+    struct Saturated(#[serde(deserialize_with = "saturating_integer")] i64);
+
+    Ok(Option::<Saturated>::deserialize(deserializer)?.map(|Saturated(value)| value))
+}
+
+/// Un motivo di rifiuto di un'operazione di forma breve, con la sua posizione.
+fn refuse(index: usize, reason: impl Into<String>) -> OpError {
+    OpError::Invalid {
+        index,
+        reason: reason.into(),
+    }
+}
+
+/// Un valore calcolato dal nucleo (un posto, una misura) come intero del
+/// modello. Un valore non intero, o fuori dai limiti del modello, non entra.
+fn whole(index: usize, value: f64) -> Result<i64, OpError> {
+    let bound = MAX_SAFE_INTEGER as f64;
+    if value.is_finite() && value.fract() == 0.0 && value.abs() <= bound {
+        // Dentro ±(2^53−1) un `f64` intero è esatto: il cast non arrotonda.
+        #[allow(clippy::cast_possible_truncation)]
+        let integer = value as i64;
+        Ok(integer)
+    } else {
+        Err(refuse(
+            index,
+            "a position or a size is not a whole number within the model limits",
+        ))
+    }
 }

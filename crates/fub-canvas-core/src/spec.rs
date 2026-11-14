@@ -15,6 +15,7 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 
 use crate::model::{Canvas, CanvasError};
+use crate::ops::color;
 
 /// Quanto può differire un nome sbagliato da quello giusto, perché sia un
 /// suggerimento: la distanza di Levenshtein al più di così.
@@ -71,6 +72,12 @@ pub enum FieldKind {
     Object,
     /// Una lista di liste di numeri, `[[x, y], …]`.
     Points,
+    /// Un colore di scheda o di arco: un nome, il numero da 1 a 6, o `#rrggbb`.
+    Color,
+    /// I lati di un arco: `"auto"`, o un oggetto con `from` e `to`, ognuno un lato.
+    Sides,
+    /// Due numeri, `[w, h]`.
+    Pair,
     /// Un valore qualunque.
     Any,
 }
@@ -86,19 +93,125 @@ const fn required(name: &'static str, kind: FieldKind, doc_it: &'static str) -> 
     }
 }
 
+/// Un campo facoltativo senza valore di serie. `null` vale come assente.
+const fn optional(name: &'static str, kind: FieldKind, doc_it: &'static str) -> FieldSpec {
+    FieldSpec {
+        name,
+        kind,
+        required: false,
+        default: None,
+        doc_it,
+    }
+}
+
+/// I lati di una scheda che sta accanto a un'altra.
+const SIDES: &[&str] = &["top", "right", "bottom", "left"];
+/// I tipi di una scheda nella forma breve.
+const KINDS: &[&str] = &["text", "file", "link", "group"];
+/// Le punte di un arco nella forma breve.
+const ENDS: &[&str] = &["arrow", "none", "both"];
+
 /// Le operazioni del nucleo, una voce per variante di [`CanvasOp`], nello
 /// stesso ordine. Un'operazione nuova entra qui nello stesso task.
 pub const OPS: &[OpSpec] = &[
     OpSpec {
         name: "add_card",
-        summary_it: "Aggiunge una scheda in cima all'ordine.",
-        fields: &[required(
-            "node",
-            FieldKind::Node,
-            "Una scheda come nel file. `id` è facoltativo: se manca lo dà il seme.",
-        )],
+        summary_it: "Aggiunge una scheda in cima all'ordine: com'è nel file (`node`), o in forma breve (`text`, `file`, `url`, `label`).",
+        fields: &[
+            optional(
+                "node",
+                FieldKind::Node,
+                "Una scheda come nel file, per intero. Non si mescola con la forma breve. `id` dentro la scheda è facoltativo: se manca lo dà il seme.",
+            ),
+            optional(
+                "id",
+                FieldKind::Id,
+                "L'id della scheda nuova. Se manca lo dà il seme.",
+            ),
+            optional(
+                "text",
+                FieldKind::Text,
+                "Il testo di una scheda di testo. Se manca è vuoto.",
+            ),
+            optional(
+                "file",
+                FieldKind::Text,
+                "Il percorso di un file del vault: una scheda di file.",
+            ),
+            optional(
+                "url",
+                FieldKind::Text,
+                "Il collegamento di una scheda link.",
+            ),
+            optional(
+                "label",
+                FieldKind::Text,
+                "L'etichetta di un gruppo. Da sola fa un gruppo.",
+            ),
+            FieldSpec {
+                name: "type",
+                kind: FieldKind::Enum(KINDS),
+                required: false,
+                default: None,
+                doc_it: "Il tipo della scheda, se non lo dice il campo che c'è.",
+            },
+            optional(
+                "subpath",
+                FieldKind::Text,
+                "Il sottopercorso di un file, come `#page=3`.",
+            ),
+            optional(
+                "x",
+                FieldKind::Number,
+                "La posizione, in unità della lavagna. Va con `y`, e non con `near`.",
+            ),
+            optional(
+                "y",
+                FieldKind::Number,
+                "La posizione, in unità della lavagna. Va con `x`, e non con `near`.",
+            ),
+            optional(
+                "width",
+                FieldKind::Number,
+                "La larghezza. Di serie quella di nascita del tipo e del testo.",
+            ),
+            optional(
+                "height",
+                FieldKind::Number,
+                "L'altezza. Di serie quella di nascita del tipo e del testo.",
+            ),
+            optional(
+                "color",
+                FieldKind::Color,
+                "Il colore: un nome, un numero da 1 a 6, o `#rrggbb`.",
+            ),
+            optional(
+                "near",
+                FieldKind::Id,
+                "La scheda accanto alla quale nasce questa.",
+            ),
+            FieldSpec {
+                name: "side",
+                kind: FieldKind::Enum(SIDES),
+                required: false,
+                default: Some("\"right\""),
+                doc_it: "Il lato di `near` dove nasce la scheda.",
+            },
+            optional(
+                "gap",
+                FieldKind::Number,
+                "La distanza da `near`, non negativa. Di serie 48 a destra e a sinistra, 24 sopra e sotto.",
+            ),
+            optional(
+                "content_size",
+                FieldKind::Pair,
+                "Le dimensioni del contenuto di un file: i pixel di un'immagine, o i punti della prima pagina di un PDF. Danno le misure di nascita.",
+            ),
+        ],
         examples: &[
             r#"{"op":"add_card","node":{"type":"text","text":"Nuova idea","x":400,"y":0,"width":320,"height":160}}"#,
+            r#"{"op":"add_card","text":"Nuova idea","near":"t2","side":"bottom"}"#,
+            r#"{"op":"add_card","file":"schemi/foto.png","x":400,"y":240,"content_size":[1600,1200]}"#,
         ],
     },
     OpSpec {
@@ -139,13 +252,43 @@ pub const OPS: &[OpSpec] = &[
     },
     OpSpec {
         name: "connect",
-        summary_it: "Aggiunge un arco in fondo alla lista.",
-        fields: &[required(
-            "edge",
-            FieldKind::Edge,
-            "Un arco come nel file: `fromNode` e `toNode` sono due schede. `id` è facoltativo.",
-        )],
-        examples: &[r#"{"op":"connect","edge":{"fromNode":"t2","toNode":"f1","label":"usa"}}"#],
+        summary_it: "Aggiunge un arco in fondo alla lista: com'è nel file (`edge`), o fra due schede (`from`, `to`).",
+        fields: &[
+            optional(
+                "edge",
+                FieldKind::Edge,
+                "Un arco come nel file: `fromNode` e `toNode` sono due schede. `id` dentro l'arco è facoltativo.",
+            ),
+            optional(
+                "id",
+                FieldKind::Id,
+                "L'id dell'arco nuovo. Se manca lo dà il seme.",
+            ),
+            optional("from", FieldKind::Id, "La scheda di partenza."),
+            optional("to", FieldKind::Id, "La scheda di arrivo."),
+            optional("label", FieldKind::Text, "L'etichetta dell'arco."),
+            optional(
+                "color",
+                FieldKind::Color,
+                "Il colore, come in `add_card`.",
+            ),
+            optional(
+                "sides",
+                FieldKind::Sides,
+                "`\"auto\"` per i lati più vicini, o `{from, to}` con i lati scelti. Di serie nessun lato.",
+            ),
+            FieldSpec {
+                name: "ends",
+                kind: FieldKind::Enum(ENDS),
+                required: false,
+                default: Some("\"arrow\""),
+                doc_it: "Le punte: `arrow` alla scheda di arrivo (di serie), `none` nessuna, `both` alle due.",
+            },
+        ],
+        examples: &[
+            r#"{"op":"connect","edge":{"fromNode":"t2","toNode":"f1","label":"usa"}}"#,
+            r#"{"op":"connect","from":"t1","to":"t2","sides":"auto","label":"porta a"}"#,
+        ],
     },
     OpSpec {
         name: "remove",
@@ -362,6 +505,10 @@ fn check_field(
         }
         return;
     };
+    // Un campo facoltativo `null` è un campo assente (come in serde).
+    if value.is_null() && !field.required {
+        return;
+    }
     match field.kind {
         FieldKind::Any => {}
         FieldKind::Id | FieldKind::Text => {
@@ -375,6 +522,122 @@ fn check_field(
         FieldKind::Enum(values) => check_enum(index, object, field, values, path, problems),
         FieldKind::Ids => check_ids(index, object, field.name, path, value, problems),
         FieldKind::Points => check_points(index, path, value, problems),
+        FieldKind::Color => check_color(index, object, field, path, value, problems),
+        FieldKind::Sides => check_sides(index, object, field, path, value, problems),
+        FieldKind::Pair => check_pair(index, path, value, problems),
+    }
+}
+
+/// Un colore: un nome, un numero da 1 a 6, o `#rrggbb`. Un nome sbagliato ha i
+/// nomi vicini, e la correzione se ce n'è uno solo.
+fn check_color(
+    index: usize,
+    object: &Map<String, Value>,
+    field: &FieldSpec,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+) {
+    match value {
+        Value::String(text) if color::parse(text).is_none() => {
+            let mut problem = Problem::new(ProblemCode::BadValue, Some(index), path);
+            let near = nearest(text, color::names());
+            suggest(&mut problem, &near, |candidate| {
+                Some(with(
+                    object,
+                    field.name,
+                    field.name,
+                    Value::String(candidate.to_owned()),
+                ))
+            });
+            problems.push(problem);
+        }
+        Value::String(_) => {}
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// I lati di un arco: la parola `auto`, o un oggetto con `from` e `to`, ognuno
+/// un lato o `null`. Una chiave che non è `from` né `to` ha il suo vicino.
+fn check_sides(
+    index: usize,
+    object: &Map<String, Value>,
+    field: &FieldSpec,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+) {
+    match value {
+        Value::String(text) if text != "auto" => {
+            let mut problem = Problem::new(ProblemCode::BadValue, Some(index), path);
+            let near = nearest(text, ["auto"]);
+            suggest(&mut problem, &near, |candidate| {
+                Some(with(
+                    object,
+                    field.name,
+                    field.name,
+                    Value::String(candidate.to_owned()),
+                ))
+            });
+            problems.push(problem);
+        }
+        Value::String(_) => {}
+        Value::Object(pair) => {
+            for (key, side) in pair {
+                let at = format!("{path}/{}", escape(key));
+                if key == "from" || key == "to" {
+                    check_side(index, side, at, problems);
+                    continue;
+                }
+                let mut problem = Problem::new(ProblemCode::UnknownField, Some(index), at);
+                let near = nearest(key, ["from", "to"]);
+                suggest(&mut problem, &near, |candidate| {
+                    // Il posto è già preso: la correzione non sarebbe una sola.
+                    if pair.contains_key(candidate) {
+                        return None;
+                    }
+                    let mut renamed = pair.clone();
+                    renamed.remove(key);
+                    renamed.insert(candidate.to_owned(), side.clone());
+                    Some(with(object, field.name, field.name, Value::Object(renamed)))
+                });
+                problems.push(problem);
+            }
+        }
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// Un lato di `sides`: `null` (nessun lato), o uno dei quattro. Il lato
+/// sbagliato ha il suo vicino, ma nessuna correzione: è dentro l'oggetto.
+fn check_side(index: usize, side: &Value, at: String, problems: &mut Vec<Problem>) {
+    match side {
+        Value::Null => {}
+        Value::String(text) if !SIDES.contains(&text.as_str()) => {
+            let mut problem = Problem::new(ProblemCode::BadValue, Some(index), at);
+            let near = nearest(text, SIDES.iter().copied());
+            if !near.is_empty() {
+                problem.suggestion = Some(near.join(", "));
+            }
+            problems.push(problem);
+        }
+        Value::String(_) => {}
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), at)),
+    }
+}
+
+/// Due numeri, `[w, h]`: una lista di due numeri, e basta.
+fn check_pair(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    match value {
+        Value::Array(items) if items.len() == 2 => {
+            for (position, item) in items.iter().enumerate() {
+                if !item.is_number() {
+                    let at = format!("{path}/{position}");
+                    problems.push(Problem::new(ProblemCode::WrongType, Some(index), at));
+                }
+            }
+        }
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
     }
 }
 
@@ -606,6 +869,23 @@ fn field_schema(field: &FieldSpec) -> Value {
         FieldKind::Points => json!({
             "type": "array",
             "items": { "type": "array", "items": { "type": "number" } },
+        }),
+        FieldKind::Color => json!({ "type": "string" }),
+        FieldKind::Sides => json!({
+            "oneOf": [
+                { "const": "auto" },
+                {
+                    "type": "object",
+                    "properties": { "from": { "enum": SIDES }, "to": { "enum": SIDES } },
+                    "additionalProperties": false,
+                },
+            ],
+        }),
+        FieldKind::Pair => json!({
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2,
         }),
         FieldKind::Any => json!({}),
     };
