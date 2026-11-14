@@ -97,6 +97,14 @@ Le soglie, in CI a ogni push:
 - nessun compito lungo, oltre 50 ms, fuori dai passi che rispondono,
   scrivono o ridisegnano e dagli assestamenti.
 
+Un passo che risponde è un evento solo: un compito del runner che cade nel
+suo fotogramma, come il garbage collector, lo porta da solo sopra la soglia.
+Per questo le tre corse dei comandi (lo zoom coi tasti, la scelta, gli
+strumenti) si fanno tre volte, ognuna dallo stesso stato, e ogni passo si
+giudica sulla **mediana** dei suoi tre campioni, con la stessa soglia: un
+campione storto non la sposta, una lentezza vera tocca tutti i giri. Il
+referto ha ogni campione.
+
 Il banco prova anche sé stesso: un passo sbagliato e uno lento, piantati
 apposta, devono fargli vedere il rosso. Il referto, con ogni passo, sta in
 `apps/client/bench/.output/large.json`; le soglie, con le misure su cui

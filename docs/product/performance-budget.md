@@ -153,7 +153,7 @@ dell'evento al fotogramma dipinto. I budget sono gate CI, nel passo
 | Budget | 5 000 | 20 000 | 49 900 | Peggio a riposo, 49 900 | Stato |
 |---|---:|---:|---:|---:|---|
 | Un passo che segue un gesto: la rotella, un movimento della penna | 50 ms | 50 ms | 50 ms | 11,8 ms | **CI-enforced** |
-| Un passo che risponde a un comando: un tasto, la scelta, la pressione | 100 ms | 100 ms | 100 ms | 48 ms | **CI-enforced** |
+| Un passo che risponde a un comando: un tasto, la scelta, la pressione (lo zoom coi tasti, la scelta e gli strumenti: mediana di tre giri, vedi [disegni grandi](drawing-large.md#il-banco)) | 100 ms | 100 ms | 100 ms | 48 ms | **CI-enforced** |
 | Un passo che scrive: il rilascio del tratto, Annulla | 250 ms | 500 ms | 1 000 ms | 432 ms | **CI-enforced** |
 | L'assestamento della vista, un passo che ridisegna subito | 100 ms | 150 ms | 300 ms | 86 ms | **CI-enforced** |
 | L'apertura, fino all'ultimo oggetto dipinto | 4 s | 6 s | 10 s | 3,08 s | **CI-enforced** |
