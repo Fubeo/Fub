@@ -83,9 +83,11 @@ Le regole che la sessione garantisce:
 - gli eventi predetti vanno solo all'anteprima, ogni volta al posto dei
   precedenti, e non entrano mai nel tratto;
 - un tratto si conclude alzando il puntatore o chiudendosi al limite dei
-  campioni; ogni altra fine lo annulla per intero, con un motivo
-  (`pointercancel`, perdita della cattura, finestra senza fuoco, pagina
-  nascosta, palmo, secondo dito, richiesta esplicita, distruzione);
+  campioni. La perdita della cattura e la finestra senza fuoco lo chiudono
+  come un rilascio, all'ultimo punto, e il tratto si salva (N6 T20a); un
+  movimento senza il tasto del tratto lo chiude allo stesso modo. Ogni altra
+  fine lo annulla per intero, con un motivo (`pointercancel`, pagina nascosta,
+  palmo, secondo dito, richiesta esplicita, distruzione);
 - una penna con pressione 0 non comincia un tratto, e una penna sospesa non
   disegna;
 - mouse e dito non hanno il canale di pressione, e il pennello la simula;
@@ -302,8 +304,9 @@ di sopra, e non chiamano mai l'IPC durante il tratto; la sessione
   di annulla; se una non vale non si scrive niente, lo si dice e lo si scrive
   in console. Un rifiuto (`locked`, `hidden`, `empty`…) si dice con le frasi
   dell'editor.
-- Un gesto annullato (un pizzico, il puntatore perso) manda `cancel` e
-  rimette la selezione. Il doppio clic che entra in un gruppo resta del
+- Un gesto annullato (un pizzico, `pointercancel`) manda `cancel` e rimette
+  la selezione; la cattura persa e la finestra che perde il fuoco chiudono il
+  tratto come un rilascio (`up`, N6 T20a). Il doppio clic che entra in un gruppo resta del
   client.
 - Il motore che si sta ancora aprendo si aspetta fino a 2 s
   (`ATTESA_APERTURA_MS`); se non arriva, il gesto non scrive niente.

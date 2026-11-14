@@ -84,6 +84,10 @@ pub(crate) struct Limits {
     pub depth: usize,
     /// Elementi di tutte le parti XML.
     pub elements: u64,
+    /// Caratteri di testo del flusso del corpo ([`crate::flow`]): ognuno
+    /// diventa un segno con le sue proprietà, quindi il conto pesa in memoria
+    /// molte volte i byte del testo.
+    pub chars: u64,
 }
 
 /// Gli stessi ordini di grandezza del codec (`MAX_PART`, `MAX_TOTAL`,
@@ -94,6 +98,9 @@ pub(crate) const LIMITS: Limits = Limits {
     total_bytes: 512 * 1024 * 1024,
     depth: 512,
     elements: 20_000_000,
+    // Sedici milioni di caratteri sono migliaia di pagine; i segni del flusso
+    // restano sotto il mezzo gigabyte anche così.
+    chars: 16 * 1024 * 1024,
 };
 
 /// Perché un pacchetto non si inventaria.

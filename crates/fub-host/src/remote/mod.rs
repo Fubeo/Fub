@@ -54,12 +54,38 @@ pub(crate) fn networked_manifest(id: &str, name: &str) -> fub_abi::PluginManifes
 pub const SYNC_PROTOCOL: &str = "fub-sync/1";
 
 /// KDF vault lato host (mirror di `fub_services::crypto`, senza dipendenza
-/// dal server): PBKDF2-HMAC-SHA256 ver=1, 210_000 iterazioni, sale unico
-/// 16 B. La KEK deriva dalla passphrase vault ESPLICITA (file/stdin, mai
-/// password account, mai riuso automatico); la VDK resta 32 B casuali
-/// avvolti (`wrap_vault_key`) con AAD `fub-vdk-wrap|v1`.
-pub const VAULT_KDF_VERSION: u32 = 1;
+/// dal server): PBKDF2-HMAC-SHA256 ver=2, 600_000 iterazioni, sale unico
+/// 16 B; le buste di ver=1 (210_000) si riaprono ancora. La KEK deriva dalla
+/// passphrase vault ESPLICITA (file/stdin, mai password account, mai riuso
+/// automatico); la VDK resta 32 B casuali avvolti (`wrap_vault_key`) con AAD
+/// `fub-vdk-wrap|v<ver>`.
+pub const VAULT_KDF_VERSION: u32 = 2;
 pub const VAULT_KDF_ITERATIONS_V1: u32 = 210_000;
+pub const VAULT_KDF_ITERATIONS_V2: u32 = 600_000;
+
+/// Le iterazioni di una versione nota dei parametri KDF vault: una busta con
+/// altre coppie non si deriva, perché i parametri vengono dal server.
+pub fn vault_kdf_iterations(ver: u32) -> Option<u32> {
+    vault_kdf_rounds(ver).map(std::num::NonZeroU32::get)
+}
+
+/// [`vault_kdf_iterations`] nella forma che PBKDF2 vuole: la tabella è l'unica
+/// fonte, e una voce a zero non compila.
+fn vault_kdf_rounds(ver: u32) -> Option<std::num::NonZeroU32> {
+    const fn nonzero(iterations: u32) -> std::num::NonZeroU32 {
+        match std::num::NonZeroU32::new(iterations) {
+            Some(iterations) => iterations,
+            None => panic!("a KDF version needs iterations"),
+        }
+    }
+    const V1: std::num::NonZeroU32 = nonzero(VAULT_KDF_ITERATIONS_V1);
+    const V2: std::num::NonZeroU32 = nonzero(VAULT_KDF_ITERATIONS_V2);
+    match ver {
+        1 => Some(V1),
+        2 => Some(V2),
+        _ => None,
+    }
+}
 pub const VAULT_SALT_LEN: usize = 16;
 pub const VAULT_VDK_LEN: usize = 32;
 
@@ -87,7 +113,8 @@ fn vault_b64_salt(salt_b64: &str) -> Result<Vec<u8>, String> {
         .map_err(|_| "bad salt encoding".to_string())
 }
 
-/// Nuovi parametri `ver=1` con sale unico da CSPRNG (`ring::rand`).
+/// Nuovi parametri della versione corrente con sale unico da CSPRNG
+/// (`ring::rand`).
 pub fn vault_kdf_fresh() -> Result<VaultKdfParams, String> {
     use base64::engine::general_purpose::STANDARD as B64;
     use base64::Engine;
@@ -98,17 +125,19 @@ pub fn vault_kdf_fresh() -> Result<VaultKdfParams, String> {
         .map_err(|_| "rng unavailable".to_string())?;
     Ok(VaultKdfParams {
         ver: VAULT_KDF_VERSION,
-        iterations: VAULT_KDF_ITERATIONS_V1,
+        iterations: VAULT_KDF_ITERATIONS_V2,
         salt_b64: B64.encode(salt),
     })
 }
 
-/// Deriva 32 B di KEK da passphrase + parametri (PBKDF2-HMAC-SHA256).
+/// Deriva 32 B di KEK da passphrase + parametri (PBKDF2-HMAC-SHA256), solo per
+/// una coppia di versione e iterazioni di [`vault_kdf_iterations`]: i
+/// parametri vengono dal server o da un file, e la regola vale dove si deriva.
 pub fn derive_vault_kek(passphrase: &str, params: &VaultKdfParams) -> Result<[u8; 32], String> {
-    use std::num::NonZeroU32;
+    let iters = vault_kdf_rounds(params.ver)
+        .filter(|rounds| rounds.get() == params.iterations)
+        .ok_or_else(|| "unsupported kdf parameters".to_string())?;
     let salt = vault_b64_salt(&params.salt_b64)?;
-    let iters = NonZeroU32::new(params.iterations)
-        .ok_or_else(|| "kdf iterations must be nonzero".to_string())?;
     let mut out = [0u8; 32];
     ring::pbkdf2::derive(
         ring::pbkdf2::PBKDF2_HMAC_SHA256,
@@ -365,8 +394,9 @@ pub fn wrap_for_passphrase(
     let params = vault_kdf_fresh().map_err(|e| fub_abi::PluginError::Internal(e.into()))?;
     let kek = derive_vault_kek(passphrase, &params)
         .map_err(|e| fub_abi::PluginError::Internal(e.into()))?;
-    let (nonce_b64, wrap_b64) = seal_aead(&kek, "fub-vdk-wrap|v1", vdk)
-        .map_err(|e| fub_abi::PluginError::Internal(e.into()))?;
+    let aad = format!("fub-vdk-wrap|v{}", params.ver);
+    let (nonce_b64, wrap_b64) =
+        seal_aead(&kek, &aad, vdk).map_err(|e| fub_abi::PluginError::Internal(e.into()))?;
     Ok(WrappedVaultKey {
         kdf: params,
         nonce_b64,
@@ -380,8 +410,7 @@ pub fn unwrap_for_passphrase(
 ) -> Result<[u8; VAULT_VDK_LEN], fub_abi::PluginError> {
     let wrapped: WrappedVaultKey = serde_json::from_value(value.clone())
         .map_err(|_| fub_abi::PluginError::BadArgs("invalid vault key envelope".into()))?;
-    if wrapped.kdf.ver != VAULT_KDF_VERSION
-        || wrapped.kdf.iterations != VAULT_KDF_ITERATIONS_V1
+    if vault_kdf_iterations(wrapped.kdf.ver) != Some(wrapped.kdf.iterations)
         || vault_b64_salt(&wrapped.kdf.salt_b64)
             .map(|v| v.len())
             .unwrap_or(0)
@@ -1208,6 +1237,61 @@ mod state_write_tests {
         assert_eq!(std::fs::read(dir.path().join("cursor")).unwrap(), b"2");
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
         super::sync_dir(dir.path()).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod vault_kdf_tests {
+    use super::*;
+
+    /// Una busta nuova nasce con ver=2 e 600_000 iterazioni; una di ver=1,
+    /// scritta prima, si riapre ancora; una coppia che nessuna versione ha
+    /// (come iterazioni gonfiate dal server) si rifiuta prima di derivare.
+    #[test]
+    fn new_envelopes_use_v2_and_v1_still_opens() {
+        let vdk = [9u8; VAULT_VDK_LEN];
+        let fresh = wrap_for_passphrase("passphrase", &vdk).unwrap();
+        assert_eq!((fresh.kdf.ver, fresh.kdf.iterations), (2, 600_000));
+        let value = serde_json::to_value(&fresh).unwrap();
+        assert_eq!(unwrap_for_passphrase("passphrase", &value).unwrap(), vdk);
+
+        let v1 = VaultKdfParams {
+            ver: 1,
+            iterations: VAULT_KDF_ITERATIONS_V1,
+            ..vault_kdf_fresh().unwrap()
+        };
+        let kek = derive_vault_kek("passphrase", &v1).unwrap();
+        let (nonce_b64, wrap_b64) = seal_aead(&kek, "fub-vdk-wrap|v1", &vdk).unwrap();
+        let old = serde_json::to_value(WrappedVaultKey {
+            kdf: v1,
+            nonce_b64,
+            wrap_b64,
+        })
+        .unwrap();
+        assert_eq!(unwrap_for_passphrase("passphrase", &old).unwrap(), vdk);
+
+        let mut inflated = value.clone();
+        inflated["kdf"]["iterations"] = u32::MAX.into();
+        assert!(matches!(
+            unwrap_for_passphrase("passphrase", &inflated),
+            Err(fub_abi::PluginError::BadArgs(_))
+        ));
+        let mut downgraded = value;
+        downgraded["kdf"]["ver"] = 1.into();
+        assert!(unwrap_for_passphrase("passphrase", &downgraded).is_err());
+
+        // La regola vale anche chiamando la derivazione da sola.
+        for (ver, iterations) in [(2, u32::MAX), (1, VAULT_KDF_ITERATIONS_V2), (3, 1_000)] {
+            let odd = VaultKdfParams {
+                ver,
+                iterations,
+                ..vault_kdf_fresh().unwrap()
+            };
+            assert!(
+                derive_vault_kek("passphrase", &odd).is_err(),
+                "{ver}/{iterations}"
+            );
+        }
     }
 }
 

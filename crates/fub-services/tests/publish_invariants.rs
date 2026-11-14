@@ -1226,6 +1226,12 @@ fn an_admin_cannot_revoke_or_demote_another_admin() {
         admin(&first_auth, serde_json::json!({ "revoke": writer })),
         200
     );
+    // Un Admin non nomina altri Admin: né un nuovo collaboratore né un
+    // Writer che c'è già.
+    let peer = serde_json::json!({ "grant": { "account_id": newcomer, "role": "admin" } });
+    assert_eq!(admin(&first_auth, peer), 403);
+    let promote = serde_json::json!({ "grant": { "account_id": writer, "role": "admin" } });
+    assert_eq!(admin(&first_auth, promote), 403);
     let invite = serde_json::json!({ "grant": { "account_id": newcomer, "role": "reader" } });
     assert_eq!(admin(&first_auth, invite), 200);
     assert_eq!(admin(&alice, serde_json::json!({ "revoke": second })), 200);

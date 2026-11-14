@@ -1,0 +1,16 @@
+{
+  "name": "read-size-only",
+  "description": "Solo la misura: l'allineamento è quello di serie.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"t1\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": { \"v\": 1, \"size\": \"xl\" } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "t1",
+        "state": "ok",
+        "text": "{\"v\":1,\"size\":\"xl\"}",
+        "size": "xl",
+        "align": "start"
+      }
+    ]
+  }
+}

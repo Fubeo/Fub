@@ -1,0 +1,16 @@
+{
+  "name": "write-sections-on-image",
+  "description": "Le sezioni su un'immagine non si scrivono.",
+  "file": "foto.png",
+  "parts": {
+    "kind": "sections",
+    "sections": [
+      "A",
+      "B"
+    ]
+  },
+  "expect": {
+    "outcome": "refused",
+    "reason": "file"
+  }
+}

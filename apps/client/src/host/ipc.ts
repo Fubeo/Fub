@@ -44,6 +44,7 @@ import type {
   InvokeMode,
   KernelNotice,
   ResourceDescriptor,
+  ResourceWriteOptions,
   Locale,
   PluginError,
   SettingValue,
@@ -70,7 +71,7 @@ import type {
   SettingScope,
   CatalogEntry,
 } from "./contract";
-import { openViewer, saveViewer, writeResource } from "../editors/media/transport";
+import { openViewer, ReuseSupport, saveViewer, writeResource } from "../editors/media/transport";
 import { readCraftPreview, type CraftPreview, type CraftPreviewSize } from "./craft";
 import { createMobileBridge } from "../shells/mobile/bridge";
 import type { MobileBridge } from "../shells/mobile/bridge";
@@ -92,6 +93,10 @@ const mediaInvoke = <T>(
 ): Promise<T> => options?.headers
   ? invoke<T>(cmd, args, { headers: options.headers })
   : invoke<T>(cmd, args);
+
+// Se l'host di questa seduta ha già rifiutato `reuse` (un host di prima): i
+// depositi dopo vanno subito senza (T32b). Uno per finestra, quanto l'host.
+const reuseSupport = new ReuseSupport();
 
 
 // Mirror esatto dei record serde in fub-host::support e fub-app::support.
@@ -249,8 +254,11 @@ export const api = {
   /// e la sa soltanto Tauri: costruirla a mano rompeva le immagini delle note
   /// su Windows. L'handle è un numero: niente percorso, niente query.
   assetUrl: (handle: string) => convertFileSrc(handle, "fub-asset"),
-  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string | null) =>
-    writeResource(mediaInvoke, id, bytes, expected, vault ?? undefined),
+  /// Deposita byte grezzi: `expected` null crea soltanto, una stringa è il CAS.
+  /// `options.reuse: "same-content"` non scrive se il vault ha già questi byte
+  /// (vedi `writeResource` e la sezione «Depositare un file» del contratto).
+  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string | null, options?: ResourceWriteOptions) =>
+    writeResource(mediaInvoke, id, bytes, expected, vault ?? undefined, options, reuseSupport),
   viewerOpen: (url: string, title: string, policy: { allowRemote: boolean; allowlist: readonly string[] }) =>
     openViewer(mediaInvoke, url, title, policy),
   viewerSave: (url: string, title: string, allowlist: readonly string[], attachmentFolder: string, vault?: string) =>

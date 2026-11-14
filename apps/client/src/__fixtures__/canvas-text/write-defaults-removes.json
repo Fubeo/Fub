@@ -1,0 +1,26 @@
+{
+  "name": "write-defaults-removes",
+  "description": "Tornati ai valori di serie, il campo sparisce.",
+  "node": {
+    "id": "t1",
+    "type": "text",
+    "x": 0,
+    "y": 0,
+    "width": 300,
+    "height": 120,
+    "text": "nota",
+    "fub:text": {
+      "v": 1,
+      "size": "l",
+      "align": "center"
+    }
+  },
+  "style": {
+    "size": "m",
+    "align": "start"
+  },
+  "expect": {
+    "outcome": "written",
+    "text": null
+  }
+}

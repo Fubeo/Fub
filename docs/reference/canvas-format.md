@@ -33,6 +33,18 @@ lavagna, scritto una volta sola:
   livello resta nei campi sconosciuti di chi lo tiene, e `InkLayer::to_value`
   lo riscrive uguale per valore. Le regole sono in [L'inchiostro della
   lavagna](canvas-ink.md); i vettori li legge `tests/ink_vectors.rs`.
+- `parts`: gli estratti `fub:parts` delle schede di file.
+  `read_parts(&canvas)` li dà nell'ordine di `nodes`, `node_parts(&node)`
+  uno solo, `write_parts(file, &parts)` il `subpath` e il campo da
+  scrivere. Il campo resta nei campi sconosciuti della scheda; le regole
+  sono in [Gli estratti della lavagna](canvas-parts.md), i vettori li legge
+  `tests/parts_vectors.rs`.
+- `text`: la misura e l'allineamento `fub:text` delle schede di testo.
+  `read_text(&canvas)` li dà nell'ordine di `nodes`, `node_text(&node)` uno
+  solo, `text_style(&node)` come si mostra la scheda e
+  `write_text(&node, style)` il campo da scrivere. Le regole sono [qui
+  sotto](#la-misura-e-lallineamento-del-testo), i vettori li legge
+  `tests/text_vectors.rs`.
 - `js`, `source`, `patch`, `ops`: la scrittura come la fa JavaScript, il
   ritocco del sorgente, le toppe con la loro inversa e le operazioni
   d'intento.
@@ -199,6 +211,189 @@ Le regole dei byte nuovi:
 
 Il lavoro è lineare: una scheda uguale prima e dopo si confronta come struct
 e non diventa un valore JSON.
+
+## I colori
+
+`color`, su una scheda o su un arco, è uno dei sei colori di JSON Canvas
+(`"1"`…`"6"`: Rosso, Arancione, Giallo, Verde, Azzurro, Viola) o un colore
+esatto `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`. Un altro testo (`"7"`,
+`"rosso"`, `""`, `"#12"`) è un colore che Fub non conosce: la lavagna si apre,
+il testo resta com'è e la scheda si disegna senza colore. Un valore che non è
+una stringa (`7`, `true`) non è un colore: è un errore di lettura. La lista,
+i nomi e le regole della tela stanno in
+`apps/client/src/editors/canvas/colors.ts`.
+
+- **Che cosa scrive Fub.** Il numero per i sei; per i nove «Colori delle
+  note», gli stessi dei Blocchi, il loro esadecimale chiaro fisso (grigio
+  `#5e626b`, marrone `#84573e`, arancione `#984b00`, giallo `#795f00`,
+  verde `#007231`, blu `#0064b0`, viola `#7847a6`, rosa `#9e366f`, rosso
+  `#b7191c`); per «Altro…» il colore scelto, `#rrggbb` minuscolo (con le due
+  cifre dell'opacità solo se non è pieno). Obsidian e ogni altro lettore di
+  JSON Canvas mostrano i nove come quei colori esatti.
+- **Che cosa legge.** Ogni colore com'è: `#ABC` o `#aabbccdd` restano scritti
+  così finché nessuno cambia il colore di quella scheda, e scegliere il
+  colore che c'è già non scrive niente. Un esadecimale dei nove, anche in
+  maiuscolo, si riconosce.
+- **Che cosa riscrive con un colore che non conosce.** Il testo resta uguale
+  quando la scheda cambia di posto o di testo, e scegliere un colore dal menu
+  lo sostituisce. Il nucleo scrive di nuovo un colore che non conosce solo se
+  la lavagna l'ha letto: un annulla riporta il testo di prima, una scheda
+  copiata lo porta con sé. Un colore inventato è un rifiuto `invalid`, come
+  prima. Una lavagna riaperta da un file che quel colore non ce l'ha più non
+  lo riscrive, e un annulla che lo riporta è rifiutato.
+- **Come si disegna.** Lo dice la pelle (`skin/editors.css`): la tela mette
+  sulla scheda e sul gruppo dell'arco `data-canvas-color` (`1`…`6`, il nome
+  di uno dei nove, `custom`) e, per un colore libero, il valore del file in
+  `--canvas-color`. Un colore che Fub non conosce non mette né l'una né
+  l'altra. La carta prende la tinta del colore (i sei con le dosi
+  di sempre, i nove con `--doc-tint-*`, un colore libero col 14% di sé), il
+  filo e le punte di un arco il colore pieno; al buio i nove seguono i
+  Blocchi (`--doc-color-*`). Il nome del colore arriva al lettore di schermo
+  nel nome della scheda.
+
+## La misura e l'allineamento del testo
+
+Il testo di una scheda `text` resta Markdown puro nel campo `text` di JSON
+Canvas. La misura e l'allineamento con cui Fub lo mostra stanno a parte, nel
+campo `fub:text` della scheda, accanto a `fub:ink` e `fub:parts`:
+
+```json
+{ "id": "t1", "type": "text", "text": "# Idea", "x": 0, "y": 0,
+  "width": 300, "height": 120,
+  "fub:text": { "v": 1, "size": "l", "align": "center" } }
+```
+
+- `v`: la versione, 1 (anche scritta `1.0`).
+- `size`, facoltativo: `s`, `m` (quello di serie), `l` o `xl`.
+- `align`, facoltativo: `start` (quello di serie, a sinistra), `center` o
+  `end`.
+
+Le regole stanno in `crates/fub-canvas-core/src/text.rs` e, uguali, in
+`apps/client/src/editors/canvas/text-style.ts`; i vettori in comune sono in
+`apps/client/src/__fixtures__/canvas-text/`.
+
+- **Che cosa legge.** Un campo valido dice come si mostra la scheda: i campi
+  che mancano valgono di serie. Un campo che Fub non capisce (non è un
+  oggetto, `v` manca o non è 1, `size` o `align` non è un nome che conosce,
+  o la scheda non è di testo) si conserva così com'è e la scheda si mostra di
+  serie. Leggere non riscrive mai il campo; i campi sconosciuti dentro
+  `fub:text` restano nel loro ordine. Obsidian non conosce il campo, lo
+  conserva e mostra il testo di serie; una lavagna di Obsidian non l'ha.
+- **Che cosa scrive.** Solo quando la persona cambia la misura o
+  l'allineamento di una scheda di testo, e solo i valori che non sono di
+  serie, in quest'ordine: `v`, `size`, `align`, poi i campi sconosciuti di un
+  campo valido. Tornata a `m` e `start` senza altri campi, la chiave sparisce
+  dal file. Un campo che si conservava senza mostrarlo (una versione futura)
+  si riscrive alla versione 1, senza il suo contenuto; scegliere il valore
+  che la scheda mostra già non scrive niente.
+- **Come si disegna.** La tela mette sulla scheda `data-text-size` e
+  `data-text-align` quando non sono di serie; la misura e l'allineamento li
+  dà la pelle (`skin/editors.css`), sul testo letto e su quello che si
+  scrive.
+
+### Nella riga delle opzioni
+
+La [riga delle opzioni](canvas-input.md#la-riga-delle-opzioni) li mostra con
+le schede scelte e col Testo (`chrome/options.ts`):
+
+- «Misura»: quattro «A» grandi come la misura (`canvas.text_size.s`, `.m`,
+  `.l`, `.xl`: Piccolo, Medio, Grande, Molto grande). «Allineamento»:
+  `canvas.text_align.start`, `.center`, `.end` (a sinistra, al centro, a
+  destra).
+- Segnano il valore delle schede di testo scelte, nessuno se sono diversi.
+  Un clic le cambia in un commit, un solo annulla anche su più schede;
+  ognuna tiene l'altro valore suo e quelle che si mostrano già così non si
+  toccano.
+- Col Testo e senza schede di testo scelte valgono per le prossime schede
+  del Testo: l'ultimo valore scelto nella riga, di serie Medio e a sinistra,
+  finché la lavagna resta aperta.
+- Con sole schede di file, di link o gruppi, e in sola lettura, si vedono
+  spenti col perché e senza un valore segnato. Quando la riga non ha posto
+  vanno in «…» dopo la Vista.
+
+## Negli appunti
+
+Copiando delle schede o dei tratti liberi scelti col Lazo (Ctrl+C, Ctrl+X,
+«Copia» e «Taglia» del tasto destro) la tela scrive negli appunti due tipi
+insieme. La forma, la lettura e il Markdown stanno in
+`apps/client/src/editors/canvas/clipboard.ts`.
+
+- **`application/x-fub-canvas+json`:** schede e tratti, per un'altra lavagna
+  di Fub.
+
+  ```json
+  { "version": 1, "nodes": [ … ], "edges": [ … ], "fub:ink": { "v": 1, "strokes": [ … ] } }
+  ```
+
+  `nodes` sono le schede scelte, nell'ordine del file (la profondità);
+  `edges` i soli fili che uniscono due schede copiate. Ogni scheda e ogni
+  filo sono quelli del modello, campi sconosciuti compresi: l'inchiostro
+  attaccato viaggia nel campo `fub:ink` della sua scheda. `fub:ink` alla
+  radice porta i tratti liberi scelti, nella forma del livello della radice
+  ([inchiostro](canvas-ink.md#il-livello)): i soli tratti scelti,
+  nell'ordine del livello, com'erano (ancora `free`, coordinate della
+  lavagna, campi sconosciuti compresi). C'è solo se ci sono tratti; senza
+  schede `nodes` ed `edges` sono vuoti. Altri campi alla radice non ci sono.
+- **`text/plain`:** il Markdown delle schede, per gli altri programmi: in
+  ordine di lettura (dall'alto in basso, a pari altezza da sinistra), una
+  scheda per paragrafo. Una scheda di testo dà il suo testo, una di file il
+  link `[[…]]` (una nota senza `.md`, col suo `subpath`), una di link
+  l'indirizzo, un gruppo il nome. I tratti non hanno Markdown: dei soli
+  tratti il testo è vuoto.
+
+Dal menu, dove il browser non manda la copia, la tela scrive con gli appunti
+della shell: il tipo di Fub va come formato della pagina
+(`web application/x-fub-canvas+json`) solo dove la shell lo accetta, sennò
+resta il Markdown. Dei soli tratti, senza il tipo di Fub, non resterebbe
+niente: l'avviso dice che la copia non è riuscita, e il taglio non toglie.
+
+**La versione.** `version` è un intero. Fub legge la versione 1 e rifiuta
+una versione più alta per intero, con un avviso: niente si incolla a metà.
+Un testo che non è JSON, o non ha la forma (`version` mancante o non intero,
+`nodes` o `edges` che non sono array, una scheda senza `id`, con un tipo
+sconosciuto, una posizione o una misura non numeriche, un `id` ripetuto, un
+filo verso una scheda che negli appunti non c'è, né schede né tratti) non è
+la forma di Fub: si incolla come testo, il `text/plain` o, senza, il testo
+stesso.
+
+**Il `fub:ink` della radice** è un campo in più della versione 1: un Fub che
+non lo conosce lo ignora e incolla le schede, e appunti senza il campo si
+incollano come prima. Un campo rotto (non un livello con `v` uguale a 1 e
+`strokes` array, un tratto senza `id` stringa non vuota, un `id` ripetuto) o
+un tratto che non si incolla (un'ancora che non è `free`, uno strumento, un
+pennello o un `ink` che non valgono, oltre i limiti dell'inchiostro) rifiuta
+tutto, schede comprese, con l'avviso di una forma rifiutata: mai a metà.
+
+**Incollando** (Ctrl+V, «Incolla»), sempre in una lavagna che si può
+scrivere:
+
+- schede e fili prendono id nuovi, e i fili si riattaccano alle schede
+  nuove; i tratti dentro il `fub:ink` di una scheda tengono i loro id,
+  unici nel livello; i tratti liberi entrano in fondo al livello della
+  radice con id nuovi (`newNodeId("s")`), con `add_strokes` e
+  `move_strokes` compilati dal nucleo e fusi in una toppa per tratto;
+- schede e tratti restano alle stesse distanze fra loro, con l'angolo in
+  alto a sinistra del loro riquadro (dei tratti contano i punti, all'intero
+  sotto) nel punto dell'incolla (l'ultimo punto del puntatore sulla vista,
+  sennò il centro), agganciato a 8;
+- un commit solo, cioè un annulla; il commit del nucleo controlla tutto
+  (colori, limiti, inchiostro), e se rifiuta non entra niente: anche un
+  tratto che spostato uscirebbe dai numeri dell'inchiostro;
+- le schede incollate restano scelte, e col Lazo anche i tratti;
+- gli stessi appunti incollati di nuovo nello stesso punto si sfalsano di
+  32 per volta; copiare di nuovo riparte dal punto.
+
+**In un'altra lavagna** le schede arrivano uguali. **In un altro vault** una
+scheda di file punta allo stesso percorso: se lì il file non c'è, è una
+scheda «File mancante», come ogni scheda il cui file manca, e torna da sola
+se il file arriva.
+
+**Tagliare** copia e poi toglie le schede come «Togli dalla lavagna»: i file
+restano, e l'avviso lo dice con «Annulla». I tratti liberi copiati escono
+dal livello della radice nello stesso commit. Ctrl+D (Duplica) fa una copia
+sfalsata di 32; se le schede scelte sono le copie dell'ultimo Ctrl+D, la
+copia nuova ripete la distanza che c'è adesso fra quelle e le schede di
+partenza, anche dopo averle spostate.
 
 ## Parità
 

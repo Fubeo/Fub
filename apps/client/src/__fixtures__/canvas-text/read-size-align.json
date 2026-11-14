@@ -1,0 +1,16 @@
+{
+  "name": "read-size-align",
+  "description": "Il caso del piano: grande e al centro.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"t1\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": { \"v\": 1, \"size\": \"l\", \"align\": \"center\" } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "t1",
+        "state": "ok",
+        "text": "{\"v\":1,\"size\":\"l\",\"align\":\"center\"}",
+        "size": "l",
+        "align": "center"
+      }
+    ]
+  }
+}

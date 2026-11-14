@@ -287,6 +287,28 @@ describe("il salvataggio", () => {
     for (const listener of world.sessionListeners) listener();
     expect(el("status-saving").textContent).toBe("frame.status.saved");
   });
+
+  it("un evento che non cambia il conto non tocca la voce (T20e)", async () => {
+    mountStatusBand(life);
+    world.dirty = ["a"];
+    for (const listener of world.sessionListeners) listener();
+    const records: MutationRecord[] = [];
+    const watch = new MutationObserver((found) => records.push(...found));
+    watch.observe(el("status-saving"), { attributes: true, childList: true, characterData: true, subtree: true });
+    // Ogni tratto della penna è un evento della sessione, e il conto resta uno.
+    for (let k = 0; k < 3; k += 1) for (const listener of world.sessionListeners) listener();
+    await Promise.resolve();
+    records.push(...watch.takeRecords());
+    expect(records).toEqual([]);
+    world.dirty = [];
+    for (const listener of world.sessionListeners) listener();
+    await Promise.resolve();
+    records.push(...watch.takeRecords());
+    watch.disconnect();
+    expect(records.length).toBeGreaterThan(0);
+    expect(el("status-saving").textContent).toBe("frame.status.saved");
+    expect(el("status-saving").dataset.tone).toBe("ok");
+  });
 });
 
 describe("la modalità", () => {

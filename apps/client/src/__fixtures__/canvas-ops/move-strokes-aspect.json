@@ -1,0 +1,94 @@
+{
+  "about": "Un tratto scritto su un'immagine 2:1 in una scheda 300×300, ora 600×200: con la proporzione del contenuto (aspect = 2) l'immagine passa da 300×150 a 400×200 e s = 4/3, quindi (40, 20) della lavagna sono (30, 15) nelle unità dell'ancora, e il tratto resta sotto il puntatore. La seconda operazione ha una proporzione che non vale (0): la regola senza proporzione, s = min(600/300, 200/300) = 2/3, e (−20, 0) sono (−30, 0).",
+  "before": {
+    "nodes": [
+      {
+        "id": "img",
+        "type": "file",
+        "file": "Foto/lavagna.png",
+        "x": 0,
+        "y": 0,
+        "width": 600,
+        "height": 200,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 300,
+                "height": 300
+              },
+              "ink": "1 s100 cxy 15000,15000 1000,0"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "move_strokes",
+      "layer": {
+        "node": "img"
+      },
+      "ids": [
+        "s1"
+      ],
+      "dx": 40,
+      "dy": 20,
+      "aspect": 2
+    },
+    {
+      "op": "move_strokes",
+      "layer": {
+        "node": "img"
+      },
+      "ids": [
+        "s1"
+      ],
+      "dx": -20,
+      "dy": 0,
+      "aspect": 0
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "img",
+          "type": "file",
+          "file": "Foto/lavagna.png",
+          "x": 0,
+          "y": 0,
+          "width": 600,
+          "height": 200,
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "s1",
+                "tool": "pen",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 300,
+                  "height": 300
+                },
+                "ink": "1 s100 cxy 15000,16500 1000,0"
+              }
+            ]
+          }
+        }
+      ],
+      "edges": []
+    }
+  }
+}

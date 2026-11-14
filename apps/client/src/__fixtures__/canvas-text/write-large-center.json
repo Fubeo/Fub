@@ -1,0 +1,21 @@
+{
+  "name": "write-large-center",
+  "description": "Una scheda senza campo diventa grande e al centro.",
+  "node": {
+    "id": "t1",
+    "type": "text",
+    "x": 0,
+    "y": 0,
+    "width": 300,
+    "height": 120,
+    "text": "nota"
+  },
+  "style": {
+    "size": "l",
+    "align": "center"
+  },
+  "expect": {
+    "outcome": "written",
+    "text": "{\"v\":1,\"size\":\"l\",\"align\":\"center\"}"
+  }
+}

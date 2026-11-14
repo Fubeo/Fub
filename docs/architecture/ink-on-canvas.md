@@ -38,7 +38,9 @@ coordinate della lavagna e `onEraseEnd`.
   `onStroke` in coordinate della lavagna, con pennello, colore e strumento
   letti all'inizio (`look`); la scia resta finché la lavagna non chiama
   `settle(id)` nello stesso giro in cui aggiunge l'asciutto. Un tratto
-  annullato (palmo, cattura persa, finestra nascosta) toglie subito la scia.
+  annullato (palmo, pagina nascosta, `pointercancel`) toglie subito la scia;
+  uno chiuso dalla cattura persa o dalla finestra che perde il fuoco si salva
+  come un rilascio, all'ultimo punto (N6 T20a).
   La sessione fa un tratto alla volta: una seconda penna non scrive e non
   arriva alla lavagna.
 - **L'asciutto.** `editors/canvas/ink-paint.ts`: `paintCard` mette nella
@@ -59,15 +61,15 @@ coordinate della lavagna e `onEraseEnd`.
   `ink/dom/idle.ts`, che la fa girare quando il thread è libero
   (`requestIdleCallback` con un `timeout`, altrimenti `setTimeout(0)`). Una
   penna che torna giù prima annulla la consegna.
-- **Le preferenze.** `editors/canvas/preferences.ts` legge i due
-  interruttori della macchina di `fub.lavagna` (`lavagna.rs`), spenti di
-  serie: `canvas.ink_mouse_remember` («Ricorda se scrivi col mouse») e
-  `canvas.finger_moves_card` («Il dito sposta le schede»). `watchPreferences`
-  li segue con `setting_changed` e torna il disposer; un valore che non è un
-  interruttore vale spento. L'ultimo «Scrivi col mouse» è lo stato di vista
+- **Le preferenze.** `editors/canvas/preferences.ts` legge le tredici
+  impostazioni di `fub.lavagna` (`lavagna.rs`). `watchPreferences` le segue
+  con `setting_changed` e torna il disposer. Una cartella dei file trascinati
+  non valida vale `Allegati` (`dropFolderPathOf`); dove vanno i file dal
+  computer lo dice `canvas.drop_folder` (`dropFolderFor`, in
+  `state/canvas-intake.ts`). `canvas.toolbar` è una casella per strumento
+  (`toolbar-field.ts`). L'ultimo «Scrivi col mouse» è lo stato di vista
   `canvas.ink_mouse`, uno per computer: `saveInkMouse` lo scrive a ogni
-  cambio, `readInkMouse` lo ridà solo con «Ricorda» acceso, altrimenti
-  spento.
+  cambio, `readInkMouse` lo ridà solo con «Ricorda» acceso, altrimenti spento.
 
 ## Come lo usa la lavagna
 
@@ -82,11 +84,11 @@ schede.
 - **Chi decide la scheda.** Il tratto finito sceglie la scheda sul documento
   del momento in cui la penna si alza: `anchorAt` col riquadro di
   `strokeBounds`, e un livello che il nucleo dice estraneo non tiene il
-  tratto (`foreignInkLayer`). Fuori da ogni scheda il tratto è libero, nel
-  livello della radice; se anche quello è estraneo non si scrive e la barra
-  lo dice. Lo stato dei livelli viene dal nucleo (`CanvasCore.inkLayers()`),
-  una volta per testo; il tipo della scheda (`mediaKindOfId`) decide insieme
-  `data-media-kind` e il modo dell'inchiostro (`inkFitMode`).
+  tratto (`foreignInkLayer`). Fuori da ogni scheda, o con `Alt` tenuto, è
+  libero, nella radice; se anche quella è estranea non si scrive e la barra
+  lo dice ([l'etichetta](../reference/canvas-input.md#mentre-la-penna-scrive)
+  lo mostra prima). I livelli li dà il nucleo (`CanvasCore.inkLayers()`) una
+  volta per testo; `mediaKindOfId` decide `data-media-kind` e `inkFitMode`.
 - **Il passo di annulla.** Un tratto è `strokeRecord`, `addStrokePatch` e un
   commit solo, senza ridisegnare le schede: nello stesso giro si aggiunge
   l'asciutto del livello toccato e la scia va via (`settle`). Prima si
@@ -104,6 +106,7 @@ schede.
   spessore in pixel dello schermo e modo della gomma, dal tratto dopo
   (`inkLook`; `penLook` dà la copertura, `fill-opacity`). Lo stato di vista
   `canvas.pen` (versione 1; un campo rotto vale il suo di serie) lo ricorda.
+  Sta nella riga delle opzioni (`chrome/options.ts`, T50).
 - **La gomma.** Il retro della penna, il tasto laterale e la punta con la
   Gomma del menu (`tipErases`) tolgono il tratto intero (A20). `EraseSweep`
   cerca nei tratti disegnati portati in coordinate della lavagna
@@ -115,12 +118,35 @@ schede.
   unità del tratto, sopra il tratto attenuato restano pieni i pezzi
   (`cutInkStroke`) e alla fine `cutStrokePatches` li mette al suo posto in
   un commit; un rifiuto del nucleo non cambia niente e lo dice l'avviso.
-- **Il tasto D.** D da solo sul viewport, fuori dai campi di testo, fa
-  scrivere il mouse (`data-ink="pen"` sul viewport) finché non si alza; lo
-  lasciano anche la finestra che perde il fuoco e `visibilitychange`. Un
-  tratto già giù finisce. Il pulsante «Scrivi col mouse» (`setInkMouse`)
-  fa lo stesso finché non si spegne; ogni clic lo scrive con `saveInkMouse`,
-  e la lavagna che si apre lo riprende una volta con `readInkMouse`.
+- **Il tasto D.** D da solo sul viewport, fuori dai campi, fa scrivere il
+  mouse (`data-ink="pen"`) finché non si alza, o la finestra perde il fuoco
+  o si nasconde; un tratto già giù finisce. «Scrivi col mouse»
+  (`setInkMouse`, `saveInkMouse`, `readInkMouse` all'apertura) è lo stato
+  di Penna, Evidenziatore e Gomma della [colonna](../reference/canvas-input.md).
+- **La croce.** Il mouse che scrive mostra la croce (la cella con la Gomma)
+  su un velo, `.canvas-pen-veil`, sopra le schede e le prese dei fili, non
+  con `cursor` sul viewport: `cursor` si eredita, e cambiarlo lì ricalcolava
+  lo stile di tutta la lavagna a ogni D (62–80 ms col foglio vivo). Il velo
+  si mostra togliendo `data-idle`, solo col mouse o la penna sospesa sopra
+  la vista; un dito che si appoggia o la penna che esce dal raggio lo
+  tolgono (il mouse che esce no: ogni volta che il velo compare, la scheda
+  sotto il puntatore perde `:hover` e si ridipinge). Il
+  bersaglio del tratto si cerca per coordinate e non cambia; il menu, il
+  dito, il doppio clic e la rotella vedono ciò che c'è sotto il velo
+  (`#targetOf`, `#elementAt`), e sotto il velo nessun filo si scurisce.
+- **L'inizio del tratto senza pittura.** Il bordo tratteggiato della scheda
+  bersaglio (`.canvas-ink-frames`) è uno strato composto suo
+  (`will-change: opacity`), sopra ogni scheda dello stage (`z-index: 2`) e
+  portato sull'angolo della scheda con `transform`: un tratto che comincia
+  sulla scheda del tratto prima cambia solo `data-idle`, cioè l'opacità
+  dello strato, e la lavagna sotto non si ridipinge; `#placeInkFrame`
+  scrive le misure solo quando cambiano. Il velo che compare e la cattura
+  del tratto tolgono `:hover` alla scheda sotto il puntatore: la scheda che
+  l'aveva (letta ai `pointerover`, mai a ogni movimento) tiene l'aspetto del
+  passaggio con `data-hover-held` finché il puntatore non passa davvero
+  altrove, così le prese, → e i pulsanti della scheda viva non cambiano e la
+  scheda non si ridipinge. Sotto il velo il puntatore può lasciarla senza
+  saperlo: all'alzata di un tratto che non era suo la scheda la lascia.
 - **Il dito.** Un dito sposta la vista, anche sopra le schede; testata,
   maniglie, `[data-connect]` e controlli fanno come col mouse (in sola
   lettura la testata sposta la vista). Due dita pizzicano (`pinchCamera` di
@@ -138,4 +164,4 @@ schede.
 | un tratto è una toppa, un commit e un passo; il ridisegno aspetta la penna | `editors/canvas/engine-ink.test.ts` |
 | la gomma prende il tratto dove si vede, cancella o taglia in un passo; D fa scrivere il mouse; il menu vale dal tratto dopo | `editors/canvas/ink-erase.test.ts`, `editors/canvas/engine-ink.test.ts`, `editors/canvas/pen-menu.test.ts` |
 | il dito sposta e pizzica la lavagna; la penna, anche sospesa, lo ferma | `editors/canvas/touch.test.ts`, `editors/canvas/engine-touch.test.ts` |
-| Rust e client nominano uguale le impostazioni della lavagna | `editors/canvas/settings-mirror.test.ts`, `fub-host/tests/lavagna_feature.rs` |
+| Rust e client nominano, ordinano e danno gli stessi default alle tredici impostazioni della lavagna; un valore sbagliato vale il default | `editors/canvas/settings-mirror.test.ts`, `editors/canvas/preferences.test.ts`, `fub-host/tests/lavagna_feature.rs` |

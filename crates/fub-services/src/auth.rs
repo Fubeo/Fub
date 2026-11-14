@@ -440,6 +440,34 @@ impl AccountStore {
 mod tests {
     use super::*;
 
+    /// La password di un account si verifica coi parametri salvati, ma solo se
+    /// sono una coppia nota: un `accounts.json` con iterazioni gonfiate o una
+    /// versione inventata non fa derivare niente.
+    #[test]
+    fn a_stored_hash_with_unknown_kdf_parameters_is_refused() {
+        let good = AccountStore::hash_password("correct-horse-99").unwrap();
+        assert!(AccountStore::check_password("correct-horse-99", &good).unwrap());
+        let mut v1 = good.clone();
+        v1.kdf.ver = 1;
+        v1.kdf.iterations = crate::crypto::KDF_ITERATIONS_V1;
+        let kek = derive_kek("correct-horse-99", &v1.kdf).unwrap();
+        v1.hash_b64 = B64U.encode(kek);
+        assert!(AccountStore::check_password("correct-horse-99", &v1).unwrap());
+        for (ver, iterations) in [
+            (2, u32::MAX),
+            (1, crate::crypto::KDF_ITERATIONS_V2),
+            (9, 1_000),
+        ] {
+            let mut odd = good.clone();
+            odd.kdf.ver = ver;
+            odd.kdf.iterations = iterations;
+            assert!(
+                AccountStore::check_password("correct-horse-99", &odd).is_err(),
+                "{ver}/{iterations}"
+            );
+        }
+    }
+
     #[test]
     fn an_expired_session_goes_when_a_new_one_is_issued() {
         let dir = std::env::temp_dir().join(format!("fub-services-auth-{}", uuid::Uuid::new_v4()));

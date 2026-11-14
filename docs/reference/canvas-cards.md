@@ -1,0 +1,549 @@
+# Le schede della lavagna
+
+> **Ambito:** il contratto fra la lavagna e chi mostra il contenuto di una
+> scheda di file: le specie, le misure con cui nascono, i due modi di una
+> scheda, le regole che scelgono le schede vive e le immagini ferme.
+> **Fonti autorevoli:** `apps/client/src/editors/canvas/cards.ts` e le prove
+> in `apps/client/src/editors/canvas/cards.test.ts`; per le misure di nascita,
+> `apps/client/src/editors/canvas/drop-layout.ts` e le sue prove; per le
+> estensioni, `apps/client/src/ui/format-kind.ts` e
+> `apps/client/src/editors/media/media-types.ts`.
+
+Questa pagina serve a chi scrive un renderer di scheda (la parte che mostra
+una nota, un foglio, un PDF, un'immagine o una pagina web dentro la scheda) e
+a chi lavora sul motore della lavagna che li monta.
+Come si entra in una scheda, la rotella e i comandi con i loro tasti stanno in
+[I tasti e i gesti della lavagna](canvas-input.md); come ci si muove e la
+vista che torna riaprendo la lavagna, in [La vista della lavagna](canvas-view.md).
+
+## Schede vive e ferme
+
+Una scheda di file ha due modi.
+
+- **Viva** (`live`): il renderer ha aperto il file e ci si può entrare per
+  scorrere, scegliere e copiare. Una scheda viva tiene risorse aperte: una
+  sessione di foglio, un documento PDF, il DOM di una nota con i suoi
+  ascolti.
+- **Ferma** (`snapshot`): nessuna risorsa aperta. Mostra l'ultima immagine
+  ferma, o per le specie fatte di DOM (nota, foglio) il contenuto reso
+  inerte; mai stata viva, mostra titolo e specie.
+
+Il passaggio fra i due modi avviene solo a fine gesto, mai durante.
+
+```mermaid
+stateDiagram-v2
+  [*] --> Ferma: montata fuori vista
+  [*] --> Viva: montata in vista
+  Ferma --> Viva: entra fra le schede vive
+  Viva --> Ferma: esce, o lo zoom scende sotto 0,35
+  Viva --> [*]: destroy
+  Ferma --> [*]: destroy
+```
+
+La tela chiama `setMode` solo quando il modo cambia davvero; `destroy` chiude
+la `Lifetime` della scheda in qualunque modo sia.
+
+## Le specie
+
+La specie sceglie il renderer. Viene dall'estensione del file, come fa la
+shell per l'albero e le schede del riquadro: il client non conosce il
+provider di un file senza chiederlo al backend.
+
+| Specie | Da dove viene |
+|---|---|
+| `null` | nodi `text` e `group`: la tela li disegna da sé |
+| `web` | nodi `link` |
+| `note` | `md`, `markdown` |
+| `document` | ciò che `formatKindOf` dice `word` o `odt` (`docx`, `doc`, `dot`, `rtf`, `odt`) |
+| `sheet` | ciò che `formatKindOf` dice `sheet` (`xlsx`, `xlsm`, `xltx`, `xltm`) |
+| `pdf` | ciò che `mediaKindOfId` dice `pdf` |
+| `image` | ciò che `mediaKindOfId` dice `image`, SVG compreso |
+| `craft` | `vectorcraft`, `figcraft`, `pcraft` ([la scheda dei file Craft](canvas-craft.md)) |
+| `file` | tutto il resto: CSV, `.canvas`, audio, video, ZIP, nomi senza estensione |
+
+Regole dell'estensione:
+
+- conta l'ultimo segmento del percorso, in minuscolo: `FOTO.JPG` è
+  un'immagine;
+- il `subpath` non conta: `Nota.md#1.2 Titolo` è una nota;
+- un punto nel nome di una cartella non è un'estensione:
+  `Corsi.2026/leggimi` è un file;
+- un nome nascosto senza altro punto (`.md`) non ha estensione.
+
+L'SVG è un'immagine ferma anche se `formatKindOf` lo chiama disegno: nella
+scheda non diventa mai il disegno vivo. Una specie senza renderer registrato
+(senza la sua porta) si mostra come scheda di file con «Apri».
+
+## Le misure di nascita
+
+Una scheda portata sulla lavagna nasce con la misura della sua specie. Le
+misure stanno in `drop-layout.ts`, con `bornSize` e `dropLayout`:
+
+| Specie | Misura di nascita |
+|---|---|
+| `note`, `document` | 320×240 |
+| `sheet` | 480×300 |
+| `pdf` | 360 di larghezza, con le proporzioni della prima pagina; 360×480 finché la prima pagina non si sa |
+| `image` | il lato lungo 480, con le proporzioni dell'immagine; 480×360 finché la misura non si sa |
+| `web` | 320×120 |
+| `file`, `craft` | 320×160 |
+
+«Spargi le pagine…» (T72) dà a ogni pagina la misura della sua: la stessa
+`bornSize`, con le proporzioni di quella pagina. La disposizione delle schede
+(`spreadLayout`, righe di dieci, gruppo oltre dodici) sta in `drop-layout.ts`.
+
+Le misure di nascita non si agganciano alla griglia di 8 px: si arrotondano
+all'intero più vicino, e nessun lato scende sotto 40 px, la misura minima
+della tela. Così un'immagine 16:9 nasce 480×270, esatta. Un'immagine molto
+stretta, come 1×4000, ha il lato corto a 40 px: lì la proporzione non si
+tiene. Ridimensionare a mano una scheda, invece, aggancia a 8 px come prima
+(salvo con Maiusc, che tiene le proporzioni).
+
+Quando si lasciano insieme più schede, si dispongono in griglia: `ceil(sqrt(n))`
+colonne, riempite per righe nell'ordine del nome del file. Le posizioni si
+agganciano a 8 px. La colonna o la riga dopo parte al primo multiplo di 8 che
+lascia almeno 24 px dopo il bordo della precedente, cioè dopo la sua scheda più
+larga o la più alta della riga. Dopo un foglio alto 300 la riga sotto parte
+328 px più in basso, con 28 px di spazio. Oltre 12 schede, un gruppo le
+raccoglie con 24 px di margine per lato.
+
+### Il rilascio e l'incolla
+
+La tela (`#intake` in `engine.ts`) usa queste regole quando arrivano file
+trascinati dal computer o dall'albero, o incollati:
+
+- la griglia parte dal punto del rilascio. Un incolla parte dall'ultimo
+  punto in cui il puntatore è stato visto sulla vista. Se il puntatore ne è
+  uscito, parte dal centro della vista;
+- la misura di un'immagine viene dalla porta `measureImage` (in
+  `editors/core/bootstrap.ts`: i byte dalla `ResourceTransport`, la misura
+  da `decodeImage` o dall'immagine decodificata). Se la porta manca,
+  fallisce o non risponde entro 3 s (`MEASURE_IMAGE_TIMEOUT_MS`), l'immagine
+  nasce 480×360. Si misurano quattro immagini alla volta;
+- oltre 12 file nasce anche il gruppo, con l'etichetta «{count} file»
+  (`canvas.intake.group`). Il gruppo sta prima delle schede nel documento,
+  cioè sotto di loro;
+- le schede, il gruppo e il file cambiato di una scheda (sotto) entrano in
+  un commit solo, che un annulla toglie tutto insieme;
+- lasciato su una scheda di file, il primo file ne prende il posto e gli
+  altri nascono in griglia;
+- le celle copiate diventano una scheda di testo con una tabella Markdown:
+  l'HTML con una tabella passa dalla porta `clipboardMarkdown` (la
+  conversione dell'incolla dell'editor Markdown), il testo a tabulazioni su
+  più righe da `parseTsv` e `markdownTable`; una riga sola resta testo;
+- mentre si trascinano file o voci dell'albero, rettangoli tratteggiati
+  (`canvas-drop-ghost`) mostrano dove nasceranno le schede, uno per file in
+  `dataTransfer.items`, o uno solo se non si sa (le voci dell'albero, WebKit
+  che non dice i tipi); oltre dodici, la cornice del gruppo col numero
+  (`canvas-drop-ghost-group`). Spariscono all'uscita e al rilascio.
+
+Il deposito dei file del computer (`depositCanvasFiles`) si ferma al primo
+file che l'host rifiuta, con un `CanvasDepositError` che porta i percorsi
+già depositati: le loro schede nascono in un commit solo, poi l'errore nella
+barra (`canvas-intake-error`). Se nessun file è andato, c'è solo l'errore, e
+gli appunti non diventano testo.
+
+Dove finiscono lo dice `canvas.drop_folder` (`dropFolderFor`, in
+`state/canvas-intake.ts`): le note con `files.attachment-folder`, una
+cartella accanto alla lavagna o una del vault. La prima copia lo dice con una
+notifica, e «Cambia cartella» apre quella voce. Se la cartella è esclusa da
+`files.excluded-folders`, dove i file non si trovano con la ricerca, la
+notifica lo dice a ogni gesto che ci copia.
+
+Un file che il vault ha già con gli stessi byte non si copia (`reuse`, lo
+decide l'host): la notifica «Già nel vault come…» offre «Fanne una copia»
+(«Fanne delle copie» per più file). Il clic deposita i byte senza `reuse`, con
+i nomi soliti («foto 1.png»), e ripunta le schede nate da quel gesto, per id,
+in un commit solo: Ctrl+Z torna al file riusato; si offre anche dopo un
+errore, per i file riusati prima di esso. La porta è
+`CanvasDepositCards`, data dal motore al deposito: una scheda tolta o già
+puntata altrove non cambia, e con la lavagna chiusa il gesto non fa niente.
+Un host che rifiuta `reuse` lo rifiuta una volta per seduta (`ReuseSupport`
+in `editors/media/transport.ts`, uno per finestra in `host/ipc.ts`).
+
+## Il contratto
+
+I tipi stanno in `cards.ts`, con i commenti sui loro campi. In breve:
+
+- `CardRenderer` dichiara le specie che sa mostrare (`kinds`) e monta una
+  scheda con `mount(node, host, mode, context)`, che dà una `CardView`.
+- `CardContext` dà al renderer il percorso del file senza `subpath`, il
+  `subpath` a parte, l'id della lavagna, una `Lifetime` che si chiude con
+  `destroy`, la cache delle immagini ferme, la misura e lo zoom correnti,
+  `missing()` per dire che il file non c'è, e per il PDF `initialPage` (la
+  pagina ricordata, o `null`) e `pageChanged(pagina)` (vedi «Riaprire dove
+  eri»), e `pageShown()`: è in vista l'immagine di un'altra pagina, e la
+  tela ridisegna l'inchiostro della scheda; `contentShown()` e `cellsShown()`
+  fanno lo stesso quando cambiano `contentAspect()` o le celle in vista. `parts` porta le parti già provate di
+  un [estratto](canvas-parts.md), o `null` (vale il `subpath`); `excerpt`,
+  fuori dalla sola lettura, i gesti dell'avviso di una sezione persa.
+- `CardView` risponde a `setMode` e a `destroy`; può rispondere anche a
+  `resize` (a fine gesto), `enter` e `leave` (entrare nella scheda e
+  uscirne; `enter` restituisce `false` se non c'è niente in cui entrare),
+  `key` (`true` se il tasto è della scheda), `page` (la pagina mostrata, da
+  1), `pageBox` (la pagina in vista, la sua misura in punti PDF e il suo
+  rettangolo nella scheda, o `null`; da ferma la misura viene da
+  `CardSnapshot.pageSize`: [L'ancora di pagina](canvas-ink-anchors.md#lancora-di-pagina)),
+  `contentAspect` (la proporzione del contenuto in vista, intero e al centro;
+  da ferma `CardSnapshot.aspect`: [La misura della scheda](canvas-ink.md#la-misura-della-scheda))
+  e, per il foglio, `cellAt` e `cellRect` (la cella sotto un punto, dove sta
+  una cella: [L'ancora di cella](canvas-ink-anchors.md#lancora-di-cella)).
+- `createCardRegistry` costruisce il registro per specie. Due renderer
+  diversi per la stessa specie sono un errore, lanciato quando il registro
+  si costruisce: `card kind <specie> has two renderers`. Lo stesso renderer
+  che nomina due volte una specie non è un doppione.
+- `data-card-state` sulla radice della vista dice che cosa mostra (nota, documento,
+  foglio, immagine, PDF): `loading`, `content`, `unreadable`, `unavailable`,
+  `too-large`, `missing`, `placeholder`. Chi non lo scrive ricade sul campo.
+
+Ascolti, osservatori e timer passano dalla `Lifetime` (`check-listeners.mjs`).
+
+### Un renderer non scrive mai il file
+
+Un renderer legge e basta, da vivo e quando si chiude: sfogliare un PDF,
+scorrere un foglio o scegliere delle celle non cambia il file. Dalla lavagna
+si scrivono solo il `.canvas`, i file depositati o incollati, e ciò che si
+scrive dentro una scheda con l'editor vero del file (vedi «Scrivere dentro
+una scheda»), che passa dalla sessione del documento e non dal renderer.
+
+## Le immagini ferme
+
+`CardSnapshots` tiene le immagini ferme in memoria, per file e per parte; la
+cache stessa arriva con T2 (`apps/client/src/editors/canvas/card-cache.ts`).
+La parte dice che cosa è e a quale larghezza, e si costruisce sempre con
+`snapshotPart(prefisso, larghezza)`:
+
+- la larghezza si arrotonda al multiplo di 32 px più vicino, mai sotto 32,
+  così una scheda che cambia misura di poco ritrova la stessa immagine;
+- il prefisso non è vuoto e non contiene `@`, che separa la larghezza;
+- `whole@640` è l'immagine intera, `page-3@640` la pagina 3 di un PDF.
+
+`forget(path)` dimentica tutte le parti di un file: serve quando il file
+cambia, si sposta o esce dalla lavagna.
+
+## Quali schede sono vive
+
+`liveCardIds(nodes, view, zoom, limit)` dà gli id delle schede vive. Le regole:
+
+1. sotto `LIVE_ZOOM_MIN` nessuna; allo zoom esatto sì;
+2. una vista vuota (larghezza o altezza zero) non ha schede vive;
+3. la vista si allarga di `LIVE_MARGIN` della sua larghezza e della sua
+   altezza per lato;
+4. è dentro una scheda il cui rettangolo tocca la vista allargata, anche
+   solo sul bordo; una scheda più grande della vista, che la contiene tutta,
+   è dentro;
+5. contano solo le schede con una specie;
+6. se sono più di `limit` restano le più vicine al centro della vista. La
+   distanza è quella fra il centro e il punto più vicino della scheda, quindi
+   una scheda che copre il centro vale zero; a pari distanza vince l'ordine
+   del file. Un `limit` zero o negativo non lascia nessuna scheda.
+
+I valori di partenza:
+
+| Costante | Valore | Che cosa regola |
+|---|---|---|
+| `LIVE_ZOOM_MIN` | 0,35 | lo zoom da cui in su una scheda può essere viva |
+| `LIVE_MARGIN` | 0,5 | il margine per lato, in frazione della vista |
+| `MAX_LIVE_CARDS` | 40 | il massimo di schede vive insieme, il `limit` di serie |
+
+Sono valori di partenza, non misure: vengono dal passo 15 (N6) dei «Piani di
+Fub», che li propone come compromesso fra fluidità e schede pronte quando
+ci si sposta di poco. La misura della lavagna con 20 fogli vivi (scenario S3
+del banco WebView) li conferma o li cambia, e allora questa pagina dirà la
+misura da cui vengono.
+
+## Il cambio di modo
+
+`updateLiveCards(cards, wanted, current, quiet)` mette ogni scheda nel modo
+voluto. Tutto avviene nel lavoro rimandato con la chiave `cards`
+(`CARD_QUIET_KEY`), che la penna esegue quando è su: mentre la penna è giù
+nessuna scheda cambia modo.
+
+- `wanted` si copia quando si chiama: è la decisione di quel momento;
+- le schede montate si leggono quando il lavoro va: una scheda smontata nel
+  frattempo non riceve niente ed esce da `current`;
+- `setMode` si chiama solo dove il modo cambia, e `current` si aggiorna nel
+  lavoro, non prima;
+- se un `setMode` lancia, le altre schede cambiano lo stesso, quella resta
+  col modo di prima e l'errore esce alla fine del lavoro.
+
+`quiet` è un tipo strutturale di `cards.ts`, `CardQuiet`, con il solo
+`defer(key, work)`: la lavagna non dipende dal modulo della penna.
+
+## Come la tela tiene le schede
+
+La tela (`editors/canvas/engine.ts`) riceve le schede con l'opzione
+`cards?: CanvasCards`, cioè `{ registry: CardRegistry; snapshots:
+CardSnapshots; watch(path, changed) }`. Senza (un'altra finestra, le prove
+vecchie) ogni scheda ha il corpo di sempre: il percorso del file, il
+segnaposto, l'indirizzo.
+
+La resa è a chiavi: la tela tiene una mappa id → scheda sulla scena, con
+l'elemento `.canvas-node`, il corpo e ciò che lo tiene vivo. A ogni resa:
+
+- chi c'è già si aggiorna sul posto: posizione, misura, colore, titolo,
+  scelta, le quattro maniglie per ridimensionare (non in sola lettura; i
+  gesti sono in [I tasti e i gesti](canvas-input.md#le-maniglie)); il
+  titolo di una scheda di file o di link sta sopra il suo rettangolo, fuori
+  (`bottom: 100%`, come Obsidian), e la scheda resta della sua misura;
+- chi è nuovo nasce, chi non c'è più si distrugge;
+- l'ordine sulla scena segue il file (la prima sotto, l'ultima sopra), e una
+  scheda si sposta nel DOM solo se è fuori posto;
+- il corpo si rifà solo se cambia la sua chiave: `type`, `file`, `subpath`,
+  `url`, `text`, `label` e lo sfondo di un gruppo. I corpi di sempre si
+  rifanno anche quando cambia la lingua, e quelli di testo quando cambiano
+  le sintassi del Markdown o la sola lettura; una vista no.
+
+Spostare, ridimensionare, colorare o scrivere in un'altra scheda non tocca
+le viste; cambiare il file della scheda, toglierla o cambiarle l'id le
+smonta (con l'annulla torna una vista nuova). Il campo di
+modifica di una scheda prende il posto del corpo: la vista si smonta quando
+il campo si apre, e il corpo si rifà alla prima resa dopo che si chiude.
+
+Per una scheda con una specie e un renderer la tela chiama
+`mount(node, corpo, "snapshot", context)`: nasce ferma, e quali schede sono
+vive lo decide la tela subito dopo (vedi «Vive e ferme»). Il `context` porta:
+
+- `path`, il file senza `#…`, e `subpath`, da `subpath` o dal `#` nel
+  percorso; una scheda di link ha `path` vuoto e l'indirizzo in `node.url`;
+- `documentId`, la lavagna; `lifetime`, una `Lifetime` per vista;
+- `size()`, la misura di adesso in unità della lavagna, e `zoom()`;
+- `missing()`, che dice che il file non c'è: la vista si smonta e la scheda
+  mostra «File mancante» (vedi «Il file che manca»). Da una vista già smontata
+  non fa niente;
+- `initialPage`, la pagina ricordata della scheda, e `pageChanged(pagina)`,
+  che la ricorda (vedi «Riaprire dove eri»). Da una vista già smontata
+  `pageChanged` non fa niente.
+
+Sulla scheda montata ci sono `data-card-kind` (la specie) e `data-card-mode`.
+Un renderer che lancia in `mount` lascia il corpo di sempre e un avviso in
+console: la tela va avanti. Una vista si smonta con `destroy()` e poi con la
+chiusura della sua `Lifetime`, una volta sola; se `destroy` lancia, le altre
+si smontano lo stesso. `destroy` della tela smonta tutte le viste, e dopo
+nessuna resa ne monta altre.
+
+Oltre `MAX_INTERACTIVE_NODES` (2000 schede) la scena mostra il messaggio
+della lavagna troppo grande e nessuna vista; tornati sotto, le schede
+rinascono. L'inchiostro si ridisegna dopo ogni resa; un tratto scritto
+aggiorna solo il suo livello.
+
+## Il file che manca
+
+Quando un renderer scopre che il file non c'è, chiama `context.missing()`. La
+tela smonta la vista e mostra il segnaposto «File mancante: {percorso}»
+(`canvas.card.missing`), con `data-card-missing="true"` sulla scheda e due
+pulsanti del kit sotto (`.canvas-card-missing`):
+
+- **Ritrova…** (`canvas.card.relink`) apre il selettore dei file del vault,
+  col nome del file che manca. Gli omonimi vengono per primi. Con un nome il
+  selettore chiede tutto il vault, una volta, al clic, perché un omonimo oltre
+  le 500 voci della lista non si troverebbe. Il file scelto sostituisce il
+  percorso della scheda in un commit solo; il `#…` che la scheda aveva nel
+  percorso e il `subpath` restano. Un annulla torna al file di prima.
+- **Togli dalla lavagna** (`canvas.card.remove`) toglie la scheda e le sue
+  linee, come Canc, per quella scheda sola, con lo stesso avviso e il suo
+  «Annulla» ([il menu della scheda](canvas-input.md#il-menu-della-scheda)).
+
+Le regole:
+
+- La tela ascolta il file con `watch` finché la scheda è mancante. Quando il
+  file torna o cambia, la scheda si rimonta da sé con la sua vista; se il
+  renderer dice di nuovo che manca, torna mancante.
+- Se il file torna, o la scheda cambia, mentre il selettore di «Ritrova…» è
+  aperto, la scelta è vecchia e non tocca niente.
+- Il segnaposto si rifà quando cambiano la lingua o la sola lettura, e quando
+  la scheda cambia (allora il file si chiede di nuovo). Uno spostamento o un
+  colore di un'altra scheda non lo tocca.
+- In sola lettura il segnaposto c'è, senza gesti. Senza un selettore
+  (`onPickFile` assente) manca «Ritrova…», e «Togli» resta.
+- Una scheda di link non manca mai: il suo `missing()` non fa niente.
+
+## Quando la tela cambia il modo
+
+La tela sceglie le schede vive con `liveCardIds` e cambia loro il modo con
+`updateLiveCards`, nel silenzio della penna della tela (la stessa
+`PenQuiet` dell'inchiostro). La vista passata a `liveCardIds` è il viewport
+in coordinate della lavagna (la camera divisa per lo zoom), con lo zoom
+della camera; contano solo le schede con una vista montata, così una specie
+senza renderer non toglie posto alle altre.
+
+La scelta si rifà:
+
+- **a fine gesto**: al rilascio del puntatore dopo uno spostamento della
+  lavagna, un pizzico, un trascinamento o un ridimensionamento di schede, e
+  `WHEEL_SETTLE_MS` (150 ms) dopo l'ultimo scatto della rotella; anche un
+  gesto fermato a metà (un `pointercancel`, la penna che si posa sotto il
+  dito) è un gesto finito;
+- **dopo ogni resa**: un documento nuovo o cambiato da fuori, un annulla,
+  una scheda aggiunta o tolta;
+- **quando la vista cambia misura** (un `ResizeObserver` sul viewport, che
+  si stacca con la tela), e lo zoom dei pulsanti e dei tasti, che è un gesto
+  già finito.
+
+Durante un gesto nessuna scheda cambia modo, nemmeno se lo zoom passa sotto
+0,35 e torna sopra nello stesso gesto: conta solo dove il gesto finisce.
+Con la penna giù il cambio aspetta che si alzi; il lavoro che arriva quando
+la penna si alza non fa niente se intanto è cominciato un altro gesto (la
+sua fine rifà la scelta). Con la lavagna nascosta (dentro un elemento
+`hidden`, come la linguetta di un altro riquadro, o fuori dalla pagina) le
+schede restano come sono; quando torna in vista la vista cambia misura e la
+scelta si rifà.
+
+Il percorso di uno spostamento col tasto centrale:
+
+```mermaid
+sequenceDiagram
+  participant P as puntatore
+  participant T as tela
+  participant Q as PenQuiet
+  participant V as viste
+  P->>T: pointerdown (comincia lo spostamento)
+  P->>T: pointermove… (solo la camera, nessun modo cambia)
+  P->>T: pointerup
+  T->>T: liveCardIds(schede con una vista, vista, zoom)
+  T->>Q: updateLiveCards → defer("cards")
+  alt penna su
+    Q->>V: setMode solo dove il modo cambia
+  else penna giù
+    Q-->>Q: aspetta che la penna si alzi
+    Q->>V: setMode, se nessun gesto è cominciato
+  end
+```
+
+Il modo riuscito si scrive sulla scheda in `data-card-mode`; un `setMode`
+che lancia lascia il modo di prima e un avviso in console. A fine gesto la
+tela chiama anche `resize()` sulle viste la cui scheda ha cambiato misura
+(un ridimensionamento, un annulla, una modifica da fuori), una volta per
+misura nuova; durante un ridimensionamento non lo chiama.
+
+## Le porte della shell
+
+Nella shell le schede arrivano alla tela dalla registrazione della lavagna
+(`editors/core/bootstrap.ts`), nel suo montaggio pigro: non all'avvio di Fub.
+La scheda di foglio arriva con un suo `import()`; finché non c'è, la vista
+tiene il modo chiesto dalla tela e lo passa alla scheda vera.
+
+Le porte vengono dall'opzione `canvasCards?: CanvasCardPorts`, che la shell
+costruisce in `state/document-controller.ts`, e da due opzioni che c'erano
+già, `media` e `gridHost`:
+
+| Specie | Da dove legge |
+|---|---|
+| nota, documento | `renderEmbed` e la stessa montatura sicura delle schede di testo (`mountMarkdown`), con i link risolti dalla nota |
+| immagine, PDF | la `transport` di `media`, nel vault di adesso; un file che non c'è (`not_found`) è un file mancante, un'immagine oltre 64 MiB non si legge |
+| foglio | `gridHost`; il giornale e la base della sessione aperta del documento se c'è, sennò il giornale vuoto e la revisione di `readDocument` |
+| web | la cache delle schede di link (`linkCardView`, `requestLinkCard`, l'evento `link-cards`) e il visore della finestra |
+| Craft | `canvasCards.craft`: le anteprime di `state/craft-previews.ts` e il menu «Apri con…» ([la scheda dei file Craft](canvas-craft.md)) |
+
+Senza `media` le immagini e i PDF, senza `gridHost` i fogli, hanno il corpo
+di sempre; senza `canvasCards` tutte le schede.
+
+`watch(path)` ascolta `document_changed`, `document_removed` e
+`document_renamed` per i file che un formato serve (note, fogli), le varianti
+`entry_*` per gli altri (immagini, PDF); ogni ascolto ha il suo smontaggio.
+Prima di avvisare la scheda la cache delle immagini ferme dimentica il file
+(`forget`): nessuna scheda, nemmeno su un'altra lavagna, ritrova l'immagine di
+prima. Lo stesso `watch` ascolta una scheda mancante («Il file che manca»).
+
+La cache delle immagini ferme è una sola per finestra, per tutte le lavagne
+che vi si aprono. Si svuota quando una lavagna si monta in un vault diverso
+da quello in cui la cache si è riempita: lo stesso percorso è un altro file.
+
+## Scrivere dentro una scheda
+
+Chi scrive dentro una scheda usa l'editor vero del file, sulla stessa
+`DocumentSession` di un riquadro: stesse bozze, conflitti e salvataggio. La
+tela non importa nessun editor (il confine di CodeMirror): riceve
+`CardEditorPort` (`editors/canvas/cards.ts`), che la shell costruisce in
+`state/card-editors.ts` con le sessioni e il registro delle superfici della
+finestra e passa con `canvasCards.editors` e `surface.ts` (`CardEditing`).
+Senza porta le schede restano in lettura.
+
+`open(path, host, { compact, readOnly, lifetime, heading })`, con `heading` che
+porta la vista al titolo (`headingOffset`); l'editor dà la sua barra di formato
+(`toolbar()`) e il banner del conflitto, come un riquadro. Come la nota la usa:
+[Scrivere in una scheda di nota](canvas-input.md#scrivere-in-una-scheda-di-nota).
+
+- prenota la sessione (`retain`) e la tiene finché l'editor vive, anche
+  dopo una rinomina (`renamed()` la riprende sul nome nuovo); fuori dal
+  controllore una sessione si lascia solo con `releaseSession`
+  (`shell-layout.ts`, `document-bridge.ts`), che la lascia aperta se una
+  scheda ci scrive: un riquadro chiuso non la chiude sotto la scheda;
+- legge il file con `readForSurface` e chiede la superficie al registro per
+  `format_id` e `source_kind`, come un riquadro, nella sua modalità
+  predefinita; la monta in `host` e la attacca (`attachSurface`);
+- dà `null`, senza lasciare niente montato né prenotato, se il file non ha
+  un editor (il registro ripiegherebbe sulla superficie d'errore, o la
+  superficie non tiene il testo), se la sessione non si apre, o se la vita
+  della scheda si chiude mentre `open` aspetta.
+
+L'annulla è della superficie: un cambio da un riquadro o da un'altra scheda
+entra con `syncDoc` e non si annulla qui; una battuta rimasta indietro si
+ribasa come in un riquadro. Due `open` sullo stesso file: due superfici, una sessione.
+
+`state()` è lo stato del salvataggio della sessione (`SaveState`, quello
+della testata di un riquadro) o `readonly`: chiesto dalla scheda, la
+chiusura della finestra, una cancellazione in sospeso, il prestito a un'app
+(`heldReadOnly`, col perché in `readOnlyWhy()`), oppure la sessione chiusa
+sotto l'editor (il file tolto, `closed()`). Allora la superficie resta
+ferma in sola lettura, e nessuna battuta finisce dove non si salva. In cima
+all'editor la porta disegna il banner del conflitto e gli avvisi della nota
+di un riquadro (`notices`), ridisegnati a ogni evento della sessione.
+`leave()` registra il testo tenuto dall'editor e salva adesso; `destroy()` lo
+registra, stacca, smonta e lascia la prenotazione, una volta sola.
+
+Chiusa la lavagna o la scheda, se nessuno tiene il file la sessione salva e si
+chiude; se non può salvare resta con la bozza e la shell chiede come per un
+riquadro (`unsaved` → `keepOrDiscardUnsaved`), salvo alla chiusura della shell.
+
+### La scheda di testo
+
+Il testo sta nel `.canvas`: `openText(host, testo, { onText, readOnly,
+lifetime, documentId, forms })` monta l'editor delle note in Live, senza
+sessione, con un nome nella cartella della lavagna per i link relativi. Ogni
+battuta va a `onText`, poi nel testo in sospeso della tela (commit dopo 250 ms,
+bozza intanto), con la misura della scheda cresciuta scrivendo ([crescita e tasti](canvas-input.md#scrivere-in-una-scheda-di-testo)).
+Smontato, consegna prima a `onText` il testo tenuto (`commitPending`); un testo
+che non terrebbe byte per byte, o `null`, lasciano il campo semplice.
+
+### Scrivere in una scheda di foglio
+
+Un doppio clic su una cella della scheda di foglio viva, o Invio sulla scheda
+scelta, chiede di scrivere (`CardView.edit(from)`, con `from` l'elemento
+sotto il gesto). La scheda (`editors/grid/card.ts`) apre la porta con
+`compact: true`: la shell lo passa al montaggio come
+`SurfaceMountContext.compact`, e `mountGrid` (`editors/core/bootstrap.ts`)
+monta la griglia vera senza nastro, linguette, finestre né tavolozza, con
+l'host ridotto di `editors/grid/compact.ts`:
+
+- il catalogo dei comandi tiene solo quelli che scrivono valori e formule
+  (le battute, l'incolla, il riempimento, annulla e ripeti) e quelli che
+  leggono soltanto (`COMPACT_COMMANDS`): righe, colonne, unioni e formati
+  restano dell'editor intero, e Ctrl+G o il bordo di una colonna non fanno
+  niente; un comando fuori dall'elenco l'host non lo manda al file;
+- Invio sulla cella scelta la apre (come F2), Invio e Tab nella cella aperta
+  confermano e passano alla cella dopo, come in un riquadro; Ctrl+PagSu e
+  Ctrl+PagGiù non cambiano foglio: si scrive solo il foglio attivo;
+- il primo Esc chiude la cella aperta, il secondo esce dalla scrittura; il
+  tasto destro resta quello della griglia.
+
+Mentre si scrive la sessione di lettura della resa è chiusa e la griglia è
+l'unica sul file; la sessione del documento è la stessa di un riquadro
+aperto sullo stesso foglio, che riceve il giornale nuovo e riapre la sua
+griglia senza rileggere il disco. Uscendo, il giornale va alla sessione e si
+salva come alla chiusura di un riquadro, e la resa si rilegge.
+
+La cella attiva e il suo contenuto com'è scritto arrivano alla tela come dati:
+la superficie dà `EditorSurface.activeCell` (`SurfaceActiveCellSource` in
+`editors/core/registry.ts`, letto quando il motore della griglia dice che la
+selezione, la cartella o la modalità sono cambiate), la porta li passa come
+`CardEditor.context()`/`onContext`, la scheda come `CardWriting.context`, e
+la tela li mostra nella riga delle opzioni (`[data-option="formula"]`) e
+nella banda (`voti.xlsx · B4`). Nella scheda la barra della formula della
+griglia non si vede.
+
+Un foglio di sola lettura non si scrive: la scheda resta attiva per scorrere
+e copiare, e la riga del titolo e una notifica dicono perché. Una scrittura
+che arriva su una revisione vecchia la gestisce la griglia, come in un
+riquadro; una scheda ferma o distrutta mentre la griglia arriva la smonta
+senza lasciare niente aperto.

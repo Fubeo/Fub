@@ -18,7 +18,7 @@ use fub_abi::grid::{GridApplyRequest, GridCellKey, GridCellPatch, GridWindowRequ
 use fub_abi::model::DocId;
 use fub_abi::{GridBytesCell, GridCommand, GridJournal, GridValue, PluginError};
 use fub_format_xlsx::grid::XLSX_GRID_SURFACE;
-use fub_host::resources::ResourceWrite;
+use fub_host::resources::{ResourceReuse, ResourceWrite};
 use fub_host::Host;
 
 struct Vault {
@@ -384,9 +384,13 @@ fn i_byte_della_shell_non_coprono_una_cartella_ma_ne_creano_una() {
     let id = DocId::new("Conti.xlsx");
     let before = vault.on_disk("Conti.xlsx");
     let revision = Revision::of_bytes(&before);
-    let written = vault
-        .host
-        .resource_write(None, &id, b"{\"version\":1}", Some(revision));
+    let written = vault.host.resource_write(
+        None,
+        &id,
+        b"{\"version\":1}",
+        Some(revision),
+        ResourceReuse::Never,
+    );
     let Err(PluginError::PermissionDenied(message)) = &written else {
         panic!("{written:?}");
     };
@@ -398,7 +402,13 @@ fn i_byte_della_shell_non_coprono_una_cartella_ma_ne_creano_una() {
     // Una cartella nuova, scaricata o incollata, si deposita come ogni file.
     let created = vault
         .host
-        .resource_write(None, &DocId::new("Copia.xlsx"), &before, None)
+        .resource_write(
+            None,
+            &DocId::new("Copia.xlsx"),
+            &before,
+            None,
+            ResourceReuse::Never,
+        )
         .unwrap();
     assert_eq!(created.revision, Revision::of_bytes(&before));
     assert_eq!(vault.on_disk("Copia.xlsx"), before);

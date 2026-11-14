@@ -63,6 +63,19 @@ pub fn content_hash_hex(bytes: &[u8]) -> String {
         .to_owned()
 }
 
+/// A key that can be written bare as a frontmatter key: ASCII letters,
+/// digits, `_` and `-`, starting with a letter or `_`, at most 64 bytes.
+/// Anything else (a `:`, a newline, a `#`) would change the YAML structure.
+pub fn is_ident(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 64
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        && s.chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+}
+
 /// Minimal YAML scalar quoting, mirroring the clipper's `yamlScalar`.
 ///
 /// Plain when safe, JSON-quoted otherwise (covers `:`, `#`, leading
