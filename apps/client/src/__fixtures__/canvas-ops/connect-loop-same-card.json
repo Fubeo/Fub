@@ -1,0 +1,15 @@
+{
+  "about": "Un arco da una scheda a sé stessa è valido in codice, come in JSON Canvas: con `sides: \"auto\"` va dal lato destro al sinistro.",
+  "before": {
+    "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" }]
+  },
+  "ops": [{ "op": "connect", "from": "a", "to": "a", "sides": "auto" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" }],
+      "edges": [{ "id": "e220a8397b1dcdaf", "fromNode": "a", "toNode": "a", "fromSide": "right", "toSide": "left", "toEnd": "arrow" }]
+    },
+    "created": ["e220a8397b1dcdaf"]
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "about": "`node` e la forma breve nella stessa operazione non si mescolano: è Invalid, e non si sceglie quale vince.",
+  "before": {},
+  "ops": [{ "op": "add_card", "node": { "type": "text", "text": "a", "x": 0, "y": 0, "width": 100, "height": 60 }, "text": "b" }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

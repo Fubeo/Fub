@@ -24,7 +24,7 @@
     { "op": "connect", "from": "f3", "to": "f4", "sides": "auto" },
     { "op": "connect", "from": "f4", "to": "f5", "sides": "auto" }
   ],
-  "needs": ["add_card.id", "add_card.near", "add_card.side", "add_card.text", "connect.from", "connect.sides", "connect.to"],
+  "needs": [],
   "checks": [
     { "count": { "kind": "text", "n": 5 } },
     { "count": { "kind": "edge", "n": 4 } },

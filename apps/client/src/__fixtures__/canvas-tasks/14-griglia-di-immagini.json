@@ -19,7 +19,7 @@
     { "op": "add_card", "id": "f6", "file": "Foto/gita-06.jpg" },
     { "op": "layout", "ids": ["f1", "f2", "f3", "f4", "f5", "f6"], "shape": "grid", "columns": 3 }
   ],
-  "needs": ["add_card.file", "add_card.id", "layout"],
+  "needs": ["layout"],
   "checks": [
     { "count": { "kind": "image", "n": 6 } },
     { "aligned": { "texts": ["Foto/gita-01.jpg", "Foto/gita-04.jpg"], "axis": "left" } },

@@ -1,0 +1,13 @@
+{
+  "about": "Una pagina PDF di 595×842 punti (A4) nasce larga 360 e alta 512, agganciato a 8, col sottopercorso della pagina; in fondo alla lista vuota va in 0,0.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "p5", "file": "Corsi/dispensa.pdf", "subpath": "#page=5", "content_size": [595, 842] }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "p5", "type": "file", "file": "Corsi/dispensa.pdf", "subpath": "#page=5", "x": 0, "y": 0, "width": 360, "height": 512 }],
+      "edges": []
+    },
+    "created": ["p5"]
+  }
+}

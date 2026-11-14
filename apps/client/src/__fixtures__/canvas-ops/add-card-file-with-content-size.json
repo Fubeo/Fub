@@ -1,0 +1,13 @@
+{
+  "about": "Un'immagine di 1600×1200 pixel nasce col lato lungo di 480 e l'altro di 360: le proporzioni vengono dai pixel dati in content_size.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "foto", "file": "schemi/foto.png", "x": 0, "y": 0, "content_size": [1600, 1200] }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "foto", "type": "file", "file": "schemi/foto.png", "x": 0, "y": 0, "width": 480, "height": 360 }],
+      "edges": []
+    },
+    "created": ["foto"]
+  }
+}

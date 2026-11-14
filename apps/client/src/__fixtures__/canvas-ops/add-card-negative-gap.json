@@ -1,0 +1,6 @@
+{
+  "about": "Una distanza negativa da `near` non si scrive: è Invalid.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "a" }] },
+  "ops": [{ "op": "add_card", "id": "b", "text": "b", "near": "a", "gap": -4 }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

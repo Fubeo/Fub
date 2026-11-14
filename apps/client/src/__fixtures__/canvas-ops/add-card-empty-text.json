@@ -1,0 +1,13 @@
+{
+  "about": "Il solo `type` fa una scheda di testo vuota: il testo è la stringa vuota e la misura è quella di nascita, 320×160.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "v", "type": "text" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "v", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "" }],
+      "edges": []
+    },
+    "created": ["v"]
+  }
+}
