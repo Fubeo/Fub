@@ -123,13 +123,70 @@ export function embedTasksBlocks(container: HTMLElement, life: Lifetime): void {
     waiting.textContent = liveStrings.t("tasks.block.loading");
     block.append(waiting);
     pre.replaceWith(block);
-    embedView(TASKS_QUERY_VIEW, block, { query: code.textContent ?? "" }, life);
+    // Spento il componente, il recinto torna codice; riacceso, torna vista.
+    embedView(TASKS_QUERY_VIEW, block, { query: code.textContent ?? "" }, life, {
+      lost: () => block.replaceWith(pre),
+      found: () => pre.replaceWith(block),
+    });
   }
 }
 
 // ---------------------------------------------------------------------------
 // La pastiglia della scadenza
 // ---------------------------------------------------------------------------
+
+/// Allarga `range` finché nessun elemento resta a metà: un bordo che cade
+/// dentro un `<a>` o un `<code>` che il tratto non contiene tutto si sposta
+/// prima (o dopo) l'elemento. Estrarre un tratto a metà di un elemento lo
+/// spezza in due copie — un `<a href>` vuoto da una parte e il suo doppione
+/// dall'altra —; così la pastiglia prende l'elemento intero, come nella Live
+/// (`wholePill`), oppure sta tutta dentro quello che la contiene.
+///
+/// Gli span di posizione della resa (`<span data-md-from data-md-to>`, senza
+/// classe) non sono elementi da prendere interi: portano un pezzo di testo e
+/// il tratto di sorgente da cui viene. Uno che corrisponde al sorgente un
+/// carattere per carattere si divide in due al bordo, ognuno col suo tratto;
+/// uno che non corrisponde (un'entità, una barra protettiva) si prende intero.
+function wholeElements(range: Range): void {
+  if (range.startContainer !== range.endContainer) {
+    const [endNode, endOffset] = splitPosition(range.endContainer, range.endOffset);
+    range.setEnd(endNode, endOffset);
+    const [startNode, startOffset] = splitPosition(range.startContainer, range.startOffset);
+    range.setStart(startNode, startOffset);
+  }
+  const common = range.commonAncestorContainer;
+  const outermost = (node: Node): Node | null => {
+    if (node === common) return null;
+    let found: Node | null = null;
+    for (let at: Node | null = node.parentNode; at && at !== common; at = at.parentNode) found = at;
+    return found;
+  };
+  const startElement = outermost(range.startContainer);
+  const endElement = outermost(range.endContainer);
+  if (startElement) range.setStartBefore(startElement);
+  if (endElement) range.setEndAfter(endElement);
+}
+
+/// Un bordo dentro il testo di uno span di posizione fedele al sorgente: lo
+/// span si divide lì, e il bordo diventa il punto fra le due metà. Altrimenti
+/// il bordo resta dov'è.
+function splitPosition(node: Node, offset: number): [Node, number] {
+  const span = node.parentElement;
+  const parent = span?.parentNode;
+  if (!(node instanceof Text) || !span || !parent || span.tagName !== "SPAN" || span.className !== "" || span.childNodes.length !== 1) return [node, offset];
+  const from = Number(span.dataset.mdFrom);
+  const to = Number(span.dataset.mdTo);
+  if (!Number.isInteger(from) || !Number.isInteger(to) || to - from !== node.length) return [node, offset];
+  const index = [...parent.childNodes].indexOf(span);
+  if (offset <= 0) return [parent, index];
+  if (offset >= node.length) return [parent, index + 1];
+  const after = span.cloneNode(false) as HTMLElement;
+  after.append(node.splitText(offset));
+  span.dataset.mdTo = String(from + offset);
+  after.dataset.mdFrom = String(from + offset);
+  span.after(after);
+  return [parent, index + 1];
+}
 
 /// In Lettura la scadenza di un compito è una pastiglia, come nella Live:
 /// arancio quando è vicina, segnata quando la data non si legge. Il testo
@@ -153,6 +210,7 @@ export function markTaskDues(container: HTMLElement, today: string = localDay())
     range.setStart(...locate(due.source[0]));
     const [endNode, endOffset] = locate(due.source[1] - 1);
     range.setEnd(endNode, endOffset + 1);
+    wholeElements(range);
     const pill = document.createElement("span");
     pill.className = look === "plain" ? "task-due" : `task-due task-due-${look}`;
     if (look === "bad") pill.title = liveStrings.t("tasks.due.unreadable");

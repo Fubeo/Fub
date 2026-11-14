@@ -27,7 +27,7 @@ import type { SyntaxNode, Tree } from "@lezer/common";
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
 import { t } from "../../../../i18n/strings";
-import { dueLook, liveProjection, localDay, projectedDue } from "./task-due";
+import { dueLook, liveProjection, liveTaskEnd, localDay, projectedDue } from "./task-due";
 import { isAllowedLink } from "../../../../ui/sanitize";
 import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
@@ -410,8 +410,10 @@ export function computeDecorations(
   // Dedupe delle decorazioni di riga: blocchi annidati (citazione dentro
   // citazione) non devono impilare due volte la stessa classe.
   const quoteRows = new Set<number>();
-  // Il giorno di chi guarda, per dire se una scadenza è vicina.
+  // Il giorno di chi guarda, per dire se una scadenza è vicina, e le
+  // pastiglie delle scadenze, che si posano per ultime (`wholePill`).
   const today = localDay();
+  const pills: LiveDeco[] = [];
 
   // Le formule fra dollari si leggono per contenitore con la regola della
   // Lettura (`containerMath`): un `$` aperto su una riga può chiudere sulla
@@ -999,19 +1001,54 @@ export function computeDecorations(
       }
       // La scadenza è una pastiglia anche sulla riga attiva: un segno sul
       // testo, che resta com'è e si scrive dentro la pastiglia. La regola
-      // legge il testo del compito senza la sintassi (`task-due.ts`), come la
+      // legge il testo del compito — il primo paragrafo, righe che lo
+      // continuano comprese — senza la sintassi (`task-due.ts`), come la
       // ricerca e la vista: una data dentro un codice conta, un indirizzo no.
-      const due = projectedDue(liveProjection(syntaxTree(state), text, row.from, paragraphEnd, row.to));
+      const tree = syntaxTree(state);
+      const taskEnd = liveTaskEnd(tree, boxFrom, row.to);
+      const source = taskEnd > row.to ? doc.sliceString(row.from, taskEnd) : text;
+      const due = projectedDue(liveProjection(tree, source, row.from, paragraphEnd, taskEnd));
       if (due) {
         const look = dueLook(due, checked, today);
-        out.push({ from: due.source[0], to: due.source[1], kind: "task-due", data: look === "plain" ? undefined : look });
+        pills.push({ from: due.source[0], to: due.source[1], kind: "task-due", data: look === "plain" ? undefined : look });
       }
     }
   }
 
   keepPunctuation(doc, out);
+  for (const pill of pills) out.push(wholePill(pill, out));
   out.sort((a, b) => a.from - b.from || a.to - b.to);
   return out;
+}
+
+/// Le decorazioni che una pastiglia può attraversare: quelle di riga, e il
+/// barrato della voce fatta, che finisce col fine riga (dove la pastiglia, se
+/// continua, va comunque a capo).
+const LINE_KINDS: ReadonlySet<LiveDecoKind> = new Set(["quote-line", "codeblock-line", "callout-line", "done"]);
+
+/// La pastiglia della scadenza, allargata finché non taglia più niente.
+///
+/// Un segno che ne attraversa il bordo — il codice in cui sta la data, il
+/// wikilink che la porta, i suoi segni nascosti, un evidenziato — spezzerebbe
+/// la pastiglia in due toppe: CodeMirror chiude e riapre il segno che finisce
+/// prima. Così la pastiglia prende per intero l'elemento che tocca, come in
+/// Lettura (`markTaskDues`): sta dentro un elemento che la contiene o
+/// contiene quelli che tocca, mai a cavallo.
+export function wholePill(pill: LiveDeco, others: readonly LiveDeco[]): LiveDeco {
+  let { from, to } = pill;
+  for (let grown = true; grown; ) {
+    grown = false;
+    for (const other of others) {
+      if (other === pill || LINE_KINDS.has(other.kind) || other.from >= other.to) continue;
+      const inside = other.from <= from && to <= other.to;
+      const around = from <= other.from && other.to <= to;
+      if (other.to <= from || to <= other.from || inside || around) continue;
+      from = Math.min(from, other.from);
+      to = Math.max(to, other.to);
+      grown = true;
+    }
+  }
+  return { ...pill, from, to };
 }
 
 const REPLACED: ReadonlySet<LiveDecoKind> = new Set(["hide", "math", "image", "link-pill", "footnote-back"]);

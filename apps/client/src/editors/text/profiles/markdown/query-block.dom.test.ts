@@ -105,6 +105,38 @@ describe("il recinto ```tasks```", () => {
     expect(host.mount).toHaveBeenCalledTimes(1);
   });
 
+  it("spento il componente torna codice, riacceso torna vista", () => {
+    const container = rendered("not done", true);
+    const life = openLifetime();
+    embedTasksBlocks(container, life);
+    embeddedViewsDiscovered();
+    expect(host.mount).toHaveBeenCalledTimes(1);
+    const [, instance, block] = host.mount.mock.calls[0]!;
+
+    // Il componente si spegne: la scoperta non trova più la view.
+    known.clear();
+    embeddedViewsDiscovered();
+    expect(host.unmount).toHaveBeenCalledWith(TASKS_QUERY_VIEW, instance);
+    expect(container.querySelector(".block-tasks")).toBeNull();
+    expect(container.querySelector("pre > code.language-tasks")?.textContent).toBe("not done");
+
+    // Un recinto reso mentre è spento resta codice, senza aspettare.
+    const later = rendered("done", true);
+    embedTasksBlocks(later, life);
+    expect(later.querySelector("pre > code.language-tasks")).not.toBeNull();
+    expect(later.querySelector(".block-tasks")).toBeNull();
+
+    // Si riaccende: tutti e due tornano vista, il primo nello stesso posto.
+    known.add(TASKS_QUERY_VIEW);
+    embeddedViewsDiscovered();
+    expect(host.mount).toHaveBeenCalledTimes(3);
+    expect(container.querySelector(".block-tasks")).toBe(block);
+    expect(container.querySelector("pre")).toBeNull();
+    expect(later.querySelector(".block-tasks")).not.toBeNull();
+    life.close();
+    expect(host.unmount).toHaveBeenCalledTimes(3);
+  });
+
   it("chiuso prima della scoperta non si monta più", () => {
     known.clear();
     const container = rendered("not done", true);
@@ -156,6 +188,38 @@ describe("la pastiglia della scadenza", () => {
     const pill = container.querySelector<HTMLElement>(".task-due");
     expect(pill?.textContent).toBe("📅 2026-11-16");
     expect(container.querySelector("li")?.textContent).toBe("Pagare 📅 2026-11-16 poi");
+    // Il codice entra intero nella pastiglia: non se ne fa una copia.
+    expect(container.querySelectorAll("code")).toHaveLength(1);
+    expect(pill?.querySelector("code")?.textContent).toBe("2026-11-16");
+  });
+
+  it("in Lettura prende intero il link che porta la data, senza spezzarlo", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<ul><li class="task" data-task=""><input type="checkbox" disabled>Chiama <a class="wikilink" href="#" data-wikilink-page="Mario">Mario</a> 📅 <a class="wikilink" href="#" data-wikilink-page="2026-11-16">2026-11-16</a></li></ul>';
+    markTaskDues(container, "2026-11-14");
+    const pill = container.querySelector<HTMLElement>(".task-due");
+    expect(pill?.className).toBe("task-due task-due-near");
+    expect(pill?.textContent).toBe("📅 2026-11-16");
+    const links = [...container.querySelectorAll("a")];
+    expect(links.map((link) => [link.textContent, link.dataset.wikilinkPage])).toEqual([
+      ["Mario", "Mario"],
+      ["2026-11-16", "2026-11-16"],
+    ]);
+    expect(links[1]!.parentElement).toBe(pill);
+  });
+
+  it("in Lettura legge solo il primo paragrafo, anche di una voce stretta", () => {
+    const container = document.createElement("div");
+    container.innerHTML = [
+      "<ul>",
+      '<li class="task" data-task=""><input type="checkbox" disabled>Codice sotto<pre><code>📅 2026-11-16</code></pre></li>',
+      '<li class="task" data-task=""><input type="checkbox" disabled>Citazione sotto<blockquote><p>📅 2026-11-16</p></blockquote></li>',
+      '<li class="task" data-task=""><p><input type="checkbox" disabled>Larga</p><p>📅 2026-11-16</p></li>',
+      '<li class="task" data-task=""><p><input type="checkbox" disabled>Larga 📅 2026-11-17</p><p>altro</p></li>',
+      "</ul>",
+    ].join("");
+    markTaskDues(container, "2026-11-14");
+    expect([...container.querySelectorAll(".task-due")].map((pill) => pill.textContent)).toEqual(["📅 2026-11-17"]);
   });
 
   it("nella Live è un segno sul testo, anche sulla riga del cursore", () => {
@@ -187,6 +251,42 @@ describe("la pastiglia della scadenza", () => {
       expect(pills[3]!.title).toContain("Data non leggibile");
       // Il testo del documento non cambia.
       expect(engine.getDoc()).toContain("- [ ] Vicina 📅 2026-11-16");
+    } finally {
+      engine.destroy();
+      parent.remove();
+    }
+  });
+
+  it("nella Live legge le righe che continuano il compito, i wikilink, e non spezza la pastiglia", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} })],
+    });
+    try {
+      engine.setDoc([
+        "Sopra",
+        "",
+        "- [ ] Chiama [[Mario]] 📅 [[2026-11-16]]",
+        "- [ ] Pagare 📅 `2026-11-17 mattina` poi",
+        "- [ ] Su due righe",
+        "  📅 2026-11-18",
+        "- [ ] Padre",
+        "  ```",
+        "  📅 2026-11-19",
+        "  ```",
+        "",
+      ].join("\n"));
+      const pills = [...parent.querySelectorAll<HTMLElement>(".cm-fub-due")];
+      expect(pills.map((pill) => [pill.textContent, pill.className.replace(/\s+/g, " ").trim()])).toEqual([
+        ["📅 2026-11-16", "cm-fub-due cm-fub-due-near"],
+        ["📅 2026-11-17 mattina", "cm-fub-due cm-fub-due-near"],
+        ["📅 2026-11-18", "cm-fub-due cm-fub-due-near"],
+      ]);
+      // La pastiglia contiene il codice intero, non ne è tagliata.
+      expect(pills[1]!.querySelector(".cm-fub-code")?.textContent).toBe("2026-11-17 mattina");
     } finally {
       engine.destroy();
       parent.remove();

@@ -27,17 +27,23 @@ proprio fuso il giorno cambia: al disegno successivo il compito del giorno
 prima è in «Scaduti», anche se nessun file è cambiato.
 
 La scadenza è la data scritta dopo l'ultimo `📅` del testo del compito, nel
-formato `AAAA-MM-GG`. Il testo del compito è il primo paragrafo della sua voce
-senza la sintassi: conta anche il testo dentro un codice o nell'etichetta di un
-link, non l'indirizzo di un link, e non le sottovoci. Una data che non esiste,
+formato `AAAA-MM-GG`. Il testo del compito è il primo paragrafo della sua voce,
+righe che lo continuano comprese, senza la sintassi: conta ciò che si legge. Il
+testo dentro un codice o un evidenziato, l'etichetta di un link e un wikilink
+con ciò che mostra (`[[Mario]]` è «Mario», un alias conta per l'alias) contano;
+l'indirizzo di un link, un'immagine, un embed, una formula, le sottovoci e i
+blocchi sotto il primo paragrafo no. Così `📅 [[2026-10-19]]`, la data collegata
+alla nota del giorno, è una scadenza. Una data che non esiste,
 come `2026-02-30`, non sparisce: il compito va in «Senza data» con l'etichetta
 «Data non leggibile». La regola è una sola, in `fub_abi::rules::tasks`, con la
 gemella TypeScript `taskDue` in `apps/client/src/rules/mirrored.ts` legata alla
 stessa fixture: la usano la ricerca (`due:`), la vista, il recinto e la
-pastiglia nel testo.
+pastiglia nel testo. Il corpus del formato Markdown tiene d'accordo le tre
+letture del testo (il modello, la Live e la Lettura) sugli stessi casi.
 
 Nella vista il testo del compito si legge senza la data, che sta sotto in una
-pastiglia accanto al nome della nota: rossa se il compito è scaduto.
+pastiglia accanto al nome della nota: **arancione** quando la scadenza è
+vicina, con la stessa soglia della pastiglia nel testo (vedi sotto).
 
 Un compito annidato in un'altra lista, o dentro una citazione, conta come
 qualunque altro. Un compito già fatto (`- [x]`) non compare.
@@ -67,9 +73,10 @@ Il nome della nota d'origine, accanto al compito, apre la nota.
 
 ## Limiti
 
-- La vista legge al più **10.000** compiti aperti e ne disegna al più **300**,
-  nell'ordine dei gruppi. Quando taglia lo scrive sotto la lista. Per restringere
-  si usa la ricerca.
+- La vista tiene al più **10.000** compiti aperti e ne disegna al più **300**.
+  Il taglio viene dopo l'ordine dei gruppi: legge tutte le note con compiti
+  aperti e tiene i primi, non quelli delle prime note lette. Quando taglia lo
+  scrive sotto la lista. Per restringere si usa la ricerca.
 - La vista legge le note con compiti aperti dall'indice di ricerca. Se il vault
   non ha un indice attivo, la vista lo dice invece di mostrare un elenco vuoto.
 - I promemoria non ci sono ancora.
@@ -78,11 +85,15 @@ Il nome della nota d'origine, accanto al compito, apre la nota.
 
 Nella nota, in Live e in Lettura, il `📅` con la sua data diventa una
 pastiglia: grigia di solito, **arancione** quando il compito è aperto e la
-scadenza cade prima di sette giorni dal giorno corrente (scaduti compresi). La
+scadenza è vicina, cioè passata, di oggi o dei sei giorni seguenti (la regola
+`due_is_near`, con la gemella `dueIsNear`: la stessa della pastiglia nella vista
+e nel recinto). La
 pastiglia mostra la data com'è scritta: il file non cambia. Un compito fatto
 resta grigio. Una data che non si legge (`2026-02-30`, `📅 domani`) ha la
 pastiglia tratteggiata in rosso, e passandoci sopra dice come si scrive. In Live
-la pastiglia resta anche sulla riga del cursore: la data si scrive dentro.
+la pastiglia resta anche sulla riga del cursore: la data si scrive dentro. Una
+pastiglia non si spezza mai: se la data sta a metà di un codice, di un link o di
+un evidenziato, la pastiglia prende l'elemento intero.
 
 ## Il recinto ```` ```tasks ````
 
@@ -128,9 +139,15 @@ il nome della nota apre la nota. Il recinto si ridisegna quando l'indice cambia,
 come la vista dell'ispettore: una spunta, o un'altra nota che cambia, si vede da
 sola.
 
-Il recinto legge al più **10.000** compiti e ne disegna al più **100**: quando
-taglia lo scrive. Se il componente «Compiti» è spento il recinto non è
-dichiarato e resta un blocco di codice.
+Un `path includes` si guarda prima di leggere la nota: una nota fuori dal
+percorso non si legge. Per i compiti fatti l'indice non tiene la scadenza, e
+una riga `due` la controlla il componente sulle note lette.
+
+Il recinto tiene al più **10.000** compiti e ne disegna al più **100**; il
+taglio, come il `limit`, viene dopo l'ordine. Quando il vault ne ha di più lo
+scrive. Se il componente «Compiti» è spento il recinto non è dichiarato e resta
+un blocco di codice; spegnendolo con la nota aperta, il recinto torna codice, e
+riaccendendolo torna la vista.
 
 La lettura delle righe è in `crates/fub-features/src/tasks/query.rs`, il
 disegno in `crates/fub-features/src/tasks.rs`. Nella shell il recinto riceve il
