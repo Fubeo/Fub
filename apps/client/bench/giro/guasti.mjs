@@ -80,6 +80,9 @@ const NEL_GUASTO = "Testo scritto durante il guasto.";
 
 /// Quanto aspetta, al più, che il fuoco appena spostato si veda.
 const ATTESA_FUOCO_MS = 2_000;
+/// Quanto si aspetta al più che una finestra si chiuda da sé: largo, perché
+/// la macchina può essere carica; la condizione arriva di solito in un attimo.
+const ATTESA_CHIUSURA_MS = 10_000;
 
 /// Il testo della nota com'era quando il gruppo l'ha aperta per i compiti di
 /// tastiera: è la «versione vecchia» che il ripristino rimette.
@@ -518,8 +521,11 @@ const cestino = {
   async controlla(pagina, host) {
     verifica((await host.testo(CESTINATA)) === primaDelCestino, "la nota rimessa non ha il testo di prima");
     verifica((await pagina.locator("#view-panel-trash [role=listitem]").count()) === 0, "la nota rimessa è ancora nel cestino");
-    // Rimessa, la nota si apre (come il provider: `Navigate`).
+    // Rimessa, la nota si apre dove è tornata davvero (come il provider:
+    // `Navigate` verso il nome che il ripristino ha usato).
     await pagina.waitForSelector(aFuoco(NOME_CESTINATA));
+    const chiave = await pagina.getAttribute('.pane.focus .tab[aria-selected="true"]', "data-key");
+    verifica((chiave ?? "").includes(JSON.stringify(CESTINATA)), `rimessa, si è aperta ${chiave} e non la nota tornata in ${CESTINATA}`);
     // E l'albero la mostra di nuovo, dove stava.
     await pagina.click('#views-ribbon .rail-btn[data-panel="files"]');
     await pagina.waitForSelector(`#file-list li[data-path="${CESTINATA}"]`, { state: "attached" });
@@ -829,14 +835,12 @@ const conflittoDuranteLaChiusura = {
     await ripara(pagina, "saveDraft");
     const disco = await leggi(pagina, NOTA);
     await scriviDaFuori(pagina, NOTA, `${disco}\n${FUORI_DURANTE}\n`);
-    await pagina.waitForTimeout(1_000);
-    await giro.foto("arriva-il-conflitto");
     // Il conflitto vince: la finestra si chiude come «Tienila aperta» e la
     // nota torna con la barra del conflitto (PA T63).
-    verifica(
-      (await finestra.count()) === 0,
-      "arrivato il conflitto, la finestra «Modifiche non salvate» resta aperta e chiede ancora (il piano vuole che si chiuda)",
-    );
+    const chiusa = await finestra.waitFor({ state: "detached", timeout: ATTESA_CHIUSURA_MS }).then(() => true, () => false);
+    verifica(chiusa, "arrivato il conflitto, la finestra «Modifiche non salvate» resta aperta e chiede ancora");
+    await barraDelConflitto(pagina);
+    await giro.foto("arriva-il-conflitto");
   },
   async controlla(pagina, host) {
     await pagina.waitForSelector(aFuoco(NOME));
