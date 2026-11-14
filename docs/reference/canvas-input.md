@@ -183,9 +183,11 @@ puntatore l'ha portata, le schede vive tornano come dopo un rilascio, e un
 rilascio che arriva dopo non fa niente. Il dito non si chiude per la cattura
 persa, che il browser e lo strato della penna gli tolgono quando passa a
 scrivere: il suo gesto lo chiudono il rilascio, il `pointercancel` o la
-finestra. Il tratto della penna non passa da questa regola: lo tiene
-l'adattatore dell'inchiostro, che alla finestra che perde il fuoco e alla
-cattura persa lo annulla (vedi [L'inchiostro sulla lavagna](../architecture/canvas-ink-layer.md)).
+finestra. Il tratto della penna segue la stessa regola: la cattura persa e la
+finestra che perde il fuoco lo chiudono e lo salvano fino all'ultimo punto
+(vedi [L'inchiostro sulla lavagna](../architecture/canvas-ink-layer.md)). Il
+menu radiale che la penna o il dito tengono si chiude con loro, senza
+scegliere una voce.
 
 ## Comandi e tasti
 
