@@ -5963,7 +5963,7 @@ Cosa fare:
 Fatto quando: un test per ciascun caso rosso sulla base e verde dopo; i test
 di T96 e di T30–T32 restano verdi.
 Prova: npx vitest run src/state; scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · integrato da coder/n6-t102 (22559da89) · veri e corretti: `settle()` passa l'esito `unsaved` a `keepOrDiscardUnsaved` (che non scarta se una scheda ha ripreso la nota) e «Apri a lato» trova il vicino nelle divisioni annidate (regola in canvas-view.md); `destroyText` consegna il testo in sospeso (oggi non perdeva testo: l'editor manda ogni cambio subito); falso `noticeCopies`: anche «copied_excluded» dice dove sono andati i file · 4 test rossi sulla base · rischio: il collegamento `unsaved` nella shell è provato con una porta finta, non di punta a punta
 
 ## Non verificato stanotte
 
