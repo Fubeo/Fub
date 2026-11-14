@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { forceParsing } from "@codemirror/language";
 import { EditorState, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import { markdownGrammar } from "./grammar";
@@ -24,7 +24,9 @@ describe("il prefisso delle voci", () => {
     const doc = "- uno\n  - due\n1. tre\n- [ ] quattro\n-\n\n```\n- no\n```";
     const view = new EditorView({ parent: document.body, state: EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) }) });
     views.push(view);
-    ensureSyntaxTree(view.state, doc.length, 1000);
+    // L'albero della vista, non soltanto quello dello stato: sotto carico il
+    // primo esame si ferma prima della fine.
+    forceParsing(view, doc.length, 10_000);
     const found = listPrefixes(view).map(({ line, end }) => doc.slice(line, end));
     expect(found).toEqual(["- ", "  - ", "1. ", "- [ ] "]);
   });
@@ -35,7 +37,7 @@ describe("il prefisso delle voci nelle citazioni", () => {
     const doc = "Testo con - un trattino.\n\n> - in citazione\n>   1. annidata\n\n| - | no |\n| --- | --- |";
     const view = new EditorView({ parent: document.body, state: EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) }) });
     views.push(view);
-    ensureSyntaxTree(view.state, doc.length, 1000);
+    forceParsing(view, doc.length, 10_000);
     expect(listPrefixes(view).map(({ line, end }) => doc.slice(line, end))).toEqual(["> - ", ">   1. "]);
   });
 });
@@ -52,7 +54,7 @@ describe("il prefisso delle voci sotto i blocchi resi", () => {
     });
     const view = new EditorView({ parent: document.body, state: EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), hidden] }) });
     views.push(view);
-    ensureSyntaxTree(view.state, doc.length, 1000);
+    forceParsing(view, doc.length, 10_000);
     expect(view.visibleRanges.length).toBe(2);
     expect(listPrefixes(view).map(({ line }) => line)).toEqual([0, doc.indexOf("- quattro")]);
   });

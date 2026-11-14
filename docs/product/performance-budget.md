@@ -249,30 +249,16 @@ lavori).
 | 7.201 righe | Live | 5,7 · 8,4 · 38,0 ms | 3,0 · 3,9 · 4,2 ms | 6,8 · 11,5 · 29,1 ms |
 | 7.201 righe | Blocchi | 5,5 · 9,6 · 24,2 ms | 3,1 · 4,4 · 5,2 ms | 7,6 · 11,9 · 37,8 ms |
 
-**Il budget non è ancora rispettato sulla nota grande.** La Sorgente, che non
-fa altro che il lavoro di CodeMirror e della sessione del documento, sta già
-intorno ai 4 ms (da 2,7 a 5,6 da un giro all'altro, con lo stesso codice), e
-la Live e i Blocchi le stanno sopra di circa un millisecondo e mezzo (prima
-erano tre). Fra un giro e l'altro la stessa nota varia di più di quanto valga
-una correzione: il numero da guardare è la distanza dalla Sorgente, non la
-cifra di un giro solo.
+**Il budget non è ancora rispettato sulla nota grande.** La Sorgente, che fa
+soltanto il lavoro di CodeMirror e della sessione, sta già intorno ai 4 ms, e
+fra un giro e l'altro la stessa nota varia più di una correzione: il numero da
+guardare è la distanza dalla Sorgente, non la cifra di un giro solo.
 
-Sui core P (sei giri alternati, carico da 3,6 a 9,7) la nota di 7.201 righe dà, mediana · novantesimo: Sorgente 3,9 ·
-5,9 ms, Live 4,9 · 9,8 (prima 6,3 · 10,8), Blocchi 5,5 · 10,5 (prima 6,6 ·
-10,5). Le righe nascoste tolte dal campo dei blocchi (qui sotto) sono venute
-dopo: con carico da 10 a 25 la Sorgente fa 3,7 · 4,8, la Live 6,6 · 11,4
-(prima 8,8 · 12,3), i Blocchi 7,1 · 12,8 (prima 8,6 · 13,2). Poi sono venuti
-l'evidenziazione della sintassi sui tratti visibili, il rientro sospeso e la
-guardia dei segni (qui sotto): nel profilo di una battuta nella Live tolgono
-circa 0,6 ms (sintassi da 0,60 a 0,24, rientro da 0,27 a 0,07, guardia da
-0,22 a 0,2). Il banco del 14 novembre, sei giri alternati sui core P con un
-carico da 23 a 101, non li separa dal rumore: nei tre giri con meno carico
-(da 23 a 49) la Sorgente fa da 3,4 a 4,9 ms, la Live da 4,4 a 10,1 (prima da
-6,4 a 7,8), i Blocchi da 5,1 a 20,1 (prima da 6,7 a 10,2). Della distanza che
-resta dalla Sorgente, il profilo mostra il lavoro di CodeMirror sui widget di
-blocco e il suo esame più caro nella Live (qui sotto), poi la patch delle
-decorazioni in riga (0,3 ms), il campo dei blocchi (0,3) e la guardia dei
-segni (0,2).
+Sui core P (14 novembre, sei giri alternati; contano i tre con carico da 23 a
+49, gli altri arrivano a 101) la nota di 7.201 righe dà di mediana: Sorgente da
+3,4 a 4,9 ms, Live da 4,4 a 10,1 (prima da 6,4 a 7,8), Blocchi da 5,1 a 20,1
+(prima da 6,7 a 10,2). Sopra la Sorgente restano i widget di CodeMirror (qui
+sotto), le decorazioni in riga, il campo dei blocchi e i segni (0,3·0,3·0,2).
 
 Una battuta lavora soltanto vicino alle posizioni del cambio, mai con un giro
 sui blocchi di primo livello:
@@ -312,22 +298,14 @@ sui blocchi di primo livello:
   della vista che dà soltanto quelle del tratto visibile: CodeMirror confronta
   due volte a ogni aggiornamento tutte le decorazioni a punto della vista, e
   prima erano 1.600 sulla nota grande (fino a 1,3 ms per battuta);
-- **l'evidenziazione della sintassi** (`theme.ts`, `highlightVisible`) non è
-  quella di CodeMirror: i blocchi resi spezzano il tratto visibile in molti
-  pezzi (sette nella Live sulla nota grande), e `syntaxHighlighting` scorreva
-  l'albero dall'inizio per ognuno. Il nostro plugin unisce i pezzi distanti
-  meno di 4.000 caratteri in una sola passata di `highlightTree` e taglia i
-  tratti ai pezzi visibili; le classi sono le stesse (`theme.test.ts` le
-  confronta con quelle di CodeMirror, nelle due luci e dopo una battuta). Da
-  0,60 a 0,24 ms per battuta nella Live (la Sorgente 0,15–0,2);
-- **il rientro sospeso delle voci** (`hanging.ts`) scorre l'albero una volta
-  sola sul tratto visibile, scende soltanto nei nodi che possono contenere
-  voci, e a una battuta non rimisura i prefissi se la vista non si è mossa,
-  le altezze non sono cambiate e i prefissi misurati sono ancora quelli
-  (`widthsHold`). Da 0,27 a 0,07 ms;
-- **la guardia dei segni** (`format-toggle.ts`, che tiene appaiati `**`, `_`,
-  `~~`) rilegge soltanto le righe con un segno, e ricorda le ultime otto righe
-  lette: a una battuta ne rilegge una.
+- **la sintassi** (`theme.ts`, `highlightVisible`): i blocchi resi spezzano il
+  tratto visibile (sette pezzi nella Live), e `syntaxHighlighting` scorreva
+  l'albero dall'inizio per ognuno; il nostro plugin unisce i pezzi a meno di
+  4.000 caratteri in una passata e taglia ai pezzi, con le classi di CodeMirror
+  (`theme.test.ts`). Da 0,60 a 0,24 ms nella Live;
+- **il rientro sospeso** (`hanging.ts`) scorre una volta il tratto visibile e a
+  una battuta non rimisura se vista, altezze e prefissi restano (0,27 → 0,07);
+- **la guardia dei segni** (`format-toggle.ts`) rilegge una riga a battuta.
 
 Un blocco tornato tiene il suo widget: il suo `eq` non guarda la posizione, e
 dopo l'aggiornamento della vista le coordinate `data-md-*` del DOM tornano al
@@ -349,18 +327,9 @@ Resta proporzionale alla nota il lavoro che la Sorgente fa uguale:
   battuta lo ripassa (`lineFeeds`, l'operazione applicata);
 - **la selezione del DOM** che CodeMirror riscrive.
 
-Resta di CodeMirror, e paga soltanto la Live e i Blocchi, il lavoro sui
-widget di blocco, che non possono uscire dal campo: CodeMirror rifiuta le
-decorazioni di blocco e quelle che sostituiscono un a capo date da un plugin
-della vista. `RangeSet.compare` non condivide mai i pezzi che contengono
-decorazioni a punto con lunghezza, quindi a ogni aggiornamento confronta due
-volte tutti i widget della nota (circa 0,25 ms sulla nota grande), e la mappa
-delle altezze li ripassa tutti alla misura, che però cade nel fotogramma
-dopo, fuori dalla battuta. Nella Live anche l'esame di CodeMirror costa di
-più che nella Sorgente sullo stesso albero (da 2,4 a 2,7 ms contro 1,3–1,8
-nel profilo): una prova senza la guardia dei segni, che usa il parser
-Markdown una seconda volta, lo riporta vicino alla Sorgente, ma la prova
-nella stessa pagina dà soltanto 0,2 ms, dentro il rumore; non è dimostrato.
+Resta di CodeMirror il lavoro sui widget di blocco, che un plugin della vista
+non può dare: `RangeSet.compare` li confronta tutti due volte a ogni
+aggiornamento (0,25 ms sulla nota grande).
 
 Siccome questo banco non sta nella CI, le guardie in CI contano il lavoro di
 una battuta: `render-incremental.test.ts` per la resa e i blocchi della Live
