@@ -145,3 +145,5 @@ La shell valida ogni luce prima di mostrarla nel catalogo. Se un tema installato
 ## Ciclo autore
 
 Da `apps/client`: eseguire `npm run theme:generate`, poi `npm run theme:verify`; per la resa usare anche `npm run bench:verify` e `npm run bench:a11y`. Non modificare a mano `contract.json`, questo README o i file del campione: sono derivati e la verifica byte-per-byte deve restare verde.
+
+Nell'app, con la modalità sviluppatore accesa, Impostazioni › Aspetto › «Tutti i componenti» apre una pagina con ogni componente che il tema veste, in ogni suo stato, poi la tavolozza, i caratteri e i primitivi del kit. Vale il tema in uso o quello in anteprima; i due interruttori in testa provano l'altra luce e il contrasto alto senza salvare niente, un clic su un componente ne mostra gli hook da copiare, e un tema rifiutato mostra lì la sua diagnosi.

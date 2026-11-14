@@ -350,6 +350,14 @@ le stanno sopra, col suo colore, e il contrasto del testo sul foglio diventa un
 esito invece di un «da verificare».
 Il catalogo contiene i campioni posizionati dentro i rispettivi riquadri;
 le regioni che scorrono hanno nome accessibile e ingresso da tastiera.
+I due cataloghi del banco (`bench/catalog.html`, coi componenti
+dell'anatomia, la tavolozza e il campionario delle viste, e `bench/kit.html`,
+coi primitivi del kit negli stati forzati) sono pagine sottili: il loro cuore
+sta in `apps/client/src/dev/catalogo/`, e lo stesso cuore disegna nell'app la
+pagina «Tutti i componenti», che Impostazioni › Aspetto apre in modalità
+sviluppatore. La pagina arriva con un `import()` (codice, stringhe e foglio
+suo), così il bundle iniziale non cresce; le foto di `catalog-*` e `kit-*`
+sono la prova che il banco disegna come prima.
 Il controllo del focus distingue i discendenti di un `details` chiuso
 dagli elementi realmente visibili e raggiungibili. In ogni scena con la
 modalità nella banda, Invio su `#status-mode` apre il menu (che prende il

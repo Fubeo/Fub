@@ -60,6 +60,7 @@
 | `MemoryHost` (provare un provider) | `crates/fub-sdk/src/testing/mod.rs` |
 | i template dei disegni | `crates/fub-features/templates/` |
 | le scene del banco visivo | `apps/client/bench/scene.mjs` |
+| i cataloghi del banco e la pagina «Tutti i componenti» | `apps/client/src/dev/catalogo/` |
 | i comportamenti della shell (avvisi, menu delle modalità, tasto destro, albero, linguette, avvisi nel foglio) | `apps/client/src/panels/`, `apps/client/src/state/`, `apps/client/src/ui/` e `docs/architecture/shell-behaviours.md` |
 | la cornice del telefono e la soglia dei 600 px | `apps/client/src/shells/scrittoio/mobile/` e `docs/architecture/phone-frame.md` |
 | i budget della CI della WebView | `apps/client/bench/webview/budgets.json` |
