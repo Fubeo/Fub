@@ -27,6 +27,7 @@ import type { SyntaxNode, Tree } from "@lezer/common";
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
 import { t } from "../../../../i18n/strings";
+import { dueIsNear, localDay, taskDue } from "./tasks-query";
 import { isAllowedLink } from "../../../../ui/sanitize";
 import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
@@ -169,6 +170,9 @@ export type LiveDecoKind =
   | "highlight"
   | "tag"
   | "done"
+  // la scadenza `📅 AAAA-MM-GG` di un compito: una pastiglia, arancio quando è
+  // vicina (`data` "near"), grigia altrimenti
+  | "task-due"
   | "quote-mark"
   | "sup"
   | "sub"
@@ -405,6 +409,8 @@ export function computeDecorations(
   // Dedupe delle decorazioni di riga: blocchi annidati (citazione dentro
   // citazione) non devono impilare due volte la stessa classe.
   const quoteRows = new Set<number>();
+  // Il giorno di chi guarda, per dire se una scadenza è vicina.
+  const today = localDay();
 
   // Le formule fra dollari si leggono per contenitore con la regola della
   // Lettura (`containerMath`): un `$` aperto su una riga può chiudere sulla
@@ -990,6 +996,13 @@ export function computeDecorations(
       if (checked && paragraphEnd + 1 < row.to) {
         out.push({ from: paragraphEnd + 1, to: row.to, kind: "done" });
       }
+      // La scadenza è una pastiglia anche sulla riga attiva: un segno sul
+      // testo, che resta com'è e si scrive dentro la pastiglia.
+      const due = taskDue(text);
+      if (due && row.from + due.from >= paragraphEnd && isFree(row.from + due.from, row.from + due.to)) {
+        const near = !checked && due.day !== null && dueIsNear(due.day, today);
+        out.push({ from: row.from + due.from, to: row.from + due.to, kind: "task-due", data: near ? "near" : undefined });
+      }
     }
   }
 
@@ -1387,6 +1400,8 @@ function calloutLine(type: string): Decoration {
   return line;
 }
 const bulletMark = Decoration.mark({ class: "cm-fub-bullet" });
+const dueMark = Decoration.mark({ class: "cm-fub-due" });
+const dueNearMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-near" });
 const taskMark = Decoration.mark({ class: "cm-fub-bullet cm-fub-bullet-task" });
 const marksMap: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
   (["h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "strike", "sup", "sub", "code", "link", "highlight", "done", "quote-mark", "near", "nobreak", "footnote-label"] as const).map(
@@ -1468,6 +1483,8 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
         },
       });
     }
+    case "task-due":
+      return d.data === "near" ? dueNearMark : dueMark;
     case "tag":
       return Decoration.mark({
         class: "cm-fub-tag",

@@ -1324,8 +1324,9 @@ function renderTop(node: SyntaxNode, found: Found, context: TopContext): LazyBlo
       // blocco reso, non codice: la Live lo mostra come la Lettura.
       const info = node.getChild("CodeInfo");
       const infoWord = info === null ? "" : source.slice(info.from, info.to).trim().split(/\s+/)[0]!.toLowerCase();
-      // Così l'indice (K4): non si scrive come codice, si legge reso.
-      const declared = info !== null && (aux.declared.has(infoWord) || infoWord === "toc");
+      // Così l'indice (K4) e i compiti (```tasks```, `query-block.ts`): non
+      // si scrivono come codice, si leggono resi.
+      const declared = info !== null && (aux.declared.has(infoWord) || infoWord === "toc" || infoWord === "tasks");
       return block({
         from,
         to,
