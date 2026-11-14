@@ -248,15 +248,15 @@ npm run bench:giro -- --out=$TMPDIR/giro --telefono   # mobile.html a 390×844
 npm run bench:giro -- --solo=avvio --luce=light       # un gruppo, nella luce giorno
 ```
 
-Il corridore è `bench/giro.mjs`; i gruppi, in ordine, sono in
-`bench/giro/elenco.mjs`, uno per file accanto che dice in testa che cosa prova.
-`avvio`: dal primo avvio senza vault all'albero, alla scrittura in Live e alle
-quattro modalità. `scrivere` (non al telefono): «/» e maniglia, tasto destro,
-palette, due riquadri, rinomina coi link, ricerca e «In entrata», con la query
-`?formatbar=1&slash=1` dei comandi di formato. `guasti` (non al telefono):
-conflitto, sola lettura, cestino, i compiti 3–9 da tastiera, testo non salvato,
-salvataggio che fallisce. Al primo errore il giro si ferma, dice dove e perché,
-fotografa (`…-errore.png`) ed esce con 1; foto e referto in `--out`, porta `--port`.
+Il corridore è `bench/giro.mjs`; i gruppi, in ordine, sono in `bench/giro/elenco.mjs`,
+uno per file accanto che dice in testa che cosa prova. `avvio`: dal primo avvio
+senza vault all'albero, alla scrittura in Live e alle quattro modalità. `scrivere`
+(non al telefono): «/» e maniglia, tasto destro, palette, due riquadri, rinomina
+coi link, ricerca e «In entrata»; ricarica con `?formatbar=1&slash=1`, senza cui
+il finto non dà i comandi di formato. `guasti` (non al telefono): conflitti,
+errori, cestino, tastiera. Al primo compito che fallisce il giro si ferma, dice
+quale e perché, fotografa (`…-errore.png`) ed esce con 1. Foto e referto
+(`giro.json`) in `--out` (di serie `bench/.output/giro/`), porta da `FUB_BENCH_PORT` o `--port`.
 
 Che cosa **non** prova: i pixel (senza baseline, si guardano: `bench:verify`),
 il motore vero (risponde il finto host; i suoi «Struttura» e «Collegamenti»
