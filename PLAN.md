@@ -1675,7 +1675,7 @@ duplica); nessun dato personale nell'issue.
 Fatto quando: il protocollo ha i compiti della scrittura; l'issue ha cinque
 risultati.
 Prova: scripts/check.sh --rapido
-Stato: [ ] rinviato · come PA T17 (2026-11-09, l'utente: la prova con
+Stato: [ ] rinviato · come PA T17 (2026-11-09, l'utente: la prova con · 2026-11-14, l'utente: rinviata ancora, senza data («non ho intenzione di farla per ora»)
 cinque persone per ora non si fa; alla release proveranno i primi utenti).
 Non blocca T28 né le onde dopo.
 
