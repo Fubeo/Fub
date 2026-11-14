@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { javascript } from "@codemirror/lang-javascript";
 import { css } from "@codemirror/lang-css";
-import { ensureSyntaxTree, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
+import { ensureSyntaxTree, forceParsing, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
 import { EditorState, RangeSetBuilder, StateField, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemirror/view";
 import { highlightTree } from "@lezer/highlight";
@@ -148,6 +148,10 @@ afterEach(() => { for (const view of views.splice(0)) view.destroy(); });
 function mount(doc: string, extensions: Extension): EditorView {
   const view = new EditorView({ parent: document.body, state: stateOf(doc, extensions) });
   views.push(view);
+  // L'albero dello stato nasce da un esame a tempo limitato: sotto carico è
+  // corto, e corto in modo diverso da una vista all'altra. Lo si porta in
+  // fondo, come farebbe il lavoro inattivo di CodeMirror.
+  expect(forceParsing(view, doc.length, 10_000)).toBe(true);
   return view;
 }
 
@@ -172,7 +176,11 @@ describe("le classi della sintassi nell'editor", () => {
         expect(text).toEqual(painted(theirs));
         // Una battuta, e di nuovo uguali.
         const at = doc.indexOf("forte");
-        for (const view of [ours, theirs]) view.dispatch({ changes: { from: at, insert: "x" } });
+        // Lo stesso per il riesame dopo la battuta.
+        for (const view of [ours, theirs]) {
+          view.dispatch({ changes: { from: at, insert: "x" } });
+          expect(forceParsing(view, view.state.doc.length, 10_000)).toBe(true);
+        }
         expect(painted(ours)).toEqual(painted(theirs));
       }
     });
