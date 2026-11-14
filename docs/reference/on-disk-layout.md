@@ -374,6 +374,14 @@ chiama così, in qualunque cartella. Per una voce che il nome da solo non riport
 al suo path, cioè una nota di una cartella, la cestinatura non avviene senza
 sidecar.
 
+Svuotare il cestino distrugge soltanto le voci che al censimento avevano già
+un sidecar valido, e ciascuna solo se subito prima della rimozione è ancora lo
+stesso file: identità, dimensione, data e timbro di cambiamento. Una voce che
+un'altra finestra o un altro processo Fub ha sostituito nel frattempo resta,
+col suo sidecar, e non si conta. Fra quell'ultimo controllo e la rimozione
+resta la finestra di una chiamata di sistema: chiuderla vorrebbe un lock
+inter-processo sul vault che il kernel non ha.
+
 Lo stato per-documento di una nota cestinata non resta sotto il suo path, che
 torna libero: la cestinatura sposta `doc/<path>/` in `doc~trash/<voce>/`, dove
 `<voce>` è l'id della voce del cestino, codificato come ogni documento. Il

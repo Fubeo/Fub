@@ -1333,3 +1333,97 @@ fn the_rollback_from_the_system_trash_puts_the_note_back() {
 }
 
 
+/// Un altro processo sostituisce una voce del cestino appena censita: la
+/// scrive di nuovo allo stesso nome, con un altro contenuto.
+struct ReplacedAfterCensus {
+    inner: FsStorage,
+    replaced: std::sync::atomic::AtomicBool,
+}
+
+impl VaultStorage for ReplacedAfterCensus {
+    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        self.inner.read(path)
+    }
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        self.inner.write(path, bytes)
+    }
+    fn update(
+        &self,
+        path: &Utf8Path,
+        merge: fub_kernel::storage::Merge<'_>,
+    ) -> std::io::Result<()> {
+        self.inner.update(path, merge)
+    }
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.append(path, bytes)
+    }
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename(from, to)
+    }
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename_no_replace(from, to)
+    }
+    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove(path)
+    }
+    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        self.inner.list(dir)
+    }
+    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        self.inner.stat(path)
+    }
+    fn file_identity(
+        &self,
+        path: &Utf8Path,
+    ) -> std::io::Result<Option<fub_kernel::storage::FileIdentity>> {
+        // La seconda domanda sull'identità della voce è quella dello sweep,
+        // subito prima di distruggere: il censimento è finito, e l'altro
+        // processo arriva adesso.
+        if path.as_str().contains(".trash/One")
+            && self.replaced.swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
+            self.inner
+                .write(path, b"replaced by another process")
+                .expect("the other process writes");
+        }
+        self.inner.file_identity(path)
+    }
+    fn change_stamp(&self, path: &Utf8Path) -> std::io::Result<Option<u64>> {
+        self.inner.change_stamp(path)
+    }
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove_empty_dir(dir)
+    }
+}
+
+/// **Svuotare il cestino distrugge soltanto il file che ha contato** (B14
+/// dell'audit). Una voce sostituita da un altro processo Fub fra il censimento
+/// e la rimozione resta, con il contenuto nuovo; le altre se ne vanno.
+#[test]
+fn emptying_the_trash_keeps_an_entry_replaced_after_the_census() {
+    let fx = Fixture::new();
+    fx.put("One.txt", "first");
+    fx.put("Two.txt", "second");
+    let storage = Arc::new(ReplacedAfterCensus {
+        inner: FsStorage,
+        replaced: std::sync::atomic::AtomicBool::new(false),
+    });
+    let mut ws = fx.workspace_on(storage);
+
+    ws.delete_document(&DocId::new("One.txt")).unwrap();
+    ws.delete_document(&DocId::new("Two.txt")).unwrap();
+    let one = ws
+        .list_trash()
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.original == DocId::new("One.txt"))
+        .expect("One is in the trash")
+        .id;
+
+    assert_eq!(ws.empty_trash().unwrap(), 1, "only Two is destroyed");
+    assert_eq!(
+        std::fs::read(fx.root.join(one.as_str())).unwrap(),
+        b"replaced by another process",
+        "the replaced entry was destroyed"
+    );
+}

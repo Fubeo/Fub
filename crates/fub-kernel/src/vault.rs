@@ -1839,7 +1839,7 @@ impl Vault {
     fn trash_entries_with_sidecars(
         &self,
         dir: &Utf8Path,
-        out: &mut Vec<(Utf8PathBuf, Utf8PathBuf)>,
+        out: &mut Vec<CensusEntry>,
     ) -> Result<()> {
         let entries = self.storage.list(dir).map_err(|source| KernelError::Io {
             path: dir.to_owned(),
@@ -1860,7 +1860,17 @@ impl Vault {
             let id = self.doc_id_for_path(&entry.path)?;
             if self.read_trash_sidecar(&id, &entry.stat)?.is_some() {
                 let sidecar = self.trash_sidecar_path(&id);
-                out.push((entry.path, sidecar));
+                // Lo stesso `stat` che lo sweep richiederà prima di
+                // distruggere: due domande uguali, confrontabili.
+                let Ok(stat) = self.storage.stat(&entry.path) else {
+                    continue;
+                };
+                let seen = self.trash_file_seen(&entry.path, stat);
+                out.push(CensusEntry {
+                    path: entry.path,
+                    sidecar,
+                    seen,
+                });
             }
         }
         Ok(())
@@ -1879,10 +1889,14 @@ impl Vault {
     /// censimento iniziale, e si rimuovono solo quei sidecar. Una `trash`
     /// concorrente resta quindi reversibile con il suo path d'origine intatto.
     ///
-    /// Resta una finestra multi-processo non coperta: senza un lock di vault, un
-    /// altro processo puo sostituire una voce gia censita fra la verifica del
-    /// sidecar e la `remove`. Questo metodo non introduce un lock
-    /// inter-processo che il kernel non possiede.
+    /// Una voce censita si distrugge solo se è ancora **lo stesso file**:
+    /// stessa identità, stessa dimensione e data, stesso timbro di
+    /// cambiamento. Un altro processo Fub sullo stesso vault che nel frattempo
+    /// l'ha sostituita (una nuova cestinatura con lo stesso nome, un
+    /// ripristino seguito da un'altra cancellazione) lascia la sua voce
+    /// intatta, insieme al sidecar. Fra quel controllo e la `remove` resta una
+    /// finestra di una chiamata di sistema, che solo un lock inter-processo
+    /// sul vault chiuderebbe, e il kernel non lo possiede.
     pub fn empty_trash(&self) -> Result<usize> {
         let dir = self.root.join(TRASH_DIR);
         let mut cataloged = Vec::new();
@@ -1890,7 +1904,23 @@ impl Vault {
             self.trash_entries_with_sidecars(&dir, &mut cataloged)?;
         }
         let mut count = 0;
-        for (path, sidecar) in &cataloged {
+        for CensusEntry {
+            path,
+            sidecar,
+            seen,
+        } in &cataloged
+        {
+            // Una voce cambiata dopo il censimento non è più quella che
+            // l'utente ha deciso di distruggere: resta, col suo sidecar.
+            match crate::error::optional(self.storage.stat(path)) {
+                Ok(None) => continue,
+                Ok(Some(stat)) if self.trash_file_seen(path, stat) == *seen => {}
+                Ok(Some(_)) | Err(_) => {
+                    tracing::warn!(target: "fub.kernel", %path,
+                        "trash entry changed after the census: kept");
+                    continue;
+                }
+            }
             // Si distrugge solo questa voce, e solo se c'è ancora: chi l'ha già
             // tolta (un'altra finestra, un sync) non si conta — il risultato
             // che si voleva c'è già. Un guasto vero del supporto risale, perché
@@ -1919,6 +1949,34 @@ impl Vault {
         let _ = self.storage.remove_empty_dir(&self.trash_metadata_dir());
         tracing::info!(target: "fub.kernel", "trash emptied: {count} entries destroyed");
         Ok(count)
+    }
+}
+
+/// Una voce del cestino censita da [`Vault::empty_trash`]: il file, il suo
+/// sidecar e com'era il file quando lo si è contato.
+struct CensusEntry {
+    path: Utf8PathBuf,
+    sidecar: Utf8PathBuf,
+    seen: TrashFileSeen,
+}
+
+/// Ciò che distingue un file da quello che lo ha sostituito allo stesso nome:
+/// dimensione e data, identità e timbro di cambiamento dove il supporto li sa
+/// dare.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TrashFileSeen {
+    stat: Stat,
+    identity: Option<FileIdentity>,
+    change: Option<u64>,
+}
+
+impl Vault {
+    fn trash_file_seen(&self, path: &Utf8Path, stat: Stat) -> TrashFileSeen {
+        TrashFileSeen {
+            stat,
+            identity: self.storage.file_identity(path).ok().flatten(),
+            change: self.storage.change_stamp(path).ok().flatten(),
+        }
     }
 }
 
