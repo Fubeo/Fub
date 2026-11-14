@@ -35,7 +35,7 @@ Le chiavi che Fub non conosce restano nel file e non vengono interpretate.
 Ogni voce di `views` ha una chiave `name` (obbligatoria, unica nel file) e una
 chiave `type`, che è una fra `table`, `cards`, `list`, `kanban`, `map`,
 `calendar` e `timeline`. Un `type` che Fub non conosce rende il file illeggibile
-come Base. La Base disegna oggi le prime cinque: una vista `calendar` o
+come Base. La Base disegna le prime cinque: una vista `calendar` o
 `timeline` si mostra come un tipo che la Base non disegna (un errore sulla vista,
 con «Riprova»). Le altre chiavi sono facoltative:
 
@@ -55,7 +55,7 @@ con «Riprova»). Le altre chiavi sono facoltative:
 
 Il calendario mostrerà le note nel giorno di una proprietà data. La linea del
 tempo mostrerà ogni nota come una barra fra la proprietà d'inizio e quella di
-fine, o come un punto se manca la fine. Oggi il file le legge e le scrive, e la
+fine, o come un punto se manca la fine. Il file le legge e le scrive, e la
 valutazione dà il giorno di ogni nota, ma la superficie non le disegna: le
 disegnano i task T17 (calendario) e T34 (linea del tempo) del piano dell'editor.
 Tutte e due leggono le proprietà delle note, e le chiavi che dicono quali sono
