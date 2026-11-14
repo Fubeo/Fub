@@ -1,0 +1,5 @@
+# Una sola vista per ora.
+version: 1
+views:  # nessuna vista ancora
+  - name: Tutte   # la prima e unica
+    type: table

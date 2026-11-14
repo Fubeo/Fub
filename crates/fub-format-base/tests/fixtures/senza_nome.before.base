@@ -1,0 +1,3 @@
+views:
+  - type: table
+    limit: 3

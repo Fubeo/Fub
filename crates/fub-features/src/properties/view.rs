@@ -264,9 +264,10 @@ fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError
         return Ok(UiNode::column(1, children));
     }
     let model = host.read_model(&doc)?;
+    let types = property_types(host);
     let props = model
         .frontmatter
-        .properties_with_types(&date_formats(host), &property_types(host));
+        .properties_with_types(&date_formats(host), &types);
     let same_day = host
         .view_state(SAME_DAY_STATE)?
         .and_then(|v| v.as_str().map(str::to_string))
@@ -274,11 +275,20 @@ fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError
     if props.is_empty() {
         children.push(UiNode::empty_state(Text::key(EMPTY_NO_PROPS)));
     } else {
-        children.extend(
-            props
-                .iter()
-                .map(|(k, v)| row(&doc, k, v, model.frontmatter.get(k), same_day.as_deref())),
-        );
+        children.extend(props.iter().map(|(k, v)| {
+            let choices = match types.option_match(k, v) {
+                Some(OptionMatch::Found(_)) => types.options(k),
+                _ => &[],
+            };
+            row(
+                &doc,
+                k,
+                v,
+                model.frontmatter.get(k),
+                same_day.as_deref(),
+                choices,
+            )
+        }));
     }
     if let Some(day) = &same_day {
         children.push(same_day_list(host, &doc, day)?);
@@ -442,6 +452,7 @@ fn row(
     value: &PropertyValue,
     raw: Option<&serde_json::Value>,
     same_day: Option<&str>,
+    choices: &[PropertyOption],
 ) -> UiNode {
     let payload = serde_json::json!({ KEY: key, DOC: doc.as_str() });
     let source_only = matches!(value, PropertyValue::Unknown(_) | PropertyValue::Empty)
@@ -461,6 +472,8 @@ fn row(
                 ],
             ),
         })
+    } else if let (PropertyValue::Text(current), false) = (value, choices.is_empty()) {
+        choice_widget(key, current, choices, payload.clone())
     } else {
         widget(key, value, payload.clone(), raw)
     };
@@ -499,6 +512,35 @@ fn row(
             children: controls,
         },
     )
+}
+
+/// Una Selezione o uno Stato il cui valore è una delle opzioni: la tendina
+/// delle opzioni del registro, nel loro ordine. Due opzioni con lo stesso nome
+/// sono una voce sola; un valore fuori dalle opzioni non arriva qui e resta un
+/// campo di testo.
+fn choice_widget(
+    key: &str,
+    current: &str,
+    choices: &[PropertyOption],
+    payload: serde_json::Value,
+) -> UiNode {
+    let mut options: Vec<UiOption> = Vec::with_capacity(choices.len());
+    for choice in choices {
+        if !options.iter().any(|o| o.value == choice.name) {
+            options.push(UiOption::new(
+                choice.name.clone(),
+                Text::from(choice.name.clone()),
+            ));
+        }
+    }
+    UiNode::new(UiKind::Select {
+        field: key.to_string(),
+        label: Some(Text::from(key)),
+        value: vec![current.to_string()],
+        options,
+        multiple: false,
+        action: Some(ActionRef::with(SET, payload)),
+    })
 }
 
 fn widget(
