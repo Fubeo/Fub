@@ -652,8 +652,8 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ),
     (
         "canvas.read.max_chars.desc",
-        "Solo per la forma outline: taglia a una riga intera e dice quante ne restano. Assente = 20 000.",
-        "Only for the outline form: cuts at a whole line and says how many remain. Absent = 20 000.",
+        "Con outline taglia a una riga intera e dice quante ne restano; con json taglia solo i punti di ink_read e scrive points_omitted; con code non vale. Assente = 20 000.",
+        "With outline it cuts at a whole line and says how many remain; with json it cuts only the points of ink_read and writes points_omitted; it does not apply to code. Absent = 20 000.",
     ),
     (
         E_READ_FORM,
