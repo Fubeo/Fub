@@ -112,8 +112,13 @@ selezione con la barra accesa), `menu` (solo col tasto destro) e `off`.
 ## Il «/» nel testo
 
 Il **«/»** scritto a inizio riga o dopo uno spazio apre il pannello dei blocchi
-sotto la riga, o sopra se sotto non c'è posto. In Live e in Blocchi è lo
-stesso; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
+sotto la riga. Se sotto non ci sta intero si accorcia, e l'elenco scorre
+dentro, fino a 220 px; solo se sotto non c'è neanche quello si apre sopra la
+riga. Non esce mai dall'area del documento: testata, barra degli strumenti e
+barra della finestra restano scoperte (`slashPlacement` in
+`editors/text/profiles/markdown/slash.ts`). Sul telefono è un foglio in fondo
+alla finestra. Vale in ogni modalità di scrittura; il «+» della maniglia mette
+un blocco vuoto e ci apre il «/».
 
 - **La testata** mostra ciò che si è scritto, il contesto («riga vuota:
   diventa il blocco scelto», «dopo il testo: un blocco nuovo sotto») e il

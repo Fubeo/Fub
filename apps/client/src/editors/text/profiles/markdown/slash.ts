@@ -6,8 +6,9 @@
 // Il pannello è della shell (`panels/slash/panel.ts`), disegnato coi pezzi
 // del kit; qui stanno il riconoscimento del contesto, puro sul testo, e lo
 // stato: uno `StateField` con dove sta il «/» e ciò che si è scritto dopo. Il
-// campo dà un tooltip di CodeMirror (`showTooltip`) che posa il pannello sotto
-// la riga, o sopra se sotto non c'è posto, e un keymap a precedenza alta passa
+// campo dà un tooltip di CodeMirror (`showTooltip`) che posa il pannello dove
+// dice `slashPlacement` (sotto la riga, accorciato; sopra solo se sotto non
+// c'è il minimo, e mai fuori dall'area del documento), e un keymap a precedenza alta passa
 // al pannello i tasti mentre è aperto. Restano qui anche i completamenti che
 // una voce riapre dopo di sé quando la si esegue senza il suo passo: il tipo
 // di riquadro e il linguaggio di un blocco di codice.
@@ -149,8 +150,48 @@ export function slashPlace(state: EditorState, from: number, to: number): SlashP
   return { line: rest.trim() === "" ? "empty" : "after-text", above, inList: LIST_MARK.test(line.text) };
 }
 
+// Il lato lo sceglie `slashPlacement`, non CodeMirror: la sua regola apre
+// sopra appena sotto non c'è l'altezza intera, anche fino in cima alla
+// finestra. Qui il tooltip resta sempre sotto, e il pannello si sposta dopo.
 function tooltipAt(from: number): Tooltip {
-  return { pos: from, above: false, strictSide: false, create: (view) => slashTooltip(view) };
+  return { pos: from, above: false, strictSide: true, create: (view) => slashTooltip(view) };
+}
+
+/// Quanto può accorciarsi il pannello prima di aprirsi sopra la riga (px):
+/// la testata, le linguette, tre righe e il piede.
+export const SLASH_MIN_HEIGHT = 220;
+/// Lo stacco fra la riga e il pannello (px), sopra come sotto.
+export const SLASH_GAP = 8;
+
+/// Dove sta il pannello del «/», in coordinate della finestra.
+export interface SlashPlacement {
+  readonly above: boolean;
+  readonly top: number;
+  readonly height: number;
+}
+
+/// La regola di posizione del pannello: sotto la riga, accorciato se serve
+/// (l'elenco scorre dentro) fino a `min`. Soltanto se sotto non c'è neanche
+/// `min` si apre sopra, e sopra non va mai oltre `bounds.top`, il bordo alto
+/// dell'area del documento: testata, barra degli strumenti e barra della
+/// finestra restano scoperte. Se nessuno dei due lati ha `min`, prende il
+/// lato più alto e ci sta dentro.
+export function slashPlacement(
+  caret: { readonly top: number; readonly bottom: number },
+  natural: number,
+  bounds: { readonly top: number; readonly bottom: number },
+  min = SLASH_MIN_HEIGHT,
+  gap = SLASH_GAP,
+): SlashPlacement {
+  const want = Math.max(0, natural);
+  const below = Math.max(0, bounds.bottom - (caret.bottom + gap));
+  const above = Math.max(0, caret.top - gap - bounds.top);
+  const floor = Math.min(min, want);
+  const goAbove = below < floor && above > below;
+  const height = Math.min(want, goAbove ? above : below);
+  return goAbove
+    ? { above: true, top: caret.top - gap - height, height }
+    : { above: false, top: caret.bottom + gap, height };
 }
 
 /// La selezione che «Trasforma» guarda, finché resta quella.
@@ -259,7 +300,9 @@ function slashTooltip(view: EditorView): TooltipView {
   };
   return {
     dom: panel.dom,
-    offset: { x: -16, y: 8 },
+    offset: { x: -16, y: SLASH_GAP },
+    // L'altezza la decide `slashPlacement`: CodeMirror non la tocca.
+    resize: false,
     mount() {
       panels.set(view, panel);
       view.contentDOM.setAttribute("aria-controls", panel.listId);
@@ -269,17 +312,48 @@ function slashTooltip(view: EditorView): TooltipView {
       if (update.docChanged || update.selectionSet) refresh();
     },
     positioned() {
-      // Qui CodeMirror sta scrivendo la sua misura e non lascia leggere il
-      // layout: la posizione del «/» si legge nella misura che segue.
-      const open = placed ? null : current();
+      // Qui CodeMirror sta scrivendo la sua misura (il pannello sotto la
+      // riga, alto quanto il CSS) e non lascia leggere il layout: la riga e
+      // l'area del documento si leggono nella misura che segue, che sposta e
+      // accorcia il pannello secondo `slashPlacement`.
+      const open = current();
+      const first = !placed;
       placed = true;
       view.requestMeasure({
         key: panel,
         read: () => {
+          const dom = panel.dom;
           const caret = open ? view.coordsAtPos(open.from) : null;
-          return caret ? caret.left - panel.dom.getBoundingClientRect().left : 0;
+          if (!caret || dom.classList.contains("is-sheet")) return { caret: null, caretX: 0, natural: 0, bounds: null };
+          const area = view.scrollDOM.getBoundingClientRect();
+          return {
+            caret,
+            caretX: first ? caret.left - dom.getBoundingClientRect().left : 0,
+            natural: parseFloat(getComputedStyle(dom).height) || 0,
+            // Uno stacco anche dai bordi dell'area, come dalla riga.
+            bounds: { top: Math.max(area.top, 0) + SLASH_GAP, bottom: Math.min(area.bottom, window.innerHeight) - SLASH_GAP },
+          };
         },
-        write: (caretX) => panel.placed(panel.dom.classList.contains("cm-tooltip-above"), caretX),
+        write: ({ caret, caretX, natural, bounds }) => {
+          const dom = panel.dom;
+          let above = dom.classList.contains("cm-tooltip-above");
+          if (caret && bounds) {
+            const place = slashPlacement(caret, natural, bounds);
+            // CodeMirror l'ha messo a `caret.bottom + SLASH_GAP`: lo si sposta
+            // di quanto manca, nella sua stessa unità (fixed o absolute).
+            const from = caret.bottom + SLASH_GAP;
+            const top = parseFloat(dom.style.top);
+            if (Number.isFinite(top)) dom.style.top = `${top + (place.top - from) / view.scaleY}px`;
+            dom.style.height = place.height < natural ? `${place.height / view.scaleY}px` : "";
+            dom.classList.toggle("cm-tooltip-above", place.above);
+            dom.classList.toggle("cm-tooltip-below", !place.above);
+            above = place.above;
+          }
+          panel.placed(above, caretX);
+          // Il foglio del dito (lo decide `placed` la prima volta) sta in
+          // fondo alla finestra con l'altezza del suo CSS.
+          if (dom.classList.contains("is-sheet")) dom.style.removeProperty("height");
+        },
       });
     },
     destroy() {
