@@ -441,22 +441,8 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
   coppia di surrogati. Non porta il sorgente intero, che con un file grande
   costerebbe a ogni gesto. `inverse` sono le toppe dell'annulla, da dare a un
   altro `canvas_commit`.
-  Un commit che cambia soltanto livelli d'inchiostro (di schede che restano
-  al loro posto, o quello della radice che c'era e c'è ancora) porta anche
-  `changed`: `{"nodes": [...], "root": {...}}`, più `board` se serve.
-  Ogni voce di `nodes` è una scheda riscritta con la sua posizione:
-  `{"at", "node"}` la dà intera (il suo livello è nato o sparito, o è
-  cambiato oltre i tratti), `{"at", "id", "strokes"}` dice che è cambiata
-  solo la lista `strokes` del suo livello. `root` ha le chiavi della radice
-  riscritte intere, `board` il cambio della sola lista dei tratti della
-  radice. Un cambio della lista è `{"start", "remove", "insert"}`: i tratti
-  da `start` a `start + remove` sono diventati `insert`, e gli altri campi
-  del livello restano quelli, nel loro ordine. Messo sul modello di prima,
-  `changed` dà quello che darebbe `canvas_model` (`changedModel` di
-  `core.ts`); senza `changed` il modello si rilegge intero. Il nucleo fa un
-  commit così senza rileggere la lavagna: ritocca e rilegge solo il testo
-  delle parti cambiate (`fub-canvas-core/src/commit.rs`), e scrive gli
-  stessi byte del ritocco di tutto il testo.
+  Un commit di soli tratti porta anche `changed`: le schede riscritte, o solo il cambio della loro lista `strokes` (`{"start", "remove", "insert"}`), e così per la radice;
+  sul modello di prima dà quello di `canvas_model` (forma in `Cores::commit` di `src/api.rs`, `changedModel` di `core.ts`). Il nucleo ritocca e rilegge solo le parti cambiate, con gli stessi byte.
 - `canvas_preview` dà il sorgente che darebbe `canvas_commit` con le stesse
   toppe, o lo stesso errore, e non cambia la lavagna: serve alle bozze, che
   vogliono il testo intero.
@@ -471,9 +457,6 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
   (`read_layers`), nella forma di `expect` dei
   [vettori dell'inchiostro](canvas-ink.md#i-vettori). Come `canvas_model`
   non ha ingresso da liberare; la risposta è nel risultato, del modulo.
-  La facciata tiene i livelli letti di ogni lavagna: dopo un commit con
-  `changed` rilegge solo quelli delle parti cambiate, dopo ogni altro cambio
-  li rilegge tutti alla prossima domanda.
 - Gli handle partono da 1, crescono e non si riusano: 0 e `u32::MAX` non sono
   mai handle, e un handle chiuso risponde `handle` per sempre.
 
@@ -554,8 +537,7 @@ wasm32-unknown-unknown`).
 `compile`, `nodeAt`, `inkLayers` e `close`. `inkLayers` chiede i livelli al
 nucleo una volta per testo (apertura, `reset`, `commit`) e fino al cambio
 ridà lo stesso array congelato; lo usano i costruttori dei tratti di
-`operation.ts` e `inkLayerStates` di `ink-record.ts`. Dopo un commit con `changed` la tela fa il
-suo modello da quello di prima con `changedModel`, senza `model()`. Rilegge le viste della memoria dopo ogni
+`operation.ts` e `inkLayerStates` di `ink-record.ts`. Rilegge le viste della memoria dopo ogni
 chiamata e libera ogni ingresso con `fub_free`, anche quando la chiamata
 fallisce. Un testo con un surrogato spaiato è un errore `utf8` prima di
 arrivare al modulo, mai un U+FFFD. Gli errori sono `CanvasCoreError` con i
