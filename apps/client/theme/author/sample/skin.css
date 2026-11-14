@@ -19309,8 +19309,11 @@ h6.ui-heading {
    che è un rifiuto. Stretto, il perché va a capo sotto. Un nome di file non
    si spezza: si accorcia coi puntini (intero nel suggerimento). Un motivo che
    riguarda tutto il tema ha solo il codice e il perché. */
+/* Il margine a destra tiene il codice, che stretto va in fondo alla riga,
+   lontano dal bordo del blocco come il testo. */
 .tema-diagnosi {
   padding-left: var(--space-5);
+  padding-right: var(--space-4);
   box-shadow: inset 3px 0 0 var(--danger);
 }
 .tema-diagnosi-lista {
