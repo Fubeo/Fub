@@ -482,9 +482,15 @@ const solaLettura = {
     verifica(!(await leggi(pagina, NOTA)).includes(SOLA_LETTURA), "il file in sola lettura è stato scritto");
     verifica((await testoDelRiquadro(pagina)).includes(SOLA_LETTURA), "il riquadro ha perso il testo non salvato");
     await giro.foto("sola-lettura");
-    // Il file torna scrivibile: «Riprova» nel foglio salva ciò che era rimasto.
+    // Il file torna scrivibile: «Riprova» nel foglio salva ciò che era
+    // rimasto. Il salvataggio automatico ci riprova anche da solo a ogni
+    // pausa (PA T59): su una macchina lenta può arrivare prima del clic, e la
+    // riga se ne va da sé. Conta che il testo arrivi sul disco (`controlla`).
     await ripara(pagina, "writeDocument");
-    await rigaDelFoglio(pagina, "save_failed").locator('button:text-is("Riprova")').click();
+    const riprova = rigaDelFoglio(pagina, "save_failed").locator('button:text-is("Riprova")');
+    await riprova.click({ timeout: ATTESA_CHIUSURA_MS }).catch(async (errore) => {
+      if ((await riprova.count()) > 0) throw errore;
+    });
     await aspettaStato(pagina, "salvato");
   },
   async controlla(pagina, host) {
