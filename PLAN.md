@@ -2229,7 +2229,7 @@ di almeno 25 ms rispetto a oggi sulla stessa macchina a carico simile, i
 riquadri si vedono come prima (foto nelle due luci), i test della penna
 verdi.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (0b9a99d81, 2026-11-14). Il bordo del bersaglio è uno strato suo (`will-change: opacity`, `z-index: 2`, spostato con `transform`) e si scrive solo ciò che cambia; la scheda sotto il velo o sotto la cattura tiene l'aspetto del passaggio con `data-hover-held` (regole gemelle in `skin/editors.css`, fuori da Tocca). Chromium headless, scheda pesante, 3 coppie alternate: tasselli ridipinti 10 → 4 all'inizio del tratto. Il calo di 25 ms su WebKit non è misurato: resta per la misura WebView di S8 (`npm run bench:webview -- --only=S8 --budgets=targets`). Rischio da guardare nell'app vera: lo strato dentro lo stage scalato può sfocarsi a zoom ≠ 1 su WebKitGTK.
 
 ## T21 · La prova del cancello
 
