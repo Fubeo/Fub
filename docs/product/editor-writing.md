@@ -22,8 +22,18 @@ l'indirizzo tra tonde. Che cosa succede dipende da dove cade.
 
 La scelta compare solo per un incolla, mai per un indirizzo scritto lettera per
 lettera. Invio o un'altra battuta tengono Link e chiudono la scelta; il cursore
-che esce dalla riga la chiude senza cambiare nulla. «Scheda» si sceglie col
-puntatore: da tastiera la scelta resta Link.
+che esce dalla riga la chiude senza cambiare nulla.
+
+Con la tastiera:
+
+- Tab, dall'editor, porta il fuoco sulla scelta, sul Link. La scelta è una barra
+  con un solo punto di tabulazione: ← e → passano da Link a Scheda.
+- Invio o Spazio applicano la voce col fuoco, come un clic: Link chiude la
+  scelta, Scheda scrive l'indirizzo da solo. Il fuoco torna nell'editor.
+- Esc, Tab o Maiusc+Tab riportano il fuoco nell'editor tenendo Link.
+- Qualunque altro tasto tiene Link, chiude la scelta e va all'editor, dove fa
+  il suo lavoro.
+- Senza scelta visibile, Tab è quello di sempre.
 
 Non tutto diventa un link:
 

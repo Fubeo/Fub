@@ -1,6 +1,6 @@
 import { isStrictlyInsideCode } from "./parser";
 import { pasteHtml } from "../../paste-html";
-import { StateEffect, StateField } from "@codemirror/state";
+import { Prec, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, keymap, type Command } from "@codemirror/view";
 import type TurndownService from "turndown";
 import { inContentSpace, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
@@ -298,6 +298,72 @@ function choiceButton(event: Event): HTMLElement | null {
   return target?.closest<HTMLElement>(".cm-fub-address-choice [data-choice]") ?? null;
 }
 
+/// Applica una voce della scelta: «Scheda» scrive l'indirizzo da solo sulla
+/// riga, «Link» (o una scelta che non c'è più) la chiude e lascia il link. Il
+/// fuoco torna nell'editor, dove il cursore è già.
+function chooseAddress(view: EditorView, card: boolean): void {
+  const choice = view.state.field(addressChoice);
+  if (choice === null) return;
+  const to = choice.from + choice.link.length;
+  // Il testo deve essere ancora quello scritto: altrimenti la scelta è vecchia.
+  if (card && !view.state.readOnly && view.state.sliceDoc(choice.from, to) === choice.link) {
+    view.dispatch({
+      changes: { from: choice.from, to, insert: choice.url },
+      selection: { anchor: choice.from + choice.url.length },
+      userEvent: "input.paste",
+    });
+  } else {
+    view.dispatch({ effects: offerAddressChoice.of(null) });
+  }
+  view.focus();
+}
+
+/// Il fuoco sta su una voce della scelta.
+function focusIsInChoice(view: EditorView): boolean {
+  const choice = view.contentDOM.querySelector(".cm-fub-address-choice");
+  return choice !== null && choice.contains(view.root.activeElement);
+}
+
+/// Chiude la scelta col Link e riporta il fuoco nell'editor.
+function leaveChoice(view: EditorView): boolean {
+  view.dispatch({ effects: offerAddressChoice.of(null) });
+  view.focus();
+  return true;
+}
+
+/// Tab dall'editor, con la scelta visibile: il fuoco va sul punto di
+/// tabulazione della scelta, il Link. Senza scelta Tab resta com'era.
+function tabIntoChoice(view: EditorView): boolean {
+  const stop = view.contentDOM.querySelector<HTMLElement>(".cm-fub-address-choice [data-choice][tabindex='0']");
+  if (stop === null) return false;
+  stop.focus();
+  return true;
+}
+
+/// Invio e Spazio su una voce della scelta: un clic, come quello del puntatore.
+/// Il tasto è preso qui, così il browser non ne fa un secondo clic.
+function activateChoiceControl(view: EditorView): boolean {
+  if (!focusIsInChoice(view)) return false;
+  const control = view.root.activeElement?.closest<HTMLElement>("[data-choice]");
+  if (!control) return false;
+  control.click();
+  return true;
+}
+
+/// Le chiavi della scelta mentre il fuoco è su di lei. Le frecce le dà la barra
+/// (`kit/toolbar-keys`), che le prende prima dell'editor. Prima dei comandi
+/// dell'editor, perché Tab e Invio in un testo fanno altro.
+const addressChoiceKeys = Prec.highest(keymap.of([
+  { key: "Tab", run: (view) => (focusIsInChoice(view) ? leaveChoice(view) : tabIntoChoice(view)) },
+  { key: "Shift-Tab", run: (view) => (focusIsInChoice(view) ? leaveChoice(view) : false) },
+  { key: "Escape", run: (view) => (focusIsInChoice(view) ? leaveChoice(view) : false) },
+  { key: "Enter", run: activateChoiceControl },
+  { key: "Space", run: activateChoiceControl },
+]));
+
+/// Modificatori da soli: premerli non chiude la scelta.
+const CHOICE_MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta"]);
+
 const addressChoiceGestures = EditorView.domEventHandlers({
   // Il pulsante non prende il fuoco e non sposta il cursore.
   mousedown(event) {
@@ -309,22 +375,16 @@ const addressChoiceGestures = EditorView.domEventHandlers({
     const button = choiceButton(event);
     if (button === null) return false;
     event.preventDefault();
-    const choice = view.state.field(addressChoice);
-    if (choice !== null && button.dataset.choice === "card" && !view.state.readOnly) {
-      const to = choice.from + choice.link.length;
-      // Il testo deve essere ancora quello scritto: altrimenti la scelta è vecchia.
-      if (view.state.sliceDoc(choice.from, to) === choice.link) {
-        view.dispatch({
-          changes: { from: choice.from, to, insert: choice.url },
-          selection: { anchor: choice.from + choice.url.length },
-          userEvent: "input.paste",
-        });
-        return true;
-      }
-    }
-    // «Link», o una scelta che non c'è più: il link resta com'è.
-    if (choice !== null) view.dispatch({ effects: offerAddressChoice.of(null) });
+    chooseAddress(view, button.dataset.choice === "card");
     return true;
+  },
+  // Un tasto che la scelta non prende la chiude col Link, e il fuoco torna
+  // all'editor: il tasto fa il suo lavoro lì, come una battuta.
+  keydown(event, view) {
+    if (event.defaultPrevented || CHOICE_MODIFIERS.has(event.key) || !focusIsInChoice(view)) return false;
+    view.dispatch({ effects: offerAddressChoice.of(null) });
+    view.focus();
+    return false;
   },
 });
 
@@ -424,6 +484,7 @@ export const markdownPaste = [
   pasteHandler,
   addressChoice,
   addressChoiceGestures,
+  addressChoiceKeys,
   preloadConverter,
   keymap.of([{ key: "Mod-Shift-v", run: pastePlainText }]),
 ];

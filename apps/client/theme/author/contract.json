@@ -4758,7 +4758,8 @@
       "states": [
         "rest",
         "hover",
-        "pressed"
+        "pressed",
+        "focused"
       ]
     },
     {
@@ -8821,7 +8822,7 @@
     "optional_roles": 66,
     "hooks": 1589,
     "state_names": 7,
-    "assigned_states": 762,
+    "assigned_states": 763,
     "components": 226,
     "preference_tokens": 189
   }

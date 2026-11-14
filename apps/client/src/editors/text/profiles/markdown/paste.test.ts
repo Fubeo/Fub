@@ -17,6 +17,18 @@ function press(element: Element | null | undefined): void {
   element?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 }
 
+/// Un tasto premuto su `target`, come lo manda il browser.
+function key(target: EventTarget, name: string, modifiers: { shiftKey?: boolean } = {}): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...modifiers });
+  target.dispatchEvent(event);
+  return event;
+}
+
+/// Il fuoco sta su una voce della scelta montata in `host`.
+function focusInChoice(host: HTMLElement): boolean {
+  return host.querySelector(".cm-fub-address-choice")?.contains(document.activeElement) ?? false;
+}
+
 function paste(
   html: string,
   plain: string,
@@ -81,9 +93,10 @@ describe("Markdown clipboard paste", () => {
     const { engine, event, view, host } = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
     expect(event.defaultPrevented).toBe(true);
     expect(engine.getDoc()).toBe("prima\r\n[https://example.org/a](https://example.org/a)\r\nfine");
-    // La scelta è un gruppo di due pulsanti: Link premuto, Scheda no.
+    // La scelta è una barra di due pulsanti: Link premuto, Scheda no.
     const choice = host.querySelector(".cm-fub-address-choice");
-    expect(choice?.getAttribute("role")).toBe("group");
+    expect(choice?.getAttribute("role")).toBe("toolbar");
+    expect(choice?.getAttribute("aria-label")).toBe("Come scrivere l'indirizzo");
     const buttons = [...(choice?.querySelectorAll("button") ?? [])];
     expect(buttons.map((button) => button.textContent)).toEqual(["Link", "Scheda"]);
     expect(buttons.map((button) => button.getAttribute("aria-pressed"))).toEqual(["true", "false"]);
@@ -124,6 +137,94 @@ describe("Markdown clipboard paste", () => {
     expect(left.engine.getDoc()).toContain(link);
     left.engine.destroy();
     left.host.remove();
+  });
+
+  it("da tastiera: Tab entra nella scelta, le frecce passano fra le voci, Invio su Scheda fa la scheda", () => {
+    const { engine, view, host } = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    const link = host.querySelector<HTMLElement>('[data-choice="link"]')!;
+    const card = host.querySelector<HTMLElement>('[data-choice="card"]')!;
+    // Tab dall'editor porta il fuoco sul Link, e la barra ha un solo punto di tabulazione.
+    expect(key(view.contentDOM, "Tab").defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(link);
+    expect([link.tabIndex, card.tabIndex]).toEqual([0, -1]);
+    // Le frecce passano da una voce all'altra, e il punto di tabulazione le segue.
+    key(link, "ArrowRight");
+    expect(document.activeElement).toBe(card);
+    expect([link.tabIndex, card.tabIndex]).toEqual([-1, 0]);
+    key(card, "ArrowLeft");
+    expect(document.activeElement).toBe(link);
+    key(link, "ArrowRight");
+    // Invio su Scheda: un solo clic, l'indirizzo da solo sulla riga, il fuoco nell'editor.
+    let clicks = 0;
+    card.addEventListener("click", () => clicks++);
+    expect(key(card, "Enter").defaultPrevented).toBe(true);
+    expect(clicks).toBe(1);
+    expect(engine.getDoc()).toBe("prima\r\nhttps://example.org/a\r\nfine");
+    expect(host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(focusInChoice(host)).toBe(false);
+    engine.destroy();
+    host.remove();
+  });
+
+  it("da tastiera: Spazio su Link lascia il link, Esc lo tiene e riporta il fuoco nell'editor", () => {
+    const link = "[https://example.org/a](https://example.org/a)";
+    const space = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    key(space.view.contentDOM, "Tab");
+    let clicks = 0;
+    space.host.querySelector('[data-choice="link"]')!.addEventListener("click", () => clicks++);
+    key(space.host.querySelector('[data-choice="link"]')!, " ");
+    expect(clicks).toBe(1);
+    expect(space.engine.getDoc()).toBe(`prima\r\n${link}\r\nfine`);
+    expect(space.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    space.engine.destroy();
+    space.host.remove();
+    // Esc: il link resta, la scelta chiude, il fuoco torna nell'editor.
+    const esc = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    key(esc.view.contentDOM, "Tab");
+    const escaped = key(esc.host.querySelector('[data-choice="link"]')!, "Escape");
+    expect(escaped.defaultPrevented).toBe(true);
+    expect(esc.engine.getDoc()).toBe(`prima\r\n${link}\r\nfine`);
+    expect(esc.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(focusInChoice(esc.host)).toBe(false);
+    esc.engine.destroy();
+    esc.host.remove();
+  });
+
+  it("da tastiera: un tasto che la scelta non prende tiene il Link e va all'editor; i modificatori da soli no", () => {
+    const link = "[https://example.org/a](https://example.org/a)";
+    const { engine, view, host } = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    key(view.contentDOM, "Tab");
+    const focused = host.querySelector<HTMLElement>('[data-choice="link"]')!;
+    // Premere Shift da solo non chiude la scelta.
+    key(focused, "Shift");
+    expect(host.querySelector(".cm-fub-address-choice")).not.toBeNull();
+    expect(document.activeElement).toBe(focused);
+    // Una lettera chiude la scelta col Link e porta il fuoco nell'editor.
+    key(focused, "x");
+    expect(host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(focusInChoice(host)).toBe(false);
+    expect(engine.getDoc()).toBe(`prima\r\n${link}\r\nfine`);
+    engine.destroy();
+    host.remove();
+  });
+
+  it("da tastiera: Shift-Tab dalla scelta torna all'editor col Link; Tab senza scelta resta quello dell'editor", () => {
+    const { engine, view, host } = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    key(view.contentDOM, "Tab");
+    expect(key(document.activeElement as HTMLElement, "Tab", { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(focusInChoice(host)).toBe(false);
+    // Senza scelta, Tab indenta come sempre, e non porta il fuoco da nessuna parte.
+    const plain = paste("", "", "", EditorSelection.single(7), false);
+    const before = plain.engine.getDoc();
+    expect(key(plain.view.contentDOM, "Tab").defaultPrevented).toBe(true);
+    expect(plain.engine.getDoc()).not.toBe(before);
+    expect(plain.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(focusInChoice(plain.host)).toBe(false);
+    plain.engine.destroy();
+    plain.host.remove();
+    engine.destroy();
+    host.remove();
   });
 
   it("l'indirizzo incollato dentro un testo entra com'è, senza link né scelta", () => {

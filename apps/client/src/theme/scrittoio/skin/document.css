@@ -421,6 +421,11 @@
   color: var(--doc-fg);
   border-color: var(--doc-fg);
 }
+.cm-editor .cm-content .cm-fub-address-choice-link:focus-visible,
+.cm-editor .cm-content .cm-fub-address-choice-card:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 /* Un segno che si vede ancora in Live, con «elemento» o «riga»: un passo sotto
    la sintassi della Sorgente, dentro o fuori dallo span che la colora. */
 .cm-editor .cm-content .cm-fub-near,

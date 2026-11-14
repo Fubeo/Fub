@@ -7,6 +7,8 @@
 
 import { StateEffect } from "@codemirror/state";
 import { EditorView, WidgetType } from "@codemirror/view";
+import { rovingToolbar } from "../../../../kit/toolbar-keys";
+import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { isAllowedLink } from "../../../../ui/sanitize";
 import { liveStrings } from "./strings";
 
@@ -125,10 +127,14 @@ export class LinkCardWidget extends WidgetType {
   ignoreEvent(event: Event): boolean { return event instanceof KeyboardEvent; }
 }
 
+/// La vita della barra di ogni scelta montata: si chiude quando la scelta esce.
+const choiceLives = new WeakMap<HTMLElement, Lifetime>();
+
 /// La scelta sotto un indirizzo incollato su una riga vuota (T25): «Link», la
 /// scelta di partenza, e «Scheda», che scrive l'indirizzo da solo sulla riga.
-/// I pulsanti non prendono il fuoco: la battuta dopo tiene il Link, e i gesti
-/// stanno in `paste.ts`, che sa che cosa scrivere.
+/// È una barra degli strumenti (`kit/toolbar-keys`): un solo punto di
+/// tabulazione, e le frecce fra le due voci. Quello che sceglie Invio, Spazio,
+/// Esc o Tab lo decide `paste.ts`, che sa che cosa scrivere.
 export class AddressChoiceWidget extends WidgetType {
   constructor(readonly url: string) { super(); }
   eq(other: AddressChoiceWidget): boolean { return other.url === this.url; }
@@ -138,15 +144,25 @@ export class AddressChoiceWidget extends WidgetType {
     root.className = "cm-fub-address-choice";
     root.contentEditable = "false";
     root.dataset.url = this.url;
-    root.setAttribute("role", "group");
+    root.setAttribute("role", "toolbar");
     root.setAttribute("aria-label", liveStrings.t("paste.address.label"));
-    root.append(
-      choiceControl("link", liveStrings.t("paste.address.link"), liveStrings.t("paste.address.link.title"), true),
-      choiceControl("card", liveStrings.t("paste.address.card"), liveStrings.t("paste.address.card.title"), false),
-    );
+    const link = choiceControl("link", liveStrings.t("paste.address.link"), liveStrings.t("paste.address.link.title"), true);
+    const card = choiceControl("card", liveStrings.t("paste.address.card"), liveStrings.t("paste.address.card.title"), false);
+    root.append(link, card);
+    const life = openLifetime();
+    rovingToolbar(root, { controls: () => [link, card] }, life).refresh(link);
+    choiceLives.set(root, life);
     return root;
   }
-  ignoreEvent(event: Event): boolean { return event instanceof KeyboardEvent; }
+  destroy(dom: HTMLElement): void {
+    choiceLives.get(dom)?.close();
+    choiceLives.delete(dom);
+  }
+  // Le battute e il clic arrivano all'editor (`paste.ts` le gestisce); il resto
+  // del puntatore resta alla scelta.
+  ignoreEvent(event: Event): boolean {
+    return !(event instanceof KeyboardEvent || event.type === "click" || event.type === "mousedown");
+  }
 }
 
 function choiceControl(kind: "link" | "card", label: string, title: string, pressed: boolean): HTMLButtonElement {
