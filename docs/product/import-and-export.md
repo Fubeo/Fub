@@ -156,6 +156,10 @@ destinazione **nuova**, fuori dal vault, col dialogo di sistema.
   (il documento unico Markdown, un PDF unico) lo mette dentro quella cartella.
 - Una cartella che esiste già non si sovrascrive mai, e una destinazione dentro
   il vault si rifiuta.
+- La cartella scelta si apre una volta e ogni file si crea, si rinomina e si
+  toglie attraverso le sue sottocartelle aperte (`fub_kernel::transfer::DirectorySink`):
+  un collegamento che porta fuori dalla cartella scelta si rifiuta, anche se
+  compare a export in corso al posto di una sottocartella.
 - Una cartella del vault che non c'è, o che non contiene niente che il formato
   sappia scrivere, è un errore e non un export vuoto riuscito. Se l'export
   fallisce a metà, la cartella creata per lui si toglie.
