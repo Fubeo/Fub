@@ -55,14 +55,19 @@
 //!
 //! # I tetti
 //!
-//! La vista tiene al più [`READ_LIMIT`] compiti e ne disegna al più
-//! [`SHOW_LIMIT`]. Il taglio viene **dopo l'ordine**: si leggono tutte le note
-//! che l'indice nomina, e di tanto in tanto si mettono in ordine i compiti
-//! tenuti e si scarta la coda, così i compiti che restano sono i primi
-//! nell'ordine della vista (o del recinto, col suo `limit`) e non i primi
-//! delle note lette. Quando taglia lo dice: un vault con diecimila compiti non
-//! è una lista da scorrere, ed è meglio una lista corta che dice quanto manca
-//! che una lunga che si blocca al disegno.
+//! La vista legge al più [`NOTE_LIMIT`] note, tiene al più [`READ_LIMIT`]
+//! compiti e ne disegna al più [`SHOW_LIMIT`]. Ogni salvataggio la ridisegna,
+//! e leggere una nota costa: su un vault di prova con cinquemila note e
+//! quindicimila compiti (`large_vault_redraw_cost` in `tests/tasks_e2e.rs`)
+//! un ridisegno senza tetto alle note chiedeva circa 180 ms, col tetto circa
+//! 70 ms; metà è la revisione, che si legge prima del modello (vedi sotto).
+//! Oltre il tetto le note si contano e non si leggono, e la vista lo dice. Il taglio dei compiti viene **dopo l'ordine**: di tanto in tanto si
+//! mettono in ordine i compiti tenuti e si scarta la coda, così i compiti che
+//! restano sono i primi nell'ordine della vista (o del recinto, col suo
+//! `limit`) fra quelli delle note lette, e non i primi letti. Quando taglia lo
+//! dice: un vault con diecimila compiti non è una lista da scorrere, ed è
+//! meglio una lista corta che dice quanto manca che una lunga che si blocca al
+//! disegno.
 //!
 //! Prima di leggere una nota si guarda ciò che il suo nome basta a dire (il
 //! `path includes` di un recinto): una nota che non può rispondere non si
@@ -117,6 +122,10 @@ pub const QUERY: &str = "query";
 /// un plugin di terzi. `tests/tasks_e2e.rs` lo cerca fra i comandi registrati.
 const NOTE_TASK_TOGGLE: &str = "note.task.toggle";
 
+/// Quante note un ridisegno legge al più, nell'ordine in cui l'indice le
+/// nomina. Le altre che potrebbero rispondere si contano, e la vista dice che
+/// non le ha lette.
+pub const NOTE_LIMIT: usize = 2_000;
 /// Quanti compiti la vista tiene al più, i primi nel suo ordine. Oltre, il vault ne
 /// ha di più e la vista lo dice.
 pub const READ_LIMIT: usize = 10_000;
@@ -164,6 +173,8 @@ const FENCE_COUNT_ONE: &str = "fence_count_one";
 const FENCE_COUNT: &str = "fence_count";
 const FENCE_SHOWN: &str = "fence_shown";
 const FENCE_SHOWN_MANY: &str = "fence_shown_many";
+const NOTES_MANY: &str = "notes_many";
+const FENCE_NOTES_MANY: &str = "fence_notes_many";
 
 /// Le stringhe dei compiti. Vedi [`crate::backlinks::catalog`] per il perché stiano
 /// nel componente e non nella shell.
@@ -180,6 +191,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 SHOWN_MANY,
                 "Mostro {shown} compiti: il vault ne ha più di {total}. Restringi con la ricerca.",
+            )
+            .with(
+                NOTES_MANY,
+                "Ho letto le prime {read} note con compiti aperti su {total}: i compiti delle altre non sono qui.",
             )
             .with(UNREADABLE_DATE, "Data non leggibile")
             .with(UNREAD_NOTES, "{count} note non si sono lette.")
@@ -211,6 +226,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 FENCE_SHOWN_MANY,
                 "Mostro i primi {shown}: il vault ne ha più di {total}. Restringi con le righe del recinto.",
+            )
+            .with(
+                FENCE_NOTES_MANY,
+                "Ho letto le prime {read} note su {total} che possono rispondere: restringi con le righe del recinto.",
             ),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Tasks")
@@ -223,6 +242,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 SHOWN_MANY,
                 "Showing {shown} tasks: the vault has more than {total}. Narrow it with search.",
+            )
+            .with(
+                NOTES_MANY,
+                "Read the first {read} notes with open tasks out of {total}: the tasks of the others are not here.",
             )
             .with(UNREADABLE_DATE, "Unreadable date")
             .with(UNREAD_NOTES, "{count} notes could not be read.")
@@ -254,6 +277,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 FENCE_SHOWN_MANY,
                 "Showing the first {shown}: the vault has more than {total}. Narrow it down with the block's lines.",
+            )
+            .with(
+                FENCE_NOTES_MANY,
+                "Read the first {read} notes out of {total} that may match: narrow it down with the block's lines.",
             ),
     ]
 }
@@ -528,6 +555,10 @@ struct Gathered {
     tasks: Vec<Task>,
     /// Il vault ha più di [`READ_LIMIT`] compiti che rispondono: la lista è tagliata.
     more: bool,
+    /// Le note lette, al più [`NOTE_LIMIT`].
+    read: usize,
+    /// Le note che potevano rispondere e non si sono lette, oltre [`NOTE_LIMIT`].
+    beyond: usize,
     /// Note che l'indice nomina e che non si sono lette, perché sparite o illeggibili
     /// fra la domanda e la lettura.
     unread: usize,
@@ -573,6 +604,11 @@ fn gather(
         if !reads(&hit.doc) {
             continue;
         }
+        if gathered.read == NOTE_LIMIT {
+            gathered.beyond += 1;
+            continue;
+        }
+        gathered.read += 1;
         let revision = host.document_revision(&hit.doc).ok();
         match host.read_model(&hit.doc) {
             Ok(model) => gathered.tasks.extend(
@@ -631,6 +667,9 @@ fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError
     };
     if gathered.unread > 0 {
         children.push(unread_notice(gathered.unread));
+    }
+    if gathered.beyond > 0 {
+        children.push(notes_notice(NOTES_MANY, &gathered));
     }
 
     let tasks = gathered.tasks;
@@ -755,6 +794,9 @@ fn fence_tree(
     if gathered.unread > 0 {
         children.push(unread_notice(gathered.unread));
     }
+    if gathered.beyond > 0 {
+        children.push(notes_notice(FENCE_NOTES_MANY, &gathered));
+    }
     let tasks = gathered.tasks;
     if tasks.is_empty() {
         children.push(UiNode::empty_state(Text::key(FENCE_NONE)));
@@ -793,6 +835,18 @@ fn fence_tree(
         )));
     }
     Ok(UiNode::column(1, children))
+}
+
+/// Il tetto alle note: quante se ne sono lette su quante potevano rispondere.
+fn notes_notice(key: &str, gathered: &Gathered) -> UiNode {
+    UiNode::text(Text::message(
+        key,
+        vec![
+            Arg::int("read", gathered.read as i64),
+            Arg::int("total", (gathered.read + gathered.beyond) as i64),
+        ],
+    ))
+    .with_key("notes")
 }
 
 fn unread_notice(count: usize) -> UiNode {

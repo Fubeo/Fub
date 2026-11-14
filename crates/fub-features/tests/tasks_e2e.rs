@@ -520,6 +520,56 @@ fn set_read_only(path: impl AsRef<std::path::Path>, read_only: bool) {
 }
 
 #[test]
+fn notes_are_read_up_to_a_limit_and_the_view_and_the_fence_say_so() {
+    let vault = Vault::new();
+    let limit = fub_features::tasks::NOTE_LIMIT;
+    // Cinque note più del tetto, un compito ciascuna; e una nota sola in
+    // `Altro/`, che un recinto col percorso legge senza toccare il tetto.
+    for note in 0..limit + 5 {
+        vault.put(
+            &format!("N{note:05}.md"),
+            &format!("- [ ] Compito {note}\n"),
+        );
+    }
+    std::fs::create_dir(vault.root.join("Altro")).unwrap();
+    vault.put("Altro/Sola.md", "- [ ] Il compito di Altro\n");
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let total = limit + 6;
+
+    let tree = ws.render_view(&instance()).unwrap();
+    let said = format!(
+        "Ho letto le prime {limit} note con compiti aperti su {total}: i compiti delle altre non sono qui."
+    );
+    assert!(
+        messages(&tree).contains(&said),
+        "la vista dice il tetto alle note: {:?}",
+        &messages(&tree)[..3]
+    );
+
+    let tree = ws.render_view(&fence("not done")).unwrap();
+    let said = format!(
+        "Ho letto le prime {limit} note su {total} che possono rispondere: restringi con le righe del recinto."
+    );
+    assert!(
+        messages(&tree).contains(&said),
+        "il recinto dice il tetto alle note: {:?}",
+        &messages(&tree)[..3]
+    );
+
+    let tree = ws
+        .render_view(&fence("not done\npath includes Altro"))
+        .unwrap();
+    assert_eq!(task_labels(&tree), vec!["Il compito di Altro".to_string()]);
+    assert!(
+        !messages(&tree).iter().any(|m| m.starts_with("Ho letto")),
+        "le note fuori dal percorso non contano nel tetto: {:?}",
+        messages(&tree)
+    );
+}
+
+#[test]
 fn ten_thousand_tasks_are_read_up_to_a_limit_and_the_view_says_so() {
     let vault = Vault::new();
     // 503 note da 20 compiti: 10.060 compiti, più di quanti la vista ne legge.
@@ -928,4 +978,49 @@ fn the_cut_comes_after_the_order_in_the_view_and_in_the_fence() {
         "un limite che taglia non è un vault con troppi compiti: {:?}",
         messages(&fenced)
     );
+}
+
+/// Misura, non prova: quanto costa ridisegnare la vista e un recinto su un
+/// vault grande, in un tempdir. `cargo test --release -p fub-features --test
+/// tasks_e2e -- --ignored --nocapture large_vault`.
+#[test]
+#[ignore]
+fn large_vault_redraw_cost() {
+    let vault = Vault::new();
+    for n in 0..5_000 {
+        let mut body = format!(
+            "# Nota {n}\n\nUn paragrafo di testo che parla di altro, con un [[link]] e un #tag.\n\n"
+        );
+        for k in 0..3 {
+            body.push_str(&format!(
+                "- [ ] Compito {n}.{k} 📅 2026-{:02}-{:02}\n",
+                1 + (n + k) % 12,
+                1 + (n * 7 + k) % 28
+            ));
+        }
+        body.push_str("- [x] Fatto\n\nAltro testo sotto la lista.\n");
+        vault.put(&format!("n{n}.md"), &body);
+    }
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let started = std::time::Instant::now();
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    eprintln!("apertura e indice: {:?}", started.elapsed());
+    for (name, view) in [
+        ("vista", instance()),
+        ("recinto aperti", fence("not done\nsort by due")),
+        ("recinto due", fence("due before 2026-03-01")),
+    ] {
+        let mut times = Vec::new();
+        for _ in 0..5 {
+            let at = std::time::Instant::now();
+            ws.render_view(&view).expect("si disegna");
+            times.push(at.elapsed());
+        }
+        times.sort();
+        eprintln!(
+            "{name}: mediana {:?}, min {:?}, max {:?}",
+            times[2], times[0], times[4]
+        );
+    }
 }

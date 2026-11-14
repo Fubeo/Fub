@@ -75,9 +75,13 @@ Il nome della nota d'origine, accanto al compito, apre la nota.
 ## Limiti
 
 - La vista tiene al più **10.000** compiti aperti e ne disegna al più **300**.
-  Il taglio viene dopo l'ordine dei gruppi: legge tutte le note con compiti
-  aperti e tiene i primi, non quelli delle prime note lette. Quando taglia lo
-  scrive sotto la lista. Per restringere si usa la ricerca.
+  Il taglio viene dopo l'ordine dei gruppi: fra i compiti delle note lette
+  tiene i primi, non quelli delle prime note lette. Quando taglia lo scrive
+  sotto la lista. Per restringere si usa la ricerca.
+- A ogni ridisegno la vista legge al più **2.000** note con compiti aperti,
+  nell'ordine dell'indice: oltre, le conta e scrive in cima che i compiti delle
+  altre non ci sono. Su un vault di prova di 5.000 note e 15.000 compiti un
+  ridisegno costa così circa 70 ms invece di 180.
 - La vista legge le note con compiti aperti dall'indice di ricerca. Se il vault
   non ha un indice attivo, la vista lo dice invece di mostrare un elenco vuoto.
 - I promemoria non ci sono ancora.
@@ -150,7 +154,9 @@ sulle note lette, e a restringere quelle note sono le righe `tag` e `path`.
 
 Il recinto tiene al più **10.000** compiti e ne disegna al più **100**; il
 taglio, come il `limit`, viene dopo l'ordine. Quando il vault ne ha di più lo
-scrive. Se il componente «Compiti» è spento il recinto non è dichiarato e resta
+scrive. La vista e il recinto leggono al più **2.000** note per ridisegno, il
+recinto contando solo quelle dentro il suo `path includes`: le altre si
+contano, e la vista lo scrive. Se il componente «Compiti» è spento il recinto non è dichiarato e resta
 un blocco di codice; spegnendolo con la nota aperta, il recinto torna codice, e
 riaccendendolo torna la vista.
 
