@@ -190,7 +190,7 @@ pub use stats::{
 #[cfg(feature = "tags")]
 pub use tags::{build_tags_view, TagCommands, TagPanelView, TAGS_ID, TAGS_VIEW, TAG_RENAME};
 #[cfg(feature = "tasks")]
-pub use tasks::{TasksView, TASKS_ID, TASKS_VIEW};
+pub use tasks::{TasksView, TASKS_ID, TASKS_QUERY_VIEW, TASKS_VIEW};
 #[cfg(feature = "template")]
 pub use template::{
     TemplateCommands, TemplateView, CLOCK_12, CLOCK_24, CLOCK_DATETIME, CLOCK_TIME,

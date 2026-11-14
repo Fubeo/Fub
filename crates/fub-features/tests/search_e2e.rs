@@ -871,3 +871,25 @@ fn due_dates_of_open_tasks_filter_by_day_and_by_side() {
     assert_eq!(ids("due:>=2026-10-01 due:<2026-11-01"), ["Oggi.md"]);
     assert_eq!(ids("task:todo -due:>=2000-01-01"), ["Senza.md"]);
 }
+
+/// La scadenza che la ricerca indicizza è quella della regola del contratto
+/// (`fub_abi::rules::tasks`), la stessa della vista dei compiti: una data che
+/// non esiste non è una scadenza, e la data scritta come `code` lo è.
+#[test]
+fn the_due_date_follows_the_rule_of_the_contract() {
+    let v = Vault::new();
+    v.put("Refuso.md", "- [ ] refuso 📅 2026-02-30\n");
+    v.put("Codice.md", "- [ ] in codice 📅 `2026-10-19`\n");
+    let ws = v.open();
+    let ids = |line: &str| {
+        let expr = fub_abi::rules::search_syntax::parse(line, false).expect("sintassi valida");
+        let mut names = matching(&ws, expr)
+            .into_iter()
+            .map(|m| m.doc.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    };
+    assert_eq!(ids("due:>=2026-01-01"), ["Codice.md"]);
+    assert_eq!(ids("due:2026-10-19"), ["Codice.md"]);
+}
