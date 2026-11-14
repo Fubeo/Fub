@@ -7,6 +7,7 @@
 //   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3,C1]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
 //        [--budgets=ci|targets] [--out=bench/.output/webview] [--dist=dist]
+//        [--x11]  (sotto Xvfb su una sessione Wayland: l'app resta in X11)
 //
 // Avvia `tauri-driver` con un vault e una configurazione scritti in una
 // cartella temporanea (`fixtures.mjs`): la sonda è accesa dalle impostazioni
@@ -41,6 +42,8 @@ const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
 const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,S8,S9,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
+/// `--x11`: l'app va in X11 anche su una sessione Wayland (vedi `main`).
+const x11 = "x11" in args;
 const port = Number(args.port ?? 4444);
 const base = `http://127.0.0.1:${port}`;
 
@@ -240,7 +243,14 @@ const OPENING_SCRIPT = `
 /// spostamento, e il referto lo dice.
 async function moveAndZoom(session, at) {
   // Il pulsante di mezzo sposta la lavagna, come il trackpad e la rotella.
-  await session.actions(drag({ ...at, dx: 400, dy: 0, ms: 3_000, button: 1 }));
+  try {
+    await session.actions(drag({ ...at, dx: 400, dy: 0, ms: 3_000, button: 1 }));
+  } catch (error) {
+    // Il driver rifiuta un punto fuori dalla finestra: il referto dice dove
+    // stava il gesto e quanto è grande la pagina (`innerWidth`, `innerHeight`).
+    const page = await session.execute("return [innerWidth, innerHeight];").catch(() => null);
+    throw new Error(`lo spostamento è rifiutato (${error.message}): il punto è ${at.x}, ${at.y} e il gesto va 400 px da una parte e dall'altra; la pagina è ${JSON.stringify(page)}`);
+  }
   await session.releaseActions();
   let zoomed = true;
   try {
@@ -306,6 +316,165 @@ const SHEET_GEOMETRY = `
 `;
 const sheetGeometry = (session) => session.execute(SHEET_GEOMETRY, [SHEET_NODES, 240]);
 const count = (session, css) => session.execute("return document.querySelectorAll(arguments[0]).length;", [css]);
+
+/// S9, il tasto fino al fotogramma (T46): una scheda di nota della stessa
+/// lavagna, una delle venti note vive (`scheda-0`, `S2/Nota 00001.md`).
+const SHEET_NOTE_CARD = "scheda-0";
+/// Gli scatti di Ctrl+rotella che portano la scheda al centro (`panTo`): due
+/// fuori e due dentro, così la vista non scende sotto 0,35, dove i fogli
+/// tornano segnaposto e il loro lavoro entrerebbe nella misura.
+const PAN_STEPS = 2;
+/// I 200 caratteri che S1 scrive nel riquadro, qui nella scheda di nota.
+const NOTE_TYPED = "Il corso di analisi del lunedì, in aula. ".repeat(5).slice(0, 200);
+
+/// Porta la scheda `css` al centro della vista a zoom 0,5, con scatti di
+/// Ctrl+rotella mandati dalla pagina come in S9: `PAN_STEPS` scatti via da
+/// lei, col punto che la manda al centro, poi `PAN_STEPS` scatti sul centro,
+/// che la lasciano ferma. Torna dove sta dopo: lo zoom e se il suo centro è
+/// dentro la vista.
+async function panTo(session, css) {
+  const before = await session.execute(`
+    const view = document.querySelector('.pane.focus .canvas-viewport')?.getBoundingClientRect();
+    const card = document.querySelector(arguments[0])?.getBoundingClientRect();
+    if (!view || !card) return null;
+    return { view: [view.left + view.width / 2, view.top + view.height / 2], card: [card.left + card.width / 2, card.top + card.height / 2] };
+  `, [css]);
+  if (!before) throw new Error(`«${css}» non è nella lavagna`);
+  const [vx, vy] = before.view;
+  const [bx, by] = before.card;
+  // Il punto che, con lo zoom `f` di un scatto, lascia il centro della scheda
+  // (B) sul centro della vista (V): P = (V − f·B) / (1 − f).
+  const f = 1.1 ** -PAN_STEPS;
+  const px = (vx - f * bx) / (1 - f);
+  const py = (vy - f * by) / (1 - f);
+  await session.execute(`
+    const view = document.querySelector('.pane.focus .canvas-viewport');
+    if (!view) return false;
+    const [px, py, vx, vy, steps] = arguments;
+    const scatto = (x, y, deltaY) => view.dispatchEvent(new WheelEvent("wheel", { deltaY, deltaMode: 0, ctrlKey: true, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    for (let i = 0; i < steps; i++) scatto(px, py, 120);
+    for (let i = 0; i < steps; i++) scatto(vx, vy, -120);
+    return true;
+  `, [px, py, vx, vy, PAN_STEPS]);
+  return session.execute(`
+    const view = document.querySelector('.pane.focus .canvas-viewport')?.getBoundingClientRect();
+    const card = document.querySelector(arguments[0])?.getBoundingClientRect();
+    if (!view || !card) return null;
+    const x = card.left + card.width / 2, y = card.top + card.height / 2;
+    return { zoom: Math.round((card.width / 240) * 100) / 100, inside: x > view.left && x < view.right && y > view.top && y < view.bottom };
+  `, [css]);
+}
+
+/// S9: porta la scheda `css` al centro della vista a zoom 0,5. Prima, se lo
+/// zoom è un altro, gli scatti di Ctrl+rotella col punto che manda il centro
+/// della scheda sul centro della vista (come lo zoom di S9); poi `panTo`, che
+/// la centra con due scatti fuori e due dentro. Torna `panTo`.
+async function placeCard(session, css) {
+  const now = await session.execute(`
+    const view = document.querySelector('.pane.focus .canvas-viewport')?.getBoundingClientRect();
+    const card = document.querySelector(arguments[0])?.getBoundingClientRect();
+    if (!view || !card) return null;
+    return { zoom: card.width / 240, view: [view.left + view.width / 2, view.top + view.height / 2], card: [card.left + card.width / 2, card.top + card.height / 2] };
+  `, [css]);
+  if (!now) throw new Error(`«${css}» non è nella lavagna`);
+  const steps = Math.round(Math.log(SHEET_ZOOM.target / now.zoom) / Math.log(1.1));
+  if (steps !== 0) {
+    const f = 1.1 ** steps;
+    const [vx, vy] = now.view;
+    const [bx, by] = now.card;
+    const px = (vx - f * bx) / (1 - f);
+    const py = (vy - f * by) / (1 - f);
+    await session.execute(`
+      const view = document.querySelector('.pane.focus .canvas-viewport');
+      if (!view) return false;
+      const [px, py, steps] = arguments;
+      for (let i = 0; i < Math.abs(steps); i++) {
+        view.dispatchEvent(new WheelEvent("wheel", { deltaY: steps > 0 ? -120 : 120, deltaMode: 0, ctrlKey: true, clientX: px, clientY: py, bubbles: true, cancelable: true }));
+      }
+      return true;
+    `, [px, py, steps]);
+  }
+  return panTo(session, css);
+}
+
+/// S9, il tasto fino al fotogramma (T46): si entra in scrittura nella scheda
+/// di nota della lavagna con i fogli vivi (clic per sceglierla, Invio, come
+/// T41), si scrive un carattere che non si misura (il montaggio dell'editor),
+/// poi i 200 caratteri di S1 con la sonda accesa. Se un passo non riesce il
+/// referto lo dice e il valore è `null`: la misura non vale. Torna
+/// `{ p95, count, typed }`.
+///
+/// Parte in un'app nuova: il pan di mezzo di `moveAndZoom` lascia WebKitWebDriver
+/// con il pulsante di mezzo premuto (il suo rilascio non arriva), e dopo non
+/// arrivano alla lavagna né i clic né i tasti (misurato in T46: il clic arriva
+/// come `click` con `buttons` a 4, senza `pointerdown`). L'app di S9 si chiude
+/// prima, e la nuova aspetta un attimo: Fub ha un'istanza sola (plugin
+/// single-instance), e una seconda che parte mentre la prima è viva può cederle.
+async function noteTyping(notes) {
+  const card = `.pane.focus .canvas-node[data-node="${SHEET_NOTE_CARD}"]`;
+  const invalid = (why) => {
+    notes.push(`S9.keyToPaint non misurato: ${why}`);
+    return { p95: null, count: 0, typed: false };
+  };
+  await pause(3_000);
+  const session = await openSession(base, app);
+  try {
+    await ready(session);
+    await indexed(session);
+    await openByName(session, SHEET_BOARD.name, "Scheda 20");
+    await session.waitFor("return document.querySelectorAll(arguments[0]).length >= arguments[1]", [SHEET_NODES, SHEET_CARDS], 60_000);
+    const placed = await placeCard(session, card);
+    if (!placed?.inside || !(placed.zoom >= SHEET_ZOOM.min && placed.zoom <= SHEET_ZOOM.max)) {
+      return invalid(`la scheda non è al centro a zoom ${SHEET_ZOOM.min}–${SHEET_ZOOM.max} (zoom ${placed?.zoom ?? "—"}, dentro la vista ${placed?.inside ?? "—"})`);
+    }
+    // I fogli vivi restano vivi a questo zoom: se non arrivano tutti, il referto lo dice.
+    try {
+      await session.waitFor("return document.querySelectorAll(arguments[0]).length >= arguments[1]", [LIVE_SHEETS, SHEET_CARDS], SHEET_LIVE_WAIT_MS);
+    } catch {
+      notes.push(`S9.keyToPaint: fogli vivi a zoom ${placed.zoom} ${await count(session, LIVE_SHEETS)} su ${SHEET_CARDS}`);
+    }
+    // Clic per sceglierla, Invio per entrare in scrittura (T41).
+    const at = await centerOf(session, card);
+    await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
+      { type: "pointerMove", x: at.x, y: at.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
+    ] }]);
+    await session.releaseActions();
+    await session.keys(ENTER);
+    try {
+      await session.waitFor("const a = document.querySelector(arguments[0]); return a?.dataset.cardEditing !== undefined && !!a.querySelector('.cm-content');", [card], 15_000);
+    } catch {
+      return invalid("Invio non mette la scheda in scrittura");
+    }
+    // Il fuoco nell'editor della scheda: se non ci va da sé, un clic dentro.
+    const focused = await session.execute("const a = document.querySelector(arguments[0]); return !!a && a.contains(document.activeElement) && document.activeElement.isContentEditable === true;", [card]);
+    if (!focused) {
+      const inside = await centerOf(session, `${card} .cm-content`);
+      if (!inside) return invalid("la scheda in scrittura non ha un editor");
+      await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
+        { type: "pointerMove", x: inside.x, y: inside.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
+      ] }]);
+      await session.releaseActions();
+    }
+    await chord(session, CTRL, END);
+    // Il primo carattere è del montaggio dell'editor: si scrive a parte.
+    await session.keys("x");
+    const settle = await session.executeAsync(STILL_SCRIPT, [OPENING_STILL_FRAMES, OPENING_GAP_MS, OPENING_LIMIT_MS]);
+    if (!settle.still) notes.push(`S9.keyToPaint: la lavagna non si ferma prima dei tasti (buco più lungo ${settle.longestGap} ms)`);
+    await start(session);
+    await session.keys(NOTE_TYPED);
+    await pause(500);
+    const report = await stop(session);
+    const text = await session.execute("return document.querySelector(arguments[0] + ' .cm-content')?.textContent ?? '';", [card]);
+    if (!text.includes(NOTE_TYPED)) {
+      return invalid(`il driver non scrive nell'editor della scheda: ci sono ${text.length} caratteri, non quelli digitati`);
+    }
+    // Nessun tasto registrato: la sonda non ha visto niente, e zero non è un tempo.
+    if (report.input.key.count === 0) return invalid("la sonda non registra nessun tasto mentre si scrive");
+    return { p95: report.input.key.p95, count: report.input.key.count, typed: true };
+  } finally {
+    await session.close();
+  }
+}
 
 const stop = (session) => session.execute("return window.__fubProbe.stop();");
 const start = (session) => session.execute("window.__fubProbe.start(); return true;");
@@ -560,16 +729,23 @@ const SCENARIOS = {
     const zoomed = await moveAndZoom(session, at);
     const report = await stop(session);
     notes.push(`fogli vivi dopo i gesti: ${await count(session, LIVE_SHEETS)}`);
+    // Dopo la finestra dei fotogrammi: i tasti della nota non entrano nel
+    // massimo dello spostamento, e la sonda di sopra non conta i loro. Il
+    // tasto ha un'app sua (vedi `noteTyping`): questa si chiude prima.
+    await session.close();
+    const typing = await noteTyping(notes);
     return {
       report,
       zoomed,
       zoom,
       opening,
       notes,
+      typing,
       values: {
         "S9.liveCards": liveCards,
         "S9.frameGap.p95": report.frames.p95,
         "S9.frameGap.max": report.frames.max,
+        "S9.keyToPaint.p95": typing.p95,
       },
       samples: report.frames.count,
     };
@@ -1123,11 +1299,22 @@ async function main() {
   const root = mkdtempSync(join(tmpdir(), "fub-webview-"));
   const { vault, config } = writeFixtures(root);
   benchVault = vault;
+  // Con `WAYLAND_DISPLAY` GTK apre la finestra in Wayland, anche dentro Xvfb:
+  // sullo schermo di chi misura, non sul display che il driver muove con il
+  // puntatore. `--x11` toglie la variabile al driver e chiede X11.
+  if (process.env.WAYLAND_DISPLAY && !x11) {
+    console.log("! WAYLAND_DISPLAY è impostato: la finestra va sullo schermo Wayland. Sotto Xvfb su una sessione Wayland aggiungi --x11.");
+  }
+  const driverEnv = { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config };
+  if (x11) {
+    delete driverEnv.WAYLAND_DISPLAY;
+    driverEnv.GDK_BACKEND = "x11";
+  }
   const driver = spawn(args.driver ?? "tauri-driver", [
     "--port", String(port),
     ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
   ], {
-    env: { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config },
+    env: driverEnv,
     stdio: ["ignore", "inherit", "inherit"],
     // Un gruppo di processi suo: alla fine si ferma il driver con l'app e
     // WebKitWebDriver che ha avviato, non soltanto `tauri-driver`.
@@ -1167,7 +1354,9 @@ async function main() {
         session = await openSession(base, app);
       } catch (error) {
         failed++;
-        results[id] = { error: `l'app non è partita: ${String(error?.message ?? error)}` };
+        // `fetch` dice «fetch failed» e la causa (la porta, il timeout) è in `cause`.
+        const cause = error?.cause ? ` (${error.cause.code ?? error.cause.message ?? error.cause})` : "";
+        results[id] = { error: `l'app non è partita: ${String(error?.message ?? error)}${cause}` };
         console.log(`✗ ${id}: ${results[id].error}`);
         continue;
       }
@@ -1176,6 +1365,12 @@ async function main() {
         // I1 misura proprio l'indicizzazione dell'avvio: non la aspetta.
         if (id !== "S6" && id !== "I1") await indexed(session);
         const result = await SCENARIOS[id](session);
+        // Zero campioni non è un tempo di zero: se la sonda non ha visto niente
+        // (un fotogramma che non arriva, un tasto perso) il referto non scrive
+        // un numero, e la soglia lo conta come misura che manca.
+        if (result.samples === 0 && result.values) {
+          for (const key of Object.keys(result.values)) result.values[key] = null;
+        }
         results[id] = result;
         writeFileSync(join(out, `${id}.json`), JSON.stringify(result, null, 2) + "\n");
         if (result.skipped) {
@@ -1202,7 +1397,14 @@ async function main() {
         console.log(`✗ ${id}: ${results[id].error}`);
       } finally {
         // C1 chiude da sé le sessioni che apre, anche la prima.
-        if (id !== "C1") await session.close();
+        if (id !== "C1") {
+          await session.close();
+          // Fub ha un'istanza sola: l'app di questo scenario deve finire prima
+          // che parta la successiva. Ipotesi per S9 dopo S3 (T46), che ha dato
+          // «UND_ERR_HEADERS_TIMEOUT» in due giri su quattro: la nuova cede alla
+          // vecchia e il driver aspetta una finestra che non arriva.
+          await pause(3_000);
+        }
       }
     }
   } finally {
@@ -1219,7 +1421,7 @@ async function main() {
   const report = {
     commit: git("rev-parse", "HEAD"),
     machine: { host: hostname(), cpu: cpus()[0]?.model ?? null, cores: cpus().length, memoryGiB: Math.round(totalmem() / 2 ** 30) },
-    system: { os: osType(), release: release(), session: process.env.XDG_SESSION_TYPE ?? (process.env.WAYLAND_DISPLAY ? "wayland" : process.env.DISPLAY ? "x11" : null) },
+    system: { os: osType(), release: release(), session: x11 ? "x11" : process.env.XDG_SESSION_TYPE ?? (process.env.WAYLAND_DISPLAY ? "wayland" : process.env.DISPLAY ? "x11" : null) },
     webview: Object.values(results).find((r) => r.report?.userAgent)?.report.userAgent ?? null,
     budgets: budgetsKind,
     results,
