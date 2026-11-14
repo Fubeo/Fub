@@ -1311,23 +1311,38 @@
     "graph-list-info",
     "graph-list-more",
     "context-menu",
+    "menu-at-point",
+    "menu-items",
+    "menu-glide",
+    "menu-lit",
     "menu-separator",
     "menu-group",
+    "menu-group-label",
     "menu-empty",
     "menu-head",
+    "menu-head-kind",
     "menu-head-name",
     "menu-clipboard",
+    "menu-clipboard-glide",
     "menu-quick",
+    "menu-pressed",
+    "menu-choices",
+    "menu-choice",
+    "menu-choice-set",
+    "menu-choice-name",
     "menu-foot",
+    "menu-foot-text",
     "menu-foot-query",
+    "menu-foot-caret",
+    "menu-finding",
     "menu-path",
     "context-submenu",
     "menu-more",
     "context-strip",
     "menu-label",
     "menu-hint",
-    "menu-body",
     "menu-description",
+    "menu-quiet",
     "menu-swatches",
     "menu-swatch",
     "menu-check",
@@ -2915,23 +2930,38 @@
     "graph-list-info": "cornice",
     "graph-list-more": "cornice",
     "context-menu": "cornice",
+    "menu-at-point": "cornice",
+    "menu-items": "cornice",
+    "menu-glide": "cornice",
+    "menu-lit": "cornice",
     "menu-separator": "cornice",
     "menu-group": "cornice",
+    "menu-group-label": "cornice",
     "menu-empty": "cornice",
     "menu-head": "cornice",
+    "menu-head-kind": "cornice",
     "menu-head-name": "cornice",
     "menu-clipboard": "cornice",
+    "menu-clipboard-glide": "cornice",
     "menu-quick": "cornice",
+    "menu-pressed": "cornice",
+    "menu-choices": "cornice",
+    "menu-choice": "cornice",
+    "menu-choice-set": "cornice",
+    "menu-choice-name": "cornice",
     "menu-foot": "cornice",
+    "menu-foot-text": "cornice",
     "menu-foot-query": "cornice",
+    "menu-foot-caret": "cornice",
+    "menu-finding": "cornice",
     "menu-path": "cornice",
     "context-submenu": "cornice",
     "menu-more": "cornice",
     "context-strip": "cornice",
     "menu-label": "cornice",
     "menu-hint": "cornice",
-    "menu-body": "cornice",
     "menu-description": "cornice",
+    "menu-quiet": "cornice",
     "menu-swatches": "cornice",
     "menu-swatch": "cornice",
     "menu-check": "cornice",
@@ -6498,8 +6528,13 @@
       "part": "menus",
       "hooks": [
         "context-menu",
+        "menu-at-point",
+        "menu-items",
+        "menu-glide",
+        "menu-lit",
         "menu-separator",
         "menu-group",
+        "menu-group-label",
         "menu-empty"
       ],
       "states": [
@@ -6511,6 +6546,7 @@
       "part": "menus",
       "hooks": [
         "menu-head",
+        "menu-head-kind",
         "menu-head-name"
       ],
       "states": [
@@ -6522,12 +6558,31 @@
       "part": "menus",
       "hooks": [
         "menu-clipboard",
-        "menu-quick"
+        "menu-clipboard-glide",
+        "menu-quick",
+        "menu-pressed"
       ],
       "states": [
         "rest",
         "hover",
-        "focused"
+        "focused",
+        "pressed"
+      ]
+    },
+    {
+      "name": "menu-choices",
+      "part": "menus",
+      "hooks": [
+        "menu-choices",
+        "menu-choice",
+        "menu-choice-set",
+        "menu-choice-name"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "pressed"
       ]
     },
     {
@@ -6535,7 +6590,10 @@
       "part": "menus",
       "hooks": [
         "menu-foot",
+        "menu-foot-text",
         "menu-foot-query",
+        "menu-foot-caret",
+        "menu-finding",
         "menu-path"
       ],
       "states": [
@@ -6570,8 +6628,8 @@
       "hooks": [
         "menu-label",
         "menu-hint",
-        "menu-body",
         "menu-description",
+        "menu-quiet",
         "menu-swatches",
         "menu-swatch",
         "menu-check",
@@ -8861,10 +8919,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1602,
+    "hooks": 1617,
     "state_names": 7,
-    "assigned_states": 765,
-    "components": 226,
+    "assigned_states": 770,
+    "components": 227,
     "preference_tokens": 189
   }
 }

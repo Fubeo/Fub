@@ -10,17 +10,41 @@
 Il tasto destro, il tasto Menu o Maiusc+F10 aprono in ogni editor un menu con
 le stesse parti, nello stesso ordine; una parte vuota non c'è.
 
-1. **La testata**: che cosa sta sotto il puntatore, con la sua icona e il suo
-   nome, per esempio «Titolo 2 · Formula» o «Link alla nota · Media».
-2. **La riga degli appunti**: Taglia, Copia e Incolla come tre pulsanti, se
-   almeno due si possono fare; con uno solo, «Incolla» è una voce come le
-   altre.
+1. **La testata**, in una riga: che cosa sta sotto il puntatore, con l'icona
+   d'accento, la specie in grassetto e il nome in grigio, per esempio «Titolo 2
+   Formula» o «Link alla nota Media».
+2. **La barra degli appunti**: Taglia, Copia e Incolla alla pari, su un fondo
+   tenue, se almeno due si possono fare; con uno solo, «Incolla» è una voce
+   come le altre.
 3. **Le voci del posto**, nei loro gruppi.
 4. «Formato ▸», soltanto dove non c'è la mini-barra.
 5. «Dai plugin ▸», dopo le voci di Fub.
 6. In fondo, in rosso, ciò che cancella.
 
-Tutto il resto non ruba un posto: si trova **scrivendo** nel piede del menu.
+Ogni voce sta in una riga sola: l'icona, il nome e a destra, in grigio e in
+monospazio, la scorciatoia o la freccia del sottomenu. Una spiegazione non va
+mai a capo: sta a destra in grigio, tagliata se non ci sta. Una voce che offre
+due o tre gesti col loro segno, come **Copia come**, li tiene nella riga
+invece che in un sottomenu: tre tastini coi segni di Markdown, HTML e testo
+senza formattazione. Accesa la riga, il nome del formato scelto compare
+accanto («Copia come HTML»), ← e → cambiano formato e Invio copia; chi ascolta
+sente il nome intero su ogni tastino. Con più scelte, o senza un segno
+riconoscibile, resta il sottomenu.
+
+**La scelta è una sola**, fra la barra e l'elenco: la indica una pastiglia che
+scivola da una voce all'altra, o nella barra una linguetta chiara e rialzata.
+Il puntatore la sposta e quando esce dal menu resta dov'era; mai due cose
+accese insieme. ↑ dalla prima voce sale alla barra, ↓ dall'ultima ci torna, ←
+e → cambiano parte; senza la barra l'elenco fa il giro. Una parte della barra
+o un formato premuti si fanno d'accento con la spunta, poi il menu si chiude e
+il gesto si fa una volta sola.
+
+Tutto il resto non ruba un posto: si trova **scrivendo**. Il piede, una fascia
+tenue, dice «Scrivi per trovare altro»; scrivendo mostra ciò che si è scritto,
+l'elenco tiene prima le voci del menu che corrispondono e poi, sotto «Altri
+comandi», quelle che si trovano solo scrivendo. Backspace torna indietro, Esc
+svuota la ricerca prima di chiudere il menu. Se non trova niente offre «Cerca
+… fra tutti i comandi», con a destra il suo tasto.
 Lì stanno Incolla senza formattazione, i comandi del vault dichiarati per il
 «/», Cerca nel documento, Seleziona tutto e le voci in più dell'editor. «Cerca
 nel documento» c'è dove l'editor ha la sua barra di ricerca: note, documenti
@@ -47,7 +71,7 @@ In una nota Markdown in scrittura le voci del posto sono:
 | Sotto il puntatore | Voci |
 |---|---|
 | Testo | Incolla, Trasforma il blocco ▸, Inserisci un blocco…, Copia il link a questo punto |
-| Selezione | la riga degli appunti, Copia come ▸, Collega a una nota…, Estrai in una nota nuova |
+| Selezione | la barra degli appunti, Copia come (i tre formati nella riga), Collega a una nota…, Estrai in una nota nuova |
 | Link alla nota | Apri, Apri a lato, Copia il link, Togli il link |
 | Indirizzo web | Apri nel browser, Copia l'indirizzo, Togli il link |
 | Immagine | Apri nel visore, Copia l'immagine, Larghezza ▸, Sostituisci l'immagine…, Mostra nell'esploratore |
@@ -60,11 +84,18 @@ In una nota Markdown in scrittura le voci del posto sono:
 
 Il tasto destro fuori dalla selezione porta lì il cursore; dentro, la lascia.
 In Lettura il menu offre «Modifica qui», che porta il cursore nel punto
-cliccato, «Copia il link a questo punto» e «Copia la nota come ▸». Il tasto
+cliccato, «Copia il link a questo punto» e «Copia la nota come», coi tre
+formati nella riga. Il tasto
 destro su un link in Live lascia il cursore dov'è, così la sintassi del link
-resta nascosta. Aperto col mouse, il menu tiene il fuoco su di sé e nessuna
-voce ha l'anello: la prima freccia sceglie la prima voce, o l'ultima con la
-freccia su. Dal tasto Menu o da Maiusc+F10 il fuoco va subito alla prima voce.
+resta nascosta. Aperto col mouse, il menu tiene il fuoco su di sé e niente è
+acceso: la prima freccia sceglie la prima voce, o l'ultima con la freccia su.
+Dal tasto Menu o da Maiusc+F10 il fuoco va subito alla prima voce, non alla
+barra.
+
+Il menu nasce dal punto del clic, in meno di un quinto di secondo: testata,
+barra e voci arrivano una dopo l'altra, il sottomenu entra da destra, e
+chiuso il menu sfuma senza muoversi. I menu a tendina entrano con una
+dissolvenza breve. Col moto ridotto niente si muove.
 
 Dove Fub non ha un menu, il tasto destro non apre quello della WebView: resta
 nei campi di testo, sul testo scelto, sul lettore audio e video e con
@@ -142,7 +173,7 @@ In modalità Blocchi la maniglia di un blocco apre il suo menu col clic e col
 tasto destro, con la testata «Blocco» e l'inizio del testo: Trasforma in ▸,
 Colore ▸ (Testo e Fondo, coi nove colori dei Blocchi), Duplica, Copia il link
 al blocco, Sposta su e giù, Affianca in colonne, e «Elimina il blocco» per
-ultimo. La griglia delle tabelle in Live ha la testata «Tabella», la riga
+ultimo. La griglia delle tabelle in Live ha la testata «Tabella», la barra
 degli appunti, Inserisci ▸, Sposta ▸, Ordina la colonna ▸, Allinea la colonna
 ▸, Svuota la cella, e in fondo Elimina la riga e Elimina la colonna.
 
@@ -201,7 +232,8 @@ griglia delle tabelle in Live ha il suo
 - `apps/client/src/panels/explorer.ts`, `explorer-selection.ts` e
   `document.ts`: i menu dell'albero, della scelta, delle schede e del
   riquadro;
-- `apps/client/src/ui/menu.ts`: il menu, il fuoco e la tastiera;
+- `apps/client/src/ui/menu.ts`: il menu, il fuoco, la tastiera e il moto;
+  `apps/client/src/theme/scrittoio/skin/menus.css` il suo aspetto;
 - `apps/client/src/editors/text/profiles/markdown/surface.ts` e `menu.ts`: le
   voci di una nota e ciò che sta sotto il puntatore;
 - `apps/client/src/i18n/lexicon.ts`: il lessico dei menu;
