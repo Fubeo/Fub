@@ -121,7 +121,18 @@ describe("depositOrReuse (la lavagna)", () => {
     const result = await depositOrReuse(vault.deposit, "foto.png", bytes(1, 2));
     expect(result).toEqual({ receipt: { id: "attachments/foto 1.png", revision: "r1" }, reused: false });
     expect(vault.attempts).toEqual(["attachments/foto.png", "attachments/foto 1.png"]);
-    expect(vault.reuses).toEqual([true, true]);
+    expect(vault.reuses).toEqual([true, false]);
+  });
+
+  it("sei nomi occupati fanno una ricerca sola: dopo il primo, scritture semplici «solo se nuovo»", async () => {
+    const taken = Object.fromEntries(
+      ["foto.png", ...[1, 2, 3, 4, 5].map((n) => `foto ${n}.png`)].map((name, i) => [`attachments/${name}`, bytes(9, i)]),
+    );
+    const vault = fakeVault(taken);
+    const result = await depositOrReuse(vault.deposit, "foto.png", bytes(1, 2));
+    expect(result).toEqual({ receipt: { id: "attachments/foto 6.png", revision: "r1" }, reused: false });
+    expect(vault.attempts).toHaveLength(7);
+    expect(vault.reuses).toEqual([true, false, false, false, false, false, false]);
   });
 
   it("«nome.ext» diverso e «nome 1.ext» uguale: l'host trova «nome 1.ext» al primo tentativo", async () => {

@@ -150,10 +150,10 @@ export async function depositAttachment(
 /// altrimenti scrive al candidato, come `depositAttachment`. Il client non
 /// legge i file del vault per confrontarli: il confronto è dell'host, che lo
 /// fa prima di rispondere e, nel dubbio, scrive. I candidati sono quelli di
-/// `depositAttachment` («foto.png», «foto 1.png», …): un `already_exists`
-/// passa al successivo, ogni altro errore dell'host (un nome che il vault
-/// rifiuta, l'I/O) risale. Le note e il registratore restano su
-/// `depositAttachment`.
+/// `depositAttachment` («foto.png», «foto 1.png», …): il riuso si chiede solo
+/// al primo, un `already_exists` passa al successivo con una scrittura
+/// semplice, ogni altro errore dell'host (un nome che il vault rifiuta, l'I/O)
+/// risale. Le note e il registratore restano su `depositAttachment`.
 export async function depositOrReuse(
   deposit: AttachmentDeposit,
   originalName: string,
@@ -163,9 +163,16 @@ export async function depositOrReuse(
   if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
     throw new Error(t("errors.attachment.too_large", { name }));
   }
+  // La domanda «c'è già?» si fa una volta sola, col primo candidato: la sua
+  // risposta non dipende dal nome. Dopo un `already_exists` l'host ha già
+  // risposto «no» (o «non so»), quindi i nomi seguenti sono scritture semplici
+  // «solo se nuovo», senza rifare la ricerca a ogni nome.
+  let asked = false;
   for (const candidate of attachmentCandidates(deposit, name)) {
+    const options: ResourceWriteOptions | undefined = asked ? undefined : { reuse: "same-content" };
+    asked = true;
     try {
-      const written = await deposit.write(candidate, bytes, { reuse: "same-content" });
+      const written = await deposit.write(candidate, bytes, options);
       return { receipt: { id: written.id, revision: written.revision }, reused: written.reused === true };
     } catch (error) {
       if (!isAlreadyExists(error)) throw error;
