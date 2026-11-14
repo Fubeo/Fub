@@ -62,12 +62,15 @@ export function wholeRange(range: Range, which: "row" | "column" | "table", boun
 /// Ctrl+D e Ctrl+R, come nei fogli di calcolo: con più righe (o colonne)
 /// scelte la prima si copia nelle altre; con una sola, si copia quella sopra
 /// (o a sinistra), che non può stare prima di `first` (l'intestazione non si
-/// copia nel corpo). `null` se non c'è niente da copiare.
+/// copia nel corpo). Le righe d'intestazione scelte non contano: con una
+/// colonna intera scende la prima riga del corpo. `null` se non c'è niente
+/// da copiare.
 export function fillCopy(range: Range, direction: "down" | "right", first = 0): { readonly source: Range; readonly target: Range } | null {
   if (direction === "down") {
-    if (range.r1 > range.r0) return { source: { ...range, r1: range.r0 }, target: { ...range, r0: range.r0 + 1 } };
-    if (range.r0 - 1 < first) return null;
-    return { source: { ...range, r0: range.r0 - 1, r1: range.r0 - 1 }, target: range };
+    const r0 = Math.max(range.r0, first);
+    if (range.r1 > r0) return { source: { ...range, r0, r1: r0 }, target: { ...range, r0: r0 + 1 } };
+    if (range.r1 < first || r0 - 1 < first || r0 !== range.r0) return null;
+    return { source: { ...range, r0: r0 - 1, r1: r0 - 1 }, target: range };
   }
   if (range.c1 > range.c0) return { source: { ...range, c1: range.c0 }, target: { ...range, c0: range.c0 + 1 } };
   if (range.c0 - 1 < 0) return null;

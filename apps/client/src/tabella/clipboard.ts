@@ -163,6 +163,26 @@ export function cutDestination(source: Range, selection: Range): Range {
   };
 }
 
+let cutTold = false;
+
+/// Se il taglio deve ancora dire che cosa farà l'incolla: soltanto la prima
+/// volta della sessione, in qualunque tabella. Il segno resta tratteggiato e
+/// sposta soltanto nella sua tabella; altrove l'incolla copia, e chi taglia
+/// lo deve sapere prima di incollare.
+export function tellCutOnce(): boolean {
+  if (cutTold) return false;
+  cutTold = true;
+  return true;
+}
+
+/// Dove va un taglio incollato in una tabella di `size`, se ci sta. Oltre il
+/// bordo il taglio non si sposta e non allarga la tabella: `null`, e
+/// l'incolla è uno qualunque. La stessa regola per la cornice e il documento.
+export function cutTarget(source: Range, selection: Range, size: { readonly rows: number; readonly columns: number }): Range | null {
+  const destination = cutDestination(source, selection);
+  return destination.r1 < size.rows && destination.c1 < size.columns ? destination : null;
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }

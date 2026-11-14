@@ -33,7 +33,7 @@
 import { t } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import type { TableAlign, TableBlock, TableCaps, TableClipboard, TableEdit, TableMenuEntry, TableSize } from "../adapter";
-import { clipboardData, clipboardRows, cutDestination, cutMoves, pasteTargets, type CutMark } from "../clipboard";
+import { clipboardData, clipboardRows, cutMoves, cutTarget, pasteTargets, tellCutOnce, type CutMark } from "../clipboard";
 import { structureEdit, TABLE_ALIGNS, TABLE_COMMANDS, tableCommand, type TableCommandContext, type TableTarget } from "../commands";
 import { editingIntent, sheetIntent, type TableFormat } from "../keys";
 import { dataEdge, isMultiCell, nextInRange, type Cell, type Move, type Range, type Shape } from "../navigation";
@@ -129,6 +129,8 @@ export class TableFrame {
   /// Maiusc+F8 acceso: muoversi tiene gli intervalli già scelti.
   #adding = false;
   #cut: CutMark | null = null;
+  /// La tabella com'era quando si è tagliato (`#tableText`).
+  #cutTable = "";
   #editing: Editing | null = null;
   #cells: HTMLElement[][] = [];
   /// I testi che le celle mostrano adesso: il moto li confronta coi nuovi.
@@ -229,6 +231,10 @@ export class TableFrame {
   /// ridisegna, e la selezione resta dov'era finché c'è. Il cambio si vede:
   /// le celle scivolano dal posto di prima.
   update(): void {
+    // Ogni modifica della tabella toglie il segno del taglio, anche quella da
+    // fuori (annulla, sorgente, un altro riquadro); un ridisegno senza cambi
+    // no. Si guarda soltanto quando c'è un segno.
+    if (this.#cut && this.#tableText() !== this.#cutTable) this.#cut = null;
     const snapshot = this.#snapshot();
     this.#anchor = this.#clamp(this.#anchor);
     this.#focus = this.#clamp(this.#focus);
@@ -1205,7 +1211,18 @@ export class TableFrame {
   /// Taglia non svuota: segna le celle, e l'incolla che segue le sposta.
   #markCut(range: Range, text: string): void {
     this.#cut = { range, text };
+    this.#cutTable = this.#tableText();
     this.#paintSelection();
+    if (this.#host.notice && tellCutOnce()) this.#host.notice(t("table.cut.marked"));
+  }
+
+  /// Tutta la tabella come testo, per sapere se è cambiata dal taglio: le
+  /// celle tagliate possono dire ancora lo stesso (vuote) ed essere altre.
+  #tableText(): string {
+    const { rows, columns } = this.#host.size();
+    const cells: string[] = [`${rows}×${columns}`];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < columns; c++) cells.push(this.#host.cellText(r, c));
+    return cells.join("\u0000");
   }
 
   #copy(event: ClipboardEvent, cut: boolean): void {
@@ -1261,7 +1278,8 @@ export class TableFrame {
     if (this.#editing || this.#host.readOnly()) return false;
     if (this.#refuseMany()) return false;
     const mark = this.#cut;
-    if (mark && cutMoves(mark, text, this.#clipboard(mark.range).text)) return this.#pasteCut(mark);
+    const destination = mark ? cutTarget(mark.range, this.range, this.#host.size()) : null;
+    if (mark && destination && cutMoves(mark, text, this.#clipboard(mark.range).text)) return this.#pasteCut(mark, destination);
     const rows = clipboardRows(text, html);
     if (rows.length === 0) return false;
     const block = { rows: rows.length, columns: Math.max(...rows.map((row) => row.length)) };
@@ -1276,9 +1294,9 @@ export class TableFrame {
   }
 
   /// L'incolla dopo un taglio: le celle tagliate si svuotano e il loro testo
-  /// va all'angolo della selezione, in un cambio solo.
-  #pasteCut(mark: CutMark): boolean {
-    const destination = cutDestination(mark.range, this.range);
+  /// va all'angolo della selezione (`destination`, dentro la tabella), in un
+  /// cambio solo.
+  #pasteCut(mark: CutMark, destination: Range): boolean {
     const rows: string[][] = [];
     for (let r = mark.range.r0; r <= mark.range.r1; r++) {
       const line: string[] = [];

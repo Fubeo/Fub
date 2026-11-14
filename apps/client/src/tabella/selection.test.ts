@@ -46,4 +46,11 @@ describe("Ctrl+D e Ctrl+R", () => {
     expect(fillCopy({ r0: 1, c0: 1, r1: 1, c1: 1 }, "down", 1)).toBeNull();
     expect(fillCopy({ r0: 1, c0: 0, r1: 1, c1: 0 }, "right")).toBeNull();
   });
+
+  it("con più righe a partire dall'intestazione la prima del corpo scende, l'intestazione no", () => {
+    // Ctrl+Spazio su una colonna di quattro righe, poi Ctrl+D.
+    expect(fillCopy({ r0: 0, c0: 1, r1: 3, c1: 1 }, "down", 1)).toEqual({ source: { r0: 1, c0: 1, r1: 1, c1: 1 }, target: { r0: 2, c0: 1, r1: 3, c1: 1 } });
+    // L'intestazione e una riga sola del corpo: sopra c'è soltanto l'intestazione.
+    expect(fillCopy({ r0: 0, c0: 0, r1: 1, c1: 1 }, "down", 1)).toBeNull();
+  });
 });

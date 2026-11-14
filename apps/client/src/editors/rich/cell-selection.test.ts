@@ -4,6 +4,9 @@
 // celle, Maiusc con le frecce oltre la cella per scegliere celle, e sulle
 // celle scelte i gesti del foglio, gli appunti e «Unisci celle».
 import { afterEach, describe, expect, it } from "vitest";
+import { TextSelection } from "prosemirror-state";
+import { t } from "../../i18n/strings";
+import { recentNotices } from "../../ui/notify";
 import { RichEngine } from "./engine";
 import { cellAt, cellBoxes, cutCells, DOCUMENT_TABLE_CAPS, selectedCells } from "./cell-selection";
 import {
@@ -151,6 +154,52 @@ describe("le tabelle del documento", () => {
       return true;
     });
     expect(document.querySelectorAll(".is-cell-cut")).toHaveLength(0);
+  });
+
+  it("un Ctrl+clic fuori dalle celle le spegne: Canc dopo non svuota le celle vecchie", () => {
+    const e = engine([["a", "b", "c"], ["d", "e", "f"], ["g", "h", "i"]]);
+    e.select(at(e, "e") + 1);
+    press("ArrowRight", { shiftKey: true });
+    press("ArrowDown", { shiftKey: true });
+    expect(selectedCells(e.state)?.range).toEqual({ r0: 1, c0: 1, r1: 2, c1: 2 });
+    // Ctrl+clic nel paragrafo dopo la tabella: il browser sposta il cursore.
+    const content = document.querySelector<HTMLElement>(".rich-content")!;
+    content.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, ctrlKey: true, button: 0, clientX: 5, clientY: 500 }));
+    content.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, ctrlKey: true, button: 0, clientX: 5, clientY: 500 }));
+    e.apply((state, dispatch) => {
+      dispatch?.(state.tr.setSelection(TextSelection.create(state.doc, at(e, "dopo") + 2)).setMeta("pointer", true));
+      return true;
+    });
+    expect(selectedCells(e.state)).toBeNull();
+    press("Delete");
+    expect(grid(e)).toEqual([["a", "b", "c"], ["d", "e", "f"], ["g", "h", "i"]]);
+  });
+
+  it("con più intervalli copia e taglia non fanno niente e lo dicono", () => {
+    const e = engine([["a", "b"], ["c", "d"]]);
+    e.select(at(e, "a") + 1);
+    press("ArrowRight", { shiftKey: true });
+    press("F8", { shiftKey: true });
+    press("ArrowDown");
+    expect(selectedCells(e.state)?.others).toHaveLength(1);
+    const data = new Map<string, string>();
+    const event = new Event("cut", { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(event, "clipboardData", { value: { setData: (type: string, value: string) => void data.set(type, value) } });
+    document.querySelector<HTMLElement>(".rich-content")!.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(data.size).toBe(0);
+    expect(cutCells(e.state)).toBeNull();
+    expect(recentNotices()[0]?.text).toBe(t("grid.multi.refused"));
+  });
+
+  it("il primo taglio dice che incollato fuori dalla sua tabella si copia", () => {
+    const e = engine([["a", "b"], ["c", "d"]]);
+    e.select(at(e, "a") + 1);
+    press("ArrowDown", { shiftKey: true });
+    const event = new Event("cut", { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(event, "clipboardData", { value: { setData: () => {} } });
+    document.querySelector<HTMLElement>(".rich-content")!.dispatchEvent(event);
+    expect(recentNotices().map((notice) => notice.text)).toContain(t("table.cut.marked"));
   });
 
   it("dove ci sono celle unite Ctrl+«+» non inserisce colonne", () => {

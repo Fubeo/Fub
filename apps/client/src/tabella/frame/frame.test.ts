@@ -214,6 +214,37 @@ describe("la cornice della Tabella", () => {
     expect(edits).toEqual([]);
   });
 
+  it("un cambio da fuori toglie il segno del taglio; un ridisegno senza cambi no", () => {
+    const { frame, rows, edits } = mount([["Nome", "Voto"], ["", ""], ["", ""], ["Bea", "9"]]);
+    const store = { text: "", html: "" };
+    frame.focus({ row: 1, column: 0 });
+    clipboardEvent("cut", store);
+    expect(frame.cutRange).toEqual({ r0: 1, c0: 0, r1: 1, c1: 0 });
+    frame.update();
+    expect(frame.cutRange).toEqual({ r0: 1, c0: 0, r1: 1, c1: 0 });
+    // Un annulla da fuori toglie la riga: al posto del segno ora c'è un'altra
+    // cella vuota, che l'incolla non deve spostare.
+    rows.splice(1, 1);
+    frame.update();
+    expect(frame.cutRange).toBeNull();
+    frame.focus({ row: 2, column: 0 });
+    clipboardEvent("paste", store);
+    expect(edits.every((edit) => edit.kind !== "set" || edit.blocks.length === 1)).toBe(true);
+  });
+
+  it("un taglio che incollato uscirebbe dalla tabella non sposta: è un incolla qualunque", () => {
+    const { frame, rows } = mount(ROWS);
+    const store = { text: "", html: "" };
+    frame.focus({ row: 1, column: 0 });
+    key("ArrowDown", { shiftKey: true });
+    clipboardEvent("cut", store);
+    frame.focus({ row: 2, column: 1 });
+    clipboardEvent("paste", store);
+    // Le celle tagliate restano: nessuna cella svuotata.
+    expect(rows[1]).toEqual(["Ada", "10"]);
+    expect(rows[2]![0]).toBe("Bea");
+  });
+
   it("dà i nomi delle colonne dei fogli di calcolo", () => {
     expect([0, 25, 26, 51, 52, 701, 702].map(columnName)).toEqual(["A", "Z", "AA", "AZ", "BA", "ZZ", "AAA"]);
   });

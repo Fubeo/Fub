@@ -25,12 +25,14 @@ import type { Node as PmNode, ResolvedPos } from "prosemirror-model";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import type { TableCaps, TableEdit } from "../../tabella/adapter";
-import { clipboardData, cutDestination, cutMoves, type CutMark } from "../../tabella/clipboard";
+import { clipboardData, cutMoves, cutTarget, tellCutOnce, type CutMark } from "../../tabella/clipboard";
 import { structureEdit } from "../../tabella/commands";
 import { documentIntent } from "../../tabella/keys";
 import { isMultiCell, nextInRange, type Cell, type Move, type Range, type Shape } from "../../tabella/navigation";
 import { fillCopy, rangeBetween, touches, wholeRange, withRange } from "../../tabella/selection";
+import { t } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { notify } from "../../ui/notify";
 import { richSchema } from "./schema";
 
 const { para, row: rowType, cell: cellType, table: tableType } = richSchema.nodes;
@@ -425,14 +427,19 @@ function copyCells(view: EditorView, event: ClipboardEvent, cut: boolean): boole
   const selected = selectedCells(view.state);
   if (!selected || !event.clipboardData) return false;
   event.preventDefault();
-  // Come nei fogli di calcolo: più intervalli non si copiano insieme.
-  if (selected.others.length > 0) return true;
+  // Come nei fogli di calcolo: più intervalli non si copiano insieme, e lo si
+  // dice come la cornice.
+  if (selected.others.length > 0) {
+    notify(t("grid.multi.refused"), "info");
+    return true;
+  }
   const data = clipboardData(rangeRows(selected.table, selected.tablePos, selected.range));
   event.clipboardData.setData("text/plain", data.text);
   event.clipboardData.setData("text/html", data.html);
   const plugin = cellKey.getState(view.state) ?? NONE;
   const mark = cut && view.editable ? { range: selected.range, text: data.text, tablePos: selected.tablePos } : null;
   view.dispatch(view.state.tr.setMeta(cellKey, { ...plugin, cut: mark } satisfies CellState));
+  if (mark && tellCutOnce()) notify(t("table.cut.marked"), "info");
   return true;
 }
 
@@ -451,10 +458,9 @@ function pasteCut(view: EditorView, event: ClipboardEvent): boolean {
   if (!cutMoves(mark, event.clipboardData.getData("text/plain"), now)) return false;
   const selected = selectedCells(state);
   const target = selected?.range ?? { r0: here.box.row, c0: here.box.column, r1: here.box.row, c1: here.box.column };
-  const destination = cutDestination(mark.range, target);
   const boxes = cellBoxes(table, mark.tablePos);
-  const size = tableSize(table, boxes);
-  if (destination.r1 >= size.rows || destination.c1 >= size.columns) return false;
+  const destination = cutTarget(mark.range, target, tableSize(table, boxes));
+  if (!destination) return false;
   event.preventDefault();
   const sources = boxesIn(boxes, mark.range);
   const content = (box: CellBox): PmNode | null => {
@@ -494,15 +500,16 @@ class CellDrag {
     const view = this.#view;
     const plugin = cellKey.getState(view.state) ?? NONE;
     const before = selectedCells(view.state);
-    const adding = (event.ctrlKey || event.metaKey) && before !== null;
+    const at = event.button === 0 && !event.shiftKey ? view.posAtCoords({ left: event.clientX, top: event.clientY }) : null;
+    const from = at ? cellAt(view.state.doc.resolve(at.pos)) : null;
+    // Mod+clic aggiunge soltanto su una cella della stessa tabella; altrove è
+    // un clic qualunque.
+    const adding = (event.ctrlKey || event.metaKey) && before !== null && from !== null && before.tablePos === from.tablePos;
     // Un clic nuovo spegne le celle (non il segno del taglio): le selezioni
     // del puntatore dopo, no.
     if (plugin.cells && !adding) view.dispatch(view.state.tr.setMeta(cellKey, { ...plugin, cells: null } satisfies CellState));
-    if (event.button !== 0 || event.shiftKey) return;
-    const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
-    const from = at ? cellAt(view.state.doc.resolve(at.pos)) : null;
     if (!from) return;
-    const others = adding && before && before.tablePos === from.tablePos ? withRange(before.others, before.range) : [];
+    const others = adding ? withRange(before.others, before.range) : [];
     this.#drag?.close();
     const drag = openLifetime();
     this.#drag = drag;
@@ -523,6 +530,9 @@ class CellDrag {
     drag.listen(doc, "mouseup", () => {
       drag.close();
       if (this.#drag === drag) this.#drag = null;
+      // Mod+clic su una cella sola, senza trascinare: la cella è un intervallo
+      // in più, come nei fogli di calcolo.
+      if (adding && !celled) view.dispatch(chooseCells(view.state, { tablePos: from.tablePos, anchor, head: anchor, others, adding: false }));
     });
   }
 
