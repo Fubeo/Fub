@@ -26,6 +26,7 @@ pub mod layout;
 pub mod model;
 pub mod ops;
 pub mod patch;
+pub mod preview;
 pub mod read;
 pub mod source;
 pub mod spec;
