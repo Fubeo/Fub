@@ -110,6 +110,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e
   la loro inversa
 - [Il server MCP](reference/mcp-server.md)
+- [I tipi delle proprietà](reference/property-types.md): il registro
+  `properties.types`, le opzioni di Selezione e Stato e i loro comandi
 - [I formati dei file Craft](reference/craft-formats.md), gli
   [XMP accanto alle foto](reference/xmp-sidecars.md) e le
   [app esterne](reference/external-editors.md)

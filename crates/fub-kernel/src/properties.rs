@@ -129,9 +129,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(P_TYPES, "Tipi delle proprietà")
             .with(
                 P_TYPES_DESC,
-                "Dichiarazioni dei tipi per questo vault in JSON versionato. \
-                 Senza dichiarazioni le proprietà conservano il loro valore \
-                 originale e le chiavi convenzionali mantengono il loro significato.",
+                "Dichiarazioni dei tipi per questo vault in JSON versionato, con \
+                 le opzioni di Selezione e Stato. Senza dichiarazioni le proprietà \
+                 conservano il loro valore originale e le chiavi convenzionali \
+                 mantengono il loro significato.",
             )
             .with(P_DATE_FORMAT, "Formato delle date")
             .with(
@@ -154,9 +155,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(P_TYPES, "Property types")
             .with(
                 P_TYPES_DESC,
-                "Versioned JSON declarations of property types for this vault. \
-                 Without declarations properties keep their original values, \
-                 and conventional keys retain their meaning.",
+                "Versioned JSON declarations of property types for this vault, \
+                 with the options of Select and Status. Without declarations \
+                 properties keep their original values, and conventional keys \
+                 retain their meaning.",
             )
             .with(
                 P_DATE_FORMAT_DESC,
@@ -253,5 +255,30 @@ mod tests {
         }
         let declared = property_types(Some(r#"{"version":1,"types":{"rating":"number"}}"#));
         assert_eq!(declared.resolve("rating"), Some(PropertyType::Number));
+    }
+
+    /// Le opzioni di Selezione e Stato si leggono dal registro della versione
+    /// 1; con un campo che questo kernel non conosce, il registro vale come
+    /// non dichiarato (e l'editor non lo riscrive).
+    #[test]
+    fn the_registry_reads_select_status_and_url_with_their_options() {
+        use fub_abi::model::{PropertyColor, PropertyType, StatusGroup};
+        let declared = property_types(Some(concat!(
+            r#"{"version":1,"types":{"stage":"status","link":"url"},"#,
+            r#""options":{"stage":[{"name":"Fatto","color":"green","group":"done"}]}}"#
+        )));
+        assert_eq!(declared.resolve("stage"), Some(PropertyType::Status));
+        assert_eq!(declared.resolve("link"), Some(PropertyType::Url));
+        let done = declared.option("stage", "Fatto").unwrap();
+        assert_eq!(
+            (done.color(), done.group()),
+            (PropertyColor::Green, StatusGroup::Done)
+        );
+        assert_eq!(
+            property_types(Some(
+                r#"{"version":1,"types":{},"options":{"a":[{"name":"x","icon":"star"}]}}"#
+            )),
+            PropertyTypes::default()
+        );
     }
 }

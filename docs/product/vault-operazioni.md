@@ -167,7 +167,9 @@ formato; il kernel conserva path e sorgente senza incorporare regole Markdown.
 
 Le proprietà del frontmatter restano nel file. Un vault può dichiararne il tipo
 per nome nell'impostazione versionata `properties.types`, che sceglie widget e
-semantica di query senza spostare valori in un database. Gli aggiornamenti
+semantica di query senza spostare valori in un database; Selezione e Stato vi
+tengono le loro opzioni ([I tipi delle proprietà](../reference/property-types.md)).
+Gli aggiornamenti
 strutturati modificano la sola chiave interessata e conservano commenti, ordine,
 virgolette, terminatori e corpo; rinominare o togliere una chiave da tutto il
 vault (`property.key.rename`, `property.key.delete`, `property.keys.migrate`)

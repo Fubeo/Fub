@@ -6,7 +6,7 @@ use super::*;
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stiano qui.
 pub fn catalog() -> Vec<StringCatalog> {
     crate::formats::speaking(vec![
-        StringCatalog::new("it")
+        options_it(StringCatalog::new("it"))
             .with(VIEW_TITLE, "Proprietà")
             .with(EMPTY_NO_NOTES, "Nessuna nota aperta.")
             .with(EMPTY_NO_PROPS, "Questa nota non ha proprietà.")
@@ -139,7 +139,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("property.type.set.type.title", "Tipo")
             .with(
                 "property.type.set.type.desc",
-                "text, list, number, checkbox, date, date_time o tags.",
+                "text, list, number, checkbox, date, date_time, tags, select, status o url.",
             )
             .with("property.key.rename.title", "Rinomina proprietà nel vault")
             .with(
@@ -185,7 +185,7 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "note.properties.clear.doc.desc",
                 "La nota; se manca, quella attiva.",
             ),
-        StringCatalog::new("en")
+        options_en(StringCatalog::new("en"))
             .with(VIEW_TITLE, "Properties")
             .with(EMPTY_NO_NOTES, "No note open.")
             .with(EMPTY_NO_PROPS, "This note has no properties.")
@@ -315,7 +315,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("property.type.set.type.title", "Type")
             .with(
                 "property.type.set.type.desc",
-                "text, list, number, checkbox, date, date_time or tags.",
+                "text, list, number, checkbox, date, date_time, tags, select, status or url.",
             )
             .with("property.key.rename.title", "Rename vault property")
             .with(
@@ -356,4 +356,199 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "The note; the active one if omitted.",
             ),
     ])
+}
+
+/// I nove colori e i tre gruppi, coi nomi dei colori dei Blocchi
+/// (`blocks.color.*` in `markdown/strings.ts`).
+const COLOR_NAMES_IT: [&str; 9] = [
+    "Grigio",
+    "Marrone",
+    "Arancione",
+    "Giallo",
+    "Verde",
+    "Blu",
+    "Viola",
+    "Rosa",
+    "Rosso",
+];
+const COLOR_NAMES_EN: [&str; 9] = [
+    "Gray", "Brown", "Orange", "Yellow", "Green", "Blue", "Purple", "Pink", "Red",
+];
+const GROUP_NAMES_IT: [&str; 3] = ["Da fare", "In corso", "Fatto"];
+const GROUP_NAMES_EN: [&str; 3] = ["To do", "In progress", "Done"];
+
+fn option_choices(
+    mut catalog: StringCatalog,
+    colors: [&str; 9],
+    groups: [&str; 3],
+) -> StringCatalog {
+    for (color, title) in PropertyColor::ALL.iter().zip(colors) {
+        catalog = catalog.with(
+            format!("{PROPERTY_OPTION_SET}.{COLOR}.{}", color.as_key()),
+            title,
+        );
+    }
+    for (group, title) in StatusGroup::ALL.iter().zip(groups) {
+        catalog = catalog.with(
+            format!("{PROPERTY_OPTION_SET}.{GROUP}.{}", group.as_key()),
+            title,
+        );
+    }
+    catalog
+}
+
+/// Le opzioni di Selezione e Stato: il comando, il suo annullo, gli errori.
+fn options_it(catalog: StringCatalog) -> StringCatalog {
+    option_choices(catalog, COLOR_NAMES_IT, GROUP_NAMES_IT)
+        .with(P_OPTION_ADD, "Opzione «{option}» aggiunta a «{key}»")
+        .with(P_OPTION_SET, "Opzione «{option}» di «{key}» aggiornata")
+        .with(P_OPTION_SAME, "L'opzione «{option}» di «{key}» è già così")
+        .with(U_OPTION, "Annulla la modifica all'opzione «{option}» di «{key}»")
+        .with(P_TYPES_RESTORE, "Tipi delle proprietà rimessi com'erano")
+        .with(U_TYPES_RESTORE, "Annulla il ripristino dei tipi delle proprietà")
+        .with(
+            E_NOT_CHOICE,
+            "«{key}» non è una Selezione né uno Stato: le opzioni sono solo per questi due tipi.",
+        )
+        .with(E_TYPES_SERIALIZE, "Non ho potuto scrivere il registro dei tipi: {reason}")
+        .with(E_OPTION_EMPTY, "Il nome dell'opzione è vuoto.")
+        .with(E_OPTION_TAKEN, "«{key}» ha già un'opzione «{option}».")
+        .with(E_OPTION_MISSING, "«{key}» non ha un'opzione «{option}» da rinominare.")
+        .with(E_COLOR, "«{value}» non è uno dei nove colori.")
+        .with(E_GROUP, "«{value}» non è un gruppo: todo, doing o done.")
+        .with(E_GROUP_NOT_STATUS, "Il gruppo vale solo per lo Stato, e «{key}» è una Selezione.")
+        .with(
+            E_TYPES_CHANGED,
+            "I tipi delle proprietà sono cambiati nel frattempo: riprova sul registro di adesso.",
+        )
+        .with(
+            E_TYPES_UNREADABLE,
+            "Il registro dei tipi ({key}) è illeggibile o di una versione più nuova: non lo riscrivo.",
+        )
+        .with(
+            "property.option.set.title",
+            "Aggiungi o modifica un'opzione",
+        )
+        .with(
+            "property.option.set.desc",
+            "Aggiunge un'opzione a una Selezione o a uno Stato, o la rinomina, la colora e la raggruppa. Le note non cambiano.",
+        )
+        .with("property.option.set.key.title", "Proprietà")
+        .with(
+            "property.option.set.key.desc",
+            "La chiave dichiarata Selezione o Stato.",
+        )
+        .with("property.option.set.option.title", "Opzione")
+        .with(
+            "property.option.set.option.desc",
+            "Il nome dell'opzione; se non c'è, si aggiunge in fondo.",
+        )
+        .with("property.option.set.name.title", "Nuovo nome")
+        .with(
+            "property.option.set.name.desc",
+            "Rinomina l'opzione. I valori già scritti nelle note restano com'erano.",
+        )
+        .with("property.option.set.color.title", "Colore")
+        .with("property.option.set.color.desc", "Uno dei nove colori.")
+        .with("property.option.set.group.title", "Gruppo")
+        .with(
+            "property.option.set.group.desc",
+            "Solo per lo Stato: Da fare, In corso o Fatto.",
+        )
+        .with("property.option.set.expected.title", "Registro letto")
+        .with(
+            "property.option.set.expected.desc",
+            "Il testo del registro che si è letto: se nel frattempo è cambiato, non si scrive.",
+        )
+        .with(
+            "property.types.restore.title",
+            "Rimetti i tipi delle proprietà",
+        )
+        .with(
+            "property.types.restore.desc",
+            "Rimette il registro dei tipi a un testo di prima, se nessuno l'ha cambiato: è l'annullo delle opzioni.",
+        )
+        .with("property.types.restore.value.title", "Registro di prima")
+        .with(
+            "property.types.restore.value.desc",
+            "Il testo da rimettere.",
+        )
+        .with("property.types.restore.expected.title", "Registro di adesso")
+        .with(
+            "property.types.restore.expected.desc",
+            "Il testo che il registro deve avere perché si rimetta quello di prima.",
+        )
+}
+
+fn options_en(catalog: StringCatalog) -> StringCatalog {
+    option_choices(catalog, COLOR_NAMES_EN, GROUP_NAMES_EN)
+        .with(P_OPTION_ADD, "Option «{option}» added to «{key}»")
+        .with(P_OPTION_SET, "Option «{option}» of «{key}» updated")
+        .with(P_OPTION_SAME, "Option «{option}» of «{key}» is already like that")
+        .with(U_OPTION, "Undo the change to option «{option}» of «{key}»")
+        .with(P_TYPES_RESTORE, "Property types put back as they were")
+        .with(U_TYPES_RESTORE, "Undo restoring the property types")
+        .with(
+            E_NOT_CHOICE,
+            "«{key}» is neither a Select nor a Status: options are only for these two types.",
+        )
+        .with(E_TYPES_SERIALIZE, "Could not write the type registry: {reason}")
+        .with(E_OPTION_EMPTY, "The option name is empty.")
+        .with(E_OPTION_TAKEN, "«{key}» already has an option «{option}».")
+        .with(E_OPTION_MISSING, "«{key}» has no option «{option}» to rename.")
+        .with(E_COLOR, "«{value}» is not one of the nine colors.")
+        .with(E_GROUP, "«{value}» is not a group: todo, doing or done.")
+        .with(E_GROUP_NOT_STATUS, "Groups are only for Status, and «{key}» is a Select.")
+        .with(
+            E_TYPES_CHANGED,
+            "The property types changed in the meantime: try again on the current registry.",
+        )
+        .with(
+            E_TYPES_UNREADABLE,
+            "The type registry ({key}) is unreadable or from a newer version: it is not rewritten.",
+        )
+        .with("property.option.set.title", "Add or change an option")
+        .with(
+            "property.option.set.desc",
+            "Add an option to a Select or a Status, or rename, color and group it. Notes do not change.",
+        )
+        .with("property.option.set.key.title", "Property")
+        .with(
+            "property.option.set.key.desc",
+            "The key declared as Select or Status.",
+        )
+        .with("property.option.set.option.title", "Option")
+        .with(
+            "property.option.set.option.desc",
+            "The option name; added at the end if missing.",
+        )
+        .with("property.option.set.name.title", "New name")
+        .with(
+            "property.option.set.name.desc",
+            "Rename the option. Values already written in notes stay as they are.",
+        )
+        .with("property.option.set.color.title", "Color")
+        .with("property.option.set.color.desc", "One of the nine colors.")
+        .with("property.option.set.group.title", "Group")
+        .with(
+            "property.option.set.group.desc",
+            "Status only: To do, In progress or Done.",
+        )
+        .with("property.option.set.expected.title", "Registry read")
+        .with(
+            "property.option.set.expected.desc",
+            "The registry text that was read: if it changed in the meantime, nothing is written.",
+        )
+        .with("property.types.restore.title", "Put back property types")
+        .with(
+            "property.types.restore.desc",
+            "Put the type registry back to an earlier text, if nobody changed it: the undo of options.",
+        )
+        .with("property.types.restore.value.title", "Earlier registry")
+        .with("property.types.restore.value.desc", "The text to put back.")
+        .with("property.types.restore.expected.title", "Current registry")
+        .with(
+            "property.types.restore.expected.desc",
+            "The text the registry must have for the earlier one to be put back.",
+        )
 }
