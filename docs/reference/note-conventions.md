@@ -1,8 +1,8 @@
 # Le convenzioni scritte nelle note
 
 > **Ambito:** le forme che Fub legge e riscrive dentro il testo di una nota
-> Markdown, oltre a CommonMark e alle estensioni di Obsidian: oggi i commenti
-> con la discussione.
+> Markdown, oltre a CommonMark e alle estensioni di Obsidian: i commenti con
+> la discussione.
 > **Fonti autorevoli:** `crates/fub-format-markdown/src/parse/comments.rs`,
 > `crates/fub-abi/src/model.rs` (`custom_kind::COMMENT_RANGE`,
 > `custom_kind::COMMENT_MESSAGE`), i casi «discussione» di

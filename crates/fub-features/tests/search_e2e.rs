@@ -284,8 +284,14 @@ fn comment_finds_the_messages_and_content_does_not() {
         "Bozza.md",
         "Il {==passo commentato==}{>>@Anna Bianchi 2026-11-08 17:40: frase zoppicante<<}{>>@Bruno: Rivedere<<} qui.\n",
     );
-    v.put("Punto.md", "Un punto {>>2026-11-09: zoppicante anche qui<<} e basta.\n");
-    v.put("Testo.md", "Una frase zoppicante nel corpo, senza commenti.\n");
+    v.put(
+        "Punto.md",
+        "Un punto {>>2026-11-09: zoppicante anche qui<<} e basta.\n",
+    );
+    v.put(
+        "Testo.md",
+        "Una frase zoppicante nel corpo, senza commenti.\n",
+    );
     let ws = v.open();
     let ids = |line: &str| {
         let expr = fub_abi::rules::search_syntax::parse(line, false).expect("una ricerca");
@@ -324,6 +330,22 @@ fn comment_finds_the_messages_and_content_does_not() {
     };
     assert_eq!(exact("Rivedere"), ["Bozza.md"]);
     assert!(exact("rivedere").is_empty());
+    // Un predicato che non porta un TextQuery è una domanda malposta.
+    let wrong = ws.query_index(IndexQuery::Documents {
+        matching: QueryExpr::of(QueryPredicate::Custom {
+            ns: fub_abi::rules::search_syntax::COMMENT_PREDICATE_NS.into(),
+            predicate: serde_json::json!(5),
+        }),
+        sort: None,
+        select: PropertySelect::None,
+        page: Some(Page::first(20)),
+        excerpts: Excerpts::Attach,
+    });
+    let wrong = format!("{wrong:?}");
+    assert!(
+        wrong.starts_with("Err(") && wrong.contains("comment_query_shape"),
+        "{wrong}"
+    );
 }
 
 #[test]

@@ -380,16 +380,28 @@ mod tests {
         assert_eq!(h.text, "va bene così");
 
         let h = header("@Anna 2026-11-08: senza ora");
-        assert_eq!((h.author, h.date, h.text), (Some("Anna"), Some("2026-11-08"), "senza ora"));
+        assert_eq!(
+            (h.author, h.date, h.text),
+            (Some("Anna"), Some("2026-11-08"), "senza ora")
+        );
 
         let h = header("@Anna: senza data");
-        assert_eq!((h.author, h.date, h.text), (Some("Anna"), None, "senza data"));
+        assert_eq!(
+            (h.author, h.date, h.text),
+            (Some("Anna"), None, "senza data")
+        );
 
         let h = header("2026-11-08 17:40: senza nome");
-        assert_eq!((h.author, h.date, h.text), (None, Some("2026-11-08 17:40"), "senza nome"));
+        assert_eq!(
+            (h.author, h.date, h.text),
+            (None, Some("2026-11-08 17:40"), "senza nome")
+        );
 
         let h = header("scritto a mano: 10:30");
-        assert_eq!((h.author, h.date, h.text), (None, None, "scritto a mano: 10:30"));
+        assert_eq!(
+            (h.author, h.date, h.text),
+            (None, None, "scritto a mano: 10:30")
+        );
 
         let h = header("@Anna");
         assert_eq!((h.author, h.date, h.text), (None, None, "@Anna"));

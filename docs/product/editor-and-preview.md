@@ -145,16 +145,11 @@ di espansione e dimensione mostra un errore leggibile e conserva il testo.
 
 ## Sintassi estesa e viste strutturali
 
-La resa condivisa supporta task, highlight, callout annidati e ripiegabili,
-wikilink con alias, heading e block id, tabelle, note a piè di pagina etichettate
-e inline. Nelle immagini Markdown il suffisso dell'alt `|larghezza` o
-`|larghezzaxaltezza` è una dimensione, non testo alternativo. I commenti `%%…%%`
-restano nel file, non nella resa; in Live sono attenuati sulla riga del cursore.
-Nei commenti con la discussione (`{==passo==}{>>@Autore AAAA-MM-GG HH:MM:
-messaggio<<}`, la forma è in
-[Le convenzioni scritte nelle note](../reference/note-conventions.md)) il passo
-si legge come il resto del testo e i messaggi non sono nella resa di Lettura,
-di stampa e di pubblicazione.
+La resa condivisa supporta task, highlight, callout annidati e ripiegabili, wikilink con alias,
+heading e block id, tabelle, note a piè di pagina etichettate e inline. Nelle immagini Markdown il
+suffisso dell'alt `|larghezza` o `|larghezzaxaltezza` è una dimensione, non testo alternativo. I
+commenti `%%…%%` restano nel file, non nella resa; in Live sono attenuati sulla riga del cursore. Dei
+[commenti con la discussione](../reference/note-conventions.md) la resa mostra il passo, non i messaggi.
 Evidenziati e commenti non attraversano link, wikilink, tag, codice, enfasi,
 formule o note in riga; una nota attraversata si perde.
 

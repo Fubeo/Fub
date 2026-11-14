@@ -369,6 +369,8 @@ impl Inliner<'_> {
 /// L'inizio del portatore di un messaggio di commento nella resa di stampa.
 const COMMENT_OPEN: &str = "<template class=\"comment-note\"";
 const COMMENT_CLOSE: &str = "</template>";
+/// Un messaggio letto dal portatore: autore, data e testo.
+type CommentMessage = (Option<String>, Option<String>, String);
 
 /// I messaggi dei commenti di `body`: tolti, o (`with`) note a piè di pagina.
 ///
@@ -384,7 +386,7 @@ const COMMENT_CLOSE: &str = "</template>";
 /// pagina. Un portatore non chiuso resta com'è: non è nostro.
 fn comment_notes(body: &str, with: bool) -> String {
     let mut out = String::with_capacity(body.len());
-    let mut notes: Vec<Vec<(Option<String>, Option<String>, String)>> = Vec::new();
+    let mut notes: Vec<Vec<CommentMessage>> = Vec::new();
     let mut rest = body;
     while let Some(at) = rest.find(COMMENT_OPEN) {
         out.push_str(&rest[..at]);
@@ -445,7 +447,7 @@ fn comment_notes(body: &str, with: bool) -> String {
 
 /// Un portatore in testa a `html`: autore, data e testo del messaggio, e
 /// quanti byte occupa. `None` se `html` non comincia con un portatore intero.
-fn comment_carrier(html: &str) -> Option<((Option<String>, Option<String>, String), usize)> {
+fn comment_carrier(html: &str) -> Option<(CommentMessage, usize)> {
     let tag_rest = html.strip_prefix(COMMENT_OPEN)?;
     let open_end = tag_rest.find('>')?;
     let attrs = attributes(&tag_rest[..open_end])?;
@@ -612,10 +614,7 @@ mod tests {
 
     #[test]
     fn without_comments_the_carriers_leave_the_page() {
-        assert_eq!(
-            comment_notes(WITH_THREAD, false),
-            "<p>Il passo e qui.</p>"
-        );
+        assert_eq!(comment_notes(WITH_THREAD, false), "<p>Il passo e qui.</p>");
     }
 
     #[test]
@@ -631,7 +630,10 @@ mod tests {
              <span class=\"comment-date\">2026-11-08 17:40</span>: uno &lt;b&gt; &amp; due</p>\
              <p class=\"comment-message\"><span class=\"comment-author\">Bruno</span>: ok</p>"
         ), "{page}");
-        assert!(page.contains("<li id=\"comment-2\"><p class=\"comment-message\">punto</p>"), "{page}");
+        assert!(
+            page.contains("<li id=\"comment-2\"><p class=\"comment-message\">punto</p>"),
+            "{page}"
+        );
         assert!(page.contains("href=\"#comment-ref-2\""), "{page}");
     }
 

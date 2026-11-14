@@ -1128,6 +1128,63 @@ mod tests {
         out
     }
 
+    /// Il passo resta testo; il messaggio non c'è a schermo, e per la stampa
+    /// viaggia inerte in un `<template>` con il testo escapato.
+    #[test]
+    fn a_comment_message_is_hidden_on_screen_and_carried_for_print() {
+        let block = Block::Paragraph {
+            inlines: vec![
+                Inline::Custom {
+                    custom_kind: custom_kind::COMMENT_RANGE.into(),
+                    attrs: json!({ "source": "{==", "edge": "start" }),
+                    span: Span { start: 0, end: 3 },
+                },
+                Inline::Text("passo".into()),
+                Inline::Custom {
+                    custom_kind: custom_kind::COMMENT_RANGE.into(),
+                    attrs: json!({ "source": "==}", "edge": "end" }),
+                    span: Span { start: 8, end: 11 },
+                },
+                Inline::Custom {
+                    custom_kind: custom_kind::COMMENT_MESSAGE.into(),
+                    attrs: json!({
+                        "source": "{>>@Anna \"A\" 2026-11-08: <b>no</b><<}",
+                        "author": "Anna \"A\"",
+                        "date": "2026-11-08",
+                        "text": "<b>no</b>",
+                        "anchored": true
+                    }),
+                    span: Span { start: 11, end: 50 },
+                },
+            ],
+            anchor: None,
+            span: Span { start: 0, end: 50 },
+        };
+        let html = |target| {
+            let mut out = String::new();
+            let opts = RenderOptions {
+                target,
+                ..RenderOptions::default()
+            };
+            render_block(&block, &opts, &mut out);
+            out
+        };
+        let screen = html(RenderTarget::Screen);
+        assert!(screen.contains(">passo</p>"), "{screen}");
+        assert!(
+            !screen.contains("Anna") && !screen.contains("no<"),
+            "{screen}"
+        );
+        let print = html(RenderTarget::Print);
+        assert!(
+            print.contains(
+                "passo<template class=\"comment-note\" data-author=\"Anna &quot;A&quot;\" \
+                 data-date=\"2026-11-08\">&lt;b&gt;no&lt;/b&gt;</template></p>"
+            ),
+            "{print}"
+        );
+    }
+
     #[test]
     fn custom_fallback_keeps_html_attributes_separate_from_payload() {
         let html = custom_html(

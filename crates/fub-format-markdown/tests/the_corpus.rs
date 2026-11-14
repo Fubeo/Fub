@@ -1519,7 +1519,10 @@ fn the_corpus_exercises_every_family() {
 fn comments_return_byte_for_byte() {
     let p = provider();
     let mut seen = 0;
-    for c in corpus().iter().filter(|c| c.name.starts_with("discussione")) {
+    for c in corpus()
+        .iter()
+        .filter(|c| c.name.starts_with("discussione"))
+    {
         let model = parse(c.source);
         assert!(
             !comment_messages(&model).is_empty(),

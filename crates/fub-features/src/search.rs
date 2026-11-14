@@ -315,9 +315,10 @@ mod schema;
 
 pub use catalog::{catalog, settings};
 use catalog::{
-    io_err, reason, COUNT, DOC_READ, INDEX_CLOSE, INDEX_COMMIT, INDEX_CREATE, INDEX_LOCKED,
-    INDEX_READER, INDEX_RELOAD, MANIFEST_WRITE, PATH, REASON, SCOPE_TOO_LARGE, SCOPE_TOO_MANY,
-    SEARCH, SELECT_UNSUPPORTED, SNIPPET, TOKENIZER, UNSERVED_FAMILY, UNSERVED_LEAF, WHAT,
+    io_err, reason, COMMENT_QUERY_SHAPE, COUNT, DOC_READ, INDEX_CLOSE, INDEX_COMMIT, INDEX_CREATE,
+    INDEX_LOCKED, INDEX_READER, INDEX_RELOAD, MANIFEST_WRITE, PATH, REASON, SCOPE_TOO_LARGE,
+    SCOPE_TOO_MANY, SEARCH, SELECT_UNSUPPORTED, SNIPPET, TOKENIZER, UNSERVED_FAMILY, UNSERVED_LEAF,
+    WHAT,
 };
 #[cfg(test)]
 use engine::head_of;
@@ -326,9 +327,7 @@ pub use index::SearchIndex;
 pub use provider::SearchSettings;
 #[cfg(test)]
 use schema::schema_fingerprint;
-use schema::{
-    build_schema, comment_texts, fingerprint, tag_names, task_states, Fields, Manifest,
-};
+use schema::{build_schema, comment_texts, fingerprint, tag_names, task_states, Fields, Manifest};
 
 #[cfg(test)]
 mod tests;

@@ -528,7 +528,10 @@ impl SearchIndex {
             // commenti.
             QueryPredicate::Custom { ns, predicate } if ns == COMMENT_PREDICATE_NS => {
                 let text: TextQuery = serde_json::from_value(predicate.clone()).map_err(|err| {
-                    PluginError::BadArgs(format!("`{ns}` vuole un TextQuery: {err}").into())
+                    PluginError::BadArgs(Text::message(
+                        COMMENT_QUERY_SHAPE,
+                        vec![Arg::text(REASON, err.to_string())],
+                    ))
                 })?;
                 let weight = self.weights.read().expect("rwlock").body;
                 let Some(q) = self.text_query_on(&text, vec![(f.comments, weight)])? else {
