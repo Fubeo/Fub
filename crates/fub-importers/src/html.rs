@@ -234,22 +234,115 @@ fn browser_href(raw: &str) -> String {
         .collect()
 }
 
-/// Una destinazione non http che il Markdown può portare così com'è. Gli
-/// schemi che eseguono o incorporano (`javascript:`, `vbscript:`, `data:`) e
-/// uno schema mascherato da un'entità (`&#106;avascript:`) o da un escape
-/// (`javascript\:`), che il Markdown risolverebbe, restano testo. Gli altri
-/// schemi restano, perché un importatore porta i suoi (`evernote://`), e la
-/// resa li filtra di nuovo. Gemella di `safeDestination` in `convert.js`.
+/// Le entità nominate che una destinazione risolve per vedere il suo schema:
+/// quelle che scrivono punteggiatura ASCII o un tab.
+const DEST_ENTITIES: [(&str, &str); 11] = [
+    ("amp", "&"),
+    ("colon", ":"),
+    ("sol", "/"),
+    ("quest", "?"),
+    ("num", "#"),
+    ("lt", "<"),
+    ("gt", ">"),
+    ("quot", "\""),
+    ("apos", "'"),
+    ("Tab", "\t"),
+    ("NewLine", "\n"),
+];
+
+/// Gli escape e le entità che il Markdown risolve in una destinazione,
+/// quanto basta per vedere lo schema che porterà: gli escape di
+/// punteggiatura, i riferimenti numerici e i nomi di [`DEST_ENTITIES`]; un
+/// nome sconosciuto resta com'è. Gemella di `markdownDestination` in
+/// `convert.js`.
+fn markdown_destination(dest: &str) -> String {
+    let mut unescaped = String::with_capacity(dest.len());
+    let mut chars = dest.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(&next) = chars.peek().filter(|next| next.is_ascii_punctuation()) {
+                unescaped.push(next);
+                chars.next();
+                continue;
+            }
+        }
+        unescaped.push(c);
+    }
+    let mut out = String::with_capacity(unescaped.len());
+    let mut rest = unescaped.as_str();
+    while let Some(c) = rest.chars().next() {
+        if c == '&' {
+            if let Some((decoded, len)) = entity_at(rest) {
+                out.push_str(&decoded);
+                rest = &rest[len..];
+                continue;
+            }
+        }
+        out.push(c);
+        rest = &rest[c.len_utf8()..];
+    }
+    out
+}
+
+/// Il riferimento a carattere all'inizio di `s` (che comincia con `&`) e la
+/// sua lunghezza: `&#x` e da uno a sei esadecimali, `&#` e da una a sette
+/// cifre, o un nome di 2..=32 lettere e cifre, sempre chiusi da `;`.
+fn entity_at(s: &str) -> Option<(String, usize)> {
+    let b = s.as_bytes();
+    let run = |from: usize, max: usize, ok: fn(&u8) -> bool| {
+        b.get(from..).map_or(0, |tail| {
+            tail.iter().take(max).take_while(|c| ok(c)).count()
+        })
+    };
+    let closed = |end: usize| b.get(end) == Some(&b';');
+    let numeric = |digits: &str, radix: u32| {
+        let code = u32::from_str_radix(digits, radix).unwrap_or(0);
+        let valid = code != 0 && !(0xd800..=0xdfff).contains(&code);
+        char::from_u32(code)
+            .filter(|_| valid)
+            .unwrap_or('\u{fffd}')
+            .to_string()
+    };
+    match (b.get(1), b.get(2)) {
+        (Some(b'#'), Some(b'x' | b'X')) => {
+            let n = run(3, 6, u8::is_ascii_hexdigit);
+            (n > 0 && closed(3 + n)).then(|| (numeric(&s[3..3 + n], 16), 4 + n))
+        }
+        (Some(b'#'), _) => {
+            let n = run(2, 7, u8::is_ascii_digit);
+            (n > 0 && closed(2 + n)).then(|| (numeric(&s[2..2 + n], 10), 3 + n))
+        }
+        (Some(first), _) if first.is_ascii_alphabetic() => {
+            let n = run(2, 31, u8::is_ascii_alphanumeric);
+            (n > 0 && closed(2 + n)).then(|| {
+                let name = &s[1..2 + n];
+                let decoded = DEST_ENTITIES
+                    .iter()
+                    .find(|(known, _)| *known == name)
+                    .map_or(&s[..3 + n], |(_, value)| value);
+                (decoded.to_string(), 3 + n)
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Una destinazione non http che il Markdown può portare così com'è. Lo
+/// schema si giudica sull'indirizzo che il Markdown risolverà (escape ed
+/// entità sciolti, poi letto come il browser): `javascript:`, `vbscript:` e
+/// `data:`, anche mascherati come `javascript&colon;` o `javascript\:`, fanno
+/// cadere il link. Gli altri schemi restano, perché un importatore porta i
+/// suoi (`evernote://`) e la resa li filtra di nuovo; un relativo
+/// `a&amp;b.html` resta. Gemella di `safeDestination` in `convert.js`.
 fn safe_destination(dest: &str) -> bool {
-    if dest.chars().any(|c| {
-        c.is_whitespace() || c.is_control() || matches!(c, '\u{feff}' | '"' | '\'' | '<' | '>')
-    }) {
+    if dest
+        .chars()
+        .any(|c| c.is_whitespace() || c.is_control() || matches!(c, '\u{feff}' | '"' | '<' | '>'))
+    {
         return false;
     }
-    let head = dest.split(['/', '?', '#']).next().unwrap_or("");
-    if head.contains(['&', '\\']) {
-        return false;
-    }
+    let resolved = browser_href(&markdown_destination(dest));
+    let head = resolved.split(['/', '?', '#']).next().unwrap_or("");
     match head.split_once(':') {
         Some((scheme, _)) => !["javascript", "vbscript", "data"]
             .iter()
@@ -306,7 +399,7 @@ pub fn html_to_markdown(html: &str, opts: &ClipOptions) -> (String, Vec<ClipAsse
     let mut notes: Vec<ClipNote> = Vec::new();
     let mut out: Vec<String> = Vec::new();
     let mut list_stack: Vec<(bool, u64)> = Vec::new(); // (ordered, next)
-    let mut link_stack: Vec<Option<String>> = Vec::new();
+    let mut link_stack: Vec<Option<(String, usize)>> = Vec::new();
     let mut pre_depth = 0usize;
     let mut skip_depth = 0usize;
     let mut blockquote_depth = 0usize;
@@ -464,30 +557,35 @@ pub fn html_to_markdown(html: &str, opts: &ClipOptions) -> (String, Vec<ClipAsse
             }
             "a" => {
                 if !closing {
-                    link_stack.push(Some(browser_href(attr(&attrs, "href").unwrap_or(""))));
+                    let dest = browser_href(attr(&attrs, "href").unwrap_or(""));
+                    link_stack.push(Some((dest, out.len())));
                     out.push("[".to_string());
                 } else {
-                    let popped = link_stack.pop();
-                    // Un link `javascript:` scartato non ha scritto la `[`.
-                    if matches!(popped, Some(None)) {
-                        continue;
-                    }
-                    let dest = popped.flatten().filter(|s| !s.is_empty());
-                    match dest {
-                        Some(d) if is_http_img(&d) => out.push(format!("]({})", md_url(&d))),
-                        Some(d) => {
-                            if safe_destination(&d) {
-                                out.push(format!("]({})", md_url(&d)));
+                    // Un link che cade lascia l'etichetta come testo semplice,
+                    // senza le quadre che una definizione `[etichetta]: …`
+                    // farebbe tornare link. Un link `javascript:` scartato non
+                    // ha scritto nemmeno la `[`.
+                    match link_stack.pop() {
+                        Some(None) => {}
+                        None => out.push("]".to_string()),
+                        Some(Some((dest, at))) => {
+                            if is_http_img(&dest) {
+                                out.push(format!("]({})", md_url(&dest)));
                             } else {
-                                out.push("]".to_string());
+                                if !dest.is_empty() && safe_destination(&dest) {
+                                    out.push(format!("]({})", md_url(&dest)));
+                                } else {
+                                    out[at].clear();
+                                }
+                                if !dest.is_empty() {
+                                    notes.push(ClipNote {
+                                        level: "info",
+                                        message: "kept non-http link as text".to_string(),
+                                        entry: "a".to_string(),
+                                    });
+                                }
                             }
-                            notes.push(ClipNote {
-                                level: "info",
-                                message: "kept non-http link as text".to_string(),
-                                entry: "a".to_string(),
-                            });
                         }
-                        _ => out.push("]".to_string()),
                     }
                 }
             }
@@ -789,11 +887,11 @@ mod tests {
     /// security-limits.test.mjs`: i due convertitori restano 1:1.
     #[test]
     fn links_keep_only_safe_destinations() {
-        let html = "<p><a href=\"java\tscript:alert(1)\">a</a> <a href=\"\u{1}javascript:alert(1)\">b</a> <a href=\"data:text/html,x\">c</a> <a href=\"&#106;avascript:alert(1)\">d</a> <a href=\"javascript\\:alert(1)\">e</a> <a href=\"other.html#s\">f</a> <a href=\"#comment-1\">g</a> <a href=\"mailto:a@b.it\">h</a> <a href=\" https://x.it/a \">i</a> <a href=\"//evil.it/x\">j</a> <a href=\"evernote://a/b\">k</a> <a href=\"VBScript:x\">l</a></p>";
+        let html = "<p><a href=\"java\tscript:alert(1)\">a</a> <a href=\"\u{1}javascript:alert(1)\">b</a> <a href=\"data:text/html,x\">c</a> <a href=\"&#106;avascript:alert(1)\">d</a> <a href=\"javascript\\:alert(1)\">e</a> <a href=\"other.html#s\">f</a> <a href=\"#comment-1\">g</a> <a href=\"mailto:a@b.it\">h</a> <a href=\" https://x.it/a \">i</a> <a href=\"//evil.it/x\">j</a> <a href=\"evernote://a/b\">k</a> <a href=\"VBScript:x\">l</a> <a href=\"a&amp;b.html\">m</a> <a href=\"dir\\f.html\">n</a> <a href=\"javascript&colon;alert(1)\">o</a> <a href=\"javascript&#58;alert(1)\">p</a> <a href=\"java&Tab;script:alert(1)\">q</a> <a>r</a> <a href=\"https://en.wikipedia.org/wiki/Hitchhiker's_Guide\">w</a></p>";
         let (md, _, notes) = html_to_markdown(html, &ClipOptions::default());
         assert_eq!(
             md,
-            "a b [c] [d] [e] [f](other.html#s) [g](#comment-1) [h](mailto:a@b.it) [i](https://x.it/a) [j](//evil.it/x) [k](evernote://a/b) [l]"
+            "a b c d e [f](other.html#s) [g](#comment-1) [h](mailto:a@b.it) [i](https://x.it/a) [j](//evil.it/x) [k](evernote://a/b) l [m](a&amp;b.html) [n](dir\\f.html) o p q r [w](https://en.wikipedia.org/wiki/Hitchhiker's_Guide)"
         );
         assert_eq!(
             notes

@@ -89,7 +89,7 @@
   }
 
   function isHttpImg(src) {
-    return typeof src === "string" && /^https?:\/\/[^\s"'<>]+$/i.test(src);
+    return typeof src === "string" && /^https?:\/\/[^\s"<>]+$/i.test(src);
   }
 
   // An href/src as the browser reads it: no control characters or spaces at
@@ -99,16 +99,31 @@
     return String(raw || "").replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, "").replace(/[\t\n\r]/g, "");
   }
 
-  // A non-http link destination the Markdown can carry as it is. Schemes
-  // that run or embed (javascript:, vbscript:, data:) and a scheme masked by
-  // an entity (`&#106;avascript:`) or an escape (`javascript\:`), which
-  // Markdown would resolve, stay as text. Other schemes stay, as an importer
-  // carries its own (`evernote://`) and rendering filters them again.
+  // The entities and backslash escapes that Markdown resolves in a link
+  // destination, enough to see the scheme it will carry: numeric references,
+  // and the named ones that write ASCII punctuation or a tab. Unknown names
+  // stay as they are. Mirror of `markdown_destination` in html.rs.
+  var DEST_ENTITIES = { amp: "&", colon: ":", sol: "/", quest: "?", num: "#", lt: "<", gt: ">", quot: '"', apos: "'", Tab: "\t", NewLine: "\n" };
+  function markdownDestination(d) {
+    return d.replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/&(#[xX][0-9a-fA-F]{1,6}|#[0-9]{1,7}|[A-Za-z][A-Za-z0-9]{1,31});/g, function (whole, body) {
+      if (body.charAt(0) === "#") {
+        var code = body.charAt(1) === "x" || body.charAt(1) === "X" ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+        return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? "�" : String.fromCodePoint(code);
+      }
+      return Object.prototype.hasOwnProperty.call(DEST_ENTITIES, body) ? DEST_ENTITIES[body] : whole;
+    });
+  }
+
+  // A non-http link destination the Markdown can carry as it is. The scheme
+  // is judged on the address Markdown will resolve (entities and escapes
+  // decoded, then read as the browser reads it): javascript:, vbscript: and
+  // data:, also masked as `javascript&colon;` or `javascript\:`, drop the
+  // link. Other schemes stay, as an importer carries its own (`evernote://`)
+  // and rendering filters them again; a relative `a&amp;b.html` stays.
   // Mirror of `safe_destination` in html.rs.
   function safeDestination(d) {
-    if (/[\s\x00-\x1f\x7f-\x9f"'<>]/.test(d)) return false;
-    var head = d.split(/[/?#]/)[0];
-    if (/[&\\]/.test(head)) return false;
+    if (/[\s\x00-\x1f\x7f-\x9f"<>]/.test(d)) return false;
+    var head = browserHref(markdownDestination(d)).split(/[/?#]/)[0];
     var colon = head.indexOf(":");
     return colon === -1 || !/^(javascript|vbscript|data)$/i.test(head.slice(0, colon));
   }
@@ -207,14 +222,22 @@
           break;
         case "a":
           if (!closing) {
-            linkStack.push(browserHref(attrs.href || ""));
+            linkStack.push({ dest: browserHref(attrs.href || ""), at: out.length });
             out.push("[");
           } else {
-            var dest = linkStack.pop();
-            if (dest === null) { /* a dropped javascript: link wrote no "[" */ }
+            // A link that drops leaves its label as plain text, without the
+            // brackets a `[label]: …` definition would turn back into a
+            // link. A dropped javascript: link wrote no "[" at all.
+            var open = linkStack.pop();
+            var dest = open ? open.dest : "";
+            if (open === null) { /* nothing to close */ }
             else if (dest && isHttpImg(dest)) out.push("](" + mdUrl(dest) + ")");
-            else if (dest) { out.push(safeDestination(dest) ? "](" + mdUrl(dest) + ")" : "]"); notes.push({ level: "info", message: "kept non-http link as text", entry: "a" }); }
-            else out.push("]");
+            else if (!open) out.push("]");
+            else {
+              if (dest && safeDestination(dest)) out.push("](" + mdUrl(dest) + ")");
+              else out[open.at] = "";
+              if (dest) notes.push({ level: "info", message: "kept non-http link as text", entry: "a" });
+            }
           }
           break;
         case "img": {

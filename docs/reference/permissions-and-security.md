@@ -307,12 +307,13 @@ Il pulsante «Forget API key» delle opzioni la toglie.
 La conversione della pagina in Markdown (`apps/clipper/src/convert.js`, gemella
 di `crates/fub-importers/src/html.rs`, che la usano anche gli importatori e il
 salvataggio del visore) legge un `href` come lo legge il browser: senza
-caratteri di controllo ai bordi, senza tab e a capo in mezzo. Un link
-`javascript:` cade con la sua etichetta; uno `vbscript:` o `data:`, o uno
-schema mascherato da un'entità (`&#106;avascript:`) o da un escape
-(`javascript\:`) che il Markdown risolverebbe, resta testo. Gli altri schemi
-restano destinazioni, perché un importatore porta i suoi (`evernote://`): la
-resa li filtra di nuovo.
+caratteri di controllo ai bordi, senza tab e a capo in mezzo. Lo schema si
+giudica sull'indirizzo che il Markdown risolverà, con escape ed entità sciolti.
+Con `javascript:`, `vbscript:` o `data:`, anche mascherati da un'entità
+(`javascript&colon;`, `&#106;avascript:`) o da un escape (`javascript\:`), il
+link cade e la sua etichetta resta testo, senza parentesi quadre. Gli altri
+schemi e i percorsi relativi (`a&amp;b.html`) restano destinazioni, perché un
+importatore porta i suoi (`evernote://`): la resa li filtra di nuovo.
 
 ## Server MCP
 
