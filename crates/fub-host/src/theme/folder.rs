@@ -79,7 +79,10 @@ pub enum ThemeFolderCheck {
 
 /// Il rifiuto tipizzato di un errore delle porte, o l'errore stesso quando
 /// non è un rifiuto della cartella (il disco, la cartella cambiata).
-pub(super) fn refusal(error: ThemeError, root: &Utf8Path) -> Result<ThemeFolderRefusal, ThemeError> {
+pub(super) fn refusal(
+    error: ThemeError,
+    root: &Utf8Path,
+) -> Result<ThemeFolderRefusal, ThemeError> {
     Ok(match error {
         ThemeError::Engine { declared, .. } => ThemeFolderRefusal::Engine { declared },
         ThemeError::Permissions { .. } => ThemeFolderRefusal::Permissions,

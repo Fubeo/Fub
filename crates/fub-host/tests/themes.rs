@@ -2513,7 +2513,10 @@ fn linking(config: &Utf8Path) -> (Host, mpsc::Receiver<ThemeLink>) {
 }
 
 fn link(host: &Host, folder: &Utf8Path) -> ThemeLink {
-    match host.link_theme_folder(folder).expect("developer mode is on") {
+    match host
+        .link_theme_folder(folder)
+        .expect("developer mode is on")
+    {
         ThemeFolderLink::Linked { link } => link,
         other => panic!("the folder should link: {other:?}"),
     }
@@ -2622,7 +2625,11 @@ fn a_broken_save_is_refused_and_a_deleted_folder_is_missing() {
         ),
         "{event:?}"
     );
-    assert_eq!(event.id.as_deref(), Some("acme.collegato"), "the last id read");
+    assert_eq!(
+        event.id.as_deref(),
+        Some("acme.collegato"),
+        "the last id read"
+    );
     assert!(host.themes().unwrap().is_empty());
     drain(&got);
 

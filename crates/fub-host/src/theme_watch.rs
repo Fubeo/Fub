@@ -90,7 +90,12 @@ impl ThemeKeeper {
     ///
     /// Con `again` anche la stessa cartella si rimonta: chi la collega di nuovo
     /// (sparita e tornata) vuole che la si guardi da capo.
-    pub(crate) fn watch(&self, config_dir: Option<&Utf8Path>, folder: Option<&Utf8Path>, again: bool) {
+    pub(crate) fn watch(
+        &self,
+        config_dir: Option<&Utf8Path>,
+        folder: Option<&Utf8Path>,
+        again: bool,
+    ) {
         let mut mounted = held(&self.ops);
         if !again && mounted.folder.as_deref() == folder {
             return;
@@ -186,7 +191,13 @@ fn saved_files(
         }
         let regular = std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file());
         if regular {
-            files.insert(relative.components().map(|part| part.as_str()).collect::<Vec<_>>().join("/"));
+            files.insert(
+                relative
+                    .components()
+                    .map(|part| part.as_str())
+                    .collect::<Vec<_>>()
+                    .join("/"),
+            );
         }
     }
     files

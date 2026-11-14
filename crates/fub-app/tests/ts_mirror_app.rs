@@ -82,7 +82,10 @@ fn extending_manifest() -> fub_abi::theme::ThemeManifest {
 
 /// Una cartella rifiutata, col motivo dato: il campione del mirror per ogni
 /// Il tema collegato in uno stato, coi file salvati dell'evento.
-fn theme_link(state: fub_host::theme::ThemeLinkState, changed: &[&str]) -> fub_host::theme::ThemeLink {
+fn theme_link(
+    state: fub_host::theme::ThemeLinkState,
+    changed: &[&str],
+) -> fub_host::theme::ThemeLink {
     fub_host::theme::ThemeLink {
         folder: "/home/chi/temi/carta".into(),
         id: Some("acme.carta".into()),
@@ -100,7 +103,10 @@ fn theme_links() -> Vec<Value> {
     missing.id = None;
     missing.name = None;
     vec![
-        to_value(theme_link(ThemeLinkState::Ready, &["skin.css", "fonts/carta.woff2"])),
+        to_value(theme_link(
+            ThemeLinkState::Ready,
+            &["skin.css", "fonts/carta.woff2"],
+        )),
         to_value(missing),
         to_value(theme_link(
             ThemeLinkState::Refused {

@@ -2454,7 +2454,10 @@ impl Host {
     /// all'avvio per dire che la cartella non c'è più.
     pub fn theme_link(&self) -> Option<crate::theme::ThemeLink> {
         let folder = self.linked_theme_folder()?;
-        Some(crate::theme::theme_link(self.config_dir.as_deref(), &folder))
+        Some(crate::theme::theme_link(
+            self.config_dir.as_deref(),
+            &folder,
+        ))
     }
 
     /// Monta o smonta l'osservatore secondo la chiave e la modalità
@@ -2524,7 +2527,8 @@ impl Host {
     /// «Scollega»: azzera la chiave e smonta l'osservatore. Senza modalità
     /// sviluppatore, come buttare un permesso: si può sempre.
     pub fn unlink_theme_folder(&self) -> Result<(), PluginError> {
-        self.machine.reset(crate::settings::DEVELOPER_THEME_FOLDER)?;
+        self.machine
+            .reset(crate::settings::DEVELOPER_THEME_FOLDER)?;
         self.tell_observer(crate::settings::DEVELOPER_THEME_FOLDER)
     }
 
