@@ -39,6 +39,7 @@ ascolta niente e non chiede fotogrammi.
 | S5 | tratto di penna di 3 s su un disegno di 2.000 tracciati | massimo fra fotogrammi |
 | S6 | avvio a freddo fino alla prima nota | ms |
 | S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
+| S9 | la lavagna di S3 con venti fogli `.xlsx` vivi: spostamento e zoom come S3; poi una nota di quella lavagna in scrittura, 200 caratteri come S1 (`S9.keyToPaint`) | p95 e massimo fra fotogrammi; p95 tasto → fotogramma |
 | S8 | la penna sulla lavagna: dieci tratti da 300 ms sopra una scheda con una tabella di 100 × 100 celle, su una lavagna con un foglio `.xlsx` di 100 × 100 celle e 2.000 tratti già scritti; poi la scheda della tabella spostata coi suoi tratti per 2 s | massimo fra fotogrammi a penna (obiettivo 33 ms) e allo spostamento; path asciutti; sha256 del `.xlsx` prima e dopo |
 | S9 | spostamento e zoom di S3 sulla lavagna di S3 con in più 20 fogli vivi (`.xlsx`), la vista sul loro blocco a zoom 0,5 | numero dei fogli vivi; p95 e massimo fra fotogrammi |
 | R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
@@ -46,6 +47,17 @@ ascolta niente e non chiede fotogrammi.
 | I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
 | L1 | il nucleo della lavagna in WebAssembly: il modulo degli asset compilato con la CSP dell'app, poi venti aperture e duecento spostamenti di una scheda su una lavagna di 50 e una di 2.000 schede | istanza; prima apertura, primo commit e p95, ms |
 | C1 | i profili dei componenti: «Solo note» e poi «Tutto» applicati con `components_apply`, l'app riavviata sulla nota lunga, poi un'altra nota aperta | avvio a freddo in ms, chunk scaricati all'avvio, chunk dei componenti spegnibili arrivati (zero in tutti e due i profili) |
+
+S9 misura anche il tasto fino al fotogramma in una scheda di nota della stessa
+lavagna (`S9.keyToPaint`, obiettivo 16,7 ms): la scheda va a zoom 0,5 al centro
+della vista, si sceglie con un clic e si entra con Invio, si scrive un carattere
+che non si misura (il montaggio dell'editor) e poi i 200 caratteri di S1, con la
+sonda accesa. Lo fa in un'app nuova: il pan col pulsante di mezzo dei gesti di S3
+lascia WebKitWebDriver con il pulsante premuto, e dopo non arrivano clic né
+tasti alla lavagna. Se la sonda non registra nessun tasto, o il testo non arriva
+nell'editor della scheda, il valore è `null` e il referto lo dice: la misura non
+vale. Uno scenario senza campioni non scrive un valore: un tempo di zero non è
+una misura, e la soglia lo conta come misura che manca.
 
 R1 legge `/proc/<pid>/smaps_rollup` dei processi che discendono dal driver,
 tolti i driver (`memory.mjs`): la PSS divide le pagine condivise fra chi le
@@ -244,7 +256,14 @@ in più vanno a `run.mjs`, per esempio `--only=R1,T1`.
    ```
 
    Su Linux aggiungi `--native-driver=/usr/bin/WebKitWebDriver`. Misura sia
-   in una sessione Wayland sia in una X11. Dentro una sessione Wayland
+   in una sessione Wayland sia in una X11.
+
+   Sotto Xvfb su una sessione Wayland (con `WAYLAND_DISPLAY` impostato) aggiungi
+   `--x11`. Senza, GTK apre la finestra in Wayland, cioè sullo schermo di chi
+   misura e non nel display di Xvfb dove il driver muove il puntatore: S3
+   fallisce con «move target out of bounds». `--x11` toglie `WAYLAND_DISPLAY`
+   al driver e mette `GDK_BACKEND=x11`, e il referto scrive `x11` come
+   sessione. Se la variabile c'è e non hai scelto, il banco lo dice all'inizio. Dentro una sessione Wayland
    `xvfb-run` da solo non basta: GTK sceglie lo schermo Wayland e la
    finestra non va in Xvfb. Lancialo con
    `env -u WAYLAND_DISPLAY GDK_BACKEND=x11`.

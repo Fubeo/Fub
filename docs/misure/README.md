@@ -105,6 +105,7 @@ lavagna di S3 con venti fogli `.xlsx` vivi, spostata e ingrandita come S3.
 | Data | Sistema | Macchina | Pagina |
 |---|---|---|---|
 | 2026-11-13 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | Intel Core i5-13600KF, condivisa, senza GPU sotto Xvfb | [La lavagna con venti fogli vivi](2026-11-13-lavagna-fogli-vivi-s9.md) |
+| 2026-11-14 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb, con `--x11` | Intel Core i5-13600KF, condivisa, senza GPU sotto Xvfb | [Il tasto in una scheda di nota, dopo le misure della lavagna](2026-11-14-lavagna-fogli-vivi-s9-tasto.md) |
 
 ## Le librerie a runtime
 
