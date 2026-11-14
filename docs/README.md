@@ -103,10 +103,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Le annotazioni PDF](reference/annotation-format.md), la
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
   e la [sessione live](reference/live-session.md)
-- [Le porte del disegno](reference/drawing-ipc.md): l'IPC del motore del
-  disegno
-- [Le porte della griglia](reference/grid-ipc.md): l'IPC dei fogli di
-  calcolo
+- Le porte del [disegno](reference/drawing-ipc.md) e della
+  [griglia](reference/grid-ipc.md): l'IPC dei loro motori
 - [Il formato della lavagna](reference/canvas-format.md): il nucleo
   `fub-canvas-core` e le regole di lettura e scrittura delle `.canvas`, e
   le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e
@@ -117,12 +115,10 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Il server MCP](reference/mcp-server.md)
 - [Le schede della lavagna](reference/canvas-cards.md): specie, schede vive e
   ferme, il contratto dei renderer; [la scheda dei file Craft](reference/canvas-craft.md)
-- [I tasti e i gesti della lavagna](reference/canvas-input.md), i comandi e
-  i loro tasti, [la vista della lavagna](reference/canvas-view.md),
-  [l'ispettore](reference/canvas-inspector.md) e
-  [convertire le schede](reference/canvas-convert.md)
-- [Le convenzioni scritte nelle note](reference/note-conventions.md): i
-  commenti con la discussione (`{==passo==}{>>messaggio<<}`)
+- [I tasti e i gesti della lavagna](reference/canvas-input.md), [la sua
+  vista](reference/canvas-view.md), [l'ispettore](reference/canvas-inspector.md)
+  e [convertire le schede](reference/canvas-convert.md)
+- [Le convenzioni scritte nelle note](reference/note-conventions.md): i commenti (`{==passo==}{>>messaggio<<}`)
 - [I tipi delle proprietà](reference/property-types.md): il registro
   `properties.types`, le opzioni di Selezione e Stato e i loro comandi
 - [I formati dei file Craft](reference/craft-formats.md), gli
@@ -133,8 +129,6 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 
 - [Stato del progetto](project/status.md): dove siamo, l'ordine di lavoro, il
   rilascio e lo stato di M5
-- [Runtime dei plugin](architecture/plugin-runtime.md), con i
-  [provider WASM](architecture/wasm-providers.md)
 
 ## Capire le decisioni
 
