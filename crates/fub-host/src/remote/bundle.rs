@@ -390,13 +390,29 @@ impl JobLock {
     fn acquire(root: &Path) -> Result<Self, PluginError> {
         std::fs::create_dir_all(root)
             .map_err(|_| PluginError::Io("sync state root unavailable".into()))?;
+        let path = root.join("sync-pass.lock");
+        // Come il lock dello scrittore del vault (`automation::lock_vault_writer`):
+        // un collegamento al posto del file farebbe bloccare a due processi due
+        // file diversi, e «sync already running» non varrebbe più.
+        let not_regular =
+            |meta: &std::fs::Metadata| !meta.is_file() || meta.file_type().is_symlink();
+        if std::fs::symlink_metadata(&path).is_ok_and(|meta| not_regular(&meta)) {
+            return Err(PluginError::PermissionDenied(
+                "sync lock is not a regular file".into(),
+            ));
+        }
         let file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .truncate(false)
-            .open(root.join("sync-pass.lock"))
+            .open(&path)
             .map_err(|_| PluginError::Io("sync lock unavailable".into()))?;
+        if file.metadata().is_ok_and(|meta| !meta.is_file()) {
+            return Err(PluginError::PermissionDenied(
+                "sync lock is not a regular file".into(),
+            ));
+        }
         file.try_lock().map_err(|error| match error {
             std::fs::TryLockError::WouldBlock => {
                 PluginError::Cancelled("sync already running".into())
@@ -811,6 +827,29 @@ mod recovery_tests {
             "stable lock inode must stay"
         );
         drop(second);
+    }
+
+    /// Un collegamento o una cartella al posto del lock non si blocca: due
+    /// processi bloccherebbero due file diversi.
+    #[test]
+    fn a_lock_that_is_not_a_regular_file_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("sync-pass.lock")).unwrap();
+        assert!(matches!(
+            JobLock::acquire(dir.path()),
+            Err(fub_abi::PluginError::PermissionDenied(_))
+        ));
+        #[cfg(unix)]
+        {
+            let other = tempfile::tempdir().unwrap();
+            let target = other.path().join("altrove.lock");
+            std::fs::write(&target, b"").unwrap();
+            std::os::unix::fs::symlink(&target, other.path().join("sync-pass.lock")).unwrap();
+            assert!(matches!(
+                JobLock::acquire(other.path()),
+                Err(fub_abi::PluginError::PermissionDenied(_))
+            ));
+        }
     }
 }
 
