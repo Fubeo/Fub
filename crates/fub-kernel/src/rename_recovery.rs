@@ -139,6 +139,13 @@ impl RenameRecoveryScan {
                 ));
                 continue;
             }
+            // L'intento è un file del vault, quindi un dato da fuori: i nomi
+            // che porta si recintano qui, prima di comporli con la radice. Un
+            // intento con un `..` resta dov'è, come uno illeggibile.
+            if let Some(error) = unfenced(&record) {
+                failures.push(error);
+                continue;
+            }
             pending.push(PendingRenameRecovery {
                 storage: Arc::clone(&self.storage),
                 root: self.root.clone(),
@@ -319,6 +326,21 @@ pub(crate) fn persist(
     }
 }
 
+/// Il primo nome dell'intento che esce dal vault, come errore.
+fn unfenced(record: &Record) -> Option<KernelError> {
+    std::iter::once(&record.from)
+        .chain(std::iter::once(&record.to))
+        .chain(record.rewrites.iter().map(|edit| &edit.source))
+        .find_map(|id| {
+            fub_abi::rules::path_policy::fenced(id.as_str())
+                .err()
+                .map(|why| KernelError::BadName {
+                    name: id.to_string(),
+                    why: why.to_string(),
+                })
+        })
+}
+
 fn recovery_dir(root: &Utf8Path) -> Utf8PathBuf {
     root.join(FUB_DIR).join(DIR)
 }
@@ -387,6 +409,28 @@ mod tests {
             .invoke()
             .unwrap()
             .into_parts()
+    }
+
+    #[test]
+    fn an_intent_that_names_a_path_outside_the_vault_is_not_recovered() {
+        let (storage, root) = fixture();
+        for (from, to) in [("../fuori.md", "b.md"), ("a.md", "/etc/passwd")] {
+            persist(
+                Arc::clone(&storage),
+                &root,
+                DocId::new(from),
+                DocId::new(to),
+                Revision::of("a"),
+                Vec::new(),
+            )
+            .unwrap();
+        }
+        let (pending, failures) = scan(storage, root);
+        assert!(pending.is_empty());
+        assert_eq!(failures.len(), 2);
+        assert!(failures
+            .iter()
+            .all(|error| matches!(error, KernelError::BadName { .. })));
     }
 
     #[test]
