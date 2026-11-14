@@ -283,7 +283,7 @@ lista è un problema nel rapporto, e il comando riesce.
 L'esito è l'effetto `Custom` con payload `{"version": 1, "kind": "check",
 "ok", "problems", "warnings", "warnings_omitted", "summary",
 "outline_after"}`. La forma del rapporto è quella di
-[Il controllo](canvas-code.md#il-controllo), con due aggiunte. `warnings_omitted`
+[Il controllo](canvas-check.md), con due aggiunte. `warnings_omitted`
 dice quanti avvisi non entrano nei primi cento. Ogni problema porta `text`, la
 chiave del catalogo della sua frase (`canvas.check.p_<codice>`, in italiano e in
 inglese): la frase la rende chi mostra il rapporto, e il payload resta
