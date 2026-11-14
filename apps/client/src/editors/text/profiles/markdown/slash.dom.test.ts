@@ -267,10 +267,12 @@ describe("il menu «/» nel testo", () => {
       view.dispatch({ selection: EditorSelection.cursor(engine.getDoc().length) });
       type("/");
       // Il pannello sta dove dice il suo `style.top` (fixed, finestra senza
-      // scala), alto quanto dice il suo stile.
+      // scala), alto quanto dice il suo stile; `lift` è l'entrata o l'uscita
+      // a metà, che lo trasforma senza toccare il suo stile.
+      let lift = 0;
       panel().getBoundingClientRect = () => {
         const style = panel().style;
-        return new DOMRect(104, parseFloat(style.top) || 0, 620, parseFloat(style.height) || 400);
+        return new DOMRect(104, (parseFloat(style.top) || 0) + lift, 620, parseFloat(style.height) || 400);
       };
       const heights: string[] = [];
       const look = () => {
@@ -280,10 +282,13 @@ describe("il menu «/» nel testo", () => {
       look();
       look();
       look();
+      // Si scrive mentre il pannello è ancora a metà dell'entrata.
+      lift = -6;
       type("d");
       look();
       type("a");
       look();
+      lift = 0;
       for (let i = 0; i < 2; i++) {
         const at = view.state.selection.main.head;
         view.dispatch({ changes: { from: at - 1, to: at }, userEvent: "delete.backward" });
