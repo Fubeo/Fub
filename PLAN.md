@@ -5258,7 +5258,7 @@ Fatto quando: S34 si riproduce nel banco (la foto della scena nuova
 coincide con la toppa, a parte il testo delle voci che mancano); i test
 dicono quali voci si vedono con quali comandi.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/ui/commands.test.ts src/panels/explorer.test.ts
-Stato: [ ] da fare
+Stato: [x] integrato 2026-11-14 (coder/pa-t43 @ c7784f7a2, merge 84ec7dab7) · un giro di revisione (8 punti); check verde tranne le baseline di `file-nuovo-tipo`, che vengono dal runner alla consegna · elenco unico dei tipi in `ui/commands.ts` (`newEntries`/`newKinds`, `registerNewKindHost`), `creation.ts` tolto; la Nota senza cartella nasce dove nasce Ctrl+N
 
 ## T44 · Un documento e un foglio vuoti
 
