@@ -226,9 +226,11 @@ una nota: si legge con qualunque radice.
 - `fub_canvas_apply` porta in una lavagna una lista di operazioni
   (`add_card`, `connect`, `move`, `resize`, `set`, `remove`, `reorder`,
   `color`, `align`, `distribute`, `duplicate`, `reverse`, `group`, `layout`,
-  `insert`, `convert`; i campi
-  sono in `fub_canvas_guide`, e la forma in
-  [Operazioni sulla lavagna](canvas-operations.md)) come una modifica sola,
+  `insert`, `convert`, `from_mermaid`, `from_outline`; i campi
+  sono in `fub_canvas_guide`, la forma in
+  [Operazioni sulla lavagna](canvas-operations.md), e ciò che si legge di
+  Mermaid e delle scalette in [Da Mermaid e da una scaletta](canvas-import.md))
+  come una modifica sola,
   con `canvas.apply`. `ops` è la lista o il suo testo JSON; `base` è
   obbligatoria come per `fub_write`, e una revisione superata è un
   `conflict`. Vuole la lavagna fra le radici di lettura e di scrittura, non
@@ -238,7 +240,7 @@ una nota: si legge con qualunque radice.
   (`dry_run: true`, `check`, `outcome`) e non scrive; con `apply` risponde
   `{doc, dry_run: false, created, revision, warnings}`: gli id delle schede e
   degli archi aggiunti, dati o nuovi, la revisione dopo, e gli avvisi del
-  controllo. Un JSON che non si legge e un documento che non è una lavagna
+  controllo (per primi le note di ciò che la lavagna non ha tenuto). Un JSON che non si legge e un documento che non è una lavagna
   sono `bad_args`.
 - `fub_invoke` senza `"apply": true` restituisce il piano e non scrive.
   Con `apply`, un comando che scrive si esegue soltanto se tutte le note del

@@ -216,8 +216,10 @@ degli argomenti) sono `Internal`.
 L'anteprima (`dry_run`) restituisce il piano con l'unica modifica e non
 scrive. L'applicazione restituisce l'annulla (l'inversa che l'host dà della
 modifica) e l'effetto `Custom` con namespace `fub.lavagna` e payload
-`{"created": [...], "revision": "..."}`: gli id nati, nell'ordine di
-`created`, e la revisione del file dopo. Operazioni che non cambiano un byte
+`{"created": [...], "revision": "...", "notes": [...], "notes_omitted": 0}`:
+gli id nati, nell'ordine di `created`, la revisione del file dopo, e le
+[note](canvas-import.md#le-note) di ciò che le operazioni non hanno potuto
+tenere (`{index, code, detail}`, al più 100, e quante ne restano fuori). Operazioni che non cambiano un byte
 non scrivono e non lasciano un annulla; l'effetto dice la revisione corrente.
 
 `canvas.create` («Nuova lavagna», «New whiteboard») fa nascere una lavagna

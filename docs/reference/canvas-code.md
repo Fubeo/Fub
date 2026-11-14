@@ -3,9 +3,10 @@
 > **Ambito:** la lavagna come codice: le tre letture di una lavagna (`outline`,
 > `code`, `json`), le misure e i posti che il nucleo decide per una scheda, le
 > operazioni d'intento con cui una lavagna si scrive. Lo schema delle
-> operazioni sta in [la sua pagina](canvas-schema.md), e il controllo che
+> operazioni sta in [la sua pagina](canvas-schema.md), il controllo che
 > dice che cosa cambierebbe prima di scrivere in
-> [la sua pagina](canvas-check.md).
+> [la sua pagina](canvas-check.md), e `from_mermaid` e `from_outline` in
+> [la loro](canvas-import.md).
 > **Fonti autorevoli:** `crates/fub-canvas-core/src/describe.rs` (le letture),
 > `crates/fub-canvas-core/src/layout.rs` e `layout/arrange.rs` (misure e posti),
 > `crates/fub-canvas-core/src/ops.rs` e `ops/` (le operazioni), i loro test in
@@ -247,7 +248,9 @@ casi con i numeri stanno in `apps/client/src/__fixtures__/canvas-layout.json`.
 Un agente o la sessione dal tablet scrivono **operazioni d'intento**
 (`CanvasOp`, in `crates/fub-canvas-core/src/ops.rs`), come «sposta» o
 «collega», non toppe. `compile(canvas, ops, seed)` le traduce nelle
-[toppe](canvas-operations.md#le-toppe) e dà `Compiled { patches, created }`.
+[toppe](canvas-operations.md#le-toppe) e dà `Compiled { patches, created, notes }`:
+`notes` dice ciò che un'operazione non ha potuto tenere (oggi solo
+[`from_mermaid` e `from_outline`](canvas-import.md#le-note)).
 
 Le operazioni si compilano in ordine, ognuna sul modello della precedente (si
 può aggiungere una scheda e subito spostarla), e valgono tutte o nessuna. Il
@@ -467,6 +470,17 @@ scrive file. Una scheda che non è un testo, o un `file` vuoto, è `Invalid`.
 { "op": "convert", "id": "t2", "file": "Idee/Evaporazione.md" }
 ```
 
+### `from_mermaid` e `from_outline`
+
+Fanno di un diagramma Mermaid `flowchart` o di una scaletta rientrata un blocco
+di schede, gruppi e archi già disposto, messo come un `insert`; ciò che non si
+tiene (una forma, uno stile, una riga) diventa una nota. Che cosa si legge, gli
+id, la disposizione e i limiti stanno in [Da Mermaid e da una scaletta](canvas-import.md).
+
+```json
+{ "op": "from_mermaid", "text": "flowchart LR\n  A[Evaporazione] --> B[Condensazione] --> A", "near": "t1", "side": "bottom" }
+```
+
 ### Gli id nuovi
 
 Un id nuovo viene dal seme del chiamante (`seed`, un intero a 64 bit senza
@@ -494,11 +508,11 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 
 | Errore | Quando |
 |---|---|
-| `UnknownNode` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout` o `convert` di un id che non è una scheda; il `near` di `insert`; un arco verso una scheda che non c'è |
+| `UnknownNode` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout` o `convert` di un id che non è una scheda; il `near` di `insert`, `from_mermaid` o `from_outline`; un arco verso una scheda che non c'è |
 | `UnknownEdge` | `remove`, `set` o `color` di un id che non è né una scheda né un arco; `reverse` di un id che non è un arco |
 | `DuplicateId` | un id dato che è già preso (anche in `as`); un id ripetuto nella lista di `move`, `remove`, `reorder`, `color`, `align`, `distribute`, `duplicate` o `layout` |
-| `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie, il gruppo o il frammento; un `insert` porta più di 10 000 schede; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
-| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto |
+| `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie, il gruppo o il frammento; un `insert` porta più di 10 000 schede; i [limiti](canvas-import.md#i-limiti-e-gli-errori) di `from_mermaid` e `from_outline`; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
+| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto; un testo che `from_mermaid` o `from_outline` non legge ([i loro errori](canvas-import.md#i-limiti-e-gli-errori)) |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file
 (`before`, `seed`, `ops`, `expect`); `tests/op_vectors.rs` li fa girare e

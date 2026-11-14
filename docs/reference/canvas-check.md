@@ -24,7 +24,7 @@ sei campi:
 |---|---|
 | `ok` | la lista si scrive: non ci sono problemi |
 | `problems` | i problemi, con la forma di quelli di `validate`; la compilazione si ferma al primo |
-| `warnings` | gli avvisi sulle schede che la lista tocca, `{code, ids, estimated_height?}`: al più 100 |
+| `warnings` | le note della compilazione e gli avvisi sulle schede che la lista tocca, `{code, ids, estimated_height?, index?, detail?}`: al più 100 |
 | `warnings_omitted` | quanti avvisi non entrano in `warnings`: sempre presente, di solito `0`. Il conto è esatto |
 | `summary` | che cosa cambia, come si legge sotto; `null` se `ok` è falso |
 | `outline_after` | la lettura di dopo, come `outline`; `null` se `ok` è falso |
@@ -40,8 +40,8 @@ nessuna.
 |---|---|---|
 | `unknown_node` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout`, `convert`, il `near` di `insert` o un estremo di `connect`, con un id che non è una scheda | le schede col nome vicino |
 | `unknown_edge` | `remove`, `set` o `color` con un id che non è né una scheda né un arco; `reverse` con un id che non è un arco | le schede e gli archi col nome vicino |
-| `duplicate_id` | un id dato che c'è già, o ripetuto nella stessa operazione | — |
-| `too_many`, `too_many_moved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, o un `insert` porta più di 10 000 schede; `too_many_moved` è un `move` con `contents` che tocca più di 1 000 schede | — |
+| `duplicate_id` | un id dato che c'è già, o ripetuto nella stessa operazione | per `from_mermaid` e `from_outline` un `prefix` con cui l'operazione si compila (`m1-`, `m2-`… o `s1-`…, al più venti prove) |
+| `too_many`, `too_many_moved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, o un `insert` porta più di 10 000 schede, o un testo di `from_mermaid` o `from_outline` passa i suoi limiti; `too_many_moved` è un `move` con `contents` che tocca più di 1 000 schede | — |
 | `invalid` | una scheda o un arco che il formato non accetta, col motivo in `message`; un'operazione che la forma accetta e serde no, con la frase fissa `the operation does not match its schema` | — |
 
 I nomi vicini sono quelli dello schema: distanza al più 2, maiuscole ASCII
@@ -63,10 +63,14 @@ più operazioni cambiano compare una volta, con il saldo.
   `{id, fromNode, toNode, fields}`.
 - `order_changed`: se l'ordine delle schede rimaste è cambiato (un `reorder`).
 
-**Gli avvisi.** Solo sulle schede che il giro tocca, nate o cambiate: una coppia
+**Gli avvisi.** Prima le note della compilazione (`Compiled::notes`: ciò che
+un'operazione non ha potuto tenere, come la forma di un nodo Mermaid), nel loro
+ordine, con `index` (l'operazione) e `detail`, e `ids` vuoto; le note che il
+nucleo non tiene (`notes_omitted`) contano fra gli omessi. Poi gli avvisi sulle
+schede che il giro tocca, nate o cambiate: una coppia
 che nessuno tocca non compare, anche se si copre o il suo testo non ci sta.
-Il rapporto ne porta al più 100 (`MAX_WARNINGS`), nell'ordine del testo, poi
-delle coperture, poi dei gruppi. Gli altri si contano in `warnings_omitted`:
+Il rapporto ne porta al più 100 (`MAX_WARNINGS`), nell'ordine delle note, del
+testo, delle coperture e dei gruppi. Gli altri si contano in `warnings_omitted`:
 ogni coppia si conta una volta, e il conto è esatto. Con 2000 schede nello
 stesso punto ci sono 1 999 000 coperture: il rapporto ne porta 100 e omette
 1 998 900.
@@ -76,6 +80,7 @@ stesso punto ci sono 1 999 000 coperture: il rapporto ne porta 100 e omette
 | `overlap` | due schede che non sono gruppi hanno un'area in comune; un bordo che combacia non conta | le due |
 | `half_in_group` | una scheda è in parte dentro un gruppo e in parte fuori | la scheda e il gruppo |
 | `text_overflow` | il testo di una scheda di testo non ci sta nella sua altezza; `estimated_height` è quella che la stima di [«Misure e posti»](canvas-code.md#misure-e-posti) vuole | la scheda |
+| `shape_dropped`, `style_dropped`, `line_skipped`, `indent_rounded` | le note di [`from_mermaid` e `from_outline`](canvas-import.md#le-note) | nessuna |
 
 Un esempio, con la lavagna d'esempio di `spec.rs` (`t1`, `t2`, `f1` e l'arco
 `e1`) e il giro `[{"op": "move", "ids": ["f1"], "dx": 0, "dy": -200}]`:

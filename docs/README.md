@@ -110,8 +110,9 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e
   la loro inversa, [la lavagna come codice](reference/canvas-code.md): le
   letture, le misure e i posti, le operazioni d'intento, il loro
-  [schema](reference/canvas-schema.md) e
-  [il controllo](reference/canvas-check.md) che dice che cosa cambierebbe
+  [schema](reference/canvas-schema.md),
+  [Mermaid e le scalette](reference/canvas-import.md) che diventano una
+  lavagna e [il controllo](reference/canvas-check.md) che dice che cosa cambierebbe
 - [Il server MCP](reference/mcp-server.md)
 - [I formati dei file Craft](reference/craft-formats.md), gli
   [XMP accanto alle foto](reference/xmp-sidecars.md) e le
