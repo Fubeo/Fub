@@ -2622,7 +2622,7 @@ tre adattatori; gli appunti con campioni veri di Excel, LibreOffice, Fogli e
 Word.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/tabella
-Stato: [ ] da fare
+Stato: [~] PR #373 (feat/tabella-gesti-nuovi, 2026-11-15) · revisione media e 12 correzioni fatte · fuori: i campioni veri degli appunti (nel repo non ce ne sono, non si inventano: da catturare da Excel, LibreOffice, Fogli e Word) e il doppio clic del motore dei fogli sopra le celle piene · aspetta CI e baseline dal runner
 
 ## T52 · Tabella in foglio, foglio in tabella, incolla celle
 
