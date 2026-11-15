@@ -421,18 +421,18 @@ attraverso una shell, e per percorso assoluto, senza cercarlo nel `PATH`
 cartelle che scrive l'amministratore (`/usr/bin`, `/bin`, `/usr/local/bin` e
 quelle di NixOS e Guix; su macOS solo `/usr/bin`), ed è buono se è un file
 regolare, eseguibile e non riscrivibile dal gruppo o dagli altri; su Windows
-viene dalla cartella di sistema (`SystemRoot`). Se non c'è, l'esito è
-«nessun programma» e la shell lo dice. Un file del vault che si eseguirebbe
-aprendolo si mostra e non si apre.
+viene dalla cartella di Windows che dà il sistema
+(`GetSystemWindowsDirectoryW`), mai da `SystemRoot`, che l'ambiente di chi
+avvia Fub può cambiare. Se non c'è, l'esito è «nessun programma» e la shell
+lo dice. Un file del vault che si eseguirebbe aprendolo si mostra e non si
+apre.
 
 La regola vale per il **primo** programma, non per quelli che lancia lui.
 `xdg-open` è uno script che cerca `gio`, `kde-open` e i loro pari nel `PATH`
 ereditato, come fa l'`Exec=` dei file `.desktop`; il `PATH` del figlio resta
 quello dell'utente, perché restringerlo romperebbe le app in `~/.local/bin`.
 Chi scrive in una cartella di quel `PATH` sceglie quindi l'app che apre il
-file. Su Windows anche `SystemRoot` viene dall'ambiente di chi avvia Fub: la
-via robusta, `GetSystemWindowsDirectoryW`, vorrebbe una dipendenza nuova di
-`fub-app`, che è una scelta di supply chain del maintainer.
+file.
 
 ## Supply chain
 
