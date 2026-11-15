@@ -14,6 +14,7 @@
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
+use crate::ink::CellAddress;
 use crate::model::{Canvas, CanvasError};
 use crate::ops::{color, draw, erase};
 
@@ -101,6 +102,10 @@ pub enum FieldKind {
     /// Le pagine di `spread_pages`: un testo come nel campo della GUI
     /// (`"3-7, 9"`, `"20-"`) o una lista di numeri di pagina.
     Pages,
+    /// Dove scrive o cancella l'inchiostro (`on` di `draw` ed `erase_along`):
+    /// `"auto"`, `"board"`, l'id di una scheda, la pagina di un PDF
+    /// `{card, page, page_size?}` o la cella di un foglio `{card, sheet, cell}`.
+    InkOn,
     /// Un valore qualunque.
     Any,
 }
@@ -819,10 +824,10 @@ pub const OPS: &[OpSpec] = &[
         fields: &[
             FieldSpec {
                 name: "on",
-                kind: FieldKind::Text,
+                kind: FieldKind::InkOn,
                 required: false,
                 default: Some("\"auto\""),
-                doc_it: "Di chi è il tratto e in che coordinate sono i punti: `\"auto\"` (coordinate della lavagna; conta solo la scheda più in alto che il riquadro del tratto tocca: la scheda lo prende se contiene il centro del riquadro e almeno metà della sua area, e se il suo livello non è estraneo; altrimenti il tratto resta libero, anche se una scheda sotto lo conterrebbe tutto), `\"board\"` (la lavagna, tratto libero) o l'id di una scheda (le sue coordinate, 0,0 in alto a sinistra).",
+                doc_it: "Di chi è il tratto e in che coordinate sono i punti: `\"auto\"` (coordinate della lavagna; conta solo la scheda più in alto che il riquadro del tratto tocca: la scheda lo prende se contiene il centro del riquadro e almeno metà della sua area, e se il suo livello non è estraneo; altrimenti il tratto resta libero, anche se una scheda sotto lo conterrebbe tutto), `\"board\"` (la lavagna, tratto libero), l'id di una scheda (le sue coordinate, 0,0 in alto a sinistra), `{\"card\", \"page\", \"page_size\"?}` (la pagina, da 1, di una scheda PDF, in punti PDF dall'angolo in alto a sinistra della pagina; `page_size` `[larghezza, altezza]` in punti la legge `canvas.apply` dal file, come `page_count`, che rifiuta una pagina oltre l'ultima) o `{\"card\", \"sheet\", \"cell\"}` (la cella A1, da `A1` a `XFD1048576`, del foglio col nome com'è nel file di una scheda di foglio, in pixel del foglio al 100% dall'angolo in alto a sinistra della cella).",
             },
             optional(
                 "points",
@@ -861,6 +866,7 @@ pub const OPS: &[OpSpec] = &[
             r#"{"op":"draw","on":"t1","shape":{"kind":"ellipse","x":8,"y":8,"width":304,"height":144},"pen":"marker","color":"vermilion"}"#,
             r#"{"op":"draw","points":[[40,200],[120,180],[200,210]],"color":"blue"}"#,
             r#"{"op":"draw","on":"board","shape":{"kind":"arrow","x1":330,"y1":80,"x2":390,"y2":80},"size":3}"#,
+            r#"{"op":"draw","on":{"card":"p1","page":2,"page_size":[595,842]},"points":[[72,100],[300,100]],"pen":"highlighter","size":12}"#,
         ],
     },
     OpSpec {
@@ -943,10 +949,10 @@ pub const OPS: &[OpSpec] = &[
             ),
             FieldSpec {
                 name: "on",
-                kind: FieldKind::Text,
+                kind: FieldKind::InkOn,
                 required: false,
                 default: Some("\"auto\""),
-                doc_it: "In che coordinate sono i punti e che cosa si taglia: `\"auto\"` (coordinate della lavagna; i tratti liberi e quelli delle schede sotto il cammino), `\"board\"` (la lavagna, solo i tratti liberi) o l'id di una scheda (le sue coordinate, 0,0 in alto a sinistra; solo i suoi tratti).",
+                doc_it: "In che coordinate sono i punti e che cosa si taglia: `\"auto\"` (coordinate della lavagna; i tratti liberi e quelli delle schede sotto il cammino), `\"board\"` (la lavagna, solo i tratti liberi), l'id di una scheda (le sue coordinate, 0,0 in alto a sinistra; solo i suoi tratti), `{\"card\", \"page\", \"page_size\"?}` (punti PDF della pagina; solo i tratti di quella pagina) o `{\"card\", \"sheet\", \"cell\"}` (pixel del foglio al 100% dalla cella; solo i tratti di quella cella), come per `draw`.",
             },
             optional(
                 "aspect",
@@ -1172,6 +1178,7 @@ fn check_field(
         FieldKind::InkColor => check_ink_color(index, object, field, path, value, problems),
         FieldKind::Positive => check_positive(index, path, value, problems),
         FieldKind::Pages => check_pages(index, path, value, problems),
+        FieldKind::InkOn => check_ink_on(index, path, value, problems),
     }
 }
 
@@ -1263,6 +1270,83 @@ fn check_shape(
             problem.suggestion = Some(near.join(", "));
         }
         problems.push(problem);
+    }
+}
+
+/// `on` di `draw` e di `erase_along`: una stringa (una parola o un id), la
+/// pagina `{card, page, page_size?, page_count?}` o la cella `{card, sheet,
+/// cell}`, come la legge [`draw::InkOn`]. Un oggetto con `page` è una pagina,
+/// uno con `sheet` o `cell` una cella; uno senza nessuno dei tre è
+/// `bad_value`. La pagina va da 1 e la cella è un indirizzo A1 da `A1` a
+/// `XFD1048576` (`bad_value` se no), il foglio un testo non vuoto.
+fn check_ink_on(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    let fields = match value {
+        Value::String(_) => return,
+        Value::Object(fields) => fields,
+        _ => {
+            problems.push(Problem::new(ProblemCode::WrongType, Some(index), path));
+            return;
+        }
+    };
+    let page = fields.contains_key("page");
+    let allowed: &[&str] = if page {
+        &["card", "page", "page_size", "page_count"]
+    } else if fields.contains_key("sheet") || fields.contains_key("cell") {
+        &["card", "sheet", "cell"]
+    } else {
+        problems.push(Problem::new(ProblemCode::BadValue, Some(index), path));
+        return;
+    };
+    let mut push = |code: ProblemCode, name: &str| {
+        problems.push(Problem::new(
+            code,
+            Some(index),
+            format!("{path}/{}", escape(name)),
+        ));
+    };
+    for name in allowed {
+        let value = fields.get(*name);
+        let optional = matches!(*name, "page_size" | "page_count");
+        let Some(value) = value.filter(|value| !(optional && value.is_null())) else {
+            if !optional {
+                push(ProblemCode::MissingField, name);
+            }
+            continue;
+        };
+        let code = match *name {
+            "card" => (!value.is_string()).then_some(ProblemCode::WrongType),
+            "page" if !is_integer(value) => Some(ProblemCode::WrongType),
+            "page" => value
+                .as_f64()
+                .filter(|page| *page >= 1.0)
+                .is_none()
+                .then_some(ProblemCode::BadValue),
+            "page_size" => {
+                let pair = value
+                    .as_array()
+                    .is_some_and(|items| items.len() == 2 && items.iter().all(Value::is_number));
+                (!pair).then_some(ProblemCode::WrongType)
+            }
+            "page_count" => (!is_integer(value)).then_some(ProblemCode::WrongType),
+            "sheet" => match value.as_str() {
+                None => Some(ProblemCode::WrongType),
+                Some("") => Some(ProblemCode::BadValue),
+                Some(_) => None,
+            },
+            "cell" => match value.as_str() {
+                None => Some(ProblemCode::WrongType),
+                Some(text) => CellAddress::parse(text)
+                    .is_none()
+                    .then_some(ProblemCode::BadValue),
+            },
+            _ => None,
+        };
+        if let Some(code) = code {
+            push(code, name);
+        }
+    }
+    for key in fields.keys().filter(|key| !allowed.contains(&key.as_str())) {
+        push(ProblemCode::UnknownField, key);
     }
 }
 
@@ -1800,6 +1884,37 @@ fn field_schema(field: &FieldSpec) -> Value {
             })
         }
         FieldKind::Positive => json!({ "type": "number", "exclusiveMinimum": 0 }),
+        FieldKind::InkOn => json!({
+            "oneOf": [
+                { "type": "string" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "card": { "type": "string" },
+                        "page": { "type": "integer", "minimum": 1 },
+                        "page_size": {
+                            "type": "array",
+                            "items": { "type": "number" },
+                            "minItems": 2,
+                            "maxItems": 2,
+                        },
+                        "page_count": { "type": "integer" },
+                    },
+                    "required": ["card", "page"],
+                    "additionalProperties": false,
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "card": { "type": "string" },
+                        "sheet": { "type": "string", "minLength": 1 },
+                        "cell": { "type": "string", "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$" },
+                    },
+                    "required": ["card", "sheet", "cell"],
+                    "additionalProperties": false,
+                },
+            ],
+        }),
         FieldKind::Pages => json!({
             "oneOf": [
                 { "type": "string" },

@@ -10,7 +10,9 @@
 //!   `auto` (di serie) i punti sono della lavagna e il cammino tocca i tratti
 //!   liberi e quelli di ogni scheda; con `board` solo quelli liberi; con l'id
 //!   di una scheda i punti sono nelle sue coordinate e il cammino tocca solo
-//!   i suoi tratti.
+//!   i suoi tratti; con la pagina di un PDF o la cella di un foglio i punti
+//!   sono nelle unità dell'ancora (punti PDF, pixel del foglio) e il cammino
+//!   tocca solo i tratti di quella pagina o di quella cella ([`Scope`]).
 //! - **Le unità.** Il cammino torna nelle unità del tratto con l'inverso della
 //!   trasformazione della resa ([`InkFit`], con la proporzione del contenuto
 //!   `aspect` se `on` è una scheda e chi scrive la sa), e il raggio,
@@ -25,10 +27,11 @@
 //!   dall'ultimo al primo, poi si mettono i pezzi dove stavano: le toppe di
 //!   `cutStrokePatches`, che l'inversa disfa in fila. Valgono tutte o
 //!   nessuna, come ogni operazione.
-//! - **Ciò che non si taglia.** Un tratto che Fub non disegna, un tratto
+//! - **Ciò che non si taglia.** Un tratto che Fub non disegna, un livello
+//!   estraneo, o, se `on` non è la sua pagina o la sua cella, un tratto
 //!   attaccato alla pagina di un PDF o alla cella di un foglio (dove stanno
-//!   nella scheda lo sa solo la resa), o un livello estraneo, non si tocca: se
-//!   può stare sotto il cammino, una nota ([`NoteCode::InkKept`]) lo dice.
+//!   nella scheda lo sa solo la resa), non si tocca: se può stare sotto il
+//!   cammino, una nota ([`NoteCode::InkKept`]) lo dice.
 
 use std::collections::HashSet;
 
@@ -36,11 +39,11 @@ use fub_ink_codec::{cut_brush, ink_samples, split_ink, split_work, Ink, InkBrush
 use serde::{de, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
-use super::draw::OnTarget;
+use super::draw::{InkOn, OnTarget};
 use super::{refuse, Compiler, NoteCode, OpError};
 use crate::ink::{
-    DrawnStroke, InkAnchor, InkFit, InkLayer, InkStroke, LayerRef, StrokeState, INK_KEY,
-    INK_MAX_BYTES,
+    CellAddress, DrawnStroke, InkAnchor, InkFit, InkLayer, InkStroke, LayerRef, StrokeState,
+    INK_KEY, INK_MAX_BYTES,
 };
 use crate::layout::Rect;
 use crate::model::CanvasNode;
@@ -65,9 +68,10 @@ pub struct EraseAlongArgs {
     /// raggio `size / 2`.
     #[serde(deserialize_with = "eraser_size")]
     pub size: f64,
-    /// `"auto"` (di serie), `"board"` o l'id di una scheda.
+    /// `"auto"` (di serie), `"board"`, l'id di una scheda, la pagina di un
+    /// PDF o la cella di un foglio, come per `draw`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub on: Option<String>,
+    pub on: Option<InkOn>,
     /// La proporzione (larghezza su altezza) del contenuto che la scheda di
     /// `on` mostra, se chi scrive la sa, come in `move_strokes`: solo con `on`
     /// sull'id di una scheda. Non si scrive nel file.
@@ -104,6 +108,23 @@ struct Holder<'a> {
     origin: (f64, f64),
     /// La proporzione del contenuto della scheda, se `on` è lei e si sa.
     aspect: Option<f64>,
+    /// Quali tratti del livello il cammino può toccare.
+    scope: Scope<'a>,
+}
+
+/// Quali tratti di un livello guarda la gomma, e in che unità è il cammino.
+#[derive(Copy, Clone)]
+enum Scope<'a> {
+    /// Quelli della scheda e quelli liberi, nelle coordinate della lavagna o
+    /// della scheda; non quelli di pagina o di cella ([`unplaced`]).
+    Layer,
+    /// Solo quelli della pagina `page`, col cammino in punti PDF della
+    /// pagina mostrata alla misura `size` (se no, alla misura dell'ancora di
+    /// ogni tratto).
+    Page { page: u64, size: Option<(f64, f64)> },
+    /// Solo quelli della cella `cell` del foglio `sheet`, col cammino in
+    /// pixel del foglio al 100% dall'angolo della cella.
+    Cell { sheet: &'a str, cell: CellAddress },
 }
 
 /// Un tratto tagliato: dove stava e i pezzi che lo sostituiscono, ancora senza
@@ -175,7 +196,7 @@ impl Compiler {
         let path = path_points(index, &args.points)?;
         let radius = args.size / 2.0;
         let (layers, notes) =
-            self.erase_cuts(index, (args.on.as_deref(), args.aspect), &path, radius)?;
+            self.erase_cuts(index, (args.on.as_ref(), args.aspect), &path, radius)?;
         for detail in notes {
             self.note(index, NoteCode::InkKept, detail);
         }
@@ -191,13 +212,14 @@ impl Compiler {
     fn erase_cuts(
         &self,
         index: usize,
-        (on, aspect): (Option<&str>, Option<f64>),
+        (on, aspect): (Option<&InkOn>, Option<f64>),
         path: &[Spot],
         radius: f64,
     ) -> Result<(Vec<LayerCut>, Vec<String>), OpError> {
         let target = self.on_target(index, on)?;
         // Con `auto` il cammino passa su più schede, ognuna col suo contenuto:
-        // una proporzione sola non direbbe di quale.
+        // una proporzione sola non direbbe di quale. Una pagina e una cella
+        // hanno già le loro unità.
         if aspect.is_some() && !matches!(target, OnTarget::Card(_)) {
             return Err(OpError::Invalid {
                 index,
@@ -210,7 +232,11 @@ impl Compiler {
             value: self.working.extra.get(INK_KEY),
             origin: (0.0, 0.0),
             aspect: None,
+            scope: Scope::Layer,
         };
+        // Con `on` su una scheda, una pagina o una cella, un livello estraneo
+        // è un errore; con `auto` e `board` una nota.
+        let one_card = !matches!(target, OnTarget::Auto | OnTarget::Board);
         let holders: Vec<Holder<'_>> = match target {
             OnTarget::Auto => self
                 .working
@@ -219,12 +245,24 @@ impl Compiler {
                 .filter(|node| node.extra.contains_key(INK_KEY))
                 .map(|node| {
                     let rect = Rect::of_node(node);
-                    Holder::card(node, (rect.x, rect.y), None)
+                    Holder::card(node, (rect.x, rect.y), None, Scope::Layer)
                 })
                 .chain(std::iter::once(board))
                 .collect(),
             OnTarget::Board => vec![board],
-            OnTarget::Card(node) => vec![Holder::card(node, (0.0, 0.0), aspect)],
+            OnTarget::Card(node) => vec![Holder::card(node, (0.0, 0.0), aspect, Scope::Layer)],
+            OnTarget::Page { node, page, size } => vec![Holder::card(
+                node,
+                (0.0, 0.0),
+                None,
+                Scope::Page { page, size },
+            )],
+            OnTarget::Cell { node, sheet, cell } => vec![Holder::card(
+                node,
+                (0.0, 0.0),
+                None,
+                Scope::Cell { sheet, cell },
+            )],
         };
         let area = Area::around(path.iter().copied(), radius);
         let mut layers = Vec::new();
@@ -235,7 +273,7 @@ impl Compiler {
                 continue;
             };
             let Ok(ink) = InkLayer::from_value(value) else {
-                if matches!(target, OnTarget::Card(_)) {
+                if one_card {
                     return Err(OpError::ForeignLayer {
                         index,
                         layer: holder.layer.clone(),
@@ -265,17 +303,22 @@ impl Compiler {
                         continue;
                     }
                 };
-                if let Some(kind) = unplaced(&drawn) {
+                if let (Scope::Layer, Some(kind)) = (holder.scope, unplaced(&drawn)) {
                     if holder.may_hold(&area, Some(stroke)) {
                         notes.push(format!(
-                            "stroke {:?} of {} is anchored to a {kind}, and where the {kind} is shown in the card is known only to the renderer, so it is not cut",
+                            "stroke {:?} of {} is anchored to a {kind}, and where the {kind} is shown in the card is known only to the renderer: erase with `on` set to the {kind} to cut it",
                             stroke.id,
                             holder.name(),
                         ));
                     }
                     continue;
                 }
-                if let Some(pieces) = holder.cut(index, &drawn, path, radius, &mut work)? {
+                // Un tratto che non è della pagina o della cella di `on` non
+                // si guarda.
+                let Some(fit) = holder.fit(&drawn.anchor) else {
+                    continue;
+                };
+                if let Some(pieces) = holder.cut(index, &drawn, fit, path, radius, &mut work)? {
                     cuts.push(StrokeCut {
                         at,
                         before: stroke.clone(),
@@ -344,13 +387,74 @@ impl Compiler {
 
 impl<'a> Holder<'a> {
     /// Il livello della scheda `node`, col suo angolo in `origin`.
-    fn card(node: &'a CanvasNode, origin: (f64, f64), aspect: Option<f64>) -> Holder<'a> {
+    fn card(
+        node: &'a CanvasNode,
+        origin: (f64, f64),
+        aspect: Option<f64>,
+        scope: Scope<'a>,
+    ) -> Holder<'a> {
         Holder {
             layer: LayerRef::Node(node.id.clone()),
             node: Some(node),
             value: node.extra.get(INK_KEY),
             origin,
             aspect,
+            scope,
+        }
+    }
+
+    /// Come il tratto con l'ancora `anchor` va nelle coordinate del cammino,
+    /// o `None` se il cammino non lo guarda. Sul livello, la resa della
+    /// scheda ([`InkFit::of`]); sulla pagina di `on`, solo i tratti di quella
+    /// pagina, portati alla misura data ([`InkFit::on_page`]); sulla cella di
+    /// `on`, solo i tratti di quella cella, che hanno già le unità del
+    /// cammino.
+    fn fit(&self, anchor: &InkAnchor) -> Option<InkFit> {
+        match (self.scope, anchor) {
+            (Scope::Layer, _) => InkFit::of(self.node, anchor, self.aspect),
+            (
+                Scope::Page { page, size },
+                &InkAnchor::Page {
+                    page: stroke_page,
+                    width,
+                    height,
+                },
+            ) if stroke_page == page => Some(match size {
+                Some(shown) => InkFit::on_page((width, height), shown),
+                None => InkFit::IDENTITY,
+            }),
+            (
+                Scope::Cell { sheet, cell },
+                InkAnchor::Cell {
+                    sheet: stroke_sheet,
+                    cell: stroke_cell,
+                },
+            ) if stroke_sheet == sheet && *stroke_cell == cell => Some(InkFit::IDENTITY),
+            _ => None,
+        }
+    }
+
+    /// Se il tratto `stroke`, che non si disegna, dice di essere della pagina
+    /// o della cella di `on`: l'ancora com'è scritta, se si legge fin lì.
+    fn names_target(&self, stroke: &InkStroke) -> bool {
+        let Some(anchor) = stroke.anchor.as_ref().and_then(Value::as_object) else {
+            return false;
+        };
+        let kind = anchor.get("kind").and_then(Value::as_str);
+        match self.scope {
+            Scope::Layer => true,
+            Scope::Page { page, .. } => {
+                // Le pagine stanno entro 2^53−1 (`saturating_integer`): il
+                // cast è esatto. Il numero si legge per valore, come l'ancora.
+                #[allow(clippy::cast_precision_loss)]
+                let page = page as f64;
+                kind == Some("page") && anchor.get("page").and_then(Value::as_f64) == Some(page)
+            }
+            Scope::Cell { sheet, cell } => {
+                kind == Some("cell")
+                    && anchor.get("sheet").and_then(Value::as_str) == Some(sheet)
+                    && anchor.get("cell").and_then(Value::as_str) == Some(cell.to_string().as_str())
+            }
         }
     }
 
@@ -365,8 +469,12 @@ impl<'a> Holder<'a> {
     /// Se il livello, o il tratto `stroke` che non si disegna, può stare sotto
     /// il cammino: per una scheda, se il cammino tocca la scheda; per la
     /// radice, se tocca i punti del tratto, quando si leggono, e sempre
-    /// altrimenti.
+    /// altrimenti. Con `on` su una pagina o una cella, il livello sempre, e il
+    /// tratto se la sua ancora dice quella pagina o quella cella.
     fn may_hold(&self, area: &Area, stroke: Option<&InkStroke>) -> bool {
+        if !matches!(self.scope, Scope::Layer) {
+            return stroke.is_none_or(|stroke| self.names_target(stroke));
+        }
         if let Some(node) = self.node {
             let rect = Rect::of_node(node);
             let rect = Rect {
@@ -394,17 +502,14 @@ impl<'a> Holder<'a> {
         &self,
         index: usize,
         drawn: &DrawnStroke,
+        fit: InkFit,
         path: &[Spot],
         radius: f64,
         work: &mut f64,
     ) -> Result<Option<Vec<InkPiece>>, OpError> {
-        // Come `erasableInk` e `cutInk`: lo spostamento della resa si somma
-        // all'angolo della scheda, e il cammino torna nelle unità del tratto.
-        // Un tratto di pagina o di cella non arriva qui ([`unplaced`]): senza
-        // misura non si taglia.
-        let Some(fit) = InkFit::of(self.node, &drawn.anchor, self.aspect) else {
-            return Ok(None);
-        };
+        // Come `erasableInk` e `cutInk`: lo spostamento della resa (`fit`, da
+        // [`Holder::fit`]) si somma all'angolo della scheda, e il cammino
+        // torna nelle unità del tratto.
         if fit.s.is_nan() || fit.s <= 0.0 {
             return Ok(None);
         }
@@ -938,6 +1043,92 @@ mod tests {
             far.patches.is_empty() && far.notes.is_empty(),
             "{:?}",
             far.notes
+        );
+    }
+
+    /// Con `on` sulla pagina o sulla cella la gomma guarda solo i tratti di
+    /// quella pagina o di quella cella: uno che non si disegna ma dice di
+    /// esserlo ha la nota, gli altri (un'altra pagina, un'altra cella, i
+    /// tratti della scheda) non si toccano e non si nominano. Un livello
+    /// estraneo è un errore, come con l'id della scheda.
+    #[test]
+    fn sulla_pagina_e_sulla_cella_si_guardano_solo_i_loro_tratti() {
+        let stroke = |id: &str, anchor: Value, tool: &str| {
+            json!({"id": id, "tool": tool, "brush": BALL, "color": "#0072b2",
+                   "anchor": anchor, "ink": "1 s100 cxy 1000,1000 4000,0"})
+        };
+        let page = |page: u32| json!({"kind": "page", "page": page, "width": 595, "height": 842});
+        let cell = |cell: &str| json!({"kind": "cell", "sheet": "Foglio 1", "cell": cell});
+        let canvas = board(&json!({
+            "nodes": [
+                {"id": "p1", "type": "file", "file": "Corsi/dispensa.pdf", "x": 0, "y": 0,
+                 "width": 300, "height": 400, "fub:ink": {"v": 1, "strokes": [
+                     stroke("p2", page(2), "pen"),
+                     stroke("p3-kept", page(3), "matita"),
+                     stroke("p2-kept", page(2), "matita"),
+                     stroke("card", json!({"kind": "card", "width": 300, "height": 400}), "pen")]}},
+                {"id": "x1", "type": "file", "file": "Corsi/voti.xlsx", "x": 1000, "y": 0,
+                 "width": 300, "height": 200, "fub:ink": {"v": 1, "strokes": [
+                     stroke("b3", cell("B3"), "pen"),
+                     stroke("b3-kept", cell("B3"), "matita"),
+                     stroke("c3-kept", cell("C3"), "matita")]}},
+                {"id": "x2", "type": "file", "file": "Corsi/altro.xlsx", "x": 2000, "y": 0,
+                 "width": 300, "height": 200, "fub:ink": "estraneo"}
+            ],
+            "edges": []
+        }));
+        // Il cammino sta sui tratti (da x = 10 a 50, y = 10).
+        let erase = |on: Value| {
+            run(
+                &canvas,
+                json!({"op": "erase_along", "on": on, "points": [[30, 0], [30, 20]], "size": 4}),
+            )
+        };
+        let on_page = erase(json!({"card": "p1", "page": 3})).expect("la pagina 3");
+        assert!(on_page.patches.is_empty(), "{:?}", on_page.patches);
+        let kept: Vec<&str> = on_page
+            .notes
+            .iter()
+            .map(|note| note.detail.as_str())
+            .collect();
+        assert_eq!(kept.len(), 1, "{kept:?}");
+        assert!(kept[0].contains("\"p3-kept\""), "{kept:?}");
+
+        let on_page = erase(json!({"card": "p1", "page": 2})).expect("la pagina 2");
+        let cut: Vec<_> = on_page
+            .patches
+            .iter()
+            .filter_map(|patch| match patch {
+                CanvasPatch::Ink {
+                    before: Some(stroke),
+                    after: None,
+                    ..
+                } => Some(stroke.id.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(cut, ["p2"], "solo il tratto della pagina 2 si taglia");
+        assert_eq!(on_page.notes.len(), 1, "{:?}", on_page.notes);
+        assert!(on_page.notes[0].detail.contains("\"p2-kept\""));
+
+        let on_cell = erase(json!({"card": "x1", "sheet": "Foglio 1", "cell": "B3"})).expect("B3");
+        assert_eq!(on_cell.created.len(), 2, "B3 si taglia in due");
+        assert_eq!(on_cell.notes.len(), 1, "{:?}", on_cell.notes);
+        assert!(on_cell.notes[0].detail.contains("\"b3-kept\""));
+        // Un altro foglio con lo stesso indirizzo non è la stessa cella.
+        let other =
+            erase(json!({"card": "x1", "sheet": "Foglio1", "cell": "B3"})).expect("Foglio1");
+        assert!(other.patches.is_empty() && other.notes.is_empty());
+
+        let foreign = erase(json!({"card": "x2", "sheet": "Foglio 1", "cell": "B3"}));
+        assert!(
+            matches!(foreign, Err(OpError::ForeignLayer { .. })),
+            "{foreign:?}"
+        );
+        let not_a_pdf = erase(json!({"card": "x1", "page": 1}));
+        assert!(
+            matches!(not_a_pdf, Err(OpError::Invalid { .. })),
+            "{not_a_pdf:?}"
         );
     }
 

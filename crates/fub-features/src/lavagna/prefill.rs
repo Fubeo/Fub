@@ -3,7 +3,9 @@
 //! `fit: content`; il numero e le misure delle pagine di un PDF per
 //! `spread_pages` (`page_count`, `page_sizes`); il numero delle pagine e la
 //! misura della pagina o dell'immagine di un `excerpt` (`page_count`,
-//! `content_size`). Il nucleo non legge file: lo fa qui, con
+//! `content_size`); il numero delle pagine e la misura della pagina di un
+//! `on` sulla pagina di un PDF, per `draw` ed `erase_along` (`page_count`,
+//! `page_size`). Il nucleo non legge file: lo fa qui, con
 //! `read_document_bytes`, e misura con `imagesize` (le immagini) e con
 //! [`crate::draw::pdf_page_sizes`] (le pagine di un PDF). Ogni file si legge
 //! una volta sola per lista.
@@ -24,7 +26,8 @@ use fub_abi::traits::HostApi;
 use fub_canvas_core::layout::{self, CardKind};
 use fub_canvas_core::model::Canvas;
 use fub_canvas_core::ops::{
-    chosen_pages, CanvasOp, CompileNote, ExcerptArgs, NoteCode, SpreadPagesArgs,
+    chosen_pages, CanvasOp, CompileNote, DrawArgs, EraseAlongArgs, ExcerptArgs, InkOn, NoteCode,
+    OnPage, SpreadPagesArgs,
 };
 use fub_canvas_core::parts::{CanvasParts, PartsKind};
 use serde_json::Value;
@@ -131,6 +134,20 @@ pub(super) fn fill_ops(
                     notes.extend(fill_excerpt(index, &mut files, &file, args));
                 }
             }
+            CanvasOp::Draw(DrawArgs {
+                on: Some(InkOn::Page(on)),
+                ..
+            })
+            | CanvasOp::EraseAlong(EraseAlongArgs {
+                on: Some(InkOn::Page(on)),
+                ..
+            }) => {
+                if let Some(file) = card_file(canvas, &added, &on.card) {
+                    if let Some(pages) = files.pages(&file) {
+                        notes.extend(fill_page(index, on, pages));
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -212,6 +229,22 @@ fn fill_excerpt(
         Some(PartsKind::Image { .. }) => files.size(file),
         Some(PartsKind::Sections { .. }) | None => None,
     };
+    note
+}
+
+/// `page_count` e `page_size` di un `on` sulla pagina di un PDF (`draw`,
+/// `erase_along`): il conto del file, e la misura della pagina se non è data.
+/// Una pagina oltre l'ultima resta senza misura: la rifiuta la compilazione,
+/// col conto.
+fn fill_page(index: usize, on: &mut OnPage, pages: &[[f64; 2]]) -> Option<CompileNote> {
+    let note = count_from_file(index, &mut on.page_count, pages.len());
+    if on.page_size.is_none() {
+        on.page_size = on
+            .page
+            .checked_sub(1)
+            .and_then(|at| usize::try_from(at).ok())
+            .and_then(|at| pages.get(at).copied());
+    }
     note
 }
 

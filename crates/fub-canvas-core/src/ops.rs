@@ -67,7 +67,7 @@ pub use align::{AlignArgs, AlignTo, DistributeArgs, DistributeAxis};
 pub use card::AddCardArgs;
 pub use connect::{AutoWord, ConnectArgs, Ends, SidePair, Sides};
 pub use convert::ConvertArgs;
-pub use draw::{DrawArgs, DrawShape, MAX_DRAW_POINTS, ON_AUTO, ON_BOARD};
+pub use draw::{DrawArgs, DrawShape, InkOn, OnCell, OnPage, MAX_DRAW_POINTS, ON_AUTO, ON_BOARD};
 pub use duplicate::DuplicateArgs;
 pub use erase::{EraseAlongArgs, MAX_ERASE_POINTS, MAX_ERASE_WORK};
 pub use group::GroupArgs;

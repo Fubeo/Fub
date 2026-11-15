@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Spot } from "../../ink/tools/sweep";
+import type { CardCellBox, CardPageBox } from "./cards";
 import { cutInk, erasableInk, pieceRecords } from "./ink-erase";
 import { decodeStroke, type DrawableStroke, type InkLayerState } from "./ink-record";
 import type { CanvasNode } from "./model";
@@ -68,7 +69,11 @@ function stateOf(layer: Layer): InkLayerState {
 /// la radice.
 function guiAfter(vector: Vector): Map<string, Json[]> {
   const op = vector.ops[0]!;
-  const on: string = op.on ?? "auto";
+  // `on` sulla pagina di un PDF o sulla cella di un foglio (LIC T19): la
+  // scheda è `card`, e la tela mostra la pagina o la cella nel suo angolo,
+  // un'unità della lavagna per punto PDF o pixel del foglio.
+  const content: Json | null = typeof op.on === "object" && op.on !== null ? op.on : null;
+  const on: string = content ? content.card : (op.on ?? "auto");
   const created = [...(vector.expect.created ?? [])];
   const layers = layersOf(vector.before);
   let path = op.points as Spot[];
@@ -80,6 +85,26 @@ function guiAfter(vector: Vector): Map<string, Json[]> {
   const touched = layers.filter((layer) =>
     on === "auto" ? true : on === "board" ? layer.node === null : layer.node?.id === on,
   );
+  // La pagina mostrata: la misura data, o quella dell'ancora dei suoi tratti.
+  const pageBox = (layer: Layer): CardPageBox | null => {
+    if (!content || typeof content.page !== "number") return null;
+    const written = layer.strokes.find((record) => record.anchor?.kind === "page" && record.anchor.page === content.page);
+    const [width, height] = (content.page_size as [number, number] | undefined) ?? [written?.anchor.width, written?.anchor.height];
+    return { page: content.page, size: { width, height }, rect: { x: 0, y: 0, width, height } };
+  };
+  const cellBox = (node: string, sheet: string, cell: string): CardCellBox | null =>
+    content && node === on && content.sheet === sheet && content.cell === cell
+      ? { sheet, cell, rect: { x: 0, y: 0, width: 64, height: 20 }, zoom: 1 }
+      : null;
+  // Con la pagina o la cella in `on` la gomma in codice guarda solo i loro
+  // tratti: dove stanno gli altri, rispetto alla pagina o alla cella, lo sa
+  // la resa. La gomma della tela, che passa sulla scheda, taglierebbe anche
+  // quelli che il cammino tocca.
+  const ofContent = (stroke: DrawableStroke): boolean =>
+    !content
+      || (typeof content.page === "number"
+        ? stroke.page === content.page
+        : stroke.cell?.sheet === content.sheet && stroke.cell?.cell === content.cell);
   const result = new Map<string, Json[]>();
   for (const layer of layers) {
     const key = layer.node?.id ?? "";
@@ -90,7 +115,11 @@ function guiAfter(vector: Vector): Map<string, Json[]> {
     // `aspect` è la proporzione del contenuto della scheda di `on`: la tela
     // la dà a `erasableInk` con `aspects`, per scheda.
     const aspects = (node: string): number | null => (node === on && typeof op.aspect === "number" ? op.aspect : null);
-    const units = new Map(erasableInk([stateOf(layer)], undefined, aspects).map((unit) => [unit.id, unit]));
+    const units = new Map(
+      erasableInk([stateOf(layer)], () => pageBox(layer), aspects, cellBox)
+        .filter((unit) => ofContent(unit.stroke))
+        .map((unit) => [unit.id, unit]),
+    );
     const strokes: Json[] = [];
     for (const record of layer.strokes) {
       const unit = units.get(record.id);
@@ -112,6 +141,9 @@ describe("erase_along come la gomma «Solo il pezzo»", () => {
     expect(names).toContain("erase-along-cuts-in-half.json");
     expect(names).toContain("erase-along-auto-board-and-card.json");
     expect(names).toContain("erase-along-aspect.json");
+    expect(names).toContain("erase-along-on-page.json");
+    expect(names).toContain("erase-along-on-page-other-size.json");
+    expect(names).toContain("erase-along-on-cell.json");
   });
 
   for (const [name, vector] of applied) {

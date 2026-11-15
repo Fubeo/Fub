@@ -538,7 +538,8 @@ impl InkFit {
     ///
     /// `None` per un tratto attaccato alla pagina di un PDF o alla cella di un
     /// foglio: dove la pagina o la cella sta dentro la scheda lo sa la resa,
-    /// non il nucleo.
+    /// non il nucleo. Nelle coordinate della pagina stessa vale
+    /// [`InkFit::on_page`]; in quelle della cella, l'identità.
     pub(crate) fn of(
         node: Option<&CanvasNode>,
         anchor: &InkAnchor,
@@ -591,6 +592,35 @@ impl InkFit {
             dx: (w - width * s) / 2.0,
             dy: (h - height * s) / 2.0,
         })
+    }
+
+    /// Come la resa porta un tratto con l'ancora di pagina, scritto sulla
+    /// pagina alla misura `written` (quella dell'ancora), sulla stessa pagina
+    /// mostrata alla misura `shown`, dall'angolo in alto a sinistra: lo
+    /// stesso fattore nei due sensi, il minore. È `pageFit` di
+    /// `apps/client/src/editors/canvas/ink-record.ts` con il rettangolo della
+    /// pagina in `0, 0`: le coordinate sono quelle della pagina, non della
+    /// scheda (dove la pagina sta nella scheda lo sa la resa). Con la misura
+    /// di quando il tratto si è scritto è l'identità; con un'altra (il PDF
+    /// sostituito) il tratto si scala senza deformarsi. Una misura che non
+    /// vale dà `s = 0`. Mai `NaN`.
+    pub(crate) fn on_page(written: (f64, f64), shown: (f64, f64)) -> InkFit {
+        let (sx, sy) = (shown.0 / written.0, shown.1 / written.1);
+        // Come `Math.min`: un `NaN` da una parte dà `NaN`.
+        let s = if sx.is_nan() || sy.is_nan() {
+            f64::NAN
+        } else {
+            sx.min(sy)
+        };
+        if s.is_finite() && s > 0.0 {
+            InkFit {
+                s,
+                dx: 0.0,
+                dy: 0.0,
+            }
+        } else {
+            InkFit::HIDDEN
+        }
     }
 
     pub(crate) fn point(self, [x, y]: [f64; 2]) -> [f64; 2] {

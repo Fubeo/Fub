@@ -114,6 +114,7 @@ fn kind_name(kind: FieldKind) -> &'static str {
         FieldKind::InkColor => "ink_color",
         FieldKind::Positive => "positive",
         FieldKind::Pages => "pages",
+        FieldKind::InkOn => "ink_on",
         FieldKind::Any => "any",
     }
 }

@@ -3,7 +3,9 @@
 //! la penna si alza: decide a chi va il tratto (la regola dell'ancora, in
 //! `ops/anchor.rs`), porta i punti nelle unità dell'ancora, li quantizza e li
 //! codifica con `fub-ink-codec`, col pennello della penna (`pen_brush`, la
-//! stessa ricetta di `pens.ts`). Il tratto entra poi come farebbe
+//! stessa ricetta di `pens.ts`). Con `on` sulla pagina di un PDF o sulla cella
+//! di un foglio i punti sono già nelle unità dell'ancora `page` o `cell` di N6
+//! ([`InkOn`]). Il tratto entra poi come farebbe
 //! `add_strokes`: lo stesso livello, lo stesso ordine dei campi, gli stessi
 //! controlli. Le regole stanno in `docs/reference/canvas-ink-code.md`.
 //!
@@ -26,9 +28,9 @@ use serde_json::{Map, Value};
 
 use super::anchor::{anchor_at, stroke_bounds};
 use super::color::parse_hex;
-use super::{refuse, saturating_integer, Compiler, OpError};
-use crate::ink::{InkAnchor, InkLayer, LayerRef, INK_KEY};
-use crate::layout::Rect;
+use super::{refuse, saturating_integer, saturating_option, Compiler, OpError};
+use crate::ink::{CellAddress, InkAnchor, InkLayer, LayerRef, INK_KEY};
+use crate::layout::{self, CardKind, Rect};
 use crate::model::CanvasNode;
 use crate::patch::CanvasPatch;
 
@@ -68,10 +70,11 @@ const MIN_POLYGON_POINTS: usize = 3;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DrawArgs {
-    /// `"auto"` (di serie), `"board"` o l'id di una scheda: di chi è il tratto
-    /// e in che coordinate sono i punti.
+    /// `"auto"` (di serie), `"board"`, l'id di una scheda, la pagina di un
+    /// PDF o la cella di un foglio: di chi è il tratto e in che coordinate
+    /// sono i punti.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub on: Option<String>,
+    pub on: Option<InkOn>,
     /// I punti, `[x, y]` o `[x, y, pressione]` con la pressione da 0 a 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub points: Option<Vec<Vec<f64>>>,
@@ -104,6 +107,127 @@ pub struct DrawArgs {
     /// L'id del tratto, unico nel suo livello.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+}
+
+/// `on` di `draw` e di `erase_along`, com'è scritto: una parola o l'id di una
+/// scheda, la pagina di un PDF (un oggetto con `page`) o la cella di un
+/// foglio (un oggetto con `sheet` o `cell`). Le ancore che ne vengono sono
+/// quelle di N6 ([`InkAnchor::Page`], [`InkAnchor::Cell`]).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum InkOn {
+    /// `"auto"`, `"board"` o l'id di una scheda.
+    Name(String),
+    /// La pagina di un PDF: i punti in punti PDF dall'angolo in alto a
+    /// sinistra della pagina.
+    Page(OnPage),
+    /// La cella di un foglio: i punti in pixel del foglio al 100%
+    /// dall'angolo in alto a sinistra della cella.
+    Cell(OnCell),
+}
+
+/// `on` sulla pagina di un PDF: `{card, page, page_size?, page_count?}`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OnPage {
+    /// La scheda del PDF.
+    pub card: String,
+    /// La pagina, da 1.
+    #[serde(deserialize_with = "page_number")]
+    pub page: u64,
+    /// La misura della pagina in punti, `[larghezza, altezza]`, come si vede
+    /// (con la sua rotazione): va nell'ancora. `canvas.apply` la legge dal
+    /// file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_size: Option<[f64; 2]>,
+    /// Quante pagine ha il PDF: con il conto, una pagina oltre l'ultima è
+    /// `Invalid`. `canvas.apply` lo legge dal file, e se il file si legge
+    /// vince il file.
+    #[serde(
+        default,
+        deserialize_with = "saturating_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub page_count: Option<i64>,
+}
+
+/// `on` sulla cella di un foglio: `{card, sheet, cell}`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OnCell {
+    /// La scheda del foglio.
+    pub card: String,
+    /// Il nome del foglio com'è nel file, non vuoto (spazi compresi).
+    #[serde(deserialize_with = "sheet_name")]
+    pub sheet: String,
+    /// L'indirizzo della cella in notazione A1, da `A1` a `XFD1048576`.
+    #[serde(deserialize_with = "cell_address", serialize_with = "cell_text")]
+    pub cell: CellAddress,
+}
+
+impl<'de> Deserialize<'de> for InkOn {
+    /// Una stringa, o un oggetto: con `page` è una pagina, con `sheet` o
+    /// `cell` una cella. Un oggetto che non è né l'una né l'altra non si
+    /// legge.
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        match Value::deserialize(deserializer)? {
+            Value::String(name) => Ok(InkOn::Name(name)),
+            Value::Object(fields) if fields.contains_key("page") => {
+                OnPage::deserialize(Value::Object(fields))
+                    .map(InkOn::Page)
+                    .map_err(|error| de::Error::custom(format_args!("`on` as a page: {error}")))
+            }
+            Value::Object(fields)
+                if fields.contains_key("sheet") || fields.contains_key("cell") =>
+            {
+                OnCell::deserialize(Value::Object(fields))
+                    .map(InkOn::Cell)
+                    .map_err(|error| de::Error::custom(format_args!("`on` as a cell: {error}")))
+            }
+            Value::Object(_) => Err(de::Error::custom(
+                "`on` as an object is {card, page, page_size?} or {card, sheet, cell}",
+            )),
+            _ => Err(de::Error::custom(
+                "`on` is \"auto\", \"board\", the id of a node, a page or a cell",
+            )),
+        }
+    }
+}
+
+/// Se `page` è un numero di pagina che `on` accetta: da 1.
+pub fn is_page_number(page: i64) -> bool {
+    page >= 1
+}
+
+fn page_number<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u64, D::Error> {
+    let page = saturating_integer(deserializer)?;
+    u64::try_from(page)
+        .ok()
+        .filter(|_| is_page_number(page))
+        .ok_or_else(|| de::Error::custom(format_args!("{page} is not a page: pages start at 1")))
+}
+
+fn sheet_name<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    let sheet = String::deserialize(deserializer)?;
+    if sheet.is_empty() {
+        return Err(de::Error::custom("the name of a sheet cannot be empty"));
+    }
+    Ok(sheet)
+}
+
+fn cell_address<'de, D: Deserializer<'de>>(deserializer: D) -> Result<CellAddress, D::Error> {
+    let text = String::deserialize(deserializer)?;
+    CellAddress::parse(&text).ok_or_else(|| {
+        de::Error::custom(format_args!(
+            "{text:?} is not a cell: a cell is A1 to XFD1048576, in capitals"
+        ))
+    })
+}
+
+// La firma la vuole serde.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn cell_text<S: serde::Serializer>(cell: &CellAddress, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.collect_str(cell)
 }
 
 /// Le forme di `draw`. Le coordinate sono quelle di `on`.
@@ -218,6 +342,20 @@ pub(super) enum OnTarget<'a> {
     /// L'id di una scheda (anche un gruppo): le sue coordinate, 0,0 in alto a
     /// sinistra.
     Card(&'a CanvasNode),
+    /// La pagina `page` della scheda PDF `node`, in punti PDF dall'angolo
+    /// della pagina; `size` è la sua misura, se si sa.
+    Page {
+        node: &'a CanvasNode,
+        page: u64,
+        size: Option<(f64, f64)>,
+    },
+    /// La cella `cell` del foglio `sheet` della scheda di foglio `node`, in
+    /// pixel del foglio al 100% dall'angolo della cella.
+    Cell {
+        node: &'a CanvasNode,
+        sheet: &'a str,
+        cell: CellAddress,
+    },
 }
 
 impl Compiler {
@@ -241,7 +379,7 @@ impl Compiler {
             (Some(_), Some(_)) => return Err(refuse(index, "give `points` or `shape`, not both")),
             (None, None) => return Err(refuse(index, "give `points` or `shape`")),
         };
-        let (layer, anchor, origin) = self.draw_target(index, args.on.as_deref(), &points, size)?;
+        let (layer, anchor, origin) = self.draw_target(index, args.on.as_ref(), &points, size)?;
         let samples: Vec<Sample> = (0_u32..)
             .zip(&points)
             .map(|(i, point)| Sample {
@@ -271,29 +409,98 @@ impl Compiler {
         self.add_strokes(index, &layer, &[stroke])
     }
 
-    /// Che cosa dice `on`, sul modello di adesso: `auto` (di serie), `board` o
-    /// una scheda, che deve esserci (`UnknownNode`). La stessa lettura vale per
-    /// `draw` e per `erase_along`.
-    pub(super) fn on_target(
-        &self,
+    /// Che cosa dice `on`, sul modello di adesso: `auto` (di serie), `board`,
+    /// una scheda, che deve esserci (`UnknownNode`), la pagina di una scheda
+    /// PDF o la cella di una scheda di foglio (`Invalid` su un'altra scheda,
+    /// o per una pagina oltre l'ultima quando il conto si sa). La stessa
+    /// lettura vale per `draw` e per `erase_along`.
+    pub(super) fn on_target<'s>(
+        &'s self,
         index: usize,
-        on: Option<&str>,
-    ) -> Result<OnTarget<'_>, OpError> {
-        Ok(match on.unwrap_or(ON_AUTO) {
-            ON_BOARD => OnTarget::Board,
-            ON_AUTO => OnTarget::Auto,
-            id => OnTarget::Card(self.node(index, id)?),
-        })
+        on: Option<&'s InkOn>,
+    ) -> Result<OnTarget<'s>, OpError> {
+        match on {
+            None => Ok(OnTarget::Auto),
+            Some(InkOn::Name(name)) => Ok(match name.as_str() {
+                ON_BOARD => OnTarget::Board,
+                ON_AUTO => OnTarget::Auto,
+                id => OnTarget::Card(self.node(index, id)?),
+            }),
+            Some(InkOn::Page(target)) => {
+                let node = self.node(index, &target.card)?;
+                if layout::card_kind(node) != CardKind::Pdf {
+                    return Err(refuse(
+                        index,
+                        format!("`on.page` needs a PDF card: {:?} is not one", target.card),
+                    ));
+                }
+                if let Some(count) = target.page_count {
+                    let count = u64::try_from(count)
+                        .ok()
+                        .filter(|count| *count >= 1)
+                        .ok_or_else(|| refuse(index, "`on.page_count` must be at least 1"))?;
+                    if target.page > count {
+                        return Err(refuse(
+                            index,
+                            format!(
+                                "`on.page`: page {} is not in the PDF, which has {count} pages",
+                                target.page
+                            ),
+                        ));
+                    }
+                }
+                let size = match target.page_size {
+                    None => None,
+                    Some([width, height])
+                        if width.is_finite()
+                            && height.is_finite()
+                            && width > 0.0
+                            && height > 0.0 =>
+                    {
+                        Some((width, height))
+                    }
+                    Some(_) => {
+                        return Err(refuse(
+                            index,
+                            "`on.page_size` is two numbers greater than zero",
+                        ))
+                    }
+                };
+                Ok(OnTarget::Page {
+                    node,
+                    page: target.page,
+                    size,
+                })
+            }
+            Some(InkOn::Cell(target)) => {
+                let node = self.node(index, &target.card)?;
+                if layout::card_kind(node) != CardKind::Sheet {
+                    return Err(refuse(
+                        index,
+                        format!(
+                            "`on.cell` needs a spreadsheet card: {:?} is not one",
+                            target.card
+                        ),
+                    ));
+                }
+                Ok(OnTarget::Cell {
+                    node,
+                    sheet: &target.sheet,
+                    cell: target.cell,
+                })
+            }
+        }
     }
 
     /// Il livello, l'ancora e l'origine delle coordinate del tratto, da `on`.
-    /// I punti di una scheda sono già nelle sue unità; con `auto` sono della
-    /// lavagna, e vanno alla scheda che li prende (togliendo il suo angolo) o
-    /// restano liberi.
+    /// I punti di una scheda, di una pagina o di una cella sono già nelle
+    /// unità dell'ancora; con `auto` sono della lavagna, e vanno alla scheda
+    /// che li prende (togliendo il suo angolo) o restano liberi. La pagina
+    /// vuole la sua misura, che va nell'ancora.
     fn draw_target(
         &self,
         index: usize,
-        on: Option<&str>,
+        on: Option<&InkOn>,
         points: &[Point],
         size: f64,
     ) -> Result<(LayerRef, InkAnchor, (f64, f64)), OpError> {
@@ -326,6 +533,32 @@ impl Compiler {
             OnTarget::Card(node) => Ok((
                 LayerRef::Node(node.id.clone()),
                 InkAnchor::card_of(node),
+                (0.0, 0.0),
+            )),
+            OnTarget::Page { node, page, size } => {
+                let Some((width, height)) = size else {
+                    return Err(refuse(
+                        index,
+                        "`on.page_size` is missing: `canvas.apply` reads it from the PDF, \
+                         give it when the file cannot be read",
+                    ));
+                };
+                Ok((
+                    LayerRef::Node(node.id.clone()),
+                    InkAnchor::Page {
+                        page,
+                        width,
+                        height,
+                    },
+                    (0.0, 0.0),
+                ))
+            }
+            OnTarget::Cell { node, sheet, cell } => Ok((
+                LayerRef::Node(node.id.clone()),
+                InkAnchor::Cell {
+                    sheet: sheet.to_owned(),
+                    cell,
+                },
                 (0.0, 0.0),
             )),
         }
