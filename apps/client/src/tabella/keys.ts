@@ -7,7 +7,9 @@
 //   girano dentro la selezione. Maiusc+Spazio sceglie la riga,
 //   Ctrl+Spazio la colonna, tutti e due la tabella; Ctrl+D riempie in giù,
 //   Ctrl+R a destra; Ctrl+«+» e Ctrl+«−» inseriscono e tolgono righe o
-//   colonne; Maiusc+F8 aggiunge un intervallo agli altri.
+//   colonne; Maiusc+F8 aggiunge un intervallo agli altri; Alt con le frecce
+//   sposta righe o colonne, Alt+= scrive la somma delle celle sopra, Ctrl+;
+//   la data di oggi.
 // - **Documento** (il docx): il cursore è nel testo della cella; le frecce
 //   restano del testo, Tab e Maiusc+Tab vanno di cella in cella, e Maiusc con
 //   una freccia che esce dalla cella comincia la selezione di celle.
@@ -47,7 +49,14 @@ export type TableIntent =
   | { readonly kind: "whole"; readonly which: WholeTarget }
   | { readonly kind: "fill"; readonly direction: FillDirection }
   | { readonly kind: "structure"; readonly change: StructureChange }
-  | { readonly kind: "add-ranges" };
+  | { readonly kind: "add-ranges" }
+  /// Alt con una freccia: sposta le righe (su, giù) o le colonne (a sinistra,
+  /// a destra) scelte di un posto.
+  | { readonly kind: "shift-lines"; readonly axis: "rows" | "columns"; readonly by: -1 | 1 }
+  /// Alt+=: la somma delle celle sopra, scritta come valore.
+  | { readonly kind: "sum" }
+  /// Ctrl+;: la data di oggi.
+  | { readonly kind: "today" };
 
 /// Che cosa Maiusc+Spazio, Ctrl+Spazio e tutti e due scelgono per intero.
 export type WholeTarget = "row" | "column" | "table";
@@ -94,6 +103,32 @@ export function addRangesKey(event: KeyLike): boolean {
   return event.key === "F8" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
 }
 
+/// Alt con una freccia, senza altri modificatori: le righe o le colonne
+/// scelte si spostano di un posto. `null` per ogni altro tasto.
+export function shiftLinesKey(event: KeyLike): { readonly axis: "rows" | "columns"; readonly by: -1 | 1 } | null {
+  if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return null;
+  switch (event.key) {
+    case "ArrowUp": return { axis: "rows", by: -1 };
+    case "ArrowDown": return { axis: "rows", by: 1 };
+    case "ArrowLeft": return { axis: "columns", by: -1 };
+    case "ArrowRight": return { axis: "columns", by: 1 };
+    default: return null;
+  }
+}
+
+/// Alt+=, la somma automatica dei fogli di calcolo. Conta il carattere
+/// (su una tastiera italiana «=» è Maiusc+0) e il tasto fisico, perché su
+/// macOS Alt cambia il carattere («≠»).
+export function sumKey(event: KeyLike): boolean {
+  return event.altKey && !event.ctrlKey && !event.metaKey && (event.key === "=" || event.code === "Equal");
+}
+
+/// Ctrl (o Cmd)+;, la data di oggi. Conta il carattere: su una tastiera
+/// italiana «;» è Maiusc+«,».
+export function todayKey(event: KeyLike): boolean {
+  return (event.ctrlKey || event.metaKey) && !event.altKey && event.key === ";";
+}
+
 /// Le enfasi che i tasti chiedono: l'adattatore sa come il suo formato le
 /// scrive.
 export type TableFormat = "bold" | "italic" | "strike";
@@ -111,6 +146,10 @@ export function sheetIntent(event: KeyLike): TableIntent | null {
   const structure = structureKey(event);
   if (structure) return { kind: "structure", change: structure };
   if (addRangesKey(event)) return { kind: "add-ranges" };
+  const shift = shiftLinesKey(event);
+  if (shift) return { kind: "shift-lines", ...shift };
+  if (sumKey(event)) return { kind: "sum" };
+  if (todayKey(event)) return { kind: "today" };
   if (mod && !event.altKey) {
     if (lower === "z") return { kind: extend ? "redo" : "undo" };
     if (lower === "y") return { kind: "redo" };
@@ -159,11 +198,17 @@ export type EditingIntent =
   | { readonly kind: "commit"; readonly rows: number; readonly columns: number }
   | { readonly kind: "commit-tab"; readonly step: 1 | -1 }
   | { readonly kind: "cancel" }
-  | { readonly kind: "format"; readonly which: TableFormat };
+  | { readonly kind: "format"; readonly which: TableFormat }
+  /// Ctrl+; nella cella aperta: la data di oggi dove sta il cursore.
+  | { readonly kind: "today" };
 
+/// Dentro la cella aperta Alt+Invio fa come Invio (conferma e scende): il
+/// campo è di una riga sola, e l'a capo in una cella resta del testo
+/// Markdown (`<br>`).
 export function editingIntent(event: KeyLike, mode: "replace" | "edit"): EditingIntent | null {
   const mod = event.ctrlKey || event.metaKey;
   const lower = event.key.toLowerCase();
+  if (todayKey(event)) return { kind: "today" };
   if (mod && !event.shiftKey && (lower === "b" || lower === "i")) return { kind: "format", which: lower === "b" ? "bold" : "italic" };
   switch (event.key) {
     case "Enter": return { kind: "commit", rows: event.shiftKey ? -1 : 1, columns: 0 };
@@ -192,10 +237,11 @@ export interface DocumentCells {
 ///
 /// I gesti del foglio che nel testo non scrivono niente valgono sempre dentro
 /// una tabella: Ctrl+Spazio la colonna, Ctrl+Maiusc+Spazio la tabella,
-/// Maiusc+F8. Quelli che nel testo hanno già un senso valgono soltanto con
-/// celle scelte, perché il testo li tiene: Maiusc+Spazio (uno spazio scritto
-/// tenendo Maiusc), Invio, Ctrl+D, Ctrl+R (allinea a destra), Ctrl+«+» (apice)
-/// e Ctrl+«−». Mentre si aggiungono intervalli le frecce muovono la cella.
+/// Maiusc+F8, Ctrl+; (la data di oggi). Quelli che nel testo hanno già un
+/// senso valgono soltanto con celle scelte, perché il testo li tiene:
+/// Maiusc+Spazio (uno spazio scritto tenendo Maiusc), Invio, Ctrl+D, Ctrl+R
+/// (allinea a destra), Ctrl+«+» (apice), Ctrl+«−» e Alt con le frecce (su
+/// macOS salta di parola e di paragrafo). Mentre si aggiungono intervalli le frecce muovono la cella.
 /// Ctrl con una freccia resta del testo (salta di parola): nel documento non
 /// va al bordo dei dati.
 export function documentIntent(
@@ -206,11 +252,14 @@ export function documentIntent(
   const whole = wholeKey(event);
   if (whole && (whole !== "row" || table.cells)) return { kind: "whole", which: whole };
   if (addRangesKey(event)) return { kind: "add-ranges" };
+  if (todayKey(event)) return { kind: "today" };
   if (table.cells) {
     const fill = fillKey(event);
     if (fill) return { kind: "fill", direction: fill };
     const structure = structureKey(event);
     if (structure) return { kind: "structure", change: structure };
+    const shift = shiftLinesKey(event);
+    if (shift) return { kind: "shift-lines", ...shift };
   }
   if (event.ctrlKey || event.metaKey || event.altKey) return null;
   if (event.key === "Escape") return { kind: "leave" };

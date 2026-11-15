@@ -5,8 +5,10 @@
 // i gesti del foglio (`documentIntent`): Canc svuota, Ctrl+C e Ctrl+X passano
 // TSV e una tabella HTML, Invio e Tab fanno girare la cella attiva, Ctrl+D e
 // Ctrl+R riempiono, Ctrl+«+» e Ctrl+«−» inseriscono e tolgono righe o
-// colonne, Maiusc+F8 aggiunge intervalli; Ctrl+Spazio e Ctrl+Maiusc+Spazio
-// scelgono la colonna e la tabella anche senza celle scelte. «Unisci celle»
+// colonne, Alt con le frecce sposta le righe o le colonne scelte, Maiusc+F8
+// aggiunge intervalli; Ctrl+Spazio e Ctrl+Maiusc+Spazio scelgono la colonna e
+// la tabella anche senza celle scelte, e Ctrl+; scrive la data di oggi dove
+// sta il cursore (con celle scelte, nella cella attiva). «Unisci celle»
 // unisce una riga.
 //
 // Taglia non svuota: segna le celle (`is-cell-cut`), e l'incolla che segue le
@@ -30,7 +32,8 @@ import { structureEdit } from "../../tabella/commands";
 import { documentIntent } from "../../tabella/keys";
 import { boundedShape, isMultiCell, nextInRange, type Cell, type Move, type Range } from "../../tabella/navigation";
 import { fillCopy, rangeBetween, touches, wholeRange, withRange } from "../../tabella/selection";
-import { t } from "../../i18n/strings";
+import { todayText } from "../../tabella/series";
+import { resolvedLanguage, t } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
 import { richSchema } from "./schema";
@@ -337,6 +340,44 @@ function onKey(view: EditorView, event: KeyboardEvent): boolean {
         others: [],
         adding: false,
       }, tr).scrollIntoView());
+      return true;
+    }
+    case "shift-lines": {
+      // Le righe (o le colonne) delle celle scelte, di un posto, in un passo;
+      // le celle scelte vanno con loro.
+      if (!view.editable || !multi || current.others.length > 0) return true;
+      const rows = intent.axis === "rows";
+      const edit = rows
+        ? { kind: "move-rows" as const, from: range.r0, to: range.r1, by: intent.by }
+        : { kind: "move-columns" as const, from: range.c0, to: range.c1, by: intent.by };
+      const tr = state.tr;
+      if (!applyTableEdit(tr, here.table, here.tablePos, edit)) return true;
+      const shift = (cell: Cell): Cell => (rows ? { row: cell.row + intent.by, column: cell.column } : { row: cell.row, column: cell.column + intent.by });
+      view.dispatch(chooseCells(state, {
+        ...current,
+        anchor: shift(current.anchor),
+        head: shift(current.head),
+        active: current.active ? shift(current.active) : undefined,
+      }, tr).scrollIntoView());
+      return true;
+    }
+    case "today": {
+      if (!view.editable) return true;
+      const text = todayText(new Date(), resolvedLanguage());
+      if (multi) {
+        // Con celle scelte la data va nella cella attiva, al posto del suo
+        // testo, come nella tabella delle note.
+        const box = boxCovering(boxes, active.row, active.column);
+        if (!box) return true;
+        const tr = state.tr;
+        rewriteCells(tr, here.tablePos, [box], (cell) => {
+          const first = cell.node.firstChild;
+          return cellType.create(cell.node.attrs, para.create(first?.type === para ? first.attrs : null, richSchema.text(text)));
+        }, active);
+        view.dispatch(keepCells(tr, own).scrollIntoView());
+        return true;
+      }
+      view.dispatch(state.tr.insertText(text).scrollIntoView());
       return true;
     }
     case "move": {

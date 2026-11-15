@@ -4,6 +4,7 @@ import { t } from "../../../../i18n/strings";
 import { declareClipboard } from "../../../../platform/clipboard";
 import { closeContextMenu } from "../../../../ui/menu";
 import { caseApplies, expectedOf, playCase, seenOf, TABLE_CONFORMANCE, type ConformanceClipboard, type ConformanceTarget } from "../../../../tabella/conformance";
+import { framePointer } from "../../../../tabella/frame/test-support";
 import { TableGrid, tableMenu, type TableGridHost } from "./table-grid";
 import type { TableData } from "./table-model";
 
@@ -385,13 +386,22 @@ describe("la prova comune della Tabella, sul Markdown", () => {
     });
     (document.activeElement ?? document.body).dispatchEvent(event);
   };
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   for (const test of TABLE_CONFORMANCE) {
     it.runIf(caseApplies(test, target))(test.name, async () => {
-      const { grid } = mount(test.rows.map((row) => [...row]));
+      if (test.today) {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date(test.today));
+      }
+      const { grid, writes } = mount(test.rows.map((row) => [...row]));
       grid.focus("first");
       const seen = await playCase(test, {
         key: (name, init) => key(document.activeElement ?? document.body, name, init),
         command: (id) => void grid.runAction(id),
+        pointer: (gesture) => framePointer(grid.element, gesture),
+        edits: () => writes.length,
         clipboard,
         cells: () => grid.data.rows.map((row) => [...row]),
         active: () => ({ row: grid.active.row, column: grid.active.col }),

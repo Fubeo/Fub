@@ -3,7 +3,7 @@
 // Le tabelle del documento nel modo «documento» della Tabella: Tab fra le
 // celle, Maiusc con le frecce oltre la cella per scegliere celle, e sulle
 // celle scelte i gesti del foglio, gli appunti e «Unisci celle».
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TextSelection } from "prosemirror-state";
 import { t } from "../../i18n/strings";
 import { recentNotices } from "../../ui/notify";
@@ -250,7 +250,7 @@ describe("la prova comune della Tabella, sul documento", () => {
   function key(e: RichEngine, name: string, init: KeyboardEventInit): void {
     if (press(name, init)) return;
     const step = ({ ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] } as Record<string, [number, number]>)[name];
-    if (!step || init.shiftKey || init.ctrlKey) return;
+    if (!step || init.shiftKey || init.ctrlKey || init.altKey) return;
     const found = cellAt(e.state.selection.$head);
     if (!found) return;
     const next = cellBoxes(found.table, found.tablePos).find((box) => box.row === found.box.row + step[0] && box.column === found.box.column + step[1]);
@@ -279,6 +279,9 @@ describe("la prova comune della Tabella, sul documento", () => {
       command: (id) => {
         if (!e.run(id)) refused.push(id);
       },
+      // Il documento non ha né la maniglia né le intestazioni: il gesto non
+      // trova dove farsi, e i casi che lo usano lì mancano col perché.
+      pointer: () => {},
       clipboard,
       cells: () => grid(e),
       active: () => here(e),
@@ -304,9 +307,20 @@ describe("la prova comune della Tabella, sul documento", () => {
     return e;
   }
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  /// L'orologio del caso, se ne ha uno.
+  const clock = (test: ConformanceCase) => {
+    if (!test.today) return;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(test.today));
+  };
+
   for (const test of TABLE_CONFORMANCE) {
     if (caseApplies(test, target)) {
       it(test.name, async () => {
+        clock(test);
         const seen = await playCase(test, driver(start(test)));
         const expected = expectedOf(test, target);
         expect(seenOf(seen, expected)).toEqual(expected);
@@ -316,6 +330,7 @@ describe("la prova comune della Tabella, sul documento", () => {
     const reason = caseAbsence(test, target);
     if (reason === null) continue;
     it(`${test.name}: assente (${reason})`, async () => {
+      clock(test);
       const e = start(test);
       const refused: string[] = [];
       const seen = await playCase(test, driver(e, refused));
