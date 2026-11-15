@@ -17,7 +17,7 @@ import { focusableElements, focusZone } from "../../ui/a11y";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, cellAnchorAt, pageAnchorAt, strokeBounds, StrokeBox, type Bounds } from "./anchor";
 import { parseTsv } from "../core/tsv";
-import { bornSize, dropLayout, markdownTable, type DropItem } from "./drop-layout";
+import { DROP_GROUP_THRESHOLD, markdownTable, sortedDrop, type DropFile } from "./drop-layout";
 import { parsePageRanges } from "./page-ranges";
 import type { PdfPagesReader } from "./cards/pdf";
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../../ui/drag-types";
@@ -124,7 +124,7 @@ import { CitationCounts, cardFilePath, headZonePaths, syncCardHead, twinGroups, 
 import { CanvasDepositError, type DropFolderChoice } from "../../state/canvas-intake";
 import { saveStateKey } from "../../state/saving";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
-import { inkFitMode } from "./ink-fit";
+import { inkFitMode, validAspect } from "./ink-fit";
 import { mountInkLayer, type InkGuide, type InkGuideStart, type InkLayer, type InkLayerStroke } from "./ink-layer";
 import { createCanvasRuler, type CanvasRuler } from "./ink-ruler";
 import { HOLD_MS, shapeKind, StrokeGuide } from "./ink-shapes";
@@ -170,16 +170,10 @@ import {
   type InkStrokeRecord,
 } from "./ink-record";
 import {
-  addStrokePatch,
-  eraseStrokePatch,
-  eraseStrokePatches,
   moveStrokesOp,
   newNodeId,
-  removeEdgePatch,
   restyleStrokesOp,
   sameLayer,
-  removeNodePatch,
-  upsertEdgePatch,
   upsertNodePatch,
   type CanvasOperation,
   type CanvasPatch,
@@ -284,6 +278,29 @@ const MAX_CARD_TEXT_BYTES = 1_048_576;
 export const MEASURE_IMAGE_TIMEOUT_MS = 3_000;
 /** Quante immagini si misurano insieme quando ne arrivano tante. */
 const MEASURE_IMAGE_PARALLEL = 4;
+/**
+ * Oltre questi file trascinati i riquadri tratteggiati non si calcolano: la
+ * cornice del gruppo li direbbe, ma una compilazione di migliaia di schede a
+ * ogni entrata non vale un'anteprima.
+ */
+const MAX_DROP_GHOSTS = 1000;
+/**
+ * I punti al più del cammino di un `erase_along`: `MAX_ERASE_POINTS` del
+ * nucleo (`crates/fub-canvas-core/src/ops/erase.rs`), quanti campioni ha un
+ * tratto. Un cammino più lungo va in più operazioni.
+ */
+const ERASE_ALONG_MAX_POINTS = 10_000;
+/**
+ * Il lavoro che la tela concede a un `erase_along`: metà di `MAX_ERASE_WORK`
+ * del nucleo (50 000 000 distanze), perché la stima della tela
+ * (`eraseAlongSegments`) non sa i segmenti che il nucleo trova vicini.
+ */
+const ERASE_ALONG_WORK = 25_000_000;
+/**
+ * Le schede al più di una `move` con `contents`, quelle date più quelle dei
+ * gruppi: `MAX_MOVED` del nucleo (`crates/fub-canvas-core/src/ops/adjust.rs`).
+ */
+const MOVE_CONTENTS_MAX = 1_000;
 const utf8 = new TextEncoder();
 const MAX_INTERACTIVE_NODES = 2_000;
 const MAX_INTERACTIVE_EDGES = 4_000;
@@ -440,6 +457,36 @@ interface InkChain {
  * comincia. Con `"piece"` (T22) anche il cammino fatto, in coordinate della
  * lavagna, e il taglio di adesso di ogni tratto toccato, per chiave.
  */
+/**
+ * Il trascinamento delle schede in corso: le schede scelte (`ids`), ognuna
+ * col suo posto di partenza in `origin` insieme a ciò che i gruppi scelti
+ * portano, e lo spostamento di adesso (`dx`, `dy`, in unità intere della
+ * lavagna), lo stesso per tutte: al rilascio è una `move` (T24).
+ */
+interface CardDrag {
+  readonly pointerId: number;
+  startX: number;
+  startY: number;
+  readonly ids: readonly string[];
+  readonly origin: Map<string, { x: number; y: number }>;
+  moved: boolean;
+  dx: number;
+  dy: number;
+}
+
+/**
+ * I riquadri tratteggiati di un trascinamento di file (T24): quanti file,
+ * il punto agganciato in cui il nucleo li ha disposti, le schede e il gruppo
+ * oltre i dodici, in coordinate della lavagna.
+ */
+interface DropGhost {
+  readonly count: number;
+  readonly x: number;
+  readonly y: number;
+  readonly cards: readonly Rect[];
+  readonly group: Rect | null;
+}
+
 interface InkErase {
   readonly id: number;
   readonly sweep: EraseSweep<ErasableInk>;
@@ -447,6 +494,8 @@ interface InkErase {
   readonly mode: InkEraserMode;
   readonly path: Spot[];
   readonly cuts: Map<string, InkErasing>;
+  /** Il raggio della gomma in unità della lavagna, allo zoom dell'ultimo passo: `erase_along` lo scrive. */
+  radius: number;
 }
 
 /** Un tratto che la gomma «Solo il pezzo» sta tagliando. */
@@ -808,6 +857,12 @@ export interface CanvasEngineOptions {
    * dà la stessa lavagna della sua forma in codice.
    */
   readonly seed?: () => bigint;
+  /**
+   * L'id di una scheda che un gesto fa nascere e che altre operazioni della
+   * stessa lista nominano (il rilascio di file, Collega nel vuoto, Ctrl+Invio
+   * in una scheda): di serie `newNodeId()`. Le prove lo fissano, come `seed`.
+   */
+  readonly newId?: () => string;
 }
 
 /**
@@ -1429,6 +1484,45 @@ function externalUrl(value: string): string | null {
   }
 }
 
+/**
+ * Quanti segmenti al più ha il cammino di un `erase_along` sui tratti `units`
+ * (i punti in coordinate della lavagna) con la gomma di raggio `radius`:
+ * sotto `MAX_ERASE_POINTS` del nucleo, e sotto metà del suo `MAX_ERASE_WORK`.
+ * Il lavoro del nucleo (`split_work` in `crates/fub-ink-codec/src/cut.rs`) è,
+ * per ogni segmento del cammino vicino a un tratto, uno più un passo per
+ * coppia di campioni più la lunghezza del tratto diviso metà della portata
+ * (raggio più metà dello spessore): la stima prende il raggio da solo, e
+ * conta ogni segmento vicino a ogni tratto. In unità della lavagna la scala
+ * della scheda si semplifica.
+ */
+export function eraseAlongSegments(units: readonly { readonly points: readonly number[] }[], radius: number): number {
+  let work = 0;
+  for (const { points } of units) {
+    let length = 0;
+    for (let i = 2; i + 1 < points.length; i += 2) {
+      length += Math.hypot(points[i]! - points[i - 2]!, points[i + 1]! - points[i - 1]!);
+    }
+    work += 1 + points.length / 2 + (2 * length) / radius;
+  }
+  const perSegment = Number.isFinite(work) && work > 0 ? work : 1;
+  return Math.max(1, Math.min(ERASE_ALONG_MAX_POINTS - 1, Math.floor(ERASE_ALONG_WORK / perSegment)));
+}
+
+/**
+ * Il cammino `path` in pezzi di fila di al più `segments` segmenti: l'ultimo
+ * punto di un pezzo è il primo del seguente, così nessun tratto fra due punti
+ * resta senza gomma. Un cammino corto è un pezzo solo.
+ */
+export function erasePathPieces(path: readonly Spot[], segments: number): Spot[][] {
+  const step = Math.max(1, Math.floor(segments));
+  if (path.length <= step + 1) return [path.slice()];
+  const pieces: Spot[][] = [];
+  for (let start = 0; start < path.length - 1; start += step) {
+    pieces.push(path.slice(start, Math.min(path.length, start + step + 1)));
+  }
+  return pieces;
+}
+
 export class CanvasEngine {
   readonly #root: HTMLElement;
   readonly #toolbar: HTMLElement;
@@ -1537,6 +1631,14 @@ export class CanvasEngine {
   #pointerSeen: { x: number; y: number } | null = null;
   /** I rettangoli tratteggiati di un trascinamento in corso sopra la vista. */
   #dropGhosts: HTMLElement | null = null;
+  /** I riquadri del trascinamento di file in corso, calcolati all'entrata (T24). */
+  #dropGhost: DropGhost | null = null;
+  /**
+   * Per quanti file sono stati calcolati i riquadri: con `#dropGhost` a `null`
+   * vuol dire «nessun riquadro» (troppi file, il nucleo li rifiuta), e non si
+   * ricompila a ogni movimento finché il numero resta quello.
+   */
+  #dropGhostCount: number | null = null;
   /** La griglia (T71): i punti sotto le schede, nella vista; `null` prima del montaggio. */
   #grid: HTMLElement | null = null;
   /** Le guide del gesto in corso (T71): un solo elemento sopra le schede; `null` a gesto fermo. */
@@ -1546,7 +1648,8 @@ export class CanvasEngine {
   #snapSetting = DEFAULT_PREFERENCES.snap;
   /** Ctrl+' per questa lavagna (T71): `null` segue `canvas.grid`; si ricorda con la vista. */
   #gridOverride: boolean | null = null;
-  #drag: { pointerId: number; startX: number; startY: number; origin: Map<string, { x: number; y: number }>; moved: boolean } | null = null;
+  /** Il trascinamento delle schede in corso (`CardDrag`). */
+  #drag: CardDrag | null = null;
   /**
    * Il ridimensionamento in corso (T66): la maniglia `corner`, la cornice di
    * partenza `box` (la scheda, o la cornice della scelta) e le schede che
@@ -3622,6 +3725,7 @@ export class CanvasEngine {
       mode: this.#penChoice.eraser,
       path: [],
       cuts: new Map(),
+      radius: 0,
     };
   }
 
@@ -3642,6 +3746,7 @@ export class CanvasEngine {
       return;
     }
     const radius = erase.sweep.radius / zoom;
+    erase.radius = radius;
     const last = erase.path[erase.path.length - 1];
     let loX = last ? last[0] : Infinity;
     let loY = last ? last[1] : Infinity;
@@ -3689,7 +3794,7 @@ export class CanvasEngine {
     if (erase.mode === "stroke" ? erase.sweep.size === 0 : erase.cuts.size === 0) return;
     let done = false;
     try {
-      done = erase.mode === "stroke" ? this.#eraseCommit(erase.sweep.marked()) : this.#cutCommit(this.#cutsOf(erase));
+      done = erase.mode === "stroke" ? this.#eraseCommit(erase.sweep.marked()) : this.#cutCommit(this.#cutsOf(erase), erase.path, erase.radius);
     } finally {
       if (!done) this.#restoreErase(erase);
     }
@@ -3792,7 +3897,7 @@ export class CanvasEngine {
   #eraseCommit(marked: readonly ErasableInk[]): boolean {
     const start = this.#inkEditStart();
     if (!start) return false;
-    const { doc, layers } = start;
+    const { layers } = start;
     const present = new Set<string>();
     for (const state of this.#inkStateList()) {
       for (const entry of state.strokes) present.add(inkKey(state.layer, entry.id));
@@ -3808,12 +3913,14 @@ export class CanvasEngine {
       }
       entry.ids.push(unit.id);
     }
-    const patches: InkPatch[] = [];
+    // Una `erase_strokes` per livello, nell'ordine in cui la gomma li ha presi (T24).
+    const ops: CanvasIntentOp[] = [];
     for (const { layer, ids } of groups.values()) {
-      const made = eraseStrokePatches(doc, layers, layer, ids);
-      if (made) patches.push(...made);
+      if (foreignInkLayer(layers, layer)) continue;
+      ops.push({ op: "erase_strokes", layer: layer === "board" ? "board" : { node: layer.node }, ids: [...ids] });
     }
-    return this.#commitInkEdit(patches);
+    const patches = ops.length > 0 ? this.#compileOps(ops) : null;
+    return patches !== null && this.#commitInkEdit(inkPatches(patches));
   }
 
   /**
@@ -3823,7 +3930,7 @@ export class CanvasEngine {
    * frattempo non c'è più, o è cambiato, si lascia; un livello diventato
    * estraneo non si tocca. `true` se il commit è riuscito.
    */
-  #cutCommit(cuts: readonly InkErasing[]): boolean {
+  #cutCommit(cuts: readonly InkErasing[], path: readonly Spot[], radius: number): boolean {
     const start = this.#inkEditStart();
     if (!start) return false;
     const { doc, layers } = start;
@@ -3843,12 +3950,94 @@ export class CanvasEngine {
       }
       entry.cuts.push({ id: unit.id, pieces: pieceRecords(now, pieces) });
     }
+    const along = this.#eraseAlongOps(cuts, path, radius);
+    if (along !== null) {
+      const patches = along.length > 0 ? this.#compileOps(along) : null;
+      return patches !== null && this.#commitInkEdit(inkPatches(patches));
+    }
     const patches: InkPatch[] = [];
     for (const { layer, cuts: layerCuts } of groups.values()) {
       const made = cutStrokePatches(doc, layers, layer, layerCuts);
       if (made) patches.push(...made);
     }
     return this.#commitInkEdit(patches);
+  }
+
+  /**
+   * La gomma «Solo il pezzo» come `erase_along` (T24): un'operazione per
+   * posto toccato, col cammino fatto e la sua larghezza: nelle coordinate
+   * della lavagna per i tratti liberi (`on: "board"`), in quelle della scheda
+   * per i suoi (`on` col suo id, con la proporzione del contenuto che
+   * mostra), in punti della pagina mostrata per quelli di un PDF
+   * (`on: {card, page, page_size}`) e in pixel del foglio dall'angolo della
+   * cella per quelli di una cella (`on: {card, sheet, cell}`). `null` se la
+   * scheda non dice più dove mostra la pagina o la cella di un tratto tagliato
+   * (allora la tela scrive i pezzi che ha tagliato lei).
+   */
+  #eraseAlongOps(cuts: readonly InkErasing[], path: readonly Spot[], radius: number): CanvasIntentOp[] | null {
+    const doc = this.#doc;
+    if (!doc || path.length === 0 || !(radius > 0)) return null;
+    // Dove taglia ogni operazione: la radice, una scheda, una sua pagina o una
+    // sua cella, con l'angolo e la scala con cui la scheda la mostra (come
+    // `erasableInk`): il cammino ci torna con `(punto − angolo) / scala`.
+    const targets = new Map<string, { readonly on: unknown; readonly x: number; readonly y: number; readonly s: number; readonly aspect?: number }>();
+    for (const { unit } of cuts) {
+      const { page, cell } = unit.stroke;
+      if (unit.node === null) {
+        targets.set("board", { on: "board", x: 0, y: 0, s: 1 });
+        continue;
+      }
+      const node = doc.nodes.find((one) => one.id === unit.node);
+      if (!node) return null;
+      if (cell !== null) {
+        const box = this.#cellRectOf(node.id, cell.sheet, cell.cell);
+        if (!box || !(box.zoom > 0) || !Number.isFinite(box.rect.x) || !Number.isFinite(box.rect.y)) return null;
+        targets.set(`cell\u0000${node.id}\u0000${cell.sheet}\u0000${cell.cell}`, {
+          on: { card: node.id, sheet: cell.sheet, cell: cell.cell },
+          x: node.x + box.rect.x,
+          y: node.y + box.rect.y,
+          s: box.zoom,
+        });
+      } else if (page !== null) {
+        const box = this.#pageBoxOf(node.id);
+        if (!box || box.page !== page) return null;
+        // `pageFit`: il fattore minore, dall'angolo del rettangolo.
+        const s = Math.min(box.rect.width / box.size.width, box.rect.height / box.size.height);
+        if (!(s > 0) || !Number.isFinite(s)) return null;
+        targets.set(`page\u0000${node.id}\u0000${page}`, {
+          on: { card: node.id, page, page_size: [box.size.width, box.size.height] },
+          x: node.x + box.rect.x,
+          y: node.y + box.rect.y,
+          s,
+        });
+      } else if (!targets.has(`card\u0000${node.id}`)) {
+        const aspect = this.#layerAspect({ node: node.id });
+        targets.set(`card\u0000${node.id}`, {
+          on: node.id,
+          x: node.x,
+          y: node.y,
+          s: 1,
+          ...(validAspect(aspect) ? { aspect } : {}),
+        });
+      }
+    }
+    // Un cammino lungo va in pezzi di fila che si toccano in un estremo: ogni
+    // pezzo resta sotto i tetti del nucleo (punti e lavoro), e la lista
+    // resta una, cioè un passo d'annulla.
+    const pieces = erasePathPieces(path, eraseAlongSegments(cuts.map(({ unit }) => unit), radius));
+    const ops: CanvasIntentOp[] = [];
+    for (const target of targets.values()) {
+      for (const piece of pieces) {
+        ops.push({
+          op: "erase_along",
+          points: piece.map(([x, y]) => [(x - target.x) / target.s, (y - target.y) / target.s]),
+          size: (radius * 2) / target.s,
+          on: target.on,
+          ...(target.aspect === undefined ? {} : { aspect: target.aspect }),
+        });
+      }
+    }
+    return ops;
   }
 
   /**
@@ -3977,13 +4166,15 @@ export class CanvasEngine {
       if (made.reason !== "empty") this.#showNotice(t(made.reason === "full" ? "canvas.ink.full" : "canvas.ink.refused"));
       return;
     }
-    const patch = addStrokePatch(doc, layers, ref, made.record);
-    if (!patch) {
-      this.#showNotice(t("canvas.ink.refused"));
-      return;
-    }
+    // Il tratto entra con `add_strokes` (T24): la codifica dei punti è della
+    // tela (N4), il livello, l'ordine dei campi e l'id li dà il nucleo.
+    const { id: _id, ...fields } = made.record as unknown as Record<string, unknown>;
+    const compiled = this.#compileIntent([{ op: "add_strokes", layer: ref === "board" ? "board" : { node: ref.node }, strokes: [fields] }], "canvas.ink.refused");
+    const added = compiled?.patches.find((patch): patch is InkPatch => patch.kind === "ink" && patch.after !== null);
+    if (!compiled || !added?.after) return;
+    const record = added.after as unknown as InkStrokeRecord;
     const before = this.#source;
-    const code = this.#commitLocal([patch], "input", (step) => this.#pushInkStep(step, chain), false);
+    const code = this.#commitLocal(compiled.patches, "input", (step) => this.#pushInkStep(step, chain), false);
     if (code !== true) {
       // Una trappola la dice il nucleo che si riapre.
       if (code !== "trap") this.#showNotice(t(code === "limit" ? "canvas.ink.full" : "canvas.ink.refused"));
@@ -3991,12 +4182,12 @@ export class CanvasEngine {
     }
     const top = this.#undo[this.#undo.length - 1];
     if (stroke.split && top) this.#inkChain = { step: top, before: chain?.before ?? before };
-    const dry = toDry(made.record, this.#inkPaths);
+    const dry = toDry(record, this.#inkPaths);
     if (dry) this.#paintStroke(holder, dry);
     if (this.#intakeError) this.#showNotice("");
     // Il pezzo di un tratto spezzato non si annuncia: lo dice l'ultimo.
     if (!stroke.split) this.#sayInkHolder(holder);
-    if (shape !== null) this.#writeShape(stroke, shape, made.record, ref, holder, page ?? cell);
+    if (shape !== null) this.#writeShape(stroke, shape, record, ref, holder, page ?? cell);
   }
 
   /**
@@ -4025,9 +4216,14 @@ export class CanvasEngine {
     const after: Record<string, unknown> = { ...made.record, id: written.id };
     if (written.at === undefined) delete after.at;
     else after.at = written.at;
-    const gone = eraseStrokePatch(start.doc, start.layers, ref, written.id);
-    if (!gone) return;
-    this.#commitInkEdit([{ ...gone, after: after as unknown as InkStrokeRecord }]);
+    // Il tratto appena scritto è l'ultimo del suo livello: toglierlo e
+    // rimettere la forma con lo stesso id la lascia al suo posto (T24).
+    const layer = ref === "board" ? "board" : { node: ref.node };
+    const patches = this.#compileOps([
+      { op: "erase_strokes", layer, ids: [written.id] },
+      { op: "add_strokes", layer, strokes: [after] },
+    ]);
+    if (patches) this.#commitInkEdit(inkPatches(patches));
   }
 
   /**
@@ -5933,40 +6129,23 @@ export class CanvasEngine {
       if (stale()) return;
       const unique = [...new Set(paths)].filter(isVaultPath);
       if ((!unique.length && !text) || (paths.length > 0 && !unique.length)) return;
-      const patches: CanvasPatch[] = [];
+      const ops: CanvasIntentOp[] = [];
       // Una nota sola rilasciata dal vault, senza Alt: dopo il commit si apre
       // il selettore delle sezioni (T74). Un file depositato dal computer non
       // è ancora nell'indice: lo si sceglie dopo, con «Parti…».
       const single = drop && !files.length && unique.length === 1 && !(event as DragEvent).altKey ? unique[0]! : null;
       const file = this.#doc!.nodes.find((node) => node.id === existing && node.type === "file");
-      // Su una scheda di file il primo file ne prende il posto (A-8).
+      // Su una scheda di file il primo file ne prende il posto (A-8): una `set`.
       if (file && unique.length) {
         const path = unique.shift()!;
-        const patch = upsertNodePatch(this.#doc!, { ...file, file: path, subpath: undefined });
-        if (patch) patches.push(patch);
+        const op = setOp(file, { ...file, file: path, subpath: undefined });
+        if (op) ops.push(op);
         bear(path, file.id);
       }
       if (unique.length) {
         const items = await this.#bornItems(unique);
         if (stale()) return;
-        const layout = dropLayout(items, point);
-        if (layout.group) {
-          // Il gruppo prima delle schede, così sta sotto di loro.
-          const patch = upsertNodePatch(this.#doc!, {
-            id: newNodeId("n"), type: "group", ...layout.group,
-            label: t("canvas.intake.group", { count: String(layout.cards.length) }),
-          });
-          if (patch) patches.push(patch);
-        }
-        for (const card of layout.cards) {
-          const id = newNodeId("n");
-          const patch = upsertNodePatch(this.#doc!, {
-            id, type: "file", file: card.path,
-            x: card.x, y: card.y, width: card.width, height: card.height,
-          });
-          if (patch) patches.push(patch);
-          bear(card.path, id);
-        }
+        ops.push(...this.#dropOps(items, point, bear));
       }
       // Gli appunti diventano testo solo se non c'era un file da depositare:
       // un file rifiutato non si trasforma in una scheda di testo (T15b).
@@ -5974,16 +6153,11 @@ export class CanvasEngine {
         const table = await this.#pastedTable(data, text);
         if (stale()) return;
         const url = table === null ? externalUrl(text.trim()) : null;
-        const node: CanvasNode = {
-          id: newNodeId("n"), type: url ? "link" : "text",
-          x: snap(point.x), y: snap(point.y), width: 320, height: 160,
-          ...(url ? { url } : { text: table ?? text }),
-        };
-        const patch = upsertNodePatch(this.#doc!, node);
-        if (patch) patches.push(patch);
+        // La forma breve di `add_card` (T9): la misura la dà il nucleo.
+        ops.push({ op: "add_card", ...(url ? { url } : { text: table ?? text }), x: snap(point.x), y: snap(point.y) });
       }
-      // Un commit solo: un annulla toglie tutto ciò che è nato.
-      const committed = this.#commit(patches, "input");
+      // Una lista sola: un annulla toglie tutto ciò che è nato.
+      const committed = this.#writeOps(ops) !== null;
       const card = single === null ? undefined : born.get(single)?.[0];
       if (committed && card !== undefined && this.#partsPickerSetting) void this.#openParts(card, "drop");
     } finally {
@@ -6005,20 +6179,18 @@ export class CanvasEngine {
       repoint: (changes) => {
         if (!live()) return 0;
         const doc = this.#doc!;
-        const patches: CanvasPatch[] = [];
+        const ops: CanvasIntentOp[] = [];
         const touched = new Set<string>();
         for (const { from, to } of changes) {
           if (!isVaultPath(to)) continue;
           for (const id of born.get(from) ?? []) {
             const node = doc.nodes.find((candidate) => candidate.id === id);
             if (!node || touched.has(id) || node.type !== "file" || node.file !== from) continue;
-            const patch = upsertNodePatch(doc, { ...node, file: to });
-            if (patch) patches.push(patch);
+            ops.push({ op: "set", id, fields: { file: to } });
             touched.add(id);
           }
         }
-        if (patches.length) this.#commit(patches, "input");
-        return patches.length;
+        return ops.length > 0 && this.#writeOps(ops) !== null ? ops.length : 0;
       },
     };
   }
@@ -6036,28 +6208,67 @@ export class CanvasEngine {
   }
 
   /**
-   * I file con la specie e la misura di nascita. Le immagini chiedono la loro
-   * misura alla porta, poche alla volta; una misura che non c'è, fallisce o
-   * non arriva in tempo lascia quella di serie.
+   * I file lasciati cadere, ognuno con le dimensioni del suo contenuto quando
+   * si sanno: le immagini chiedono i loro pixel alla porta, poche alla volta;
+   * una misura che non c'è, fallisce o non arriva in tempo non si dà, e il
+   * nucleo prende la misura di serie della specie.
    */
-  async #bornItems(paths: readonly string[]): Promise<DropItem[]> {
-    const items: DropItem[] = paths.map((path) => {
-      const kind = cardKindOf({ id: "", type: "file", file: path, x: 0, y: 0, width: 0, height: 0 }) ?? "file";
-      return { path, kind, size: bornSize(kind) };
-    });
+  async #bornItems(paths: readonly string[]): Promise<DropFile[]> {
+    const items: DropFile[] = paths.map((path) => ({ path }));
     const measure = this.#options.measureImage;
     if (!measure) return items;
-    const images = items.map((item, index) => ({ item, index })).filter(({ item }) => item.kind === "image");
+    const images = items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => cardKindOf({ id: "", type: "file", file: item.path, x: 0, y: 0, width: 0, height: 0 }) === "image");
     let next = 0;
     const worker = async (): Promise<void> => {
       while (next < images.length && !this.#destroyed) {
         const { item, index } = images[next++]!;
         const size = await measuredImage(measure, item.path);
-        if (size) items[index] = { ...item, size: bornSize("image", size) };
+        if (size) items[index] = { ...item, contentSize: [size.width, size.height] };
       }
     };
     await Promise.all(Array.from({ length: Math.min(MEASURE_IMAGE_PARALLEL, images.length) }, worker));
     return items;
+  }
+
+  /**
+   * Le operazioni dei file lasciati cadere in `at` (T24): la tela li ordina
+   * per nome (`sortedDrop`), poi un `add_card` per file, con il suo `id` e
+   * `content_size` quando la misura si sa; con più file la griglia del
+   * nucleo (`layout` `grid`) dal punto del rilascio, agganciato a 8, e oltre
+   * `DROP_GROUP_THRESHOLD` il gruppo che li tiene (`group`). Un file solo
+   * nasce già lì: la griglia di una scheda è il suo angolo agganciato.
+   * `bear` riceve ogni scheda che nasce, col suo percorso; `newId` dà gli id.
+   */
+  #dropOps(
+    items: readonly DropFile[],
+    at: { readonly x: number; readonly y: number },
+    bear: (path: string, id: string) => void,
+    newId: () => string = () => this.#newId(),
+  ): CanvasIntentOp[] {
+    const x = snap(at.x);
+    const y = snap(at.y);
+    const sorted = sortedDrop(items);
+    const ops: CanvasIntentOp[] = [];
+    const ids: string[] = [];
+    for (const item of sorted) {
+      const id = newId();
+      ids.push(id);
+      bear(item.path, id);
+      ops.push({
+        op: "add_card",
+        id,
+        file: item.path,
+        ...(item.contentSize ? { content_size: [...item.contentSize] } : {}),
+        ...(sorted.length === 1 ? { x, y } : {}),
+      });
+    }
+    if (sorted.length > 1) ops.push({ op: "layout", ids, kind: "grid", x, y });
+    if (sorted.length > DROP_GROUP_THRESHOLD) {
+      ops.push({ op: "group", ids, label: t("canvas.intake.group", { count: String(sorted.length) }) });
+    }
+    return ops;
   }
 
   /**
@@ -6094,11 +6305,22 @@ export class CanvasEngine {
       return;
     }
     const count = Math.max(1, [...(data.items ?? [])].filter((item) => item.kind === "file").length);
-    // Nomi che tengono l'ordine dato: la griglia è quella del rilascio.
-    const items: DropItem[] = Array.from({ length: count }, (_, index) => ({
-      path: String(index).padStart(8, "0"), kind: "file", size: bornSize("file"),
-    }));
-    const layout = dropLayout(items, this.#screenToWorld(event.clientX, event.clientY));
+    const pointer = this.#screenToWorld(event.clientX, event.clientY);
+    // I riquadri si calcolano una volta, all'entrata (o quando cambia il
+    // numero dei file): poi seguono il puntatore sulla griglia, senza
+    // chiamare il nucleo a ogni movimento.
+    if (this.#dropGhostCount !== count) {
+      this.#dropGhost = this.#dropGhostShape(count, pointer);
+      this.#dropGhostCount = count;
+    }
+    const ghost = this.#dropGhost;
+    if (!ghost) {
+      this.#dropGhosts?.remove();
+      this.#dropGhosts = null;
+      return;
+    }
+    const shiftX = snap(pointer.x) - ghost.x;
+    const shiftY = snap(pointer.y) - ghost.y;
     let layer = this.#dropGhosts;
     if (!layer) {
       layer = document.createElement("div");
@@ -6112,8 +6334,8 @@ export class CanvasEngine {
     layer.style.setProperty("--canvas-zoom", String(this.#camera.zoom));
     // Oltre i dodici (prototipo T25), la cornice del gruppo che li terrà col
     // numero in mezzo: mentre si trascina si sa quanti sono, non come si chiamano.
-    const rects = layout.group ? [layout.group] : layout.cards;
-    const grouped = layout.group !== null;
+    const rects = ghost.group ? [ghost.group] : ghost.cards;
+    const grouped = ghost.group !== null;
     while (layer.children.length > rects.length) layer.lastElementChild!.remove();
     rects.forEach((card, index) => {
       let ghost = layer.children[index] as HTMLElement | undefined;
@@ -6135,15 +6357,55 @@ export class CanvasEngine {
       } else {
         ghost.replaceChildren();
       }
-      ghost.style.transform = `translate(${card.x}px, ${card.y}px)`;
+      ghost.style.transform = `translate(${card.x + shiftX}px, ${card.y + shiftY}px)`;
       ghost.style.width = `${card.width}px`;
       ghost.style.height = `${card.height}px`;
     });
   }
 
+  /**
+   * I riquadri di `count` file che nascerebbero in `at`: le operazioni del
+   * rilascio (`#dropOps`, con nomi che tengono l'ordine dato e la misura di
+   * serie di un file) compilate dal nucleo senza scrivere niente, così la
+   * griglia e il gruppo sono quelli che il rilascio farà. `null` se il nucleo
+   * non c'è o le rifiuta (una lavagna piena): allora nessun riquadro.
+   */
+  #dropGhostShape(count: number, at: { readonly x: number; readonly y: number }): DropGhost | null {
+    const core = this.#core;
+    if (!core || this.#destroyed || count > MAX_DROP_GHOSTS) return null;
+    const items = Array.from({ length: count }, (_, index) => ({ path: String(index).padStart(8, "0") }));
+    // Gli id dei riquadri sono suoi: non consumano quelli di `newId`.
+    const ids: string[] = [];
+    const ops = this.#dropOps(items, at, (_path, id) => ids.push(id), () => `drop-ghost-${ids.length}`);
+    let compiled: CanvasCompiled;
+    try {
+      compiled = core.compile(ops, this.#seed());
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return null;
+      }
+      if (error instanceof CanvasCoreError) return null;
+      throw error;
+    }
+    const placed = new Map<string, Rect>();
+    for (const patch of compiled.patches) {
+      if (patch.kind === "upsert-node") {
+        const { x, y, width, height } = patch.after;
+        placed.set(patch.after.id, { x, y, width, height });
+      }
+    }
+    const cards = ids.flatMap((id) => placed.get(id) ?? []);
+    const groupId = count > DROP_GROUP_THRESHOLD ? compiled.created[compiled.created.length - 1] : undefined;
+    const group = groupId === undefined ? null : placed.get(groupId) ?? null;
+    return { count, x: snap(at.x), y: snap(at.y), cards, group };
+  }
+
   #hideDropGhosts(): void {
     this.#dropGhosts?.remove();
     this.#dropGhosts = null;
+    this.#dropGhost = null;
+    this.#dropGhostCount = null;
   }
 
   // --- la griglia e le guide (T71) -------------------------------------------
@@ -6464,7 +6726,7 @@ export class CanvasEngine {
       ? { x: at.x + 160, y: at.y + 80 }
       : this.#screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
     const born: CanvasNode = {
-      id: newNodeId("n"),
+      id: this.#newId(),
       type,
       x: snap(center.x - 160),
       y: snap(center.y - 80),
@@ -6478,23 +6740,30 @@ export class CanvasEngine {
     // Una scheda dello strumento Testo nasce con la misura e l'allineamento
     // scelti nella sua riga (T92).
     const node = (type === "text" && this.#tool === "text" ? withTextStyle(born, this.#textNext) : null) ?? born;
-    const patches: CanvasPatch[] = [];
-    const patch = upsertNodePatch(this.#doc, node);
-    if (patch) patches.push(patch);
-    if (patch && source && facing) {
+    // La scheda con il suo `id`, poi il filo verso di lei, in una lista sola
+    // (T24): un passo d'annulla.
+    const ops: CanvasIntentOp[] = [{ op: "add_card", node: { ...node } }];
+    if (source && facing) {
       const fromSide = link?.fromSide ?? nearestSides(node, source, facing.side).toSide;
-      const edgePatch = upsertEdgePatch(this.#doc, {
-        id: newNodeId("e"), fromNode: source.id, toNode: node.id, fromSide, toSide: facing.side, ...this.#tipEnds(),
-      });
-      if (edgePatch) patches.push(edgePatch);
+      const edge = this.#connectOps(source.id, node.id, { from: fromSide, to: facing.side }, node.id);
+      if (edge) ops.push(...edge);
     }
-    if (patches.length && this.#commit(patches, "input")) {
-      this.#selection = [node.id];
-      this.#edgeSelection = [];
-      this.#options.onSelectionChange();
-      return node;
-    }
-    return null;
+    const id = this.#writeOps(ops)?.[0];
+    const placed = id === undefined ? undefined : this.#doc?.nodes.find((one) => one.id === id);
+    if (!placed) return null;
+    this.#selection = [placed.id];
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    return placed;
+  }
+
+  /**
+   * L'id di una scheda che un gesto fa nascere e che le operazioni della
+   * stessa lista nominano (il filo verso di lei, la griglia del rilascio):
+   * quello di `newId` delle opzioni, o uno a caso (T24).
+   */
+  #newId(): string {
+    return this.#options.newId?.() ?? newNodeId("n");
   }
 
   /**
@@ -6685,32 +6954,35 @@ export class CanvasEngine {
   /**
    * Le schede e i tratti liberi di `clipboard` con l'angolo del loro
    * riquadro in `at`, in un commit solo, poi scelti (i tratti solo col Lazo,
-   * l'unico che li tiene scelti). I tratti entrano nel livello della radice
-   * con id nuovi e lo spostamento delle schede, compilati dal nucleo
-   * (`add_strokes`, `move_strokes`). `false` se il nucleo rifiuta qualcosa:
-   * allora non entra niente.
+   * l'unico che li tiene scelti). Le schede e i fili entrano con `insert`
+   * (il frammento di N6 T68, con id nuovi dal nucleo), i tratti nel livello
+   * della radice con `add_strokes` e `move_strokes` (T24), tutto in una
+   * compilazione. `false` se il nucleo rifiuta qualcosa (un filo senza una
+   * delle sue schede, un tratto che non vale): allora non entra niente.
    */
   #commitPasted(clipboard: CanvasClipboard, at: { readonly x: number; readonly y: number }): boolean {
     const doc = this.#doc;
     if (!doc || this.#readOnly) return false;
+    // Lo spostamento del blocco e gli id nuovi dei tratti: le schede si
+    // spostano quanto i tratti, così restano dove erano gli uni per gli altri.
     const placed = placedSelection(clipboard, at, newNodeId);
-    const patches: CanvasPatch[] = [];
-    for (const node of placed.nodes) {
-      const patch = upsertNodePatch(doc, node);
-      if (patch) patches.push(patch);
+    const ops: CanvasIntentOp[] = [];
+    if (clipboard.nodes.length > 0) {
+      let left = Infinity;
+      let top = Infinity;
+      for (const node of clipboard.nodes) {
+        left = Math.min(left, node.x);
+        top = Math.min(top, node.y);
+      }
+      const fragment = { version: clipboard.version, nodes: clipboard.nodes, edges: clipboard.edges };
+      ops.push({ op: "insert", fragment: JSON.parse(JSON.stringify(fragment)) as Record<string, unknown>, x: left + placed.dx, y: top + placed.dy });
     }
-    for (const edge of placed.edges) {
-      const patch = upsertEdgePatch(doc, edge);
-      if (patch) patches.push(patch);
-    }
-    const ops = pastedInkOps(placed);
-    if (ops.length > 0) {
-      const ink = this.#compilePasted(ops);
-      if (!ink) return false;
-      patches.push(...ink);
-    }
-    if (!this.#commit(patches, "input")) return false;
-    this.#selection = placed.nodes.map((node) => node.id);
+    ops.push(...pastedInkOps(placed));
+    const compiled = this.#compileIntent(ops, null);
+    if (!compiled) return false;
+    const patches = joinedInkPatches(compiled.patches);
+    if (patches.length === 0 || !this.#commit(patches, "input")) return false;
+    this.#selection = compiled.created.slice(0, clipboard.nodes.length);
     this.#edgeSelection = [];
     this.#strokeSelection = this.#tool === "lasso"
       ? new Set(placed.strokes.map((stroke) => inkKey("board", stroke.id)))
@@ -6718,28 +6990,6 @@ export class CanvasEngine {
     this.#options.onSelectionChange();
     this.#displaySelection();
     return true;
-  }
-
-  /**
-   * Le toppe dei tratti incollati, compilate dal nucleo sul modello di
-   * adesso, una per tratto (`joinedInkPatches`). `null` se il nucleo le
-   * rifiuta (un tratto che non vale, uno spostamento fuori dai numeri
-   * dell'inchiostro, il livello della radice estraneo): l'avviso lo dice chi
-   * chiama.
-   */
-  #compilePasted(ops: readonly CanvasIntentOp[]): CanvasPatch[] | null {
-    const core = this.#core;
-    if (!core || this.#destroyed || this.#readOnly || this.#isSceneOversized()) return null;
-    try {
-      return joinedInkPatches(core.compile(ops, this.#seed()).patches);
-    } catch (error) {
-      if (lostCore(error)) {
-        this.#lose();
-        return null;
-      }
-      if (error instanceof CanvasCoreError) return null;
-      throw error;
-    }
   }
 
   /**
@@ -7082,26 +7332,11 @@ export class CanvasEngine {
   #removeNodes(nodes: readonly string[], edges: readonly string[], strokes: readonly string[] = []): boolean {
     if (!this.#doc) return false;
     if (strokes.length === 0) return this.#writeOps(this.#removeOps(nodes, edges)) !== null;
-    // Il taglia del Lazo, coi tratti liberi: un gesto degli appunti (T24).
-    const patches: CanvasPatch[] = [];
-    const layers = this.#inkLayersNow();
-    const erased = layers ? eraseStrokePatches(this.#doc, layers, "board", strokes) : null;
-    if (!erased) return false;
-    patches.push(...erased);
-    const selected = new Set(nodes);
-    const removed = new Set(edges);
-    for (const edge of this.#doc.edges) {
-      if (selected.has(edge.fromNode) || selected.has(edge.toNode)) removed.add(edge.id);
-    }
-    for (const id of removed) {
-      const patch = removeEdgePatch(this.#doc, id);
-      if (patch) patches.push(patch);
-    }
-    for (const id of selected) {
-      const patch = removeNodePatch(this.#doc, id);
-      if (patch) patches.push(patch);
-    }
-    return patches.length > 0 && this.#commit(patches, "input");
+    // Il taglia del Lazo, coi tratti liberi: un gesto degli appunti (T24),
+    // con `erase_strokes` e `remove` in una lista sola.
+    const ops: CanvasIntentOp[] = [{ op: "erase_strokes", layer: "board", ids: [...strokes] }];
+    ops.push(...(this.#removeOps(nodes, edges) ?? []));
+    return this.#writeOps(ops, null) !== null;
   }
 
   /**
@@ -8276,8 +8511,9 @@ export class CanvasEngine {
       if (written.subpath !== null) next.subpath = written.subpath;
       if (written.parts !== null) next[PARTS_KEY] = written.parts;
     }
-    const patch = upsertNodePatch(doc, next);
-    if (patch) this.#commit([patch], "input");
+    // I campi cambiati della scheda, con una `set` (T24).
+    const op = setOp(node, next);
+    if (op) this.#writeOps([op]);
   }
 
   /**
@@ -8576,7 +8812,7 @@ export class CanvasEngine {
     const entry = this.#cards.get(crop.node);
     const doc = this.#doc;
     const node = doc?.nodes.find((one) => one.id === crop.node);
-    let patch: CanvasPatch | null = null;
+    let op: CanvasIntentOp | null = null;
     if (how !== null && doc && node && entry && node.type === "file" && cardTarget(node).path === crop.path && !this.#readOnly) {
       const chosen = how === "remove" ? WHOLE_ZONE : zone ?? editor?.zone() ?? WHOLE_ZONE;
       const next: CanvasNode = { ...node };
@@ -8597,13 +8833,13 @@ export class CanvasEngine {
       }
       const natural = editor?.natural() ?? null;
       if (ok && natural) next.height = this.#cropHeightFor(entry, zoneRatio(chosen, natural));
-      patch = ok ? upsertNodePatch(doc, next) : null;
+      op = ok ? setOp(node, next) : null;
     }
     const focused = editor !== null && entry !== undefined && entry.article.contains(document.activeElement);
     this.#crop = null;
     editor?.close();
     if (entry) delete entry.article.dataset.cardCropping;
-    if (patch) this.#commit([patch], "input");
+    if (op) this.#writeOps([op]);
     // Senza commit (Esc, niente di cambiato) la scheda torna com'era: la sua
     // altezza e, se aveva una zona, la sua vista.
     const now = this.#doc?.nodes.find((one) => one.id === crop.node);
@@ -9316,7 +9552,8 @@ export class CanvasEngine {
         }
       }
     }
-    this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin, moved: false };
+    const ids = this.#selection.filter((id) => origin.has(id));
+    this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, ids, origin, moved: false, dx: 0, dy: 0 };
     this.#viewport.setPointerCapture?.(event.pointerId);
     event.preventDefault();
   }
@@ -10064,7 +10301,7 @@ export class CanvasEngine {
   #fitToContent(ids: readonly string[]): void {
     const doc = this.#doc;
     if (!doc || this.#readOnly || this.#isSceneOversized()) return;
-    let changed = false;
+    const ops: CanvasIntentOp[] = [];
     for (const id of ids) {
       const node = doc.nodes.find((entry) => entry.id === id);
       const entry = this.#cards.get(id);
@@ -10073,11 +10310,11 @@ export class CanvasEngine {
       // La misura del contenuto è di nuovo quella che la scheda prende da sé (T44).
       if (size) this.#sizedByHand.delete(id);
       if (!size || (size.width === node.width && size.height === node.height)) continue;
-      node.width = size.width;
-      node.height = size.height;
-      changed = true;
+      // La misura la prende la tela dal DOM (il testo come si vede, il corpo
+      // senza testata): il nucleo la scrive con `resize` (T24).
+      ops.push({ op: "resize", id, width: Math.round(size.width), height: Math.round(size.height) });
     }
-    if (changed) this.#commitFromSource("input");
+    this.#writeOps(ops);
   }
 
   /** La misura del contenuto della scheda `node`; `null` se non c'è o non si sa. */
@@ -10167,24 +10404,30 @@ export class CanvasEngine {
       drag.moved = true;
     }
     const byId = new Map(doc.nodes.map((node) => [node.id, node] as const));
-    // Alt tenuto, o `canvas.snap` spento: la scheda va dove la porta il puntatore,
-    // in unità intere. Altrimenti le guide (T71) vincono sulla griglia, su ogni asse.
+    // Alt tenuto, o `canvas.snap` spento: le schede vanno dove le porta il
+    // puntatore, in unità intere. Altrimenti le guide (T71) vincono sulla
+    // griglia, su ogni asse. Lo spostamento è uno per tutte (una `move`, T24):
+    // la griglia aggancia l'angolo in alto a sinistra del loro riquadro, come
+    // le guide, e le schede tengono le loro distanze.
     const free = at.altKey || !this.#snapSetting;
     const guide = drag.moved && !free ? this.#dragGuide(drag.origin, byId, dx, dy) : null;
     if (guide === null) this.#hideGuides();
+    let left = Infinity;
+    let top = Infinity;
+    for (const origin of drag.origin.values()) {
+      left = Math.min(left, origin.x);
+      top = Math.min(top, origin.y);
+    }
+    if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+    const along = (start: number, delta: number, guided: boolean, pull: number): number =>
+      free || guided ? Math.round(delta + pull) : snap(start + delta) - start;
+    drag.dx = along(left, dx, guide?.guidedX ?? false, guide?.dx ?? 0);
+    drag.dy = along(top, dy, guide?.guidedY ?? false, guide?.dy ?? 0);
     for (const [id, origin] of drag.origin) {
       const node = byId.get(id);
       if (!node) continue;
-      if (free) {
-        node.x = Math.round(origin.x + dx);
-        node.y = Math.round(origin.y + dy);
-      } else if (guide) {
-        node.x = guide.guidedX ? Math.round(origin.x + dx + guide.dx) : snap(origin.x + dx);
-        node.y = guide.guidedY ? Math.round(origin.y + dy + guide.dy) : snap(origin.y + dy);
-      } else {
-        node.x = snap(origin.x + dx);
-        node.y = snap(origin.y + dy);
-      }
+      node.x = origin.x + drag.dx;
+      node.y = origin.y + drag.dy;
     }
     this.#renderLive();
   }
@@ -10284,14 +10527,14 @@ export class CanvasEngine {
       this.#handleTap = resize.moved ? null : [...resize.origin.keys()];
       // La misura l'ha scelta chi usa: scrivendo la scheda non si allarga più (T44).
       if (resize.moved) for (const id of resize.origin.keys()) this.#sizedByHand.add(id);
-      this.#commitFromSource("input");
+      this.#writeGesture(resize.moved ? this.#resizeOps(resize.origin) : null);
       return;
     }
     if (this.#drag && event.pointerId === this.#drag.pointerId) {
       const drag = this.#drag;
       this.#drag = null;
       this.#hideGuides();
-      if (drag.moved) this.#commitFromSource("input");
+      if (drag.moved) this.#writeGesture(this.#dragOps(drag));
       return;
     }
     if (this.#connect && event.pointerId === this.#connect.pointerId) {
@@ -10437,21 +10680,21 @@ export class CanvasEngine {
       if (!other) return false;
       const otherSide = movesFrom ? existing.toSide ?? "left" : existing.fromSide ?? "right";
       const side = nearestSides(other, target, otherSide, other.id === target.id).toSide;
-      const edge: CanvasEdge = movesFrom
-        ? { ...existing, fromNode: target.id, fromSide: side }
-        : { ...existing, toNode: target.id, toSide: side };
-      const patch = upsertEdgePatch(doc, edge);
-      if (patch) this.#commit([patch], "input");
+      // L'estremità riattaccata è una `set` dell'arco (T24): la scheda e il lato.
+      const fields = movesFrom ? { fromNode: target.id, fromSide: side } : { toNode: target.id, toSide: side };
+      this.#writeOps([{ op: "set", id: existing.id, fields }]);
       return false;
     }
     const source = doc.nodes.find((node) => node.id === connect.from);
     if (!source) return false;
     if (target) {
-      const sides = nearestSides(source, target, connect.fromSide);
-      const patch = upsertEdgePatch(doc, {
-        id: newNodeId("e"), fromNode: source.id, toNode: target.id, ...sides, ...this.#tipEnds(),
-      });
-      if (patch) this.#commit([patch], "input");
+      // Il filo lasciato sul corpo di una scheda va ai lati più vicini
+      // (`sides: "auto"`); partito da un lato (un punto della scheda, T67),
+      // tiene quello, e l'arrivo è il lato più vicino a lui (T24).
+      const sides = connect.fromSide === undefined
+        ? "auto"
+        : { from: connect.fromSide, to: nearestSides(source, target, connect.fromSide).toSide };
+      this.#writeOps(this.#connectOps(source.id, target.id, sides));
       return false;
     }
     // Nel vuoto, solo dopo un vero tiro e dentro la vista (non sulla
@@ -10478,21 +10721,31 @@ export class CanvasEngine {
 
   /**
    * La `connect` da `from` a `to`, coi lati più vicini (`sides: "auto"`, la
-   * regola di `nearestSides` di `edges.ts`) e le punte scelte nella riga di
-   * Collega (T50): `arrow` di serie, `none`, o la sola punta all'inizio, che
-   * la forma breve non ha (allora l'arco intero, coi lati di
-   * `nearestSides`). `null` se una delle due non c'è.
+   * regola di `nearestSides` di `edges.ts`) o coi lati dati, e le punte scelte
+   * nella riga di Collega (T50): `arrow` di serie, `none`, o la sola punta
+   * all'inizio, che la forma breve non ha (allora l'arco intero, coi lati di
+   * `nearestSides`). `born` è l'id di una scheda che nasce nella stessa lista
+   * (Collega nel vuoto, Ctrl+Maiusc+Invio): allora può non esserci ancora.
+   * `null` se una delle due non c'è.
    */
-  #connectOps(from: string, to: string): CanvasIntentOp[] | null {
+  #connectOps(
+    from: string,
+    to: string,
+    sides: "auto" | { readonly from: EdgeSide; readonly to: EdgeSide } = "auto",
+    born?: string,
+  ): CanvasIntentOp[] | null {
     const a = this.#doc?.nodes.find((node) => node.id === from);
     const b = this.#doc?.nodes.find((node) => node.id === to);
-    if (!a || !b) return null;
+    if (!a && from !== born) return null;
+    if (!b && to !== born) return null;
     if (this.#tips === "start") {
-      const { fromSide, toSide } = nearestSides(a, b);
+      const pair = sides === "auto" && a && b ? nearestSides(a, b) : null;
+      const fromSide = pair ? pair.fromSide : sides === "auto" ? undefined : sides.from;
+      const toSide = pair ? pair.toSide : sides === "auto" ? undefined : sides.to;
       return [{ op: "connect", edge: { fromNode: from, toNode: to, fromSide, toSide, ...this.#tipEnds() } }];
     }
-    const sides = "auto";
-    return [this.#tips === "none" ? { op: "connect", from, to, sides, ends: "none" } : { op: "connect", from, to, sides }];
+    const short = { op: "connect", from, to, sides: sides === "auto" ? sides : { ...sides } };
+    return [this.#tips === "none" ? { ...short, ends: "none" } : short];
   }
 
   /** I fili con i loro capi sulla lavagna, per cercare quello sotto il puntatore. */
@@ -10619,47 +10872,55 @@ export class CanvasEngine {
     this.#statusSettle();
   }
 
-  #commitFromSource(origin: EditorChangeOrigin): void {
-    if (!this.#doc) return;
-    // Ricostruisce le patch confrontando live vs nucleo: preimmagini vere,
-    // mai snap del live come before.
-    const before = this.#coreModel();
-    if (!before) {
-      this.#render();
-      return;
+  /**
+   * La fine di un gesto che ha mosso il modello in mano (un trascinamento, un
+   * ridimensionamento): il modello torna quello del nucleo, poi le operazioni
+   * del gesto vanno nel file in un passo d'annulla (T24). Senza operazioni, o
+   * se il nucleo le rifiuta, la lavagna si ridisegna com'era.
+   */
+  #writeGesture(ops: readonly CanvasIntentOp[] | null): void {
+    const model = this.#coreModel();
+    if (model) this.#doc = model;
+    if (this.#writeOps(ops) === null && !this.#destroyed) this.#render();
+  }
+
+  /**
+   * La `move` di un trascinamento (T24): le schede scelte dello spostamento
+   * del gesto; un gruppo porta le schede che ci stanno dentro (`contents`,
+   * T10), come le ha portate la vista. Oltre `MOVE_CONTENTS_MAX` schede
+   * portate il nucleo rifiuta `contents`: allora la `move` dice tutte le
+   * schede che la vista ha portato, una per una. `null` se non si è mosso
+   * niente.
+   */
+  #dragOps(drag: CardDrag): CanvasIntentOp[] | null {
+    if (drag.ids.length === 0 || (drag.dx === 0 && drag.dy === 0)) return null;
+    const groups = drag.ids.some((id) => this.#doc?.nodes.find((node) => node.id === id)?.type === "group");
+    if (groups && drag.origin.size > MOVE_CONTENTS_MAX) {
+      return [{ op: "move", ids: [...drag.origin.keys()], dx: drag.dx, dy: drag.dy }];
     }
-    const patches: CanvasPatch[] = [];
-    const beforeNodes = new Map(before.nodes.map((n) => [n.id, n]));
-    const liveNodes = new Map(this.#doc.nodes.map((n) => [n.id, n]));
-    for (const [id, live] of liveNodes) {
-      const prev = beforeNodes.get(id);
-      if (!prev || JSON.stringify(prev) !== JSON.stringify(live)) {
-        patches.push({
-          kind: "upsert-node",
-          before: prev ? JSON.parse(JSON.stringify(prev)) as CanvasNode : null,
-          after: JSON.parse(JSON.stringify(live)) as CanvasNode,
-        });
+    return [{ op: "move", ids: [...drag.ids], dx: drag.dx, dy: drag.dy, ...(groups ? { contents: true } : {}) }];
+  }
+
+  /**
+   * Le operazioni di un ridimensionamento (T24), scheda per scheda: una
+   * `move` se l'angolo in alto a sinistra è cambiato (le maniglie a sinistra o
+   * in alto, Alt, la scelta che scala), una `resize` con le misure del gesto se
+   * è cambiata la misura. Le misure sono già in unità intere della lavagna, a
+   * ogni zoom. `null` se niente è cambiato.
+   */
+  #resizeOps(origin: ReadonlyMap<string, ResizeBox>): CanvasIntentOp[] | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    const ops: CanvasIntentOp[] = [];
+    for (const [id, start] of origin) {
+      const node = doc.nodes.find((entry) => entry.id === id);
+      if (!node) continue;
+      if (node.x !== start.x || node.y !== start.y) ops.push({ op: "move", ids: [id], dx: node.x - start.x, dy: node.y - start.y });
+      if (node.width !== start.width || node.height !== start.height) {
+        ops.push({ op: "resize", id, width: node.width, height: node.height });
       }
     }
-    for (const [id, prev] of beforeNodes) {
-      if (!liveNodes.has(id)) {
-        patches.push({
-          kind: "remove-node",
-          before: JSON.parse(JSON.stringify(prev)) as CanvasNode,
-          at: before.nodes.findIndex((node) => node.id === id),
-          after: null,
-        });
-      }
-    }
-    const beforeOrder = before.nodes.map((n) => n.id);
-    const liveOrder = this.#doc.nodes.map((n) => n.id);
-    if (JSON.stringify(beforeOrder) !== JSON.stringify(liveOrder)
-      && JSON.stringify([...liveOrder].sort()) === JSON.stringify([...beforeOrder].sort())) {
-      patches.push({ kind: "reorder", before: beforeOrder, after: liveOrder });
-    }
-    this.#doc = before;
-    if (patches.length) this.#commit(patches, origin);
-    else this.#render();
+    return ops.length > 0 ? ops : null;
   }
 
   #wheel(event: WheelEvent): void {
@@ -10769,6 +11030,13 @@ export class CanvasEngine {
     if (event.key === "Escape" && this.#connect) {
       event.preventDefault();
       this.#cancelConnect();
+      return;
+    }
+    // Esc mentre si trascina o si ridimensiona una scheda ferma il gesto: le
+    // schede tornano dov'erano e il file non cambia (T24).
+    if (event.key === "Escape" && (this.#drag !== null || this.#resize !== null)) {
+      event.preventDefault();
+      this.#cancelGestures();
       return;
     }
     // Esc mentre si trascina il rettangolo lo annulla, e la scelta torna com'era (N6 T20b).
@@ -12108,8 +12376,8 @@ export class CanvasEngine {
     if (this.#cards.get(id)?.missingFor !== expected) return;
     const now = this.#doc.nodes.find((candidate) => candidate.id === id);
     if (!now) return;
-    const patch = upsertNodePatch(this.#doc, { ...now, file: relinkedFile(now, chosen) });
-    if (patch) this.#commit([patch], "input");
+    const op = setOp(now, { ...now, file: relinkedFile(now, chosen) });
+    if (op) this.#writeOps([op]);
   }
 
   /** «Togli dalla lavagna» di una scheda mancante: come Canc, per quella scheda sola. */
@@ -12445,18 +12713,18 @@ export class CanvasEngine {
     const spot = freeSpot(doc.nodes, beside
       ? { x: source.x + source.width + NEXT_CARD_GAP, y: source.y, width: source.width, height: TEXT_CARD_HEIGHT }
       : { x: source.x, y: source.y + source.height + NEXT_CARD_GAP, width: source.width, height: TEXT_CARD_HEIGHT });
-    const node: CanvasNode = { id: newNodeId("n"), type: "text", ...spot, text: "" };
-    const patches: CanvasPatch[] = [];
-    const patch = upsertNodePatch(doc, node);
-    if (!patch) return null;
-    patches.push(patch);
+    // Il posto lo sceglie la tela (`freeSpot`, larga come la scheda di
+    // partenza): la scheda nasce con `add_card` e il suo `id`, il filo con
+    // `connect`, in una lista sola (T24).
+    const id = this.#newId();
+    const ops: CanvasIntentOp[] = [{ op: "add_card", id, text: "", ...spot }];
     if (beside) {
-      const edge = upsertEdgePatch(doc, {
-        id: newNodeId("e"), fromNode: source.id, toNode: node.id, fromSide: "right", toSide: "left", ...this.#tipEnds(),
-      });
-      if (edge) patches.push(edge);
+      const edge = this.#connectOps(source.id, id, { from: "right", to: "left" }, id);
+      if (edge) ops.push(...edge);
     }
-    if (!this.#commit(patches, "input")) return null;
+    const written = this.#writeOps(ops)?.[0];
+    const node = written === undefined ? undefined : this.#doc?.nodes.find((one) => one.id === written);
+    if (!node) return null;
     this.#selection = [node.id];
     this.#edgeSelection = [];
     this.#options.onSelectionChange();
@@ -12645,6 +12913,11 @@ function withPending(card: CanvasNode, pending: PendingText): CanvasNode {
     next.height = Math.max(next.height, pending.size.height);
   }
   return next;
+}
+
+/** Le toppe dei tratti fra quelle compilate: le operazioni d'inchiostro danno solo quelle. */
+function inkPatches(patches: readonly CanvasPatch[]): InkPatch[] {
+  return patches.filter((patch): patch is InkPatch => patch.kind === "ink");
 }
 
 /** Una copia delle toppe, che chi le ha date può ancora cambiare. */
