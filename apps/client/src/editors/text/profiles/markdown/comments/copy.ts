@@ -17,6 +17,7 @@
 import type { EditorState, Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { SyntaxForm } from "../../../../../host/contract";
+import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
 import { threadsIn } from "./threads";
 import { threadCuts, type Range } from "./syntax";
 
@@ -96,25 +97,14 @@ export function commentCut(state: EditorState, forms?: readonly SyntaxForm[]): C
   return carried ? { plain: plain.join(state.lineBreak), markdown: markdown.join(state.lineBreak) } : null;
 }
 
-let lastCut: CarriedCut | null = null;
-
-/// La finestra che perde il focus, o la pagina che si nasconde, può tornare
-/// con negli appunti un testo copiato da un'altra app: il taglio ricordato
-/// non vale più.
-function forgetOnLeave(): void {
-  forgetCut();
-}
-function forgetWhenHidden(): void {
-  if (document.visibilityState === "hidden") forgetCut();
-}
+/// L'ultimo taglio ricordato, con la vita dei suoi ascoltatori.
+let lastCut: { readonly cut: CarriedCut; readonly life: Lifetime } | null = null;
 
 /// Dimentica l'ultimo taglio ricordato e smette di ascoltare la finestra.
 function forgetCut(): void {
-  if (!lastCut) return;
+  const last = lastCut;
   lastCut = null;
-  if (typeof window === "undefined") return;
-  window.removeEventListener("blur", forgetOnLeave);
-  document.removeEventListener("visibilitychange", forgetWhenHidden);
+  last?.life.close();
 }
 
 /// Ricorda il taglio che porta un commento, per l'incolla dal menu (gli
@@ -127,10 +117,15 @@ function forgetCut(): void {
 export function rememberCut(cut: CarriedCut | null): void {
   forgetCut();
   if (!cut) return;
-  lastCut = cut;
+  const life = openLifetime();
+  lastCut = { cut, life };
   if (typeof window === "undefined") return;
-  window.addEventListener("blur", forgetOnLeave);
-  document.addEventListener("visibilitychange", forgetWhenHidden);
+  // La finestra che perde il focus, o la pagina che si nasconde, può tornare
+  // con negli appunti un testo copiato da un'altra app.
+  life.listen(window, "blur", forgetCut);
+  life.listen(document, "visibilitychange", () => {
+    if (document.visibilityState === "hidden") forgetCut();
+  });
 }
 
 /// Il Markdown col commento intero che gli appunti `data` portano da un
@@ -141,7 +136,7 @@ export function rememberCut(cut: CarriedCut | null): void {
 export function carriedMarkdown(data: DataTransfer): string | null {
   const typed = data.getData(FUB_MARKDOWN_TYPE);
   if (typed) return typed;
-  const cut = lastCut;
+  const cut = lastCut?.cut;
   if (!cut) return null;
   if (data.getData("text/plain").replace(/\r\n?/g, "\n") !== cut.plain) {
     forgetCut();
