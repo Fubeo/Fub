@@ -12,6 +12,17 @@
 //! saprà quanti ne sono rimasti fuori, invece di una coda che cresce senza
 //! fine per una pagina che apre `fub://` in un ciclo.
 //!
+//! `fub://capture` non è autenticato: qualunque pagina lo apre, e l'`origin`
+//! della busta è un'etichetta che la pagina sceglie. Per questo una cattura
+//! chiede sempre conferma nella shell (nessuna impostazione la salta), e qui
+//! ha due limiti in più. Le catture in coda sono al più
+//! [`CAPTURE_CAPACITY`], ognuna fino a 2 MiB e una conferma a testa: oltre si
+//! rifiutano e si contano. Il `nonce` lega i tentativi di una stessa cattura:
+//! uno già in coda non si accoda di nuovo, e uno già scritto non si riscrive
+//! ([`URI_APPLY`] lo rifiuta come conflitto), anche se l'utente lo conferma.
+//! L'app ricorda gli ultimi [`NONCE_MEMORY`] `nonce` scritti, finché resta
+//! aperta.
+//!
 //! Nessun URI scrive da solo. [`URI_PENDING`] li classifica con il parser di
 //! [`automation`](crate::automation), lo stesso della CLI e del mobile, e con
 //! le callback negate; [`URI_APPLY`] esegue un'azione che scrive (`new`,
@@ -44,6 +55,10 @@ pub const URI_APPLY: &str = "uri.apply";
 
 /// Quanti URI aspettano la shell, al più.
 pub const CAPACITY: usize = 32;
+/// Quante catture aspettano la shell, al più, dentro [`CAPACITY`].
+pub const CAPTURE_CAPACITY: usize = 4;
+/// Quanti `nonce` di catture scritte l'app ricorda.
+pub const NONCE_MEMORY: usize = 256;
 
 const URI: &str = "uri";
 
@@ -55,25 +70,104 @@ pub(crate) struct UriInbox {
 
 #[derive(Default)]
 struct Inbox {
-    queue: VecDeque<String>,
+    queue: VecDeque<Queued>,
     /// Quanti URI il tetto ha rifiutato dall'ultima volta che la shell ha
     /// preso la coda.
     refused: usize,
+    /// I `nonce` delle catture scritte (o in scrittura), i più vecchi prima.
+    written: VecDeque<String>,
+}
+
+struct Queued {
+    raw: String,
+    /// `Some` per una cattura: il suo `nonce`, se lo porta.
+    capture: Option<Option<String>>,
+}
+
+/// Che cosa la coda ha fatto di un URI.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Received {
+    /// In coda, la shell lo prenderà.
+    Queued,
+    /// Lo stesso `nonce` di una cattura già in coda o già scritta: è un nuovo
+    /// tentativo della stessa, e non si accoda una seconda volta.
+    Duplicate,
+    /// Fuori: la coda, o la parte delle catture, è piena.
+    Refused,
 }
 
 impl UriInbox {
-    /// Mette `raw` in coda; `false` se la coda è piena e l'URI resta fuori.
-    pub(crate) fn push(&self, raw: &str) -> bool {
+    /// Mette `raw` in coda, con i tetti e i `nonce` delle catture.
+    pub(crate) fn push(&self, raw: &str) -> Received {
+        // Si legge fuori dal lock: un URI può pesare 2 MiB.
+        let capture = match parse_fub_uri(raw) {
+            Ok(FubUri::Capture { nonce, .. }) => Some(nonce),
+            _ => None,
+        };
         let mut inbox = self
             .state
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
-        if inbox.queue.len() >= CAPACITY {
+        if let Some(Some(nonce)) = &capture {
+            let queued = inbox
+                .queue
+                .iter()
+                .any(|item| matches!(&item.capture, Some(Some(other)) if other == nonce));
+            if queued || inbox.written.contains(nonce) {
+                return Received::Duplicate;
+            }
+        }
+        let captures = inbox
+            .queue
+            .iter()
+            .filter(|item| item.capture.is_some())
+            .count();
+        if inbox.queue.len() >= CAPACITY || (capture.is_some() && captures >= CAPTURE_CAPACITY) {
             inbox.refused += 1;
+            return Received::Refused;
+        }
+        inbox.queue.push_back(Queued {
+            raw: raw.to_string(),
+            capture,
+        });
+        Received::Queued
+    }
+
+    /// Prenota `nonce` per una scrittura: `false` se è già stato scritto, o
+    /// se un'altra scrittura lo tiene. Chi lo prenota e poi fallisce lo
+    /// rilascia con [`Self::release`].
+    fn claim(&self, nonce: &str) -> bool {
+        let mut inbox = self
+            .state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        if inbox.written.iter().any(|seen| seen == nonce) {
             return false;
         }
-        inbox.queue.push_back(raw.to_string());
+        if inbox.written.len() >= NONCE_MEMORY {
+            inbox.written.pop_front();
+        }
+        inbox.written.push_back(nonce.to_string());
         true
+    }
+
+    fn release(&self, nonce: &str) {
+        let mut inbox = self
+            .state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        if let Some(at) = inbox.written.iter().position(|seen| seen == nonce) {
+            inbox.written.remove(at);
+        }
+    }
+
+    fn written(&self, nonce: &str) -> bool {
+        self.state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .written
+            .iter()
+            .any(|seen| seen == nonce)
     }
 
     /// Gli URI in coda e quanti ne sono rimasti fuori. `take` li toglie;
@@ -85,9 +179,15 @@ impl UriInbox {
             .unwrap_or_else(|poison| poison.into_inner());
         if take {
             let refused = std::mem::take(&mut inbox.refused);
-            (inbox.queue.drain(..).collect(), refused)
+            (
+                inbox.queue.drain(..).map(|item| item.raw).collect(),
+                refused,
+            )
         } else {
-            (inbox.queue.iter().cloned().collect(), inbox.refused)
+            (
+                inbox.queue.iter().map(|item| item.raw.clone()).collect(),
+                inbox.refused,
+            )
         }
     }
 }
@@ -126,7 +226,7 @@ pub(crate) fn invoke(
         .text(URI)
         .expect("spec validata")
         .to_string();
-    apply(host, &raw, mode)
+    apply(host, inbox, &raw, mode)
 }
 
 /// L'URI letto con le regole di tutti, callback comprese: l'app non ne apre
@@ -258,7 +358,12 @@ fn describe(host: &Host, raw: &str) -> Value {
 /// Esegue l'azione di un URI che scrive, nel vault che nomina se è aperto,
 /// altrimenti in quello corrente. Aprire un altro vault è un gesto della
 /// shell, con la sua conferma: qui un vault non aperto è un rifiuto.
-fn apply(host: &Host, raw: &str, mode: InvokeMode) -> Result<CommandOutcome, PluginError> {
+fn apply(
+    host: &Host,
+    inbox: &UriInbox,
+    raw: &str,
+    mode: InvokeMode,
+) -> Result<CommandOutcome, PluginError> {
     let uri = parse(raw).map_err(|why| bad_uri(&why))?;
     let root = match vault_of(&uri) {
         None => None,
@@ -327,6 +432,8 @@ fn apply(host: &Host, raw: &str, mode: InvokeMode) -> Result<CommandOutcome, Plu
             title,
             markdown,
             source_url,
+            nonce,
+            properties,
             ..
         } => {
             let missing = |what: &str| {
@@ -340,7 +447,7 @@ fn apply(host: &Host, raw: &str, mode: InvokeMode) -> Result<CommandOutcome, Plu
                 title: title.ok_or_else(|| missing("title"))?,
                 markdown: markdown.ok_or_else(|| missing("markdown"))?,
                 source_url,
-                properties: None,
+                properties,
                 target: CaptureTarget {
                     // Il vault è già risolto: la cattura lo riceve come
                     // selettore, non come il nome scritto nell'URI.
@@ -351,10 +458,24 @@ fn apply(host: &Host, raw: &str, mode: InvokeMode) -> Result<CommandOutcome, Plu
                 },
             };
             validate_capture_v1(&payload).map_err(|why| bad_uri(&why.to_string()))?;
+            let replayed = || PluginError::Conflict(Text::key("host.uri.capture_replayed"));
             let doc = if mode.is_dry_run() {
+                if nonce.as_deref().is_some_and(|nonce| inbox.written(nonce)) {
+                    return Err(replayed());
+                }
                 crate::capture::plan(host, vault, &payload, None)?
             } else {
-                crate::capture::apply(host, vault, &payload, None)?
+                // Il `nonce` si prenota prima di scrivere e si rilascia se la
+                // scrittura fallisce: due conferme dello stesso ritaglio non
+                // scrivono due volte, nemmeno insieme.
+                if nonce.as_deref().is_some_and(|nonce| !inbox.claim(nonce)) {
+                    return Err(replayed());
+                }
+                crate::capture::apply(host, vault, &payload, None).inspect_err(|_| {
+                    if let Some(nonce) = nonce.as_deref() {
+                        inbox.release(nonce);
+                    }
+                })?
             };
             Ok(planned_or_done(doc, mode))
         }
@@ -383,18 +504,73 @@ mod tests {
     fn the_inbox_keeps_what_arrives_until_taken_and_counts_what_it_refuses() {
         let inbox = UriInbox::default();
         for n in 0..CAPACITY {
-            assert!(inbox.push(&format!("fub://open?note={n}.md")));
+            assert_eq!(
+                inbox.push(&format!("fub://open?note={n}.md")),
+                Received::Queued
+            );
         }
-        assert!(!inbox.push("fub://open?note=oltre.md"));
+        assert_eq!(inbox.push("fub://open?note=oltre.md"), Received::Refused);
         let (seen, refused) = inbox.pending(false);
         assert_eq!((seen.len(), refused), (CAPACITY, 1), "guardare non toglie");
         let (taken, refused) = inbox.pending(true);
         assert_eq!(taken[0], "fub://open?note=0.md");
         assert_eq!((taken.len(), refused), (CAPACITY, 1));
         assert_eq!(inbox.pending(true), (Vec::new(), 0));
-        assert!(
+        assert_eq!(
             inbox.push("fub://open?note=dopo.md"),
+            Received::Queued,
             "presa la coda, c'è posto"
         );
+    }
+
+    fn capture(n: usize, nonce: Option<&str>) -> String {
+        let nonce = nonce
+            .map(|nonce| format!("&nonce={nonce}"))
+            .unwrap_or_default();
+        format!("fub://capture?title=T{n}&markdown=x{nonce}")
+    }
+
+    #[test]
+    fn captures_have_their_own_cap_inside_the_queue() {
+        let inbox = UriInbox::default();
+        for n in 0..CAPTURE_CAPACITY {
+            assert_eq!(inbox.push(&capture(n, None)), Received::Queued);
+        }
+        assert_eq!(inbox.push(&capture(99, None)), Received::Refused);
+        assert_eq!(
+            inbox.push("fub://open?note=a.md"),
+            Received::Queued,
+            "il tetto delle catture non ferma il resto"
+        );
+        let (taken, refused) = inbox.pending(true);
+        assert_eq!((taken.len(), refused), (CAPTURE_CAPACITY + 1, 1));
+        assert_eq!(inbox.push(&capture(5, None)), Received::Queued);
+    }
+
+    #[test]
+    fn the_same_nonce_is_queued_once_and_written_once() {
+        let inbox = UriInbox::default();
+        assert_eq!(inbox.push(&capture(1, Some("n-1"))), Received::Queued);
+        assert_eq!(inbox.push(&capture(2, Some("n-1"))), Received::Duplicate);
+        assert_eq!(inbox.pending(true).0.len(), 1);
+        assert!(inbox.claim("n-1"));
+        assert!(!inbox.claim("n-1"), "una seconda scrittura è un conflitto");
+        assert_eq!(
+            inbox.push(&capture(3, Some("n-1"))),
+            Received::Duplicate,
+            "già scritta: non chiede di nuovo"
+        );
+        inbox.release("n-1");
+        assert!(inbox.claim("n-1"), "rilasciato dopo un errore, si riprova");
+    }
+
+    #[test]
+    fn the_memory_of_written_nonces_is_bounded() {
+        let inbox = UriInbox::default();
+        for n in 0..=NONCE_MEMORY {
+            assert!(inbox.claim(&format!("n-{n}")));
+        }
+        assert!(inbox.claim("n-0"), "il più vecchio è uscito");
+        assert!(!inbox.claim(&format!("n-{NONCE_MEMORY}")));
     }
 }

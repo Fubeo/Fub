@@ -1924,6 +1924,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.uri.no_vault", "Nessun vault aperto: il collegamento non ha dove scrivere.")
         .with("host.uri.reads", "«{action}» non scrive: lo esegue la finestra.")
         .with("host.uri.capture_missing", "La cattura chiede anche «{what}».")
+        .with("host.uri.capture_replayed", "Questa cattura è già stata scritta: un nuovo invio con lo stesso nonce non la scrive di nuovo.")
         .with("host.web.clip.title", "Salva la pagina web come nota")
         .with("host.web.clip.desc", "Scarica di nuovo una pagina di un sito approvato e la scrive come nota Markdown, con la fonte; in prova dice soltanto dove.")
         .with("host.param.url", "Indirizzo")
@@ -2094,7 +2095,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_URI_ALLOWED, "Collegamenti fub:// che scrivono senza chiedere")
         .with(
             C_URI_ALLOWED_DESC,
-            "Le azioni scelte (nota nuova, giornaliera, nota unica, cattura) scrivono appena il collegamento arriva, senza conferma. Aprire un altro vault chiede sempre. Vale su questo computer.",
+            "Le azioni scelte (nota nuova, giornaliera, nota unica) scrivono appena il collegamento arriva, senza conferma. Una cattura e l'apertura di un altro vault chiedono sempre. Vale su questo computer.",
         )
         .with(C_FILES_LINK_STYLE, "Nuovi link")
         .with(
@@ -2562,6 +2563,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.uri.no_vault", "No vault is open: the link has nowhere to write.")
         .with("host.uri.reads", "“{action}” does not write: the window runs it.")
         .with("host.uri.capture_missing", "The capture also needs “{what}”.")
+        .with("host.uri.capture_replayed", "This capture has already been written: sending it again with the same nonce does not write it twice.")
         .with("host.web.clip.title", "Save the web page as a note")
         .with("host.web.clip.desc", "Downloads a page of an approved site again and writes it as a Markdown note, with its source; a dry run only says where.")
         .with("host.param.url", "Address")
@@ -2755,7 +2757,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_URI_ALLOWED, "fub:// links that write without asking")
         .with(
             C_URI_ALLOWED_DESC,
-            "The chosen actions (new note, daily note, unique note, capture) write as soon as the link arrives, without a confirmation. Opening another vault always asks. Applies on this computer.",
+            "The chosen actions (new note, daily note, unique note) write as soon as the link arrives, without a confirmation. A capture and opening another vault always ask. Applies on this computer.",
         )
         .with(C_FILES_LINK_STYLE, "New links")
         .with(
