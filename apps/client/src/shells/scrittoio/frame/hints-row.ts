@@ -26,14 +26,13 @@ import { onEvent } from "../../../state/kernel";
 import {
   allCommands,
   type CommandEntry,
-  commandOfKeybindingKey,
   displayBinding,
   foldedChord,
   keyboardPlatform,
   type KeyboardPlatform,
   keyName,
-  loadKeyOverrides,
   modifierName,
+  onKeyOverridesLoaded,
   parseChords,
 } from "../../../ui/commands";
 import type { Lifetime } from "../../../ui/lifetime";
@@ -237,10 +236,11 @@ export function mountHintsRow(lifetime: Lifetime, band: HTMLElement, before: Ele
   readSetting();
   lifetime.add(onEvent("setting_changed", ({ key }) => {
     if (key === HINTS_SETTING) readSetting();
-    // Una scorciatoia cambiata: si ridisegna quando la mappa degli accordi è
-    // riletta, non prima, o la riga direbbe il tasto vecchio.
-    else if (commandOfKeybindingKey(key) !== null) void loadKeyOverrides().then(schedule);
   }));
+  // Una scorciatoia cambiata: la mappa degli accordi la rilegge
+  // `mountKeyOverrides`, una volta sola; la riga si ridisegna quando quella
+  // lettura arriva, non prima, o direbbe il tasto vecchio.
+  lifetime.add(onKeyOverridesLoaded(schedule));
   lifetime.add(onLanguage(() => {
     drawn = "";
     schedule();

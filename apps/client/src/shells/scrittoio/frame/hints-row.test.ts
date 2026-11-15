@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommandSpec, SettingEntry } from "../../../host/contract";
 import { state } from "../../../state/store";
-import { type CommandEntry, loadKeyOverrides, resetShellCommands } from "../../../ui/commands";
+import { type CommandEntry, loadKeyOverrides, mountKeyOverrides, resetShellCommands } from "../../../ui/commands";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 
 const world = vi.hoisted(() => ({
@@ -247,6 +247,9 @@ describe("la riga nella banda", () => {
   it("segue una scorciatoia cambiata nelle Preferenze", async () => {
     state.commandSpecs = [spec("demo.find", "Mod-o")];
     await loadKeyOverrides();
+    // La lettura unica degli accordi, come nella finestra: la riga non ne fa
+    // una sua, aspetta l'avviso di questa.
+    mountKeyOverrides(life);
     mountHintsRow(life, band, end);
     await settle();
     const hints = source();

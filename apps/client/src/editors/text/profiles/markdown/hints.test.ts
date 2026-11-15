@@ -13,6 +13,7 @@ import { blocksMode } from "./blocks";
 import { selectCursorBlock } from "./blocks/selection";
 import { markdownGrammar } from "./grammar";
 import { liveHints, markdownHints } from "./hints";
+import { livePreview } from "./livepreview";
 import { openSlashAt, openSlashMenu, slashMenuExtension, type SlashMenuSource } from "./slash";
 
 const views: EditorView[] = [];
@@ -147,5 +148,19 @@ describe("il plugin della Live", () => {
     first.destroy();
     views.splice(views.indexOf(first), 1);
     expect(currentHints()).toBeNull();
+  });
+
+  it("il fuoco nel titolo della pagina, un campo dentro un widget, dà il contesto del titolo", () => {
+    // La testata della pagina ignora gli eventi (`ignoreEvent`), e CodeMirror
+    // non li passa agli `eventHandlers` dei plugin: il titolo si vede solo se
+    // il plugin ascolta `view.dom` da sé.
+    const view = mount("prima|", [livePreview({ openWikilink() {}, searchTag() {} }), blocksMode({ page: () => "Nota" })]);
+    const title = view.dom.querySelector<HTMLInputElement>(".cm-fub-page-title");
+    expect(title, "la testata della pagina col suo titolo").not.toBeNull();
+    title!.focus();
+    expect(document.activeElement).toBe(title);
+    expect(currentHints()?.id).toBe("title");
+    title!.blur();
+    expect(currentHints()?.id).not.toBe("title");
   });
 });

@@ -19,6 +19,13 @@
 ///   si scrive, `Mod-Enter` di CodeMirror): uno o più, nella sintassi delle
 ///   scorciatoie (`Shift-ArrowUp`) o come nome di un tasto (`/`, `Escape`,
 ///   `Mod` per il modificatore tenuto).
+///
+/// Le voci `keys` si scrivono come sono: non passano dalle scorciatoie della
+/// persona, perché dentro l'editor vince la sua keymap (quella di CodeMirror
+/// per il testo), che le Preferenze non cambiano. Un editor che usa la porta
+/// mette in `keys` solo i tasti che la sua keymap esegue davvero, e in
+/// `command` tutto ciò che è un comando della palette, così la riga segue i
+/// tasti che la persona gli ha dato.
 export type HintItem =
   | { readonly command: string; readonly chord?: string | null; readonly say: string }
   | { readonly keys: readonly string[]; readonly say: string };

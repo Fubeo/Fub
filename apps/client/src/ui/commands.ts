@@ -416,15 +416,37 @@ export function commandOfKeybindingKey(key: string): string | null {
   return name === "" ? null : `${ns}:${name}`;
 }
 
+/// Le letture partite, per sapere quale è l'ultima: una lettura vecchia che
+/// risponde tardi non rimette gli accordi di prima sopra quelli nuovi.
+let overrideReads = 0;
+
+/// Chi vuole sapere quando la mappa degli accordi è stata riletta (la riga dei
+/// suggerimenti, che scrive i tasti della persona).
+const overrideListeners = new Set<() => void>();
+
+/// Avvisa dopo ogni lettura degli accordi che è arrivata in tempo, cioè quando
+/// `allCommands()` dice già i tasti nuovi. Restituisce il disabbonamento.
+export function onKeyOverridesLoaded(listener: () => void): () => void {
+  overrideListeners.add(listener);
+  return () => {
+    overrideListeners.delete(listener);
+  };
+}
+
 export async function loadKeyOverrides(): Promise<void> {
+  const read = ++overrideReads;
+  let next: Map<string, string>;
   try {
-    overrides = chordMap(await settings());
+    next = chordMap(await settings());
   } catch {
     // Un vault che non sa dire come è configurato non è un motivo per lasciare
     // la tastiera muta: restano gli accordi dichiarati, che sono quelli con cui
     // la shell è nata.
-    overrides = new Map();
+    next = new Map();
   }
+  if (read !== overrideReads) return;
+  overrides = next;
+  for (const listener of [...overrideListeners]) listener();
 }
 
 /// Le righe di impostazione che sono accordi, come mappa. Pura, per il banco.

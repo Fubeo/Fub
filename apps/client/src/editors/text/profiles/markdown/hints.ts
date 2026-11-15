@@ -210,6 +210,22 @@ export function liveHints(slash: () => boolean = () => false): Extension {
         this.decorations = decorate(view, slash);
         this.hints = openHintSource(() => markdownHints(this.view.state, { editor: this.view.hasFocus, title: this.title }, slash()));
         if (view.hasFocus) this.hints.changed(true);
+        // Il fuoco del titolo si ascolta su `view.dom` direttamente, non con
+        // gli `eventHandlers` del plugin: CodeMirror scarta gli eventi nati in
+        // un widget che li ignora (`ignoreEvent`), e la testata della pagina
+        // li ignora tutti, quindi lì `focusin` non arriverebbe mai.
+        const isTitle = (target: EventTarget | null): boolean =>
+          (target as Element | null)?.classList?.contains("cm-fub-page-title") === true;
+        this.life.listen(view.dom, "focusin", (event: FocusEvent) => {
+          if (!isTitle(event.target)) return;
+          this.title = true;
+          this.hints.changed(true);
+        });
+        this.life.listen(view.dom, "focusout", (event: FocusEvent) => {
+          if (!this.title || !isTitle(event.target)) return;
+          this.title = false;
+          this.hints.changed();
+        });
       }
       update(update: ViewUpdate): void {
         // Per la riga dei suggerimenti basta un avviso: il contesto si legge
@@ -272,16 +288,6 @@ export function liveHints(slash: () => boolean = () => false): Extension {
     {
       decorations: (value) => value.decorations,
       eventHandlers: {
-        focusin(event) {
-          if (!(event.target as Element | null)?.classList?.contains("cm-fub-page-title")) return;
-          this.title = true;
-          this.hints.changed(true);
-        },
-        focusout(event) {
-          if (!this.title || !(event.target as Element | null)?.classList?.contains("cm-fub-page-title")) return;
-          this.title = false;
-          this.hints.changed();
-        },
         mousedown(event) {
           // Il clic sulla pastiglia non sposta il cursore e non toglie il fuoco.
           if ((event.target as Element | null)?.closest?.(".cm-fub-heading-pill-button")) event.preventDefault();

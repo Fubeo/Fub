@@ -65,12 +65,11 @@ vi.mock("../../../ui/commands", () => ({
   allCommands: () => [],
   displayBinding: (binding: string | null) => (binding ?? "").replace("Mod-", "Ctrl+"),
   // La riga dei suggerimenti (`hints-row.ts`), che la banda monta.
-  commandOfKeybindingKey: (key: string) => (key.startsWith("keys.") ? key.slice(5) : null),
   foldedChord: (binding: string) => (binding.includes("-") ? binding.toLowerCase() : null),
   keyboardPlatform: () => "other",
   keyName: (key: string) => key,
-  loadKeyOverrides: () => Promise.resolve(),
   modifierName: () => null,
+  onKeyOverridesLoaded: () => () => {},
   parseChords: (binding: string) => (binding.includes("-") ? [] : null),
 }));
 vi.mock("../../../ui/menu", () => ({
