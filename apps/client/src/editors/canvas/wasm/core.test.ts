@@ -167,7 +167,7 @@ describe("il nucleo della lavagna in WebAssembly", () => {
     expect(codeOf(() => core.nodeAt(0))).toBe("handle");
     expect(codeOf(() => core.inkLayers())).toBe("handle");
     expect(codeOf(() => core.describe())).toBe("handle");
-    expect(codeOf(() => core.check({ ops: [] }))).toBe("handle");
+    expect(codeOf(() => core.check([]))).toBe("handle");
     expect(() => core.close()).not.toThrow();
   });
 
@@ -200,36 +200,36 @@ describe("il nucleo della lavagna in WebAssembly", () => {
     core.close();
   });
 
-  it("check dà il rapporto: il riassunto, il primo problema col suggerimento, il testo che non si legge", async () => {
+  it("check dà il rapporto: il riassunto, il primo problema col suggerimento, una lista che non è un array", async () => {
     const core = await openCore(oneCard("uno"));
     const ops = [
       { op: "add_card", text: "Nuova", x: 400, y: 0 },
       { op: "move", ids: ["a"], dx: 8, dy: 0 },
     ];
-    const report = core.check({ ops }, 5);
+    const report = core.check(ops, 5);
     expect(report.ok).toBe(true);
     expect(report.problems).toEqual([]);
     expect(report.summary?.cards_added).toHaveLength(1);
     expect(report.summary?.cards_changed[0]?.moved).toEqual({ from: { x: 0, y: 0 }, to: { x: 8, y: 0 } });
-    // Come testo, col seme come bigint: lo stesso rapporto, e gli id di compile.
-    expect(core.check({ text: JSON.stringify(ops) }, 5n)).toEqual(report);
+    // Col seme come bigint: lo stesso rapporto, e gli id di compile.
+    expect(core.check(ops, 5n)).toEqual(report);
     const created = core.compile(ops, 5).created;
     expect(report.summary?.cards_added.map((card) => card.id)).toEqual(created);
     // Il primo problema, con l'id vicino.
-    const wrong = core.check({ ops: [{ op: "move", ids: ["aa"], dx: 8, dy: 0 }] });
+    const wrong = core.check([{ op: "move", ids: ["aa"], dx: 8, dy: 0 }]);
     expect(wrong.ok).toBe(false);
     expect(wrong.summary).toBeNull();
     expect(wrong.problems).toEqual([
       { code: "unknown_node", index: 0, path: "/0/ids/0", message: "there is no node with this id", suggestion: "a" },
     ]);
-    // Un testo vuoto o che non è JSON: il problema della lista intera.
-    for (const text of ["", "   ", "Ciao"]) {
-      const refused = core.check({ text });
+    // Un valore che non è una lista: il problema della lista intera.
+    for (const value of [null, {}, "[]"]) {
+      const refused = core.check(value);
       expect(refused.ok).toBe(false);
       expect(refused.problems).toHaveLength(1);
-      expect(refused.problems[0]).toMatchObject({ code: "invalid", index: null, path: "" });
+      expect(refused.problems[0]).toMatchObject({ index: null, path: "" });
     }
-    expect(codeOf(() => core.check({ ops: [] }, 2 ** 60))).toBe("request");
+    expect(codeOf(() => core.check([], 2 ** 60))).toBe("request");
     // Niente ha cambiato la lavagna.
     expect(core.preview([])).toBe(oneCard("uno"));
     core.close();
@@ -425,7 +425,7 @@ describe("il nucleo della lavagna in WebAssembly", () => {
     expect(codeOf(() => core.reset("{"))).toBe("source");
     expect(codeOf(() => core.compile([{ op: "fly" }]))).toBe("request");
     core.describe();
-    core.check({ text: "non è JSON" });
+    core.check({ non: "una lista" });
     expect(await rejectionCode(runtime.openCore("[]"))).toBe("source");
     core.preview([]);
     core.close();

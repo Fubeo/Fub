@@ -416,7 +416,7 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
 | `canvas_preview(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | il sorgente intero, come testo |
 | `canvas_compile(h, ptr, len) -> i32` | `{"ops", "seed"}` | 0 o -1 | `{"patches", "created"}` |
 | `canvas_describe(h, ptr, len) -> i32` | `{"form": "code", "ids"?}` | 0 o -1 | `{"form", "text"}` |
-| `canvas_check(h, ptr, len) -> i32` | `{"ops"}` o `{"text"}`, più `"seed"` | 0 o -1 | il rapporto del controllo |
+| `canvas_check(h, ptr, len) -> i32` | `{"ops", "seed"?}` | 0 o -1 | il rapporto del controllo |
 | `canvas_model(h) -> i32` | | 0 o -1 | `{"canvas"}` |
 | `canvas_node_at(h, byte) -> i32` | | l'indice, -1 fuori da ogni scheda, -2 se fallisce | vuoto |
 | `canvas_ink_layers(h) -> i32` | | 0 o -1 | `{"layers"}` |
@@ -444,7 +444,7 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
   senza cambiarla. `seed` è facoltativo (0 se manca), un intero da 0 a
   2⁶⁴ − 1 come numero o come stringa di cifre decimali, perché un numero di
   JavaScript non è esatto oltre 2⁵³.
-- `canvas_describe` dà la lista che rifà le schede `ids` e gli archi fra loro, o la lavagna intera senza `ids`, come il testo di `canvas.read` in forma `code`. `canvas_check` dà il [rapporto](canvas-check.md) di una lista, data come JSON (`ops`) o come testo da leggere (`text`, quello degli appunti: senza BOM; vuoto o non JSON è il problema `invalid` della lista). Tutti e due o nessuno è `request`. Nessuno dei due cambia la lavagna.
+- `canvas_describe` dà la lista che rifà le schede `ids` e gli archi fra loro, o la lavagna intera senza `ids`, come il testo di `canvas.read` in forma `code`. `canvas_check` dà il [rapporto](canvas-check.md) della lista `ops`, col seme `seed` di `canvas_compile`: un valore JSON qualunque, e uno che non è una lista è il problema `wrong_type` con `index` nullo. Il testo degli appunti lo legge il client, una volta, e dà lo stesso valore al controllo e alla compilazione; una richiesta senza `ops` o con campi in più è `request`. Nessuno dei due cambia la lavagna.
 - `canvas_node_at` dà l'indice della scheda il cui oggetto nel sorgente
   contiene il byte `byte`, contato in UTF-8 dall'inizio del testo, BOM
   compreso.

@@ -242,9 +242,6 @@ export interface CanvasCheckReport {
   readonly outline_after: string | null;
 }
 
-/** La lista da controllare: come JSON, o come testo da leggere (quello degli appunti). */
-export type CanvasCheckInput = { readonly ops: unknown } | { readonly text: string };
-
 /**
  * Perché il nucleo non disegna un tratto di un livello valido: la prima
  * ragione nell'ordine dei vettori (`docs/reference/canvas-ink.md`).
@@ -288,11 +285,11 @@ export interface CanvasCore {
   describe(ids?: readonly string[]): string;
   /**
    * Controlla una lista sul modello, senza cambiarlo: il rapporto del nucleo
-   * (problemi, avvisi, riassunto). Un testo vuoto o che non è JSON è un
-   * problema `invalid` del rapporto, non un errore. Lo stesso seme di
-   * `compile` dà gli stessi id.
+   * (problemi, avvisi, riassunto). `ops` è un valore qualunque: una lista
+   * che non è un array è un problema del rapporto, non un errore. Lo stesso
+   * `ops` e lo stesso seme di `compile` danno gli stessi id.
    */
-  check(input: CanvasCheckInput, seed?: number | bigint | string): CanvasCheckReport;
+  check(ops: unknown, seed?: number | bigint | string): CanvasCheckReport;
   /** L'indice della scheda il cui oggetto contiene il byte `byte` (UTF-8, BOM compreso), o `null`. */
   nodeAt(byte: number): number | null;
   /**
@@ -645,9 +642,9 @@ class Core implements CanvasCore {
     return answer.text;
   }
 
-  check(input: CanvasCheckInput, seed?: number | bigint | string): CanvasCheckReport {
+  check(ops: unknown, seed?: number | bigint | string): CanvasCheckReport {
     this.#live();
-    const request = withSeed("text" in input ? { text: input.text } : { ops: input.ops }, seed);
+    const request = withSeed({ ops }, seed);
     return this.#json(encodeJson(request), (ptr, len) => this.#target.exports.canvas_check(this.#handle, ptr, len)) as CanvasCheckReport;
   }
 

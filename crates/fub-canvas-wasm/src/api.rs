@@ -16,7 +16,7 @@
 
 use std::collections::BTreeMap;
 
-use fub_canvas_core::check::{check, CheckReport, Code, Problem};
+use fub_canvas_core::check::check;
 use fub_canvas_core::commit::{Changed, CommitError, Core, LayerChange};
 use fub_canvas_core::describe::{self, DescribeOptions};
 use fub_canvas_core::ink::{board_layer, node_layer, LayerRead, LayerState, StrokeState, INK_KEY};
@@ -150,16 +150,14 @@ enum DescribeForm {
     Code,
 }
 
-/// La richiesta di [`Cores::check`]: la lista come JSON (`ops`) o come testo
-/// da leggere (`text`, quello degli appunti), una delle due, e il seme degli
-/// id nuovi come in [`CompileRequest`].
+/// La richiesta di [`Cores::check`]: la lista come JSON (`ops`, un valore
+/// qualunque: una lista che non è un array è un problema del rapporto) e il
+/// seme degli id nuovi come in [`CompileRequest`]. Il testo degli appunti lo
+/// legge chi chiama, una volta, e dà lo stesso `ops` a check e a compile.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CheckRequest {
-    #[serde(default)]
-    ops: Option<Value>,
-    #[serde(default)]
-    text: Option<String>,
+    ops: Value,
     #[serde(default, deserialize_with = "seed")]
     seed: u64,
 }
@@ -430,28 +428,14 @@ impl Cores {
     }
 
     /// Controlla una lista di operazioni sulla lavagna `handle`, senza
-    /// cambiarla: `{"ops" | "text", "seed"?}` risponde il rapporto di
-    /// [`check`] (`{"ok", "problems", "warnings", "warnings_omitted",
-    /// "summary", "outline_after"}`). Un testo vuoto o che non è JSON non è
-    /// un errore della chiamata: è il problema `invalid` della lista intera,
-    /// come una lista che non è una lista.
+    /// cambiarla: `{"ops", "seed"?}` risponde il rapporto di [`check`]
+    /// (`{"ok", "problems", "warnings", "warnings_omitted", "summary",
+    /// "outline_after"}`).
     pub fn check(&self, handle: Handle, request: &[u8]) -> Result<String, Failure> {
         let request: CheckRequest = serde_json::from_str(text(request)?)
             .map_err(|error| Failure::new("request", error.to_string()))?;
         let core = self.core(handle)?;
-        let report = match (request.ops, request.text) {
-            (Some(ops), None) => check(core.canvas(), &ops, request.seed),
-            (None, Some(text)) => match list_of_text(&text) {
-                Ok(ops) => check(core.canvas(), &ops, request.seed),
-                Err(message) => refused(message),
-            },
-            _ => {
-                return Err(Failure::new(
-                    "request",
-                    "give the operations either as `ops` or as `text`, not both",
-                ))
-            }
-        };
+        let report = check(core.canvas(), &request.ops, request.seed);
         serde_json::to_string(&report).map_err(Failure::internal)
     }
 
@@ -511,36 +495,6 @@ fn text(bytes: &[u8]) -> Result<&str, Failure> {
         ));
     }
     std::str::from_utf8(bytes).map_err(|error| Failure::new("utf8", error.to_string()))
-}
-
-/// Il testo di una lista come JSON: un BOM in testa si toglie, e un testo
-/// vuoto (o di soli spazi) o che non è JSON dà la frase del problema.
-fn list_of_text(text: &str) -> Result<Value, String> {
-    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-    if text.trim().is_empty() {
-        return Err("the text is empty".to_owned());
-    }
-    serde_json::from_str(text).map_err(|error| format!("the text is not JSON: {error}"))
-}
-
-/// Il rapporto di una lista che non si legge: il problema `invalid` della
-/// lista intera, come quello di [`check`] per una lista che non è un array.
-fn refused(message: String) -> CheckReport {
-    CheckReport {
-        ok: false,
-        problems: vec![Problem {
-            code: Code::Invalid,
-            index: None,
-            path: String::new(),
-            message,
-            suggestion: None,
-            fix: None,
-        }],
-        warnings: Vec::new(),
-        warnings_omitted: 0,
-        summary: None,
-        outline_after: None,
-    }
 }
 
 fn patches(request: &[u8]) -> Result<Vec<CanvasPatch>, Failure> {

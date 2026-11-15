@@ -85,7 +85,8 @@ import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, saveFingerWri
 import { openCanvasRadial, rememberRecent } from "./chrome/radial";
 import type { Radial, RadialPointer } from "../spatial/tools/radial";
 import { createCanvasEmpty, isEmptyBoard, transferOf, type CanvasEmpty } from "./chrome/empty";
-import { checkProblemText, clipboardText, codeList, summaryText } from "./code-text";
+import { checkProblemText, clipboardText, codeTextProblem, problemPhrase, readCodeList, summaryText, warningsText } from "./code-text";
+import { asCopies, asUpdates, codeClashes, type CodeClashes } from "./code-paste";
 import { createCanvasNavigator, type CanvasNavigator } from "./chrome/navigator";
 import { CanvasJumps } from "./jumps";
 import { applyFindMarks, boardFindIndex, findMarks, type FindMark, type FindNotesPort, type FindTarget } from "./find";
@@ -419,6 +420,18 @@ interface CardEditor {
   readonly born: CanvasStep | null;
   /** La misura a cui la scheda di testo è cresciuta mentre ci si scrive (T44); `null` finché non cresce. */
   grown: { readonly width: number; readonly height: number } | null;
+}
+
+/**
+ * Una scelta della finestra di «Incolla codice» (LIC T25): la lista così come
+ * si scrive, il riassunto in parole (`""` se non cambia niente o non si può)
+ * e il controllo del nucleo che lo dice.
+ */
+interface PasteChoice {
+  readonly id: "paste" | "update" | "copies";
+  readonly ops: readonly unknown[];
+  readonly said: string;
+  readonly report: CanvasCheckReport;
 }
 
 /**
@@ -1120,6 +1133,19 @@ function sameViewport(a: Viewport, b: Viewport): boolean {
 function overlaps(node: Rect, view: Rect): boolean {
   return node.x < view.x + view.width && node.x + node.width > view.x
     && node.y < view.y + view.height && node.y + node.height > view.y;
+}
+
+/**
+ * Le schede libere, come le sceglie `layout` senza `ids` (`loose_cards` di
+ * `ops/layout.rs`): non gruppi, e non dentro un gruppo (tutto il rettangolo
+ * nel suo, bordi compresi).
+ */
+export function looseCards(nodes: readonly CanvasNode[]): CanvasNode[] {
+  const groups = nodes.filter((node) => node.type === "group");
+  const inside = (card: CanvasNode, group: CanvasNode): boolean =>
+    card.id !== group.id && card.x >= group.x && card.y >= group.y
+    && card.x + card.width <= group.x + group.width && card.y + card.height <= group.y + group.height;
+  return nodes.filter((node) => node.type !== "group" && !groups.some((group) => inside(node, group)));
 }
 
 function snap(value: number): number {
@@ -3058,8 +3084,9 @@ export class CanvasEngine {
       return code;
     }
     // Il testo esatto del passo torna anche su una scena troppo grande: un
-    // giro che ha fatto nascere migliaia di schede («Incolla codice»,
-    // `canvas.apply`) si annulla, e la lavagna torna interattiva (LIC T25).
+    // passo locale che l'ha portata oltre il limite (un «Incolla codice» di
+    // migliaia di schede) si annulla e si ripete, e la lavagna torna
+    // interattiva (LIC T25).
     if (this.#destroyed || !this.#doc || this.#readOnly) return "rejected";
     const core = this.#core;
     if (!core) return "trap";
@@ -6024,22 +6051,41 @@ export class CanvasEngine {
 
   /**
    * «Disponi» (LIC T25): `layout` delle schede scelte, o, senza selezione,
-   * di tutte quelle fuori dai gruppi (il nucleo le sceglie se mancano gli
-   * `ids`). `null` con meno di due schede, come la voce spenta.
+   * delle schede libere (il nucleo le sceglie se mancano gli `ids`). `null`
+   * con meno di due, come la voce spenta.
    */
   #layoutOps(kind: CanvasLayout): CanvasIntentOp[] | null {
     const ids = this.#selectedNodes().map((node) => node.id);
     if (ids.length >= 2) return [{ op: "layout", ids, kind }];
-    if (ids.length === 0 && (this.#doc?.nodes.length ?? 0) >= 2) return [{ op: "layout", kind }];
+    if (ids.length === 0 && this.#doc && looseCards(this.#doc.nodes).length >= 2) return [{ op: "layout", kind }];
     return null;
   }
 
-  /** Perché «Disponi» è spento: una scheda sola, o una lavagna con meno di due schede. */
+  /**
+   * Perché «Disponi» è spento: una scheda sola scelta o, senza selezione,
+   * meno di due schede libere (quelle che il nucleo dispone: non gruppi, e
+   * non dentro un gruppo).
+   */
   #layoutWhy(): string | null {
     const chosen = this.#selectedNodes().length;
     if (chosen === 1) return t("canvas.commands.why.two");
-    if (chosen >= 2 || (this.#doc?.nodes.length ?? 0) >= 2) return null;
-    return t(this.#doc?.nodes.length ? "canvas.commands.why.two" : "canvas.commands.why.empty");
+    if (chosen >= 2) return null;
+    if (!this.#doc?.nodes.length) return t("canvas.commands.why.empty");
+    return looseCards(this.#doc.nodes).length >= 2 ? null : t("canvas.commands.why.two");
+  }
+
+  /** «Disponi»: scrive il `layout`; se le schede sono già disposte così lo dice, mai il silenzio. */
+  #arrangeLayout(kind: CanvasLayout): void {
+    if (this.#readOnly || this.#isSceneOversized()) return;
+    const ops = this.#layoutOps(kind);
+    if (!ops) return;
+    const compiled = this.#compileIntent(ops, "canvas.change_refused");
+    if (!compiled) return;
+    if (compiled.patches.length === 0) {
+      this.#showNotice(t("canvas.layout.nothing"));
+      return;
+    }
+    this.#commit(compiled.patches, "input");
   }
 
   #drawEdgeInspector(bar: HTMLElement): void {
@@ -7338,18 +7384,55 @@ export class CanvasEngine {
   }
 
   /**
-   * «Copia come codice» (LIC T25): le schede scelte, o la lavagna intera
-   * senza selezione, come la lista di operazioni che le rifà
-   * (`canvas_describe`), negli appunti come testo. Non scrive la lavagna.
+   * Che cosa copia «Copia come codice»: senza niente di scelto la lavagna
+   * intera (`null`); se no le schede scelte (con gli archi fra loro e il loro
+   * inchiostro) e i tratti liberi scelti col Lazo. Un arco o un tratto di
+   * scheda scelti senza le loro schede non si copiano da soli: allora
+   * `"partial"`, e la voce è spenta col perché.
+   */
+  #codeSelection(): { readonly cards: readonly string[]; readonly free: readonly string[] } | null | "partial" {
+    const cards = this.#selectedNodes().map((node) => node.id);
+    const strokes = this.#chosenStrokes();
+    if (cards.length === 0 && this.#edgeSelection.length === 0 && strokes.length === 0) return null;
+    const chosen = new Set(cards);
+    const edges = this.#doc?.edges ?? [];
+    const lonely = this.#edgeSelection.some((id) => {
+      const edge = edges.find((one) => one.id === id);
+      return !edge || !chosen.has(edge.fromNode) || !chosen.has(edge.toNode);
+    });
+    if (lonely || strokes.some((unit) => unit.node !== null)) return "partial";
+    return { cards, free: strokes.map((unit) => unit.id) };
+  }
+
+  /** Perché «Copia come codice» è spento: la lavagna vuota, o una scelta che non si copia. */
+  #copyCodeWhy(): string | null {
+    if (!this.#doc || isEmptyBoard(this.#doc)) return t("canvas.commands.why.empty");
+    return this.#codeSelection() === "partial" ? t("canvas.copy_code.why") : null;
+  }
+
+  /**
+   * «Copia come codice» (LIC T25): ciò che è scelto, o la lavagna intera
+   * senza selezione, come la lista di operazioni che lo rifà, negli appunti
+   * come testo. Le schede le scrive il nucleo (`canvas_describe`); i tratti
+   * liberi scelti seguono in una `add_strokes` della radice, com'è nel file
+   * (la stessa forma di `describe`). Non scrive la lavagna.
    */
   #copyCode(): void {
     const core = this.#core;
-    if (this.#destroyed || !core || !this.#doc) return;
+    const doc = this.#doc;
+    if (this.#destroyed || !core || !doc || this.#copyCodeWhy() !== null) return;
     this.#recordPending();
-    const ids = this.#selectedNodes().map((node) => node.id);
+    const chosen = this.#codeSelection();
+    if (chosen === "partial") return;
     let text: string;
     try {
-      text = core.describe(ids.length > 0 ? ids : undefined);
+      if (chosen === null) text = core.describe();
+      else {
+        const ops = chosen.cards.length > 0 ? JSON.parse(core.describe(chosen.cards)) as unknown[] : [];
+        const free = copiedSelection(doc, [], chosen.free)?.[INK_KEY]?.strokes ?? [];
+        if (free.length > 0) ops.push({ op: "add_strokes", layer: "board", strokes: free });
+        text = JSON.stringify(ops, null, 2);
+      }
     } catch (error) {
       if (lostCore(error)) {
         this.#lose();
@@ -7366,13 +7449,40 @@ export class CanvasEngine {
     });
   }
 
+  /** Un avviso di «Incolla codice» senza finestra: il fuoco torna alla tela, dove si era. */
+  #pasteNotice(text: string): void {
+    this.#showNotice(text);
+    if (!this.#destroyed) this.#viewport.focus({ preventScroll: true });
+  }
+
+  /** Il controllo del nucleo, o `null` se il nucleo è morto (allora la tela si riapre) o rifiuta la chiamata. */
+  #checkCode(ops: readonly unknown[], seed: bigint): CanvasCheckReport | null {
+    const core = this.#core;
+    if (!core) return null;
+    try {
+      return core.check(ops, seed);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return null;
+      }
+      if (error instanceof CanvasCoreError) {
+        this.#pasteNotice(t("canvas.change_refused"));
+        return null;
+      }
+      throw error;
+    }
+  }
+
   /**
-   * «Incolla codice» (LIC T25): legge una lista di operazioni dagli appunti,
-   * la fa controllare al nucleo (`canvas_check`) e, se passa, mostra il
-   * riassunto e chiede. Con «Incolla» la scrive in un passo d'annulla, con
-   * lo stesso seme del controllo: gli id nati sono quelli del riassunto. Un
-   * problema, appunti vuoti o una lista che non cambia niente lo dice
-   * l'avviso, senza finestra; Esc o «Annulla» non scrivono.
+   * «Incolla codice» (LIC T25): legge il testo degli appunti una volta come
+   * lista (`readCodeList`), e dà lo stesso valore al controllo del nucleo
+   * (`canvas_check`) e poi alla scrittura, con lo stesso seme: gli id nati
+   * sono quelli del riassunto. Se la lista nomina schede, archi o tratti che
+   * la lavagna ha già, la finestra offre «Aggiorna le schede» e «Aggiungi
+   * come copie» (`code-paste.ts`); se no «Incolla». Un passo d'annulla in
+   * ogni caso. Un problema, appunti vuoti o una lista che non cambia niente
+   * li dice l'avviso, senza finestra; Esc o «Annulla» non scrivono.
    */
   async #pasteCode(): Promise<void> {
     if (this.#destroyed || this.#readOnly || this.#isSceneOversized()) return;
@@ -7380,48 +7490,70 @@ export class CanvasEngine {
     try {
       text = await clipboardText();
     } catch {
-      if (!this.#destroyed) this.#showNotice(t("editor_menu.paste_failed"));
+      if (!this.#destroyed) this.#pasteNotice(t("editor_menu.paste_failed"));
       return;
     }
-    const core = this.#core;
-    if (this.#destroyed || this.#readOnly || !core || !this.#doc || this.#isSceneOversized()) return;
+    if (this.#destroyed || this.#readOnly || !this.#core || !this.#doc || this.#isSceneOversized()) return;
+    const read = readCodeList(text);
+    if (!read.ok) {
+      this.#pasteNotice(codeTextProblem(read.problem));
+      return;
+    }
     this.#recordPending();
+    const doc = this.#doc;
+    const clashes = codeClashes(doc, read.ops);
+    if (!clashes.ok) {
+      const { index, id, kind } = clashes.kind;
+      this.#pasteNotice(t("canvas.paste_code.kind", {
+        n: String(index + 1), id, kind: t(`canvas.paste_code.kind.${kind}` as Key),
+      }));
+      return;
+    }
     const seed = this.#seed();
     const source = this.#source;
-    let report: CanvasCheckReport;
-    try {
-      report = core.check({ text }, seed);
-    } catch (error) {
-      if (lostCore(error)) {
-        this.#lose();
+    const choices: PasteChoice[] = [];
+    if (!clashes.clashes) {
+      const report = this.#checkCode(read.ops, seed);
+      if (!report) return;
+      if (!report.ok || !report.summary) {
+        this.#pasteNotice(checkProblemText(report.problems[0]));
         return;
       }
-      if (error instanceof CanvasCoreError) {
-        this.#showNotice(t("canvas.change_refused"));
+      const said = summaryText(report.summary);
+      if (said === "") {
+        this.#pasteNotice(t("canvas.paste_code.nothing"));
         return;
       }
-      throw error;
+      choices.push({ id: "paste", ops: read.ops, said, report });
+    } else {
+      const update = asUpdates(doc, read.ops);
+      const copies = asCopies(doc, read.ops, seed);
+      for (const [id, ops, updated] of [["update", update.ops, update.updated], ["copies", copies, new Set<string>()]] as const) {
+        const report = this.#checkCode(ops, seed);
+        if (!report) return;
+        const said = report.ok && report.summary ? summaryText(report.summary, updated) : "";
+        choices.push({ id, ops, said, report });
+      }
+      if (choices.every((choice) => choice.said === "")) {
+        const refused = choices.find((choice) => !choice.report.ok);
+        this.#pasteNotice(refused ? checkProblemText(refused.report.problems[0]) : t("canvas.paste_code.nothing"));
+        return;
+      }
     }
-    if (!report.ok || !report.summary) {
-      this.#showNotice(checkProblemText(text, report.problems[0]));
+    const chosen = await this.#confirmPaste(choices, clashes.clashes);
+    if (!chosen || this.#destroyed) return;
+    // Intanto la lavagna può essere cambiata (un altro riquadro, il disco), o
+    // diventata di sola lettura o troppo grande: il riassunto non dice più il
+    // vero, e non si scrive. Mai il silenzio.
+    if (this.#readOnly || this.#isSceneOversized() || !this.#doc) {
+      this.#pasteNotice(t("canvas.paste_code.locked"));
       return;
     }
-    const said = summaryText(report.summary);
-    if (said === "") {
-      this.#showNotice(t("canvas.paste_code.nothing"));
-      return;
-    }
-    const warnings = report.warnings.length + report.warnings_omitted;
-    if (!(await this.#confirmPaste(said, warnings)) || this.#destroyed) return;
-    // Intanto la lavagna può essere cambiata (un altro riquadro, il disco):
-    // il riassunto non dice più il vero, e non si scrive.
     if (this.#source !== source) {
-      this.#showNotice(t("canvas.paste_code.changed"));
+      this.#pasteNotice(t("canvas.paste_code.changed"));
       return;
     }
-    const ops = codeList(text);
-    if (!ops) return;
-    const created = this.#writeOps(ops, "canvas.change_refused", seed);
+    const created = this.#writeOps(chosen.ops as CanvasIntentOp[], "canvas.change_refused", seed);
     if (!created || this.#destroyed || !this.#doc) return;
     const born = new Set(this.#doc.nodes.map((node) => node.id));
     const cards = created.filter((id) => born.has(id));
@@ -7433,25 +7565,62 @@ export class CanvasEngine {
     }
   }
 
-  /** La conferma di «Incolla codice»: il riassunto, gli avvisi; «Annulla» di serie, Esc come «Annulla». */
-  #confirmPaste(summary: string, warnings: number): Promise<boolean> {
+  /**
+   * La conferma di «Incolla codice»: il riassunto di ogni scelta e gli
+   * avvisi. Senza id presi una scelta, «Incolla»; con id presi «Aggiorna le
+   * schede» (proposta) e «Aggiungi come copie», ognuna col suo riassunto, o
+   * col suo problema e senza bottone se non si può. «Annulla» di serie, Esc
+   * come «Annulla».
+   */
+  #confirmPaste(choices: readonly PasteChoice[], clashes: CodeClashes | null): Promise<PasteChoice | null> {
     const own = openLifetime();
     this.#life.add(() => own.close());
-    const said = t("canvas.paste_code.description", { summary });
-    const handle = openDialog<boolean>({
+    const sentences: string[] = [];
+    const usable = choices.filter((choice) => choice.said !== "");
+    if (!clashes) sentences.push(t("canvas.paste_code.description", { summary: choices[0]!.said }));
+    else {
+      const named = [
+        [clashes.cards.length, "cards"], [clashes.edges.length, "edges"], [clashes.strokes, "strokes"],
+      ] as const;
+      const list = named.filter(([count]) => count > 0)
+        .map(([count, what]) => plural(count, `canvas.paste_code.count.${what}.one` as Key, `canvas.paste_code.count.${what}` as Key));
+      sentences.push(t("canvas.paste_code.clash", { list: list.join(", ") }));
+      for (const choice of choices) {
+        const problem = choice.report.ok ? null : choice.report.problems[0];
+        const summary = problem
+          ? t("canvas.paste_code.option_refused", { n: String((problem.index ?? 0) + 1), problem: problemPhrase(problem) })
+          : choice.said || t("canvas.paste_code.option_nothing");
+        sentences.push(t(choice.id === "update" ? "canvas.paste_code.as_update" : "canvas.paste_code.as_copies", { summary }));
+      }
+    }
+    // Gli avvisi della scelta proposta (la prima che si può).
+    const first = usable[0];
+    const warnings = first ? warningsText(first.report.warnings, first.report.warnings_omitted) : "";
+    if (warnings !== "") sentences.push(warnings);
+    const labels: Readonly<Record<PasteChoice["id"], Key>> = {
+      paste: "canvas.paste_code.action",
+      update: "canvas.paste_code.update",
+      copies: "canvas.paste_code.copies",
+    };
+    const handle = openDialog<PasteChoice | null>({
       title: t("canvas.paste_code.title"),
-      description: warnings === 0 ? said
-        : `${said} ${plural(warnings, "canvas.paste_code.warnings.one", "canvas.paste_code.warnings")}`,
+      description: sentences.join(" "),
       actions: [
-        { id: "cancel", label: t("app.cancel"), value: false, autofocus: true },
-        { id: "paste", label: t("canvas.paste_code.action"), kind: "primary", value: true },
+        { id: "cancel", label: t("app.cancel"), value: null, autofocus: true },
+        // Prima le copie, poi la proposta, che è il bottone pieno in fondo.
+        ...[...usable].reverse().map((choice, index, all) => ({
+          id: choice.id,
+          label: t(labels[choice.id]),
+          value: choice,
+          ...(index === all.length - 1 ? { kind: "primary" as const } : {}),
+        })),
       ],
-      dismissValue: false,
+      dismissValue: null,
       lifetime: own,
     });
-    return handle.result.then((yes) => {
+    return handle.result.then((chosen) => {
       own.close();
-      return yes;
+      return chosen;
     });
   }
 
@@ -7733,11 +7902,9 @@ export class CanvasEngine {
       const kind = id.slice("canvas.layout.".length) as CanvasLayout;
       if (!(CANVAS_LAYOUTS as readonly string[]).includes(kind)) return null;
       return {
-        disabled: () => writable() ?? this.#layoutWhy(),
+        disabled: () => writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : this.#layoutWhy()),
         op: () => this.#layoutOps(kind),
-        run: () => {
-          if (!this.#readOnly) this.#writeOps(this.#layoutOps(kind));
-        },
+        run: () => this.#arrangeLayout(kind),
       };
     }
     if (id.startsWith("canvas.align.")) {
@@ -8147,14 +8314,17 @@ export class CanvasEngine {
       // sola lettura. Incollare legge gli appunti, controlla e chiede.
       case "canvas.copy_code":
         return {
-          disabled: () => (this.#doc && !isEmptyBoard(this.#doc) ? null : t("canvas.commands.why.empty")),
+          disabled: () => this.#copyCodeWhy(),
           run: () => this.#copyCode(),
         };
       case "canvas.paste_code":
         return {
           disabled: () => writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null),
           // `value` è il testo degli appunti: la lista che scriverebbe, se è una lista.
-          op: (input) => codeList(input?.value),
+          op: (input) => {
+            const read = input?.value === undefined ? null : readCodeList(input.value);
+            return read?.ok ? (read.ops as CanvasIntentOp[]) : null;
+          },
           run: () => void this.#pasteCode(),
         };
       case "canvas.distribute_x":

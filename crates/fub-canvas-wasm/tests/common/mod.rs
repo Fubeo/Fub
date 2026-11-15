@@ -828,9 +828,9 @@ pub fn describe_gives_the_code(via: &mut impl Via) {
 }
 
 /// `check` dà il rapporto del nucleo: il riassunto senza problemi, il primo
-/// problema col suggerimento, un testo vuoto o che non è JSON come problema
-/// `invalid` della lista intera. La lista come JSON o come testo dà lo stesso
-/// rapporto; il seme è quello di `compile`; niente cambia la lavagna.
+/// problema col suggerimento, una lista che non è un array come problema della
+/// lista intera. Il seme è quello di `compile`, anche come stringa di cifre;
+/// niente cambia la lavagna. Il testo degli appunti lo legge chi chiama.
 pub fn check_gives_the_report(via: &mut impl Via) {
     let source = described_board();
     let (handle, _) = via.open(source.as_bytes()).expect("si apre");
@@ -856,16 +856,11 @@ pub fn check_gives_the_report(via: &mut impl Via) {
     assert!(report["outline_after"]
         .as_str()
         .is_some_and(|text| text.contains("Pioggia")));
-    // Lo stesso testo, con un BOM in testa come lo danno certi appunti, e il
-    // seme come stringa di cifre.
-    let text = format!(
-        "\u{feff}{}",
-        serde_json::to_string_pretty(&ops).expect("testo")
-    );
-    let from_text = via
-        .check(handle, &bytes(&json!({ "text": text, "seed": "3" })))
-        .expect("check dal testo");
-    assert_eq!(from_text, report, "il testo dà lo stesso rapporto");
+    // Il seme come stringa di cifre dà lo stesso rapporto.
+    let as_text_seed = via
+        .check(handle, &bytes(&json!({ "ops": ops, "seed": "3" })))
+        .expect("check col seme in cifre");
+    assert_eq!(as_text_seed, report);
 
     // Il primo problema, col suggerimento: `bb` non c'è, `b` è a un passo.
     let wrong = json!([
@@ -899,40 +894,17 @@ pub fn check_gives_the_report(via: &mut impl Via) {
     assert_eq!(shape["problems"][0]["code"], "unknown_field", "{shape}");
     assert!(shape["problems"][0]["fix"].is_object(), "{shape}");
 
-    // Un testo vuoto, di soli spazi, o che non è JSON: il problema `invalid`
-    // della lista intera, senza indice.
-    for (text, start) in [
-        ("", "the text is empty"),
-        ("  \n\t", "the text is empty"),
-        ("\u{feff}", "the text is empty"),
-        ("Ciclo dell'acqua", "the text is not JSON"),
-        ("[{\"op\": \"add_card\",", "the text is not JSON"),
-    ] {
+    // Un valore che non è una lista, anche `null`: il problema della lista
+    // intera, senza indice; la chiamata riesce.
+    for ops in [json!({}), Value::Null, json!("[]")] {
         let report = via
-            .check(handle, &bytes(&json!({ "text": text })))
-            .expect("un testo che non si legge non è un errore della chiamata");
-        assert_eq!(report["ok"], false, "{text:?}");
-        assert_eq!(report["summary"], Value::Null, "{text:?}");
-        let problem = &report["problems"][0];
-        assert_eq!(problem["code"], "invalid", "{text:?}");
-        assert_eq!(problem["index"], Value::Null, "{text:?}");
-        assert_eq!(problem["path"], "", "{text:?}");
-        assert!(
-            problem["message"]
-                .as_str()
-                .is_some_and(|m| m.starts_with(start)),
-            "{text:?}: {problem}"
-        );
+            .check(handle, &bytes(&json!({ "ops": ops })))
+            .expect("una lista che non è un array non è un errore della chiamata");
+        assert_eq!(report["ok"], false, "{ops}");
+        assert_eq!(report["summary"], Value::Null, "{ops}");
+        assert!(report["problems"][0]["code"].is_string(), "{ops}");
+        assert_eq!(report["problems"][0]["index"], Value::Null, "{ops}");
     }
-    // JSON che non è una lista: il problema della forma, come con `ops`.
-    let object = via
-        .check(handle, &bytes(&json!({ "text": "{}" })))
-        .expect("un oggetto");
-    let as_ops = via
-        .check(handle, &bytes(&json!({ "ops": {} })))
-        .expect("un oggetto");
-    assert_eq!(object, as_ops);
-    assert_eq!(object["ok"], false);
 
     for bad in [
         &b""[..],
@@ -941,7 +913,7 @@ pub fn check_gives_the_report(via: &mut impl Via) {
         b"{}",
         br#"{"seed": 1}"#,
         br#"{"ops": [], "text": "[]"}"#,
-        br#"{"text": 3}"#,
+        br#"{"text": "[]"}"#,
         br#"{"ops": [], "seed": -1}"#,
         br#"{"ops": [], "other": 1}"#,
     ] {
