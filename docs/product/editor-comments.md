@@ -77,7 +77,14 @@ pannello dei commenti.
   «Annulla». Incollando in Fub, con Ctrl V o con Incolla del tasto destro, il
   commento torna attaccato al testo nel posto nuovo; «Incolla come testo»
   incolla il passo e basta, e nel codice entra sempre il testo semplice. Un
-  taglio di una parte del passo, o la sola copia, restano come sopra.
+  taglio di una parte del passo, o la sola copia, restano come sopra. Taglia
+  e Incolla del tasto destro passano dagli appunti del sistema, che non hanno
+  il tipo di Fub: Fub ricorda l'ultimo taglio, e lo dimentica quando la
+  finestra perde il focus o si nasconde e quando gli appunti hanno un altro
+  testo, così un commento non si attacca mai a un testo copiato da un'altra
+  app.
+- Un taglio mostra un avviso solo, quello del taglio; Canc e Backspace quello
+  del commento tolto.
 - L'HTML che va verso altre app è quello della Lettura: niente segni, niente
   messaggi, niente fondo.
 - Incollare in Fub un testo copiato da Fub con dei commenti lo tiene com'è: un
@@ -98,13 +105,15 @@ del menu in `surface.ts`), la Sorgente in `comments/source.ts`, la Lettura in
 `render-inline.ts`, l'allargamento dei gesti di formato in `format-toggle.ts`.
 Il numero di parole della nota (la banda, il pannello delle statistiche,
 `fub-cli wordcount`) lo conta il kernel in `crates/fub-features/src/stats.rs`,
-sul sorgente senza i segni e i messaggi dei commenti. I colori sono della
+sul sorgente senza i segni e i messaggi dei commenti; allo stesso modo la riga
+«Selezione» del pannello, sul testo selezionato che la shell gli passa com'è
+scritto. I colori sono della
 pelle (`skin/editors.css`, componente `note-comments` dell'anatomia).
 
 ## Limiti
 
-- Le selezioni che la shell passa al kernel portano il testo com'è scritto:
-  la riga «Selezione» del pannello delle statistiche conta anche i segni e i
-  messaggi di un commento selezionato.
+- Con modifiche non ancora salvate la riga «Selezione» del pannello delle
+  statistiche toglie solo i commenti che il file salvato ha già: un commento
+  appena scritto si conta coi suoi segni fino al salvataggio.
 - In Vim `l` e `h` attraversano un segno nascosto un carattere alla volta (una
   coda lunga chiede decine di battute), come gli indirizzi nascosti dei link.

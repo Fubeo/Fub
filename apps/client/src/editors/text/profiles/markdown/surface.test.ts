@@ -9,6 +9,7 @@ import { api } from "../../../../host/ipc";
 import { state } from "../../../../state/store";
 import { closeCommandPalette } from "../../../../ui/palette";
 import { declareClipboard } from "../../../../platform/clipboard";
+import { liveStrings } from "./strings";
 
 interface TestEditor {
   ed: MarkdownSurface;
@@ -1106,8 +1107,12 @@ describe("i commenti nella superficie (T21)", () => {
     ed.buffer.setDoc(NOTE);
     view().dispatch({ selection: { anchor: FROM, head: TO } });
     view().focus();
+    for (const toast of document.querySelectorAll(".toast")) toast.remove();
     const cut = clipboardEvent("cut");
     view().contentDOM.dispatchEvent(cut.event);
+    // Un gesto, un avviso: quello del taglio, non anche quello della cancellazione.
+    expect([...document.querySelectorAll<HTMLElement>(".toast")].map((toast) => toast.dataset["text"]))
+      .toEqual([liveStrings.t("comments.cut")]);
     expect(cut.data.get("text/plain")).toBe("passo");
     expect(cut.data.get("application/x-fub-markdown")).toBe(COMMENT);
     expect(cut.data.get("text/html")).not.toContain("riscritto");
@@ -1148,9 +1153,12 @@ describe("i commenti nella superficie (T21)", () => {
       ed.setMode("live_preview");
       ed.buffer.setDoc(NOTE);
       view().dispatch({ selection: { anchor: FROM, head: TO } });
+      for (const toast of document.querySelectorAll(".toast")) toast.remove();
       ed.contextMenu!(null)!.clipboard!.run("cut");
       await vi.waitFor(() => expect(ed.buffer.getDoc()).toBe("Il  poi.\n\nAltro.\n"));
       expect(clipboard.written[0]!["text/plain"]).toBe("passo");
+      expect([...document.querySelectorAll<HTMLElement>(".toast")].map((toast) => toast.dataset["text"]))
+        .toEqual([liveStrings.t("comments.cut")]);
       view().dispatch({ selection: { anchor: ed.buffer.getDoc().indexOf("Altro") + 5 } });
       ed.contextMenu!(null)!.clipboard!.run("paste-plain");
       await vi.waitFor(() => expect(ed.buffer.getDoc()).toBe("Il  poi.\n\nAltropasso.\n"));

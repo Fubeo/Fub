@@ -98,25 +98,56 @@ export function commentCut(state: EditorState, forms?: readonly SyntaxForm[]): C
 
 let lastCut: CarriedCut | null = null;
 
+/// La finestra che perde il focus, o la pagina che si nasconde, può tornare
+/// con negli appunti un testo copiato da un'altra app: il taglio ricordato
+/// non vale più.
+function forgetOnLeave(): void {
+  forgetCut();
+}
+function forgetWhenHidden(): void {
+  if (document.visibilityState === "hidden") forgetCut();
+}
+
+/// Dimentica l'ultimo taglio ricordato e smette di ascoltare la finestra.
+function forgetCut(): void {
+  if (!lastCut) return;
+  lastCut = null;
+  if (typeof window === "undefined") return;
+  window.removeEventListener("blur", forgetOnLeave);
+  document.removeEventListener("visibilitychange", forgetWhenHidden);
+}
+
 /// Ricorda il taglio che porta un commento, per l'incolla dal menu (gli
 /// appunti asincroni portano soltanto il testo e l'HTML). Un taglio o una
 /// copia che non porta commenti lo dimentica: ciò che è negli appunti non è
-/// più quel taglio.
+/// più quel taglio. Lo dimenticano anche la finestra che perde il focus o si
+/// nasconde e un incolla con un testo diverso: un commento non si riattacca
+/// mai a un testo che viene da un'altra app. Gli ascoltatori vivono quanto
+/// il ricordo.
 export function rememberCut(cut: CarriedCut | null): void {
+  forgetCut();
+  if (!cut) return;
   lastCut = cut;
+  if (typeof window === "undefined") return;
+  window.addEventListener("blur", forgetOnLeave);
+  document.addEventListener("visibilitychange", forgetWhenHidden);
 }
 
 /// Il Markdown col commento intero che gli appunti `data` portano da un
 /// taglio di Fub, o `null`: dal tipo di Fub, o dall'ultimo taglio ricordato
-/// se il testo semplice è proprio il suo. Un incolla di solo testo («Incolla
-/// come testo», Mod-Maiusc-V) non ha l'HTML che il taglio scrive sempre, e
-/// resta il testo semplice.
+/// se il testo semplice è proprio il suo (un testo diverso lo dimentica). Un
+/// incolla di solo testo («Incolla come testo», Mod-Maiusc-V) non ha l'HTML
+/// che il taglio scrive sempre, e resta il testo semplice.
 export function carriedMarkdown(data: DataTransfer): string | null {
   const typed = data.getData(FUB_MARKDOWN_TYPE);
   if (typed) return typed;
   const cut = lastCut;
-  if (!cut || !data.getData("text/html")) return null;
-  return data.getData("text/plain").replace(/\r\n?/g, "\n") === cut.plain ? cut.markdown : null;
+  if (!cut) return null;
+  if (data.getData("text/plain").replace(/\r\n?/g, "\n") !== cut.plain) {
+    forgetCut();
+    return null;
+  }
+  return data.getData("text/html") ? cut.markdown : null;
 }
 
 /// Il testo semplice di una copia o di un taglio coi commenti tagliati
