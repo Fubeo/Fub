@@ -2729,7 +2729,7 @@ Fatto quando: la tabella e la Base con la stessa selezione danno lo stesso
 numero (la scheda di foglio con T43); i test dei formati.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/frame src/tabella
-Stato: [~] PR #375 (feat/somma-nella-banda, 2026-11-15) · revisione media e correzioni (annulla e ricarica, it_IT, a11y della Base, percentuali, parentesi, date, barrato, posizione del menu da tastiera) · aspetta CI e baseline dal runner
+Stato: [x] fatto · PR #375 unita in main (0c7c76d34, 2026-11-15) · revisione media e correzioni (annulla e ricarica, it_IT, a11y della Base, percentuali, parentesi, date, barrato, posizione del menu da tastiera); confronto col prototipo in DECISIONS.md
 
 ## T56 · Misure, prova con Obsidian, documentazione
 
