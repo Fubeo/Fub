@@ -446,15 +446,15 @@ async function placeCard(session, css) {
 /// con il pulsante di mezzo premuto (il suo rilascio non arriva), e dopo non
 /// arrivano alla lavagna né i clic né i tasti (misurato in T46: il clic arriva
 /// come `click` con `buttons` a 4, senza `pointerdown`). L'app di S9 si chiude
-/// prima, e la nuova aspetta un attimo: Fub ha un'istanza sola (plugin
-/// single-instance), e una seconda che parte mentre la prima è viva può cederle.
+/// prima con `closeSession`, che aspetta l'uscita dei suoi processi: Fub ha
+/// un'istanza sola (plugin single-instance), e una seconda che parte mentre la
+/// prima è viva può cederle.
 async function noteTyping(notes) {
   const card = `.pane.focus .canvas-node[data-node="${SHEET_NOTE_CARD}"]`;
   const invalid = (why) => {
     notes.push(`S9.keyToPaint non misurato: ${why}`);
     return { p95: null, count: 0, typed: false };
   };
-  await pause(3_000);
   const session = await openSession(base, app);
   try {
     await ready(session);

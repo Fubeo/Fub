@@ -16,14 +16,13 @@ dubbio su una scelta tecnica si decide, non si chiede.
 
 ## L'orchestratore decide da solo
 
-- l'ordine dei task pronti e quanti coder far lavorare insieme (al massimo tre).
-  Nel piano fub-pre-alpha lavorano due coder alla volta (Opus,
-  ragionamento medio) e nessun altro agente: è la regola dell'utente dal
-  2026-11-07 (dal 2026-11-04 era un coder solo), e la cambia solo l'utente.
-  Dal 2026-11-10 un task semplice può andare a un coder Haiku 5.5, e di
-  coder Haiku ne lavorano quanti ne servono (regola dell'utente): quale
-  task è semplice e quanti Haiku insieme lo decide l'orchestratore (vedi
-  «Il ramo, le consegne e i due coder» in `PLAN.md`);
+- l'ordine dei task pronti e quanti agenti far lavorare insieme. Dal
+  2026-11-14 lavorano al massimo cinque agenti Opus con ragionamento medio,
+  revisioni comprese (regola dell'utente, che la cambia solo lui; prima erano
+  due coder dal 2026-11-07 e uno dal 2026-11-04). Un task particolarmente
+  semplice, e solo quello, può andare a un coder Haiku con ragionamento
+  xhigh. I controlli pesanti passano dalla coda della macchina (vedi
+  `CLAUDE_DEVICE.md`);
 - il come che il piano approvato lascia aperto: nomi, tipi, dove sta una
   funzione, la forma di un messaggio d'errore, la forma dei test;
 - un piccolo refactor dentro i file del task;
@@ -45,22 +44,61 @@ dubbio su una scelta tecnica si decide, non si chiede.
 Ogni decisione presa da solo che un altro piano dovrebbe conoscere va nel
 registro.
 
-## Chiede sempre
+## Decide da solo, con più cura
 
-- ciò che chi usa Fub vede o fa in modo diverso da come dice il piano
-  approvato;
-- il contratto pubblico: ABI e WIT dei plugin, i comandi IPC del client che il
-  piano non nomina, un formato su disco che leggono altri programmi o versioni
-  già pubblicate;
-- sicurezza e permessi;
-- una dipendenza esterna nuova o una licenza;
-- cambiare «Fatto quando» o «Fuori scope», saltare o rinviare un task;
-- disattivare, saltare o mettere in quarantena un test;
-- il merge.
+Dal 2026-11-08 l'utente lascia all'orchestratore anche le scelte che prima
+chiedeva, merge compresi: «fai sempre la scelta più adatta per ottenere il
+massimo risultato, anche mettendoci un po' di più. E ti lascio libero anche
+di fondere le branch con il main quando vuoi tu, quindi non aspettare le mie
+risposte. Basta che ottieni il massimo risultato e la massima
+personalizzazione e libertà dell'utente. E ovviamente mantenendo un certo
+grado di sicurezza e affidabilità del progetto.»
+
+Queste scelte l'orchestratore le prende da solo, ma con una soglia più alta,
+le scrive nel registro e le dice nel resoconto:
+
+- **il merge in `main`** di una consegna o di un ramo di piano: solo con la
+  PR pronta (non bozza), la CI completa verde sull'ultima testa (Linux,
+  Windows e macOS, banchi compresi quando tocca `apps/client/`), la
+  revisione del diff fatta, le baseline prese dal runner e guardate, e
+  nessun rosso tranne un instabile noto con la sua issue, rilanciato una
+  volta e passato. Mai `--admin`, mai saltare un controllo richiesto, mai
+  forzare. Dopo il merge, `origin/main` entra nei rami di piano puliti;
+- ciò che chi usa Fub vede o fa in modo diverso dal piano approvato: si
+  sceglie la strada che dà più qualità, più personalizzazione e più libertà
+  a chi usa Fub, e si fotografa;
+- il contratto pubblico (ABI, WIT, IPC, formati su disco letti da altri):
+  solo additivo, con le guardie di compatibilità verdi; mai rompere un
+  formato già pubblicato;
+- sicurezza e permessi: si sceglie sempre la strada più stretta; mai
+  allargare un permesso, una CSP o una capacità WASM per comodità;
+- una dipendenza esterna nuova: solo se il piano la implica, con licenza
+  compatibile e `cargo deny check` verde; mai cambiare la politica delle
+  licenze o della catena di fornitura;
+- cambiare «Fatto quando» o «Fuori scope», rinviare o dividere un task:
+  solo per un risultato migliore, mai per chiudere prima;
+- un test: si corregge la causa. Disattivarlo o metterlo in quarantena solo
+  se è instabile per una causa fuori da Fub, con una issue aperta, e mai un
+  test che prova sicurezza o dati.
+
+## Resta all'utente
+
+Solo ciò che l'orchestratore non può fare o che esce dal repository:
+
+- ciò che si fa con le mani o con persone: la prova di K2 con una persona,
+  la prova con cinque persone, il giro su un Mac, avviare il piano del
+  telefono;
+- licenze di opere altrui (il logo e ArtCraft), account e segreti
+  (SignPath, chiavi di firma);
+- la pubblicazione della pre-release (il tag `v0.2.0-prealpha.1` e la
+  release su GitHub): il 2026-11-14 l'utente ha detto «Pubblica pure tag e
+  pre-release», quindi l'orchestratore la pubblica quando le condizioni di
+  T24 ci sono tutte.
 
 Quando chiede: le domande di un momento tutte insieme, solo quelle la cui
 risposta cambia davvero il risultato, con la conseguenza pratica di ogni
-scelta e la raccomandazione per prima.
+scelta e la raccomandazione per prima. Non si ferma ad aspettare: lavora su
+ciò che non dipende dalla risposta.
 
 ## Registro
 
