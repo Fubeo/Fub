@@ -240,6 +240,13 @@
   background: var(--danger-wash);
   color: var(--danger);
 }
+/* Sopra il velo rosso o giallo di un avviso l'accento arriva a 4,4:1:
+   l'azione prende l'inchiostro d'accento più forte (più scuro alla luce, più
+   chiaro al buio). Il passaggio resta com'è. */
+.conflict-banner .link-button,
+.sheet-notice .link-button {
+  color: var(--accent-soft);
+}
 
 /* **La striscia degli spazi**: un pozzetto come le schede dell'ispettore.
    L'acceso è un foglietto con figura e nome, gli altri soltanto la figura (il

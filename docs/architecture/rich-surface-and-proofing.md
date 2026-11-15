@@ -353,6 +353,21 @@ non dal documento. Le regole della pelle sul contenuto valgono solo sotto
 cui stanno, dalla pelle, e la superficie non scrive ruoli del tema
 sull'elemento.
 
+Sotto `look-file` la carta del file è chiara in ogni luce: la regola della
+carta in `structure.css` (`.look-file .rich-desk, .look-file .grid-viewport`)
+ricollega i ruoli `--doc-*` ai `--paper-*` del tema, coi ripieghi della serie
+per un tema che non li dichiara. Sulla carta stanno anche l'anello del fuoco
+(`--focus-ring`) e il cursore (`--doc-caret`), che prendono `--paper-link`, e
+i colori della sintassi (`--syn-*`), che prendono l'inchiostro della carta:
+in una formula, come in Excel, hanno colore solo i riferimenti
+(`--doc-author-*`). Così al buio niente del tema chiaro finisce sul bianco.
+La griglia di un foglio fa lo stesso con i suoi segni (la cella attiva e
+quella scelta, la selezione, il riempimento, la cella in modifica, gli
+oggetti, il segno dei commenti): ridichiarano `--accent` e `--accent-veil`
+dalla carta, nella stessa `structure.css` (la pelle non dichiara variabili),
+e in `skin/editors.css` la cella in modifica ha il fondo della carta. Le intestazioni di righe e colonne sono cornice e restano del
+tema.
+
 Il moto della carta (`editors/rich/rich-motion.ts`) segue la regola del palco:
 il testo è sempre al suo posto finale, e si muove la sagoma di ogni foglio
 (`.rich-sheet-paper`). `RichMotion` osserva la classe `look-*`, `data-mode`

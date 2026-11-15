@@ -810,6 +810,16 @@
   background: var(--bg-elev);
   box-shadow: var(--shadow-2);
 }
+/* I segni della griglia sulla carta del file prendono l'accento della carta
+   (la regola è in `structure.css`, che ridichiara i ruoli); qui la cella in
+   modifica ha il fondo della carta, non quello dei pannelli, e il quadratino
+   del riempimento il bordo della carta. */
+.look-file .grid-cell-editor {
+  background: var(--doc-bg);
+}
+.look-file .grid-fill-handle {
+  border-color: var(--doc-bg);
+}
 /* Una cella di una cartella di Excel che legge una cella cambiata mostra
    ancora il valore del file, che Fub non ricalcola: lo dice un filo a puntini
    sotto, che resta anche sul colore della cella. Una cella cambiata qui e
@@ -4226,9 +4236,11 @@
   cursor: pointer;
 }
 .rich-side-open:hover { background: var(--bg-hover); }
+/* L'anello sta dentro la pillola, sul suo fondo: fuori, sulla carta bianca,
+   al buio starebbe a 2,2:1. L'ombra della pillola resta. */
 .rich-side-open:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring);
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring), var(--shadow-2);
 }
 .rich-find {
   background-color: var(--doc-find, var(--doc-highlight));
