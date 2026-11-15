@@ -198,14 +198,15 @@ describe("che cosa si muove", () => {
     expect(moto.runs).toEqual([]);
   });
 
-  it("lo scambio fa scorrere le righe dal posto vecchio, con la molla", async () => {
+  it("lo scambio fa scorrere le righe dal posto vecchio, col moto della posa", async () => {
     const view = await mounted("Uno\n\nDue\n\nTre", 1);
     press(view, "ArrowDown", { ctrlKey: true, shiftKey: true });
     await frame();
     const lines = moto.runs.filter((run) => run.el.classList.contains("cm-line"));
     expect(lines.length).toBeGreaterThan(0);
     for (const run of lines) expect(run.spec.from).toHaveProperty("y");
-    expect(lines.every((run) => run.spec.spring === "soft")).toBe(true);
+    // Lo stesso moto del rilascio di un trascinamento: 340 ms, poi niente.
+    expect(lines.every((run) => run.spec.duration === 340)).toBe(true);
   });
 
   it("col moto ridotto uno scambio non muove niente", async () => {

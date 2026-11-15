@@ -159,6 +159,116 @@ export function moveRun(state: EditorState, blocks: readonly Block[], run: Block
   return moveSiblings(state, blocks, run.first, run.last, b + 2 < sibs.length ? sibs[b + 2]! : -1);
 }
 
+// ── Annidare e portare fuori, dal trascinamento ─────────────────────────────
+
+/// Le voci d'elenco: soltanto loro si annidano col gesto di lato.
+export function isListItem(block: Block | undefined): boolean {
+  return !!block && LISTISH.has(block.kind);
+}
+
+/// Il rientro di una riga: gli spazi e le tabulazioni in testa.
+const leading = (line: string): string => /^[ \t]*/.exec(line)![0];
+
+/// Il rientro dei figli di una voce: quello del primo figlio se ne ha, se no
+/// quanto il segno della voce e il suo spazio («- », «1. »).
+function childIndent(state: EditorState, blocks: readonly Block[], item: number): string | null {
+  const child = blocks.findIndex((block) => block.parent === item);
+  if (child >= 0) return leading(state.doc.lineAt(blocks[child]!.from).text);
+  const head = /^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)/.exec(state.doc.lineAt(blocks[item]!.from).text);
+  return head ? head[1]! + " ".repeat(head[2]!.length + Math.min(4, head[3]!.length)) : null;
+}
+
+/// Il testo con il rientro `from` di ogni riga sostituito da `to`. Le righe
+/// vuote restano vuote; una riga meno rientrata (una continuazione pigra)
+/// prende comunque il rientro nuovo.
+export function reindent(text: string, from: string, to: string): string {
+  return text.split("\n").map((line) => {
+    if (line.trim() === "") return line;
+    return to + (line.startsWith(from) ? line.slice(from.length) : line.trimStart());
+  }).join("\n");
+}
+
+/// Dove sparisce la tratta di fratelli, con le righe vuote che la staccavano
+/// dal vicino sopra, o da quello sotto se è la prima.
+function removalOf(blocks: readonly Block[], run: BlockRun): { from: number; to: number } {
+  const sibs = siblingsOf(blocks, run.first);
+  const a = sibs.indexOf(run.first);
+  const b = sibs.indexOf(run.last);
+  if (a > 0) return { from: blocks[sibs[a - 1]!]!.to, to: blocks[run.last]!.to };
+  const next = b + 1 < sibs.length ? blocks[sibs[b + 1]!]!.from : blocks[run.last]!.to;
+  return { from: blocks[run.first]!.from, to: Math.max(next, blocks[run.last]!.to) };
+}
+
+/// Una modifica sola che toglie `gone` e mette `insert` in `at`, fuori da
+/// `gone`; con dove comincia, nel documento nuovo, il testo messo.
+function relocate(state: EditorState, gone: { from: number; to: number }, at: number, insert: string): { changes: { from: number; to: number; insert: string }; placed: number } | null {
+  const doc = state.doc;
+  if (at > gone.from && at < gone.to) return null;
+  if (at <= gone.from) {
+    return { changes: { from: at, to: gone.to, insert: insert + doc.sliceString(at, gone.from) }, placed: at };
+  }
+  const between = doc.sliceString(gone.to, at);
+  return { changes: { from: gone.from, to: at, insert: between + insert }, placed: gone.from + between.length };
+}
+
+/// Le righe della tratta sono tutte voci (i figli possono essere altro).
+function allItems(blocks: readonly Block[], run: BlockRun): boolean {
+  const parent = blocks[run.first]!.parent;
+  for (let i = run.first; i <= run.last; i++) if (blocks[i]!.parent === parent && !isListItem(blocks[i])) return false;
+  return true;
+}
+
+/// Il rilascio che annida la tratta `run` di voci sotto la voce sorella
+/// `under`, in fondo ai suoi figli, col rientro dei figli. Un passo
+/// d'annullamento. `null` se non si può.
+export function nestRun(state: EditorState, blocks: readonly Block[], run: BlockRun, under: number): MoveSpec | null {
+  const sibs = siblingsOf(blocks, run.first);
+  if (!sibs.includes(under) || (under >= run.first && under <= run.last)) return null;
+  if (!allItems(blocks, run) || !isListItem(blocks[under])) return null;
+  const indent = childIndent(state, blocks, under);
+  if (indent === null) return null;
+  const moving = state.doc.sliceString(blocks[run.first]!.from, blocks[run.last]!.to);
+  const base = leading(state.doc.lineAt(blocks[run.first]!.from).text);
+  return relocated(state, blocks, run, blocks[under]!.to, reindent(moving, base, indent));
+}
+
+/// Il rilascio che porta fuori la tratta `run` di voci annidate: va subito
+/// dopo la voce che la conteneva, col suo rientro. `null` se non si può.
+export function outdentRun(state: EditorState, blocks: readonly Block[], run: BlockRun): MoveSpec | null {
+  const parent = blocks[run.first]!.parent;
+  if (parent < 0 || !isListItem(blocks[parent]) || !allItems(blocks, run)) return null;
+  const moving = state.doc.sliceString(blocks[run.first]!.from, blocks[run.last]!.to);
+  const base = leading(state.doc.lineAt(blocks[run.first]!.from).text);
+  const indent = leading(state.doc.lineAt(blocks[parent]!.from).text);
+  return relocated(state, blocks, run, blocks[parent]!.to, reindent(moving, base, indent));
+}
+
+function relocated(state: EditorState, blocks: readonly Block[], run: BlockRun, at: number, text: string): MoveSpec | null {
+  const nl = state.lineBreak;
+  const body = text.split(/\r?\n/).join(nl);
+  const done = relocate(state, removalOf(blocks, run), at, nl + body);
+  if (!done) return null;
+  const movedFrom = done.placed + nl.length;
+  const moved = { from: movedFrom, to: movedFrom + body.length };
+  const start = blocks[run.first]!.from;
+  const end = blocks[run.last]!.to;
+  // Il cursore dentro la tratta va all'inizio della tratta nel posto nuovo.
+  const follow = (pos: number) => (pos >= start && pos <= end ? movedFrom : null);
+  const head = follow(state.selection.main.head);
+  return {
+    changes: done.changes,
+    ...(head !== null ? { selection: EditorSelection.cursor(head) } : {}),
+    userEvent: "move.drop",
+    scrollIntoView: true,
+    annotations: blockGesture.of({ kind: "drop", lead: moved }),
+    follow,
+    // Le righe riscritte non hanno un posto vecchio da dire: il moto le
+    // ritrova riportando le posizioni attraverso la modifica.
+    origin: () => null,
+    moved,
+  };
+}
+
 /// `Mod-Shift-↑/↓`: il blocco del cursore, o la tratta che `run` dà, scambia
 /// il posto col fratello vicino.
 export function moveBlockBy(dir: -1 | 1): StateCommand {

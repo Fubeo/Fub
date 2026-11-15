@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
-import { history } from "@codemirror/commands";
+import { history, undo } from "@codemirror/commands";
 import { EditorSelection, EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { type Extension } from "@codemirror/state";
@@ -319,7 +319,7 @@ describe("il trascinamento solleva soltanto il blocco", () => {
     grip.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 0, clientY: 40 }));
     const el = view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-lift");
     expect(el, "il blocco si solleva").not.toBeNull();
-    return el!.firstElementChild as HTMLElement;
+    return el!.querySelector<HTMLElement>(".cm-fub-block-lift-card")!.firstElementChild as HTMLElement;
   }
   /// Il testo di ogni riga o widget che l'immagine porta.
   const rows = (inner: HTMLElement) => Array.from(inner.children, (row) => row.textContent?.trim());
@@ -388,50 +388,65 @@ describe("il trascinamento solleva soltanto il blocco", () => {
   });
 });
 
+/// happy-dom non impagina: ogni riga è alta 20 px, come nel test del moto,
+/// così il posto è deciso dalle righe vere.
+function rowsOf20(view: EditorView): void {
+  vi.spyOn(view, "lineBlockAt").mockImplementation((pos: number) => {
+    const top = (view.state.doc.lineAt(pos).number - 1) * 20;
+    return { from: 0, to: 0, top, bottom: top + 20, height: 20, type: 0, widget: null, widgetLineBreaks: 0 } as ReturnType<EditorView["lineBlockAt"]>;
+  });
+}
+
+/// Prende la maniglia del blocco `index` col puntatore in `y`.
+function grab(view: EditorView, index: number, y: number) {
+  const handles = view.plugin(handlesView)!;
+  const block = view.state.field(blockModel).blocks[index]!;
+  handles.shown = { from: block.from, depth: block.depth };
+  const grip = view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!;
+  grip.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1, clientX: 0, clientY: y }));
+  return {
+    grip,
+    handles,
+    move: (toY: number, toX = 0) => grip.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: toX, clientY: toY })),
+    up: (toY: number) => grip.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: 0, clientY: toY })),
+    slot: () => view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-slot"),
+    lift: () => view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-lift"),
+  };
+}
+
 describe("il frontmatter resta il primo blocco", () => {
-  /// Trascina la maniglia del blocco `index` fino a `y`, e la lascia se
-  /// `release`. happy-dom non impagina: ogni riga è alta 20 px, come nel test
-  /// del moto, così il punto d'arrivo è deciso dalle righe vere.
-  function dragTo(view: EditorView, index: number, y: number, release = true): HTMLElement {
-    vi.spyOn(view, "lineBlockAt").mockImplementation((pos: number) => {
-      const top = (view.state.doc.lineAt(pos).number - 1) * 20;
-      return { from: 0, to: 0, top, bottom: top + 20, height: 20, type: 0, widget: null, widgetLineBreaks: 0 } as ReturnType<EditorView["lineBlockAt"]>;
-    });
-    const handles = view.plugin(handlesView)!;
-    const block = view.state.field(blockModel).blocks[index]!;
-    handles.shown = { from: block.from, depth: block.depth };
-    const grip = view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!;
-    grip.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1, clientX: 0, clientY: 100 }));
-    grip.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 0, clientY: y }));
-    const drop = handles.drop;
-    if (release) grip.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: 0, clientY: y }));
-    return drop;
-  }
   const DOC = "---\nicon: 🌿\n---\nUno\n\nDue";
 
-  it("trascinando sopra il frontmatter, il punto più alto è subito dopo di lui", () => {
+  it("trascinando sopra il frontmatter, il posto più alto è subito dopo di lui", () => {
     const view = mount(DOC, 0, undefined, propertiesDisplay.of("visible"));
-    // Due trascinato fin sopra il frontmatter: la linea d'arrivo sta sul bordo
-    // alto di «Uno», cioè subito sotto il frontmatter (che finisce a 60 px).
-    const drop = dragTo(view, 2, 10, false);
-    expect(drop.hidden, "la linea d'arrivo si vede").toBe(false);
-    expect(drop.style.top).toBe("59px");
-    view.plugin(handlesView)!.endDrag(false);
+    rowsOf20(view);
+    // Due trascinato fin sopra il frontmatter: il posto si apre dove stava
+    // «Uno», cioè subito sotto il frontmatter (che finisce a 60 px).
+    let hand = grab(view, 2, 100);
+    hand.move(10);
+    expect(hand.slot()?.hidden, "il posto si vede").toBe(false);
+    expect(hand.slot()?.style.top).toBe("60px");
+    expect(hand.slot()?.dataset.home, "non è più l'origine").toBeUndefined();
+    hand.handles.endDrag(false);
     expect(view.state.doc.toString()).toBe(DOC);
 
     // Rilasciato lì, Due va fra il frontmatter e Uno: il frontmatter resta primo.
-    dragTo(view, 2, 10);
+    hand = grab(view, 2, 100);
+    hand.move(10);
+    hand.up(10);
     const blocks = view.state.field(blockModel).blocks;
     expect(blocks[0]!.kind).toBe("frontmatter");
     expect(view.state.sliceDoc(blocks[1]!.from, blocks[1]!.to)).toBe("Due");
     expect(view.state.doc.toString()).toBe("---\nicon: 🌿\n---\n\nDue\n\nUno");
   });
 
-  it("trascinato giù, il frontmatter non si sposta e non lascia una linea d'arrivo", () => {
+  it("trascinato giù, il frontmatter non si sposta: il posto resta l'origine", () => {
     const view = mount(DOC, 0, undefined, propertiesDisplay.of("visible"));
-    const drop = dragTo(view, 0, 200, false);
-    expect(drop.hidden, "nessuna linea: non si sposta niente").toBe(true);
-    view.plugin(handlesView)!.endDrag(false);
+    rowsOf20(view);
+    const hand = grab(view, 0, 30);
+    hand.move(200);
+    expect(hand.slot()?.dataset.home, "il posto resta quello d'origine").toBe("true");
+    hand.up(200);
     expect(view.state.doc.toString()).toBe(DOC);
     expect(view.state.field(blockModel).blocks[0]!.kind).toBe("frontmatter");
   });
@@ -449,5 +464,103 @@ describe("il frontmatter resta il primo blocco", () => {
     press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
     expect(view.state.doc.toString(), "un altro passo non trova posto").toBe("---\nicon: 🌿\n---\n\nDue\n\nUno");
     expect(view.state.field(blockModel).blocks[0]!.kind).toBe("frontmatter");
+  });
+});
+
+describe("il blocco in mano (E2)", () => {
+  // Uno (0–20), Due (40–60), il titolo (80–100), Tre (120–140).
+  const DOC = "Uno\n\nDue\n\n# I conti\n\nTre";
+  const live = (view: EditorView) => view.dom.querySelector(".cm-fub-block-live")?.textContent?.trim() ?? "";
+
+  it("si prende dopo 4 px di movimento, con gli occhi socchiusi; un clic resta un clic", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    expect(hand.grip.dataset.held, "premuta, la maniglia socchiude gli occhi").toBe("true");
+    hand.move(13);
+    expect(hand.lift(), "3 px non bastano").toBeNull();
+    hand.move(14);
+    expect(hand.lift(), "4 px sì").not.toBeNull();
+    expect(hand.slot()?.dataset.home, "il posto, grigio, è l'origine").toBe("true");
+    expect(view.dom.classList.contains("cm-fub-blocks-dragging")).toBe(true);
+    hand.handles.endDrag(false);
+    expect(hand.grip.dataset.held).toBeUndefined();
+    expect(hand.lift()).toBeNull();
+    expect(hand.slot()).toBeNull();
+  });
+
+  it("il rilascio sul posto sposta il blocco in un solo passo d'annullamento, e lo dice", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(150);
+    // Fuori dalla sua sezione: l'etichetta e l'annuncio dicono dove cade.
+    expect(view.scrollDOM.querySelector(".cm-fub-block-lift-to")?.textContent).toBe("in «I conti»");
+    expect(live(view)).toBe("Posizione 4 di 4, in «I conti»");
+    hand.up(150);
+    expect(view.state.doc.toString()).toBe("Due\n\n# I conti\n\nTre\n\nUno");
+    expect(hand.lift(), "il blocco in mano se ne va").toBeNull();
+    undo(view);
+    expect(view.state.doc.toString(), "un Ctrl+Z e torna tutto").toBe(DOC);
+  });
+
+  it("annuncia ogni cambio di posto, non la presa", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const before = live(view);
+    const hand = grab(view, 0, 10);
+    hand.move(16);
+    expect(live(view), "alla presa il blocco è al suo posto").toBe(before);
+    hand.move(70);
+    expect(live(view)).toBe("Posizione 2 di 4");
+    hand.handles.endDrag(false);
+  });
+
+  it("Esc lo riporta dov'era, senza toccare il testo", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(150);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(hand.lift()).toBeNull();
+    expect(view.dom.classList.contains("cm-fub-blocks-dragging")).toBe(false);
+    hand.up(150);
+    expect(view.state.doc.toString()).toBe(DOC);
+  });
+
+  it("la finestra che perde il fuoco riporta il blocco al suo posto", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(150);
+    window.dispatchEvent(new Event("blur"));
+    expect(hand.lift()).toBeNull();
+    expect(view.state.doc.toString()).toBe(DOC);
+  });
+
+  it("il testo cambiato da fuori durante il gesto lo annulla: vince il testo nuovo", async () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(150);
+    view.dispatch({ changes: { from: view.state.doc.length, insert: "\n\nQuattro" } });
+    await Promise.resolve();
+    expect(hand.lift()).toBeNull();
+    hand.up(150);
+    expect(view.state.doc.toString()).toBe(`${DOC}\n\nQuattro`);
+  });
+
+  it("un blocco alto si fa compatto: al più 104 px, tagliato, col suo tipo", () => {
+    const tall = "```\n1\n2\n3\n4\n5\n6\n7\n8\n```\n\nDopo";
+    const view = mount(tall, tall.length);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(30);
+    const lift = hand.lift()!;
+    expect(lift.style.height).toBe("104px");
+    expect(lift.querySelector<HTMLElement>(".cm-fub-block-lift-card")?.dataset.clipped).toBe("true");
+    expect(lift.querySelector(".cm-fub-block-lift-more")?.textContent).toBeTruthy();
+    expect(hand.slot()?.style.height).toBe("104px");
+    hand.handles.endDrag(false);
   });
 });

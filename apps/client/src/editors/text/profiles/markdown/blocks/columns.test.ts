@@ -86,6 +86,19 @@ describe("il blocco lasciato sul bordo destro", () => {
     expect(grid(out)).toBe("2");
   });
 
+  it("sul bordo sinistro va prima: due colonne, o la prima delle colonne che ci sono", () => {
+    const state = stateOf("Ospite\n\nOspitato");
+    const out = apply(state, dropAsColumn(state, blocksOf(state), { first: 1, last: 1 }, 0, "left")!);
+    expect(out).toBe("> [!columns]\n> > [!column]\n> > Ospitato\n>\n> > [!column]\n> > Ospite");
+    expect(grid(out)).toBe("2");
+    const two = "> [!columns]\n> > [!column]\n> > 1\n>\n> > [!column]\n> > 2";
+    const cols = stateOf(`${two}\n\nZero`);
+    const zero = at(cols, "Zero");
+    const first = apply(cols, dropAsColumn(cols, blocksOf(cols), { first: zero, last: zero }, 0, "left")!);
+    expect(first).toBe("> [!columns]\n> > [!column]\n> > Zero\n>\n> > [!column]\n> > 1\n>\n> > [!column]\n> > 2");
+    expect(grid(first)).toBe("3");
+  });
+
   it("un blocco con righe vuote dentro le tiene citate", () => {
     const state = stateOf("Testo\n\n```\na\n\nb\n```");
     const blocks = blocksOf(state);
