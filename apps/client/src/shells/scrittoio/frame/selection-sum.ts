@@ -256,6 +256,11 @@ export function resetShownStats(): void {
 /// La crea nascosta; la riempie `show`.
 export class BandSum {
   readonly element: HTMLElement;
+  /// La stessa cosa a voce, per chi non vede la banda: una regione cortese
+  /// (`role="status"`), fuori dalla voce che si nasconde, perché una regione
+  /// nascosta non parla. La scelta delle celle nella Base non ha altra voce:
+  /// la sua tabella non è una griglia ARIA (`docs/product/editor-tables.md`).
+  readonly voice: HTMLElement;
   readonly #lifetime: Lifetime;
   #summary: SelectionSum | null = null;
   /// Le parti, per conto: si riscrivono solo dove cambiano, e il fuoco su un
@@ -278,15 +283,26 @@ export class BandSum {
       event.preventDefault();
       this.#openMenu(event);
     });
+    const voice = document.createElement("span");
+    voice.id = "status-sum-voice";
+    voice.className = "sr-only";
+    voice.setAttribute("role", "status");
+    voice.setAttribute("aria-live", "polite");
+    this.voice = voice;
     lifetime.add(() => element.remove());
+    lifetime.add(() => voice.remove());
   }
 
   /// I conti da dire, o `null` per spegnere la voce.
   show(summary: SelectionSum | null): void {
     this.#summary = summary;
     this.element.hidden = summary === null;
-    if (!summary) return;
+    if (!summary) {
+      this.#say("");
+      return;
+    }
     this.element.setAttribute("aria-label", t("frame.status.sum.label"));
+    const spoken: string[] = [];
     let first = true;
     for (const stat of SUM_STATS) {
       const on = shown.has(stat);
@@ -304,8 +320,16 @@ export class BandSum {
       part.button.toggleAttribute("data-lead", first);
       part.button.setAttribute("aria-label", t("frame.status.sum.part", { stat: name, value }));
       setTooltip(part.button, t("frame.status.sum.copy_hint"));
+      spoken.push(t("frame.status.sum.spoken", { stat: name, value }));
       first = false;
     }
+    this.#say(spoken.join(", "));
+  }
+
+  /// Parla soltanto quando la frase cambia: un ridisegno con gli stessi conti
+  /// non si ripete.
+  #say(text: string): void {
+    if (this.voice.textContent !== text) this.voice.textContent = text;
   }
 
   #part(stat: SumStat) {

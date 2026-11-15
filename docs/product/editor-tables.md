@@ -148,20 +148,38 @@ conto. Il conto si fa nella shell, senza chiamate al core, in un passo solo
 anche su diecimila celle.
 
 - Un numero si legge com'è scritto nella lingua della nota (`lang:` nel
-  frontmatter, se no quella dell'app): «1.240,5» in italiano, «1,240.5» in
-  inglese, lo spazio come separatore in francese; vale anche la forma del
-  computer «1240.5». Segno, valute (€ $ £ ¥) e percento sono permessi; testo,
-  date e celle vuote non contano. Il grassetto o il codice attorno al numero
-  non lo cambiano. La riga d'intestazione non conta mai.
+  frontmatter, anche nella forma `it_IT`, se no quella dell'app): «1.240,5» in
+  italiano, «1,240.5» in inglese, lo spazio come separatore in francese. La
+  forma del computer «1240.5» vale soltanto dove il punto non separa le
+  migliaia: in italiano «15.11» e «12.30» sono una data e un'ora, e non
+  contano. Segno, valute (€ $ £ ¥) e percento sono permessi; un numero tra
+  parentesi è negativo, come nei conti: «(1.234)», «(€ 1.240,50)». Testo,
+  date, celle vuote e testo barrato (`~~100~~`) non contano. Il grassetto o il
+  codice attorno al numero non lo cambiano. La riga d'intestazione non conta
+  mai.
 - Il conteggio è quello delle celle numeriche. I risultati si scrivono nella
-  lingua delle celle, con i decimali delle celle (la media almeno due).
+  lingua delle celle, al più con le cifre dopo la virgola delle celle (la
+  media almeno due) e senza zeri in fondo, come il prototipo: «1,50» e «1,00»
+  fanno «2,5».
+- Se tutte le celle contate sono percentuali, somma, media, minimo e massimo
+  si scrivono in percento: «10%» e «20%» fanno «Somma 30%». Se sono miste, una
+  percentuale vale la sua frazione («50%» è 0,5) e i risultati sono numeri:
+  «50%» e «2» fanno «Somma 2,5».
 - Un clic su una voce la copia negli appunti e lo dice con un avviso; il tasto
-  destro sulla banda sceglie le voci (anche Minimo e Massimo). La scelta dura
-  quanto la sessione, e almeno una voce resta accesa.
+  destro sulla banda, o il tasto Menu e Maiusc+F10 su una voce, sceglie le
+  voci (anche Minimo e Massimo). La scelta dura quanto la sessione, e almeno
+  una voce resta accesa. I conti si sentono anche a voce, da una regione
+  cortese (`role="status"`) che parla quando cambiano.
 - Nella Base le celle si scelgono con il clic, Maiusc+clic, il trascinamento,
-  Maiusc con le frecce (le righe dei gruppi si saltano); Escape, la ricerca o
-  una vista nuova le lasciano. Una Base dentro una nota non porta la somma
-  nella banda.
+  o Maiusc con le frecce dalla cella (le righe dei gruppi si saltano). Nel
+  campo aperto Maiusc con le frecce sceglie il testo: Escape lascia il campo
+  senza scriverlo e porta alla cella, da cui le frecce scelgono le celle.
+  Quando la Base si ridisegna (un'altra nota salvata, un gruppo chiuso) la
+  scelta resta se le sue celle d'angolo ci sono ancora, con la stessa nota e
+  la stessa colonna; se ne va con Escape, con la ricerca, cambiando vista o
+  quando una delle due non c'è più. La tabella della Base non è una griglia
+  ARIA (non ha la navigazione con le frecce): la scelta si sente dalla voce
+  della banda. Una Base dentro una nota non porta la somma nella banda.
 
 ## Dove si trova
 

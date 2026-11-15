@@ -5,6 +5,7 @@ import type { SurfaceCellSelection } from "../../../editors/core/registry";
 import { mountBaseSurface } from "../../../editors/base/surface";
 import { TableGrid, type TableGridHost } from "../../../editors/text/profiles/markdown/table-grid";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { forwardNotice } from "../../../state/kernel";
 
 const world = vi.hoisted(() => ({
   copied: [] as string[],
@@ -293,7 +294,7 @@ describe("la tabella Markdown e la Base danno lo stesso numero", () => {
     }
   });
 
-  it("nella Base Maiusc con le frecce scende riga per riga, e la ricerca toglie la selezione", async () => {
+  it("nella Base Maiusc con le frecce scende riga per riga dalla cella, e la ricerca toglie la selezione", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     const surface = mountBaseSurface("base", { paneId: "base-frecce", documentId: "budget.base", parent: host }, {
@@ -307,16 +308,91 @@ describe("la tabella Markdown e la Base danno lo stesso numero", () => {
       surface.buffer.setDoc("views:\n  - {name: Tabella, type: table}\n");
       await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(4));
       const input = host.querySelector<HTMLInputElement>('tr[data-index="0"] > td[data-cell="1"] input')!;
-      input.focus();
-      for (let step = 0; step < 3; step++) input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true, cancelable: true }));
       const viewport = host.querySelector<HTMLElement>(".base-table-viewport")!;
+      const key = (target: Element, name: string, shiftKey = false) => {
+        const event = new KeyboardEvent("keydown", { key: name, shiftKey, bubbles: true, cancelable: true });
+        target.dispatchEvent(event);
+        return event;
+      };
+      input.focus();
+      // Nel campo aperto Maiusc con le frecce resta al campo: sceglie il testo.
+      expect(key(input, "ArrowDown", true).defaultPrevented).toBe(false);
+      expect(document.activeElement).toBe(input);
+      expect(surface.cellSelection!.read()).toBeNull();
+      // Esc lascia il campo (senza scriverlo) e porta alla cella: da lì Maiusc
+      // con le frecce sceglie le celle.
+      input.value = "9999";
+      expect(key(input, "Escape").defaultPrevented).toBe(true);
+      expect(input.value).toBe("1800");
       expect(document.activeElement).toBe(viewport);
+      expect(host.querySelector('tr[data-index="0"] > td[data-cell="1"]')!.hasAttribute("data-picked")).toBe(true);
+      for (let step = 0; step < 3; step++) key(viewport, "ArrowDown", true);
       expect(summarizeSelection(surface.cellSelection!.read()!)?.sum).toBe(4300);
       const search = host.querySelector<HTMLInputElement>(".base-search")!;
       search.value = "Stampa";
       search.dispatchEvent(new Event("input", { bubbles: true }));
       await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(1));
       expect(surface.cellSelection!.read()).toBeNull();
+    } finally {
+      surface.destroy();
+    }
+  });
+
+  it("nella Base la scelta resta quando il vault cambia altrove, e se ne va con le sue celle", async () => {
+    // Le righe che l'indice dà adesso: il test le cambia fra una ricarica e
+    // l'altra.
+    let shown = [["Allestimento", 1800], ["Trasporti", 1200], ["Assicurazione", 600]] as [string, number][];
+    const queryIndex = (request: IndexQuery): Promise<IndexResult> => {
+      const rows = shown.map(([voce, previsto]) => ({ doc: `${voce}.md`, values: { previsto: { kind: "number", value: previsto } }, properties: {} }));
+      if (request.kind === "documents") {
+        return Promise.resolve({ kind: "documents", value: { offset: 0, total: rows.length, items: rows.map((row) => ({ doc: row.doc, properties: [] })) } });
+      }
+      const op = (request.kind === "custom" && typeof request.query === "object" && request.query && "op" in request.query) ? request.query.op : null;
+      if (op === "parse") return Promise.resolve({ kind: "custom", value: { views: ["Tabella"] } });
+      if (op === "plan") return Promise.resolve({ kind: "custom", value: {
+        view: "Tabella", view_type: "table", columns: ["previsto"], column_labels: {},
+        required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {},
+      } });
+      return Promise.resolve({ kind: "custom", value: { rows, summaries: {} } });
+    };
+    const host = document.createElement("div");
+    document.body.append(host);
+    const surface = mountBaseSurface("base", { paneId: "base-resta", documentId: "budget.base", parent: host }, {
+      queryIndex,
+      invokeCommand: async () => ({}),
+      viewState: async () => null,
+      setViewState: async () => {},
+      onOpenDocument: () => {},
+    });
+    const otherNoteSaved = () => forwardNotice({
+      event: { type: "document_changed", id: "altra.md", changes: { aspects: ["frontmatter"], properties: ["status"], tags_added: [], tags_removed: [] } },
+      origin: { actor: { kind: "kernel" }, batch: null },
+    });
+    try {
+      surface.buffer.setDoc("views:\n  - {name: Tabella, type: table}\n");
+      await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(3));
+      const cell = (row: number) => host.querySelector(`tr[data-index="${row}"] > td[data-cell="1"]`)!;
+      press(cell(0), "pointerdown");
+      press(cell(0), "pointerup");
+      press(cell(1), "pointerdown", { shiftKey: true });
+      expect(summarizeSelection(surface.cellSelection!.read()!)?.sum).toBe(3000);
+      const heard = vi.fn();
+      const stop = surface.cellSelection!.subscribe(heard);
+      // Un'altra nota si salva, e una riga nuova arriva in cima: le stesse
+      // celle (stessa nota, stessa colonna) restano scelte, col valore nuovo.
+      shown = [["Cornici", 50], ["Allestimento", 1900], ["Trasporti", 1200], ["Assicurazione", 600]];
+      otherNoteSaved();
+      await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(4));
+      expect(summarizeSelection(surface.cellSelection!.read()!)?.sum).toBe(3100);
+      expect(heard).toHaveBeenCalled();
+      expect([...host.querySelectorAll("tr[data-doc]")].filter((row) => row.querySelector("td[data-picked]")).map((row) => row.getAttribute("data-doc"))).toEqual(["Allestimento.md", "Trasporti.md"]);
+      // Una delle due celle non c'è più: la scelta se ne va.
+      shown = [["Cornici", 50], ["Trasporti", 1200], ["Assicurazione", 600]];
+      otherNoteSaved();
+      await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(3));
+      expect(surface.cellSelection!.read()).toBeNull();
+      expect(host.querySelectorAll("td[data-picked]").length).toBe(0);
+      stop();
     } finally {
       surface.destroy();
     }
@@ -392,6 +468,15 @@ describe("la voce della banda", () => {
     expect(said(sum)).toEqual(["Massimo1.240"]);
     expect(parts(sum)[0]!.hasAttribute("data-lead")).toBe(true);
     expect([...sum.element.querySelectorAll(".status-sum-dot:not([hidden])")].length).toBe(0);
+  });
+
+  it("a voce dice gli stessi conti, una volta per cambio", () => {
+    const sum = new BandSum(life);
+    document.body.append(sum.element, sum.voice);
+    sum.show(summarizeSelection(selection("it", ["1.240", "860", "420"])));
+    expect(sum.voice.textContent).toBe("Somma 2.520, Media 840, Conteggio 3");
+    sum.show(null);
+    expect(sum.voice.textContent).toBe("");
   });
 
   it("dalla tastiera (tasto Menu, Maiusc+F10) il menu si apre sul numero a fuoco, non in un angolo", () => {

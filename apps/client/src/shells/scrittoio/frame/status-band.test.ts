@@ -641,6 +641,30 @@ describe("la somma delle celle scelte (T55)", () => {
   const sumEl = () => document.getElementById("status-sum");
   const values = () => [...sumEl()!.querySelectorAll("button[data-stat]:not([hidden]) .status-sum-value")].map((each) => each.textContent);
 
+  it("chi non vede la banda sente la somma, a voce bassa, quando la scelta cambia", () => {
+    const chosen = { values: null as (string | number)[] | null };
+    const { pane, changed } = cellsPane(chosen);
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    const voice = document.getElementById("status-sum-voice")!;
+    expect(voice.getAttribute("role")).toBe("status");
+    expect(voice.getAttribute("aria-live")).toBe("polite");
+    expect(voice.classList.contains("sr-only")).toBe(true);
+    // Fuori dalla voce che si nasconde: una regione nascosta non parla.
+    expect(voice.closest("[hidden]")).toBeNull();
+    expect(voice.textContent).toBe("");
+    chosen.values = ["1.240", "860", "420"];
+    changed();
+    // Le parole vere le prova `selection-sum.test.ts`; qui le stringhe sono
+    // finte, e conta che i numeri ci siano.
+    expect(voice.textContent).toContain('"value":"2.520"');
+    expect(voice.textContent).toContain('"value":"840"');
+    chosen.values = null;
+    changed();
+    expect(voice.textContent).toBe("");
+  });
+
   it("con due celle numeriche dice somma, media e conteggio, e le parole si fanno da parte", () => {
     const chosen = { values: null as (string | number)[] | null };
     const { pane, changed } = cellsPane(chosen);

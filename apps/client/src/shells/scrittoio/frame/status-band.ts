@@ -319,6 +319,7 @@ export function mountStatusBand(lifetime: Lifetime): void {
   const declared = byId("views-status");
   if (declared?.parentElement === band) declared.after(sum.element);
   else band.append(sum.element);
+  sum.element.after(sum.voice);
   let counted: SurfaceCellSelectionSource | null = null;
   let stopCounting: (() => void) | null = null;
   lifetime.add(() => stopCounting?.());
