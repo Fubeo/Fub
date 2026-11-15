@@ -6034,7 +6034,7 @@ Fatto quando: le viste dette sopra passano `bench:viste` (PA T55) senza le
 righe di Differenze 49–52; i test di `FIELD_LAYOUT` e di `nodeFill`
 sono verdi; le baseline nuove vengono dal runner.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/editors/text src/editors/grid src/editors/canvas && npm run typecheck && npm run bench:verify && npm run bench:a11y
-Stato: [ ] da fare
+Stato: [x] fatto · integrato (coder/pa-t56 @ 2442edbea, merge 495c7ddb7, 2026-11-15) · al buio cella attiva, selezione e anello della griglia 2,18 → 5,99:1, «=» e numeri della formula 1,9 → 18:1, azione degli avvisi sui veli 6,2–7,9:1; segni solo dentro `.grid-viewport`, anello e sintassi della carta su `.rich-content`/`.rich-running`/`.grid-viewport` (non sulla scrivania), anello della Sorgente sopra le gutter; revisione media con 7 correzioni · differenze: le variabili in `structure.css` (la pelle non le dichiara), ripiego #007249, nessun `nodeFill` nel codice, due hook spostati nel contratto (vedi DECISIONS.md) · fuori: colori forzati (il pavimento `outline-offset: 2px !important` rimette fuori l anello delle superfici a tutta carta)
 
 ## T57 · I bersagli e i nomi interi, dal controllo delle viste
 

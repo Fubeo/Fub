@@ -2883,3 +2883,4 @@ La più recente in cima: data · piano · decisione · perché.
   `run.mjs` del banco WebView tiene le opzioni delle due parti: `--gc` e
   `--x11/--wayland`. Al posto della pausa fissa di 3 s c'è `closeSession`, che
   aspetta la fine dell'app.
+- 2026-11-15 · T56 · Il contratto del tema cambia solo nella posizione di due hook (`conflict-banner`, `sheet-notice` anche in `drawers.panel-title`), nessun ruolo nuovo: l'anatomia vuole ogni classe di un file della pelle dichiarata nel suo pezzo, e spostare la regola in `sheets.css` avrebbe cambiato il contratto lo stesso. I segni della griglia (`--accent`/`--accent-veil`) stanno in `structure.css` perché la pelle non può dichiarare variabili né nominare `.grid-cell`. Decisione dell'orchestratore; il «Non toccare» del contratto voleva evitare ruoli nuovi, che non ci sono.
