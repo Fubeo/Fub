@@ -25,6 +25,8 @@ pub trait Via {
     fn model(&mut self, handle: u32) -> Result<Value, Value>;
     fn node_at(&mut self, handle: u32, byte: u32) -> Result<Option<usize>, Value>;
     fn ink_layers(&mut self, handle: u32) -> Result<Value, Value>;
+    fn describe(&mut self, handle: u32, request: &[u8]) -> Result<Value, Value>;
+    fn check(&mut self, handle: u32, request: &[u8]) -> Result<Value, Value>;
     fn close(&mut self, handle: u32) -> Result<(), Value>;
 }
 
@@ -562,6 +564,8 @@ pub fn bad_input(via: &mut impl Via) {
         expect_code(via.commit(handle, bad), "utf8");
         expect_code(via.preview(handle, bad), "utf8");
         expect_code(via.compile(handle, bad), "utf8");
+        expect_code(via.describe(handle, bad), "utf8");
+        expect_code(via.check(handle, bad), "utf8");
         // Anche dentro una stringa JSON.
         let mut wrapped = b"[\"".to_vec();
         wrapped.extend_from_slice(bad);
@@ -640,6 +644,8 @@ pub fn handles(via: &mut impl Via) {
         expect_code(via.commit(handle, b"[]"), "handle");
         expect_code(via.preview(handle, b"[]"), "handle");
         expect_code(via.compile(handle, br#"{"ops": []}"#), "handle");
+        expect_code(via.describe(handle, br#"{"form": "code"}"#), "handle");
+        expect_code(via.check(handle, br#"{"ops": []}"#), "handle");
         expect_code(via.model(handle), "handle");
         expect_code(via.node_at(handle, 0), "handle");
         expect_code(via.close(handle), "handle");
@@ -719,5 +725,232 @@ pub fn results(via: &mut impl Via) {
     let preview = via.preview(handle, b"[]").expect("preview");
     assert!(preview.len() > 65_536);
     assert_eq!(preview, source.as_bytes());
+    via.close(handle).expect("close");
+}
+
+/// Una lavagna con un gruppo, una scheda di testo con un tratto, una di file
+/// nel gruppo, un arco e un tratto libero: ciò che `describe` deve ridare.
+pub fn described_board() -> String {
+    let card_stroke = card_stroke("s-a");
+    let board = json!({
+        "nodes": [
+            {"id": "g", "type": "group", "x": 0, "y": 400, "width": 560, "height": 520, "label": "Gruppo"},
+            {"id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Ciclo dell'acqua",
+             "fub:ink": {"v": 1, "strokes": [card_stroke]}},
+            {"id": "b", "type": "file", "x": 40, "y": 440, "width": 400, "height": 400, "file": "Scienze/nuvole.png"},
+        ],
+        "edges": [
+            {"id": "e", "fromNode": "a", "toNode": "b", "fromSide": "bottom", "toSide": "top"},
+        ],
+        "fub:ink": {"v": 1, "strokes": [free_stroke("s-free")]},
+    });
+    serde_json::to_string_pretty(&board).expect("si scrive")
+}
+
+/// `describe` dà la lista che ricrea la lavagna, inchiostro compreso: compilata
+/// su una lavagna vuota ridà lo stesso modello. Con `ids` legge solo quelle
+/// schede e gli archi fra loro, senza l'inchiostro libero. Una richiesta
+/// sbagliata è `request`, e niente cambia la lavagna.
+pub fn describe_gives_the_code(via: &mut impl Via) {
+    let source = described_board();
+    let (handle, opened) = via.open(source.as_bytes()).expect("si apre");
+    let answer = via
+        .describe(handle, br#"{"form": "code"}"#)
+        .expect("describe");
+    assert_eq!(answer["form"], "code");
+    let text = answer["text"].as_str().expect("il codice è testo");
+    // Il testo è quello di `canvas.read` in forma `code`: JSON con i rientri.
+    assert!(text.starts_with("[\n  {"), "{text}");
+    let ops: Value = serde_json::from_str(text).expect("il codice è JSON");
+    let layers: Vec<&str> = ops
+        .as_array()
+        .expect("una lista")
+        .iter()
+        .filter(|op| op["op"] == "add_strokes")
+        .map(|op| op["layer"].as_str().unwrap_or("una scheda"))
+        .collect();
+    assert_eq!(layers.len(), 2, "i due livelli d'inchiostro: {ops}");
+    assert!(layers.contains(&"board"), "{layers:?}");
+    let (empty, _) = via.open(b"").expect("vuota");
+    let compiled = via
+        .compile(empty, &bytes(&json!({ "ops": ops, "seed": 7 })))
+        .expect("si compila");
+    via.commit(empty, &bytes(&compiled["patches"]))
+        .expect("si scrive");
+    assert_eq!(
+        via.model(empty).expect("dopo")["canvas"],
+        opened["canvas"],
+        "la lista ricrea la lavagna"
+    );
+    via.close(empty).expect("close");
+
+    // Solo `a` e `b` (e un id che non c'è): le due schede e l'arco fra loro,
+    // niente gruppo né inchiostro libero.
+    let some = via
+        .describe(handle, br#"{"form": "code", "ids": ["a", "b", "nessuna"]}"#)
+        .expect("con ids");
+    let some: Value = serde_json::from_str(some["text"].as_str().expect("testo")).expect("JSON");
+    let some = some.as_array().expect("una lista");
+    let count = |name: &str| some.iter().filter(|op| op["op"] == name).count();
+    assert_eq!(count("add_card"), 2, "{some:?}");
+    assert_eq!(count("connect"), 1, "{some:?}");
+    assert!(
+        !some
+            .iter()
+            .any(|op| op["op"] == "add_strokes" && op["layer"] == "board"),
+        "{some:?}"
+    );
+    // Una lavagna vuota è una lista vuota.
+    let (blank, _) = via.open(b"").expect("vuota");
+    let none = via.describe(blank, br#"{"form": "code"}"#).expect("vuota");
+    assert_eq!(none["text"], "[]");
+    via.close(blank).expect("close");
+
+    for bad in [
+        &b""[..],
+        b"{",
+        b"{}",
+        b"[]",
+        br#"{"form": "outline"}"#,
+        br#"{"form": "json"}"#,
+        br#"{"form": "code", "ids": "a"}"#,
+        br#"{"form": "code", "ids": [1]}"#,
+        br#"{"form": "code", "max_chars": 10}"#,
+    ] {
+        expect_code(via.describe(handle, bad), "request");
+    }
+    assert_eq!(
+        utf8(via.preview(handle, b"[]").expect("preview")),
+        source,
+        "describe non cambia la lavagna"
+    );
+    via.close(handle).expect("close");
+}
+
+/// `check` dà il rapporto del nucleo: il riassunto senza problemi, il primo
+/// problema col suggerimento, un testo vuoto o che non è JSON come problema
+/// `invalid` della lista intera. La lista come JSON o come testo dà lo stesso
+/// rapporto; il seme è quello di `compile`; niente cambia la lavagna.
+pub fn check_gives_the_report(via: &mut impl Via) {
+    let source = described_board();
+    let (handle, _) = via.open(source.as_bytes()).expect("si apre");
+    let ops = json!([
+        {"op": "add_card", "id": "n1", "text": "Evaporazione", "near": "a"},
+        {"op": "add_card", "id": "n2", "text": "Pioggia", "x": 2000, "y": 0},
+        {"op": "connect", "from": "n1", "to": "n2"},
+        {"op": "move", "ids": ["a"], "dx": 800, "dy": -800},
+    ]);
+    let report = via
+        .check(handle, &bytes(&json!({ "ops": ops, "seed": 3 })))
+        .expect("check");
+    assert_eq!(report["ok"], true, "{report}");
+    assert_eq!(report["problems"], json!([]));
+    let summary = &report["summary"];
+    assert_eq!(summary["cards_added"].as_array().map(Vec::len), Some(2));
+    assert_eq!(summary["edges_added"].as_array().map(Vec::len), Some(1));
+    assert_eq!(summary["cards_changed"][0]["id"], "a");
+    assert!(
+        summary["cards_changed"][0]["moved"].is_object(),
+        "{summary}"
+    );
+    assert!(report["outline_after"]
+        .as_str()
+        .is_some_and(|text| text.contains("Pioggia")));
+    // Lo stesso testo, con un BOM in testa come lo danno certi appunti, e il
+    // seme come stringa di cifre.
+    let text = format!(
+        "\u{feff}{}",
+        serde_json::to_string_pretty(&ops).expect("testo")
+    );
+    let from_text = via
+        .check(handle, &bytes(&json!({ "text": text, "seed": "3" })))
+        .expect("check dal testo");
+    assert_eq!(from_text, report, "il testo dà lo stesso rapporto");
+
+    // Il primo problema, col suggerimento: `bb` non c'è, `b` è a un passo.
+    let wrong = json!([
+        {"op": "move", "ids": ["bb"], "dx": 8, "dy": 0},
+        {"op": "move", "ids": ["zz"], "dx": 8, "dy": 0},
+    ]);
+    let refused = via
+        .check(handle, &bytes(&json!({ "ops": wrong })))
+        .expect("check con un problema");
+    assert_eq!(refused["ok"], false);
+    assert_eq!(refused["summary"], Value::Null);
+    assert_eq!(refused["outline_after"], Value::Null);
+    let problems = refused["problems"].as_array().expect("i problemi");
+    assert_eq!(problems.len(), 1, "la compilazione si ferma al primo");
+    assert_eq!(problems[0]["code"], "unknown_node");
+    assert_eq!(problems[0]["index"], 0);
+    assert_eq!(problems[0]["path"], "/0/ids/0");
+    assert!(
+        problems[0]["suggestion"]
+            .as_str()
+            .is_some_and(|near| near.split(", ").any(|id| id == "b")),
+        "{refused}"
+    );
+    // La forma sbagliata: un campo con un solo nome vicino ha la correzione.
+    let shape = via
+        .check(
+            handle,
+            &bytes(&json!({ "ops": [{"op": "add_card", "txet": "x"}] })),
+        )
+        .expect("check della forma");
+    assert_eq!(shape["problems"][0]["code"], "unknown_field", "{shape}");
+    assert!(shape["problems"][0]["fix"].is_object(), "{shape}");
+
+    // Un testo vuoto, di soli spazi, o che non è JSON: il problema `invalid`
+    // della lista intera, senza indice.
+    for (text, start) in [
+        ("", "the text is empty"),
+        ("  \n\t", "the text is empty"),
+        ("\u{feff}", "the text is empty"),
+        ("Ciclo dell'acqua", "the text is not JSON"),
+        ("[{\"op\": \"add_card\",", "the text is not JSON"),
+    ] {
+        let report = via
+            .check(handle, &bytes(&json!({ "text": text })))
+            .expect("un testo che non si legge non è un errore della chiamata");
+        assert_eq!(report["ok"], false, "{text:?}");
+        assert_eq!(report["summary"], Value::Null, "{text:?}");
+        let problem = &report["problems"][0];
+        assert_eq!(problem["code"], "invalid", "{text:?}");
+        assert_eq!(problem["index"], Value::Null, "{text:?}");
+        assert_eq!(problem["path"], "", "{text:?}");
+        assert!(
+            problem["message"]
+                .as_str()
+                .is_some_and(|m| m.starts_with(start)),
+            "{text:?}: {problem}"
+        );
+    }
+    // JSON che non è una lista: il problema della forma, come con `ops`.
+    let object = via
+        .check(handle, &bytes(&json!({ "text": "{}" })))
+        .expect("un oggetto");
+    let as_ops = via
+        .check(handle, &bytes(&json!({ "ops": {} })))
+        .expect("un oggetto");
+    assert_eq!(object, as_ops);
+    assert_eq!(object["ok"], false);
+
+    for bad in [
+        &b""[..],
+        b"{",
+        b"[]",
+        b"{}",
+        br#"{"seed": 1}"#,
+        br#"{"ops": [], "text": "[]"}"#,
+        br#"{"text": 3}"#,
+        br#"{"ops": [], "seed": -1}"#,
+        br#"{"ops": [], "other": 1}"#,
+    ] {
+        expect_code(via.check(handle, bad), "request");
+    }
+    assert_eq!(
+        utf8(via.preview(handle, b"[]").expect("preview")),
+        source,
+        "check non cambia la lavagna"
+    );
     via.close(handle).expect("close");
 }

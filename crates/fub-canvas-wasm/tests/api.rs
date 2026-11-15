@@ -56,6 +56,12 @@ impl Via for Api {
     fn ink_layers(&mut self, handle: u32) -> Result<Value, Value> {
         answer(self.0.ink_layers(handle))
     }
+    fn describe(&mut self, handle: u32, request: &[u8]) -> Result<Value, Value> {
+        answer(self.0.describe(handle, request))
+    }
+    fn check(&mut self, handle: u32, request: &[u8]) -> Result<Value, Value> {
+        answer(self.0.check(handle, request))
+    }
     fn close(&mut self, handle: u32) -> Result<(), Value> {
         self.0.close(handle).map_err(error)
     }
@@ -83,6 +89,16 @@ fn ink_layers_follow_the_commits() {
 #[test]
 fn stroke_commits_follow_the_model() {
     common::stroke_commits_follow_the_model(&mut Api::default());
+}
+
+#[test]
+fn describe_gives_the_code_that_rebuilds_the_board() {
+    common::describe_gives_the_code(&mut Api::default());
+}
+
+#[test]
+fn check_gives_the_report_of_the_core() {
+    common::check_gives_the_report(&mut Api::default());
 }
 
 #[test]

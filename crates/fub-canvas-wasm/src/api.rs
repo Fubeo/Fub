@@ -16,7 +16,9 @@
 
 use std::collections::BTreeMap;
 
+use fub_canvas_core::check::{check, CheckReport, Code, Problem};
 use fub_canvas_core::commit::{Changed, CommitError, Core, LayerChange};
+use fub_canvas_core::describe::{self, DescribeOptions};
 use fub_canvas_core::ink::{board_layer, node_layer, LayerRead, LayerState, StrokeState, INK_KEY};
 use fub_canvas_core::model::{Canvas, CanvasError, CanvasNode, MAX_SOURCE_BYTES};
 use fub_canvas_core::ops::{compile, CanvasOp, OpError};
@@ -126,6 +128,38 @@ impl From<OpError> for Failure {
 #[serde(deny_unknown_fields)]
 struct CompileRequest {
     ops: Vec<CanvasOp>,
+    #[serde(default, deserialize_with = "seed")]
+    seed: u64,
+}
+
+/// La richiesta di [`Cores::describe`]: la forma (per ora solo `code`) e,
+/// facoltativi, gli id delle schede da leggere, con gli archi fra loro.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DescribeRequest {
+    form: DescribeForm,
+    #[serde(default)]
+    ids: Option<Vec<String>>,
+}
+
+/// Le forme di [`Cores::describe`]: la lista che ricrea la lavagna. La lettura
+/// in righe e il modello li dà già la tela, che ha il modello.
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum DescribeForm {
+    Code,
+}
+
+/// La richiesta di [`Cores::check`]: la lista come JSON (`ops`) o come testo
+/// da leggere (`text`, quello degli appunti), una delle due, e il seme degli
+/// id nuovi come in [`CompileRequest`].
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CheckRequest {
+    #[serde(default)]
+    ops: Option<Value>,
+    #[serde(default)]
+    text: Option<String>,
     #[serde(default, deserialize_with = "seed")]
     seed: u64,
 }
@@ -376,6 +410,51 @@ impl Cores {
         serde_json::to_string(&compiled).map_err(Failure::internal)
     }
 
+    /// La lavagna `handle` come codice: `{"form": "code", "ids"?}` risponde
+    /// `{"form": "code", "text"}`, con la lista di operazioni che la ricrea
+    /// ([`describe::code`]) scritta come la scrive `canvas.read` (JSON con i
+    /// rientri). Con `ids`, solo quelle schede e gli archi fra loro, senza
+    /// l'inchiostro libero. Non cambia la lavagna.
+    pub fn describe(&self, handle: Handle, request: &[u8]) -> Result<String, Failure> {
+        let request: DescribeRequest = serde_json::from_str(text(request)?)
+            .map_err(|error| Failure::new("request", error.to_string()))?;
+        let core = self.core(handle)?;
+        let DescribeForm::Code = request.form;
+        let options = DescribeOptions {
+            ids: request.ids,
+            max_chars: None,
+        };
+        let ops = describe::code(core.canvas(), &options);
+        let text = serde_json::to_string_pretty(&ops).map_err(Failure::internal)?;
+        Ok(json!({ "form": "code", "text": text }).to_string())
+    }
+
+    /// Controlla una lista di operazioni sulla lavagna `handle`, senza
+    /// cambiarla: `{"ops" | "text", "seed"?}` risponde il rapporto di
+    /// [`check`] (`{"ok", "problems", "warnings", "warnings_omitted",
+    /// "summary", "outline_after"}`). Un testo vuoto o che non è JSON non è
+    /// un errore della chiamata: è il problema `invalid` della lista intera,
+    /// come una lista che non è una lista.
+    pub fn check(&self, handle: Handle, request: &[u8]) -> Result<String, Failure> {
+        let request: CheckRequest = serde_json::from_str(text(request)?)
+            .map_err(|error| Failure::new("request", error.to_string()))?;
+        let core = self.core(handle)?;
+        let report = match (request.ops, request.text) {
+            (Some(ops), None) => check(core.canvas(), &ops, request.seed),
+            (None, Some(text)) => match list_of_text(&text) {
+                Ok(ops) => check(core.canvas(), &ops, request.seed),
+                Err(message) => refused(message),
+            },
+            _ => {
+                return Err(Failure::new(
+                    "request",
+                    "give the operations either as `ops` or as `text`, not both",
+                ))
+            }
+        };
+        serde_json::to_string(&report).map_err(Failure::internal)
+    }
+
     /// I livelli d'inchiostro della lavagna `handle`, come li legge il
     /// nucleo ([`fub_canvas_core::ink::read_layers`]): `{"layers": [...]}`,
     /// nella forma di `expect` dei vettori di `canvas-ink/`. Ogni livello è
@@ -432,6 +511,36 @@ fn text(bytes: &[u8]) -> Result<&str, Failure> {
         ));
     }
     std::str::from_utf8(bytes).map_err(|error| Failure::new("utf8", error.to_string()))
+}
+
+/// Il testo di una lista come JSON: un BOM in testa si toglie, e un testo
+/// vuoto (o di soli spazi) o che non è JSON dà la frase del problema.
+fn list_of_text(text: &str) -> Result<Value, String> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    if text.trim().is_empty() {
+        return Err("the text is empty".to_owned());
+    }
+    serde_json::from_str(text).map_err(|error| format!("the text is not JSON: {error}"))
+}
+
+/// Il rapporto di una lista che non si legge: il problema `invalid` della
+/// lista intera, come quello di [`check`] per una lista che non è un array.
+fn refused(message: String) -> CheckReport {
+    CheckReport {
+        ok: false,
+        problems: vec![Problem {
+            code: Code::Invalid,
+            index: None,
+            path: String::new(),
+            message,
+            suggestion: None,
+            fix: None,
+        }],
+        warnings: Vec::new(),
+        warnings_omitted: 0,
+        summary: None,
+        outline_after: None,
+    }
 }
 
 fn patches(request: &[u8]) -> Result<Vec<CanvasPatch>, Failure> {
