@@ -486,8 +486,9 @@ sono `apps/client/src/__fixtures__/canvas-patches/*-ink-*.json` e
 
 ## In codice
 
-`draw`, che scrive un tratto dai punti o da una forma, e l'inchiostro nelle
-letture della lavagna stanno in [L'inchiostro in codice](canvas-ink-code.md).
+`draw`, che scrive un tratto dai punti o da una forma, `erase_along`, la gomma
+che taglia, e l'inchiostro nelle letture della lavagna stanno in
+[L'inchiostro in codice](canvas-ink-code.md).
 
 ## I vettori
 

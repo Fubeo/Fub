@@ -1512,7 +1512,7 @@ metà di un tratto» non ha `needs`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-ink-codec; cargo test
 -p fub-canvas-core; cd apps/client && npx vitest run
 src/ink/tools/split-vectors.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto · integrato (coder/lic-t18 @ 858d33e3c, merge b7ac6f715, 2026-11-15) · revisione media: tetto del lavoro anche contro NaN e passo zero (walk_step), `at` come toISOString quando lo spostamento arrotonda a zero, vettori rifatti dalla gomma della tela (erase-along-parity.test.ts). Differenza: un raggio la cui metà arrotonda a zero lascia il tratto intatto invece di Invalid
 
 ## T19 · Disegnare sulla pagina e sulla cella
 

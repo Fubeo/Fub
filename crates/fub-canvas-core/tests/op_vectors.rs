@@ -248,6 +248,7 @@ fn ogni_operazione_ha_un_vettore() {
         "draw",
         "move_strokes",
         "restyle_strokes",
+        "erase_along",
     ] {
         assert!(seen.contains(op), "nessun vettore usa {op:?}");
     }

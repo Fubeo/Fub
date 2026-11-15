@@ -21,8 +21,8 @@
 use fub_ink_codec::{InkBrush, PEN_KEY};
 use serde_json::{Map, Number, Value};
 
-use crate::ink::{DrawnStroke, InkAnchor, InkLayer, LayerRef, StrokeState};
-use crate::model::{CanvasNode, CanvasNodeType, MAX_SAFE_INTEGER};
+use crate::ink::{DrawnStroke, InkAnchor, InkFit as Fit, InkLayer, LayerRef, StrokeState};
+use crate::model::{CanvasNode, MAX_SAFE_INTEGER};
 use crate::ops::CanvasOp;
 
 /// Il campo che dice quanti punti di un tratto il JSON non mostra.
@@ -30,96 +30,6 @@ const POINTS_OMITTED: &str = "points_omitted";
 
 /// Il campo che dice perché un tratto non si disegna, nel JSON.
 const BAD: &str = "bad";
-
-/// Come i punti dell'ancora vanno nelle coordinate della scheda di adesso:
-/// `(dx + s · x, dy + s · y)`.
-#[derive(Copy, Clone, Debug, PartialEq)]
-struct Fit {
-    s: f64,
-    dx: f64,
-    dy: f64,
-}
-
-impl Fit {
-    const IDENTITY: Fit = Fit {
-        s: 1.0,
-        dx: 0.0,
-        dy: 0.0,
-    };
-
-    /// Il modo della scheda ([`scales`]): `scale` scala senza deformarsi e si
-    /// centra, `fixed` resta alla misura di riferimento. Un tratto libero non
-    /// si porta. È `inkFit` di `apps/client/src/editors/canvas/ink-fit.ts`,
-    /// provato coi suoi vettori (`canvas-ink-fit/`).
-    ///
-    /// `None` per un tratto attaccato alla pagina di un PDF o alla cella di un
-    /// foglio: dove la pagina o la cella sta dentro la scheda lo sa la resa,
-    /// non il nucleo, come per le operazioni sui tratti.
-    fn of(node: Option<&CanvasNode>, anchor: &InkAnchor) -> Option<Fit> {
-        let (width, height) = match anchor {
-            InkAnchor::Page { .. } | InkAnchor::Cell { .. } => return None,
-            InkAnchor::Free => return Some(Fit::IDENTITY),
-            InkAnchor::Card { width, height } => (*width, *height),
-        };
-        let Some(node) = node else {
-            return Some(Fit::IDENTITY);
-        };
-        if !scales(node) {
-            return Some(Fit::IDENTITY);
-        }
-        // Le misure di una scheda sono interi entro ±(2^53−1): il cast è esatto.
-        #[allow(clippy::cast_precision_loss)]
-        let (w, h) = (node.width as f64, node.height as f64);
-        if w < 0.0 || h < 0.0 {
-            return Some(Fit {
-                s: 0.0,
-                dx: 0.0,
-                dy: 0.0,
-            });
-        }
-        let s = (w / width).min(h / height);
-        Some(Fit {
-            s,
-            dx: (w - width * s) / 2.0,
-            dy: (h - height * s) / 2.0,
-        })
-    }
-
-    fn point(self, [x, y]: [f64; 2]) -> [f64; 2] {
-        [self.dx + self.s * x, self.dy + self.s * y]
-    }
-}
-
-/// Le estensioni che fanno scalare l'inchiostro: le immagini di `mimeForExt`
-/// (`apps/client/src/editors/media/media-types.ts`) e il PDF.
-const SCALING_EXTENSIONS: [&str; 13] = [
-    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif", "heic", "tif", "tiff", "pdf",
-];
-
-/// Il modo `scale`: una scheda `file` il cui file è un'immagine o un PDF.
-///
-/// È `inkFitMode` della resa, che fa fede: l'estensione è quella di `extOf`
-/// (l'ultima parte del nome dopo un punto, in minuscolo; un nome come `.png`
-/// non ne ha) e un `#` nel campo `file` non taglia niente. Per questo non è
-/// [`crate::layout::card_kind`], che toglie dal primo `#` come la specie della
-/// scheda nella GUI: `foto#1.png` è una scheda `file` che scala.
-fn scales(node: &CanvasNode) -> bool {
-    if node.node_type != CanvasNodeType::File {
-        return false;
-    }
-    let Some(path) = node.file.as_deref() else {
-        return false;
-    };
-    let name = path.rsplit('/').next().unwrap_or(path);
-    if name.starts_with('.') && !name[1..].contains('.') {
-        return false;
-    }
-    let Some(point) = name.rfind('.') else {
-        return false;
-    };
-    let extension = name[point + 1..].to_ascii_lowercase();
-    SCALING_EXTENSIONS.contains(&extension.as_str())
-}
 
 /// Un riquadro: l'angolo in alto a sinistra, la larghezza e l'altezza.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -553,6 +463,7 @@ fn number(value: f64) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ink::{scales, InkAnchor};
     use std::path::PathBuf;
 
     /// I vettori di `canvas-ink-fit/`, la prova di `ink-fit.ts` della resa:

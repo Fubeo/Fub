@@ -2,7 +2,7 @@
 //! «ridimensiona», «collega», «togli», «cambia», «porta sopra», «allinea»,
 //! «distribuisci», «duplica», «inverti», «raggruppa», «dispone», «incolla»,
 //! «trasforma in file», «da Mermaid», «da una scaletta», «aggiungi tratti»,
-//! «cancella tratti», «disegna». Un agente o
+//! «cancella tratti», «disegna», «cancella lungo un cammino». Un agente o
 //! la sessione dal tablet pensano così, non in toppe con l'immagine di
 //! prima: [`compile`] traduce una lista di operazioni nelle toppe di
 //! [`crate::patch`], che sono la sola forma con cui una lavagna cambia.
@@ -53,6 +53,7 @@ mod connect;
 mod convert;
 pub(crate) mod draw;
 mod duplicate;
+pub(crate) mod erase;
 mod group;
 mod import;
 mod insert;
@@ -66,6 +67,7 @@ pub use connect::{AutoWord, ConnectArgs, Ends, SidePair, Sides};
 pub use convert::ConvertArgs;
 pub use draw::{DrawArgs, DrawShape, MAX_DRAW_POINTS, ON_AUTO, ON_BOARD};
 pub use duplicate::DuplicateArgs;
+pub use erase::{EraseAlongArgs, MAX_ERASE_POINTS, MAX_ERASE_WORK};
 pub use group::GroupArgs;
 pub use import::{FromMermaidArgs, FromOutlineArgs};
 pub use insert::{InsertArgs, MAX_INSERTED};
@@ -179,6 +181,10 @@ pub enum CanvasOp {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         aspect: Option<f64>,
     },
+    /// Taglia i tratti che il cammino `points`, largo `size`, tocca, come la
+    /// gomma «Solo il pezzo»: i pezzi che restano prendono il posto di ogni
+    /// tratto. Le regole sono in `ops/erase.rs`.
+    EraseAlong(EraseAlongArgs),
 }
 
 impl CanvasOp {
@@ -210,6 +216,7 @@ impl CanvasOp {
             Self::Draw(_) => "draw",
             Self::MoveStrokes { .. } => "move_strokes",
             Self::RestyleStrokes { .. } => "restyle_strokes",
+            Self::EraseAlong(_) => "erase_along",
         }
     }
 }
@@ -221,9 +228,9 @@ pub struct Compiled {
     pub patches: Vec<CanvasPatch>,
     /// Gli id di ogni scheda, arco e tratto aggiunti (`add_card`, `connect`,
     /// `duplicate`, `group`, `insert`, `from_mermaid`, `from_outline`,
-    /// `add_strokes`, `draw`), dati o generati, nell'ordine delle operazioni;
-    /// e quelli nuovi dei tratti che `move_strokes` porta in un livello dove il
-    /// loro id era già preso.
+    /// `add_strokes`, `draw`, i pezzi di `erase_along`), dati o generati,
+    /// nell'ordine delle operazioni; e quelli nuovi dei tratti che
+    /// `move_strokes` porta in un livello dove il loro id era già preso.
     pub created: Vec<String>,
     /// Ciò che le operazioni non hanno potuto tenere, nell'ordine delle
     /// operazioni: al più [`MAX_NOTES`]. Senza note il campo non si scrive.
@@ -264,6 +271,9 @@ pub enum NoteCode {
     LineSkipped,
     /// Un rientro della scaletta che non cade su un livello vale il più vicino.
     IndentRounded,
+    /// Un tratto che Fub non disegna, o un livello estraneo, sotto il cammino
+    /// di `erase_along`: non si taglia.
+    InkKept,
 }
 
 fn is_zero(value: &usize) -> bool {
@@ -289,8 +299,9 @@ pub enum OpError {
     #[error("canvas op {index}: id {id:?} is already taken or repeated")]
     DuplicateId { index: usize, id: String },
     /// La lavagna avrebbe più schede o archi del limite, un `insert` porta
-    /// più schede di [`MAX_INSERTED`], o un tratto di `draw` avrebbe più punti
-    /// di [`MAX_DRAW_POINTS`].
+    /// più schede di [`MAX_INSERTED`], un tratto di `draw` avrebbe più punti
+    /// di [`MAX_DRAW_POINTS`], o il cammino di `erase_along` ne ha più di
+    /// [`MAX_ERASE_POINTS`].
     #[error("canvas op {index}: a canvas holds at most {limit} {what}")]
     TooMany {
         index: usize,
@@ -309,7 +320,8 @@ pub enum OpError {
     /// un tratto del livello.
     #[error("canvas op {index}: there is no ink stroke {id:?} in the layer")]
     UnknownStroke { index: usize, id: String },
-    /// Il livello d'inchiostro è estraneo: Fub non ci scrive.
+    /// Il livello d'inchiostro è estraneo: Fub non ci scrive (anche l'`on` di
+    /// `erase_along` su una scheda col livello estraneo).
     #[error("canvas op {index}: the ink layer is foreign")]
     ForeignLayer { index: usize, layer: LayerRef },
 }
@@ -470,6 +482,7 @@ impl Compiler {
                 size,
                 aspect,
             } => self.restyle_strokes(index, layer, ids, (color.as_deref(), *size), *aspect)?,
+            CanvasOp::EraseAlong(args) => self.erase_along(index, args)?,
         };
         if patches.is_empty() {
             return Ok(());
@@ -1117,13 +1130,13 @@ impl Frame {
     /// scheda lo sa solo la resa, e il nucleo non sposta né ridimensiona quel
     /// tratto (`hidden`). `aspect` è la proporzione del contenuto che la
     /// scheda mostra, se il client la sa.
-    fn fit(&self, anchor: &InkAnchor, aspect: Option<f64>) -> InkFit {
+    fn fit(&self, anchor: &InkAnchor, aspect: Option<f64>) -> AspectFit {
         match (self, anchor) {
             (Frame::Card(node), InkAnchor::Card { width, height }) => {
                 ink_fit(node, *width, *height, aspect)
             }
-            (_, InkAnchor::Page { .. } | InkAnchor::Cell { .. }) => InkFit::HIDDEN,
-            _ => InkFit::IDENTITY,
+            (_, InkAnchor::Page { .. } | InkAnchor::Cell { .. }) => AspectFit::HIDDEN,
+            _ => AspectFit::IDENTITY,
         }
     }
 }
@@ -1131,19 +1144,19 @@ impl Frame {
 /// Da unità dell'ancora a unità della scheda di adesso: il punto `(px, py)`
 /// va a `(x + s·px, y + s·py)`.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct InkFit {
+struct AspectFit {
     s: f64,
     x: f64,
     y: f64,
 }
 
-impl InkFit {
-    const IDENTITY: InkFit = InkFit {
+impl AspectFit {
+    const IDENTITY: AspectFit = AspectFit {
         s: 1.0,
         x: 0.0,
         y: 0.0,
     };
-    const HIDDEN: InkFit = InkFit {
+    const HIDDEN: AspectFit = AspectFit {
         s: 0.0,
         x: 0.0,
         y: 0.0,
@@ -1192,39 +1205,39 @@ fn scales(node: &CanvasNode) -> bool {
 /// regola di N4. Mai `NaN`. Gli stessi vettori del client:
 /// `canvas-ink-fit/` e `canvas-ink-fit-aspect/`.
 #[allow(clippy::cast_precision_loss)]
-fn ink_fit(node: &CanvasNode, ref_width: f64, ref_height: f64, aspect: Option<f64>) -> InkFit {
+fn ink_fit(node: &CanvasNode, ref_width: f64, ref_height: f64, aspect: Option<f64>) -> AspectFit {
     if !scales(node) {
-        return InkFit::IDENTITY;
+        return AspectFit::IDENTITY;
     }
     let (w, h) = (node.width as f64, node.height as f64);
     if !(ref_width.is_finite() && ref_height.is_finite() && ref_width > 0.0 && ref_height > 0.0) {
-        return InkFit::HIDDEN;
+        return AspectFit::HIDDEN;
     }
     if !(w.is_finite() && h.is_finite() && w >= 0.0 && h >= 0.0) {
-        return InkFit::HIDDEN;
+        return AspectFit::HIDDEN;
     }
     if let Some(aspect) = aspect.filter(|aspect| aspect.is_finite() && *aspect > 0.0) {
         let from = content_box((ref_width, ref_height), aspect);
         let to = content_box((w, h), aspect);
         let (Some(from), Some(to)) = (from, to) else {
-            return InkFit::HIDDEN;
+            return AspectFit::HIDDEN;
         };
         // `content_box` dà misure finite: qui zero è l'unico caso.
         if from.2 <= 0.0 {
-            return InkFit::HIDDEN;
+            return AspectFit::HIDDEN;
         }
         let s = to.2 / from.2;
         if !s.is_finite() {
-            return InkFit::HIDDEN;
+            return AspectFit::HIDDEN;
         }
-        return InkFit {
+        return AspectFit {
             s,
             x: to.0 - s * from.0,
             y: to.1 - s * from.1,
         };
     }
     let s = (w / ref_width).min(h / ref_height);
-    InkFit {
+    AspectFit {
         s,
         x: (w - ref_width * s) / 2.0,
         y: (h - ref_height * s) / 2.0,
@@ -1565,7 +1578,7 @@ mod tests {
     }
 
     /// `s`, `x`, `y` e i punti di un vettore (`expect`).
-    fn same_fit(name: &str, fit: InkFit, expect: &Value) {
+    fn same_fit(name: &str, fit: AspectFit, expect: &Value) {
         for (key, got) in [("s", fit.s), ("x", fit.x), ("y", fit.y)] {
             let want = expect[key].as_f64().expect("un numero");
             assert!(
@@ -1633,7 +1646,7 @@ mod tests {
             &json!({ "type": "text", "text": "" }),
             &json!({ "width": 600, "height": 200 }),
         );
-        assert_eq!(ink_fit(&note, 300.0, 300.0, Some(2.0)), InkFit::IDENTITY);
+        assert_eq!(ink_fit(&note, 300.0, 300.0, Some(2.0)), AspectFit::IDENTITY);
         // La scheda di misura zero: il tratto non si vede, mai `NaN`.
         let flat = fit_card(
             &json!({ "type": "file", "file": "Foto/lavagna.png" }),

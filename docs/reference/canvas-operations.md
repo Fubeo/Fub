@@ -200,8 +200,9 @@ operazioni producono sono descritte sopra, in «Le toppe».
 La toppa `ink` e le operazioni `add_strokes`, `erase_strokes`, `move_strokes` e
 `restyle_strokes` stanno nell'[inchiostro della lavagna](canvas-ink.md#toppa-e-operazioni);
 `draw`, che scrive un tratto dai punti o da una forma con la penna e il colore per
-nome, sta in [L'inchiostro in codice](canvas-ink-code.md). `move` e `resize` non toccano
-l'inchiostro; `remove` lo porta via con la scheda, e l'annulla lo rimette.
+nome, ed `erase_along`, la gomma che taglia, stanno in [L'inchiostro in codice](canvas-ink-code.md).
+`move` e `resize` non toccano l'inchiostro; `remove` lo porta via con la scheda, e
+l'annulla lo rimette.
 
 ## Comandi
 

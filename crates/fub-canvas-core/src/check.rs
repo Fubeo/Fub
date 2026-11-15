@@ -283,6 +283,7 @@ impl Warning {
                 NoteCode::StyleDropped => WarningCode::StyleDropped,
                 NoteCode::LineSkipped => WarningCode::LineSkipped,
                 NoteCode::IndentRounded => WarningCode::IndentRounded,
+                NoteCode::InkKept => WarningCode::InkKept,
             },
             ids: Vec::new(),
             estimated_height: None,
@@ -310,6 +311,9 @@ pub enum WarningCode {
     LineSkipped,
     /// Nota: un rientro della scaletta vale il livello più vicino.
     IndentRounded,
+    /// Nota: un tratto che Fub non disegna, o un livello estraneo, sotto il
+    /// cammino di `erase_along`, non si taglia.
+    InkKept,
 }
 
 /// Controlla `raw`, una lista di operazioni, sulla lavagna `canvas`, con gli id

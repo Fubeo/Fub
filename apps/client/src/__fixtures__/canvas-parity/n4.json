@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "N4",
-  "max_missing": 1,
+  "max_missing": 0,
   "entries": [
     {
       "id": "N4.ink.pen_card",
@@ -71,10 +71,8 @@
       "source": "N4",
       "gui": [{ "gesture": "erase-piece" }],
       "writes": "file",
-      "state": "missing",
-      "computes": "il taglio dei campioni, che N4 T22 fa solo in TypeScript (`ink/tools/split.ts`)",
-      "target_ops": [{ "op": "erase_along", "points": [[100, 450], [140, 450]], "size": 12 }],
-      "task": "T18"
+      "state": "code",
+      "ops": [{ "op": "erase_along", "points": [[100, 450], [140, 450]], "size": 12 }]
     },
     {
       "id": "N4.ink.mouse",

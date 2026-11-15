@@ -1088,6 +1088,7 @@ fn le_lavagne_si_leggono_e_si_guidano() {
             "distribute",
             "draw",
             "duplicate",
+            "erase_along",
             "erase_strokes",
             "from_mermaid",
             "from_outline",

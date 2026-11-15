@@ -11,6 +11,10 @@
 //!   copiate da `apps/client/src/ink/pens.ts` e `palette.ts`: la ricetta del
 //!   pennello di ogni penna ([`pen_brush`]) e gli otto colori per nome
 //!   ([`ink_color`]).
+//! - [`cut`] è la gomma che taglia, copiata da
+//!   `apps/client/src/ink/tools/split.ts`: i pezzi che restano di un tratto
+//!   dove passa il cammino della gomma ([`split_ink`]) e il loro pennello
+//!   ([`cut_brush`]).
 //!
 //! Li usano due lettori: i disegni (`fub-scene`), per dire se un tratto si
 //! ridisegna, e il nucleo della lavagna, che scrive gli stessi tratti nel
@@ -24,10 +28,12 @@
 //! `crates/fub-abi/tests/dependency_invariant.rs` ne verifica le dipendenze.
 
 pub mod brush;
+pub mod cut;
 pub mod ink;
 pub mod pens;
 
 pub use brush::{Brush, BrushError, InkBrush, Nib1Brush, NIB1, NIB1_KEYS, PF1, PF1_KEYS};
+pub use cut::{cut_brush, ink_samples, split_ink, split_work, InkPiece, Spot};
 pub use ink::{Ink, InkError, Sample, Scale};
 pub use pens::{
     clamp_size, ink_color, pen, pen_brush, InkSwatch, PenBlend, PenRecipe, PenSpec, PenTool,
