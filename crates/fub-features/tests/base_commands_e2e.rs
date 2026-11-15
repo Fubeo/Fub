@@ -349,3 +349,98 @@ fn una_chiave_gia_com_e_non_scrive_e_non_annulla_niente() {
     assert!(outcome.undo.is_none(), "niente da annullare");
     assert_eq!(source(&ws, BASE_FILE), BEFORE);
 }
+
+// I gesti della barra della Base (T15): ognuno manda una sola chiave, con il
+// valore nella forma che il client costruisce (`apps/client/src/editors/base/
+// filter.ts` e `sort.ts`). Qui si vede quali righe quel valore scrive, e che il
+// piano lo rilegge uguale.
+
+/// Una Base con la vista dei gesti in YAML a blocchi, e un'altra che nessun
+/// gesto tocca.
+const GESTI: &str = "# Opere in prestito.\nviews:\n  - name: Tabella   # la vista dei gesti\n    type: table\n  - name: Bacheca\n    type: kanban\n";
+
+/// Scrive `key` della vista Tabella con `value` (JSON, o niente per toglierla),
+/// con la revisione del file, e torna il testo nuovo.
+fn gesto(ws: &mut Workspace, key: &str, value: Option<Value>) -> String {
+    let base = revision(ws, BASE_FILE);
+    let mut args = json!({ "doc": BASE_FILE, "view": "Tabella", "key": key, "base": base });
+    if let Some(value) = value {
+        args["value"] = Value::String(value.to_string());
+    }
+    invoke(ws, BASE_VIEW_SET, args, InvokeMode::Apply).expect("il gesto si scrive");
+    source(ws, BASE_FILE)
+}
+
+/// Le righe che stanno fra la vista dei gesti e quella accanto.
+fn con(righe: &str) -> String {
+    GESTI.replace("    type: table\n", &format!("    type: table\n{righe}"))
+}
+
+#[test]
+fn il_filtro_composto_a_vista_scrive_solo_filters() {
+    let (_vault, mut ws) = with_base(GESTI);
+    let filtro = json!({ "and": [
+        { "condition": { "property": "stato", "op": "is", "value": "Arrivata" } },
+        { "condition": { "property": "valore", "op": "greater_than", "value": 3000 } },
+    ] });
+    assert_eq!(
+        gesto(&mut ws, "filters", Some(filtro)),
+        con("    filters:\n      and:\n      - condition:\n          property: stato\n          op: is\n          value: Arrivata\n      - condition:\n          property: valore\n          op: greater_than\n          value: 3000\n"),
+        "solo la chiave filters; commenti e vista accanto restano",
+    );
+}
+
+#[test]
+fn il_filtro_come_ricerca_scrive_l_oppure_e_l_ultima_etichetta_lo_toglie() {
+    let (_vault, mut ws) = with_base(GESTI);
+    let filtro = json!({ "or": [
+        { "condition": { "property": "stato", "op": "contains", "value": "Arrivata" } },
+        { "not": { "condition": { "file": "path", "op": "in_folder", "value": "Archivio" } } },
+    ] });
+    assert_eq!(
+        gesto(&mut ws, "filters", Some(filtro)),
+        con("    filters:\n      or:\n      - condition:\n          property: stato\n          op: contains\n          value: Arrivata\n      - not:\n          condition:\n            file: path\n            op: in_folder\n            value: Archivio\n"),
+    );
+    assert_eq!(
+        gesto(&mut ws, "filters", None),
+        GESTI,
+        "togliere l'ultima etichetta riporta i byte di prima"
+    );
+}
+
+#[test]
+fn ordina_e_proprieta_scrivono_sort_e_order_e_basta() {
+    let (_vault, mut ws) = with_base(GESTI);
+    let sort = "    sort:\n      - key: consegna\n        descending: true\n";
+    assert_eq!(
+        gesto(
+            &mut ws,
+            "sort",
+            Some(json!([{ "key": "consegna", "descending": true }]))
+        ),
+        con(sort),
+    );
+    assert_eq!(
+        gesto(
+            &mut ws,
+            "order",
+            Some(json!(["file.name", "stato", "consegna"]))
+        ),
+        con(&format!(
+            "    order:\n      - file.name\n      - stato\n      - consegna\n{sort}"
+        )),
+        "le colonne entrano senza toccare l'ordinamento",
+    );
+    assert_eq!(
+        gesto(
+            &mut ws,
+            "order",
+            Some(json!(["stato", "file.name", "consegna"]))
+        ),
+        con(&format!(
+            "    order:\n      - stato\n      - file.name\n      - consegna\n{sort}"
+        )),
+        "trascinare una colonna riscrive soltanto order",
+    );
+    assert_eq!(gesto(&mut ws, "order", None), con(sort));
+}

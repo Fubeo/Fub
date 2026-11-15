@@ -1053,9 +1053,12 @@ fn respond(query: Value) -> Result<Value, PluginError> {
     let definition =
         BaseDefinition::parse(&request.source).map_err(|error| bad(format!("base: {error}")))?;
     match request.op.as_str() {
-        "parse" => {
-            Ok(json!({"views": definition.views.iter().map(|v| &v.name).collect::<Vec<_>>()}))
-        }
+        // Con i nomi, il tipo di ogni vista nello stesso ordine: le linguette
+        // della Base ne disegnano la figura anche quando non sono scelte.
+        "parse" => Ok(json!({
+            "views": definition.views.iter().map(|v| &v.name).collect::<Vec<_>>(),
+            "types": definition.views.iter().map(|v| v.view_type).collect::<Vec<_>>(),
+        })),
         "plan" => {
             let plan = planned(&definition, request.view.as_deref())?;
             let required_props = required(&plan)?;
@@ -1075,8 +1078,12 @@ fn respond(query: Value) -> Result<Value, PluginError> {
                         .map(|name| (&property.key, name))
                 })
                 .collect();
+            // Il filtro, l'ordinamento e le colonne scritte della vista, come
+            // il modello li legge: la superficie li mostra a vista e li
+            // riscrive con `base.view.set`, senza leggere il YAML da sé.
+            // `order` è vuoto quando le colonne le deduce `columns`.
             Ok(
-                json!({"view":plan.view.name,"view_type":view_type,"columns":columns(&plan),"column_labels":labels,"required_props":required_props,"all_properties":plan.view.search.as_deref().is_some_and(|s| !s.is_empty()),"group":plan.view.group.as_ref().map(|g| &g.key),"limit":plan.view.limit,"map":plan.view.map,"date_key":date_key,"start_key":start_key,"end_key":end_key,"create_defaults":create_defaults(&plan.definition.filters, &plan.view.filters)}),
+                json!({"view":plan.view.name,"view_type":view_type,"columns":columns(&plan),"filters":plan.view.filters,"sort":plan.view.sort,"order":plan.view.order,"column_labels":labels,"required_props":required_props,"all_properties":plan.view.search.as_deref().is_some_and(|s| !s.is_empty()),"group":plan.view.group.as_ref().map(|g| &g.key),"limit":plan.view.limit,"map":plan.view.map,"date_key":date_key,"start_key":start_key,"end_key":end_key,"create_defaults":create_defaults(&plan.definition.filters, &plan.view.filters)}),
             )
         }
         "derive" => derive(
@@ -1859,6 +1866,43 @@ mod tests {
             respond(json!({"version":1,"op":"plan","source":SOURCE,"view":"Board"})).unwrap();
         assert_eq!(plan["view_type"], "kanban");
         assert_eq!(plan["required_props"], json!(["score", "status"]));
+    }
+
+    #[test]
+    fn plan_says_the_written_filter_sort_and_order() {
+        let source = "views:\n  - name: T\n    type: table\n    order:\n      - file.name\n      - prop.stato\n    filters:\n      and:\n        - condition:\n            property: stato\n            op: is\n            value: Arrivata\n    sort:\n      - key: prop.stato\n        descending: true\n";
+        let plan = respond(json!({"version":1,"op":"plan","source":source,"view":"T"})).unwrap();
+        assert_eq!(plan["order"], json!(["file.name", "prop.stato"]));
+        assert_eq!(
+            plan["sort"],
+            json!([{"key":"prop.stato","descending":true}])
+        );
+        let condition = &plan["filters"]["and"][0]["condition"];
+        assert_eq!(condition["property"], "stato");
+        assert_eq!(condition["op"], "is");
+        assert_eq!(condition["value"], "Arrivata");
+        // Una vista senza le tre chiavi: nessun filtro, nessun ordine, colonne
+        // dedotte.
+        let bare = respond(
+            json!({"version":1,"op":"plan","source":"views:\n  - name: N\n    type: table\n"}),
+        )
+        .unwrap();
+        assert_eq!(bare["filters"], json!("all"));
+        assert_eq!(bare["sort"], json!([]));
+        assert_eq!(bare["order"], json!([]));
+    }
+
+    #[test]
+    fn parse_says_each_view_type_in_order() {
+        let parsed = respond(json!({"version":1,"op":"parse","source":TIME_SOURCE})).unwrap();
+        assert_eq!(
+            parsed["views"].as_array().unwrap().len(),
+            parsed["types"].as_array().unwrap().len()
+        );
+        let source = "views:\n  - name: A\n    type: kanban\n    group:\n      key: s\n  - name: B\n    type: table\n";
+        let parsed = respond(json!({"version":1,"op":"parse","source":source})).unwrap();
+        assert_eq!(parsed["views"], json!(["A", "B"]));
+        assert_eq!(parsed["types"], json!(["kanban", "table"]));
     }
 
     #[test]
