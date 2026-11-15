@@ -221,8 +221,11 @@ pub const EDITOR_SLASH_HIDDEN: &str = "editor.slash.hidden";
 /// L'ordine delle sezioni del menu «/», dopo Suggeriti, Preferiti e Recenti.
 /// Le sezioni non dette seguono nel loro ordine, gli id sconosciuti non contano.
 pub const EDITOR_SLASH_SECTIONS: &str = "editor.slash.sections";
-/// In che modalità si apre un riquadro nuovo: `source`, `live_preview`,
-/// `blocks` o `reading`, gli id delle modalità della superficie testuale.
+/// In che modalità si apre un riquadro nuovo: `live_preview` (Scrittura),
+/// `source` o `reading`, gli id delle modalità della superficie testuale.
+/// `blocks`, scritto da un Fub che aveva la modalità Blocchi, resta un valore
+/// valido e vale Scrittura: non si riscrive e non si mostra
+/// (`editor_settings`).
 pub const EDITOR_DEFAULT_MODE: &str = "editor.default-mode";
 /// Quanto della sintassi Markdown si vede in Live: `mai` scrive come in Word,
 /// senza segni nemmeno col cursore dentro; `elemento` rivela, attenuati, i
@@ -666,10 +669,18 @@ fn editor_settings() -> Vec<SettingSpec> {
         C_EDITOR_DEFAULT_MODE_DESC,
         "live_preview",
         vec![
-            UiOption::new("live_preview", Text::key(C_MODE_LIVE)),
-            UiOption::new("blocks", Text::key(C_MODE_BLOCKS)),
+            UiOption::new("live_preview", Text::key(C_MODE_WRITING)),
             UiOption::new("source", Text::key(C_MODE_SOURCE)),
             UiOption::new("reading", Text::key(C_MODE_READING)),
+            // I Blocchi sono dentro Scrittura (E1). Chi li aveva scelti ha
+            // `blocks` nel file della macchina, e quel valore resta suo: non si
+            // riscrive, e una scelta tolta lo farebbe ignorare con un avviso e
+            // ricadere sul predefinito. Resta allora fra le scelte, in fondo,
+            // con l'etichetta di Scrittura: due scelte con la stessa etichetta
+            // sono la stessa scelta, e il pannello mostra soltanto la prima
+            // (`visibleChoices` in `apps/client/src/panels/settings-model.ts`).
+            // La shell apre `blocks` in Scrittura (`SurfaceMode.formerIds`).
+            UiOption::new("blocks", Text::key(C_MODE_WRITING)),
         ],
     )];
     settings.push(choice(
@@ -1562,8 +1573,7 @@ const C_EDITOR_LIVE_REVEAL_LINE: &str = "core.editor.live_reveal.line";
 const C_EDITOR_LIVE_GUIDE: &str = "core.editor.live_guide";
 const C_EDITOR_LIVE_GUIDE_DESC: &str = "core.editor.live_guide.desc";
 const C_MODE_SOURCE: &str = "core.mode.source";
-const C_MODE_LIVE: &str = "core.mode.live";
-const C_MODE_BLOCKS: &str = "core.mode.blocks";
+const C_MODE_WRITING: &str = "core.mode.writing";
 const C_MODE_READING: &str = "core.mode.reading";
 const C_GROUP_DIAGNOSTICS: &str = "core.group.diagnostics";
 const C_GROUP_PRIVACY: &str = "core.group.privacy";
@@ -2166,7 +2176,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_INDENT_2, "2 spazi")
         .with(C_EDITOR_INDENT_4, "4 spazi")
         .with(C_EDITOR_PROPERTIES, "Proprietà nel testo")
-        .with(C_EDITOR_PROPERTIES_DESC, "Come Live mostra il frontmatter in cima alla nota. Un click sulle proprietà riapre lo YAML da scrivere; in Sorgente resta sempre YAML.")
+        .with(C_EDITOR_PROPERTIES_DESC, "Come Scrittura mostra il frontmatter in cima alla nota. Un click sulle proprietà riapre lo YAML da scrivere; in Sorgente resta sempre YAML.")
         .with(C_EDITOR_PROPERTIES_VISIBLE, "Visibili")
         .with(C_EDITOR_PROPERTIES_HIDDEN, "Nascoste")
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
@@ -2188,16 +2198,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_SLASH_SECTIONS_DESC, "Le sezioni dopo Suggeriti, Preferiti e Recenti. Quelle non elencate seguono nel loro ordine.")
         .with(C_EDITOR_DEFAULT_MODE, "Modalità iniziale")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "La modalità di una finestra nuova o di un vault aperto per la prima volta. Un riquadro diviso eredita quella del riquadro da cui nasce, e ognuno ricorda la sua.")
-        .with(C_EDITOR_LIVE_REVEAL, "Segni del Markdown in Live")
-        .with(C_EDITOR_LIVE_REVEAL_DESC, "I segni del Markdown si vedono in Sorgente; qui si sceglie se mostrarli anche in Live.")
+        .with(C_EDITOR_LIVE_REVEAL, "Segni del Markdown in Scrittura")
+        .with(C_EDITOR_LIVE_REVEAL_DESC, "I segni del Markdown si vedono in Sorgente; qui si sceglie se mostrarli anche in Scrittura.")
         .with(C_EDITOR_LIVE_REVEAL_NEVER, "Mai, come in Word")
         .with(C_EDITOR_LIVE_REVEAL_ELEMENT, "Dell'elemento del cursore")
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Della riga del cursore")
         .with(C_EDITOR_LIVE_GUIDE, "Guida mentre scrivi")
-        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Live un segno aperto dà subito lo stile al testo e mostra in grigio la chiusura che manca; lo spazio chiude apice e pedice.")
+        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Scrittura un segno aperto dà subito lo stile al testo e mostra in grigio la chiusura che manca; lo spazio chiude apice e pedice.")
         .with(C_MODE_SOURCE, "Sorgente")
-        .with(C_MODE_LIVE, "Live")
-        .with(C_MODE_BLOCKS, "Blocchi")
+        .with(C_MODE_WRITING, "Scrittura")
         .with(C_MODE_READING, "Lettura")
         .with(C_GROUP_PRIVACY, "Privacy")
         .with(C_HISTORY, "Ricerche e note recenti")
@@ -2800,7 +2809,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_INDENT_2, "2 spaces")
         .with(C_EDITOR_INDENT_4, "4 spaces")
         .with(C_EDITOR_PROPERTIES, "Properties in the text")
-        .with(C_EDITOR_PROPERTIES_DESC, "How Live shows the frontmatter at the top of the note. A click on the properties reopens the YAML for writing; Source always shows YAML.")
+        .with(C_EDITOR_PROPERTIES_DESC, "How Writing shows the frontmatter at the top of the note. A click on the properties reopens the YAML for writing; Source always shows YAML.")
         .with(C_EDITOR_PROPERTIES_VISIBLE, "Visible")
         .with(C_EDITOR_PROPERTIES_HIDDEN, "Hidden")
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
@@ -2822,16 +2831,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_SLASH_SECTIONS_DESC, "The sections after Suggested, Favorites and Recent. Those not listed follow in their own order.")
         .with(C_EDITOR_DEFAULT_MODE, "Initial mode")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "The mode of a new window or of a vault opened for the first time. A split pane inherits the mode of the pane it comes from, and each pane remembers its own.")
-        .with(C_EDITOR_LIVE_REVEAL, "Markdown marks in Live")
-        .with(C_EDITOR_LIVE_REVEAL_DESC, "Markdown marks are visible in Source; here you choose whether Live shows them too.")
+        .with(C_EDITOR_LIVE_REVEAL, "Markdown marks in Writing")
+        .with(C_EDITOR_LIVE_REVEAL_DESC, "Markdown marks are visible in Source; here you choose whether Writing shows them too.")
         .with(C_EDITOR_LIVE_REVEAL_NEVER, "Never, as in Word")
         .with(C_EDITOR_LIVE_REVEAL_ELEMENT, "Of the element at the cursor")
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Of the line at the cursor")
         .with(C_EDITOR_LIVE_GUIDE, "Guide while typing")
-        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Live an opened mark styles the text at once and shows the missing close in grey; a space closes superscript and subscript.")
+        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Writing an opened mark styles the text at once and shows the missing close in grey; a space closes superscript and subscript.")
         .with(C_MODE_SOURCE, "Source")
-        .with(C_MODE_LIVE, "Live")
-        .with(C_MODE_BLOCKS, "Blocks")
+        .with(C_MODE_WRITING, "Writing")
         .with(C_MODE_READING, "Reading")
         .with(C_PLUGINS_DISABLED, "Disabled components")
         .with(
@@ -3447,6 +3455,104 @@ mod tests {
         let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
         assert_eq!(values, ["mai", "elemento", "riga"]);
         assert!(!spec.program_writable);
+    }
+
+    /// Le scelte della modalità iniziale sono Scrittura, Sorgente e Lettura;
+    /// `blocks` resta valido in fondo, con l'etichetta di Scrittura, perché il
+    /// pannello lo nasconda (due scelte con la stessa etichetta sono una) e la
+    /// shell lo apra in Scrittura.
+    #[test]
+    fn the_initial_mode_offers_writing_source_reading_and_keeps_blocks_as_writing() {
+        let spec = core_machine_settings()
+            .into_iter()
+            .find(|spec| spec.key == EDITOR_DEFAULT_MODE)
+            .expect("il core dichiara la modalità iniziale");
+        let SettingKind::Choice { default, options } = &spec.kind else {
+            panic!("la modalità iniziale è una scelta");
+        };
+        assert_eq!(default, "live_preview");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, ["live_preview", "source", "reading", "blocks"]);
+        let label = |value: &str| {
+            options
+                .iter()
+                .find(|option| option.value == value)
+                .map(|option| option.label.clone())
+        };
+        assert_eq!(label("blocks"), label("live_preview"));
+        assert_eq!(label("live_preview"), Some(Text::key(C_MODE_WRITING)));
+        assert!(spec
+            .kind
+            .rejects(&fub_abi::settings::SettingValue::Text("blocks".into()))
+            .is_none());
+        let said = |locale: &str| {
+            core_catalog()
+                .into_iter()
+                .find(|catalog| catalog.locale == locale)
+                .and_then(|catalog| catalog.entries.get(C_MODE_WRITING).cloned())
+        };
+        assert_eq!(said("it").as_deref(), Some("Scrittura"));
+        assert_eq!(said("en").as_deref(), Some("Writing"));
+    }
+
+    /// Il file della macchina di chi aveva scelto i Blocchi: `blocks` si legge
+    /// com'è scritto, da lui e non dal predefinito, e il file resta byte per
+    /// byte quello di prima, dopo l'apertura, la dichiarazione e la lettura.
+    /// Un valore sconosciuto vale il predefinito, come sempre, e nemmeno lui si
+    /// riscrive.
+    #[test]
+    fn blocks_in_the_machine_file_reads_back_as_written_and_the_file_stays_byte_for_byte() {
+        use fub_abi::settings::{SettingSource, SettingValue};
+        use fub_kernel::MachineSettings;
+
+        let dir = tempfile::tempdir().expect("cartella temporanea");
+        let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("settings.json"))
+            .expect("percorso UTF-8");
+        // Il file come lo scriveva un Fub che aveva la modalità Blocchi.
+        {
+            let (old, warning) = MachineSettings::open(&path);
+            assert_eq!(warning, None);
+            old.declare(&core_machine_settings()).expect("schema");
+            old.set(EDITOR_DEFAULT_MODE, SettingValue::Text("blocks".into()))
+                .expect("`blocks` è una scelta valida");
+        }
+        let before = std::fs::read(&path).expect("il file della macchina");
+        assert!(String::from_utf8_lossy(&before).contains("\"blocks\""));
+
+        let read = |path: &camino::Utf8Path| {
+            let (machine, warning) = MachineSettings::open(path);
+            assert_eq!(warning, None);
+            machine.declare(&core_machine_settings()).expect("schema");
+            let entry = machine
+                .entries()
+                .into_iter()
+                .find(|entry| entry.spec.key == EDITOR_DEFAULT_MODE)
+                .expect("la riga della modalità iniziale");
+            assert_eq!(
+                machine.effective(EDITOR_DEFAULT_MODE).expect("dichiarata"),
+                (entry.value.clone(), entry.source)
+            );
+            (entry.value, entry.source)
+        };
+        assert_eq!(
+            read(&path),
+            (SettingValue::Text("blocks".into()), SettingSource::Machine)
+        );
+        assert_eq!(std::fs::read(&path).expect("il file"), before);
+
+        let unknown = String::from_utf8(before.clone())
+            .expect("JSON")
+            .replace("\"blocks\"", "\"pagine\"")
+            .into_bytes();
+        std::fs::write(&path, &unknown).expect("scrive il valore sconosciuto");
+        assert_eq!(
+            read(&path),
+            (
+                SettingValue::Text("live_preview".into()),
+                SettingSource::Default
+            )
+        );
+        assert_eq!(std::fs::read(&path).expect("il file"), unknown);
     }
 
     /// Il default è il massimo dello schermo, e ogni tetto offerto dal pannello

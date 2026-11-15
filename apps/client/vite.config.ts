@@ -273,6 +273,11 @@ export default defineConfig({
           // coi gesti delle tabelle, non con l'editor che la monta, e da sola
           // non pesa sul chunk dei documenti.
           if (/\/src\/tabella\//.test(id)) return "tabella";
+          // Il pannello delle impostazioni, con la pagina dei componenti, le
+          // informazioni e la rinomina del vault: cambia con le impostazioni,
+          // non con l'editor o la ricerca, e da solo non pesa sul chunk che
+          // questi condividono.
+          if (/\/src\/panels\/(settings[^/]*|components-page|about|vault-rename)\.ts$/.test(id)) return "settings-panel";
           // Scrittura, il nucleo del testo ricco, con ProseMirror: la usano
           // i documenti e il testo dei disegni, che la carica dopo il
           // montaggio. Da sola non pesa sul primo disegno e resta in cache
