@@ -157,6 +157,14 @@ interrotta.
 Dove il browser lo dà, l'adattatore ascolta anche `pointerrawupdate`, che
 arriva prima del `pointermove` del fotogramma: i suoi campioni vanno subito
 alla sessione, e il `pointermove` che segue non ripete quelli già arrivati.
+Il `pointermove` può riportarli con un altro istante (Chromium con l'input del
+protocollo DevTools, 10–17 ms dopo), e la sessione riconosce un doppione solo
+dall'istante: per questo l'adattatore ricorda i campioni di `pointerrawupdate`
+finché un `pointermove` non li riporta, e scarta il campione del `pointermove`
+che ha gli stessi valori (coordinate del client, pressione, inclinazione,
+rotazione, tasti) di uno di loro, consumandolo. Un campione senza gemello entra
+come sempre; due campioni uguali in istanti diversi di una penna ferma restano
+due.
 L'anteprima resta incrementale (`pf1-live.ts`) e non usa
 `requestAnimationFrame` (DEC-26).
 
