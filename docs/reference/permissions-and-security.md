@@ -505,6 +505,19 @@ lettura, mai una pila o una memoria esaurite.
 - L'append del kernel rifiuta symlink, hardlink e target non regolari, e
   conta i nomi del file sull'handle aperto, non riaprendo il path.
 
+### Testo verso un foglio di calcolo
+
+Un testo che esce verso un altro foglio di calcolo non diventa una formula
+(CSV injection): un campo che comincia con `=`, `+`, `-` o `@`, anche dopo
+spazi, prende un apostrofo davanti. Vale per l'export CSV dei documenti
+(`fub-importers`, `csv.rs`), per il salvataggio CSV/TSV di GridCraft e per
+il testo degli appunti della griglia (`fub.copyHtml`), con la patch
+`0012-formule-come-testo` di `vendor/gridcraft`. La griglia mette
+l'apostrofo anche davanti a una tabulazione o a un ritorno a capo iniziali,
+e lascia com'è un numero con il segno (`-12`, `-1,234.50`, `-12%`), che
+resta un numero; incollato di nuovo nella griglia, il testo torna quello di
+prima. L'HTML degli appunti non cambia.
+
 ## Servizi remoti
 
 - La chiave del vault (VDK, 32 byte casuali) viaggia avvolta da una KEK
