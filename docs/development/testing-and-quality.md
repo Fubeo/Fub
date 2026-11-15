@@ -248,28 +248,21 @@ npm run bench:giro -- --out=$TMPDIR/giro --telefono   # mobile.html a 390×844
 npm run bench:giro -- --solo=avvio --luce=light       # un gruppo, nella luce giorno
 ```
 
-Il corridore è `bench/giro.mjs`; i gruppi, in ordine, sono in `bench/giro/elenco.mjs`,
-uno per file accanto che dice in testa che cosa prova. `avvio`: dal primo avvio
-senza vault all'albero, alla scrittura in Live e alle quattro modalità. `scrivere`
-(non al telefono): «/» e maniglia, tasto destro, palette, due riquadri, rinomina
-coi link, ricerca e «In entrata»; ricarica con `?formatbar=1&slash=1`, senza cui
-il finto non dà i comandi di formato. `editor` (non al telefono): una frase in
-un Word salvata, una formula in un foglio Excel e «Ordina» dal menu «Comandi»,
-un rettangolo in un disegno SVG che finisce nel suo testo, una parola cercata
-in un PDF e la pagina 3; ricarica con `?rich=docx&workbook=1&connectors=6&giro=editor`,
-dove `giro=editor` (`bench/giro-fixture.ts`) aggiunge il PDF di quattro pagine
-e una cartella che risponde soltanto alla formula e all'ordine del compito,
-e ricorda che cosa il salvataggio ha innestato. `guasti` (non al telefono): conflitti,
-errori, cestino, tastiera. Al primo compito che fallisce il giro si ferma, dice
-quale e perché, fotografa (`…-errore.png`) ed esce con 1. Foto e referto
+Il corridore è `bench/giro.mjs`; i gruppi, in ordine, sono in `bench/giro/elenco.mjs`, uno per file
+accanto che dice in testa che cosa prova. `avvio`: dal primo avvio senza vault all'albero, alla
+scrittura in Live e alle quattro modalità. `scrivere` (non al telefono): «/» e maniglia, tasto
+destro, palette, due riquadri, rinomina coi link, ricerca e «In entrata»; ricarica con
+`?formatbar=1&slash=1`, senza cui il finto non dà i comandi di formato. `editor` (non al telefono):
+una frase in un Word, formula e «Ordina» in un Excel, un rettangolo in un SVG, una ricerca in un
+PDF; `giro=editor` (`bench/giro-fixture.ts`) dà il PDF e un foglio che serve solo quei comandi.
+`guasti` (non al telefono): conflitti, errori, cestino, tastiera. Al primo compito che fallisce il
+giro si ferma, dice quale e perché, fotografa (`…-errore.png`) ed esce con 1. Foto e referto
 (`giro.json`) in `--out` (di serie `bench/.output/giro/`), porta da `FUB_BENCH_PORT` o `--port`.
 
-Che cosa **non** prova: i pixel (senza baseline, si guardano: `bench:verify`),
-il motore vero (risponde il finto host; i suoi «Struttura» e «Collegamenti»
-sono uguali per ogni nota, la sua rinomina riscrive solo i wikilink, e i valori
-del foglio dopo la formula e l'ordine sono scritti a mano, non calcolati), il
-sistema operativo (finestre, dialoghi, WebView e installer: il selettore di
-cartella risponde il vault del banco). Restano al giro a mano sugli installer.
+Che cosa **non** prova: i pixel (senza baseline, si guardano: `bench:verify`), il motore vero
+(risponde il finto host; i suoi «Struttura» e «Collegamenti» sono uguali per ogni nota, la sua
+rinomina riscrive solo i wikilink, i valori del foglio sono a mano), il sistema operativo (finestre,
+dialoghi, WebView e installer, al giro a mano; il selettore dà il vault del banco).
 
 Varianti usate dalle prove di accettazione della Graph View e dei disegni
 grandi:
