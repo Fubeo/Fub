@@ -231,6 +231,10 @@ interface Hold {
   readonly grab: number;
   /// Lo scorrimento e la colonna del testo, letti alla presa.
   readonly scroller: { readonly top: number; readonly left: number };
+  /// Quanto (px) le altezze di CodeMirror sbagliano dove sta davvero il
+  /// blocco: un widget di blocco col margine (la testata della pagina) non
+  /// entra nella mappa delle altezze. Letto alla presa, vale per ogni misura.
+  readonly skew: number;
   readonly column: { readonly left: number; readonly right: number };
   /// Il titolo della sezione d'origine, e l'ultima cosa annunciata.
   readonly section: string | null;
@@ -840,7 +844,7 @@ class HandlesView {
       read: () => {
         const hold = drag.hold;
         if (!hold || this.drag !== drag) return null;
-        return this.measure(hold.run, hold.sibs, this.docBase(hold.scroller));
+        return this.measure(hold.run, hold.sibs, this.docBase(hold.scroller) + hold.skew);
       },
       write: (geo) => {
         const hold = drag.hold;
@@ -875,10 +879,15 @@ class HandlesView {
     const rowsLeft = Math.min(...rects.map((rect) => rect.left));
     const width = Math.max(...rects.map((rect) => rect.right)) - rowsLeft;
     const sibs = siblingsOf(blocks, run.first);
-    const geo = this.measure(run, sibs, this.docBase(scroller));
-    const held = heldHeight(geo.height);
     const toScrollX = (x: number) => x - scroller.left + scrollDOM.scrollLeft;
     const toScrollY = (y: number) => y - scroller.top + scrollDOM.scrollTop;
+    // La prima riga del blocco dice dove sta davvero: le altezze di
+    // CodeMirror si correggono di quanto sbagliano lì.
+    const base = this.docBase(scroller);
+    const first = this.measure(run, sibs, base);
+    const skew = rects[0]!.height > 0 ? toScrollY(rects[0]!.top) - first.top : 0;
+    const geo = Math.abs(skew) < 0.5 ? first : this.measure(run, sibs, base + skew);
+    const held = heldHeight(geo.height);
     const left = toScrollX(rowsLeft) - CARD_PAD;
     // La maniglia resta sotto il puntatore: il punto della presa, dentro il
     // blocco compatto.
@@ -901,7 +910,15 @@ class HandlesView {
     const inner = document.createElement("div");
     inner.className = view.contentDOM.className;
     inner.style.padding = "0";
-    for (const row of rows) inner.append(row.cloneNode(true));
+    // Il respiro di una riga può dipendere da dove sta (un titolo che non è
+    // il primo figlio): la copia tiene quello che aveva al suo posto.
+    for (const row of rows) {
+      const copy = row.cloneNode(true) as HTMLElement;
+      const style = getComputedStyle(row);
+      copy.style.paddingTop = style.paddingTop;
+      copy.style.paddingBottom = style.paddingBottom;
+      inner.append(copy);
+    }
     card.append(inner);
     const grip = document.createElement("span");
     grip.className = "cm-fub-block-lift-grip";
@@ -944,6 +961,7 @@ class HandlesView {
       el, card, shade, to, slot, left, held, grab, scroller,
       column: { left: content.left, right: content.right },
       section: sectionAt(state, blocks, span.from, span), said: "",
+      skew: Math.abs(skew) < 0.5 ? 0 : skew,
       tx: 0, ty: 0, cx: 0, cy: 0, tilt: 0,
     };
     this.layout(drag, false);
@@ -981,7 +999,7 @@ class HandlesView {
     const n = hold.others.length;
     // Sull'ultimo ottavo a destra o a sinistra di un vicino: «Accanto».
     hold.beside = null;
-    const side = geo.fixed ? null : besideSide(drag.x, hold.column.left, hold.column.right, list);
+    const side = geo.fixed ? null : besideSide(drag.x, dx, hold.column.left, hold.column.right, list);
     if (side) {
       const k = neighbourAt(geo, geo.origin, pointerY);
       const target = k >= 0 ? hold.others[k]! : -1;

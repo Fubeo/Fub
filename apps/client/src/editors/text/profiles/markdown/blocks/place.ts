@@ -126,14 +126,18 @@ export function leanOf(dx: number, options: { readonly list: boolean; readonly c
   return "none";
 }
 
-/// Il bordo di un blocco dove il posto diventa «Accanto»: `x` nell'ultimo
-/// ottavo a destra o a sinistra della colonna `[left, right]`. A sinistra non
-/// vale per le voci d'elenco, dove il gesto verso destra annida.
-export function besideSide(x: number, left: number, right: number, list: boolean): "left" | "right" | null {
+/// Il bordo di un blocco dove il posto diventa «Accanto»: a destra, il
+/// puntatore `x` nell'ultimo ottavo della colonna `[left, right]`; a sinistra,
+/// il blocco portato oltre il bordo sinistro, cioè il puntatore spostato a
+/// sinistra della presa di almeno `NEST_PX` (`dx`). La maniglia sta già a
+/// sinistra del testo: un ottavo misurato dal bordo della colonna scatterebbe
+/// a ogni presa. A sinistra non vale per le voci d'elenco, dove quel gesto
+/// porta fuori.
+export function besideSide(x: number, dx: number, left: number, right: number, list: boolean): "left" | "right" | null {
   const width = right - left;
   if (width <= 0) return null;
   if (x >= right - width * BESIDE_SHARE) return "right";
-  if (!list && x >= left && x <= left + width * BESIDE_SHARE) return "left";
+  if (!list && dx <= -NEST_PX) return "left";
   return null;
 }
 

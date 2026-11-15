@@ -158,12 +158,13 @@ describe("di lato", () => {
     expect(leanOf(100, { ...can, list: false })).toBe("none");
   });
 
-  it("sull'ultimo ottavo a destra o a sinistra il posto diventa «Accanto»", () => {
-    expect(besideSide(790, 0, 800, false)).toBe("right");
-    expect(besideSide(699, 0, 800, false)).toBeNull();
-    expect(besideSide(50, 0, 800, false)).toBe("left");
-    expect(besideSide(-10, 0, 800, false), "fuori dal testo, a sinistra, è la maniglia").toBeNull();
-    expect(besideSide(50, 0, 800, true), "in un elenco la sinistra annida").toBeNull();
-    expect(besideSide(790, 0, 800, true)).toBe("right");
+  it("sull'ultimo ottavo a destra, o portato oltre il bordo sinistro, il posto diventa «Accanto»", () => {
+    expect(besideSide(790, 760, 0, 800, false)).toBe("right");
+    expect(besideSide(699, 660, 0, 800, false)).toBeNull();
+    expect(besideSide(50, 20, 0, 800, false), "la presa porta il puntatore sul testo: non è «Accanto»").toBeNull();
+    expect(besideSide(-50, -24, 0, 800, false), "portato oltre il bordo sinistro").toBe("left");
+    expect(besideSide(-50, -23, 0, 800, false)).toBeNull();
+    expect(besideSide(-50, -40, 0, 800, true), "in un elenco la sinistra porta fuori").toBeNull();
+    expect(besideSide(790, 760, 0, 800, true)).toBe("right");
   });
 });

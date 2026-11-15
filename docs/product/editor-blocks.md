@@ -67,10 +67,11 @@ cambio di posto la regione viva dice «Posizione 4 di 14, in «I conti»».
 
 Di lato il blocco segue il puntatore per un terzo, al più 28 px. Una voce
 d'elenco spostata di 24 px a destra entra nella voce sopra; di 24 px a
-sinistra, in fondo alla sua lista, ne esce. Sull'ultimo ottavo a destra o a
-sinistra di un vicino compare una barra verticale: lasciato lì, il blocco gli
-va **accanto**, in colonne (a sinistra non vale per le voci d'elenco, dove
-quel gesto porta fuori). Al rilascio il blocco cade nel posto con un solo
+sinistra, in fondo alla sua lista, ne esce. Col puntatore sull'ultimo ottavo
+a destra di un vicino, o portato di 24 px a sinistra della presa, compare una
+barra verticale sul bordo del vicino: lasciato lì, il blocco gli va
+**accanto**, in colonne (a sinistra non vale per le voci d'elenco, dove quel
+gesto porta fuori). Al rilascio il blocco cade nel posto con un solo
 passo d'annullamento; Esc, una finestra che perde il fuoco o il testo cambiato
 da fuori (che vince) lo riportano dov'era. Vicino ai bordi la nota scorre. Le maniglie
 stanno fuori dal testo ma sono pulsanti veri: il «+» e la maniglia del blocco
