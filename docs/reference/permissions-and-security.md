@@ -321,13 +321,28 @@ da scaricare, sono i siti `https` e il loopback `http` (`127.0.0.1`,
 sito remoto parte soltanto se l'utente ha concesso quell'origine anche nelle opzioni
 (`apps/clipper/src/interpreter.js`).
 
-La chiave dell'assistente remoto, se l'utente la scrive nelle opzioni, sta
-nello spazio locale dell'estensione (`storage.local`, voce `fub-ai-key`): il
-popup la legge in memoria per la sola domanda e la dimentica dopo, e non
-entra mai in una pagina, in un indirizzo `fub://` o in una cattura. Il rischio
-che resta: chi legge il profilo del browser con i diritti dell'utente, o un
-difetto che esegua codice nella pagina delle opzioni, legge anche la chiave.
-Il pulsante «Forget API key» delle opzioni la toglie.
+La chiave dell'assistente remoto, se l'utente la scrive nelle opzioni, passa
+da `apps/clipper/src/keystore.js`. Di serie sta in `storage.session` (voce
+`fub-ai-key`): resta nella memoria del browser, non tocca il disco, non è
+visibile agli script di contenuto e sparisce alla chiusura del browser
+(Chromium dalla 102, Firefox dalla 115 anche in MV2, Safari dalla 16.4). Solo
+se l'utente accende «Ricorda la chiave su questo dispositivo» (spenta di
+serie, preferenza `fub-ai-key-remember`) va in `storage.local`, nel profilo
+del browser; la frase sotto la casella dice il rischio. Senza
+`storage.session` il salvataggio di una chiave da non ricordare fallisce con
+un messaggio: mai `storage.local` di nascosto. Una chiave che una versione
+vecchia aveva messo in `storage.local` resta lì e la casella appare accesa.
+Spostando la chiave da un'area all'altra si scrive prima la copia nuova e poi
+si toglie la vecchia. «Dimentica la chiave» la toglie da tutte e due le aree.
+
+Il campo è di tipo password, con un pulsante che la mostra o la nasconde, e
+non viene mai riempito con la chiave salvata. Il popup la legge al momento di
+«Chiedi», per quella sola richiesta, e non la tiene in memoria; non entra mai
+in una pagina, in un indirizzo `fub://` o in una cattura. Il rischio che
+resta: con «Ricorda» acceso, chi legge il profilo del browser con i diritti
+dell'utente legge anche la chiave; in ogni caso un difetto che esegua codice
+nella pagina delle opzioni o nel popup la può leggere mentre il browser è
+aperto.
 
 La conversione della pagina in Markdown (`apps/clipper/src/convert.js`, gemella
 di `crates/fub-importers/src/html.rs`, che la usano anche gli importatori e il
