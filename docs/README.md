@@ -90,6 +90,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 - Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md), [il moto](development/motion-smoke-test.md) e [la lavagna](development/canvas-smoke-test.md)
 - [Le misure nella WebView](development/webview-measurements.md) e [le misure prese](misure/README.md)
 - [Creare un plugin](development/plugin-authoring.md)
+- [La parità della lavagna](development/canvas-parity.md): l'inventario di ciò che la GUI fa e della sua forma in codice
 - [Stile della documentazione](development/documentation-style.md) e [versionamento e release](development/versioning-and-releases.md)
 
 ## Consultare i contratti
@@ -104,15 +105,14 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 - [Le annotazioni PDF](reference/annotation-format.md), la
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
   e la [sessione live](reference/live-session.md)
-- Le porte del [disegno](reference/drawing-ipc.md) e della
-  [griglia](reference/grid-ipc.md): l'IPC dei loro motori
-- [Il formato della lavagna](reference/canvas-format.md): il nucleo
-  `fub-canvas-core` e le regole di lettura e scrittura delle `.canvas`, e
-  le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e
-  la loro inversa
-- [L'inchiostro della lavagna](reference/canvas-ink.md), i campi `fub:ink`
-  di un `.canvas`, con [le ancore di pagina e di cella](reference/canvas-ink-anchors.md),
-  e [gli estratti](reference/canvas-parts.md), `fub:parts`
+- Le porte del [disegno](reference/drawing-ipc.md) e della [griglia](reference/grid-ipc.md): l'IPC dei loro motori
+- [Il formato della lavagna](reference/canvas-format.md) (`fub-canvas-core`),
+  le [toppe](reference/canvas-operations.md) con la loro inversa,
+  [la lavagna come codice](reference/canvas-code.md) (letture, misure, operazioni
+  d'intento) col suo [schema](reference/canvas-schema.md), [Mermaid e le
+  scalette](reference/canvas-import.md), [il controllo](reference/canvas-check.md),
+  [l'inchiostro](reference/canvas-ink.md) (`fub:ink`) con [le ancore di pagina e
+  di cella](reference/canvas-ink-anchors.md), e [gli estratti](reference/canvas-parts.md) (`fub:parts`)
 - [Il server MCP](reference/mcp-server.md)
 - [Le schede della lavagna](reference/canvas-cards.md): specie, schede vive e
   ferme, il contratto dei renderer; [la scheda dei file Craft](reference/canvas-craft.md)

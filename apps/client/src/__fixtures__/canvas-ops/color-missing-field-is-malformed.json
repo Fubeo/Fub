@@ -1,0 +1,8 @@
+{
+  "about": "Il campo color di color c'è sempre, anche null: se manca, la lista non si legge. Così una dimenticanza non toglie i colori in silenzio.",
+  "before": {
+    "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a", "color": "2" }]
+  },
+  "ops": [{ "op": "color", "ids": ["a"] }],
+  "expect": { "outcome": "malformed" }
+}

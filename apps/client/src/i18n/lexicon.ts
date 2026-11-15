@@ -43,6 +43,7 @@ export const LEXICON: readonly LexiconEntry[] = [
   { say: "Scrittura", instead: ["Live", "Modalità Blocchi"], why: "Una modalità sola per scrivere, Live e Blocchi insieme: è la parola dei documenti di Word (Pagina, Scrittura, Lettura)" },
   // I commenti CriticMarkup (T21): il passo evidenziato con la sua discussione.
   { say: "Commento", instead: ["Nota a margine", "Annotazione nel testo"], why: "La parola di Word e di Google Documenti; «nota» è già il file, «annotazione» è dei PDF" },
+  { say: "Sbirciata, Sbircia", instead: ["Anteprima modificabile", "Apri in sovrimpressione"], why: "La nota aperta sopra la destra del foglio, dove si scrive: «Anteprima» resta la scheda al passaggio, che si guarda e basta" },
 ];
 
 /// Le varianti, tutte: nessuna voce di menu le contiene. «Arancio» è anche

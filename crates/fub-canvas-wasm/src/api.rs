@@ -16,7 +16,9 @@
 
 use std::collections::BTreeMap;
 
+use fub_canvas_core::check::check;
 use fub_canvas_core::commit::{Changed, CommitError, Core, LayerChange};
+use fub_canvas_core::describe::{self, DescribeOptions};
 use fub_canvas_core::ink::{board_layer, node_layer, LayerRead, LayerState, StrokeState, INK_KEY};
 use fub_canvas_core::model::{Canvas, CanvasError, CanvasNode, MAX_SOURCE_BYTES};
 use fub_canvas_core::ops::{compile, CanvasOp, OpError};
@@ -97,7 +99,9 @@ impl From<OpError> for Failure {
             OpError::UnknownNode { id, .. } => ("UnknownNode", Some(id)),
             OpError::UnknownEdge { id, .. } => ("UnknownEdge", Some(id)),
             OpError::DuplicateId { id, .. } => ("DuplicateId", Some(id)),
-            OpError::TooMany { .. } => ("TooMany", None),
+            // Il tetto di `move` è un «troppe» come gli altri: il tipo resta
+            // quello che la tela conosce, e il messaggio dice il resto.
+            OpError::TooMany { .. } | OpError::TooManyMoved { .. } => ("TooMany", None),
             OpError::Invalid { .. } => ("Invalid", None),
             OpError::UnknownStroke { id, .. } => ("UnknownStroke", Some(id)),
             OpError::ForeignLayer { .. } => ("ForeignLayer", None),
@@ -124,6 +128,36 @@ impl From<OpError> for Failure {
 #[serde(deny_unknown_fields)]
 struct CompileRequest {
     ops: Vec<CanvasOp>,
+    #[serde(default, deserialize_with = "seed")]
+    seed: u64,
+}
+
+/// La richiesta di [`Cores::describe`]: la forma (per ora solo `code`) e,
+/// facoltativi, gli id delle schede da leggere, con gli archi fra loro.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DescribeRequest {
+    form: DescribeForm,
+    #[serde(default)]
+    ids: Option<Vec<String>>,
+}
+
+/// Le forme di [`Cores::describe`]: la lista che ricrea la lavagna. La lettura
+/// in righe e il modello li dà già la tela, che ha il modello.
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum DescribeForm {
+    Code,
+}
+
+/// La richiesta di [`Cores::check`]: la lista come JSON (`ops`, un valore
+/// qualunque: una lista che non è un array è un problema del rapporto) e il
+/// seme degli id nuovi come in [`CompileRequest`]. Il testo degli appunti lo
+/// legge chi chiama, una volta, e dà lo stesso `ops` a check e a compile.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CheckRequest {
+    ops: Value,
     #[serde(default, deserialize_with = "seed")]
     seed: u64,
 }
@@ -372,6 +406,37 @@ impl Cores {
         let core = self.core(handle)?;
         let compiled = compile(core.canvas(), &request.ops, request.seed)?;
         serde_json::to_string(&compiled).map_err(Failure::internal)
+    }
+
+    /// La lavagna `handle` come codice: `{"form": "code", "ids"?}` risponde
+    /// `{"form": "code", "text"}`, con la lista di operazioni che la ricrea
+    /// ([`describe::code`]) scritta come la scrive `canvas.read` (JSON con i
+    /// rientri). Con `ids`, solo quelle schede e gli archi fra loro, senza
+    /// l'inchiostro libero. Non cambia la lavagna.
+    pub fn describe(&self, handle: Handle, request: &[u8]) -> Result<String, Failure> {
+        let request: DescribeRequest = serde_json::from_str(text(request)?)
+            .map_err(|error| Failure::new("request", error.to_string()))?;
+        let core = self.core(handle)?;
+        let DescribeForm::Code = request.form;
+        let options = DescribeOptions {
+            ids: request.ids,
+            max_chars: None,
+        };
+        let ops = describe::code(core.canvas(), &options);
+        let text = serde_json::to_string_pretty(&ops).map_err(Failure::internal)?;
+        Ok(json!({ "form": "code", "text": text }).to_string())
+    }
+
+    /// Controlla una lista di operazioni sulla lavagna `handle`, senza
+    /// cambiarla: `{"ops", "seed"?}` risponde il rapporto di [`check`]
+    /// (`{"ok", "problems", "warnings", "warnings_omitted", "summary",
+    /// "outline_after"}`).
+    pub fn check(&self, handle: Handle, request: &[u8]) -> Result<String, Failure> {
+        let request: CheckRequest = serde_json::from_str(text(request)?)
+            .map_err(|error| Failure::new("request", error.to_string()))?;
+        let core = self.core(handle)?;
+        let report = check(core.canvas(), &request.ops, request.seed);
+        serde_json::to_string(&report).map_err(Failure::internal)
     }
 
     /// I livelli d'inchiostro della lavagna `handle`, come li legge il

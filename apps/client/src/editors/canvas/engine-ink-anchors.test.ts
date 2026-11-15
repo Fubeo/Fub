@@ -10,9 +10,9 @@
 // `cellRect`, `cellsShown`, come `grid/card.ts`).
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { parseInkBrush } from "../../ink/brush";
-import { CanvasEngine, type CanvasChange } from "./engine";
+import { CanvasEngine, type CanvasChange, type CanvasCorePort } from "./engine";
 import { createCardRegistry, type CardCellBox, type CardContext, type CardPageBox, type CardRenderer, type CardSnapshot, type CardSnapshots } from "./cards";
-import { canvasCoreReady } from "./wasm/core";
+import { canvasCoreReady, openCoreNow, type CanvasIntentOp } from "./wasm/core";
 
 beforeAll(async () => {
   await canvasCoreReady();
@@ -56,6 +56,30 @@ function fakePdf() {
   return { renderer, turn };
 }
 
+/// Il nucleo vero, con le liste di operazioni che la tela gli fa compilare.
+function recordingCore(compiled: CanvasIntentOp[][]): CanvasCorePort {
+  return {
+    ready: canvasCoreReady,
+    openNow: (text) => {
+      const core = openCoreNow(text);
+      if (!core) return null;
+      return new Proxy(core, {
+        get(target, key, receiver) {
+          const value = Reflect.get(target, key, receiver) as unknown;
+          if (typeof value !== "function") return value;
+          return (...args: unknown[]) => {
+            if (key === "compile") compiled.push(JSON.parse(JSON.stringify(args[0])) as CanvasIntentOp[]);
+            return (value as (...a: unknown[]) => unknown).apply(target, args);
+          };
+        },
+      });
+    },
+  };
+}
+
+/// Le `erase_along` che la tela ha fatto compilare.
+const alongOf = (compiled: readonly CanvasIntentOp[][]) => compiled.flat().filter((op) => op.op === "erase_along");
+
 function memorySnapshots(): CardSnapshots {
   const map = new Map<string, CardSnapshot>();
   return {
@@ -69,8 +93,10 @@ function mounted(source = BOARD) {
   const host = document.createElement("div");
   document.body.append(host);
   const changes: CanvasChange[] = [];
+  const compiled: CanvasIntentOp[][] = [];
   const pdf = fakePdf();
   const engine = new CanvasEngine(host, {
+    core: recordingCore(compiled),
     surfaceId: "ink-anchors",
     formatId: "canvas",
     documentId: "lavagna.canvas",
@@ -80,7 +106,7 @@ function mounted(source = BOARD) {
     cards: { registry: createCardRegistry([pdf.renderer]), snapshots: memorySnapshots(), watch: () => () => {} },
   });
   engine.setDoc(source);
-  return { engine, host, changes, pdf };
+  return { engine, host, changes, pdf, compiled };
 }
 
 function pointerEvent(type: string, init: PointerEventInit & { readonly timeStamp?: number }): PointerEvent {
@@ -177,6 +203,27 @@ describe("l'inchiostro sulla pagina di un PDF", () => {
     pen(host, card(host, "doc"), [[650, 60], [660, 30], [670, 20]]);
     const [stroke] = strokesOf(changes[0]!.text, "doc");
     expect((stroke!.anchor as Json).kind).toBe("page");
+  });
+
+  it("la gomma «Solo il pezzo» taglia il tratto di pagina con `erase_along` sulla pagina mostrata (T24)", () => {
+    const { engine, host, changes, compiled } = mounted();
+    pen(host, card(host, "doc"), ON_PAGE);
+    engine.setInkEraser("piece");
+    compiled.length = 0;
+    eraser(host, card(host, "doc"), [[690, 90], [690, 160]]);
+    const along = alongOf(compiled);
+    expect(along).toHaveLength(1);
+    expect(along[0]!.on).toEqual({ card: "doc", page: 2, page_size: [595, 842] });
+    // In punti della pagina: (690 − 600) · 595/300 = 178,5 e (90 − 40) · 595/300 ≈ 99,17.
+    const points = along[0]!.points as number[][];
+    expect(points[0]![0]).toBeCloseTo(178.5, 6);
+    expect(points[0]![1]).toBeCloseTo((50 * 595) / 300, 6);
+    // La larghezza della gomma (almeno 16 unità della lavagna, di più se va veloce) in punti della pagina.
+    expect(Number(along[0]!.size)).toBeGreaterThanOrEqual((16 * 595) / 300 - 1e-9);
+    expect(changes).toHaveLength(2);
+    const pieces = strokesOf(changes[1]!.text, "doc");
+    expect(pieces).toHaveLength(2);
+    for (const piece of pieces) expect(piece.anchor).toEqual({ kind: "page", page: 2, width: 595, height: 842 });
   });
 
   it("annulla e ripeti ridisegnano il tratto di pagina solo sulla sua pagina", () => {
@@ -406,8 +453,10 @@ describe("l'inchiostro sulle celle di un foglio (T38)", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: CanvasChange[] = [];
+    const compiled: CanvasIntentOp[][] = [];
     const sheet = fakeSheet();
     const engine = new CanvasEngine(host, {
+      core: recordingCore(compiled),
       surfaceId: "ink-cells",
       formatId: "canvas",
       documentId: "lavagna.canvas",
@@ -417,7 +466,7 @@ describe("l'inchiostro sulle celle di un foglio (T38)", () => {
       cards: { registry: createCardRegistry([sheet.renderer]), snapshots: memorySnapshots(), watch: () => () => {} },
     });
     engine.setDoc(source);
-    return { engine, host, changes, sheet };
+    return { engine, host, changes, sheet, compiled };
   }
 
   /// B3 nella scheda con il foglio in cima: x 172, y 84.
@@ -499,6 +548,25 @@ describe("l'inchiostro sulle celle di un foglio (T38)", () => {
     eraser(host, card(host, "fogli"), [[across, SHEET.y + COLUMN_HEADER - 5], [across, SHEET.y + COLUMN_HEADER + 30]]);
     expect(changes).toHaveLength(2);
     expect(strokesOf(changes[1]!.text, "fogli").map((each) => each.id)).not.toContain(id);
+  });
+
+  it("la gomma «Solo il pezzo» taglia il tratto di cella con `erase_along` sulla cella (T24)", () => {
+    const { engine, host, changes, compiled } = sheetMounted();
+    pen(host, card(host, "fogli"), ON_B3);
+    engine.setInkEraser("piece");
+    compiled.length = 0;
+    const across = SHEET.x + B3.x + 40;
+    eraser(host, card(host, "fogli"), [[across, SHEET.y + B3.y - 10], [across, SHEET.y + B3.y + 30]]);
+    const along = alongOf(compiled);
+    expect(along).toHaveLength(1);
+    expect(along[0]!.on).toEqual({ card: "fogli", sheet: "Conti 2025", cell: "B3" });
+    // In pixel del foglio dall'angolo di B3, al 100%.
+    expect(along[0]!.points).toEqual([[40, -10], [40, 30]]);
+    expect(along[0]!.size).toBe(16);
+    expect(changes).toHaveLength(2);
+    const pieces = strokesOf(changes[1]!.text, "fogli");
+    expect(pieces).toHaveLength(2);
+    for (const piece of pieces) expect(piece.anchor).toEqual({ kind: "cell", sheet: "Conti 2025", cell: "B3" });
   });
 
   it("un file con l'ancora di cella si apre sulla sua cella; un'ancora che non vale resta nel file e non si vede", () => {

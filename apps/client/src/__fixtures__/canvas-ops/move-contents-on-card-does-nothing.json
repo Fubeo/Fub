@@ -1,0 +1,19 @@
+{
+  "about": "contents su una scheda che non è un gruppo non porta niente: si sposta solo la scheda nominata, anche se un gruppo la contiene.",
+  "before": {
+    "nodes": [
+      { "id": "g", "type": "group", "label": "Lezione", "x": 0, "y": 0, "width": 400, "height": 300 },
+      { "id": "t1", "type": "text", "x": 20, "y": 40, "width": 100, "height": 60, "text": "t1" }
+    ]
+  },
+  "ops": [{ "op": "move", "ids": ["t1"], "dx": 10, "dy": 0, "contents": true }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "g", "type": "group", "label": "Lezione", "x": 0, "y": 0, "width": 400, "height": 300 },
+        { "id": "t1", "type": "text", "x": 30, "y": 40, "width": 100, "height": 60, "text": "t1" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "about": "Rientri incoerenti: 3 spazi valgono il livello sotto (1), un salto di due livelli vale un livello solo; una nota indent_rounded per riga.",
+  "op": {
+    "op": "from_outline",
+    "text": "Radice\n   Figlio a tre spazi\n        Nipote saltato\n  Figlio giusto"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "type": "text",
+          "x": 0,
+          "y": 92,
+          "width": 320,
+          "height": 160,
+          "text": "Radice"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "type": "text",
+          "x": 416,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Figlio a tre spazi"
+        },
+        {
+          "id": "06c45d188009454f",
+          "type": "text",
+          "x": 832,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Nipote saltato"
+        },
+        {
+          "id": "f88bb8a8724c81ec",
+          "type": "text",
+          "x": 416,
+          "y": 184,
+          "width": 320,
+          "height": 160,
+          "text": "Figlio giusto"
+        }
+      ],
+      "edges": [
+        {
+          "id": "1b39896a51a8749b",
+          "fromNode": "e220a8397b1dcdaf",
+          "toNode": "6e789e6aa1b965f4",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "53cb9f0c747ea2ea",
+          "fromNode": "6e789e6aa1b965f4",
+          "toNode": "06c45d188009454f",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "2c829abe1f4532e1",
+          "fromNode": "e220a8397b1dcdaf",
+          "toNode": "f88bb8a8724c81ec",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4",
+      "06c45d188009454f",
+      "f88bb8a8724c81ec",
+      "1b39896a51a8749b",
+      "53cb9f0c747ea2ea",
+      "2c829abe1f4532e1"
+    ],
+    "notes": [
+      {
+        "index": 0,
+        "code": "indent_rounded",
+        "detail": "line 2: an indent of 3 columns is read as level 1"
+      },
+      {
+        "index": 0,
+        "code": "indent_rounded",
+        "detail": "line 3: an indent of 8 columns is read as level 2"
+      }
+    ]
+  }
+}

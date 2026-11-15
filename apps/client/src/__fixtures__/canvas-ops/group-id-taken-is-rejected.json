@@ -1,0 +1,9 @@
+{
+  "about": "group con un id che c'è già (b): DuplicateId, come le altre operazioni che creano una scheda.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+    { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+  ] },
+  "ops": [{ "op": "group", "ids": ["a"], "id": "b" }],
+  "expect": { "outcome": "rejected", "error": { "kind": "DuplicateId", "index": 0, "id": "b" } }
+}

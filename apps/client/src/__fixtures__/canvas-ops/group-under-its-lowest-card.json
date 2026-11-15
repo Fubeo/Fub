@@ -1,0 +1,19 @@
+{
+  "about": "group di a e x: il rettangolo le racchiude con margine 24, agganciato (-24, -24, 768, 408). Il gruppo nasce sotto la più bassa delle sue schede (a, la prima della lista): così sta sotto tutte e tre. Il primo id del seme va al gruppo.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "a" },
+    { "id": "t", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "t" },
+    { "id": "x", "type": "text", "x": 0, "y": 300, "width": 100, "height": 60, "text": "x" }
+  ] },
+  "ops": [{ "op": "group", "ids": ["a", "x"], "label": "Pezzi" }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "e220a8397b1dcdaf", "type": "group", "label": "Pezzi", "x": -24, "y": -24, "width": 768, "height": 408 },
+      { "id": "a", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "t", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "t" },
+      { "id": "x", "type": "text", "x": 0, "y": 300, "width": 100, "height": 60, "text": "x" }
+    ] },
+    "created": ["e220a8397b1dcdaf"]
+  }
+}

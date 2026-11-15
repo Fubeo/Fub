@@ -53,7 +53,8 @@ import {
   renderMarkdownStatePrefix,
   renderPatch,
 } from "./render";
-import { decodeDestination, normalizeLabel } from "./link-syntax";
+import { decodeDestination, normalizeLabel, routeHref } from "./link-syntax";
+import { followPath, followWikilink, linkModifier, textLinkGesture, type PeekLink } from "./link-gesture";
 import { FOOTNOTE_DEFINITION } from "./grammar";
 import { commentCopy } from "./comments/copy";
 import { commentDecorations, commentEditing } from "./comments/mask";
@@ -105,7 +106,16 @@ import { blockPrefixes } from "./block-prefix";
 import { linkDialogOpener } from "./link-dialog";
 import { liveStrings } from "./strings";
 import { topChanges } from "./top-changes";
-import { bareUrl, linkCardGestures, linkCardsChanged, LinkCardWidget, type LinkCardSource } from "./link-card";
+import {
+  bareUrl,
+  bareWikilink,
+  linkCardGestures,
+  linkCardsChanged,
+  LinkCardWidget,
+  noteCardGestures,
+  NoteCardWidget,
+  type LinkCardSource,
+} from "./link-card";
 import { markPresence } from "../../../core/presence";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
@@ -120,6 +130,12 @@ export interface LivePreviewCallbacks {
   /// Lettura arrivava alla sezione — due risposte per lo stesso link, che è la
   /// §4.4 nella sua forma più piccola.
   openWikilink(page: string, heading: string | null, block: string | null): void;
+  /// Alt col clic, o Alt-Invio, su un link a un documento del vault: la
+  /// sbirciata (E11, T20). Senza, quei gesti aprono il documento.
+  peekLink?(link: PeekLink): void;
+  /// Che cosa fa il clic che apre un link (`editor.link-click`): `apri`, di
+  /// serie, o `sbircia`. Senza, apre.
+  linkClick?(): "apri" | "sbircia";
   /// Click semplice su un tag: riceve il nome senza `#` (es. "area/lavoro").
   searchTag(tag: string): void;
   /// `Alt-Invio` su un link relativo: il percorso, ancora codificato come
@@ -139,9 +155,20 @@ export interface LivePreviewCallbacks {
   /// una pastiglia. Quando la cartella cambia arriva [`pageIconsChanged`].
   isPerson?(page: string): boolean;
   /// Le schede dei collegamenti (K8, `state/link-cards.ts`): senza, un URL da
-  /// solo resta un link. Quando cambiano arriva [`linkCardsChanged`].
+  /// solo resta un link. Quando cambiano arriva [`linkCardsChanged`]. Con
+  /// `note`, anche un wikilink da solo in un paragrafo è una scheda (E11).
   readonly linkCard?: LinkCardSource;
 }
+
+/// Il paragrafo che è soltanto un collegamento, e quindi una scheda: un
+/// indirizzo web (K8) o un wikilink (E11).
+/// Quanto aspettano le schede tenute a ricontarsi dopo che i candidati sono
+/// cambiati: una volta per pausa, non a ogni battuta.
+const NOTE_HOLD_DELAY_MS = 250;
+
+type CardTarget =
+  | { readonly kind: "web"; readonly url: string }
+  | { readonly kind: "note"; readonly page: string; readonly heading: string | null; readonly block: string | null; readonly alias: string | null };
 
 /// Le icone delle pagine sono cambiate: i wikilink si ridecorano.
 export const pageIconsChanged = StateEffect.define<null>();
@@ -1732,27 +1759,36 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
 
   if (e.type === "click") return false;
 
+  // Il clic che apre un link nel testo (Ctrl, Cmd sul Mac) e Alt col clic:
+  // la regola di `open-link.ts`, la stessa della Lettura e delle schede.
+  const gesture = textLinkGesture(e);
   const wikilink = target.closest<HTMLElement>(".cm-fub-wikilink");
-  if (wikilink && (e.ctrlKey || e.metaKey)) {
+  if (wikilink && gesture) {
     // L'attributo porta il bersaglio come sta scritto nella sorgente: qui lo
     // si ripassa dalla stessa grammatica di prima, invece di ri-serializzarlo.
     const labelledBy = parseWikilinkInner(wikilink.getAttribute(ATTR_WIKILINK) ?? "");
-    cb.openWikilink(labelledBy.page, labelledBy.heading, labelledBy.block);
+    void followWikilink(cb, labelledBy.page, labelledBy.heading, labelledBy.block, gesture);
     e.preventDefault();
     return true;
   }
 
   const link = target.closest<HTMLElement>(".cm-fub-link");
-  if (link && (e.ctrlKey || e.metaKey)) {
+  if (link && gesture) {
     const href = link.getAttribute(ATTR_HREF);
     // Naviga solo ciò che il sanitizzatore lascia passare (stessa policy di
     // Lettura): `javascript:…`, `data:…` e i protocol-relative restano fermi.
-    if (href && isAllowedLink(href)) {
-      window.open(href, "_blank", "noopener,noreferrer");
+    if (!href || !isAllowedLink(href)) return false;
+    const route = routeHref(href);
+    if (route.kind === "path") {
+      if (!cb.openPath || route.path === "") return false;
+      void followPath(cb, route.path, gesture);
       e.preventDefault();
       return true;
     }
-    return false;
+    if (gesture === "peek") return false;
+    window.open(href, "_blank", "noopener,noreferrer");
+    e.preventDefault();
+    return true;
   }
 
   const tag = target.closest<HTMLElement>(".cm-fub-tag");
@@ -1962,7 +1998,9 @@ function interactiveTarget(target: Element | null, event: MouseEvent): boolean {
   if (target.closest("button, input, select, textarea, summary, [data-ui-slot], .tag[data-tag]")) return true;
   // Mod-clic segue un link e apre un'immagine del vault a tutta finestra: il
   // gesto lo gestisce la resa (`mount.ts`), l'editor non sposta il cursore.
-  return !!target.closest("a, img[data-vault-id]") && (event.ctrlKey || event.metaKey);
+  // Alt col clic su un wikilink è la sbirciata (T20): niente cursore in più.
+  if (event.altKey && !event.ctrlKey && !event.metaKey && target.closest("a[data-wikilink-page], a.internal-path")) return true;
+  return !!target.closest("a, img[data-vault-id]") && linkModifier(event);
 }
 /// La riga sorgente del blocco sotto il punto, senza leggere l'editor.
 ///
@@ -2253,8 +2291,9 @@ class CandidateMark extends RangeValue {
     /// Una tabella che la griglia sa leggere: resta griglia anche col cursore
     /// dentro, perché la griglia è il modo di scriverla.
     readonly grid: boolean,
-    /// Un paragrafo che è soltanto un indirizzo: la sua scheda (K8).
-    readonly linkCard: string | undefined,
+    /// Un paragrafo che è soltanto un indirizzo o un wikilink: la sua scheda
+    /// (K8, E11).
+    readonly linkCard: CardTarget | undefined,
     /// La scelta che la selezione ha dettato: blocco reso o sorgente, righe
     /// vuote dopo nascoste o no. Uguale, il candidato resta quello di prima.
     readonly decision: string,
@@ -2637,13 +2676,15 @@ export function livePreview(
     if (INLINE_KINDS.has(block.kind) && block.kind !== "paragraph") return null;
     const { rendered, grid } = shapeOf(block);
     const url = !rendered && callbacks.linkCard && block.kind === "paragraph" ? bareUrl(block.source) : null;
-    if (!url) {
+    const note = !rendered && !url && callbacks.linkCard?.note && block.kind === "paragraph" ? bareWikilink(block.source) : null;
+    const card: CardTarget | undefined = url ? { kind: "web", url } : note ? { kind: "note", ...note } : undefined;
+    if (!card) {
       if (!rendered) return null;
       if (policy !== "riga" && block.kind === "paragraph" && onlyImages(block.source)) return null;
     }
     const from = lineStart(source, block.from);
     const next = following ? lineStart(source, following.from) : source.length;
-    const mark = new CandidateMark(block, block.from - from, block.to - block.from, url ? false : grid, url ?? undefined, "");
+    const mark = new CandidateMark(block, block.from - from, block.to - block.from, card ? false : grid, card, "");
     return mark.range(from, Math.max(next, block.to));
   }
   /// La scelta di un candidato per la selezione di adesso, con le sue
@@ -2659,10 +2700,19 @@ export function livePreview(
     const to = from + mark.offset + mark.length;
     const { linkCard, grid } = mark;
     if (linkCard !== undefined) {
-      // Col cursore dentro, l'indirizzo si scrive com'è.
+      // Col cursore dentro, l'indirizzo (o il wikilink) si scrive com'è.
       if (touched(state, from, to) || !callbacks.linkCard) return { decision: "s", ranges };
-      const card = callbacks.linkCard.view(linkCard);
-      ranges.push(Decoration.replace({ block: true, widget: new LinkCardWidget(linkCard, card) }).range(from, to));
+      if (linkCard.kind === "note") {
+        // Finché la nota non è nota (la domanda in corso, un link che non
+        // porta a niente) il paragrafo resta il suo link.
+        const seen = callbacks.linkCard.note?.(linkCard.page) ?? { kind: "missing" as const };
+        if (seen.kind !== "card") return { decision: `n${seen.kind}`, ranges };
+        const widget = new NoteCardWidget(linkCard.page, linkCard.heading, linkCard.block, linkCard.alias, seen.card);
+        ranges.push(Decoration.replace({ block: true, widget }).range(from, to));
+        return { decision: "ncard", ranges };
+      }
+      const card = callbacks.linkCard.view(linkCard.url);
+      ranges.push(Decoration.replace({ block: true, widget: new LinkCardWidget(linkCard.url, card) }).range(from, to));
       return { decision: `k${card.kind}`, ranges };
     }
     const block = movedBlock(mark.block, from + mark.offset);
@@ -3091,6 +3141,45 @@ export function livePreview(
     { key: "Mod-Backspace", mac: "Alt-Backspace", run: deleteWordNear(false) },
     { key: "Mod-Delete", mac: "Alt-Delete", run: deleteWordNear(true) },
   ]));
+  // Le schede delle note che il testo ha (anche quelle ancora link, la nota
+  // che non c'è o la domanda in corso): l'editor le tiene finché le ha, e chi
+  // le possiede richiede soltanto quelle tenute (`state/note-cards.ts`). Si
+  // ricontano poco dopo che i candidati cambiano, non a ogni battuta.
+  const linkSource = callbacks.linkCard;
+  const noteHolds = linkSource?.holdNote ? ViewPlugin.fromClass(class {
+    held = new Map<string, () => void>();
+    timer: ReturnType<typeof setTimeout> | null = null;
+    candidates: RangeSet<CandidateMark> | null = null;
+    constructor(readonly view: EditorView) { this.count(); }
+    update(update: ViewUpdate): void {
+      if (update.state.field(blocks, false)?.candidates === this.candidates || this.timer !== null) return;
+      this.timer = setTimeout(() => {
+        this.timer = null;
+        this.count();
+      }, NOTE_HOLD_DELAY_MS);
+    }
+    count(): void {
+      const value = this.view.state.field(blocks, false);
+      this.candidates = value?.candidates ?? null;
+      const pages = new Set<string>();
+      value?.candidates.between(0, this.view.state.doc.length, (_from, _to, mark) => {
+        if (mark.linkCard?.kind === "note") pages.add(mark.linkCard.page);
+      });
+      for (const [page, release] of this.held) {
+        if (pages.has(page)) continue;
+        this.held.delete(page);
+        release();
+      }
+      for (const page of pages) {
+        if (!this.held.has(page)) this.held.set(page, linkSource.holdNote!(page));
+      }
+    }
+    destroy(): void {
+      if (this.timer !== null) clearTimeout(this.timer);
+      for (const release of this.held.values()) release();
+      this.held.clear();
+    }
+  }) : [];
   // Dopo che la vista ha posato il DOM: i blocchi resi che una modifica ha
   // spostato rimettono a posto le loro coordinate.
   // Un widget tenuto da una resa di prima può nascere dopo, quando scorre nella
@@ -3107,5 +3196,7 @@ export function livePreview(
     propertiesExtension(),
     callbacks.linkCard ? linkCardGestures(callbacks.linkCard) : [],
     commentEditing(forms), commentCopy(forms),
+    callbacks.linkCard?.note ? noteCardGestures(callbacks) : [],
+    noteHolds,
   ];
 }

@@ -132,7 +132,8 @@ disegna.
 - **Le guide.** Mentre si sposta una scheda, o si tira un angolo di una scheda
   sola, il bordo e il centro della scheda si agganciano ai bordi e ai centri
   delle altre schede in vista, entro 6 px sullo schermo. Spostando più schede
-  insieme conta il riquadro di tutte. Contano solo le schede in vista, anche
+  insieme conta il riquadro di tutte: la griglia aggancia il suo angolo, e
+  le distanze fra le schede restano. Contano solo le schede in vista, anche
   con duemila schede sulla lavagna.
 - **Spazi uguali.** Tre schede in fila (sovrapposte sull'altro asse): la scheda
   che si muove si mette dopo, prima o in mezzo, con due spazi uguali a quello

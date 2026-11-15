@@ -14,6 +14,9 @@
 // - Con `editor.preview-modifier` serve Ctrl/Cmd dappertutto.
 // - Si chiude uscendo dal link e dalla scheda, con Esc, o quando la shell si
 //   smonta. Un link che non si risolve non apre niente.
+// - Il nome si risolve dalla nota che contiene il link: quella del riquadro,
+//   o quella che un contenitore dichiara con `data-link-source` (la
+//   sbirciata, T20, che mostra un'altra nota sopra il riquadro).
 import { resolvedReference, settings } from "../host/query";
 import { onEvent } from "../state/kernel";
 import { appPreviewSubject, previewOf } from "../state/craft-previews";
@@ -33,7 +36,13 @@ interface Target {
   heading: string | null;
   block: string | null;
   live: boolean;
+  /// La nota da cui il nome si risolve, se un contenitore la dichiara.
+  from: string | null;
 }
+
+/// L'attributo con cui un contenitore dice da quale nota si risolvono i link
+/// che mostra, quando non è la nota del riquadro.
+export const LINK_SOURCE_ATTRIBUTE = "data-link-source";
 
 /// Il bersaglio del wikilink sotto il puntatore, se ce n'è uno. Un link
 /// dentro un testo che si sta scrivendo (`contenteditable` acceso, la Live)
@@ -50,6 +59,7 @@ export function linkTarget(element: Element | null): { link: HTMLElement; target
       heading: link.dataset.wikilinkHeading ?? null,
       block: link.dataset.wikilinkBlock ?? null,
       live: editable !== null && editable.getAttribute("contenteditable") !== "false",
+      from: link.closest(`[${LINK_SOURCE_ATTRIBUTE}]`)?.getAttribute(LINK_SOURCE_ATTRIBUTE) || null,
     },
   };
 }
@@ -120,7 +130,7 @@ export function mountLinkPreview(life: Lifetime): void {
     const resolved = target.page || target.heading || target.block
       ? await resolvedReference(
           { kind: "wiki", value: { page: target.page, heading: target.heading, block: target.block } },
-          state.currentDoc ?? undefined,
+          target.from ?? state.currentDoc ?? undefined,
         ).catch(() => null)
       : null;
     if (mine !== generation || !resolved || !link.isConnected) return;

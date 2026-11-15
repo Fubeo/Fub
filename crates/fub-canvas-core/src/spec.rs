@@ -1,0 +1,2031 @@
+//! Lo schema delle operazioni: il nome, i campi, il tipo e gli esempi di ogni
+//! [`CanvasOp`], scritti una volta sola, nel nucleo.
+//!
+//! Da qui vengono tre cose che un modello legge prima di scrivere:
+//! - [`OPS`]: una voce per operazione, con i suoi campi e i suoi esempi. I
+//!   test di `tests/spec.rs` controllano che coincida con serde, campo per
+//!   campo, e che ogni esempio compili su [`example_canvas`];
+//! - [`json_schema`]: lo schema JSON 2020-12 della lista di operazioni;
+//! - [`validate`]: i problemi di una lista, prima della lettura, con un codice,
+//!   una posizione e, quando la correzione è una sola, l'operazione corretta.
+//!
+//! Le regole e i codici sono in `docs/reference/canvas-schema.md`.
+
+use serde::Serialize;
+use serde_json::{json, Map, Value};
+
+use crate::ink::{page_from_number, CellAddress};
+use crate::model::{Canvas, CanvasError};
+use crate::ops::{color, draw, erase};
+
+/// Quanto può differire un nome sbagliato da quello giusto, perché sia un
+/// suggerimento: la distanza di Levenshtein al più di così.
+const MAX_DISTANCE: usize = 2;
+
+/// Un'operazione come la descrive il nucleo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OpSpec {
+    /// Il valore del campo `op`, come lo legge serde.
+    pub name: &'static str,
+    /// Una riga in italiano, per il modello e per la guida.
+    pub summary_it: &'static str,
+    /// I campi dell'operazione, senza `op`.
+    pub fields: &'static [FieldSpec],
+    /// Esempi in JSON. Ognuno si legge e compila sulla lavagna di
+    /// [`example_canvas`].
+    pub examples: &'static [&'static str],
+}
+
+/// Un campo di un'operazione.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FieldSpec {
+    /// Il nome del campo nel JSON, come lo legge serde.
+    pub name: &'static str,
+    pub kind: FieldKind,
+    /// Se serde lo vuole. Un campo facoltativo che manca non è un problema.
+    pub required: bool,
+    /// Il valore di serie, come testo JSON, se ce n'è uno.
+    pub default: Option<&'static str>,
+    /// Una frase in italiano che dice a che cosa serve il campo.
+    pub doc_it: &'static str,
+}
+
+/// Il tipo JSON di un campo. Le varianti con un vocabolario lo portano con sé.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FieldKind {
+    /// Una stringa che è un id.
+    Id,
+    /// Una lista di stringhe che sono id.
+    Ids,
+    /// Un intero: anche `1.0` o `1e2` sono interi, `1.5` no.
+    Number,
+    /// Un numero qualunque, anche con la virgola.
+    Float,
+    /// Una stringa.
+    Text,
+    /// `true` o `false`.
+    Bool,
+    /// Una stringa presa da questo elenco.
+    Enum(&'static [&'static str]),
+    /// Un oggetto che è una scheda come nel file.
+    Node,
+    /// Un oggetto che è un arco come nel file.
+    Edge,
+    /// Un oggetto qualunque.
+    Object,
+    /// I campi nuovi di una scheda o di un arco (`set`): un oggetto, il cui
+    /// `color` è un colore.
+    Patch,
+    /// Una lista di liste di numeri, `[[x, y], …]`.
+    Points,
+    /// Un colore di scheda o di arco: un nome, il numero da 1 a 6, o `#rrggbb`.
+    Color,
+    /// I lati di un arco: `"auto"`, o un oggetto con `from` e `to`, ognuno un lato.
+    Sides,
+    /// Due numeri, `[w, h]`.
+    Pair,
+    /// Un livello d'inchiostro: `"board"` (la radice) o `{"node": id}`.
+    Layer,
+    /// Una lista di tratti d'inchiostro, ognuno un oggetto come nel file.
+    Strokes,
+    /// Una forma d'inchiostro di `draw`: un oggetto con `kind` (uno di
+    /// [`SHAPE_KINDS`]) e i campi di quella forma.
+    Shape,
+    /// La misura di una penna: un numero, anche con la virgola, da 0,25 a 200.
+    PenSize,
+    /// Un colore d'inchiostro: un nome della tavolozza dell'inchiostro, o
+    /// `#rrggbb`.
+    InkColor,
+    /// Un numero maggiore di zero, anche con la virgola: la larghezza della
+    /// gomma di `erase_along`.
+    Positive,
+    /// Le pagine di `spread_pages`: un testo come nel campo della GUI
+    /// (`"3-7, 9"`, `"20-"`) o una lista di numeri di pagina.
+    Pages,
+    /// Dove scrive o cancella l'inchiostro (`on` di `draw` ed `erase_along`):
+    /// `"auto"`, `"board"`, l'id di una scheda, la pagina di un PDF
+    /// `{card, page, page_size?}` o la cella di un foglio `{card, sheet, cell}`.
+    InkOn,
+    /// Un valore qualunque.
+    Any,
+}
+
+/// Un campo obbligatorio senza valore di serie.
+const fn required(name: &'static str, kind: FieldKind, doc_it: &'static str) -> FieldSpec {
+    FieldSpec {
+        name,
+        kind,
+        required: true,
+        default: None,
+        doc_it,
+    }
+}
+
+/// Un campo facoltativo senza valore di serie. `null` vale come assente.
+const fn optional(name: &'static str, kind: FieldKind, doc_it: &'static str) -> FieldSpec {
+    FieldSpec {
+        name,
+        kind,
+        required: false,
+        default: None,
+        doc_it,
+    }
+}
+
+/// I lati di una scheda che sta accanto a un'altra.
+const SIDES: &[&str] = &["top", "right", "bottom", "left"];
+/// I tipi di una scheda nella forma breve.
+const KINDS: &[&str] = &["text", "file", "link", "group"];
+/// Le punte di un arco nella forma breve.
+const ENDS: &[&str] = &["arrow", "none", "both"];
+/// Dove va una scheda con `reorder`: in cima, o in fondo.
+const LAYERS: &[&str] = &["front", "back"];
+/// Il modo di prendere la misura da un contenuto, con `resize`.
+const FITS: &[&str] = &["content"];
+/// Il lato comune di `align`: i sei bottoni della barra.
+const ALIGN_SIDES: &[&str] = &["left", "center", "right", "top", "middle", "bottom"];
+/// L'asse dei centri di `distribute`.
+const AXES: &[&str] = &["x", "y"];
+/// La disposizione di `layout`.
+const LAYOUT_KINDS: &[&str] = &["grid", "row", "column", "tree"];
+/// Il verso di un albero in `layout`.
+const LAYOUT_DIRECTIONS: &[&str] = &["down", "right", "up", "left"];
+/// Le penne di `draw`: gli id di `fub_ink_codec::PENS`, nello stesso ordine
+/// (lo controlla un test qui sotto).
+pub const PEN_IDS: &[&str] = &[
+    "ballpoint",
+    "fountain",
+    "brush",
+    "marker",
+    "pencil",
+    "calligraphy",
+    "highlighter",
+];
+/// Le forme di `draw`, il campo `kind` di `shape`.
+pub const SHAPE_KINDS: &[&str] = &["line", "arrow", "rect", "ellipse", "polygon", "star"];
+/// I campi di ogni forma di `draw`, oltre a `kind`: tutti obbligatori.
+const SHAPE_FIELDS: &[(&str, &[&str])] = &[
+    ("line", &["x1", "y1", "x2", "y2"]),
+    ("arrow", &["x1", "y1", "x2", "y2"]),
+    ("rect", &["x", "y", "width", "height"]),
+    ("ellipse", &["x", "y", "width", "height"]),
+    ("polygon", &["points"]),
+    ("star", &["cx", "cy", "r", "tips"]),
+];
+
+/// Le operazioni del nucleo, una voce per variante di [`CanvasOp`], nello
+/// stesso ordine. Un'operazione nuova entra qui nello stesso task.
+pub const OPS: &[OpSpec] = &[
+    OpSpec {
+        name: "add_card",
+        summary_it: "Aggiunge una scheda in cima all'ordine: com'è nel file (`node`), o in forma breve (`text`, `file`, `url`, `label`).",
+        fields: &[
+            optional(
+                "node",
+                FieldKind::Node,
+                "Una scheda come nel file, per intero. Non si mescola con la forma breve. `id` dentro la scheda è facoltativo: se manca lo dà il seme.",
+            ),
+            optional(
+                "id",
+                FieldKind::Id,
+                "L'id della scheda nuova. Se manca lo dà il seme.",
+            ),
+            optional(
+                "text",
+                FieldKind::Text,
+                "Il testo di una scheda di testo. Se manca è vuoto.",
+            ),
+            optional(
+                "file",
+                FieldKind::Text,
+                "Il percorso di un file del vault: una scheda di file.",
+            ),
+            optional(
+                "url",
+                FieldKind::Text,
+                "Il collegamento di una scheda link.",
+            ),
+            optional(
+                "label",
+                FieldKind::Text,
+                "L'etichetta di un gruppo. Da sola fa un gruppo.",
+            ),
+            FieldSpec {
+                name: "type",
+                kind: FieldKind::Enum(KINDS),
+                required: false,
+                default: None,
+                doc_it: "Il tipo della scheda, se non lo dice il campo che c'è.",
+            },
+            optional(
+                "subpath",
+                FieldKind::Text,
+                "Il sottopercorso di un file, come `#page=3`.",
+            ),
+            optional(
+                "x",
+                FieldKind::Number,
+                "La posizione, in unità della lavagna. Va con `y`, e non con `near`.",
+            ),
+            optional(
+                "y",
+                FieldKind::Number,
+                "La posizione, in unità della lavagna. Va con `x`, e non con `near`.",
+            ),
+            optional(
+                "width",
+                FieldKind::Number,
+                "La larghezza. Di serie quella di nascita del tipo e del testo.",
+            ),
+            optional(
+                "height",
+                FieldKind::Number,
+                "L'altezza. Di serie quella di nascita del tipo e del testo.",
+            ),
+            optional(
+                "color",
+                FieldKind::Color,
+                "Il colore: un nome, un numero da 1 a 6, o `#rrggbb`.",
+            ),
+            optional(
+                "near",
+                FieldKind::Id,
+                "La scheda accanto alla quale nasce questa.",
+            ),
+            FieldSpec {
+                name: "side",
+                kind: FieldKind::Enum(SIDES),
+                required: false,
+                default: Some("\"right\""),
+                doc_it: "Il lato di `near` dove nasce la scheda.",
+            },
+            optional(
+                "gap",
+                FieldKind::Number,
+                "La distanza da `near`, non negativa. Di serie 48 a destra e a sinistra, 24 sopra e sotto.",
+            ),
+            optional(
+                "content_size",
+                FieldKind::Pair,
+                "Le dimensioni del contenuto di un file: i pixel di un'immagine, o i punti della prima pagina di un PDF. Danno le misure di nascita.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"add_card","node":{"type":"text","text":"Nuova idea","x":400,"y":0,"width":320,"height":160}}"#,
+            r#"{"op":"add_card","text":"Nuova idea","near":"t2","side":"bottom"}"#,
+            r#"{"op":"add_card","file":"schemi/foto.png","x":400,"y":240,"content_size":[1600,1200]}"#,
+        ],
+    },
+    OpSpec {
+        name: "move",
+        summary_it: "Sposta le schede `ids` di `dx` e `dy`. Un gruppo si sposta da solo, o con `contents` porta con sé le schede dentro.",
+        fields: &[
+            required("ids", FieldKind::Ids, "Le schede da spostare."),
+            required(
+                "dx",
+                FieldKind::Number,
+                "Di quanto si sposta in orizzontale, in unità della lavagna.",
+            ),
+            required(
+                "dy",
+                FieldKind::Number,
+                "Di quanto si sposta in verticale, in unità della lavagna.",
+            ),
+            optional(
+                "contents",
+                FieldKind::Bool,
+                "Con `true`, un gruppo di `ids` porta con sé le schede che stanno dentro di lui, una volta sola. Su una scheda che non è un gruppo non fa niente.",
+            ),
+        ],
+        examples: &[r#"{"op":"move","ids":["t1","t2"],"dx":40,"dy":0}"#],
+    },
+    OpSpec {
+        name: "resize",
+        summary_it: "Dà alla scheda `id` le misure `width` e `height`, o con `fit: content` l'altezza del suo contenuto.",
+        fields: &[
+            required("id", FieldKind::Id, "La scheda da ridimensionare."),
+            optional(
+                "width",
+                FieldKind::Number,
+                "La larghezza, in unità della lavagna. Se manca resta quella che ha.",
+            ),
+            optional(
+                "height",
+                FieldKind::Number,
+                "L'altezza, in unità della lavagna. Se manca resta quella che ha. Non si dà con `fit`.",
+            ),
+            FieldSpec {
+                name: "fit",
+                kind: FieldKind::Enum(FITS),
+                required: false,
+                default: None,
+                doc_it: "`content`: l'altezza viene dal contenuto, con la larghezza data. Un testo si misura con la stima della lavagna; un'immagine o un PDF con le sue proporzioni.",
+            },
+            optional(
+                "content_size",
+                FieldKind::Pair,
+                "Le dimensioni del contenuto di un'immagine o di un PDF, con `fit`: i pixel, o i punti della prima pagina. Se manca le legge il file.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"resize","id":"t1","width":400,"height":200}"#,
+            r#"{"op":"resize","id":"t1","fit":"content"}"#,
+        ],
+    },
+    OpSpec {
+        name: "connect",
+        summary_it: "Aggiunge un arco in fondo alla lista: com'è nel file (`edge`), o fra due schede (`from`, `to`).",
+        fields: &[
+            optional(
+                "edge",
+                FieldKind::Edge,
+                "Un arco come nel file: `fromNode` e `toNode` sono due schede. `id` dentro l'arco è facoltativo.",
+            ),
+            optional(
+                "id",
+                FieldKind::Id,
+                "L'id dell'arco nuovo. Se manca lo dà il seme.",
+            ),
+            optional("from", FieldKind::Id, "La scheda di partenza."),
+            optional("to", FieldKind::Id, "La scheda di arrivo."),
+            optional("label", FieldKind::Text, "L'etichetta dell'arco."),
+            optional(
+                "color",
+                FieldKind::Color,
+                "Il colore, come in `add_card`.",
+            ),
+            optional(
+                "sides",
+                FieldKind::Sides,
+                "`\"auto\"` per i lati coi punti di mezzo più vicini, come «Collega», o `{from, to}` con i lati scelti. Di serie nessun lato.",
+            ),
+            FieldSpec {
+                name: "ends",
+                kind: FieldKind::Enum(ENDS),
+                required: false,
+                default: Some("\"arrow\""),
+                doc_it: "Le punte: `arrow` alla scheda di arrivo (di serie), `none` nessuna, `both` alle due.",
+            },
+        ],
+        examples: &[
+            r#"{"op":"connect","edge":{"fromNode":"t2","toNode":"f1","label":"usa"}}"#,
+            r#"{"op":"connect","from":"t1","to":"t2","sides":"auto","label":"porta a"}"#,
+        ],
+    },
+    OpSpec {
+        name: "remove",
+        summary_it: "Toglie schede e archi; con una scheda vanno via anche i suoi archi.",
+        fields: &[required(
+            "ids",
+            FieldKind::Ids,
+            "Gli id da togliere: schede o archi.",
+        )],
+        examples: &[
+            r#"{"op":"remove","ids":["e1"]}"#,
+            r#"{"op":"remove","ids":["f1"]}"#,
+        ],
+    },
+    OpSpec {
+        name: "set",
+        summary_it: "Cambia i campi di una scheda o di un arco; `null` toglie un campo.",
+        fields: &[
+            required("id", FieldKind::Id, "La scheda o l'arco da cambiare."),
+            required(
+                "fields",
+                FieldKind::Patch,
+                "I campi nuovi. `id` non si cambia, né `type` di una scheda. Il `color` accetta i nomi di `add_card`.",
+            ),
+        ],
+        examples: &[r#"{"op":"set","id":"t1","fields":{"color":"4","text":"Ciclo dell'acqua"}}"#],
+    },
+    OpSpec {
+        name: "reorder",
+        summary_it: "Porta le schede in cima all'ordine, o in fondo con `to: back`, nell'ordine dato.",
+        fields: &[
+            required(
+                "ids",
+                FieldKind::Ids,
+                "Le schede da portare, nell'ordine dato.",
+            ),
+            FieldSpec {
+                name: "to",
+                kind: FieldKind::Enum(LAYERS),
+                required: false,
+                default: Some("\"front\""),
+                doc_it: "`front`: in cima, sopra le altre (di serie). `back`: in fondo, sotto le altre.",
+            },
+        ],
+        examples: &[
+            r#"{"op":"reorder","ids":["t2","t1"]}"#,
+            r#"{"op":"reorder","ids":["t1"],"to":"back"}"#,
+        ],
+    },
+    OpSpec {
+        name: "color",
+        summary_it: "Colora più schede e archi in una volta, con un nome, un numero da 1 a 6, o `#rrggbb`; `null` toglie il colore.",
+        fields: &[
+            required("ids", FieldKind::Ids, "Le schede o gli archi da colorare."),
+            required(
+                "color",
+                FieldKind::Color,
+                "Il colore: un nome come in `add_card` (`red`, `note-blue`…), un numero da 1 a 6, o `#rrggbb`. `null` toglie il colore. Il campo c'è sempre.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"color","ids":["t1","t2"],"color":"red"}"#,
+            r#"{"op":"color","ids":["e1"],"color":null}"#,
+        ],
+    },
+    OpSpec {
+        name: "align",
+        summary_it: "Allinea le schede `ids` allo stesso bordo o centro, come i bottoni della barra: `left`, `center`, `right`, `top`, `middle`, `bottom`.",
+        fields: &[
+            required("ids", FieldKind::Ids, "Le schede da allineare. Con meno di due non si sposta niente."),
+            required(
+                "to",
+                FieldKind::Enum(ALIGN_SIDES),
+                "Il lato comune. `left`, `right` e `center` allineano in orizzontale, `top`, `bottom` e `middle` in verticale. Il bordo è quello più esterno del gruppo, agganciato a 8.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"align","ids":["t1","t2"],"to":"top"}"#,
+            r#"{"op":"align","ids":["t1","t2","f1"],"to":"left"}"#,
+        ],
+    },
+    OpSpec {
+        name: "distribute",
+        summary_it: "Distribuisce le schede `ids` lungo `axis`: le estreme restano dove sono, quelle di mezzo hanno i centri a passi uguali.",
+        fields: &[
+            required("ids", FieldKind::Ids, "Le schede da distribuire. Con meno di tre non si sposta niente."),
+            required(
+                "axis",
+                FieldKind::Enum(AXES),
+                "`x` per i centri in orizzontale, `y` in verticale. Le posizioni si agganciano a 8.",
+            ),
+        ],
+        examples: &[r#"{"op":"distribute","ids":["t1","t2","f1"],"axis":"x"}"#],
+    },
+    OpSpec {
+        name: "duplicate",
+        summary_it: "Copia le schede `ids` e gli archi che le collegano fra loro, sfalsate di 32 (o di `dx` e `dy`). Gli id delle copie vengono dal seme, o da `as`.",
+        fields: &[
+            required("ids", FieldKind::Ids, "Le schede da copiare. Un gruppo senza le sue schede si copia da solo."),
+            FieldSpec {
+                name: "dx",
+                kind: FieldKind::Number,
+                required: false,
+                default: Some("32"),
+                doc_it: "Lo spostamento in orizzontale delle copie, in unità della lavagna. Con quello di serie la posizione si aggancia a 8; uno scritto resta com'è.",
+            },
+            FieldSpec {
+                name: "dy",
+                kind: FieldKind::Number,
+                required: false,
+                default: Some("32"),
+                doc_it: "Lo spostamento in verticale delle copie, come `dx`.",
+            },
+            optional(
+                "as",
+                FieldKind::Ids,
+                "Gli id delle copie, nell'ordine di `ids`: un id per scheda. Se manca li dà il seme.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"duplicate","ids":["t1","t2"],"dx":0,"dy":216,"as":["t3","t4"]}"#,
+            r#"{"op":"duplicate","ids":["f1"]}"#,
+        ],
+    },
+    OpSpec {
+        name: "reverse",
+        summary_it: "Inverte gli archi `ids`: la partenza diventa l'arrivo, e lati e punte restano sulla loro scheda, come «Inverti il filo».",
+        fields: &[required("ids", FieldKind::Ids, "Gli archi da invertire.")],
+        examples: &[r#"{"op":"reverse","ids":["e1"]}"#],
+    },
+    OpSpec {
+        name: "group",
+        summary_it: "Mette le schede `ids` in un gruppo col rettangolo che le racchiude e un margine di 24, appena sotto la più bassa di loro.",
+        fields: &[
+            required("ids", FieldKind::Ids, "Le schede da raggruppare. Almeno una."),
+            optional(
+                "id",
+                FieldKind::Id,
+                "L'id del gruppo nuovo. Se manca lo dà il seme.",
+            ),
+            optional(
+                "label",
+                FieldKind::Text,
+                "L'etichetta del gruppo. Di serie vuota.",
+            ),
+            optional(
+                "color",
+                FieldKind::Color,
+                "Il colore del gruppo, come in `add_card`.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"group","ids":["t1","t2"],"label":"Ciclo"}"#,
+            r#"{"op":"group","ids":["f1"]}"#,
+        ],
+    },
+    OpSpec {
+        name: "layout",
+        summary_it: "Dispone le schede `ids` in griglia, riga, colonna o albero (`kind`), dall'origine data o dall'angolo delle schede; senza `ids`, le schede che non stanno in un gruppo.",
+        fields: &[
+            optional(
+                "ids",
+                FieldKind::Ids,
+                "Le schede da disporre, nell'ordine dato. Un gruppo si muove con le schede dentro. Senza `ids`: tutte le schede che non stanno in un gruppo, nell'ordine della lavagna.",
+            ),
+            required(
+                "kind",
+                FieldKind::Enum(LAYOUT_KINDS),
+                "`grid` (ceil(√n) colonne, riempite per righe), `row` (una riga), `column` (una colonna) o `tree` (a strati, con gli archi fra le schede date).",
+            ),
+            FieldSpec {
+                name: "gap",
+                kind: FieldKind::Number,
+                required: false,
+                default: Some("24"),
+                doc_it: "Lo spazio fra due schede vicine, in unità della lavagna. Non negativo.",
+            },
+            optional(
+                "x",
+                FieldKind::Number,
+                "La coordinata orizzontale dell'origine, agganciata a 8. Va con `y`.",
+            ),
+            optional(
+                "y",
+                FieldKind::Number,
+                "La coordinata verticale dell'origine, agganciata a 8. Va con `x`.",
+            ),
+            FieldSpec {
+                name: "direction",
+                kind: FieldKind::Enum(LAYOUT_DIRECTIONS),
+                required: false,
+                default: Some("\"down\""),
+                doc_it: "Il verso di un albero: `down` (la radice in alto, di serie), `right`, `up` o `left`. Solo con `kind: tree`.",
+            },
+        ],
+        examples: &[
+            r#"{"op":"layout","ids":["t1","t2","f1"],"kind":"row"}"#,
+            r#"{"op":"layout","kind":"tree","direction":"right","gap":32}"#,
+        ],
+    },
+    OpSpec {
+        name: "insert",
+        summary_it: "Incolla un frammento copiato (`fragment`, la forma degli appunti: `version` 1, `nodes`, `edges`): ogni scheda e ogni arco prende un id nuovo, e il frammento va come un blocco in `x`, `y`, accanto a `near` o nel posto automatico.",
+        fields: &[
+            required(
+                "fragment",
+                FieldKind::Object,
+                "Il frammento: `{\"version\": 1, \"nodes\": [...], \"edges\": [...]}`, le schede e gli archi come nel file, ognuno col suo `id`. Gli archi vanno fra schede del frammento. Al più 10 000 schede.",
+            ),
+            optional(
+                "x",
+                FieldKind::Number,
+                "Dove va il bordo sinistro del frammento. Va con `y`, e non con `near`.",
+            ),
+            optional(
+                "y",
+                FieldKind::Number,
+                "Dove va il bordo alto del frammento. Va con `x`, e non con `near`.",
+            ),
+            optional(
+                "near",
+                FieldKind::Id,
+                "La scheda accanto alla quale va il frammento, come un blocco.",
+            ),
+            FieldSpec {
+                name: "side",
+                kind: FieldKind::Enum(SIDES),
+                required: false,
+                default: Some("\"right\""),
+                doc_it: "Il lato di `near` dove va il frammento.",
+            },
+        ],
+        examples: &[
+            r#"{"op":"insert","fragment":{"version":1,"nodes":[{"id":"a","type":"text","text":"Domanda","x":0,"y":0,"width":320,"height":160},{"id":"b","type":"text","text":"Risposta","x":400,"y":0,"width":320,"height":160}],"edges":[{"id":"e","fromNode":"a","toNode":"b","toEnd":"arrow"}]},"near":"f1","side":"bottom"}"#,
+            r#"{"op":"insert","fragment":{"version":1,"nodes":[{"id":"a","type":"text","text":"Copia","x":40,"y":40,"width":320,"height":160}],"edges":[]},"x":800,"y":0}"#,
+        ],
+    },
+    OpSpec {
+        name: "convert",
+        summary_it: "Trasforma la scheda di testo `id` nella scheda del file `file`, con lo stesso posto, le stesse misure e lo stesso colore. Il file lo scrive prima un'altra porta.",
+        fields: &[
+            required("id", FieldKind::Id, "La scheda di testo da trasformare."),
+            required(
+                "file",
+                FieldKind::Text,
+                "Il percorso del file nel vault, non vuoto: la nota col testo, scritta prima (per esempio con `fub_create`).",
+            ),
+        ],
+        examples: &[r#"{"op":"convert","id":"t2","file":"Idee/Evaporazione.md"}"#],
+    },
+    OpSpec {
+        name: "spread_pages",
+        summary_it: "Spargi le pagine del PDF della scheda `id`: una scheda per pagina (`#page=N`), in fila alla sua destra, a capo dopo 10, e in un gruppo oltre 12, come «Spargi le pagine…» della GUI.",
+        fields: &[
+            required("id", FieldKind::Id, "La scheda del PDF."),
+            optional(
+                "pages",
+                FieldKind::Pages,
+                "Le pagine: un testo come nella GUI (`\"3-7, 9\"`, `\"20-\"` fino alla fine) o una lista di numeri, da 1. Di serie tutte. Le pagine oltre l'ultima si tagliano, e un avviso lo dice. Al più 1000.",
+            ),
+            optional(
+                "page_count",
+                FieldKind::Number,
+                "Quante pagine ha il PDF. `canvas.apply` lo legge dal file, e se il file si legge vince il file: si dà solo se il file non si legge.",
+            ),
+            optional(
+                "page_sizes",
+                FieldKind::Points,
+                "Le misure in punti delle pagine, `[[larghezza, altezza], …]` dalla prima. `canvas.apply` le legge dal file. Una pagina senza misura nasce 360×480.",
+            ),
+            optional(
+                "label",
+                FieldKind::Text,
+                "L'etichetta del gruppo, oltre 12 pagine. Di serie «N pagine».",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"spread_pages","id":"p1","pages":"1-3"}"#,
+            r#"{"op":"spread_pages","id":"p1","pages":[2,5],"label":"Capitolo 2"}"#,
+        ],
+    },
+    OpSpec {
+        name: "excerpt",
+        summary_it: "L'estratto della scheda di file `id`: una scheda nuova sullo stesso file, accanto, che mostra solo la parte `part` (pagine o una zona di un PDF, sezioni di una nota, un ritaglio di un'immagine). Con `in_place` è la scheda stessa a diventare l'estratto.",
+        fields: &[
+            required("id", FieldKind::Id, "La scheda di file."),
+            required(
+                "part",
+                FieldKind::Object,
+                "La parte, come il campo `fub:parts`: `{\"kind\": \"pages\", \"pages\": [3, 4]}`, `{\"kind\": \"region\", \"page\": 2, \"rect\": [x, y, w, h]}` (frazioni della pagina), `{\"kind\": \"sections\", \"sections\": [\"Titolo\"]}`, `{\"kind\": \"image\", \"rect\": [x, y, w, h], \"rotate\": 90}`.",
+            ),
+            optional(
+                "near",
+                FieldKind::Id,
+                "La scheda accanto alla quale nasce l'estratto. Di serie `id`.",
+            ),
+            FieldSpec {
+                name: "side",
+                kind: FieldKind::Enum(SIDES),
+                required: false,
+                default: Some("\"right\""),
+                doc_it: "Il lato di `near` dove nasce l'estratto.",
+            },
+            optional(
+                "content_size",
+                FieldKind::Pair,
+                "La misura del contenuto: i punti della pagina (pagine, zona) o i pixel dell'immagine. Dà le proporzioni; `canvas.apply` la legge dal file.",
+            ),
+            optional(
+                "page_count",
+                FieldKind::Number,
+                "Quante pagine ha il PDF: una pagina della parte oltre l'ultima è rifiutata. `canvas.apply` lo legge dal file, e se il file si legge vince il file.",
+            ),
+            optional(
+                "in_place",
+                FieldKind::Bool,
+                "Con `true` la scheda `id` diventa l'estratto, al suo posto e con le sue misure, come il selettore delle sezioni; a differenza del ritaglio della GUI l'altezza non cambia.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"excerpt","id":"p1","part":{"kind":"pages","pages":[3,4]}}"#,
+            r#"{"op":"excerpt","id":"f1","part":{"kind":"image","rect":[0,0,0.5,1]},"in_place":true}"#,
+        ],
+    },
+    OpSpec {
+        name: "from_mermaid",
+        summary_it: "Un diagramma Mermaid (`flowchart` o `graph`) diventa schede di testo, gruppi (`subgraph`) e archi, già disposti ad albero nel verso dell'intestazione, come un blocco in `x`, `y`, accanto a `near` o nel posto automatico. Ciò che la lavagna non tiene (forme, stili) torna nelle note.",
+        fields: &[
+            required(
+                "text",
+                FieldKind::Text,
+                "Il diagramma, al più 256 KiB e 2000 nodi: nodi (`A[testo]`, `A(testo)`, `A{testo}`…), archi (`-->`, `---`, `-.->`, `==>`, `<-->`, `-- testo -->`, `-->|testo|`, anche in catena e con `&`), `subgraph id [titolo]` … `end`, commenti `%%`.",
+            ),
+            optional(
+                "x",
+                FieldKind::Number,
+                "Dove va il bordo sinistro del blocco. Va con `y`, e non con `near`.",
+            ),
+            optional(
+                "y",
+                FieldKind::Number,
+                "Dove va il bordo alto del blocco. Va con `x`, e non con `near`.",
+            ),
+            optional(
+                "near",
+                FieldKind::Id,
+                "La scheda accanto alla quale va il blocco.",
+            ),
+            FieldSpec {
+                name: "side",
+                kind: FieldKind::Enum(SIDES),
+                required: false,
+                default: Some("\"right\""),
+                doc_it: "Il lato di `near` dove va il blocco.",
+            },
+            optional(
+                "prefix",
+                FieldKind::Text,
+                "Il testo davanti a ogni id di Mermaid: con `m-`, il nodo `A` è la scheda `m-A`. Serve quando un id c'è già.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"from_mermaid","text":"flowchart LR\n  A[Evaporazione] --> B[Condensazione] --> C[Precipitazione] --> A"}"#,
+            r#"{"op":"from_mermaid","text":"graph TD\n  subgraph s [Fasi]\n    A[Inizio] -->|poi| B[Fine]\n  end","near":"f1","side":"bottom","prefix":"m-"}"#,
+        ],
+    },
+    OpSpec {
+        name: "from_outline",
+        summary_it: "Una scaletta rientrata diventa un albero di schede di testo: una riga è una scheda, e un arco va dal genitore a ogni figlio. Il blocco va in `x`, `y`, accanto a `near` o nel posto automatico.",
+        fields: &[
+            required(
+                "text",
+                FieldKind::Text,
+                "La scaletta, al più 256 KiB e 2000 righe: un livello è 2 spazi o un tab, e i segni `-`, `*`, `+`, `1.` si tolgono. Le righe vuote non contano.",
+            ),
+            FieldSpec {
+                name: "direction",
+                kind: FieldKind::Enum(LAYOUT_DIRECTIONS),
+                required: false,
+                default: Some("\"right\""),
+                doc_it: "Il verso dell'albero: `right` (la radice a sinistra e i figli in colonna, di serie), `down`, `up` o `left`.",
+            },
+            optional(
+                "x",
+                FieldKind::Number,
+                "Dove va il bordo sinistro del blocco. Va con `y`, e non con `near`.",
+            ),
+            optional(
+                "y",
+                FieldKind::Number,
+                "Dove va il bordo alto del blocco. Va con `x`, e non con `near`.",
+            ),
+            optional(
+                "near",
+                FieldKind::Id,
+                "La scheda accanto alla quale va il blocco.",
+            ),
+            FieldSpec {
+                name: "side",
+                kind: FieldKind::Enum(SIDES),
+                required: false,
+                default: Some("\"right\""),
+                doc_it: "Il lato di `near` dove va il blocco.",
+            },
+            optional(
+                "prefix",
+                FieldKind::Text,
+                "Con `prefix` l'id di una scheda è `prefix` più il numero della sua riga (`s-3`); senza, gli id vengono dal seme.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"from_outline","text":"Progetto\n  Ricerca\n  Sviluppo"}"#,
+            r#"{"op":"from_outline","text":"- Tesi\n  - Metodi\n  - Risultati","direction":"down","x":0,"y":600,"prefix":"s-"}"#,
+        ],
+    },
+    OpSpec {
+        name: "add_strokes",
+        summary_it: "Aggiunge tratti d'inchiostro già codificati in cima al livello `layer` (la radice o una scheda), nell'ordine dato. È la forma grezza di `fub:ink`.",
+        fields: &[
+            required(
+                "layer",
+                FieldKind::Layer,
+                "Il livello: `\"board\"` per i tratti liberi, `{\"node\": id}` per quelli di una scheda.",
+            ),
+            required(
+                "strokes",
+                FieldKind::Strokes,
+                "I tratti come nel file (`tool`, `brush`, `color`, `anchor`, `ink`), campi sconosciuti compresi. `id` è facoltativo: senza, lo dà il seme. Un tratto che non si disegnerebbe in quel livello è `invalid`.",
+            ),
+        ],
+        examples: &[
+            r##"{"op":"add_strokes","layer":"board","strokes":[{"tool":"pen","brush":"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint","color":"#0072b2","anchor":{"kind":"free"},"ink":"1 s100 cxy 4000,2500 120,40 95,-10"}]}"##,
+        ],
+    },
+    OpSpec {
+        name: "erase_strokes",
+        summary_it: "Cancella dal livello `layer` i tratti `ids`. Un tratto che Fub non disegna si conserva e non si cancella.",
+        fields: &[
+            required(
+                "layer",
+                FieldKind::Layer,
+                "Il livello: `\"board\"` per i tratti liberi, `{\"node\": id}` per quelli di una scheda.",
+            ),
+            required("ids", FieldKind::Ids, "Gli id dei tratti da cancellare."),
+        ],
+        examples: &[r#"{"op":"erase_strokes","layer":"board","ids":["s1"]}"#],
+    },
+    OpSpec {
+        name: "draw",
+        summary_it: "Scrive un tratto d'inchiostro con i punti (`points`) o con una forma (`shape`), con la penna, la misura e il colore per nome. Con `on: \"auto\"` il tratto va alla scheda che lo prende, come quando si scrive con la penna.",
+        fields: &[
+            FieldSpec {
+                name: "on",
+                kind: FieldKind::InkOn,
+                required: false,
+                default: Some("\"auto\""),
+                doc_it: "Di chi è il tratto e in che coordinate sono i punti: `\"auto\"` (coordinate della lavagna; conta solo la scheda più in alto che il riquadro del tratto tocca: la scheda lo prende se contiene il centro del riquadro e almeno metà della sua area, e se il suo livello non è estraneo; altrimenti il tratto resta libero, anche se una scheda sotto lo conterrebbe tutto), `\"board\"` (la lavagna, tratto libero), l'id di una scheda (le sue coordinate, 0,0 in alto a sinistra), `{\"card\", \"page\", \"page_size\"?}` (la pagina, da 1, di una scheda PDF, in punti PDF dall'angolo in alto a sinistra della pagina; `page_size` `[larghezza, altezza]` in punti la legge `canvas.apply` dal file, come `page_count`, che rifiuta una pagina oltre l'ultima) o `{\"card\", \"sheet\", \"cell\"}` (la cella A1, da `A1` a `XFD1048576`, del foglio col nome com'è nel file di una scheda di foglio, in pixel del foglio al 100% dall'angolo in alto a sinistra della cella).",
+            },
+            optional(
+                "points",
+                FieldKind::Points,
+                "I punti, `[[x, y], …]` o `[[x, y, pressione], …]` con la pressione da 0 a 1 (di serie 0,5); al più 10 000. Un punto solo è un tocco. Va senza `shape`.",
+            ),
+            optional(
+                "shape",
+                FieldKind::Shape,
+                "Una forma che diventa punti ogni 4 unità: `{\"kind\": \"line\"|\"arrow\", x1, y1, x2, y2}`, `{\"kind\": \"rect\"|\"ellipse\", x, y, width, height}`, `{\"kind\": \"polygon\", points}`, `{\"kind\": \"star\", cx, cy, r, tips}` (almeno 3 punte). Va senza `points`.",
+            ),
+            FieldSpec {
+                name: "pen",
+                kind: FieldKind::Enum(PEN_IDS),
+                required: false,
+                default: Some("\"ballpoint\""),
+                doc_it: "La penna, come nel menu della penna: dà il pennello e lo strumento (`highlighter` evidenzia).",
+            },
+            optional(
+                "size",
+                FieldKind::PenSize,
+                "La misura della penna, da 0,25 a 200, in unità della lavagna o della scheda; di serie quella della penna.",
+            ),
+            optional(
+                "color",
+                FieldKind::InkColor,
+                "Un colore dell'inchiostro: `black`, `blue`, `vermilion`, `green`, `purple`, `orange`, `sky`, `yellow`, o `#rrggbb`. Di serie blu per le penne e giallo per l'evidenziatore.",
+            ),
+            optional(
+                "id",
+                FieldKind::Id,
+                "L'id del tratto, unico nel suo livello; senza, lo dà il seme.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"draw","on":"t1","shape":{"kind":"ellipse","x":8,"y":8,"width":304,"height":144},"pen":"marker","color":"vermilion"}"#,
+            r#"{"op":"draw","points":[[40,200],[120,180],[200,210]],"color":"blue"}"#,
+            r#"{"op":"draw","on":"board","shape":{"kind":"arrow","x1":330,"y1":80,"x2":390,"y2":80},"size":3}"#,
+            r#"{"op":"draw","on":{"card":"p1","page":2,"page_size":[595,842]},"points":[[72,100],[300,100]],"pen":"highlighter","size":12}"#,
+        ],
+    },
+    OpSpec {
+        name: "move_strokes",
+        summary_it: "Sposta i tratti `ids` del livello `layer` di `dx`, `dy`; con `to` li porta in un altro livello, con i punti nelle unità della nuova ancora. È il Lazo della GUI.",
+        fields: &[
+            required(
+                "layer",
+                FieldKind::Layer,
+                "Il livello: `\"board\"` per i tratti liberi, `{\"node\": id}` per quelli di una scheda.",
+            ),
+            required("ids", FieldKind::Ids, "Gli id dei tratti da spostare."),
+            required(
+                "dx",
+                FieldKind::Float,
+                "Lo spostamento in orizzontale, in unità della lavagna; anche con la virgola.",
+            ),
+            required(
+                "dy",
+                FieldKind::Float,
+                "Lo spostamento in verticale, come `dx`.",
+            ),
+            optional(
+                "to",
+                FieldKind::Layer,
+                "Il livello dove vanno i tratti, se non è `layer`. Un tratto il cui id è già preso lì prende un id nuovo, che sta fra quelli creati.",
+            ),
+            optional(
+                "aspect",
+                FieldKind::Float,
+                "La proporzione (larghezza su altezza) del contenuto che la scheda di `layer` mostra, se chi scrive la sa; non si scrive nel file.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"move_strokes","layer":"board","ids":["s1"],"dx":40,"dy":-16}"#,
+            r#"{"op":"move_strokes","layer":"board","ids":["s1"],"dx":0,"dy":0,"to":{"node":"t1"}}"#,
+        ],
+    },
+    OpSpec {
+        name: "restyle_strokes",
+        summary_it: "Cambia il colore e lo spessore del pennello dei tratti `ids` del livello `layer`. Almeno uno dei due.",
+        fields: &[
+            required(
+                "layer",
+                FieldKind::Layer,
+                "Il livello: `\"board\"` per i tratti liberi, `{\"node\": id}` per quelli di una scheda.",
+            ),
+            required("ids", FieldKind::Ids, "Gli id dei tratti da cambiare."),
+            optional(
+                "color",
+                FieldKind::Text,
+                "Il colore nuovo, `#rrggbb`.",
+            ),
+            optional(
+                "size",
+                FieldKind::Float,
+                "Lo spessore nuovo del pennello, in unità della lavagna, maggiore di zero.",
+            ),
+            optional(
+                "aspect",
+                FieldKind::Float,
+                "Come in `move_strokes`: la proporzione del contenuto della scheda di `layer`, se si sa.",
+            ),
+        ],
+        examples: &[r##"{"op":"restyle_strokes","layer":"board","ids":["s1"],"color":"#d55e00","size":4}"##],
+    },
+    OpSpec {
+        name: "erase_along",
+        summary_it: "Passa la gomma che taglia lungo i punti (`points`), larga `size`: ogni tratto che tocca si taglia dove passa, e i pezzi che restano prendono il suo posto, come la gomma «Solo il pezzo». Un tratto coperto tutto se ne va.",
+        fields: &[
+            required(
+                "points",
+                FieldKind::Points,
+                "Il cammino della gomma, `[[x, y], …]`, nelle coordinate di `on`; al più 10 000 punti. Un punto solo è un cerchio.",
+            ),
+            required(
+                "size",
+                FieldKind::Positive,
+                "La larghezza della gomma, maggiore di zero, nelle coordinate di `on`: taglia ciò che sta a meno di `size / 2` dal cammino, contando lo spessore del tratto.",
+            ),
+            FieldSpec {
+                name: "on",
+                kind: FieldKind::InkOn,
+                required: false,
+                default: Some("\"auto\""),
+                doc_it: "In che coordinate sono i punti e che cosa si taglia: `\"auto\"` (coordinate della lavagna; i tratti liberi e quelli delle schede sotto il cammino), `\"board\"` (la lavagna, solo i tratti liberi), l'id di una scheda (le sue coordinate, 0,0 in alto a sinistra; solo i suoi tratti), `{\"card\", \"page\", \"page_size\"?}` (punti PDF della pagina; solo i tratti di quella pagina) o `{\"card\", \"sheet\", \"cell\"}` (pixel del foglio al 100% dalla cella; solo i tratti di quella cella), come per `draw`.",
+            },
+            optional(
+                "aspect",
+                FieldKind::Float,
+                "Come in `move_strokes`: la proporzione del contenuto della scheda di `on`, se si sa. Solo con `on` sull'id di una scheda.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"erase_along","points":[[41,15],[41,35]],"size":2}"#,
+            r#"{"op":"erase_along","on":"t1","points":[[160,0],[160,160]],"size":16}"#,
+        ],
+    },
+];
+
+/// La lavagna su cui girano gli esempi di [`OPS`]: due schede di testo, una
+/// di file, un arco fra le due di testo e un tratto libero, `s1`, per gli
+/// esempi dell'inchiostro.
+const EXAMPLE_CANVAS: &str = r##"{
+  "nodes": [
+    {"id": "t1", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Ciclo dell'acqua"},
+    {"id": "t2", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "Evaporazione"},
+    {"id": "f1", "type": "file", "x": 0, "y": 240, "width": 320, "height": 200, "file": "schemi/acqua.png"},
+    {"id": "p1", "type": "file", "x": 800, "y": 240, "width": 360, "height": 480, "file": "schemi/dispensa.pdf"}
+  ],
+  "edges": [{"id": "e1", "fromNode": "t1", "toNode": "t2", "label": "porta a"}],
+  "fub:ink": {"v": 1, "strokes": [
+    {"id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": {"kind": "free"}, "ink": "1 s100 cxy 4000,2500 120,40 95,-10"}
+  ]}
+}"##;
+
+/// La lavagna d'esempio di [`OPS`].
+pub fn example_canvas() -> Result<Canvas, CanvasError> {
+    crate::parse(EXAMPLE_CANVAS)
+}
+
+/// Un problema di una lista di operazioni, come lo dà [`validate`].
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Problem {
+    /// Che cosa non va, come codice stabile.
+    pub code: ProblemCode,
+    /// La posizione dell'operazione nella lista, da zero. `None` se il
+    /// problema riguarda la lista intera.
+    pub index: Option<usize>,
+    /// Dove sta, come puntatore JSON (RFC 6901): `/2/dx`. Per la lista intera
+    /// è `""`.
+    pub path: String,
+    /// Una frase fissa in inglese, come i messaggi di
+    /// [`crate::ops::OpError`]. Le frasi per le persone le fa chi mostra il
+    /// problema.
+    pub message: &'static str,
+    /// Il nome o i nomi più vicini al valore sbagliato, a distanza al più 2.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggestion: Option<String>,
+    /// L'operazione intera con la correzione. C'è solo quando la correzione è
+    /// una sola, e il posto dove va è libero.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fix: Option<Value>,
+}
+
+/// I codici dei problemi di [`validate`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProblemCode {
+    /// La lista è vuota.
+    Invalid,
+    /// Manca `op`, o il suo valore non è il nome di un'operazione.
+    UnknownOp,
+    /// Un campo che l'operazione non ha.
+    UnknownField,
+    /// Un campo obbligatorio che manca.
+    MissingField,
+    /// Un tipo JSON sbagliato. Vale anche per la lista che non è una lista.
+    WrongType,
+    /// Un valore fuori dall'elenco ammesso.
+    BadValue,
+}
+
+impl ProblemCode {
+    fn message(self) -> &'static str {
+        match self {
+            Self::Invalid => "the list has no operations",
+            Self::UnknownOp => "no operation has this name",
+            Self::UnknownField => "the operation has no such field",
+            Self::MissingField => "a required field is missing",
+            Self::WrongType => "the value has the wrong JSON type",
+            Self::BadValue => "the value is not one of the allowed values",
+        }
+    }
+}
+
+impl Problem {
+    fn new(code: ProblemCode, index: Option<usize>, path: String) -> Self {
+        Self {
+            code,
+            index,
+            path,
+            message: code.message(),
+            suggestion: None,
+            fix: None,
+        }
+    }
+}
+
+/// I problemi di una lista di operazioni, come li darebbe la lettura. Una
+/// lista non vuota senza problemi è una lista che serde legge, e viceversa. La
+/// lista vuota fa eccezione: serde la legge, `validate` la dà `invalid`.
+///
+/// Prima della lista: non è un array (`wrong_type`) o è vuoto (`invalid`).
+/// Poi per ogni operazione, in ordine: il nome (`unknown_op`), i campi che
+/// l'operazione ha (`missing_field`, `wrong_type`, `bad_value`), e quelli che
+/// non ha (`unknown_field`). Un'operazione col nome sbagliato non ha i suoi
+/// campi controllati: non si sa quali sono.
+///
+/// Il costo è lineare nel numero di operazioni e di campi.
+pub fn validate(value: &Value) -> Vec<Problem> {
+    let Some(list) = value.as_array() else {
+        return vec![Problem::new(ProblemCode::WrongType, None, String::new())];
+    };
+    if list.is_empty() {
+        return vec![Problem::new(ProblemCode::Invalid, None, String::new())];
+    }
+    let mut problems = Vec::new();
+    for (index, op) in list.iter().enumerate() {
+        check_op(index, op, &mut problems);
+    }
+    problems
+}
+
+fn check_op(index: usize, value: &Value, problems: &mut Vec<Problem>) {
+    let op_path = format!("/{index}");
+    let Some(object) = value.as_object() else {
+        problems.push(Problem::new(ProblemCode::WrongType, Some(index), op_path));
+        return;
+    };
+    let name_path = format!("{op_path}/op");
+    let name = match object.get("op") {
+        Some(Value::String(name)) => name.as_str(),
+        Some(_) => {
+            problems.push(Problem::new(ProblemCode::WrongType, Some(index), name_path));
+            return;
+        }
+        None => {
+            problems.push(Problem::new(ProblemCode::UnknownOp, Some(index), name_path));
+            return;
+        }
+    };
+    let Some(spec) = OPS.iter().find(|spec| spec.name == name) else {
+        let mut problem = Problem::new(ProblemCode::UnknownOp, Some(index), name_path);
+        let near = nearest(name, OPS.iter().map(|spec| spec.name));
+        suggest(&mut problem, &near, |candidate| {
+            Some(with(
+                object,
+                "op",
+                "op",
+                Value::String(candidate.to_owned()),
+            ))
+        });
+        problems.push(problem);
+        return;
+    };
+    for field in spec.fields {
+        check_field(index, object, field, problems);
+    }
+    for (key, value) in object {
+        if key == "op" || spec.fields.iter().any(|field| field.name == key) {
+            continue;
+        }
+        let mut problem = Problem::new(
+            ProblemCode::UnknownField,
+            Some(index),
+            format!("{op_path}/{}", escape(key)),
+        );
+        let near = nearest(key, spec.fields.iter().map(|field| field.name));
+        suggest(&mut problem, &near, |candidate| {
+            // Il posto è già preso: la correzione non sarebbe una sola.
+            (!object.contains_key(candidate)).then(|| with(object, key, candidate, value.clone()))
+        });
+        problems.push(problem);
+    }
+}
+
+/// Un campo dell'operazione `index`: presente e del tipo giusto, o un
+/// problema.
+fn check_field(
+    index: usize,
+    object: &Map<String, Value>,
+    field: &FieldSpec,
+    problems: &mut Vec<Problem>,
+) {
+    let path = format!("/{index}/{}", escape(field.name));
+    let Some(value) = object.get(field.name) else {
+        if field.required {
+            problems.push(Problem::new(ProblemCode::MissingField, Some(index), path));
+        }
+        return;
+    };
+    // Un campo facoltativo `null` è un campo assente (come in serde).
+    if value.is_null() && !field.required {
+        return;
+    }
+    match field.kind {
+        FieldKind::Any => {}
+        FieldKind::Id | FieldKind::Text => {
+            wrong_unless(value.is_string(), index, path, problems);
+        }
+        FieldKind::Bool => wrong_unless(value.is_boolean(), index, path, problems),
+        FieldKind::Number => wrong_unless(is_integer(value), index, path, problems),
+        FieldKind::Float => wrong_unless(value.is_number(), index, path, problems),
+        FieldKind::Node | FieldKind::Edge | FieldKind::Object => {
+            wrong_unless(value.is_object(), index, path, problems);
+        }
+        FieldKind::Patch => check_patch(index, object, field, path, value, problems),
+        FieldKind::Enum(values) => check_enum(index, object, field, values, path, problems),
+        FieldKind::Ids => check_ids(index, object, field.name, path, value, problems),
+        FieldKind::Points => check_points(index, path, value, problems),
+        FieldKind::Color => check_color(index, object, field, path, value, problems),
+        FieldKind::Sides => check_sides(index, object, field, path, value, problems),
+        FieldKind::Pair => check_pair(index, path, value, problems),
+        FieldKind::Layer => check_layer(index, path, value, problems),
+        FieldKind::Strokes => check_strokes(index, path, value, problems),
+        FieldKind::Shape => check_shape(index, object, field, path, value, problems),
+        FieldKind::PenSize => check_pen_size(index, path, value, problems),
+        FieldKind::InkColor => check_ink_color(index, object, field, path, value, problems),
+        FieldKind::Positive => check_positive(index, path, value, problems),
+        FieldKind::Pages => check_pages(index, path, value, problems),
+        FieldKind::InkOn => check_ink_on(index, path, value, problems),
+    }
+}
+
+/// Le pagine di `spread_pages`: un testo (lo legge la compilazione, come il
+/// campo della GUI) o una lista di interi da 1. Un elemento che non è un
+/// intero è `wrong_type`, un intero sotto 1 `bad_value`, col suo indice.
+fn check_pages(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    match value {
+        Value::String(_) => {}
+        Value::Array(items) => {
+            for (at, item) in items.iter().enumerate() {
+                let code = if !is_integer(item) {
+                    ProblemCode::WrongType
+                } else if item.as_f64().is_some_and(|page| page >= 1.0) {
+                    continue;
+                } else {
+                    ProblemCode::BadValue
+                };
+                problems.push(Problem::new(code, Some(index), format!("{path}/{at}")));
+            }
+        }
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// Una forma di `draw`: un oggetto con `kind`, uno di [`SHAPE_KINDS`], e i
+/// campi di quella forma, tutti numeri (`tips` un intero, `points` una lista
+/// di punti). Un `kind` sbagliato ha il suo vicino; un campo che la forma non
+/// ha, i suoi.
+fn check_shape(
+    index: usize,
+    object: &Map<String, Value>,
+    field: &FieldSpec,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+) {
+    let Value::Object(shape) = value else {
+        problems.push(Problem::new(ProblemCode::WrongType, Some(index), path));
+        return;
+    };
+    let kind_path = format!("{path}/kind");
+    let kind = match shape.get("kind") {
+        Some(Value::String(kind)) => kind.as_str(),
+        Some(_) => {
+            problems.push(Problem::new(ProblemCode::WrongType, Some(index), kind_path));
+            return;
+        }
+        None => {
+            problems.push(Problem::new(
+                ProblemCode::MissingField,
+                Some(index),
+                kind_path,
+            ));
+            return;
+        }
+    };
+    let Some((_, fields)) = SHAPE_FIELDS.iter().find(|(name, _)| *name == kind) else {
+        let mut problem = Problem::new(ProblemCode::BadValue, Some(index), kind_path);
+        let near = nearest(kind, SHAPE_KINDS.iter().copied());
+        suggest(&mut problem, &near, |candidate| {
+            let mut changed = shape.clone();
+            changed.insert("kind".to_owned(), Value::String(candidate.to_owned()));
+            Some(with(object, field.name, field.name, Value::Object(changed)))
+        });
+        problems.push(problem);
+        return;
+    };
+    for name in *fields {
+        let at = format!("{path}/{name}");
+        match (*name, shape.get(*name)) {
+            (_, None) => problems.push(Problem::new(ProblemCode::MissingField, Some(index), at)),
+            ("points", Some(points)) => check_points(index, at, points, problems),
+            ("tips", Some(tips)) => wrong_unless(is_integer(tips), index, at, problems),
+            (_, Some(number)) => wrong_unless(number.is_number(), index, at, problems),
+        }
+    }
+    for key in shape.keys() {
+        if key == "kind" || fields.contains(&key.as_str()) {
+            continue;
+        }
+        let mut problem = Problem::new(
+            ProblemCode::UnknownField,
+            Some(index),
+            format!("{path}/{}", escape(key)),
+        );
+        let near = nearest(key, fields.iter().copied());
+        if !near.is_empty() {
+            problem.suggestion = Some(near.join(", "));
+        }
+        problems.push(problem);
+    }
+}
+
+/// `on` di `draw` e di `erase_along`: una stringa (una parola o un id), la
+/// pagina `{card, page, page_size?, page_count?}` o la cella `{card, sheet,
+/// cell}`, come la legge [`draw::InkOn`]. Un oggetto con `page` è una pagina,
+/// uno con `sheet` o `cell` una cella; uno senza nessuno dei tre è
+/// `bad_value`. La pagina va da 1 e la cella è un indirizzo A1 da `A1` a
+/// `XFD1048576` (`bad_value` se no), il foglio un testo non vuoto.
+fn check_ink_on(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    let fields = match value {
+        Value::String(_) => return,
+        Value::Object(fields) => fields,
+        _ => {
+            problems.push(Problem::new(ProblemCode::WrongType, Some(index), path));
+            return;
+        }
+    };
+    let page = fields.contains_key("page");
+    let allowed: &[&str] = if page {
+        &["card", "page", "page_size", "page_count"]
+    } else if fields.contains_key("sheet") || fields.contains_key("cell") {
+        &["card", "sheet", "cell"]
+    } else {
+        problems.push(Problem::new(ProblemCode::BadValue, Some(index), path));
+        return;
+    };
+    let mut push = |code: ProblemCode, name: &str| {
+        problems.push(Problem::new(
+            code,
+            Some(index),
+            format!("{path}/{}", escape(name)),
+        ));
+    };
+    for name in allowed {
+        let value = fields.get(*name);
+        let optional = matches!(*name, "page_size" | "page_count");
+        let Some(value) = value.filter(|value| !(optional && value.is_null())) else {
+            if !optional {
+                push(ProblemCode::MissingField, name);
+            }
+            continue;
+        };
+        let code = match *name {
+            "card" => (!value.is_string()).then_some(ProblemCode::WrongType),
+            "page" if !is_integer(value) => Some(ProblemCode::WrongType),
+            "page" => value
+                .as_f64()
+                .and_then(page_from_number)
+                .is_none()
+                .then_some(ProblemCode::BadValue),
+            "page_size" => {
+                let pair = value
+                    .as_array()
+                    .is_some_and(|items| items.len() == 2 && items.iter().all(Value::is_number));
+                (!pair).then_some(ProblemCode::WrongType)
+            }
+            "page_count" => (!is_integer(value)).then_some(ProblemCode::WrongType),
+            "sheet" => match value.as_str() {
+                None => Some(ProblemCode::WrongType),
+                Some("") => Some(ProblemCode::BadValue),
+                Some(_) => None,
+            },
+            "cell" => match value.as_str() {
+                None => Some(ProblemCode::WrongType),
+                Some(text) => CellAddress::parse(text)
+                    .is_none()
+                    .then_some(ProblemCode::BadValue),
+            },
+            _ => None,
+        };
+        if let Some(code) = code {
+            push(code, name);
+        }
+    }
+    for key in fields.keys().filter(|key| !allowed.contains(&key.as_str())) {
+        push(ProblemCode::UnknownField, key);
+    }
+}
+
+/// Un numero maggiore di zero.
+fn check_positive(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    match value.as_f64() {
+        Some(size) if erase::is_eraser_size(size) => {}
+        Some(_) => problems.push(Problem::new(ProblemCode::BadValue, Some(index), path)),
+        None => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// La misura di una penna: un numero da 0,25 a 200.
+fn check_pen_size(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    match value.as_f64() {
+        Some(size) if draw::is_pen_size(size) => {}
+        Some(_) => problems.push(Problem::new(ProblemCode::BadValue, Some(index), path)),
+        None => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// Un colore d'inchiostro: un nome della tavolozza o `#rrggbb`. Un nome
+/// sbagliato ha i nomi dell'inchiostro vicini, e la correzione se ce n'è uno
+/// solo.
+fn check_ink_color(
+    index: usize,
+    object: &Map<String, Value>,
+    field: &FieldSpec,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+) {
+    match value {
+        Value::String(text) if draw::ink_hex(text).is_none() => {
+            let mut problem = Problem::new(ProblemCode::BadValue, Some(index), path);
+            let near = nearest(
+                text,
+                fub_ink_codec::INK_PALETTE.iter().map(|swatch| swatch.id),
+            );
+            suggest(&mut problem, &near, |candidate| {
+                Some(with(
+                    object,
+                    field.name,
+                    field.name,
+                    Value::String(candidate.to_owned()),
+                ))
+            });
+            problems.push(problem);
+        }
+        Value::String(_) => {}
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// Un colore: un nome, un numero da 1 a 6, o `#rrggbb`, o `null` (nessun
+/// colore). Un nome sbagliato ha i nomi vicini, e la correzione se ce n'è uno
+/// solo.
+fn check_color(
+    index: usize,
+    object: &Map<String, Value>,
+    field: &FieldSpec,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+) {
+    check_color_at(index, path, value, problems, |candidate| {
+        Some(with(
+            object,
+            field.name,
+            field.name,
+            Value::String(candidate.to_owned()),
+        ))
+    });
+}
+
+/// Un colore in un punto qualunque del JSON: `fix` costruisce l'operazione
+/// corretta col nome scelto.
+fn check_color_at(
+    index: usize,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+    fix: impl Fn(&str) -> Option<Value>,
+) {
+    match value {
+        Value::String(text) if color::parse(text).is_none() => {
+            let mut problem = Problem::new(ProblemCode::BadValue, Some(index), path);
+            let near = nearest(text, color::names());
+            suggest(&mut problem, &near, fix);
+            problems.push(problem);
+        }
+        Value::String(_) | Value::Null => {}
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// I campi nuovi di `set`: un oggetto, e il suo `color` (se c'è) è un colore.
+/// Gli altri campi li legge la scheda, e non si controllano qui.
+fn check_patch(
+    index: usize,
+    object: &Map<String, Value>,
+    field: &FieldSpec,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+) {
+    let Value::Object(fields) = value else {
+        problems.push(Problem::new(ProblemCode::WrongType, Some(index), path));
+        return;
+    };
+    let Some(chosen) = fields.get("color") else {
+        return;
+    };
+    check_color_at(
+        index,
+        format!("{path}/color"),
+        chosen,
+        problems,
+        |candidate| {
+            let mut changed = fields.clone();
+            changed.insert("color".to_owned(), Value::String(candidate.to_owned()));
+            Some(with(object, field.name, field.name, Value::Object(changed)))
+        },
+    );
+}
+
+/// I lati di un arco: la parola `auto`, o un oggetto con `from` e `to`, ognuno
+/// un lato o `null`. Una chiave che non è `from` né `to` ha il suo vicino.
+fn check_sides(
+    index: usize,
+    object: &Map<String, Value>,
+    field: &FieldSpec,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+) {
+    match value {
+        Value::String(text) if text != "auto" => {
+            let mut problem = Problem::new(ProblemCode::BadValue, Some(index), path);
+            let near = nearest(text, ["auto"]);
+            suggest(&mut problem, &near, |candidate| {
+                Some(with(
+                    object,
+                    field.name,
+                    field.name,
+                    Value::String(candidate.to_owned()),
+                ))
+            });
+            problems.push(problem);
+        }
+        Value::String(_) => {}
+        Value::Object(pair) => {
+            for (key, side) in pair {
+                let at = format!("{path}/{}", escape(key));
+                if key == "from" || key == "to" {
+                    check_side(index, side, at, problems);
+                    continue;
+                }
+                let mut problem = Problem::new(ProblemCode::UnknownField, Some(index), at);
+                let near = nearest(key, ["from", "to"]);
+                suggest(&mut problem, &near, |candidate| {
+                    // Il posto è già preso: la correzione non sarebbe una sola.
+                    if pair.contains_key(candidate) {
+                        return None;
+                    }
+                    let mut renamed = pair.clone();
+                    renamed.remove(key);
+                    renamed.insert(candidate.to_owned(), side.clone());
+                    Some(with(object, field.name, field.name, Value::Object(renamed)))
+                });
+                problems.push(problem);
+            }
+        }
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// Un lato di `sides`: `null` (nessun lato), o uno dei quattro. Il lato
+/// sbagliato ha il suo vicino, ma nessuna correzione: è dentro l'oggetto.
+fn check_side(index: usize, side: &Value, at: String, problems: &mut Vec<Problem>) {
+    match side {
+        Value::Null => {}
+        Value::String(text) if !SIDES.contains(&text.as_str()) => {
+            let mut problem = Problem::new(ProblemCode::BadValue, Some(index), at);
+            let near = nearest(text, SIDES.iter().copied());
+            if !near.is_empty() {
+                problem.suggestion = Some(near.join(", "));
+            }
+            problems.push(problem);
+        }
+        Value::String(_) => {}
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), at)),
+    }
+}
+
+/// Due numeri, `[w, h]`: una lista di due numeri, e basta.
+fn check_pair(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    match value {
+        Value::Array(items) if items.len() == 2 => {
+            for (position, item) in items.iter().enumerate() {
+                if !item.is_number() {
+                    let at = format!("{path}/{position}");
+                    problems.push(Problem::new(ProblemCode::WrongType, Some(index), at));
+                }
+            }
+        }
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+fn check_enum(
+    index: usize,
+    object: &Map<String, Value>,
+    field: &FieldSpec,
+    values: &[&'static str],
+    path: String,
+    problems: &mut Vec<Problem>,
+) {
+    let Some(value) = object.get(field.name) else {
+        return;
+    };
+    match value {
+        Value::String(text) if !values.iter().any(|value| *value == text) => {
+            let mut problem = Problem::new(ProblemCode::BadValue, Some(index), path);
+            let near = nearest(text, values.iter().copied());
+            suggest(&mut problem, &near, |candidate| {
+                Some(with(
+                    object,
+                    field.name,
+                    field.name,
+                    Value::String(candidate.to_owned()),
+                ))
+            });
+            problems.push(problem);
+        }
+        Value::String(_) => {}
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// Una lista di id. Una stringa sola è l'errore più comune: la correzione è
+/// la lista con quella stringa, e si dà.
+fn check_ids(
+    index: usize,
+    object: &Map<String, Value>,
+    key: &str,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+) {
+    match value {
+        Value::Array(items) => {
+            for (position, item) in items.iter().enumerate() {
+                if !item.is_string() {
+                    let at = format!("{path}/{position}");
+                    problems.push(Problem::new(ProblemCode::WrongType, Some(index), at));
+                }
+            }
+        }
+        Value::String(text) => {
+            let mut problem = Problem::new(ProblemCode::WrongType, Some(index), path);
+            problem.fix = Some(with(object, key, key, json!([text])));
+            problems.push(problem);
+        }
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// Una lista di punti: una lista di liste di numeri.
+fn check_points(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    let Value::Array(points) = value else {
+        problems.push(Problem::new(ProblemCode::WrongType, Some(index), path));
+        return;
+    };
+    for (position, point) in points.iter().enumerate() {
+        let at = format!("{path}/{position}");
+        let Value::Array(coordinates) = point else {
+            problems.push(Problem::new(ProblemCode::WrongType, Some(index), at));
+            continue;
+        };
+        for (axis, coordinate) in coordinates.iter().enumerate() {
+            if !coordinate.is_number() {
+                let at = format!("{at}/{axis}");
+                problems.push(Problem::new(ProblemCode::WrongType, Some(index), at));
+            }
+        }
+    }
+}
+
+/// Un livello d'inchiostro, come lo legge [`crate::ink::LayerRef`]: la parola
+/// `board`, o un oggetto col solo campo `node`, un testo.
+fn check_layer(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    match value {
+        Value::String(word) if word == "board" => {}
+        Value::String(_) => problems.push(Problem::new(ProblemCode::BadValue, Some(index), path)),
+        Value::Object(fields) => {
+            match fields.get("node") {
+                Some(Value::String(_)) => {}
+                Some(_) => problems.push(Problem::new(
+                    ProblemCode::WrongType,
+                    Some(index),
+                    format!("{path}/node"),
+                )),
+                None => problems.push(Problem::new(
+                    ProblemCode::MissingField,
+                    Some(index),
+                    format!("{path}/node"),
+                )),
+            }
+            for key in fields.keys().filter(|key| key.as_str() != "node") {
+                problems.push(Problem::new(
+                    ProblemCode::UnknownField,
+                    Some(index),
+                    format!("{path}/{}", escape(key)),
+                ));
+            }
+        }
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// Una lista di tratti: ogni voce è un oggetto. I campi del tratto li legge la
+/// compilazione, che dice `invalid` per un tratto che non si legge.
+fn check_strokes(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    let Value::Array(strokes) = value else {
+        problems.push(Problem::new(ProblemCode::WrongType, Some(index), path));
+        return;
+    };
+    for (position, stroke) in strokes.iter().enumerate() {
+        if !stroke.is_object() {
+            let at = format!("{path}/{position}");
+            problems.push(Problem::new(ProblemCode::WrongType, Some(index), at));
+        }
+    }
+}
+
+fn wrong_unless(fits: bool, index: usize, path: String, problems: &mut Vec<Problem>) {
+    if !fits {
+        problems.push(Problem::new(ProblemCode::WrongType, Some(index), path));
+    }
+}
+
+/// Un intero JSON: anche `1.0` o `1e2`, come le legge serde. Una frazione vera
+/// no, e un numero non finito non c'è in un [`Value`].
+fn is_integer(value: &Value) -> bool {
+    match value {
+        Value::Number(number) => {
+            number.is_i64()
+                || number.is_u64()
+                || number
+                    .as_f64()
+                    .is_some_and(|float| float.is_finite() && float.fract() == 0.0)
+        }
+        _ => false,
+    }
+}
+
+/// Il suggerimento e, se la correzione è una sola, la correzione.
+fn suggest(problem: &mut Problem, near: &[&str], fix: impl Fn(&str) -> Option<Value>) {
+    if near.is_empty() {
+        return;
+    }
+    problem.suggestion = Some(near.join(", "));
+    if let [only] = near {
+        problem.fix = fix(only);
+    }
+}
+
+/// I nomi più vicini a `given`, a distanza al più [`MAX_DISTANCE`]: quelli alla
+/// distanza minima, nell'ordine dato.
+fn nearest(given: &str, names: impl IntoIterator<Item = &'static str>) -> Vec<&'static str> {
+    let mut best = MAX_DISTANCE + 1;
+    let mut near = Vec::new();
+    for name in names {
+        let Some(d) = distance(given, name) else {
+            continue;
+        };
+        if d < best {
+            best = d;
+            near.clear();
+        }
+        if d == best {
+            near.push(name);
+        }
+    }
+    near
+}
+
+/// La distanza di Levenshtein fra `given` e `name`, se è al più
+/// [`MAX_DISTANCE`]. Il confronto ignora le maiuscole ASCII: `Add-Card` è vicino
+/// a `add_card`. È solo un suggerimento: serde resta sensibile alle maiuscole, e
+/// un nome che non è esatto non si legge.
+pub(crate) fn distance(given: &str, name: &str) -> Option<usize> {
+    let given: Vec<char> = given.to_ascii_lowercase().chars().collect();
+    let name: Vec<char> = name.chars().collect();
+    if given.len().abs_diff(name.len()) > MAX_DISTANCE {
+        return None;
+    }
+    let mut previous: Vec<usize> = (0..=name.len()).collect();
+    for (row, letter) in given.iter().enumerate() {
+        let mut current = vec![row + 1; name.len() + 1];
+        for (column, other) in name.iter().enumerate() {
+            current[column + 1] = (previous[column] + usize::from(letter != other))
+                .min(previous[column + 1] + 1)
+                .min(current[column] + 1);
+        }
+        previous = current;
+    }
+    let d = previous[name.len()];
+    (d <= MAX_DISTANCE).then_some(d)
+}
+
+/// La lista di chiavi di `object` con `key` rinominata in `to` e col valore
+/// `value`, nello stesso posto.
+fn with(object: &Map<String, Value>, key: &str, to: &str, value: Value) -> Value {
+    Value::Object(
+        object
+            .iter()
+            .map(|(name, old)| {
+                if name == key {
+                    (to.to_owned(), value.clone())
+                } else {
+                    (name.clone(), old.clone())
+                }
+            })
+            .collect(),
+    )
+}
+
+/// Un nome come segmento di puntatore JSON (RFC 6901).
+fn escape(segment: &str) -> String {
+    segment.replace('~', "~0").replace('/', "~1")
+}
+
+/// Lo schema JSON 2020-12 di una lista di operazioni: una lista non vuota, e
+/// ogni elemento è una delle operazioni di [`OPS`]. Ogni ramo ha `op` costante,
+/// `additionalProperties: false` e gli esempi.
+pub fn json_schema() -> Value {
+    let branches: Vec<Value> = OPS.iter().map(branch).collect();
+    json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Operazioni della lavagna",
+        "description": "Una lista non vuota di operazioni: ognuna è un oggetto con il campo `op`.",
+        "type": "array",
+        "minItems": 1,
+        "items": { "oneOf": branches },
+    })
+}
+
+fn branch(spec: &OpSpec) -> Value {
+    let mut properties = Map::new();
+    properties.insert("op".to_owned(), json!({ "const": spec.name }));
+    let mut required = vec!["op"];
+    for field in spec.fields {
+        properties.insert(field.name.to_owned(), field_schema(field));
+        if field.required {
+            required.push(field.name);
+        }
+    }
+    let examples: Vec<Value> = spec
+        .examples
+        .iter()
+        .filter_map(|text| serde_json::from_str(text).ok())
+        .collect();
+    json!({
+        "type": "object",
+        "description": spec.summary_it,
+        "properties": properties,
+        "required": required,
+        "additionalProperties": false,
+        "examples": examples,
+    })
+}
+
+fn field_schema(field: &FieldSpec) -> Value {
+    let mut schema = match field.kind {
+        FieldKind::Id | FieldKind::Text => json!({ "type": "string" }),
+        FieldKind::Ids => json!({ "type": "array", "items": { "type": "string" } }),
+        FieldKind::Number => json!({ "type": "integer" }),
+        FieldKind::Float => json!({ "type": "number" }),
+        FieldKind::Bool => json!({ "type": "boolean" }),
+        FieldKind::Enum(values) => json!({ "type": "string", "enum": values }),
+        FieldKind::Node | FieldKind::Edge | FieldKind::Object | FieldKind::Patch => {
+            json!({ "type": "object" })
+        }
+        FieldKind::Points => json!({
+            "type": "array",
+            "items": { "type": "array", "items": { "type": "number" } },
+        }),
+        FieldKind::Color => json!({ "type": "string" }),
+        FieldKind::Sides => json!({
+            "oneOf": [
+                { "const": "auto" },
+                {
+                    "type": "object",
+                    "properties": { "from": { "enum": SIDES }, "to": { "enum": SIDES } },
+                    "additionalProperties": false,
+                },
+            ],
+        }),
+        FieldKind::Pair => json!({
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2,
+        }),
+        FieldKind::Layer => json!({
+            "oneOf": [
+                { "const": "board" },
+                {
+                    "type": "object",
+                    "properties": { "node": { "type": "string" } },
+                    "required": ["node"],
+                    "additionalProperties": false,
+                },
+            ],
+        }),
+        FieldKind::Strokes => json!({ "type": "array", "items": { "type": "object" } }),
+        FieldKind::Shape => shape_schema(),
+        FieldKind::PenSize => json!({
+            "type": "number",
+            "minimum": fub_ink_codec::MIN_PEN_SIZE,
+            "maximum": fub_ink_codec::MAX_PEN_SIZE,
+        }),
+        FieldKind::InkColor => {
+            let names: Vec<&str> = fub_ink_codec::INK_PALETTE
+                .iter()
+                .map(|swatch| swatch.id)
+                .collect();
+            json!({
+                "anyOf": [
+                    { "enum": names },
+                    { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                ],
+            })
+        }
+        FieldKind::Positive => json!({ "type": "number", "exclusiveMinimum": 0 }),
+        FieldKind::InkOn => json!({
+            "oneOf": [
+                { "type": "string" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "card": { "type": "string" },
+                        "page": { "type": "integer", "minimum": 1, "maximum": crate::model::MAX_SAFE_INTEGER },
+                        "page_size": {
+                            "type": "array",
+                            "items": { "type": "number" },
+                            "minItems": 2,
+                            "maxItems": 2,
+                        },
+                        "page_count": { "type": "integer" },
+                    },
+                    "required": ["card", "page"],
+                    "additionalProperties": false,
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "card": { "type": "string" },
+                        "sheet": { "type": "string", "minLength": 1 },
+                        "cell": { "type": "string", "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$" },
+                    },
+                    "required": ["card", "sheet", "cell"],
+                    "additionalProperties": false,
+                },
+            ],
+        }),
+        FieldKind::Pages => json!({
+            "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "integer", "minimum": 1 } },
+            ],
+        }),
+        FieldKind::Any => json!({}),
+    };
+    if let Value::Object(map) = &mut schema {
+        map.insert("description".to_owned(), json!(field.doc_it));
+        if let Some(default) = field
+            .default
+            .and_then(|text| serde_json::from_str(text).ok())
+        {
+            map.insert("default".to_owned(), default);
+        }
+    }
+    schema
+}
+
+/// Lo schema di una forma di `draw`: un ramo per `kind`, coi suoi campi.
+fn shape_schema() -> Value {
+    let branches: Vec<Value> = SHAPE_FIELDS
+        .iter()
+        .map(|(kind, fields)| {
+            let mut properties = Map::new();
+            properties.insert("kind".to_owned(), json!({ "const": kind }));
+            for name in *fields {
+                let schema = match *name {
+                    "points" => json!({
+                        "type": "array",
+                        "items": { "type": "array", "items": { "type": "number" } },
+                    }),
+                    "tips" => json!({ "type": "integer" }),
+                    _ => json!({ "type": "number" }),
+                };
+                properties.insert((*name).to_owned(), schema);
+            }
+            let mut required = vec!["kind"];
+            required.extend(fields.iter().copied());
+            json!({
+                "type": "object",
+                "properties": properties,
+                "required": required,
+                "additionalProperties": false,
+            })
+        })
+        .collect();
+    json!({ "oneOf": branches })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn le_penne_di_draw_sono_quelle_di_fub_ink_codec() {
+        let ids: Vec<&str> = fub_ink_codec::PENS.iter().map(|pen| pen.id).collect();
+        assert_eq!(PEN_IDS, ids.as_slice());
+    }
+
+    #[test]
+    fn le_forme_di_draw_hanno_i_loro_campi() {
+        let kinds: Vec<&str> = SHAPE_FIELDS.iter().map(|(kind, _)| *kind).collect();
+        assert_eq!(SHAPE_KINDS, kinds.as_slice());
+    }
+
+    #[test]
+    fn on_di_serie_e_auto() {
+        let draw = OPS.iter().find(|op| op.name == "draw").expect("draw");
+        let on = draw
+            .fields
+            .iter()
+            .find(|field| field.name == "on")
+            .expect("on");
+        assert_eq!(
+            on.default,
+            Some(format!("\"{}\"", crate::ops::ON_AUTO).as_str())
+        );
+    }
+
+    /// Un campo di prova, con un vocabolario.
+    const COLOR: FieldSpec = FieldSpec {
+        name: "color",
+        kind: FieldKind::Enum(&["red", "blue"]),
+        required: true,
+        default: None,
+        doc_it: "un colore di prova",
+    };
+
+    #[test]
+    fn un_valore_fuori_dall_elenco_ha_il_vicino_e_la_correzione() {
+        let object = json!({ "op": "move", "color": "gren" });
+        let object = object.as_object().expect("un oggetto");
+        let mut problems = Vec::new();
+        check_field(0, object, &COLOR, &mut problems);
+        assert_eq!(problems.len(), 1);
+        let problem = &problems[0];
+        assert_eq!(problem.code, ProblemCode::BadValue);
+        assert_eq!(problem.path, "/0/color");
+        assert_eq!(problem.suggestion.as_deref(), Some("red"));
+        assert_eq!(problem.fix, Some(json!({ "op": "move", "color": "red" })));
+    }
+
+    #[test]
+    fn la_distanza_ignora_le_maiuscole_ascii_e_ha_un_tetto() {
+        assert_eq!(distance("ADD-CARD", "add_card"), Some(1));
+        assert_eq!(distance("move", "move"), Some(0));
+        assert_eq!(distance("dX", "dx"), Some(0));
+        assert_eq!(distance("foo", "ids"), None);
+        assert_eq!(distance("", "ab"), Some(2));
+        assert_eq!(distance("", "abc"), None);
+    }
+}
