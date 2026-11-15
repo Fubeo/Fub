@@ -223,6 +223,19 @@ pub enum LoadError {
     /// contratto dell'host.
     #[error("il componente non si istanzia: {0}")]
     Instantiation(String),
+    /// L'istanza non nasce perché la memoria lineare di tutte le istanze del
+    /// processo è finita (`PROCESS_MEMORY_CEILING`).
+    #[error("il componente non si istanzia: {0}")]
+    MemoryBudget(crate::limits::MemoryBudgetExceeded),
+}
+
+/// L'errore di un'istanziazione: tipizzato quando la memoria del processo è
+/// finita, il testo di wasmtime altrimenti.
+fn instantiation_error(error: wasmtime::Error) -> LoadError {
+    match error.downcast_ref::<crate::limits::MemoryBudgetExceeded>() {
+        Some(budget) => LoadError::MemoryBudget(*budget),
+        None => LoadError::Instantiation(format!("{error:#}")),
+    }
 }
 
 /// Un `.wasm` compilato e pronto a produrre istanze indipendenti.
@@ -421,7 +434,7 @@ impl Component {
         let instance = self
             .pre
             .instantiate(&mut store)
-            .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?;
+            .map_err(instantiation_error)?;
         let plugin = self
             .indices
             .load(&mut store, &instance)
@@ -694,6 +707,21 @@ fn source_revision() -> PluginError {
     PluginError::Conflict(Text::key("host.grid.source_revision"))
 }
 
+/// La memoria lineare di tutte le istanze del processo è finita.
+pub(crate) fn memory_budget(budget: &crate::limits::MemoryBudgetExceeded) -> PluginError {
+    const MIB: usize = 1024 * 1024;
+    PluginError::Internal(Text::message(
+        "host.wasm.memory_budget",
+        vec![
+            Arg::int("used", i64::try_from(budget.used / MIB).unwrap_or(i64::MAX)),
+            Arg::int(
+                "ceiling",
+                i64::try_from(budget.ceiling / MIB).unwrap_or(i64::MAX),
+            ),
+        ],
+    ))
+}
+
 /// Un componente che non esporta l'interfaccia che la chiamata serve.
 fn missing_export(interface: &str) -> PluginError {
     PluginError::Internal(Text::message(
@@ -703,6 +731,9 @@ fn missing_export(interface: &str) -> PluginError {
 }
 
 pub(crate) fn failure(error: wasmtime::Error) -> PluginError {
+    if let Some(budget) = error.downcast_ref::<crate::limits::MemoryBudgetExceeded>() {
+        return memory_budget(budget);
+    }
     if error.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::Interrupt) {
         return PluginError::Internal(
             "il componente non ha risposto entro il tempo concesso ed è stato fermato".into(),

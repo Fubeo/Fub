@@ -161,7 +161,11 @@ Il runtime:
   contratto, oltre è una trap;
 - non concede filesystem o rete direttamente;
 - serve soltanto le famiglie host disponibili;
-- applica limiti alla memoria lineare e alle tabelle;
+- applica limiti alla memoria lineare e alle tabelle: al più 64 MiB per
+  istanza sommando tutte le sue memorie (oltre, `memory.grow` risponde -1) e
+  1 GiB per tutte le istanze del processo insieme; chi supera il tetto del
+  processo riceve una trap tipizzata (`host.wasm.memory_budget`), e la
+  memoria torna al conto quando l'istanza viene smontata;
 - interrompe chiamate oltre la deadline;
 - converte trap in errori tipizzati;
 - limita la ricorsione delle forme;
