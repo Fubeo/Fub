@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- I metadati AppStream del Flatpak di Fub (packaging/flatpak/README.md). -->
+<component type="desktop-application">
+  <id>io.github.Fubeo.Fub</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+
+  <name>Fub</name>
+  <summary>Local-first knowledge manager</summary>
+  <summary xml:lang="it">Gestore della conoscenza local-first</summary>
+
+  <description>
+    <p>
+      Fub is a local-first knowledge manager for notes, documents,
+      spreadsheets, PDFs and drawings. It opens vaults of Markdown files as
+      they are, without converting them, and keeps your data on your disk.
+    </p>
+    <p xml:lang="it">
+      Fub è un gestore della conoscenza local-first per note, documenti,
+      fogli di calcolo, PDF e disegni. Apre vault di file Markdown così come
+      sono, senza convertirli, e tiene i tuoi dati sul tuo disco.
+    </p>
+  </description>
+
+  <developer id="io.github.Fubeo">
+    <name>Fubeo</name>
+  </developer>
+
+  <launchable type="desktop-id">io.github.Fubeo.Fub.desktop</launchable>
+
+  <url type="homepage">https://github.com/Fubeo/Fub</url>
+  <url type="bugtracker">https://github.com/Fubeo/Fub/issues</url>
+  <url type="vcs-browser">https://github.com/Fubeo/Fub</url>
+
+  <provides>
+    <binary>fub</binary>
+    <binary>fub-cli</binary>
+  </provides>
+
+  <requires>
+    <display_length compare="ge">800</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+
+  <content_rating type="oars-1.1"/>
+</component>

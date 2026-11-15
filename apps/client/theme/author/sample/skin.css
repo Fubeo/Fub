@@ -6333,13 +6333,22 @@ kbd,
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
-/* I Blocchi (H3–H7): il «+» e la maniglia nel margine, la linea d'arrivo
-   del trascinamento, i blocchi selezionati. Fuori dal passaggio i pulsanti
-   del blocco del cursore restano tenui; sotto il puntatore si leggono. */
+/* I Blocchi (H3–H7, E2): il «+» e la maniglia a due occhi nel margine, i
+   blocchi selezionati. Con un puntatore i pulsanti non si vedono a riposo e
+   compaiono tenui sul blocco sotto il puntatore; senza passaggio restano
+   tenui sul blocco del cursore. La maniglia sotto il puntatore prende
+   l'accento e gli occhi crescono appena. */
 .cm-editor .cm-fub-block-add,
 .cm-editor .cm-fub-block-grip {
   color: var(--doc-gutter-fg);
   opacity: 0.55;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+@media (hover: hover) {
+  .cm-editor .cm-fub-block-handles:not([data-active="true"]):not(:focus-within) .cm-fub-block-add,
+  .cm-editor .cm-fub-block-handles:not([data-active="true"]):not(:focus-within) .cm-fub-block-grip {
+    opacity: 0;
+  }
 }
 .cm-editor .cm-fub-block-handles[data-active="true"] .cm-fub-block-add,
 .cm-editor .cm-fub-block-handles[data-active="true"] .cm-fub-block-grip,
@@ -6348,39 +6357,82 @@ kbd,
 .cm-editor .cm-fub-block-grip[aria-expanded="true"] {
   opacity: 1;
 }
-.cm-editor .cm-fub-block-add:hover,
-.cm-editor .cm-fub-block-grip:hover,
-.cm-editor .cm-fub-block-grip[aria-expanded="true"] {
+.cm-editor .cm-fub-block-add:hover {
   color: var(--doc-fg);
-  background: var(--doc-fill-soft);
+  background: var(--doc-block-hover);
+}
+.cm-editor .cm-fub-block-grip:hover,
+.cm-editor .cm-fub-block-grip[data-held],
+.cm-editor .cm-fub-block-grip[aria-expanded="true"] {
+  color: var(--accent-soft);
+  background: var(--accent-veil);
+}
+.cm-editor .cm-fub-block-grip[data-held] .cm-fub-block-grip-held {
+  color: var(--accent-soft);
+}
+.cm-editor .cm-fub-block-grip-eyes svg {
+  transition: transform 0.16s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.cm-editor .cm-fub-block-grip:hover .cm-fub-block-grip-eyes svg {
+  transform: scale(1.12);
 }
 .cm-editor .cm-fub-block-add:focus-visible,
 .cm-editor .cm-fub-block-grip:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
+/* Il blocco in mano: il blocco vero sul suo foglio, con l'ombra; la
+   maniglia socchiusa resta sotto il puntatore. Le etichette: quanti blocchi
+   o che tipo (un blocco alto, tagliato) e, in un'altra sezione, dove cade. */
+.cm-editor .cm-fub-block-lift {
+  color: var(--doc-fg);
+}
+.cm-editor .cm-fub-block-lift-card,
+.cm-editor .cm-fub-block-lift-full {
+  background: var(--doc-bg);
+}
+.cm-editor .cm-fub-block-lift-card[data-clipped]::after {
+  background: linear-gradient(transparent, var(--doc-bg) 85%);
+}
+.cm-editor .cm-fub-block-lift-shade {
+  box-shadow: 0 0 0 1px var(--border-strong), var(--shadow-3);
+}
+.cm-editor .cm-fub-block-lift-grip {
+  color: var(--accent-soft);
+}
+.cm-editor .cm-fub-block-lift-tags {
+  font-family: var(--font-ui);
+}
+.cm-editor .cm-fub-block-lift-more {
+  color: var(--doc-gutter-fg);
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-fub-block-lift-to {
+  color: var(--doc-bg);
+  background: var(--accent);
+}
+/* Il posto dove cadrà: fondo d'accento e un filo; sull'origine, grigio. */
+.cm-editor .cm-fub-block-slot {
+  background: var(--accent-veil);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.cm-editor .cm-fub-block-slot[data-home] {
+  background: var(--doc-block-hover);
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
+}
+/* «Accanto»: la barra sul bordo del vicino. */
 .cm-editor .cm-fub-block-drop {
   background: var(--doc-drop-line);
 }
 /* Il blocco vivo (N13). La selezione di blocchi è un velo sopra le righe,
-   così passa sopra il fondo del codice e la riga attiva; l'alone del blocco
-   appena posato e la passata del colore nuovo si spengono da soli; il blocco
-   sollevato galleggia sul foglio con la sua ombra. */
+   così passa sopra il fondo del codice e la riga attiva; la passata del
+   colore nuovo si spegne da sola. */
 .cm-editor .cm-fub-block-mark {
   background: var(--doc-block-selected);
   border-radius: 4px;
 }
-.cm-editor .cm-fub-block-halo {
-  background: var(--doc-block-selected);
-  box-shadow: 0 0 0 2px var(--doc-drop-line);
-}
 .cm-editor .cm-fub-block-pass {
   background: var(--doc-block-hover);
-}
-.cm-editor .cm-fub-block-lift {
-  background: var(--doc-bg);
-  border-radius: 4px;
-  box-shadow: var(--shadow-3);
 }
 /* Sul fondo della selezione l'indirizzo del link vuole l'inchiostro pieno. */
 .cm-editor .cm-content .cm-fub-block-selected .cm-fub-link-pill {

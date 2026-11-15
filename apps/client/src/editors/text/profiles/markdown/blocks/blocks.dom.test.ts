@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
-import { history } from "@codemirror/commands";
+import { history, undo } from "@codemirror/commands";
 import { EditorSelection, EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { type Extension } from "@codemirror/state";
@@ -16,6 +16,7 @@ import { blockSelection, selectCursorBlock } from "./selection";
 import { addBelow, colorRanges, gripLabel, handlesView } from "./handles";
 import { setContentColor } from "../color";
 import { blockModel } from "./model";
+import { dragPose, LIFT_SCALE } from "./motion";
 import { closeContextMenu } from "../../../../../ui/menu";
 import { openSlashMenu, slashMenuExtension, type SlashMenuSource } from "../slash";
 import { propertiesDisplay } from "../../../properties-display";
@@ -321,7 +322,7 @@ describe("il trascinamento solleva soltanto il blocco", () => {
     grip.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 0, clientY: 40 }));
     const el = view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-lift");
     expect(el, "il blocco si solleva").not.toBeNull();
-    return el!.firstElementChild as HTMLElement;
+    return el!.querySelector<HTMLElement>(".cm-fub-block-lift-card")!.firstElementChild as HTMLElement;
   }
   /// Il testo di ogni riga o widget che l'immagine porta.
   const rows = (inner: HTMLElement) => Array.from(inner.children, (row) => row.textContent?.trim());
@@ -392,50 +393,65 @@ describe("il trascinamento solleva soltanto il blocco", () => {
   });
 });
 
+/// happy-dom non impagina: ogni riga è alta 20 px, come nel test del moto,
+/// così il posto è deciso dalle righe vere.
+function rowsOf20(view: EditorView): void {
+  vi.spyOn(view, "lineBlockAt").mockImplementation((pos: number) => {
+    const top = (view.state.doc.lineAt(pos).number - 1) * 20;
+    return { from: 0, to: 0, top, bottom: top + 20, height: 20, type: 0, widget: null, widgetLineBreaks: 0 } as ReturnType<EditorView["lineBlockAt"]>;
+  });
+}
+
+/// Prende la maniglia del blocco `index` col puntatore in `y`.
+function grab(view: EditorView, index: number, y: number) {
+  const handles = view.plugin(handlesView)!;
+  const block = view.state.field(blockModel).blocks[index]!;
+  handles.shown = { from: block.from, depth: block.depth };
+  const grip = view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!;
+  grip.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1, clientX: 0, clientY: y }));
+  return {
+    grip,
+    handles,
+    move: (toY: number, toX = 0) => grip.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: toX, clientY: toY })),
+    up: (toY: number) => grip.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: 0, clientY: toY })),
+    slot: () => view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-slot"),
+    lift: () => view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-lift"),
+  };
+}
+
 describe("il frontmatter resta il primo blocco", () => {
-  /// Trascina la maniglia del blocco `index` fino a `y`, e la lascia se
-  /// `release`. happy-dom non impagina: ogni riga è alta 20 px, come nel test
-  /// del moto, così il punto d'arrivo è deciso dalle righe vere.
-  function dragTo(view: EditorView, index: number, y: number, release = true): HTMLElement {
-    vi.spyOn(view, "lineBlockAt").mockImplementation((pos: number) => {
-      const top = (view.state.doc.lineAt(pos).number - 1) * 20;
-      return { from: 0, to: 0, top, bottom: top + 20, height: 20, type: 0, widget: null, widgetLineBreaks: 0 } as ReturnType<EditorView["lineBlockAt"]>;
-    });
-    const handles = view.plugin(handlesView)!;
-    const block = view.state.field(blockModel).blocks[index]!;
-    handles.shown = { from: block.from, depth: block.depth };
-    const grip = view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!;
-    grip.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1, clientX: 0, clientY: 100 }));
-    grip.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 0, clientY: y }));
-    const drop = handles.drop;
-    if (release) grip.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: 0, clientY: y }));
-    return drop;
-  }
   const DOC = "---\nicon: 🌿\n---\nUno\n\nDue";
 
-  it("trascinando sopra il frontmatter, il punto più alto è subito dopo di lui", () => {
+  it("trascinando sopra il frontmatter, il posto più alto è subito dopo di lui", () => {
     const view = mount(DOC, 0, undefined, propertiesDisplay.of("visible"));
-    // Due trascinato fin sopra il frontmatter: la linea d'arrivo sta sul bordo
-    // alto di «Uno», cioè subito sotto il frontmatter (che finisce a 60 px).
-    const drop = dragTo(view, 2, 10, false);
-    expect(drop.hidden, "la linea d'arrivo si vede").toBe(false);
-    expect(drop.style.top).toBe("59px");
-    view.plugin(handlesView)!.endDrag(false);
+    rowsOf20(view);
+    // Due trascinato fin sopra il frontmatter: il posto si apre dove stava
+    // «Uno», cioè subito sotto il frontmatter (che finisce a 60 px).
+    let hand = grab(view, 2, 100);
+    hand.move(10);
+    expect(hand.slot()?.hidden, "il posto si vede").toBe(false);
+    expect(hand.slot()?.style.top).toBe("60px");
+    expect(hand.slot()?.dataset.home, "non è più l'origine").toBeUndefined();
+    hand.handles.endDrag(false);
     expect(view.state.doc.toString()).toBe(DOC);
 
     // Rilasciato lì, Due va fra il frontmatter e Uno: il frontmatter resta primo.
-    dragTo(view, 2, 10);
+    hand = grab(view, 2, 100);
+    hand.move(10);
+    hand.up(10);
     const blocks = view.state.field(blockModel).blocks;
     expect(blocks[0]!.kind).toBe("frontmatter");
     expect(view.state.sliceDoc(blocks[1]!.from, blocks[1]!.to)).toBe("Due");
     expect(view.state.doc.toString()).toBe("---\nicon: 🌿\n---\n\nDue\n\nUno");
   });
 
-  it("trascinato giù, il frontmatter non si sposta e non lascia una linea d'arrivo", () => {
+  it("trascinato giù, il frontmatter non si sposta: il posto resta l'origine", () => {
     const view = mount(DOC, 0, undefined, propertiesDisplay.of("visible"));
-    const drop = dragTo(view, 0, 200, false);
-    expect(drop.hidden, "nessuna linea: non si sposta niente").toBe(true);
-    view.plugin(handlesView)!.endDrag(false);
+    rowsOf20(view);
+    const hand = grab(view, 0, 30);
+    hand.move(200);
+    expect(hand.slot()?.dataset.home, "il posto resta quello d'origine").toBe("true");
+    hand.up(200);
     expect(view.state.doc.toString()).toBe(DOC);
     expect(view.state.field(blockModel).blocks[0]!.kind).toBe("frontmatter");
   });
@@ -453,5 +469,264 @@ describe("il frontmatter resta il primo blocco", () => {
     press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
     expect(view.state.doc.toString(), "un altro passo non trova posto").toBe("---\nicon: 🌿\n---\n\nDue\n\nUno");
     expect(view.state.field(blockModel).blocks[0]!.kind).toBe("frontmatter");
+  });
+});
+
+describe("il blocco in mano (E2)", () => {
+  // Uno (0–20), Due (40–60), il titolo (80–100), Tre (120–140).
+  const DOC = "Uno\n\nDue\n\n# I conti\n\nTre";
+  const live = (view: EditorView) => view.dom.querySelector(".cm-fub-block-live")?.textContent?.trim() ?? "";
+
+  it("si prende dopo 4 px di movimento, con gli occhi socchiusi; un clic resta un clic", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    expect(hand.grip.dataset.held, "premuta, la maniglia socchiude gli occhi").toBe("true");
+    hand.move(13);
+    expect(hand.lift(), "3 px non bastano").toBeNull();
+    hand.move(14);
+    expect(hand.lift(), "4 px sì").not.toBeNull();
+    expect(hand.slot()?.dataset.home, "il posto, grigio, è l'origine").toBe("true");
+    expect(view.dom.classList.contains("cm-fub-blocks-dragging")).toBe(true);
+    hand.handles.endDrag(false);
+    expect(hand.grip.dataset.held).toBeUndefined();
+    expect(hand.lift(), "torna a casa volando").not.toBeNull();
+    hand.handles.returning!.land();
+    expect(hand.lift()).toBeNull();
+    expect(hand.slot()).toBeNull();
+  });
+
+  it("il rilascio sul posto sposta il blocco in un solo passo d'annullamento, e lo dice", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(150);
+    // Fuori dalla sua sezione: l'etichetta e l'annuncio dicono dove cade.
+    expect(view.scrollDOM.querySelector(".cm-fub-block-lift-to")?.textContent).toBe("in «I conti»");
+    expect(live(view)).toBe("Posizione 4 di 4, in «I conti»");
+    hand.up(150);
+    expect(view.state.doc.toString()).toBe("Due\n\n# I conti\n\nTre\n\nUno");
+    expect(hand.lift(), "il blocco in mano se ne va").toBeNull();
+    undo(view);
+    expect(view.state.doc.toString(), "un Ctrl+Z e torna tutto").toBe(DOC);
+  });
+
+  it("annuncia ogni cambio di posto, non la presa", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const before = live(view);
+    const hand = grab(view, 0, 10);
+    hand.move(16);
+    expect(live(view), "alla presa il blocco è al suo posto").toBe(before);
+    hand.move(70);
+    expect(live(view)).toBe("Posizione 2 di 4");
+    hand.handles.endDrag(false);
+  });
+
+  it("Esc lo riporta dov'era, senza toccare il testo", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(150);
+    const lift = hand.lift()!;
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(view.dom.classList.contains("cm-fub-blocks-dragging")).toBe(false);
+    // Torna a casa da dov'è: la copia resta in pagina e vola, alla fine
+    // nella grandezza vera; ombra, posto ed etichette svaniscono; le righe
+    // vere restano nascoste e i vicini tornano al loro posto.
+    expect(hand.lift()).toBe(lift);
+    expect(lift.style.transform, "il volo parte dalla posa, non dal riposo").toBe("");
+    expect(lift.querySelector<HTMLElement>(".cm-fub-block-lift-card")!.style.transform).toBe(`scale(${1 / LIFT_SCALE})`);
+    expect(lift.querySelector<HTMLElement>(".cm-fub-block-lift-shade")!.style.opacity).toBe("0");
+    expect(lift.querySelector<HTMLElement>(".cm-fub-block-lift-tags")!.style.opacity).toBe("0");
+    expect(hand.slot()!.style.opacity).toBe("0");
+    expect(view.state.field(dragPose).lifted, "le righe vere aspettano la copia").not.toBeNull();
+    expect(view.state.field(dragPose).parted).toEqual([]);
+    hand.handles.returning!.land();
+    expect(hand.lift()).toBeNull();
+    expect(hand.slot()).toBeNull();
+    expect(view.state.field(dragPose).lifted, "arrivata, le righe vere riappaiono").toBeNull();
+    hand.up(150);
+    expect(view.state.doc.toString()).toBe(DOC);
+  });
+
+  it("una presa nuova posa subito il blocco che sta tornando a casa", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    let hand = grab(view, 0, 10);
+    hand.move(150);
+    hand.handles.endDrag(false);
+    expect(hand.handles.returning).not.toBeNull();
+    hand = grab(view, 0, 10);
+    expect(hand.handles.returning).toBeNull();
+    expect(view.scrollDOM.querySelectorAll(".cm-fub-block-lift")).toHaveLength(0);
+    hand.handles.endDrag(false);
+  });
+
+  it("a puntatore fermo il blocco in mano arriva e il ciclo dei fotogrammi si spegne", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(150);
+    const drag = hand.handles.drag!;
+    expect(drag.hold!.frames, "acceso mentre corre").not.toBeNull();
+    expect(drag.hold!.el.style.willChange, "uno strato suo mentre corre").toBe("transform");
+    for (let frame = 0; frame < 120 && drag.hold!.frames; frame += 1) hand.handles.follow(drag);
+    expect(drag.hold!.frames, "spento all'arrivo").toBeNull();
+    expect(drag.hold!.el.style.willChange, "fermo, il testo si ridisegna nitido").toBe("");
+    expect(drag.hold!.cy).toBe(drag.hold!.ty);
+    hand.move(70);
+    expect(drag.hold!.frames, "riacceso al movimento").not.toBeNull();
+    hand.handles.endDrag(false);
+    expect(drag.hold!.frames).toBeNull();
+    hand.handles.returning?.land();
+  });
+
+  it("la finestra che perde il fuoco riporta il blocco al suo posto", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(150);
+    window.dispatchEvent(new Event("blur"));
+    hand.handles.returning!.land();
+    expect(hand.lift()).toBeNull();
+    expect(view.state.doc.toString()).toBe(DOC);
+  });
+
+  it("il testo cambiato da fuori durante il gesto lo annulla: vince il testo nuovo", async () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(150);
+    view.dispatch({ changes: { from: view.state.doc.length, insert: "\n\nQuattro" } });
+    await Promise.resolve();
+    expect(hand.lift()).toBeNull();
+    hand.up(150);
+    expect(view.state.doc.toString()).toBe(`${DOC}\n\nQuattro`);
+  });
+
+  it("un blocco alto si fa compatto: al più 104 px, tagliato, col suo tipo", () => {
+    const tall = "```\n1\n2\n3\n4\n5\n6\n7\n8\n```\n\nDopo";
+    const view = mount(tall, tall.length);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(30);
+    const lift = hand.lift()!;
+    expect(lift.style.height).toBe("104px");
+    expect(lift.querySelector<HTMLElement>(".cm-fub-block-lift-card")?.dataset.clipped).toBe("true");
+    expect(lift.querySelector(".cm-fub-block-lift-more")?.textContent).toBeTruthy();
+    expect(hand.slot()?.style.height).toBe("104px");
+    hand.handles.endDrag(false);
+  });
+});
+
+describe("il blocco in mano (E2), i casi limite", () => {
+  const DOC = "Uno\n\nDue\n\n# I conti\n\nTre";
+  const live = (view: EditorView) => view.dom.querySelector(".cm-fub-block-live")?.textContent?.trim() ?? "";
+
+  it("a riposo carta e ombra sono più grandi dell'1,5%: la presa cresce, non cala", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(30);
+    expect(hand.lift()).not.toBeNull();
+    // La regola del tema: la scala a riposo è LIFT_SCALE, e la presa parte da
+    // 1/LIFT_SCALE (cioè dalla grandezza vera) verso quella.
+    const css = Array.from(document.querySelectorAll("style"), (style) => style.textContent ?? "").join("\n");
+    const rule = /\.cm-fub-block-lift-shade,\s*\.cm-fub-block-lift-card[^{]*\{([^}]*)\}/.exec(css.replace(/\.ͼ\w+ /g, ""));
+    expect(rule, "la regola della carta in mano").not.toBeNull();
+    expect(rule![1]).toContain(`scale: ${LIFT_SCALE}`);
+    expect(LIFT_SCALE).toBeGreaterThan(1);
+    hand.handles.endDrag(false);
+  });
+
+  it("la copia in mano non ha id né fuoco", () => {
+    const view = mount("Uno ^abc123\n\nDue", 0);
+    rowsOf20(view);
+    view.contentDOM.querySelector(".cm-line")?.setAttribute("id", "riga");
+    const hand = grab(view, 0, 10);
+    hand.move(30);
+    const lift = hand.lift()!;
+    expect(lift.hasAttribute("inert")).toBe(true);
+    expect(lift.getAttribute("aria-hidden")).toBe("true");
+    expect(lift.querySelector("[id]")).toBeNull();
+    hand.handles.endDrag(false);
+  });
+
+  it("la misura rifatta dentro l'aggiornamento di CodeMirror non spedisce una transazione lì dentro", async () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const hand = grab(view, 0, 10);
+    hand.move(150);
+    // Le righe cambiano altezza (la finestra si stringe): la posa cambia.
+    vi.spyOn(view, "lineBlockAt").mockImplementation((pos: number) => {
+      const top = (view.state.doc.lineAt(pos).number - 1) * 30;
+      return { from: 0, to: 0, top, bottom: top + 30, height: 30, type: 0, widget: null, widgetLineBreaks: 0 } as ReturnType<EditorView["lineBlockAt"]>;
+    });
+    const before = view.state.field(dragPose).parted;
+    hand.handles.remeasure(hand.handles.drag!);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await Promise.resolve();
+    expect(errors.mock.calls.flat().join(" ")).not.toMatch(/update is in progress/);
+    expect(view.state.field(dragPose).parted, "la posa nuova è scritta, appena dopo").not.toEqual(before);
+    errors.mockRestore();
+    hand.handles.endDrag(false);
+  });
+
+  it("Mod-Shift-↓ dice il posto come il trascinamento", () => {
+    const view = mount("# I conti\n\nUno\n\nDue", 12);
+    press(view, "ArrowDown", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString()).toBe("# I conti\n\nDue\n\nUno");
+    expect(live(view)).toBe("Posizione 3 di 3, in «I conti»");
+  });
+
+  it("il testo cambiato prima della presa annulla il gesto", async () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    view.dispatch({ changes: { from: view.state.doc.length, insert: "\n\nQuattro" } });
+    await Promise.resolve();
+    expect(hand.handles.drag).toBeNull();
+    hand.move(150);
+    expect(hand.lift()).toBeNull();
+  });
+
+  it("durante un gesto il tasto destro (la pressione lunga) non apre il menu", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.grip.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 5, clientY: 5 }));
+    expect(document.querySelector("#context-menu")).toBeNull();
+    hand.handles.endDrag(false);
+    closeContextMenu();
+  });
+
+  it("in una vista scalata (la lavagna con lo zoom) il posto si conta in px di CodeMirror", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    Object.defineProperty(view, "scaleX", { value: 2, configurable: true });
+    Object.defineProperty(view, "scaleY", { value: 2, configurable: true });
+    // Il puntatore a 150 px di schermo è a 75 px di CodeMirror: dopo «Due»,
+    // non in fondo come sarebbe a scala 1.
+    let hand = grab(view, 0, 20);
+    hand.move(150);
+    expect(live(view)).toBe("Posizione 2 di 4");
+    hand.handles.endDrag(false);
+    // A 300 px di schermo, 150 di CodeMirror: in fondo.
+    hand = grab(view, 0, 20);
+    hand.move(300);
+    hand.up(300);
+    expect(view.state.doc.toString()).toBe("Due\n\n# I conti\n\nTre\n\nUno");
+  });
+
+  it("«Accanto» a sinistra chiede il puntatore ben oltre il bordo: una deriva non basta", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(70, -24);
+    expect(view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-drop")?.hidden, "nessuna barra").toBe(true);
+    expect(live(view)).toBe("Posizione 2 di 4");
+    hand.handles.endDrag(false);
   });
 });
