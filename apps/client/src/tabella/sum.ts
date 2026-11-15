@@ -7,7 +7,7 @@
 export type DecimalMark = "," | ".";
 
 /// Un numero letto da una cella, con ciò che serve a riscriverlo come lui.
-interface Reading {
+export interface Reading {
   readonly value: number;
   readonly places: number;
   readonly grouped: boolean;
@@ -74,11 +74,21 @@ export function decimalMarkOf(texts: readonly string[], language: string): Decim
 /// su): i numeri fino al primo valore che non lo è, come la somma automatica
 /// dei fogli di calcolo. Il totale ha i decimali e il separatore delle
 /// migliaia dei numeri sommati. `null` se subito sopra non ci sono numeri.
+///
+/// Il segno dei decimali lo dicono soltanto i numeri del blocco sommato:
+/// un «3.5» più su, oltre un valore che non è un numero, non fa leggere
+/// «1.240» come uno virgola ventiquattro.
 export function sumAbove(above: readonly string[], language: string): string | null {
-  const decimal = decimalMarkOf(above, language);
-  const readings: Reading[] = [];
+  const block: string[] = [];
   for (const text of above) {
-    const reading = text.trim() === "" ? null : readNumber(text, decimal);
+    if (text.trim() === "" || !isNumberText(text)) break;
+    block.push(text);
+  }
+  const decimal = decimalMarkOf(block, language);
+  const readings: Reading[] = [];
+  // Un numero scritto con l'altro segno ferma la somma lì, come un testo.
+  for (const text of block) {
+    const reading = readNumber(text, decimal);
     if (!reading) break;
     readings.push(reading);
   }
@@ -86,6 +96,27 @@ export function sumAbove(above: readonly string[], language: string): string | n
   const places = Math.max(...readings.map((reading) => reading.places));
   const total = readings.reduce((sum, reading) => sum + reading.value, 0);
   return writeNumber(total, places, decimal, readings.some((reading) => reading.grouped));
+}
+
+/// Ciò che `readNumbers` legge: i numeri e il segno dei decimali del gruppo.
+export interface NumberGroup {
+  readonly decimal: DecimalMark;
+  readonly numbers: readonly Reading[];
+}
+
+/// `texts` letti insieme come numeri, col segno dei decimali che mostrano
+/// (`decimalMarkOf`), altrimenti con quello della lingua: un gruppo si legge
+/// tutto con lo stesso segno. `null` se uno di loro non è un numero così.
+/// La somma e il riempimento delle serie leggono i numeri allo stesso modo.
+export function readNumbers(texts: readonly string[], language: string): NumberGroup | null {
+  const decimal = decimalMarkOf(texts, language);
+  const numbers: Reading[] = [];
+  for (const text of texts) {
+    const reading = readNumber(text, decimal);
+    if (!reading) return null;
+    numbers.push(reading);
+  }
+  return { decimal, numbers };
 }
 
 /// Un numero scritto col segno dei decimali `decimal`, `places` decimali e,

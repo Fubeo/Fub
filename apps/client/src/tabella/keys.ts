@@ -116,11 +116,12 @@ export function shiftLinesKey(event: KeyLike): { readonly axis: "rows" | "column
   }
 }
 
-/// Alt+=, la somma automatica dei fogli di calcolo. Conta il carattere
-/// (su una tastiera italiana «=» è Maiusc+0) e il tasto fisico, perché su
-/// macOS Alt cambia il carattere («≠»).
+/// Alt+=, la somma automatica dei fogli di calcolo. Conta il carattere, con
+/// Maiusc o senza: su una tastiera italiana «=» è Maiusc+0, e il tasto che
+/// sulla tastiera inglese fa «=» lì scrive «ì». Su macOS Opzione cambia il
+/// carattere di quel tasto in «≠», che vale lo stesso.
 export function sumKey(event: KeyLike): boolean {
-  return event.altKey && !event.ctrlKey && !event.metaKey && (event.key === "=" || event.code === "Equal");
+  return event.altKey && !event.ctrlKey && !event.metaKey && (event.key === "=" || event.key === "≠");
 }
 
 /// Ctrl (o Cmd)+;, la data di oggi. Conta il carattere: su una tastiera
@@ -210,6 +211,9 @@ export function editingIntent(event: KeyLike, mode: "replace" | "edit"): Editing
   const lower = event.key.toLowerCase();
   if (todayKey(event)) return { kind: "today" };
   if (mod && !event.shiftKey && (lower === "b" || lower === "i")) return { kind: "format", which: lower === "b" ? "bold" : "italic" };
+  // Alt con una freccia resta del campo, come ogni tasto che la cella non
+  // usa: non conferma, non esce e non sposta righe o colonne.
+  if (event.altKey && event.key.startsWith("Arrow")) return null;
   switch (event.key) {
     case "Enter": return { kind: "commit", rows: event.shiftKey ? -1 : 1, columns: 0 };
     case "Tab": return { kind: "commit-tab", step: event.shiftKey ? -1 : 1 };

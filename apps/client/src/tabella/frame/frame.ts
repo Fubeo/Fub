@@ -44,7 +44,7 @@ import { structureEdit, TABLE_ALIGNS, TABLE_COMMANDS, tableCommand, type TableCo
 import { columnCompletion, type ColumnCompletion } from "../completion";
 import { editingIntent, sheetIntent, type TableFormat } from "../keys";
 import { boundedShape, dataEdge, isMultiCell, nextInRange, type Cell, type Move, type Range, type Shape } from "../navigation";
-import { fillCopy, fillRange, rangeBetween, wholeRange, withRange } from "../selection";
+import { fillCopy, fillRange, fillToEndRange, rangeBetween, wholeRange, withRange } from "../selection";
 import { fillSeries, todayText } from "../series";
 import { sumAbove } from "../sum";
 import { animate } from "../../moto";
@@ -83,6 +83,10 @@ export interface TableFrameHost {
   /// Un avviso breve per chi scrive (un gesto che con più intervalli non si
   /// fa). Senza, il gesto rifiutato tace.
   notice?(text: string): void;
+  /// La lingua della tabella (quella che la nota dichiara, per esempio), o
+  /// `null`: la serie e la somma la usano dove due letture sono possibili
+  /// («mar» martedì o marzo, «1.000» mille o uno). Senza, vale quella di Fub.
+  language?(): string | null;
   focused?(): void;
   changed?(): void;
   /// `false` se la griglia non è una fermata del Tab: una tabella dentro un
@@ -105,7 +109,22 @@ interface Editing {
   /// Il completamento dalla colonna, letta all'apertura della cella; `null`
   /// nell'intestazione.
   readonly completion: ColumnCompletion | null;
+  /// Il valore della colonna proposto adesso, scritto come nella colonna:
+  /// se la cella si conferma con quel testo (le maiuscole non contano), la
+  /// cella prende il valore della colonna. `null` senza proposta.
+  proposal: string | null;
+  /// Vero mentre il campo scrive la proposta: l'evento `input` che ne nasce
+  /// non è una battuta, e non completa di nuovo.
+  proposing: boolean;
 }
+
+/// La classe del campo mentre il resto proposto è selezionato: solo lì la
+/// selezione si colora con l'accento.
+const PROPOSAL = "is-proposal";
+
+/// I tasti che da soli non scrivono e non spostano il cursore: tenerli non
+/// toglie il colore della proposta.
+const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "CapsLock"]);
 
 /// Gli avvisi che la Tabella dà una volta sola in una sessione: il primo
 /// completamento, la prima somma scritta come valore, il primo «=».
@@ -859,6 +878,12 @@ export class TableFrame {
     this.apply({ kind: "set", blocks: this.ranges.map((range) => blank(range)) });
   }
 
+  /// La lingua della tabella: quella che l'ospite dice (la nota che la
+  /// dichiara), altrimenti quella di Fub.
+  #language(): string {
+    return this.#host.language?.() || resolvedLanguage();
+  }
+
   /// Scrive `text` nella cella `at`, in un passo, e la selezione resta.
   /// `false` se la cella diceva già così o adesso non si può.
   #write(at: Cell, text: string): boolean {
@@ -874,7 +899,7 @@ export class TableFrame {
     const { row, column } = this.active;
     const above: string[] = [];
     for (let r = row - 1; r >= this.#host.caps().headerRows; r--) above.push(this.#host.cellText(r, column));
-    const total = sumAbove(above, resolvedLanguage());
+    const total = sumAbove(above, this.#language());
     if (total === null) {
       this.#host.notice?.(t("table.sum.none"));
       return;
@@ -969,7 +994,7 @@ export class TableFrame {
     // La colonna si legge adesso, una volta: a ogni battuta il completamento
     // cerca soltanto fra i valori già letti.
     const completion = row >= this.#host.caps().headerRows ? this.#columnCompletion(row, column) : null;
-    const editing: Editing = { row, column, input, mode, original, life, completion };
+    const editing: Editing = { row, column, input, mode, original, life, completion, proposal: null, proposing: false };
     this.#editing = editing;
     this.#placeOverlays();
     input.focus({ preventScroll: true });
@@ -978,11 +1003,20 @@ export class TableFrame {
     if (completion) {
       // Si completa a ogni lettera scritta, non mentre l'IME compone: lì si
       // completa quando la composizione finisce. Cancellare non completa, così
-      // Canc toglie la proposta.
+      // Canc toglie la proposta. Ogni testo nuovo toglie la proposta di prima.
       life.listen(input, "input", (event) => {
+        if (editing.proposing) return;
+        this.#dropProposal(editing);
         const typed = event as InputEvent;
         if (!typed.isComposing && (typed.inputType === "insertText" || typed.inputType === "insertCompositionText")) this.#complete(editing);
       });
+      // Il colore della proposta vale finché il resto è selezionato: un tasto
+      // o un clic nel campo lo toglie, anche quando la proposta resta (una
+      // freccia che porta il cursore in fondo).
+      life.listen(input, "keydown", (event) => {
+        if (!MODIFIERS.has((event as KeyboardEvent).key)) input.classList.remove(PROPOSAL);
+      });
+      life.listen(input, "pointerdown", () => input.classList.remove(PROPOSAL));
       let composed: ReturnType<typeof setTimeout> | null = null;
       life.listen(input, "compositionend", () => {
         if (composed !== null) clearTimeout(composed);
@@ -1018,15 +1052,39 @@ export class TableFrame {
 
   /// Propone il resto di un valore della colonna, selezionato, se il cursore
   /// è in fondo a ciò che si è scritto. La prima volta dice come si usa.
+  ///
+  /// Il resto entra come una scrittura del campo (`insertText`), non
+  /// riscrivendo il valore: così l'annulla del campo lo conosce, e Ctrl+Z
+  /// torna a ciò che si era scritto. Dove il browser non lo sa fare, il resto
+  /// entra con `setRangeText`.
   #complete(editing: Editing): void {
     const { input, completion } = editing;
     const typed = input.value;
     if (!completion || input.selectionStart !== typed.length || input.selectionEnd !== typed.length) return;
     const proposal = completion.suggest(typed);
     if (proposal === null) return;
-    input.value = proposal;
-    input.setSelectionRange(typed.length, proposal.length);
+    const rest = proposal.slice(typed.length);
+    editing.proposing = true;
+    let inserted = false;
+    try {
+      inserted = input.ownerDocument.execCommand("insertText", false, rest);
+    } catch {
+      inserted = false;
+    } finally {
+      editing.proposing = false;
+    }
+    if (!inserted && input.value === typed) input.setRangeText(rest, typed.length, typed.length, "end");
+    if (input.value !== typed + rest) return;
+    input.setSelectionRange(typed.length, input.value.length);
+    editing.proposal = proposal;
+    input.classList.add(PROPOSAL);
     tellOnce(this.#host.notice, "table.completion.told");
+  }
+
+  /// Toglie la proposta: il testo del campo resta com'è.
+  #dropProposal(editing: Editing): void {
+    editing.proposal = null;
+    editing.input.classList.remove(PROPOSAL);
   }
 
   /// Chiude la modifica: `commit` scrive il testo, altrimenti si torna a
@@ -1037,13 +1095,19 @@ export class TableFrame {
     this.#editing = null;
     editing.life.close();
     const hadFocus = editing.input.ownerDocument.activeElement === editing.input;
-    const value = editing.input.value.replace(/\r?\n/g, " ");
+    const typed = editing.input.value.replace(/\r?\n/g, " ");
+    // La proposta accettata scrive il valore della colonna com'è scritto lì:
+    // «r» e Invio dà «Roma», come in Excel.
+    const { proposal } = editing;
+    const value = proposal !== null && typed.toLocaleLowerCase() === proposal.toLocaleLowerCase() ? proposal : typed;
     const cell = this.#cells[editing.row]?.[editing.column];
     if (cell) delete cell.dataset.shown;
     if (commit && value !== editing.original) {
       const written = this.apply({ kind: "set", blocks: [{ row: editing.row, column: editing.column, rows: [[value]] }] });
       // Chi scrive una formula la vede restare testo: lo si dice una volta.
-      if (written && value.trimStart().startsWith("=")) tellOnce(this.#host.notice, "table.formula.text");
+      // Non per «==» (un segno scritto, non una formula) né per un «=» che
+      // non sta in testa.
+      if (written && value.startsWith("=") && !value.startsWith("==")) tellOnce(this.#host.notice, "table.formula.text");
     }
     this.#fill();
     this.#paintSelection();
@@ -1288,10 +1352,11 @@ export class TableFrame {
   }
 
   /// Riempie `target` a partire da `source`, che vi sta dentro a un capo:
-  /// ogni riga (o colonna) continua la sua serie. I giorni e i mesi seguono
-  /// la lingua di Fub dove due serie dicono la stessa parola.
+  /// ogni riga (o colonna) continua la sua serie. Dove due serie dicono la
+  /// stessa parola, o un numero si legge in due modi, vale la lingua della
+  /// tabella (`#language`).
   fill(source: Range, target: Range): boolean {
-    const language = resolvedLanguage();
+    const language = this.#language();
     const down = target.r1 > source.r1;
     const up = target.r0 < source.r0;
     const right = target.c1 > source.c1;
@@ -1326,16 +1391,17 @@ export class TableFrame {
     return this.apply({ kind: "set", blocks }, { anchor: { row: target.r0, column: target.c0 }, focus: { row: target.r1, column: target.c1 } });
   }
 
-  /// Il doppio clic sulla maniglia: la serie scende fino in fondo alla
-  /// tabella.
+  /// Il doppio clic sulla maniglia: la serie scende quanto la colonna
+  /// accanto, senza scrivere sopra una cella piena (`fillToEndRange`).
   #fillToEnd(event: MouseEvent): void {
     event.preventDefault();
     event.stopPropagation();
     if (this.#host.readOnly() || this.#refuseMany()) return;
     const source = this.range;
-    const last = this.#host.size().rows - 1;
-    if (source.r1 >= last) return;
-    this.fill(source, { ...source, r1: last });
+    const { rows, columns } = this.#host.size();
+    const filled = (row: number, column: number) => this.#host.cellText(row, column).trim() !== "";
+    const target = fillToEndRange(source, rows, columns, filled, this.#host.caps().headerRows);
+    if (target) this.fill(source, target);
   }
 
   #dblclick(event: MouseEvent): void {

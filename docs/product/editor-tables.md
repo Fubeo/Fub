@@ -60,12 +60,19 @@ celle il puntatore resta la freccia.
   degli ultimi due, un testo che finisce con un numero, i giorni della
   settimana e i mesi, corti o interi, in italiano e in inglese («lun», «mar»…;
   «gennaio», «febbraio»…; «Jan», «Feb»…), col passo della sorgente, dopo
-  dicembre di nuovo gennaio e con le maiuscole del primo valore; dove una
-  parola è di due lingue («mar») vince la lingua di Fub. Il doppio clic sul
-  quadratino riempie fino in fondo alla tabella.
+  dicembre di nuovo gennaio e con le maiuscole del primo valore. Dove una
+  parola è di due lingue («mar») o un numero si legge in due modi («1.000»)
+  vale la lingua della nota (`lang:` nel frontmatter), altrimenti quella di
+  Fub; i numeri si leggono come nella somma. Il doppio clic sul quadratino
+  riempie in giù quanto la colonna accanto (quella a sinistra, altrimenti
+  quella a destra), come Excel: si ferma prima di una cella già piena, non
+  fa niente senza una colonna accanto piena e non porta l'intestazione nel
+  corpo.
 - Scrivendo in una cella la Tabella propone un valore già scritto nella
-  stessa colonna, col resto scelto: Invio o Tab lo accetta, continuare a
-  scrivere lo ignora, Canc lo toglie. Propone soltanto quando un valore solo
+  stessa colonna, col resto scelto e lavato d'accento: Invio o Tab lo
+  accetta, e la cella prende il valore com'è scritto nella colonna («r»
+  accettato è «Roma»); continuare a scrivere lo ignora, Canc lo toglie, e
+  Mod+Z dentro la cella torna a ciò che si era scritto. Propone soltanto quando un valore solo
   comincia così (come Excel: con «Roma» e «Romagna», «Rom» non propone
   niente), mai nell'intestazione, mai i numeri e mai a chi scrive un numero;
   con l'IME aspetta la fine della composizione. La colonna si legge quando
@@ -74,16 +81,19 @@ celle il puntatore resta la freccia.
 - Alt+= scrive nella cella attiva la somma dei numeri subito sopra, fino al
   primo valore che non è un numero o all'intestazione. È un numero, non una
   formula: non si aggiorna, e la prima volta lo dice. I numeri si leggono
-  all'italiana («1.240,50») o all'inglese («1,240.50») come li scrive la
-  colonna; dove la colonna non lo dice («1.240») decide la lingua di Fub. Il
-  totale tiene i decimali e il separatore delle migliaia dei numeri sommati.
-  Senza numeri sopra non scrive niente e lo dice.
+  all'italiana («1.240,50») o all'inglese («1,240.50») come li scrivono i
+  numeri sommati, non quelli più su; dove non lo dicono («1.240») decide la
+  lingua della nota, altrimenti quella di Fub. Il totale tiene i decimali e
+  il separatore delle migliaia dei numeri sommati. Senza numeri sopra non
+  scrive niente e lo dice. Conta il carattere «=», con Maiusc o senza: sulla
+  tastiera italiana è Alt+Maiusc+0.
 - Mod+; scrive la data del giorno nella lingua di Fub («15 nov 2026»): nella
   cella attiva, o dove sta il cursore se la cella è aperta.
 - Alt con una freccia sposta di un posto le righe (su, giù) o le colonne
   (sinistra, destra) della selezione, e la selezione le segue; l'intestazione
-  non si sposta.
-- Chi scrive una cella che comincia con `=` vede, la prima volta, che nelle
+  non si sposta. Con la cella aperta Alt con una freccia resta del campo: non
+  conferma e non sposta niente.
+- Chi scrive una cella che comincia con un `=` solo (non `==`) vede, la prima volta, che nelle
   tabelle Markdown resta testo e che le formule che si aggiornano sono quelle
   del foglio.
 - Mod+«+» inserisce prima della selezione tante righe quante ne sono scelte
@@ -93,7 +103,8 @@ celle il puntatore resta la freccia.
 - Mod+B, Mod+I e Mod+Maiusc+X mettono grassetto, corsivo e barrato.
 - Il menu contestuale (tasto destro, tasto menu, Maiusc+F10 o, al tocco, il
   tocco lungo) inserisce, sposta ed elimina righe e colonne, ordina secondo la
-  colonna attiva, allinea a sinistra, al centro o a destra, copia, taglia e
+  colonna attiva (i numeri, letti come nella somma, prima del testo; le celle
+  vuote in fondo), allinea a sinistra, al centro o a destra, copia, taglia e
   svuota. I pulsanti «+ Riga» e «+ Colonna» sotto la tabella aggiungono in
   fondo. Al tocco due maniglie agli angoli della selezione la allargano.
 - Dove si scrive col dito, col cursore in una tabella la barra di
@@ -152,10 +163,14 @@ la selezione, Mod+D e Mod+R riempiono, Mod+«+» e Mod+«−» inseriscono e
 tolgono righe o colonne, con le stesse regole del modo foglio; le colonne si
 toccano soltanto dove nessuna cella è unita. Senza celle scelte Invio va a
 capo, Mod+R allinea a destra e Mod+«+» fa l'apice, come nel resto del testo.
-Mod+; scrive la data del giorno dove sta il cursore (con celle scelte, al posto
-del testo della cella attiva). Alt con una freccia sposta le righe o le colonne delle
-celle scelte; senza celle scelte la freccia resta del testo (su macOS Alt
-salta di parola).
+Mod+; scrive la data del giorno dove sta il cursore. Con celle scelte la data
+va nella cella attiva: al posto del testo se la cella ha soltanto un
+paragrafo di testo semplice, altrimenti in fondo al suo primo paragrafo, dopo
+uno spazio, così stili, paragrafi e oggetti restano. Alt con una freccia
+sposta le righe o le colonne delle celle scelte; senza celle scelte la freccia
+resta del testo (su macOS Alt salta di parola). Mod+Alt con una freccia
+sposta la riga o la colonna del cursore con la stessa regola: le colonne non
+si spostano dove una cella è unita.
 
 Sulle celle scelte Canc svuota tutti gli intervalli, copia passa TSV e una
 tabella HTML (con più intervalli rifiuta, e lo dice, come i fogli), e

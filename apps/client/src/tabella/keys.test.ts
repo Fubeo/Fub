@@ -90,9 +90,13 @@ describe("i tasti della Tabella", () => {
     // Con Maiusc o Ctrl in più non si spostano righe: restano le frecce.
     expect(sheetIntent(press("ArrowDown", { altKey: true, shiftKey: true }))?.kind).not.toBe("shift-lines");
     expect(sheetIntent(press("ArrowDown", { altKey: true, ctrlKey: true }))?.kind).not.toBe("shift-lines");
-    expect(sheetIntent(press("=", { altKey: true }))).toEqual({ kind: "sum" });
-    // Su macOS Alt cambia il carattere: conta il tasto.
+    // Conta il carattere: sulla tastiera inglese «=» senza Maiusc, su quella
+    // italiana Maiusc+0, su macOS Opzione lo cambia in «≠».
+    expect(sheetIntent(press("=", { altKey: true, code: "Equal" }))).toEqual({ kind: "sum" });
+    expect(sheetIntent(press("=", { altKey: true, shiftKey: true, code: "Digit0" }))).toEqual({ kind: "sum" });
     expect(sheetIntent(press("≠", { altKey: true, code: "Equal" }))).toEqual({ kind: "sum" });
+    // Sulla tastiera italiana il tasto «Equal» scrive «ì»: Alt+ì non somma.
+    expect(sheetIntent(press("ì", { altKey: true, code: "Equal" }))?.kind).not.toBe("sum");
     expect(sheetIntent(press(";", { ctrlKey: true }))).toEqual({ kind: "today" });
     // Su una tastiera italiana «;» è Maiusc+«,».
     expect(sheetIntent(press(";", { ctrlKey: true, shiftKey: true, code: "Comma" }))).toEqual({ kind: "today" });
@@ -102,6 +106,14 @@ describe("i tasti della Tabella", () => {
   it("nella cella aperta Ctrl+; scrive la data, Alt+Invio conferma come Invio", () => {
     expect(editingIntent(press(";", { ctrlKey: true }), "edit")).toEqual({ kind: "today" });
     expect(editingIntent(press("Enter", { altKey: true }), "edit")).toEqual({ kind: "commit", rows: 1, columns: 0 });
+  });
+
+  it("nella cella aperta Alt con le frecce resta del campo: non conferma e non esce", () => {
+    for (const key of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]) {
+      expect(editingIntent(press(key, { altKey: true }), "edit")).toBeNull();
+      expect(editingIntent(press(key, { altKey: true }), "replace")).toBeNull();
+    }
+    expect(editingIntent(press("ArrowDown"), "edit")).toEqual({ kind: "commit", rows: 1, columns: 0 });
   });
 
   it("nel documento Ctrl+; vale sempre, Alt con le frecce solo con celle scelte, Alt+= mai", () => {

@@ -16,7 +16,8 @@
 // (`bounded`) lì confrontano soltanto la cella attiva e le celle. Il foglio
 // esegue alcuni gesti coi comandi del suo catalogo: lì il caso controlla il
 // comando chiesto (`delegated`) invece delle celle; un gesto che il foglio
-// non ha lo dice col perché (`workbookAbsent`).
+// non ha lo dice col perché (`workbookAbsent`), e così uno che lì fa
+// apposta un'altra cosa (`workbookDiffers`).
 //
 // Un gesto che scrive conta le scritture (`edits`): una scrittura è un passo
 // solo dell'annulla, e Ctrl+Z lo toglie tutto. Nel documento l'annulla è
@@ -73,6 +74,10 @@ export interface ConformanceCase {
   /// Perché il foglio (l'adattatore che delega al suo catalogo) non ha il
   /// gesto: lì la prova controlla che non chieda nessun comando.
   readonly workbookAbsent?: string;
+  /// Perché nel foglio lo stesso gesto fa apposta un'altra cosa (il foglio
+  /// non ha una riga d'intestazione, per esempio): lì il caso non si prova,
+  /// e la prova del foglio lo elenca saltato col perché.
+  readonly workbookDiffers?: string;
   /// Il giorno della prova (una data ISO): l'orologio del driver lo segna.
   readonly today?: string;
   readonly steps: readonly ConformanceStep[];
@@ -140,7 +145,7 @@ export interface ConformanceResult {
 export function caseApplies(test: ConformanceCase, target: TableCaps | ConformanceTarget): boolean {
   const full: ConformanceTarget = "mode" in target ? target : { mode: "sheet", caps: target, bounded: true, delegates: false };
   if (!(test.modes ?? ALL_MODES).includes(full.mode) || test.absent?.[full.mode]) return false;
-  if (full.delegates && test.workbookAbsent) return false;
+  if (full.delegates && (test.workbookAbsent || test.workbookDiffers)) return false;
   if (full.delegates && test.delegated) return true;
   return (test.needs ?? []).every((need) => full.caps[need]);
 }
@@ -450,13 +455,25 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
     edits: 1,
   },
   {
-    name: "il completamento si accetta anche con Tab, che va avanti",
+    // La cella prende il valore della colonna com'è scritto lì, come in
+    // Excel: «r» accettato è «Roma».
+    name: "il completamento si accetta anche con Tab, che va avanti, e scrive il valore della colonna",
     absent: { document: NO_COMPLETION },
     workbookAbsent: NOT_IN_ENGINE,
     rows: CITIES,
     steps: [{ key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "r" }, { key: "Tab" }],
-    cells: [["Città", "Note"], ["Roma", "a"], ["Milano", "b"], ["roma", ""]],
+    cells: [["Città", "Note"], ["Roma", "a"], ["Milano", "b"], ["Roma", ""]],
     active: { row: 3, column: 1 },
+  },
+  {
+    name: "Alt con una freccia nella cella aperta non conferma e non sposta",
+    modes: ["sheet"],
+    workbookAbsent: NOT_IN_ENGINE,
+    rows: ROWS,
+    steps: [{ key: "ArrowDown" }, { key: "x" }, { key: "ArrowDown", alt: true }, { key: "ArrowRight", alt: true }, { key: "Escape" }],
+    cells: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]],
+    active: { row: 1, column: 0 },
+    edits: 0,
   },
   {
     name: "il completamento tace nell'intestazione",
@@ -512,13 +529,69 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
     edits: 1,
   },
   {
+    // Come Excel: la serie non scrive sopra una cella già piena.
+    name: "il doppio clic sulla maniglia si ferma prima di una cella piena",
+    absent: { document: NO_HANDLE },
+    delegated: "edit.autoFill",
+    rows: [["Giorno", "Ore"], ["lun", "8"], ["", "7"], ["gio", "6"], ["", "5"]],
+    steps: [{ key: "ArrowDown" }, { pointer: { kind: "fill-double" } }],
+    cells: [["Giorno", "Ore"], ["lun", "8"], ["mar", "7"], ["gio", "6"], ["", "5"]],
+    edits: 1,
+  },
+  {
+    name: "il doppio clic sulla maniglia scende quanto la colonna accanto",
+    absent: { document: NO_HANDLE },
+    delegated: "edit.autoFill",
+    rows: [["Giorno", "Ore"], ["lun", "8"], ["", "7"], ["", ""], ["", ""]],
+    steps: [{ key: "ArrowDown" }, { pointer: { kind: "fill-double" } }],
+    cells: [["Giorno", "Ore"], ["lun", "8"], ["mar", "7"], ["", ""], ["", ""]],
+    edits: 1,
+  },
+  {
+    name: "il doppio clic sulla maniglia non porta l'intestazione nel corpo",
+    absent: { document: NO_HANDLE },
+    workbookDiffers: "nel foglio la prima riga non è un'intestazione: la maniglia la continua come le altre",
+    rows: DAYS,
+    steps: [{ pointer: { kind: "fill-double" } }],
+    cells: [["Giorno", "Ore"], ["lun", "8"], ["", "7"], ["", "6"]],
+    edits: 0,
+  },
+  {
+    // Sulla tastiera italiana «=» è Maiusc+0.
     name: "Alt+= scrive la somma delle celle sopra, coi numeri all'italiana",
     absent: { document: NO_SUM },
     // Nel foglio la somma resta la formula di oggi.
     delegated: "formulas.autoSum",
     rows: [["Voce", "Importo"], ["Cornici", "1.240,5"], ["Trasporti", "860"], ["Totale", ""]],
-    steps: [{ key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowRight" }, { key: "=", alt: true, code: "Equal" }],
+    steps: [{ key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowRight" }, { key: "=", alt: true, shift: true, code: "Digit0" }],
     cells: [["Voce", "Importo"], ["Cornici", "1.240,5"], ["Trasporti", "860"], ["Totale", "2.100,5"]],
+    edits: 1,
+  },
+  {
+    // Il tasto che sulla tastiera inglese fa «=», su quella italiana scrive
+    // «ì»: Alt+ì non è la somma.
+    name: "Alt+= conta il carattere, non il tasto",
+    modes: ["sheet"],
+    workbookAbsent: "Alt+ì non è la somma: il foglio non chiede nessun comando",
+    rows: [["Voce", "Importo"], ["Cornici", "1.240,5"], ["Totale", ""]],
+    steps: [{ key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowRight" }, { key: "ì", alt: true, code: "Equal" }],
+    cells: [["Voce", "Importo"], ["Cornici", "1.240,5"], ["Totale", ""]],
+    edits: 0,
+  },
+  {
+    // Il segno dei decimali si legge dai soli numeri sommati: i numeri
+    // all'inglese sopra il blocco («3.5», «0.25») non fanno leggere «1.240»
+    // come uno virgola ventiquattro. Nel blocco nessun numero lo dice, e
+    // decide la lingua (l'italiano della prova).
+    name: "Alt+= legge i decimali dai soli numeri sommati",
+    absent: { document: NO_SUM },
+    delegated: "formulas.autoSum",
+    rows: [["Voce", "Importo"], ["Tasso", "3.5"], ["Sconto", "0.25"], ["Spese", "-"], ["Cornici", "1.240"], ["Trasporti", "860"], ["Totale", ""]],
+    steps: [
+      { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" },
+      { key: "ArrowRight" }, { key: "=", alt: true, code: "Equal" },
+    ],
+    cells: [["Voce", "Importo"], ["Tasso", "3.5"], ["Sconto", "0.25"], ["Spese", "-"], ["Cornici", "1.240"], ["Trasporti", "860"], ["Totale", "2.100"]],
     edits: 1,
   },
   {

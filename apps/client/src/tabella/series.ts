@@ -5,7 +5,7 @@
 // «febbraio»…, anche in inglese), il resto ripetuto in ciclo. Qui sta anche
 // la data di oggi che Ctrl+; scrive in una cella.
 
-import { cellNumber } from "./sort";
+import { readNumbers, writeNumber } from "./sum";
 
 /// Una serie che gira: i giorni della settimana o i mesi, interi o corti.
 interface Cycle {
@@ -42,20 +42,23 @@ const PLAIN_CYCLES = CYCLES.map((cycle) => ({ ...cycle, plain: cycle.names.map(p
 
 /// I `count` valori dopo `source`, nell'ordine in cui la maniglia li scrive.
 /// `backward` riempie all'indietro (in su o a sinistra): la serie scende.
-/// `language` sceglie fra due serie che dicono la stessa parola (in italiano
-/// «mar» è martedì, in inglese è marzo): vince la lingua della tabella, cioè
-/// quella in cui Fub sta parlando.
+/// `language` è la lingua della tabella (quella della nota, altrimenti
+/// quella di Fub). Sceglie fra due serie che dicono la stessa parola (in
+/// italiano «mar» è martedì, in inglese è marzo) e legge i numeri che non
+/// dicono il loro segno dei decimali: all'italiana «1.000» è mille, come
+/// nella somma (`readNumbers`).
 export function fillSeries(source: readonly string[], count: number, backward = false, language = "it"): string[] {
   if (count <= 0 || source.length === 0) return [];
   const seed = backward ? [...source].reverse() : [...source];
-  const numbers = seed.map(cellNumber);
-  if (numbers.every((value): value is number => value !== null)) {
+  const group = readNumbers(seed, language);
+  if (group) {
+    const numbers = group.numbers.map((reading) => reading.value);
     const step = seed.length > 1 ? numbers[numbers.length - 1]! - numbers[numbers.length - 2]! : 1;
     const signed = backward && seed.length === 1 ? -step : step;
-    const comma = seed.some((text) => text.includes(","));
-    const places = Math.max(...seed.map((text) => (/[.,](\d+)$/.exec(text.trim())?.[1]?.length ?? 0)));
+    const places = Math.max(...group.numbers.map((reading) => reading.places));
+    const grouped = group.numbers.some((reading) => reading.grouped);
     const last = numbers[numbers.length - 1]!;
-    return Array.from({ length: count }, (_, i) => format(last + signed * (i + 1), places, comma));
+    return Array.from({ length: count }, (_, i) => writeNumber(last + signed * (i + 1), places, group.decimal, grouped));
   }
   const tail = seed.map((text) => /^(.*?)(\d+)$/u.exec(text));
   if (tail.every((match) => match !== null) && tail.every((match) => match![1] === tail[0]![1])) {
@@ -106,11 +109,6 @@ function caseOf(text: string): "upper" | "title" | "lower" {
   if (text.length > 1 && text === text.toLocaleUpperCase() && text !== text.toLocaleLowerCase()) return "upper";
   const first = text[0] ?? "";
   return first !== first.toLocaleLowerCase() ? "title" : "lower";
-}
-
-function format(value: number, places: number, comma: boolean): string {
-  const text = places > 0 ? value.toFixed(places) : String(Math.round(value * 1e9) / 1e9);
-  return comma ? text.replace(".", ",") : text;
 }
 
 /// La data di oggi come la scrive Ctrl+; in una cella: il giorno, il mese

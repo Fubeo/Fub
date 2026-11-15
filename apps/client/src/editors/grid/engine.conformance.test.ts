@@ -176,6 +176,11 @@ describe("la prova comune della Tabella, sul foglio", () => {
       });
       continue;
     }
+    if (test.workbookDiffers && (test.modes ?? ["sheet"]).includes("sheet")) {
+      // Il foglio fa apposta un'altra cosa: il caso resta elencato, col perché.
+      it.skip(`${test.name}: diverso nel foglio (${test.workbookDiffers})`, () => {});
+      continue;
+    }
     if (!test.workbookAbsent || caseAbsence(test, target) === null) continue;
     it(`${test.name}: assente (${test.workbookAbsent})`, async () => {
       const { engine, driver } = await sheet(test);

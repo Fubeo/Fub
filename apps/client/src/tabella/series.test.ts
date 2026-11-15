@@ -8,6 +8,15 @@ describe("il riempimento di serie", () => {
     expect(fillSeries(["7"], 2)).toEqual(["8", "9"]);
   });
 
+  it("legge i numeri come la somma, nella lingua della tabella", () => {
+    // All'italiana «1.000» è mille; all'inglese è uno con tre decimali.
+    expect(fillSeries(["1.000"], 1, false, "it")).toEqual(["1.001"]);
+    expect(fillSeries(["1.000"], 1, false, "en")).toEqual(["2.000"]);
+    expect(fillSeries(["1.000", "2.000"], 2, false, "it")).toEqual(["3.000", "4.000"]);
+    expect(fillSeries(["1.250,5", "1.500,5"], 1, false, "en")).toEqual(["1.750,5"]);
+    expect(fillSeries(["0.1", "0.2"], 2, false, "it")).toEqual(["0.3", "0.4"]);
+  });
+
   it("all'indietro la serie scende", () => {
     expect(fillSeries(["3", "4"], 2, true)).toEqual(["2", "1"]);
   });

@@ -10,11 +10,13 @@
 import { isNumberText } from "./sum";
 
 export interface ColumnCompletion {
-  /// Il valore intero da proporre per `typed` (ciò che si è scritto, poi il
-  /// resto del valore della colonna), o `null`. Si propone soltanto quando un
-  /// valore solo comincia così, come in Excel: con «Roma» e «Romagna» nella
-  /// colonna, «Rom» non propone niente, e chi scrive «Roma» non si trova
-  /// «Romagna» sotto le dita.
+  /// Il valore della colonna da proporre per `typed`, scritto come nella
+  /// colonna, o `null`. Mentre si scrive il campo mostra ciò che si è
+  /// scritto e poi il resto del valore; chi lo accetta trova nella cella il
+  /// valore della colonna, maiuscole comprese («r» diventa «Roma»), come in
+  /// Excel. Si propone soltanto quando un valore solo comincia così: con
+  /// «Roma» e «Romagna» nella colonna, «Rom» non propone niente, e chi scrive
+  /// «Roma» non si trova «Romagna» sotto le dita.
   suggest(typed: string): string | null;
 }
 
@@ -52,7 +54,7 @@ export function columnCompletion(values: readonly string[]): ColumnCompletion {
       // Una lettera che cambia lunghezza col minuscolo (la «İ» turca) non
       // lascia tagliare il valore al punto giusto: niente proposta.
       if (fold(found.value.slice(0, typed.length)) !== prefix) return null;
-      return typed + found.value.slice(typed.length);
+      return found.value;
     },
   };
 }

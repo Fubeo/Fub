@@ -4,9 +4,11 @@ import { columnCompletion } from "./completion";
 describe("il completamento dalla colonna", () => {
   const cities = columnCompletion(["Roma", "Milano", "Napoli", "", "milano"]);
 
-  it("propone il solo valore che comincia così, tenendo ciò che si è scritto", () => {
+  it("propone il solo valore che comincia così, scritto come nella colonna", () => {
     expect(cities.suggest("Mi")).toBe("Milano");
-    expect(cities.suggest("mi")).toBe("milano");
+    // «Milano» e «milano» sono uno solo, il primo: «mi» propone «Milano».
+    expect(cities.suggest("mi")).toBe("Milano");
+    expect(cities.suggest("r")).toBe("Roma");
     expect(cities.suggest("N")).toBe("Napoli");
   });
 
@@ -46,7 +48,7 @@ describe("il completamento dalla colonna", () => {
   it("i caratteri dell'IME e gli accenti si confrontano come gli altri", () => {
     const words = columnCompletion(["東京", "大阪", "Perché", "Èrica"]);
     expect(words.suggest("東")).toBe("東京");
-    expect(words.suggest("è")).toBe("èrica");
+    expect(words.suggest("è")).toBe("Èrica");
     expect(words.suggest("Perc")).toBe("Perché");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decimalMarkOf, isNumberText, readNumber, sumAbove, writeNumber } from "./sum";
+import { decimalMarkOf, isNumberText, readNumber, readNumbers, sumAbove, writeNumber } from "./sum";
 
 describe("la somma come valore", () => {
   it("legge i numeri all'italiana e all'inglese", () => {
@@ -39,6 +39,18 @@ describe("la somma come valore", () => {
     expect(sumAbove(["2", "3", "", "100"], "it")).toBe("5");
     expect(sumAbove(["0,1", "0,2"], "it")).toBe("0,3");
     expect(sumAbove(["-5", "3"], "it")).toBe("-2");
+  });
+
+  it("il segno dei decimali lo dicono i soli numeri sommati, non quelli oltre un testo", () => {
+    // «3.5» e «0.25» stanno sopra «Importo»: non contano per «1.240».
+    expect(sumAbove(["860", "1.240", "Importo", "0.25", "3.5"], "it")).toBe("2.100");
+    expect(sumAbove(["860", "1.240", "", "0,25", "3,5"], "en")).toBe("861.240");
+  });
+
+  it("legge un gruppo di numeri con lo stesso segno, come la serie", () => {
+    expect(readNumbers(["1.000", "2.000"], "it")).toEqual({ decimal: ",", numbers: [{ value: 1000, places: 0, grouped: true }, { value: 2000, places: 0, grouped: true }] });
+    expect(readNumbers(["1.5", "2"], "it")?.decimal).toBe(".");
+    expect(readNumbers(["1", "Roma"], "it")).toBeNull();
   });
 
   it("niente somma se subito sopra non c'è un numero", () => {

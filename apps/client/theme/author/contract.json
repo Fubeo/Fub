@@ -693,6 +693,7 @@
     "tb-drop",
     "is-moving-lines",
     "tb-input",
+    "is-proposal",
     "has-cell-selection",
     "is-cell-selected",
     "is-cell-cut",
@@ -2452,6 +2453,7 @@
     "tb-drop": "segno",
     "is-moving-lines": "segno",
     "tb-input": "segno",
+    "is-proposal": "segno",
     "has-cell-selection": "contenuto",
     "is-cell-selected": "segno",
     "is-cell-cut": "segno",
@@ -5469,7 +5471,8 @@
         "is-fill",
         "tb-drop",
         "is-moving-lines",
-        "tb-input"
+        "tb-input",
+        "is-proposal"
       ],
       "states": [
         "rest",
@@ -9608,7 +9611,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1757,
+    "hooks": 1758,
     "state_names": 7,
     "assigned_states": 837,
     "components": 249,
