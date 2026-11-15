@@ -1029,6 +1029,20 @@ const SETTINGS: SettingEntry[] = [
   },
   {
     spec: {
+      key: "editor.blocks",
+      label: "Blocchi: maniglie e selezione",
+      description:
+        "Accesi, ogni blocco ha la maniglia e il «+», Esc seleziona il blocco e Ctrl A prende il blocco, poi tutti. Spenti, Scrittura è un editor di testo: Ctrl A seleziona tutto il testo e Ctrl D la prossima occorrenza.",
+      group: "Editor",
+      scope: "machine",
+      kind: { kind: "toggle", default: true },
+      program_writable: false,
+    },
+    value: true,
+    source: "default",
+  },
+  {
+    spec: {
       key: "editor.line_numbers",
       label: "Numeri di riga",
       description: "Mostra la grondaia con il numero di ogni riga.",

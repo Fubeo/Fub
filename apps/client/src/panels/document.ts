@@ -65,6 +65,7 @@ import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-b
 import { createSelectionBubble, type SelectionBubble } from "./selection-bubble";
 import { bubbleWanted, miniBarMode, mountMiniBar } from "./mini-bar";
 import { openEditorMenu, type EditorMenuHost } from "./editor-menu";
+import { blocksPreferred, setBlocksPreference } from "../state/editor-blocks";
 import { createStandingChip, type StandingChip } from "./standing";
 import { activeShell, platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
@@ -1367,7 +1368,25 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
       },
     }] : []),
   ];
+  // Le scelte di Scrittura, sulle note: per prima i blocchi (`editor.blocks`),
+  // la stessa chiave delle Impostazioni, che cambia senza riaprire la nota.
+  const blocksOn = blocksPreferred();
+  const writing: MenuItem[] = doc && surface?.family === "text" && surface.profile === "markdown" ? [{
+    label: t("pane.menu.blocks"),
+    description: t(blocksOn ? "pane.menu.blocks.on" : "pane.menu.blocks.off", { chord: displayBinding("Mod-a") }),
+    icon: "blocks",
+    group: t("pane.menu.writing"),
+    choice: "checkbox",
+    checked: blocksOn,
+    run: () => {
+      void setBlocksPreference(!blocksOn).then(
+        () => notify(t(blocksOn ? "pane.menu.blocks.turned_off" : "pane.menu.blocks.turned_on", { chord: displayBinding("Mod-a") }), "info"),
+        (error: unknown) => notify(t("pane.menu.blocks.failed", { reason: errorText(error) }), "guasto"),
+      );
+    },
+  }] : [];
   const items: MenuItem[] = [
+    ...writing,
     ...offered("shell.pane.split.right", t("pane.menu.split_right")),
     ...offered("shell.pane.split.down", t("pane.menu.split_down")),
     ...(sourceView ? [{
