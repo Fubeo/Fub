@@ -867,6 +867,21 @@ describe("i blocchi come preferenza dal menu del riquadro (T5)", () => {
     expect(toasts()).toContain("Blocchi accesi");
   });
 
+  it("una scrittura che non riesce lascia la spunta e le maniglie come prima, e lo dice", async () => {
+    const host = await start(VAULT, [blocksRow(true)]);
+    // Il backend vero non persiste e non annuncia una scrittura rifiutata. Il
+    // `fault` del finto scrive il valore prima di rifiutare (lo dice la
+    // skill del banco): qui la porta rifiuta e basta, come l'host.
+    const api = host.module.api as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    api.setSetting = () => Promise.reject({ kind: "io", message: "disco pieno" });
+    await open("Benvenuto.md");
+    expect(handles()).toBe(true);
+    (await entry())!.click();
+    await waitFor("l'avviso del guasto", () => toasts().includes("disco pieno"));
+    expect(handles()).toBe(true);
+    expect((await entry())?.getAttribute("aria-checked")).toBe("true");
+  });
+
   it("fuori da una nota la voce non c'è", async () => {
     await start(VAULT, [blocksRow(true)]);
     await open("schizzo.draw");

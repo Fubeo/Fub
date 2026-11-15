@@ -17,6 +17,7 @@ import { onLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
 import { blocksMode, pageArrives, plainMode, type BlocksOptions } from "./blocks";
+import { selectBlockThenAll, selectBody } from "./blocks/keys";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { liveStrings } from "./strings";
 import { pageIconsChanged } from "./livepreview";
@@ -648,8 +649,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     blocksOn = on;
     if (mode === "live_preview") applyBlocks();
   }
-  function applyBlocks(): void {
-    if (engine.runViewCommand((view) => view.compositionStarted)) {
+  function applyBlocks(force = false): void {
+    if (!force && engine.runViewCommand((view) => view.compositionStarted)) {
       blocksPending = true;
       return;
     }
@@ -660,12 +661,16 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     engine.reconfigure();
     engine.restoreScrollAnchor(anchor);
   }
-  life.listen(parent, "compositionend", () => {
+  const settlePending = (force: boolean) => {
     if (!blocksPending) return;
     queueMicrotask(() => {
-      if (!life.closed && blocksPending) applyBlocks();
+      if (!life.closed && blocksPending) applyBlocks(force);
     });
-  });
+  };
+  life.listen(parent, "compositionend", () => settlePending(false));
+  // Una composizione abbandonata col fuoco che se ne va può non dare mai il
+  // suo `compositionend`: uscendo dalla nota il cambio non aspetta più.
+  life.listen(parent, "focusout", () => settlePending(true));
 
   // Reading owns browser selection; only history commands reach the hidden editor.
   life.listen(reading, "keydown", (event) => {
@@ -1040,12 +1045,19 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
 
   const docId = (): string => resources?.documentId ?? documentId;
 
+  /// «Seleziona tutto» del tasto destro fa ciò che fa Mod-a, che la voce
+  /// mostra: in Scrittura coi blocchi il blocco e poi tutti, senza il corpo
+  /// della nota; in Sorgente tutto il testo.
+  const selectAll = (): void => {
+    if (mode !== "live_preview" || !engine.runViewCommand(blocksOn ? selectBlockThenAll : selectBody)) engine.selectAll();
+  };
+
   /// Gli appunti della scrittura: i gesti offerti, e «Copia come ▸» sulla
   /// selezione.
   const writingClipboard = (offers: SurfaceMenuClipboard["offers"], copyAs = false): SurfaceMenuClipboard => ({
     offers,
     run(op) {
-      if (op === "select-all") engine.selectAll();
+      if (op === "select-all") selectAll();
       else if (op === "paste" || op === "paste-plain") pasteFromClipboard(op === "paste-plain");
       else {
         const text = selectedSource();

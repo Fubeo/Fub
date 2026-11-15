@@ -16,6 +16,7 @@ import { EditorSelection, type EditorState, type Extension, Prec } from "@codemi
 import { EditorView, keymap, type KeyBinding } from "@codemirror/view";
 import { getCM } from "@replit/codemirror-vim";
 import { calloutHead } from "../callout-head";
+import { keepingHeader, movesHeader } from "../commands";
 import { frontmatterRange } from "../render";
 import { type Block, type BlockKind, subtreeEnd } from "./model";
 import { cursorRun, moveRun, siblingsOf } from "./move";
@@ -177,7 +178,7 @@ function bodyRun(blocks: readonly Block[]): { first: number; last: number } | nu
 /// seconda tutti i blocchi del corpo, come selezione di blocchi. Oltre non
 /// fa altro. Una nota col solo frontmatter non ha blocchi da prendere: il
 /// tasto si ferma lì e la selezione resta com'era.
-const selectBlockThenAll: Command = (view) => {
+export const selectBlockThenAll: Command = (view) => {
   const state = view.state;
   const blocks = modelOf(state);
   const { main } = state.selection;
@@ -258,7 +259,7 @@ export function bodySpan(state: EditorState): { from: number; to: number } | nul
 
 /// Mod-a coi blocchi spenti: il corpo della nota. Il secondo non fa altro; una
 /// nota col solo frontmatter non prende niente.
-const selectBody: Command = (view) => {
+export const selectBody: Command = (view) => {
   const body = bodySpan(view.state);
   if (!body) return true;
   const { main, ranges } = view.state.selection;
@@ -267,25 +268,12 @@ const selectBody: Command = (view) => {
   return true;
 };
 
-/// Le righe scelte stanno nel frontmatter, o vi salirebbero.
-function crossesHeader(state: EditorState, dir: -1 | 1): boolean {
-  const range = frontmatterRange(state.doc);
-  if (!range) return false;
-  const closing = state.doc.lineAt(Math.max(0, range.to - 1)).number;
-  return state.selection.ranges.some((selected) => {
-    const first = state.doc.lineAt(selected.from).number;
-    return first <= closing || (dir === -1 && first - 1 <= closing);
-  });
-}
-
-/// Mod-Shift-↑/↓ coi blocchi spenti: le righe scelte, come Alt-↑/↓. Una mossa
-/// che toccherebbe la testata non fa niente, e il tasto si ferma lì.
+/// Mod-Shift-↑/↓ coi blocchi spenti: le righe scelte, come Alt-↑/↓, con la
+/// stessa guardia della testata: una mossa che porterebbe una riga dentro o
+/// fuori dal frontmatter, o ne sposterebbe un `---`, non fa niente, e il tasto
+/// si ferma lì.
 function moveLines(dir: -1 | 1): Command {
-  return (view) => {
-    if (view.state.readOnly) return false;
-    if (crossesHeader(view.state, dir)) return true;
-    return dir === -1 ? moveLineUp(view) : moveLineDown(view);
-  };
+  return keepingHeader(dir === -1 ? moveLineUp : moveLineDown, (state) => movesHeader(state, dir));
 }
 
 export const plainKeys: readonly KeyBinding[] = [

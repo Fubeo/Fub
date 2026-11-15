@@ -78,8 +78,11 @@ sono selezionati.
   blocchi del corpo come selezione di blocchi, titolo e proprietà fuori; la
   terza non fa altro. Una nota col solo frontmatter non ha niente da prendere.
 - Mod+D duplica il blocco del cursore, sotto, e il cursore passa nella copia
-  allo stesso punto; con una selezione di blocchi la duplica tutta. Sul
-  frontmatter non fa niente.
+  allo stesso punto; con una selezione di blocchi la duplica tutta. Il
+  frontmatter non si duplica come blocco, perché farebbe una seconda testata:
+  col cursore nel suo YAML Mod+D passa alla copia della riga del testo, che
+  copia la riga di una proprietà come le altre righe e non copia mai le righe
+  `---`.
 - Alt+↑/↓ sulle righe del testo (fuori dalle proprietà) non portano una riga
   del corpo dentro il frontmatter, né le sue righe `---` fuori.
 - Backspace all'inizio di un paragrafo lo unisce al testo del blocco sopra.
@@ -109,10 +112,13 @@ pagina e i segni della Live restano, il «/» resta, e i gesti cambiano così.
 | Trascinare | il blocco, dalla maniglia | il testo scelto |
 | «Trasforma il blocco» | nel menu della maniglia e nel tasto destro | nel tasto destro |
 
-Una nota senza frontmatter dà a Mod+A tutto il testo. Spegnere i blocchi con
+Una nota senza frontmatter dà a Mod+A tutto il testo. «Seleziona tutto» del
+tasto destro fa ciò che fa Mod+A nei due stati. Spegnere i blocchi con
 una selezione di blocchi attiva la lascia come selezione di testo sulle stesse
-righe. Durante una composizione (IME) il cambio aspetta che la composizione
-finisca. In una scheda della lavagna Esc resta della scheda nei due stati.
+righe, e chiude il menu della maniglia se era aperto. Durante una
+composizione (IME) il cambio aspetta che la composizione
+finisca, o che il fuoco lasci la nota. In una scheda della lavagna Esc resta
+della scheda nei due stati.
 
 ## Il movimento
 
@@ -359,6 +365,7 @@ schede stanno nella cache del bundle, ricostruibile. «Pagina web»
   `apps/client/src/state/link-cards.ts`: la scheda nella Live e le risposte di
   `crates/fub-host/src/link_card.rs`;
 - `apps/client/src/state/editor-blocks.ts`: la preferenza `editor.blocks`,
-  letta dalla superficie e scritta dal menu «…» del riquadro;
+  letta all'avvio della finestra e dalla superficie, scritta dal menu «…»
+  del riquadro;
 - `crates/fub-host/src/settings.rs`: la modalità dei riquadri nuovi, il
   cursore morbido e `editor.blocks`.

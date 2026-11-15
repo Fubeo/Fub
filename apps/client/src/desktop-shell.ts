@@ -93,6 +93,7 @@ import { mountPageIcons } from "./state/page-icons";
 import { mountPeople } from "./state/people";
 import { mountExternalEditors } from "./state/external-editors";
 import { mountDates } from "./state/dates";
+import { mountBlocksPreference } from "./state/editor-blocks";
 import { mountLinkCards } from "./state/link-cards";
 import { mountCraftPreviews } from "./state/craft-previews";
 import { mountCraftPhotos } from "./state/craft-photos";
@@ -877,6 +878,8 @@ async function init(): Promise<Teardown> {
   mountPageIcons(pageWindowLifetime);
   mountPeople(pageWindowLifetime);
   mountDates(pageWindowLifetime);
+  // `editor.blocks` prima della prima nota: si monta già nello stato giusto.
+  mountBlocksPreference(pageWindowLifetime);
   mountLinkCards(pageWindowLifetime);
   mountCraftPreviews(pageWindowLifetime);
   // Le app Craft installate, per il sottomenu «Apri con un'altra app».

@@ -138,6 +138,9 @@ export const ENGLISH: Readonly<Record<string, string>> = {
   "Frammenti CSS locali": "Local CSS snippets",
   "Frammenti attivabili, locali e limitati agli hook visivi; nessuna rete o importazione CSS.":
     "Toggleable, local, paint-only snippets scoped to visual hooks; no network or CSS imports.",
+  "Blocchi: maniglie e selezione": "Blocks: handles and selection",
+  "Accesi, ogni blocco ha la maniglia e il «+», Esc seleziona il blocco e Ctrl A prende il blocco, poi tutti. Spenti, Scrittura è un editor di testo: Ctrl A seleziona tutto il testo e Ctrl D la prossima occorrenza.":
+    "On, every block has its handle and «+», Esc selects the block and Ctrl A takes the block, then all of them. Off, Writing is a text editor: Ctrl A selects all the text and Ctrl D the next occurrence.",
   "Numeri di riga": "Line numbers",
   "Mostra la grondaia con il numero di ogni riga.": "Shows the gutter with the number of each line.",
   "Larghezza della colonna": "Column width",

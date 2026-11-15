@@ -15,6 +15,7 @@ import { mountMarkdownSurface, type MarkdownSurface } from "../surface";
 import { blockSelection } from "./selection";
 import { blockTextSpan, bodySpan } from "./keys";
 import { modelOf } from "./transform";
+import { handlesView } from "./handles";
 
 vi.mock("../../../../../host/query", () => ({ settings: vi.fn() }));
 
@@ -211,12 +212,23 @@ describe("Ctrl Maiusc ↑ ↓", () => {
 });
 
 describe("Ctrl D", () => {
-  it("accesi duplica il blocco del cursore, e si scrive nella copia", async () => {
-    const { view } = await note("- a\n- b\n\nfine", true, 3);
+  it("accesi duplica il blocco del cursore col suo sottoalbero, e si scrive nella copia", async () => {
+    // Una riga sola non distinguerebbe il blocco dalla riga (`duplicateLines`
+    // del testo): la voce ha una figlia, e la copia la porta con sé.
+    const { view } = await note("- a\n  - figlia\n- b", true, 3);
     expect(press(view, "d", { ctrlKey: true })).toBe(true);
-    expect(view.state.doc.toString()).toBe("- a\n- a\n- b\n\nfine");
-    expect(view.state.selection.main.head).toBe(7);
+    expect(view.state.doc.toString()).toBe("- a\n  - figlia\n- a\n  - figlia\n- b");
+    expect(view.state.selection.main.head).toBe(18);
     expect(view.state.field(blockSelection)).toBeNull();
+  });
+
+  it("accesi, nel frontmatter, copia la riga della proprietà e mai un `---`", async () => {
+    const { view } = await note("---\na: 1\n---\nUno", true, 5);
+    press(view, "d", { ctrlKey: true });
+    expect(view.state.doc.toString()).toBe("---\na: 1\na: 1\n---\nUno");
+    view.dispatch({ selection: { anchor: 1 } });
+    press(view, "d", { ctrlKey: true });
+    expect(view.state.doc.toString()).toBe("---\na: 1\na: 1\n---\nUno");
   });
 
   it("accesi duplica la selezione di blocchi, e la copia resta scelta", async () => {
@@ -261,6 +273,48 @@ describe("il «/» e il menu del blocco", () => {
   });
 });
 
+describe("«Seleziona tutto» del tasto destro", () => {
+  const selectAll = (ed: MarkdownSurface) => ed.contextMenu!(null)!.clipboard!.run("select-all");
+  const doc = "---\ntitolo: x\n---\nUno\n\nDue";
+
+  it("accesi fa ciò che fa Ctrl A: il testo del blocco, poi tutti i blocchi", async () => {
+    const { ed, view } = await note(doc, true, doc.indexOf("Uno") + 1);
+    selectAll(ed);
+    expect(chosen(view)).toBe("Uno");
+    selectAll(ed);
+    expect(view.state.field(blockSelection)).not.toBeNull();
+    expect(chosen(view)).toBe("Uno\n\nDue");
+  });
+
+  it("spenti il corpo della nota, titolo e proprietà fuori; in Sorgente tutto il testo", async () => {
+    const { ed, view } = await note(doc, false, doc.indexOf("Uno") + 1);
+    selectAll(ed);
+    expect(chosen(view)).toBe("Uno\n\nDue");
+    ed.setMode("source");
+    selectAll(ed);
+    expect(chosen(view)).toBe(doc);
+  });
+});
+
+describe("il menu della maniglia mentre i blocchi si spengono", () => {
+  it("si chiude, e una voce rimasta indietro non rompe niente", async () => {
+    const n = await note("Uno\n\nDue", true, 1);
+    const handles = n.view.plugin(handlesView)!;
+    const block = modelOf(n.view.state)[0]!;
+    handles.shown = { from: block.from, depth: block.depth };
+    handles.openMenu();
+    expect(document.querySelector("#context-menu")).not.toBeNull();
+    await change(false);
+    expect(document.querySelector("#context-menu"), "il menu se ne va con le maniglie").toBeNull();
+    // «Duplica», «Su», «Giù» ritrovano il blocco con `withRun`: senza il
+    // modello non fanno niente, invece di lanciare.
+    const run = vi.fn();
+    expect(() => handles.withRun({ from: block.from, depth: block.depth }, run)).not.toThrow();
+    expect(run).not.toHaveBeenCalled();
+    expect(n.view.state.doc.toString()).toBe("Uno\n\nDue");
+  });
+});
+
 describe("cambiare la chiave", () => {
   it("non riapre la nota: stessa vista, stesso testo, stessa selezione e stessa cronologia", async () => {
     const n = await note("Uno\n\nDue", true, 1);
@@ -301,6 +355,16 @@ describe("cambiare la chiave", () => {
     expect(handles(n), "la composizione non si interrompe").toBe(true);
     composing = false;
     n.view.contentDOM.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
+    await settle();
+    expect(handles(n)).toBe(false);
+  });
+
+  it("una composizione abbandonata senza compositionend non lo blocca: uscendo dalla nota il cambio arriva", async () => {
+    const n = await note("Uno\n\nDue", true, 1);
+    Object.defineProperty(n.view, "compositionStarted", { configurable: true, get: () => true });
+    await change(false);
+    expect(handles(n)).toBe(true);
+    n.view.contentDOM.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
     await settle();
     expect(handles(n)).toBe(false);
   });
