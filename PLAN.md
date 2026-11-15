@@ -671,7 +671,7 @@ la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/page
 src/editors/text/profiles/markdown/corpus.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15, da main
 
 ## T7 · Il titolo e il primo H1
 
@@ -3712,7 +3712,7 @@ finto e passano sul vero; le foto di T81 uguali.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/kit src/ui/menu-budget.test.ts
 src/editors/text/profiles/markdown/three-doors.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15, da main
 
 ## T84 · Il «/» in una colonna
 
