@@ -11981,10 +11981,15 @@ kbd,
   box-shadow: 0 2px 0 -1px var(--highlight);
   color: inherit;
 }
-/* Col cursore dentro, il fondo due volte: il giallo pieno del prototipo, in
-   entrambe le luci, senza un colore nuovo. */
+/* Col cursore dentro, il fondo pieno con un velo in più: più giallo del
+   riposo, senza un colore nuovo. Il velo è al 40% perché il testo resti
+   leggibile al buio: due strati pieni davano 3,85:1 sulla carta scura, così
+   il testo sta sopra 4,9:1 anche sulla riga attiva (5,9:1 in alto
+   contrasto); in luce il testo scuro resta sopra 12:1. */
 .cm-editor .cm-content .cm-fub-comment-range-on {
-  background: linear-gradient(var(--doc-highlight), var(--doc-highlight)), var(--doc-highlight);
+  background:
+    linear-gradient(color-mix(in oklab, var(--doc-highlight) 40%, transparent), color-mix(in oklab, var(--doc-highlight) 40%, transparent)),
+    var(--doc-highlight);
 }
 .cm-editor .cm-content .cm-fub-comment-source {
   border-radius: 3px;
