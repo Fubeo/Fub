@@ -107,31 +107,41 @@ fn near_segments(samples: &[Sample], path: &[Spot], radius: f64) -> Vec<(Spot, S
     segments
 }
 
-/// Quanti passi fa il taglio fra i campioni `a` e `b`, col passo `step`. Come
-/// `Math.max(1, NaN)`, un conto senza senso resta `NaN`, e allora il segmento
-/// non si percorre.
+/// Il passo del taglio, `radius / 2`, se il taglio si può fare: il passo è
+/// finito e maggiore di zero e i campioni hanno `x` e `y` finiti. Altrimenti
+/// `None`, e il tratto non si taglia: un passo zero (un raggio così piccolo
+/// che la metà arrotonda a zero) o un campione non finito farebbero un numero
+/// di passi infinito o `NaN`, e il giro non finirebbe. La tela non ci arriva:
+/// i suoi raggi sono di qualche pixel.
+fn walk_step(samples: &[Sample], radius: f64) -> Option<f64> {
+    let step = radius / 2.0;
+    let finite = samples.iter().all(|s| s.x.is_finite() && s.y.is_finite());
+    (step.is_finite() && step > 0.0 && finite).then_some(step)
+}
+
+/// Quanti passi fa il taglio fra i campioni `a` e `b`, col passo `step` di
+/// [`walk_step`]: almeno uno. Infinito solo se la distanza trabocca.
 fn steps(a: &Sample, b: &Sample, step: f64) -> f64 {
-    let n = ((b.x - a.x).hypot(b.y - a.y) / step).ceil();
-    if n.is_nan() {
-        n
-    } else {
-        n.max(1.0)
-    }
+    ((b.x - a.x).hypot(b.y - a.y) / step).ceil().max(1.0)
 }
 
 /// Quante distanze al più calcola [`split_ink`] prima delle bisezioni: un
 /// passo per campione del cammino fra due campioni, per ogni segmento vicino
 /// del cammino. Zero se il taglio non si fa (nessun campione, nessun segmento
-/// vicino, un raggio non positivo). Può essere infinito.
+/// vicino, un raggio non positivo, un passo che [`walk_step`] non accetta).
+/// Mai `NaN`; infinito se una distanza trabocca, e allora [`split_ink`] non
+/// taglia.
 pub fn split_work(samples: &[Sample], path: &[Spot], radius: f64) -> f64 {
     if samples.is_empty() || path.is_empty() || radius.is_nan() || radius <= 0.0 {
         return 0.0;
     }
+    let Some(step) = walk_step(samples, radius) else {
+        return 0.0;
+    };
     let segments = near_segments(samples, path, radius).len();
     if segments == 0 {
         return 0.0;
     }
-    let step = radius / 2.0;
     let walked: f64 = samples
         .windows(2)
         .map(|pair| steps(&pair[0], &pair[1], step))
@@ -153,9 +163,17 @@ struct Open {
 /// cammino non lo tocca, un vettore vuoto se lo cancella tutto.
 ///
 /// Il lavoro cresce con [`split_work`]: chi riceve il cammino da fuori lo
-/// conta prima.
+/// conta prima. Un passo che [`walk_step`] non accetta, o un numero di passi
+/// infinito, non taglia: `None`.
 pub fn split_ink(samples: &[Sample], path: &[Spot], radius: f64) -> Option<Vec<InkPiece>> {
     if samples.is_empty() || path.is_empty() || radius.is_nan() || radius <= 0.0 {
+        return None;
+    }
+    let step = walk_step(samples, radius)?;
+    if samples
+        .windows(2)
+        .any(|pair| !steps(&pair[0], &pair[1], step).is_finite())
+    {
         return None;
     }
     // Del cammino contano i segmenti vicini al tratto.
@@ -184,7 +202,6 @@ pub fn split_ink(samples: &[Sample], path: &[Spot], radius: f64) -> Option<Vec<I
             cut_end: false,
         });
     }
-    let step = radius / 2.0;
     for pair in samples.windows(2) {
         let (a, b) = (&pair[0], &pair[1]);
         let n = steps(a, b, step);
@@ -322,6 +339,16 @@ mod tests {
             .collect()
     }
 
+    fn sample(x: f64, y: f64) -> Sample {
+        Sample {
+            x,
+            y,
+            p: None,
+            t: 0.0,
+            tilt: None,
+        }
+    }
+
     #[test]
     fn un_taglio_a_meta_fa_due_pezzi_coi_bordi_esatti() {
         let pieces = split_ink(&line(), &[[50.0, -20.0], [50.0, 20.0]], 5.0).expect("toccato");
@@ -354,6 +381,24 @@ mod tests {
         assert_eq!(two, 41.0 * 2.0);
         let fine = split_work(&line(), &[[50.0, 0.0]], 1e-300);
         assert!(fine.is_infinite() || fine > 1e300);
+    }
+
+    #[test]
+    fn un_passo_zero_o_un_campione_non_finito_non_taglia_e_non_costa() {
+        // 5e-324 / 2 arrotonda a zero: il passo è zero, e due campioni uguali
+        // darebbero 0 / 0.
+        let samples = [sample(0.0, 0.0), sample(0.0, 0.0), sample(10.0, 0.0)];
+        assert_eq!(split_work(&samples, &[[0.0, 0.0]], 5e-324), 0.0);
+        assert!(split_ink(&samples, &[[0.0, 0.0]], 5e-324).is_none());
+        let wild = [sample(0.0, 0.0), sample(f64::INFINITY, 0.0)];
+        assert_eq!(split_work(&wild, &[[0.0, 0.0]], 4.0), 0.0);
+        assert!(split_ink(&wild, &[[0.0, 0.0]], 4.0).is_none());
+        let nan = [sample(0.0, 0.0), sample(f64::NAN, 0.0)];
+        assert!(split_ink(&nan, &[[0.0, 0.0]], 4.0).is_none());
+        // Una distanza che trabocca: il lavoro è infinito e il taglio non si fa.
+        let far = [sample(-f64::MAX, 0.0), sample(f64::MAX, 0.0)];
+        assert_eq!(split_work(&far, &[[0.0, 0.0]], 4.0), f64::INFINITY);
+        assert!(split_ink(&far, &[[0.0, 0.0]], 4.0).is_none());
     }
 
     #[test]

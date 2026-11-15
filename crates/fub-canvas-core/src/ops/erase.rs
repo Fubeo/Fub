@@ -380,7 +380,8 @@ impl<'a> Holder<'a> {
         let reach = radius / fit.s + brush_size(&drawn.brush) / 2.0;
         let samples = ink_samples(&drawn.ink);
         *work += split_work(&samples, &local, reach);
-        if *work > MAX_ERASE_WORK {
+        // Un conto `NaN` si rifiuta anche lui.
+        if work.is_nan() || *work > MAX_ERASE_WORK {
             return Err(refuse(
                 index,
                 "the eraser path is too fine for these strokes: use a larger `size` or split the path",
@@ -462,8 +463,9 @@ fn path_points(index: usize, points: &[Vec<f64>]) -> Result<Vec<Spot>, OpError> 
 const DAY_MS: i64 = 86_400_000;
 
 /// `at` spostato di `offset` millisecondi, come `shiftedAt` della tela:
-/// `None` se resta com'è, cioè se non si legge o se lo spostamento
-/// arrotondato è zero.
+/// `None` se resta com'è, cioè se non si legge, se `offset` è zero o se
+/// l'esito esce dagli anni 0–9999. Un `offset` che non è zero ma arrotonda a
+/// zero riscrive `at` nella forma di `toISOString`, come la tela.
 ///
 /// `Date.parse` legge molte forme; il nucleo, che non ha un fuso orario, legge
 /// quelle che non ne dipendono: una data ISO 8601 `YYYY-MM-DD`, da sola (la
@@ -472,8 +474,11 @@ const DAY_MS: i64 = 86_400_000;
 /// millisecondi e `Z`, fra gli anni 0 e 9999.
 fn shifted_at(at: &str, offset: f64) -> Option<String> {
     let time = parse_iso(at)?;
+    if offset == 0.0 {
+        return None;
+    }
     let shift = js_round(offset);
-    if shift == 0.0 || !shift.is_finite() || shift.abs() > 8.64e15 {
+    if !shift.is_finite() || shift.abs() > 8.64e15 {
         return None;
     }
     // Entro ±8,64·10¹⁵ ms, i limiti di `Date`: il cast è esatto.
@@ -633,8 +638,21 @@ mod tests {
             shifted_at(at, 0.5).as_deref(),
             Some("2026-11-02T09:20:31.251Z")
         );
-        assert_eq!(shifted_at(at, 0.49999999999999994), None);
         assert_eq!(shifted_at(at, 0.0), None);
+        // Non zero ma arrotonda a zero: la tela riscrive `at` con
+        // `toISOString`, coi millisecondi.
+        assert_eq!(
+            shifted_at(at, 0.49999999999999994).as_deref(),
+            Some("2026-11-02T09:20:31.250Z")
+        );
+        assert_eq!(
+            shifted_at("2026-11-02T10:20:31.25+01:00", 0.2).as_deref(),
+            Some("2026-11-02T09:20:31.250Z")
+        );
+        assert_eq!(
+            shifted_at("2026-11-02", 0.2).as_deref(),
+            Some("2026-11-02T00:00:00.000Z")
+        );
         // Attraverso la mezzanotte, il mese e l'anno bisestile.
         assert_eq!(
             shifted_at("2024-02-28T23:59:59.999Z", 1.0).as_deref(),
@@ -798,5 +816,31 @@ mod tests {
             json!({"op": "erase_along", "points": few, "size": 1}),
         )
         .expect("due punti vanno bene");
+    }
+
+    #[test]
+    fn un_raggio_che_arrotonda_a_zero_finisce_subito() {
+        // Lo scenario della revisione: lo spessore e la gomma più piccoli che
+        // un f64 dice. Il passo del taglio arrotonda a zero, e due campioni
+        // uguali darebbero 0 / 0: il taglio non si fa, e il tetto resta acceso.
+        let canvas = board(&json!({
+            "nodes": [], "edges": [],
+            "fub:ink": {"v": 1, "strokes": [free("s", "pf1 size=1e-323", "1 s100 cxy 0,0 0,0 1000,0")]}
+        }));
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let outcome = run(
+                &canvas,
+                json!({"op": "erase_along", "points": [[0, 0]], "size": 5e-324}),
+            );
+            let _ = send.send(outcome);
+        });
+        let outcome = receive
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("erase_along finisce subito");
+        let compiled = outcome.expect("si compila");
+        assert!(compiled.patches.is_empty(), "{:?}", compiled.patches);
+        // Il tratto si disegna (nessuna nota `ink_kept`): il caso arriva al taglio.
+        assert!(compiled.notes.is_empty(), "{:?}", compiled.notes);
     }
 }
