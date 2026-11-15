@@ -234,12 +234,11 @@ Tutti i comandi girano da `apps/client/`; gli script sorgente sono in
 
 ### Il giro della pre-alpha
 
-Il giro fa sul banco, di fila e sulla stessa pagina, i compiti che una persona
-fa nella pre-alpha: la shell vera col finto host e il vault del banco, gesti
-con la tastiera e col puntatore, il moto ridotto e la lingua italiana del
-palco (`bench/stage.mjs`). Ogni compito controlla il risultato nel DOM o nel
-finto host (per esempio il Markdown che arriva a `writeDocument`, non solo
-l'assenza di errori) e lascia una foto.
+Il giro fa sul banco, di fila e sulla stessa pagina, i compiti che una persona fa
+nella pre-alpha: la shell vera col finto host e il vault del banco, gesti con la
+tastiera e col puntatore, il moto ridotto e la lingua italiana del palco
+(`bench/stage.mjs`). Ogni compito controlla il risultato nel DOM o nel finto host (per
+esempio il Markdown che arriva a `writeDocument`, non solo l'assenza di errori) e lascia una foto.
 
 ```bash
 cd apps/client
