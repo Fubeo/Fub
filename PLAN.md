@@ -1545,7 +1545,7 @@ leggono con le regole di N6 T19 e T37 (i loro vettori, con i tratti di
 `draw`).
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cargo
 test -p fub-features --features lavagna,draw --test lavagna
-Stato: [~] in corso · coder dal 2026-11-15
+Stato: [x] integrato nel ramo del piano (0f037caef, 2026-11-15) · revisione media e correzioni; scelte in DECISIONS.md
 
 ## T20 · Da Mermaid e da una scaletta
 
