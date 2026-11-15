@@ -1909,3 +1909,9 @@ La più recente in cima: data · piano · decisione · perché.
 - 2026-11-15 · T6 · La riga degli strumenti della testata è una riga sola di 28 px come nel prototipo: con quattro strumenti più «⋯» non ci sta, quindi `fitTools` nasconde dalla fine quelli che non entrano e il menu «⋯» (sempre ultimo) li offre in cima; a 1280 px finisce lì «Nuova sottopagina». La riga dei dati ha interlinea fissa di 19 px per cadere su pixel interi. La testata è `display: flow-root`, perché il margine di un figlio che usciva sfasava `posAtCoords` di CodeMirror (maniglie sulla riga sbagliata in S7).
 
 - 2026-11-15 · T6 · L'utente sceglie: «Aggiungi una proprietà» resta visibile a riposo in Scrittura, come nel prototipo; `three-doors.test.ts` lo conta come contenuto della testata (`.cm-fub-page-props button`), come già `writingAtRest` del banco. Chiesto all'utente perché allarga un test di guardia.
+
+- 2026-11-15 · T16, dalla revisione (decide l'orchestratore, è dentro il task):
+  - `base.rs` toccato fuori da «Tocca»: il piano della vista dà `summaries` con la `label` di `derive`, così il piede non rifà la regola. Il calcolo resta nel core.
+  - Piede con la ricerca attiva: «3 di 50 note», riepiloghi attenuati e detti «su tutte le 50 note della vista». Il client non ricalcola.
+  - Venti viste: un pulsante «Altre N viste» in fondo alle linguette apre il menu delle viste che non stanno; la vista scelta resta in barra.
+  - Rinomina e Tipo spenti nella Base incorporata (rinominare in tutto il vault lascerebbe il blocco della nota sulla chiave vecchia). In un `.base` la rinomina riscrive anche le chiavi della mappa e delle date della vista; formule e altre Basi no, e la nota del campo lo dice.
