@@ -67,15 +67,15 @@ describe("farTitle", () => {
     expect(farTitle(node({ file: "foto.png" }))).toBe("foto.png");
     expect(farTitle(node({ file: "Note/Varianza.md", subpath: "#Formula" }))).toBe("Varianza.md › Formula");
     expect(farTitle(node({ file: "Note/Varianza.md", subpath: "#Capitolo#Formula" }))).toBe("Varianza.md › Capitolo › Formula");
-    // Senza file: l'id, come la testata.
-    expect(farTitle(node({ file: "" }))).toBe("n1");
-    expect(farTitle(node({}))).toBe("n1");
+    // Senza file il titolo è vuoto: mai l'id interno.
+    expect(farTitle(node({ file: "" }))).toBe("");
+    expect(farTitle(node({}))).toBe("");
   });
 
   it("una pagina web mostra l'indirizzo senza schema e senza la barra finale", () => {
     expect(farTitle(node({ type: "link", url: "https://example.com/" }))).toBe("example.com");
     expect(farTitle(node({ type: "link", url: "http://it.wikipedia.org/wiki/Varianza" }))).toBe("it.wikipedia.org/wiki/Varianza");
-    expect(farTitle(node({ type: "link" }))).toBe("n1");
+    expect(farTitle(node({ type: "link" }))).toBe("");
   });
 
   it("un testo mostra la sua prima riga scritta, senza i segni del Markdown", () => {
