@@ -483,7 +483,7 @@ sposta un blocco sotto un altro titolo dalla Struttura e l'annulla lo
 rimette; le scene di T2 trovano il cartellino.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks
-Stato: [~] in corso · coder dal 2026-11-15 (feat/fuori-dalla-colonna da main a3ee357dc)
+Stato: [~] PR #391 (feat/fuori-dalla-colonna @ de1a95a77, main unito), revisione indipendente fatta e 6 difetti corretti; aspetta CI
 
 ## T3 · La modalità Scrittura
 
