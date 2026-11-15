@@ -142,7 +142,7 @@ describe("i tratti di draw sulla pagina e sulla cella si leggono con le regole d
       // stessa ancora e gli stessi campioni. (Sulla pagina la penna usa il
       // fattore della larghezza, la resa il minore: col rettangolo nelle
       // proporzioni della pagina coincidono.)
-      const samples: InkSample[] = local.map((sample, i) => ({ x: placed[2 * i]!, y: placed[2 * i + 1]!, p: 0.5, t: i * 8 }));
+      const samples: InkSample[] = local.map((_sample, i) => ({ x: placed[2 * i]!, y: placed[2 * i + 1]!, p: 0.5, t: i * 8 }));
       const gui = strokeRecord({ samples, pressure: true, split: false }, node, defaultInkLook(1, true), NOW, box.page ?? box.cell);
       if (!gui.ok) throw new Error(`la tela rifiuta il tratto: ${gui.reason}`);
       expect(gui.record.anchor).toEqual(record.anchor);
