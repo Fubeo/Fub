@@ -1801,7 +1801,7 @@ menu e sui tasti passano; `wasm/vectors.test.ts` passa col vettore Craft;
 `cargo test -p fub-canvas-core --test layout_vectors` passa.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas && npm run typecheck
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15
 
 ## T24 · La GUI scrive con le operazioni: gesti, trascinamenti, appunti
 
