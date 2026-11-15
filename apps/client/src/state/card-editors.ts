@@ -28,12 +28,12 @@ import { rebaseStaleChange, type EditorChange } from "../editors/core/text-opera
 import type { SyntaxForm } from "../host/contract";
 import type { Theme } from "../theme/theme";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
-import {
-  documentSessions,
-  type CloseResult,
-  type DocumentSession,
-  type DocumentSessionCollection,
-  type DocumentSurfaceUpdate,
+import { cardStopped, cardWriting } from "./card-writes";
+import type {
+  CloseResult,
+  DocumentSession,
+  DocumentSessionCollection,
+  DocumentSurfaceUpdate,
 } from "./document-session";
 
 /// Ciò che la porta usa della collezione delle sessioni: la stessa di ogni
@@ -130,29 +130,6 @@ export interface CardEditorHub extends CardEditorPort {
 /// Il prefisso delle identità delle superfici di scheda: un riquadro non lo
 /// usa mai, così una modifica sa a chi tornare.
 const CARD_SURFACE_PREFIX = "card-editor:";
-
-/// Le sessioni tenute dalle schede che scrivono, di ogni porta della finestra:
-/// la sessione di ciascuna (che segue le rinomine).
-const writing = new Set<{ readonly session: DocumentSession }>();
-
-/// Se una scheda della lavagna scrive adesso nel documento `path`.
-export function cardWrites(path: string): boolean {
-  for (const editor of writing) if (editor.session.id === path) return true;
-  return false;
-}
-
-/// Lascia la sessione di `path` per chi non la guarda più (un riquadro chiuso,
-/// un layout nuovo, una finestra del documento che se ne va): se una scheda
-/// ci scrive, la sessione resta (`active`) e la lascerà la scheda uscendo.
-/// È l'unica strada per lasciare una sessione fuori da `document-controller.ts`
-/// (T96).
-export async function releaseSession(
-  path: string,
-  sessions: Pick<DocumentSessionCollection, "release"> = documentSessions,
-): Promise<CloseResult> {
-  if (cardWrites(path)) return { kind: "active" };
-  return sessions.release(path);
-}
 
 /// Un editor montato in una scheda, dalla nascita allo smontaggio.
 interface OpenCardEditor {
@@ -380,7 +357,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
     }
     editor.destroyed = true;
     open.delete(editor.surfaceId);
-    writing.delete(editor);
+    cardStopped(editor);
     editor.listeners.clear();
     const teardowns = editor.teardowns.splice(0);
     for (let i = teardowns.length - 1; i >= 0; i--) {
@@ -600,7 +577,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         unsubscribe,
       );
       open.set(surfaceId, editor);
-      writing.add(editor);
+      cardWriting(editor);
       if (noticeBox && deps.notices) {
         try {
           const notices = deps.notices(noticeBox, () => docOf(editor), () => markNotices(editor));

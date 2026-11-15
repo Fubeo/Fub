@@ -118,6 +118,21 @@ export const KIT: PartAnatomy = {
       states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")],
       hooks: ["kit-list", "kit-list-item", "kit-list-highlight"],
     },
+    // La lingua dei menu (`kit/row.ts`, `kit/tile.ts`, `kit/group-label.ts`):
+    // `hover` è la scelta accesa (`data-lit`), `pressed` la risposta prima
+    // che il menu si chiuda (`data-pressed`), `disabled` la voce spenta col
+    // suo perché.
+    {
+      name: "kit-row",
+      states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")],
+      hooks: ["kit-row", "kit-row-icon", "kit-row-label", "kit-row-note", "kit-row-keys", "kit-row-more"],
+    },
+    {
+      name: "kit-tile",
+      states: [S("rest"), S("hover"), S("pressed"), S("disabled")],
+      hooks: ["kit-tile", "kit-tile-icon", "kit-tile-label"],
+    },
+    { name: "kit-group-label", states: [S("rest")], hooks: ["kit-group-label"] },
     {
       name: "kit-tabs",
       states: SELECTABLE,

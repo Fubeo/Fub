@@ -7,7 +7,7 @@
 // disegna. Nessuna sessione duplicata: `(vault,doc)` resta unica. Una
 // sessione si lascia solo da `releaseSession`, che sa delle schede della
 // lavagna che ci scrivono (N6 T96).
-import { releaseSession } from "./card-editors";
+import { releaseSession } from "./card-writes";
 import { panes, pane, panesWithDoc, setLayout, type Layout } from "./layout";
 
 async function releaseUnwatched(next: Layout): Promise<void> {

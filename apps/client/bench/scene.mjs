@@ -1357,6 +1357,20 @@ export const SCENE = onPage("shell", [
       prepare: async () => {},
     },
     {
+      id: "kit-lingua",
+      title: "Il kit: la lingua dei menu, righe, tessere ed etichette nei loro stati",
+      query: "lingua",
+      viewport: KIT_WINDOW,
+      prepare: async (page) => {
+        // La sezione sta in fondo alla colonna di destra: la si porta in cima.
+        await page.evaluate(() => {
+          const heading = [...document.querySelectorAll("h2")].find((node) => node.textContent === "La lingua dei menu");
+          if (!heading) throw new Error("manca la sezione «La lingua dei menu»");
+          heading.closest("section").scrollIntoView({ block: "start" });
+        });
+      },
+    },
+    {
       id: "kit-popover",
       title: "Il kit: il popover che porta un menu, col fuoco sulla prima voce",
       prepare: async (page) => {

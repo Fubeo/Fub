@@ -92,7 +92,8 @@ import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
 import { syntaxForms, unsavedDrafts } from "../host/query";
-import { createCardEditorPort, type CardEditorHub, type CardNotices } from "./card-editors";
+import type { CardEditorHub, CardNotices } from "./card-editors";
+import { lazyCardEditorHub } from "./card-writes";
 import { createFormatBar, type GroupId } from "../panels/format-bar";
 import type { ComponentRefusal, ComponentRow, DraftInfo, Origin } from "../host/contract";
 import {
@@ -549,30 +550,6 @@ function watchCardFile(path: string, changed: () => void): () => void {
   };
 }
 
-/// La porta per scrivere dentro le schede (N6 T40): le stesse sessioni e lo
-/// stesso registro delle superfici dei riquadri di questa finestra, e la
-/// stessa sola lettura (`heldReadOnly`). Nasce al primo uso: caricare il
-/// modulo non legge ancora la collezione delle sessioni.
-let cardEditorHub: CardEditorHub | null = null;
-function cardEditorsHub(): CardEditorHub {
-  cardEditorHub ??= createCardEditorPort({
-    sessions: documentSessions,
-    surfaces: () => surfaceRegistry ?? null,
-    held: heldReadOnly,
-    heldWhy,
-    shownInPane: isOpen,
-    theme: () => theme,
-    forms: syntaxForms,
-    toolbar: cardToolbar,
-    conflict: (box, path) => view.drawCardConflict(box, path),
-    notices: (box, path, drawn) => view.drawCardNotices(box, path, drawn),
-    // Una scheda chiusa sopra un salvataggio fallito: la domanda di un
-    // riquadro, e «Tieni» riapre la nota nel riquadro col fuoco (T102).
-    unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
-  });
-  return cardEditorHub;
-}
-
 /// La sbirciata della finestra (E11, T20): una sola, sopra il riquadro col
 /// fuoco, con l'editor della nota montato dalla porta delle schede. Nasce al
 /// primo uso.
@@ -706,17 +683,34 @@ function cardToolbar(surface: EditorSurface, life: Lifetime): HTMLElement {
   life.add(() => bar.destroy());
   return bar.element;
 }
-const cardEditors: CardEditorHub = {
-  open: (path, host, options) => cardEditorsHub().open(path, host, options),
-  openText: (host, text, options) => cardEditorsHub().openText(host, text, options),
-  written: (surfaceId, change) => cardEditorHub?.written(surfaceId, change) ?? false,
-  failed: (surfaceId, error) => cardEditorHub?.failed(surfaceId, error) ?? false,
-  holds: (path) => cardEditorHub?.holds(path) ?? false,
-  renamed: () => cardEditorHub?.renamed(),
-  refreshReadOnly: () => cardEditorHub?.refreshReadOnly(),
-  setTheme: (next) => cardEditorHub?.setTheme(next),
-  destroyAll: () => cardEditorHub?.destroyAll(),
-};
+
+/// La porta per scrivere dentro le schede (N6 T40): le stesse sessioni e lo
+/// stesso registro delle superfici dei riquadri di questa finestra, e la
+/// stessa sola lettura (`heldReadOnly`). Nasce al primo uso, e il suo modulo
+/// arriva allora con un `import()`: serve solo a una lavagna, che arriva anche
+/// lei così, e non pesa sull'avvio di nessuna finestra (`lazyCardEditorHub`).
+const cardEditors: CardEditorHub = lazyCardEditorHub(async () => {
+  const { createCardEditorPort } = await import("./card-editors");
+  return () => createCardEditorPort({
+    sessions: documentSessions,
+    surfaces: () => surfaceRegistry ?? null,
+    held: heldReadOnly,
+    heldWhy,
+    shownInPane: isOpen,
+    theme: () => theme,
+    forms: syntaxForms,
+    toolbar: cardToolbar,
+    conflict: (box, path) => view.drawCardConflict(box, path),
+    notices: (box, path, drawn) => view.drawCardNotices(box, path, drawn),
+    // Una scheda chiusa sopra un salvataggio fallito: la domanda di un
+    // riquadro, e «Tieni» riapre la nota nel riquadro col fuoco (T102).
+    unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
+  });
+}, {
+  sessions: () => documentSessions,
+  shownInPane: isOpen,
+  unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
+});
 
 /// Le porte delle schede della lavagna (N6 T12). Le immagini e i PDF si
 /// leggono dalla `transport` dei media (`mediaTransport`), i fogli con le

@@ -286,6 +286,16 @@
     "kit-list",
     "kit-list-item",
     "kit-list-highlight",
+    "kit-row",
+    "kit-row-icon",
+    "kit-row-label",
+    "kit-row-note",
+    "kit-row-keys",
+    "kit-row-more",
+    "kit-tile",
+    "kit-tile-icon",
+    "kit-tile-label",
+    "kit-group-label",
     "kit-tabs",
     "kit-tab",
     "kit-tab-label",
@@ -2071,6 +2081,16 @@
     "kit-list": "cornice",
     "kit-list-item": "cornice",
     "kit-list-highlight": "cornice",
+    "kit-row": "cornice",
+    "kit-row-icon": "cornice",
+    "kit-row-label": "cornice",
+    "kit-row-note": "cornice",
+    "kit-row-keys": "cornice",
+    "kit-row-more": "cornice",
+    "kit-tile": "cornice",
+    "kit-tile-icon": "cornice",
+    "kit-tile-label": "cornice",
+    "kit-group-label": "cornice",
     "kit-tabs": "cornice",
     "kit-tab": "cornice",
     "kit-tab-label": "cornice",
@@ -4214,6 +4234,50 @@
         "focused",
         "selected",
         "disabled"
+      ]
+    },
+    {
+      "name": "kit-row",
+      "part": "kit",
+      "hooks": [
+        "kit-row",
+        "kit-row-icon",
+        "kit-row-label",
+        "kit-row-note",
+        "kit-row-keys",
+        "kit-row-more"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "kit-tile",
+      "part": "kit",
+      "hooks": [
+        "kit-tile",
+        "kit-tile-icon",
+        "kit-tile-label"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "disabled"
+      ]
+    },
+    {
+      "name": "kit-group-label",
+      "part": "kit",
+      "hooks": [
+        "kit-group-label"
+      ],
+      "states": [
+        "rest"
       ]
     },
     {
@@ -9714,10 +9778,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1783,
+    "hooks": 1793,
     "state_names": 7,
-    "assigned_states": 845,
-    "components": 251,
+    "assigned_states": 855,
+    "components": 254,
     "preference_tokens": 189
   }
 }
