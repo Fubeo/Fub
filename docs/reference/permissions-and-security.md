@@ -355,6 +355,13 @@ link cade e la sua etichetta resta testo, senza parentesi quadre. Gli altri
 schemi e i percorsi relativi (`a&amp;b.html`) restano destinazioni, perché un
 importatore porta i suoi (`evernote://`): la resa li filtra di nuovo.
 
+Il client scioglie le entità del Markdown senza DOM
+(`apps/client/src/editors/text/profiles/markdown/link-syntax.ts`): le
+numeriche e le nominate della tabella completa di HTML, generata da
+`vendor/whatwg-entities/`, sempre con il `;` finale come vuole CommonMark.
+Un nome che la tabella non ha, o una forma senza `;`, resta testo; un test
+ferma un ritorno di `innerHTML` in quel file.
+
 ## Server MCP
 
 `fub-cli mcp` dà il vault a un agente, su stdio. Senza

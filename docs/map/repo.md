@@ -115,7 +115,11 @@ parse (`crates/fub-kernel/tests/write_atomicity.rs`).
 | PhotoCraft, LightCraft | `tools/motori-prova/foto/`, `luce/` | le prove di K7 e K8 |
 | PdfCraft | `tools/motori-prova/pdf/` | le prove; il client usa pdf.js (`editors/media/pdf-view.ts`) |
 
-Le copie in `vendor/` sono derivati: upstream a un commit preciso più le
+Fuori dai motori, `vendor/whatwg-entities/` tiene la tabella delle entità
+nominate della specifica HTML (CC BY 4.0), da cui il client genera quella che
+scioglie le entità del Markdown.
+
+Le copie dei motori in `vendor/` sono derivati: upstream a un commit preciso più le
 patch numerate di `patches/`, con `upstream.lock` che ne conserva le impronte.
 L'interfaccia (`ui-egui`) e il server MCP dei due motori non sono copiati.
 
