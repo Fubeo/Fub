@@ -48,10 +48,14 @@ Con un testo Tutto mostra tre gruppi, nell'ordine:
   i documenti di Word, i fogli, le lavagne), nell'ordine di pertinenza che dà
   l'indice; poi gli altri file che Fub sa mostrare (PDF, immagini, audio,
   video), che l'indice dei nomi non conosce e che vengono dall'elenco dei file
-  del vault, letto una volta per apertura del lanciatore. Per questi conta il
-  nome con l'estensione (`pdf` trova i PDF), e un file che si chiama proprio
-  come si è scritto sale subito dopo i documenti che si chiamano così. Ogni
-  riga porta l'icona della sua specie;
+  del vault. L'elenco si legge quando il lanciatore si apre, e di nuovo quando
+  i documenti cambiano; se la lettura non è finita, i documenti si vedono subito
+  e i file si aggiungono quando arrivano, senza spostare la riga scelta con le
+  frecce. Per questi conta il nome con l'estensione (`pdf` trova i PDF), e un
+  file che si chiama proprio come si è scritto sale subito dopo i documenti che
+  si chiamano così. Un documento che non è una nota porta l'icona del suo
+  formato, un file quella della sua specie (un libro per un PDF, un'immagine,
+  una nota musicale, uno schermo per un video); una nota non porta icona;
 - **Nel testo**: le note in cui il testo compare nel contenuto, con l'estratto e
   il punto del primo riscontro (le note già elencate non si ripetono);
 - **Titoli**: i titoli della nota aperta che contengono il testo.
@@ -60,9 +64,11 @@ Un gruppo che non ha righe non compare. Un elenco lungo si ferma a 200 righe e
 dice quante sono in tutto. Una sintassi di ricerca a metà (per esempio una
 virgoletta aperta) si dice, senza fermare i gruppi che trovano qualcosa.
 
-Quando non c'è niente, la frase dice che cosa fare. Se il testo può diventare il
-nome di una nota, la frase propone `Maiusc-Invio` per crearla; se non può (per
-esempio è fatto solo di barre), non propone niente.
+Quando non c'è niente, la frase dice perché e che cosa fare. Se il testo può
+diventare il nome di una nota, la frase lo propone e il piede mostra il bottone
+**Crea la nota**, col suo tasto `Maiusc-Invio`; se non può (per esempio è fatto
+solo di barre), non propone niente. Mentre l'indice lavora, con una sintassi a
+metà o con un guasto la frase dice quello, e non si crea niente.
 
 ## I gesti
 
@@ -71,7 +77,7 @@ esempio è fatto solo di barre), non propone niente.
 | Invio | apre la riga attiva qui, o esegue il comando, o inserisce il blocco |
 | Ctrl-Invio (Cmd-Invio su Mac) | apre a lato, in un riquadro accanto a quello col fuoco |
 | Alt-Invio | apre a lato, finché non c'è la sbirciata |
-| Maiusc-Invio | apre come Invio; senza righe, crea la nota col nome scritto |
+| Maiusc-Invio | apre come Invio; quando la risposta offre di creare, crea la nota col nome scritto |
 | Tab | mostra le azioni della riga attiva, se è una nota o una persona |
 | Esc | dalle azioni torna all'elenco; altrimenti chiude il lanciatore |
 | Ctrl Maiusc Invio | porta la domanda nel pannello Cerca, dove c'è una domanda |
@@ -82,20 +88,37 @@ Tab non cambia modo: mostra le azioni. Le azioni di una nota sono **Apri qui**,
 **Copia il link**, **Appunta** (o **Togli dagli appunti**, se è già appuntata).
 Scrivere nel campo lascia le azioni e torna all'elenco.
 
-Con un tocco, senza tastiera, il piede mostra il bottone **Azioni**, che fa
-quello che fa Tab. L'anteprima non c'è al telefono.
+Sulla riga di una nota o di una persona il piede mostra il bottone **Azioni**,
+che fa quello che fa Tab: è la strada di chi tocca, senza tastiera. Allo stesso
+modo **Crea la nota** fa quello che fa Maiusc-Invio. I bottoni del piede non
+sono fermate del Tab. Al telefono il piede non mostra i tasti, solo le parole, e
+l'anteprima non c'è.
 
 ### Maiusc-Invio e le note nuove
 
-Maiusc-Invio crea una nota solo quando non c'è nessuna riga da scegliere. La
-nota nasce nello spazio attivo, col nome scritto, e il fuoco va nell'editor.
+Maiusc-Invio, o **Crea la nota**, crea una nota solo quando la risposta che si
+vede lo offre: nessuna riga da scegliere, l'indice fermo, nessuna sintassi a
+metà e nessun guasto. La nota nasce nello spazio attivo, col nome scritto, e il
+fuoco va nell'editor.
 
 - Un nome che il file non accetta (barre, due punti, caratteri di controllo) si
   corregge da solo: quei caratteri diventano spazi. Il nome proposto è quello
   che la frase mostra.
 - Un nome già preso non crea una seconda nota: apre quella che c'è e lo dice.
 - Mentre la risposta non è ancora arrivata, Maiusc-Invio non crea niente: aspetta
-  che si veda la risposta.
+  che si veda la risposta. Vale anche per la risposta che si rifà quando i
+  documenti cambiano: la nota che l'indice ha appena trovato non nasce doppia.
+  Mentre si scrive, **Crea la nota** resta al suo posto ma non crea.
+
+### Quando i documenti cambiano
+
+Se una nota nasce, si cancella o si rinomina mentre il lanciatore è aperto, un
+elenco che mostra note si rifà con la stessa domanda (e si rileggono i file):
+la nota sparita esce dall'elenco e dall'anteprima, una ricerca che non trovava
+niente trova la nota arrivata nell'indice. La riga scelta con le frecce resta
+scelta, se c'è ancora; altrimenti la scelta è la prima riga. Un Invio dato
+mentre l'elenco si rifà vale per la riga su cui era; se quella è sparita, non
+apre niente. Le azioni aperte non si rifanno.
 
 ### Riga e Aiuto
 

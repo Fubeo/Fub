@@ -32,16 +32,21 @@ const world = vi.hoisted(() => ({
   languageListeners: new Set<() => void>(),
   render: null as unknown as (doc: string) => Promise<{ html: string; parts: [] }>,
   rendered: [] as string[],
-  /// Quante volte il lanciatore ha dimenticato i file letti.
+  /// Quante volte il lanciatore ha dimenticato i file letti (e li rilegge).
   forgot: 0,
+  /// Quante volte li ha riletti tenendo quelli di prima.
+  reread: 0,
 }));
 
 vi.mock("./sources", () => ({
   TEMPLATE_COMMAND: "note.from_template",
   answersAtOnce: (mode: string) => mode === "commands" || mode === "line" || mode === "blocks" || mode === "help",
   selectable: (row: { kind: string }) => row.kind !== "group",
-  forgetFiles: () => {
+  prefetchFiles: () => {
     world.forgot += 1;
+  },
+  rereadFiles: () => {
+    world.reread += 1;
   },
   listing: (mode: string, text: string) => {
     world.asked.push([mode, text]);
@@ -146,6 +151,8 @@ import { ASK_DELAY_MS, SLOW_AFTER_MS, mountLauncher, type Launcher } from "./lau
 import { PREVIEW_DELAY_MS, PREVIEW_SLOW_MS } from "./preview";
 
 const nothing = (note: string | null = null): Listing => ({ rows: [], note, total: null });
+/// Una risposta senza righe che offre di creare la nota `name`.
+const offer = (name: string, note = `launcher.note.all.create ${JSON.stringify({ query: name, name })}`): Listing => ({ ...nothing(note), create: name });
 const listed = (rows: Row[], total: number | null = null): Listing => ({ rows, note: null, total });
 const note = (doc: string, extra: Partial<Extract<Row, { kind: "note" }>> = {}): Row => ({
   kind: "note",
@@ -180,6 +187,11 @@ const surface = (): HTMLElement | null => document.querySelector(".launcher");
 const field = (): HTMLInputElement => document.querySelector(".launcher-input") as HTMLInputElement;
 const veil = (): HTMLElement => document.querySelector(".launcher-veil") as HTMLElement;
 const titles = (): string[] => [...document.querySelectorAll(".launcher-row-title")].map((each) => each.textContent ?? "");
+/// Il titolo della riga attiva, quella che Invio sceglie.
+const activeTitle = (): string | null => {
+  const id = field().getAttribute("aria-activedescendant");
+  return id ? (document.getElementById(id)?.querySelector(".launcher-row-title")?.textContent ?? null) : null;
+};
 const selectedMode = (): string | null =>
   document.querySelector('.launcher-modes [role="tab"][aria-selected="true"]')?.textContent ?? null;
 const said = (): string => document.querySelector(".launcher-note")?.textContent ?? "";
@@ -190,8 +202,10 @@ const paneSays = (): string => {
   const words = document.querySelector(".launcher-preview-note") as HTMLElement;
   return words.hidden ? "" : (words.textContent ?? "");
 };
-// Il bottone delle azioni (per il telefono) porta la stessa classe: qui è escluso.
-const toPanel = (): HTMLButtonElement => document.querySelector(".launcher-panel:not(.launcher-actions)") as HTMLButtonElement;
+// Il bottone delle azioni (per il telefono) e «Crea la nota» portano la stessa
+// classe: qui sono esclusi.
+const toPanel = (): HTMLButtonElement => document.querySelector(".launcher-panel:not(.launcher-actions):not(.launcher-create)") as HTMLButtonElement;
+const toCreate = (): HTMLButtonElement => document.querySelector(".launcher-create") as HTMLButtonElement;
 
 /// La finestra, con le misure che happy-dom non cambia da sé.
 function resizeTo(width: number, height: number): void {
@@ -249,6 +263,7 @@ beforeEach(() => {
   world.rendered.length = 0;
   world.render = async (doc) => ({ html: `<p>Resa di ${doc}</p>`, parts: [] });
   world.forgot = 0;
+  world.reread = 0;
   resizeTo(1280, 800);
   common.switcher.mockClear();
   common.palette.mockClear();
@@ -479,7 +494,7 @@ describe("i modi", () => {
     expect(document.activeElement).toBe(field());
   });
 
-  it("nessuna linguetta è una fermata del Tab: Tab qui cambia modo", () => {
+  it("nessuna linguetta è una fermata del Tab, nemmeno dopo un Tab o un clic sulla fila", () => {
     launcher.open("all");
     const stops = (): number[] => [...document.querySelectorAll<HTMLElement>('.launcher-modes [role="tab"]')].map((tab) => tab.tabIndex);
     expect(stops()).toEqual([-1, -1, -1, -1, -1, -1, -1]);
@@ -660,7 +675,7 @@ describe("scegliere una riga", () => {
   });
 
   it("Maiusc-Invio su una ricerca senza risultati crea la nota col nome scritto, apre e porta il fuoco nell'editor", async () => {
-    world.answer = () => nothing('launcher.note.all.create {"query":"Idea nuova","name":"Idea nuova"}');
+    world.answer = () => offer("Idea nuova");
     launcher.open("all");
     typed("Idea nuova");
     expect(said()).toBe('launcher.note.all.create {"query":"Idea nuova","name":"Idea nuova"}');
@@ -672,7 +687,7 @@ describe("scegliere una riga", () => {
 
   it("una creazione rifiutata non apre niente", async () => {
     world.created = null;
-    world.answer = () => nothing("launcher.note.all.create");
+    world.answer = () => offer("Idea");
     launcher.open("all");
     typed("Idea");
     press(field(), "Enter", { shiftKey: true });
@@ -697,7 +712,7 @@ describe("scegliere una riga", () => {
     await settle();
     expect(world.log).toEqual([]);
     expect(surface()).not.toBeNull();
-    coming.land(nothing("launcher.note.all.create"));
+    coming.land(offer("Idea"));
     await settle();
     press(field(), "Enter", { shiftKey: true });
     await settle();
@@ -715,7 +730,7 @@ describe("scegliere una riga", () => {
 
   it("un nome già preso apre la nota che c'è, e lo dice", async () => {
     world.named = ["Idea.md"];
-    world.answer = () => nothing("launcher.note.all.create");
+    world.answer = () => offer("Idea");
     launcher.open("all");
     typed("Idea");
     press(field(), "Enter", { shiftKey: true });
@@ -1139,7 +1154,7 @@ describe("le risposte che arrivano tardi", () => {
   });
 
   it("una ricerca senza risultati si rifà quando i documenti cambiano: la nota arrivata nell'indice si vede", () => {
-    world.answer = () => nothing('launcher.note.all.create {"query":"Stampa","name":"Stampa"}');
+    world.answer = () => offer("Stampa");
     launcher.open("all");
     typed("Stampa");
     expect(said()).toBe('launcher.note.all.create {"query":"Stampa","name":"Stampa"}');
@@ -1149,13 +1164,142 @@ describe("le risposte che arrivano tardi", () => {
     expect(said()).toBe("");
   });
 
-  it("con dei risultati già visibili, un cambio di documenti non rifà la ricerca", () => {
+  it("una nota cancellata o rinominata a lanciatore aperto esce dall'elenco, e la scelta mossa resta sulla sua riga", () => {
+    world.answer = () => listed([note("Uno.md"), note("Due.md"), note("Tre.md")]);
+    launcher.open("all");
+    typed("o");
+    press(field(), "ArrowDown");
+    press(field(), "ArrowDown");
+    expect(activeTitle()).toBe("Tre");
+    // «Uno» è stato cancellato, «Due» rinominato: i documenti cambiano.
+    world.answer = () => listed([note("Altro.md"), note("Tre.md")]);
+    world.asked.length = 0;
+    emit("documents");
+    expect(world.asked).toEqual([["all", "o"]]);
+    expect(world.reread).toBe(1);
+    expect(titles()).toEqual(["Altro", "Tre"]);
+    expect(activeTitle()).toBe("Tre");
+    press(field(), "Enter");
+    expect(world.log).toEqual(["open Tre.md"]);
+  });
+
+  it("senza una scelta mossa, l'elenco rifatto sceglie la sua prima riga", () => {
+    world.answer = () => listed([note("Uno.md"), note("Due.md")]);
+    launcher.open("all");
+    typed("o");
+    world.answer = () => listed([note("Due.md")]);
+    emit("documents");
+    expect(titles()).toEqual(["Due"]);
+    expect(activeTitle()).toBe("Due");
+  });
+
+  it("un Invio dato mentre l'elenco si rifà vale per la riga scelta, se c'è ancora; se è sparita non apre niente", async () => {
+    world.answer = () => listed([note("Uno.md"), note("Due.md")]);
+    launcher.open("all");
+    typed("o");
+    press(field(), "ArrowDown");
+    let coming = pending();
+    world.answer = () => coming.promise;
+    emit("documents");
+    press(field(), "Enter");
+    expect(world.log).toEqual([]);
+    coming.land(listed([note("Nuova.md"), note("Uno.md"), note("Due.md")]));
+    await settle();
+    expect(world.log).toEqual(["open Due.md"]);
+
+    launcher.open("all");
+    world.answer = () => listed([note("Uno.md"), note("Due.md")]);
+    typed("e");
+    press(field(), "ArrowDown");
+    coming = pending();
+    world.answer = () => coming.promise;
+    world.log.length = 0;
+    emit("documents");
+    press(field(), "Enter");
+    coming.land(listed([note("Uno.md")]));
+    await settle();
+    expect(world.log).toEqual([]);
+    expect(surface()).not.toBeNull();
+  });
+
+  it("le azioni aperte e i modi senza note non si rifanno quando i documenti cambiano", () => {
     world.answer = () => listed([note("Uno.md")]);
     launcher.open("all");
     typed("uno");
+    press(field(), "Tab");
     world.asked.length = 0;
     emit("documents");
     expect(world.asked).toEqual([]);
+    launcher.open("tags");
+    world.asked.length = 0;
+    emit("documents");
+    expect(world.asked).toEqual([]);
+  });
+
+  it("ciò che arriva dopo (i file ancora in lettura) si aggiunge: senza una scelta mossa sceglie la prima riga, con una scelta la tiene", async () => {
+    let later = pending();
+    world.answer = () => ({ ...listed([note("Uno.md"), note("Due.md")]), more: later.promise });
+    launcher.open("all");
+    typed("stampa");
+    await settle();
+    expect(titles()).toEqual(["Uno", "Due"]);
+    later.land(listed([note("Stampa.pdf"), note("Uno.md"), note("Due.md")]));
+    await settle();
+    expect(titles()).toEqual(["Stampa", "Uno", "Due"]);
+    expect(activeTitle()).toBe("Stampa");
+
+    later = pending();
+    typed("stampe");
+    await settle();
+    press(field(), "ArrowDown");
+    expect(activeTitle()).toBe("Due");
+    later.land(listed([note("Stampa.pdf"), note("Uno.md"), note("Due.md")]));
+    await settle();
+    expect(titles()).toEqual(["Stampa", "Uno", "Due"]);
+    expect(activeTitle()).toBe("Due");
+  });
+
+  it("ciò che arriva dopo per una domanda vecchia non scrive sopra la risposta nuova", async () => {
+    const later = pending();
+    const answers: Answer[] = [{ ...listed([note("Uno.md")]), more: later.promise }, listed([note("Nuova.md")])];
+    world.answer = () => answers.shift() ?? listed([]);
+    launcher.open("all");
+    await settle();
+    typed("nuova");
+    await settle();
+    expect(titles()).toEqual(["Nuova"]);
+    later.land(listed([note("Stampa.pdf"), note("Uno.md")]));
+    await settle();
+    expect(titles()).toEqual(["Nuova"]);
+  });
+
+  it("con l'indice in corso Maiusc-Invio non crea, e «Crea la nota» non c'è", () => {
+    world.answer = () => nothing("launcher.note.all.indexing");
+    launcher.open("all");
+    typed("Idea");
+    press(field(), "Enter", { shiftKey: true });
+    expect(world.log).toEqual([]);
+    expect(surface()).not.toBeNull();
+    expect(toCreate().hidden).toBe(true);
+  });
+
+  it("mentre arriva la risposta rifatta (i documenti sono cambiati) Maiusc-Invio non crea", async () => {
+    world.answer = () => offer("Idea");
+    launcher.open("all");
+    typed("Idea");
+    const coming = pending();
+    world.answer = () => coming.promise;
+    emit("documents");
+    press(field(), "Enter", { shiftKey: true });
+    toCreate().click();
+    await settle();
+    expect(world.log).toEqual([]);
+    // L'indice ha trovato la nota: niente doppione.
+    coming.land(listed([note("Idea.md")]));
+    await settle();
+    expect(world.log).toEqual([]);
+    expect(titles()).toEqual(["Idea"]);
+    expect(toCreate().hidden).toBe(true);
   });
 
   it("un Invio dato alla cieca non apre né crea niente; Maiusc-Invio crea solo a risposta vista", async () => {
@@ -1166,7 +1310,7 @@ describe("le risposte che arrivano tardi", () => {
     await settle();
     type("idea");
     press(field(), "Enter", { shiftKey: true });
-    coming.land(nothing('launcher.note.all.create {"query":"idea","name":"idea"}'));
+    coming.land(offer("idea"));
     await settle();
     expect(world.log).toEqual([]);
     expect(surface()).not.toBeNull();
@@ -1591,6 +1735,44 @@ describe("l'anteprima accanto all'elenco", () => {
     await settle();
     expect(kept.childNodes).toHaveLength(0);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("«Crea la nota», da toccare", () => {
+  it("c'è solo quando la risposta offre di creare, porta scritto il suo accordo, e toccato crea e apre", async () => {
+    world.answer = () => listed([note("Uno.md")]);
+    launcher.open("all");
+    typed("Uno");
+    expect(toCreate().hidden).toBe(true);
+    world.answer = () => nothing('launcher.note.all.none {"query":"..."}');
+    typed("...");
+    expect(toCreate().hidden).toBe(true);
+    world.answer = () => offer("Idea nuova");
+    typed("Idea nuova");
+    expect(toCreate().hidden).toBe(false);
+    expect(toCreate().tabIndex).toBe(-1);
+    expect(toCreate().firstChild?.textContent).toBe("launcher.create.offer");
+    expect(toCreate().querySelector("kbd")?.textContent).toMatch(/↵$/);
+    expect(toCreate().getAttribute("aria-keyshortcuts")).toBe("Shift+Enter");
+    toCreate().click();
+    await settle();
+    expect(world.log).toEqual(["create Idea nuova in -", "open Nuova.md", "focus editor"]);
+    expect(surface()).toBeNull();
+  });
+
+  it("mentre si scrive resta al suo posto ma non crea; in un altro modo non c'è", async () => {
+    world.answer = () => offer("Idea");
+    launcher.open("all");
+    typed("Idea");
+    expect(toCreate().hidden).toBe(false);
+    type("Idea b");
+    expect(toCreate().hidden).toBe(false);
+    toCreate().click();
+    await settle();
+    expect(world.log).toEqual([]);
+    expect(document.activeElement).toBe(field());
+    launcher.open("tags");
+    expect(toCreate().hidden).toBe(true);
   });
 });
 

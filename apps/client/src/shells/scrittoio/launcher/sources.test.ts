@@ -33,6 +33,9 @@ const world = vi.hoisted(() => {
     /// Le pagine dell'anagrafe chieste, e se l'anagrafe risponde.
     entryPages: [] as { offset: number; limit: number }[],
     entriesFail: false,
+    /// Le letture dell'anagrafe trattenute: ogni pagina aspetta la prima di
+    /// queste, se ce n'è una.
+    entryGates: [] as Promise<void>[],
   };
 });
 
@@ -64,6 +67,8 @@ vi.mock("../../../host/query", () => ({
   notesByName: async () => world.names,
   vaultEntries: async (window: { offset: number; limit: number }, kind: string) => {
     world.entryPages.push(window);
+    const gate = world.entryGates.shift();
+    if (gate) await gate;
     if (world.entriesFail) throw new Error("host fake: anagrafe guasta");
     if (kind !== "asset") throw new Error(`il lanciatore chiede solo i file, non ${kind}`);
     const items = world.files.slice(window.offset, window.offset + window.limit).map((id) => ({ id, kind: "asset", size: 1, mtime: 0, fingerprint: null }));
@@ -117,10 +122,31 @@ vi.mock("../../../ui/palette", () => ({
   paletteHistoryForTest: () => ["shell.palette"],
 }));
 
-import { FILE_LIMIT, LIST_LIMIT, SEARCH_LIMIT, TEMPLATE_COMMAND, answersAtOnce, forgetFiles, listing, selectable, type Row } from "./sources";
+import {
+  FILE_LIMIT,
+  LIST_LIMIT,
+  SEARCH_LIMIT,
+  TEMPLATE_COMMAND,
+  answersAtOnce,
+  forgetFiles,
+  listing,
+  prefetchFiles,
+  rereadFiles,
+  selectable,
+  type Row,
+} from "./sources";
 
 const ask = (mode: Parameters<typeof listing>[0], text: string) => listing(mode, text) as Promise<Awaited<ReturnType<typeof listing>>>;
 const keys = (rows: Row[]) => rows.map((row) => row.key);
+
+/// Una lettura dell'anagrafe che finisce quando lo dice il test.
+function holdEntries(): () => void {
+  let open!: () => void;
+  world.entryGates.push(new Promise<void>((resolve) => {
+    open = resolve;
+  }));
+  return open;
+}
 
 /// Il comando del kernel com'è dichiarato dal registro.
 function spec(id: string, title: string, keybinding: string | null = null) {
@@ -150,6 +176,7 @@ beforeEach(() => {
   world.hidden = [];
   world.entryPages.length = 0;
   world.entriesFail = false;
+  world.entryGates.length = 0;
   forgetFiles();
 });
 
@@ -264,6 +291,85 @@ describe("Tutto con un testo", () => {
     expect(keys((await ask("all", "stampa")).rows)).toEqual(["g:files", "n:Stampa.md", "n:R1/Stampa.pdf"]);
   });
 
+  it("con l'anagrafe ancora in lettura i documenti arrivano subito, e i file dopo, nello stesso ordine", async () => {
+    world.names = ["Appunti di stampa.md"];
+    world.files = ["R1/Stampa.pdf"];
+    const open = holdEntries();
+    const answer = await ask("all", "stampa");
+    expect(keys(answer.rows)).toEqual(["g:files", "n:Appunti di stampa.md"]);
+    expect(answer.more).toBeDefined();
+    open();
+    const later = await answer.more!;
+    expect(keys(later!.rows)).toEqual(["g:files", "n:R1/Stampa.pdf", "n:Appunti di stampa.md"]);
+    // Letta l'anagrafe, la domanda dopo ha tutto subito.
+    const next = await ask("all", "stampa");
+    expect(keys(next.rows)).toEqual(["g:files", "n:R1/Stampa.pdf", "n:Appunti di stampa.md"]);
+    expect(next.more).toBeUndefined();
+  });
+
+  it("senza niente da mostrare si aspettano i file, invece di dire «nessun risultato» e poi smentirlo", async () => {
+    world.files = ["R1/Stampa.pdf"];
+    const open = holdEntries();
+    const coming = ask("all", "stampa");
+    open();
+    const answer = await coming;
+    expect(keys(answer.rows)).toEqual(["g:files", "n:R1/Stampa.pdf"]);
+    expect(answer.more).toBeUndefined();
+    expect(answer.create).toBeUndefined();
+  });
+
+  it("i file arrivati dopo che non cambiano niente non rifanno l'elenco", async () => {
+    world.names = ["Stampa.md"];
+    world.files = ["Foto/Mare.jpg"];
+    const open = holdEntries();
+    const answer = await ask("all", "stampa");
+    open();
+    expect(await answer.more).toBeNull();
+  });
+
+  it("la lettura parte all'apertura (`prefetchFiles`), e i file riletti tengono intanto l'elenco di prima", async () => {
+    world.files = ["R1/Stampa.pdf", "R1/Stampa vecchia.pdf"];
+    prefetchFiles();
+    expect(world.entryPages).toHaveLength(1);
+    expect(keys((await ask("all", "stampa")).rows)).toEqual(["g:files", "n:R1/Stampa.pdf", "n:R1/Stampa vecchia.pdf"]);
+    expect(world.entryPages).toHaveLength(1);
+    // «Stampa vecchia» è stata cancellata: i documenti cambiano, e si rilegge.
+    world.files = ["R1/Stampa.pdf"];
+    const open = holdEntries();
+    rereadFiles();
+    const answer = await ask("all", "stampa");
+    expect(keys(answer.rows)).toEqual(["g:files", "n:R1/Stampa.pdf", "n:R1/Stampa vecchia.pdf"]);
+    open();
+    expect(keys((await answer.more)!.rows)).toEqual(["g:files", "n:R1/Stampa.pdf"]);
+  });
+
+  it("un file rinominato che lascia l'elenco vuoto lo dice, e offre di creare", async () => {
+    world.files = ["R1/Stampa.pdf"];
+    prefetchFiles();
+    await ask("all", "stampa");
+    world.files = ["R1/Copia.pdf"];
+    const open = holdEntries();
+    rereadFiles();
+    const answer = await ask("all", "stampa");
+    open();
+    const later = (await answer.more)!;
+    expect(later.rows).toEqual([]);
+    expect(later.note).toBe('launcher.note.all.create {"query":"stampa","name":"stampa"}');
+    expect(later.create).toBe("stampa");
+  });
+
+  it("una lettura superata non scrive sopra quella nuova", async () => {
+    world.files = ["Vecchio.pdf"];
+    const slow = holdEntries();
+    prefetchFiles();
+    world.files = ["Nuovo.pdf"];
+    rereadFiles();
+    expect(keys((await ask("all", "pdf")).rows)).toEqual(["g:files", "n:Nuovo.pdf"]);
+    slow();
+    await Promise.resolve();
+    expect(keys((await ask("all", "pdf")).rows)).toEqual(["g:files", "n:Nuovo.pdf"]);
+  });
+
   it("la ricerca nel testo porta estratto e punto del primo riscontro, senza ripetere le note per nome", async () => {
     world.names = ["Uno.md"];
     world.matches = {
@@ -317,8 +423,18 @@ describe("Tutto con un testo", () => {
     expect(keys((await ask("all", '"aperta')).rows)).toEqual(["g:files", "n:Aperta.md"]);
   });
 
-  it("senza risultati propone di creare la nota, se il testo può essere un nome", async () => {
-    expect((await ask("all", "Idea nuova")).note).toBe('launcher.note.all.create {"query":"Idea nuova","name":"Idea nuova"}');
+  it("senza risultati propone di creare la nota, se il testo può essere un nome: solo allora la risposta dice che si può", async () => {
+    const answer = await ask("all", "Idea nuova");
+    expect(answer.note).toBe('launcher.note.all.create {"query":"Idea nuova","name":"Idea nuova"}');
+    expect(answer.create).toBe("Idea nuova");
+  });
+
+  it("con l'indice in corso, una sintassi a metà o un nome impossibile non offre di creare", async () => {
+    world.indexing = "running";
+    expect((await ask("all", "Idea")).create).toBeUndefined();
+    world.indexing = "idle";
+    expect((await ask("all", '"Idea')).create).toBeUndefined();
+    expect((await ask("all", "///")).create).toBeUndefined();
   });
 
   it("senza risultati e senza un nome possibile lo dice, senza offrire di creare", async () => {

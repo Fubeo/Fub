@@ -82,6 +82,12 @@ export interface Listing {
   note: string | null;
   /// Quanti sono in tutto, quando se ne mostra solo una parte.
   total: number | null;
+  /// Il nome della nota che si può creare: c'è solo quando la frase lo
+  /// propone, e solo allora Maiusc-Invio crea.
+  create?: string;
+  /// Lo stesso elenco con ciò che arriva dopo (i file del vault ancora in
+  /// lettura), o `null` se non cambia niente.
+  more?: Promise<Listing | null>;
 }
 
 /// Una riga che si sceglie: le intestazioni dei gruppi no.
@@ -144,11 +150,19 @@ async function headingRows(doc: string, text: string): Promise<Row[]> {
 }
 
 /// I file del vault che non sono documenti e che Fub sa mostrare (un PDF,
-/// un'immagine, un audio), letti una volta per vault finché il lanciatore non
-/// li dimentica (`forgetFiles`, a ogni apertura). L'indice dei nomi conosce
-/// solo i documenti: questi li conosce l'anagrafe, che non ha una ricerca per
-/// nome, e la si legge a pagine come fa il disegno per le sue immagini.
-let files: { vault: string; ids: Promise<string[]> } | null = null;
+/// un'immagine, un audio). L'indice dei nomi conosce solo i documenti: questi
+/// li conosce l'anagrafe, che non ha una ricerca per nome, e la si legge a
+/// pagine come fa il disegno per le sue immagini. La lettura parte quando il
+/// lanciatore si apre (`prefetchFiles`), non alla prima domanda, e si rifà
+/// quando i documenti cambiano (`rereadFiles`): intanto vale l'elenco di prima.
+interface FileList {
+  vault: string;
+  /// L'ultimo elenco letto, o `null` finché la prima lettura non finisce.
+  known: string[] | null;
+  /// La lettura in corso, se ce n'è una.
+  reading: Promise<string[]> | null;
+}
+let files: FileList | null = null;
 
 async function readFiles(): Promise<string[]> {
   const found: string[] = [];
@@ -161,30 +175,57 @@ async function readFiles(): Promise<string[]> {
   return found;
 }
 
-function vaultFiles(vault: string): Promise<string[]> {
-  if (files?.vault !== vault) {
-    const ids = readFiles();
-    const held = { vault, ids };
-    files = held;
-    // Una lettura fallita non resta in memoria: la prossima domanda riprova.
-    ids.catch(() => {
-      if (files === held) files = null;
-    });
-  }
-  return files.ids;
+/// Fa partire una lettura. Vince l'ultima: una lettura superata non scrive
+/// sopra quella nuova, e una fallita lascia l'elenco di prima.
+function startReading(list: FileList): void {
+  const reading = readFiles();
+  list.reading = reading;
+  reading.then(
+    (ids) => {
+      if (list.reading !== reading) return;
+      list.known = ids;
+      list.reading = null;
+    },
+    () => {
+      if (list.reading === reading) list.reading = null;
+    },
+  );
 }
 
-/// Dimentica i file letti: chi riapre il lanciatore vede quelli di adesso.
+/// L'elenco dei file di un vault; se non c'è, o l'ultima lettura è fallita
+/// senza lasciarne uno, la lettura parte adesso.
+function fileList(vault: string): FileList {
+  if (files?.vault !== vault) files = { vault, known: null, reading: null };
+  if (files.known === null && files.reading === null) startReading(files);
+  return files;
+}
+
+/// Dimentica i file letti e comincia a rileggerli: chi apre il lanciatore vede
+/// quelli di adesso, e la lettura corre mentre scrive la sua domanda.
+export function prefetchFiles(): void {
+  files = null;
+  if (state.vaultRoot) fileList(state.vaultRoot);
+}
+
+/// Rilegge i file, tenendo intanto l'elenco di prima: un file tolto o
+/// rinominato mentre il lanciatore è aperto sparisce quando arriva il nuovo.
+export function rereadFiles(): void {
+  if (files !== null && files.vault === state.vaultRoot) startReading(files);
+}
+
+/// Dimentica i file letti, senza rileggerli.
 export function forgetFiles(): void {
   files = null;
 }
 
 /// I file (non documenti) il cui nome, estensione compresa, contiene ogni
 /// parola scritta: prima quelli il cui nome comincia così, poi gli altri.
-async function filesByName(vault: string, written: string): Promise<string[]> {
-  const all = await vaultFiles(vault);
-  return filterByText(all, written, childName, true).slice(0, FILE_LIMIT);
+function filesNamed(all: readonly string[] | null, written: string): string[] {
+  return all === null ? [] : filterByText(all, written, childName, true).slice(0, FILE_LIMIT);
 }
+
+const sameList = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((each, index) => each === right[index]);
 
 /// Le righe del gruppo dei nomi: i documenti nell'ordine che il kernel dà, e
 /// i file dopo. Un file che si chiama proprio come si è scritto («Stampa» per
@@ -237,22 +278,18 @@ async function everything(text: string): Promise<Listing> {
     return capped(rows);
   }
 
-  // I file sono un'aggiunta ai documenti: se l'anagrafe non risponde, le note
-  // per nome restano, come per i titoli.
-  const [docs, found] = await Promise.all([notesByName(written), filesByName(vault, written).catch(() => [])]);
-  const names = namedRows(docs, found, written);
-  const named = new Set(names);
-  const rows: Row[] = [];
-  if (names.length > 0) {
-    rows.push(group("files", t("launcher.group.files")));
-    rows.push(...names.map((each) => noteRow(each, "name", null, null)));
-  }
+  // I file sono un'aggiunta ai documenti: si mostrano quelli già letti, e se
+  // una lettura è in corso arrivano dopo (`more`) senza trattenere le note.
+  // Se l'anagrafe non risponde, le note restano, come per i titoli.
+  const list = fileList(vault);
+  const docs = await notesByName(written);
+  const docNames = new Set(docs);
   let syntax: string | null = null;
   const inText: Row[] = [];
   try {
     const page = await matchingDocuments(searchExpression(written), { offset: 0, limit: SEARCH_LIMIT });
     for (const match of page.items) {
-      if (named.has(match.doc)) continue;
+      if (docNames.has(match.doc)) continue;
       inText.push(noteRow(
         match.doc,
         "text",
@@ -265,30 +302,62 @@ async function everything(text: string): Promise<Listing> {
     if (!(error instanceof SearchSyntaxError)) throw error;
     syntax = error.message;
   }
-  if (inText.length > 0) {
-    rows.push(group("text", t("launcher.group.text")));
-    rows.push(...inText);
-  }
   // I titoli sono un gruppo in più: se l'indice non li dà, le note restano
   // dove sono, e chi cerca una nota non perde il suo risultato per un titolo.
   const headings = doc ? await headingRows(doc, written).catch(() => []) : [];
-  if (headings.length > 0) {
-    rows.push(group("headings", t("launcher.group.headings")));
-    rows.push(...headings);
+
+  const assemble = (found: readonly string[]): Row[] => {
+    const names = namedRows(docs, found, written);
+    const rows: Row[] = [];
+    if (names.length > 0) {
+      rows.push(group("files", t("launcher.group.files")));
+      rows.push(...names.map((each) => noteRow(each, "name", null, null)));
+    }
+    if (inText.length > 0) {
+      rows.push(group("text", t("launcher.group.text")));
+      rows.push(...inText);
+    }
+    if (headings.length > 0) {
+      rows.push(group("headings", t("launcher.group.headings")));
+      rows.push(...headings);
+    }
+    return rows;
+  };
+
+  let found = filesNamed(list.known, written);
+  let reading = list.reading;
+  let rows = assemble(found);
+  if (reading !== null && rows.length === 0) {
+    // Senza niente da mostrare non c'è niente da trattenere: si aspettano i
+    // file, invece di dire «nessun risultato» e poi smentirlo.
+    const fresh = await reading.catch(() => null);
+    found = filesNamed(fresh ?? list.known, written);
+    reading = null;
+    rows = assemble(found);
   }
-  if (rows.length === 0) {
+  // Senza righe, la frase dice perché.
+  const finish = async (rows: Row[]): Promise<Listing> => {
+    if (rows.length > 0) return capped(rows);
     if (syntax !== null) return nothing(syntax);
     const status = await vaultStatus();
     if (status.indexing === "running") return nothing(t("launcher.note.all.indexing"));
-    // Il testo che può essere un nome di nota si propone con Maiusc-Invio.
+    // Il testo che può essere un nome di nota si offre da creare: è l'unico
+    // caso in cui Maiusc-Invio e «Crea la nota» creano.
     const name = searchedName(written);
-    return nothing(
-      name === null
-        ? t("launcher.note.all.none", { query: written })
-        : t("launcher.note.all.create", { query: written, name }),
-    );
-  }
-  return capped(rows);
+    if (name === null) return nothing(t("launcher.note.all.none", { query: written }));
+    return { ...nothing(t("launcher.note.all.create", { query: written, name })), create: name };
+  };
+  const answer = await finish(rows);
+  if (reading === null) return answer;
+  const shown = found;
+  const more = reading.then(
+    (ids) => {
+      const fresh = filesNamed(ids, written);
+      return sameList(fresh, shown) ? null : finish(assemble(fresh));
+    },
+    () => null,
+  );
+  return { ...answer, more };
 }
 
 function commands(text: string): Listing {

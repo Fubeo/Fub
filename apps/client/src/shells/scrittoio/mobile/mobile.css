@@ -249,9 +249,9 @@
     display: none;
   }
 
-  /* Niente tasti sul telefono: «Apri nel pannello» dice solo la parola, e
-     sparisce quando non c'è una domanda da portare, così non sembra un comando
-     spento. */
+  /* Niente tasti sul telefono: i bottoni del piede («Azioni», «Crea la nota»,
+     «Apri nel pannello») dicono solo la parola. «Apri nel pannello» sparisce
+     quando non c'è una domanda da portare, così non sembra un comando spento. */
   :root[data-client-shell="mobile"] .launcher-panel .launcher-key,
   :root[data-client-shell="mobile"] .launcher-panel:disabled {
     display: none;

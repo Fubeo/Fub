@@ -17,7 +17,6 @@ import { t, onLanguage } from "../../../i18n/strings";
 import { createList, createTabs, type ListHandle, type TabsHandle } from "../../../kit";
 import { DURATION, animate, motionLevel, prepareExit } from "../../../moto";
 import { pageName } from "../../../rules/mirrored";
-import { searchedName } from "../../../rules/searched-name";
 import { focusEditor } from "../../../state/document-controller";
 import { identifier, trapFocus } from "../../../ui/a11y";
 import { allCommands, ariaBinding, displayBinding, matchesBinding } from "../../../ui/commands";
@@ -46,7 +45,7 @@ import {
   type Reading,
 } from "./model";
 import { createPreview } from "./preview";
-import { answersAtOnce, forgetFiles, listing, selectable, type Listing, type Row } from "./sources";
+import { answersAtOnce, listing, prefetchFiles, rereadFiles, selectable, type Listing, type Row } from "./sources";
 
 /// Quanto si aspetta dopo l'ultima battuta prima di chiedere a una sorgente
 /// che risponde da lontano (ms).
@@ -119,6 +118,8 @@ const SHOWS_PREVIEW: readonly Mode[] = ["all"];
 /// L'accordo che porta la domanda nel pannello Cerca. È un gesto del
 /// lanciatore, come gli altri Invio del piede, non l'accordo di un comando.
 const PANEL_CHORD = "Mod-Shift-Enter";
+/// L'accordo che crea la nota col nome scritto, quando la risposta lo offre.
+const CREATE_CHORD = "Shift-Enter";
 
 /// La velocità con cui l'opacità parte all'apertura (per ms): la superficie
 /// si vede subito, mentre la misura segue la molla.
@@ -191,9 +192,9 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     const pill = document.getElementById("pill");
     const life = openLifetime();
     const race = new Race();
-    // I file del vault si rileggono a ogni apertura: quelli letti l'altra volta
-    // possono essere cambiati.
-    forgetFiles();
+    // I file del vault si rileggono a ogni apertura (quelli letti l'altra volta
+    // possono essere cambiati), e la lettura parte subito: corre mentre si scrive.
+    prefetchFiles();
 
     const layer = el("div", "launcher-layer");
     const veil = el("div", "launcher-veil");
@@ -264,7 +265,19 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     toActions.tabIndex = -1;
     toActions.hidden = true;
     toActions.textContent = t("launcher.actions");
-    foot.append(status, hints, toActions, toPanel);
+    // Crea la nota col nome scritto, quando la risposta lo offre: lo stesso che
+    // fa Maiusc-Invio, da toccare. Come gli altri controlli del piede non è una
+    // fermata del Tab.
+    const toCreate = el("button", "launcher-panel launcher-create");
+    toCreate.type = "button";
+    toCreate.tabIndex = -1;
+    toCreate.hidden = true;
+    toCreate.setAttribute("aria-keyshortcuts", ariaBinding(CREATE_CHORD));
+    const createChord = el("kbd", "launcher-key");
+    createChord.setAttribute("aria-hidden", "true");
+    createChord.textContent = withEnter(CREATE_CHORD);
+    toCreate.append(t("launcher.create.offer"), createChord);
+    foot.append(status, hints, toActions, toCreate, toPanel);
 
     content.append(head, strip, said, body, foot);
     surface.append(content);
@@ -276,11 +289,21 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     let stale = false;
     /// Un Invio arrivato prima della risposta: vale per la prima riga che arriva.
     let deferred: OpenWay | null = null;
+    /// Vero mentre si rifà la stessa domanda (i documenti sono cambiati): le
+    /// righe che si vedono sono ancora quelle, e un Invio vale per la riga
+    /// scelta, se c'è ancora, non per la prima che arriva.
+    let refreshing = false;
+    /// La riga a cui va l'Invio dato durante un rifacimento.
+    let deferredKey: string | null = null;
+    /// Vero quando chi usa Fub ha mosso la scelta (frecce, puntatore): un
+    /// elenco che si aggiorna da sé non gliela sposta. Altrimenti la scelta è
+    /// la prima riga, anche dopo l'aggiornamento.
+    let moved = false;
     /// La nota (o la persona) di cui si mostrano le azioni, se si mostrano.
     let actionsOf: string | null = null;
     /// L'ultima risposta mostrata, per tornarci dalle azioni.
     let shown: Shown | null = null;
-    /// Quante righe scelte si vedono adesso: un Maiusc-Invio crea solo se sono zero.
+    /// Quante righe scelte si vedono adesso.
     let visible = 0;
     /// Vero mentre `paint` rifà l'elenco: le righe passano per uno stato vuoto,
     /// e lì l'anteprima non deve spegnersi e riaccendersi. `paint` chiama
@@ -457,12 +480,17 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
           return;
         }
         // La riga attiva risponde a una domanda vecchia: l'Invio aspetta la
-        // risposta giusta, e intanto la si chiede subito.
+        // risposta giusta, e intanto la si chiede subito. Se la domanda è la
+        // stessa (si rifà perché i documenti sono cambiati), l'Invio resta
+        // per questa riga.
         deferred = way;
+        deferredKey = refreshing ? row.key : null;
         if (askTimer !== undefined) query();
       },
       onHighlight: () => {
-        if (!painting) watch();
+        if (painting) return;
+        moved = true;
+        watch();
       },
       disabled: (row) => !selectable(row),
       focus: "activedescendant",
@@ -503,15 +531,26 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       preview.element.hidden = !roomy;
     };
 
-    /// Disegna un elenco. Torna quante righe scelte ci sono e la prima.
-    const paint = (answer: Shown): Row | null => {
+    /// Disegna un elenco. Torna quante righe scelte ci sono e la prima. Con
+    /// `keep` è la stessa domanda aggiornata: la scelta mossa da chi usa Fub
+    /// resta sulla sua riga, se c'è ancora, e l'elenco non torna in cima.
+    const paint = (answer: Shown, keep = false): Row | null => {
       setBusy(false);
-      // Le righe si ridisegnano tutte: il segno delle lettere cercate dipende
-      // dalla domanda, non solo dalla voce.
+      const found = answer.rows.filter(selectable);
       painting = true;
       try {
-        list.setItems([]);
-        list.setItems(answer.rows);
+        if (keep) {
+          // Il kit tiene la riga attiva se la sua chiave c'è ancora, e ridisegna
+          // le voci nuove: la domanda è la stessa, quindi anche il segno.
+          list.setItems(answer.rows);
+          if (!moved) list.setActive(found[0]?.key ?? null);
+        } else {
+          // Le righe si ridisegnano tutte: il segno delle lettere cercate dipende
+          // dalla domanda, non solo dalla voce.
+          moved = false;
+          list.setItems([]);
+          list.setItems(answer.rows);
+        }
       } finally {
         painting = false;
       }
@@ -523,7 +562,6 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
         head.removeAttribute("aria-selected");
         head.removeAttribute("aria-disabled");
       }
-      const found = answer.rows.filter(selectable);
       const count = found.length;
       visible = count;
       input.setAttribute("aria-expanded", String(count > 0));
@@ -540,21 +578,28 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
             ? t("launcher.status.one")
             : t("launcher.status.count", { count });
       if (status.textContent !== counted) status.textContent = counted;
-      rows.scrollTop = 0;
+      if (!keep) rows.scrollTop = 0;
+      offerCreate();
       watch();
       return found[0] ?? null;
     };
 
-    const show = (answer: Shown): void => {
+    const show = (answer: Shown, keep = false): void => {
       window.clearTimeout(slowTimer);
       slowTimer = undefined;
       stale = false;
       shown = answer;
-      const only = paint(answer);
+      const only = paint(answer, keep);
       const way = deferred;
+      const key = deferredKey;
       deferred = null;
-      // Un Invio dato alla cieca va alla prima riga che arriva.
-      if (way !== null && only !== null) choose(only, way);
+      deferredKey = null;
+      refreshing = false;
+      if (way === null) return;
+      // Un Invio dato alla cieca va alla prima riga che arriva; dato durante un
+      // rifacimento, alla riga su cui era, se c'è ancora.
+      const target = key === null ? only : (answer.rows.find((row) => row.key === key && selectable(row)) ?? null);
+      if (target !== null) choose(target, way);
     };
 
     const failure = (error: unknown): Shown => ({
@@ -564,7 +609,9 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       failed: true,
     });
 
-    function query(): void {
+    /// Chiede la risposta alla domanda del campo. Con `keep` è la stessa
+    /// domanda rifatta: la risposta nuova non sposta la scelta.
+    function query(keep = false): void {
       window.clearTimeout(askTimer);
       askTimer = undefined;
       let answer: Listing | Promise<Listing>;
@@ -575,19 +622,34 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       }
       if (!(answer instanceof Promise)) {
         race.cancel();
-        show(answer);
+        show(answer, keep);
+        const more = answer.more;
+        if (more) void race.last(async (expected) => addLater(await expected(more.catch(() => null))));
         return;
       }
       const coming = answer;
       window.clearTimeout(slowTimer);
       slowTimer = window.setTimeout(() => setBusy(true), SLOW_AFTER_MS);
-      // Una risposta superata da una domanda più nuova non arriva a `show`.
+      // Una risposta superata da una domanda più nuova non arriva a `show`, e
+      // nemmeno ciò che arriva dopo di lei (`more`): passa dallo stesso giro.
       void race.last(async (expected) => {
-        show(await expected(coming.catch(failure)));
+        const first: Shown = await expected(coming.catch(failure));
+        show(first, keep);
+        if (first.more) addLater(await expected(first.more.catch(() => null)));
       });
     }
 
+    /// Ciò che arriva dopo la risposta si aggiunge: chi ha mosso la scelta la
+    /// ritrova. Con le azioni aperte si tiene per quando si torna all'elenco.
+    function addLater(later: Listing | null): void {
+      if (later === null) return;
+      if (actionsOf === null) show(later, true);
+      else shown = later;
+    }
+
     const ask = (): void => {
+      refreshing = false;
+      deferredKey = null;
       stale = true;
       window.clearTimeout(askTimer);
       askTimer = undefined;
@@ -605,6 +667,21 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       // Con le azioni aperte la domanda non si porta: il piede dice Esc torna.
       toPanel.hidden = mode !== "all" || actionsOf !== null;
       toPanel.disabled = mode !== "all" || toSearchPanel(input.value) === null;
+    };
+
+    /// «Crea la nota» si vede quando la risposta offre di creare, in «Tutto»
+    /// e fuori dalle azioni. Mentre si scrive resta (il piede non salta a ogni
+    /// battuta), ma crea solo quando la risposta è quella della domanda scritta.
+    function offerCreate(): void {
+      toCreate.hidden = mode !== "all" || actionsOf !== null || shown?.create === undefined;
+    }
+
+    /// Crea la nota offerta, se la risposta che si vede è quella del campo.
+    const create = (): boolean => {
+      const name = shown?.create;
+      if (mode !== "all" || actionsOf !== null || stale || name === undefined || !state.vaultRoot) return false;
+      leaveFor(() => createNamed(name));
+      return true;
     };
 
     const dress = (): void => {
@@ -663,8 +740,11 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     function setMode(next: Mode, asked?: string): void {
       mode = next;
       deferred = null;
+      deferredKey = null;
+      refreshing = false;
       actionsOf = null;
       shown = null;
+      offerCreate();
       const recalled = asked === undefined || asked === "";
       const value = recalled ? memory.recall(next) : asked;
       input.value = value;
@@ -728,16 +808,28 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       ask();
     });
 
-    // L'indice può arrivare dopo la domanda: una ricerca di nomi senza risultati
-    // si rifà quando i documenti cambiano, senza aspettare una battuta in più.
-    // Un risultato vecchio non scrive sopra il nuovo: lo tiene la gara (`race`).
+    // Quando i documenti cambiano la domanda si rifà, senza aspettare una
+    // battuta: l'indice può arrivare dopo la domanda (una ricerca senza
+    // risultati li trova), e una nota in elenco può essere stata cancellata o
+    // rinominata (non resta in elenco e in anteprima). Il segnale non dice quali
+    // documenti: si rifà ogni elenco che mostra note, tenendo la scelta. Le
+    // righe che si vedono intanto non sono quelle della risposta nuova
+    // (`stale`): Maiusc-Invio non crea. Un risultato vecchio non scrive sopra
+    // il nuovo: lo tiene la gara (`race`).
     life.add(on("documents", () => {
-      if (stale || visible > 0 || actionsOf !== null || input.value.trim() === "") return;
-      if (mode !== "all" && mode !== "people") return;
-      query();
+      rereadFiles();
+      if (stale || actionsOf !== null || (mode !== "all" && mode !== "people")) return;
+      const notes = shown?.rows.some((row) => row.kind === "note" || row.kind === "person") ?? false;
+      if (!notes && (visible > 0 || input.value.trim() === "")) return;
+      stale = true;
+      refreshing = true;
+      query(true);
     }));
 
     life.listen(toPanel, "click", () => carry());
+    life.listen(toCreate, "click", () => {
+      if (!create()) input.focus();
+    });
     life.listen(toActions, "click", () => {
       if (actionable(list.active())) enterActions(list.active() as Extract<Row, { kind: "note" | "person" }>);
       // Il fuoco torna al campo: il bottone, che ha preso il tocco, non deve
@@ -764,15 +856,12 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       watch();
     });
 
-    // Maiusc-Invio su una ricerca senza risultati crea la nota col nome scritto.
-    // Con una risposta ancora in arrivo, o con righe, non crea niente.
+    // Maiusc-Invio crea la nota col nome scritto, solo quando la risposta che
+    // si vede lo offre: non con righe, non mentre l'indice lavora, non con una
+    // sintassi a metà o un guasto, non mentre una risposta nuova è in arrivo.
     life.listen(input, "keydown", (event) => {
       if (event.isComposing || event.key !== "Enter" || !event.shiftKey) return;
-      if (mode !== "all" || actionsOf !== null || stale || visible > 0 || !state.vaultRoot) return;
-      const name = searchedName(input.value);
-      if (name === null) return;
-      event.preventDefault();
-      leaveFor(() => createNamed(name));
+      if (create()) event.preventDefault();
     });
 
     life.listen(surface, "keydown", (event) => {
