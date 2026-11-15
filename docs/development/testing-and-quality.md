@@ -265,6 +265,16 @@ esaminato il diff; non va promosso a baseline. Un cambiamento intenzionale
 richiede invece revisione del foglio, spiegazione delle scene coinvolte e
 rigenerazione nell'ambiente Ubuntu validato.
 
+Oltre a ora, fuso, lingua, moto e finestra, il palco (`bench/stage.mjs`) tiene
+fermi due casi che la pagina non dichiara da sé. `Math.random` è a seme fisso:
+CodeMirror lo usa per cercare la posizione sotto un punto, e col caso vero una
+selezione di poche lettere si dipingeva a volte come una riga intera. E un
+elemento che sta per riscriversi da sé porta `data-pending` (la riga dei
+suggerimenti durante la sua pausa): `prepareScene` e `stillShot` aspettano che
+nella pagina non ce ne sia più nessuno, e dopo 5 s falliscono nominando
+l'elemento. Un componente con un timer che cambia ciò che si vede usa lo stesso
+attributo invece di chiedere al banco un'attesa a tempo.
+
 Lo strato d'avvio ha quattro scene: `avvio-attesa` (il marchio e la riga del
 vault che si apre), `avvio-lento` («Ci vuole più del solito.», a 10 s),
 `avvio-guasto` (il motivo, col fuoco su Riprova) e `avvio-telefono` (l'attesa

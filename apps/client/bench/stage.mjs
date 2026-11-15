@@ -1,4 +1,4 @@
-// Il palco: il server, il browser, e **le sei cose che il banco tiene ferme**.
+// Il palco: il server, il browser, e **le otto cose che il banco tiene ferme**.
 //
 // Le usano in due — il fotografo (`foto.mjs`) e il controllo di accessibilità
 // (`a11y.mjs`) — e stanno qui perché una stabilità dichiarata in due posti è
@@ -7,7 +7,7 @@
 //
 // # La stabilità è una decisione, non un'impostazione (§31.1)
 //
-// Sono sei, e ognuna è qui perché senza di lei il banco sfarfalla — e un banco
+// Sono otto, e ognuna è qui perché senza di lei il banco sfarfalla — e un banco
 // visivo che sfarfalla si spegne da solo entro tre settimane, perché il primo
 // rosso che nessuno sa spiegare insegna a non guardarlo più.
 //
@@ -28,8 +28,19 @@
 //    è successo alla prima corsa di questo file.
 // 6. **La finestra è una.** Viewport fisso e `deviceScaleFactor: 1`: la
 //    baseline è per una misura, non per lo schermo di chi passa.
+// 7. **Il caso è seminato.** `Math.random` è un generatore a seme fisso.
+//    CodeMirror lo usa nella ricerca di una posizione sotto un punto
+//    (`InlineCoordsScan.scan`), e la selezione la cerca ai due bordi della
+//    riga a capo: col caso vero, in una corsa su due i due bordi differivano
+//    di un carattere e tre lettere scelte si dipingevano come una riga intera
+//    (`riga-dei-suggerimenti`).
+// 8. **Ciò che cambierà da sé lo dice.** Un elemento che sta per riscriversi
+//    senza che nessuno lo tocchi (la riga dei suggerimenti durante la sua
+//    pausa) porta `data-pending`; prima dello scatto si aspetta che nella
+//    pagina non ce ne sia più nessuno. Un tempo indovinato sarebbe giusto
+//    sulla macchina di chi l'ha scelto e sbagliato sul runner.
 //
-// La settima non sta qui perché non è del palco: le baseline sono **solo
+// La nona non sta qui perché non è del palco: le baseline sono **solo
 // Linux**. Il perché sta in `foto.mjs`, accanto alla soglia.
 import { createServer } from "vite";
 import { chromium } from "playwright";
@@ -68,6 +79,18 @@ const QUIET = `
   .cm-cursorLayer { visibility: hidden !important; }
   .avvio-scia { animation: none !important; }
 `;
+
+/// Il seme del caso del banco: conta che sia sempre lo stesso, non quale sia.
+const RANDOM_SEED = 0x5eed_f0b;
+
+/// Ciò che nella pagina sta per cambiare da sé (la regola 8): finché c'è, non
+/// si scatta.
+export const PENDING = "[data-pending]";
+
+/// Quanto si aspetta che la pagina smetta di avere elementi in attesa (ms).
+/// La riga dei suggerimenti si ferma entro due pause (600 ms); il resto è
+/// margine per un runner carico.
+const PENDING_TIMEOUT = 5_000;
 
 const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
 
@@ -183,6 +206,19 @@ export async function openPage(browser, light, { clock = true } = {}) {
     colorScheme: light,
   });
   const page = await context.newPage();
+  // Il caso a seme fisso (la regola 7), anche lui prima di ogni documento:
+  // mulberry32, che basta a chi lo usa per spezzare un pareggio e non per
+  // cifrare. `crypto` resta quello vero.
+  await page.addInitScript((seed) => {
+    let state = seed >>> 0;
+    Math.random = () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }, RANDOM_SEED);
   // Prima di ogni navigazione: si installa come script d'avvio, quindi la
   // pagina nasce già con l'ora ferma. Dopo il `goto` sarebbe tardi — chi legge
   // l'orologio lo legge montandosi.
@@ -241,12 +277,39 @@ export async function prepareScene(page, scene, light, base, url) {
   await page.evaluate(() =>
     Promise.all([...document.images].map((img) => (img.complete ? null : img.decode().catch(() => null)))),
   );
+  // Ciò che sta per cambiare da sé si aspetta dopo l'ultimo gesto: è il gesto
+  // ad armare la pausa della riga dei suggerimenti.
+  await waitUntilSettled(page);
   await page.addStyleTag({ content: QUIET });
   // Un fotogramma dopo l'ultimo gesto: il layout è già calcolato, ma ciò che è
   // stato scritto adesso deve ancora essere dipinto.
   await page.evaluate(
     () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
   );
+}
+
+/// Aspetta che nella pagina non ci sia più niente in attesa (`PENDING`, la
+/// regola 8). Se dopo `PENDING_TIMEOUT` qualcosa è ancora in attesa, lancia
+/// dicendo chi: è una pausa che si riarma da sola, e va trovata, non
+/// aspettata di più.
+export async function waitUntilSettled(page, timeout = PENDING_TIMEOUT) {
+  try {
+    await page.waitForFunction((selector) => !document.querySelector(selector), PENDING, { timeout });
+  } catch (error) {
+    const still = await page
+      .evaluate(
+        (selector) =>
+          [...document.querySelectorAll(selector)].map((el) =>
+            el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`,
+          ),
+        PENDING,
+      )
+      .catch(() => []);
+    throw new Error(
+      `la pagina non si ferma: dopo ${timeout} ms ${still.join(", ") || "qualcosa"} porta ancora data-pending`,
+      { cause: error },
+    );
+  }
 }
 
 /// Uno scatto che è **uguale a sé stesso**.
@@ -266,7 +329,11 @@ export async function stillShot(page, attempts = 4) {
       () => new Promise((r) => setTimeout(() => requestAnimationFrame(r), 250)),
     );
     const after = await page.screenshot();
-    if (before.equals(after)) return after;
+    // Due scatti uguali con una pausa ancora armata non sono una scena ferma:
+    // sono una scena che non è ancora cambiata.
+    const pending = await page.evaluate((selector) => document.querySelector(selector) !== null, PENDING);
+    if (before.equals(after) && !pending) return after;
+    if (pending) await waitUntilSettled(page);
     before = after;
   }
   throw new Error("la scena non sta ferma: due scatti di fila non coincidono mai");
