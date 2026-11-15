@@ -78,7 +78,7 @@ celle il puntatore resta la freccia.
   colonna; dove la colonna non lo dice («1.240») decide la lingua di Fub. Il
   totale tiene i decimali e il separatore delle migliaia dei numeri sommati.
   Senza numeri sopra non scrive niente e lo dice.
-- Mod+; scrive la data di oggi nella lingua di Fub («15 nov 2026»): nella
+- Mod+; scrive la data del giorno nella lingua di Fub («15 nov 2026»): nella
   cella attiva, o dove sta il cursore se la cella è aperta.
 - Alt con una freccia sposta di un posto le righe (su, giù) o le colonne
   (sinistra, destra) della selezione, e la selezione le segue; l'intestazione
@@ -152,7 +152,7 @@ la selezione, Mod+D e Mod+R riempiono, Mod+«+» e Mod+«−» inseriscono e
 tolgono righe o colonne, con le stesse regole del modo foglio; le colonne si
 toccano soltanto dove nessuna cella è unita. Senza celle scelte Invio va a
 capo, Mod+R allinea a destra e Mod+«+» fa l'apice, come nel resto del testo.
-Mod+; scrive la data di oggi dove sta il cursore (con celle scelte, al posto
+Mod+; scrive la data del giorno dove sta il cursore (con celle scelte, al posto
 del testo della cella attiva). Alt con una freccia sposta le righe o le colonne delle
 celle scelte; senza celle scelte la freccia resta del testo (su macOS Alt
 salta di parola).
