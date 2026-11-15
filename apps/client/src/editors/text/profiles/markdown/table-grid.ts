@@ -114,16 +114,19 @@ const CAPS: TableCaps = {
 const UNAVAILABLE: EditorActionState = { enabled: false, active: null };
 
 /// Le enfasi che una cella può avere attorno a tutto il suo testo: la cella
-/// mostra ciò che sta dentro.
-const SHOWN_WRAPS = ["**", "__", "~~", "==", "*", "_", "`"] as const;
+/// mostra ciò che sta dentro. Il barrato (`~~`) non c'è: è un'altra regola.
+const SHOWN_WRAPS = ["**", "__", "==", "*", "_", "`"] as const;
+const STRUCK = "~~";
 
 /// Il testo che una cella mostra, per chi legge i valori (la somma della
 /// banda): senza gli spazi attorno e senza le enfasi che lo avvolgono tutto,
-/// così «**1.200**» vale «1.200».
+/// così «**1.200**» vale «1.200». Un testo tutto barrato («~~100~~») è un
+/// valore cancellato, che i conti non devono vedere: vale una cella vuota.
 export function shownCellText(text: string): string {
   let shown = text.trim();
   for (let changed = true; changed;) {
     changed = false;
+    if (shown.length > STRUCK.length * 2 && shown.startsWith(STRUCK) && shown.endsWith(STRUCK)) return "";
     for (const mark of SHOWN_WRAPS) {
       if (shown.length > mark.length * 2 && shown.startsWith(mark) && shown.endsWith(mark)) {
         shown = shown.slice(mark.length, -mark.length).trim();
@@ -327,6 +330,10 @@ export class TableGrid implements TableGridActions {
   update(data: TableData): void {
     this.#data = data;
     this.#frame.update();
+    // Le celle scelte sono le stesse, ma i loro valori no (un annulla, un
+    // ripeti, la nota ricaricata dal disco): chi le legge, come la somma della
+    // banda, rilegge.
+    this.#host.changed();
   }
 
   /// Porta il fuoco nella griglia: sulla prima o sull'ultima riga (entrando

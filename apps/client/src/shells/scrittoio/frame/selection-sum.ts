@@ -10,10 +10,15 @@
 //
 // Un numero si legge nella lingua della tabella (`lang` della nota, o quella
 // dell'interfaccia): in italiano «1.240,50», in inglese «1,240.50». La forma
-// del computer («1240.5», senza separatori delle migliaia) vale in ogni
-// lingua, perché non si confonde con nessuna. I risultati si scrivono nella
-// stessa lingua delle celle: copiati e incollati nella tabella, si rileggono
-// uguali.
+// del computer («1240.5», senza separatori delle migliaia) vale soltanto dove
+// il punto non separa le migliaia: in italiano «15.11» e «12.30» sono una data
+// e un'ora, non numeri. Fra parentesi un numero è negativo, come nei conti:
+// «(1.234)». I risultati si scrivono nella stessa lingua delle celle, senza
+// zeri in fondo, come il prototipo: copiati e incollati nella tabella, si
+// rileggono uguali. Se tutte le celle contate sono percentuali, anche somma,
+// media, minimo e massimo lo sono («10%» e «20%» fanno «30%»); se sono miste,
+// una percentuale vale la sua frazione («12%» è 0,12) e i risultati sono
+// numeri.
 //
 // Un clic su un numero lo copia; il tasto destro (o il tasto Menu) apre la
 // scelta di che cosa mostrare, anche minimo e massimo. La scelta vale per la
@@ -51,6 +56,8 @@ const MAX_NUMBER_LENGTH = 64;
 
 /// I conti di una selezione, coi decimali che le sue celle portano.
 export interface SelectionSum {
+  /// Tutte le celle contate sono percentuali: i risultati si scrivono così.
+  readonly percent: boolean;
   readonly sum: number;
   readonly average: number;
   /// Quante celle numeriche: il testo e le celle vuote non contano.
@@ -66,6 +73,9 @@ interface NumberForm {
   readonly pattern: RegExp;
   readonly group: RegExp;
   readonly decimal: string;
+  /// La forma del computer non si confonde con quella della lingua: il punto
+  /// non vi separa le migliaia.
+  readonly plainDot: boolean;
 }
 
 const forms = new Map<string, NumberForm>();
@@ -96,22 +106,40 @@ function numberForm(locale: string): NumberForm {
     pattern: new RegExp(`^(?:(\\d{1,3}(?:${groupClass}\\d{3})+)|(\\d+))?(?:${escapeRegExp(decimal)}(\\d+))?$`, "u"),
     group: new RegExp(groupClass, "gu"),
     decimal,
+    plainDot: group !== ".",
   };
   forms.set(locale, form);
   return form;
 }
 
+/// Un numero letto da una cella: il valore (una percentuale come frazione),
+/// le cifre dopo la virgola che porta, e se era una percentuale.
+export interface ShownNumber {
+  readonly value: number;
+  readonly decimals: number;
+  readonly percent: boolean;
+}
+
 /// Il numero che una cella mostra, letto nella lingua `locale`, con le sue
-/// cifre dopo la virgola; `null` se è testo. Il segno (anche «−»), la valuta
-/// (€ $ £ ¥) e la percentuale («12%» vale 0,12) si capiscono.
-export function readShownNumber(text: string, locale: string): { readonly value: number; readonly decimals: number } | null {
+/// cifre dopo la virgola; `null` se è testo. Il segno (anche «−»), le
+/// parentesi dei conti («(1.234)» è negativo), la valuta (€ $ £ ¥) e la
+/// percentuale («12%» vale 0,12) si capiscono.
+export function readShownNumber(text: string, locale: string): ShownNumber | null {
   if (text.length > MAX_NUMBER_LENGTH) return null;
   let body = text.trim().replace(/[€$£¥]/gu, "").trim();
   if (body === "") return null;
+  let sign = 1;
+  const negative = body.startsWith("(") && body.endsWith(")");
+  if (negative) {
+    sign = -1;
+    body = body.slice(1, -1).trim();
+  }
   const percent = body.endsWith("%");
   if (percent) body = body.slice(0, -1).trim();
-  let sign = 1;
   if (/^[-−+]/u.test(body)) {
+    // Un segno dentro le parentesi dice due volte la stessa cosa, o due
+    // contrarie: non è un numero da indovinare.
+    if (negative) return null;
     if (body[0] !== "+") sign = -1;
     body = body.slice(1).trim();
   }
@@ -125,8 +153,10 @@ export function readShownNumber(text: string, locale: string): { readonly value:
     fraction = local[3] ?? "";
   } else {
     // La forma del computer: nessun separatore delle migliaia, il punto per
-    // la virgola. In italiano «1.240» resta milleduecentoquaranta, perché la
-    // forma della lingua si prova prima.
+    // la virgola. Dove il punto separa le migliaia (l'italiano) non vale:
+    // «1.240» è milleduecentoquaranta, e «15.11» o «12.30» sono una data o
+    // un'ora, non numeri da sommare.
+    if (!form.plainDot) return null;
     const plain = /^(\d+)(?:\.(\d+))?$/u.exec(body);
     if (!plain) return null;
     whole = plain[1]!;
@@ -134,7 +164,7 @@ export function readShownNumber(text: string, locale: string): { readonly value:
   }
   const value = sign * Number(`${whole || "0"}.${fraction || "0"}`);
   if (!Number.isFinite(value)) return null;
-  return percent ? { value: value / 100, decimals: fraction.length + 2 } : { value, decimals: fraction.length };
+  return percent ? { value: value / 100, decimals: fraction.length + 2, percent } : { value, decimals: fraction.length, percent };
 }
 
 /// Le cifre dopo la virgola di un numero che il formato dà già come numero.
@@ -153,6 +183,7 @@ export function summarizeSelection(selection: SurfaceCellSelection): SelectionSu
   let min = Infinity;
   let max = -Infinity;
   let decimals = 0;
+  let percents = 0;
   for (const shown of selection.values()) {
     let value: number;
     let places: number;
@@ -165,6 +196,7 @@ export function summarizeSelection(selection: SurfaceCellSelection): SelectionSu
       if (!read) continue;
       value = read.value;
       places = read.decimals;
+      if (read.percent) percents++;
     }
     count++;
     sum += value;
@@ -173,27 +205,43 @@ export function summarizeSelection(selection: SurfaceCellSelection): SelectionSu
     if (places > decimals) decimals = places;
   }
   if (count < 2) return null;
-  return { sum, average: sum / count, count, min, max, decimals: Math.min(decimals, MAX_DECIMALS), locale: selection.locale };
+  return {
+    sum,
+    average: sum / count,
+    count,
+    min,
+    max,
+    decimals: Math.min(decimals, MAX_DECIMALS),
+    percent: percents === count,
+    locale: selection.locale,
+  };
 }
 
-function formatter(locale: string, decimals: number): Intl.NumberFormat {
-  const key = `${locale}\u0000${decimals}`;
+function formatter(locale: string, decimals: number, percent = false): Intl.NumberFormat {
+  const key = `${locale}\u0000${decimals}\u0000${percent}`;
   let format = formatters.get(key);
   if (!format) {
     // Le migliaia sempre separate, anche dove la lingua le lascia unite fino a
-    // diecimila (l'italiano): «2.520», come nel prototipo.
-    format = new Intl.NumberFormat(knownLocale(locale), { useGrouping: true, maximumFractionDigits: decimals });
+    // diecimila (l'italiano): «2.520», come nel prototipo. Gli zeri in fondo
+    // se ne vanno, come nel prototipo: «1,50 + 1» fa «2,5».
+    format = new Intl.NumberFormat(knownLocale(locale), {
+      useGrouping: true,
+      maximumFractionDigits: decimals,
+      ...(percent ? { style: "percent" } : {}),
+    });
     formatters.set(key, format);
   }
   return format;
 }
 
 /// Un conto scritto nella lingua delle celle. La media porta almeno due
-/// decimali, che una divisione li chiede; il conteggio è un intero.
+/// decimali, che una divisione li chiede; il conteggio è un intero. Con sole
+/// percentuali i decimali sono quelli del percento («12,5%»).
 export function formatStat(summary: SelectionSum, stat: SumStat): string {
   if (stat === "count") return formatter(summary.locale, 0).format(summary.count);
-  const decimals = stat === "average" ? Math.min(Math.max(summary.decimals, 2), MAX_DECIMALS) : summary.decimals;
-  return formatter(summary.locale, decimals).format(summary[stat]);
+  const places = summary.percent ? Math.max(summary.decimals - 2, 0) : summary.decimals;
+  const decimals = stat === "average" ? Math.min(Math.max(places, 2), MAX_DECIMALS) : places;
+  return formatter(summary.locale, decimals, summary.percent).format(summary[stat]);
 }
 
 /// Che cosa la banda mostra, per la sessione: almeno una voce.
@@ -317,7 +365,11 @@ export class BandSum {
         },
       };
     });
+    // Dalla tastiera (tasto Menu, Maiusc+F10) il gesto non ha un punto: il
+    // menu si apre sul numero a fuoco, o sulla voce, mai in un angolo.
+    const byKeyboard = event.button !== 2 || (event.clientX === 0 && event.clientY === 0);
+    const owner = (event.target as Element | null)?.closest<HTMLElement>("button[data-stat]") ?? this.element;
     // Cinque scelte: niente ricerca, che con così poche voci è rumore.
-    showContextMenu(event, items, { label: t("frame.status.sum.menu"), search: false });
+    showContextMenu(byKeyboard ? owner : event, items, { label: t("frame.status.sum.menu"), search: false });
   }
 }

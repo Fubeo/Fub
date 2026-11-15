@@ -135,6 +135,11 @@ describe("frontmatterLanguage", () => {
     expect(frontmatterLanguage(state("---\ntitle: x\n---\nTesto"))).toBeNull();
     expect(frontmatterLanguage(state("lang: en\n"))).toBeNull();
   });
+
+  it("scrive la lingua come la vuole `Intl`: «it_IT» diventa «it-IT»", () => {
+    expect(frontmatterLanguage(state("---\nlang: it_IT\n---\nTesto"))).toBe("it-IT");
+    expect(frontmatterLanguage(state("---\nlanguage: \"pt_BR\"\n---\nTesto"))).toBe("pt-BR");
+  });
 });
 
 /// Un host che segna «speling» con il suggerimento «spelling».

@@ -436,4 +436,10 @@ describe("le celle scelte per la somma della banda (T55)", () => {
     expect(shownCellText("1 **e** 2")).toBe("1 **e** 2");
     expect(shownCellText("**")).toBe("**");
   });
+
+  it("il testo barrato non è un valore: non conta", () => {
+    expect(shownCellText("~~100~~")).toBe("");
+    expect(shownCellText("**~~1.240~~**")).toBe("");
+    expect(shownCellText("~~100~~ 120")).toBe("~~100~~ 120");
+  });
 });

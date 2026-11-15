@@ -10,7 +10,7 @@ const world = vi.hoisted(() => ({
   copied: [] as string[],
   copyFails: false,
   notices: [] as { text: string; tone: string }[],
-  menu: null as null | { items: { label: string; checked?: boolean; disabled?: boolean; run?: () => void }[]; label?: string },
+  menu: null as null | { at: unknown; items: { label: string; checked?: boolean; disabled?: boolean; run?: () => void }[]; label?: string },
 }));
 
 vi.mock("../../../platform/clipboard", async (original) => ({
@@ -27,8 +27,8 @@ vi.mock("../../../ui/notify", async (original) => ({
 }));
 vi.mock("../../../ui/menu", async (original) => ({
   ...(await original<typeof import("../../../ui/menu")>()),
-  showContextMenu: (_at: unknown, items: NonNullable<typeof world.menu>["items"], options: { label?: string } = {}) => {
-    world.menu = { items, label: options.label };
+  showContextMenu: (at: unknown, items: NonNullable<typeof world.menu>["items"], options: { label?: string } = {}) => {
+    world.menu = { at, items, label: options.label };
   },
 }));
 
@@ -54,12 +54,36 @@ describe("i numeri nella lingua della tabella", () => {
     expect(read("1,5", "en")).toBeNull();
   });
 
-  it("la forma del computer vale in ogni lingua, dove non si confonde", () => {
-    expect(read("3.14", "it")).toBe(3.14);
-    expect(read("1240.5", "it")).toBe(1240.5);
-    // In italiano «1.240» resta milleduecentoquaranta: la forma della lingua
-    // si prova prima.
+  it("la forma del computer vale dove il punto non separa le migliaia", () => {
+    expect(read("1240.5", "fr")).toBe(1240.5);
+    expect(read("3.14", "fr")).toBe(3.14);
+    // In italiano il punto separa le migliaia: «1.240» è milleduecentoquaranta,
+    // e un punto che non lo fa non è un numero (una data, un'ora).
     expect(read("1.240", "it")).toBe(1240);
+    expect(read("1240.5", "it")).toBeNull();
+    expect(read("3.14", "it")).toBeNull();
+  });
+
+  it("le date e le ore col punto non sono numeri dove il punto separa le migliaia", () => {
+    expect(read("15.11", "it")).toBeNull();
+    expect(read("12.30", "it")).toBeNull();
+    expect(read("15.11", "de")).toBeNull();
+    expect(read("1.240", "it")).toBe(1240);
+    // In inglese il punto è la virgola dei decimali: quelli sono numeri.
+    expect(read("15.11", "en")).toBe(15.11);
+    expect(read("12.30", "en")).toBe(12.3);
+    expect(read("1.240", "en")).toBe(1.24);
+    expect(read("1240.5", "en")).toBe(1240.5);
+  });
+
+  it("un numero tra parentesi è negativo, come nei conti", () => {
+    expect(read("(1.234)", "it")).toBe(-1234);
+    expect(read("(€ 1.240,50)", "it")).toBe(-1240.5);
+    expect(read("€ (1.240,50)", "it")).toBe(-1240.5);
+    expect(read("(1,234.5)", "en")).toBe(-1234.5);
+    expect(read("(-5)", "en")).toBeNull();
+    expect(read("()", "en")).toBeNull();
+    expect(read("(5", "en")).toBeNull();
   });
 
   it("segno, valuta, percentuale e spazi attorno", () => {
@@ -103,6 +127,32 @@ describe("i conti di una selezione", () => {
   it("come nel prototipo: «Somma 2.520 · Media 840 · Conteggio 3»", () => {
     const summary = summarizeSelection(selection("it", ["1.240", "860", "420"]))!;
     expect([formatStat(summary, "sum"), formatStat(summary, "average"), formatStat(summary, "count")]).toEqual(["2.520", "840", "3"]);
+  });
+
+  it("percentuali sole: somma, media, minimo e massimo si scrivono in percento", () => {
+    const summary = summarizeSelection(selection("it", ["10%", "20%"]))!;
+    expect(summary.percent).toBe(true);
+    expect(formatStat(summary, "sum")).toBe("30%");
+    expect(formatStat(summary, "average")).toBe("15%");
+    expect(formatStat(summary, "min")).toBe("10%");
+    expect(formatStat(summary, "max")).toBe("20%");
+    expect(formatStat(summary, "count")).toBe("2");
+    const fine = summarizeSelection(selection("en", ["12.5%", "10%"]))!;
+    expect(formatStat(fine, "sum")).toBe("22.5%");
+    expect(formatStat(fine, "average")).toBe("11.25%");
+  });
+
+  it("percentuali e numeri insieme: il percento vale la sua frazione, e i risultati sono numeri", () => {
+    const summary = summarizeSelection(selection("it", ["50%", "2"]))!;
+    expect(summary.percent).toBe(false);
+    expect(formatStat(summary, "sum")).toBe("2,5");
+    expect(formatStat(summary, "max")).toBe("2");
+  });
+
+  it("i risultati tolgono gli zeri in fondo, come il prototipo", () => {
+    const summary = summarizeSelection(selection("it", ["1,50", "1,00"]))!;
+    expect(formatStat(summary, "sum")).toBe("2,5");
+    expect(formatStat(summary, "average")).toBe("1,25");
   });
 
   it("i risultati si scrivono nella lingua delle celle, coi loro decimali e senza rumore", () => {
@@ -342,6 +392,21 @@ describe("la voce della banda", () => {
     expect(said(sum)).toEqual(["Massimo1.240"]);
     expect(parts(sum)[0]!.hasAttribute("data-lead")).toBe(true);
     expect([...sum.element.querySelectorAll(".status-sum-dot:not([hidden])")].length).toBe(0);
+  });
+
+  it("dalla tastiera (tasto Menu, Maiusc+F10) il menu si apre sul numero a fuoco, non in un angolo", () => {
+    const sum = new BandSum(life);
+    document.body.append(sum.element);
+    sum.show(summarizeSelection(selection("it", ["1.240", "860", "420"])));
+    const second = parts(sum)[1]!;
+    second.focus();
+    // Il tasto Menu: nessun tasto destro e nessun punto.
+    second.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 0, clientX: 0, clientY: 0 }));
+    expect(world.menu?.at).toBe(second);
+    // Col puntatore, il punto del clic.
+    const pointer = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 40, clientY: 30 });
+    second.dispatchEvent(pointer);
+    expect(world.menu?.at).toBe(pointer);
   });
 
   it("smontata, se ne va dalla banda", () => {
