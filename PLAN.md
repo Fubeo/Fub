@@ -440,7 +440,7 @@ Esc e l'annuncio; le foto del banco, chiaro e scuro, somigliano alle righe
 828 e 853 del prototipo; la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15, da main; revisione con 16 correzioni in corso
 
 ## T2b · Fuori dalla colonna e lo scorrimento al bordo
 
@@ -2729,7 +2729,7 @@ Fatto quando: la tabella e la Base con la stessa selezione danno lo stesso
 numero (la scheda di foglio con T43); i test dei formati.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/frame src/tabella
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15 (feat/somma-nella-banda), correzioni della revisione
 
 ## T56 · Misure, prova con Obsidian, documentazione
 
@@ -3712,7 +3712,7 @@ finto e passano sul vero; le foto di T81 uguali.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/kit src/ui/menu-budget.test.ts
 src/editors/text/profiles/markdown/three-doors.test.ts
-Stato: [~] in corso · coder dal 2026-11-15, da main
+Stato: [~] PR #374 (bozza), baseline dal runner
 
 ## T84 · Il «/» in una colonna
 
