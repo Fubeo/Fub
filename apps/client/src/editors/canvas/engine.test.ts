@@ -6,7 +6,6 @@ import { mountMarkdown } from "../text/profiles/markdown/mount";
 import { CANVAS_ZOOM_STEP, CARD_PAUSE_MS, CanvasEngine, EDGE_SCROLL_MAX, EDGE_SCROLL_ZONE, MAX_CANVAS_HISTORY, NEXT_CARD_GAP, edgeScrollSpeed, MEASURE_IMAGE_TIMEOUT_MS, proposedNoteName, type CanvasChange, type CanvasCorePort, type CanvasDepositCards, type CanvasEngineOptions } from "./engine";
 import type { CanvasDocument } from "./model";
 import { readCanvasClipboard } from "./clipboard";
-import { dropLayout } from "./drop-layout";
 import { ENTRIES_DRAG_TYPE } from "../../ui/drag-types";
 import { applyOperation, lineFeeds, operationFromText } from "../core/text-operation";
 import { t } from "../../i18n/strings";
@@ -2602,18 +2601,31 @@ describe("CanvasEngine: trascinare e incollare (T15)", () => {
   it("più file nascono in griglia, in ordine di nome, con la misura della specie, e un annulla li toglie", async () => {
     const resolvePaths = vi.fn(async () => ["b/z.md", "a/foto 10.png", "x/libro.xlsx", "a/foto 2.png"]);
     const measureImage = vi.fn(async (path: string) => (path === "a/foto 2.png" ? { width: 1000, height: 500 } : null));
-    const { engine, host, changes } = mounted(canvasSource(), { attachments: { deposit: vi.fn(), resolvePaths }, measureImage });
+    let next = 0;
+    const { engine, host, changes } = mounted(canvasSource(), {
+      attachments: { deposit: vi.fn(), resolvePaths }, measureImage, newId: () => `d${++next}`,
+    });
     drop(host, transfer());
     await vi.waitFor(() => expect(changes).toHaveLength(1));
     const nodes = born(engine);
     expect(nodes.map((node) => node.file)).toEqual(["a/foto 2.png", "a/foto 10.png", "x/libro.xlsx", "b/z.md"]);
     // La misura: l'immagine misurata col lato lungo di 480, quella senza
-    // misura 480×360, il foglio 480×300, la nota 320×240.
-    expect(nodes.map((node) => [node.width, node.height])).toEqual([[480, 240], [480, 360], [480, 300], [320, 240]]);
-    // La griglia di `dropLayout` a partire dal punto del rilascio.
+    // misura 480×360, il foglio 480×304 (la misura di nascita del nucleo,
+    // `born_size`), la nota 320×240.
+    expect(nodes.map((node) => [node.width, node.height])).toEqual([[480, 240], [480, 360], [480, 304], [320, 240]]);
+    // Le operazioni del rilascio (T24): un `add_card` per file con il suo id,
+    // in ordine di nome, e la griglia del nucleo dal punto del rilascio.
     const first = nodes[0]!;
-    const expected = dropLayout(nodes.map((node) => ({ path: node.file!, kind: "file", size: { width: node.width, height: node.height } })), first);
-    expect(nodes.map((node) => ({ path: node.file, x: node.x, y: node.y }))).toEqual(expected.cards.map((card) => ({ path: card.path, x: card.x, y: card.y })));
+    const core = openCoreNow(canvasSource())!;
+    const expected = core.preview(core.compile([
+      { op: "add_card", id: "d1", file: "a/foto 2.png", content_size: [1000, 500] },
+      { op: "add_card", id: "d2", file: "a/foto 10.png" },
+      { op: "add_card", id: "d3", file: "x/libro.xlsx" },
+      { op: "add_card", id: "d4", file: "b/z.md" },
+      { op: "layout", ids: ["d1", "d2", "d3", "d4"], kind: "grid", x: first.x, y: first.y },
+    ], 1n).patches);
+    core.close();
+    expect(engine.getDoc()).toBe(expected);
     expect(nodes[1]!.x).toBe(first.x + 504);
     expect(nodes[2]!.y).toBe(first.y + 384);
     expect(measureImage).toHaveBeenCalledTimes(2);
@@ -7784,6 +7796,337 @@ describe("le correzioni di T23: la GUI scrive come prima", () => {
     expect(engine.undo()).toBe(true);
     expect(engine.getDoc()).toBe(SOURCE);
     expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+});
+
+// T24: i gesti scrivono con le operazioni del nucleo, non con toppe fatte a
+// mano. Ogni prova legge le operazioni che la tela dà a `compile` e il file
+// che ne esce, con un passo d'annulla.
+describe("i gesti scrivono con le operazioni (T24)", () => {
+  const SOURCE = JSON.stringify({
+    nodes: [
+      { id: "a", type: "text", x: 0, y: 0, width: 200, height: 96, text: "a" },
+      { id: "b", type: "text", x: 3, y: 205, width: 200, height: 96, text: "b" },
+      { id: "g", type: "group", x: 600, y: 0, width: 480, height: 320, label: "Gruppo" },
+      { id: "c", type: "text", x: 640, y: 40, width: 104, height: 80, text: "dentro" },
+      { id: "f", type: "file", x: 0, y: 600, width: 320, height: 240, file: "doc/x.md" },
+    ],
+    edges: [],
+  });
+  const FRAGMENT_TYPE = "application/x-fub-canvas+json";
+
+  /** Il nucleo vero, con le liste di operazioni che la tela gli fa compilare. */
+  function recordingCore(): { port: CanvasCorePort; compiled: CanvasIntentOp[][] } {
+    const compiled: CanvasIntentOp[][] = [];
+    return {
+      compiled,
+      port: {
+        ready: canvasCoreReady,
+        openNow: (text) => {
+          const core = openCoreNow(text);
+          if (!core) return null;
+          return new Proxy(core, {
+            get(target, key, receiver) {
+              const value = Reflect.get(target, key, receiver) as unknown;
+              if (typeof value !== "function") return value;
+              return (...args: unknown[]) => {
+                if (key === "compile") compiled.push(JSON.parse(JSON.stringify(args[0])) as CanvasIntentOp[]);
+                return (value as (...a: unknown[]) => unknown).apply(target, args);
+              };
+            },
+          });
+        },
+      },
+    };
+  }
+
+  function open(overrides: Partial<CanvasEngineOptions> = {}, source = SOURCE) {
+    const recorded = recordingCore();
+    const made = mounted(source, { core: recorded.port, ...overrides });
+    return { ...made, compiled: recorded.compiled };
+  }
+
+  const viewportOf = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>(".canvas-viewport")!;
+  const card = (host: HTMLElement, id: string): HTMLElement => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+  const nodeOf = (engine: CanvasEngine, id: string) => readCanvas(engine.getDoc()).nodes.find((node) => node.id === id)!;
+  const lastOps = (compiled: readonly CanvasIntentOp[][]): CanvasIntentOp[] => compiled[compiled.length - 1] ?? [];
+
+  function zoomOf(host: HTMLElement): number {
+    const match = /scale\(([\d.e+-]+)\)/.exec(host.querySelector<HTMLElement>(".canvas-stage")!.style.transform);
+    if (!match) throw new Error("niente zoom");
+    return Number(match[1]);
+  }
+
+  function pointer(target: EventTarget, type: string, clientX: number, clientY: number, init: PointerEventInit = {}): void {
+    target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, buttons: 1, pointerId: 7, pointerType: "mouse", clientX, clientY, ...init }));
+  }
+
+  /** Sceglie la scheda `id` con un clic (Maiusc la aggiunge). */
+  function choose(host: HTMLElement, id: string, shiftKey = false): void {
+    pointer(card(host, id), "pointerdown", 0, 0, { pointerId: 3, shiftKey });
+    pointer(viewportOf(host), "pointerup", 0, 0, { pointerId: 3, shiftKey, buttons: 0 });
+  }
+
+  /**
+   * Trascina la testata della scheda `id` di `(sx, sy)` px sullo schermo;
+   * senza `release` resta giù. Con `free` tiene Alt mentre si muove (giù
+   * sulla scheda Alt tira un filo): niente griglia né guide.
+   */
+  function dragHead(host: HTMLElement, id: string, sx: number, sy: number, release = true, free = false): void {
+    const head = card(host, id).querySelector<HTMLElement>(".canvas-node-handle")!;
+    pointer(head, "pointerdown", 100, 100);
+    pointer(viewportOf(host), "pointermove", 100 + sx, 100 + sy, { altKey: free });
+    if (release) pointer(viewportOf(host), "pointerup", 100 + sx, 100 + sy, { buttons: 0, altKey: free });
+  }
+
+  function zoomKey(host: HTMLElement, key: "+" | "-", times: number): void {
+    for (let i = 0; i < times; i++) {
+      viewportOf(host).dispatchEvent(new KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true, cancelable: true }));
+    }
+  }
+
+  function clipboardPaste(host: HTMLElement, values: Record<string, string>): void {
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    const data = { files: [], items: [], types: Object.keys(values), getData: (type: string) => values[type] ?? "" };
+    Object.defineProperty(event, "clipboardData", { value: data });
+    viewportOf(host).dispatchEvent(event);
+  }
+
+  function filesDrop(host: HTMLElement, x = 200, y = 120): void {
+    const event = new DragEvent("drop", { bubbles: true, cancelable: true });
+    const data = { files: [], items: [], types: ["Files"], getData: () => "" };
+    Object.defineProperties(event, { dataTransfer: { value: data }, clientX: { value: x }, clientY: { value: y } });
+    viewportOf(host).dispatchEvent(event);
+  }
+
+  it("trascinare una scheda è una `move` del suo spostamento, un annulla", () => {
+    const { engine, host, changes, compiled } = open();
+    const zoom = zoomOf(host);
+    dragHead(host, "a", 96 * zoom, 48 * zoom, true, true);
+    expect(lastOps(compiled)).toEqual([{ op: "move", ids: ["a"], dx: 96, dy: 48 }]);
+    expect([nodeOf(engine, "a").x, nodeOf(engine, "a").y]).toEqual([96, 48]);
+    expect(changes).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(SOURCE);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+
+  it("più schede trascinate: uno spostamento solo, agganciato sul loro riquadro; le distanze restano", () => {
+    const { engine, host, compiled } = open();
+    choose(host, "a");
+    choose(host, "b", true);
+    const zoom = zoomOf(host);
+    dragHead(host, "a", 37 * zoom, 21 * zoom);
+    // Lo spostamento lo agganciano la griglia o le guide sul riquadro delle
+    // due: b, fuori griglia di 3, resta a 3 da a.
+    const a = nodeOf(engine, "a");
+    expect(lastOps(compiled)).toEqual([{ op: "move", ids: ["a", "b"], dx: a.x, dy: a.y }]);
+    expect(a.x).not.toBe(0);
+    expect(nodeOf(engine, "b").x - nodeOf(engine, "a").x).toBe(3);
+    expect(nodeOf(engine, "b").y - nodeOf(engine, "a").y).toBe(205);
+    engine.destroy();
+  });
+
+  it("un gruppo trascinato porta le schede dentro con `contents`", () => {
+    const { engine, host, compiled } = open();
+    const zoom = zoomOf(host);
+    dragHead(host, "g", 48 * zoom, 0);
+    expect(lastOps(compiled)).toEqual([{ op: "move", ids: ["g"], dx: 48, dy: 0, contents: true }]);
+    expect([nodeOf(engine, "g").x, nodeOf(engine, "c").x]).toEqual([648, 688]);
+    expect(nodeOf(engine, "a").x).toBe(0);
+    engine.destroy();
+  });
+
+  it("Esc durante il trascinamento lo ferma: le schede tornano e il file non cambia", () => {
+    const { engine, host, changes, compiled } = open();
+    const zoom = zoomOf(host);
+    dragHead(host, "a", 96 * zoom, 48 * zoom, false);
+    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    viewportOf(host).dispatchEvent(escape);
+    expect(escape.defaultPrevented).toBe(true);
+    pointer(viewportOf(host), "pointerup", 100 + 96 * zoom, 100 + 48 * zoom, { buttons: 0 });
+    expect(changes).toHaveLength(0);
+    expect(compiled.some((ops) => ops.some((op) => op.op === "move"))).toBe(false);
+    expect(engine.getDoc()).toBe(SOURCE);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+
+  it("Esc durante il ridimensionamento lo ferma: la scheda torna e il file non cambia", () => {
+    const { engine, host, changes } = open();
+    choose(host, "a");
+    const grip = card(host, "a").querySelector<HTMLElement>('.canvas-resize[data-corner="se"]')!;
+    pointer(grip, "pointerdown", 100, 100);
+    pointer(viewportOf(host), "pointermove", 160, 140);
+    viewportOf(host).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    pointer(viewportOf(host), "pointerup", 160, 140, { buttons: 0 });
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(SOURCE);
+    engine.destroy();
+  });
+
+  it.each([
+    ["al 400%", "+", 40],
+    ["vicino al 25%", "-", 6],
+  ] as const)("%s il gesto misura in unità della lavagna", (_label, key, times) => {
+    const { engine, host, compiled } = open();
+    if (key === "-") {
+      // Dal 100%: sei passi di 1,25 in giù sono il 26%.
+      setReducedMotionPreference(true);
+      viewportOf(host).dispatchEvent(new KeyboardEvent("keydown", { key: "0", code: "Digit0", bubbles: true, cancelable: true }));
+      setReducedMotionPreference(false);
+      expect(zoomOf(host)).toBe(1);
+    }
+    zoomKey(host, key, times);
+    const zoom = zoomOf(host);
+    if (key === "+") expect(zoom).toBe(4);
+    else expect(zoom).toBeCloseTo(0.262, 3);
+    dragHead(host, "a", 96 * zoom, 0, true, true);
+    expect(lastOps(compiled)).toEqual([{ op: "move", ids: ["a"], dx: 96, dy: 0 }]);
+    engine.destroy();
+  });
+
+  it("la maniglia in alto a sinistra è una `move` e una `resize`, un annulla", () => {
+    const { engine, host, changes, compiled } = open();
+    choose(host, "a");
+    const zoom = zoomOf(host);
+    const grip = card(host, "a").querySelector<HTMLElement>('.canvas-resize[data-corner="nw"]')!;
+    pointer(grip, "pointerdown", 100, 100);
+    pointer(viewportOf(host), "pointermove", 100 - 48 * zoom, 100 - 32 * zoom);
+    pointer(viewportOf(host), "pointerup", 100 - 48 * zoom, 100 - 32 * zoom, { buttons: 0 });
+    expect(lastOps(compiled)).toEqual([
+      { op: "move", ids: ["a"], dx: -48, dy: -32 },
+      { op: "resize", id: "a", width: 248, height: 128 },
+    ]);
+    const a = nodeOf(engine, "a");
+    expect([a.x, a.y, a.width, a.height]).toEqual([-48, -32, 248, 128]);
+    expect(changes).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(SOURCE);
+    engine.destroy();
+  });
+
+  it("il filo lasciato sul corpo di una scheda è `connect` con `sides: auto`; da un lato, coi lati", () => {
+    const { engine, host, compiled } = open();
+    const zoom = zoomOf(host);
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(card(host, "f").querySelector(".canvas-card-body"));
+    try {
+      engine.commands().find((command) => command.id === toolCommandId("connect"))!.run();
+      pointer(card(host, "a"), "pointerdown", 100, 100);
+      pointer(viewportOf(host), "pointermove", 100, 100 + 600 * zoom);
+      pointer(viewportOf(host), "pointerup", 100, 100 + 600 * zoom, { buttons: 0 });
+      expect(lastOps(compiled)).toEqual([{ op: "connect", from: "a", to: "f", sides: "auto" }]);
+      expect(engine.undo()).toBe(true);
+      engine.commands().find((command) => command.id === toolCommandId("select"))!.run();
+      const port = card(host, "a").querySelector<HTMLElement>(':scope > .canvas-port[data-side="right"]')!;
+      pointer(port, "pointerdown", 100, 100);
+      pointer(viewportOf(host), "pointermove", 100, 100 + 600 * zoom);
+      pointer(viewportOf(host), "pointerup", 100, 100 + 600 * zoom, { buttons: 0 });
+      const ops = lastOps(compiled);
+      expect(ops).toHaveLength(1);
+      expect(ops[0]).toMatchObject({ op: "connect", from: "a", to: "f", sides: { from: "right" } });
+      expect(readCanvas(engine.getDoc()).edges).toEqual([expect.objectContaining({ fromNode: "a", fromSide: "right", toNode: "f" })]);
+    } finally {
+      pointing.mockRestore();
+    }
+    engine.destroy();
+  });
+
+  it("200 file: una lista sola (un `add_card` ciascuno, `layout`, `group`), un commit, un annulla", async () => {
+    const paths = Array.from({ length: 200 }, (_, index) => `foto/img ${index + 1}.md`);
+    let next = 0;
+    const { engine, host, changes, compiled } = open({
+      attachments: { deposit: vi.fn(), resolvePaths: vi.fn(async () => [...paths].reverse()) },
+      newId: () => `d${++next}`,
+    });
+    filesDrop(host);
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    const ops = lastOps(compiled);
+    const ids = paths.map((_, index) => `d${index + 1}`);
+    expect(ops.map((op) => op.op)).toEqual([...paths.map(() => "add_card"), "layout", "group"]);
+    // In ordine di nome coi numeri per valore: «img 2» prima di «img 10».
+    expect(ops.slice(0, 3).map((op) => op.file)).toEqual(["foto/img 1.md", "foto/img 2.md", "foto/img 3.md"]);
+    expect(ops[200]).toMatchObject({ op: "layout", kind: "grid", ids });
+    expect(ops[201]).toMatchObject({ op: "group", ids });
+    const doc = readCanvas(engine.getDoc());
+    expect(doc.nodes).toHaveLength(5 + 200 + 1);
+    expect(doc.nodes.filter((node) => node.type === "group")).toHaveLength(2);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(SOURCE);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+
+  it("un file che è già in una scheda ne fa un'altra, nel punto del rilascio", async () => {
+    const { engine, host, changes, compiled } = open({
+      attachments: { deposit: vi.fn(), resolvePaths: vi.fn(async () => ["doc/x.md"]) },
+      newId: () => "nuova",
+    });
+    filesDrop(host);
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    const ops = lastOps(compiled);
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({ op: "add_card", id: "nuova", file: "doc/x.md" });
+    const doc = readCanvas(engine.getDoc());
+    expect(doc.nodes.filter((node) => node.file === "doc/x.md").map((node) => node.id)).toEqual(["f", "nuova"]);
+    engine.destroy();
+  });
+
+  it("i riquadri del trascinamento si compilano una volta all'entrata; uscire dalla lavagna non scrive niente", () => {
+    const { engine, host, changes, compiled } = open({ attachments: { deposit: vi.fn(), resolvePaths: vi.fn(async () => []) } });
+    const ghosts = () => [...host.querySelectorAll<HTMLElement>(".canvas-drop-ghost")];
+    const over = (x: number, y: number) => {
+      const event = new DragEvent("dragover", { bubbles: true, cancelable: true });
+      const data = { files: [], items: [{ kind: "file" }, { kind: "file" }], types: ["Files"], getData: () => "" };
+      Object.defineProperties(event, { dataTransfer: { value: data }, clientX: { value: x }, clientY: { value: y } });
+      viewportOf(host).dispatchEvent(event);
+    };
+    const before = compiled.length;
+    over(200, 120);
+    const first = ghosts().map((ghost) => ghost.style.transform);
+    expect(first).toHaveLength(2);
+    for (let step = 1; step <= 20; step++) over(200 + step * 40, 120);
+    // Una sola compilazione, che non scrive; i riquadri seguono il puntatore.
+    expect(compiled.length - before).toBe(1);
+    expect(ghosts().map((ghost) => ghost.style.transform)).not.toEqual(first);
+    viewportOf(host).dispatchEvent(new DragEvent("dragleave", { bubbles: true }));
+    expect(ghosts()).toHaveLength(0);
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(SOURCE);
+    engine.destroy();
+  });
+
+  it("il testo incollato è un `add_card` nella forma corta, nel punto agganciato", async () => {
+    const { engine, host, changes, compiled } = open({ newId: () => "incollata" });
+    clipboardPaste(host, { "text/plain": "ciao" });
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    const ops = lastOps(compiled);
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({ op: "add_card", text: "ciao" });
+    expect(ops[0]).not.toHaveProperty("width");
+    expect(Math.abs(Number(ops[0]!.x) % 8)).toBe(0);
+    expect(Math.abs(Number(ops[0]!.y) % 8)).toBe(0);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(SOURCE);
+    engine.destroy();
+  });
+
+  it("le schede incollate entrano con `insert` del frammento, coi fili", async () => {
+    const { engine, host, changes, compiled } = open();
+    const fragment = JSON.stringify({ version: 1, nodes: [
+      { id: "p", type: "text", x: 10, y: 10, width: 120, height: 80, text: "uno" },
+      { id: "q", type: "text", x: 210, y: 10, width: 120, height: 80, text: "due" },
+    ], edges: [{ id: "e", fromNode: "p", toNode: "q" }] });
+    clipboardPaste(host, { [FRAGMENT_TYPE]: fragment, "text/plain": "uno due" });
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    expect(lastOps(compiled).map((op) => op.op)).toEqual(["insert"]);
+    const doc = readCanvas(engine.getDoc());
+    expect(doc.nodes.slice(5).map((node) => node.text)).toEqual(["uno", "due"]);
+    expect(doc.edges).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(SOURCE);
     engine.destroy();
   });
 });
