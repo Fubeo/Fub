@@ -24,6 +24,7 @@ import type { TableTarget } from "../../../../tabella/commands";
 import { columnName, TableFrame } from "../../../../tabella/frame/frame";
 import type { TableFormat } from "../../../../tabella/keys";
 import type { Range } from "../../../../tabella/navigation";
+import { selectedCells, selectsSeveral } from "../../../../tabella/selection";
 import {
   clearFormatting,
   clearRange,
@@ -73,6 +74,9 @@ export interface TableGridHost {
 export interface TableGridActions {
   actionState(id: string): EditorActionState;
   runAction(id: string): boolean;
+  /// Le celle scelte, una volta ciascuna e senza l'intestazione, col testo che
+  /// mostrano: la banda le somma (E24). `null` con una cella sola.
+  selectedValues(): Iterable<string> | null;
 }
 
 const WRAPS: Readonly<Record<string, readonly [string, string]>> = {
@@ -108,6 +112,27 @@ const CAPS: TableCaps = {
 };
 
 const UNAVAILABLE: EditorActionState = { enabled: false, active: null };
+
+/// Le enfasi che una cella può avere attorno a tutto il suo testo: la cella
+/// mostra ciò che sta dentro.
+const SHOWN_WRAPS = ["**", "__", "~~", "==", "*", "_", "`"] as const;
+
+/// Il testo che una cella mostra, per chi legge i valori (la somma della
+/// banda): senza gli spazi attorno e senza le enfasi che lo avvolgono tutto,
+/// così «**1.200**» vale «1.200».
+export function shownCellText(text: string): string {
+  let shown = text.trim();
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const mark of SHOWN_WRAPS) {
+      if (shown.length > mark.length * 2 && shown.startsWith(mark) && shown.endsWith(mark)) {
+        shown = shown.slice(mark.length, -mark.length).trim();
+        changed = true;
+      }
+    }
+  }
+  return shown;
+}
 
 const toCell = (position: GridPosition) => ({ row: position.row, column: position.col });
 const toPosition = (cell: { readonly row: number; readonly column: number }): GridPosition => ({ row: cell.row, col: cell.column });
@@ -325,6 +350,19 @@ export class TableGrid implements TableGridActions {
   /// smontare la griglia (cambio di modalità, chiusura del riquadro).
   destroy(): void {
     this.#frame.destroy();
+  }
+
+  /// Le celle scelte col testo che mostrano, lette da ciò che la tabella è
+  /// adesso: una volta per cambio di selezione, mai per battuta.
+  selectedValues(): Iterable<string> | null {
+    const ranges = this.#frame.ranges;
+    if (!selectsSeveral(ranges)) return null;
+    const rows = this.#data.rows;
+    return {
+      *[Symbol.iterator]() {
+        for (const { row, column } of selectedCells(ranges, CAPS.headerRows)) yield shownCellText(rows[row]?.[column] ?? "");
+      },
+    };
   }
 
   // ── Azioni della barra ─────────────────────────────────────────────────────

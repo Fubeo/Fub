@@ -74,6 +74,18 @@ export function frontmatterRange(doc: { length: number; sliceString(from: number
   return detectFrontmatter(doc.sliceString(0, Math.min(doc.length, FRONTMATTER_WINDOW)));
 }
 
+/// La lingua dichiarata dal frontmatter (`lang: it-IT`, o `language:`), se
+/// c'è: il correttore controlla in quella, e la banda ci legge i numeri delle
+/// tabelle.
+export function declaredLanguage(doc: { length: number; sliceString(from: number, to?: number): string }): string | null {
+  const range = frontmatterRange(doc);
+  if (!range) return null;
+  const match = /^lang(?:uage)?[ \t]*:[ \t]*["']?([A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{1,8})*)["']?[ \t]*$/m.exec(
+    doc.sliceString(range.from, range.to),
+  );
+  return match ? match[1]! : null;
+}
+
 function isAlphaNum(char: string): boolean {
   return /[\p{Alphabetic}\p{Nd}\p{Nl}\p{No}]/u.test(char);
 }

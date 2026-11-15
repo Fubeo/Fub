@@ -28,6 +28,37 @@ export function rangeBetween(anchor: { readonly row: number; readonly column: nu
   };
 }
 
+/// Se gli intervalli prendono più di una cella, contando l'intestazione: con
+/// una cella sola la banda non somma. Due intervalli sono sempre celle
+/// diverse, che `withRange` non ne ripete uno uguale.
+export function selectsSeveral(ranges: readonly Range[]): boolean {
+  if (ranges.length > 1) return true;
+  const range = ranges[0];
+  return range !== undefined && (range.r1 > range.r0 || range.c1 > range.c0);
+}
+
+/// Ogni cella scelta una volta sola, intervallo per intervallo e riga per
+/// riga, senza le prime `headerRows` righe (l'intestazione): la cella che due
+/// intervalli prendono tutti e due conta nel primo. È ciò che la banda somma
+/// (E24); chi chiama legge i valori mostrati da queste coordinate, una volta
+/// per cambio di selezione.
+export function* selectedCells(ranges: readonly Range[], headerRows = 0): Generator<Cell, void, undefined> {
+  for (let index = 0; index < ranges.length; index++) {
+    const range = ranges[index]!;
+    const top = Math.max(range.r0, headerRows);
+    if (top > range.r1) continue;
+    // Solo gli intervalli di prima che toccano questo possono avere una cella
+    // già contata: di solito nessuno, e il giro resta lineare.
+    const earlier = ranges.slice(0, index).filter((other) => touches(other, top, range.c0, range.r1, range.c1));
+    for (let row = top; row <= range.r1; row++) {
+      for (let column = range.c0; column <= range.c1; column++) {
+        if (earlier.length > 0 && earlier.some((other) => touches(other, row, column))) continue;
+        yield { row, column };
+      }
+    }
+  }
+}
+
 /// Il riempimento che la maniglia porta da `source` verso la cella `over`:
 /// come in Excel, lungo l'asse su cui il puntatore è uscito di più, fino alla
 /// sua riga o colonna. Dentro la sorgente non c'è riempimento (`null`).

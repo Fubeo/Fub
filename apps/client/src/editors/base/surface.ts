@@ -5,11 +5,13 @@ import { EVERY_DOCUMENT } from "../../host/contract";
 import { api } from "../../host/ipc";
 import { registerCustomRenderer } from "../../ui/custom";
 import { errorText, isErrorKind } from "../../host/errors";
-import { onLanguage, t } from "../../i18n/strings";
+import { onLanguage, resolvedLanguage, t } from "../../i18n/strings";
 import type { DocumentUpdate } from "../core/text-operation";
 import { onEvent } from "../../state/kernel";
 import { openVaultRoot, vaultArg } from "../../state/vault";
-import type { BufferedSurface, SurfaceMountContext } from "../core/registry";
+import type { BufferedSurface, SurfaceCellSelectionSource, SurfaceMountContext } from "../core/registry";
+import type { Cell, Range } from "../../tabella/navigation";
+import { rangeBetween, selectedCells, selectsSeveral, touches } from "../../tabella/selection";
 import type { SurfaceMenu, SurfaceMenuItem } from "../core/editor-menu";
 import { uniformRowRange } from "../core/row-window";
 import { LOCAL_FETCH } from "../core/local-fetch";
@@ -103,6 +105,58 @@ export function mountBaseSurface(
   // I gruppi chiusi di tabella, schede ed elenco, per vista: stato della
   // superficie, come lo scroll, che il file `.base` non conosce.
   const collapsedGroups = new Map<string, Set<string>>();
+  // Le celle scelte nella tabella (E24), con le regole della Tabella
+  // (`tabella/selection.ts`): righe di `tableItems`, colonne con la nota per
+  // prima e poi `plan.columns`. Un clic sceglie una cella, Maiusc+clic o il
+  // trascinamento allargano fino a un'altra, Maiusc con le frecce riga per
+  // riga, Esc torna alla cella. La banda somma i valori mostrati: nessuna
+  // IPC per una selezione, e una tabella ridisegnata (ricerca, vista,
+  // ricarica) la toglie.
+  let tableItems: readonly ({ group: string; count: number } | BaseRow)[] = [];
+  let picked: { anchor: Cell; focus: Cell } | null = null;
+  let picking = false;
+  let paintPicked: () => void = () => {};
+  const cellListeners = new Set<() => void>();
+  const pick = (next: { anchor: Cell; focus: Cell } | null): void => {
+    const same = next !== null && picked !== null
+      && next.anchor.row === picked.anchor.row && next.anchor.column === picked.anchor.column
+      && next.focus.row === picked.focus.row && next.focus.column === picked.focus.column;
+    if (same || (next === null && picked === null)) return;
+    picked = next;
+    paintPicked();
+    for (const listener of [...cellListeners]) listener();
+  };
+  const pickedRanges = (): Range[] => (picked ? [rangeBetween(picked.anchor, picked.focus)] : []);
+  /// Il valore che una cella mostra: un numero come numero, il resto come
+  /// testo. Un errore non è un valore da sommare.
+  const shownValue = (row: BaseRow, column: number): string | number => {
+    if (column === 0) return row.doc;
+    const key = plan?.columns[column - 1];
+    const value = key === undefined ? undefined : row.values[key];
+    if (value?.kind === "number") return value.value;
+    if (value?.kind === "error") return "";
+    return cellText(value);
+  };
+  const cellSelection: SurfaceCellSelectionSource = {
+    read: () => {
+      const ranges = pickedRanges();
+      if (plan?.viewType !== "table" || !selectsSeveral(ranges)) return null;
+      const items = tableItems;
+      return {
+        locale: resolvedLanguage(),
+        *values() {
+          for (const { row, column } of selectedCells(ranges)) {
+            const item = items[row];
+            if (item && !("group" in item)) yield shownValue(item, column);
+          }
+        },
+      };
+    },
+    subscribe: (listener) => {
+      cellListeners.add(listener);
+      return () => cellListeners.delete(listener);
+    },
+  };
   const groupToggle = (name: string, count: number): HTMLButtonElement => {
     const view = plan?.view ?? "";
     const closed = collapsedGroups.get(view)?.has(name) === true;
@@ -320,6 +374,8 @@ export function mountBaseSurface(
     const items: ({ group: string; count: number } | BaseRow)[] = key
       ? groupBaseRows(page, key, orderOf()).flatMap(({ name, rows }) => [{ group: name, count: rows.length }, ...(groupOpen(name) ? rows : [])])
       : page;
+    tableItems = items;
+    const columns = (plan?.columns.length ?? 0) + 1;
     const renderWindow = () => {
       const range = uniformRowRange(items.length, viewport.scrollTop, viewport.clientHeight || TABLE_VIEWPORT_HEIGHT, TABLE_ROW_HEIGHT);
       if (!range) { tableBody.replaceChildren(); return; }
@@ -341,12 +397,15 @@ export function mountBaseSurface(
         const row = item;
         const tr = document.createElement("tr");
         tr.dataset.doc = row.doc;
+        tr.dataset.index = String(index);
         tr.style.height = `${TABLE_ROW_HEIGHT}px`;
         const fileCell = tr.insertCell();
+        fileCell.dataset.cell = "0";
         fileCell.style.cssText = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
         fileCell.append(button(row.doc, () => open(row.doc)));
-        for (const column of plan?.columns ?? []) {
+        for (const [position, column] of (plan?.columns ?? []).entries()) {
           const cell = tr.insertCell();
+          cell.dataset.cell = String(position + 1);
           cell.style.cssText = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
           cell.append(editable(row, column));
         }
@@ -354,7 +413,102 @@ export function mountBaseSurface(
       }
       if (range.end + 1 < items.length) fragment.append(spacer((items.length - range.end - 1) * TABLE_ROW_HEIGHT));
       tableBody.replaceChildren(fragment);
+      paint();
     };
+    // Le celle scelte si segnano solo fra le righe disegnate: con ventimila
+    // righe la finestra resta di poche decine, e così il lavoro.
+    const paint = (): void => {
+      const ranges = pickedRanges();
+      const range = selectsSeveral(ranges) ? ranges[0]! : null;
+      for (const cell of tableBody.querySelectorAll<HTMLTableCellElement>("tr[data-index] > td[data-cell]")) {
+        const inside = range !== null && touches(range, Number(cell.parentElement!.dataset.index), Number(cell.dataset.cell));
+        if (inside !== cell.hasAttribute("data-picked")) cell.toggleAttribute("data-picked", inside);
+      }
+    };
+    paintPicked = paint;
+    const cellAt = (target: EventTarget | null): Cell | null => {
+      const cell = target instanceof Element ? target.closest<HTMLElement>("tr[data-index] > td[data-cell]") : null;
+      if (!cell || !tableBody.contains(cell)) return null;
+      return { row: Number(cell.parentElement!.dataset.index), column: Number(cell.dataset.cell) };
+    };
+    // La riga del fuoco resta in vista quando le frecce la portano fuori.
+    const reveal = (row: number): void => {
+      const top = row * TABLE_ROW_HEIGHT;
+      const height = viewport.clientHeight || TABLE_VIEWPORT_HEIGHT;
+      if (top < viewport.scrollTop) viewport.scrollTop = top;
+      else if (top + TABLE_ROW_HEIGHT > viewport.scrollTop + height) viewport.scrollTop = top + TABLE_ROW_HEIGHT - height;
+      else return;
+      renderWindow();
+    };
+    // Una riga d'intestazione di gruppo non è una cella: le frecce la
+    // saltano.
+    const dataRow = (from: number, by: -1 | 1): number => {
+      for (let row = from + by; row >= 0 && row < items.length; row += by) if (!("group" in items[row]!)) return row;
+      return from;
+    };
+    // La tabella prende il fuoco quando la selezione esce dal campo aperto:
+    // Maiusc con le frecce ed Esc continuano da lì.
+    viewport.tabIndex = -1;
+    viewport.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      const cell = cellAt(event.target);
+      if (!cell) return;
+      if (event.shiftKey && picked) {
+        // Maiusc+clic allarga senza aprire la cella sotto il puntatore.
+        event.preventDefault();
+        pick({ anchor: picked.anchor, focus: cell });
+        return;
+      }
+      pick({ anchor: cell, focus: cell });
+      picking = true;
+    });
+    viewport.addEventListener("pointermove", (event) => {
+      if (!picking || !picked) return;
+      if ((event.buttons & 1) === 0) { picking = false; return; }
+      const cell = cellAt(document.elementFromPoint(event.clientX, event.clientY));
+      if (!cell || (cell.row === picked.focus.row && cell.column === picked.focus.column)) return;
+      // Uscito dalla cella di partenza, il trascinamento sceglie celle e non
+      // più testo: il campo aperto si lascia.
+      if (document.activeElement !== viewport && root.contains(document.activeElement)) {
+        window.getSelection()?.removeAllRanges();
+        viewport.focus({ preventScroll: true });
+      }
+      event.preventDefault();
+      pick({ anchor: picked.anchor, focus: cell });
+    });
+    const stopPicking = () => { picking = false; };
+    viewport.addEventListener("pointerup", stopPicking);
+    viewport.addEventListener("pointercancel", stopPicking);
+    viewport.addEventListener("focusin", (event) => {
+      // Col Tab in una cella, quella cella diventa la scelta; un fuoco che
+      // arriva dentro una selezione di più celle non la disfa.
+      if (picking || event.target === viewport || selectsSeveral(pickedRanges())) return;
+      const cell = cellAt(event.target);
+      if (cell) pick({ anchor: cell, focus: cell });
+    });
+    viewport.addEventListener("keydown", (event) => {
+      if (!picked || event.altKey || event.ctrlKey || event.metaKey) return;
+      const several = selectsSeveral(pickedRanges());
+      if (event.key === "Escape" && several) {
+        event.preventDefault();
+        event.stopPropagation();
+        pick({ anchor: picked.anchor, focus: picked.anchor });
+        return;
+      }
+      if (!event.shiftKey) return;
+      const { focus } = picked;
+      let next: Cell | null = null;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") next = { row: dataRow(focus.row, event.key === "ArrowDown" ? 1 : -1), column: focus.column };
+      // Di lato solo con più celle già scelte: in un campo Maiusc con le
+      // frecce laterali sceglie ancora il testo.
+      else if (several && event.key === "ArrowRight") next = { row: focus.row, column: Math.min(focus.column + 1, columns - 1) };
+      else if (several && event.key === "ArrowLeft") next = { row: focus.row, column: Math.max(focus.column - 1, 0) };
+      if (!next) return;
+      event.preventDefault();
+      if (document.activeElement !== viewport) viewport.focus({ preventScroll: true });
+      pick({ anchor: picked.anchor, focus: next });
+      reveal(next.row);
+    });
     viewport.addEventListener("scroll", renderWindow);
     viewport.append(table);
     body.append(viewport);
@@ -627,6 +781,11 @@ export function mountBaseSurface(
     tileCleanup?.();
     tileCleanup = null;
     body.replaceChildren();
+    // Le righe di prima non ci sono più: la selezione se ne va con loro.
+    tableItems = [];
+    paintPicked = () => {};
+    picking = false;
+    pick(null);
     if (error) { body.append(button(labels().retry, () => void reload(true))); return; }
     const matches = filteredRows();
     const page = plan?.viewType === "table" ? matches : matches.slice(0, displayed);
@@ -841,6 +1000,7 @@ export function mountBaseSurface(
     },
     focus() { search.focus(); },
     contextMenu: menuAt,
+    cellSelection,
     setReadOnly(next: boolean) {
       if (readOnly === next) return;
       if (next) writeEpoch++;
@@ -851,7 +1011,7 @@ export function mountBaseSurface(
     },
     setTheme(theme: Theme) { root.dataset.theme = theme; },
     destroy() {
-      destroyed = true; generation++; pending?.abort(); tileCleanup?.();
+      destroyed = true; generation++; pending?.abort(); tileCleanup?.(); cellListeners.clear();
       for (const stop of stopEvents) stop();
       for (const [url, timer] of downloads) { window.clearTimeout(timer); URL.revokeObjectURL(url); }
       downloads.clear();
