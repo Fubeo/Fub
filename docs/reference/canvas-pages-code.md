@@ -10,9 +10,12 @@
 Le altre operazioni stanno in [La lavagna come codice](canvas-code.md#le-operazioni),
 il campo `fub:parts` degli estratti in [Gli estratti della lavagna](canvas-parts.md).
 Le due operazioni fanno ciò che fanno «Spargi le pagine…» e il selettore delle
-parti della GUI, con le stesse misure e gli stessi posti: la prova è
-`apps/client/src/editors/canvas/spread-pages-parity.test.ts`, che rifà i vettori
-con `parsePageRanges`, `bornSize` e `spreadLayout` della GUI.
+parti della GUI, con le stesse misure e gli stessi posti. «Spargi le pagine…»
+scrive proprio `spread_pages`, col conto, le misure per numero di pagina e
+l'etichetta del gruppo nella lingua dell'interfaccia; R8 di
+`apps/client/src/editors/canvas/parity.test.ts` lo confronta con la voce.
+`spread-pages-parity.test.ts` rifà ancora i vettori con `parsePageRanges`,
+`bornSize` e `spreadLayout`, la regola che la GUI usava prima.
 
 Il nucleo non legge file. Il numero e le misure delle pagine, e la misura
 dell'immagine, li mette nella lista `canvas.check`/`canvas.apply` di

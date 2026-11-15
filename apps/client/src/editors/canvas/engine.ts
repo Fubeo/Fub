@@ -17,7 +17,7 @@ import { focusableElements, focusZone } from "../../ui/a11y";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, cellAnchorAt, pageAnchorAt, strokeBounds, StrokeBox, type Bounds } from "./anchor";
 import { parseTsv } from "../core/tsv";
-import { bornSize, dropLayout, markdownTable, spreadLayout, type DropItem } from "./drop-layout";
+import { bornSize, dropLayout, markdownTable, type DropItem } from "./drop-layout";
 import { parsePageRanges } from "./page-ranges";
 import type { PdfPagesReader } from "./cards/pdf";
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../../ui/drag-types";
@@ -6920,8 +6920,8 @@ export class CanvasEngine {
    * «Spargi le pagine…» (T72): una scheda per pagina del PDF scelto, in riga
    * accanto alla sua, a capo ogni 10 e in gruppo oltre 12. Chiede le pagine (di
    * serie tutte), chiede conferma oltre `SPREAD_CONFIRM_ABOVE`, misura ogni
-   * pagina come nasce un PDF (T29) e mette tutto in un commit solo: un annulla
-   * le toglie. Il file non si cambia.
+   * pagina come nasce un PDF (T29) e scrive tutto con `spread_pages` (T23), in
+   * un passo solo: un annulla le toglie. Il file non si cambia.
    */
   async #spreadPages(): Promise<void> {
     const pages = this.#options.cards?.pdfPages;
@@ -6949,25 +6949,31 @@ export class CanvasEngine {
     if (!alive()) return;
     const measured = await pages.sizes(path, wanted);
     if (!alive()) return;
-    const doc = this.#doc;
-    const beside = doc?.nodes.find((node) => node.id === id);
-    if (!doc || !beside) return;
-    const layout = spreadLayout(wanted.map((_, index) => bornSize("pdf", measured[index] ?? undefined)), beside);
-    const patches: CanvasPatch[] = [];
-    if (layout.group) {
-      const patch = upsertNodePatch(doc, {
-        id: newNodeId("n"), type: "group", ...layout.group,
-        label: t("canvas.spread.group", { count: String(wanted.length) }),
-      });
-      if (patch) patches.push(patch);
-    }
+    this.#writeOps(this.#spreadOps(id, wanted, count, measured));
+  }
+
+  /**
+   * La forma in codice di «Spargi le pagine» (T23): `page_sizes` va per numero
+   * di pagina, e una pagina non misurata ha `[0, 0]`, che il nucleo fa nascere
+   * come la GUI senza misura. L'etichetta del gruppo è quella della lingua.
+   */
+  #spreadOps(
+    id: string,
+    wanted: readonly number[],
+    count: number,
+    measured: readonly ({ readonly width: number; readonly height: number } | null | undefined)[] = [],
+  ): CanvasIntentOp[] {
+    const last = Math.max(0, ...wanted);
+    const sizes: number[][] = Array.from({ length: last }, () => [0, 0]);
     wanted.forEach((page, index) => {
-      const patch = upsertNodePatch(doc, {
-        id: newNodeId("n"), type: "file", file: path, subpath: `#page=${page}`, ...layout.rects[index]!,
-      });
-      if (patch) patches.push(patch);
+      const size = measured[index];
+      if (size) sizes[page - 1] = [size.width, size.height];
     });
-    if (patches.length) this.#commit(patches, "input");
+    return [{
+      op: "spread_pages", id, pages: [...wanted], page_count: count,
+      ...(measured.some(Boolean) ? { page_sizes: sizes } : {}),
+      label: t("canvas.spread.group", { count: String(wanted.length) }),
+    }];
   }
 
   /**
@@ -7703,6 +7709,14 @@ export class CanvasEngine {
             if (one?.type !== "file" || cardKindOf(one) !== "pdf" || !isVaultPath(cardTarget(one).path)) return t("canvas.commands.why.no_pdf");
             if (!this.#options.cards?.pdfPages) return t("canvas.commands.why.no_pdf_reader");
             return this.#pdfBroken.has(cardTarget(one).path) ? t("canvas.commands.why.pdf_unreadable") : null;
+          },
+          // `value` sono le pagine scritte nel campo; il conto e le misure le
+          // legge `canvas.apply` dal PDF, come qui li legge la tela. Quante
+          // pagine nasceranno lo sa solo il conto: l'etichetta del gruppo
+          // resta quella di serie del nucleo.
+          op: (input) => {
+            const one = only();
+            return one && input?.value ? [{ op: "spread_pages", id: one.id, pages: input.value }] : null;
           },
           run: () => void this.#spreadPages().catch((error: unknown) => this.#showIntakeError(error)),
         };

@@ -284,7 +284,8 @@ cambiano la lavagna sono spente col perché, non nascoste.
   Oltre dodici schede nascono in un gruppo «N pagine». Un intervallo oltre
   l'ultima pagina si taglia, e il campo lo dice; un pezzo che non si legge lo
   dice e il dialogo resta aperto. Oltre 200 pagine chiedono conferma, e
-  «Annulla» non fa nulla. Il tutto è un solo commit, che «Annulla» riporta. Se
+  «Annulla» non fa nulla. Scrive `spread_pages` del nucleo, col conto e le
+  misure lette dal PDF, in un passo solo che «Annulla» riporta. Se
   il PDF non si apre, il comando lo dice e resta spento col perché finché il
   file non cambia; in sola lettura è spento col perché.
 - **`C`** con una scheda scelta comincia il filo da lei, come «Collega…» e il

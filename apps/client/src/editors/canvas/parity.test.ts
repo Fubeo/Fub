@@ -9,6 +9,8 @@
 // gesto, in `docs/development/canvas-parity.md`.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenu, SurfaceMenuEntry } from "../core/editor-menu";
+import { CardCache } from "./card-cache";
+import { createCardRegistry } from "./cards";
 import type { CanvasEngine, CanvasNotesPort } from "./engine";
 import type { PartsPickerPort } from "./parts-picker";
 import { mountCanvas } from "./test-mount";
@@ -421,6 +423,8 @@ interface R8Answers {
   readonly pickFile?: string;
   readonly newNote?: string;
   readonly noteText?: string;
+  /** Le pagine del PDF per «Spargi le pagine»: con questo la tela ha il lettore, senza misure. */
+  readonly pdfPageCount?: number;
 }
 
 /** La tela montata su cui R8 fa una voce. */
@@ -617,6 +621,23 @@ const SETUP: Readonly<Record<string, R8Setup>> = {
     ops: () => [{ op: "add_card", text: "(il testo letto)", x: 1344, y: 400, width: 320, height: 200 }],
     why: "la scheda va accanto alla nota (n1: f1 non è una nota) al primo posto libero a 24, larga e alta come lei; `near` lascia 48 e nasce con la misura del testo",
   },
+  "N6.pages.spread": {
+    via: "canvas.spread_pages",
+    answers: { pdfPageCount: 12 },
+    act: async ({ engine }) => {
+      run(engine, "canvas.spread_pages");
+      await settle();
+      const field = document.querySelector<HTMLInputElement>(".kit-dialog .kit-field-input");
+      if (!field) throw new Error("Spargi le pagine non chiede quali");
+      field.value = "1-2";
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector<HTMLElement>('.kit-dialog [data-action="spread"]')?.click();
+      await settle();
+    },
+  },
+  "N6.parts.excerpt": {
+    skip: "la voce raccoglie quattro gesti (pagine, zona, sezioni, ritaglio): «Parti…» fa solo le sezioni sul posto, e il ritaglio è un gesto, che porta T24 insieme alla scrittura del selettore con `excerpt`",
+  },
   "N6.card.relink": {
     via: "canvas.replace_file",
     answers: { pickFile: "Archivio/voti.xlsx" },
@@ -658,6 +679,14 @@ async function r8Problems(voice: Voice, setup: R8Run): Promise<string[]> {
       read: async () => answers.noteText ?? "",
     },
     parts: PARTS,
+    ...(answers.pdfPageCount === undefined ? {} : {
+      cards: {
+        registry: createCardRegistry([]),
+        snapshots: new CardCache(),
+        watch: () => () => {},
+        pdfPages: { count: async () => answers.pdfPageCount!, sizes: async (_path, pages) => pages.map(() => null) },
+      },
+    }),
   });
   try {
     const targets = setup.select ?? opIds(voice.ops ?? []);
