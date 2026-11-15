@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openLifetime } from "../../../../../ui/lifetime";
-import { coverElement, coverYOf, type CoverHost } from "./cover";
+import { coverColorOf, coverElement, coverYOf, type CoverHost } from "./cover";
 
 // La copertina della testata (T6): gli strumenti al passaggio e il
 // riposizionamento che scrive `cover-y:`.
@@ -38,6 +38,15 @@ describe("la posizione della copertina", () => {
     expect(coverYOf("-5")).toBe(0);
     expect(coverYOf("alto")).toBeNull();
     expect(coverYOf(null)).toBeNull();
+  });
+
+  it("un colore è `#rgb` o `#rrggbb`, con o senza trasparenza; il resto è un'immagine", () => {
+    expect(coverColorOf("#a3c4f3")).toBe("#a3c4f3");
+    expect(coverColorOf(" #ABC ")).toBe("#ABC");
+    expect(coverColorOf("#a3c4f380")).toBe("#a3c4f380");
+    expect(coverColorOf("#a3c4f")).toBeNull();
+    expect(coverColorOf("img/mare.png")).toBeNull();
+    expect(coverColorOf("red")).toBeNull();
   });
 });
 

@@ -27,6 +27,16 @@ describe("le proprietà in evidenza", () => {
       .toEqual({ featured: ["stato", "aliases"], rest: [] });
   });
 
+  it("senza la riga dei dati che le mostri, le etichette sono una proprietà", () => {
+    const split = featuredProperties(block("tags: [mostra]\nstato: In corso").entries, false);
+    expect(split.featured.map((entry) => entry.key)).toEqual(["tags", "stato"]);
+  });
+
+  it("una chiave scritta due volte è una riga sola, col valore dell'ultima", () => {
+    const split = featuredProperties(block("stato: a\nluogo: x\nstato: b").entries);
+    expect(split.featured.map((entry) => [entry.key, entry.value])).toEqual([["luogo", "x"], ["stato", "b"]]);
+  });
+
   it("trenta proprietà: quattro in evidenza, ventisei dietro «Altre»", () => {
     const yaml = Array.from({ length: 30 }, (_, index) => `voce${index + 1}: ${index + 1}`).join("\n");
     const split = keys(yaml);

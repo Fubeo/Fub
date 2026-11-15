@@ -22,7 +22,7 @@ import { drawPageMark, figureLabel, figureValue, PAGE_FIGURES, pageMarkLabel, pa
 import { markPresence } from "../../../../core/presence";
 import type { PropertiesDisplay } from "../../../properties-display";
 import { matchEmoji } from "../completions";
-import { listItems, propertyBlock, type PropertyBlock } from "../properties";
+import { lastEntry, listItems, propertyBlock, type PropertyBlock } from "../properties";
 import { liveStrings } from "../strings";
 import { coverElement, coverYOf } from "./cover";
 import { featuredProperties, propertiesElement, samePageProperties, type PageProperties } from "./featured";
@@ -63,22 +63,27 @@ export interface PageData {
   readonly readOnly: boolean;
   readonly renamable: boolean;
   readonly subpages: boolean;
+  /// Il frontmatter non si legge: la testata lo dice e non ci scrive.
+  readonly unreadable: boolean;
   /// Le proprietà della testata; `null` in `source`, dove resta lo YAML.
   readonly properties: PageProperties | null;
 }
 
 /// La testata di questo stato. `block` è il frontmatter già letto, se chi
-/// chiama lo ha.
+/// chiama lo ha; `factTags` dice che la riga dei dati mostra le etichette (se
+/// no, `tags:` è una proprietà come le altre).
 export function pageData(
   state: EditorState,
   options: PageOptions,
   display: PropertiesDisplay,
   block: PropertyBlock | null = propertyBlock(state),
   open = false,
+  factTags = false,
 ): PageData {
   const entries = block?.entries ?? [];
-  const value = (key: string) => entries.find((entry) => entry.key === key)?.value ?? null;
-  const split = featuredProperties(entries);
+  const value = (key: string) => lastEntry(entries, key)?.value ?? null;
+  const split = featuredProperties(entries, factTags);
+  const unreadable = block?.unreadable ?? false;
   return {
     title: options.page?.() ?? "",
     folder: options.folderPage?.() ?? false,
@@ -92,11 +97,14 @@ export function pageData(
     readOnly: state.readOnly,
     renamable: options.rename !== undefined,
     subpages: options.subpage !== undefined,
-    properties: display === "source" ? null : {
-      display,
+    unreadable,
+    // Un frontmatter che non si legge la testata lo dice anche in `source`:
+    // gli strumenti tacciono, e la ragione si legge lì.
+    properties: display === "source" && !unreadable ? null : {
+      display: display === "hidden" ? "hidden" : "visible",
       featured: split.featured,
       rest: split.rest,
-      unreadable: block?.unreadable ?? false,
+      unreadable,
       open,
     },
   };
@@ -107,6 +115,7 @@ export function samePage(a: PageData, b: PageData): boolean {
   return a.title === b.title && a.folder === b.folder && a.icon === b.icon && a.cover === b.cover
     && a.coverY === b.coverY && a.description === b.description
     && a.readOnly === b.readOnly && a.renamable === b.renamable && a.subpages === b.subpages
+    && a.unreadable === b.unreadable
     && a.classes.length === b.classes.length && a.classes.every((name, i) => name === b.classes[i])
     && samePageProperties(a.properties, b.properties);
 }
@@ -156,17 +165,25 @@ export interface PageHost {
   measure(): void;
   /// «Altre N proprietà» aperto o chiuso.
   readonly more: { readonly open: boolean; set(open: boolean): void };
+  /// Un riquadro della testata (icona, copertina, sottopagina, «…») si è
+  /// aperto o chiuso: chi ospita non rifà la testata sotto un riquadro aperto.
+  popover?(open: boolean): void;
 }
 
-/// La testata di `data`. Ogni ascoltatore e ogni riquadro aperto vivono in
-/// `life`.
-export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime): HTMLElement {
+/// La testata di `data`, in `root` (svuotata) o in un elemento nuovo. Ogni
+/// ascoltatore e ogni riquadro aperto vivono in `life`.
+export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime, root: HTMLElement = document.createElement("div")): HTMLElement {
   const editable = host.writing && !data.readOnly;
-  const root = document.createElement("div");
+  // In un frontmatter che non si legge non si scrive niente: niente
+  // strumenti, niente icona da cambiare, niente copertina da spostare.
+  const writable = editable && !data.unreadable;
+  root.replaceChildren();
+  root.removeAttribute("aria-busy");
   root.className = "cm-fub-page";
   root.setAttribute("role", "group");
   root.setAttribute("aria-label", liveStrings.t("page.label"));
   if (data.cover) root.dataset.cover = "true";
+  else delete root.dataset.cover;
   let popover: PopoverHandle | null = null;
   const closePopover = () => {
     popover?.close();
@@ -175,7 +192,11 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime)
   life.add(closePopover);
   const opener = (open: typeof openIconPicker) => (anchor: HTMLElement) => {
     closePopover();
-    popover = open(host, anchor, data, life, () => { popover = null; });
+    host.popover?.(true);
+    popover = open(host, anchor, data, life, () => {
+      popover = null;
+      host.popover?.(false);
+    });
   };
   const iconButton = opener(openIconPicker);
   const coverButton = opener(openCoverDialog);
@@ -184,7 +205,7 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime)
 
   if (data.cover) {
     root.append(coverElement(data.cover, data.coverY, {
-      editable,
+      editable: writable,
       mountImage: host.mountImage,
       change: coverButton,
       reposition: (y) => host.writeProperty("cover-y", y),
@@ -202,7 +223,7 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime)
     if (icon instanceof HTMLButtonElement) {
       icon.type = "button";
       icon.setAttribute("aria-label", liveStrings.t("page.icon.change", { icon: label }));
-      icon.disabled = !editable;
+      icon.disabled = !writable;
       life.listen(icon, "click", () => iconButton(icon));
     } else {
       icon.setAttribute("role", "img");
@@ -211,24 +232,30 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime)
     root.append(icon);
   }
 
-  if (editable) {
+  if (writable) {
     const tools = document.createElement("div");
     tools.className = "cm-fub-page-tools";
     markPresence(tools, "hover");
-    const tool = (text: string, run: (button: HTMLButtonElement) => void): HTMLButtonElement => {
+    // Come nel prototipo: la figura davanti, poi il nome.
+    const tool = (icon: string | null, text: string, run: (button: HTMLButtonElement) => void): HTMLButtonElement => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "cm-fub-page-tool";
-      button.textContent = text;
+      const figure = icon ? iconEl(icon) : null;
+      figure?.setAttribute("aria-hidden", "true");
+      // Senza la figura (il set non la porta) resta il nome, o «⋯».
+      const name = document.createElement("span");
+      name.textContent = text || (figure ? "" : "⋯");
+      button.replaceChildren(...(figure ? [figure] : []), ...(name.textContent ? [name] : []));
       life.listen(button, "click", () => run(button));
       tools.append(button);
       return button;
     };
-    if (label === null) tool(liveStrings.t("page.icon.add"), iconButton);
-    if (!data.cover) tool(liveStrings.t("page.cover.add"), coverButton);
-    if (!data.description) tool(liveStrings.t("page.description.add"), () => host.addDescription());
-    if (data.subpages) tool(liveStrings.t("page.subpage.add"), subpageButton);
-    const more = tool("⋯", moreButton);
+    if (label === null) tool("fmt-icon", liveStrings.t("page.icon.add"), iconButton);
+    if (!data.cover) tool("fmt-cover", liveStrings.t("page.cover.add"), coverButton);
+    if (!data.description) tool("fmt-text", liveStrings.t("page.description.add"), () => host.addDescription());
+    if (data.subpages) tool("notes", liveStrings.t("page.subpage.add"), subpageButton);
+    const more = tool("fmt-more", "", moreButton);
     more.classList.add("cm-fub-page-more");
     more.setAttribute("aria-label", liveStrings.t("page.more"));
     more.setAttribute("aria-haspopup", "menu");
@@ -239,7 +266,7 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime)
 
   if (data.properties) {
     const section = propertiesElement(data.properties, {
-      editable,
+      editable: writable,
       open: (at) => host.openProperty(at),
       add: () => host.addProperty(),
       more: host.more,
@@ -443,8 +470,8 @@ function openIconPicker(host: PageHost, anchor: HTMLElement, data: PageData, lif
   return popover;
 }
 
-/// La copertina: un'immagine del vault (il path, come in `![](…)`) o un
-/// indirizzo; «Togli la copertina» se ce n'è una.
+/// La copertina: un'immagine del vault (il path, come in `![](…)`), un colore
+/// (`#a3c4f3`) o un indirizzo; «Togli la copertina» se ce n'è una.
 function openCoverDialog(host: PageHost, anchor: HTMLElement, data: PageData, life: Lifetime, closed: () => void): PopoverHandle {
   const own = openLifetime();
   const body = document.createElement("div");
@@ -623,19 +650,22 @@ function openPageMenu(host: PageHost, anchor: HTMLElement, data: PageData, life:
 }
 
 /// La testata della Lettura: si mette in cima alla resa di `reading`, prima
-/// di tutto. Il frontmatter reso (`block-frontmatter-unparsed`) si nasconde
-/// quando le proprietà stanno nella testata; in `source` e quando non si
-/// legge resta, sotto il titolo. Dà lo smontaggio.
+/// di tutto, e ci resta quando la resa si rifà da sé (un embed arrivato:
+/// `data-md-pinned`, `mount.ts`). Il frontmatter reso
+/// (`block-frontmatter-unparsed`) lo nasconde la pelle quando le proprietà
+/// stanno nella testata (`data-page-props` sul contenitore); in `source` e
+/// quando non si legge resta, sotto il titolo. Dà lo smontaggio.
 export function mountReadingHeader(
   reading: HTMLElement,
   state: EditorState,
   options: PageOptions,
   display: PropertiesDisplay,
   more: PageHost["more"],
+  factTags = false,
 ): () => void {
   const life = openLifetime();
   const block = propertyBlock(state);
-  const data = pageData(state, options, display, block);
+  const data = pageData(state, options, display, block, false, factTags);
   const noop = () => {};
   const root = renderPageHeader(data, {
     writing: false,
@@ -651,12 +681,12 @@ export function mountReadingHeader(
     measure: noop,
     more,
   }, life);
+  root.dataset.mdPinned = "";
   reading.prepend(root);
-  const source = reading.querySelector<HTMLElement>(":scope > .block-frontmatter-unparsed");
-  if (source && block && data.properties && !block.unreadable) source.hidden = true;
+  if (block && data.properties && !block.unreadable) reading.dataset.pageProps = "header";
   return () => {
     life.close();
     root.remove();
-    if (source) source.hidden = false;
+    delete reading.dataset.pageProps;
   };
 }

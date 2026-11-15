@@ -1237,20 +1237,21 @@ const WORKBOOK_CHROME: readonly SettingEntry[] = WORKBOOK_DOC === null ? [] : [
   source: "default",
 }));
 
-/// Come la nota mostra le proprietà (`editor.properties`), per le scene
-/// della testata (T6): `?properties=visible|hidden`. Senza, la voce non c'è e
-/// vale il default dell'host (`source`), così le altre scene non cambiano.
+/// Come la nota mostra le proprietà (`editor.properties`), come la voce
+/// dell'host: di macchina, di serie `visible`. Le scene della testata (T6)
+/// la cambiano con `?properties=visible|hidden|source`.
 const PROPERTIES_PARAM = params.get("properties");
-const PROPERTIES_DISPLAY: readonly SettingEntry[] = PROPERTIES_PARAM !== "visible" && PROPERTIES_PARAM !== "hidden" ? [] : [{
+const PROPERTIES_CHOSEN = PROPERTIES_PARAM === "visible" || PROPERTIES_PARAM === "hidden" || PROPERTIES_PARAM === "source" ? PROPERTIES_PARAM : null;
+const PROPERTIES_DISPLAY: readonly SettingEntry[] = [{
   spec: {
     key: "editor.properties",
     label: "Proprietà",
     description: "Come la nota mostra il frontmatter.",
     group: "Editor",
-    scope: "vault",
+    scope: "machine",
     kind: {
       kind: "choice",
-      default: "source",
+      default: "visible",
       options: [
         { value: "visible", label: "In evidenza" },
         { value: "hidden", label: "Nascoste" },
@@ -1259,8 +1260,8 @@ const PROPERTIES_DISPLAY: readonly SettingEntry[] = PROPERTIES_PARAM !== "visibl
     },
     program_writable: true,
   },
-  value: PROPERTIES_PARAM,
-  source: "vault",
+  value: PROPERTIES_CHOSEN ?? "visible",
+  source: PROPERTIES_CHOSEN ? "machine" : "default",
 }];
 
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.

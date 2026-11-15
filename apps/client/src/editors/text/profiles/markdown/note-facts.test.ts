@@ -296,7 +296,10 @@ describe("nella superficie", () => {
     expect(parent.querySelector(".cm-fub-page")).not.toBeNull();
     const rows = parent.querySelectorAll(".note-facts");
     expect(rows.length).toBe(1);
-    expect(rows[0]!.previousElementSibling?.classList.contains("cm-fub-page-title")).toBe(true);
+    // In fondo alla testata, dopo il titolo e le proprietà.
+    expect(rows[0]!.parentElement?.classList.contains("cm-fub-page")).toBe(true);
+    expect(rows[0]!.nextElementSibling).toBeNull();
+    expect(rows[0]!.parentElement?.querySelector(".cm-fub-page-title")).not.toBeNull();
     // Dati nuovi: la riga cambia e la testata resta quella.
     const header = parent.querySelector(".cm-fub-page");
     draw({ modified: null, links: 1, tags: [] });

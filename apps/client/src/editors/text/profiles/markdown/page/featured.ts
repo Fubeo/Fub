@@ -2,8 +2,9 @@
 // disegnano. Senza tipo, le prime quattro del frontmatter; le altre stanno
 // dietro «Altre N proprietà». Le chiavi che la testata mostra a modo suo
 // (icona, copertina, classi della pagina) non sono righe, e nemmeno le
-// etichette, che stanno nella riga dei dati come nel prototipo. Il valore è quello che il frontmatter dice, in una riga: gli
-// editor dei tipi arrivano con T8, e intanto il clic riapre lo YAML.
+// etichette quando le mostra la riga dei dati, come nel prototipo. Il valore
+// è quello che il frontmatter dice, in una riga: gli editor dei tipi
+// arrivano con T8, e intanto il clic riapre lo YAML.
 import { t } from "../../../../../i18n/strings";
 import { iconEl } from "../../../../../ui/icons";
 import type { Lifetime } from "../../../../../ui/lifetime";
@@ -26,12 +27,18 @@ export interface FeaturedSplit {
 }
 
 /// Le voci del frontmatter divise fra quelle in evidenza e le altre, ognuna
-/// nell'ordine del file.
-export function featuredProperties(entries: readonly PropertyEntry[]): FeaturedSplit {
+/// nell'ordine del file. Una chiave scritta due volte è una riga sola, col
+/// valore dell'ultima, come la legge YAML. Le etichette restano fuori solo
+/// se la riga dei dati le mostra (`factTags`): finché l'indice non risponde,
+/// o senza riga dei dati, `tags:` è una proprietà come le altre.
+export function featuredProperties(entries: readonly PropertyEntry[], factTags = true): FeaturedSplit {
   const featured: PropertyEntry[] = [];
   const rest: PropertyEntry[] = [];
+  const last = new Map<string, PropertyEntry>();
+  for (const entry of entries) last.set(entry.key, entry);
   for (const entry of entries) {
-    if (PAGE_KEYS.has(entry.key) || FACT_KEYS.has(entry.key)) continue;
+    if (last.get(entry.key) !== entry) continue;
+    if (PAGE_KEYS.has(entry.key) || (factTags && FACT_KEYS.has(entry.key))) continue;
     if (featured.length < FEATURED_LIMIT) featured.push(entry);
     else rest.push(entry);
   }

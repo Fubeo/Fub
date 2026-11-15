@@ -12,6 +12,8 @@ import { propertiesDisplay, type PropertiesDisplay } from "../../../properties-d
 import { renderMarkdown } from "../render";
 import { blocksMode } from "../blocks/index";
 import { mountReadingHeader } from "./header";
+import { mountMarkdown } from "../mount";
+import type { MarkdownResourceChange, MarkdownResources } from "../../../../../ui/markdown-resources";
 import corpus from "../../../../../__fixtures__/corpus-syntax.json";
 
 // La testata della pagina (T6, E3): la stessa in Scrittura e in Lettura.
@@ -203,6 +205,114 @@ describe("la testata in Scrittura", () => {
     view.dispatch({ changes: { from: view.state.doc.length, insert: "x" }, userEvent: "input.type" });
     expect(header(view)).toBe(before);
   });
+
+  it("il titolo che si sta scrivendo resta quando il frontmatter cambia da fuori", () => {
+    const view = mount(NOTE);
+    const title = header(view).querySelector<HTMLInputElement>(".cm-fub-page-title")!;
+    title.focus();
+    title.value = "Nota nuova";
+    title.setSelectionRange(2, 4);
+    const at = view.state.doc.toString().indexOf("Biblioteca");
+    view.dispatch({ changes: { from: at, to: at + "Biblioteca".length, insert: "Archivio" } });
+    const after = header(view).querySelector<HTMLInputElement>(".cm-fub-page-title")!;
+    expect(after.value).toBe("Nota nuova");
+    expect(document.activeElement).toBe(after);
+    expect([after.selectionStart, after.selectionEnd]).toEqual([2, 4]);
+    // L'uscita del campo vecchio non ha rinominato: il titolo aspetta Invio.
+    expect(view.state.doc.toString()).toContain("luogo: Archivio");
+  });
+
+  it("un riquadro aperto resta aperto quando il frontmatter cambia, e la testata si rifà alla chiusura", () => {
+    const view = mount(NOTE);
+    header(view).querySelector<HTMLElement>(".cm-fub-page-icon")!.click();
+    const picker = () => document.querySelector(".cm-fub-page-popover");
+    expect(picker()).not.toBeNull();
+    const at = view.state.doc.toString().indexOf("Biblioteca");
+    view.dispatch({ changes: { from: at, to: at + "Biblioteca".length, insert: "Archivio" } });
+    expect(picker()).not.toBeNull();
+    press(document.activeElement as HTMLElement, "Escape");
+    expect(picker()).toBeNull();
+    toggle(header(view))!.click();
+    expect(header(view).querySelector("[data-key=luogo] .cm-fub-page-prop-value")?.textContent).toBe("Archivio");
+  });
+
+  it("riposizionata la copertina, il fuoco torna a «Riposiziona», con Invio e con Esc", () => {
+    const view = mount(NOTE);
+    const reposition = () => [...header(view).querySelectorAll<HTMLElement>(".cm-fub-page-cover-tool")].find((b) => b.textContent === "Riposiziona")!;
+    reposition().click();
+    const cover = header(view).querySelector<HTMLElement>(".cm-fub-page-cover")!;
+    expect(cover.getAttribute("role")).toBe("slider");
+    expect(cover.getAttribute("aria-orientation")).toBe("vertical");
+    press(cover, "Escape");
+    expect(document.activeElement).toBe(reposition());
+    reposition().click();
+    press(header(view).querySelector<HTMLElement>(".cm-fub-page-cover")!, "ArrowDown");
+    press(header(view).querySelector<HTMLElement>(".cm-fub-page-cover")!, "Enter");
+    expect(view.state.doc.toString()).toContain("cover-y: 45");
+    // La testata si è rifatta con la posizione nuova: il fuoco è sul pulsante nuovo.
+    expect(document.activeElement).toBe(reposition());
+  });
+
+  it("«Usa» con la copertina che c'era non riscrive niente, nemmeno col commento in coda", () => {
+    const doc = "---\ncover: foto.jpg # dalla gita\n---\nTesto";
+    const view = mount(doc);
+    [...header(view).querySelectorAll<HTMLElement>(".cm-fub-page-cover-tool")].find((b) => b.textContent === "Cambia copertina")!.click();
+    const use = [...document.querySelectorAll<HTMLElement>(".cm-fub-page-popover .cm-fub-page-tool")].find((b) => b.textContent === "Usa")!;
+    use.click();
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it("una voce con un'ancora o un commento non si riscrive: il gesto apre lo YAML su di lei", () => {
+    const doc = "---\ncover: &img foto.jpg\nog: *img\ncssclasses: [wide] # mie\n---\nTesto";
+    const view = mount(doc);
+    [...header(view).querySelectorAll<HTMLElement>(".cm-fub-page-cover-tool")].find((b) => b.textContent === "Cambia copertina")!.click();
+    const field = document.querySelector<HTMLInputElement>(".cm-fub-page-popover input")!;
+    field.value = "altra.jpg";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    [...document.querySelectorAll<HTMLElement>(".cm-fub-page-popover .cm-fub-page-tool")].find((b) => b.textContent === "Usa")!.click();
+    expect(view.state.doc.toString()).toBe(doc);
+    expect(view.state.doc.lineAt(view.state.selection.main.head).text).toBe("cover: &img foto.jpg");
+    // Il menu «⋯» con le classi commentate: lo stesso.
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+    header(view).querySelector<HTMLElement>(".cm-fub-page-more")!.click();
+    const small = [...document.querySelectorAll<HTMLElement>(".cm-fub-block-menu [role=menuitemcheckbox]")].find((row) => row.textContent?.includes("Testo piccolo"))!;
+    small.click();
+    expect(view.state.doc.toString()).toBe(doc);
+    expect(view.state.doc.lineAt(view.state.selection.main.head).text).toBe("cssclasses: [wide] # mie");
+  });
+
+  it("un frontmatter illeggibile: nessuno strumento scrive, e lo dice anche con `source`", () => {
+    const doc = "---\nicon: 🌱\ncover: mare.png\ntitolo: a: b\n---\nTesto";
+    const view = mount(doc);
+    const root = header(view);
+    expect(root.querySelector(".cm-fub-page-unreadable")).not.toBeNull();
+    expect(root.querySelector(".cm-fub-page-tools")).toBeNull();
+    expect(root.querySelector(".cm-fub-page-cover-tools")).toBeNull();
+    expect(root.querySelector<HTMLButtonElement>("button.cm-fub-page-icon")?.disabled).toBe(true);
+    expect(root.querySelector(".cm-fub-page-props-add")).toBeNull();
+    const source = mount(doc, "source");
+    expect(header(source).querySelector(".cm-fub-page-unreadable")).not.toBeNull();
+    // Un blocco `---` che non è una mappa: il modello lo tiene com'è, la
+    // testata non ne scrive un altro sopra.
+    const bare = mount("---\nsolo del testo\n---\nTesto");
+    expect(header(bare).querySelector(".cm-fub-page-unreadable")).not.toBeNull();
+    expect(header(bare).querySelector(".cm-fub-page-tools")).toBeNull();
+  });
+
+  it("senza la riga dei dati le etichette sono una proprietà, e una chiave doppia una riga sola", () => {
+    const view = mount("---\ntags: [mostra]\nstato: a\nstato: b\n---\nTesto");
+    expect(rows(header(view))).toEqual(["tags", "stato"]);
+    expect(header(view).querySelector("[data-key=stato] .cm-fub-page-prop-value")?.textContent).toBe("b");
+  });
+
+  it("una copertina a tinta unita: il colore, e niente «Riposiziona»", () => {
+    const view = mount("---\ncover: \"#a3c4f3\"\n---\nTesto");
+    const cover = header(view).querySelector<HTMLElement>(".cm-fub-page-cover")!;
+    expect(cover.dataset.color).toBe("true");
+    expect(cover.style.backgroundColor).not.toBe("");
+    expect(cover.querySelector("img")).toBeNull();
+    expect([...cover.querySelectorAll(".cm-fub-page-cover-tool")].map((b) => b.textContent)).toEqual(["Cambia copertina"]);
+  });
 });
 
 function reading(doc: string, display: PropertiesDisplay = "visible") {
@@ -233,15 +343,49 @@ describe("la testata in Lettura", () => {
     expect(root.querySelector(".cm-fub-page-tools")).toBeNull();
     toggle(root)!.click();
     expect(rows(root)).toHaveLength(6);
-    // Lo YAML reso non si ripete sotto.
-    expect(element.querySelector<HTMLElement>(":scope > .block-frontmatter-unparsed")?.hidden).toBe(true);
+    // Lo YAML reso non si ripete sotto: lo nasconde la pelle, con
+    // l'attributo del contenitore.
+    expect(element.dataset.pageProps).toBe("header");
+    expect(element.querySelector(":scope > .block-frontmatter-unparsed")).not.toBeNull();
   });
 
   it("in `source` e quando non si legge, lo YAML resta sotto il titolo", () => {
-    expect(reading(NOTE, "source").element.querySelector<HTMLElement>(":scope > .block-frontmatter-unparsed")?.hidden).toBe(false);
+    expect(reading(NOTE, "source").element.dataset.pageProps).toBeUndefined();
     const bad = reading("---\ntitolo senza due punti\nstato: aperto\n---\nTesto");
     expect(bad.element.querySelector(".cm-fub-page-unreadable")).not.toBeNull();
-    expect(bad.element.querySelector<HTMLElement>(":scope > .block-frontmatter-unparsed")?.hidden).toBe(false);
+    expect(bad.element.dataset.pageProps).toBeUndefined();
+  });
+
+  it("resta in cima quando la resa si rifà da sé, con la riga dei dati", () => {
+    const doc = `${NOTE}\n\n![[Altra nota]]`;
+    let changed: ((change: MarkdownResourceChange) => void) | null = null;
+    const resources = {
+      documentId: "nota.md",
+      match: () => undefined,
+      embed: () => new Promise(() => {}),
+      subscribe: (listener: (change: MarkdownResourceChange) => void) => {
+        changed = listener;
+        return () => { changed = null; };
+      },
+      invalidate: () => {},
+      release: () => {},
+    } as unknown as MarkdownResources;
+    const element = document.createElement("div");
+    document.body.append(element);
+    const unmountBody = mountMarkdown(element, renderMarkdown(doc).html, { resources });
+    const state = EditorState.create({ doc });
+    const unmountHeader = mountReadingHeader(element, state, { page: () => "Nota" }, "visible", { open: false, set: () => {} });
+    const root = element.querySelector(":scope > .cm-fub-page")!;
+    const facts = document.createElement("div");
+    facts.className = "note-facts";
+    root.append(facts);
+    expect(element.querySelector(".embed[data-embed-page]")).not.toBeNull();
+    changed!("embeds");
+    expect(element.firstElementChild).toBe(root);
+    expect(root.querySelector(".note-facts")).toBe(facts);
+    expect(element.dataset.pageProps).toBe("header");
+    unmountHeader();
+    unmountBody();
   });
 
   it("smontata, la resa torna com'era", () => {

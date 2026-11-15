@@ -12,6 +12,7 @@ import {
   addProperty,
   frontmatterOpen,
   headerShowsProperties,
+  lastEntry,
   openPropertyAt,
   propertyBlock,
   propertyList,
@@ -24,10 +25,16 @@ import { pageData as pageDataOf, pageStops, renderPageHeader, samePage, type Pag
 
 export { PAGE_FONTS, pageClassesWith, type PageData, type PageFont } from "../page/header";
 
+/// La riga dei dati mostra le etichette: allora `tags:` non è una riga della
+/// testata.
+function factTags(state: EditorState): boolean {
+  return (noteFactsOf(state)?.tags.length ?? 0) > 0;
+}
+
 /// La testata di questo stato, con le opzioni dei Blocchi.
 export function pageData(state: EditorState, options: BlocksOptions = state.facet(blocksOptions)): PageData {
   const block = propertyBlock(state);
-  return pageDataOf(state, options, state.facet(propertiesDisplay), block, block ? frontmatterOpen(state, block) : false);
+  return pageDataOf(state, options, state.facet(propertiesDisplay), block, block ? frontmatterOpen(state, block) : false, factTags(state));
 }
 
 /// Dove comincia il testo della pagina: dopo il frontmatter, se c'è.
@@ -38,8 +45,23 @@ function bodyStart(state: EditorState): number {
 }
 
 /// Scrive una proprietà della pagina con un passo d'annullamento suo.
+/// Non scrive mai ciò che non saprebbe riscrivere: in un frontmatter che YAML
+/// non legge non scrive niente; una voce con un commento, un'ancora, un
+/// alias o in una forma che la riscrittura perderebbe non la tocca, e apre lo
+/// YAML su di lei; un valore uguale a quello che c'è non lo riscrive.
 function writeProperty(view: EditorView, key: string, value: string | number | readonly string[] | null): void {
   if (view.state.readOnly) return;
+  const block = propertyBlock(view.state);
+  if (block?.unreadable) return;
+  const entry = block ? lastEntry(block.entries, key) : undefined;
+  if (entry) {
+    const same = value !== null && entry.value === (typeof value === "object" ? value.join(", ") : String(value));
+    if (same) return;
+    if (!entry.simple) {
+      openPropertyAt(view, entry.from);
+      return;
+    }
+  }
   const change = setProperty(view.state, key, value);
   if (change) view.dispatch({ changes: change, userEvent: "input" });
 }
@@ -51,7 +73,7 @@ export function addPropertyKey(view: EditorView, key: string): void {
   const state = view.state;
   if (state.readOnly) return;
   const block = propertyBlock(state);
-  const entry = block?.entries.find((item) => item.key === key);
+  const entry = block ? lastEntry(block.entries, key) : undefined;
   if (entry) {
     openPropertyAt(view, entry.from);
     return;
@@ -96,8 +118,9 @@ function toBody(view: EditorView): void {
   view.focus();
 }
 
-/// Ciò che la testata chiede, fatto sull'editor.
-function hostFor(view: EditorView): PageHost {
+/// Ciò che la testata chiede, fatto sull'editor. `root` è la testata
+/// disegnata: un riquadro che si chiude la rifà, se nel frattempo è cambiata.
+function hostFor(view: EditorView, root: HTMLElement): PageHost {
   const options = view.state.facet(blocksOptions);
   const subpage = options.subpage;
   return {
@@ -131,12 +154,73 @@ function hostFor(view: EditorView): PageHost {
       get open() { return view.state.field(pageMore, false) ?? false; },
       set: (open) => view.dispatch({ effects: setPageMore.of(open) }),
     },
+    popover: (open) => {
+      const shown = drawn.get(root);
+      if (!shown) return;
+      shown.popover = open;
+      // Chiuso il riquadro, la testata rimasta indietro si rifà adesso.
+      if (!open && shown.pending && !shown.closing && root.isConnected) {
+        const data = view.state.field(pageHeader, false)?.data;
+        if (data) draw(root, view, data);
+      }
+    },
   };
 }
 
-const lives = new WeakMap<HTMLElement, Lifetime>();
-/// Ciò che una testata disegnata mostra, e la vita della sua riga dei dati.
-const drawn = new WeakMap<HTMLElement, { data: PageData; facts: Lifetime }>();
+/// Una testata disegnata: ciò che mostra, la sua vita, quella della riga dei
+/// dati, e se ha un riquadro aperto (allora non si rifà: `pending`).
+interface Drawn {
+  data: PageData;
+  life: Lifetime;
+  facts: Lifetime;
+  popover: boolean;
+  pending: boolean;
+  closing: boolean;
+}
+const drawn = new WeakMap<HTMLElement, Drawn>();
+
+/// Il controllo col fuoco, riconosciuto dopo un rifacimento: la classe, e il
+/// testo che porta (lo stesso pulsante in una testata nuova).
+function focusKey(element: Element): string {
+  return `${element.className}\u0000${element.getAttribute("aria-label") ?? element.textContent ?? ""}`;
+}
+
+/// Disegna `data` in `root`, al posto della testata che c'era. Ciò che si sta
+/// facendo resta: il titolo che si scrive (valore, selezione, fuoco) e il
+/// fuoco su un pulsante che c'è ancora. La vita vecchia si chiude prima di
+/// togliere il campo, così la sua uscita non rinomina.
+function draw(root: HTMLElement, view: EditorView, data: PageData): void {
+  const before = drawn.get(root);
+  const active = root.ownerDocument.activeElement;
+  const focused = active instanceof HTMLElement && root.contains(active) ? active : null;
+  const title = root.querySelector<HTMLInputElement>("input.cm-fub-page-title");
+  const typed = title && before && title.value !== before.data.title
+    ? { value: title.value, start: title.selectionStart, end: title.selectionEnd, direction: title.selectionDirection }
+    : null;
+  const key = focused ? focusKey(focused) : null;
+  if (before) {
+    before.closing = true;
+    before.facts.close();
+    before.life.close();
+  }
+  const life = openLifetime();
+  const facts = openLifetime();
+  life.add(() => drawn.get(root)?.facts.close());
+  drawn.set(root, { data, life, facts, popover: false, pending: false, closing: false });
+  renderPageHeader(data, hostFor(view, root), life, root);
+  placeFacts(root, view, facts);
+  const field = root.querySelector<HTMLInputElement>("input.cm-fub-page-title");
+  if (field && typed && !field.readOnly) {
+    field.value = typed.value;
+    if (focused === title) field.setSelectionRange(typed.start, typed.end, typed.direction ?? undefined);
+  }
+  if (focused === title && field) {
+    field.focus({ preventScroll: true });
+  } else if (key) {
+    const same = [...root.querySelectorAll<HTMLElement>("button, input, [tabindex]")].find((element) => focusKey(element) === key);
+    (same ?? null)?.focus({ preventScroll: true });
+  }
+}
 
 /// Mette in fondo alla testata la riga dei dati dello stato, al posto di
 /// quella che c'era; la sua vita è `facts`, chiusa a ogni rifacimento.
@@ -154,31 +238,39 @@ class PageHeaderWidget extends WidgetType {
   }
 
   toDOM(view: EditorView): HTMLElement {
-    const life = openLifetime();
-    const root = renderPageHeader(this.data, hostFor(view), life);
-    lives.set(root, life);
-    const facts = openLifetime();
-    life.add(() => drawn.get(root)?.facts.close());
-    drawn.set(root, { data: this.data, facts });
-    placeFacts(root, view, facts);
+    const root = document.createElement("div");
+    draw(root, view, this.data);
     return root;
   }
 
-  /// Cambiata solo la riga dei dati: si rifà la riga e la testata resta (col
-  /// titolo che si sta scrivendo).
+  /// La testata si aggiorna sul posto. Cambiata solo la riga dei dati, si
+  /// rifà la riga. Cambiato altro (il frontmatter scritto da un altro
+  /// riquadro, una rinomina), si rifà la testata e il titolo che si sta
+  /// scrivendo resta; con un riquadro aperto (l'icona, la copertina) si
+  /// aspetta che si chiuda, perché non sparisca sotto le mani.
   override updateDOM(dom: HTMLElement, view: EditorView): boolean {
     const before = drawn.get(dom);
-    if (!before || !samePage(before.data, this.data)) return false;
-    before.facts.close();
-    const facts = openLifetime();
-    drawn.set(dom, { data: this.data, facts });
-    placeFacts(dom, view, facts);
+    if (!before) return false;
+    if (samePage(before.data, this.data)) {
+      before.facts.close();
+      before.facts = openLifetime();
+      placeFacts(dom, view, before.facts);
+      return true;
+    }
+    if (before.popover) {
+      before.pending = true;
+      return true;
+    }
+    draw(dom, view, this.data);
     return true;
   }
 
   override destroy(dom: HTMLElement): void {
-    lives.get(dom)?.close();
-    lives.delete(dom);
+    const shown = drawn.get(dom);
+    if (shown) {
+      shown.closing = true;
+      shown.life.close();
+    }
     drawn.delete(dom);
   }
 
@@ -197,7 +289,7 @@ interface PageState {
 }
 
 function compute(state: EditorState, block: PropertyBlock | null): PageState {
-  const data = pageDataOf(state, state.facet(blocksOptions), state.facet(propertiesDisplay), block, block ? frontmatterOpen(state, block) : false);
+  const data = pageDataOf(state, state.facet(blocksOptions), state.facet(propertiesDisplay), block, block ? frontmatterOpen(state, block) : false, factTags(state));
   const facts = noteFactsOf(state);
   const widget = Decoration.widget({ widget: new PageHeaderWidget(data, facts), block: true, side: -1 });
   return { data, facts, block, decorations: Decoration.set([widget.range(0)]) };

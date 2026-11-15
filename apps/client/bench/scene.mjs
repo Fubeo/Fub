@@ -1009,7 +1009,7 @@ export const SCENE = onPage("shell", [
   ].map(([id, live, title, mode, viewport, gesture]) => ({
     id,
     title,
-    query: `live=${live}&properties=visible`,
+    query: `live=${live}`,
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openHeader(page, mode, gesture),
   })),
@@ -1391,7 +1391,7 @@ export const SCENE = onPage("shell", [
     {
       id: "mobile-testata",
       title: "Il telefono: la testata in Scrittura, con la copertina bassa e le colonne strette",
-      query: "live=testata&properties=visible",
+      query: "live=testata",
       viewport: PHONE,
       prepare: (page) => openHeader(page, "live_preview"),
     },

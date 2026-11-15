@@ -5463,20 +5463,40 @@ kbd,
    dalla stessa ascissa: cambiare modalità non sposta il testo. In Live,
    Blocchi e Sorgente la porta `.cm-content`; in Lettura il riquadro scorre a tutta
    larghezza — la barra di scorrimento resta sul bordo del foglio — e la
-   colonna la fa il padding. */
+   colonna la fa il padding, che fa cominciare il testo dove comincia in
+   Scrittura. I margini di lato sono quelli della pagina del prototipo (E1):
+   104 px a sinistra, dove stanno «+» e la maniglia del blocco, e 96 a destra.
+   La copertina della testata esce degli stessi margini, fino ai bordi
+   (più sotto, con la testata). */
 .pane-editor[data-markdown-mode="source"] .cm-content,
 .pane-editor[data-markdown-mode="live_preview"] .cm-content,
 .pane-editor[data-markdown-mode="blocks"] .cm-content {
   box-sizing: border-box;
-  max-width: calc(var(--content-width) + 2 * var(--space-9));
   margin-inline: auto;
-  padding: var(--space-9) var(--space-9) var(--space-11);
+  padding-top: var(--space-9);
+  padding-bottom: var(--space-11);
 }
 .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
   box-sizing: border-box;
   width: auto;
   margin-inline: 0;
-  padding: var(--space-9) max(var(--space-9), calc((100% - var(--content-width)) / 2)) var(--space-11);
+  padding-top: var(--space-9);
+  padding-bottom: var(--space-11);
+}
+.pane-editor[data-markdown-mode="source"] .cm-content,
+.pane-editor[data-markdown-mode="live_preview"] .cm-content,
+.pane-editor[data-markdown-mode="blocks"] .cm-content {
+  max-width: calc(var(--content-width) + 200px);
+  padding-right: 96px;
+  padding-left: 104px;
+}
+.pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+  padding-right: max(96px, calc((100% - var(--content-width) - 200px) / 2 + 96px));
+  padding-left: max(104px, calc((100% - var(--content-width) - 200px) / 2 + 104px));
+}
+.fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+  padding-right: 96px;
+  padding-left: 104px;
 }
 /* CodeMirror rientra ogni riga di 6px: in Lettura quel rientro non c'è, e la
    pagina salterebbe di lato passando da Live a Lettura. */
@@ -5484,16 +5504,90 @@ kbd,
 .pane-editor[data-markdown-mode="blocks"] .cm-content > .cm-line {
   padding-inline: 0;
 }
-/* Un foglio stretto (due affiancati, la finestra piccola) cede margine prima
-   di cedere testo. */
+/* La finestra stretta cede margine prima di cedere testo, come nel
+   prototipo: 64 e 48 px sotto i 940, 40 e 20 sotto i 620. Lo stesso un
+   foglio stretto in una finestra larga (due affiancati): 40 e 20 sotto i 560
+   px di foglio, 18 al telefono. */
+@media (max-width: 940px) {
+  .pane-editor[data-markdown-mode="source"] .cm-content,
+  .pane-editor[data-markdown-mode="live_preview"] .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-content {
+    max-width: calc(var(--content-width) + 112px);
+    padding-right: 48px;
+    padding-left: 64px;
+  }
+  .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: max(48px, calc((100% - var(--content-width) - 112px) / 2 + 48px));
+    padding-left: max(64px, calc((100% - var(--content-width) - 112px) / 2 + 64px));
+  }
+  .fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: 48px;
+    padding-left: 64px;
+  }
+}
+@media (max-width: 620px) {
+  .pane-editor[data-markdown-mode="source"] .cm-content,
+  .pane-editor[data-markdown-mode="live_preview"] .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-content {
+    max-width: calc(var(--content-width) + 60px);
+    padding-right: 20px;
+    padding-left: 40px;
+  }
+  .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: max(20px, calc((100% - var(--content-width) - 60px) / 2 + 20px));
+    padding-left: max(40px, calc((100% - var(--content-width) - 60px) / 2 + 40px));
+  }
+  .fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: 20px;
+    padding-left: 40px;
+  }
+  .pane-editor[data-markdown-mode="source"] .cm-content,
+  .pane-editor[data-markdown-mode="live_preview"] .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-content,
+  .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-10);
+  }
+}
 @container sheet (max-width: 560px) {
   .pane-editor[data-markdown-mode="source"] .cm-content,
   .pane-editor[data-markdown-mode="live_preview"] .cm-content,
   .pane-editor[data-markdown-mode="blocks"] .cm-content {
-    padding: var(--space-8) var(--space-7) var(--space-10);
+    max-width: calc(var(--content-width) + 60px);
+    padding-right: 20px;
+    padding-left: 40px;
   }
   .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
-    padding: var(--space-8) var(--space-7) var(--space-10);
+    padding-right: max(20px, calc((100% - var(--content-width) - 60px) / 2 + 20px));
+    padding-left: max(40px, calc((100% - var(--content-width) - 60px) / 2 + 40px));
+  }
+  .fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: 20px;
+    padding-left: 40px;
+  }
+  .pane-editor[data-markdown-mode="source"] .cm-content,
+  .pane-editor[data-markdown-mode="live_preview"] .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-content,
+  .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-10);
+  }
+}
+@container sheet (max-width: 480px) {
+  .pane-editor[data-markdown-mode="source"] .cm-content,
+  .pane-editor[data-markdown-mode="live_preview"] .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-content {
+    max-width: calc(var(--content-width) + 36px);
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+  .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: max(18px, calc((100% - var(--content-width) - 36px) / 2 + 18px));
+    padding-left: max(18px, calc((100% - var(--content-width) - 36px) / 2 + 18px));
+  }
+  .fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: 18px;
+    padding-left: 18px;
   }
 }
 
@@ -5991,7 +6085,7 @@ kbd,
 .cm-fub-page-cover {
   position: relative;
   height: 112px;
-  margin: calc(-1 * var(--space-9)) calc(-1 * var(--space-9)) 0;
+  margin: calc(-1 * var(--space-9)) -96px 0 -104px;
   overflow: hidden;
   background: var(--doc-fill-soft);
 }
@@ -6026,9 +6120,11 @@ kbd,
   gap: var(--space-2);
   opacity: 0;
 }
+/* Al passaggio, col fuoco dentro, e la barra del riposizionamento finché si
+   riposiziona. */
 .cm-fub-page-cover:hover .cm-fub-page-cover-tools,
 .cm-fub-page-cover:focus-within .cm-fub-page-cover-tools,
-.cm-fub-page-cover[data-reposition] .cm-fub-page-cover-tools {
+.cm-fub-page-cover-moving {
   opacity: 1;
 }
 .cm-fub-page-cover-tool,
@@ -6102,16 +6198,25 @@ button.cm-fub-page-icon {
 .cm-fub-page:focus-within .cm-fub-page-tools {
   opacity: 1;
 }
+/* Come nel prototipo: la figura, 5 px, il nome, a 12,5 px. */
 .cm-fub-page-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   height: 26px;
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-4);
   border: 0;
   border-radius: var(--radius-chip);
   background: none;
   color: var(--doc-gutter-fg);
   font-family: var(--font-ui);
-  font-size: var(--text-sm);
+  font-size: 12.5px;
   cursor: pointer;
+}
+.cm-fub-page-tool > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
 }
 .cm-fub-page-tool:hover,
 button.cm-fub-page-icon:hover {
@@ -6132,9 +6237,11 @@ button.cm-fub-page-icon:hover {
   background: none;
   color: var(--doc-fg);
   font-family: var(--font-reading);
-  font-size: 2.2em;
+  /* 40 px su 46 in «Comoda», 34 su 40 in «Compatta», 46 su 52 in «Ariosa»:
+     la misura segue l'altezza dei controlli della densità (32, 28, 36). */
+  font-size: calc(var(--control-h) * 1.5 - 8px);
   font-weight: var(--weight-bold);
-  line-height: 1.2;
+  line-height: calc(var(--control-h) * 1.5 - 2px);
   letter-spacing: -0.012em;
   overflow-wrap: break-word;
 }
@@ -6249,18 +6356,40 @@ button.cm-fub-page-icon:focus-visible {
   margin-bottom: var(--space-8);
   border-bottom: 1px solid var(--doc-rule-soft);
 }
-/* Il foglio stretto (il telefono, due fogli affiancati): la copertina si
-   abbassa e segue i margini più corti della colonna, il titolo cede. */
-@container sheet (max-width: 560px) {
+/* La finestra e il foglio stretti: la colonna dei nomi cede (124 px, al
+   telefono 108), la copertina segue i margini più corti e al telefono si
+   abbassa, il titolo scende a 31 px su 37. */
+@media (max-width: 940px) {
   .cm-fub-page-cover {
-    height: 88px;
-    margin: calc(-1 * var(--space-8)) calc(-1 * var(--space-7)) 0;
-  }
-  .cm-fub-page-title {
-    font-size: 1.85em;
+    margin-right: -48px;
+    margin-left: -64px;
   }
   .cm-fub-page-prop {
-    grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 124px) minmax(0, 1fr);
+  }
+}
+@media (max-width: 620px) {
+  .cm-fub-page-cover {
+    margin: calc(-1 * var(--space-8)) -20px 0 -40px;
+  }
+}
+@container sheet (max-width: 560px) {
+  .cm-fub-page-cover {
+    margin: calc(-1 * var(--space-8)) -20px 0 -40px;
+  }
+}
+@container sheet (max-width: 480px) {
+  .cm-fub-page-cover {
+    height: 110px;
+    margin-right: -18px;
+    margin-left: -18px;
+  }
+  .cm-fub-page-title {
+    font-size: 31px;
+    line-height: 37px;
+  }
+  .cm-fub-page-prop {
+    grid-template-columns: minmax(0, 108px) minmax(0, 1fr);
   }
 }
 /* Il segno della scelta in vigore nel menu «…» della pagina. */
@@ -6283,9 +6412,6 @@ button.cm-fub-page-icon:focus-visible {
    menu «…» scrive in `cssclasses`, sul riquadro della nota. */
 .fub-note--wide .pane-editor[data-markdown-mode] .cm-content {
   max-width: none;
-}
-.fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
-  padding-inline: var(--space-9);
 }
 .fub-note--small .markdown-rendered {
   font-size: var(--text-lg);
@@ -7474,6 +7600,11 @@ button.cm-fub-page-icon:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
+}
+/* In Lettura, con le proprietà nella testata, lo YAML reso non si ripete
+   sotto (`mountReadingHeader`). */
+.markdown-rendered[data-page-props="header"] > .block-frontmatter-unparsed {
+  display: none;
 }
 .markdown-rendered .block-frontmatter-unparsed pre {
   margin: 0;
