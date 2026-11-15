@@ -26,9 +26,10 @@
 // - **Un campione, una volta.** Dove il motore manda `pointerrawupdate`, ogni
 //   campione arriva lì prima, e il `pointermove` che segue lo riporta
 //   (Pointer Events 3: i suoi coalescenti sono gli stessi cambiamenti). Il
-//   `pointermove` può dargli un istante diverso (Chromium con l'input del
-//   protocollo DevTools: 10–17 ms dopo), e la sessione, che riconosce un
-//   doppione dall'istante, lo terrebbe due volte. Allora il campione del
+//   `pointermove` di solito ha lo stesso istante, ma non è promesso: con
+//   l'orologio finto di Playwright (quello del banco) ogni evento prende
+//   l'istante del suo invio, e il `pointermove` arriva 2–15 ms dopo. La
+//   sessione, che riconosce un doppione dall'istante, lo terrebbe due volte. Allora il campione del
 //   `pointermove` che ha gli stessi valori di uno di `pointerrawupdate` non
 //   ancora riportato è quel campione, e non entra; uno senza gemello entra,
 //   come sempre. Una penna ferma che manda due campioni uguali in istanti

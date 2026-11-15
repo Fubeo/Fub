@@ -164,8 +164,9 @@ describe("pipeline della penna", () => {
 
   it("il pointermove che riporta un campione di pointerrawupdate con un altro istante non lo raddoppia", () => {
     attach();
-    // Come Chromium con l'input del protocollo DevTools: ogni campione arriva
-    // con pointerrawupdate e torna col pointermove 10–17 ms dopo.
+    // Come Chromium con l'orologio finto di Playwright (il banco): ogni
+    // campione arriva con pointerrawupdate e torna col pointermove, che ha
+    // l'istante del suo invio, qualche ms dopo.
     dispatch(down({ ...PEN, clientX: 10, clientY: 20, pressure: 0.4, timeStamp: 100 }));
     dispatch(rawUpdate({ clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 104 }));
     dispatch(move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 118 }));
