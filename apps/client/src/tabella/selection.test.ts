@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { covers, fillCopy, fillToEndRange, touches, wholeRange, withRange } from "./selection";
+import { covers, fillCopy, fillToEndRange, selectedCells, selectsSeveral, touches, wholeRange, withRange } from "./selection";
 
 describe("la selezione a più intervalli", () => {
   it("dice se un intervallo tocca una cella o un'unione", () => {
@@ -52,6 +52,36 @@ describe("Ctrl+D e Ctrl+R", () => {
     expect(fillCopy({ r0: 0, c0: 1, r1: 3, c1: 1 }, "down", 1)).toEqual({ source: { r0: 1, c0: 1, r1: 1, c1: 1 }, target: { r0: 2, c0: 1, r1: 3, c1: 1 } });
     // L'intestazione e una riga sola del corpo: sopra c'è soltanto l'intestazione.
     expect(fillCopy({ r0: 0, c0: 0, r1: 1, c1: 1 }, "down", 1)).toBeNull();
+  });
+});
+
+describe("le celle scelte per la somma della banda", () => {
+  it("dà ogni cella una volta, senza l'intestazione, anche dove due intervalli si toccano", () => {
+    const a = { r0: 0, c0: 1, r1: 2, c1: 1 };
+    const b = { r0: 2, c0: 1, r1: 3, c1: 2 };
+    expect([...selectedCells([a, b], 1)]).toEqual([
+      { row: 1, column: 1 }, { row: 2, column: 1 },
+      { row: 2, column: 2 }, { row: 3, column: 1 }, { row: 3, column: 2 },
+    ]);
+  });
+
+  it("un intervallo tutto nell'intestazione non dà niente", () => {
+    expect([...selectedCells([{ r0: 0, c0: 0, r1: 0, c1: 3 }], 1)]).toEqual([]);
+  });
+
+  it("diecimila celle in un giro solo, senza confronti fra gli intervalli", () => {
+    const column = { r0: 0, c0: 2, r1: 10_000, c1: 2 };
+    let count = 0;
+    for (const _ of selectedCells([column], 1)) count++;
+    expect(count).toBe(10_000);
+  });
+
+  it("una cella sola non è una selezione da sommare; due intervalli sì", () => {
+    const one = { r0: 1, c0: 1, r1: 1, c1: 1 };
+    expect(selectsSeveral([])).toBe(false);
+    expect(selectsSeveral([one])).toBe(false);
+    expect(selectsSeveral([{ ...one, r1: 2 }])).toBe(true);
+    expect(selectsSeveral([one, { r0: 3, c0: 1, r1: 3, c1: 1 }])).toBe(true);
   });
 });
 

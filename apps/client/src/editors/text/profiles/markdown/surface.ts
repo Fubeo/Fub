@@ -13,7 +13,7 @@ import { currentTheme as getCurrentTheme, type Theme } from "../../../../theme/t
 import type { SyntaxForm } from "../../../../host/contract";
 import { byteToNormalizedCharIndices, normalizeLineBreaks } from "../../../../rules/offsets";
 import { isFolderPage, pageName, taskChecked } from "../../../../rules/mirrored";
-import { onLanguage, t } from "../../../../i18n/strings";
+import { onLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
 import { blocksMode, pageArrives } from "./blocks";
@@ -39,6 +39,7 @@ import type {
   SurfacePoint,
   SurfaceReference,
   SurfaceScrollLink,
+  SurfaceCellSelectionSource,
 } from "../../../core/registry";
 import { modeById } from "../../../core/surface-modes";
 import type { EditorChange } from "../../../core/text-operation";
@@ -64,7 +65,7 @@ import {
 } from "../../../core/editor-actions";
 import { MARKDOWN_EXPORTS } from "./exports";
 import { markdownReference } from "./references";
-import { frontmatterRange, renderMarkdown } from "./render";
+import { declaredLanguage, frontmatterRange, renderMarkdown } from "./render";
 import { addProperty, clearProperties } from "./properties";
 import { clipboardHtml } from "./copy-html";
 import type { ProofPorts } from "../../../core/proof-ports";
@@ -376,8 +377,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         active: (grid) => {
           tableGrid = grid;
           actionsChanged();
+          cellsChanged();
         },
-        changed: () => actionsChanged(),
+        changed: () => {
+          actionsChanged();
+          cellsChanged();
+        },
       },
       mountRendered: (container, html, actions) => mountMarkdown(container, html, {
         ...actions,
@@ -404,6 +409,26 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const actionListeners = new Set<() => void>();
   const actionsChanged = () => {
     for (const listener of [...actionListeners]) listener();
+  };
+  /// Chi segue le celle scelte nella griglia attiva (la somma nella banda).
+  const cellListeners = new Set<() => void>();
+  const cellsChanged = () => {
+    for (const listener of [...cellListeners]) listener();
+  };
+  /// Le celle scelte, coi numeri letti nella lingua della nota (`lang:`) o in
+  /// quella dell'interfaccia. Si legge quando la banda chiede, non a ogni
+  /// battuta.
+  const cellSelection: SurfaceCellSelectionSource = {
+    read: () => {
+      const values = mode === "reading" ? null : tableGrid?.selectedValues() ?? null;
+      if (!values) return null;
+      const locale = engine.readState((state) => declaredLanguage(state.doc)) ?? resolvedLanguage();
+      return { locale, values: () => values };
+    },
+    subscribe: (listener) => {
+      cellListeners.add(listener);
+      return () => cellListeners.delete(listener);
+    },
   };
   // Copiare o tagliare una selezione porta anche l'HTML, per incollare con la
   // formattazione fuori da Fub. Il testo si legge prima di CodeMirror, perché
@@ -1569,6 +1594,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (known === null) throw new RangeError(`surface mode ${next} is not supported`);
       setMode(known);
       actionsChanged();
+      cellsChanged();
     },
     buffer: {
       setDoc: (text) => {
@@ -1661,8 +1687,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       return found.anchor;
     },
     scrollLink,
+    cellSelection,
     destroy: () => {
       actionListeners.clear();
+      cellListeners.clear();
       closeSlashPalette(parent);
       cancelReadingSync();
       life.close();
