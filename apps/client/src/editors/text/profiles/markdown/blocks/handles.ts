@@ -38,8 +38,9 @@ import {
   besideSide, heldHeight, type Lean, leanOf, magnet, NEST_PX, neighbourAt, nextPlace, type PlaceGeometry, shiftOf,
   shownTop, sideways, slotTop, tailShift,
 } from "./place";
-import { animate, halt, liveState, motionLevel, onFrame } from "../../../../../moto";
+import { animate, halt, liveState, type Motion, motionLevel, onFrame } from "../../../../../moto";
 import { markPresence } from "../../../../core/presence";
+import type { Teardown } from "../../../../../ui/lifetime";
 
 export interface BlocksOptions {
   /// Il nome della pagina, per il link al blocco: `[[Pagina#^id]]`.
@@ -255,6 +256,12 @@ interface Hold {
   cx: number;
   cy: number;
   tilt: number;
+  /// Il ciclo dei fotogrammi che porta il blocco dove vuole andare: acceso
+  /// solo finché non c'è arrivato, così a puntatore fermo tutto riposa.
+  frames: Teardown | null;
+  /// Il blocco in mano sta tornando a casa dopo il rilascio: la sua copia e
+  /// il posto restano finché non arriva.
+  flying: boolean;
 }
 
 /// Dove sarebbero le coordinate `seen` della riga di `pos` a corsa finita: il
@@ -356,6 +363,8 @@ class HandlesView {
   /// I widget di blocco (una tabella, una scheda) messi in posa a mano: le
   /// decorazioni di riga della posa non li raggiungono.
   readonly posed = new Set<HTMLElement>();
+  /// Il blocco lasciato che torna a casa: `land` lo posa subito.
+  returning: { land(quiet?: boolean): void } | null = null;
   readonly hoverable: boolean;
 
   constructor(readonly view: EditorView) {
@@ -444,13 +453,22 @@ class HandlesView {
   }
 
   update(update: ViewUpdate): void {
+    const returning = this.returning;
+    if (returning && update.docChanged) queueMicrotask(() => returning.land());
     const drag = this.drag;
     if (drag) {
       // Il testo cambiato da fuori durante il gesto (un altro riquadro, il
       // disco), anche prima che il blocco sia preso: il gesto si annulla e il
       // testo nuovo vince. Non si può spedire una transazione dentro un
       // aggiornamento: appena dopo.
-      if (update.docChanged) queueMicrotask(() => { if (this.drag === drag) this.endDrag(false); });
+      // Il blocco non torna a casa volando: casa può non esserci più.
+      if (update.docChanged) {
+        queueMicrotask(() => {
+          if (this.drag !== drag) return;
+          this.endDrag(false);
+          this.returning?.land();
+        });
+      }
       // La parte montata da CodeMirror è cambiata: si rimisura.
       else if (drag.hold && (update.viewportChanged || update.geometryChanged)) this.remeasure(drag);
       // CodeMirror può aver rifatto i widget: la posa si riscrive a DOM nuovo.
@@ -751,6 +769,8 @@ class HandlesView {
   startDrag(event: PointerEvent): void {
     if (event.button !== 0 || this.drag || this.view.state.readOnly) return;
     this.swallowClick = false;
+    // Un blocco che sta ancora tornando a casa si posa prima della presa nuova.
+    this.returning?.land();
     const blocks = this.view.state.field(blockModel).blocks;
     const index = indexOf(blocks, this.shown);
     if (index < 0) return;
@@ -991,6 +1011,7 @@ class HandlesView {
     slot.style.height = `${held}px`;
     scrollDOM.append(slot, el);
     drag.life.add(() => {
+      if (drag.hold?.flying) return;
       el.remove();
       slot.remove();
     });
@@ -1003,8 +1024,14 @@ class HandlesView {
       section: sectionAt(state, blocks, span.from, span), said: "",
       skew: Math.abs(skew) < 0.5 ? 0 : skew,
       sx, sy, otherIndex: new Map(others.map((i, k) => [i, k])), partedKey: "",
-      tx: 0, ty: 0, cx: 0, cy: 0, tilt: 0,
+      tx: 0, ty: 0, cx: 0, cy: 0, tilt: 0, frames: null, flying: false,
     };
+    const hold = drag.hold;
+    drag.life.add(() => {
+      hold.frames?.();
+      hold.frames = null;
+      hold.el.style.willChange = "";
+    });
     // I vicini sotto un blocco alto salgono scivolando, non a scatto.
     this.layout(drag, true);
     // Il posto entra in dissolvenza.
@@ -1023,9 +1050,20 @@ class HandlesView {
     } else {
       animate(shade, { from: { scale: 1 / LIFT_SCALE, opacity: 0 }, duration: LIFT_MS, easing: LIFT_EASING });
     }
-    // In mano segue il puntatore in due o tre fotogrammi; col moto ridotto
-    // va dove deve senza volo, e il ciclo dei fotogrammi non si accende.
-    if (!reduced) drag.life.add(onFrame(() => this.follow(drag)));
+  }
+
+  /// Il blocco in mano va verso dove vuole andare: col moto ridotto ci salta,
+  /// altrimenti si accende il ciclo dei fotogrammi, che si spegne all'arrivo.
+  chase(drag: Drag): void {
+    const hold = drag.hold;
+    if (!hold) return;
+    if (motionLevel() === "reduced") return this.follow(drag, true);
+    if (hold.frames) return;
+    // Uno strato suo soltanto mentre corre. Uno strato tenuto tiene la
+    // griglia dei pixel di quando è nato, e il testo che il compositore sposta
+    // si sfoca di mezzo pixel; fermo, senza, si ridisegna nitido dov'è.
+    hold.el.style.willChange = "transform";
+    hold.frames = onFrame(() => this.follow(drag));
   }
 
   /// Dove cadrebbe il blocco col puntatore dov'è: il posto fra i vicini, il
@@ -1074,7 +1112,7 @@ class HandlesView {
     const slotAt = slotTop(geo, hold.place);
     hold.ty = top - geo.top + (hold.beside ? 0 : magnet(slotAt - top));
     this.layout(drag, true);
-    if (motionLevel() === "reduced") this.follow(drag, true);
+    this.chase(drag);
   }
 
   /// Il posto, i vicini scostati, l'etichetta e l'annuncio per lo stato di
@@ -1208,9 +1246,16 @@ class HandlesView {
       hold.tilt += (Math.max(-TILT_MAX, Math.min(TILT_MAX, vx * 0.045)) - hold.tilt) * 0.18;
       if (Math.abs(hold.tx - hold.cx) < 0.05) hold.cx = hold.tx;
       if (Math.abs(hold.ty - hold.cy) < 0.05) hold.cy = hold.ty;
+      if (Math.abs(hold.tilt) < 0.005 && hold.cx === hold.tx) hold.tilt = 0;
     }
-    const tilt = Math.abs(hold.tilt) < 0.005 ? "" : ` rotate(${hold.tilt.toFixed(3)}deg)`;
+    const tilt = hold.tilt === 0 ? "" : ` rotate(${hold.tilt.toFixed(3)}deg)`;
     hold.el.style.transform = `translate(${hold.cx.toFixed(2)}px, ${hold.cy.toFixed(2)}px)${tilt}`;
+    // Arrivato: il ciclo si spegne, e si riaccende al prossimo movimento.
+    if (hold.cx === hold.tx && hold.cy === hold.ty && hold.tilt === 0 && hold.frames) {
+      hold.frames();
+      hold.frames = null;
+      hold.el.style.willChange = "";
+    }
   }
 
   /// Il tratto del blocco in mano, nella posa di adesso.
@@ -1240,9 +1285,7 @@ class HandlesView {
 
   /// Mette le righe nella posa `parted`, e quelle che cambiano posto ci
   /// arrivano scivolando da dove si vedevano (`slide`).
-  part(parted: PartedRun[], slide: boolean): void {
-    const drag = this.drag;
-    const hold = drag?.hold;
+  part(parted: PartedRun[], slide: boolean, hold: Hold | null | undefined = this.drag?.hold): void {
     if (!hold) return;
     const view = this.view;
     const pose = view.state.field(dragPose);
@@ -1309,44 +1352,73 @@ class HandlesView {
     for (const el of seen) this.posed.add(el);
   }
 
+  /// I widget di blocco tornano come li vuole CodeMirror.
+  unposeWidgets(): void {
+    for (const el of this.posed) {
+      el.style.opacity = "";
+      el.style.translate = "";
+    }
+    this.posed.clear();
+  }
+
   endDrag(commit: boolean, quiet = false): void {
+    let flying = false;
     try {
-      this.finishDrag(commit, quiet);
+      flying = this.finishDrag(commit, quiet);
     } finally {
       // Dopo la transazione: il moto della posa legge i widget dov'erano.
-      for (const el of this.posed) {
-        el.style.opacity = "";
-        el.style.translate = "";
-      }
-      this.posed.clear();
+      // Se il blocco torna a casa, lo fa il suo arrivo.
+      if (!flying) this.unposeWidgets();
     }
   }
 
-  finishDrag(commit: boolean, quiet: boolean): void {
+  /// Vero se il blocco lasciato torna a casa volando (`flyHome`).
+  finishDrag(commit: boolean, quiet: boolean): boolean {
     const drag = this.drag;
-    if (!drag) return;
+    if (!drag) return false;
     this.drag = null;
     const hold = drag.hold;
     // Dove si vedeva il blocco in mano rispetto al posto vecchio: da lì
     // parte la posa, o il ritorno se il gesto non sposta niente. Si legge
     // prima che il blocco in mano se ne vada.
     const lift = drag.moving ? this.liftPose(drag) : null;
+    // Se il gesto non sposta niente, la copia in mano torna a casa da dov'è:
+    // resta in pagina oltre la fine del gesto. Altrimenti se ne va qui sotto.
+    const keep = !quiet && drag.moving && !!hold && motionLevel() !== "reduced";
+    if (keep) hold.flying = true;
     drag.life.close();
+    let flew = false;
+    try {
+      flew = this.release(drag, hold, lift, commit, quiet);
+    } finally {
+      if (keep && !flew) {
+        hold.flying = false;
+        hold.el.remove();
+        hold.slot.remove();
+      }
+    }
+    return flew;
+  }
+
+  /// Il rilascio vero e proprio: la transazione della posa, o il ritorno.
+  release(drag: Drag, hold: Hold | null, lift: ReturnType<HandlesView["liftPose"]>, commit: boolean, quiet: boolean): boolean {
     this.drop.hidden = true;
     delete this.drop.dataset.beside;
     this.view.dom.classList.remove("cm-fub-blocks-dragging");
-    if (!drag.moving) return;
+    if (!drag.moving) return false;
     // Il clic che segue il rilascio: lo consuma la maniglia, o lo azzera il
     // prossimo trascinamento.
     this.swallowClick = true;
     if (drag.touch && !quiet) tap();
-    const settle = (): void => {
+    const settle = (): boolean => {
+      if (hold?.flying) return this.flyHome(hold);
       const lead = this.liftedSpan();
-      if (quiet || (!lift && !lead)) return;
+      if (quiet || (!lift && !lead)) return false;
       this.view.dispatch({
         effects: setDragPose.of(null),
         annotations: blockGesture.of({ kind: "drop", say: "", ...(lead ? { lead } : {}), ...(lift ? { lift } : {}) }),
       });
+      return false;
     };
     if (!commit || !hold) return settle();
     const view = this.view;
@@ -1360,7 +1432,7 @@ class HandlesView {
       if (!spec) return settle();
       view.dispatch({ ...spec, effects: [setBlockSelection.of(null), setDragPose.of(null)], annotations: blockGesture.of({ kind: "columns" }) });
       view.focus();
-      return;
+      return false;
     }
     const n = hold.others.length;
     let spec;
@@ -1378,9 +1450,66 @@ class HandlesView {
     const gesture = blockGesture.of({ kind: "drop", origin, lead: moved, ...(lift ? { lift } : {}) });
     view.dispatch({ ...move, userEvent: "move.drop", effects, annotations: gesture });
     view.focus();
+    return false;
+  }
+
+  /// Il blocco lasciato senza spostarlo (Esc, o rilasciato al suo posto)
+  /// torna a casa da dov'è e con la grandezza che ha in quell'istante, anche
+  /// a metà presa: la carta vola, l'ombra, il posto e le etichette svaniscono,
+  /// i vicini tornano scivolando. All'arrivo la copia se ne va e le righe vere,
+  /// identiche e allo stesso posto, riappaiono.
+  ///
+  /// Ogni corsa parte da dove si vede la sua: il moto continua quelle a metà.
+  /// Lo stato finale è già nel DOM (moto torna al CSS, a corsa finita).
+  flyHome(hold: Hold): boolean {
+    const { el, card, shade, slot } = hold;
+    this.part([], true, hold);
+    const runs: Motion[] = [];
+    const timing = { duration: PART_MS, easing: PART_EASING };
+    const fade = { duration: SLOT_IN_MS, easing: "ease-out" };
+    // La copia segue il puntatore scrivendo in linea: da lì parte il volo.
+    const { cx: x, cy: y, tilt: rotate } = hold;
+    el.style.transform = "";
+    runs.push(animate(el, { from: { x, y, rotate }, ...timing }));
+    // La carta torna alla grandezza vera: la scala del CSS per l'inversa.
+    card.style.transform = `scale(${1 / LIFT_SCALE})`;
+    runs.push(animate(card, { to: { scale: 1 / LIFT_SCALE }, ...timing }));
+    for (const gone of [shade, slot, ...el.querySelectorAll<HTMLElement>(".cm-fub-block-lift-tags, .cm-fub-block-lift-grip")]) {
+      gone.style.opacity = "0";
+      runs.push(animate(gone, { to: { opacity: 0 }, ...(gone === shade ? timing : fade) }));
+    }
+    // Un blocco alto torna intero: la sua copia completa ricompare sopra la
+    // carta mentre i vicini scendono.
+    const inner = card.firstElementChild;
+    if (hold.geo.height > hold.held && inner) {
+      const full = document.createElement("div");
+      full.className = "cm-fub-block-lift-full";
+      full.style.height = `${hold.geo.height}px`;
+      full.append(inner.cloneNode(true));
+      card.after(full);
+      runs.push(animate(full, { from: { opacity: 0 }, ...timing }));
+    }
+    let landed = false;
+    const flight = {
+      land: (quiet = false): void => {
+        if (landed) return;
+        landed = true;
+        if (this.returning === flight) this.returning = null;
+        for (const run of runs) run.cancel();
+        hold.flying = false;
+        el.remove();
+        slot.remove();
+        this.unposeWidgets();
+        if (!quiet && this.view.state.field(dragPose).lifted) this.view.dispatch({ effects: setDragPose.of(null) });
+      },
+    };
+    this.returning = flight;
+    void runs[0]!.finished.then(() => flight.land());
+    return true;
   }
 
   destroy(): void {
+    this.returning?.land(true);
     this.endDrag(false, true);
     this.view.dom.classList.remove("cm-fub-blocks-dragging");
     this.life.close();
@@ -1454,7 +1583,6 @@ export const blockHandles: Extension = [
       zIndex: "6",
       pointerEvents: "none",
       transformOrigin: "24px 50%",
-      willChange: "transform",
     },
     // In mano la carta e la sua ombra sono più grandi dell'1,5%, dal bordo
     // sinistro: la presa ci arriva da 1/LIFT_SCALE, la posa riparte da qui.

@@ -124,10 +124,15 @@ delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
   al posto ne è attratto. Sale soltanto il blocco: la testata della pagina e i
   widget degli altri blocchi restano fermi. I vicini scivolano in 300 ms
   superando l'arrivo di un soffio. Al rilascio il blocco si posa in 340 ms, e
-  poi niente: nessun alone. Esc lo riporta indietro allo stesso modo; al tocco
+  poi niente: nessun alone. Esc (o il rilascio al suo posto) lo riporta a casa
+  in 300 ms da dove si vede e con la grandezza che ha, anche a metà presa:
+  l'ombra, il posto e le etichette svaniscono e i vicini tornano scivolando;
+  una presa nuova o il testo cambiato lo posano subito. Al tocco
   presa e posa danno un colpetto aptico. Le misure si prendono alla presa e
   di nuovo soltanto se cambia la parte montata da CodeMirror; per fotogramma si
-  scrive soltanto `transform`, e il documento cambia al rilascio. Trascinato
+  scrive soltanto `transform`, il ciclo dei fotogrammi gira solo finché il
+  blocco non ha raggiunto il puntatore (e solo allora ha uno strato suo), e il
+  documento cambia al rilascio. Trascinato
   sopra il frontmatter, il blocco si posa subito sotto di lui, che non si
   trascina.
 - **Scambiare.** Mod+Shift+↑/↓ fa scivolare le righe dal posto vecchio, con

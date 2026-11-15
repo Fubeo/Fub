@@ -486,6 +486,8 @@ describe("il blocco in mano (E2)", () => {
     expect(view.dom.classList.contains("cm-fub-blocks-dragging")).toBe(true);
     hand.handles.endDrag(false);
     expect(hand.grip.dataset.held).toBeUndefined();
+    expect(hand.lift(), "torna a casa volando").not.toBeNull();
+    hand.handles.returning!.land();
     expect(hand.lift()).toBeNull();
     expect(hand.slot()).toBeNull();
   });
@@ -522,11 +524,58 @@ describe("il blocco in mano (E2)", () => {
     rowsOf20(view);
     const hand = grab(view, 0, 10);
     hand.move(150);
+    const lift = hand.lift()!;
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
-    expect(hand.lift()).toBeNull();
     expect(view.dom.classList.contains("cm-fub-blocks-dragging")).toBe(false);
+    // Torna a casa da dov'è: la copia resta in pagina e vola, alla fine
+    // nella grandezza vera; ombra, posto ed etichette svaniscono; le righe
+    // vere restano nascoste e i vicini tornano al loro posto.
+    expect(hand.lift()).toBe(lift);
+    expect(lift.style.transform, "il volo parte dalla posa, non dal riposo").toBe("");
+    expect(lift.querySelector<HTMLElement>(".cm-fub-block-lift-card")!.style.transform).toBe(`scale(${1 / LIFT_SCALE})`);
+    expect(lift.querySelector<HTMLElement>(".cm-fub-block-lift-shade")!.style.opacity).toBe("0");
+    expect(lift.querySelector<HTMLElement>(".cm-fub-block-lift-tags")!.style.opacity).toBe("0");
+    expect(hand.slot()!.style.opacity).toBe("0");
+    expect(view.state.field(dragPose).lifted, "le righe vere aspettano la copia").not.toBeNull();
+    expect(view.state.field(dragPose).parted).toEqual([]);
+    hand.handles.returning!.land();
+    expect(hand.lift()).toBeNull();
+    expect(hand.slot()).toBeNull();
+    expect(view.state.field(dragPose).lifted, "arrivata, le righe vere riappaiono").toBeNull();
     hand.up(150);
     expect(view.state.doc.toString()).toBe(DOC);
+  });
+
+  it("una presa nuova posa subito il blocco che sta tornando a casa", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    let hand = grab(view, 0, 10);
+    hand.move(150);
+    hand.handles.endDrag(false);
+    expect(hand.handles.returning).not.toBeNull();
+    hand = grab(view, 0, 10);
+    expect(hand.handles.returning).toBeNull();
+    expect(view.scrollDOM.querySelectorAll(".cm-fub-block-lift")).toHaveLength(0);
+    hand.handles.endDrag(false);
+  });
+
+  it("a puntatore fermo il blocco in mano arriva e il ciclo dei fotogrammi si spegne", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(150);
+    const drag = hand.handles.drag!;
+    expect(drag.hold!.frames, "acceso mentre corre").not.toBeNull();
+    expect(drag.hold!.el.style.willChange, "uno strato suo mentre corre").toBe("transform");
+    for (let frame = 0; frame < 120 && drag.hold!.frames; frame += 1) hand.handles.follow(drag);
+    expect(drag.hold!.frames, "spento all'arrivo").toBeNull();
+    expect(drag.hold!.el.style.willChange, "fermo, il testo si ridisegna nitido").toBe("");
+    expect(drag.hold!.cy).toBe(drag.hold!.ty);
+    hand.move(70);
+    expect(drag.hold!.frames, "riacceso al movimento").not.toBeNull();
+    hand.handles.endDrag(false);
+    expect(drag.hold!.frames).toBeNull();
+    hand.handles.returning?.land();
   });
 
   it("la finestra che perde il fuoco riporta il blocco al suo posto", () => {
@@ -535,6 +584,7 @@ describe("il blocco in mano (E2)", () => {
     const hand = grab(view, 0, 10);
     hand.move(150);
     window.dispatchEvent(new Event("blur"));
+    hand.handles.returning!.land();
     expect(hand.lift()).toBeNull();
     expect(view.state.doc.toString()).toBe(DOC);
   });
