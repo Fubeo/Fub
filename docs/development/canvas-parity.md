@@ -195,6 +195,42 @@ come `ops`. Il test le applica a `before` e dice quali passano; un compito senza
 file salta, e lo dice. Senza la variabile non fa nulla, e in CI non gira nessun
 modello.
 
+### I numeri al 2026-11-15
+
+Prima sono le soluzioni `ops_today` sul nucleo di `main` (`7970ee10f`, con N4 e
+N6 già dentro); dopo sono le soluzioni `ops` sul nucleo del ramo
+`piano/lavagna-in-codice` (`162852532`). Medie sui venti compiti.
+
+| | Compiti risolti | Operazioni | Righe di JSON | Caratteri |
+|---|---|---|---|---|
+| Prima: `ops_today` su `main` | 20 su 20 | 4,2 | 48,6 | 625,5 |
+| Dopo: `ops` sul ramo | 20 su 20 | 2,6 | 22,7 | 195,1 |
+
+Sul nucleo di `main` le forme `ops` passano in un compito solo su venti
+(`15-lavagna-di-riepilogo`, che usa soltanto `add_card` e `connect` con tutti i
+campi): le altre diciannove chiedono operazioni o campi che `main` non ha. Sul
+ramo passano anche tutte le `ops_today`: le forme di `main` restano valide. Il
+calo più forte è nei compiti che `main` scrive scheda per scheda: la scaletta
+(da 4 operazioni a 1), Mermaid (da 6 a 1), l'albero (da 13 a 1, da 146 righe a
+6). Due compiti costano quanto prima o di più: `15-lavagna-di-riepilogo` (le
+stesse operazioni) e `16-incolla-frammento` (1 operazione `insert`, ma 40 righe
+contro 36, perché il frammento porta le sue schede intere).
+
+Come si rifanno:
+
+- Operazioni: la lunghezza della lista. Righe: le righe di
+  `JSON.stringify(ops, null, 2)`. Caratteri: il JSON compatto, come la tabella
+  del runner. Si contano dai file del corpus, con Node.
+- Compiti risolti: si scrive ogni lista in un file `<compito>.json` di una
+  cartella (una per `ops_today`, una per `ops`) e si passa la cartella al test
+  `esiti_di_un_modello_se_richiesti` con `FUB_CANVAS_ESITI`. Sul ramo basta il
+  comando sopra. Per `main` serve, in una cartella temporanea, una copia di
+  `crates/fub-ink`, `crates/fub-ink-codec` e `crates/fub-canvas-core` di `main`
+  in un workspace che contiene solo loro, con il `Cargo.lock` di `main`; dentro
+  ci vanno `layout.rs` del ramo (senza `pub mod arrange`, serve solo ai
+  controlli `count` e `in_group`), `tests/task_corpus.rs` e la cartella dei
+  compiti al suo percorso relativo. Le operazioni restano quelle di `main`.
+
 ## Che cosa non misura
 
 - Il significato di una forma in codice: R2 dice che compila, non che faccia la
