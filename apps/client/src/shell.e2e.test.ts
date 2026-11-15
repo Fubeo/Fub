@@ -737,6 +737,42 @@ describe("navigazione accessibile dell'esploratore", () => {
     expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
   });
 
+  it("un'apertura che finisce tardi non toglie il fuoco a chi è già entrato nel documento aperto", async () => {
+    // #395: la superficie si monta prima che l'apertura finisca (il contesto
+    // si pubblica dopo). Chi intanto entra nel documento (il Tab della lavagna
+    // vuota al suo primo pulsante) ci resta: la fine dell'apertura riportava
+    // il fuoco all'editor, e il pulsante lo perdeva.
+    const host = await start(VAULT);
+    const controller = await import("./state/document-controller");
+    (document.querySelector<HTMLElement>("#file-list .tree-row") ?? document.body).focus();
+    const unlock = host.throttle("setActiveContext");
+    const opening = controller.openDocument("note/Spesa.md", { gesture: true });
+    for (let i = 0; i < 40 && !textToVideo().includes("pane, latte"); i++) await settle();
+    expect(textToVideo()).toContain("pane, latte");
+    const surface = document.querySelector<HTMLElement>(".pane.focus .pane-editor > *");
+    expect(surface).not.toBeNull();
+    // Un controllo del documento, come «Scrivi una scheda» della lavagna vuota.
+    const control = document.createElement("button");
+    surface?.append(control);
+    control.focus();
+    unlock();
+    await opening;
+    await settle();
+    expect(document.activeElement).toBe(control);
+    control.remove();
+
+    // Col fuoco ancora dove era al gesto, l'editor lo prende come prima.
+    (document.querySelector<HTMLElement>("#file-list .tree-row") ?? document.body).focus();
+    const again = host.throttle("setActiveContext");
+    const second = controller.openDocument("note/Riunione.md", { gesture: true });
+    await settle();
+    again();
+    await second;
+    await settle();
+    expect(textToVideo()).toContain("riunione");
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+  });
+
   it("rivela la nota attiva dentro una cartella chiusa, senza togliere il fuoco all'editor", async () => {
     await start(VAULT);
     const noteItem = () =>

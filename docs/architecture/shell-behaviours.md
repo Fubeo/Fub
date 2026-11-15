@@ -98,7 +98,9 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   portato altrove: se sta ancora dov'era al gesto, da nessuna parte o in un
   riquadro. Un documento lento da aprire (un `.docx` da impaginare) non toglie
   il fuoco al lanciatore, a un dialogo o a un campo aperti intanto, e il loro
-  Invio non finisce nel documento.
+  Invio non finisce nel documento. Se il fuoco sta già dentro il documento
+  aperto (la superficie si monta prima che l'apertura finisca, e il Tab della
+  lavagna vuota porta al suo primo pulsante), resta dov'è.
 - **Menu contestuale estendibile.** Le view sulla superficie `context_menu`
   (`ui/context-views.ts`) si aggiungono in coda al menu di una nota, di una
   cartella o di un file dell'albero. Il bersaglio del clic non è nel contesto
