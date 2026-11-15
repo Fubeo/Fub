@@ -215,9 +215,9 @@ casi con i numeri stanno in `apps/client/src/__fixtures__/canvas-layout.json`.
   `md` e `markdown` sono `note`; `docx`, `doc`, `dot`, `rtf` e `odt` sono
   `document`; `xlsx`, `xlsm`, `xltx` e `xltm` sono `sheet`; `pdf` è `pdf`;
   `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `bmp`, `ico`, `avif`, `heic`,
-  `tif` e `tiff` sono `image`; tutto il resto, o nessuna estensione, è `file`.
-  Un punto nelle cartelle non conta (`cartella.v2/nota` non ha estensione), e
-  un punto in testa al nome non apre un'estensione (`.md` è `file`).
+  `tif` e `tiff` sono `image`; `vectorcraft`, `figcraft`, `pcraft` sono `craft`;
+  il resto, o nessuna estensione, è `file`. Un punto nelle cartelle non conta
+  (`cartella.v2/nota`), né uno in testa al nome (`.md` è `file`).
 - **Misure di nascita.** Il testo è largo 320, o 480 se una riga ha più di 36
   caratteri, e alto quanto dice la stima qui sotto. `note` e `document` sono
   320×240; `sheet` 480×304; `pdf` 360 di larghezza, e alto `round(360·h/w)` se
@@ -245,12 +245,11 @@ casi con i numeri stanno in `apps/client/src/__fixtures__/canvas-layout.json`.
   usa la misura di nascita. Un `near` che non c'è dà `None`, e lo dice chi chiama.
 - **Dentro un gruppo.** Una scheda è dentro se il suo rettangolo sta tutto in
   quello del gruppo, bordi compresi. Una scheda non è dentro sé stessa.
-- **Lati più vicini.** Si confrontano i centri. Se la distanza in orizzontale è
-  almeno quella in verticale, il collegamento va da `right` a `left` (o da
-  `left` a `right` se la seconda scheda sta a sinistra); se no, da `bottom` a
-  `top` (o da `top` a `bottom`).
-- **Gruppo attorno.** Il rettangolo che racchiude le schede, allargato del
-  margine per lato, con ognuno dei quattro valori agganciato.
+- **Lati più vicini.** Come «Collega»: la coppia di lati coi punti di mezzo più
+  vicini, provati nell'ordine `top`, `right`, `bottom`, `left`; a pari distanza
+  la prima. Una scheda con sé stessa va da `right` a `top`.
+- **Gruppo attorno.** Il rettangolo delle schede allargato del margine per lato,
+  coi quattro bordi agganciati uno per uno, come «Raggruppa».
 
 ## Le operazioni
 
@@ -387,7 +386,8 @@ niente, e non è un errore.
 
 Copia le schede `ids` e gli archi che hanno tutti e due gli estremi fra le copie,
 come «Copia» della GUI. Le copie stanno in cima all'ordine, sfalsate di `dx` e `dy`
-(di serie 32 e 32), e la loro posizione si aggancia a 8. Gli id vengono dal seme, o
+(di serie 32, e la posizione si aggancia a 8; uno scritto resta com'è, come
+Ctrl+D ripetuto). Gli id vengono dal seme, o
 da `as`: un id per scheda, nell'ordine di `ids`, liberi e distinti. Un gruppo senza
 le sue schede si copia da solo.
 
@@ -397,10 +397,10 @@ le sue schede si copia da solo.
 
 ### `reverse`
 
-Inverte gli archi `ids`: la partenza diventa l'arrivo, e i lati vanno con le loro
-schede. Le punte restano sul loro ruolo (`toEnd` è la punta all'arrivo), così la
-freccia cambia verso. Una punta che il file non scrive si scrive prima di invertire,
-col valore di serie di JSON Canvas (`fromEnd` `none`, `toEnd` `arrow`).
+Inverte gli archi `ids`, come «Inverti il filo»: la partenza diventa l'arrivo, e
+lati e punte restano sulla loro scheda. Una punta non scritta vale quella di serie
+(`fromEnd` `none`, `toEnd` `arrow`); dopo si scrive solo una punta che non è quella
+di serie del suo posto, e un lato solo se c'era.
 
 ```json
 { "op": "reverse", "ids": ["e1"] }
@@ -409,7 +409,7 @@ col valore di serie di JSON Canvas (`fromEnd` `none`, `toEnd` `arrow`).
 ### `group`
 
 Mette le schede `ids` (almeno una) in un gruppo, col rettangolo che le racchiude e
-un margine di 24 per lato, agganciato a 8. Il gruppo nasce appena sotto la più
+un margine di 24 per lato, coi bordi agganciati a 8. Il gruppo nasce appena sotto la più
 bassa delle sue schede: se una è già in un gruppo, il nuovo sta sopra quel gruppo
 e sotto le schede. `label` è vuota di serie; `id` e `color` sono come in `add_card`.
 

@@ -1,8 +1,9 @@
 //! `duplicate`: copia le schede `ids` e gli archi che hanno tutti e due gli
 //! estremi fra le copie, come «Copia» della GUI. Le copie stanno in cima
-//! all'ordine, sfalsate di `dx` e `dy` (di serie 32 e 32, agganciate a 8, come
-//! `#duplicateSelection` di `engine.ts`). Un gruppo senza le sue schede si copia
-//! da solo. Le regole stanno in `docs/reference/canvas-code.md`, «Le operazioni».
+//! all'ordine, sfalsate di `dx` e `dy`: lo spostamento di serie (32) si
+//! aggancia a 8, uno scritto no, come `#duplicateSelection` di `engine.ts` che
+//! aggancia la prima copia e ripete lo spostamento dell'ultimo Ctrl+D così
+//! com'è (T68). Un gruppo senza le sue schede si copia da solo. Le regole stanno in `docs/reference/canvas-code.md`, «Le operazioni».
 
 use std::collections::HashMap;
 
@@ -24,8 +25,9 @@ const SHIFT: i64 = 32;
 pub struct DuplicateArgs {
     /// Le schede da copiare. Un id che non è una scheda è `UnknownNode`.
     pub ids: Vec<String>,
-    /// Lo spostamento in orizzontale delle copie; di serie 32. La posizione si
-    /// aggancia a 8; satura a ±(2^53−1).
+    /// Lo spostamento in orizzontale delle copie. Di serie 32, e allora la
+    /// posizione si aggancia a 8; uno scritto si somma così com'è. Satura a
+    /// ±(2^53−1).
     #[serde(
         default,
         deserialize_with = "saturating_option",
@@ -63,16 +65,14 @@ impl Compiler {
             });
         }
         let ids = self.copy_ids(index, args.copies.as_deref(), originals.len())?;
-        let dx = args.dx.unwrap_or(SHIFT);
-        let dy = args.dy.unwrap_or(SHIFT);
         let cards: Vec<CanvasNode> = originals
             .iter()
             .zip(&ids)
             .map(|(original, id)| {
                 let mut copy = original.clone();
                 copy.id.clone_from(id);
-                copy.x = shifted(index, original.x, dx)?;
-                copy.y = shifted(index, original.y, dy)?;
+                copy.x = shifted(index, original.x, args.dx)?;
+                copy.y = shifted(index, original.y, args.dy)?;
                 Ok(copy)
             })
             .collect::<Result<_, OpError>>()?;
@@ -178,9 +178,16 @@ impl Compiler {
     }
 }
 
-/// La posizione di una copia: quella dell'originale più lo spostamento,
-/// agganciata a 8 come `#duplicateSelection` di `engine.ts`.
-fn shifted(index: usize, at: i64, by: i64) -> Result<i64, OpError> {
-    let sum = saturate(at.saturating_add(by));
-    whole(index, layout::snap(sum as f64))
+/// La posizione di una copia su un asse: quella dell'originale più lo
+/// spostamento. Lo spostamento di serie ([`SHIFT`]) si aggancia a 8, come la
+/// prima copia di `#duplicateSelection` in `engine.ts`; uno scritto resta
+/// com'è, come lo spostamento ripetuto di Ctrl+D, che la GUI non aggancia.
+fn shifted(index: usize, at: i64, by: Option<i64>) -> Result<i64, OpError> {
+    match by {
+        None => {
+            let sum = saturate(at.saturating_add(SHIFT));
+            whole(index, layout::snap(sum as f64))
+        }
+        Some(by) => Ok(saturate(at.saturating_add(by))),
+    }
 }

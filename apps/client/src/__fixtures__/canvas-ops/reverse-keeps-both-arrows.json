@@ -1,5 +1,5 @@
 {
-  "about": "reverse di un arco con due punte: restano due punte, ciascuna sul suo ruolo, e cambiano solo le schede e i lati.",
+  "about": "reverse di un arco con due punte: restano due punte, ciascuna sulla sua scheda, e cambiano solo le schede e i lati. La punta all'arrivo è la freccia di serie, quindi toEnd non si scrive, come reversedEdge della GUI.",
   "before": {
     "nodes": [
       { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
@@ -18,7 +18,7 @@
         { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
       ],
       "edges": [
-        { "id": "e1", "fromNode": "b", "fromSide": "left", "fromEnd": "arrow", "toNode": "a", "toSide": "right", "toEnd": "arrow" }
+        { "id": "e1", "fromNode": "b", "fromSide": "left", "fromEnd": "arrow", "toNode": "a", "toSide": "right" }
       ]
     }
   }

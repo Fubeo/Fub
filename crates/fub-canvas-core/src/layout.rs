@@ -66,8 +66,9 @@ const MAX_SIDE: f64 = MAX_SAFE_INTEGER as f64;
 
 /// La specie di una scheda: da lei dipendono la misura di nascita e il posto.
 ///
-/// `Craft` è la specie di un file Craft. Nessuna estensione la produce ancora
-/// ([`card_kind`] non la dà), e la darà il riconoscimento di Craft.
+/// `Craft` è la specie di un file di VectorCraft, FigCraft o PhotoCraft: le
+/// estensioni sono quelle di `CRAFT_EXTENSIONS` in
+/// `apps/client/src/editors/canvas/cards.ts` (N6 T18).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CardKind {
     /// Un testo scritto nella scheda.
@@ -167,6 +168,7 @@ pub fn kind_of_path(path: &str) -> CardKind {
         "docx" | "doc" | "dot" | "rtf" | "odt" => CardKind::Document,
         "xlsx" | "xlsm" | "xltx" | "xltm" => CardKind::Sheet,
         "pdf" => CardKind::Pdf,
+        "vectorcraft" | "figcraft" | "pcraft" => CardKind::Craft,
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "ico" | "avif" | "heic"
         | "tif" | "tiff" => CardKind::Image,
         _ => CardKind::File,
@@ -432,38 +434,64 @@ pub fn inside(card: &CanvasNode, group: &CanvasNode) -> bool {
 }
 
 /// I lati più vicini fra due schede, per un arco di `sides: "auto"`: il lato
-/// di `from` e il lato di `to`.
+/// di `from` e il lato di `to`, come `nearestSides` di `edges.ts` che usa
+/// «Collega» della GUI.
 ///
-/// Si confrontano i centri. Se la distanza in orizzontale è almeno quella in
-/// verticale, si va da destra a sinistra (o da sinistra a destra se `to` sta a
-/// sinistra); se no, da basso in alto (o da alto in basso se `to` sta sopra).
-/// Una scheda con sé stessa dà destra e sinistra.
+/// Si prova ogni coppia di lati, nell'ordine `top`, `right`, `bottom`, `left`
+/// per `from` e poi per `to`, e vince la coppia i cui punti di mezzo sono più
+/// vicini; a pari distanza resta la prima trovata. Due schede con lo stesso
+/// rettangolo danno `top`→`top`. Una scheda con sé stessa esce a destra e torna
+/// in alto, come il filo che la GUI lascia sulla sua scheda di partenza.
 pub fn nearest_sides(from: &CanvasNode, to: &CanvasNode) -> (CanvasEdgeSide, CanvasEdgeSide) {
-    // Il doppio del centro, per restare nei numeri interi.
-    let dx = doubled_centre(to.x, to.width) - doubled_centre(from.x, from.width);
-    let dy = doubled_centre(to.y, to.height) - doubled_centre(from.y, from.height);
-    if dx.abs() >= dy.abs() {
-        if dx < 0 {
-            (CanvasEdgeSide::Left, CanvasEdgeSide::Right)
-        } else {
-            (CanvasEdgeSide::Right, CanvasEdgeSide::Left)
+    if from.id == to.id {
+        return (CanvasEdgeSide::Right, CanvasEdgeSide::Top);
+    }
+    let mut best = (CanvasEdgeSide::Right, CanvasEdgeSide::Left);
+    let mut best_distance: Option<i128> = None;
+    for a in SIDES {
+        let (ax, ay) = doubled_side_point(from, a);
+        for b in SIDES {
+            let (bx, by) = doubled_side_point(to, b);
+            let (dx, dy) = (bx - ax, by - ay);
+            let distance = dx * dx + dy * dy;
+            if best_distance.is_none_or(|known| distance < known) {
+                best = (a, b);
+                best_distance = Some(distance);
+            }
         }
-    } else if dy < 0 {
-        (CanvasEdgeSide::Top, CanvasEdgeSide::Bottom)
-    } else {
-        (CanvasEdgeSide::Bottom, CanvasEdgeSide::Top)
+    }
+    best
+}
+
+/// I lati nell'ordine di `EDGE_SIDES` di `edges.ts`: decide la coppia che
+/// vince a pari distanza.
+const SIDES: [CanvasEdgeSide; 4] = [
+    CanvasEdgeSide::Top,
+    CanvasEdgeSide::Right,
+    CanvasEdgeSide::Bottom,
+    CanvasEdgeSide::Left,
+];
+
+/// Il doppio del punto di mezzo del lato `side` di `card`, come `sidePoint` di
+/// `edges.ts`: col doppio si resta nei numeri interi, e il quadrato della
+/// distanza ordina le coppie come la distanza vera.
+fn doubled_side_point(card: &CanvasNode, side: CanvasEdgeSide) -> (i128, i128) {
+    let (x, y) = (2 * i128::from(card.x), 2 * i128::from(card.y));
+    let (width, height) = (i128::from(card.width), i128::from(card.height));
+    match side {
+        CanvasEdgeSide::Top => (x + width, y),
+        CanvasEdgeSide::Bottom => (x + width, y + 2 * height),
+        CanvasEdgeSide::Left => (x, y + height),
+        CanvasEdgeSide::Right => (x + 2 * width, y + height),
     }
 }
 
-/// Il doppio del centro di una scheda su un asse, in un intero.
-fn doubled_centre(origin: i64, size: i64) -> i128 {
-    2 * i128::from(origin) + i128::from(size)
-}
-
 /// Il rettangolo che racchiude le schede `rects`, allargato di `margin` per
-/// lato e agganciato: ciascuno dei quattro valori (x, y, larghezza, altezza)
-/// passa da [`snap`], come fa `engine.ts` con le misure. Dà `None` se non c'è
-/// nessuna scheda.
+/// lato e agganciato come «Raggruppa» della GUI: ciascuno dei quattro bordi
+/// (sinistro, alto, destro, basso) passa da [`snap`], e larghezza e altezza
+/// sono la differenza fra i bordi agganciati. Fuori dalla griglia di 8 non è
+/// lo stesso che agganciare la misura: una scheda in -125, -60, 250×60 dà
+/// 304×104, non 296×112. Dà `None` se non c'è nessuna scheda.
 pub fn group_rect(rects: &[Rect], margin: f64) -> Option<Rect> {
     let (first, rest) = rects.split_first()?;
     let (left, top, right, bottom) = rest.iter().fold(
@@ -477,11 +505,13 @@ pub fn group_rect(rects: &[Rect], margin: f64) -> Option<Rect> {
             )
         },
     );
+    let (left, top) = (snap(left - margin), snap(top - margin));
+    let (right, bottom) = (snap(right + margin), snap(bottom + margin));
     Some(Rect {
-        x: snap(left - margin),
-        y: snap(top - margin),
-        width: snap(right - left + 2.0 * margin),
-        height: snap(bottom - top + 2.0 * margin),
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
     })
 }
 

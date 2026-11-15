@@ -334,7 +334,7 @@
       "gui": [{ "gesture": "connect-handle" }, { "menu": "canvas.connect" }],
       "writes": "file",
       "state": "code",
-      "ops": [{ "op": "connect", "from": "t2", "to": "f1" }]
+      "ops": [{ "op": "connect", "from": "t2", "to": "f1", "sides": "auto" }]
     },
     {
       "id": "main.edge.reconnect",

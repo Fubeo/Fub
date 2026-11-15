@@ -224,6 +224,8 @@ disegno: un comando spento si vede col perché; i cinque usati da poco in quella
 lavagna stanno in cima (stato di vista `canvas.commands:<documento>`; se non si
 scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 
+Un comando che scrive ha `op`, le sue [operazioni d'intento](canvas-code.md#le-operazioni): menu, barra, campi e tasti le fanno compilare al nucleo (col seme di `seed`, se no a caso) e le scrivono in un passo d'annulla; se il nucleo rifiuta non cambia niente, la barra lo dice e il campo torna com'era. Il posto e la misura di sempre li sceglie la GUI e li scrive nell'operazione. Collega è `connect` con `sides: "auto"`, Inverti il filo è `reverse` (le punte restano sulla loro scheda), Raggruppa è `group`, e Ctrl+D è `duplicate`, che copia anche i fili fra le schede copiate. Le schede e i fili che nascono così, e quelli del doppio clic e dello strumento Testo, hanno l'id del seme, sedici cifre esadecimali ([gli id nuovi](canvas-code.md#gli-id-nuovi)), non più `n-…`; i gesti, gli appunti e Ctrl+Invio dentro una scheda danno ancora `newNodeId`.
+
 | Comandi | Tasti |
 |---|---|
 | `canvas.tool.select`, `.lasso`, `.hand`, `.pen`, `.highlighter`, `.eraser`, `.text`, `.connect` | `V`, `Q`, `H`, `P`, `Maiusc+P`, `E`, `T`, `C` |
@@ -282,7 +284,8 @@ cambiano la lavagna sono spente col perché, non nascoste.
   Oltre dodici schede nascono in un gruppo «N pagine». Un intervallo oltre
   l'ultima pagina si taglia, e il campo lo dice; un pezzo che non si legge lo
   dice e il dialogo resta aperto. Oltre 200 pagine chiedono conferma, e
-  «Annulla» non fa nulla. Il tutto è un solo commit, che «Annulla» riporta. Se
+  «Annulla» non fa nulla. Scrive `spread_pages` del nucleo, col conto e le
+  misure lette dal PDF, in un passo solo che «Annulla» riporta. Se
   il PDF non si apre, il comando lo dice e resta spento col perché finché il
   file non cambia; in sola lettura è spento col perché.
 - **`C`** con una scheda scelta comincia il filo da lei, come «Collega…» e il

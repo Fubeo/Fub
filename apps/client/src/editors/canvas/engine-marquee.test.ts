@@ -284,6 +284,26 @@ describe("il rettangolo del trascinamento nel vuoto con la Selezione (N6 T20b)",
     engine.destroy();
   });
 
+  it("due schede e il loro filo scelti: «Collega…» le collega, e la sua operazione è quella che scrive; C invece non collega", async () => {
+    const { engine, host, changes } = mounted(LINKED);
+    dragOnEmpty(host, [-50, -50], [700, 150]);
+    await frame();
+    release(host, [700, 150]);
+    expect(engine.selection()).toEqual({ nodes: ["a", "b"], edges: ["e"] });
+    const connect = engine.commands().find((one) => one.id === "canvas.connect")!;
+    const key = engine.commands().find((one) => one.id === "canvas.tool.connect")!;
+    // C con un filo scelto non collega (sceglie lo strumento), e così non ha operazioni.
+    expect(key.op!()).toBeNull();
+    // «Collega…» collega lo stesso, come prima di T23: la sua operazione lo dice.
+    expect(connect.op!()).toEqual([{ op: "connect", from: "a", to: "b", sides: "auto" }]);
+    connect.run();
+    expect(changes).toHaveLength(1);
+    const edges = (JSON.parse(engine.getDoc()) as { edges: Array<Record<string, unknown>> }).edges;
+    expect(edges).toHaveLength(3);
+    expect(edges[2]).toMatchObject({ fromNode: "a", toNode: "b", fromSide: "right", toSide: "left", toEnd: "arrow" });
+    engine.destroy();
+  });
+
   it("un fotogramma cambia la classe delle sole schede che cambiano stato, e il riquadro non tocca le altre", async () => {
     const { engine, host } = mounted(row(12));
     // Ogni scheda conta le sue scritture della classe «selected»: il motore non le

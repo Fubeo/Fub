@@ -2,15 +2,19 @@
 // La parità della GUI (R7): la tela mostra gli id che l'inventario dichiara
 // (menu, barra, campi, appunti), ogni voce trova il suo id, i gesti e i tasti
 // sono quelli delle costanti `GESTURES` e `KEYS`, e ogni tasto delle voci
-// cambia il file se e solo se la voce dice `writes: "file"`. Le regole R1–R6
+// cambia il file se e solo se la voce dice `writes: "file"`. R8 (T23): ogni
+// voce in codice con un menu, un bottone, un campo o un tasto scrive con la
+// GUI la stessa lavagna della sua forma in codice. Le regole R1–R6
 // stanno in `crates/fub-canvas-core/tests/parity.rs`; come si aggiunge un
 // gesto, in `docs/development/canvas-parity.md`.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenu, SurfaceMenuEntry } from "../core/editor-menu";
+import { CardCache } from "./card-cache";
+import { createCardRegistry } from "./cards";
 import type { CanvasEngine, CanvasNotesPort } from "./engine";
 import type { PartsPickerPort } from "./parts-picker";
 import { mountCanvas } from "./test-mount";
-import { canvasCoreReady } from "./wasm/core";
+import { canvasCoreReady, openCoreNow, type CanvasIntentOp } from "./wasm/core";
 import boardFile from "../../__fixtures__/canvas-parity/board.json";
 import mainFile from "../../__fixtures__/canvas-parity/main.json";
 import n4File from "../../__fixtures__/canvas-parity/n4.json";
@@ -33,6 +37,8 @@ interface Voice {
   readonly source: string;
   readonly gui: ReadonlyArray<Partial<Record<GuiKind, string>>>;
   readonly writes: "file" | "nothing" | "other-file";
+  readonly state: string;
+  readonly ops?: readonly CanvasIntentOp[];
 }
 
 /** Un valore di `gui` dichiarato da una voce. */
@@ -388,5 +394,353 @@ describe("la parità della tela (R7)", () => {
 
   it("ogni tasto delle voci cambia il file se e solo se la voce dice writes: file", () => {
     expect(declared("key").flatMap(keyProblems)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R8 (T23): la GUI scrive come la forma in codice.
+// ---------------------------------------------------------------------------
+
+/** I tipi di `gui` che R8 prova: gesti e appunti sono di T24. */
+const R8_GUI: readonly GuiKind[] = ["menu", "toolbar", "field", "key"];
+
+/**
+ * Le voci di R8: in codice (`code` o `composed`), che scrivono il file, di una
+ * fonte in `merged`, con almeno un menu, un bottone, un campo o un tasto.
+ */
+const R8_VOICES = MERGED.filter(
+  (voice) =>
+    (voice.state === "code" || voice.state === "composed")
+    && voice.writes === "file"
+    && voice.gui.some((gui) => R8_GUI.some((kind) => gui[kind] !== undefined)),
+);
+
+/** Il tetto delle voci che R8 non confronta (PLAN.md, R8). */
+const R8_MAX_SKIPS = 5;
+
+/** Le risposte del selettore dei file e delle note finte. */
+interface R8Answers {
+  readonly pickFile?: string;
+  readonly newNote?: string;
+  readonly noteText?: string;
+  /** Le pagine del PDF per «Spargi le pagine»: con questo la tela ha il lettore, senza misure. */
+  readonly pdfPageCount?: number;
+}
+
+/** La tela montata su cui R8 fa una voce. */
+interface R8Context {
+  readonly engine: CanvasEngine;
+  readonly host: HTMLElement;
+}
+
+interface R8Run {
+  /** Il valore di `gui` della voce che l'azione usa: deve essere della voce. */
+  readonly via: string;
+  /** Le schede o gli archi da scegliere prima; di serie gli id delle `ops`. */
+  readonly select?: readonly string[];
+  /** L'azione della GUI, come la fa l'utente. */
+  readonly act: (context: R8Context) => void | Promise<void>;
+  /**
+   * Le operazioni da confrontare quando quelle della voce non possono dire il
+   * posto o il contenuto che la GUI sceglie: le stesse operazioni (lo stesso
+   * `op`), con i campi che la GUI scrive. `why` dice perché.
+   */
+  readonly ops?: (context: R8Context) => readonly CanvasIntentOp[];
+  readonly why?: string;
+  readonly answers?: R8Answers;
+  /** I passi d'annulla dell'azione: di serie uno. */
+  readonly undos?: number;
+}
+
+type R8Setup = R8Run | { readonly skip: string };
+
+/** Il centro della vista in coordinate della lavagna, dalla trasformazione della scena. */
+function worldCenter(host: HTMLElement): { x: number; y: number } {
+  const stage = host.querySelector<HTMLElement>(".canvas-stage");
+  const match = /translate\((-?[\d.e+-]+)px, (-?[\d.e+-]+)px\) scale\(([\d.e+-]+)\)/.exec(stage?.style.transform ?? "");
+  if (!match) throw new Error("la scena della tela non dice la sua trasformazione");
+  const [x, y, zoom] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  // happy-dom non misura: la tela prende la vista di serie, 800×600.
+  return { x: (400 - x) / zoom, y: (300 - y) / zoom };
+}
+
+/** Il posto di una scheda nata dal menu: centrata sul centro della vista, agganciata a 8. */
+function bornAtCenter(host: HTMLElement, width: number, height: number) {
+  const center = worldCenter(host);
+  const snap = (value: number) => Math.round(value / 8) * 8;
+  return { x: snap(center.x - 160), y: snap(center.y - 80), width, height };
+}
+
+function buttonOf(root: ParentNode, action: string): HTMLElement {
+  const button = root.querySelector<HTMLElement>(`[data-canvas-action="${action}"]`);
+  if (!button) throw new Error(`la barra non ha il bottone «${action}»`);
+  return button;
+}
+
+/** Un campo della barra cambiato, come quando l'utente lo lascia. */
+function setField(host: HTMLElement, field: string, value: string): void {
+  const control = host.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-canvas-field="${field}"]`);
+  if (!control) throw new Error(`la barra non ha il campo «${field}»`);
+  control.value = value;
+  control.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/** Lascia finire le promesse della tela (selettore dei file, note, dialoghi). */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 6; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+const runCommand = (id: string) => ({ via: id, act: ({ engine }: R8Context) => run(engine, id) });
+const pressKey = (key: string) => ({ via: key, act: ({ host }: R8Context) => press(viewportOf(host), key) });
+
+/**
+ * Come R8 fa ogni voce. Una voce nuova in codice con una GUI va qui: senza,
+ * R8 fallisce. `skip` vale solo per una voce che non si può confrontare, e
+ * dice perché; non più di `R8_MAX_SKIPS`.
+ */
+const SETUP: Readonly<Record<string, R8Setup>> = {
+  "main.card.add_text": {
+    ...runCommand("canvas.add.text"),
+    ops: ({ host }) => [{ op: "add_card", text: "", ...bornAtCenter(host, 320, 160) }],
+    why: "la scheda nasce vuota al centro della vista, con la misura di sempre della GUI; il testo si scrive dopo",
+  },
+  "main.card.add_file": {
+    via: "canvas.add.file",
+    answers: { pickFile: "Corsi/appunti.md" },
+    act: async ({ engine }) => {
+      run(engine, "canvas.add.file");
+      await settle();
+    },
+    ops: ({ host }) => [{ op: "add_card", file: "Corsi/appunti.md", ...bornAtCenter(host, 320, 160) }],
+    why: "al centro della vista e 320×160 per ogni specie, come prima di T23",
+  },
+  "main.card.add_link": {
+    ...runCommand("canvas.add.link"),
+    ops: ({ host }) => [{ op: "add_card", url: "https://", ...bornAtCenter(host, 320, 120) }],
+    why: "il collegamento nasce con «https://» da completare, al centro della vista",
+  },
+  "main.card.add_group": {
+    via: "add-group",
+    act: ({ host }) => buttonOf(host, "add-group").click(),
+    ops: ({ host }) => [{ op: "add_card", label: "", ...bornAtCenter(host, 480, 320) }],
+    why: "il gruppo nasce senza nome al centro della vista",
+  },
+  "main.card.edit": {
+    via: "Enter",
+    act: ({ engine, host }) => {
+      press(viewportOf(host), "Enter");
+      const editor = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor");
+      if (!editor) throw new Error("Invio non apre il campo della scheda");
+      editor.value = "Perché la media è così bassa?";
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      engine.commitPending();
+    },
+  },
+  "main.card.move": pressKey("ArrowRight"),
+  "main.color.preset": runCommand("canvas.color.1"),
+  "main.color.none": {
+    via: "canvas.color.none",
+    // t1 non ha colore nella lavagna di prova: prima lo prende, poi lo perde.
+    act: ({ engine }) => {
+      run(engine, "canvas.color.3");
+      // Senza il colore 3 scritto, «nessun colore» non toglierebbe niente e
+      // la voce passerebbe a vuoto.
+      if (engine.getDoc() === BOARD) throw new Error("`canvas.color.3` non ha scritto il colore");
+      run(engine, "canvas.color.none");
+    },
+    undos: 2,
+  },
+  "main.color.hex": {
+    via: "canvas.color.other",
+    act: ({ engine }) => {
+      run(engine, "canvas.color.other");
+      const code = document.querySelector<HTMLInputElement>(".kit-color-input");
+      if (!code) throw new Error("«Altro…» non apre il selettore del colore");
+      code.value = "#0064b0";
+      code.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    },
+  },
+  "main.duplicate": pressKey("Mod+D"),
+  "main.delete": pressKey("Delete"),
+  "main.order.front": runCommand("canvas.bring_front"),
+  "main.order.back": runCommand("canvas.send_back"),
+  "main.align": runCommand("canvas.align.left"),
+  "main.distribute": runCommand("canvas.distribute_x"),
+  "main.edge.connect": runCommand("canvas.connect"),
+  "main.edge.reconnect": { via: "edge-toNode", act: ({ host }) => setField(host, "edge-toNode", "f1") },
+  "main.edge.reverse": runCommand("canvas.edge.reverse"),
+  "main.edge.label": { via: "edge-label", act: ({ host }) => setField(host, "edge-label", "perché") },
+  // La voce dice il sottomenu «Colore» (`canvas.color`): la sua voce 4.
+  "main.edge.color": { via: "canvas.color", act: ({ engine }) => run(engine, "canvas.color.4") },
+  "main.edge.sides": {
+    via: "edge-fromSide",
+    act: ({ host }) => {
+      setField(host, "edge-fromSide", "bottom");
+      setField(host, "edge-toSide", "top");
+    },
+    undos: 2,
+  },
+  "main.edge.ends": { via: "edge-fromEnd", act: ({ host }) => setField(host, "edge-fromEnd", "arrow") },
+  "N4.ink.highlighter": {
+    skip: "il bottone sceglie l'evidenziatore; il tratto lo scrive il gesto della penna, che è di T24",
+  },
+  "N6.text.style": {
+    via: "text-size-l",
+    act: ({ host }) => {
+      buttonOf(host, "text-size-l").click();
+      buttonOf(host, "text-align-center").click();
+    },
+    undos: 2,
+  },
+  "N6.color.names": runCommand("canvas.color.blue"),
+  "N6.group.selection": pressKey("Mod+G"),
+  "N6.convert.extract": {
+    via: "canvas.extract_note",
+    answers: { newNote: "Corsi/Ripasso.md" },
+    act: async ({ engine }) => {
+      run(engine, "canvas.extract_note");
+      await settle();
+      const confirm = document.querySelector<HTMLElement>('.kit-dialog [data-action="extract"]');
+      if (!confirm) throw new Error("Estrai in una nota non chiede il nome");
+      confirm.click();
+      await settle();
+    },
+  },
+  "N6.convert.copy_here": {
+    via: "canvas.copy_note_text",
+    select: ["n1"],
+    answers: { noteText: "(il testo letto)" },
+    act: async ({ engine }) => {
+      run(engine, "canvas.copy_note_text");
+      await settle();
+    },
+    // n1 sta in 1000,400 ed è 320×200: a destra a 24, larga e alta come lei.
+    ops: () => [{ op: "add_card", text: "(il testo letto)", x: 1344, y: 400, width: 320, height: 200 }],
+    why: "la scheda va accanto alla nota (n1: f1 non è una nota) al primo posto libero a 24, larga e alta come lei; `near` lascia 48 e nasce con la misura del testo",
+  },
+  "N6.pages.spread": {
+    via: "canvas.spread_pages",
+    answers: { pdfPageCount: 12 },
+    act: async ({ engine }) => {
+      run(engine, "canvas.spread_pages");
+      await settle();
+      const field = document.querySelector<HTMLInputElement>(".kit-dialog .kit-field-input");
+      if (!field) throw new Error("Spargi le pagine non chiede quali");
+      field.value = "1-2";
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector<HTMLElement>('.kit-dialog [data-action="spread"]')?.click();
+      await settle();
+    },
+  },
+  "N6.parts.excerpt": {
+    skip: "la voce raccoglie quattro gesti (pagine, zona, sezioni, ritaglio): «Parti…» fa solo le sezioni sul posto, e il ritaglio è un gesto, che porta T24 insieme alla scrittura del selettore con `excerpt`",
+  },
+  "N6.card.relink": {
+    via: "canvas.replace_file",
+    answers: { pickFile: "Archivio/voti.xlsx" },
+    act: async ({ engine }) => {
+      run(engine, "canvas.replace_file");
+      await settle();
+    },
+  },
+};
+
+/** Gli id che le operazioni della voce nominano: le schede e gli archi da scegliere. */
+function opIds(ops: readonly CanvasIntentOp[]): string[] {
+  const ids: string[] = [];
+  for (const op of ops) {
+    for (const key of ["ids", "id", "from", "to"]) {
+      const value = op[key];
+      for (const one of Array.isArray(value) ? value : [value]) {
+        if (typeof one === "string" && !ids.includes(one)) ids.push(one);
+      }
+    }
+  }
+  return ids;
+}
+
+const BOARD_EDGES = new Set(boardFile.board.edges.map((edge) => edge.id));
+const BOARD_NODES = new Set(boardFile.board.nodes.map((node) => node.id));
+
+/** Fa la voce con la GUI e con la sua forma in codice: dice che cosa non torna. */
+async function r8Problems(voice: Voice, setup: R8Run): Promise<string[]> {
+  const declaredGui = voice.gui.flatMap((gui) => R8_GUI.map((kind) => gui[kind]).filter((value) => value !== undefined));
+  if (!declaredGui.includes(setup.via)) return [`\`${voice.id}\`: SETUP usa «${setup.via}», che non è nella sua gui`];
+  const answers = setup.answers ?? {};
+  const { engine, host } = mountCanvas(BOARD, {
+    seed: () => 1n,
+    onPickFile: () => answers.pickFile ?? null,
+    notes: {
+      freeName: async (_folder, name) => name,
+      create: async () => answers.newNote ?? "nota.md",
+      read: async () => answers.noteText ?? "",
+    },
+    parts: PARTS,
+    ...(answers.pdfPageCount === undefined ? {} : {
+      cards: {
+        registry: createCardRegistry([]),
+        snapshots: new CardCache(),
+        watch: () => () => {},
+        pdfPages: { count: async () => answers.pdfPageCount!, sizes: async (_path, pages) => pages.map(() => null) },
+      },
+    }),
+  });
+  try {
+    const targets = setup.select ?? opIds(voice.ops ?? []);
+    targets.forEach((id, index) => {
+      if (BOARD_EDGES.has(id)) chooseEdge(host, id);
+      else if (BOARD_NODES.has(id)) select(host, id, index > 0);
+    });
+    const context = { engine, host };
+    const ops = setup.ops ? setup.ops(context) : voice.ops ?? [];
+    if (ops.map((op) => op.op).join() !== (voice.ops ?? []).map((op) => op.op).join()) {
+      return [`\`${voice.id}\`: le operazioni di SETUP non sono quelle della voce`];
+    }
+    await setup.act(context);
+    const core = openCoreNow(BOARD);
+    if (!core) throw new Error("il nucleo non è pronto");
+    let expected: string;
+    try {
+      expected = core.preview(core.compile(ops, 1n).patches);
+    } finally {
+      core.close();
+    }
+    const problems: string[] = [];
+    if (engine.getDoc() !== expected) {
+      problems.push(`\`${voice.id}\`: la GUI scrive\n${engine.getDoc()}\nla forma in codice\n${expected}`);
+    }
+    // Esattamente `undos` passi d'annulla: ognuno annulla qualcosa, l'ultimo
+    // torna a board.json, e dopo non resta nessun passo.
+    const undos = setup.undos ?? 1;
+    for (let step = 0; step < undos; step++) {
+      if (!engine.undo()) {
+        problems.push(`\`${voice.id}\`: la GUI ha fatto ${step} passi d'annulla, non ${undos}`);
+        break;
+      }
+      if (step < undos - 1 && engine.getDoc() === BOARD) {
+        problems.push(`\`${voice.id}\`: ${step + 1} annulla tornano già a board.json, non ${undos}`);
+      }
+    }
+    if (engine.getDoc() !== BOARD) problems.push(`\`${voice.id}\`: ${undos} annulla non tornano a board.json`);
+    if (engine.undo()) problems.push(`\`${voice.id}\`: la GUI ha fatto più di ${undos} passi d'annulla`);
+    return problems;
+  } finally {
+    engine.destroy();
+  }
+}
+
+describe("la GUI scrive come la forma in codice (R8)", () => {
+  it("ogni voce di R8 ha il suo SETUP, e le voci saltate sono al più cinque", () => {
+    const ids = R8_VOICES.map((voice) => voice.id);
+    expect(ids.filter((id) => !(id in SETUP))).toEqual([]);
+    expect(Object.keys(SETUP).filter((id) => !ids.includes(id))).toEqual([]);
+    const skipped = Object.values(SETUP).filter((setup) => "skip" in setup);
+    expect(skipped.length).toBeLessThanOrEqual(R8_MAX_SKIPS);
+  });
+
+  it.each(R8_VOICES.map((voice) => [voice.id, voice] as const))("%s", async (_id, voice) => {
+    const setup = SETUP[voice.id];
+    if (!setup || "skip" in setup) return;
+    expect(await r8Problems(voice, setup)).toEqual([]);
   });
 });

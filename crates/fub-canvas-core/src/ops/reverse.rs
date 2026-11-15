@@ -1,7 +1,7 @@
-//! `reverse`: inverte gli archi `ids`, come «Inverti la direzione» della GUI. La
-//! partenza diventa l'arrivo, e ogni lato va con la sua scheda. Le punte no: la
-//! punta resta sul ruolo, `toEnd` è la punta all'arrivo, così la freccia cambia
-//! verso. Le regole stanno in `docs/reference/canvas-code.md`, «Le operazioni».
+//! `reverse`: inverte gli archi `ids`, come «Inverti il filo» della GUI
+//! (`reversedEdge` di `model.ts`, #353). La partenza diventa l'arrivo, e ogni
+//! lato e ogni punta vanno con la loro scheda: la freccia che stava su una
+//! scheda ci resta, e cambia solo chi è la partenza e chi l'arrivo. Le regole stanno in `docs/reference/canvas-code.md`, «Le operazioni».
 
 use serde::{Deserialize, Serialize};
 
@@ -54,20 +54,23 @@ impl Compiler {
     }
 }
 
-/// L'arco scambiato. `fromNode` e `toNode` si scambiano, con `fromSide` e
-/// `toSide`. Le punte restano dove sono per ruolo: `fromEnd` alla partenza,
-/// `toEnd` all'arrivo. Una punta che il file non scrive vale quella di serie di
-/// JSON Canvas (`fromEnd` `none`, `toEnd` `arrow`), e si scrive prima di
-/// scambiare, così il verso nuovo non ne cambia una per caso.
+/// L'arco scambiato, come `reversedEdge` di `model.ts`. `fromNode` e `toNode`
+/// si scambiano, e con loro i lati e le punte: la punta nuova alla partenza è
+/// quella che l'arco mostrava all'arrivo, e viceversa. Una punta che il file
+/// non scrive vale quella di serie di JSON Canvas (`fromEnd` `none`, `toEnd`
+/// `arrow`); dopo lo scambio si scrive solo una punta che non è quella di
+/// serie del suo posto, e un lato solo se c'era.
 fn flipped(edge: &CanvasEdge) -> CanvasEdge {
+    let start = edge.to_end.unwrap_or(CanvasEdgeEnd::Arrow);
+    let finish = edge.from_end.unwrap_or(CanvasEdgeEnd::None);
     CanvasEdge {
         id: edge.id.clone(),
         from_node: edge.to_node.clone(),
         from_side: edge.to_side,
-        from_end: Some(edge.from_end.unwrap_or(CanvasEdgeEnd::None)),
+        from_end: (start != CanvasEdgeEnd::None).then_some(start),
         to_node: edge.from_node.clone(),
         to_side: edge.from_side,
-        to_end: Some(edge.to_end.unwrap_or(CanvasEdgeEnd::Arrow)),
+        to_end: (finish != CanvasEdgeEnd::Arrow).then_some(finish),
         color: edge.color.clone(),
         label: edge.label.clone(),
         extra: edge.extra.clone(),

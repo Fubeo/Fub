@@ -352,7 +352,7 @@ pub const OPS: &[OpSpec] = &[
             optional(
                 "sides",
                 FieldKind::Sides,
-                "`\"auto\"` per i lati più vicini, o `{from, to}` con i lati scelti. Di serie nessun lato.",
+                "`\"auto\"` per i lati coi punti di mezzo più vicini, come «Collega», o `{from, to}` con i lati scelti. Di serie nessun lato.",
             ),
             FieldSpec {
                 name: "ends",
@@ -470,7 +470,7 @@ pub const OPS: &[OpSpec] = &[
                 kind: FieldKind::Number,
                 required: false,
                 default: Some("32"),
-                doc_it: "Lo spostamento in orizzontale delle copie, in unità della lavagna. La posizione si aggancia a 8.",
+                doc_it: "Lo spostamento in orizzontale delle copie, in unità della lavagna. Con quello di serie la posizione si aggancia a 8; uno scritto resta com'è.",
             },
             FieldSpec {
                 name: "dy",
@@ -492,7 +492,7 @@ pub const OPS: &[OpSpec] = &[
     },
     OpSpec {
         name: "reverse",
-        summary_it: "Inverte gli archi `ids`: la partenza diventa l'arrivo, e la punta resta sull'arrivo, così la freccia cambia verso.",
+        summary_it: "Inverte gli archi `ids`: la partenza diventa l'arrivo, e lati e punte restano sulla loro scheda, come «Inverti il filo».",
         fields: &[required("ids", FieldKind::Ids, "Gli archi da invertire.")],
         examples: &[r#"{"op":"reverse","ids":["e1"]}"#],
     },

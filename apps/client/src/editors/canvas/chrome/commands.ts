@@ -20,6 +20,7 @@ import type { Key } from "../../../i18n/strings";
 import { keyName, keyboardPlatform, modifierName, parseChords, type KeyboardPlatform } from "../../../ui/commands";
 import { CANVAS_COLOR_CHOICES, colorCommandLabel, type CanvasColorChoice } from "../colors";
 import { TEXT_ALIGNS, TEXT_SIZES } from "../text-style";
+import type { CanvasIntentOp } from "../wasm/core";
 
 /// Quando un comando vale: sempre, con uno strumento, con una selezione.
 export type CanvasCommandContext = "always" | "tool" | "selection";
@@ -31,6 +32,19 @@ export interface CanvasCommandArgs {
   readonly at?: { readonly x: number; readonly y: number };
   readonly edge?: string;
 }
+
+/// Ciò che serve alla forma in codice di un comando (T23): dove e su quale
+/// collegamento, come per `run`, e `value`, ciò che il comando chiede prima
+/// di scrivere (il file scelto nel selettore, il colore di «Altro…», il
+/// percorso della nota appena nata, il testo letto o scritto nel campo).
+export interface CanvasOpInput extends CanvasCommandArgs {
+  readonly value?: string;
+}
+
+/// Le operazioni d'intento di un comando che scrive, adesso: la stessa forma
+/// che scrive `canvas.apply`. `null` se adesso non scrive niente (la scelta
+/// è vuota, o manca `value`).
+export type CanvasCommandOp = (input?: CanvasOpInput) => readonly CanvasIntentOp[] | null;
 
 /// Un comando della lavagna, com'è adesso.
 export interface CanvasCommand {
@@ -50,6 +64,9 @@ export interface CanvasCommand {
   readonly danger: boolean;
   /// Perché adesso non si può, o `null` se si può.
   disabled(): string | null;
+  /// Le sue operazioni, se scrive il file: `run` le compila col nucleo e le
+  /// scrive in un passo d'annulla, dopo aver chiesto `value` se serve.
+  readonly op?: CanvasCommandOp;
   run(args?: CanvasCommandArgs): void;
 }
 
@@ -253,6 +270,8 @@ export interface CanvasCommandBehaviour {
   /// lato su B3», T45); `null` o assente: il nome del catalogo.
   label?(): string | null;
   disabled(): string | null;
+  /// Le operazioni d'intento, per un comando che scrive il file (T23).
+  op?: CanvasCommandOp;
   run(args?: CanvasCommandArgs): void;
 }
 
@@ -276,6 +295,7 @@ export function buildCanvasCommands(
       boardKeys: spec.boardKeys === true,
       danger: spec.danger === true,
       disabled: () => does.disabled(),
+      ...(does.op ? { op: does.op } : {}),
       run: (args) => does.run(args),
     });
   }
