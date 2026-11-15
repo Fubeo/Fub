@@ -65,7 +65,7 @@ import { askVaultProfile, isNewVault, mountOnboarding, type VaultProfileHooks } 
 import { mountIncomingLinks, URI_ALLOWED } from "./ui/incoming-links";
 import { mountWebViewer } from "./ui/web-viewer";
 import { confirm } from "./platform/confirm";
-import { registerBaseRenderer } from "./editors/base/surface";
+import { registerBaseRenderer } from "./editors/base/renderer";
 import { applyRailMachineSettings, mountRail, refreshRailShortcuts, syncRail } from "./panels/rail";
 import { applySlashSettings } from "./panels/slash/prefs";
 import { mountStrings, onLanguage, resolvedLanguage, t, type Key } from "./i18n/strings";

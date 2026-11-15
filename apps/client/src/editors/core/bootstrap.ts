@@ -16,8 +16,7 @@ import { notify } from "../../ui/notify";
 import { revealSidePanel } from "../../ui/side-panels";
 import { PROOF_NS, type ProofPorts } from "./proof-ports";
 import { currentTheme } from "../../theme/theme";
-import { mountBaseSurface } from "../base/surface";
-import { BASE_OWNER, BASE_PROFILE, BASE_FORMAT } from "../base/data";
+import { BASE_OWNER, BASE_PROFILE, BASE_FORMAT } from "../base/ids";
 import { createTextEngine } from "../text/engine";
 import { createPlainTextProfile } from "../text/profiles/plain-text";
 import { mountMediaSurface, profileForKind, type MediaSurfaceDeps, type PdfAnnotationsPort } from "../media/media-surface";
@@ -723,19 +722,27 @@ export function createDocumentSurfaceRegistry(
     family: "structured",
     defaultProfile: BASE_PROFILE,
     formats: { [BASE_FORMAT]: BASE_PROFILE },
+    // La superficie, la barra e i dati arrivano col primo `.base` aperto, in
+    // un pezzo del bundle loro: non pesano sull'avvio né sul pezzo che la
+    // shell condivide con gli altri editor.
     factory: {
-      mount(profile, context) {
-        // Il vault in cui la superficie nasce (FUB-001).
-        const vault = openVaultRoot();
-        return mountBaseSurface(profile, context, {
-          queryIndex: (query) => api.queryIndex(query, ...vaultArg(vault)),
-          invokeCommand: api.invokeCommand,
-          viewState: api.viewState,
-          setViewState: api.setViewState,
-          onOpenDocument: options.onOpenDocument,
-          // La revisione del `.base` aperto, per i gesti della barra (CAS).
-          revision: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
-        });
+      load: async () => {
+        const { mountBaseSurface } = await import("../base/surface");
+        return {
+          mount(profile, context) {
+            // Il vault in cui la superficie nasce (FUB-001).
+            const vault = openVaultRoot();
+            return mountBaseSurface(profile, context, {
+              queryIndex: (query) => api.queryIndex(query, ...vaultArg(vault)),
+              invokeCommand: api.invokeCommand,
+              viewState: api.viewState,
+              setViewState: api.setViewState,
+              onOpenDocument: options.onOpenDocument,
+              // La revisione del `.base` aperto, per i gesti della barra (CAS).
+              revision: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
+            });
+          },
+        };
       },
     },
   });

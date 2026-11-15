@@ -3,12 +3,12 @@
 import { currentTheme, type Theme } from "../../theme/theme";
 import { EVERY_DOCUMENT } from "../../host/contract";
 import { api } from "../../host/ipc";
-import { registerCustomRenderer } from "../../ui/custom";
+import type { CustomRenderContext } from "../../ui/custom";
 import { errorText, isErrorKind } from "../../host/errors";
 import { onLanguage, t } from "../../i18n/strings";
 import type { DocumentUpdate } from "../core/text-operation";
 import { onEvent } from "../../state/kernel";
-import { openVaultRoot, vaultArg } from "../../state/vault";
+import { vaultArg } from "../../state/vault";
 import type { BufferedSurface, SurfaceMountContext } from "../core/registry";
 import type { SurfaceMenu, SurfaceMenuItem } from "../core/editor-menu";
 import { uniformRowRange } from "../core/row-window";
@@ -1025,18 +1025,19 @@ export function mountBaseSurface(
   };
 }
 
-/** Native fenced and file-backed Base embeds use the same surface and data ports. */
-export function registerBaseRenderer(onOpenDocument: (doc: string) => void | Promise<void>): void {
-  registerCustomRenderer(BASE_RENDERER_NS, (host, payload, _onAction, context) => {
+/// Una Base incorporata in una nota, da un blocco ```` ```base ```` o da un
+/// `![[Nome.base]]`: la stessa superficie e le stesse porte di un `.base`
+/// aperto. La monta la resa registrata da `renderer.ts` quando questo modulo
+/// è arrivato; `vault` è quello in cui la resa è partita (FUB-001). Torna come
+/// smontarla, o niente se il payload non è una Base.
+export function mountBaseEmbed(host: HTMLElement, payload: unknown, context: CustomRenderContext, vault: string | undefined, onOpenDocument: (doc: string) => void | Promise<void>): (() => void) | undefined {
+  {
     const parsed = parseBaseEmbed({ node: "custom", ns: BASE_RENDERER_NS, payload, fallback: [] });
     if (!parsed) return;
     // Una base incorporata deriva `file.*` dalla nota che la contiene, non dal
     // suo path `.base`: la nota la dice chi monta la resa.
     const embed = { ...parsed, container: context.container ?? parsed.container };
     let disposed = false;
-    // Il vault in cui la base è stata incorporata: le sue domande lo nominano
-    // anche se, nel frattempo, ne è stato aperto un altro (FUB-001).
-    const vault = openVaultRoot();
     // La revisione del file `.base` letto: i gesti della barra la confrontano.
     let revision: string | null = null;
     const surface = mountBaseSurface("base", {
@@ -1078,9 +1079,5 @@ export function registerBaseRenderer(onOpenDocument: (doc: string) => void | Pro
     const stopChanges = onEvent("document_changed", (event) => { if (event.id === embed.base) read(); });
     read();
     return () => { disposed = true; stopChanges(); surface.destroy(); };
-  }, (payload) => {
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
-    const fields = payload as Record<string, unknown>;
-    return typeof fields.source === "string" || typeof fields.base === "string";
-  });
+  }
 }

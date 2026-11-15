@@ -7,12 +7,9 @@ import type { SurfaceMode, SurfaceMountContext } from "../core/registry";
 import { parseFilter, type FilterDef } from "./filter";
 import { parseOrder, parseSort, type SortEntry } from "./sort";
 
-export const BASE_OWNER = "fub.shell.base";
-export const BASE_PROFILE = "base";
-export const BASE_FORMAT = "base";
-export const BASE_FAMILY = "structured" as const;
-export const BASE_QUERY_NS = "fub.base";
-export const BASE_RENDERER_NS = "fub:base";
+import { BASE_QUERY_NS, BASE_RENDERER_NS } from "./ids";
+
+export { BASE_FAMILY, BASE_FORMAT, BASE_OWNER, BASE_PROFILE, BASE_QUERY_NS, BASE_RENDERER_NS } from "./ids";
 export const BASE_MAP_ATTRIBUTION_FALLBACK = "Offline coordinates";
 export const BASE_STATE_KEY = "base.active-view";
 /** YAML is not a network grant. Only an explicit gesture plus a host-owned
