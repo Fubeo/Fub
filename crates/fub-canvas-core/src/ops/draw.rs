@@ -5,7 +5,7 @@
 //! codifica con `fub-ink-codec`, col pennello della penna (`pen_brush`, la
 //! stessa ricetta di `pens.ts`). Il tratto entra poi come farebbe
 //! `add_strokes`: lo stesso livello, lo stesso ordine dei campi, gli stessi
-//! controlli. Le regole stanno in `docs/reference/canvas-ink.md`, «In codice».
+//! controlli. Le regole stanno in `docs/reference/canvas-ink-code.md`.
 //!
 //! Lo strumento del tratto (`pen` o `highlighter`) lo dà la penna: la parola
 //! del file viene da [`fub_ink_codec::PenTool::as_str`], e il solo che la

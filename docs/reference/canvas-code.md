@@ -130,7 +130,7 @@ I lati e le punte compaiono solo quando non sono quelli di serie: nessun lato,
 la punta alla fine (`toEnd` assente o `arrow`), nessuna punta in partenza.
 
 L'inchiostro aggiunge `ink=…` alla riga di una scheda e la riga `ink board …`
-dopo i conti: [In codice](canvas-ink.md#in-codice).
+dopo i conti: [L'inchiostro in codice](canvas-ink-code.md#leggere).
 
 Un id che ha solo lettere, cifre o `-_.:#` si scrive com'è. Un id con uno
 spazio o un altro carattere si scrive come stringa JSON, così la riga resta
@@ -145,7 +145,7 @@ per arco. Ogni scheda e ogni arco vanno in forma breve quando ogni campo ci sta
 (`id`, `x` e `y` sempre; `width` e `height` solo se non sono quelle di nascita;
 il colore con il suo nome); altrimenti sono il loro valore JSON del file, come
 `node` o `edge`, con i campi sconosciuti dentro. L'inchiostro va con
-`add_strokes` ([In codice](canvas-ink.md#in-codice)).
+`add_strokes` ([L'inchiostro in codice](canvas-ink-code.md#leggere)).
 
 ```json
 [
@@ -163,7 +163,7 @@ com'è, come lo scrive il file: `nodes` ed `edges` sempre, anche vuoti, poi la
 radice sconosciuta. Con `ids` la radice sconosciuta non c'è, perché non è di
 una scheda. I livelli `fub:ink` restano com'è nel file; accanto,
 `ink_read(&Canvas, &DescribeOptions) -> Value` dà i tratti decodificati, solo
-da leggere ([In codice](canvas-ink.md#in-codice)).
+da leggere ([L'inchiostro in codice](canvas-ink-code.md#leggere)).
 
 ### Le opzioni
 
@@ -488,11 +488,12 @@ id, la disposizione e i limiti stanno in [Da Mermaid e da una scaletta](canvas-i
 { "op": "from_mermaid", "text": "flowchart LR\n  A[Evaporazione] --> B[Condensazione] --> A", "near": "t1", "side": "bottom" }
 ```
 
-### `draw`
+### `draw`, `move_strokes` e `restyle_strokes`
 
-Scrive un tratto d'inchiostro dai punti o da una forma, con penna e colore per
+`draw` scrive un tratto d'inchiostro dai punti o da una forma, con penna e colore per
 nome: `{"op": "draw", "on": "t1", "shape": {"kind": "rect", "x": 8, "y": 8, "width": 304,
-"height": 144}}`. Campi, forme, `on` ed errori: [In codice](canvas-ink.md#in-codice).
+"height": 144}}`. Campi, forme, `on` ed errori: [L'inchiostro in codice](canvas-ink-code.md#draw).
+I comandi del Lazo, `move_strokes` e `restyle_strokes`: [Toppa e operazioni](canvas-ink.md#toppa-e-operazioni).
 
 ### Gli id nuovi
 
@@ -518,8 +519,7 @@ salta quelli del suo livello.
 
 ### Gli errori delle operazioni
 
-Ogni errore (`OpError`) dice quale operazione della lista non si compila
-(`index`, da zero).
+Ogni errore (`OpError`) dice quale operazione della lista non si compila (`index`, da zero).
 
 | Errore | Quando |
 |---|---|
@@ -528,8 +528,8 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 | `DuplicateId` | un id dato che è già preso (anche in `as`); un id ripetuto nella lista di `move`, `remove`, `reorder`, `color`, `align`, `distribute`, `duplicate` o `layout` |
 | `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie, il gruppo o il frammento; un `insert` porta più di 10 000 schede; i [limiti](canvas-import.md#i-limiti-e-gli-errori) di `from_mermaid` e `from_outline`; un tratto di `draw` con più di 10 000 punti; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
 | `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto; un testo che `from_mermaid` o `from_outline` non legge ([i loro errori](canvas-import.md#i-limiti-e-gli-errori)); un tratto che non si disegnerebbe; i punti o la forma di `draw` che non fanno un tratto ([gli errori](canvas-ink.md#in-codice)) |
-| `UnknownStroke` | `erase_strokes` di un id che non è un tratto del livello |
-| `ForeignLayer` | `add_strokes`, `erase_strokes` o `draw` su un livello estraneo |
+| `UnknownStroke` | `erase_strokes`, `move_strokes` o `restyle_strokes` di un id che non è un tratto del livello |
+| `ForeignLayer` | un'operazione dell'inchiostro (`draw` compreso) su un livello estraneo |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file
 (`before`, `seed`, `ops`, `expect`); `tests/op_vectors.rs` li fa girare e
