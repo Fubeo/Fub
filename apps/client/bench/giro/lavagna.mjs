@@ -34,7 +34,7 @@ const NOME = "Vuota";
 const PRIMA = "Domande per la seduta";
 const SECONDA = "Chiedere la varianza";
 /// La pressione della penna lungo il tratto: da leggera a forte, come una
-/// persona che calca a metà. È la `force` del protocollo, fra 0 e 1.
+/// persona che calca sempre di più. È la `force` del protocollo, fra 0 e 1.
 const PRESSIONE = { da: 0.25, a: 0.85 };
 
 function verifica(condizione, messaggio) {
@@ -87,13 +87,11 @@ async function esciDallaScheda(pagina) {
 }
 
 /// La penna, dal protocollo del browser: appoggia, scorre lungo `punti` con la
-/// pressione che cresce da `PRESSIONE.da` a `PRESSIONE.a`, alza. Ogni evento
-/// porta il suo istante, come quelli del dispositivo. `aMeta`, se c'è, si
-/// chiama a metà tratto, con la penna ancora giù.
+/// pressione che cresce da `PRESSIONE.da` a `PRESSIONE.a`, alza. `aMeta`, se
+/// c'è, si chiama a metà tratto, con la penna ancora giù.
 async function tratto(pagina, punti, aMeta) {
   const cdp = await pagina.context().newCDPSession(pagina);
   try {
-    const inizio = Date.now() / 1000;
     const evento = (type, [x, y], i, giu) =>
       cdp.send("Input.dispatchMouseEvent", {
         type,
@@ -104,7 +102,6 @@ async function tratto(pagina, punti, aMeta) {
         clickCount: type === "mouseMoved" ? 0 : 1,
         pointerType: "pen",
         force: giu ? PRESSIONE.da + ((PRESSIONE.a - PRESSIONE.da) * i) / (punti.length - 1) : 0,
-        timestamp: inizio + i * 0.008,
       });
     await evento("mouseMoved", punti[0], 0, false);
     await evento("mousePressed", punti[0], 0, true);
