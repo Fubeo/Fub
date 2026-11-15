@@ -25,22 +25,19 @@ import { pngOf } from "../../../core/png";
 import { showContextMenu, type MenuItem } from "../../../../ui/menu";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { routeHref } from "./link-syntax";
-
-/** The modifiers of a click on a link of the rendered note. */
-export interface LinkGesture {
-  readonly altKey: boolean;
-  readonly modKey: boolean;
-}
+import { renderedLinkGesture, type WikilinkGesture } from "./link-gesture";
 
 export interface MarkdownMountOptions {
   readonly documentId?: string;
   readonly resources?: MarkdownResources;
   /**
-   * The click on a wikilink. `gesture` says which modifiers came with it (Alt
-   * asks for the peek, Ctrl/Cmd for opening): the host decides what they mean.
+   * The click on a wikilink. `gesture` is the click read with the rule of
+   * `open-link.ts` (Alt asks for the peek, any other click is the opening
+   * click): the host decides what it means.
    */
-  readonly openWikilink?: (page: string, heading?: string, block?: string, gesture?: LinkGesture) => void | Promise<void>;
-  readonly openPath?: (path: string, from?: string) => void | Promise<void>;
+  readonly openWikilink?: (page: string, heading?: string, block?: string, gesture?: WikilinkGesture) => void | Promise<void>;
+  /** The click on a link to a vault document (`[text](note.md)`), like `openWikilink`. */
+  readonly openPath?: (path: string, from?: string, gesture?: WikilinkGesture) => void | Promise<void>;
   /**
    * Opens the document a figure shows (a Craft file, a PDF) with the gesture.
    * Unlike `openWikilink` it never creates a note: a file that is gone is a
@@ -248,8 +245,9 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
       return;
     }
     if (!link) return;
+    const gesture = renderedLinkGesture(event);
     const openPath = (path: string): void => {
-      if (options.openPath) void Promise.resolve().then(() => options.openPath?.(path)).catch((error: unknown) => {
+      if (options.openPath) void Promise.resolve().then(() => options.openPath?.(path, options.documentId, gesture)).catch((error: unknown) => {
         if (life.closed) return;
         link.classList.add("unresolved");
         notify(t("preview.open_failed", { page: path, reason: errorText(error) }), "guasto");
@@ -263,7 +261,6 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
     if (link.classList.contains("wikilink") && options.openWikilink) {
       event.preventDefault();
       const page = link.dataset.wikilinkPage ?? "";
-      const gesture: LinkGesture = { altKey: event.altKey, modKey: event.ctrlKey || event.metaKey };
       void Promise.resolve().then(() => options.openWikilink?.(page, link.dataset.wikilinkHeading, link.dataset.wikilinkBlock, gesture))
         .catch((error: unknown) => {
           if (life.closed) return;

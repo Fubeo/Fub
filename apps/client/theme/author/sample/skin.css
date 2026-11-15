@@ -5565,8 +5565,16 @@ kbd,
   outline-offset: -1px;
 }
 /* Il corpo è un editor vero, come quello di un riquadro: colonna e carattere
-   li dà la pelle del documento. */
+   li dà la pelle del documento. Il testo è un po' più piccolo di quello del
+   riquadro, come nel prototipo (16,5 px su 18): la misura scelta nelle
+   Preferenze (`--text-reading`) scala con lui. La proporzione si calcola sul
+   pannello, dove `--text-reading` è ancora quella della pagina, e il corpo
+   la riprende: una proprietà che nomina sé stessa non varrebbe niente. */
+.note-peek {
+  --note-peek-reading: calc(var(--text-reading) * 11 / 12);
+}
 .note-peek-body {
+  --text-reading: var(--note-peek-reading);
   position: relative;
   flex: 1;
   min-height: 0;

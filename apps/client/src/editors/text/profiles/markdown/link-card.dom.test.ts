@@ -129,14 +129,19 @@ describe("la scheda della nota nella Live (E11)", () => {
     const parent = document.createElement("div");
     document.body.append(parent);
     const asked: string[] = [];
+    const held = new Map<string, number>();
     const openWikilink = vi.fn();
-    const peekWikilink = vi.fn();
+    const peekLink = vi.fn();
     const source: LinkCardSource = {
       view: () => ({ kind: "bare" }),
       request: () => {},
       note: (page) => {
         asked.push(page);
         return notes.get(page) ?? { kind: "loading" };
+      },
+      holdNote: (page) => {
+        held.set(page, (held.get(page) ?? 0) + 1);
+        return () => held.set(page, (held.get(page) ?? 0) - 1);
       },
       watch: () => () => {},
     };
@@ -145,19 +150,19 @@ describe("la scheda della nota nella Live (E11)", () => {
       onSelectionChange() {},
       extensions: () => [
         markdown({ base: markdownGrammar }),
-        livePreview({ openWikilink, peekWikilink, linkClick: () => linkClick, searchTag() {}, linkCard: source }),
+        livePreview({ openWikilink, peekLink, linkClick: () => linkClick, searchTag() {}, linkCard: source }),
       ],
     });
     const refresh = () => engine.runViewCommand((view) => {
       view.dispatch({ effects: linkCardsChanged.of(null) });
       return true;
     });
-    return { parent, engine, asked, openWikilink, peekWikilink, refresh, destroy() { engine.destroy(); parent.remove(); } };
+    return { parent, engine, asked, held, openWikilink, peekLink, refresh, destroy() { engine.destroy(); parent.remove(); } };
   }
 
   const CARD: NoteCardView = {
     kind: "card",
-    card: { doc: "Luoghi/Biblioteca civica.md", title: "Biblioteca civica", icon: "📚", description: "Orari e sale", date: "10 novembre 2026", cover: "#cfe7d6" },
+    card: { doc: "Luoghi/Biblioteca civica.md", title: "Biblioteca civica", icon: "📚", description: "Orari e sale", date: "10 novembre 2026", cover: "#cfe7d6", links: 6 },
   };
 
   it("mostra la scheda fuori dal cursore e il wikilink col cursore dentro", () => {
@@ -175,7 +180,7 @@ describe("la scheda della nota nella Live (E11)", () => {
       expect(card()?.dataset.wikilinkPage).toBe("Biblioteca civica");
       expect(card()?.querySelector(".cm-fub-note-card-title")?.textContent).toContain("Biblioteca civica");
       expect(card()?.querySelector(".cm-fub-note-card-desc")?.textContent).toBe("Orari e sale");
-      expect(card()?.querySelector(".cm-fub-note-card-meta")?.textContent).toBe("10 novembre 2026");
+      expect(card()?.querySelector(".cm-fub-note-card-meta")?.textContent).toBe("10 novembre 2026 · 6 collegamenti");
       expect(card()?.querySelector<HTMLElement>(".cm-fub-note-card-cover")?.style.background).toContain("#cfe7d6");
       expect(card()?.getAttribute("aria-label")).toContain("Biblioteca civica");
       // Il file resta il wikilink.
@@ -203,7 +208,7 @@ describe("la scheda della nota nella Live (E11)", () => {
     }
   });
 
-  it("il clic segue editor.link-click, Alt sbircia, Ctrl apre", () => {
+  it("il clic, con o senza Ctrl, segue editor.link-click; Alt sbircia", () => {
     for (const rule of ["apri", "sbircia"] as const) {
       const e = editor(new Map([["Biblioteca civica", CARD]]), rule);
       try {
@@ -212,13 +217,14 @@ describe("la scheda della nota nella Live (E11)", () => {
         const click = (init: MouseEventInit) => main.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...init }));
         click({});
         if (rule === "apri") expect(e.openWikilink).toHaveBeenLastCalledWith("Biblioteca civica", "Orari", null);
-        else expect(e.peekWikilink).toHaveBeenLastCalledWith("Biblioteca civica", "Orari", null);
+        else expect(e.peekLink).toHaveBeenLastCalledWith({ kind: "wiki", page: "Biblioteca civica", heading: "Orari", block: null });
         e.openWikilink.mockClear();
-        e.peekWikilink.mockClear();
+        e.peekLink.mockClear();
         click({ altKey: true });
-        expect(e.peekWikilink).toHaveBeenCalledTimes(1);
+        expect(e.peekLink).toHaveBeenCalledTimes(1);
+        // Ctrl col clic è un clic come un altro su ciò che è reso: segue la regola.
         click({ ctrlKey: true });
-        expect(e.openWikilink).toHaveBeenCalledTimes(1);
+        expect(rule === "apri" ? e.openWikilink : e.peekLink).toHaveBeenCalledTimes(1 + (rule === "apri" ? 0 : 1));
         // Il mousedown non porta il cursore dentro: la scheda resta scheda.
         const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 });
         main.dispatchEvent(down);
@@ -230,4 +236,22 @@ describe("la scheda della nota nella Live (E11)", () => {
     }
   });
 
+  it("tiene le schede che ha nel testo, anche quelle ancora link, e le lascia quando le perde", async () => {
+    vi.useFakeTimers();
+    const e = editor(new Map([["Biblioteca civica", CARD]]));
+    try {
+      e.engine.setDoc("Primo\n\n[[Biblioteca civica]]\n\n[[Manca]]");
+      await vi.advanceTimersByTimeAsync(300);
+      expect(e.held.get("Biblioteca civica")).toBe(1);
+      expect(e.held.get("Manca")).toBe(1);
+      e.engine.setDoc("Primo\n\n[[Biblioteca civica]]");
+      await vi.advanceTimersByTimeAsync(300);
+      expect(e.held.get("Manca")).toBe(0);
+      expect(e.held.get("Biblioteca civica")).toBe(1);
+    } finally {
+      e.destroy();
+      vi.useRealTimers();
+    }
+    expect(e.held.get("Biblioteca civica")).toBe(0);
+  });
 });

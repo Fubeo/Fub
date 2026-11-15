@@ -75,7 +75,12 @@ export async function createNote(name?: string, folder?: string): Promise<string
 /// `undefined` lascia decidere a lui.
 export async function folderOfOpenNote(): Promise<string | undefined> {
   const doc = state.currentDoc;
-  if (!doc) return undefined;
+  return doc ? folderOfNote(doc) : undefined;
+}
+
+/// Come [`folderOfOpenNote`] per la nota `doc`: la nota che contiene il link
+/// da cui nasce la nuova (una sbirciata, che non è la nota aperta).
+export async function folderOfNote(doc: string): Promise<string | undefined> {
   const declared = (await settings().catch(() => []))
     .find((item) => item.spec.key === "files.new-note-folder")?.value;
   if (typeof declared !== "string") return undefined;

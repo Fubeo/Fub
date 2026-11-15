@@ -6,7 +6,8 @@ import { markdown } from "@codemirror/lang-markdown";
 import { createTextEngine } from "../../engine";
 import { createMarkdownProfile } from "./profile";
 import { markdownGrammar } from "./grammar";
-import { followWikilink, linkAt } from "./open-link";
+import { followPath, followWikilink, linkModifier, renderedLinkGesture, textLinkGesture } from "./link-gesture";
+import { linkAt } from "./open-link";
 
 const state = (doc: string) =>
   EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) });
@@ -118,9 +119,10 @@ describe("i gesti della sbirciata (E11)", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const openWikilink = vi.fn();
-    const peekWikilink = vi.fn();
+    const peekLink = vi.fn();
+    const openPath = vi.fn();
     const profile = createMarkdownProfile({
-      callbacks: { openWikilink, peekWikilink, linkClick: () => linkClick, searchTag: () => {}, openPath: () => {} },
+      callbacks: { openWikilink, peekLink, linkClick: () => linkClick, searchTag: () => {}, openPath },
       completions: { searchNotes: async () => [], listTags: async () => [] },
     });
     const engine = createTextEngine(host, {
@@ -133,13 +135,13 @@ describe("i gesti della sbirciata (E11)", () => {
     view.dispatch({ selection: { anchor: cursor } });
     const press = () =>
       runScopeHandlers(view, new KeyboardEvent("keydown", { key: "Enter", altKey: true }), "editor");
-    return { view, openWikilink, peekWikilink, press, dispose: () => { engine.destroy(); host.remove(); } };
+    return { view, openWikilink, peekLink, openPath, press, dispose: () => { engine.destroy(); host.remove(); } };
   }
 
   it("Alt-Invio su un wikilink sbircia, col punto che nomina, e non scrive niente", () => {
     const e = editor("vedi [[Nota#Sezione]]", 9);
     expect(e.press()).toBe(true);
-    expect(e.peekWikilink).toHaveBeenCalledWith("Nota", "Sezione", null);
+    expect(e.peekLink).toHaveBeenCalledWith({ kind: "wiki", page: "Nota", heading: "Sezione", block: null });
     expect(e.openWikilink).not.toHaveBeenCalled();
     expect(e.view.state.doc.toString()).toBe("vedi [[Nota#Sezione]]");
     e.dispose();
@@ -155,32 +157,77 @@ describe("i gesti della sbirciata (E11)", () => {
       return event;
     };
     press({});
-    expect(e.peekWikilink).not.toHaveBeenCalled();
+    expect(e.peekLink).not.toHaveBeenCalled();
     expect(e.openWikilink).not.toHaveBeenCalled();
     expect(press({ altKey: true }).defaultPrevented).toBe(true);
-    expect(e.peekWikilink).toHaveBeenCalledWith("Biblioteca civica", null, null);
+    expect(e.peekLink).toHaveBeenCalledWith({ kind: "wiki", page: "Biblioteca civica", heading: null, block: null });
     press({ ctrlKey: true });
     expect(e.openWikilink).toHaveBeenCalledWith("Biblioteca civica", null, null);
     e.dispose();
   });
 
+  it.each(["apri", "sbircia"] as const)("un link Markdown a una nota nel testo: Alt sbircia, Ctrl segue editor.link-click (%s)", (rule) => {
+    {
+      const e = editor("Altro\n\nVedi [il capitolo](../capitoli/Uno.md) qui", 2, rule);
+      const link = e.view.contentDOM.querySelector<HTMLElement>(".cm-fub-link[data-fub-href]");
+      expect(link).not.toBeNull();
+      const press = (init: MouseEventInit) => {
+        const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, ...init });
+        link!.dispatchEvent(event);
+        return event;
+      };
+      // Il clic semplice è del cursore (non si prova qui: comincerebbe una
+      // selezione col mouse che resta aperta fra un editor e l'altro).
+      expect(press({ altKey: true }).defaultPrevented).toBe(true);
+      expect(e.openPath).not.toHaveBeenCalled();
+      expect(e.peekLink).toHaveBeenLastCalledWith({ kind: "path", path: "../capitoli/Uno.md" });
+      e.peekLink.mockClear();
+      press({ ctrlKey: true });
+      if (rule === "apri") expect(e.openPath).toHaveBeenCalledWith("../capitoli/Uno.md");
+      else expect(e.peekLink).toHaveBeenCalledWith({ kind: "path", path: "../capitoli/Uno.md" });
+      e.dispose();
+    }
+  });
+
+  it("sul Mac il clic che apre è Cmd: Ctrl col clic è il tasto destro", () => {
+    const click = (init: MouseEventInit) => new MouseEvent("mousedown", { button: 0, ...init });
+    expect(textLinkGesture(click({ metaKey: true }), "MacIntel")).toBe("click");
+    expect(textLinkGesture(click({ ctrlKey: true }), "MacIntel")).toBeNull();
+    expect(textLinkGesture(click({ ctrlKey: true }), "Linux x86_64")).toBe("click");
+    expect(textLinkGesture(click({ metaKey: true }), "Win32")).toBeNull();
+    expect(textLinkGesture(click({ altKey: true }), "MacIntel")).toBe("peek");
+    expect(textLinkGesture(click({}), "Linux x86_64")).toBeNull();
+    expect(textLinkGesture(click({ ctrlKey: true, altKey: true }), "Linux x86_64")).toBeNull();
+    expect(linkModifier(click({ metaKey: true }), "iPad")).toBe(true);
+    // In ciò che è reso ogni clic è il clic che apre, Alt sbircia.
+    expect(renderedLinkGesture(click({}))).toBe("click");
+    expect(renderedLinkGesture(click({ ctrlKey: true }))).toBe("click");
+    expect(renderedLinkGesture(click({ altKey: true }))).toBe("peek");
+  });
+
   it("il clic che apre segue editor.link-click; Alt sbircia sempre; l'apertura chiesta apre sempre", () => {
     const openWikilink = vi.fn();
-    const peekWikilink = vi.fn();
+    const peekLink = vi.fn();
     let rule: "apri" | "sbircia" = "apri";
-    const follow = { openWikilink, peekWikilink, linkClick: () => rule };
+    const follow = { openWikilink, peekLink, linkClick: () => rule };
     void followWikilink(follow, "A", null, null, "click");
     expect(openWikilink).toHaveBeenLastCalledWith("A", null, null);
     void followWikilink(follow, "B", null, "b1", "peek");
-    expect(peekWikilink).toHaveBeenLastCalledWith("B", null, "b1");
+    expect(peekLink).toHaveBeenLastCalledWith({ kind: "wiki", page: "B", heading: null, block: "b1" });
     rule = "sbircia";
     void followWikilink(follow, "C", "S", null, "click");
-    expect(peekWikilink).toHaveBeenLastCalledWith("C", "S", null);
+    expect(peekLink).toHaveBeenLastCalledWith({ kind: "wiki", page: "C", heading: "S", block: null });
     void followWikilink(follow, "D", null, null, "open");
     expect(openWikilink).toHaveBeenLastCalledWith("D", null, null);
     // Una finestra senza sbirciata apre, qualunque sia il gesto.
     const plain = vi.fn();
     void followWikilink({ openWikilink: plain, linkClick: () => "sbircia" }, "E", null, null, "peek");
     expect(plain).toHaveBeenCalledWith("E", null, null);
+    // Un percorso, con la stessa regola.
+    const openPath = vi.fn();
+    void followPath({ openWikilink, openPath, peekLink, linkClick: () => "apri" }, "a/b.md", "click");
+    expect(openPath).toHaveBeenCalledWith("a/b.md");
+    void followPath({ openWikilink, openPath, peekLink, linkClick: () => "apri" }, "a/b.md", "peek");
+    expect(peekLink).toHaveBeenLastCalledWith({ kind: "path", path: "a/b.md" });
   });
 });

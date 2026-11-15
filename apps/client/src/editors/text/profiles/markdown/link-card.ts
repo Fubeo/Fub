@@ -18,7 +18,7 @@ import { wikilink } from "../../../../rules/syntax";
 import { drawPageMark } from "../../../../ui/page-mark";
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { isAllowedLink } from "../../../../ui/sanitize";
-import { followWikilink, type WikilinkFollow } from "./open-link";
+import { followWikilink, renderedLinkGesture, type WikilinkFollow } from "./link-gesture";
 import { liveStrings } from "./strings";
 
 /// La scheda di una pagina, come la consegna `fub.linkcard`.
@@ -52,6 +52,8 @@ export interface NoteCard {
   /// La copertina (`cover:`): un colore CSS si mostra com'è, ogni altro valore
   /// come la striscia di copertina del tema; vuota, nessuna copertina.
   readonly cover: string;
+  /// Quante note la citano (i suoi collegamenti entranti).
+  readonly links: number;
 }
 
 /// Che cosa si sa della nota a cui porta un wikilink.
@@ -69,8 +71,13 @@ export interface LinkCardSource {
   /// «Mostra l'anteprima»: scarica la pagina, se il permesso lo consente.
   request(url: string): void;
   /// Ciò che si sa della nota `page` (il bersaglio del wikilink com'è
-  /// scritto, senza sezione né blocco). Assente: un wikilink da solo resta link.
-  note?(page: string): NoteCardView;
+  /// scritto, senza sezione né blocco) scritta nella nota `from`: lo stesso
+  /// nome porta a note diverse da cartelle diverse. Assente: un wikilink da
+  /// solo resta link.
+  note?(page: string, from?: string): NoteCardView;
+  /// L'editor ha nel testo la scheda di `page`: finché la tiene, un cambio
+  /// dell'indice la richiede. Torna come lasciarla.
+  holdNote?(page: string, from?: string): () => void;
   /// Avvisa quando una scheda cambia (di pagina web o di nota); torna lo smontaggio.
   watch(changed: () => void): () => void;
 }
@@ -153,7 +160,11 @@ export class NoteCardWidget extends WidgetType {
     head.append(document.createTextNode(title));
     body.append(head);
     if (card.description) body.append(span("cm-fub-note-card-desc", card.description));
-    if (card.date) body.append(span("cm-fub-note-card-meta", card.date));
+    const meta = [
+      card.date,
+      card.links > 0 ? liveStrings.t(card.links === 1 ? "notecard.links_one" : "notecard.links", { count: String(card.links) }) : "",
+    ].filter((part) => part !== "").join(" · ");
+    if (meta) body.append(span("cm-fub-note-card-meta", meta));
     main.append(body);
     if (card.cover) {
       const cover = document.createElement("span");
@@ -169,11 +180,11 @@ export class NoteCardWidget extends WidgetType {
   ignoreEvent(event: Event): boolean { return event instanceof KeyboardEvent; }
 }
 
-/// I gesti della scheda della nota: il clic la segue come il clic che apre un
-/// link (`editor.link-click`), Alt col clic la sbircia, Ctrl col clic (Cmd
-/// sul Mac) la apre comunque. Il `mousedown` non arriva all'editor, così il
-/// cursore non entra nel paragrafo e la scheda non torna link sotto il dito;
-/// ci si entra con le frecce.
+/// I gesti della scheda della nota, con la regola di ciò che è reso
+/// (`link-gesture.ts`): Alt col clic la sbircia, ogni altro clic è il clic che
+/// apre e fa ciò che dice `editor.link-click`. Il `mousedown` non arriva
+/// all'editor, così il cursore non entra nel paragrafo e la scheda non torna
+/// link sotto il dito; ci si entra con le frecce.
 export function noteCardGestures(follow: WikilinkFollow) {
   const hit = (event: Event): HTMLElement | null => {
     const target = event.target instanceof Element ? event.target : null;
@@ -190,8 +201,7 @@ export function noteCardGestures(follow: WikilinkFollow) {
       const root = hit(event);
       if (!root) return false;
       event.preventDefault();
-      const gesture = event.altKey ? "peek" : event.ctrlKey || event.metaKey ? "open" : "click";
-      void followWikilink(follow, root.dataset.wikilinkPage ?? "", root.dataset.wikilinkHeading ?? null, root.dataset.wikilinkBlock ?? null, gesture);
+      void followWikilink(follow, root.dataset.wikilinkPage ?? "", root.dataset.wikilinkHeading ?? null, root.dataset.wikilinkBlock ?? null, renderedLinkGesture(event));
       return true;
     },
   });

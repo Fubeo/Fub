@@ -52,7 +52,8 @@ import {
   renderMarkdownStatePrefix,
   renderPatch,
 } from "./render";
-import { decodeDestination, normalizeLabel } from "./link-syntax";
+import { decodeDestination, normalizeLabel, routeHref } from "./link-syntax";
+import { followPath, followWikilink, linkModifier, textLinkGesture, type PeekLink } from "./link-gesture";
 import { FOOTNOTE_DEFINITION } from "./grammar";
 import { emptyPairsExtension } from "./empty-pair";
 import { edgeSpaces } from "./edge-space";
@@ -122,9 +123,9 @@ export interface LivePreviewCallbacks {
   /// Lettura arrivava alla sezione — due risposte per lo stesso link, che è la
   /// §4.4 nella sua forma più piccola.
   openWikilink(page: string, heading: string | null, block: string | null): void;
-  /// Alt col clic, o Alt-Invio, su un wikilink: la sbirciata (E11, T20). Senza,
-  /// quei gesti aprono la nota.
-  peekWikilink?(page: string, heading: string | null, block: string | null): void;
+  /// Alt col clic, o Alt-Invio, su un link a un documento del vault: la
+  /// sbirciata (E11, T20). Senza, quei gesti aprono il documento.
+  peekLink?(link: PeekLink): void;
   /// Che cosa fa il clic che apre un link (`editor.link-click`): `apri`, di
   /// serie, o `sbircia`. Senza, apre.
   linkClick?(): "apri" | "sbircia";
@@ -154,6 +155,10 @@ export interface LivePreviewCallbacks {
 
 /// Il paragrafo che è soltanto un collegamento, e quindi una scheda: un
 /// indirizzo web (K8) o un wikilink (E11).
+/// Quanto aspettano le schede tenute a ricontarsi dopo che i candidati sono
+/// cambiati: una volta per pausa, non a ogni battuta.
+const NOTE_HOLD_DELAY_MS = 250;
+
 type CardTarget =
   | { readonly kind: "web"; readonly url: string }
   | { readonly kind: "note"; readonly page: string; readonly heading: string | null; readonly block: string | null; readonly alias: string | null };
@@ -1660,27 +1665,36 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
 
   if (e.type === "click") return false;
 
+  // Il clic che apre un link nel testo (Ctrl, Cmd sul Mac) e Alt col clic:
+  // la regola di `open-link.ts`, la stessa della Lettura e delle schede.
+  const gesture = textLinkGesture(e);
   const wikilink = target.closest<HTMLElement>(".cm-fub-wikilink");
-  if (wikilink && (e.ctrlKey || e.metaKey)) {
+  if (wikilink && gesture) {
     // L'attributo porta il bersaglio come sta scritto nella sorgente: qui lo
     // si ripassa dalla stessa grammatica di prima, invece di ri-serializzarlo.
     const labelledBy = parseWikilinkInner(wikilink.getAttribute(ATTR_WIKILINK) ?? "");
-    cb.openWikilink(labelledBy.page, labelledBy.heading, labelledBy.block);
+    void followWikilink(cb, labelledBy.page, labelledBy.heading, labelledBy.block, gesture);
     e.preventDefault();
     return true;
   }
 
   const link = target.closest<HTMLElement>(".cm-fub-link");
-  if (link && (e.ctrlKey || e.metaKey)) {
+  if (link && gesture) {
     const href = link.getAttribute(ATTR_HREF);
     // Naviga solo ciò che il sanitizzatore lascia passare (stessa policy di
     // Lettura): `javascript:…`, `data:…` e i protocol-relative restano fermi.
-    if (href && isAllowedLink(href)) {
-      window.open(href, "_blank", "noopener,noreferrer");
+    if (!href || !isAllowedLink(href)) return false;
+    const route = routeHref(href);
+    if (route.kind === "path") {
+      if (!cb.openPath || route.path === "") return false;
+      void followPath(cb, route.path, gesture);
       e.preventDefault();
       return true;
     }
-    return false;
+    if (gesture === "peek") return false;
+    window.open(href, "_blank", "noopener,noreferrer");
+    e.preventDefault();
+    return true;
   }
 
   const tag = target.closest<HTMLElement>(".cm-fub-tag");
@@ -1891,8 +1905,8 @@ function interactiveTarget(target: Element | null, event: MouseEvent): boolean {
   // Mod-clic segue un link e apre un'immagine del vault a tutta finestra: il
   // gesto lo gestisce la resa (`mount.ts`), l'editor non sposta il cursore.
   // Alt col clic su un wikilink è la sbirciata (T20): niente cursore in più.
-  if (event.altKey && !event.ctrlKey && !event.metaKey && target.closest("a[data-wikilink-page]")) return true;
-  return !!target.closest("a, img[data-vault-id]") && (event.ctrlKey || event.metaKey);
+  if (event.altKey && !event.ctrlKey && !event.metaKey && target.closest("a[data-wikilink-page], a.internal-path")) return true;
+  return !!target.closest("a, img[data-vault-id]") && linkModifier(event);
 }
 /// La riga sorgente del blocco sotto il punto, senza leggere l'editor.
 ///
@@ -3019,6 +3033,45 @@ export function livePreview(
     { key: "Backspace", run: deleteNear(false) },
     { key: "Delete", run: deleteNear(true) },
   ]));
+  // Le schede delle note che il testo ha (anche quelle ancora link, la nota
+  // che non c'è o la domanda in corso): l'editor le tiene finché le ha, e chi
+  // le possiede richiede soltanto quelle tenute (`state/note-cards.ts`). Si
+  // ricontano poco dopo che i candidati cambiano, non a ogni battuta.
+  const linkSource = callbacks.linkCard;
+  const noteHolds = linkSource?.holdNote ? ViewPlugin.fromClass(class {
+    held = new Map<string, () => void>();
+    timer: ReturnType<typeof setTimeout> | null = null;
+    candidates: RangeSet<CandidateMark> | null = null;
+    constructor(readonly view: EditorView) { this.count(); }
+    update(update: ViewUpdate): void {
+      if (update.state.field(blocks, false)?.candidates === this.candidates || this.timer !== null) return;
+      this.timer = setTimeout(() => {
+        this.timer = null;
+        this.count();
+      }, NOTE_HOLD_DELAY_MS);
+    }
+    count(): void {
+      const value = this.view.state.field(blocks, false);
+      this.candidates = value?.candidates ?? null;
+      const pages = new Set<string>();
+      value?.candidates.between(0, this.view.state.doc.length, (_from, _to, mark) => {
+        if (mark.linkCard?.kind === "note") pages.add(mark.linkCard.page);
+      });
+      for (const [page, release] of this.held) {
+        if (pages.has(page)) continue;
+        this.held.delete(page);
+        release();
+      }
+      for (const page of pages) {
+        if (!this.held.has(page)) this.held.set(page, linkSource.holdNote!(page));
+      }
+    }
+    destroy(): void {
+      if (this.timer !== null) clearTimeout(this.timer);
+      for (const release of this.held.values()) release();
+      this.held.clear();
+    }
+  }) : [];
   // Dopo che la vista ha posato il DOM: i blocchi resi che una modifica ha
   // spostato rimettono a posto le loro coordinate.
   // Un widget tenuto da una resa di prima può nascere dopo, quando scorre nella
@@ -3035,5 +3088,6 @@ export function livePreview(
     propertiesExtension(),
     callbacks.linkCard ? linkCardGestures(callbacks.linkCard) : [],
     callbacks.linkCard?.note ? noteCardGestures(callbacks) : [],
+    noteHolds,
   ];
 }

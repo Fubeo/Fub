@@ -25,7 +25,7 @@ import { lentTo, unlend } from "../state/lend";
 import { saveStateKey } from "../state/saving";
 import type { CardNotices } from "../state/card-editors";
 import { appPreviewSubject, CRAFT_CONSENT_SETTING, craftServed, forgetConsent, peekPreview, previewOf, renderPreview, watchCraftPreviews } from "../state/craft-previews";
-import { openDocument as openRecreated } from "../state/document-controller";
+import { openDocument as openRecreated, peekSurfaceIn } from "../state/document-controller";
 import { clearRemovedNotice, dismissSheetNotice, limitedMode, removedNoticeOf, sheetNoticesOf, type SheetNoticeKind } from "../state/sheet-notices";
 import {
   openIn,
@@ -522,12 +522,17 @@ function createPane(id: string): PaneElements {
   // I collegamenti entranti e uscenti non stanno sotto il testo: li mostra
   // la scheda Collegamenti dell'ispettore, che segue il documento a fuoco.
   contentEl.append(editorEl, viewEl);
+  // La sbirciata sopra il riquadro che ha la scrittura (T20) prende la barra,
+  // la bolla e il menu del testo: agiscono sulla nota sbirciata.
   const barHost = {
     surface: () => {
+      const peek = peekSurfaceIn(id);
+      if (peek) return peek;
       const pane = paneOf(id);
       return pane?.shown?.k === "doc" ? pane.surface : null;
     },
     writing: () => {
+      if (peekSurfaceIn(id)) return true;
       const pane = paneOf(id);
       return pane ? selectedMode(pane)?.presentation === "surface" : false;
     },

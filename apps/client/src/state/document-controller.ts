@@ -74,7 +74,7 @@ import { linkedPageIcon } from "./page-icons";
 import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./people";
 import { dailyPath, firstWeekday } from "./dates";
 import { linkCardView, requestLinkCard } from "./link-cards";
-import { isNoteDoc, mountNoteCards, noteCardView, watchNoteCards } from "./note-cards";
+import { holdNoteCard, isNoteDoc, mountNoteCards, noteCardView, watchNoteCards } from "./note-cards";
 import { createNotePeek, LINK_CLICK_KEY, linkClickOf, type LinkClick, type NotePeek, type PeekTarget } from "./note-peek";
 import type { Theme } from "../theme/theme";
 import { contentLookPreference, markLook, resolveLook, type Look } from "../theme/content-look";
@@ -144,7 +144,7 @@ import {
   type LayoutNode,
   type Tab,
 } from "./layout";
-import { createNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
+import { createNote, folderOfNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
 import { lendHeld, lentDocuments, lentTo, mountLends, onLendChanged, provideLendGate, renameLend, unlend } from "./lend";
 import { confirm } from "../platform/confirm";
 import { registerShellCommand, showComponent, type CommandEntry } from "../ui/commands";
@@ -579,12 +579,16 @@ function cardEditorsHub(): CardEditorHub {
 let notePeek: NotePeek | null = null;
 function notePeekPort(): NotePeek {
   notePeek ??= createNotePeek({
-    resolve: async (target) => {
+    // Dalla nota che contiene il link (una sbirciata dentro una sbirciata,
+    // una scheda della lavagna), non dal riquadro col fuoco.
+    resolve: async ({ link, from }) => {
       const found = await resolvedReference(
-        { kind: "wiki", value: { page: target.page, heading: target.heading, block: target.block } },
-        activeDoc() ?? undefined,
+        link.kind === "wiki"
+          ? { kind: "wiki", value: { page: link.page, heading: link.heading, block: link.block } }
+          : { kind: "path", value: link.path },
+        from ?? activeDoc() ?? undefined,
       );
-      if (!found) return { kind: "missing", page: target.page };
+      if (!found) return { kind: "missing" };
       return isNoteDoc(found.doc) ? { kind: "note", doc: found.doc } : { kind: "other", doc: found.doc };
     },
     editors: cardEditors,
@@ -592,18 +596,55 @@ function notePeekPort(): NotePeek {
       const pane = panes.get(layout.focus);
       return pane ? view.peekHost(pane) : null;
     },
-    openHere: (doc) => openDocument(doc, { gesture: true }),
-    openBeside: (doc) => openDocumentBeside(doc, "row"),
+    // Il riquadro prende la nota col cursore dove stava nella sbirciata.
+    openHere: async (doc, at) => {
+      await openDocument(doc, { gesture: true });
+      if (at) await reveal(doc, { span: at });
+    },
+    openBeside: async (doc, at) => {
+      await openDocumentBeside(doc, "row");
+      if (at) await reveal(doc, { span: at });
+    },
     // Un PDF, un foglio: la sbirciata è per le note, il resto si apre a lato.
     openOther: async (doc, target) => {
-      const page = linkedPdfPage(doc, target.heading);
+      const page = linkedPdfPage(doc, target.link.kind === "wiki" ? target.link.heading : null);
       await openDocumentBeside(doc, "row", page === null ? {} : { page });
     },
-    create: (page) => createNote(page),
+    // Il bersaglio com'è scritto, come `openWikilink`; la cartella delle note
+    // nuove (`files.new-note-folder` con `./`) è quella della nota del link.
+    create: async (page, from) => createNote(page, from ? await folderOfNote(from) : undefined),
     onMoved: (listener) => onEvent("document_renamed", (event) => listener(event.from, event.to)),
+    // La barra di formato e il contesto seguono chi ha la scrittura.
+    ownerChanged: () => {
+      const pane = panes.get(layout.focus);
+      if (pane) view.drawToolbar(pane);
+      scheduleContext();
+    },
     failed: (message) => notify(message, "guasto"),
   });
   return notePeek;
+}
+
+/// La superficie della sbirciata sopra il riquadro `paneId` se ha lei la
+/// scrittura (il fuoco ci è entrato e non è tornato al testo del riquadro), o
+/// `null`. La barra di formato, il menu del testo e i comandi del documento
+/// agiscono su di lei.
+export function peekSurfaceIn(paneId: string): EditorSurface | null {
+  const pane = panes.get(paneId);
+  if (!pane || !notePeek?.isIn(view.peekHost(pane))) return null;
+  return notePeek.surface();
+}
+
+/// La superficie su cui agiscono i comandi dell'editor del riquadro col fuoco,
+/// col documento che mostra: la sbirciata se ha lei la scrittura, se no il
+/// riquadro.
+function commandTarget(): { doc: string; surface: EditorSurface } | null {
+  const peek = peekSurfaceIn(layout.focus);
+  const peekDoc = peek ? notePeek?.shown()?.doc : null;
+  if (peek && peekDoc) return { doc: peekDoc, surface: peek };
+  const r = panes.get(layout.focus);
+  if (r?.shown?.k !== "doc" || !r.surface) return null;
+  return { doc: r.shown.doc, surface: r.surface };
 }
 
 /// Il clic che apre un link: `editor.link-click`, letto all'avvio e a ogni
@@ -630,8 +671,14 @@ function watchLinkClick(lifetime: Lifetime): void {
 }
 
 /// Alt col clic, Alt-Invio o «Sbircia» su un link a una nota: la sbirciata.
-export function peekWikilink(target: PeekTarget): Promise<void> {
+export function peekLink(target: PeekTarget): Promise<void> {
   return notePeekPort().open(target);
+}
+
+/// Alt-Invio su una nota trovata con Ctrl O: la sbirciata del documento, già
+/// risolto (il nome del vault è il suo percorso).
+export function peekDocument(doc: string): Promise<void> {
+  return peekLink({ link: { kind: "path", path: `/${doc}` }, from: null });
 }
 
 /// La sbirciata, per chi la chiude o la guarda (i banchi, i comandi).
@@ -906,22 +953,22 @@ async function vaultHeadings(text: string): Promise<{ doc: string; text: string;
   return outlines.flat();
 }
 
-/// La superficie del riquadro col fuoco che sa dire il punto sotto il cursore,
-/// col documento che mostra.
+/// La superficie del riquadro col fuoco (o della sua sbirciata) che sa dire
+/// il punto sotto il cursore, col documento che mostra.
 function focusedAnchorSurface(): { doc: string; anchorHere: () => SurfaceAnchor | null } | null {
-  const r = panes.get(layout.focus);
-  if (r?.shown?.k !== "doc" || !r.surface?.anchorHere) return null;
-  const surface = r.surface;
-  return { doc: r.shown.doc, anchorHere: () => surface.anchorHere?.() ?? null };
+  const target = commandTarget();
+  if (!target?.surface.anchorHere) return null;
+  const surface = target.surface;
+  return { doc: target.doc, anchorHere: () => surface.anchorHere?.() ?? null };
 }
 
 /// I comandi che la superficie del riquadro col fuoco aggiunge alla palette
 /// (i comandi del foglio), come voci della palette: nessuna se il riquadro
 /// non mostra un documento o la superficie non ne ha.
 export function focusedSurfaceCommands(): CommandEntry[] {
-  const r = panes.get(layout.focus);
-  if (r?.shown?.k !== "doc" || !r.surface?.paletteCommands) return [];
-  return r.surface.paletteCommands().map((command): CommandEntry => ({
+  const surface = commandTarget()?.surface;
+  if (!surface?.paletteCommands) return [];
+  return surface.paletteCommands().map((command): CommandEntry => ({
     id: command.id,
     title: command.title,
     description: command.description,
@@ -938,9 +985,7 @@ export function focusedSurfaceCommands(): CommandEntry[] {
 /// Ctrl+F fuori dal testo apre la stessa barra che apre dentro: quella della
 /// superficie del riquadro col fuoco, se ne ha una nella modalità attuale.
 export function findInFocusedSurface(): boolean {
-  const r = panes.get(layout.focus);
-  if (r?.shown?.k !== "doc") return false;
-  return r.surface?.find?.() ?? false;
+  return commandTarget()?.surface.find?.() ?? false;
 }
 
 /// F6 dentro il riquadro col fuoco: la superficie passa alla sua zona seguente
@@ -1179,8 +1224,10 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   // Gli editor dentro le schede muoiono con la shell, come i riquadri; la
   // sbirciata, che ne usa uno, prima di loro.
   lifetime.add(() => cardEditors.destroyAll());
+  // La finestra che se ne va non fa domande: la bozza di un salvataggio
+  // fallito resta, come per le schede (`destroyAll`).
   lifetime.add(() => {
-    notePeek?.dismiss();
+    notePeek?.dismiss({ quiet: true });
     notePeek = null;
   });
   mountNoteCards(lifetime);
@@ -1191,7 +1238,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       if (!cardEditors.written(paneId, change)) written(paneId, change);
     },
     onSelectionChange: (paneId) => {
-      if (layout.focus === paneId) scheduleContext();
+      if (layout.focus === paneId || peekSurfaceIn(layout.focus)?.surfaceId === paneId) scheduleContext();
     },
     onFail: (paneId, error) => {
       if (cardEditors.failed(paneId, error)) return;
@@ -1199,13 +1246,15 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       if (r?.shown?.k === "doc") failSurface(r, r.shown.doc, error);
     },
     // Il clic su un link è un gesto: la scheda che nasce lo sa (T23).
-    onOpenWikilink: (page, heading, block) =>
-      openWikilink(page, heading ?? undefined, block ?? undefined, undefined, { gesture: true }),
-    onPeekWikilink: (page, heading, block) =>
-      peekWikilink({ page, heading, block }).catch((error: unknown) => notify(errorText(error), "guasto")),
+    // Il nome si risolve dalla nota che contiene il link (una sbirciata, una
+    // scheda della lavagna), non dal riquadro col fuoco.
+    onOpenWikilink: (page, heading, block, from) =>
+      openWikilink(page, heading ?? undefined, block ?? undefined, from, { gesture: true }),
+    onPeekLink: (link, from) =>
+      peekLink({ link, from }).catch((error: unknown) => notify(errorText(error), "guasto")),
     linkClick: () => linkClick,
-    onOpenWikilinkBeside: async (page, heading, block) => {
-      const target = await resolvedReference({ kind: "wiki", value: { page, heading, block } }, activeDoc() ?? undefined);
+    onOpenWikilinkBeside: async (page, heading, block, from) => {
+      const target = await resolvedReference({ kind: "wiki", value: { page, heading, block } }, from ?? activeDoc() ?? undefined);
       if (!target) throw new Error(t("preview.target_missing"));
       const pdfPage = linkedPdfPage(target.doc, heading);
       await openDocumentBeside(target.doc, "row", pdfPage === null ? {} : { page: pdfPage });
@@ -1327,6 +1376,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       request: requestLinkCard,
       // Il wikilink da solo in un paragrafo è la scheda della nota (T20).
       note: noteCardView,
+      holdNote: holdNoteCard,
       watch: (changed) => {
         const web = on("link-cards", changed);
         const notes = watchNoteCards(changed);
@@ -2244,8 +2294,9 @@ function enqueueDraw<T>(job: () => Promise<T>): Promise<T> {
 export function resetDocumentsForVault(): Promise<string[]> {
   return enqueueDraw(async () => {
     clearAllRemovedNotices();
-    // La sbirciata è del vault di prima.
-    notePeek?.dismiss();
+    // La sbirciata è del vault di prima: si chiude senza domande, chi chiama
+    // raccoglie ciò che resta sporco.
+    notePeek?.dismiss({ quiet: true });
     for (const [id, r] of panes) {
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, id);
       detachSurface(r);
@@ -3295,14 +3346,12 @@ function focusedModes(): readonly SurfaceMode[] {
 /// scorciatoia. La barra non passa di qui: agisce sul proprio riquadro.
 /// L'azione c'è nella superficie del riquadro col fuoco, e si può eseguire.
 export function editorActionReady(action: string): boolean {
-  const r = panes.get(layout.focus);
-  const actions = r?.shown?.k === "doc" ? r.surface?.editorActions : undefined;
+  const actions = commandTarget()?.surface.editorActions;
   return !!actions?.has(action) && actions.editable();
 }
 
 export function runEditorAction(action: string, params: Readonly<Record<string, unknown>> = {}): "done" | "nothing" | "unavailable" {
-  const r = panes.get(layout.focus);
-  const surface = r?.shown?.k === "doc" ? r.surface : null;
+  const surface = commandTarget()?.surface;
   const actions = surface?.editorActions;
   if (!actions || !editorActionReady(action)) return "unavailable";
   if (!actions.run(action, params)) return "nothing";
@@ -3863,6 +3912,14 @@ async function reloadDocument(id: string): Promise<void> {
 /// invece è sempre quello vero — ed è ciò che serve a contare le parole
 /// selezionate o a mandarle a un comando.
 function paneContext(): ViewContext {
+  // La sbirciata che ha la scrittura è il documento dei comandi: le sue
+  // selezioni, la sua nota.
+  const peek = peekSurfaceIn(layout.focus);
+  const peekDoc = peek ? notePeek?.shown()?.doc ?? null : null;
+  if (peek && peekDoc) {
+    const dirty = documentSessions.isDirty(peekDoc);
+    return { pane: layout.focus, doc: peekDoc, selections: selectionSetOf(peek, dirty), mode: "live_preview" };
+  }
   const doc = activeDoc();
   const r = panes.get(layout.focus);
   const mode = selectedMode(r);

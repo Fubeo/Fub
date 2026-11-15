@@ -1,6 +1,7 @@
 import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type SystemTarget } from "../text/profiles/markdown/surface";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
+import type { PeekLink } from "../text/profiles/markdown/link-gesture";
 import { api } from "../../host/ipc";
 import { on as onSignal, openVaultRoot, state as shellState, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
@@ -88,16 +89,18 @@ import {
 } from "./registry";
 
 export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
-  readonly onOpenWikilink: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
+  /// Il clic su un wikilink: `from` è il documento che contiene il link,
+  /// da cui il nome si risolve (assente: il documento del riquadro col fuoco).
+  readonly onOpenWikilink: (page: string, heading: string | null, block: string | null, from?: string) => void | Promise<void>;
   readonly onOpenPath: (path: string, from?: string) => void | Promise<void>;
   /// Il clic su una figura di una nota (un file Craft, un PDF): apre il suo
   /// documento col gesto e non crea mai una nota.
   readonly onOpenFigure?: (doc: string) => void | Promise<void>;
   /// «Apri a lato» dal menu di un wikilink: la nota in un riquadro accanto.
-  readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
-  /// La sbirciata (E11, T20) dai wikilink delle note: Alt col clic, Alt-Invio,
-  /// «Sbircia» nel menu del link.
-  readonly onPeekWikilink?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
+  readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null, from?: string) => void | Promise<void>;
+  /// La sbirciata (E11, T20) dai link delle note: Alt col clic, Alt-Invio,
+  /// «Sbircia» nel menu del link. `from` è la nota che contiene il link.
+  readonly onPeekLink?: (link: PeekLink, from: string) => void | Promise<void>;
   /// Che cosa fa il clic che apre un link di una nota (`editor.link-click`).
   readonly linkClick?: () => "apri" | "sbircia";
   /// «Apri a lato» dal menu di una scheda della lavagna: il file `path` (con
@@ -668,7 +671,7 @@ export function createDocumentSurfaceRegistry(
             onOpenPath: options.onOpenPath,
             ...(options.onOpenFigure ? { onOpenFigure: options.onOpenFigure } : {}),
             onOpenWikilinkBeside: options.onOpenWikilinkBeside,
-            ...(options.onPeekWikilink ? { onPeekWikilink: options.onPeekWikilink } : {}),
+            ...(options.onPeekLink ? { onPeekLink: options.onPeekLink } : {}),
             ...(options.linkClick ? { linkClick: options.linkClick } : {}),
             onOpenDocument: options.onOpenDocument,
             onShowFile: options.onShowFile,
