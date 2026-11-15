@@ -201,7 +201,10 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
   const iconButton = opener(openIconPicker);
   const coverButton = opener(openCoverDialog);
   const subpageButton = opener(openSubpageDialog);
-  const moreButton = opener(openPageMenu);
+  // Gli strumenti che la riga ha nascosto perché non ci stavano: il menu «⋯»
+  // li offre in cima, e li apre dallo stesso «⋯».
+  let crowded: () => readonly PageMenuAction[] = () => [];
+  const moreButton = opener((host, anchor, data, life, closed) => openPageMenu(host, anchor, data, life, closed, crowded()));
 
   if (data.cover) {
     root.append(coverElement(data.cover, data.coverY, {
@@ -237,10 +240,12 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
     tools.className = "cm-fub-page-tools";
     markPresence(tools, "hover");
     // Come nel prototipo: la figura davanti, poi il nome.
+    const actions = new Map<HTMLButtonElement, PageMenuAction>();
     const tool = (icon: string | null, text: string, run: (button: HTMLButtonElement) => void): HTMLButtonElement => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "cm-fub-page-tool";
+      if (text) actions.set(button, { id: `tool-${actions.size}`, label: text, run });
       const figure = icon ? iconEl(icon) : null;
       figure?.setAttribute("aria-hidden", "true");
       // Senza la figura (il set non la porta) resta il nome, o «⋯».
@@ -260,6 +265,8 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
     more.setAttribute("aria-label", liveStrings.t("page.more"));
     more.setAttribute("aria-haspopup", "menu");
     root.append(tools);
+    crowded = () => [...actions].filter(([button]) => button.hidden).map(([, action]) => action);
+    fitTools(tools, more, life);
   }
 
   root.append(host.writing ? titleField(data, host, root, life) : titleHeading(data));
@@ -578,14 +585,47 @@ function openSubpageDialog(host: PageHost, anchor: HTMLElement, data: PageData, 
 interface PageMenuItem {
   readonly id: string;
   readonly label: string;
-  readonly role: "menuitemcheckbox" | "menuitemradio" | "separator";
+  readonly role: "menuitem" | "menuitemcheckbox" | "menuitemradio" | "separator";
   readonly checked: boolean;
   readonly run: () => void;
 }
 
+/// Uno strumento della testata, come voce del menu «⋯» quando la riga non
+/// ha posto per lui: `run` riceve il pulsante da cui aprire il suo riquadro.
+interface PageMenuAction {
+  readonly id: string;
+  readonly label: string;
+  readonly run: (anchor: HTMLButtonElement) => void;
+}
+
+/// La riga degli strumenti è una riga sola, alta 28 px come nel prototipo:
+/// quando i pulsanti non ci stanno, si nascondono dalla fine (non «⋯», che
+/// resta l'ultimo) e il menu «⋯» li offre. Si rifà a ogni cambio di
+/// larghezza; un pulsante nascosto torna appena c'è posto.
+export function fitTools(tools: HTMLElement, more: HTMLButtonElement, life: Lifetime): void {
+  const fit = () => {
+    const buttons = [...tools.querySelectorAll<HTMLButtonElement>(":scope > .cm-fub-page-tool")].filter((button) => button !== more);
+    for (const button of buttons) button.hidden = false;
+    for (let index = buttons.length - 1; index >= 0 && tools.scrollWidth > tools.clientWidth + 1; index -= 1) {
+      buttons[index]!.hidden = true;
+    }
+  };
+  fit();
+  if (typeof ResizeObserver !== "function") return;
+  let width = -1;
+  const observer = new ResizeObserver(() => {
+    const next = tools.clientWidth;
+    if (next === width) return;
+    width = next;
+    fit();
+  });
+  observer.observe(tools);
+  life.add(() => observer.disconnect());
+}
+
 /// Il menu «…»: larghezza piena, testo piccolo, carattere. Scrive
 /// `cssclasses` e lascia le classi che non sono sue.
-function openPageMenu(host: PageHost, anchor: HTMLElement, data: PageData, life: Lifetime, closed: () => void): PopoverHandle {
+function openPageMenu(host: PageHost, anchor: HTMLElement, data: PageData, life: Lifetime, closed: () => void, crowded: readonly PageMenuAction[] = []): PopoverHandle {
   const own = openLifetime();
   const write = (change: Parameters<typeof pageClassesWith>[1]) => () => {
     popover.close();
@@ -595,6 +635,16 @@ function openPageMenu(host: PageHost, anchor: HTMLElement, data: PageData, life:
   };
   const font = PAGE_FONTS.find((name) => data.classes.includes(name)) ?? null;
   const items: PageMenuItem[] = [
+    ...crowded.map((action): PageMenuItem => ({
+      id: action.id,
+      label: action.label,
+      role: "menuitem",
+      checked: false,
+      run: () => {
+        popover.close();
+        if (anchor instanceof HTMLButtonElement && anchor.isConnected) action.run(anchor);
+      },
+    })),
     { id: "wide", label: liveStrings.t("page.wide"), role: "menuitemcheckbox", checked: data.classes.includes("wide"), run: write({ toggle: "wide" }) },
     { id: "small", label: liveStrings.t("page.small"), role: "menuitemcheckbox", checked: data.classes.includes("small"), run: write({ toggle: "small" }) },
     { id: "font-default", label: `${liveStrings.t("page.font")}: ${liveStrings.t("page.font.default")}`, role: "menuitemradio", checked: font === null, run: write({ font: null }) },
@@ -624,7 +674,8 @@ function openPageMenu(host: PageHost, anchor: HTMLElement, data: PageData, life:
       text.textContent = item.label;
       row.replaceChildren(check, text);
       row.setAttribute("role", item.role);
-      row.setAttribute("aria-checked", String(item.checked));
+      if (item.role === "menuitem") row.removeAttribute("aria-checked");
+      else row.setAttribute("aria-checked", String(item.checked));
     },
     onActivate: (item) => item.run(),
     focus: "roving",

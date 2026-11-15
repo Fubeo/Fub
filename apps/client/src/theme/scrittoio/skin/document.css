@@ -743,12 +743,14 @@ button.cm-fub-page-icon {
 .cm-fub-page-cover + .cm-fub-page-title {
   margin-top: var(--space-6);
 }
-/* Senza copertina la testata comincia dove comincia il testo. */
+/* Senza copertina la testata comincia dove comincia il testo. Una riga
+   sola di 28 px, come nel prototipo: i pulsanti che non ci stanno li nasconde
+   `fitTools` e li offre il menu «⋯». */
 .cm-fub-page-tools {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 2px;
-  min-height: 28px;
+  height: 28px;
   margin: var(--space-2) 0 2px calc(-1 * var(--space-3));
   opacity: 0;
 }
@@ -759,6 +761,7 @@ button.cm-fub-page-icon {
 /* Come nel prototipo: la figura, 5 px, il nome, a 12,5 px. */
 .cm-fub-page-tool {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 5px;
   height: 26px;
@@ -769,7 +772,11 @@ button.cm-fub-page-icon {
   color: var(--doc-gutter-fg);
   font-family: var(--font-ui);
   font-size: 12.5px;
+  white-space: nowrap;
   cursor: pointer;
+}
+.cm-fub-page-tool[hidden] {
+  display: none;
 }
 .cm-fub-page-tool > svg {
   width: 14px;

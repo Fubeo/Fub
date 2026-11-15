@@ -429,3 +429,61 @@ describe("la testata misurata da CodeMirror", () => {
     expect(rule?.[1]).toMatch(/display:\s*flow-root;/);
   });
 });
+
+describe("la riga degli strumenti della testata", () => {
+  // Una riga sola (28 px, come nel prototipo): ciò che non ci sta si nasconde
+  // dalla fine e il menu «⋯» lo offre. La larghezza è finta: 300 px di riga,
+  // 120 per strumento, 30 per «⋯», 2 di spazio fra l'uno e l'altro.
+  function fakeWidths(row: number): () => void {
+    const proto = HTMLElement.prototype;
+    const scroll = Object.getOwnPropertyDescriptor(proto, "scrollWidth");
+    const client = Object.getOwnPropertyDescriptor(proto, "clientWidth");
+    const used = (tools: Element) => {
+      const shown = [...tools.children].filter((child) => !(child as HTMLElement).hidden);
+      return shown.reduce((sum, child) => sum + (child.classList.contains("cm-fub-page-more") ? 30 : 120), 0) + 2 * Math.max(0, shown.length - 1);
+    };
+    Object.defineProperty(proto, "scrollWidth", { configurable: true, get(this: HTMLElement) { return this.classList.contains("cm-fub-page-tools") ? Math.max(row, used(this)) : 0; } });
+    Object.defineProperty(proto, "clientWidth", { configurable: true, get(this: HTMLElement) { return this.classList.contains("cm-fub-page-tools") ? row : 0; } });
+    return () => {
+      if (scroll) Object.defineProperty(proto, "scrollWidth", scroll);
+      else Reflect.deleteProperty(proto, "scrollWidth");
+      if (client) Object.defineProperty(proto, "clientWidth", client);
+      else Reflect.deleteProperty(proto, "clientWidth");
+    };
+  }
+
+  it("nasconde dalla fine ciò che non ci sta, e «⋯» lo offre e lo fa", () => {
+    const restore = fakeWidths(300);
+    try {
+      const view = mount("---\nstato: aperto\n---\nTesto");
+      const tools = [...header(view).querySelectorAll<HTMLButtonElement>(".cm-fub-page-tool")];
+      expect(tools.map((button) => [button.getAttribute("aria-label") ?? button.textContent, button.hidden])).toEqual([
+        ["Aggiungi un'icona", false],
+        ["Aggiungi una copertina", false],
+        ["Aggiungi una descrizione", true],
+        ["Le opzioni della pagina", false],
+      ]);
+      header(view).querySelector<HTMLButtonElement>(".cm-fub-page-more")!.click();
+      const items = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")];
+      expect(items.map((item) => item.textContent)).toEqual(["Aggiungi una descrizione"]);
+      expect(items[0]!.hasAttribute("aria-checked")).toBe(false);
+      items[0]!.click();
+      expect(view.state.doc.toString()).toContain("description: \n---\nTesto");
+    } finally {
+      restore();
+    }
+  });
+
+  it("con posto per tutti non nasconde niente, e il menu ha solo le opzioni della pagina", () => {
+    const restore = fakeWidths(600);
+    try {
+      const view = mount("---\nstato: aperto\n---\nTesto");
+      expect([...header(view).querySelectorAll<HTMLButtonElement>(".cm-fub-page-tool")].some((button) => button.hidden)).toBe(false);
+      header(view).querySelector<HTMLButtonElement>(".cm-fub-page-more")!.click();
+      expect(document.querySelectorAll("[role=menuitem]")).toHaveLength(0);
+      expect(document.querySelectorAll("[role=menuitemcheckbox]").length).toBeGreaterThan(0);
+    } finally {
+      restore();
+    }
+  });
+});

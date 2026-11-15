@@ -107,6 +107,8 @@ sono icona, copertina, titolo e menu «⋯» lo dice la
   finché il cursore ci sta. «Aggiungi una proprietà» apre una riga vuota prima
   della chiusura (o crea il frontmatter); «Aggiungi una descrizione», fra gli
   strumenti al passaggio, scrive `description: ` e ci porta il cursore. Gli
+  strumenti stanno in una riga sola, alta 28 px: quelli che non ci stanno si
+  nascondono dalla fine e il menu «⋯», sempre l'ultimo, li offre in cima. Gli
   editor dei valori per tipo arriveranno; in Lettura le righe si leggono e
   basta, «Altre N» compreso, senza strumenti né «Aggiungi».
 - **La copertina** è un'immagine del vault, un indirizzo o un colore
