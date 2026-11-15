@@ -1911,7 +1911,7 @@ Fatto quando: `cargo test -p fub-canvas-wasm` prova le due esportazioni;
 annulla, e i quattro «Disponi»; R7 e R8 passano con le voci nuove.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-wasm; cd
 apps/client && npx vitest run src/editors/canvas && npm run typecheck
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15 (coder/lic-t25 da 15d4be274)
 
 ## T26 · Chiusura: il conto a zero e le misure del corpus
 
