@@ -499,6 +499,21 @@ describe("la tabella come nel prototipo", () => {
     } finally { done(); }
   });
 
+  it("il titolo prende più spazio, le colonne corte restano strette, il testo divide il resto", async () => {
+    const { host, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"], summaries: [{ key: "valore", aggregate: "sum" }] } }]);
+    try {
+      await ready(host);
+      const cols = [...host.querySelectorAll<HTMLTableColElement>(".base-table colgroup col")];
+      expect(cols.map((col) => col.dataset.column)).toEqual(["\u0000file", "stato", "valore"]);
+      expect(cols[0]!.style.width).toBe("30%");
+      // Il testo non ha larghezza: si divide quello che resta.
+      expect(cols[1]!.style.width).toBe("");
+      // Il numero è largo quanto la sua intestazione o il piede («Somma 2.000,5»).
+      expect(parseInt(cols[2]!.style.width, 10)).toBeGreaterThanOrEqual(88);
+      expect(host.querySelector<HTMLTableElement>(".base-table")!.style.minWidth).toBe(`${160 + 90 + parseInt(cols[2]!.style.width, 10)}px`);
+    } finally { done(); }
+  });
+
   it("l'intestazione ha la figura della specie dei valori, e i numeri si leggono nel formato della lingua", async () => {
     const { host, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } }]);
     try {

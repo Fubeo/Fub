@@ -25,8 +25,8 @@ import {
 } from "./data";
 import { decimalOf, filterValue, isOpaque, propertyKind, propertyValues, type ValueKind } from "./filter";
 import { mountBaseToolbar } from "./toolbar";
-import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSurfaceItems, renamedInView, valueShape, type ColumnEntry } from "./column-menu";
-import { listFooter, shownText, tableFooter } from "./footer";
+import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSurfaceItems, isShortShape, renamedInView, shortColumnWidth, valueShape, type ColumnEntry } from "./column-menu";
+import { listFooter, placeSummaries, shownText, summaryName, summaryText, tableFooter } from "./footer";
 import { columnIcon, viewIcon } from "./icons";
 import { sameKey, sortedBy } from "./sort";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
@@ -89,6 +89,11 @@ const SVG = "http://www.w3.org/2000/svg";
 const VISIBLE_STEP = 100;
 const TABLE_ROW_HEIGHT = 38;
 const TABLE_VIEWPORT_HEIGHT = 560;
+/// La colonna del titolo della nota: il 30% della tabella, mai meno di
+/// 160 px; le colonne di testo non meno di 90 px.
+const TITLE_WIDTH = "30%";
+const TITLE_MIN_WIDTH = 160;
+const TEXT_MIN_WIDTH = 90;
 /// Una cella della tabella al di là di un ridisegno: la nota della riga e la
 /// chiave della colonna (`FILE_COLUMN` per la colonna della nota, che non è
 /// una proprietà e non si confonde con nessuna).
@@ -982,6 +987,38 @@ export function mountBaseSurface(
     const table = document.createElement("table");
     table.className = "base-table";
     table.style.tableLayout = "fixed";
+    // Le larghezze delle colonne, decise una volta per disegno dalle specie
+    // dei valori e non dalle righe in vista: con la finestra virtuale le
+    // righe cambiano mentre si scorre, e le colonne non devono ballare. Il
+    // titolo della nota prende più spazio, le colonne corte (numeri, date,
+    // caselle) restano larghe quanto la loro intestazione o il loro piede,
+    // le altre si dividono il resto. Sotto la larghezza minima la tabella
+    // scorre di lato, come nel prototipo; prima ci sono i puntini.
+    const widths = new Map<string, number | null>();
+    const { byColumn } = placeSummaries(gridColumns(), plan?.summaries ?? []);
+    let least = TITLE_MIN_WIDTH;
+    for (const column of gridColumns()) {
+      const shape = valueShape(rows, column);
+      if (!isShortShape(shape)) { widths.set(column, null); least += TEXT_MIN_WIDTH; continue; }
+      const foot = (byColumn.get(column) ?? []).map((summary) => `${summaryName(summary)} ${summaryText(summaries[summary.label], resolvedLanguage())}`).join("  ");
+      const width = shortColumnWidth(labelOf(column), plan ? sortedBy(plan.sort, column) !== null : false, foot);
+      widths.set(column, width);
+      least += width;
+    }
+    table.style.minWidth = `${least}px`;
+    const colgroup = document.createElement("colgroup");
+    const titleCol = document.createElement("col");
+    titleCol.dataset.column = NOTE_COLUMN;
+    titleCol.style.width = TITLE_WIDTH;
+    colgroup.append(titleCol);
+    for (const column of gridColumns()) {
+      const col = document.createElement("col");
+      col.dataset.column = column;
+      const width = widths.get(column);
+      if (width) col.style.width = `${width}px`;
+      colgroup.append(col);
+    }
+    table.append(colgroup);
     const head = table.createTHead().insertRow();
     // L'intestazione di una colonna apre il suo menu: Ordina, Raggruppa,
     // Riepilogo, Rinomina, Tipo, Nascondi.

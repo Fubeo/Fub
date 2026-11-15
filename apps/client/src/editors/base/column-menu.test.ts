@@ -6,7 +6,7 @@ import { forbiddenIn } from "../../i18n/lexicon";
 import type { MenuItem } from "../../ui/menu";
 import type { BasePlan, BaseRow, BaseSummaryDef } from "./data";
 import {
-  NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSummary, columnSurfaceItems,
+  NOTE_COLUMN, columnKind, isShortShape, shortColumnWidth, columnMenu, columnMenuItems, columnProperty, columnSummary, columnSurfaceItems,
   renamedInView, summariesWith, summaryChoices, type ColumnEntry, type ColumnMenuModel,
 } from "./column-menu";
 
@@ -237,5 +237,16 @@ describe("i conti puri del menu", () => {
     expect(renamedInView(timeline, "fine", "termine")).toEqual([["end", "termine"]]);
     const calendar = plan({ order: [], dateKey: "consegna" });
     expect(renamedInView(calendar, "consegna", "scadenza")).toEqual([["date", "scadenza"]]);
+  });
+});
+
+describe("le colonne corte della tabella", () => {
+  it("numeri, date e caselle sono corte; la larghezza viene dal testo più lungo, mai sotto 88 px", () => {
+    for (const shape of ["number", "date", "bool"] as const) expect(isShortShape(shape)).toBe(true);
+    expect(isShortShape("text")).toBe(false);
+    expect(isShortShape("list")).toBe(false);
+    expect(shortColumnWidth("n", false, "")).toBe(88);
+    expect(shortColumnWidth("consegna", true, "")).toBeGreaterThan(shortColumnWidth("consegna", false, ""));
+    expect(shortColumnWidth("v", false, "Somma 1.234.567,89")).toBeGreaterThan(88);
   });
 });

@@ -3902,6 +3902,8 @@
   border-color: transparent;
   border-radius: var(--radius-chip);
   background: transparent;
+  /* Un valore che non sta finisce coi puntini, come le celle che si leggono. */
+  text-overflow: ellipsis;
 }
 .base-cell input:where(:not([type="checkbox"])):hover {
   border-color: var(--border-strong);
