@@ -1927,11 +1927,7 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
     await page.waitForSelector("#sidebar-scrim:not([hidden])");
   }
   await openNote(page, doc);
-  if (compact && await page.isVisible("#sidebar-scrim")) {
-    const scrim = await page.locator("#sidebar-scrim").boundingBox();
-    await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
-    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
-  }
+  if (compact) await closeSidebarDrawer(page);
   await chooseMode(page, mode);
   await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .cm-content`);
   await page.evaluate(async (bottom) => {
@@ -2085,13 +2081,7 @@ async function openFromTree(page, path, ready) {
   await openFolder(page, path.slice(0, path.lastIndexOf("/")));
   await page.click(`#file-list .tree-row[data-path="${path}"]`);
   await page.waitForSelector(ready);
-  if (compact && await page.isVisible("#sidebar-scrim")) {
-    // In alto a destra: in una finestra stretta il cassetto copre il centro,
-    // e su un telefono sale dal basso.
-    const scrim = await page.locator("#sidebar-scrim").boundingBox();
-    await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
-    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
-  }
+  if (compact) await closeSidebarDrawer(page);
 }
 
 /// Apre la lavagna `path` dall'albero e dà il fuoco alla lavagna, come un clic
@@ -2117,11 +2107,7 @@ async function openDrawing(page) {
   }
   await page.click(`#file-list .tree-row[data-path="${fixture.doc}"]`);
   await page.waitForSelector(".draw-editor .draw-surface");
-  if (compact && await page.isVisible("#sidebar-scrim")) {
-    const scrim = await page.locator("#sidebar-scrim").boundingBox();
-    await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
-    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
-  }
+  if (compact) await closeSidebarDrawer(page);
   const objects = fixture.shapes.length + fixture.connectors.length + fixture.labels.length;
   await page.waitForFunction(
     (painted) => (document.querySelector(".draw-editor .draw-surface")?.querySelectorAll("[data-scene-id]").length ?? 0) >= painted,
@@ -2480,6 +2466,49 @@ async function waitForGraphToSettle(page) {
     null,
     { polling: 250, timeout: 30_000 },
   );
+}
+
+/// Richiude il cassetto dell'albero con un clic sul velo, come la persona.
+///
+/// Il clic va in alto, perché su un telefono il cassetto sale dal basso, e
+/// fuori dal cassetto, che in una finestra stretta copre il lato sinistro. Ma
+/// non sul bordo destro: lì c'è la striscia da cui l'ispettore chiuso si
+/// affaccia (`frame/peek.ts`), e il puntatore che resta fermo su di lei dopo
+/// il clic lo fa comparire sopra la nota, come per chi ci sosta davvero. Il
+/// punto lo sceglie `scrimClickPoint`, lontano da tutti e due.
+async function closeSidebarDrawer(page) {
+  if (!await page.isVisible("#sidebar-scrim")) return;
+  const scrim = await page.locator("#sidebar-scrim").boundingBox();
+  const avoid = await page.evaluate(() =>
+    [document.getElementById("sidebar"), ...document.querySelectorAll(".drawer-edge")]
+      .map((el) => el?.getBoundingClientRect())
+      .filter((box) => box && box.width > 0 && box.height > 0)
+      .map(({ x, y, width, height }) => ({ x, y, width, height })),
+  );
+  await page.click("#sidebar-scrim", { position: scrimClickPoint(scrim, avoid) });
+  await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
+}
+
+/// Dove cliccare il velo, in coordinate del velo: sulla riga a `top` px
+/// dall'alto, al centro del tratto libero più largo fra le scatole da evitare
+/// che la attraversano. Lancia se la riga è tutta coperta: un clic a caso
+/// fotograferebbe un altro stato senza dirlo.
+export function scrimClickPoint(scrim, avoid, top = 8) {
+  const row = scrim.y + top;
+  const end = scrim.x + scrim.width;
+  const covered = avoid
+    .filter((box) => box.y <= row && row < box.y + box.height)
+    .map((box) => [Math.max(box.x, scrim.x), Math.min(box.x + box.width, end)])
+    .filter(([from, to]) => from < to)
+    .sort((a, b) => a[0] - b[0]);
+  let best = null;
+  let cursor = scrim.x;
+  for (const [from, to] of [...covered, [end, end]]) {
+    if (from > cursor && (best === null || from - cursor > best[1] - best[0])) best = [cursor, from];
+    cursor = Math.max(cursor, to);
+  }
+  if (best === null) throw new Error("il velo del cassetto è tutto coperto: non c'è dove cliccarlo");
+  return { x: Math.round((best[0] + best[1]) / 2 - scrim.x), y: top };
 }
 
 /// Il nome del file di una foto: scena e luce, che sono le due coordinate.
