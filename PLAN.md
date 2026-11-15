@@ -4653,7 +4653,7 @@ non salta in silenzio).
 Fatto quando: il job è verde su una PR pronta e l'artifact ha la foto della
 scrivania.
 Prova: scripts/check.sh --rapido; la corsa del job sulla PR
-Stato: [ ] da fare
+Stato: [~] PR #392 (ci/apk-emulatore @ d6482b76a): job `android-emulatore` in `mobile.yml` (APK x86_64 di debug, KVM, API 34, 20 s senza crash, foto come artifact), solo PR pronte e `main`; primo giro: APK fatto, fermo su `/dev/kvm`, corretto; aspetta CI
 
 ## T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina
 
