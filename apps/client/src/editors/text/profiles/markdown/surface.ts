@@ -67,6 +67,7 @@ import { markdownReference } from "./references";
 import { frontmatterRange, renderMarkdown } from "./render";
 import { addProperty, clearProperties } from "./properties";
 import { clipboardHtml } from "./copy-html";
+import { copiedMarkdown } from "./comments/copy";
 import type { ProofPorts } from "../../../core/proof-ports";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../../../core/editor-menu";
 import { forEachDiagnostic, type Diagnostic } from "@codemirror/lint";
@@ -416,8 +417,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // La griglia di una tabella copia le sue celle da sé.
     if (event.target.closest(".tb-frame")) return;
     copied = engine.readState((state) => {
+      // Il testo che va negli appunti (`comments/copy.ts`): un commento tagliato
+      // dalla selezione non vi porta i segni nascosti.
       const parts = state.selection.ranges.filter((range) => !range.empty)
-        .map((range) => state.sliceDoc(range.from, range.to));
+        .map((range) => copiedMarkdown(state, range.from, range.to, forms));
       return parts.length > 0 ? parts.join(state.lineBreak) : null;
     });
   };

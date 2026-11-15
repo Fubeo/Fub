@@ -8,7 +8,9 @@ import { readClipboard } from "../../../../platform/clipboard";
 import { escapeLinkLabel, linkDestination } from "./link-syntax";
 import { AddressChoiceWidget, bareUrl } from "./link-card";
 
-const markdownSource = /(?:^|\n)[ \t]{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+[.)]\s|```|~~~)|\[[^\]\n]+\]\([^\n)]+\)|\*{1,2}[^*\n]+\*{1,2}|_{1,2}[^_\n]+_{1,2}|`[^`\n]+`/u;
+// Un commento CriticMarkup (`{>>…<<}`, T21) è Markdown di Fub: incollato da
+// una nota resta commento, invece di passare dall'HTML che non lo porta.
+const markdownSource = /(?:^|\n)[ \t]{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+[.)]\s|```|~~~)|\[[^\]\n]+\]\([^\n)]+\)|\*{1,2}[^*\n]+\*{1,2}|_{1,2}[^_\n]+_{1,2}|`[^`\n]+`|\{>>[^\n]*?<<\}/u;
 const contentAnchorPrefix = `#${inContentSpace("")}`;
 
 // Turndown serve solo a un incolla ricco, e stava nel chunk che le tre

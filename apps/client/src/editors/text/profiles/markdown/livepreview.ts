@@ -54,6 +54,9 @@ import {
 } from "./render";
 import { decodeDestination, normalizeLabel } from "./link-syntax";
 import { FOOTNOTE_DEFINITION } from "./grammar";
+import { commentCopy } from "./comments/copy";
+import { commentDecorations, commentEditing } from "./comments/mask";
+import { threadCuts } from "./comments/syntax";
 import { emptyPairsExtension } from "./empty-pair";
 import { edgeSpaces } from "./edge-space";
 import { keepMarks } from "./keep-marks";
@@ -66,6 +69,8 @@ import {
   containerMath,
   embedHtml,
   figureHtml,
+  commentsDeclared,
+  containerComments,
   embedSizeOf,
   footnoteStands,
   FOOTNOTE_REFERENCE,
@@ -169,6 +174,9 @@ export type LiveDecoKind =
   | "link"
   | "wikilink"
   | "highlight"
+  // il testo di un commento CriticMarkup (`comments/mask.ts`): `data` "on"
+  // col cursore dentro
+  | "comment-range"
   | "tag"
   | "done"
   // la scadenza `📅 AAAA-MM-GG` di un compito: una pastiglia, rossa quando è
@@ -429,11 +437,11 @@ export function computeDecorations(
   // Le formule del contenitore in cui sta l'iterazione: i contenitori non si
   // annidano, e ogni nodo in riga sta nell'ultimo aperto.
   let around: readonly DollarMath[] = [];
-  const collectFormulas = (container: SyntaxNode) => {
+  const collectFormulas = (container: SyntaxNode): string => {
     const text = doc.sliceString(container.from, container.to);
     const found = containerMath(text, container);
     around = found.formulas;
-    if (found.formulas.length === 0) return;
+    if (found.formulas.length === 0) return text;
     const block = container.name === "Paragraph" && container.parent?.name === "Document"
       && paragraphMathBlock(found, text) !== null;
     for (const math of found.formulas) {
@@ -446,6 +454,7 @@ export function computeDecorations(
         else formulasByRow.set(n, [entry]);
       }
     }
+    return text;
   };
 
   // Gli inline che il modello del provider ha come nodi, raccolti per
@@ -455,6 +464,10 @@ export function computeDecorations(
   // un link conta soltanto se ha la destinazione scritta.
   const natives: NativeInline[] = [];
   const opaqueBlocks: { from: number; to: number }[] = [];
+  // I commenti CriticMarkup (`comments/`), con la sintassi `fub:comments`
+  // accesa: i loro messaggi, dove l'albero non si decora.
+  const commentsOn = commentsDeclared(forms);
+  const messages: { from: number; to: number }[] = [];
   const liveLink = (link: SyntaxNode): NativeInline | null => {
     if (link.name === "Link" && FOOTNOTE_REFERENCE.test(doc.sliceString(link.from, link.to))) {
       return { from: link.from, to: link.to };
@@ -545,9 +558,26 @@ export function computeDecorations(
     from,
     to,
     enter(node) {
+      // Ciò che sta dentro un messaggio di un commento non è testo della nota:
+      // né enfasi né link né codice, e sparisce col messaggio.
+      if (messages.length > 0 && node.from < node.to
+        && messages.some((message) => message.from <= node.from && node.to <= message.to)) return false;
       if (isMathContainer(node.name)) {
-        collectFormulas(node.node);
-        natives.push(...nativeInlines(node.node, node.from, node.to, liveLink, around));
+        const text = collectFormulas(node.node);
+        const found = nativeInlines(node.node, node.from, node.to, liveLink, around);
+        natives.push(...found);
+        // I commenti del contenitore: i segni e i messaggi tagliano il testo
+        // per evidenziati, `%%`, wikilink e tag, e si disegnano qui.
+        if (commentsOn) {
+          for (const thread of containerComments(text, node.node, found, around)) {
+            for (const cut of threadCuts(thread)) {
+              natives.push(cut);
+              exclusions.push(cut);
+            }
+            messages.push(...thread.messages);
+            out.push(...commentDecorations(thread, reveal, doc));
+          }
+        }
       }
       // Ciò che sta in una formula non è sintassi, e un nodo che ne attraversa
       // una senza contenerla il provider non lo legge: come in Lettura non si
@@ -1501,6 +1531,8 @@ function calloutLine(type: string): Decoration {
   return line;
 }
 const bulletMark = Decoration.mark({ class: "cm-fub-bullet" });
+const commentRange = Decoration.mark({ class: "cm-fub-comment-range" });
+const commentRangeOn = Decoration.mark({ class: "cm-fub-comment-range cm-fub-comment-range-on" });
 const dueMark = Decoration.mark({ class: "cm-fub-due" });
 const dueNearMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-near" });
 const dueOverdueMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-overdue" });
@@ -1563,6 +1595,8 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
       return d.data
         ? Decoration.mark({ class: `cm-fub-${d.data}` })
         : marksMap[d.kind]!;
+    case "comment-range":
+      return d.data === "on" ? commentRangeOn : commentRange;
     case "wikilink": {
       // Il bersaglio anche nel contratto che la resa dà alla shell
       // (`data-wikilink-*`, come in Lettura): chi guarda il link sotto il
@@ -2998,5 +3032,6 @@ export function livePreview(
     theme, figureTheme(), footnoteLabelsField, blocks, gapLines, parseRest, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), edgeSpaces(), keepMarks(), signsOnFirstLetter(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
     propertiesExtension(),
     callbacks.linkCard ? linkCardGestures(callbacks.linkCard) : [],
+    commentEditing(forms), commentCopy(forms),
   ];
 }

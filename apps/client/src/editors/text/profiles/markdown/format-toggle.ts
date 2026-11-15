@@ -22,7 +22,7 @@ import {
 import { syntaxTree } from "@codemirror/language";
 import type { Tree } from "@lezer/common";
 import { markdownGrammar } from "./grammar";
-import { nativeCuts, nativeInlines } from "./render-inline";
+import { commentCutsOf, nativeCuts, nativeInlines } from "./render-inline";
 import { textSpans } from "../../../../rules/syntax";
 import { type CursorElement, elementMarksAt, HTML_TWIN, type ElementMarks } from "./cursor-elements";
 import { emptyPairsOf, heldPairAt, openedPair, type EmptyPair } from "./empty-pair";
@@ -124,7 +124,11 @@ function readSignsOf(text: string): SignsRead {
   // modello: non contiene e non attraversa un altro elemento in riga
   // (`==**x**==` resta a vista, `**==x==**` no).
   const natives = nativeInlines(tree.topNode, 0, text.length - indent, (link) => ({ from: link.from, to: link.to }), []);
-  const cuts = nativeCuts(natives).map((cut) => ({ from: cut.from + indent, to: cut.to + indent }));
+  // I segni e i messaggi dei commenti (`comments/`) non sono testo: `{==x==}`
+  // non è un evidenziato.
+  const cuts = [...nativeCuts(natives), ...commentCutsOf(text.slice(indent), tree, natives)]
+    .sort((a, b) => a.from - b.from)
+    .map((cut) => ({ from: cut.from + indent, to: cut.to + indent }));
   for (const span of textSpans(text, cuts)) {
     if (!span.name.endsWith(":highlight")) continue;
     for (const at of [span.from, span.from + 1, span.to - 2, span.to - 1]) signs.add(at);

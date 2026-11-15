@@ -4,6 +4,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "./grammar";
 import { computeDecorations, type LiveDeco, type LiveDecoKind } from "./livepreview";
 import { renderMarkdown } from "./render";
+import { threadsIn } from "./comments/mask";
 import { parseWikilinkInner } from "../../../../rules/syntax";
 import corpus from "../../../../__fixtures__/corpus-syntax.json";
 
@@ -36,6 +37,9 @@ interface CorpusCase {
   /// Gli stili in riga del modello, in ordine di documento e da fuori verso
   /// dentro.
   style: string[];
+  /// I pezzi dei commenti CriticMarkup: `start` (`{==`), `end` (`==}`) e
+  /// `message`, coi segni, in ordine.
+  comment: { kind: "start" | "end" | "message"; from: number; to: number }[];
 }
 
 const cases = corpus as CorpusCase[];
@@ -114,6 +118,26 @@ function readingMath(source: string): { inline: unknown[]; block: unknown[] } {
   return { inline, block };
 }
 
+/// I pezzi dei commenti come li taglia la Scrittura (`comments/`), nella forma
+/// della fixture.
+function shellComments(state: EditorState): [string, number, number][] {
+  const out: [string, number, number][] = [];
+  for (const thread of threadsIn(state, 0, state.doc.length)) {
+    if (thread.passage) {
+      out.push(["start", thread.passage.from, thread.passage.contentFrom]);
+      out.push(["end", thread.passage.contentTo, thread.passage.to]);
+    }
+    for (const message of thread.messages) out.push(["message", message.from, message.to]);
+  }
+  return out;
+}
+
+/// I passi dei commenti nella Lettura: il testo fra i due segni.
+function readingPassages(source: string): [number, number][] {
+  return [...renderMarkdown(source).html.matchAll(/<mark class="comment-range" data-md-from="(\d+)" data-md-to="(\d+)">/g)]
+    .map((match) => [Number(match[1]), Number(match[2])]);
+}
+
 /// Il confronto, con la divergenza dichiarata al posto dell'asserzione.
 function compare(testCase: CorpusCase, family: string, expected: unknown, actual: unknown): void {
   const key = `${testCase.name}/${family}`;
@@ -137,6 +161,7 @@ describe("il corpus: le due passate dicono la stessa cosa", () => {
     expect(count((c) => c.task)).toBeGreaterThan(2);
     expect(count((c) => c.math)).toBeGreaterThan(2);
     expect(count((c) => c.style)).toBeGreaterThan(2);
+    expect(count((c) => c.comment)).toBeGreaterThan(10);
   });
 
   // **Nessun caso si salta, nemmeno quello che il modello vede vuoto.** È la
@@ -223,6 +248,22 @@ describe("il corpus: le due passate dicono la stessa cosa", () => {
         "stile",
         testCase.style,
         inactive.filter((d) => STYLES.has(d.kind) && !reference(d)).map((d) => d.kind),
+      );
+
+      // --- i commenti: la Scrittura taglia i segni e i messaggi del modello ---
+      // e la Lettura dà il fondo allo stesso passo.
+      compare(
+        testCase,
+        "commento",
+        testCase.comment.map((c) => [c.kind, c.from, c.to]),
+        shellComments(stateOf(testCase.source)),
+      );
+      const ends = testCase.comment.filter((c) => c.kind === "end");
+      compare(
+        testCase,
+        "commento in Lettura",
+        testCase.comment.filter((c) => c.kind === "start").map((start, index) => [start.to, ends[index]!.from]),
+        readingPassages(testCase.source),
       );
     });
   }

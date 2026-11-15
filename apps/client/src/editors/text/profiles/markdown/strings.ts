@@ -188,6 +188,11 @@ const IT = {
   "paste.address.link.title": "Scrive l'indirizzo come link: è la scelta di partenza",
   "paste.address.card": "Scheda",
   "paste.address.card.title": "Scrive l'indirizzo da solo sulla riga: diventa una scheda del segnalibro, con l'anteprima a richiesta",
+  // I commenti nel testo (T21): il passo cancellato tutto porta via il commento.
+  "comments.removed": "Commento tolto insieme al testo commentato.",
+  "comments.removed.many": "Commenti tolti insieme al testo commentato.",
+  "comments.removed.undo": "Annulla",
+  "comments.removed.undo.hint": "Rimette il commento con la sua discussione",
 } as const;
 
 const EN: Record<keyof typeof IT, string> = {
@@ -373,6 +378,10 @@ const EN: Record<keyof typeof IT, string> = {
   "paste.address.link.title": "Writes the address as a link: it is the starting choice",
   "paste.address.card": "Card",
   "paste.address.card.title": "Writes the address alone on its line: it becomes a bookmark card, with the preview on request",
+  "comments.removed": "Comment removed together with the commented text.",
+  "comments.removed.many": "Comments removed together with the commented text.",
+  "comments.removed.undo": "Undo",
+  "comments.removed.undo.hint": "Brings back the comment and its discussion",
 };
 
 // Il catalogo nasce alla prima frase, non all'import: chi importa la Live

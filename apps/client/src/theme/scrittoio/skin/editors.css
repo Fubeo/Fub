@@ -4300,3 +4300,23 @@
   color: var(--doc-link);
   text-decoration: underline;
 }
+/* I commenti nel testo (T21): in Scrittura e in Lettura il passo commentato
+   ha un fondo giallo leggero, più pieno col cursore dentro; i segni e i
+   messaggi non si vedono. In Sorgente il commento intero, segni compresi, ha
+   il colore arancione. */
+.cm-editor .cm-content .cm-fub-comment-range,
+.markdown-rendered mark.comment-range {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--doc-highlight) 70%, transparent);
+  box-shadow: 0 2px 0 -1px var(--highlight);
+  color: inherit;
+}
+.cm-editor .cm-content .cm-fub-comment-range-on {
+  background: var(--doc-highlight);
+}
+.cm-editor .cm-content .cm-fub-comment-source {
+  border-radius: 3px;
+  background: var(--doc-tint-orange);
+  color: var(--doc-color-orange);
+}
