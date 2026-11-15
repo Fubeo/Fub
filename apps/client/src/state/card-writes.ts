@@ -13,7 +13,8 @@ import { documentSessions, type CloseResult, type DocumentSessionCollection } fr
 /// Ciò che la porta pigra usa della finestra mentre il modulo arriva.
 export interface LazyCardEditorDeps {
   /// Le sessioni della finestra: `retain` le tiene, `release` le lascia.
-  readonly sessions: Pick<DocumentSessionCollection, "retain" | "release">;
+  /// Si chiedono al primo uso: creare la porta non le legge ancora.
+  sessions(): Pick<DocumentSessionCollection, "retain" | "release">;
   /// Se un riquadro mostra adesso il documento.
   shownInPane(path: string): boolean;
   /// Una sessione lasciata senza salvare: la domanda di un riquadro.
@@ -55,11 +56,11 @@ export function lazyCardEditorHub(load: () => Promise<() => CardEditorHub>, deps
   // Una sessione che nessuno guarda più si lascia; se non si salva, la domanda.
   const settle = async (path: string): Promise<void> => {
     if (watched(path)) return;
-    const outcome = await releaseSession(path, deps.sessions);
+    const outcome = await releaseSession(path, deps.sessions());
     if (outcome.kind === "unsaved" && deps.unsaved && !watched(path)) await deps.unsaved(path);
   };
   const open: CardEditorHub["open"] = async (path, host, options) => {
-    const release = deps.sessions.retain(path);
+    const release = deps.sessions().retain(path);
     opening.set(path, (opening.get(path) ?? 0) + 1);
     let editor: Awaited<ReturnType<CardEditorHub["open"]>> = null;
     try {

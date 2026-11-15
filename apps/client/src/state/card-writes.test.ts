@@ -72,7 +72,7 @@ function fakeSessions() {
 
 /// La finestra attorno alla porta: nessun riquadro mostra niente.
 function fakeWindow(sessions = fakeSessions(), shown: (path: string) => boolean = () => false) {
-  return { sessions, shownInPane: shown };
+  return { sessions: () => sessions, shownInPane: shown };
 }
 
 /// Lascia girare le promesse già risolte.

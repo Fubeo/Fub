@@ -589,7 +589,7 @@ const cardEditors: CardEditorHub = lazyCardEditorHub(async () => {
     unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
   });
 }, {
-  sessions: documentSessions,
+  sessions: () => documentSessions,
   shownInPane: isOpen,
   unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
 });
