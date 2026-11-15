@@ -1021,7 +1021,7 @@ scorciatoia cambiata; un test del vault d'esempio in `support.rs`; la scena
 del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/frame; cargo nextest run -p fub-host support
-Stato: [~] in corso · coder dal 2026-11-15, da main (feat/riga-dei-suggerimenti)
+Stato: [~] coder e revisione fatti (feat/riga-dei-suggerimenti @ d04ab93b9, porta in `editors/core/hints.ts`); con main `document-bridge` sale a 506 298 byte, sopra il tetto: la PR aspetta la divisione del pacchetto, poi baseline dal runner
 
 ## T15a · Le toppe mirate del `.base`
 
