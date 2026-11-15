@@ -45,6 +45,38 @@ function deferredLoad(hub: CardEditorHub) {
 }
 
 const host = () => ({}) as HTMLElement;
+
+/// Le sessioni della finestra come le tiene `DocumentSessionCollection`: una
+/// prenotazione (`retain`) fa rispondere `active` a `release`.
+function fakeSessions() {
+  const intents = new Map<string, number>();
+  const released: string[] = [];
+  return {
+    released,
+    retain: vi.fn((path: string) => {
+      intents.set(path, (intents.get(path) ?? 0) + 1);
+      let done = false;
+      return () => {
+        if (done) return;
+        done = true;
+        intents.set(path, (intents.get(path) ?? 1) - 1);
+      };
+    }),
+    release: vi.fn(async (path: string) => {
+      if ((intents.get(path) ?? 0) > 0) return { kind: "active" } as const;
+      released.push(path);
+      return { kind: "closed", dirty: false } as const;
+    }),
+  };
+}
+
+/// La finestra attorno alla porta: nessun riquadro mostra niente.
+function fakeWindow(sessions = fakeSessions(), shown: (path: string) => boolean = () => false) {
+  return { sessions, shownInPane: shown };
+}
+
+/// Lascia girare le promesse già risolte.
+const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 const options = { compact: false, readOnly: false } as never;
 
 describe("releaseSession", () => {
@@ -68,7 +100,7 @@ describe("releaseSession", () => {
 describe("lazyCardEditorHub", () => {
   it("non carica niente finché nessuno apre, e le domande sincrone hanno la risposta di una porta vuota", () => {
     const { load } = deferredLoad(fakeHub());
-    const hub = lazyCardEditorHub(load);
+    const hub = lazyCardEditorHub(load, fakeWindow());
     expect(hub.holds("a.md")).toBe(false);
     expect(hub.written("card-editor:1", {} as never)).toBe(false);
     expect(hub.failed("card-editor:1", new Error("x"))).toBe(false);
@@ -82,7 +114,7 @@ describe("lazyCardEditorHub", () => {
   it("alla prima apertura carica il modulo una volta, e poi passa tutto alla porta vera", async () => {
     const real = fakeHub();
     const { load, create, resolve } = deferredLoad(real);
-    const hub = lazyCardEditorHub(load);
+    const hub = lazyCardEditorHub(load, fakeWindow());
     const first = hub.open("a.md", host(), options);
     const second = hub.openText!(host(), "testo", {} as never);
     resolve();
@@ -100,7 +132,7 @@ describe("lazyCardEditorHub", () => {
   it("un'apertura in attesa del modulo quando la shell se ne va non monta niente", async () => {
     const real = fakeHub();
     const { load, create, resolve } = deferredLoad(real);
-    const hub = lazyCardEditorHub(load);
+    const hub = lazyCardEditorHub(load, fakeWindow());
     const pending = hub.open("a.md", host(), options);
     hub.destroyAll();
     resolve();
@@ -117,11 +149,52 @@ describe("lazyCardEditorHub", () => {
     const first = deferredLoad(real);
     let attempt = 0;
     const load = vi.fn(() => (++attempt === 1 ? first.load() : Promise.resolve(() => real)));
-    const hub = lazyCardEditorHub(load);
+    const hub = lazyCardEditorHub(load, fakeWindow());
     const failing = hub.open("a.md", host(), options);
     first.reject(new Error("chunk mancante"));
     await expect(failing).rejects.toThrow("chunk mancante");
     expect(await hub.open("a.md", host(), options)).toEqual({ path: "a.md" });
     expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("un'apertura in attesa del modulo tiene la sessione: un riquadro che la lascia non la chiude", async () => {
+    const sessions = fakeSessions();
+    const { load, resolve } = deferredLoad(fakeHub());
+    const hub = lazyCardEditorHub(load, fakeWindow(sessions));
+    const pending = hub.open("a.md", host(), options);
+    expect(hub.holds("a.md")).toBe(true);
+    // Il riquadro di «a.md» si chiude mentre il modulo arriva.
+    expect(await releaseSession("a.md", sessions)).toEqual({ kind: "active" });
+    expect(sessions.released).toEqual([]);
+    resolve();
+    expect(await pending).toEqual({ path: "a.md" });
+    // La porta vera ha l'editor: la sessione resta, e la lascerà lei.
+    await settled();
+    expect(sessions.released).toEqual([]);
+  });
+
+  it("un'apertura che rinuncia lascia la sessione che nessuno guarda più, non quella di un riquadro", async () => {
+    const real = fakeHub();
+    real.open = async () => null;
+    real.holds = () => false;
+    const sessions = fakeSessions();
+    let shown = true;
+    const hub = lazyCardEditorHub(async () => () => real, fakeWindow(sessions, () => shown));
+    expect(await hub.open("a.md", host(), options)).toBeNull();
+    await settled();
+    expect(sessions.released).toEqual([]);
+    shown = false;
+    expect(await hub.open("a.md", host(), options)).toBeNull();
+    await settled();
+    expect(sessions.released).toEqual(["a.md"]);
+    expect(hub.holds("a.md")).toBe(false);
+  });
+
+  it("un modulo che non arriva lascia la sessione presa per l'apertura", async () => {
+    const sessions = fakeSessions();
+    const hub = lazyCardEditorHub(() => Promise.reject(new Error("chunk mancante")), fakeWindow(sessions));
+    await expect(hub.open("a.md", host(), options)).rejects.toThrow("chunk mancante");
+    await settled();
+    expect(sessions.released).toEqual(["a.md"]);
   });
 });

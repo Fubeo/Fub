@@ -588,6 +588,10 @@ const cardEditors: CardEditorHub = lazyCardEditorHub(async () => {
     // riquadro, e «Tieni» riapre la nota nel riquadro col fuoco (T102).
     unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
   });
+}, {
+  sessions: documentSessions,
+  shownInPane: isOpen,
+  unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
 });
 
 /// Le porte delle schede della lavagna (N6 T12). Le immagini e i PDF si
