@@ -396,6 +396,8 @@ appena qualcuno inserisce un item nel mezzo.
 | storage | integrazione, corruzione e interruzione |
 | IPC | mirror, fixture e test shell |
 | UI | Vitest, type-check, build, accessibilità |
+| menu o voci di un menu | `src/ui/menu-budget.test.ts` (nove voci e quattro gruppi al primo livello, niente tasti per muoversi scritti nel menu) |
+| azioni di un blocco, maniglia, barra di formato, pulsanti sul foglio | `src/editors/text/profiles/markdown/three-doors.test.ts` (le stesse azioni da ogni porta, nessun pulsante a riposo) |
 | resa | banco visuale |
 | WIT | conformità, additività e componente reale |
 | runtime WASM | componente reale, casi positivi e negativi di limiti e ciclo di vita |
