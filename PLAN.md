@@ -1944,4 +1944,4 @@ Fatto quando: `cargo test -p fub-canvas-core --test parity` e
 `max_missing` 0 (o con le eccezioni approvate); `check-doc-links.mjs` e le
 altre guardie dei documenti passano; `scripts/check.sh` è verde.
 Prova: scripts/check.sh
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15 (coder/lic-t26 da 162852532)
