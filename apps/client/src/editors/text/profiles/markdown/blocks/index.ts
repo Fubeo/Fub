@@ -3,7 +3,7 @@
 // superficie li monta con l'editor della nota.
 import { type Extension } from "@codemirror/state";
 import { blockHandles, type BlocksOptions, blocksOptions } from "./handles";
-import { blockKeysExtension } from "./keys";
+import { blockKeysExtension, plainKeysExtension } from "./keys";
 import { blockModel } from "./model";
 import { blockMotionExtension } from "./motion";
 import { blockSelectionExtension, escapeLeaves } from "./selection";
@@ -28,4 +28,12 @@ export function blocksMode(options: BlocksOptions = {}): Extension {
     // Il blocco vivo (N13): i gesti si vedono accadere.
     blockMotionExtension,
   ];
+}
+
+/// Scrittura coi blocchi spenti (`editor.blocks`, E2): un editor di testo.
+/// Niente maniglie, «+», selezione di blocchi né moto dei blocchi; i tasti
+/// sono quelli del testo (`plainKeys`). La testata della pagina resta: non è
+/// un blocco.
+export function plainMode(options: BlocksOptions = {}): Extension {
+  return [blocksOptions.of(options), plainKeysExtension, pageHeaderExtension];
 }
