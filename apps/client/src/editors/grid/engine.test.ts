@@ -303,6 +303,7 @@ describe("GridEngine", () => {
     for (const selector of [".grid-formula-editor", ".grid-cell-editor"]) {
       const field = host.querySelector<HTMLElement>(selector)!;
       expect(field.querySelector(".cm-lineNumbers")).toBeNull();
+      expect(field.querySelector(".cm-foldGutter")).toBeNull();
       expect(findTextEditorOrThrow(field).contentDOM.getAttribute("spellcheck")).toBe("false");
     }
     engine.destroy();

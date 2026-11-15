@@ -240,6 +240,18 @@
   background: var(--danger-wash);
   color: var(--danger);
 }
+/* Sopra il velo rosso o giallo di un avviso l'azione prende l'inchiostro
+   d'accento più forte (più scuro alla luce, più chiaro al buio), che sul
+   velo si legge meglio dell'accento. Il passaggio resta com'è: il fondo
+   d'accento e il colore dell'accento. */
+.conflict-banner .link-button,
+.sheet-notice .link-button {
+  color: var(--accent-soft);
+}
+.conflict-banner .link-button:hover,
+.sheet-notice .link-button:hover {
+  color: var(--accent);
+}
 
 /* **La striscia degli spazi**: un pozzetto come le schede dell'ispettore.
    L'acceso è un foglietto con figura e nome, gli altri soltanto la figura (il
