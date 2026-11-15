@@ -43,6 +43,7 @@ vi.mock("../ui/motion", () => ({
 vi.mock("../ui/tooltip", () => ({ setTooltip: () => {} }));
 vi.mock("../ui/notify", () => ({ notify: vi.fn() }));
 
+import { onEvent } from "../state/kernel";
 import { mountSettings } from "./settings";
 
 const EXCLUDED = "files.excluded-folders";
@@ -347,5 +348,111 @@ describe("il focus resta sulla riga (A03)", () => {
       expect(document.activeElement?.id).toBe("setting-a.first");
     });
     expect(document.activeElement).not.toBe(document.body);
+  });
+
+  const FIRST = "a.first";
+  const SECOND = "b.second";
+  const control = (key: string) => document.getElementById(`setting-${key}`) as HTMLInputElement;
+  const stored = (key: string) =>
+    fake.entries.find((candidate) => candidate.spec.key === key) as unknown as SettingEntry;
+  const settled = (key: string) => control(key).closest(".setting-row")?.getAttribute("aria-busy") === null;
+
+  /// L'osservatore `setting_changed` dell'ultimo pannello montato: è la stessa
+  /// via del backend vero, che emette l'evento dopo ogni scrittura e per ogni
+  /// cambio da fuori (un comando, un'altra finestra); il pannello rilegge e
+  /// ricostruisce tutte le righe.
+  function settingChanged(key: string): void {
+    const call = [...vi.mocked(onEvent).mock.calls].reverse().find(([name]) => name === "setting_changed");
+    expect(call, "il pannello ascolta setting_changed").toBeDefined();
+    (call![1] as (event: { type: "setting_changed"; key: string; scope: "vault" }) => void)({
+      type: "setting_changed",
+      key,
+      scope: "vault",
+    });
+  }
+
+  async function openToggles(): Promise<HTMLInputElement> {
+    fake.setSetting.mockImplementation(async (key: string, value: boolean) => {
+      stored(key).value = value;
+      stored(key).source = "vault";
+    });
+    await openPanel([toggleEntry(FIRST, false), toggleEntry(SECOND, false)]);
+    const first = control(FIRST);
+    expect(first.getAttribute("role")).toBe("switch");
+    first.focus();
+    expect(document.activeElement).toBe(first);
+    return first;
+  }
+
+  it("Spazio (il click nativo della casella): il valore cambia e il fuoco resta", async () => {
+    const first = await openToggles();
+    first.click();
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(FIRST, true));
+    await vi.waitFor(() => expect(control(FIRST)).not.toBe(first));
+    await vi.waitFor(() => expect(settled(FIRST)).toBe(true));
+    expect(control(FIRST).checked).toBe(true);
+    expect(document.activeElement).toBe(control(FIRST));
+  });
+
+  it("Invio sull'interruttore: lo commuta e il fuoco resta", async () => {
+    const first = await openToggles();
+    first.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(FIRST, true));
+    await vi.waitFor(() => expect(control(FIRST)).not.toBe(first));
+    await vi.waitFor(() => expect(settled(FIRST)).toBe(true));
+    expect(control(FIRST).checked).toBe(true);
+    expect(document.activeElement).toBe(control(FIRST));
+  });
+
+  it("il valore salvato che torna dall'host con setting_changed ridisegna la riga e il fuoco resta", async () => {
+    const first = await openToggles();
+    stored(FIRST).value = true;
+    stored(FIRST).source = "vault";
+    settingChanged(FIRST);
+    await vi.waitFor(() => expect(control(FIRST)).not.toBe(first));
+    expect(control(FIRST).checked).toBe(true);
+    expect(document.activeElement).toBe(control(FIRST));
+  });
+
+  it("un setting_changed per un'altra chiave ridisegna l'elenco e il fuoco resta", async () => {
+    const first = await openToggles();
+    stored(SECOND).value = true;
+    settingChanged(SECOND);
+    await vi.waitFor(() => expect(control(SECOND).checked).toBe(true));
+    expect(control(FIRST)).not.toBe(first);
+    expect(document.activeElement).toBe(control(FIRST));
+  });
+
+  it("Spazio e subito dopo il setting_changed della scrittura: il fuoco resta", async () => {
+    const first = await openToggles();
+    first.click();
+    settingChanged(FIRST);
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(FIRST, true));
+    await vi.waitFor(() => expect(control(FIRST)).not.toBe(first));
+    await vi.waitFor(() => expect(settled(FIRST)).toBe(true));
+    expect(control(FIRST).checked).toBe(true);
+    expect(document.activeElement).toBe(control(FIRST));
+  });
+
+  it("una scrittura rifiutata: l'esito sotto la riga, il valore autorevole e il fuoco sulla casella", async () => {
+    const first = await openToggles();
+    fake.setSetting.mockImplementation(async () => {
+      throw new Error("disco pieno");
+    });
+    first.click();
+    await vi.waitFor(() =>
+      expect(control(FIRST).closest(".setting-row")?.querySelector(".setting-error")).not.toBeNull(),
+    );
+    expect(control(FIRST).checked).toBe(false);
+    expect(document.activeElement).toBe(control(FIRST));
+  });
+
+  it("il fuoco fuori dal corpo non si sposta al ridisegno", async () => {
+    await openToggles();
+    const close = document.querySelector<HTMLButtonElement>("#settings-close")!;
+    close.focus();
+    settingChanged(SECOND);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(document.activeElement).toBe(close);
   });
 });
