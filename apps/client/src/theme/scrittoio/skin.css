@@ -2876,6 +2876,50 @@ kbd,
   color: var(--muted);
 }
 
+/* ── La banda: la riga dei suggerimenti ──────────────────────────────────── */
+/* Al centro, a voce bassa, i tasti utili per ciò che si sta facendo. Prende
+   lo spazio che resta fra le voci di sinistra e quelle di destra: vuota non
+   fa saltare niente, stretta toglie le voci che non ci stanno (lo fa
+   `hints-row.ts`, mai a metà di una voce). Il grigio è `--muted`, quello della
+   banda: un grigio più chiaro non si leggerebbe sul fondo. */
+.status-hints {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.status-hints-item {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+.status-hints-say {
+  padding-left: var(--space-1);
+}
+.status-hints-key {
+  padding: 0 var(--space-1);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+.status-hints-dot {
+  flex: none;
+}
+/* Non c'è al telefono né sotto i 620 px: lì la banda tiene il necessario. */
+:root[data-client-shell="mobile"] .status-hints {
+  display: none;
+}
+@media (max-width: 620px) {
+  .status-hints {
+    display: none;
+  }
+}
+
 /* ── La concentrazione ───────────────────────────────────────────────────── */
 
 /* La scrivania si spegne di un gradino: il foglio resta l'unica cosa chiara.
