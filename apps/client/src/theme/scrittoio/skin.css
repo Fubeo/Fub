@@ -2060,6 +2060,283 @@ kbd,
   font-size: var(--text-xs);
 }
 
+/* ── La lingua dei menu: riga, tessera, etichetta ────────────────────────── */
+
+/* I tre pezzi che il menu (`ui/menu.ts`), lo spazio comandi e il «/» hanno in
+   comune (`kit/row.ts`, `kit/tile.ts`, `kit/group-label.ts`): le misure sono
+   quelle del menu, e una superficie le cambia solo dove è sua. Il fondo della
+   scelta non è dei pezzi: è la pastiglia che scivola di chi li monta, come
+   l'evidenziatore della lista. */
+
+/* **La riga**: una linea sola da 34, con la figura, il nome e a destra, in
+   grigio, la nota o, in monospazio, la scorciatoia. */
+.kit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: var(--space-2) 10px var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font-size: calc(var(--text-base) + 0.5px);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* Nello spazio comandi la riga è da 38, col nome un poco più grande. */
+.kit-row[data-size="large"] {
+  min-height: 38px;
+  font-size: var(--text-md);
+}
+.kit-row:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -1);
+}
+/* La figura: 24 px prima del nome, in grigio, d'accento sulla riga accesa.
+   Chi non ha la sua ne tiene il posto, perché i nomi stiano allineati. */
+.kit-row-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+}
+.kit-row-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+/* Accesa, la riga prende il fondo del passaggio, lo stesso della pastiglia
+   del menu, e la figura si fa d'accento. Dove chi la monta fa scivolare la sua
+   pastiglia (`markGlideHost`), il fondo è quello. */
+.kit-row[data-lit] {
+  background: var(--overlay-hover);
+}
+.kit-row[data-lit] .kit-row-icon {
+  color: var(--accent);
+}
+.kit-row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Mai una seconda riga: la nota sta a destra in grigio, e si taglia prima
+   del nome. Su una riga spenta è il perché, e si vede sempre. */
+.kit-row-note {
+  flex: 0 1 auto;
+  order: 1;
+  max-width: 55%;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+}
+/* La scorciatoia e la freccia del sottomenu: a destra, nel grigio che regge
+   il contrasto nelle due luci, senza tasto disegnato attorno. */
+.kit-row-keys,
+.kit-row-more {
+  flex: none;
+  order: 2;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: calc(var(--text-xs) + 0.5px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.kit-row-more {
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+}
+/* Premuta, come la tessera: la figura lascia il posto alla spunta d'accento
+   e il nome si fa d'accento. Niente si muove: col moto ridotto è identica. */
+.kit-row[data-pressed] {
+  color: var(--accent);
+}
+.kit-row[data-pressed] .kit-row-icon > svg {
+  display: none;
+}
+.kit-row[data-pressed] .kit-row-icon::after {
+  content: "";
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
+}
+/* Spenta resta al suo posto, e non risponde al puntatore. */
+.kit-row[aria-disabled="true"] {
+  color: var(--text);
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* **La tessera**. Affiancata è una parte di una barra: la figura e il nome in
+   fila, alta 32. */
+.kit-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font-size: calc(var(--text-sm) + 0.5px);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.kit-tile-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--muted);
+}
+.kit-tile-icon > svg {
+  width: 15px;
+  height: 15px;
+}
+.kit-tile[data-lit] .kit-tile-icon {
+  color: var(--accent);
+}
+/* Affiancata, accesa è la linguetta chiara e rialzata della barra; premuta,
+   la linguetta si fa d'accento. Dove chi la monta fa scivolare la sua
+   linguetta (`markGlideHost`), il fondo è quello. */
+.kit-tile[data-shape="inline"][data-lit] {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-1);
+}
+.kit-tile[data-shape="inline"][data-pressed] {
+  background: var(--accent);
+  box-shadow: none;
+  color: var(--accent-contrast);
+}
+.kit-tile-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* In pila (il «/»): la figura in un quadrato da 40 con gli angoli da 11 sul
+   fondo del vassoio, il nome piccolo sotto. Accesa, il quadrato si fa
+   d'accento con il suo filo. */
+.kit-tile[data-shape="stack"] {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-height: 0;
+  padding: 3px 0;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.2;
+}
+.kit-tile[data-shape="stack"] .kit-tile-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--sheet-2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+}
+.kit-tile[data-shape="stack"] .kit-tile-icon > svg {
+  width: 18px;
+  height: 18px;
+}
+.kit-tile[data-shape="stack"] .kit-tile-label {
+  max-width: 100%;
+}
+.kit-tile[data-shape="stack"][data-lit] {
+  color: var(--text);
+}
+.kit-tile[data-shape="stack"][data-lit] .kit-tile-icon {
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  color: var(--accent);
+}
+/* Premuta, la figura lascia il posto alla spunta: d'accento nella barra,
+   dove il fondo lo mette chi la monta; nel quadrato pieno d'accento. Niente
+   si muove: col moto ridotto è identica. */
+.kit-tile[data-pressed] {
+  color: var(--accent);
+}
+.kit-tile[data-pressed] .kit-tile-icon {
+  color: inherit;
+  font-size: 0;
+}
+.kit-tile[data-pressed] .kit-tile-icon > svg {
+  display: none;
+}
+.kit-tile[data-pressed] .kit-tile-icon::after,
+.kit-tile[data-pressed]:not(:has(.kit-tile-icon))::before {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
+}
+.kit-tile[data-shape="stack"][data-pressed] .kit-tile-icon {
+  background: var(--accent);
+  box-shadow: none;
+  color: var(--accent-contrast);
+}
+.kit-tile[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Sotto una pastiglia che scivola il fondo è suo. Il contenitore sta in
+   `:where`, senza peso: chi monta i pezzi può ancora dare un fondo suo a uno
+   stato (la voce che tiene aperto il sottomenu). */
+:where([data-kit-glide]) .kit-row[data-lit],
+:where([data-kit-glide]) .kit-tile[data-shape="inline"][data-lit],
+:where([data-kit-glide]) .kit-tile[data-shape="inline"][data-pressed] {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* **L'etichetta di un gruppo**: minuscola, 11,5 px, quieta nel colore e
+   piena nel peso, come nel prototipo (600). Nel «/» e nello spazio comandi
+   resta in cima mentre l'elenco scorre, con un poco più d'aria sopra. */
+.kit-group-label {
+  padding: 9px var(--space-4) var(--space-2);
+  color: var(--muted);
+  font-size: calc(var(--text-xs) + 0.5px);
+  font-weight: var(--weight-bold);
+}
+.kit-group-label[data-sticky] {
+  padding: 10px var(--space-4) var(--space-2);
+  background: var(--bg-elev);
+}
+
+/* Col dito una riga è alta quanto un dito, e una parte della barra quasi. */
+@media (pointer: coarse) {
+  .kit-row,
+  .kit-row[data-size="large"] {
+    min-height: 44px;
+  }
+  .kit-tile[data-shape="inline"] {
+    min-height: 40px;
+  }
+}
+
 /* ── Garanzie ────────────────────────────────────────────────────────────── */
 
 /* In colori forzati i fondi sono del sistema e le ombre spariscono: i rialzi
@@ -2084,6 +2361,27 @@ kbd,
   }
   .kit-tab-indicator {
     background: Highlight;
+  }
+  .kit-tile[data-shape="stack"][data-lit] .kit-tile-icon {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  /* Il fondo dell'accesa sparisce: lo dice un contorno, se non c'è una
+     pastiglia che scivola col suo. */
+  .kit-row[data-lit],
+  .kit-tile[data-shape="inline"][data-lit] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  :where([data-kit-glide]) .kit-row[data-lit],
+  :where([data-kit-glide]) .kit-tile[data-shape="inline"][data-lit] {
+    outline: none;
+  }
+  /* La spunta è un fondo ritagliato: senza un colore del sistema sparirebbe. */
+  .kit-row[data-pressed] .kit-row-icon::after,
+  .kit-tile[data-pressed] .kit-tile-icon::after,
+  .kit-tile[data-pressed]:not(:has(.kit-tile-icon))::before {
+    background: CanvasText;
   }
   /* Qui una sfumatura non si disegna: i fondi che non sono immagini vere
      spariscono. La linea diventa il colore della zona intera. */
@@ -16372,28 +16670,10 @@ h6.ui-heading {
   scrollbar-color: var(--border-strong) transparent;
 }
 
-/* Una voce: una riga sola da 34, con il segno, il nome e a destra, in
-   monospazio grigio, la scorciatoia o la freccia del sottomenu. */
-.context-menu button {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 34px;
-  padding: var(--space-2) 10px var(--space-2) var(--space-3);
-  border: none;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--text);
-  font-size: calc(var(--text-base) + 0.5px);
-  font-weight: var(--weight-regular);
-  line-height: var(--leading-tight);
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
-}
+/* Una voce è una riga del kit (`kit/row.ts`, vestita in `skin/kit.css`): una
+   linea sola da 34, con il segno, il nome e a destra, in monospazio grigio,
+   la scorciatoia o la freccia del sottomenu. Qui sta ciò che è solo del
+   menu. */
 /* **La scelta è una sola**, e la dice la pastiglia che scivola da una voce
    all'altra: la voce accesa ha il fuoco, che il puntatore sposta e che resta
    dov'è quando il puntatore esce. L'anello della tastiera sta dentro la voce,
@@ -16412,38 +16692,6 @@ h6.ui-heading {
 }
 .context-menu button:focus-visible {
   outline-offset: calc(var(--focus-ring-width) * -1);
-}
-.context-menu .menu-lit .menu-icon {
-  color: var(--accent);
-}
-
-.context-menu .menu-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* La scorciatoia: a destra, in monospazio, nel grigio che regge il contrasto
-   nelle due luci; senza tasto disegnato attorno. Sta prima della spunta, che
-   chiude la riga. */
-.context-menu .menu-hint {
-  flex: none;
-  order: 2;
-  margin-left: auto;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: calc(var(--text-xs) + 0.5px);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-.context-menu .menu-more {
-  font-family: var(--font-ui);
-  font-size: var(--text-md);
 }
 
 /* Le voci che sono un aspetto: una striscia dei suoi colori prima del nome. */
@@ -16468,21 +16716,6 @@ h6.ui-heading {
 .context-menu .menu-swatches:has(> .menu-swatch:only-child) {
   border-radius: var(--radius-pill);
 }
-/* Le voci con una figura: 24 px prima del nome, in grigio, d'accento sulla
-   voce accesa. Chi non ha la sua ne tiene il posto, perché i nomi stiano
-   allineati. */
-.context-menu .menu-icon {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  color: var(--muted);
-}
-.context-menu .menu-icon > svg {
-  width: 16px;
-  height: 16px;
-}
 /* L'anteprima di uno stile: «Aa» nel colore del menu se lo stile non ne
    dice uno, e il quadratino con un filo che lo stacca dal fondo. */
 .menu-sample {
@@ -16493,18 +16726,8 @@ h6.ui-heading {
   border-radius: var(--radius-xs);
   box-shadow: 0 0 0 1px var(--border);
 }
-/* Mai una seconda riga: la spiegazione sta a destra in grigio, e si taglia.
-   Con una scorciatoia la sente soltanto chi ascolta. */
-.context-menu .menu-description {
-  flex: 0 1 auto;
-  order: 1;
-  max-width: 55%;
-  margin-left: auto;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  text-overflow: ellipsis;
-}
+/* La spiegazione sta nella nota della riga, a destra in grigio. Con una
+   scorciatoia la sente soltanto chi ascolta. */
 .context-menu .menu-description.menu-quiet {
   position: absolute;
   width: 1px;
@@ -16563,13 +16786,8 @@ h6.ui-heading {
   outline-color: var(--danger-contrast);
 }
 
-/* Una voce che ora non si può scegliere resta al suo posto, spenta, e non
-   risponde al puntatore. */
-.context-menu button[aria-disabled="true"] {
-  color: var(--text);
-  opacity: 0.4;
-  cursor: default;
-}
+/* Una voce che ora non si può scegliere resta al suo posto, spenta (la riga
+   del kit); quella distruttiva resta rossa. */
 .context-menu button.danger[aria-disabled="true"] {
   color: var(--danger);
 }
@@ -16587,17 +16805,24 @@ h6.ui-heading {
 }
 
 /* Un gruppo con un nome è per chi ascolta: chi guarda vede le voci e il
-   filetto che le stacca. L'etichetta si vede dove il gruppo la porta, come
-   «Altri comandi» scrivendo: minuscola, 11,5 px, quieta. */
+   filetto che le stacca. L'etichetta (del kit) si vede dove il gruppo la
+   porta, come «Altri comandi» scrivendo. */
 .context-menu .menu-group {
   display: flex;
   flex-direction: column;
 }
+
+/* Il nome, la freccia e l'etichetta del menu restano ganci del contratto
+   d'autore (`menu-label`, `menu-more`, `menu-group-label`) accanto a quelli
+   del kit, perché un tema che li vestiva continui a valere. L'aspetto è della
+   riga e dell'etichetta del kit; qui solo ciò che è del menu: l'etichetta
+   non si sceglie, il nome e la freccia non si selezionano col trascinamento. */
 .context-menu .menu-group-label {
-  padding: 9px var(--space-4) var(--space-2);
-  color: var(--muted);
-  font-size: calc(var(--text-xs) + 0.5px);
-  font-weight: var(--weight-medium);
+  cursor: default;
+}
+.context-menu .menu-label,
+.context-menu .menu-more {
+  user-select: none;
 }
 
 /* **La testata** dice che cosa si è toccato, in una riga: l'icona d'accento,
@@ -16673,23 +16898,8 @@ h6.ui-heading {
   background: var(--accent);
   box-shadow: none;
 }
-.context-menu .menu-clipboard .menu-quick {
-  justify-content: center;
-  gap: 7px;
-  min-height: 32px;
-  padding: 0 var(--space-2);
-  color: var(--text);
-  font-size: calc(var(--text-sm) + 0.5px);
-}
-.context-menu .menu-clipboard .menu-quick > svg {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  color: var(--muted);
-}
-.context-menu .menu-clipboard .menu-quick.menu-lit > svg {
-  color: var(--accent);
-}
+/* Le parti sono tessere del kit, affiancate; qui il filo fra l'una e
+   l'altra e l'inchiostro della parte premuta, sulla linguetta d'accento. */
 .context-menu .menu-clipboard .menu-quick + .menu-quick::before {
   content: "";
   position: absolute;
@@ -16703,15 +16913,12 @@ h6.ui-heading {
 .context-menu .menu-clipboard.menu-pressed .menu-quick::before {
   opacity: 0;
 }
-.context-menu .menu-clipboard .menu-quick.menu-pressed,
-.context-menu .menu-clipboard .menu-quick.menu-pressed > svg {
+.context-menu .menu-clipboard .menu-quick.menu-pressed {
   color: var(--accent-contrast);
 }
-.context-menu .menu-clipboard .menu-quick.menu-pressed > svg,
 .context-menu .menu-choice.menu-pressed > svg {
   display: none;
 }
-.context-menu .menu-clipboard .menu-quick.menu-pressed::after,
 .context-menu .menu-choice.menu-pressed::after {
   content: "";
   order: -1;
@@ -16725,17 +16932,8 @@ h6.ui-heading {
    coi segni dei formati, stretti in ogni lingua. Il nome del formato compare
    accanto alla voce mentre la riga è accesa. */
 .context-menu .menu-choices {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 34px;
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-control);
-  color: var(--text);
-  font-size: calc(var(--text-base) + 0.5px);
-  white-space: nowrap;
+  line-height: inherit;
   cursor: default;
 }
 .context-menu .menu-choice-name {
@@ -16748,7 +16946,16 @@ h6.ui-heading {
   gap: 3px;
 }
 .context-menu .menu-choices .menu-choice {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
   justify-content: center;
+  border: none;
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  cursor: pointer;
   gap: 0;
   width: 28px;
   min-height: 26px;
@@ -16831,13 +17038,8 @@ h6.ui-heading {
 
 /* Col dito le voci sono alte quanto un dito. */
 @media (pointer: coarse) {
-  .context-menu button,
-  .context-menu .menu-choices,
   .context-menu .menu-glide {
     min-height: 44px;
-  }
-  .context-menu .menu-clipboard .menu-quick {
-    min-height: 40px;
   }
 }
 

@@ -22,11 +22,16 @@
 import "../src/theme/scrittoio/structure.css";
 import {
   attachHoverCard,
+  createGroupLabel,
   createList,
   createOptionsBar,
+  createRow,
   createTabs,
+  createTile,
   createToolRail,
   iconButton,
+  markLit,
+  markPressed,
   mountSplitter,
   openDialog,
   openPopover,
@@ -516,6 +521,104 @@ function head(grid: HTMLElement, last: string): void {
     cell("menu: l'attiva ha il fuoco", second),
   );
   section("Lista", "right", row);
+}
+
+// ── La lingua dei menu ───────────────────────────────────────────────────────
+
+// Riga, tessera ed etichetta (`kit/row.ts`, `kit/tile.ts`, `kit/group-label.ts`),
+// i pezzi comuni al menu, allo spazio comandi e al «/». Campioni fermi, come la
+// lista qui sopra: la riga accesa e la tessera premuta sono stati, non gesti.
+// Accesa, una riga ha il suo fondo e una tessera affiancata la sua linguetta,
+// perché qui nessuno fa scivolare una pastiglia.
+//
+// La sezione c'è solo con `?lingua` (la scena `kit-lingua`): il resto del
+// catalogo sta in una finestra senza scorrere, e le sue scene e il banco del
+// movimento, che fotografano la cima della pagina, restano quelle di prima.
+if (params.has("lingua")) {
+  const rows = el("div", "vassoio");
+  rows.setAttribute("role", "menu");
+  rows.setAttribute("aria-label", "Righe del menu");
+  rows.style.width = "316px";
+  const group = el("div");
+  group.setAttribute("role", "group");
+  group.append(createGroupLabel({ text: "Nota", labels: group }));
+  const lit = createRow({ label: "Fissa la linguetta", icon: "pin", keys: "Ctrl+Maiusc+P", role: "menuitem" });
+  markLit(lit.element, true);
+  const pressed = createRow({ label: "Copia il link", icon: "backlinks", role: "menuitem" });
+  markPressed(pressed.element, true);
+  group.append(
+    createRow({ label: "Apri in un nuovo foglio", icon: "notes", keys: "Ctrl+Invio", role: "menuitem" }).element,
+    lit.element,
+    pressed.element,
+    createRow({ label: "Cronologia", icon: "history", note: "Solo per le note salvate", disabled: true, role: "menuitem" }).element,
+    createRow({ label: "Un nome lunghissimo che non sta nella riga e si taglia coi puntini", holdIcon: true, role: "menuitem" }).element,
+    createRow({ label: "Sposta in", icon: "folder", more: true, role: "menuitem" }).element,
+  );
+  rows.append(group);
+  rows.inert = true;
+
+  const large = el("div", "vassoio");
+  large.setAttribute("role", "menu");
+  large.setAttribute("aria-label", "Righe dello spazio comandi");
+  large.style.width = "316px";
+  const found = createRow({ label: "Appunti di viaggio", icon: "notes", note: "Diario", size: "large", role: "menuitem" });
+  markLit(found.element, true);
+  large.append(
+    createGroupLabel({ text: "Note", sticky: true }),
+    found.element,
+    createRow({ label: "Nuova nota", icon: "compose", keys: "Ctrl+N", size: "large", role: "menuitem" }).element,
+  );
+  large.inert = true;
+
+  // La barra degli appunti, nuda: il fondo tenue e la linguetta sono del menu.
+  const bar = el("div");
+  bar.style.display = "grid";
+  bar.style.gridTemplateColumns = "repeat(3, minmax(0, 1fr))";
+  bar.style.width = "292px";
+  const cut = createTile({ label: "Taglia", icon: "cut" });
+  const copy = createTile({ label: "Copia", icon: "copy" });
+  markLit(copy, true);
+  const paste = createTile({ label: "Incolla", icon: "template" });
+  markPressed(paste, true);
+  bar.append(cut, copy, paste);
+  bar.inert = true;
+  // Una parte senza figura, premuta: la spunta compare lo stesso.
+  const bare = el("div");
+  bare.style.display = "grid";
+  bare.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
+  bare.style.width = "196px";
+  const plain = createTile({ label: "Testo" });
+  markPressed(plain, true);
+  bare.append(createTile({ label: "HTML" }), plain);
+  bare.inert = true;
+
+  const stack = (label: string, options: Omit<Parameters<typeof createTile>[0], "shape" | "label"> = {}, dress?: (tile: HTMLButtonElement) => void): HTMLElement => {
+    const tile = createTile({ label, shape: "stack", ...options, lifetime });
+    dress?.(tile);
+    const holder = el("div");
+    holder.style.width = "52px";
+    holder.append(tile);
+    holder.inert = true;
+    return holder;
+  };
+  const tiles = el("div", "fila");
+  tiles.append(
+    cell("riposo", stack("Attività", { icon: "tasks" })),
+    cell("accesa", stack("Titolo", { glyph: "H1" }, (tile) => markLit(tile, true))),
+    cell("premuta", stack("Riquadro", { icon: "blocks" }, (tile) => markPressed(tile, true))),
+    cell("spenta", stack("Base", { icon: "collection", disabled: { reason: "Serve una nota salvata" } })),
+    cell("senza icona", stack("Scheda")),
+    cell("nome lungo", stack("Diagramma di flusso")),
+  );
+
+  const row = el("div", "fila");
+  row.append(
+    cell("righe: riposo, accesa, premuta, spenta col perché, nome lungo, sottomenu", rows),
+    cell("righe da 38 e l'etichetta che resta in cima", large),
+    cell("tessere affiancate: riposo, accesa, premuta", bar),
+    cell("senza figura: riposo, premuta", bare),
+  );
+  section("La lingua dei menu", "right", row, cell("tessere in pila", tiles));
 }
 
 // ── Schede ───────────────────────────────────────────────────────────────────
