@@ -125,7 +125,9 @@ describe("applyUserEdit", () => {
     expect(ed.getDoc()).toBe("a\r\nb\r\n");
     ed.destroy();
   });
-  it("insertAtCursor scrive più righe come righe vere anche in CRLF (i riferimenti, #394)", () => {
+  // Protezione, non una correzione: `insertAtCursor` divide già il testo su
+  // "\n" (`Text.of`), e i riferimenti trascinati passano di qui.
+  it("insertAtCursor scrive più righe come righe vere anche in CRLF (i riferimenti)", () => {
     for (const nl of ["\n", "\r\n"]) {
       const { ed, view } = editor();
       ed.setDoc(`a${nl}b${nl}`);
@@ -133,6 +135,32 @@ describe("applyUserEdit", () => {
       expect(ed.insertAtCursor("[[Uno]]\n[[Due]]")).toBe(true);
       expect(ed.getDoc()).toBe(`a${nl}b[[Uno]]${nl}[[Due]]${nl}`);
       ed.destroy();
+    }
+  });
+  // Incolla e trascinamento lasciati a CodeMirror: il testo si divide solo
+  // sul separatore, e in una nota CRLF il `clipboardInputFilter` del motore
+  // porta ogni a capo (`\n`, `\r\n`, `\r` nudo) a quello della nota (#394).
+  it("incollare o trascinare righe con a capo di ogni forma: righe vere, come in LF", () => {
+    const clipboard = (text: string) => ({ files: [], types: ["text/plain"], getData: (type: string) => (type === "text/plain" || type === "Text" ? text : "") });
+    for (const nl of ["\n", "\r\n"]) {
+      for (const kind of ["paste", "drop"] as const) {
+        const { ed, view } = editor();
+        ed.setDoc(`a${nl}b`);
+        view().dispatch({ selection: { anchor: 1 } });
+        // Il trascinamento mette il fuoco nell'editor; in happy-dom col fuoco
+        // la selezione scritta manda `selectionchange` dentro la transazione.
+        view().focus = () => {};
+        const event = new Event(kind, { bubbles: true, cancelable: true });
+        Object.defineProperty(event, kind === "paste" ? "clipboardData" : "dataTransfer", { value: clipboard("1\r2\n3\r\n4") });
+        Object.defineProperty(event, "clientX", { value: 0 });
+        Object.defineProperty(event, "clientY", { value: 0 });
+        view().contentDOM.dispatchEvent(event);
+        const doc = ed.getDoc();
+        expect(doc.split(nl).length, `${kind} ${JSON.stringify(nl)}: ${JSON.stringify(doc)}`).toBe(5);
+        if (nl === "\r\n") expect(doc.replace(/\r\n/g, ""), kind).not.toMatch(/[\r\n]/);
+        expect(doc.replace(/\r?\n/g, "|"), kind).toMatch(/1\|2\|3\|4/);
+        ed.destroy();
+      }
     }
   });
   it("insertAtCursor rifiuta sola lettura e testo con CR", () => {
