@@ -1,8 +1,8 @@
 # L'inchiostro in codice
 
 > **Ambito:** l'inchiostro della lavagna scritto e letto come codice:
-> l'operazione `draw` e le tre letture (outline, codice, modello). Versione 1.
-> **Fonti autorevoli:** `crates/fub-canvas-core/src/ops/draw.rs`,
+> le operazioni `draw` ed `erase_along` e le tre letture (outline, codice, modello). Versione 1.
+> **Fonti autorevoli:** `crates/fub-canvas-core/src/ops/draw.rs`, `ops/erase.rs`,
 > `crates/fub-canvas-core/src/describe/ink.rs` e i vettori in
 > `apps/client/src/__fixtures__/canvas-ops/`.
 
@@ -88,6 +88,44 @@ I casi della regola dell'ancora sono in
 girare i test di `ops/anchor.rs` e
 `apps/client/src/editors/canvas/anchor-vectors.test.ts`, contro `anchor.ts`.
 I vettori di `draw` sono `canvas-ops/draw-*.json`.
+
+## `erase_along`
+
+La gomma «Solo il pezzo» in codice (`ops/erase.rs`): `points` (da 1 a 10 000
+`[x, y]`, se no `Invalid` o `TooMany`), `size` (maggiore di zero) e `on`. Ogni
+tratto toccato si taglia dove passa il cerchio, e i pezzi prendono il suo posto.
+
+- **`on`:** `"auto"` (di serie) vuole punti della lavagna e taglia i tratti
+  di ogni scheda e quelli liberi; `"board"` solo quelli liberi; l'id di una
+  scheda vuole le sue unità (0,0 in alto a sinistra) e taglia solo i suoi
+  (`UnknownNode`, `ForeignLayer` come per `draw`).
+- **Il taglio:** il cammino torna nelle unità del tratto con l'inverso della
+  sua resa (anche su un'immagine scalata), e il raggio, `size / 2` diviso la
+  scala, cresce di metà dello spessore del pennello: il conto di `cutInk`,
+  con `split_ink` e `cut_brush` (`fub-ink-codec/src/cut.rs`, copia di
+  `ink/tools/split.ts`). Un raggio la cui metà arrotonda a zero non taglia.
+- **I pezzi:** tutti i campi del tratto, anche gli sconosciuti (nell'ordine
+  di `add_strokes`); un id nuovo dal seme, che salta quelli del livello e va
+  in `created`; il pennello tagliato, o il testo di prima se il pezzo non
+  tocca un taglio; `ink` nella stessa scala. Un pezzo che non si scrive
+  toglie il tratto intero, come nella tela; un tratto coperto tutto se ne va.
+- **`at`:** se il pezzo comincia dopo il tratto, `at` si sposta dei ms
+  arrotondati e si scrive come `toISOString` (`…T09:20:31.276Z`), anche se
+  arrotondano a 0. Senza fuso, il nucleo legge solo `YYYY-MM-DD` e
+  `YYYY-MM-DDTHH:MM[:SS[.fff…]]` con `Z` o `±HH:MM`, ore 00–23, anni (anche
+  dopo) 0–9999: un'ora locale, RFC 2822, `T24:00` o un anno fuori resta
+  com'era, dove la tela, con `Date.parse`, lo sposta.
+- **Le toppe:** per livello, si tolgono i tratti tagliati dall'ultimo al
+  primo e si mettono i pezzi al loro posto (`cutStrokePatches`); niente tocchi, niente toppe.
+- **Ciò che resta:** un tratto che non si disegna, un livello estraneo e un
+  tratto con l'ancora di pagina o di cella (il nucleo non sa dove sta nella
+  scheda) non si toccano; con `auto` o `board`, se possono stare sotto il cammino, la
+  nota `ink_kept` lo dice. Oltre 50 milioni di distanze stimate
+  (`split_work`) il cammino è troppo fitto: `Invalid`.
+
+`ink-cut.json`, scritto a mano, prova il taglio in Rust (`cut_vectors.rs`) e
+contro `split.ts` (`split-vectors.test.ts`); `erase-along-parity.test.ts` rifà
+i vettori `canvas-ops/erase-along-*.json` con la gomma della tela.
 
 ## Leggere
 

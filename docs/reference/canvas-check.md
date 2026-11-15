@@ -87,7 +87,7 @@ stesso punto ci sono 1 999 000 coperture: il rapporto ne porta 100 e omette
 | `half_in_group` | una scheda è in parte dentro un gruppo e in parte fuori | la scheda e il gruppo |
 | `text_overflow` | il testo di una scheda di testo non ci sta nella sua altezza; `estimated_height` è quella che la stima di [«Misure e posti»](canvas-code.md#misure-e-posti) vuole | la scheda |
 | `shape_dropped`, `style_dropped`, `line_skipped`, `indent_rounded` | le note di [`from_mermaid` e `from_outline`](canvas-import.md#le-note) | nessuna |
-| `ink_kept` | la nota di [`erase_along`](canvas-ink.md#erase_along): un tratto che Fub non disegna, o un livello estraneo, sotto il cammino non si taglia | nessuna |
+| `ink_kept` | la nota di [`erase_along`](canvas-ink-code.md#erase_along): un tratto che Fub non disegna, o un livello estraneo, sotto il cammino non si taglia | nessuna |
 
 Un esempio, con la lavagna d'esempio di `spec.rs` (`t1`, `t2`, `f1`, l'arco
 `e1` e il tratto libero `s1`) e il giro `[{"op": "move", "ids": ["f1"], "dx": 0, "dy": -200}]`:
