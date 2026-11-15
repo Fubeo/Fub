@@ -342,7 +342,11 @@ class HandlesView {
   current(): number {
     const state = this.view.state;
     if (state.readOnly) return -1;
-    const blocks = state.field(blockModel).blocks;
+    // Una misura chiesta prima di spegnere i blocchi (`editor.blocks`) può
+    // arrivare dopo: senza il modello non c'è niente da servire.
+    const model = state.field(blockModel, false);
+    if (!model) return -1;
+    const blocks = model.blocks;
     for (const key of [this.pinned, this.hoverable ? this.hovered : null]) {
       const index = indexOf(blocks, key);
       if (index >= 0) return index;

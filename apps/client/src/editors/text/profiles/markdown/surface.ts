@@ -16,7 +16,8 @@ import { isFolderPage, pageName, taskChecked } from "../../../../rules/mirrored"
 import { onLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
-import { blocksMode, pageArrives } from "./blocks";
+import { blocksMode, pageArrives, plainMode, type BlocksOptions } from "./blocks";
+import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { liveStrings } from "./strings";
 import { pageIconsChanged } from "./livepreview";
 import { linkCardsChanged, type LinkCardSource } from "./link-card";
@@ -512,8 +513,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
 
   // I Blocchi sono dentro Scrittura, la modalità in cui la nota si apre:
   // si montano con l'editor, non dopo, perché testata e maniglie ci siano
-  // dal primo disegno e nessun secondo `reconfigure` sposti il testo.
-  const blocksExtension: Extension = blocksMode({
+  // dal primo disegno e nessun secondo `reconfigure` sposti il testo. Sono una
+  // preferenza (`editor.blocks`): spenti, Scrittura è un editor di testo con
+  // la stessa testata. Si parte dall'ultimo valore letto; la lettura di
+  // questa superficie, e ogni cambio, li accendono o spengono senza riaprire
+  // la nota.
+  const blocksOptions: BlocksOptions = {
     page: () => pageName(resources?.documentId ?? documentId),
     notify: (message, tone) => notify(message, tone),
     folderPage: () => isFolderPage(resources?.documentId ?? documentId),
@@ -528,7 +533,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       : undefined,
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,
-  });
+  };
+  const blocksExtension: Extension = blocksMode(blocksOptions);
+  const plainExtension: Extension = plainMode(blocksOptions);
+  let blocksOn = blocksPreferred();
   presentation(mode);
 
   const engine = createTextEngine(parent, {
@@ -611,8 +619,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // resta un'interruzione. La resa lo dice con un attributo, e la pelle lo
   // legge; il testo del documento non cambia. «Testo da destra a sinistra»
   // gira la Lettura; l'editor lo legge da sé.
+  // Nella stessa lettura i blocchi di Scrittura (`editor.blocks`).
   let breaksRead = 0;
-  const readLineBreaks = async (): Promise<void> => {
+  const readSurfaceSettings = async (): Promise<void> => {
     const mine = ++breaksRead;
     const entries = await settings().catch(() => null);
     if (!entries || mine !== breaksRead || life.closed) return;
@@ -621,11 +630,42 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     else delete parent.dataset.lineBreaks;
     if (entries.find((entry) => entry.spec.key === RTL_KEY)?.value === true) reading.dir = "rtl";
     else reading.removeAttribute("dir");
+    setBlocks(rememberBlocks(entries));
   };
-  void readLineBreaks();
+  void readSurfaceSettings();
   life.add(onEvent("setting_changed", (event) => {
-    if (event.key === STRICT_LINE_BREAKS_KEY || event.key === RTL_KEY) void readLineBreaks();
+    if (event.key === STRICT_LINE_BREAKS_KEY || event.key === RTL_KEY || event.key === EDITOR_BLOCKS_KEY) void readSurfaceSettings();
   }));
+
+  // Accendere o spegnere i blocchi riconfigura soltanto Scrittura, sulla
+  // stessa vista: testo, selezione, cronologia e scorrimento restano. Una
+  // selezione di blocchi diventa una selezione di testo, perché il suo campo
+  // se ne va coi blocchi. Durante una composizione (IME) si aspetta la sua
+  // fine, come le preferenze del motore: riconfigurare la interromperebbe.
+  let blocksPending = false;
+  function setBlocks(on: boolean): void {
+    if (life.closed || on === blocksOn) return;
+    blocksOn = on;
+    if (mode === "live_preview") applyBlocks();
+  }
+  function applyBlocks(): void {
+    if (engine.runViewCommand((view) => view.compositionStarted)) {
+      blocksPending = true;
+      return;
+    }
+    blocksPending = false;
+    if (mode !== "live_preview") return;
+    const anchor = engine.getScrollAnchor();
+    presentation(mode);
+    engine.reconfigure();
+    engine.restoreScrollAnchor(anchor);
+  }
+  life.listen(parent, "compositionend", () => {
+    if (!blocksPending) return;
+    queueMicrotask(() => {
+      if (!life.closed && blocksPending) applyBlocks();
+    });
+  });
 
   // Reading owns browser selection; only history commands reach the hidden editor.
   life.listen(reading, "keydown", (event) => {
@@ -806,10 +846,11 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     if (anchor) scrollReadingTo(anchor.from, anchor.top);
   }
 
-  // Scrittura monta i Blocchi con la resa viva; Sorgente e Lettura no.
+  // Scrittura monta i Blocchi con la resa viva, o, spenti, la testata coi
+  // tasti del testo; Sorgente e Lettura nessuno dei due.
   function presentation(next: MarkdownMode): void {
     profile.setLivePreview(next === "live_preview");
-    profile.setBlocks(next === "live_preview" ? blocksExtension : null);
+    profile.setBlocks(next === "live_preview" ? (blocksOn ? blocksExtension : plainExtension) : null);
   }
 
   /// Il blocco della Lettura su cui si è aperto l'ultimo menu: in Lettura è
