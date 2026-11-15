@@ -440,7 +440,7 @@ Esc e l'annuncio; le foto del banco, chiaro e scuro, somigliano alle righe
 828 e 853 del prototipo; la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks
-Stato: [~] in corso · coder dal 2026-11-15, da main; revisione con 16 correzioni in corso
+Stato: [~] PR #377 (feat/maniglia-due-occhi), revisione fatta, aspetta CI e baseline
 
 ## T2b · Fuori dalla colonna e lo scorrimento al bordo
 
