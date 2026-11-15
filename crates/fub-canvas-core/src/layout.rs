@@ -60,8 +60,9 @@ const MAX_SIDE: f64 = MAX_SAFE_INTEGER as f64;
 
 /// La specie di una scheda: da lei dipendono la misura di nascita e il posto.
 ///
-/// `Craft` è la specie di un file Craft. Nessuna estensione la produce ancora
-/// ([`card_kind`] non la dà), e la darà il riconoscimento di Craft.
+/// `Craft` è la specie di un file di VectorCraft, FigCraft o PhotoCraft: le
+/// estensioni sono quelle di `CRAFT_EXTENSIONS` in
+/// `apps/client/src/editors/canvas/cards.ts` (N6 T18).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CardKind {
     /// Un testo scritto nella scheda.
@@ -161,6 +162,7 @@ pub fn kind_of_path(path: &str) -> CardKind {
         "docx" | "doc" | "dot" | "rtf" | "odt" => CardKind::Document,
         "xlsx" | "xlsm" | "xltx" | "xltm" => CardKind::Sheet,
         "pdf" => CardKind::Pdf,
+        "vectorcraft" | "figcraft" | "pcraft" => CardKind::Craft,
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "ico" | "avif" | "heic"
         | "tif" | "tiff" => CardKind::Image,
         _ => CardKind::File,
