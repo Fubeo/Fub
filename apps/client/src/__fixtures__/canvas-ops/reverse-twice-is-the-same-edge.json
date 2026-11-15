@@ -1,5 +1,5 @@
 {
-  "about": "reverse due volte sullo stesso arco: torna com'era. Le punte sono già scritte nel file, quindi il giro non ne aggiunge.",
+  "about": "reverse due volte sullo stesso arco: torna com'era, con le schede, i lati e le punte che mostra. Le punte di serie scritte nel file (fromEnd none, toEnd arrow) non si riscrivono, come reversedEdge della GUI, che scrive solo le punte che non sono di serie.",
   "before": {
     "nodes": [
       { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
@@ -18,7 +18,7 @@
         { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
       ],
       "edges": [
-        { "id": "e1", "fromNode": "a", "fromSide": "right", "fromEnd": "none", "toNode": "b", "toSide": "left", "toEnd": "arrow" }
+        { "id": "e1", "fromNode": "a", "fromSide": "right", "toNode": "b", "toSide": "left" }
       ]
     }
   }
