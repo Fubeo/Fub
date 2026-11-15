@@ -208,6 +208,8 @@ describe("le righe che nominano un posto di un documento (T2b)", () => {
     return { node: "tree_item", label, expanded: true, action, selected: false, children };
   }
   const reveal = (doc: string, start: number, end: number) => ({ action: "reveal", payload: { doc, base: "x", start, end } });
+  // Le view del test si montano senza un vault aperto.
+  const NOTE = { documentId: "nota.md", vault: undefined };
 
   it("le offre come posti dove far cadere un blocco, con la parte che si vede e l'acceso", async () => {
     renderView.mockResolvedValueOnce({
@@ -220,7 +222,12 @@ describe("le righe che nominano un posto di un documento (T2b)", () => {
     } as UiNode);
     listViews.mockResolvedValueOnce([spec("outline", "left_sidebar")]);
     const views = await loadViews();
+    const registry = await import("../editors/core/registry");
+    const changed = vi.fn();
+    const unwatch = registry.watchDropOffers(changed);
     await views.mountDeclaredViews();
+    unwatch();
+    expect(changed, "le righe disegnate lo dicono: chi tiene posti di prima li rimisura").toHaveBeenCalled();
     const rows = Array.from(document.querySelectorAll<HTMLElement>("#views-left .ui-tree-label"));
     expect(rows.map((row) => row.dataset.placeDoc ?? null)).toEqual(["nota.md", "nota.md", null, "altra.md"]);
     expect(rows[1]!.dataset.placeStart).toBe("10");
@@ -233,7 +240,7 @@ describe("le righe che nominano un posto di un documento (T2b)", () => {
     });
     try {
       const { dropOffers } = await import("../editors/core/registry");
-      const offers = dropOffers("nota.md");
+      const offers = dropOffers(NOTE);
       expect(offers.map((offer) => [offer.title, offer.span.start, offer.span.end, offer.rect.top])).toEqual([
         ["Primo", 0, 8, 0],
         ["Dentro", 10, 20, 28],
@@ -242,7 +249,9 @@ describe("le righe che nominano un posto di un documento (T2b)", () => {
       expect(rows[1]!.dataset.dropHot).toBe("true");
       offers[1]!.hover(false);
       expect(rows[1]!.dataset.dropHot).toBeUndefined();
-      expect(dropOffers("nessuna.md")).toEqual([]);
+      expect(dropOffers({ documentId: "nessuna.md", vault: undefined })).toEqual([]);
+      // Lo stesso percorso in un altro vault è un'altra nota.
+      expect(dropOffers({ documentId: "nota.md", vault: "/altro-vault" })).toEqual([]);
     } finally {
       rect.mockRestore();
     }
@@ -255,7 +264,7 @@ describe("le righe che nominano un posto di un documento (T2b)", () => {
     await views.mountDeclaredViews();
     const { dropOffers } = await import("../editors/core/registry");
     // Senza un layout ogni rettangolo è vuoto: niente si vede.
-    expect(dropOffers("nota.md")).toEqual([]);
+    expect(dropOffers(NOTE)).toEqual([]);
   });
 });
 

@@ -23,7 +23,7 @@ const bytes = (text: string) => new TextEncoder().encode(text).length;
 /// Il posto che la Struttura offre per il titolo che comincia con `heading`.
 function offer(doc: string, heading: string, title: string, rect = { left: 0, top: 0, right: 100, bottom: 28 }): SurfaceDropOffer {
   const at = bytes(doc.slice(0, doc.indexOf(heading)));
-  return { kind: "place", documentId: "nota.md", span: { start: at, end: at + bytes(heading) }, title, rect, hover: vi.fn() };
+  return { kind: "place", document: { documentId: "nota.md", vault: undefined }, span: { start: at, end: at + bytes(heading) }, title, rect, hover: vi.fn() };
 }
 
 const DOC = "Uno\n\n## I conti\n\nDue\n\n### Spese\n\nTre\n\n## Fine\n\nQuattro";
@@ -94,7 +94,54 @@ describe("il titolo di un posto della Struttura", () => {
     // Lo span punta poco prima del secondo «A»: vince quello, non il primo.
     const second = doc.lastIndexOf("## A");
     expect(headingOfPlace(state, blocksOf(state), { start: second - 3 }, "A")).toBe(blocksOf(state).findIndex((b) => b.from === second));
-    expect(headingOfPlace(state, blocksOf(state), { start: 0 }, "Assente"), "un titolo che non c'è più").toBe(-1);
+    expect(headingOfPlace(state, blocksOf(state), { start: doc.indexOf("x") }, "Assente"), "un titolo che non c'è più").toBe(-1);
+  });
+
+  it("i titoli formattati: la riga dello span basta, e il ripiego confronta il testo puro della Struttura", () => {
+    const doc = "Uno\n\n## I **conti**\n\nDue\n\n## Vedi [[Marzo]]\n\nTre\n\n## Titolo ^abc\n\nQuattro\n\n## `x` e *y* \\# [z](u)\n\nFine";
+    const state = stateOf(doc);
+    const blocks = blocksOf(state);
+    // Il nome della Struttura è `Heading.text` del provider, senza segni.
+    const cases: [string, string][] = [
+      ["## I **conti**", "I conti"],
+      ["## Vedi [[Marzo]]", "Vedi Marzo"],
+      ["## Titolo ^abc", "Titolo"],
+      ["## `x` e *y* \\# [z](u)", "x e y # z"],
+    ];
+    for (const [heading, title] of cases) {
+      const place = offer(doc, heading, title);
+      expect(headingOfPlace(state, blocks, place.span, title), `${heading} dallo span`).toBe(indexAt(state, heading));
+      // Lo span su un'altra riga (la Struttura indietro di una battuta): vince il nome.
+      expect(headingOfPlace(state, blocks, { start: 0 }, title), `${heading} dal nome`).toBe(indexAt(state, heading));
+    }
+    const uno = indexAt(state, "Uno");
+    const targets = placeTargets(state, blocks, { first: uno, last: uno }, cases.map(([heading, title]) => offer(doc, heading, title)));
+    expect(targets.map((target) => target.label)).toEqual(cases.map(([, title]) => `In fondo a «${title}»`));
+  });
+
+  it("una nota coi CRLF: gli span contano i `\\r`, e il rilascio va sul titolo omonimo giusto", () => {
+    // Ottanta `\r` prima del primo «A»: contati come caratteri, lo span
+    // cadrebbe oltre il secondo «A», a due righe da lì, e vincerebbe quello.
+    const filler = Array.from({ length: 40 }, (_, i) => [`riga ${i}`, ""]).flat();
+    const disk = [...filler, "## A", "", "uno", "", "## A", "", "due", "", "## B", "", "tre"].join("\r\n");
+    const state = EditorState.create({
+      doc: disk,
+      extensions: [EditorState.lineSeparator.of("\r\n"), markdown({ base: markdownGrammar }), blockModel, history()],
+    });
+    ensureSyntaxTree(state, state.doc.length, 5000);
+    const blocks = blocksOf(state);
+    expect(state.sliceDoc(), "la sorgente esce coi suoi a capo").toBe(disk);
+    const first = bytes(disk.slice(0, disk.indexOf("## A")));
+    const place: SurfaceDropOffer = { kind: "place", document: { documentId: "nota.md", vault: undefined }, span: { start: first, end: first + 4 }, title: "A", rect: { left: 0, top: 0, right: 100, bottom: 28 }, hover: vi.fn() };
+    const headings = blocks.map((block, i) => [block, i] as const).filter(([block]) => block.kind === "heading" && state.sliceDoc(block.from, block.to).startsWith("## A"));
+    expect(headings).toHaveLength(2);
+    expect(headingOfPlace(state, blocks, place.span, "A"), "il primo «A», quello dello span").toBe(headings[0]![1]);
+    const tre = indexAt(state, "tre");
+    const [target] = placeTargets(state, blocks, { first: tre, last: tre }, [place]);
+    const moved = state.update(target!.drop(state, blocks, { first: tre, last: tre })!).state;
+    // Il posto si legge sul testo del documento: gli a capo del pezzo spostato
+    // in una nota CRLF sono di `moveSiblings` (move.ts), non di questo modulo.
+    expect(moved.doc.toString().endsWith("## A\n\nuno\n\ntre\n\n## A\n\ndue\n\n## B")).toBe(true);
   });
 });
 

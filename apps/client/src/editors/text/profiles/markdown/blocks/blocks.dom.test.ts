@@ -20,7 +20,7 @@ import { dragPose, LIFT_SCALE } from "./motion";
 import { closeContextMenu } from "../../../../../ui/menu";
 import { openSlashMenu, slashMenuExtension, type SlashMenuSource } from "../slash";
 import { propertiesDisplay } from "../../../properties-display";
-import { offerDropTargets } from "../../../../core/registry";
+import { dropOffersChanged, offerDropTargets } from "../../../../core/registry";
 
 // I Blocchi nell'editor vero: maniglie, menu, selezione di blocchi, tasti.
 
@@ -737,20 +737,28 @@ describe("fuori dalla colonna (E2)", () => {
   const tag = (view: EditorView) => view.dom.querySelector<HTMLElement>(".cm-fub-block-lift-to");
 
   /// La Struttura della nota: un titolo, «I conti», nella riga 400–600 × 100–128.
-  function structure(hover = vi.fn()) {
+  /// `at.top` sposta la riga (la Struttura che scorre); `asked` conta le misure.
+  function structure(hover = vi.fn(), vault: string | undefined = undefined) {
     const start = DOC.indexOf("## I conti");
+    const at = { top: 100 };
+    const asked = vi.fn();
     const stop = offerDropTargets({
-      offers: (doc) => doc === "nota.md"
-        ? [{ kind: "place", documentId: "nota.md", span: { start, end: start + 10 }, title: "I conti", rect: { left: 400, top: 100, right: 600, bottom: 128 }, hover }]
-        : [],
+      offers: (doc) => {
+        asked();
+        return doc.documentId === "nota.md"
+          ? [{ kind: "place", document: { documentId: "nota.md", vault }, span: { start, end: start + 10 }, title: "I conti", rect: { left: 400, top: at.top, right: 600, bottom: at.top + 28 }, hover }]
+          : [];
+      },
     });
-    return { hover, stop };
+    return { hover, stop, at, asked };
   }
+  const NOTE = { documentId: "nota.md", vault: undefined };
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
   it("oltre 90 px dal testo il blocco si stacca; sul titolo della Struttura va in fondo alla sezione, e un annulla lo rimette", () => {
     const { hover, stop } = structure();
     try {
-      const view = mount(DOC, 0, vi.fn(), [], { document: () => "nota.md" });
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE });
       rowsOf20(view);
       const hand = grab(view, 0, 10);
       hand.move(14);
@@ -785,7 +793,7 @@ describe("fuori dalla colonna (E2)", () => {
   });
 
   it("fuori dal titolo, o con la Struttura chiusa, il cartellino torna indietro al rilascio", () => {
-    const view = mount(DOC, 0, vi.fn(), [], { document: () => "nota.md" });
+    const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE });
     rowsOf20(view);
     const hand = grab(view, 0, 10);
     hand.move(14);
@@ -806,7 +814,7 @@ describe("fuori dalla colonna (E2)", () => {
   it("il titolo che è il blocco in mano non è un bersaglio", () => {
     const { hover, stop } = structure();
     try {
-      const view = mount(DOC, 0, vi.fn(), [], { document: () => "nota.md" });
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE });
       rowsOf20(view);
       const hand = grab(view, 1, 50);
       hand.move(54);
@@ -824,7 +832,7 @@ describe("fuori dalla colonna (E2)", () => {
   it("tornato verso il testo, il blocco riprende a cercare il posto fra i vicini", () => {
     const { stop } = structure();
     try {
-      const view = mount(DOC, 0, vi.fn(), [], { document: () => "nota.md" });
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE });
       rowsOf20(view);
       const hand = grab(view, 0, 10);
       hand.move(14);
@@ -834,6 +842,69 @@ describe("fuori dalla colonna (E2)", () => {
       expect(tag(view)?.textContent, "di nuovo l'etichetta della sezione").toBe("in «I conti»");
       hand.up(110);
       expect(view.state.doc.toString()).toBe("## I conti\n\nDue\n\nUno\n\n## Fine\n\nTre");
+    } finally {
+      stop();
+    }
+  });
+
+  it("la Struttura che scorre o si ridisegna a metà gesto: i bersagli si rimisurano, non a ogni movimento", async () => {
+    const { hover, stop, at, asked } = structure();
+    try {
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE });
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(110, 500);
+      expect(tag(view)?.textContent).toBe("In fondo a «I conti»");
+      const measured = asked.mock.calls.length;
+      hand.move(112, 500);
+      hand.move(114, 502);
+      expect(asked.mock.calls.length, "nessuna misura per movimento").toBe(measured);
+      // La rotella scorre la Struttura: la riga va 200 px più giù.
+      at.top = 300;
+      document.body.dispatchEvent(new Event("scroll"));
+      document.body.dispatchEvent(new Event("scroll"));
+      await frame();
+      expect(asked.mock.calls.length, "una misura per fotogramma").toBe(measured + 1);
+      expect(hover).toHaveBeenLastCalledWith(false);
+      expect(tag(view)?.hidden, "sotto il puntatore non c'è più la riga").toBe(true);
+      expect(live(view)).toBe("Fuori dal testo: lasciato qui torna al suo posto");
+      hand.move(310, 500);
+      expect(tag(view)?.textContent, "la riga dov'è adesso").toBe("In fondo a «I conti»");
+      // La shell ridisegna: la riga torna su, e il bersaglio la segue.
+      at.top = 100;
+      dropOffersChanged();
+      await frame();
+      expect(tag(view)?.hidden).toBe(true);
+      hand.move(110, 500);
+      expect(tag(view)?.textContent).toBe("In fondo a «I conti»");
+      hand.up(110);
+      expect(view.state.doc.toString()).toBe("## I conti\n\nDue\n\nUno\n\n## Fine\n\nTre");
+      // Finito il gesto, niente ascolti rimasti accesi.
+      const after = asked.mock.calls.length;
+      document.body.dispatchEvent(new Event("scroll"));
+      dropOffersChanged();
+      await frame();
+      expect(asked.mock.calls.length).toBe(after);
+    } finally {
+      stop();
+    }
+  });
+
+  it("i posti di un altro vault, con lo stesso percorso, non sono bersagli", () => {
+    const { hover, stop } = structure(vi.fn(), "/altro-vault");
+    try {
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => ({ documentId: "nota.md", vault: "/questo-vault" }) });
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(110, 500);
+      expect(hand.lift()?.dataset.free).toBe("true");
+      expect(tag(view)?.hidden).toBe(true);
+      expect(hover).not.toHaveBeenCalled();
+      hand.up(110);
+      hand.handles.returning?.land();
+      expect(view.state.doc.toString()).toBe(DOC);
     } finally {
       stop();
     }

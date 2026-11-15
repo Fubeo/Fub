@@ -10,7 +10,7 @@
 // aggiungono altri. Niente DOM: rettangoli e testo.
 import type { EditorState } from "@codemirror/state";
 import type { SurfaceDropOffer, SurfaceRect } from "../../../../core/registry";
-import { byteToCharIndex } from "../../../../../rules/offsets";
+import { byteToNormalizedCharIndices } from "../../../../../rules/offsets";
 import { liveStrings } from "../strings";
 import type { Block } from "./model";
 import { type BlockRun, headingText, type MoveSpec, moveSiblings, pinnedFirst, siblingsOf } from "./move";
@@ -28,11 +28,20 @@ export interface DropTarget {
 }
 
 /// Il titolo che un posto della Struttura nomina: quello che comincia dove
-/// dice lo span (byte UTF-8 della sorgente disegnata) col testo della riga,
-/// o, se la Struttura è rimasta indietro di una battuta, il titolo con quel
-/// testo più vicino. `-1` se non c'è.
-export function headingOfPlace(state: EditorState, blocks: readonly Block[], span: { readonly start: number }, title: string, text = state.doc.toString()): number {
-  const at = byteToCharIndex(text, span.start);
+/// dice lo span (byte UTF-8 della sorgente com'è sul disco, `\r` compresi),
+/// o, se la Struttura è rimasta indietro di una battuta, il titolo più vicino
+/// con quel nome. `-1` se non c'è.
+///
+/// `source` è la sorgente coi suoi a capo: `state.sliceDoc()` rende quelli
+/// del file (`EditorState.lineSeparator`), e il ponte
+/// `byteToNormalizedCharIndices` la porta sugli offset del documento, che ha
+/// soltanto `\n`, come fa `revealByteOffset` del motore.
+export function headingOfPlace(state: EditorState, blocks: readonly Block[], span: { readonly start: number }, title: string, source = state.sliceDoc()): number {
+  return headingAt(state, blocks, byteToNormalizedCharIndices(source, [span.start])[0]!, title);
+}
+
+/// `headingOfPlace` con lo span già portato sugli offset del documento.
+function headingAt(state: EditorState, blocks: readonly Block[], at: number, title: string): number {
   const line = state.doc.lineAt(Math.min(at, state.doc.length)).from;
   const wanted = title.trim();
   let best = -1;
@@ -40,9 +49,10 @@ export function headingOfPlace(state: EditorState, blocks: readonly Block[], spa
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i]!;
     if (block.kind !== "heading") continue;
-    const same = headingText(state, block) === wanted;
-    if (block.from === line && (same || wanted === "")) return i;
-    if (!same) continue;
+    // La riga dello span basta: il nome serve soltanto da ripiego, e la
+    // Struttura lo scrive in testo puro, non come la riga Markdown.
+    if (block.from === line) return i;
+    if (wanted === "" || headingPlainText(state, block) !== wanted) continue;
     const d = Math.abs(block.from - line);
     if (d < distance) {
       best = i;
@@ -50,6 +60,25 @@ export function headingOfPlace(state: EditorState, blocks: readonly Block[], spa
     }
   }
   return best;
+}
+
+/// Il nome di un titolo come lo scrive la Struttura: il testo puro del
+/// provider (`Heading.text` in `crates/fub-format-markdown/src/parse.rs`),
+/// senza i segni del titolo, l'ancora `^id` in coda, l'enfasi, il codice, i
+/// collegamenti e gli escape. Imita il parser vero quanto basta al ripiego
+/// per nome: la prova che conta resta la riga dello span.
+export function headingPlainText(state: EditorState, block: Block): string {
+  return headingText(state, block)
+    .replace(/\s+\^[A-Za-z0-9][A-Za-z0-9_-]*\s*$/, "")
+    .replace(/!?\[\[[^\]|]*\|([^\]]*)\]\]/g, "$1")
+    .replace(/!?\[\[([^\]]*)\]\]/g, "$1")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/(`+)([^`]*?)\1/g, "$2")
+    .replace(/(\*\*|__|~~|==)(?=\S)(.+?)(?<=\S)\1/g, "$2")
+    .replace(/(\*|_|~|\^)(?=\S)(.+?)(?<=\S)\1/g, "$2")
+    .replace(/\\([!-/:-@[-`{-~])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /// Dove finisce la sezione del titolo `heading`: il fratello davanti a cui va
@@ -85,12 +114,13 @@ export function moveToSectionEnd(state: EditorState, blocks: readonly Block[], r
 export function placeTargets(state: EditorState, blocks: readonly Block[], run: BlockRun, offers: readonly SurfaceDropOffer[]): DropTarget[] {
   const out: DropTarget[] = [];
   if (offers.length === 0) return out;
-  const text = state.doc.toString();
-  for (const offer of offers) {
+  // Un passaggio solo sulla sorgente per tutti gli span.
+  const starts = byteToNormalizedCharIndices(state.sliceDoc(), offers.map((offer) => offer.span.start));
+  for (const [index, offer] of offers.entries()) {
     if (offer.kind !== "place") continue;
     const rect = offer.rect;
     if (!(rect.right > rect.left && rect.bottom > rect.top)) continue;
-    const heading = headingOfPlace(state, blocks, offer.span, offer.title, text);
+    const heading = headingAt(state, blocks, starts[index]!, offer.title);
     if (heading < 0 || !moveToSectionEnd(state, blocks, run, heading)) continue;
     const name = offer.title.trim() || headingText(state, blocks[heading]!);
     const key = { from: blocks[heading]!.from, title: headingText(state, blocks[heading]!) };

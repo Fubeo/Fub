@@ -40,16 +40,16 @@ import {
 } from "./place";
 import { animate, halt, liveState, type Motion, motionLevel, onFrame } from "../../../../../moto";
 import { markPresence } from "../../../../core/presence";
-import { dropOffers } from "../../../../core/registry";
+import { dropOffers, type SurfaceDropDocument, watchDropOffers } from "../../../../core/registry";
 import { type DropTarget, placeTargets, targetAt } from "./drop-targets";
 import { edgeDepth, edgeScroll, type EdgeScroll } from "./autoscroll";
 import type { Teardown } from "../../../../../ui/lifetime";
 
 export interface BlocksOptions {
-  /// L'id della nota nel vault: i posti fuori dalla colonna (i titoli della
-  /// sua Struttura) si chiedono per lei. Senza, il blocco staccato dal testo
-  /// non ha bersagli e torna al suo posto.
-  readonly document?: () => string | null;
+  /// La nota e il suo vault: i posti fuori dalla colonna (i titoli della sua
+  /// Struttura) si chiedono per lei. Senza, il blocco staccato dal testo non
+  /// ha bersagli e torna al suo posto.
+  readonly document?: () => SurfaceDropDocument | null;
   /// Il nome della pagina, per il link al blocco: `[[Pagina#^id]]`.
   readonly page?: () => string | null;
   /// Dice all'utente com'è andata un'azione che non si vede nel testo.
@@ -262,9 +262,14 @@ interface Hold {
   /// La scala del cartellino (largo al più 250 px).
   readonly freeScale: number;
   /// I bersagli fuori dalla colonna, chiesti alla shell quando il blocco si
-  /// stacca, e quello sotto il puntatore.
+  /// stacca e di nuovo quando la finestra scorre o la shell li ridisegna, e
+  /// quello sotto il puntatore.
   targets: readonly DropTarget[];
   hot: DropTarget | null;
+  /// Gli ascolti accesi mentre il blocco è staccato (lo scorrimento della
+  /// finestra, i ridisegni della shell) e la rimisura in attesa.
+  watching: Teardown | null;
+  remeasure: number | null;
   /// Il cartellino lasciato senza bersaglio torna a casa da questa scala.
   shrunk: number | null;
   /// Lo scorrimento al bordo: il suo stato e il ciclo che lo fa.
@@ -329,6 +334,10 @@ const FREE_WIDTH = 250;
 const FREE_SCALE = 0.86;
 const FREE_X = 14;
 const FREE_Y = 16;
+/// Il rimpicciolimento allo stacco, come nel prototipo (`.lift-c`:
+/// `transform .24s cubic-bezier(0.3, 1.45, 0.5, 1)`).
+const FREE_MS = 240;
+const FREE_EASING = "cubic-bezier(0.3, 1.45, 0.5, 1)";
 /// Di quanto il puntatore deve muoversi perché un clic diventi un trascinamento.
 const SLOP = 4;
 /// Al tocco, quanto (ms) va tenuto premuto perché il blocco si prenda.
@@ -1076,7 +1085,7 @@ class HandlesView {
       run, sibs, others, geo, place: geo.origin, lean: "none", beside: null,
       el, card, shade, to, slot, left, held, grab, scroller,
       column: { left: content.left, right: content.right }, text,
-      free: false, freeScale: Math.min(FREE_SCALE, FREE_WIDTH / (width + 2 * CARD_PAD)), targets: [], hot: null, shrunk: null,
+      free: false, freeScale: Math.min(FREE_SCALE, FREE_WIDTH / (width + 2 * CARD_PAD)), targets: [], hot: null, watching: null, remeasure: null, shrunk: null,
       edge: edgeScroll(), scrolling: null,
       section: sectionAt(state, blocks, span.from, span), said: "",
       skew: Math.abs(skew) < 0.5 ? 0 : skew,
@@ -1089,6 +1098,7 @@ class HandlesView {
       hold.frames = null;
       hold.el.style.willChange = "";
       this.stopScroll(hold);
+      this.unwatchTargets(hold);
       hold.hot?.hover(false);
       hold.hot = null;
     });
@@ -1188,12 +1198,7 @@ class HandlesView {
     hold.place = hold.geo.origin;
     hold.lean = "none";
     hold.beside = null;
-    const hot = targetAt(hold.targets, drag.x, drag.y);
-    if (hot !== hold.hot) {
-      hold.hot?.hover(false);
-      hot?.hover(true);
-      hold.hot = hot;
-    }
+    this.pointTarget(drag, hold);
     hold.tx = drag.x + FREE_X;
     hold.ty = drag.y + FREE_Y;
     this.layout(drag, true);
@@ -1212,7 +1217,8 @@ class HandlesView {
 
   /// Il blocco in mano si stacca: passa nello strato sopra la finestra (così
   /// raggiunge la Struttura, fuori dal riquadro), in coordinate dello schermo,
-  /// e chiede alla shell i bersagli, una volta per stacco.
+  /// rimpicciolisce col moto del prototipo (240 ms, la curva che supera
+  /// l'arrivo di un soffio) e chiede alla shell i bersagli.
   goFree(drag: Drag, hold: Hold): void {
     const rest = this.restOnScreen(hold);
     hold.cx = rest.x + hold.cx * hold.sx;
@@ -1227,13 +1233,73 @@ class HandlesView {
     hold.tx = hold.cx;
     hold.ty = hold.cy;
     this.follow(drag, true);
-    const id = this.view.state.facet(blocksOptions).document?.() ?? null;
-    if (id === null) {
-      hold.targets = [];
-      return;
+    // La transizione CSS non c'è (il moto la spegne dentro l'editor): la
+    // carta e l'ombra partono dalla grandezza di presa e calano al riposo
+    // del cartellino. Col moto ridotto ci arrivano subito.
+    if (motionLevel() !== "reduced") {
+      const from = LIFT_SCALE / hold.freeScale;
+      for (const part of [hold.card, hold.shade]) {
+        animate(part, { from: { scale: from }, duration: FREE_MS, easing: FREE_EASING });
+      }
     }
+    this.measureTargets(drag, hold);
+    this.watchTargets(drag, hold);
+  }
+
+  /// Chiede alla shell i bersagli di adesso, e riaccende quello sotto il
+  /// puntatore: allo stacco, e poi a ogni scorrimento o ridisegno.
+  measureTargets(drag: Drag, hold: Hold): void {
+    const doc = this.view.state.facet(blocksOptions).document?.() ?? null;
     const state = this.view.state;
-    hold.targets = placeTargets(state, state.field(blockModel).blocks, hold.run, dropOffers(id));
+    hold.targets = doc === null ? [] : placeTargets(state, state.field(blockModel).blocks, hold.run, dropOffers(doc));
+    // Il bersaglio di prima appartiene a misure vecchie: si spegne sempre, e
+    // si riaccende quello nuovo sotto il puntatore (anche la stessa riga).
+    hold.hot?.hover(false);
+    hold.hot = null;
+    this.pointTarget(drag, hold);
+  }
+
+  /// Accende il bersaglio sotto il puntatore e spegne quello di prima; se
+  /// cambia, ridice l'etichetta e l'annuncio.
+  pointTarget(drag: Drag, hold: Hold): boolean {
+    const hot = targetAt(hold.targets, drag.x, drag.y);
+    if (hot === hold.hot) return false;
+    hold.hot?.hover(false);
+    hot?.hover(true);
+    hold.hot = hot;
+    return true;
+  }
+
+  /// Mentre il blocco è staccato, i bersagli si rimisurano quando qualcosa
+  /// sotto di lui scorre (la rotella funziona anche col puntatore catturato:
+  /// in cattura sulla finestra, così vale per ogni scorrimento) e quando la
+  /// shell ridisegna i suoi posti. Una rimisura per fotogramma al più, mai
+  /// a ogni movimento del puntatore.
+  watchTargets(drag: Drag, hold: Hold): void {
+    this.unwatchTargets(hold);
+    const win = this.view.dom.ownerDocument.defaultView ?? window;
+    const soon = () => {
+      if (hold.remeasure !== null) return;
+      hold.remeasure = win.requestAnimationFrame(() => {
+        hold.remeasure = null;
+        if (this.drag !== drag || drag.hold !== hold || !hold.free) return;
+        this.measureTargets(drag, hold);
+        this.layout(drag, false);
+      });
+    };
+    win.addEventListener("scroll", soon, { capture: true, passive: true });
+    const stopWatching = watchDropOffers(soon);
+    hold.watching = () => {
+      win.removeEventListener("scroll", soon, { capture: true });
+      stopWatching();
+      if (hold.remeasure !== null) win.cancelAnimationFrame(hold.remeasure);
+      hold.remeasure = null;
+    };
+  }
+
+  unwatchTargets(hold: Hold): void {
+    hold.watching?.();
+    hold.watching = null;
   }
 
   /// Il blocco torna nel testo: di nuovo nello scorrimento, da dove si vede
@@ -1241,6 +1307,7 @@ class HandlesView {
   unfree(hold: Hold, grow: boolean): void {
     if (!hold.free) return;
     hold.free = false;
+    this.unwatchTargets(hold);
     hold.hot?.hover(false);
     hold.hot = null;
     hold.targets = [];
@@ -1276,9 +1343,13 @@ class HandlesView {
       if (depth === 0) return this.stopScroll(hold);
       const px = hold.edge.step(depth, elapsed);
       if (px === 0) return;
-      const before = scrollDOM.scrollTop;
-      scrollDOM.scrollTop = before + px;
-      if (scrollDOM.scrollTop === before) this.stopScroll(hold);
+      // In cima o in fondo si ferma. Il confronto è coi limiti dello
+      // scorrimento, non con la posizione di prima: con uno zoom frazionario
+      // un passo di un px può arrotondarsi a zero a metà nota.
+      const max = scrollDOM.scrollHeight - scrollDOM.clientHeight;
+      const at = scrollDOM.scrollTop;
+      if (px < 0 ? at <= 0 : at >= max - 0.5) return this.stopScroll(hold);
+      scrollDOM.scrollTop = Math.max(0, Math.min(max, at + px));
     });
   }
 

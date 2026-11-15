@@ -542,13 +542,13 @@
   background: var(--accent);
 }
 /* Il cartellino (E2, «Fuori dalla colonna»): staccato dal testo il blocco in
-   mano si fa piccolo, appena trasparente, senza la maniglia; carta e ombra
-   rimpiccioliscono col moto della presa. Il titolo della Struttura sotto il
-   puntatore lo accende `nodes.css`. */
+   mano si fa piccolo, appena trasparente, senza la maniglia. Il
+   rimpicciolimento lo anima `handles.ts` (`goFree`): dentro l'editor il moto
+   spegne le transizioni CSS. Il titolo della Struttura sotto il puntatore lo
+   accende `nodes.css`. */
 .cm-editor .cm-fub-block-lift[data-free] .cm-fub-block-lift-card,
 .cm-editor .cm-fub-block-lift[data-free] .cm-fub-block-lift-shade {
   opacity: 0.97;
-  transition: scale 0.24s cubic-bezier(0.3, 1.45, 0.5, 1), opacity 0.16s;
 }
 .cm-editor .cm-fub-block-lift[data-free] .cm-fub-block-lift-grip {
   opacity: 0;

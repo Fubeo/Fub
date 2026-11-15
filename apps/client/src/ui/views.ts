@@ -60,7 +60,7 @@ import { activeDoc } from "../state/layout";
 import { on } from "../state/store";
 import { pageName } from "../rules/mirrored";
 import { embeddedViewsDiscovered, setEmbeddedViewHost } from "./embedded-views";
-import { offerDropTargets, type SurfaceDropOffer, type SurfaceRect } from "../editors/core/registry";
+import { dropOffersChanged, offerDropTargets, type SurfaceDropDocument, type SurfaceDropOffer, type SurfaceRect } from "../editors/core/registry";
 
 const viewsLeftEl = $("#views-left");
 const viewsRightEl = $("#views-right");
@@ -181,6 +181,8 @@ function markPlaces(root: HTMLElement, node: UiNode): void {
     row.dataset.placeStart = String(place.start);
     row.dataset.placeEnd = String(place.end);
   });
+  // Righe ridisegnate: un blocco già fuori dalla colonna rimisura i posti.
+  dropOffersChanged();
 }
 
 /// La parte di `el` che si vede: il suo rettangolo tagliato da ogni antenato
@@ -208,19 +210,21 @@ function visibleRect(el: HTMLElement): SurfaceRect | null {
   return right > left && bottom > top ? { left, top, right, bottom } : null;
 }
 
-/// I posti di `documentId` che le view montate mostrano adesso.
-function placesOn(documentId: string): SurfaceDropOffer[] {
+/// I posti di `document` che le view montate mostrano adesso: soltanto quelle
+/// montate nel suo stesso vault (FUB-001), perché lo stesso percorso in un
+/// altro vault è un'altra nota.
+function placesOn(document: SurfaceDropDocument): SurfaceDropOffer[] {
   const out: SurfaceDropOffer[] = [];
   for (const mountedView of mounted.values()) {
     const container = mountedView.container;
-    if (!container.isConnected) continue;
+    if (!container.isConnected || mountedView.vault !== document.vault) continue;
     for (const row of Array.from(container.querySelectorAll<HTMLElement>(".ui-tree-label[data-place-doc]"))) {
-      if (row.dataset.placeDoc !== documentId) continue;
+      if (row.dataset.placeDoc !== document.documentId) continue;
       const rect = visibleRect(row);
       if (!rect) continue;
       out.push({
         kind: "place",
-        documentId,
+        document,
         span: { start: Number(row.dataset.placeStart), end: Number(row.dataset.placeEnd) },
         title: row.textContent?.trim() ?? "",
         rect,
@@ -267,6 +271,8 @@ function unmountMounted(id: string, mountedView: Mounted): void {
   mounted.delete(id);
   unregisterPanel(id);
   unmountTree(mountedView.container);
+  // Le sue righe non sono più posti: chi ne tiene di prima li rimisura.
+  dropOffersChanged();
 }
 
 /// Monta (o rimonta) una view dichiarata dentro il riquadro `pane`.

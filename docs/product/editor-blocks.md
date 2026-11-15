@@ -110,7 +110,12 @@ lasciato qui torna al suo posto» o il bersaglio. Col moto ridotto il
 cartellino non vola. I bersagli arrivano dal registro degli editor
 (`offerDropTargets` in `editors/core/registry.ts`): la Struttura li offre
 per le righe il cui `action.payload` porta `{doc, start, end}` (byte del
-titolo), e le misura una volta all'uscita dalla colonna.
+titolo nella sorgente com'è sul disco, `\r` compresi), soltanto per la nota
+dello stesso vault. Il titolo si riconosce dalla riga dello span; il nome
+della riga (testo puro, senza enfasi, collegamenti né `^id`) serve soltanto
+da ripiego. I posti si misurano all'uscita dalla colonna e di nuovo, al più
+una volta per fotogramma, quando qualcosa scorre o la Struttura si
+ridisegna (`dropOffersChanged`), mai a ogni movimento del puntatore.
 
 ## La selezione di blocchi
 

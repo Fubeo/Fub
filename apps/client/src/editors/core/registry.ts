@@ -246,7 +246,8 @@ export interface SurfaceRect {
  */
 export interface SurfaceDropOffer {
   readonly kind: "place";
-  readonly documentId: string;
+  /** The document the place belongs to, in the vault `vault`. */
+  readonly document: SurfaceDropDocument;
   readonly span: Span;
   readonly title: string;
   /** The visible part of the row, measured when the offers were asked for. */
@@ -255,13 +256,28 @@ export interface SurfaceDropOffer {
   hover(on: boolean): void;
 }
 
+/**
+ * A document in a vault: the same path in two vaults is two documents.
+ * `vault` is the vault root the view or the surface was mounted in
+ * (`undefined`: the one open when no root is known, as `vaultArg` reads it).
+ */
+export interface SurfaceDropDocument {
+  readonly documentId: string;
+  readonly vault: string | undefined;
+}
+
 /** Who offers drop places: the shell, for the views it draws. */
 export interface SurfaceDropOffers {
-  /** The places for `documentId` that can be seen now; read once per gesture, never per frame. */
-  offers(documentId: string): readonly SurfaceDropOffer[];
+  /**
+   * The places of `document` that can be seen now, measured now. Asked when
+   * something leaves the column and again when the shell says they changed
+   * (`dropOffersChanged`) or the window scrolls; never per frame.
+   */
+  offers(document: SurfaceDropDocument): readonly SurfaceDropOffer[];
 }
 
 const dropOfferSources = new Set<SurfaceDropOffers>();
+const dropOfferWatchers = new Set<() => void>();
 
 /**
  * Registers a source of drop places outside the document's column: the shell
@@ -270,27 +286,53 @@ const dropOfferSources = new Set<SurfaceDropOffers>();
  */
 export function offerDropTargets(source: SurfaceDropOffers): () => void {
   dropOfferSources.add(source);
+  dropOffersChanged();
   return () => {
     dropOfferSources.delete(source);
+    dropOffersChanged();
   };
 }
 
 /**
- * The drop places every source offers for `documentId` now. A source that
- * throws offers nothing: a gesture never breaks for a place it can't reach.
+ * The drop places every source offers for `document` now: same document and
+ * same vault. A source that throws offers nothing: a gesture never breaks for
+ * a place it can't reach.
  */
-export function dropOffers(documentId: string): SurfaceDropOffer[] {
+export function dropOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
   const out: SurfaceDropOffer[] = [];
   for (const source of [...dropOfferSources]) {
     try {
-      for (const offer of source.offers(documentId)) {
-        if (offer.documentId === documentId) out.push(offer);
+      for (const offer of source.offers(document)) {
+        if (offer.document.documentId === document.documentId && offer.document.vault === document.vault) out.push(offer);
       }
     } catch {
       // Una sorgente guasta non toglie le altre.
     }
   }
   return out;
+}
+
+/**
+ * The shell redrew rows that offer places (or took them away): whoever holds
+ * offers from before measures them again. Watchers run synchronously; one
+ * that throws doesn't stop the others.
+ */
+export function dropOffersChanged(): void {
+  for (const watcher of [...dropOfferWatchers]) {
+    try {
+      watcher();
+    } catch {
+      // Un osservatore guasto non toglie gli altri.
+    }
+  }
+}
+
+/** Listens for `dropOffersChanged`, while something is out of the column; the disposer stops it. */
+export function watchDropOffers(watcher: () => void): () => void {
+  dropOfferWatchers.add(watcher);
+  return () => {
+    dropOfferWatchers.delete(watcher);
+  };
 }
 
 /**
