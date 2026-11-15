@@ -1,7 +1,7 @@
 import type { DocumentWindowRequest } from "../host/contract";
 export type { DocumentWindowRequest } from "../host/contract";
 import { operationFromText, transformPair, tryApplyOperation, validateOperation, type TextOperation } from "../editors/core/text-operation";
-import { releaseSession } from "./card-editors";
+import { releaseSession } from "./card-writes";
 import { documentSessions, type DocumentSession, type DocumentSurfaceDescriptor } from "./document-session";
 import { on, state } from "./store";
 import { mountedTheme, type MirroredTheme } from "../theme/loader";
