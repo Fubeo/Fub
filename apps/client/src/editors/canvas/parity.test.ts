@@ -12,7 +12,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenu, SurfaceMenuEntry } from "../core/editor-menu";
 import { CardCache } from "./card-cache";
 import { CARD_PANEL_ID, createCanvasInspector } from "./chrome/inspector";
-import { createCardRegistry } from "./cards";
+import { createCardRegistry, type CardCellBox, type CardPageBox, type CardRenderer } from "./cards";
 import type { CanvasEngine, CanvasEngineOptions, CanvasNotesPort } from "./engine";
 import type { PartsPickerPort } from "./parts-picker";
 import { mountCanvas } from "./test-mount";
@@ -466,7 +466,17 @@ interface R8Run {
   readonly undos?: number;
 }
 
-type R8Setup = R8Run | { readonly skip: string };
+/**
+ * Come R8 fa una voce: un giro, o un giro per ogni gesto della voce (il
+ * piano chiede la sequenza di ogni gesto), o `skip` col perché.
+ */
+type R8Setup = R8Run | readonly R8Run[] | { readonly skip: string };
+
+/** I giri di una riga di `SETUP`: nessuno per una voce saltata. */
+function runsOf(setup: R8Setup | undefined): readonly R8Run[] {
+  if (!setup || "skip" in setup) return [];
+  return Array.isArray(setup) ? setup : [setup as R8Run];
+}
 
 /** Il centro della vista in coordinate della lavagna, dalla trasformazione della scena. */
 function worldCenter(host: HTMLElement): { x: number; y: number } {
@@ -589,6 +599,78 @@ function dropAt(host: HTMLElement, x: number, y: number, altKey = false): void {
   viewportOf(host).dispatchEvent(event);
 }
 
+/** Un testo trascinato e lasciato nel punto `(x, y)` della lavagna. */
+function dropTextAt(host: HTMLElement, x: number, y: number, text: string): void {
+  const event = new DragEvent("drop", { bubbles: true, cancelable: true });
+  const at = screenOf(host, x, y);
+  const data = { files: [], items: [], types: ["text/plain"], getData: (type: string) => (type === "text/plain" ? text : "") };
+  Object.defineProperties(event, { dataTransfer: { value: data }, clientX: { value: at.clientX }, clientY: { value: at.clientY } });
+  viewportOf(host).dispatchEvent(event);
+}
+
+/** Un doppio clic del mouse su `target`, nel punto `(x, y)` della lavagna. */
+function doubleClickAt(host: HTMLElement, target: Element, x: number, y: number): void {
+  target.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, button: 0, ...screenOf(host, x, y) }));
+}
+
+/** Scrive `text` nel campo aperto della scheda, al posto di quello che c'era. */
+function typeInField(host: HTMLElement, text: string): HTMLTextAreaElement {
+  const field = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor");
+  if (!field) throw new Error("il campo della scheda non è aperto");
+  field.value = text;
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+  return field;
+}
+
+/**
+ * Il filo tirato da `handle` fino al punto `(x, y)` della lavagna, dove sta
+ * `onto`: la tela chiede al documento che cosa c'è sotto il puntatore, che
+ * happy-dom non sa.
+ */
+function pullWire(host: HTMLElement, handle: Element, from: readonly [number, number], to: readonly [number, number], onto: Element | null): void {
+  const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(onto);
+  try {
+    mouseDrag(host, handle, from, to);
+  } finally {
+    pointing.mockRestore();
+  }
+}
+
+/** Le schede finte per l'inchiostro di pagina e di cella, come `engine-ink-anchors.test.ts`. */
+function anchorCards(page: CardPageBox | null, cell: CardCellBox | null): Partial<CanvasEngineOptions> {
+  const pdf: CardRenderer = {
+    kinds: ["pdf"],
+    mount(_node, host) {
+      host.append(document.createElement("div"));
+      return { setMode: () => {}, page: () => page?.page ?? 1, pageBox: () => page, destroy: () => {} };
+    },
+  };
+  const sheet: CardRenderer = {
+    kinds: ["sheet"],
+    mount(_node, host) {
+      host.append(document.createElement("div"));
+      const inside = (x: number, y: number) =>
+        cell !== null && x >= cell.rect.x && x < cell.rect.x + cell.rect.width && y >= cell.rect.y && y < cell.rect.y + cell.rect.height;
+      return {
+        setMode: () => {},
+        cellAt: ({ x, y }) => (inside(x, y) ? cell : null),
+        cellRect: (name, address) => (cell && cell.sheet === name && cell.cell === address ? cell : null),
+        destroy: () => {},
+      };
+    },
+  };
+  return { cards: { registry: createCardRegistry([pdf, sheet]), snapshots: new CardCache(), watch: () => () => {} } };
+}
+
+/**
+ * La pagina 3 (A4, 595 × 842 punti) nella scheda p1 (360 × 480 in 560,400):
+ * dall'angolo 12,44 della scheda, metà della misura, con le proporzioni della
+ * pagina come `pageBox()`: la penna e la resa hanno la stessa scala.
+ */
+const PAGE_THREE: CardPageBox = { page: 3, size: { width: 595, height: 842 }, rect: { x: 12, y: 44, width: 297.5, height: 421 } };
+/** B3 di «Foglio1» nella scheda f1 (in 0,400), in 104,60 della scheda, al 100%. */
+const CELL_B3: CardCellBox = { sheet: "Foglio1", cell: "B3", rect: { x: 104, y: 60, width: 64, height: 20 }, zoom: 1 };
+
 /** Un incolla sulla lavagna: senza puntatore visto, nel punto dello schermo 0,0. */
 function pasteOn(host: HTMLElement, values: Record<string, string>): void {
   const event = new Event("paste", { bubbles: true, cancelable: true });
@@ -705,11 +787,26 @@ const STROKE_TIME = "la GUI scrive l'ora del tratto (`at`), che la forma in codi
  * dice perché; non più di `R8_MAX_SKIPS`.
  */
 const SETUP: Readonly<Record<string, R8Setup>> = {
-  "main.card.add_text": {
-    ...runCommand("canvas.add.text"),
-    ops: ({ host }) => [{ op: "add_card", text: "", ...bornAtCenter(host, 320, 160) }],
-    why: "la scheda nasce vuota al centro della vista, con la misura di sempre della GUI; il testo si scrive dopo",
-  },
+  "main.card.add_text": [
+    {
+      ...runCommand("canvas.add.text"),
+      ops: ({ host }) => [{ op: "add_card", text: "", ...bornAtCenter(host, 320, 160) }],
+      why: "la scheda nasce vuota al centro della vista, con la misura di sempre della GUI; il testo si scrive dopo",
+    },
+    {
+      via: "dblclick-empty",
+      select: [],
+      act: ({ engine, host }) => {
+        doubleClickAt(host, viewportOf(host), 1400, 1000);
+        typeInField(host, "Idea");
+        engine.commitPending();
+      },
+      ops: () => [{ op: "add_card", text: "Idea", x: 1400, y: 1000, width: 320, height: 160 }],
+      why: "la scheda nasce con l'angolo nel punto del doppio clic, agganciato a 8, con la misura di sempre della GUI, e ci si scrive",
+      // La scheda nasce vuota (un passo), poi ci si scrive (un altro).
+      undos: 2,
+    },
+  ],
   "main.card.add_file": {
     via: "canvas.add.file",
     answers: { pickFile: "Corsi/appunti.md" },
@@ -731,18 +828,52 @@ const SETUP: Readonly<Record<string, R8Setup>> = {
     ops: ({ host }) => [{ op: "add_card", label: "", ...bornAtCenter(host, 480, 320) }],
     why: "il gruppo nasce senza nome al centro della vista",
   },
-  "main.card.edit": {
-    via: "Enter",
-    act: ({ engine, host }) => {
-      press(viewportOf(host), "Enter");
-      const editor = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor");
-      if (!editor) throw new Error("Invio non apre il campo della scheda");
-      editor.value = "Perché la media è così bassa?";
-      editor.dispatchEvent(new Event("input", { bubbles: true }));
-      engine.commitPending();
+  "main.card.edit": [
+    {
+      via: "Enter",
+      act: ({ engine, host }) => {
+        press(viewportOf(host), "Enter");
+        const editor = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor");
+        if (!editor) throw new Error("Invio non apre il campo della scheda");
+        editor.value = "Perché la media è così bassa?";
+        editor.dispatchEvent(new Event("input", { bubbles: true }));
+        engine.commitPending();
+      },
     },
-  },
-  "main.card.move": pressKey("ArrowRight"),
+    {
+      via: "dblclick-card",
+      select: [],
+      act: ({ engine, host }) => {
+        doubleClickAt(host, host.querySelector('.canvas-node[data-node="t1"]')!, 100, 80);
+        typeInField(host, "Perché la media è così bassa?");
+        engine.commitPending();
+      },
+    },
+    {
+      // Il campo si chiude con Esc: il testo si registra senza aspettare la pausa.
+      via: "edit-commit",
+      act: ({ host }) => {
+        press(viewportOf(host), "Enter");
+        const field = typeInField(host, "Perché la media è così bassa?");
+        field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+        if (host.querySelector(".canvas-text-editor")) throw new Error("Esc non chiude il campo");
+      },
+    },
+  ],
+  "main.card.move": [
+    pressKey("ArrowRight"),
+    {
+      // Di 27 a destra e 3 in giù: il riquadro di t1 si aggancia a 24,0. Di 8
+      // come la voce non si può: la guida del bordo sinistro di f1 lo riporta a 0.
+      via: "drag-card",
+      select: [],
+      act: ({ host }) => {
+        mouseDrag(host, host.querySelector('.canvas-node[data-node="t1"] .canvas-node-handle')!, [100, 10], [127, 13]);
+      },
+      ops: () => [{ op: "move", ids: ["t1"], dx: 24, dy: 0 }],
+      why: "il trascinamento aggancia il riquadro a 8 (27 → 24, 3 → 0); uno spostamento di 8 la guida di f1 lo riporta a 0",
+    },
+  ],
   "main.color.preset": runCommand("canvas.color.1"),
   "main.color.none": {
     via: "canvas.color.none",
@@ -772,8 +903,34 @@ const SETUP: Readonly<Record<string, R8Setup>> = {
   "main.order.back": runCommand("canvas.send_back"),
   "main.align": runCommand("canvas.align.left"),
   "main.distribute": runCommand("canvas.distribute_x"),
-  "main.edge.connect": runCommand("canvas.connect"),
-  "main.edge.reconnect": { via: "edge-toNode", act: ({ host }) => setField(host, "edge-toNode", "f1") },
+  "main.edge.connect": [
+    runCommand("canvas.connect"),
+    {
+      via: "connect-handle",
+      select: [],
+      act: ({ host }) => {
+        const handle = host.querySelector('.canvas-node[data-node="t2"] [data-connect]');
+        if (!handle) throw new Error("t2 non ha il pulsante «→»");
+        const body = host.querySelector('.canvas-node[data-node="f1"] .canvas-card-body') ?? host.querySelector('.canvas-node[data-node="f1"]');
+        pullWire(host, handle, [700, 20], [200, 500], body);
+      },
+    },
+  ],
+  "main.edge.reconnect": [
+    { via: "edge-toNode", act: ({ host }) => setField(host, "edge-toNode", "f1") },
+    {
+      // L'estremo di arrivo di e1 (sul lato sinistro di t2, in 400,80) lasciato sul corpo di f1.
+      via: "reconnect-end",
+      act: ({ host }) => {
+        const end = host.querySelector('[data-reconnect="e1"][data-endpoint="to"]');
+        if (!end) throw new Error("e1 scelto non ha la maniglia dell'estremo di arrivo");
+        const body = host.querySelector('.canvas-node[data-node="f1"] .canvas-card-body') ?? host.querySelector('.canvas-node[data-node="f1"]');
+        pullWire(host, end, [400, 80], [200, 500], body);
+      },
+      ops: () => [{ op: "set", id: "e1", fields: { toNode: "f1", toSide: "top" } }],
+      why: "la GUI riattacca l'estremo al lato di f1 più vicino all'altro capo (in alto): la regola dei lati per l'estremo riattaccato resta in TypeScript (DECISIONS, T24)",
+    },
+  ],
   "main.edge.reverse": runCommand("canvas.edge.reverse"),
   "main.edge.label": { via: "edge-label", act: ({ host }) => setField(host, "edge-label", "perché") },
   // La voce dice il sottomenu «Colore» (`canvas.color`): la sua voce 4.
@@ -849,21 +1006,42 @@ const SETUP: Readonly<Record<string, R8Setup>> = {
     },
   },
   "N6.parts.excerpt": {
-    skip: "la voce raccoglie quattro gesti (pagine, zona, sezioni, ritaglio): «Parti…» fa solo le sezioni sul posto, e il ritaglio è un gesto, che porta T24 insieme alla scrittura del selettore con `excerpt`",
+    skip: "la voce raccoglie quattro gesti (pagine, zona, sezioni, ritaglio): «Parti…» fa solo le sezioni sul posto, e il selettore che scrive `excerpt` lo porta T26",
   },
   // --- I gesti e gli appunti (T24) ---------------------------------------
   "main.card.drop_files": {
-    skip: "le `ops` della voce sono due `add_card` senza `layout`: la GUI mette i file in griglia (`add_card` con l'id, poi `layout`), come `N6.card.drop_many`, che confronta lo stesso codice del rilascio",
-  },
-  "main.card.paste_text": {
-    via: "paste-text",
+    via: "drop-files",
+    options: () => ({
+      attachments: { deposit: async () => [], resolvePaths: async () => ["Corsi/b.md", "Corsi/a.md"] },
+      newId: idsInOrder("a", "b"),
+    }),
     act: async ({ host }) => {
-      pasteOn(host, { "text/plain": "Testo incollato" });
+      dropAt(host, 1400, 0);
       await settle();
     },
-    ops: ({ host }) => [{ op: "add_card", text: "Testo incollato", ...pastePoint(host) }],
-    why: "nel punto dell'incolla, agganciato a 8, con la forma breve: la misura la dà il nucleo",
+    ops: ({ voice }) => [...(voice.ops ?? []).slice(0, 2), { ...voice.ops![2]!, x: 1400, y: 0 }],
+    why: "la griglia parte dal punto del rilascio, che la voce non dice",
   },
+  "main.card.paste_text": [
+    {
+      via: "paste-text",
+      act: async ({ host }) => {
+        pasteOn(host, { "text/plain": "Testo incollato" });
+        await settle();
+      },
+      ops: ({ host }) => [{ op: "add_card", text: "Testo incollato", ...pastePoint(host) }],
+      why: "nel punto dell'incolla, agganciato a 8, con la forma breve: la misura la dà il nucleo",
+    },
+    {
+      via: "drop-text",
+      act: async ({ host }) => {
+        dropTextAt(host, 1403, 997, "Testo incollato");
+        await settle();
+      },
+      ops: () => [{ op: "add_card", text: "Testo incollato", x: 1400, y: 1000 }],
+      why: "nel punto del rilascio, agganciato a 8, con la forma breve: la misura la dà il nucleo",
+    },
+  ],
   "main.card.replace_file": {
     via: "drop-on-file-card",
     options: () => ({ attachments: { deposit: async () => [], resolvePaths: async () => ["Corsi/voti-2.xlsx"] } }),
@@ -1135,6 +1313,31 @@ const SETUP: Readonly<Record<string, R8Setup>> = {
     // Il tratto (un passo), poi la forma che lo sostituisce (un altro).
     undos: 2,
   },
+  "N6.ink.page": {
+    via: "pen-on-page",
+    select: [],
+    options: () => anchorCards(PAGE_THREE, null),
+    act: ({ engine, host }) => {
+      ballpointAtFullSize(engine, host);
+      // 72,100 e 300,100 della pagina: 560 + 12 + 72/2 e 400 + 44 + 100/2 sulla lavagna.
+      penStroke(host, host.querySelector('.canvas-node[data-node="p1"]')!, [[608, 494], [722, 494]]);
+    },
+    ops: ({ voice }) => [{ ...voice.ops![0]!, size: 4 }],
+    normalize: withoutStrokeTime,
+    why: `la penna scrive lo spessore che si vede: la biro di 2 unità sulla pagina mostrata a metà sono 4 punti della pagina, e \`draw\` prende \`size\` in punti della pagina; ${STROKE_TIME}`,
+  },
+  "N6.ink.cell": {
+    via: "pen-on-cell",
+    select: [],
+    options: () => anchorCards(null, CELL_B3),
+    act: ({ engine, host }) => {
+      ballpointAtFullSize(engine, host);
+      // 2,10 e 60,10 della cella: 104 + 2 e 400 + 60 + 10 sulla lavagna.
+      penStroke(host, host.querySelector('.canvas-node[data-node="f1"]')!, [[106, 470], [164, 470]]);
+    },
+    normalize: withoutStrokeTime,
+    why: STROKE_TIME,
+  },
   "N6.inspector.raw": {
     via: "inspector-edit",
     act: ({ engine }) => {
@@ -1286,9 +1489,23 @@ describe("la GUI scrive come la forma in codice (R8)", () => {
     expect(skipped.length).toBeLessThanOrEqual(R8_MAX_SKIPS);
   });
 
-  it.each(R8_VOICES.map((voice) => [voice.id, voice] as const))("%s", async (_id, voice) => {
-    const setup = SETUP[voice.id];
-    if (!setup || "skip" in setup) return;
-    expect(await r8Problems(voice, setup)).toEqual([]);
+  it("ogni gesto e ogni gesto degli appunti di una voce confrontata ha il suo giro", () => {
+    const missing = R8_VOICES.flatMap((voice) => {
+      const runs = runsOf(SETUP[voice.id]);
+      if (runs.length === 0) return [];
+      const vias = new Set(runs.map((one) => one.via));
+      return voice.gui
+        .flatMap((gui) => [gui.gesture, gui.clipboard])
+        .filter((value): value is string => value !== undefined && !vias.has(value))
+        .map((value) => `${voice.id}: ${value}`);
+    });
+    expect(missing).toEqual([]);
+  });
+
+  const RUNS = R8_VOICES.flatMap((voice) =>
+    runsOf(SETUP[voice.id]).map((one) => [`${voice.id} (${one.via})`, voice, one] as const),
+  );
+  it.each(RUNS)("%s", async (_name, voice, one) => {
+    expect(await r8Problems(voice, one)).toEqual([]);
   });
 });
