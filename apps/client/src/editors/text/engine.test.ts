@@ -125,6 +125,16 @@ describe("applyUserEdit", () => {
     expect(ed.getDoc()).toBe("a\r\nb\r\n");
     ed.destroy();
   });
+  it("insertAtCursor scrive più righe come righe vere anche in CRLF (i riferimenti, #394)", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const { ed, view } = editor();
+      ed.setDoc(`a${nl}b${nl}`);
+      view().dispatch({ selection: { anchor: 3 } });
+      expect(ed.insertAtCursor("[[Uno]]\n[[Due]]")).toBe(true);
+      expect(ed.getDoc()).toBe(`a${nl}b[[Uno]]${nl}[[Due]]${nl}`);
+      ed.destroy();
+    }
+  });
   it("insertAtCursor rifiuta sola lettura e testo con CR", () => {
     const { ed } = editor();
     ed.setDoc("abc");

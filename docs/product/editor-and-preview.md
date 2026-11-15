@@ -230,6 +230,15 @@ buffer e, allo stesso tempo, evita che il cursore di un riquadro muova quello
 dell'altro. Il pannello collega e scollega le superfici visibili, ma non
 coordina il buffer, il salvataggio o il fan-out delle modifiche.
 
+Una nota che va a capo tutta CRLF (scritta su Windows, per esempio) resta
+tutta CRLF: l'editor la apre con quel separatore, e ogni a capo che scrive
+(Invio, le azioni della barra e del «/», le proprietà, la griglia delle
+tabelle, il completamento, l'incolla e il trascinamento) prende quello della
+nota. Una nota già mista si normalizza a LF, com'è sempre stato. Chi compone
+un inserimento lo fa con `"\n"` e conta le posizioni lì, perché un a capo vale
+una posizione qualunque sia il separatore; il testo prende gli a capo della
+nota solo all'ultimo (`editors/text/line-breaks.ts`).
+
 ## Undo, redo e selezione
 
 L'editor offre due piani distinti:

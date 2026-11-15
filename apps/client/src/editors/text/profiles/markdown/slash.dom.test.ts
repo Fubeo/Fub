@@ -130,6 +130,22 @@ describe("il menu «/» nel testo", () => {
     }
   });
 
+  it("in una nota CRLF il blocco nato sotto ha il cursore sulla riga nuova, come in LF (#394)", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const { engine, view, type, pick, destroy } = editor();
+      try {
+        engine.setDoc(`Prima${nl}Comprare il pane `);
+        view.dispatch({ selection: EditorSelection.cursor(view.state.doc.length) });
+        type("/att");
+        pick("markdown.list.task");
+        expect(engine.getDoc()).toBe(`Prima${nl}Comprare il pane${nl}- [ ] `);
+        expect(view.state.selection.main.head).toBe(view.state.doc.length);
+      } finally {
+        destroy();
+      }
+    }
+  });
+
   it("⇧↵ mette il blocco sotto anche su una riga vuota", () => {
     const { engine, type, pick, destroy } = editor();
     try {

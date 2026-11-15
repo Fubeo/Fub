@@ -11,6 +11,7 @@ import { Prec, type Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, WidgetType, keymap, type ViewUpdate } from "@codemirror/view";
 import { redo, undo } from "@codemirror/commands";
 import { isAllowedLink } from "../../../../ui/sanitize";
+import { withLineBreaks } from "../../line-breaks";
 import { mountMathBlocks } from "./math";
 import { frontmatterLanguage } from "./proof";
 import type { MarkdownBlock } from "./render-types";
@@ -112,8 +113,10 @@ class TableController {
     } catch {
       return null;
     }
+    // La sorgente va a capo con "\n", come `doc.sliceString`: la sua lunghezza
+    // è in posizioni anche in una nota CRLF.
     const source = this.#parsed.source;
-    if (this.#view.state.sliceDoc(start, start + source.length) !== source) return null;
+    if (this.#view.state.doc.sliceString(start, start + source.length) !== source) return null;
     return { from: start, to: start + source.length, parsed: this.#parsed };
   }
 
@@ -133,7 +136,7 @@ class TableController {
     const changes = tableChanges(located.parsed, next).map((change) => ({
       from: located.from + change.from,
       to: located.from + change.to,
-      insert: change.insert,
+      insert: withLineBreaks(view.state, change.insert),
     }));
     if (changes.length === 0) return true;
     pending.set(view, { from: located.from, selection, focused: this.grid.hasFocus() });
@@ -157,12 +160,12 @@ class TableController {
     if (where === "before") {
       const first = doc.lineAt(located.from);
       if (first.number > 1) view.dispatch({ selection: { anchor: doc.line(first.number - 1).to }, scrollIntoView: true });
-      else if (writable) view.dispatch({ changes: { from: first.from, insert: "\n" }, selection: { anchor: first.from }, userEvent: "input" });
+      else if (writable) view.dispatch({ changes: { from: first.from, insert: view.state.lineBreak }, selection: { anchor: first.from }, userEvent: "input" });
     } else {
       const last = doc.lineAt(located.to);
       if (last.number < doc.lines) view.dispatch({ selection: { anchor: doc.line(last.number + 1).from }, scrollIntoView: true });
       else if (writable) {
-        view.dispatch({ changes: { from: doc.length, insert: "\n" }, selection: { anchor: doc.length + 1 }, userEvent: "input" });
+        view.dispatch({ changes: { from: doc.length, insert: view.state.lineBreak }, selection: { anchor: doc.length + 1 }, userEvent: "input" });
       }
     }
     view.focus();
