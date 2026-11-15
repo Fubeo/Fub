@@ -395,10 +395,11 @@ se il file arriva.
 
 **Tagliare** copia e poi toglie le schede come «Togli dalla lavagna»: i file
 restano, e l'avviso lo dice con «Annulla». I tratti liberi copiati escono
-dal livello della radice nello stesso commit. Ctrl+D (Duplica) fa una copia
-sfalsata di 32; se le schede scelte sono le copie dell'ultimo Ctrl+D, la
-copia nuova ripete la distanza che c'è adesso fra quelle e le schede di
-partenza, anche dopo averle spostate.
+dal livello della radice nello stesso commit. Ctrl+D (Duplica) è `duplicate`
+del nucleo: fa una copia sfalsata di 32 e agganciata alla griglia di 8, coi
+fili fra le schede copiate; se le schede scelte sono le copie dell'ultimo
+Ctrl+D, la copia nuova ripete la distanza che c'è adesso fra quelle e le
+schede di partenza, anche dopo averle spostate.
 
 ## Parità
 

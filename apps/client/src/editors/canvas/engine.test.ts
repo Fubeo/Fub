@@ -7411,3 +7411,141 @@ describe("il lettore: Spazio toccato su una nota (T76)", () => {
     engine.destroy();
   });
 });
+
+describe("menu, barra, campi e tasti scrivono con le operazioni (T23)", () => {
+  /** Due schede di testo collegate, e una terza a parte. */
+  function linked(): string {
+    return JSON.stringify({
+      nodes: [
+        { id: "a", type: "text", x: 0, y: 0, width: 240, height: 160, text: "uno" },
+        { id: "b", type: "text", x: 400, y: 0, width: 240, height: 160, text: "due" },
+        { id: "c", type: "text", x: 0, y: 400, width: 240, height: 160, text: "tre" },
+      ],
+      edges: [{ id: "e1", fromNode: "a", fromSide: "right", toNode: "b", toSide: "left", label: "segue" }],
+    });
+  }
+
+  function viewport(host: HTMLElement): HTMLElement {
+    return host.querySelector<HTMLElement>(".canvas-viewport")!;
+  }
+
+  function pick(host: HTMLElement, id: string, additive = false): void {
+    host.querySelector(`.canvas-node[data-node="${id}"]`)!.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 3, shiftKey: additive, clientX: 0, clientY: 0 }),
+    );
+    viewport(host).dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3, clientX: 0, clientY: 0 }));
+  }
+
+  function chooseEdge(host: HTMLElement, id: string): void {
+    const picker = host.querySelector<HTMLSelectElement>('select[data-canvas-field="select-edge"]')!;
+    picker.value = id;
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function press(host: HTMLElement, init: KeyboardEventInit): void {
+    viewport(host).dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
+  }
+
+  function command(engine: CanvasEngine, id: string) {
+    return engine.commands().find((one) => one.id === id)!;
+  }
+
+  it("Ctrl+D copia anche i fili fra le schede copiate (D1), e un annulla toglie tutto", () => {
+    const source = linked();
+    const { engine, host, changes } = mounted(source, { seed: () => 1n });
+    pick(host, "a");
+    pick(host, "b", true);
+    pick(host, "c", true);
+    press(host, { key: "d", ctrlKey: true });
+    const after = readCanvas(engine.getDoc());
+    expect(after.nodes).toHaveLength(6);
+    expect(after.edges).toHaveLength(2);
+    const copies = after.nodes.slice(3).map((node) => node.id);
+    const copied = after.edges[1]!;
+    // Il filo nuovo va fra le copie di a e b, con l'etichetta e i lati di e1.
+    expect([copied.fromNode, copied.toNode]).toEqual([copies[0], copies[1]]);
+    expect(copied).toMatchObject({ fromSide: "right", toSide: "left", label: "segue" });
+    // Le copie restano scelte, e sono le schede (non il filo).
+    expect(host.querySelectorAll(".canvas-node.selected")).toHaveLength(3);
+    expect(changes).toHaveLength(1);
+    engine.undo();
+    expect(engine.getDoc()).toBe(source);
+    engine.destroy();
+  });
+
+  it("col seme dato, una scheda del menu ha l'id che il nucleo dà con quel seme", () => {
+    const source = linked();
+    const { engine } = mounted(source, { seed: () => 7n });
+    const add = command(engine, "canvas.add.text");
+    const ops = add.op!();
+    expect(ops).toEqual([expect.objectContaining({ op: "add_card", text: "", width: 320, height: 160 })]);
+    add.run();
+    const core = openCoreNow(source)!;
+    const expected = core.preview(core.compile(ops!, 7n).patches);
+    core.close();
+    expect(engine.getDoc()).toBe(expected);
+    // L'id viene dal seme: sedici cifre esadecimali, non più `n-…`.
+    expect(readCanvas(engine.getDoc()).nodes[3]!.id).toMatch(/^[0-9a-f]{16}$/);
+    engine.destroy();
+  });
+
+  it("senza scelta i comandi delle schede sono spenti e non hanno operazioni", () => {
+    const source = linked();
+    const { engine, host } = mounted(source);
+    for (const id of ["canvas.duplicate", "canvas.delete", "canvas.bring_front", "canvas.color.1", "canvas.align.left"]) {
+      expect(command(engine, id).disabled(), id).not.toBeNull();
+      expect(command(engine, id).op!(), id).toBeNull();
+    }
+    press(host, { key: "d", ctrlKey: true });
+    press(host, { key: "Delete" });
+    press(host, { key: "ArrowRight" });
+    expect(engine.getDoc()).toBe(source);
+    engine.destroy();
+  });
+
+  it("due azioni sono due passi d'annulla", () => {
+    const source = linked();
+    const { engine, host, changes } = mounted(source);
+    pick(host, "a");
+    command(engine, "canvas.color.2").run();
+    press(host, { key: "ArrowRight" });
+    expect(changes).toHaveLength(2);
+    expect(readCanvas(engine.getDoc()).nodes[0]).toMatchObject({ x: 8, color: "2" });
+    engine.undo();
+    expect(readCanvas(engine.getDoc()).nodes[0]).toMatchObject({ x: 0, color: "2" });
+    engine.undo();
+    expect(engine.getDoc()).toBe(source);
+    engine.destroy();
+  });
+
+  it("un campo che il nucleo rifiuta non scrive niente: torna al valore del modello, e la barra lo dice", () => {
+    const source = linked();
+    const { engine, host, changes } = mounted(source);
+    chooseEdge(host, "e1");
+    const to = host.querySelector<HTMLSelectElement>('[data-canvas-field="edge-toNode"]')!;
+    // Una scheda che non c'è: la `set` che la nomina è rifiutata.
+    const ghost = document.createElement("option");
+    ghost.value = "fantasma";
+    to.append(ghost);
+    to.value = "fantasma";
+    to.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(engine.getDoc()).toBe(source);
+    expect(changes).toHaveLength(0);
+    expect(host.querySelector<HTMLSelectElement>('[data-canvas-field="edge-toNode"]')!.value).toBe("b");
+    expect(host.querySelector(".canvas-intake-error")?.textContent).toBe(t("canvas.change_refused"));
+    engine.destroy();
+  });
+
+  it("l'operazione d'un comando è quella che scrive: il colore «Altro…», le frecce, il gruppo", () => {
+    const { engine, host } = mounted(linked());
+    pick(host, "a");
+    pick(host, "c", true);
+    expect(command(engine, "canvas.color.other").op!({ value: "#0064b0" })).toEqual([
+      { op: "color", ids: ["a", "c"], color: "#0064b0" },
+    ]);
+    expect(command(engine, "canvas.color.other").op!()).toBeNull();
+    expect(command(engine, "canvas.nudge.right").op!()).toEqual([{ op: "move", ids: ["a", "c"], dx: 8, dy: 0 }]);
+    expect(command(engine, "canvas.group").op!()).toEqual([{ op: "group", ids: ["a", "c"] }]);
+    engine.destroy();
+  });
+});

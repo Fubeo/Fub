@@ -18,6 +18,10 @@ import {
 import { RecentCommands } from "./command-search";
 import { colorCommandLabel, colorMenuLabel, type CanvasColorChoice } from "../colors";
 import { t } from "../../../i18n/strings";
+import boardFile from "../../../__fixtures__/canvas-parity/board.json";
+import mainFile from "../../../__fixtures__/canvas-parity/main.json";
+import n4File from "../../../__fixtures__/canvas-parity/n4.json";
+import n6File from "../../../__fixtures__/canvas-parity/n6.json";
 
 beforeAll(async () => {
   await canvasCoreReady();
@@ -330,6 +334,50 @@ describe("la tela legge il catalogo", () => {
     expect(duplicate.description).toBe("La lavagna è in sola lettura.");
     expect(duplicate.chord).toBe("Mod-d");
     engine.destroy();
+  });
+
+  it("ogni comando di una voce in codice che scrive il file ha le sue operazioni (T23)", () => {
+    interface Voice {
+      readonly id: string;
+      readonly source: string;
+      readonly state: string;
+      readonly writes: string;
+      readonly gui: ReadonlyArray<Readonly<Record<string, string>>>;
+    }
+    const voices = ([...mainFile.entries, ...n4File.entries, ...n6File.entries] as unknown as readonly Voice[]).filter(
+      (voice) => boardFile.merged.includes(voice.source)
+        && voice.writes === "file"
+        && (voice.state === "code" || voice.state === "composed"),
+    );
+    const commands = mountedCommands();
+    const found: string[] = [];
+    const missing: string[] = [];
+    for (const voice of voices) {
+      for (const gui of voice.gui) {
+        let command: CanvasCommand | null | undefined;
+        if (gui.menu !== undefined) {
+          // Un sottomenu («Colore», «Ordine») non è un comando: le sue voci sì.
+          command = commands.find((one) => one.id === gui.menu);
+        } else if (gui.key !== undefined) {
+          const spec = /^((?:Mod\+|Shift\+)*)(.+)$/.exec(gui.key)!;
+          const name = spec[2]!;
+          const shiftKey = spec[1]!.includes("Shift+");
+          command = commandForKey(commands, {
+            key: shiftKey || name.length > 1 ? name : name.toLowerCase(),
+            ctrlKey: spec[1]!.includes("Mod+"),
+            metaKey: false,
+            shiftKey,
+            altKey: false,
+          }, { writing: false, onBoard: true });
+        }
+        if (!command) continue;
+        found.push(command.id);
+        if (!command.op) missing.push(`\`${voice.id}\`: ${command.id} scrive il file senza op`);
+      }
+    }
+    expect(missing).toEqual([]);
+    // Il confronto vede davvero i comandi: menu e tasti delle voci ne trovano molti.
+    expect(new Set(found).size).toBeGreaterThan(30);
   });
 
   it("«Il dito scrive» è un comando, anche in sola lettura: cambia l'interruttore della colonna", () => {

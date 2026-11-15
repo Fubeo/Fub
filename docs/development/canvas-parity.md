@@ -71,13 +71,24 @@ o `plan`.
   quelli della costante `GESTURES`, i tasti quelli di `KEYS`. Ogni tasto delle
   voci si preme su `t1`, e dopo una mossa per l'annulla: il file cambia se e
   solo se la voce dice `writes: file`.
+- **R8, la GUI scrive come il codice.** Ogni voce `code` o `composed` di una
+  fonte in `merged`, che scrive il file e ha un menu, una barra, un campo o un
+  tasto, ha una riga in `SETUP` di `parity.test.ts`: la tela si monta su
+  `board.json` col seme `1`, sceglie gli id delle `ops` della voce (o quelli
+  della riga), fa l'azione con uno dei `gui` della voce, e il documento deve
+  essere quello di `compile(ops, 1)` su un secondo nucleo. Poi gli annulla
+  della riga (di serie uno) tornano a `board.json`. Una riga può dare le
+  operazioni da confrontare, con lo stesso `op` della voce, quando il posto o il
+  contenuto li sceglie la GUI (il centro della vista, i lati più vicini), e dice
+  perché; una voce che non si confronta ha `skip` col perché, al più cinque.
+  `commands.test.ts` controlla che ogni comando di quelle voci abbia `op`.
 
 ## Dove stanno i test
 
 | Test | Regole | Comando |
 |---|---|---|
 | `crates/fub-canvas-core/tests/parity.rs` | R1–R6 | `cargo test -p fub-canvas-core --test parity` |
-| `apps/client/src/editors/canvas/parity.test.ts` | R7 | `npx vitest run src/editors/canvas/parity.test.ts`, da `apps/client/` |
+| `apps/client/src/editors/canvas/parity.test.ts` | R7, R8 | `npx vitest run src/editors/canvas/parity.test.ts`, da `apps/client/` |
 | `crates/fub-canvas-core/tests/task_corpus.rs` | il corpus: forma, `needs` e controlli | `cargo test -p fub-canvas-core --test task_corpus -- --nocapture` |
 
 `apps/client/src/editors/canvas/test-mount.ts` monta la tela come
