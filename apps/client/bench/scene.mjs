@@ -494,6 +494,73 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector('#onboarding-profile .components-profile[aria-pressed="true"]');
     },
   },
+  // **La barra della Base** (T15), su `Opere.base` di `bench/base-fixture.ts`:
+  // le linguette delle viste, gli attrezzi, le etichette del filtro, i tre
+  // pannelli e le righe che un gesto ha scritto nel file.
+  {
+    id: "base-barra",
+    title: "Base: le viste come linguette, gli attrezzi e l'etichetta del filtro",
+    query: "base=1",
+    prepare: openBase,
+  },
+  {
+    id: "base-filtro",
+    title: "Base: il filtro composto a vista, con la stessa riga come ricerca",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click(".pane.focus .base-tool-filter");
+      await page.waitForSelector(".base-popover .base-filter-row");
+    },
+  },
+  {
+    id: "base-ordina",
+    title: "Base: Ordina aperto, per consegna dalla più vicina",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click(".pane.focus .base-tool-sort");
+      await page.waitForSelector(".base-popover .base-sort-row");
+    },
+  },
+  {
+    id: "base-proprieta",
+    title: "Base: Proprietà aperto, le colonne da mostrare e il loro ordine",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click(".pane.focus .base-tool-columns");
+      await page.waitForSelector(".base-popover .base-column");
+    },
+  },
+  {
+    id: "base-scritto",
+    title: "Base: «Nel file .base» dopo aver tolto l'etichetta del filtro",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click(".pane.focus .base-chip button");
+      await page.waitForSelector(".pane.focus .base-written:not([hidden])");
+      // Resta l'etichetta dell'ordinamento.
+      await page.waitForFunction(() => document.querySelectorAll(".pane.focus .base-chip").length === 1
+        && document.querySelector(".pane.focus .base-bar")?.getAttribute("aria-busy") !== "true");
+      await page.click(".pane.focus .base-written summary");
+      await page.waitForSelector(".pane.focus .base-written[open] .base-written-removed");
+    },
+  },
+  {
+    id: "base-sola-lettura",
+    title: "Base: in sola lettura, gli attrezzi che scrivono spenti e il perché",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.evaluate(async () => {
+        const { freezeDocumentSurfaces } = await import("/src/state/document-controller.ts");
+        freezeDocumentSurfaces(true);
+      });
+      await page.waitForSelector(".pane.focus .base-note:not([hidden])");
+    },
+  },
   {
     id: "grid-workbook",
     title: "Grid v2: una cartella di Excel sui suoi byte",
@@ -2207,6 +2274,22 @@ async function openLentDocx(page) {
   });
   await page.waitForSelector('.pane.focus .sheet-notice[data-notice="craft_consent"]');
   await page.mouse.move(0, 0);
+}
+
+/// Apre `Opere.base` delle scene `base-*` e aspetta la tabella con le sue
+/// righe e la barra ferma. Dalla porta della shell e non dall'albero: il
+/// finto elenca un `.base` come file, e l'albero non lo apre.
+async function openBase(page) {
+  await page.evaluate(async () => {
+    const { openDocument } = await import("/src/state/document-controller.ts");
+    await openDocument("Opere.base");
+  });
+  await page.waitForFunction(() => {
+    const pane = document.querySelector(".pane.focus");
+    return (pane?.querySelectorAll(".base-table tbody tr").length ?? 0) > 0
+      && pane?.querySelector(".base-tab[aria-pressed='true']") !== null
+      && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
+  });
 }
 
 /// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la

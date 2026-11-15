@@ -249,6 +249,67 @@ describe("decisioni del ciclo di vita della sessione", () => {
     });
   });
 
+  it("la scrittura annunciata da un comando ricarica in silenzio, una volta sola", async () => {
+    let disk = "views: []\n";
+    api.readDocument = vi.fn(async (): Promise<DocumentSource> => ({ text: disk, revision: `rev-${disk.length}`, format_id: "base", source_kind: "text", text_kind: "source" }));
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("Opere.base");
+    const gesture = { actor: { kind: "user" }, batch: "batch-7" } as const;
+
+    sessions.expectWrite("Opere.base");
+    disk = "views:\n  - name: Tabella\n";
+    expect(await sessions.handleExternalChange("Opere.base", gesture)).toEqual({ kind: "reloaded", text: disk, changed: true, quiet: true });
+    expect(sessions.text("Opere.base")).toBe(disk);
+    // L'annuncio è consumato: il cambio dopo si dice.
+    disk = "views:\n  - name: Bacheca\n";
+    expect(await sessions.handleExternalChange("Opere.base", gesture)).toEqual({ kind: "reloaded", text: disk, changed: true });
+  });
+
+  it("un annuncio ritirato, un'altra app o il kernel non zittiscono niente", async () => {
+    let disk = "a\n";
+    api.readDocument = vi.fn(async (): Promise<DocumentSource> => ({ text: disk, revision: `rev-${disk}`, format_id: "base", source_kind: "text", text_kind: "source" }));
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("Opere.base");
+
+    const withdraw = sessions.expectWrite("Opere.base");
+    withdraw();
+    disk = "b\n";
+    expect(await sessions.handleExternalChange("Opere.base", { actor: { kind: "user" }, batch: "batch-1" })).toEqual({ kind: "reloaded", text: disk, changed: true });
+
+    sessions.expectWrite("Opere.base");
+    disk = "c\n";
+    expect(await sessions.handleExternalChange("Opere.base", { actor: { kind: "watcher" }, batch: null })).toEqual({ kind: "reloaded", text: disk, changed: true });
+    disk = "d\n";
+    expect(await sessions.handleExternalChange("Opere.base", { actor: { kind: "kernel" }, batch: "batch-2" })).toEqual({ kind: "reloaded", text: disk, changed: true });
+    // L'annuncio di prima è ancora lì, per l'evento del suo comando.
+    disk = "e\n";
+    expect(await sessions.handleExternalChange("Opere.base", { actor: { kind: "user" }, batch: "batch-3" })).toMatchObject({ kind: "reloaded", quiet: true });
+  });
+
+  it("a buffer sporco la scrittura annunciata avvisa come sempre, e il testo locale resta", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("Opere.base");
+    acceptText(sessions, "Opere.base", "testo locale");
+    sessions.expectWrite("Opere.base");
+
+    const outcome = await sessions.handleExternalChange("Opere.base", { actor: { kind: "user" }, batch: "batch-1" });
+
+    expect(outcome).toEqual({ kind: "warning", cause: "riscrittura" });
+    expect(sessions.text("Opere.base")).toBe("testo locale");
+  });
+
+  it("un annuncio scade: dopo dieci secondi il cambio si dice", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    try {
+      const sessions = new DocumentSessionCollection(api);
+      await sessions.read("Opere.base");
+      sessions.expectWrite("Opere.base");
+      now.mockReturnValue(11_001);
+      const outcome = await sessions.handleExternalChange("Opere.base", { actor: { kind: "user" }, batch: "batch-1" });
+      expect(outcome).not.toHaveProperty("quiet");
+    } finally { now.mockRestore(); }
+  });
+
   it("la ricarica forzata mette in bozza il testo sporco, poi aggiorna il testo autorevole", async () => {
     const source: DocumentSource = { text: "versione ripristinata", revision: "rev-3", format_id: "markdown", source_kind: "text", text_kind: "source" };
     const sessions = new DocumentSessionCollection(api);
