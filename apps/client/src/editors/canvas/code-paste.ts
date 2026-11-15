@@ -11,13 +11,16 @@
 //   l'id di un arco la `set` dell'arco; un tratto che il livello ha già lo
 //   sostituisce, se è cambiato. Ciò che la lista non nomina resta com'è.
 // - «Aggiungi come copie»: le schede e gli archi coi nomi presi prendono un id
-//   nuovo, e le operazioni che li nominano lo seguono.
+//   nuovo, le operazioni che li nominano lo seguono (nei campi che `OPS` del
+//   nucleo dichiara id di schede), e il blocco si sposta come un Ctrl+V.
 //
 // Una scheda contro un gruppo, o una scheda contro un arco, non si traduce:
 // `set` non cambia il tipo, e la lista si ferma con un problema.
 
+import { CANVAS_CLIPBOARD_VERSION, placedSelection, type CanvasClipboard } from "./clipboard";
 import { INK_KEY } from "./ink-record";
-import type { CanvasDocument } from "./model";
+import type { CanvasDocument, CanvasNode } from "./model";
+import { moveStrokesOp, type StoredInkStroke } from "./operation";
 
 type Op = Record<string, unknown>;
 
@@ -193,15 +196,61 @@ export function asUpdates(doc: CanvasDocument, ops: readonly unknown[]): { ops: 
   }
   return { ops: out, updated };
 }
+/**
+ * Per ogni operazione, i campi che nominano una scheda o un arco della
+ * lavagna, come li dichiara `OPS` di `crates/fub-canvas-core/src/spec.rs`:
+ * i suoi campi `id`/`ids`, i `layer` (`{"node": id}`), e dentro i campi
+ * `node`, `edge` e `patch` le chiavi che sono id (`a.b` è la chiave `b`
+ * dell'oggetto `a`). Solo questi si rinominano: un campo che non è un id
+ * (`align.to`, un testo) non si tocca mai. `code-paste.test.ts` confronta la
+ * tabella con `OPS`, campo per campo.
+ */
+export const CARD_REFERENCES: Readonly<Record<string, readonly string[]>> = {
+  add_card: ["id", "near", "node.id"],
+  move: ["ids"],
+  resize: ["id"],
+  connect: ["id", "from", "to", "edge.id", "edge.fromNode", "edge.toNode"],
+  remove: ["ids"],
+  set: ["id", "fields.fromNode", "fields.toNode"],
+  reorder: ["ids"],
+  color: ["ids"],
+  align: ["ids"],
+  distribute: ["ids"],
+  duplicate: ["ids"],
+  reverse: ["ids"],
+  group: ["ids"],
+  layout: ["ids"],
+  insert: ["near"],
+  convert: ["id"],
+  spread_pages: ["id"],
+  excerpt: ["id", "near"],
+  from_mermaid: ["near"],
+  from_outline: ["near"],
+  add_strokes: ["layer.node"],
+  erase_strokes: ["layer.node"],
+  move_strokes: ["layer.node", "to.node"],
+  restyle_strokes: ["layer.node"],
+};
 
-/** I campi che nominano una scheda o un arco, in ogni operazione. */
-const REFERENCES = new Set(["id", "ids", "from", "to", "near", "fromNode", "toNode", "node", "on", "card"]);
+/**
+ * I campi `id`/`ids` di `OPS` che non nominano schede o archi che ci sono:
+ * gli id nuovi di un gruppo, di `duplicate` o di un tratto, e gli id dei
+ * tratti di un livello. Non si rinominano.
+ */
+export const NOT_CARD_REFERENCES: Readonly<Record<string, readonly string[]>> = {
+  group: ["id"],
+  duplicate: ["as"],
+  draw: ["id"],
+  erase_strokes: ["ids"],
+  move_strokes: ["ids"],
+  restyle_strokes: ["ids"],
+};
 
 /**
  * Gli id nuovi come quelli del nucleo (`canvas-code.md`, «Gli id nuovi»):
  * SplitMix64 dal seme, sedici cifre esadecimali, saltando gli id presi.
  */
-function* freshIds(seed: bigint, taken: ReadonlySet<string>): Generator<string> {
+function* freshIds(seed: bigint, taken: Set<string>): Generator<string> {
   const mask = (1n << 64n) - 1n;
   let state = BigInt.asUintN(64, seed);
   for (;;) {
@@ -211,56 +260,118 @@ function* freshIds(seed: bigint, taken: ReadonlySet<string>): Generator<string> 
     z = ((z ^ (z >> 27n)) * 0x94d049bb133111ebn) & mask;
     z = z ^ (z >> 31n);
     const id = z.toString(16).padStart(16, "0");
-    if (!taken.has(id)) yield id;
+    if (!taken.has(id)) {
+      taken.add(id);
+      yield id;
+    }
   }
 }
 
-/** `value` con gli id di `renamed` sostituiti nei campi che nominano schede e archi. */
-function renamedIn(value: unknown, renamed: ReadonlyMap<string, string>, reference = false): unknown {
-  if (typeof value === "string") return reference ? renamed.get(value) ?? value : value;
-  if (Array.isArray(value)) return value.map((item) => renamedIn(item, renamed, reference));
-  if (!isRecord(value)) return value;
-  const out: Op = {};
-  for (const [key, item] of Object.entries(value)) {
-    // I tratti hanno i loro id, del loro livello, e `sides` ha i lati in
-    // `from` e `to`: non sono schede.
-    out[key] = key === "strokes" || key === "sides" ? item : renamedIn(item, renamed, REFERENCES.has(key));
+/** `op` con gli id di `renamed` sostituiti nei soli campi di `CARD_REFERENCES`. */
+function renamedOp(op: Op, renamed: ReadonlyMap<string, string>): Op {
+  const paths = typeof op.op === "string" ? CARD_REFERENCES[op.op] ?? [] : [];
+  const rename = (value: unknown): unknown => {
+    if (typeof value === "string") return renamed.get(value) ?? value;
+    if (Array.isArray(value)) return value.map((item) => (typeof item === "string" ? renamed.get(item) ?? item : item));
+    return value;
+  };
+  const out: Op = { ...op };
+  for (const path of paths) {
+    const [head, key] = path.split(".") as [string, string | undefined];
+    if (key === undefined) {
+      if (head in out) out[head] = rename(out[head]);
+    } else if (isRecord(out[head]) && key in (out[head] as Op)) {
+      out[head] = { ...(out[head] as Op), [key]: rename((out[head] as Op)[key]) };
+    }
   }
   return out;
+}
+
+/** Dove va il blocco delle copie: l'angolo in alto a sinistra, come Ctrl+V. */
+export type CopiesPlace = (block: CanvasClipboard) => { readonly dx: number; readonly dy: number };
+
+/** Lo scarto di Ctrl+V per un blocco: quello di `placedSelection`, con l'angolo in `at`. */
+export function placedAt(at: { readonly x: number; readonly y: number }): CopiesPlace {
+  return (block) => {
+    const { dx, dy } = placedSelection(block, at, (prefix) => prefix);
+    return { dx, dy };
+  };
+}
+
+/** Il posto di una `add_card` (`x`, `y`, `width`, `height`), nella forma breve o in `node`; `null` se non lo dice. */
+function cardPlace(op: Op): CanvasNode | null {
+  const node = isRecord(op.node) ? op.node : op;
+  const { x, y } = node;
+  if (typeof x !== "number" || typeof y !== "number") return null;
+  return { id: "", type: "text", x, y, width: 0, height: 0 } as CanvasNode;
+}
+
+function movedCard(op: Op, dx: number, dy: number): Op {
+  if (isRecord(op.node)) return { ...op, node: { ...op.node, x: (op.node.x as number) + dx, y: (op.node.y as number) + dy } };
+  return { ...op, x: (op.x as number) + dx, y: (op.y as number) + dy };
 }
 
 /**
  * «Aggiungi come copie»: le schede e gli archi della lista che hanno un id
  * della lavagna prendono un id nuovo (dal seme, come quelli del nucleo), e
- * ogni operazione che li nomina (un arco, un gruppo, uno spostamento, il
- * livello d'inchiostro di una scheda) segue il nome nuovo. Un tratto libero
- * che la radice ha già perde il suo id, e il nucleo gliene dà uno.
+ * ogni operazione che li nomina lo segue, nei soli campi di
+ * `CARD_REFERENCES`. Un tratto libero che la radice ha già prende un id
+ * nuovo anche lui. Con `place` il blocco (le schede nate col loro posto e i
+ * tratti liberi) si sposta come un Ctrl+V: le schede di quanto dice `place`,
+ * i tratti della radice con un `move_strokes` dopo la loro `add_strokes`; i
+ * tratti di una scheda vanno con lei. Senza, le copie nascono dove sono gli
+ * originali.
  */
-export function asCopies(doc: CanvasDocument, ops: readonly unknown[], seed: bigint): unknown[] {
+export function asCopies(doc: CanvasDocument, ops: readonly unknown[], seed: bigint, place?: CopiesPlace): unknown[] {
   const nodes = new Set(doc.nodes.map((node) => node.id));
   const edges = new Set(doc.edges.map((edge) => edge.id));
-  const taken = new Set<string>([...nodes, ...edges]);
+  const board = layerStrokes(doc, "board");
+  const taken = new Set<string>([...nodes, ...edges, ...board.keys()]);
   const clashing: string[] = [];
   for (const op of ops) {
     if (!isRecord(op)) continue;
     const id = op.op === "add_card" ? cardId(op) : op.op === "connect" ? edgeId(op) : null;
-    if (id === null) continue;
-    if (nodes.has(id) || edges.has(id)) clashing.push(id);
-    else taken.add(id);
+    if (id !== null && (nodes.has(id) || edges.has(id))) clashing.push(id);
+    else if (id !== null) taken.add(id);
+    if (op.op === "add_strokes" && Array.isArray(op.strokes)) {
+      for (const stroke of op.strokes) if (isRecord(stroke) && typeof stroke.id === "string") taken.add(stroke.id);
+    }
   }
   const fresh = freshIds(seed ^ 0x5eedc0de5eedc0den, taken);
   const renamed = new Map<string, string>();
   for (const id of clashing) if (!renamed.has(id)) renamed.set(id, fresh.next().value as string);
-  const board = layerStrokes(doc, "board");
-  return ops.map((op) => {
-    const copy = renamedIn(op, renamed);
-    if (isRecord(copy) && copy.op === "add_strokes" && copy.layer === "board" && Array.isArray(copy.strokes)) {
+  const copies = ops.map((op) => {
+    if (!isRecord(op)) return op;
+    const copy = renamedOp(op, renamed);
+    if (copy.op === "add_strokes" && copy.layer === "board" && Array.isArray(copy.strokes)) {
       return {
         ...copy,
         strokes: copy.strokes.map((stroke) =>
-          isRecord(stroke) && typeof stroke.id === "string" && board.has(stroke.id) ? { ...stroke, id: null } : stroke),
+          isRecord(stroke) && typeof stroke.id === "string" && board.has(stroke.id)
+            ? { ...stroke, id: fresh.next().value as string }
+            : stroke),
       };
     }
     return copy;
+  });
+  if (!place) return copies;
+  const cards = copies.flatMap((op) => (isRecord(op) && op.op === "add_card" ? [cardPlace(op)].filter((card) => card !== null) : []));
+  const strokes = copies.flatMap((op) =>
+    (isRecord(op) && op.op === "add_strokes" && op.layer === "board" && Array.isArray(op.strokes) ? op.strokes : []));
+  if (cards.length === 0 && strokes.length === 0) return copies;
+  const block = {
+    version: CANVAS_CLIPBOARD_VERSION, nodes: cards, edges: [],
+    ...(strokes.length > 0 ? { [INK_KEY]: { v: 1 as const, strokes: strokes as StoredInkStroke[] } } : {}),
+  } as CanvasClipboard;
+  const { dx, dy } = place(block);
+  if (dx === 0 && dy === 0) return copies;
+  return copies.flatMap((op) => {
+    if (!isRecord(op)) return [op];
+    if (op.op === "add_card" && cardPlace(op)) return [movedCard(op, dx, dy)];
+    if (op.op === "add_strokes" && op.layer === "board" && Array.isArray(op.strokes)) {
+      const ids = op.strokes.filter(isRecord).map((stroke) => stroke.id).filter((id): id is string => typeof id === "string");
+      return ids.length > 0 ? [op, moveStrokesOp("board", ids, dx, dy)] : [op];
+    }
+    return [op];
   });
 }

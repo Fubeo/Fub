@@ -2,7 +2,8 @@
 // traduzione in aggiornamenti o in copie, provata contro il nucleo vero.
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { asCopies, asUpdates, codeClashes } from "./code-paste";
+import SPEC_RS from "../../../../../crates/fub-canvas-core/src/spec.rs?raw";
+import { asCopies, asUpdates, CARD_REFERENCES, codeClashes, NOT_CARD_REFERENCES, placedAt } from "./code-paste";
 import type { CanvasDocument } from "./model";
 import { canvasCoreReady, openCoreNow, type CanvasCore, type CanvasIntentOp } from "./wasm/core";
 
@@ -117,6 +118,82 @@ describe("code-paste", () => {
       expect(codeClashes(doc, [{ op: "add_card", id: "g", text: "x" }]))
         .toEqual({ ok: false, kind: { index: 0, id: "g", kind: "group" } });
       expect(codeClashes(doc, [{ op: "add_card", text: "x" }])).toEqual({ ok: true, clashes: null });
+    });
+  });
+});
+
+/** I campi di ogni operazione di `OPS` (spec.rs) con un tipo che può portare id: `id`, `ids`, `layer`, `node`, `edge`, `patch`. */
+function specIdFields(source: string): Map<string, string[]> {
+  const start = source.indexOf("pub const OPS");
+  const body = source.slice(start, source.indexOf("\n];", start));
+  const out = new Map<string, string[]>();
+  for (const block of body.split(/\n {4}OpSpec \{/).slice(1)) {
+    const name = /name: "([a-z_]+)"/.exec(block)![1]!;
+    const fields = [...block.matchAll(/(?:required|optional)\(\s*"([a-zA-Z_]+)",\s*FieldKind::([A-Za-z]+)/g)]
+      .filter((match) => ["Id", "Ids", "Layer", "Node", "Edge", "Patch"].includes(match[2]!))
+      .map((match) => match[1]!);
+    out.set(name, fields);
+  }
+  return out;
+}
+
+describe("i riferimenti delle copie e `OPS` del nucleo", () => {
+  it("ogni campo id di `OPS` è un riferimento o non lo è, dichiarato; la tabella non nomina campi che `OPS` non ha", () => {
+    const spec = specIdFields(SPEC_RS);
+    expect(spec.size).toBeGreaterThan(20);
+    expect(spec.get("align")).toEqual(["ids"]);
+    for (const [op, fields] of spec) {
+      const declared = new Set([...(CARD_REFERENCES[op] ?? []), ...(NOT_CARD_REFERENCES[op] ?? [])].map((path) => path.split(".")[0]));
+      for (const field of fields) expect(declared.has(field), `${op}.${field}`).toBe(true);
+    }
+    for (const [op, paths] of Object.entries({ ...CARD_REFERENCES, ...NOT_CARD_REFERENCES })) {
+      expect(spec.has(op), op).toBe(true);
+      for (const path of paths) expect(spec.get(op), `${op}.${path}`).toContain(path.split(".")[0]);
+    }
+    for (const [op, paths] of Object.entries(NOT_CARD_REFERENCES)) {
+      for (const path of paths) expect(CARD_REFERENCES[op] ?? [], `${op}.${path}`).not.toContain(path);
+    }
+  });
+
+  it("`align.to` uguale a un id copiato non si rinomina; `ids` sì", () => {
+    const source = JSON.stringify({
+      nodes: [{ id: "left", type: "text", x: 0, y: 0, width: 100, height: 60, text: "l" }],
+      edges: [],
+    });
+    withCore(source, (core, doc) => {
+      const copies = asCopies(doc, [
+        { op: "add_card", id: "left", text: "copia", x: 0, y: 200 },
+        { op: "add_card", id: "other", text: "altra", x: 300, y: 200 },
+        { op: "align", ids: ["left", "other"], to: "left" },
+      ], 7n) as Array<Record<string, unknown>>;
+      const fresh = copies[0]!.id as string;
+      expect(fresh).not.toBe("left");
+      expect(copies[2]).toEqual({ op: "align", ids: [fresh, "other"], to: "left" });
+      expect(core.check(copies, 7n).ok).toBe(true);
+    });
+  });
+
+  it("con `place` il blocco si sposta come Ctrl+V: le schede e, con un `move_strokes`, i tratti liberi", () => {
+    withCore(SOURCE, (core, doc) => {
+      const ops = JSON.parse(core.describe()) as unknown[];
+      const at = { x: 1000, y: 800 };
+      const copies = asCopies(doc, ops, 7n, placedAt(at));
+      expect(core.check(copies, 7n).ok).toBe(true);
+      const after = withCore(written(SOURCE, copies), (_, model) => model);
+      const fresh = after.nodes.slice(3);
+      // L'angolo del blocco (schede e tratti) cade in `at`: il gruppo è il più in alto a sinistra.
+      const group = fresh.find((node) => node.type === "group")!;
+      expect([group.x, group.y]).toEqual([at.x, at.y]);
+      const dx = at.x - -40;
+      const dy = at.y - -40;
+      for (const [index, node] of fresh.entries()) {
+        const original = after.nodes[index]!;
+        expect([node.x, node.y]).toEqual([original.x + dx, original.y + dy]);
+      }
+      const free = (after as unknown as { "fub:ink": { strokes: Array<{ id: string; ink: string }> } })["fub:ink"].strokes;
+      expect(free).toHaveLength(2);
+      const head = (ink: string) => ink.split(" ")[3]!.split(",").map(Number);
+      expect(head(free[1]!.ink)).toEqual([head(free[0]!.ink)[0]! + dx * 100, head(free[0]!.ink)[1]! + dy * 100]);
     });
   });
 });

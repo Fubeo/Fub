@@ -5,7 +5,7 @@ import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
 import { CANVAS_ZOOM_STEP, CARD_PAUSE_MS, CanvasEngine, EDGE_SCROLL_MAX, eraseAlongSegments, erasePathPieces, EDGE_SCROLL_ZONE, MAX_CANVAS_HISTORY, NEXT_CARD_GAP, edgeScrollSpeed, MEASURE_IMAGE_TIMEOUT_MS, proposedNoteName, type CanvasChange, type CanvasCorePort, type CanvasDepositCards, type CanvasEngineOptions } from "./engine";
 import type { CanvasDocument } from "./model";
-import { readCanvasClipboard } from "./clipboard";
+import { CANVAS_CLIPBOARD_TYPE, CANVAS_PASTE_STEP, clipboardJson, copiedSelection, readCanvasClipboard } from "./clipboard";
 import { ENTRIES_DRAG_TYPE } from "../../ui/drag-types";
 import { applyOperation, lineFeeds, operationFromText } from "../core/text-operation";
 import { t } from "../../i18n/strings";
@@ -8641,6 +8641,52 @@ describe("la lavagna come codice: copia, incolla, disponi (LIC T25)", () => {
     expect(engine.selection().nodes).toEqual(copies.map((node) => node.id));
     expect(engine.undo()).toBe(true);
     expect(engine.getDoc()).toBe(source);
+    engine.destroy();
+  });
+
+  it("«Aggiungi come copie» mette le copie dove le mette Ctrl+V, e di nuovo nello stesso punto un passo più in là", async () => {
+    const source = board();
+    const { engine, host } = mounted(source, { seed: () => 1n });
+    const ops = JSON.stringify(await copyAll(engine));
+    viewport(host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 300, clientY: 200 }));
+    // Ctrl+V delle stesse schede, per sapere dove le mette.
+    const fub = copiedSelection(readCanvas(source), ["a", "b", "c"])!;
+    const values: Record<string, string> = { [CANVAS_CLIPBOARD_TYPE]: clipboardJson(fub) };
+    const data = { files: [], items: [], types: Object.keys(values), getData: (type: string) => values[type] ?? "" } as unknown as DataTransfer;
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: data });
+    viewport(host).dispatchEvent(event);
+    await settle();
+    const pasted = readCanvas(engine.getDoc()).nodes.slice(3);
+    expect(pasted).toHaveLength(3);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(source);
+
+    const place = () => readCanvas(engine.getDoc()).nodes.slice(3).map((node) => [node.x, node.y]);
+    await pasteCode(engine, ops);
+    action("copies")!.click();
+    await settle();
+    const first = place();
+    expect(first).toEqual(pasted.map((node) => [node.x, node.y]));
+    expect(first[0]).not.toEqual([0, 0]);
+    await pasteCode(engine, ops);
+    action("copies")!.click();
+    await settle();
+    expect(readCanvas(engine.getDoc()).nodes.slice(6).map((node) => [node.x, node.y]))
+      .toEqual(first.map(([x, y]) => [x! + CANVAS_PASTE_STEP, y! + CANVAS_PASTE_STEP]));
+    engine.destroy();
+  });
+
+  it("un nuovo «Incolla codice» toglie l'avviso di prima appena parte", async () => {
+    const { engine, host } = mounted(board(), { seed: () => 1n });
+    await pasteCode(engine, "graph TD; A-->B");
+    expect(notice(host)).toBe(t("canvas.paste_code.not_json"));
+    await pasteCode(engine, JSON.stringify([{ op: "remove", ids: ["c"] }]));
+    expect(dialog()).not.toBeNull();
+    expect(notice(host)).toBe("");
+    document.querySelector<HTMLElement>('.kit-dialog [data-action="cancel"]')!.click();
+    await settle();
+    expect(notice(host)).toBe("");
     engine.destroy();
   });
 

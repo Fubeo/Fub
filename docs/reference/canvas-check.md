@@ -174,7 +174,8 @@ pezzo di lavagna passa a un assistente, e le sue modifiche tornano.
   suo avviso, e la lista non arriva al nucleo. Il primo problema del controllo
   (l'operazione contata da uno, il percorso, la frase e, se c'è, «Forse: …»)
   lo dice l'avviso, e così una lista che non cambia niente; dopo un avviso il
-  fuoco torna alla tela.
+  fuoco torna alla tela. Un nuovo «Incolla codice» toglie subito l'avviso di
+  prima.
 - Se no una finestra del kit dà il riassunto («1 scheda nuova, 2 schede
   spostate») e gli avvisi contati per specie («2 coppie di schede che si
   coprono»), con a parte le note delle operazioni. «Incolla» scrive in un
@@ -190,8 +191,11 @@ pezzo di lavagna passa a un assistente, e le sue modifiche tornano.
   resta. Il riassunto le conta come «schede aggiornate». Ciò che la lista non
   nomina resta com'è: una scheda che manca dalla lista non si toglie.
   **Aggiungi come copie**: le schede e gli archi coi nomi presi prendono un id
-  nuovo, e le operazioni che li nominano lo seguono; le copie nascono dove
-  sono gli originali. Una scelta che non cambia niente o che il nucleo
+  nuovo, e le operazioni che li nominano lo seguono, solo nei campi che `OPS`
+  di `spec.rs` dichiara id di schede o archi (`align.to` resta com'è; un test
+  confronta la tabella con `OPS`). Il blocco cade come un Ctrl+V: l'angolo
+  sul puntatore, sulla griglia, e un passo più in là se si incolla di nuovo
+  lì. Una scelta che non cambia niente o che il nucleo
   rifiuta non ha il suo bottone, e la finestra ne dice il perché. Un id usato
   per un'altra specie (una scheda di testo contro un gruppo o un arco) non si
   traduce: l'avviso lo dice, e niente cambia.

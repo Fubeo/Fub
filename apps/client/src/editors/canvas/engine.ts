@@ -86,7 +86,7 @@ import { openCanvasRadial, rememberRecent } from "./chrome/radial";
 import type { Radial, RadialPointer } from "../spatial/tools/radial";
 import { createCanvasEmpty, isEmptyBoard, transferOf, type CanvasEmpty } from "./chrome/empty";
 import { checkProblemText, clipboardText, codeTextProblem, problemPhrase, readCodeList, summaryText, warningsText } from "./code-text";
-import { asCopies, asUpdates, codeClashes, type CodeClashes } from "./code-paste";
+import { asCopies, asUpdates, codeClashes, placedAt, type CodeClashes } from "./code-paste";
 import { createCanvasNavigator, type CanvasNavigator } from "./chrome/navigator";
 import { CanvasJumps } from "./jumps";
 import { applyFindMarks, boardFindIndex, findMarks, type FindMark, type FindNotesPort, type FindTarget } from "./find";
@@ -420,6 +420,14 @@ interface CardEditor {
   readonly born: CanvasStep | null;
   /** La misura a cui la scheda di testo è cresciuta mentre ci si scrive (T44); `null` finché non cresce. */
   grown: { readonly width: number; readonly height: number } | null;
+}
+
+/** L'ultimo incolla scritto: il testo, il punto sulla griglia e quante volte di fila lì. */
+interface LastPaste {
+  readonly raw: string;
+  readonly x: number;
+  readonly y: number;
+  readonly count: number;
 }
 
 /**
@@ -1971,7 +1979,7 @@ export class CanvasEngine {
   /** «Copia» o «Taglia» del menu mentre manda la copia del browser: l'evento è nostro anche col fuoco nel menu. */
   #clipboardCommand: "copy" | "cut" | null = null;
   /** L'ultimo incolla delle schede di Fub: lo stesso testo nello stesso punto si sfalsa di nuovo. */
-  #lastPaste: { readonly raw: string; readonly x: number; readonly y: number; readonly count: number } | null = null;
+  #lastPaste: LastPaste | null = null;
   /** L'ultimo Ctrl+D: le schede di partenza e le copie, nello stesso ordine; il prossimo ne ripete lo spostamento. */
   #lastDuplicate: { readonly sources: readonly string[]; readonly copies: readonly string[] } | null = null;
   /**
@@ -6275,8 +6283,8 @@ export class CanvasEngine {
    * per un incolla, l'ultimo punto in cui il puntatore è stato visto sulla
    * vista, sennò il centro della vista.
    */
-  #intakePoint(event: DragEvent | ClipboardEvent, drop: boolean): { x: number; y: number } {
-    if (drop && "clientX" in event) return this.#screenToWorld(event.clientX, event.clientY);
+  #intakePoint(event: DragEvent | ClipboardEvent | null, drop: boolean): { x: number; y: number } {
+    if (drop && event && "clientX" in event) return this.#screenToWorld(event.clientX, event.clientY);
     if (this.#pointerSeen) return this.#screenToWorld(this.#pointerSeen.x, this.#pointerSeen.y);
     const rect = this.#viewport.getBoundingClientRect();
     return this.#screenToWorld(rect.left + this.#viewport.clientWidth / 2, rect.top + this.#viewport.clientHeight / 2);
@@ -7011,19 +7019,31 @@ export class CanvasEngine {
       this.#showNotice(t("canvas.clipboard.refused"));
       return true;
     }
-    const point = this.#intakePoint(event, false);
+    const spot = this.#pasteSpot(raw);
+    if (!this.#commitPasted(read.clipboard, spot.at)) {
+      this.#showNotice(t("canvas.clipboard.refused"));
+      return true;
+    }
+    this.#lastPaste = spot.last;
+    this.#showNotice("");
+    return true;
+  }
+
+  /**
+   * Dove cade un incolla (Ctrl+V, «Aggiungi come copie» di «Incolla codice»):
+   * l'angolo del blocco sul puntatore (o al centro della vista), sulla
+   * griglia; lo stesso testo incollato di nuovo nello stesso punto scende di
+   * `CANVAS_PASTE_STEP` ogni volta. `last` va in `#lastPaste` solo se
+   * l'incolla scrive.
+   */
+  #pasteSpot(raw: string): { readonly at: { x: number; y: number }; readonly last: LastPaste } {
+    const point = this.#intakePoint(null, false);
     const x = snap(point.x);
     const y = snap(point.y);
     const last = this.#lastPaste;
     const count = last && last.raw === raw && last.x === x && last.y === y ? last.count + 1 : 0;
     const step = count * CANVAS_PASTE_STEP;
-    if (!this.#commitPasted(read.clipboard, { x: x + step, y: y + step })) {
-      this.#showNotice(t("canvas.clipboard.refused"));
-      return true;
-    }
-    this.#lastPaste = { raw, x, y, count };
-    this.#showNotice("");
-    return true;
+    return { at: { x: x + step, y: y + step }, last: { raw, x, y, count } };
   }
 
   /**
@@ -7486,6 +7506,8 @@ export class CanvasEngine {
    */
   async #pasteCode(): Promise<void> {
     if (this.#destroyed || this.#readOnly || this.#isSceneOversized()) return;
+    // L'avviso di un incolla di prima non resta dietro la finestra di questo.
+    if (this.#intakeError) this.#showNotice("");
     let text: string;
     try {
       text = await clipboardText();
@@ -7511,6 +7533,8 @@ export class CanvasEngine {
     }
     const seed = this.#seed();
     const source = this.#source;
+    // Le copie cadono come un Ctrl+V: il punto si prende ora, dov'era il puntatore.
+    const spot = this.#pasteSpot(text);
     const choices: PasteChoice[] = [];
     if (!clashes.clashes) {
       const report = this.#checkCode(read.ops, seed);
@@ -7527,7 +7551,7 @@ export class CanvasEngine {
       choices.push({ id: "paste", ops: read.ops, said, report });
     } else {
       const update = asUpdates(doc, read.ops);
-      const copies = asCopies(doc, read.ops, seed);
+      const copies = asCopies(doc, read.ops, seed, placedAt(spot.at));
       for (const [id, ops, updated] of [["update", update.ops, update.updated], ["copies", copies, new Set<string>()]] as const) {
         const report = this.#checkCode(ops, seed);
         if (!report) return;
@@ -7555,6 +7579,7 @@ export class CanvasEngine {
     }
     const created = this.#writeOps(chosen.ops as CanvasIntentOp[], "canvas.change_refused", seed);
     if (!created || this.#destroyed || !this.#doc) return;
+    if (chosen.id === "copies") this.#lastPaste = spot.last;
     const born = new Set(this.#doc.nodes.map((node) => node.id));
     const cards = created.filter((id) => born.has(id));
     if (cards.length > 0) {
