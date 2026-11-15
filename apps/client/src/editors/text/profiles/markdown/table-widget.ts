@@ -12,6 +12,7 @@ import { EditorView, ViewPlugin, WidgetType, keymap, type ViewUpdate } from "@co
 import { redo, undo } from "@codemirror/commands";
 import { isAllowedLink } from "../../../../ui/sanitize";
 import { mountMathBlocks } from "./math";
+import { frontmatterLanguage } from "./proof";
 import type { MarkdownBlock } from "./render-types";
 import {
   cellAtOffset,
@@ -80,6 +81,7 @@ class TableController {
       cellHtml: (row, col) => this.#cellHtml(row, col),
       hydrate: (container) => mountMathBlocks(container),
       activate: (event) => this.#activate(event),
+      language: () => frontmatterLanguage(this.#view.state),
       focused: () => {
         activeGrids.set(this.#view, this.grid);
         this.#widget.callbacks.tableGrid?.active(this.grid);

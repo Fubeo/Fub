@@ -108,9 +108,9 @@ pub fn ensure_seeded(config_dir: Option<&Utf8Path>) -> Result<Utf8PathBuf, Plugi
     })?;
     // Un nome gia` occupato da un vault utente non diventa una demo: il
     // marcatore deve precedere qualunque semina o apertura.
-    let marker = root.join(".fub-demo.json");
+    let marker = root.join(DEMO_MARKER);
     match std::fs::symlink_metadata(root.as_std_path()) {
-        Ok(_) => validate_demo_root(&root)?,
+        Ok(_) => drop(validate_demo_root(&root)?),
         Err(and) if and.kind() == std::io::ErrorKind::NotFound => {
             std::fs::create_dir(root.as_std_path()).map_err(|and| {
                 PluginError::Io(format!("non riesco a preparare la demo in {root}: {and}").into())
@@ -163,31 +163,99 @@ pub fn ensure_seeded(config_dir: Option<&Utf8Path>) -> Result<Utf8PathBuf, Plugi
     Ok(root)
 }
 
+/// Il marcatore che dice «questa cartella è la demo di Fub».
+const DEMO_MARKER: &str = ".fub-demo.json";
+
 /// Il marcatore e la directory devono appartenere davvero alla demo, non a
 /// un vault che occupa casualmente lo stesso nome o a un collegamento.
-fn validate_demo_root(root: &Utf8Path) -> Result<(), PluginError> {
+///
+/// La cartella si apre **senza seguire** un collegamento al suo posto e il
+/// marcatore si legge da quella cartella aperta: torna l'handle, così chi poi
+/// la svuota ([`remove_validated_demo`]) tocca la cartella che si è
+/// controllata, non quella che il nome indica un istante dopo.
+fn validate_demo_root(root: &Utf8Path) -> Result<cap_std::fs::Dir, PluginError> {
     let invalid = || {
         PluginError::BadArgs(
             format!("{root} non sembra una demo di Fub: operazione rifiutata").into(),
         )
     };
-    let metadata = std::fs::symlink_metadata(root.as_std_path()).map_err(|_| invalid())?;
-    if !metadata.is_dir() || metadata.file_type().is_symlink() {
-        return Err(invalid());
-    }
-    let marker = root.join(".fub-demo.json");
-    let metadata = std::fs::symlink_metadata(marker.as_std_path()).map_err(|_| invalid())?;
+    let dir = open_dir_nofollow(root.as_std_path()).map_err(|_| invalid())?;
+    let marker = DEMO_MARKER;
+    let metadata = dir.symlink_metadata(marker).map_err(|_| invalid())?;
     if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Err(invalid());
     }
-    let bytes = std::fs::read(marker.as_std_path()).map_err(|_| invalid())?;
+    let bytes = dir.read(marker).map_err(|_| invalid())?;
     let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
     if value.get("seed").and_then(serde_json::Value::as_str) != Some("fub-demo")
         || value.get("v").and_then(serde_json::Value::as_u64) != Some(u64::from(DEMO_SEED_VERSION))
     {
         return Err(invalid());
     }
-    Ok(())
+    Ok(dir)
+}
+
+/// Apre la cartella `path` soltanto se al suo posto c'è una cartella vera: un
+/// collegamento non si segue (`O_NOFOLLOW` su Unix,
+/// `FILE_FLAG_OPEN_REPARSE_POINT` su Windows) e il tipo si guarda
+/// sull'handle aperto.
+fn open_dir_nofollow(path: &std::path::Path) -> std::io::Result<cap_std::fs::Dir> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        let flags = (rustix::fs::OFlags::NOFOLLOW | rustix::fs::OFlags::DIRECTORY).bits();
+        options.custom_flags(flags as i32);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        options.custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    let file = options.open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "not a real directory",
+        ));
+    }
+    Ok(cap_std::fs::Dir::from_std_file(file))
+}
+
+/// Svuota la demo attraverso la cartella aperta e controllata `dir`, poi toglie
+/// per nome la radice `root` rimasta vuota.
+///
+/// Se fra il controllo e qui qualcuno ha messo un'altra cartella al posto della
+/// demo (un vault dell'utente, un collegamento), si svuota comunque soltanto
+/// quella controllata, e la `remove_dir` finale per nome non toglie la nuova:
+/// una cartella piena o un collegamento non si rimuovono così.
+///
+/// Il marcatore `.fub-demo.json` se ne va **per ultimo**: se lo svuotamento si
+/// ferma a metà (un file bloccato, uno arrivato adesso), la cartella resta
+/// riconoscibile come demo e il prossimo azzeramento la finisce, invece di
+/// rifiutarla per sempre.
+fn remove_validated_demo(dir: cap_std::fs::Dir, root: &Utf8Path) -> std::io::Result<()> {
+    for entry in dir.entries()? {
+        let entry = entry?;
+        let name = entry.file_name();
+        if name == DEMO_MARKER {
+            continue;
+        }
+        if entry.file_type()?.is_dir() {
+            dir.remove_dir_all(&name)?;
+        } else {
+            dir.remove_file(&name)?;
+        }
+    }
+    dir.remove_file(DEMO_MARKER)?;
+    // Su Windows una cartella con un handle aperto resta in attesa di
+    // cancellazione: l'handle si chiude prima.
+    drop(dir);
+    std::fs::remove_dir(root.as_std_path())
 }
 
 /// Apre la demo e la rende corrente, ricordando da dove si viene.
@@ -260,11 +328,8 @@ pub fn reset_demo(host: &Host, config_dir: &Utf8Path) -> Result<Utf8PathBuf, Plu
         PluginError::Unserved("demo non disponibile senza una cartella di configurazione".into())
     })?;
     let owned = match std::fs::symlink_metadata(root.as_std_path()) {
-        Ok(_) => {
-            validate_demo_root(&root)?;
-            true
-        }
-        Err(and) if and.kind() == std::io::ErrorKind::NotFound => false,
+        Ok(_) => Some(validate_demo_root(&root)?),
+        Err(and) if and.kind() == std::io::ErrorKind::NotFound => None,
         Err(and) => {
             return Err(PluginError::Io(
                 format!("non riesco a verificare {root}: {and}").into(),
@@ -280,7 +345,7 @@ pub fn reset_demo(host: &Host, config_dir: &Utf8Path) -> Result<Utf8PathBuf, Plu
     // Nessun altro processo deve avere la demo aperta mentre la si cancella:
     // il lease si prende sulla radice canonica, la stessa che usa l'apertura,
     // prima di dimenticare qualunque cosa, e si tiene fino al nuovo seme.
-    let _writer = if owned {
+    let _writer = if owned.is_some() {
         let canonical = std::fs::canonicalize(root.as_std_path())
             .ok()
             .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
@@ -292,8 +357,8 @@ pub fn reset_demo(host: &Host, config_dir: &Utf8Path) -> Result<Utf8PathBuf, Plu
     // Dimenticare toglie registro e stato di vista; se la voce non c'era,
     // `forget_vault` riesce comunque (cancella per forme, senza pretendere).
     host.forget_vault(&root)?;
-    if owned {
-        std::fs::remove_dir_all(root.as_std_path()).map_err(|and| {
+    if let Some(dir) = owned {
+        remove_validated_demo(dir, &root).map_err(|and| {
             PluginError::Io(format!("non riesco ad azzerare la demo in {root}: {and}").into())
         })?;
     }
@@ -1086,6 +1151,100 @@ mod tests {
             .unwrap()
             .file_type()
             .is_symlink());
+    }
+
+    /// **Azzerare la demo cancella la cartella controllata, non quella che il
+    /// nome indica dopo** (B15 dell'audit). Prima la cancellazione era una
+    /// `remove_dir_all` sul nome, dopo il controllo del marcatore: una cartella
+    /// dell'utente messa al posto della demo in quella finestra spariva.
+    #[test]
+    fn resetting_removes_the_checked_demo_and_not_what_took_its_name() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = Utf8Path::from_path(temp.path()).unwrap();
+        let root = ensure_seeded(Some(config)).unwrap();
+        let checked = validate_demo_root(&root).expect("a seeded demo is valid");
+
+        // Nella finestra la demo va di lato e al suo nome c'è un vault vero.
+        let aside = config.join("demo-di-lato");
+        std::fs::rename(&root, &aside).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("importante.md"), "da conservare").unwrap();
+
+        assert!(remove_validated_demo(checked, &root).is_err());
+        assert_eq!(
+            std::fs::read_to_string(root.join("importante.md")).unwrap(),
+            "da conservare",
+            "the folder that took the demo's name was emptied"
+        );
+        assert_eq!(
+            std::fs::read_dir(&aside).unwrap().count(),
+            0,
+            "the checked demo is the one emptied"
+        );
+    }
+
+    /// **Un azzeramento fermato a metà lascia una demo che si può azzerare.**
+    /// Il marcatore se ne va per ultimo: se una voce non si toglie, la cartella
+    /// resta una demo, non un vault estraneo rifiutato per sempre.
+    #[cfg(unix)]
+    #[test]
+    fn a_reset_stopped_halfway_keeps_the_demo_recognisable() {
+        use std::os::unix::fs::PermissionsExt;
+        // L'ordine di `entries()` lo decide il filesystem: si prova con
+        // cartelle bloccate di nomi diversi, create prima e dopo il marcatore,
+        // così che in qualche prova il marcatore venga letto per primo.
+        for trial in 0..16 {
+            let temp = tempfile::tempdir().unwrap();
+            let config = Utf8Path::from_path(temp.path()).unwrap();
+            let root = ensure_seeded(Some(config)).unwrap();
+            // Una cartella che non si svuota: senza permesso di scrittura il
+            // file dentro non si toglie.
+            let stuck = root.join(format!("bloccata-{trial}"));
+            std::fs::create_dir(&stuck).unwrap();
+            std::fs::write(stuck.join("dentro.md"), "x").unwrap();
+            std::fs::set_permissions(&stuck, std::fs::Permissions::from_mode(0o555)).unwrap();
+            if std::fs::write(stuck.join("prova"), "").is_ok() {
+                // Da amministratore i permessi non fermano nulla.
+                std::fs::set_permissions(&stuck, std::fs::Permissions::from_mode(0o755)).unwrap();
+                return;
+            }
+            if trial % 2 == 1 {
+                let marker = root.join(DEMO_MARKER);
+                let bytes = std::fs::read(&marker).unwrap();
+                std::fs::remove_file(&marker).unwrap();
+                std::fs::write(&marker, bytes).unwrap();
+            }
+
+            let checked = validate_demo_root(&root).unwrap();
+            let stopped = remove_validated_demo(checked, &root);
+            std::fs::set_permissions(&stuck, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+            assert!(stopped.is_err(), "the stuck folder stops the reset");
+            assert!(
+                root.join(DEMO_MARKER).exists(),
+                "trial {trial}: the marker went before the reset was done"
+            );
+            let again = validate_demo_root(&root).expect("still a demo");
+            remove_validated_demo(again, &root).expect("the next reset finishes it");
+            assert!(!root.exists());
+        }
+    }
+
+    /// Un collegamento al posto della demo non si apre come demo.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_in_place_of_the_demo_is_not_a_demo() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = Utf8Path::from_path(temp.path()).unwrap();
+        let root = ensure_seeded(Some(config)).unwrap();
+        let real = config.join("demo-vera");
+        std::fs::rename(&root, &real).unwrap();
+        std::os::unix::fs::symlink(&real, &root).unwrap();
+        assert!(matches!(
+            validate_demo_root(&root),
+            Err(PluginError::BadArgs(_))
+        ));
+        assert!(real.join(".fub-demo.json").exists());
     }
 
     #[test]

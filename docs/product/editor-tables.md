@@ -25,8 +25,12 @@ celle il puntatore resta la freccia.
   prima piena o al bordo. Home ed End vanno ai capi della riga.
 - Maiusc+Spazio sceglie la riga, Mod+Spazio la colonna, Mod+Maiusc+Spazio la
   tabella. Un clic sceglie una cella, il trascinamento o Maiusc+clic un
-  rettangolo, la lettera una colonna, il numero una riga, l'angolo tutta la
-  tabella.
+  rettangolo, la lettera una colonna, il numero una riga (con Maiusc fin lì),
+  l'angolo tutta la tabella. Una lettera o un numero già scelti si
+  trascinano, come nei fogli di Google: una linea d'accento segna dove
+  arriveranno, e al rilascio le colonne o le righe scelte si spostano in un
+  passo solo; un clic senza trascinare sceglie soltanto quella. Le righe non
+  passano sopra l'intestazione, e in sola lettura non si spostano.
 - Mod+clic, Mod+trascina e Maiusc+F8 aggiungono un intervallo agli altri; di
   nuovo Maiusc+F8, o Escape, smette. Canc svuota tutti gli intervalli
   insieme; copia, taglia, incolla, riempimento e righe chiedono un intervallo
@@ -52,7 +56,46 @@ celle il puntatore resta la freccia.
   qualunque.
 - Mod+D copia in giù la prima riga scelta (con una riga sola, quella sopra;
   l'intestazione non scende nel corpo), Mod+R a destra la prima colonna. Il
-  quadratino nell'angolo della selezione continua la serie.
+  quadratino nell'angolo della selezione continua la serie: i numeri col passo
+  degli ultimi due, un testo che finisce con un numero, i giorni della
+  settimana e i mesi, corti o interi, in italiano e in inglese («lun», «mar»…;
+  «gennaio», «febbraio»…; «Jan», «Feb»…), col passo della sorgente, dopo
+  dicembre di nuovo gennaio e con le maiuscole del primo valore. Dove una
+  parola è di due lingue («mar») o un numero si legge in due modi («1.000»)
+  vale la lingua della nota (`lang:` nel frontmatter), altrimenti quella di
+  Fub; i numeri si leggono come nella somma. Il doppio clic sul quadratino
+  riempie in giù quanto la colonna accanto (quella a sinistra, altrimenti
+  quella a destra), come Excel: si ferma prima di una cella già piena, non
+  fa niente senza una colonna accanto piena e non porta l'intestazione nel
+  corpo.
+- Scrivendo in una cella la Tabella propone un valore già scritto nella
+  stessa colonna, col resto scelto e lavato d'accento: Invio o Tab lo
+  accetta, e la cella prende il valore com'è scritto nella colonna («r»
+  accettato è «Roma»); continuare a scrivere lo ignora, Canc lo toglie, e
+  Mod+Z dentro la cella torna a ciò che si era scritto. Propone soltanto quando un valore solo
+  comincia così (come Excel: con «Roma» e «Romagna», «Rom» non propone
+  niente), mai nell'intestazione, mai i numeri e mai a chi scrive un numero;
+  con l'IME aspetta la fine della composizione. La colonna si legge quando
+  la cella si apre, non a ogni battuta. La prima volta lo dice con un
+  avviso.
+- Alt+= scrive nella cella attiva la somma dei numeri subito sopra, fino al
+  primo valore che non è un numero o all'intestazione. È un numero, non una
+  formula: non si aggiorna, e la prima volta lo dice. I numeri si leggono
+  all'italiana («1.240,50») o all'inglese («1,240.50») come li scrivono i
+  numeri sommati, non quelli più su; dove non lo dicono («1.240») decide la
+  lingua della nota, altrimenti quella di Fub. Il totale tiene i decimali e
+  il separatore delle migliaia dei numeri sommati. Senza numeri sopra non
+  scrive niente e lo dice. Conta il carattere «=», con Maiusc o senza: sulla
+  tastiera italiana è Alt+Maiusc+0.
+- Mod+; scrive la data del giorno nella lingua di Fub («15 nov 2026»): nella
+  cella attiva, o dove sta il cursore se la cella è aperta.
+- Alt con una freccia sposta di un posto le righe (su, giù) o le colonne
+  (sinistra, destra) della selezione, e la selezione le segue; l'intestazione
+  non si sposta. Con la cella aperta Alt con una freccia resta del campo: non
+  conferma e non sposta niente.
+- Chi scrive una cella che comincia con un `=` solo (non `==`) vede, la prima volta, che nelle
+  tabelle Markdown resta testo e che le formule che si aggiornano sono quelle
+  del foglio.
 - Mod+«+» inserisce prima della selezione tante righe quante ne sono scelte
   (sotto, se la selezione è sull'intestazione), o tante colonne se sono scelte
   colonne intere; Mod+«−» toglie le righe scelte, l'intestazione esclusa, o
@@ -60,7 +103,8 @@ celle il puntatore resta la freccia.
 - Mod+B, Mod+I e Mod+Maiusc+X mettono grassetto, corsivo e barrato.
 - Il menu contestuale (tasto destro, tasto menu, Maiusc+F10 o, al tocco, il
   tocco lungo) inserisce, sposta ed elimina righe e colonne, ordina secondo la
-  colonna attiva, allinea a sinistra, al centro o a destra, copia, taglia e
+  colonna attiva (i numeri, letti come nella somma, prima del testo; le celle
+  vuote in fondo), allinea a sinistra, al centro o a destra, copia, taglia e
   svuota. I pulsanti «+ Riga» e «+ Colonna» sotto la tabella aggiungono in
   fondo. Al tocco due maniglie agli angoli della selezione la allargano.
 - Dove si scrive col dito, col cursore in una tabella la barra di
@@ -69,6 +113,8 @@ celle il puntatore resta la freccia.
 - Freccia su dalla prima riga, freccia giù dall'ultima ed Escape tornano al
   testo; freccia giù dalla riga sopra la tabella, e su da quella sotto, vi
   entrano. Mod+Z e Mod+Y annullano e ripetono come nel resto della nota.
+- Alt+Invio in una cella aperta conferma e scende come Invio: la cella delle
+  tabelle Markdown è su una riga sola.
 
 ### Il moto
 
@@ -117,6 +163,14 @@ la selezione, Mod+D e Mod+R riempiono, Mod+«+» e Mod+«−» inseriscono e
 tolgono righe o colonne, con le stesse regole del modo foglio; le colonne si
 toccano soltanto dove nessuna cella è unita. Senza celle scelte Invio va a
 capo, Mod+R allinea a destra e Mod+«+» fa l'apice, come nel resto del testo.
+Mod+; scrive la data del giorno dove sta il cursore. Con celle scelte la data
+va nella cella attiva: al posto del testo se la cella ha soltanto un
+paragrafo di testo semplice, altrimenti in fondo al suo primo paragrafo, dopo
+uno spazio, così stili, paragrafi e oggetti restano. Alt con una freccia
+sposta le righe o le colonne delle celle scelte; senza celle scelte la freccia
+resta del testo (su macOS Alt salta di parola). Mod+Alt con una freccia
+sposta la riga o la colonna del cursore con la stessa regola: le colonne non
+si spostano dove una cella è unita.
 
 Sulle celle scelte Canc svuota tutti gli intervalli, copia passa TSV e una
 tabella HTML (con più intervalli rifiuta, e lo dice, come i fogli), e
@@ -125,10 +179,13 @@ modo foglio, dentro la loro tabella, e l'incolla le sposta in un passo solo;
 Escape toglie prima il segno, poi gli intervalli aggiunti, poi le celle. Ogni
 gesto è un passo d'annullamento, e le celle restano scelte.
 
-Due gesti del foglio nel documento mancano apposta, e la prova comune lo dice
-col perché: Mod con una freccia, che nel testo salta di parola, e la cella da
-aprire, riscrivere o annullare, perché il cursore è già nel testo della cella.
-L'ordinamento manca perché il formato non lo sa fare.
+Alcuni gesti del foglio nel documento mancano apposta, e la prova comune lo
+dice col perché: Mod con una freccia, che nel testo salta di parola; la cella
+da aprire, riscrivere o annullare, perché il cursore è già nel testo della
+cella; il completamento, perché si scrive nel testo come in Word; Alt+=, che
+in Word inserisce un'equazione; il quadratino di riempimento e le
+intestazioni da cliccare, che il documento non ha. L'ordinamento manca perché
+il formato non lo sa fare.
 
 ## Nei fogli
 
@@ -136,8 +193,15 @@ Il foglio ha gli stessi gesti con le regole della Tabella: Maiusc+Spazio,
 Mod+Spazio, Mod con una freccia, Invio e Tab dentro la selezione, il segno del
 taglio, Maiusc+F8. Mod+D, Mod+R, Mod+«+» e Mod+«−» li esegue col suo
 catalogo, come Excel: su un intervallo che non prende righe o colonne intere
-Mod+«+» e Mod+«−» chiedono come spostare le celle. La griglia dei fogli è
-descritta in [Editor e anteprima](editor-and-preview.md#la-griglia).
+Mod+«+» e Mod+«−» chiedono come spostare le celle. Alt+= mette la formula
+della somma, il quadratino tirato o cliccato due volte continua la serie
+(anche i giorni e i mesi) e le intestazioni scelgono la colonna o la riga,
+sempre col catalogo del foglio. Il completamento, Mod+;, Alt con le frecce e
+le intestazioni da trascinare per spostare righe e colonne il foglio non li
+ha ancora: sono un lavoro sul motore dei fogli, e la prova comune lo dice.
+Nel foglio trascinare le intestazioni allarga la scelta, come in Excel. La
+griglia dei fogli è descritta in
+[Editor e anteprima](editor-and-preview.md#la-griglia).
 
 ## La somma nella banda
 
@@ -184,7 +248,7 @@ anche su diecimila celle.
 ## Dove si trova
 
 - `apps/client/src/tabella/` (tasti, navigazione, selezione, comandi, appunti,
-  cornice e moto)
+  serie, somma, completamento, cornice e moto)
 - `apps/client/src/editors/text/profiles/markdown/table-grid.ts`,
   `table-model.ts` e `table-widget.ts`
 - `apps/client/src/editors/rich/cell-selection.ts` e `table-structure.ts` (righe

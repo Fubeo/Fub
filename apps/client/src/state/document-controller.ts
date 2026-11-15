@@ -47,7 +47,7 @@ import {
   type SurfaceRequest,
   type SurfaceScrollLink,
 } from "../editors/core/registry";
-import { modeForContext, offersContext, offersMode, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
+import { modeById, modeForContext, offersContext, offersMode, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
 import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { pageName } from "../rules/organizer";
 import { folderForNote } from "../rules/mirrored";
@@ -1606,8 +1606,9 @@ function registerCommands(): void {
     available: () => offersContext(focusedModes(), "source"),
     run: () => void setContextMode("source"),
   });
-  // I Blocchi (N13) sono una modalità della nota con il ruolo della Live: il
-  // comando la nomina per id, e c'è soltanto dove la superficie la dichiara.
+  // I Blocchi (N13) sono dentro Scrittura: la nota dichiara `blocks` fra gli
+  // id di prima della sua Scrittura (`formerIds`), e il comando, che lo
+  // nomina, porta lì e c'è soltanto dove una superficie lo dichiara.
   registerShellCommand({
     id: "shell.mode.blocks",
     title: "commands.mode.blocks",
@@ -3133,14 +3134,15 @@ function redrawReading(doc: string): void {
   }
 }
 /// Il modo effettivo è quello che il riquadro ricorda per la famiglia della
-/// superficie, quando la superficie lo dichiara; altrimenti la sua predefinita,
-/// o la prima che supporta. Il fallback non riscrive il layout: tornando a
-/// quella famiglia, il riquadro ritrova la sua modalità.
+/// superficie, quando la superficie lo dichiara (anche come id di prima: un
+/// riquadro salvato nei Blocchi si apre in Scrittura); altrimenti la sua
+/// predefinita, o la prima che supporta. Il fallback non riscrive il layout:
+/// tornando a quella famiglia, il riquadro ritrova la sua modalità.
 export function selectedMode(r: Pane | undefined): SurfaceMode | undefined {
   if (!r?.surface) return undefined;
   const { family, modes, defaultMode } = r.surface;
   const requested = paneState(r.id)?.modes[family];
-  return modes.find((mode) => mode.id === requested)
+  return modeById(modes, requested)
     ?? modes.find((mode) => mode.id === defaultMode)
     ?? modes[0];
 }
@@ -3187,13 +3189,6 @@ export function focusedContextMode(): PaneMode | undefined {
   const r = panes.get(layout.focus);
   if ((r?.surface?.modes.length ?? 0) < 2) return undefined;
   return selectedMode(r)?.contextMode;
-}
-
-/// L'id della modalità del riquadro col fuoco, dove ce n'è più d'una.
-export function focusedModeId(): string | undefined {
-  const r = panes.get(layout.focus);
-  if ((r?.surface?.modes.length ?? 0) < 2) return undefined;
-  return selectedMode(r)?.id;
 }
 
 /// Le modalità della superficie del riquadro col fuoco; nessuna senza superficie.
@@ -3415,7 +3410,23 @@ function takeGesture(pane: string, doc: string): boolean {
   return true;
 }
 
+/// Alla fine di un'apertura il fuoco va all'editor solo se nessuno l'ha
+/// portato altrove intanto. Un'apertura lunga (un documento da impaginare)
+/// finisce quando chi usa Fub è già passato oltre: se nel frattempo ha aperto
+/// il lanciatore, un dialogo o un campo, quello che scrive e il suo Invio
+/// restano lì e non finiscono nel documento. Il fuoco è ancora dell'apertura
+/// se sta dov'era al gesto (`asked`), se non sta da nessuna parte, o se sta in
+/// un riquadro (l'editor di prima, che l'apertura sostituisce).
+function focusStillOpening(asked: Element | null): boolean {
+  const now = document.activeElement;
+  if (now === null || now === asked || now === document.body || now === document.documentElement) return true;
+  for (const r of panes.values()) if (r.root.contains(now)) return true;
+  return false;
+}
+
 export async function openDocument(id: string, options: OpenOptions = {}): Promise<void> {
+  // Dove sta il fuoco al gesto: alla fine si guarda se è ancora lì.
+  const asked = document.activeElement;
   // Reserve the target before entering the shared flush queue. Otherwise the
   // last-tab release can close the owner while this opening is still waiting
   // for that same queue.
@@ -3453,7 +3464,7 @@ export async function openDocument(id: string, options: OpenOptions = {}): Promi
       // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
       // selezione sarebbe quello del documento precedente.
       await publishContext();
-      if (selectedMode(panes.get(layout.focus))?.presentation !== "rendered") focusEditor();
+      if (selectedMode(panes.get(layout.focus))?.presentation !== "rendered" && focusStillOpening(asked)) focusEditor();
     });
   } finally {
     releaseIntent();
@@ -3839,10 +3850,7 @@ async function toggleReading(): Promise<void> {
 async function setContextMode(context: PaneMode): Promise<void> {
   const r = panes.get(layout.focus);
   if (!r?.surface) return;
-  // Dai Blocchi «Passa a Live» porta alla Live: hanno lo stesso ruolo, ma i
-  // Blocchi hanno un comando loro e la Live sarebbe altrimenti irraggiungibile.
-  const current = selectedMode(r)?.id;
-  const target = modeForContext(r.surface.modes.filter((mode) => mode.id !== "blocks" || current !== "blocks"), current === "blocks" ? undefined : current, context);
+  const target = modeForContext(r.surface.modes, selectedMode(r)?.id, context);
   if (target) await setMode(target.id);
 }
 
@@ -4009,7 +4017,7 @@ async function saveNow(): Promise<void> {
 
 export async function setMode(next: string): Promise<void> {
   const r = panes.get(layout.focus);
-  const mode = r?.surface?.modes.find((candidate) => candidate.id === next);
+  const mode = r?.surface ? modeById(r.surface.modes, next) : undefined;
   if (!r?.surface || !mode) return;
   const doc = activeDoc();
   // Nessun salvataggio per cambiare modo: la lettura si monta dal buffer

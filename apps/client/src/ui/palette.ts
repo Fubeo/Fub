@@ -1276,9 +1276,12 @@ async function execute(
         return;
       }
       // Un comando che avrebbe dovuto dire cosa farebbe e ha fatto altro: si
-      // consegna il suo esito e non si applica niente di nascosto.
-      await deliverOutcome(outcome, host, spec.id);
+      // consegna il suo esito e non si applica niente di nascosto. Prima si
+      // chiude, come dopo un «apply»: il fuoco torna a chi l'aveva, e una nota
+      // che l'esito apre lo prende da lì (chiudendo dopo, la palette glielo
+      // riporterebbe via).
       closeCommandPalette();
+      await deliverOutcome(outcome, host, spec.id);
       return;
     } catch (e) {
       failed(e, box, host);

@@ -323,22 +323,37 @@ describe("i comandi delle modalità seguono il ruolo dichiarato", () => {
     expect(paneMode(), "la nota ritrova la sua Sorgente").toBe("source");
   });
 
-  it("i Blocchi hanno il loro comando, soltanto nelle note, e Mod-e ne torna", async () => {
+  it("il comando dei Blocchi porta a Scrittura, soltanto nelle note, e Mod-e ne torna (T3)", async () => {
     await start();
     await open("lavagna.canvas");
     expect(await offered(["shell.mode.blocks"]), "la tela non ha Blocchi").toEqual([]);
     await open("Benvenuto.md");
+    await run("shell.mode.source");
     expect(await offered(["shell.mode.blocks"])).toEqual(["shell.mode.blocks"]);
     await run("shell.mode.blocks");
-    expect(paneMode()).toBe("blocks");
+    expect(paneMode(), "i Blocchi sono dentro Scrittura").toBe("live_preview");
+    expect(focusedPane().querySelector(".cm-fub-block-handles"), "Scrittura monta le maniglie dei blocchi").not.toBeNull();
     pressModE();
     await settle();
     expect(paneMode()).toBe("reading");
     pressModE();
     await settle();
-    expect(paneMode(), "Mod-e torna ai Blocchi, non alla Live").toBe("blocks");
+    expect(paneMode(), "Mod-e torna a Scrittura").toBe("live_preview");
+    await run("shell.mode.source");
     await run("shell.mode.live");
-    expect(paneMode(), "dai Blocchi Live porta alla Live, anche se hanno lo stesso ruolo").toBe("live_preview");
+    expect(paneMode()).toBe("live_preview");
+  });
+
+  it("un riquadro salvato nei Blocchi si apre in Scrittura (T3)", async () => {
+    await start({ ...VAULT, "Altra.md": "# Altra\n" });
+    const layout = await import("./state/layout");
+    // Il riquadro ricorda `blocks`, come l'ha salvato un Fub di prima.
+    layout.setMode(layout.layout.focus, "text", "blocks");
+    await open("Altra.md");
+    expect(paneMode()).toBe("live_preview");
+    expect(focusedPane().querySelector(".cm-fub-block-handles")).not.toBeNull();
+    // Il layout non si riscrive: un Fub di prima ritrova i suoi Blocchi.
+    expect(layout.layout.panes[layout.layout.focus]!.modes["text"]).toBe("blocks");
   });
 
   it("sulla tela Live torna dal JSON alle carte", async () => {
@@ -649,12 +664,12 @@ describe("la modalità si sceglie dalla banda", () => {
     await start();
     await open("Benvenuto.md");
     expect(button().hidden).toBe(false);
-    expect(name()).toBe("Live");
+    expect(name()).toBe("Scrittura");
     button().focus();
     button().click();
     await settle();
     expect(button().getAttribute("aria-expanded")).toBe("true");
-    expect(radios().map(labelOf)).toEqual(["Live", "Blocchi", "Sorgente", "Lettura"]);
+    expect(radios().map(labelOf)).toEqual(["Scrittura", "Sorgente", "Lettura"]);
     radios().find((item) => labelOf(item) === "Sorgente")!.click();
     await settle();
     expect(paneMode()).toBe("source");
@@ -700,7 +715,7 @@ describe("la modalità si sceglie dalla banda", () => {
       button().focus();
       button().click();
       await settle();
-      expect(radios().map(labelOf)).toEqual(["Live", "Blocchi", "Sorgente", "Lettura"]);
+      expect(radios().map(labelOf)).toEqual(["Scrittura", "Sorgente", "Lettura"]);
       // Chi chiude il menu dice di aver gestito il tasto.
       expect(escape().defaultPrevented).toBe(true);
       await settle();

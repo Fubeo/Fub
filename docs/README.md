@@ -44,8 +44,8 @@ flowchart LR
 | [Recupero e versioni](product/vault-recupero-e-versioni.md) | cestino, rinomine, versioni, snapshot |
 | [Explorer e cartelle](product/explorer-and-folders.md) | l'albero, le appuntate, gli spazi |
 | [Editor e anteprima](product/editor-and-preview.md) | le superfici di scrittura |
-| [Blocchi](product/editor-blocks.md) e [Tabelle](product/editor-tables.md) | la superficie a blocchi; i gesti delle tabelle in note, documenti e fogli |
-| [Scrivere nell'editor](product/editor-writing.md) | l'incolla degli indirizzi, e la scrittura |
+| [Scrittura](product/editor-writing.md) | le modalità di una nota, i livelli di presenza e l'incolla degli indirizzi |
+| [Blocchi](product/editor-blocks.md) e [Tabelle](product/editor-tables.md) | i blocchi di Scrittura; i gesti delle tabelle in note, documenti e fogli |
 | [Tasto destro, mini-barra e «/»](product/editor-menus.md) | i menu degli editor |
 | [Basi (file `.base`)](product/bases.md) | le viste, i filtri, i limiti e che cosa si scrive sul file |
 | [La riga dei dati](product/editor-note-facts.md) | modifica, collegamenti ed etichette sotto il titolo |
@@ -54,7 +54,7 @@ flowchart LR
 | [Annotazioni dei PDF](product/pdf-annotations.md) | scrivere accanto ai PDF |
 | [File delle app Craft](product/craft-files.md) | disegni, immagini e foto delle app Craft |
 | [La lavagna](product/lavagna.md) | schede, fili, inchiostro ed estratti nei file `.canvas` |
-| [Ricerca, link e grafo](product/search-links-and-graph.md) | trovare e seguire |
+| [Ricerca, link e grafo](product/search-links-and-graph.md), [spazio comandi (Ctrl O)](product/command-space.md) | trovare, seguire e comandare dalla tastiera |
 | [Compiti](product/tasks-and-reminders.md) | i compiti del vault per scadenza, e come si spuntano |
 | [Importare ed esportare](product/import-and-export.md) | dentro e fuori dal vault |
 | [Plugin ed estensioni](product/plugins-and-extensions.md) | come Fub cresce |

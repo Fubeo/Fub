@@ -369,22 +369,23 @@ export function deleteColumns(data: TableData, from: number, to: number): TableD
   return { rows, aligns };
 }
 
-/// Sposta di un passo le righe del corpo fra `from` e `to`; fuori dal corpo
-/// non si va.
-export function moveRows(data: TableData, from: number, to: number, delta: -1 | 1): TableData {
+/// Sposta di `delta` posti le righe del corpo fra `from` e `to` (in su se
+/// negativo); fuori dal corpo non si va.
+export function moveRows(data: TableData, from: number, to: number, delta: number): TableData {
   const start = Math.max(1, from);
-  if (to < start) return data;
-  const target = delta < 0 ? start - 1 : to + 1;
-  if (target < 1 || target >= data.rows.length) return data;
+  if (to < start || delta === 0 || !Number.isInteger(delta)) return data;
+  if (start + delta < 1 || to + delta >= data.rows.length) return data;
   const rows = mutable(data);
   const block = rows.splice(start, to - start + 1);
   rows.splice(start + delta, 0, ...block);
   return { rows, aligns: data.aligns };
 }
 
-export function moveColumns(data: TableData, from: number, to: number, delta: -1 | 1): TableData {
-  const target = delta < 0 ? from - 1 : to + 1;
-  if (target < 0 || target >= tableWidth(data)) return data;
+/// Sposta di `delta` posti le colonne fra `from` e `to`, con i loro
+/// allineamenti (a sinistra se negativo).
+export function moveColumns(data: TableData, from: number, to: number, delta: number): TableData {
+  if (delta === 0 || !Number.isInteger(delta)) return data;
+  if (from + delta < 0 || to + delta >= tableWidth(data)) return data;
   const shift = <T>(items: T[]): T[] => {
     const block = items.splice(from, to - from + 1);
     items.splice(from + delta, 0, ...block);

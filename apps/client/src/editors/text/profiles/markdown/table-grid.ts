@@ -63,6 +63,9 @@ export interface TableGridHost {
   hydrate?(container: HTMLElement): () => void;
   /// Un clic con Mod su un link o un tag dentro una cella: `true` se l'ha seguito.
   activate(event: MouseEvent): boolean;
+  /// La lingua che la nota dichiara (`lang:` nel frontmatter), o `null`: la
+  /// serie della maniglia e la somma la usano al posto di quella di Fub.
+  language?(): string | null;
   /// Il fuoco è entrato nella griglia.
   focused(): void;
   /// Selezione o contenuto sono cambiati: la barra di formattazione rilegge lo stato.
@@ -297,6 +300,7 @@ export class TableGrid implements TableGridActions {
       },
       writeClipboard: (data) => writeClipboardText(data.text),
       notice: (text) => notify(text, "info"),
+      language: () => host.language?.() ?? null,
       focused: () => host.focused(),
       changed: () => host.changed(),
     }, "markdown-rendered");

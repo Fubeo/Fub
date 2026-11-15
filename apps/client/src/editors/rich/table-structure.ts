@@ -1,6 +1,7 @@
 // Le righe e le colonne di una tabella del documento, una volta sola per i
 // comandi della barra e del menu (`commands.ts`) e per i gesti della Tabella
-// sulle celle scelte (`cell-selection.ts`, Ctrl+«+» e Ctrl+«−»). Qui non c'è
+// sulle celle scelte (`cell-selection.ts`, Ctrl+«+», Ctrl+«−» e Alt con le
+// frecce). Qui non c'è
 // cursore né selezione: chi chiama sa dove rimetterli.
 
 import type { Node as PmNode } from "prosemirror-model";
@@ -43,7 +44,7 @@ export function evenColumns(table: PmNode): boolean {
 }
 
 /// Rifà in `tr` la tabella a `tablePos` con le righe o le colonne di `edit`
-/// inserite o tolte. Le righe e le colonne nuove copiano le proprietà di
+/// inserite, tolte o spostate. Le righe e le colonne nuove copiano le proprietà di
 /// quella che spostano. `false`, e `tr` intatta, se il cambio non si può
 /// fare: colonne con celle unite, o una tabella che resterebbe senza righe o
 /// senza colonne.
@@ -79,9 +80,30 @@ export function applyTableEdit(tr: Transaction, table: PmNode, tablePos: number,
       if (!evenColumns(table) || edit.to - edit.from + 1 >= rows[0]!.childCount) return false;
       next = rows.map((row) => rowType.create(row.attrs, cellsOf(row).filter((_, index) => index < edit.from || index > edit.to)));
       break;
+    case "move-rows":
+      next = shifted(rows, edit.from, edit.to, edit.by);
+      if (next === rows) return false;
+      break;
+    case "move-columns": {
+      if (!evenColumns(table)) return false;
+      const first = cellsOf(rows[0]!);
+      if (shifted(first, edit.from, edit.to, edit.by) === first) return false;
+      next = rows.map((row) => rowType.create(row.attrs, shifted(cellsOf(row), edit.from, edit.to, edit.by)));
+      break;
+    }
     default:
       return false;
   }
   tr.replaceWith(tablePos, tablePos + table.nodeSize, tableType.create(table.attrs, next));
   return true;
+}
+
+/// `items` con quelli da `from` a `to` spostati di `by` posti; lo stesso
+/// elenco (`items`) se lo spostamento esce dall'elenco o non sposta niente.
+function shifted<T>(items: readonly T[], from: number, to: number, by: number): T[] {
+  if (by === 0 || !Number.isInteger(by) || from > to || from + by < 0 || to + by >= items.length) return items as T[];
+  const next = [...items];
+  const block = next.splice(from, to - from + 1);
+  next.splice(from + by, 0, ...block);
+  return next;
 }

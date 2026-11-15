@@ -72,6 +72,31 @@ export function fillRange(source: Range, over: Cell): Range | null {
   return over.column > source.c1 ? { ...source, c1: over.column } : { ...source, c0: over.column };
 }
 
+/// Il doppio clic sulla maniglia, come in Excel: la serie di `source` scende
+/// quanto la colonna accanto (quella a sinistra, se sotto la sorgente ha un
+/// valore, altrimenti quella a destra), e si ferma prima di una cella già
+/// piena nelle colonne della sorgente, così non scrive sopra niente.
+/// `filled` dice se una cella ha un valore, `rows` quante righe ha la
+/// tabella, `first` la prima riga del corpo: dall'intestazione non si
+/// scende. `null` se non c'è niente da riempire.
+export function fillToEndRange(source: Range, rows: number, columns: number, filled: (row: number, column: number) => boolean, first = 0): Range | null {
+  if (source.r0 < first) return null;
+  const below = source.r1 + 1;
+  if (below >= rows) return null;
+  const left = source.c0 - 1;
+  const right = source.c1 + 1;
+  const guide = left >= 0 && filled(below, left) ? left : right < columns && filled(below, right) ? right : null;
+  if (guide === null) return null;
+  let last = source.r1;
+  while (last + 1 < rows && filled(last + 1, guide)) {
+    let free = true;
+    for (let c = source.c0; c <= source.c1 && free; c++) free = !filled(last + 1, c);
+    if (!free) break;
+    last += 1;
+  }
+  return last > source.r1 ? { ...source, r1: last } : null;
+}
+
 /// Se `range` prende le righe intere (tutte le colonne di `bounds`) o le
 /// colonne intere (tutte le righe). `bounds` è la tabella: la prima e
 /// l'ultima riga e colonna che si vedono.
