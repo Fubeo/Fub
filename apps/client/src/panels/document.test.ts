@@ -920,10 +920,10 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     await settle();
     expect(current.getAttribute("aria-expanded")).toBe("true");
     // L'ordine non si fissa: Scrittoio 2 (T2) lo cambia.
-    expect(new Set(radios().map(labelOf))).toEqual(new Set(["Live", "Blocchi", "Sorgente", "Lettura"]));
+    expect(new Set(radios().map(labelOf))).toEqual(new Set(["Scrittura", "Sorgente", "Lettura"]));
     const checked = radios().filter((item) => item.getAttribute("aria-checked") === "true");
-    expect(checked.map(labelOf)).toEqual(["Live"]);
-    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Live" }));
+    expect(checked.map(labelOf)).toEqual(["Scrittura"]);
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Scrittura" }));
   });
 
   it("la voce scelta cambia la modalità del suo riquadro, non quella dell'altro", async () => {
@@ -948,7 +948,7 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     expect(right!.dataset.mode).toBe("live_preview");
     expect(currentOf(left!).getAttribute("aria-expanded")).toBe("false");
     expect(currentOf(left!).textContent).toBe("Sorgente");
-    expect(currentOf(right!).textContent).toBe("Live");
+    expect(currentOf(right!).textContent).toBe("Scrittura");
   });
 
   it("il bottone della modalità ha la figura e il nome della modalità accesa, e il suggerimento (T2)", async () => {
@@ -965,9 +965,9 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     };
     const drawn = (which: string) => new DOMParser().parseFromString(icon(which), "image/svg+xml").documentElement.innerHTML;
     expect(figure()).toBe(drawn("pen"));
-    expect(name()).toBe("Live");
-    expect(tooltip()).toBe("Live");
-    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Live" }));
+    expect(name()).toBe("Scrittura");
+    expect(tooltip()).toBe("Scrittura");
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Scrittura" }));
     const svg = current.querySelector(":scope > svg");
     // Ridisegnare la testata senza cambiare modalità non riscrive la figura.
     const { synchronize } = await import("./document");
@@ -975,12 +975,12 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     expect(current.querySelector(":scope > svg")).toBe(svg);
     current.click();
     await settle();
-    radios().find((item) => labelOf(item) === "Blocchi")!.click();
-    await waitFor("la nota in Blocchi", () => panes()[0]!.dataset.mode === "blocks");
-    expect(figure()).toBe(drawn("blocks"));
-    expect(name()).toBe("Blocchi");
-    expect(tooltip()).toBe("Blocchi");
-    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Blocchi" }));
+    radios().find((item) => labelOf(item) === "Sorgente")!.click();
+    await waitFor("la nota in Sorgente", () => panes()[0]!.dataset.mode === "source");
+    expect(figure()).toBe(drawn("code"));
+    expect(name()).toBe("Sorgente");
+    expect(tooltip()).toBe("Sorgente");
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Sorgente" }));
   });
 
   it("il bottone della modalità sta nel foglio dopo la barra di formato, non nella testata (T3)", async () => {

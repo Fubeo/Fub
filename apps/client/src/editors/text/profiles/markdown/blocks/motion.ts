@@ -346,10 +346,12 @@ class BlockMotion {
       this.live.remove();
       this.float.remove();
     });
-    view.requestMeasure({ read: () => null, write: () => this.arrive() });
   }
 
   /// La pagina che arriva: copertina, icona e titolo entrano uno dopo l'altro.
+  /// Soltanto col gesto che porta a Scrittura (`pageArrives`): una nota che si
+  /// apre, o una linguetta che torna, mostra la pagina ferma, e un gesto
+  /// invertito a metà non la fa ripartire da zero.
   arrive(): void {
     if (motionLevel() === "reduced") return;
     const parts = this.view.contentDOM.querySelectorAll(".cm-fub-page-cover, .cm-fub-page-icon, .cm-fub-page-title");
@@ -358,6 +360,9 @@ class BlockMotion {
 
   update(update: ViewUpdate): void {
     if (update.docChanged) this.lastEdit = Date.now();
+    if (update.transactions.some((tr) => tr.effects.some((effect) => effect.is(pageArrives)))) {
+      this.view.requestMeasure({ read: () => null, write: () => this.arrive() });
+    }
     // La selezione di blocchi che si spegne: il livello toglie i suoi
     // riquadri, e la loro immagine si spegne da dov'era, anche a metà entrata.
     if (update.startState.field(blockSelection, false) && !update.state.field(blockSelection, false)) {
@@ -684,6 +689,10 @@ export interface DragPose {
 }
 
 export const setDragPose = StateEffect.define<DragPose | null>();
+
+/// Il gesto che porta la nota in Scrittura da un'altra modalità: la pagina
+/// arriva (`BlockMotion.arrive`). Lo manda la superficie dopo il cambio.
+export const pageArrives = StateEffect.define<null>();
 
 const STILL: DragPose = { lifted: null, parted: null };
 

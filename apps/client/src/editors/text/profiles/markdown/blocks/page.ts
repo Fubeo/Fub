@@ -18,6 +18,7 @@ import { imageHtml } from "../render-inline";
 import { liveStrings } from "../strings";
 import { blocksOptions, type BlocksOptions } from "./handles";
 import { noteFactsElement, noteFactsOf, sameLabels, type NoteFactsLabels } from "../note-facts";
+import { markPresence } from "../../../../core/presence";
 
 /// Le classi della pagina che il menu «…» scrive in `cssclasses`; il tema le
 /// applica al riquadro (`fub-note--*`). Le altre classi della nota restano.
@@ -146,6 +147,7 @@ class PageHeaderWidget extends WidgetType {
 
     const tools = document.createElement("div");
     tools.className = "cm-fub-page-tools";
+    markPresence(tools, "hover");
     const tool = (label: string, run: (button: HTMLButtonElement) => void): HTMLButtonElement => {
       const button = document.createElement("button");
       button.type = "button";
@@ -663,10 +665,15 @@ const theme = EditorView.baseTheme({
     fontSize: "0.85em",
     cursor: "pointer",
   },
+  // Il titolo è un `<input>`, e un campo taglia ciò che esce dalla sua
+  // scatola: l'altezza la dà la riga del titolo, non quella dei campi della
+  // pelle (`--control-h`, più bassa di una riga a 2,1em), sennò la cima
+  // delle lettere resta fuori.
   ".cm-fub-page-title": {
     display: "block",
     boxSizing: "border-box",
     width: "100%",
+    height: "auto",
     margin: "0",
     padding: "0",
     border: "none",

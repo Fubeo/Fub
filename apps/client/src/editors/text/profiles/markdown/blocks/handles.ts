@@ -24,6 +24,7 @@ import { blockSelection, cursorBlock, deleteRun, duplicateRun, runOfSelection, s
 import { canTransform, targetOf, transformTo, type TransformTarget, unwrap } from "./transform";
 import { dragPose, type DragPose, LIFT_SCALE, ownsRow, setDragPose } from "./motion";
 import { animate, halt, liveState } from "../../../../../moto";
+import { markPresence } from "../../../../core/presence";
 
 export interface BlocksOptions {
   /// Il nome della pagina, per il link al blocco: `[[Pagina#^id]]`.
@@ -43,6 +44,10 @@ export interface BlocksOptions {
   /// lo è già, e lì nasce `name`. `null` se è andata, altrimenti la frase che
   /// dice perché no. Senza, la testata non la offre.
   readonly subpage?: (name: string) => Promise<string | null>;
+  /// Esc è di chi ospita l'editor, che con lui ne esce (una scheda della
+  /// lavagna): sul testo Esc non seleziona il blocco del cursore e passa
+  /// all'ospite; una selezione di blocchi già fatta la chiude ancora.
+  readonly escapeLeaves?: boolean;
 }
 
 export const blocksOptions = Facet.define<BlocksOptions, BlocksOptions>({ combine: (values) => values[0] ?? {} });
@@ -236,6 +241,7 @@ class HandlesView {
   constructor(readonly view: EditorView) {
     this.hoverable = typeof matchMedia !== "function" || matchMedia("(hover: hover)").matches;
     this.root.className = "cm-fub-block-handles";
+    markPresence(this.root, "hover");
     this.root.hidden = true;
     this.add.type = "button";
     this.add.className = "cm-fub-block-add";
@@ -260,6 +266,7 @@ class HandlesView {
     this.grip.append(dots);
     this.root.append(this.add, this.grip);
     this.drop.className = "cm-fub-block-drop";
+    markPresence(this.drop, "request");
     this.drop.hidden = true;
     view.scrollDOM.append(this.root, this.drop);
     this.life.add(() => {

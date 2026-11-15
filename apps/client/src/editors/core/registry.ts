@@ -47,6 +47,18 @@ export interface SurfaceMode {
    * know the name, the mode takes the figure of its role (`state/mode-menu.ts`).
    */
   readonly icon?: string;
+  /**
+   * One line under the label in the mode menu that says what the mode is
+   * for. Without it the menu shows the label alone.
+   */
+  readonly description?: () => string;
+  /**
+   * Ids this mode answers to besides its own: modes the surface no longer
+   * declares because they merged into this one (the Markdown `blocks`, now
+   * inside Scrittura). A saved pane or a command that names one gets this
+   * mode; the menu never lists them.
+   */
+  readonly formerIds?: readonly string[];
 }
 
 export interface SurfaceMountContext {
@@ -78,6 +90,13 @@ export interface SurfaceMountContext {
    * `false`: a pane always mounts the whole editor.
    */
   readonly compact?: boolean;
+  /**
+   * Escape belongs to the host, which leaves the surface with it (a board
+   * card, compact or not): the surface keeps Escape only to close what it has
+   * open (a menu, a selection of blocks) and gives it no meaning of its own.
+   * Absent means `false`: in a pane Escape is the surface's.
+   */
+  readonly escapeLeaves?: boolean;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */
