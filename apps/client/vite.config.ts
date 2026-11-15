@@ -167,8 +167,8 @@ export default defineConfig({
         }
         reportStartup(this, bundle);
         // Vero se dal chunk `from` si arriva, per import statici, a un chunk
-        // che si chiama `name`.
-        const reaches = (from: string, name: string): boolean => {
+        // per cui `target` è vero.
+        const reaches = (from: string, target: (chunk: Rollup.OutputChunk) => boolean): boolean => {
           const seen = new Set<string>();
           const walk = (fileName: string): boolean => {
             const chunk = bundle[fileName];
@@ -176,11 +176,14 @@ export default defineConfig({
             seen.add(fileName);
             return chunk.imports.some((dependency) => {
               const next = bundle[dependency];
-              return (next?.type === "chunk" && next.name === name) || walk(dependency);
+              return (next?.type === "chunk" && target(next)) || walk(dependency);
             });
           };
           return walk(from);
         };
+        // Il chunk del ponte dei documenti, qualunque nome gli dia Rollup.
+        const bridge = (chunk: Rollup.OutputChunk): boolean =>
+          Object.keys(chunk.modules).some((id) => /\/src\/state\/document-bridge\.ts$/.test(id));
         for (const chunk of Object.values(bundle)) {
           if (chunk.type !== "chunk") continue;
           const modules = Object.keys(chunk.modules);
@@ -196,8 +199,15 @@ export default defineConfig({
           // nessuno di loro la importa, nemmeno attraverso un altro. Un ciclo
           // fra chunk si carica, ma l'ordine in cui i moduli partono non è più
           // quello del codice.
-          if (chunk.name.startsWith("drawing-") && reaches(chunk.fileName, "surface")) {
+          if (chunk.name.startsWith("drawing-") && reaches(chunk.fileName, (next) => next.name === "surface")) {
             this.error(`${chunk.fileName}: un chunk dei disegni non importa la superficie`);
+          }
+          // La resa delle note e il renderer delle viste stanno sotto il
+          // ponte dei documenti, che li importa: se uno dei due lo importasse,
+          // anche attraverso un altro, un modulo nuovo che importano è rimasto
+          // nel ponte e va aggiunto alla sua regola in `manualChunks`.
+          if ((chunk.name === "markdown-render" || chunk.name === "ui-views") && reaches(chunk.fileName, bridge)) {
+            this.error(`${chunk.fileName}: ${chunk.name} non importa il ponte dei documenti; un modulo che importa sta ancora nel ponte`);
           }
           const limit = parser ? MERMAID_PARSER_BUDGET : CHUNK_BUDGET;
           const bytes = Buffer.byteLength(chunk.code, "utf8");
@@ -387,6 +397,28 @@ export default defineConfig({
           ) {
             return "text-engine";
           }
+          // La resa della Lettura: dal Markdown all'HTML dei blocchi e delle
+          // righe, con la grammatica che legge (note a piè di pagina, link,
+          // ripiegabili, indice, testate dei callout), la sintassi del vault,
+          // il sanificatore dell'HTML e le stringhe del profilo. La usano la
+          // Live, la stampa, la copia in HTML e le anteprime; cambia con la
+          // resa, non con i gesti dell'editor, e da sola non pesa sul chunk
+          // del ponte dei documenti.
+          // L'elenco è chiuso verso il basso: ogni modulo che questi importano
+          // e che starebbe nel ponte sta qui. Uno lasciato fuori, con
+          // `onlyExplicitManualChunks`, finirebbe in un chunk estratto a parte
+          // o farebbe un ciclo fra questo chunk e il ponte; il ciclo lo ferma
+          // il plugin `bundle-size-budgets`.
+          if (/\/src\/editors\/text\/profiles\/markdown\/(render|render-inline|strings|grammar|link-syntax|details|toc|callout-head)\.ts$|\/src\/rules\/syntax(\.generated)?\.ts$|\/src\/ui\/sanitize\.ts$/.test(id)) {
+            return "markdown-render";
+          }
+          // Il renderer delle viste dichiarative (`UiNode`) con il suo
+          // riconciliatore, i `ns` che sa disegnare e i piccoli aiuti che
+          // importa: la specie di un file, i tipi dei trascinamenti, i tasti
+          // delle linguette, le icone delle pagine. Lo montano la shell, i
+          // pannelli e la resa delle note; cambia col protocollo delle viste,
+          // non con l'editor. Chiuso verso il basso come la resa.
+          if (/\/src\/ui\/(node|format-kind|drag-types|custom|tab-keys)\.ts$|\/src\/state\/page-icons\.ts$/.test(id)) return "ui-views";
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {
