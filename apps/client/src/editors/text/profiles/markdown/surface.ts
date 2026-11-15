@@ -521,6 +521,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // la nota.
   const blocksOptions: BlocksOptions = {
     page: () => pageName(resources?.documentId ?? documentId),
+    document: () => resources?.documentId ?? documentId,
     notify: (message, tone) => notify(message, tone),
     folderPage: () => isFolderPage(resources?.documentId ?? documentId),
     rename: opts.onRenamePage

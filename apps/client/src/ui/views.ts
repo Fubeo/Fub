@@ -60,6 +60,7 @@ import { activeDoc } from "../state/layout";
 import { on } from "../state/store";
 import { pageName } from "../rules/mirrored";
 import { embeddedViewsDiscovered, setEmbeddedViewHost } from "./embedded-views";
+import { offerDropTargets, type SurfaceDropOffer, type SurfaceRect } from "../editors/core/registry";
 
 const viewsLeftEl = $("#views-left");
 const viewsRightEl = $("#views-right");
@@ -113,6 +114,127 @@ interface Mounted {
 /// stesso pannello, anche quando il contenitore DOM viene riutilizzato.
 let mountedEpoch = 0;
 const mounted = new Map<string, Mounted>();
+
+// # Le righe che nominano un posto di un documento
+//
+// Una riga d'albero la cui azione porta nel payload un documento e un
+// intervallo (`{doc, start, end}`, byte UTF-8 della sorgente disegnata: il
+// salto a un titolo della Struttura) nomina un posto di quel documento. La
+// riga lo dice con tre attributi, e la shell la offre come posto dove far
+// cadere un blocco portato fuori dalla colonna del testo (`offerDropTargets`
+// di `editors/core/registry.ts`): l'editor decide che cosa fa il rilascio,
+// qui si sa soltanto dove sta la riga e come si chiama.
+
+/// Il posto che un'azione nomina, se il suo payload ne porta uno.
+function placeOf(action: ActionRef | null): { doc: string; start: number; end: number } | null {
+  const payload = action?.payload;
+  if (!payload || typeof payload !== "object") return null;
+  const { doc, start, end } = payload as Record<string, unknown>;
+  const offset = (value: unknown): number | null => {
+    const n = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
+    return typeof n === "number" && Number.isSafeInteger(n) && n >= 0 ? n : null;
+  };
+  const from = offset(start);
+  const to = offset(end);
+  if (typeof doc !== "string" || doc === "" || from === null || to === null || to < from) return null;
+  return { doc, start: from, end: to };
+}
+
+/// Le righe d'albero di `node`, in ordine di disegno (in profondità, prima il
+/// padre): è l'ordine in cui `node.ts` mette i loro elementi.
+function treeItemActions(node: UiNode, out: (ActionRef | null)[]): void {
+  if (node.node === "tree_item") out.push(node.action);
+  for (const value of Object.values(node)) {
+    if (!Array.isArray(value)) continue;
+    for (const child of value) {
+      if (child && typeof child === "object" && typeof (child as { node?: unknown }).node === "string") {
+        treeItemActions(child as UiNode, out);
+      }
+    }
+  }
+}
+
+/// Scrive sulle righe d'albero disegnate da `node` dentro `root` il posto che
+/// nominano. Se le righe nel DOM non sono quante quelle dell'albero (un
+/// disegno che non si capisce) non segna niente: meglio nessun posto che uno
+/// sbagliato.
+function markPlaces(root: HTMLElement, node: UiNode): void {
+  const actions: (ActionRef | null)[] = [];
+  treeItemActions(node, actions);
+  const items = [
+    ...(root.matches(".ui-tree-item") ? [root] : []),
+    ...Array.from(root.querySelectorAll<HTMLElement>(".ui-tree-item")),
+  ];
+  const rows = items.map((item) => item.querySelector<HTMLElement>(":scope > .ui-tree-label"));
+  const fits = rows.length === actions.length;
+  rows.forEach((row, i) => {
+    if (!row) return;
+    const place = fits ? placeOf(actions[i]!) : null;
+    if (!place) {
+      delete row.dataset.placeDoc;
+      delete row.dataset.placeStart;
+      delete row.dataset.placeEnd;
+      delete row.dataset.dropHot;
+      return;
+    }
+    row.dataset.placeDoc = place.doc;
+    row.dataset.placeStart = String(place.start);
+    row.dataset.placeEnd = String(place.end);
+  });
+}
+
+/// La parte di `el` che si vede: il suo rettangolo tagliato da ogni antenato
+/// che taglia ciò che sborda e dalla finestra. `null` se non se ne vede niente.
+function visibleRect(el: HTMLElement): SurfaceRect | null {
+  const rect = el.getBoundingClientRect();
+  let left = rect.left;
+  let top = rect.top;
+  let right = rect.right;
+  let bottom = rect.bottom;
+  for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
+    if (up.hidden) return null;
+    const style = getComputedStyle(up);
+    if (style.overflowX === "visible" && style.overflowY === "visible") continue;
+    const clip = up.getBoundingClientRect();
+    left = Math.max(left, clip.left);
+    top = Math.max(top, clip.top);
+    right = Math.min(right, clip.right);
+    bottom = Math.min(bottom, clip.bottom);
+  }
+  right = Math.min(right, window.innerWidth);
+  bottom = Math.min(bottom, window.innerHeight);
+  left = Math.max(left, 0);
+  top = Math.max(top, 0);
+  return right > left && bottom > top ? { left, top, right, bottom } : null;
+}
+
+/// I posti di `documentId` che le view montate mostrano adesso.
+function placesOn(documentId: string): SurfaceDropOffer[] {
+  const out: SurfaceDropOffer[] = [];
+  for (const mountedView of mounted.values()) {
+    const container = mountedView.container;
+    if (!container.isConnected) continue;
+    for (const row of Array.from(container.querySelectorAll<HTMLElement>(".ui-tree-label[data-place-doc]"))) {
+      if (row.dataset.placeDoc !== documentId) continue;
+      const rect = visibleRect(row);
+      if (!rect) continue;
+      out.push({
+        kind: "place",
+        documentId,
+        span: { start: Number(row.dataset.placeStart), end: Number(row.dataset.placeEnd) },
+        title: row.textContent?.trim() ?? "",
+        rect,
+        hover: (on) => {
+          if (on) row.dataset.dropHot = "true";
+          else delete row.dataset.dropHot;
+        },
+      });
+    }
+  }
+  return out;
+}
+
+offerDropTargets({ offers: placesOn });
 
 // Le view che dichiarano la superficie principale non sono montate: sono
 // **disponibili**. Chi apre una linguetta di view le cerca in
@@ -709,12 +831,16 @@ function draw(id: string, mountedView: Mounted, tree: UiNode): void {
       if (!inspectorTabOpen(mountedView) || !patchTree(actionContainer, update.key, update.node)) {
         if (!isAuthoritative()) return;
         await renderDeclaredView(id);
+        return;
       }
+      const patched = Array.from(actionContainer.querySelectorAll<HTMLElement>("[data-key]")).find((el) => el.dataset.key === update.key);
+      if (patched) markPlaces(patched, update.node);
       return;
     }
     if (!isAuthoritative()) return;
     await applyIntent(update);
   });
+  markPlaces(mountedView.container, tree);
 }
 
 

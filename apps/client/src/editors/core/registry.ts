@@ -227,6 +227,72 @@ export interface SurfacePoint {
   readonly y: number;
 }
 
+/** A rectangle on screen, in client coordinates. */
+export interface SurfaceRect {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+/**
+ * A place outside the document's column where something carried out of it (a
+ * block in hand) can be dropped, as the shell offers it: the editor says what
+ * the drop does there, the shell only where the place is and what it is called.
+ *
+ * - `place`: a row of a declared view that names a place of a document (a
+ *   heading of the Structure): its span, in UTF-8 bytes of the source the view
+ *   was drawn from, and the row's words.
+ */
+export interface SurfaceDropOffer {
+  readonly kind: "place";
+  readonly documentId: string;
+  readonly span: Span;
+  readonly title: string;
+  /** The visible part of the row, measured when the offers were asked for. */
+  readonly rect: SurfaceRect;
+  /** The pointer, with something in hand, is over the place (or leaves it): the shell shows it. */
+  hover(on: boolean): void;
+}
+
+/** Who offers drop places: the shell, for the views it draws. */
+export interface SurfaceDropOffers {
+  /** The places for `documentId` that can be seen now; read once per gesture, never per frame. */
+  offers(documentId: string): readonly SurfaceDropOffer[];
+}
+
+const dropOfferSources = new Set<SurfaceDropOffers>();
+
+/**
+ * Registers a source of drop places outside the document's column: the shell
+ * calls it, the editor asks `dropOffers`, and neither imports the other's DOM.
+ * The returned disposer takes the source back.
+ */
+export function offerDropTargets(source: SurfaceDropOffers): () => void {
+  dropOfferSources.add(source);
+  return () => {
+    dropOfferSources.delete(source);
+  };
+}
+
+/**
+ * The drop places every source offers for `documentId` now. A source that
+ * throws offers nothing: a gesture never breaks for a place it can't reach.
+ */
+export function dropOffers(documentId: string): SurfaceDropOffer[] {
+  const out: SurfaceDropOffer[] = [];
+  for (const source of [...dropOfferSources]) {
+    try {
+      for (const offer of source.offers(documentId)) {
+        if (offer.documentId === documentId) out.push(offer);
+      }
+    } catch {
+      // Una sorgente guasta non toglie le altre.
+    }
+  }
+  return out;
+}
+
 /**
  * An export the document offers as one of its own gestures: a target the host
  * registers (`ExportTarget.id`) and the options it runs with. The words are

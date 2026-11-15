@@ -80,9 +80,37 @@ barra verticale sul bordo del vicino: lasciato lì, il blocco gli va
 **accanto**, in colonne (a sinistra non vale per le voci d'elenco, dove quel
 gesto porta fuori). Al rilascio il blocco cade nel posto con un solo
 passo d'annullamento; Esc, una finestra che perde il fuoco o il testo cambiato
-da fuori (che vince) lo riportano dov'era. Vicino ai bordi la nota scorre. Le maniglie
+da fuori (che vince) lo riportano dov'era. Le maniglie
 stanno fuori dal testo ma sono pulsanti veri: il «+» e la maniglia del blocco
 del cursore si raggiungono con Tab, e con Vim acceso restano cliccabili.
+
+**Lo scorrimento al bordo.** Col blocco in mano, a meno di 72 px dal bordo
+alto o basso della nota (al più un terzo della sua altezza) la nota scorre:
+più piano lontano dal bordo, fino a circa 800 px al secondo sul bordo (la
+velocità cresce col quadrato della vicinanza), e parte morbida, raggiungendo
+la velocità piena in mezzo secondo. Si ferma uscendo dalla fascia, alla fine
+della nota, al rilascio e quando il blocco esce dalla colonna. Col moto
+ridotto lo scorrimento resta.
+
+**Fuori dalla colonna.** Portato più di 90 px a sinistra o a destra della
+colonna del testo, il blocco diventa un **cartellino**: rimpicciolito (largo
+al più 250 px), sopra a tutto, segue il puntatore a 14 px di lato e 16 sotto,
+e la maniglia sparisce. Il posto resta aperto, grigio, dove il blocco stava.
+Le righe della Struttura della stessa nota che nominano un titolo diventano
+bersagli: col cartellino sopra una riga, la riga si accende col bordo
+d'accento e l'etichetta sotto il cartellino dice «In fondo a «Cose da fare»».
+Lasciato lì, il blocco (o i blocchi selezionati) va in fondo a quella
+sezione, prima del titolo seguente dello stesso livello o più alto, con un
+solo passo d'annullamento, e la nota scorre per mostrarlo. Lasciato altrove,
+il cartellino torna alla grandezza vera volando al suo posto, e il testo non
+cambia; lo stesso con la Struttura chiusa, con un bersaglio che è proprio il
+titolo in mano, o con blocchi annidati in una lista o in una citazione, che
+non hanno bersagli. Per chi non vede, la regione viva dice «Fuori dal testo:
+lasciato qui torna al suo posto» o il bersaglio. Col moto ridotto il
+cartellino non vola. I bersagli arrivano dal registro degli editor
+(`offerDropTargets` in `editors/core/registry.ts`): la Struttura li offre
+per le righe il cui `action.payload` porta `{doc, start, end}` (byte del
+titolo), e le misura una volta all'uscita dalla colonna.
 
 ## La selezione di blocchi
 
@@ -381,7 +409,9 @@ schede stanno nella cache del bundle, ricostruibile. «Pagina web»
 ## Dove si trova
 
 - `apps/client/src/editors/text/profiles/markdown/blocks/`: modello, maniglie,
-  selezione, spostamenti, trasformazioni, link, movimento (`motion.ts`);
+  selezione, spostamenti, trasformazioni, link, movimento (`motion.ts`),
+  scorrimento al bordo (`autoscroll.ts`) e bersagli fuori dalla colonna
+  (`drop-targets.ts`);
 - `apps/client/src/editors/text/profiles/markdown/block-gesture.ts`: i gesti
   di blocco, annotati anche dalla Live;
 - `apps/client/src/editors/text/profiles/markdown/block-id.ts`: gli id nascosti;

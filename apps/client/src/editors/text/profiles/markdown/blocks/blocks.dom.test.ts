@@ -20,6 +20,7 @@ import { dragPose, LIFT_SCALE } from "./motion";
 import { closeContextMenu } from "../../../../../ui/menu";
 import { openSlashMenu, slashMenuExtension, type SlashMenuSource } from "../slash";
 import { propertiesDisplay } from "../../../properties-display";
+import { offerDropTargets } from "../../../../core/registry";
 
 // I Blocchi nell'editor vero: maniglie, menu, selezione di blocchi, tasti.
 
@@ -726,5 +727,115 @@ describe("il blocco in mano (E2), i casi limite", () => {
     expect(view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-drop")?.hidden, "nessuna barra").toBe(true);
     expect(live(view)).toBe("Posizione 2 di 4");
     hand.handles.endDrag(false);
+  });
+});
+
+describe("fuori dalla colonna (E2)", () => {
+  // Uno (0–20), «I conti» (40–60), Due (80–100), «Fine» (120–140), Tre (160–180).
+  const DOC = "Uno\n\n## I conti\n\nDue\n\n## Fine\n\nTre";
+  const live = (view: EditorView) => view.dom.querySelector(".cm-fub-block-live")?.textContent?.trim() ?? "";
+  const tag = (view: EditorView) => view.dom.querySelector<HTMLElement>(".cm-fub-block-lift-to");
+
+  /// La Struttura della nota: un titolo, «I conti», nella riga 400–600 × 100–128.
+  function structure(hover = vi.fn()) {
+    const start = DOC.indexOf("## I conti");
+    const stop = offerDropTargets({
+      offers: (doc) => doc === "nota.md"
+        ? [{ kind: "place", documentId: "nota.md", span: { start, end: start + 10 }, title: "I conti", rect: { left: 400, top: 100, right: 600, bottom: 128 }, hover }]
+        : [],
+    });
+    return { hover, stop };
+  }
+
+  it("oltre 90 px dal testo il blocco si stacca; sul titolo della Struttura va in fondo alla sezione, e un annulla lo rimette", () => {
+    const { hover, stop } = structure();
+    try {
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => "nota.md" });
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(60, 90);
+      expect(hand.lift()?.dataset.free, "a 90 px resta nel testo").toBeUndefined();
+      expect(hand.slot()?.dataset.home, "il posto segue il puntatore").toBeUndefined();
+      hand.move(60, 91);
+      expect(hand.lift()?.dataset.free, "a 91 px si stacca: è il cartellino").toBe("true");
+      expect(hand.slot()?.dataset.home, "il posto torna all'origine").toBe("true");
+      const scale = Number(hand.lift()!.style.getPropertyValue("--fub-block-free-scale"));
+      expect(scale, "largo al più 250 px, mai più dell'86%").toBeGreaterThan(0);
+      expect(scale).toBeLessThanOrEqual(0.86);
+      expect(tag(view)?.hidden, "senza bersaglio, nessuna etichetta").toBe(true);
+      expect(live(view)).toBe("Fuori dal testo: lasciato qui torna al suo posto");
+      // Sul titolo della Struttura: il cartellino e l'annuncio dicono dove va.
+      hand.move(110, 500);
+      expect(tag(view)?.textContent).toBe("In fondo a «I conti»");
+      expect(live(view)).toBe("In fondo a «I conti»");
+      expect(hover).toHaveBeenLastCalledWith(true);
+      // Il cartellino è appeso sotto il puntatore, in coordinate dello schermo.
+      hand.handles.follow(hand.handles.drag!, true);
+      expect(hand.lift()!.style.transform).toBe("translate(514.00px, 126.00px)");
+      hand.up(110);
+      expect(hover).toHaveBeenLastCalledWith(false);
+      expect(view.state.doc.toString()).toBe("## I conti\n\nDue\n\nUno\n\n## Fine\n\nTre");
+      expect(hand.lift(), "nessun volo: il blocco è già al suo posto nuovo").toBeNull();
+      undo(view);
+      expect(view.state.doc.toString(), "un Ctrl+Z e torna tutto").toBe(DOC);
+    } finally {
+      stop();
+    }
+  });
+
+  it("fuori dal titolo, o con la Struttura chiusa, il cartellino torna indietro al rilascio", () => {
+    const view = mount(DOC, 0, vi.fn(), [], { document: () => "nota.md" });
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(14);
+    hand.move(110, 500);
+    expect(hand.lift()?.dataset.free).toBe("true");
+    expect(tag(view)?.hidden, "nessun bersaglio: nessuna etichetta").toBe(true);
+    const lift = hand.lift()!;
+    hand.up(110);
+    expect(view.state.doc.toString()).toBe(DOC);
+    // Torna a casa volando, dalla sua scala, di nuovo dentro lo scorrimento.
+    expect(hand.lift()).toBe(lift);
+    expect(lift.dataset.free).toBeUndefined();
+    expect(lift.querySelector<HTMLElement>(".cm-fub-block-lift-card")!.style.transformOrigin).toBe("0 0");
+    hand.handles.returning!.land();
+    expect(hand.lift()).toBeNull();
+  });
+
+  it("il titolo che è il blocco in mano non è un bersaglio", () => {
+    const { hover, stop } = structure();
+    try {
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => "nota.md" });
+      rowsOf20(view);
+      const hand = grab(view, 1, 50);
+      hand.move(54);
+      hand.move(110, 500);
+      expect(tag(view)?.hidden).toBe(true);
+      expect(hover).not.toHaveBeenCalled();
+      hand.handles.endDrag(false);
+      hand.handles.returning?.land();
+      expect(view.state.doc.toString()).toBe(DOC);
+    } finally {
+      stop();
+    }
+  });
+
+  it("tornato verso il testo, il blocco riprende a cercare il posto fra i vicini", () => {
+    const { stop } = structure();
+    try {
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => "nota.md" });
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(110, 500);
+      hand.move(110, 0);
+      expect(hand.lift()?.dataset.free).toBeUndefined();
+      expect(tag(view)?.textContent, "di nuovo l'etichetta della sezione").toBe("in «I conti»");
+      hand.up(110);
+      expect(view.state.doc.toString()).toBe("## I conti\n\nDue\n\nUno\n\n## Fine\n\nTre");
+    } finally {
+      stop();
+    }
   });
 });
