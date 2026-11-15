@@ -81,8 +81,8 @@ pub(super) fn parse_hex(text: &str) -> Option<String> {
 
 /// Il testo con cui la forma breve scrive questo colore, se ce n'è uno che
 /// [`parse`] riporta uguale: il nome del preset, o l'esadecimale se è già in
-/// minuscolo. Un colore senza testo così (un `#abc`) si scrive nella forma
-/// intera.
+/// minuscolo. Un colore senza testo così (un `#abc`, o un colore che Fub non
+/// conosce) si scrive nella forma intera.
 pub fn written(color: &CanvasColor) -> Option<String> {
     match color {
         CanvasColor::Preset(preset) => Some(preset_name(*preset).to_owned()),
@@ -90,6 +90,7 @@ pub fn written(color: &CanvasColor) -> Option<String> {
             Some(CanvasColor::Hex(canonical)) if canonical == *hex => Some(hex.clone()),
             _ => None,
         },
+        CanvasColor::Unknown(_) => None,
     }
 }
 
@@ -107,9 +108,11 @@ fn preset_name(preset: PresetColor) -> &'static str {
 /// Il valore che il file scrive per un colore della tavola: `"1"`…`"6"`, o
 /// `#rrggbb` in minuscolo. Un nome (`"cyan"`) diventa il suo valore (`"5"`).
 pub(crate) fn file_value(text: &str) -> Option<String> {
-    parse(text).map(|color| match color {
-        CanvasColor::Preset(preset) => preset_number(preset).to_owned(),
-        CanvasColor::Hex(hex) => hex,
+    parse(text).and_then(|color| match color {
+        CanvasColor::Preset(preset) => Some(preset_number(preset).to_owned()),
+        CanvasColor::Hex(hex) => Some(hex),
+        // `parse` non dà mai un colore sconosciuto.
+        CanvasColor::Unknown(_) => None,
     })
 }
 

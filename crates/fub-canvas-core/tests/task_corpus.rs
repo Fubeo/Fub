@@ -578,6 +578,7 @@ fn color_value(color: &CanvasColor) -> String {
     match color {
         CanvasColor::Preset(preset) => preset_value(*preset).to_owned(),
         CanvasColor::Hex(hex) => hex.to_ascii_lowercase(),
+        CanvasColor::Unknown(text) => text.clone(),
     }
 }
 

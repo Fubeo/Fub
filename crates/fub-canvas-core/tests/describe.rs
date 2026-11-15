@@ -37,15 +37,18 @@ const MIN_INK_BOARDS: usize = 28;
 /// aggiunge un vettore così lo scrive qui.
 const BOARD_INK_NOT_IN_CODE: &[&str] = &[
     "erase-strokes-not-drawn.json (prima)",
+    "move-strokes-not-drawn.json (prima)",
     "move-with-ink.json (prima)",
     "move-with-ink.json (dopo)",
     "card-on-board.json",
     "color-three-digits.json",
     "layer-not-object.json",
     "reason-brush.json",
+    "reason-cell.json",
     "reason-color.json",
     "reason-ink.json",
     "reason-order.json",
+    "reason-page.json",
     "two-foreign-layers.json",
 ];
 

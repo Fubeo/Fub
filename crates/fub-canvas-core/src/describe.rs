@@ -13,7 +13,7 @@
 //! [`ink_read`]. Nessuna parola in una lingua: le chiavi sono i
 //! nomi dei campi del formato. Le regole stanno in
 //! `docs/reference/canvas-code.md`, e quelle dell'inchiostro in
-//! `docs/reference/canvas-ink.md` («In codice»): le legge il modulo `ink`.
+//! `docs/reference/canvas-ink-code.md`: le legge il modulo `ink`.
 
 mod ink;
 
@@ -493,11 +493,12 @@ fn token(text: &str) -> String {
     }
 }
 
-/// Il colore come lo scrive il file: `"1"`…`"6"` per i preset, il `#` per l'altro.
+/// Il colore come lo scrive il file: `"1"`…`"6"` per i preset, il `#` per
+/// l'altro, e un colore che Fub non conosce com'è scritto.
 fn color_token(color: &CanvasColor) -> String {
     match color {
         CanvasColor::Preset(preset) => preset_number(*preset).to_owned(),
-        CanvasColor::Hex(hex) => token(hex),
+        CanvasColor::Hex(text) | CanvasColor::Unknown(text) => token(text),
     }
 }
 

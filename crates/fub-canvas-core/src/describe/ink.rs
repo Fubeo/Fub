@@ -16,7 +16,7 @@
 //! dell'ancora si porta alla misura di adesso come fa la resa («La misura della
 //! scheda» in `docs/reference/canvas-ink.md`). Quelli di un tratto libero sono
 //! nelle coordinate della lavagna. Le regole stanno in
-//! `docs/reference/canvas-ink.md`, «In codice».
+//! `docs/reference/canvas-ink-code.md`.
 
 use fub_ink_codec::{InkBrush, PEN_KEY};
 use serde_json::{Map, Number, Value};
@@ -51,29 +51,38 @@ impl Fit {
     /// centra, `fixed` resta alla misura di riferimento. Un tratto libero non
     /// si porta. È `inkFit` di `apps/client/src/editors/canvas/ink-fit.ts`,
     /// provato coi suoi vettori (`canvas-ink-fit/`).
-    fn of(node: Option<&CanvasNode>, anchor: InkAnchor) -> Fit {
-        let (Some(node), InkAnchor::Card { width, height }) = (node, anchor) else {
-            return Fit::IDENTITY;
+    ///
+    /// `None` per un tratto attaccato alla pagina di un PDF o alla cella di un
+    /// foglio: dove la pagina o la cella sta dentro la scheda lo sa la resa,
+    /// non il nucleo, come per le operazioni sui tratti.
+    fn of(node: Option<&CanvasNode>, anchor: &InkAnchor) -> Option<Fit> {
+        let (width, height) = match anchor {
+            InkAnchor::Page { .. } | InkAnchor::Cell { .. } => return None,
+            InkAnchor::Free => return Some(Fit::IDENTITY),
+            InkAnchor::Card { width, height } => (*width, *height),
+        };
+        let Some(node) = node else {
+            return Some(Fit::IDENTITY);
         };
         if !scales(node) {
-            return Fit::IDENTITY;
+            return Some(Fit::IDENTITY);
         }
         // Le misure di una scheda sono interi entro ±(2^53−1): il cast è esatto.
         #[allow(clippy::cast_precision_loss)]
         let (w, h) = (node.width as f64, node.height as f64);
         if w < 0.0 || h < 0.0 {
-            return Fit {
+            return Some(Fit {
                 s: 0.0,
                 dx: 0.0,
                 dy: 0.0,
-            };
+            });
         }
         let s = (w / width).min(h / height);
-        Fit {
+        Some(Fit {
             s,
             dx: (w - width * s) / 2.0,
             dy: (h - height * s) / 2.0,
-        }
+        })
     }
 
     fn point(self, [x, y]: [f64; 2]) -> [f64; 2] {
@@ -186,11 +195,18 @@ struct Decoded {
     bounds: Box2,
     /// I punti, arrotondati a 0,1.
     points: Vec<[f64; 2]>,
+    /// L'ancora di pagina o di cella, senza la misura: i punti, il riquadro
+    /// e lo spessore sono nelle sue unità, perché il nucleo non sa dove la
+    /// pagina o la cella sta nella scheda ([`Fit::of`]). `None` per gli altri
+    /// tratti.
+    anchor: Option<Value>,
 }
 
 impl Decoded {
     fn of(id: &str, drawn: &DrawnStroke, node: Option<&CanvasNode>) -> Decoded {
-        let fit = Fit::of(node, drawn.anchor);
+        let placed = Fit::of(node, &drawn.anchor);
+        let fit = placed.unwrap_or(Fit::IDENTITY);
+        let anchor = placed.is_none().then(|| content_anchor(&drawn.anchor));
         let fitted: Vec<[f64; 2]> = (0..drawn.ink.len())
             .map(|i| fit.point(drawn.ink.point(i)))
             .collect();
@@ -220,6 +236,7 @@ impl Decoded {
                 .into_iter()
                 .map(|[x, y]| [tenth(x), tenth(y)])
                 .collect(),
+            anchor,
         }
     }
 
@@ -234,6 +251,9 @@ impl Decoded {
         map.insert("tool".to_owned(), Value::from(self.tool));
         if let Some(pen) = &self.pen {
             map.insert("pen".to_owned(), Value::String(pen.clone()));
+        }
+        if let Some(anchor) = &self.anchor {
+            map.insert("anchor".to_owned(), anchor.clone());
         }
         map.insert("bounds".to_owned(), self.bounds.value());
         map.insert(
@@ -255,6 +275,25 @@ impl Decoded {
     }
 }
 
+/// L'ancora di pagina (`{"kind": "page", "page"}`) o di cella (`{"kind":
+/// "cell", "sheet", "cell"}`) di un tratto, per la lettura dell'inchiostro.
+fn content_anchor(anchor: &InkAnchor) -> Value {
+    let mut map = Map::new();
+    match anchor {
+        InkAnchor::Page { page, .. } => {
+            map.insert("kind".to_owned(), Value::from("page"));
+            map.insert("page".to_owned(), Value::from(*page));
+        }
+        InkAnchor::Cell { sheet, cell } => {
+            map.insert("kind".to_owned(), Value::from("cell"));
+            map.insert("sheet".to_owned(), Value::String(sheet.clone()));
+            map.insert("cell".to_owned(), Value::String(cell.to_string()));
+        }
+        InkAnchor::Card { .. } | InkAnchor::Free => {}
+    }
+    Value::Object(map)
+}
+
 /// Il livello come lo dice una riga dell'outline: `N`, poi `bad=M` se M tratti
 /// non si disegnano, poi il riquadro dei tratti che si disegnano o `-`. Un
 /// livello estraneo è `foreign`.
@@ -267,7 +306,11 @@ pub(super) fn summary(value: &Value, layer: &LayerRef, node: Option<&CanvasNode>
     for stroke in &ink.strokes {
         match stroke.state(layer) {
             StrokeState::Drawn(drawn) => {
-                let fit = Fit::of(node, drawn.anchor);
+                // Un tratto di pagina o di cella conta, ma il nucleo non sa
+                // dove sta nella scheda: non entra nel riquadro.
+                let Some(fit) = Fit::of(node, &drawn.anchor) else {
+                    continue;
+                };
                 let around =
                     Box2::around((0..drawn.ink.len()).map(|i| fit.point(drawn.ink.point(i))));
                 bounds = match (bounds, around) {
@@ -542,7 +585,7 @@ mod tests {
                 width: vector["ref"]["width"].as_f64().unwrap(),
                 height: vector["ref"]["height"].as_f64().unwrap(),
             };
-            let fit = Fit::of(Some(&node), anchor);
+            let fit = Fit::of(Some(&node), &anchor).expect("un'ancora card");
             let expect = &vector["expect"];
             let mode = if scales(&node) { "scale" } else { "fixed" };
             assert_eq!(mode, expect["mode"], "{name}");
@@ -577,5 +620,41 @@ mod tests {
         assert!(scales(&node("Foto/.a.png")));
         assert!(!scales(&node("Foto/.png")));
         assert!(!scales(&node("Foto/foto.")));
+    }
+
+    /// Un tratto di pagina o di cella conta nella riga dell'outline ma non
+    /// entra nel riquadro, e nella lettura porta la sua ancora coi punti nelle
+    /// sue unità: il nucleo non sa dove la pagina o la cella sta nella scheda.
+    #[test]
+    fn a_page_or_cell_stroke_keeps_its_own_units() {
+        for (file, anchor, expect) in [
+            (
+                "carta.pdf",
+                serde_json::json!({"kind": "page", "page": 2, "width": 595, "height": 842}),
+                serde_json::json!({"kind": "page", "page": 2}),
+            ),
+            (
+                "conti.xlsx",
+                serde_json::json!({"kind": "cell", "sheet": "Foglio 1", "cell": "B3"}),
+                serde_json::json!({"kind": "cell", "sheet": "Foglio 1", "cell": "B3"}),
+            ),
+        ] {
+            let node: CanvasNode = serde_json::from_value(serde_json::json!({
+                "id": "p", "type": "file", "file": file,
+                "x": 0, "y": 0, "width": 300, "height": 400,
+                "fub:ink": {"v": 1, "strokes": [{"id": "s1", "tool": "pen",
+                    "brush": "pf1 size=3", "color": "#0072b2", "anchor": anchor,
+                    "ink": "1 s100 cxy 1000,2000 100,0"}]}
+            }))
+            .unwrap();
+            let value = &node.extra[crate::ink::INK_KEY];
+            let layer = LayerRef::Node("p".to_owned());
+            assert_eq!(summary(value, &layer, Some(&node)), "1 -", "{file}");
+            let read = read_layers(&[&node], None, None);
+            let stroke = &read[0]["strokes"][0];
+            assert_eq!(stroke["anchor"], expect, "{file}");
+            assert_eq!(stroke["points"][0], serde_json::json!([10, 20]), "{file}");
+            assert_eq!(stroke["size"], serde_json::json!(3), "{file}");
+        }
     }
 }

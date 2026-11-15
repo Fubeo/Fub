@@ -968,7 +968,9 @@ fn card_tint(color: Option<&CanvasColor>) -> Tint {
             },
             None => grey(),
         },
-        None => grey(),
+        // Un colore che Fub non conosce: la scheda si disegna senza colore,
+        // come nella lavagna.
+        Some(CanvasColor::Unknown(_)) | None => grey(),
     }
 }
 
@@ -977,7 +979,7 @@ fn stroke_of(color: Option<&CanvasColor>, fallback: &str) -> String {
     match color {
         Some(CanvasColor::Preset(preset)) => preset_colours(*preset).1.to_owned(),
         Some(CanvasColor::Hex(value)) => hex(value).map_or_else(|| fallback.to_owned(), |h| h.rgb),
-        None => fallback.to_owned(),
+        Some(CanvasColor::Unknown(_)) | None => fallback.to_owned(),
     }
 }
 
