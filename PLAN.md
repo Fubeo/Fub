@@ -617,7 +617,7 @@ cambiare la chiave non riapre la nota; la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks; cargo nextest run -p fub-host
 settings
-Stato: [~] in corso · coder dal 2026-11-15, da main (feat/blocchi-preferenza)
+Stato: [~] PR #381 (feat/blocchi-preferenza @ 47903c532), revisione e correzioni fatte, check verde; aspetta CI e baseline `menu-riquadro-*` dal runner
 
 ## T6 · La testata in Scrittura e Lettura
 
@@ -1091,7 +1091,7 @@ Fatto quando: un test per gesto confronta le righe scritte; le foto del
 banco nelle due luci; la battuta resta nel budget (la Base dentro la nota).
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/base
-Stato: [~] PR #379 (bozza, feat/base-filtro-ordina @ 1a9b48d71), due revisioni e correzioni fatte; aspetta CI e baseline dal runner
+Stato: [~] PR #379 (feat/base-filtro-ordina @ f167009f6, con main), due revisioni e correzioni fatte; aspetta CI e baseline dal runner
 
 ## T16 · Base: nuova vista, menu della colonna, riepiloghi
 
