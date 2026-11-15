@@ -233,7 +233,7 @@
         { "op": "excerpt", "id": "n1", "part": { "kind": "sections", "sections": ["Varianza", "Media"] }, "in_place": true },
         { "op": "excerpt", "id": "p1", "part": { "kind": "pages", "pages": [3, 4] } }
       ],
-      "note": "Il selettore delle sezioni e il ritaglio della GUI cambiano la scheda stessa (`in_place`); senza, l'estratto è una scheda nuova accanto. Il ritaglio sul posto della GUI cambia anche l'altezza, misurata sul DOM: `in_place` tiene le misure."
+      "note": "Con `in_place` la scheda stessa diventa l'estratto, come il selettore delle sezioni; senza, l'estratto è una scheda nuova accanto. A differenza del ritaglio della GUI l'altezza non cambia: `#finishCrop` la rifà dalle proporzioni della zona (`#cropHeightFor`, misurata sul DOM), anche con «Togli il ritaglio» (vettore `excerpt-image-crop-in-place-keeps-height.json`)."
     },
     {
       "id": "N6.ink.page",

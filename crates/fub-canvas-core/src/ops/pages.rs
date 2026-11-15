@@ -27,26 +27,9 @@ pub const MAX_SPREAD_PAGES: usize = 1000;
 
 /// Quante pagine per riga: a capo dopo 10 (`SPREAD_ROW` della GUI).
 const SPREAD_ROW: usize = 10;
-/// Lo spazio fra le pagine e fra le righe, e il margine del gruppo
-/// (`DROP_GAP`).
-const SPREAD_GAP: f64 = 24.0;
-/// Il passo a cui partono le pagine (`DROP_SNAP`).
-const SPREAD_SNAP: f64 = 8.0;
 /// Oltre questo numero di pagine, un gruppo le raccoglie
 /// (`DROP_GROUP_THRESHOLD`).
-const GROUP_ABOVE: usize = 12;
-/// La misura più piccola di un lato (`DROP_MIN_SIZE`).
-const MIN_SIDE: f64 = 40.0;
-/// La larghezza di una pagina PDF appena nata.
-const PDF_WIDTH: f64 = 360.0;
-/// La misura di una pagina PDF senza la misura della pagina.
-const PDF_DEFAULT: (f64, f64) = (360.0, 480.0);
-/// Il lato lungo di un'immagine appena nata.
-const IMAGE_LONG_SIDE: f64 = 480.0;
-/// La misura di un'immagine senza la sua misura.
-const IMAGE_DEFAULT: (f64, f64) = (480.0, 360.0);
-/// La misura di nascita di una nota.
-const NOTE_SIZE: (f64, f64) = (320.0, 240.0);
+pub const SPREAD_GROUP_ABOVE: usize = 12;
 
 /// Le pagine di `spread_pages`: un testo come nel campo della GUI («3-7, 9»,
 /// «20-», vuoto per tutte) o una lista di numeri di pagina, da 1.
@@ -106,8 +89,17 @@ pub struct ExcerptArgs {
     /// pixel dell'immagine (`image`). `canvas.apply` la legge dal file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_size: Option<[f64; 2]>,
+    /// Quante pagine ha il PDF. `canvas.apply` lo legge dal file; con il
+    /// conto, una pagina della parte oltre l'ultima è `Invalid`.
+    #[serde(
+        default,
+        deserialize_with = "super::saturating_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub page_count: Option<i64>,
     /// Con `true` è la scheda `id` a diventare l'estratto, al suo posto e con
-    /// le sue misure, come il selettore delle sezioni e il ritaglio della GUI.
+    /// le sue misure, come il selettore delle sezioni; a differenza del
+    /// ritaglio della GUI l'altezza non cambia.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub in_place: Option<bool>,
 }
@@ -276,47 +268,18 @@ fn js_trim(text: &str) -> &str {
 
 /// Il primo multiplo di 8 che lascia almeno 24 dopo `end` (`nextStart`).
 fn next_start(end: f64) -> f64 {
-    ((end + SPREAD_GAP) / SPREAD_SNAP).ceil() * SPREAD_SNAP
+    ((end + layout::STACK_GAP) / layout::SNAP).ceil() * layout::SNAP
 }
 
-/// Un lato di nascita come `roundSide` della GUI: l'intero più vicino, non
-/// sotto 40; un valore non finito o non positivo vale 40.
-fn round_side(value: f64) -> f64 {
-    if value.is_finite() && value > 0.0 {
-        value.round().max(MIN_SIDE)
-    } else {
-        MIN_SIDE
-    }
-}
-
-/// La misura del contenuto, se è finita e positiva nei due lati.
-fn known(content: Option<(f64, f64)>) -> Option<(f64, f64)> {
-    content.filter(|(width, height)| {
-        width.is_finite() && *width > 0.0 && height.is_finite() && *height > 0.0
-    })
-}
-
-/// La misura di nascita come `bornSize` della GUI, per un PDF (`image`
-/// falso: largo 360, alto secondo il contenuto) o un'immagine (il lato lungo
-/// 480). Senza misura, o con un lato che esce dai limiti del modello, la
-/// misura di serie.
+/// La misura di nascita di una pagina o di un'immagine: la regola di
+/// [`layout::born_size`], la stessa di `add_card` (`bornSize` della GUI).
 fn born(image: bool, content: Option<(f64, f64)>) -> (f64, f64) {
-    let fallback = if image { IMAGE_DEFAULT } else { PDF_DEFAULT };
-    let Some((width, height)) = known(content) else {
-        return fallback;
-    };
-    let size = if image {
-        let scale = IMAGE_LONG_SIDE / width.max(height);
-        (round_side(width * scale), round_side(height * scale))
+    let kind = if image {
+        CardKind::Image
     } else {
-        (PDF_WIDTH, round_side(PDF_WIDTH * height / width))
+        CardKind::Pdf
     };
-    let limit = MAX_SAFE_INTEGER as f64;
-    if size.0 <= limit && size.1 <= limit {
-        size
-    } else {
-        fallback
-    }
+    layout::born_size(kind, None, content)
 }
 
 /// Le posizioni delle pagine accanto a `beside`, come `spreadLayout` della
@@ -341,7 +304,7 @@ fn spread_layout(sizes: &[(f64, f64)], beside: Rect) -> (Vec<Rect>, Option<Rect>
         }
         row_y = next_start(row_y + row_height);
     }
-    if sizes.len() <= GROUP_ABOVE {
+    if sizes.len() <= SPREAD_GROUP_ABOVE {
         return (rects, None);
     }
     let right = rects
@@ -353,12 +316,20 @@ fn spread_layout(sizes: &[(f64, f64)], beside: Rect) -> (Vec<Rect>, Option<Rect>
         .map(|rect| rect.y + rect.height)
         .fold(f64::NEG_INFINITY, f64::max);
     let group = Rect {
-        x: origin_x - SPREAD_GAP,
-        y: origin_y - SPREAD_GAP,
-        width: right - origin_x + 2.0 * SPREAD_GAP,
-        height: bottom - origin_y + 2.0 * SPREAD_GAP,
+        x: origin_x - layout::STACK_GAP,
+        y: origin_y - layout::STACK_GAP,
+        width: right - origin_x + 2.0 * layout::STACK_GAP,
+        height: bottom - origin_y + 2.0 * layout::STACK_GAP,
     };
     (rects, Some(group))
+}
+
+/// Il conto delle pagine dato: almeno 1, o `Invalid`.
+fn page_count(index: usize, count: i64) -> Result<u64, OpError> {
+    u64::try_from(count)
+        .ok()
+        .filter(|count| *count >= 1)
+        .ok_or_else(|| refuse(index, "`page_count` must be at least 1"))
 }
 
 /// Il percorso del file della scheda, senza la parte dal primo `#`
@@ -423,10 +394,7 @@ impl Compiler {
                      `canvas.apply` reads it from the file, give it when the file cannot be read",
                 ))
             }
-            Some(count) => u64::try_from(count)
-                .ok()
-                .filter(|count| *count >= 1)
-                .ok_or_else(|| refuse(index, "`page_count` must be at least 1"))?,
+            Some(count) => page_count(index, count)?,
         };
         let sizes = args.page_sizes.as_deref().unwrap_or_default();
         if let Some(position) = sizes.iter().position(|size| size.len() != 2) {
@@ -456,7 +424,7 @@ impl Compiler {
             ),
         })?;
         let n = chosen.pages.len();
-        let grouped = n > GROUP_ABOVE;
+        let grouped = n > SPREAD_GROUP_ABOVE;
         if self.working.nodes.len() + n + usize::from(grouped) > MAX_NODES {
             return Err(OpError::TooMany {
                 index,
@@ -527,6 +495,20 @@ impl Compiler {
                     format!("`part` is not valid ({}): {reason}", reason.as_str()),
                 )
             })?;
+        if let Some(count) = args.page_count {
+            let count = page_count(index, count)?;
+            let beyond = match &part.kind {
+                PartsKind::Pages { pages, .. } => pages.iter().copied().find(|page| *page > count),
+                PartsKind::Region { page, .. } => Some(*page).filter(|page| *page > count),
+                PartsKind::Sections { .. } | PartsKind::Image { .. } => None,
+            };
+            if let Some(page) = beyond {
+                return Err(refuse(
+                    index,
+                    format!("`part`: page {page} is not in the PDF, which has {count} pages"),
+                ));
+            }
+        }
         let in_place = args.in_place.unwrap_or(false);
         if in_place {
             if args.near.is_some() || args.side.is_some() || args.content_size.is_some() {
@@ -610,18 +592,22 @@ impl Compiler {
 /// La misura di nascita di un estratto: una pagina come il PDF, una regione
 /// con le proporzioni del suo rettangolo sulla pagina, sezioni come una nota,
 /// un ritaglio con le proporzioni della zona (girata di 90 o 270 gradi, i
-/// lati si scambiano). Senza `content` la pagina vale 360×480 e l'immagine
-/// 480×360.
+/// lati si scambiano). Senza `content` la pagina e l'immagine valgono la loro
+/// misura di serie (360×480, 480×360). Un lato che supera
+/// [`layout::MAX_BORN_SIDE`] (una zona quasi senza larghezza) dà la misura di
+/// serie, come in [`layout::born_size`].
 fn excerpt_size(kind: &PartsKind, content: Option<(f64, f64)>) -> (f64, f64) {
     match kind {
         PartsKind::Pages { .. } => born(false, content),
         PartsKind::Region { rect, .. } => {
-            let (width, height) = known(content).unwrap_or(PDF_DEFAULT);
+            let (width, height) =
+                layout::known_content(content).unwrap_or_else(|| born(false, None));
             born(false, Some((rect.width * width, rect.height * height)))
         }
-        PartsKind::Sections { .. } => NOTE_SIZE,
+        PartsKind::Sections { .. } => layout::born_size(CardKind::Note, None, None),
         PartsKind::Image { rect, rotate } => {
-            let (width, height) = known(content).unwrap_or(IMAGE_DEFAULT);
+            let (width, height) =
+                layout::known_content(content).unwrap_or_else(|| born(true, None));
             let zone = (rect.width * width, rect.height * height);
             let turned = rotate
                 .is_some_and(|degrees| (degrees.rem_euclid(180.0) - 90.0).abs() < f64::EPSILON);
@@ -717,11 +703,14 @@ mod tests {
         assert_eq!(born(false, Some((595.0, 842.0))), (360.0, 509.0));
         assert_eq!(born(true, Some((1920.0, 1080.0))), (480.0, 270.0));
         assert_eq!(born(true, Some((1.0, 4000.0))), (40.0, 480.0));
-        assert_eq!(born(false, None), PDF_DEFAULT);
-        assert_eq!(born(false, Some((0.0, 842.0))), PDF_DEFAULT);
-        assert_eq!(born(true, Some((f64::NAN, 1.0))), IMAGE_DEFAULT);
-        // Un lato infinito vale 40, come `roundSide`.
-        assert_eq!(born(false, Some((1e-300, 1e300))), (360.0, 40.0));
+        assert_eq!(born(false, None), (360.0, 480.0));
+        assert_eq!(born(false, Some((0.0, 842.0))), (360.0, 480.0));
+        assert_eq!(born(true, Some((f64::NAN, 1.0))), (480.0, 360.0));
+        // Un lato oltre 100 000 (anche infinito) vale la misura di serie: la
+        // GUI darebbe 360×40 per l'infinito e un'altezza enorme per il resto.
+        assert_eq!(born(false, Some((1e-300, 1e300))), (360.0, 480.0));
+        assert_eq!(born(false, Some((1.0, 1e9))), (360.0, 480.0));
+        assert_eq!(born(false, Some((1.0, 277.0))), (360.0, 99_720.0));
     }
 
     #[test]
@@ -861,6 +850,71 @@ mod tests {
     }
 
     #[test]
+    fn una_zona_sottilissima_o_una_pagina_assurda_non_fanno_schede_enormi() {
+        // Una zona larga un miliardesimo della pagina: 360 · 842 / 5,95e-7 ≈ 5e11
+        // di altezza. Oltre 100 000 vale la misura di serie, come in `add_card`.
+        let thin = PartsKind::Region {
+            page: 1,
+            rect: parts::PartRect {
+                x: 0.0,
+                y: 0.0,
+                width: 1e-9,
+                height: 1.0,
+            },
+            key: None,
+        };
+        assert_eq!(excerpt_size(&thin, Some((595.0, 842.0))), (360.0, 480.0));
+        // Una pagina 1 × 1e9 punti in `page_sizes`: la scheda nasce 360×480.
+        let compiled = compile(
+            &board(),
+            &ops(
+                json!([{"op": "spread_pages", "id": "p", "pages": "1-2", "page_count": 2,
+                "page_sizes": [[1, 1e9], [595, 842]]}]),
+            ),
+            1,
+        )
+        .expect("si compila");
+        let heights: Vec<i64> = compiled
+            .patches
+            .iter()
+            .filter_map(|patch| match patch {
+                CanvasPatch::UpsertNode { after, .. } => Some(after.height),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(heights, vec![480, 509]);
+    }
+
+    #[test]
+    fn un_estratto_col_conto_rifiuta_le_pagine_che_non_ci_sono() {
+        let refused = |part: Value| {
+            compile(
+                &board(),
+                &ops(json!([{"op": "excerpt", "id": "p", "part": part, "page_count": 4}])),
+                1,
+            )
+            .err()
+        };
+        assert!(matches!(
+            refused(json!({"kind": "pages", "pages": [4, 5]})),
+            Some(OpError::Invalid { .. })
+        ));
+        assert!(matches!(
+            refused(json!({"kind": "region", "page": 5, "rect": [0, 0, 1, 1]})),
+            Some(OpError::Invalid { .. })
+        ));
+        assert_eq!(refused(json!({"kind": "pages", "pages": [3, 4]})), None);
+        let zero = compile(
+            &board(),
+            &ops(
+                json!([{"op": "excerpt", "id": "p", "part": {"kind": "pages", "pages": [1]}, "page_count": 0}]),
+            ),
+            1,
+        );
+        assert!(matches!(zero, Err(OpError::Invalid { .. })), "{zero:?}");
+    }
+
+    #[test]
     fn le_misure_dell_estratto_vengono_dalla_parte() {
         let region = PartsKind::Region {
             page: 2,
@@ -902,6 +956,6 @@ mod tests {
         let sections = PartsKind::Sections {
             sections: vec!["A".to_owned()],
         };
-        assert_eq!(excerpt_size(&sections, None), NOTE_SIZE);
+        assert_eq!(excerpt_size(&sections, None), (320.0, 240.0));
     }
 }

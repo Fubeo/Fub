@@ -1624,11 +1624,12 @@ mod con_draw {
             (&json!(240), &json!(120)),
             "{foto}"
         );
-        // La pagina A4 con 360 di larghezza dà 360×512: 842 · 360 / 595, agganciato a 8.
+        // La pagina A4 con 360 di larghezza dà 360×509: 842 · 360 / 595, intero
+        // come `bornSize` della GUI e come le pagine sparse dello stesso PDF.
         let dispensa = card(&ws, "dispensa");
         assert_eq!(
             (&dispensa["width"], &dispensa["height"]),
-            (&json!(360), &json!(512)),
+            (&json!(360), &json!(509)),
             "{dispensa}"
         );
     }
@@ -1734,18 +1735,30 @@ mod con_draw {
 
     /// Un PDF vero con una pagina per misura, in punti.
     fn pdf_pages(sizes: &[(f32, f32)]) -> Vec<u8> {
+        let turned: Vec<(f32, f32, i64)> = sizes
+            .iter()
+            .map(|&(width, height)| (width, height, 0))
+            .collect();
+        pdf_document(&pdf_turned(&turned))
+    }
+
+    /// Il documento di un PDF con una pagina per misura, in punti, e la sua
+    /// `/Rotate` (0 non si scrive).
+    fn pdf_turned(sizes: &[(f32, f32, i64)]) -> Document {
         let mut document = Document::with_version("1.5");
         let pages = document.new_object_id();
         let kids: Vec<Object> = sizes
             .iter()
-            .map(|&(width, height)| {
-                document
-                    .add_object(dictionary! {
-                        "Type" => "Page",
-                        "Parent" => pages,
-                        "MediaBox" => vec![0.into(), 0.into(), width.into(), height.into()],
-                    })
-                    .into()
+            .map(|&(width, height, rotate)| {
+                let mut page = dictionary! {
+                    "Type" => "Page",
+                    "Parent" => pages,
+                    "MediaBox" => vec![0.into(), 0.into(), width.into(), height.into()],
+                };
+                if rotate != 0 {
+                    page.set("Rotate", rotate);
+                }
+                document.add_object(page).into()
             })
             .collect();
         let count = i64::try_from(kids.len()).expect("poche pagine");
@@ -1759,6 +1772,12 @@ mod con_draw {
         );
         let catalog = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
         document.trailer.set("Root", catalog);
+        document
+    }
+
+    /// I byte di un documento PDF.
+    fn pdf_document(document: &Document) -> Vec<u8> {
+        let mut document = document.clone();
         let mut out = Vec::new();
         document.save_to(&mut out).expect("il PDF si scrive");
         out
@@ -1901,5 +1920,244 @@ mod con_draw {
             "{crop}"
         );
         assert_eq!(crop["fub:parts"]["kind"], "image", "{crop}");
+    }
+
+    /// Le pagine nate da uno `spread_pages` sulla scheda `pdf`: `(subpath,
+    /// larghezza, altezza)`.
+    fn spread_sizes(ws: &Workspace, file: &str) -> Vec<(Value, Value, Value)> {
+        cards_of(ws, file)
+            .into_iter()
+            .filter(|node| node["id"] != "pdf")
+            .map(|node| {
+                (
+                    node["subpath"].clone(),
+                    node["width"].clone(),
+                    node["height"].clone(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn una_pagina_girata_da_rotate_nasce_girata() {
+        // Un A4 dritto con `/Rotate 90` si mostra 842×595: 360×254, come la GUI
+        // (pdf.js); `/Rotate 180` lo lascia dritto, 360×509.
+        let (_vault, mut ws) = vault_with(&[(
+            "Corsi/girato.pdf",
+            pdf_document(&pdf_turned(&[(595.0, 842.0, 90), (595.0, 842.0, 180)])),
+        )]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/girato.pdf", "x": 400, "y": 0 },
+                { "op": "spread_pages", "id": "pdf" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("le pagine si spargono");
+        assert_eq!(
+            spread_sizes(&ws, "Corsi/girato.pdf"),
+            vec![
+                (json!("#page=1"), json!(360), json!(254)),
+                (json!("#page=2"), json!(360), json!(509)),
+            ]
+        );
+        // `add_card` misura la prima pagina girata allo stesso modo.
+        assert_eq!(card(&ws, "pdf")["height"], json!(254));
+    }
+
+    #[test]
+    fn il_conto_delle_pagine_del_file_vince_su_quello_dato_e_lo_dice() {
+        let (_vault, mut ws) = vault_with(&[(
+            "Corsi/dispensa.pdf",
+            pdf_pages(&[(595.0, 842.0), (595.0, 842.0), (595.0, 842.0)]),
+        )]);
+        let ops = json!([
+            { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0 },
+            { "op": "spread_pages", "id": "pdf", "page_count": 9 }
+        ])
+        .to_string();
+        let checked = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto");
+        let payload = custom(&checked);
+        assert_eq!(payload["ok"], true, "{payload}");
+        let warning = payload["warnings"]
+            .as_array()
+            .expect("gli avvisi")
+            .iter()
+            .find(|warning| warning["code"] == "page_count_from_file")
+            .cloned()
+            .unwrap_or_else(|| panic!("l'avviso del conto: {payload}"));
+        assert_eq!(warning["index"], 1, "{warning}");
+        assert!(
+            warning["detail"]
+                .as_str()
+                .is_some_and(|d| d.contains("3 pages")),
+            "{warning}"
+        );
+        let applied = apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops }),
+            InvokeMode::Apply,
+        )
+        .expect("le pagine si spargono");
+        let payload = custom(&applied);
+        assert_eq!(
+            payload["notes"][0]["code"], "page_count_from_file",
+            "{payload}"
+        );
+        // Tre pagine, non nove: il file ne ha tre.
+        assert_eq!(spread_sizes(&ws, "Corsi/dispensa.pdf").len(), 3);
+    }
+
+    #[test]
+    fn un_estratto_di_una_pagina_che_il_pdf_non_ha_e_rifiutato() {
+        let (_vault, mut ws) = vault_with(&[(
+            "Corsi/dispensa.pdf",
+            pdf_pages(&[(595.0, 842.0), (595.0, 842.0)]),
+        )]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0 }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("la scheda nasce");
+        let before = source(&ws, BOARD);
+        for part in [
+            json!({ "kind": "pages", "pages": [2, 3] }),
+            json!({ "kind": "region", "page": 3, "rect": [0, 0, 1, 1] }),
+        ] {
+            for in_place in [false, true] {
+                let error = plugin_error(
+                    apply(
+                        &mut ws,
+                        json!({ "doc": BOARD, "ops": json!([
+                            { "op": "excerpt", "id": "pdf", "part": part, "in_place": in_place }
+                        ]).to_string() }),
+                        InvokeMode::Apply,
+                    )
+                    .expect_err("la pagina 3 non c'è"),
+                );
+                assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+            }
+        }
+        assert_eq!(source(&ws, BOARD), before, "il file non cambia");
+    }
+
+    #[test]
+    fn un_pdf_malformato_o_cifrato_non_da_misure() {
+        let mut locked = pdf_turned(&[(595.0, 842.0, 0)]);
+        let encrypt = locked.add_object(dictionary! {
+            "Filter" => "Standard",
+            "V" => 2,
+            "R" => 3,
+            "Length" => 128,
+            "O" => Object::string_literal(vec![1u8; 32]),
+            "U" => Object::string_literal(vec![2u8; 32]),
+            "P" => -4,
+        });
+        locked.trailer.set("Encrypt", encrypt);
+        locked.trailer.set(
+            "ID",
+            vec![
+                Object::string_literal(vec![3u8; 16]),
+                Object::string_literal(vec![3u8; 16]),
+            ],
+        );
+        let (_vault, mut ws) = vault_with(&[
+            (
+                "Corsi/rotto.pdf",
+                b"%PDF-1.5\nnon e un PDF\n%%EOF\n".to_vec(),
+            ),
+            ("Corsi/chiuso.pdf", pdf_document(&locked)),
+        ]);
+        for file in ["Corsi/rotto.pdf", "Corsi/chiuso.pdf"] {
+            // `add_card` prende la misura di serie.
+            apply(
+                &mut ws,
+                json!({ "doc": BOARD, "ops": json!([
+                    { "op": "add_card", "id": "pdf", "file": file, "x": 400, "y": 0 }
+                ]).to_string() }),
+                InvokeMode::Apply,
+            )
+            .unwrap_or_else(|e| panic!("{file}: la scheda nasce: {e:?}"));
+            let pdf = card(&ws, "pdf");
+            assert_eq!(
+                (&pdf["width"], &pdf["height"]),
+                (&json!(360), &json!(480)),
+                "{file}"
+            );
+            // `spread_pages` non ha il conto: la lista è rifiutata, col motivo.
+            let before = source(&ws, BOARD);
+            let error = plugin_error(
+                apply(
+                    &mut ws,
+                    json!({ "doc": BOARD, "ops": json!([
+                        { "op": "spread_pages", "id": "pdf" }
+                    ]).to_string() }),
+                    InvokeMode::Apply,
+                )
+                .expect_err("senza il conto delle pagine"),
+            );
+            assert!(
+                matches!(error, PluginError::BadArgs(_)),
+                "{file}: {error:?}"
+            );
+            assert_eq!(source(&ws, BOARD), before, "{file}: il file non cambia");
+            apply(
+                &mut ws,
+                json!({ "doc": BOARD, "ops": json!([{ "op": "remove", "ids": ["pdf"] }]).to_string() }),
+                InvokeMode::Apply,
+            )
+            .expect("la scheda si toglie");
+        }
+    }
+
+    #[test]
+    fn il_gruppo_delle_pagine_ha_l_etichetta_nella_lingua_di_chi_scrive() {
+        let thirteen = vec![(595.0, 842.0); 13];
+        let (_vault, mut ws) = vault_with(&[("Corsi/dispensa.pdf", pdf_pages(&thirteen))]);
+        let group_label = |ws: &Workspace| -> Value {
+            let canvas: Value =
+                serde_json::from_str(&source(ws, BOARD)).expect("la lavagna è JSON");
+            canvas["nodes"]
+                .as_array()
+                .expect("le schede")
+                .iter()
+                .rev()
+                .find(|node| node["type"] == "group")
+                .map(|node| node["label"].clone())
+                .unwrap_or(Value::Null)
+        };
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0 },
+                { "op": "spread_pages", "id": "pdf" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("le pagine si spargono");
+        assert_eq!(group_label(&ws), json!("13 pagine"));
+        // La lingua che la shell pubblica: l'inglese.
+        ws.system_locale().publish(fub_abi::locale::Locale {
+            language: "en".into(),
+            ..fub_abi::locale::Locale::default()
+        });
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "spread_pages", "id": "pdf", "pages": "1-13" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("le pagine si spargono");
+        assert_eq!(group_label(&ws), json!("13 pages"));
     }
 }

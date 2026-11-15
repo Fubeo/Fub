@@ -629,7 +629,7 @@ pub const OPS: &[OpSpec] = &[
             optional(
                 "page_count",
                 FieldKind::Number,
-                "Quante pagine ha il PDF. `canvas.apply` lo legge dal file: si dà solo se il file non si legge.",
+                "Quante pagine ha il PDF. `canvas.apply` lo legge dal file, e se il file si legge vince il file: si dà solo se il file non si legge.",
             ),
             optional(
                 "page_sizes",
@@ -643,8 +643,8 @@ pub const OPS: &[OpSpec] = &[
             ),
         ],
         examples: &[
-            r#"{"op":"spread_pages","id":"p1","pages":"1-3","page_count":12}"#,
-            r#"{"op":"spread_pages","id":"p1","pages":[2,5],"page_count":12,"page_sizes":[[595,842],[595,842],[595,842],[595,842],[842,595]]}"#,
+            r#"{"op":"spread_pages","id":"p1","pages":"1-3"}"#,
+            r#"{"op":"spread_pages","id":"p1","pages":[2,5],"label":"Capitolo 2"}"#,
         ],
     },
     OpSpec {
@@ -675,9 +675,14 @@ pub const OPS: &[OpSpec] = &[
                 "La misura del contenuto: i punti della pagina (pagine, zona) o i pixel dell'immagine. Dà le proporzioni; `canvas.apply` la legge dal file.",
             ),
             optional(
+                "page_count",
+                FieldKind::Number,
+                "Quante pagine ha il PDF: una pagina della parte oltre l'ultima è rifiutata. `canvas.apply` lo legge dal file, e se il file si legge vince il file.",
+            ),
+            optional(
                 "in_place",
                 FieldKind::Bool,
-                "Con `true` la scheda `id` diventa l'estratto, al suo posto e con le sue misure, come il selettore delle sezioni e il ritaglio della GUI.",
+                "Con `true` la scheda `id` diventa l'estratto, al suo posto e con le sue misure, come il selettore delle sezioni; a differenza del ritaglio della GUI l'altezza non cambia.",
             ),
         ],
         examples: &[
@@ -1166,9 +1171,29 @@ fn check_field(
         FieldKind::PenSize => check_pen_size(index, path, value, problems),
         FieldKind::InkColor => check_ink_color(index, object, field, path, value, problems),
         FieldKind::Positive => check_positive(index, path, value, problems),
-        FieldKind::Pages => {
-            wrong_unless(value.is_string() || value.is_array(), index, path, problems);
+        FieldKind::Pages => check_pages(index, path, value, problems),
+    }
+}
+
+/// Le pagine di `spread_pages`: un testo (lo legge la compilazione, come il
+/// campo della GUI) o una lista di interi da 1. Un elemento che non è un
+/// intero è `wrong_type`, un intero sotto 1 `bad_value`, col suo indice.
+fn check_pages(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    match value {
+        Value::String(_) => {}
+        Value::Array(items) => {
+            for (at, item) in items.iter().enumerate() {
+                let code = if !is_integer(item) {
+                    ProblemCode::WrongType
+                } else if item.as_f64().is_some_and(|page| page >= 1.0) {
+                    continue;
+                } else {
+                    ProblemCode::BadValue
+                };
+                problems.push(Problem::new(code, Some(index), format!("{path}/{at}")));
+            }
         }
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
     }
 }
 

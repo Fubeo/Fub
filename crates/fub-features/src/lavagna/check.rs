@@ -13,8 +13,9 @@ use fub_abi::edit::{Fnv1a, Revision};
 use fub_abi::error::PluginError;
 use fub_abi::text::{Arg, Text};
 use fub_abi::traits::HostApi;
-use fub_canvas_core::check::{check, Code, Problem};
+use fub_canvas_core::check::{check, CheckReport, Code, Problem, Warning, MAX_WARNINGS};
 use fub_canvas_core::commit::Core;
+use fub_canvas_core::ops::CompileNote;
 use serde_json::{json, Value};
 
 use super::*;
@@ -64,8 +65,9 @@ pub(super) fn canvas_check(
     let core = Core::open(source).map_err(|error| opening(&doc, &error))?;
     // Le misure dei file entrano prima del controllo, come nella scrittura: il
     // rapporto dice quello che `canvas.apply` farebbe.
-    let list = measure_list(&*host, core.canvas(), list);
-    let report = check(core.canvas(), &list, seed);
+    let (list, filled) = prepare_list(&*host, core.canvas(), list);
+    let mut report = check(core.canvas(), &list, seed);
+    warn_first(&filled, &mut report);
 
     let stale = base.is_some_and(|base| Revision::new(base) != revision);
     let refused = stale || !report.ok;
@@ -127,6 +129,22 @@ fn count_arg(name: &str, count: usize) -> Arg {
 
 /// Un problema del nucleo nel payload: la forma di `Problem`, con il codice come
 /// nome e la frase del catalogo per quel codice.
+/// Gli avvisi delle note di chi ha riempito la lista (un `page_count`
+/// diverso dal file) prima di quelli del controllo, come in `canvas.apply`; al
+/// più [`MAX_WARNINGS`], gli altri contati in `warnings_omitted`.
+fn warn_first(filled: &[CompileNote], report: &mut CheckReport) {
+    if filled.is_empty() {
+        return;
+    }
+    let mut warnings: Vec<Warning> = filled.iter().map(Warning::of_note).collect();
+    warnings.append(&mut report.warnings);
+    if warnings.len() > MAX_WARNINGS {
+        report.warnings_omitted += warnings.len() - MAX_WARNINGS;
+        warnings.truncate(MAX_WARNINGS);
+    }
+    report.warnings = warnings;
+}
+
 fn problem(problem: &Problem) -> Value {
     let code = code_name(problem.code);
     let mut value = json!({

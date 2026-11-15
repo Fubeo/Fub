@@ -220,11 +220,11 @@ casi con i numeri stanno in `apps/client/src/__fixtures__/canvas-layout.json`.
   un punto in testa al nome non apre un'estensione (`.md` è `file`).
 - **Misure di nascita.** Il testo è largo 320, o 480 se una riga ha più di 36
   caratteri, e alto quanto dice la stima qui sotto. `note` e `document` sono
-  320×240; `sheet` 480×304; `pdf` 360 di larghezza, e alto `snap(360·h/w)` se
+  320×240; `sheet` 480×304; `pdf` 360 di larghezza, e alto `round(360·h/w)` se
   si conosce la pagina, altrimenti 360×480. `image` ha il lato lungo a 480 e
-  l'altro `snap(480·corto/lungo)`, o 480×360 se la misura non si conosce;
+  l'altro `round(480·corto/lungo)`, o 480×360 se la misura non si conosce;
   `web` 320×120; `craft` e `file` 320×160; `group` 480×320. Un lato ricavato
-  dalle proporzioni non scende sotto 40.
+  dalle proporzioni è intero, non sotto 40; oltre 100 000 vale la serie.
 - **Stima del testo.** Ogni riga ha `cpl = max(8, floor((larghezza − 32) / 8))`
   caratteri. Le righe sono quelle separate da `\n` (o `\r\n`), e ognuna vale
   `max(1, ceil(caratteri / cpl))`, contando i punti di codice Unicode.

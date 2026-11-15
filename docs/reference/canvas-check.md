@@ -89,6 +89,7 @@ stesso punto ci sono 1 999 000 coperture: il rapporto ne porta 100 e omette
 | `shape_dropped`, `style_dropped`, `line_skipped`, `indent_rounded` | le note di [`from_mermaid` e `from_outline`](canvas-import.md#le-note) | nessuna |
 | `ink_kept` | la nota di [`erase_along`](canvas-ink-code.md#erase_along): un tratto che Fub non disegna, un tratto di pagina o di cella, o un livello estraneo, sotto il cammino non si taglia | nessuna |
 | `pages_cut` | la nota di [`spread_pages`](canvas-pages-code.md#spread_pages): le pagine chieste oltre l'ultima del PDF si tagliano | nessuna |
+| `page_count_from_file` | la nota di chi legge il PDF per [`spread_pages` ed `excerpt`](canvas-pages-code.md): il `page_count` dato non è quello del file, e vale quello del file | nessuna |
 
 Un esempio, con la lavagna d'esempio di `spec.rs` (`t1`, `t2`, `f1`, il PDF `p1`, l'arco
 `e1` e il tratto libero `s1`) e il giro `[{"op": "move", "ids": ["f1"], "dx": 0, "dy": -200}]`:

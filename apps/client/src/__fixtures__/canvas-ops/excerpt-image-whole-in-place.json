@@ -1,5 +1,5 @@
 {
-  "about": "Sul posto, il ritaglio dell'immagine intera e dritta toglie `fub:parts`: l'immagine si mostra tutta, come «Togli il ritaglio».",
+  "about": "Sul posto, il ritaglio dell'immagine intera e dritta toglie `fub:parts`: l'immagine si mostra tutta. Come il selettore delle sezioni la scheda tiene posto e misure; a differenza del ritaglio della GUI («Togli il ritaglio» rifà l'altezza dalle proporzioni) l'altezza non cambia.",
   "before": {
     "nodes": [
       {

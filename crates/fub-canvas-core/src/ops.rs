@@ -76,7 +76,7 @@ pub use insert::{InsertArgs, MAX_INSERTED};
 pub use layout::{LayoutArgs, LayoutDirection, LayoutKind};
 pub use pages::{
     chosen_pages, ChosenPages, ExcerptArgs, PageList, PagesProblem, SpreadPagesArgs,
-    MAX_SPREAD_PAGES,
+    MAX_SPREAD_PAGES, SPREAD_GROUP_ABOVE,
 };
 pub use reverse::ReverseArgs;
 
@@ -293,6 +293,10 @@ pub enum NoteCode {
     /// Le pagine chieste da `spread_pages` oltre l'ultima del PDF si
     /// tagliano.
     PagesCut,
+    /// Il `page_count` dato a `spread_pages` o a `excerpt` non è quello del
+    /// PDF: vale quello letto dal file. La scrive chi legge il file
+    /// (`canvas.apply`, `canvas.check`), non la compilazione.
+    PageCountFromFile,
 }
 
 fn is_zero(value: &usize) -> bool {

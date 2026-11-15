@@ -62,6 +62,13 @@
     "created": [
       "910a2dec89025cc1",
       "beeb8da1658eec67"
+    ],
+    "notes": [
+      {
+        "index": 0,
+        "code": "pages_cut",
+        "detail": "the PDF has 4 pages: the pages after page 4 are left out"
+      }
     ]
   }
 }

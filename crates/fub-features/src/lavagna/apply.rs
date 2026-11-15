@@ -17,7 +17,7 @@ use fub_abi::model::{DocId, Span};
 use fub_abi::text::{Arg, Text};
 use fub_abi::traits::HostApi;
 use fub_canvas_core::commit::{CommitError, Core};
-use fub_canvas_core::ops::{compile, CanvasOp, Compiled, OpError};
+use fub_canvas_core::ops::{compile, CanvasOp, CompileNote, Compiled, OpError, MAX_NOTES};
 use fub_canvas_core::spec;
 use serde_json::{json, Value};
 
@@ -43,8 +43,9 @@ pub(super) fn canvas_apply(
     // Senza un seme gli id nascono dalla revisione: anteprima e applicazione
     // sulla stessa revisione danno gli stessi id.
     let seed = seed.unwrap_or_else(|| Fnv1a::hash(revision.0.as_bytes()));
-    measure_ops(&*host, core.canvas(), &mut ops);
-    let compiled = compile(core.canvas(), &ops, seed).map_err(operation)?;
+    let filled = prepare_ops(&*host, core.canvas(), &mut ops);
+    let mut compiled = compile(core.canvas(), &ops, seed).map_err(operation)?;
+    note_first(filled, &mut compiled);
     let committed = core
         .commit(&compiled.patches)
         .map_err(|error| committing(&doc, error))?;
@@ -87,6 +88,22 @@ pub(super) fn canvas_apply(
     Ok(CommandOutcome::notify(about(N_APPLIED, &doc, Vec::new()))
         .undoable(undo)
         .with_effect(effect(&compiled, &report.revision)))
+}
+
+/// Le note di chi ha riempito la lista (un `page_count` diverso dal file)
+/// prima di quelle della compilazione, al più [`MAX_NOTES`] in tutto: quelle
+/// oltre si contano in `notes_omitted`.
+fn note_first(filled: Vec<CompileNote>, compiled: &mut Compiled) {
+    if filled.is_empty() {
+        return;
+    }
+    let mut notes = filled;
+    notes.append(&mut compiled.notes);
+    if notes.len() > MAX_NOTES {
+        compiled.notes_omitted += notes.len() - MAX_NOTES;
+        notes.truncate(MAX_NOTES);
+    }
+    compiled.notes = notes;
 }
 
 /// Che cosa ha fatto il comando, per chi lo ha chiamato: gli id nati, la

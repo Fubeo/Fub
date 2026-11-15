@@ -409,18 +409,11 @@ pub use export::{DrawioExport, ExcalidrawExport, JpegExport, PdfExport, PngExpor
 pub(crate) use write::svg_png;
 use write::{write_pdf, write_raster, write_svg};
 
-/// La misura della prima pagina di un PDF, come si mostra (punti, con la
-/// rotazione), per le misure di una scheda PDF della lavagna. `None` se il PDF
-/// è cifrato, non si apre o non ha pagine: la scheda prende le misure di serie.
-pub(crate) fn pdf_first_page(bytes: &[u8]) -> Option<(f64, f64)> {
-    let document = open_pdf(bytes)?;
-    let first = *document.get_pages().values().next()?;
-    Some(annotated::Geometry::of(&document, first).size())
-}
-
 /// Le misure di tutte le pagine di un PDF, dalla prima, come si mostrano
-/// (punti, con la rotazione): per `spread_pages` ed `excerpt` della lavagna,
-/// che ne contano anche il numero. `None` come [`pdf_first_page`].
+/// (punti, con la rotazione), per le schede PDF della lavagna: la prima per
+/// `add_card` e `resize`, tutte (e il loro numero) per `spread_pages` ed
+/// `excerpt`. `None` se il PDF è cifrato, non si apre o non ha pagine: la
+/// scheda prende le misure di serie.
 pub(crate) fn pdf_page_sizes(bytes: &[u8]) -> Option<Vec<(f64, f64)>> {
     let document = open_pdf(bytes)?;
     let sizes: Vec<(f64, f64)> = document
