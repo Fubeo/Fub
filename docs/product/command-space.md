@@ -76,7 +76,7 @@ metà o con un guasto la frase dice quello, e non si crea niente.
 |---|---|
 | Invio | apre la riga attiva qui, o esegue il comando, o inserisce il blocco |
 | Ctrl-Invio (Cmd-Invio su Mac) | apre a lato, in un riquadro accanto a quello col fuoco |
-| Alt-Invio | apre a lato, finché non c'è la sbirciata |
+| Alt-Invio | apre una nota nella [sbirciata](editor-writing.md#la-sbirciata); un altro file a lato |
 | Maiusc-Invio | apre come Invio; quando la risposta offre di creare, crea la nota col nome scritto |
 | Tab | mostra le azioni della riga attiva, se è una nota o una persona |
 | Esc | dalle azioni torna all'elenco; altrimenti chiude il lanciatore |
@@ -84,7 +84,7 @@ metà o con un guasto la frase dice quello, e non si crea niente.
 | Backspace a campo vuoto | torna a Tutto |
 
 Tab non cambia modo: mostra le azioni. Le azioni di una nota sono **Apri qui**,
-**Apri a lato**, **Rinomina o sposta…** (il comando del kernel `note.rename`),
+**Apri a lato**, **Sbircia**, **Rinomina o sposta…** (il comando del kernel `note.rename`),
 **Copia il link**, **Appunta** (o **Togli dagli appunti**, se è già appuntata).
 Scrivere nel campo lascia le azioni e torna all'elenco.
 
@@ -155,7 +155,6 @@ Le parole sono in `i18n/catalog.ts`, con la chiave `launcher.*`.
 ## Che cosa non c'è ancora
 
 - Il modo Persone non elenca ancora i giorni (la pagina del giorno).
-- Alt-Invio apre a lato, non nella sbirciata, finché la sbirciata non c'è.
 - Il modo Aiuto elenca i comandi che hanno un tasto, non ancora quelli del punto
   in cui si è: la riga dei suggerimenti li porterà.
 - Dal lanciatore non si apre più una nota in una finestra nuova: quella resta

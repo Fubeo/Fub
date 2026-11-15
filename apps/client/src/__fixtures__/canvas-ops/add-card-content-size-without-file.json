@@ -1,0 +1,6 @@
+{
+  "about": "`content_size` misura un file: su una scheda di testo è Invalid.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "a", "text": "a", "content_size": [10, 10] }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

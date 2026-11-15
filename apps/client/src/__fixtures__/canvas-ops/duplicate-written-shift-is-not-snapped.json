@@ -1,0 +1,72 @@
+{
+  "about": "duplicate con dx e dy scritti: lo spostamento si somma così com'è, senza aggancio, come Ctrl+D ripetuto nella GUI (T68), che ripete la distanza fra l'ultima copia e la sua scheda. La scheda in 48, 40 con 35 e 35 va in 83, 75; con 0 e -3 la copia va in 48, 37.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 48,
+        "y": 40,
+        "width": 200,
+        "height": 100,
+        "text": "a"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "duplicate",
+      "ids": [
+        "a"
+      ],
+      "dx": 35,
+      "dy": 35
+    },
+    {
+      "op": "duplicate",
+      "ids": [
+        "a"
+      ],
+      "dx": 0,
+      "dy": -3
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 48,
+          "y": 40,
+          "width": 200,
+          "height": 100,
+          "text": "a"
+        },
+        {
+          "id": "e220a8397b1dcdaf",
+          "type": "text",
+          "x": 83,
+          "y": 75,
+          "width": 200,
+          "height": 100,
+          "text": "a"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "type": "text",
+          "x": 48,
+          "y": 37,
+          "width": 200,
+          "height": 100,
+          "text": "a"
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4"
+    ]
+  }
+}

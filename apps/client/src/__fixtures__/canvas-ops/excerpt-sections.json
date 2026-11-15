@@ -1,0 +1,68 @@
+{
+  "about": "L'estratto di sezioni di una nota nasce come una nota, 320×240, accanto; il `subpath` è la prima sezione.",
+  "before": {
+    "nodes": [
+      {
+        "id": "n",
+        "type": "file",
+        "x": 0,
+        "y": 400,
+        "width": 320,
+        "height": 240,
+        "file": "Corsi/appunti.md"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "excerpt",
+      "id": "n",
+      "part": {
+        "kind": "sections",
+        "sections": [
+          "Varianza",
+          "Media"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "n",
+          "type": "file",
+          "x": 0,
+          "y": 400,
+          "width": 320,
+          "height": 240,
+          "file": "Corsi/appunti.md"
+        },
+        {
+          "id": "910a2dec89025cc1",
+          "type": "file",
+          "x": 368,
+          "y": 400,
+          "width": 320,
+          "height": 240,
+          "file": "Corsi/appunti.md",
+          "subpath": "#Varianza",
+          "fub:parts": {
+            "kind": "sections",
+            "sections": [
+              "Varianza",
+              "Media"
+            ]
+          }
+        }
+      ],
+      "edges": []
+    },
+    "created": [
+      "910a2dec89025cc1"
+    ]
+  }
+}

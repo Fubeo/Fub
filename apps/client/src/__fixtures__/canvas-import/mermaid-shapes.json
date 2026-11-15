@@ -1,0 +1,138 @@
+{
+  "about": "Ogni forma di nodo diventa una scheda di testo rettangolare; le forme che non sono un rettangolo lasciano una nota shape_dropped. Un nodo nudo ha per testo il suo id.",
+  "op": {
+    "op": "from_mermaid",
+    "text": "graph TD\n  A\n  B[Rettangolo]\n  C(Arrotondato)\n  D([Stadio])\n  E{Rombo}\n  F((Cerchio))\n  G[[Sottoprogramma]]\n  H>Bandiera]\n  I[\"Fra virgolette\"]"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "A",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "A"
+        },
+        {
+          "id": "B",
+          "type": "text",
+          "x": 344,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Rettangolo"
+        },
+        {
+          "id": "C",
+          "type": "text",
+          "x": 688,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Arrotondato"
+        },
+        {
+          "id": "D",
+          "type": "text",
+          "x": 1032,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Stadio"
+        },
+        {
+          "id": "E",
+          "type": "text",
+          "x": 1376,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Rombo"
+        },
+        {
+          "id": "F",
+          "type": "text",
+          "x": 1720,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Cerchio"
+        },
+        {
+          "id": "G",
+          "type": "text",
+          "x": 2064,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Sottoprogramma"
+        },
+        {
+          "id": "H",
+          "type": "text",
+          "x": 2408,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Bandiera"
+        },
+        {
+          "id": "I",
+          "type": "text",
+          "x": 2752,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Fra virgolette"
+        }
+      ]
+    },
+    "created": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I"
+    ],
+    "notes": [
+      {
+        "index": 0,
+        "code": "shape_dropped",
+        "detail": "line 4: the rounded shape of \"C\" becomes a rectangle"
+      },
+      {
+        "index": 0,
+        "code": "shape_dropped",
+        "detail": "line 5: the stadium shape of \"D\" becomes a rectangle"
+      },
+      {
+        "index": 0,
+        "code": "shape_dropped",
+        "detail": "line 6: the rhombus shape of \"E\" becomes a rectangle"
+      },
+      {
+        "index": 0,
+        "code": "shape_dropped",
+        "detail": "line 7: the circle shape of \"F\" becomes a rectangle"
+      },
+      {
+        "index": 0,
+        "code": "shape_dropped",
+        "detail": "line 8: the subroutine shape of \"G\" becomes a rectangle"
+      },
+      {
+        "index": 0,
+        "code": "shape_dropped",
+        "detail": "line 9: the asymmetric shape of \"H\" becomes a rectangle"
+      }
+    ]
+  }
+}

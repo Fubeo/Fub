@@ -1,0 +1,90 @@
+{
+  "about": "on: \"auto\" (di serie): i punti sono della lavagna, il tratto sta tutto dentro t1 e va a lei, nelle sue unità (tolto il suo angolo), con l'ancora della sua misura di adesso. Senza penna né colore: la biro blu, alla sua misura di serie; la pressione di serie è 0,5 e il tempo 8 ms per campione.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "text": "Evaporazione",
+        "x": 20,
+        "y": 200,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "points": [
+        [
+          40,
+          60
+        ],
+        [
+          44,
+          62
+        ],
+        [
+          48,
+          64
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "t1",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Ciclo dell'acqua",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "e220a8397b1dcdaf",
+                "tool": "pen",
+                "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 320,
+                  "height": 160
+                },
+                "ink": "1 s100 cxypt 4000,6000,128,0 400,200,0,8 400,200,0,8"
+              }
+            ]
+          }
+        },
+        {
+          "id": "t2",
+          "type": "text",
+          "x": 20,
+          "y": 200,
+          "width": 320,
+          "height": 160,
+          "text": "Evaporazione"
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

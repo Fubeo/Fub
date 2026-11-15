@@ -1,0 +1,6 @@
+{
+  "about": "Un `side` senza `near` non dice dove: è Invalid, invece di essere ignorato.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "a", "text": "a", "side": "top" }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

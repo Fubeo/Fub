@@ -166,7 +166,73 @@ describe("il nucleo della lavagna in WebAssembly", () => {
     expect(codeOf(() => core.compile([]))).toBe("handle");
     expect(codeOf(() => core.nodeAt(0))).toBe("handle");
     expect(codeOf(() => core.inkLayers())).toBe("handle");
+    expect(codeOf(() => core.describe())).toBe("handle");
+    expect(codeOf(() => core.check([]))).toBe("handle");
     expect(() => core.close()).not.toThrow();
+  });
+
+  it("describe dà il codice che ricrea la lavagna, inchiostro compreso, e con ids solo quelle schede", async () => {
+    const board = {
+      nodes: [
+        { id: "a", type: "text", x: 0, y: 0, width: 320, height: 160, text: "Ciclo dell'acqua 😀" },
+        { id: "b", type: "text", x: 400, y: 0, width: 320, height: 160, text: "Evaporazione", color: "5" },
+        { id: "c", type: "link", x: 0, y: 400, width: 320, height: 120, url: "https://example.org" },
+      ],
+      edges: [{ id: "e", fromNode: "a", toNode: "b", fromSide: "right", toSide: "left" }],
+      "fub:ink": { v: 1, strokes: [inkStroke("s-1")] },
+    };
+    const source = JSON.stringify(board, null, 2);
+    const core = await openCore(source);
+    const text = core.describe();
+    // Il testo di `canvas.read` in forma `code`: JSON con i rientri.
+    expect(text.startsWith("[\n  {")).toBe(true);
+    const ops = JSON.parse(text) as { op: string; layer?: string }[];
+    expect(ops.map((op) => op.op)).toEqual(["add_card", "add_card", "add_card", "connect", "add_strokes"]);
+    const empty = await openCore("");
+    empty.commit(empty.compile(ops, 3).patches);
+    expect(empty.model()).toEqual(core.model());
+    empty.close();
+    const some = JSON.parse(core.describe(["a", "b"])) as { op: string }[];
+    expect(some.map((op) => op.op)).toEqual(["add_card", "add_card", "connect"]);
+    expect(core.describe([])).toBe("[]");
+    // Non cambia la lavagna.
+    expect(core.preview([])).toBe(source);
+    core.close();
+  });
+
+  it("check dà il rapporto: il riassunto, il primo problema col suggerimento, una lista che non è un array", async () => {
+    const core = await openCore(oneCard("uno"));
+    const ops = [
+      { op: "add_card", text: "Nuova", x: 400, y: 0 },
+      { op: "move", ids: ["a"], dx: 8, dy: 0 },
+    ];
+    const report = core.check(ops, 5);
+    expect(report.ok).toBe(true);
+    expect(report.problems).toEqual([]);
+    expect(report.summary?.cards_added).toHaveLength(1);
+    expect(report.summary?.cards_changed[0]?.moved).toEqual({ from: { x: 0, y: 0 }, to: { x: 8, y: 0 } });
+    // Col seme come bigint: lo stesso rapporto, e gli id di compile.
+    expect(core.check(ops, 5n)).toEqual(report);
+    const created = core.compile(ops, 5).created;
+    expect(report.summary?.cards_added.map((card) => card.id)).toEqual(created);
+    // Il primo problema, con l'id vicino.
+    const wrong = core.check([{ op: "move", ids: ["aa"], dx: 8, dy: 0 }]);
+    expect(wrong.ok).toBe(false);
+    expect(wrong.summary).toBeNull();
+    expect(wrong.problems).toEqual([
+      { code: "unknown_node", index: 0, path: "/0/ids/0", message: "there is no node with this id", suggestion: "a" },
+    ]);
+    // Un valore che non è una lista: il problema della lista intera.
+    for (const value of [null, {}, "[]"]) {
+      const refused = core.check(value);
+      expect(refused.ok).toBe(false);
+      expect(refused.problems).toHaveLength(1);
+      expect(refused.problems[0]).toMatchObject({ index: null, path: "" });
+    }
+    expect(codeOf(() => core.check([], 2 ** 60))).toBe("request");
+    // Niente ha cambiato la lavagna.
+    expect(core.preview([])).toBe(oneCard("uno"));
+    core.close();
   });
 
   it("inkLayers chiede i livelli al nucleo una volta per testo: dopo l'apertura, reset e commit", async () => {
@@ -358,6 +424,8 @@ describe("il nucleo della lavagna in WebAssembly", () => {
     expect(codeOf(() => core.commit([{ kind: "reorder", before: ["x"], after: ["y"] }]))).not.toBe("nessun errore");
     expect(codeOf(() => core.reset("{"))).toBe("source");
     expect(codeOf(() => core.compile([{ op: "fly" }]))).toBe("request");
+    core.describe();
+    core.check({ non: "una lista" });
     expect(await rejectionCode(runtime.openCore("[]"))).toBe("source");
     core.preview([]);
     core.close();

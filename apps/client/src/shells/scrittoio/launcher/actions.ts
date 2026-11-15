@@ -6,7 +6,8 @@
 // lanciatore si chiude e parte un gesto che esiste già (aprire, dividere,
 // rivelare un punto, avviare un comando, copiare un link). Nessuna primitiva
 // nuova: qui si scelgono e si mettono in fila quelle della shell.
-import { copyNoteLinks, focusEditor, openDocument, reveal } from "../../../state/document-controller";
+import { copyNoteLinks, focusEditor, openDocument, peekDocument, reveal } from "../../../state/document-controller";
+import { isNoteDoc } from "../../../state/note-cards";
 import { closePane, layout, split } from "../../../state/layout";
 import { setPinned } from "../../../state/organization";
 import { paletteHost } from "../../../state/palette-host";
@@ -44,8 +45,16 @@ export const withEnter = (chord: string): string => displayBinding(chord).replac
 /// Apre una nota dove il gesto chiede.
 ///
 /// La divisione è quella del vecchio selettore: un riquadro accanto a quello
-/// col fuoco, richiuso se l'apertura fallisce.
+/// col fuoco, richiuso se l'apertura fallisce. La sbirciata è per le note:
+/// un altro file va a lato, come Alt col clic su un link.
 export async function openNote(doc: string, way: OpenWay): Promise<void> {
+  if (way === "peek") {
+    if (isNoteDoc(doc)) {
+      await peekDocument(doc);
+      return;
+    }
+    way = "split";
+  }
   if (way === "split") {
     const added = split(layout.focus, "row");
     if (added) {
@@ -96,7 +105,8 @@ export function step(row: Row, way: OpenWay, asked: Reading): Step {
           // Una nota trovata nel testo conclude una ricerca, e quella si ricorda.
           if (row.hit === "text" && asked.mode === "all" && asked.text.trim() !== "") rememberSearch(asked.text);
           await openNote(row.doc, way);
-          if (row.at !== null) await reveal(row.doc, point(row.at));
+          // La sbirciata mostra la nota dall'inizio: il punto è di un riquadro.
+          if (row.at !== null && !(way === "peek" && isNoteDoc(row.doc))) await reveal(row.doc, point(row.at));
         },
       };
     case "command":
@@ -137,9 +147,9 @@ export function step(row: Row, way: OpenWay, asked: Reading): Step {
   }
 }
 
-/// Le azioni di una nota (Tab): aprire qui o a lato, rinominare o spostare,
-/// copiare il link, appuntare. La sbirciata non c'è ancora: quando ci sarà, ha
-/// la sua azione.
+/// Le azioni di una nota (Tab): aprire qui o a lato, sbirciarla (soltanto una
+/// nota: un altro file non ha sbirciata), rinominare o spostare, copiare il
+/// link, appuntare.
 export function actionRows(doc: string): Row[] {
   const pinned = state.meta.pinned.includes(doc);
   const rename = allCommands().find((entry) => entry.id === RENAME_COMMAND)?.binding ?? null;
@@ -154,6 +164,7 @@ export function actionRows(doc: string): Row[] {
   return [
     row("open", t("launcher.action.open"), "↵"),
     row("split", t("launcher.action.split"), withEnter("Mod-Enter")),
+    ...(isNoteDoc(doc) ? [row("peek", t("launcher.action.peek"), withEnter("Alt-Enter"))] : []),
     row("rename", t("launcher.action.rename"), rename === null ? null : displayBinding(rename)),
     row("copy-link", t("launcher.action.copy_link"), null),
     row("pin", pinned ? t("launcher.action.unpin") : t("launcher.action.pin"), null),
@@ -168,6 +179,9 @@ export async function runAction(action: ActionId, doc: string): Promise<void> {
       return;
     case "split":
       await openNote(doc, "split");
+      return;
+    case "peek":
+      await openNote(doc, "peek");
       return;
     case "rename": {
       const entry = allCommands().find((each) => each.id === RENAME_COMMAND);

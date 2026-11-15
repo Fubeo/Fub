@@ -1,0 +1,74 @@
+{
+  "about": "reverse di un arco che non scrive né punte né lati: di serie la freccia è su b (toEnd arrow). Dopo lo scambio la freccia resta su b, che è la partenza (fromEnd arrow), e all'arrivo non c'è punta (toEnd none). Nessun lato si aggiunge, come reversedEdge della GUI.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "a"
+      },
+      {
+        "id": "b",
+        "type": "text",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "b"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "fromNode": "a",
+        "toNode": "b"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "reverse",
+      "ids": [
+        "e1"
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "a"
+        },
+        {
+          "id": "b",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "b"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "fromNode": "b",
+          "fromEnd": "arrow",
+          "toNode": "a",
+          "toEnd": "none"
+        }
+      ]
+    }
+  }
+}

@@ -242,6 +242,41 @@ pub unsafe extern "C" fn canvas_compile(handle: Handle, ptr: *const u8, len: usi
     .unwrap_or(FAILED)
 }
 
+/// La lavagna come codice: `{"form": "code", "ids"?}` dà `{"form", "text"}`.
+///
+/// # Safety
+///
+/// Come [`canvas_open`].
+#[no_mangle]
+pub unsafe extern "C" fn canvas_describe(handle: Handle, ptr: *const u8, len: usize) -> i32 {
+    // SAFETY: il contratto di `input` è quello di questa funzione.
+    let request = unsafe { input(ptr, len) };
+    with_bridge(|bridge| {
+        let outcome = request.and_then(|request| bridge.cores.describe(handle, request));
+        bridge.answer(outcome)
+    })
+    .unwrap_or(FAILED)
+}
+
+/// Controlla una lista: `{"ops" | "text", "seed"?}` dà il rapporto
+/// `{"ok", "problems", "warnings", "warnings_omitted", "summary",
+/// "outline_after"}`. Una lista con problemi riesce (0): i problemi sono nel
+/// rapporto.
+///
+/// # Safety
+///
+/// Come [`canvas_open`].
+#[no_mangle]
+pub unsafe extern "C" fn canvas_check(handle: Handle, ptr: *const u8, len: usize) -> i32 {
+    // SAFETY: il contratto di `input` è quello di questa funzione.
+    let request = unsafe { input(ptr, len) };
+    with_bridge(|bridge| {
+        let outcome = request.and_then(|request| bridge.cores.check(handle, request));
+        bridge.answer(outcome)
+    })
+    .unwrap_or(FAILED)
+}
+
 /// Il modello della lavagna `handle`: `{"canvas"}`.
 #[no_mangle]
 pub extern "C" fn canvas_model(handle: Handle) -> i32 {

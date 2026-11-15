@@ -1,0 +1,11 @@
+{
+  "about": "resize con fit content su un PDF senza misura del contenuto (né content_size né un file che si legge): è rifiutato, e la ragione dice di dare content_size.",
+  "before": {
+    "nodes": [{ "id": "p", "type": "file", "x": 0, "y": 0, "width": 360, "height": 480, "file": "Corsi/dispensa.pdf" }]
+  },
+  "ops": [{ "op": "resize", "id": "p", "fit": "content" }],
+  "expect": {
+    "outcome": "rejected",
+    "error": { "kind": "Invalid", "index": 0 }
+  }
+}

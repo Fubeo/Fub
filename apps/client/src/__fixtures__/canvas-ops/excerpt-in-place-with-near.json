@@ -1,0 +1,48 @@
+{
+  "about": "Sul posto la scheda non si sposta: `in_place` con `near` è `Invalid`.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      },
+      {
+        "id": "n",
+        "type": "file",
+        "x": 0,
+        "y": 400,
+        "width": 320,
+        "height": 240,
+        "file": "Corsi/appunti.md"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "excerpt",
+      "id": "n",
+      "part": {
+        "kind": "sections",
+        "sections": [
+          "A"
+        ]
+      },
+      "in_place": true,
+      "near": "p"
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

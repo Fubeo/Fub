@@ -1,0 +1,32 @@
+{
+  "about": "Senza `page_count` (e senza il file letto da `canvas.apply`) le pagine non si contano: `Invalid`.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "spread_pages",
+      "id": "p",
+      "pages": "1-3"
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

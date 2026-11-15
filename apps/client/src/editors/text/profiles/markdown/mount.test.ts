@@ -200,8 +200,14 @@ describe("montaggio Markdown condiviso", () => {
     expect(root.querySelectorAll("a")).toHaveLength(3);
     for (const index of [0, 1, 2]) expect(click(index).defaultPrevented).toBe(true);
     return Promise.resolve().then(() => {
-      expect(openPath).toHaveBeenCalledWith("docs/Manuale uno.html");
+      // Il percorso parte dalla nota della resa, col gesto del clic.
+      expect(openPath).toHaveBeenCalledWith("docs/Manuale uno.html", "Nota.md", "click");
       expect(opened.mock.calls.map((call) => call[0])).toEqual(["https://example.org", "mailto:a@b.c"]);
+      // Alt col clic su un documento del vault è la sbirciata.
+      root.querySelectorAll("a")[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, altKey: true }));
+      return Promise.resolve();
+    }).then(() => {
+      expect(openPath).toHaveBeenLastCalledWith("docs/Manuale uno.html", "Nota.md", "peek");
     });
   });
 
