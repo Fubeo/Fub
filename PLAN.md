@@ -1091,7 +1091,7 @@ Fatto quando: un test per gesto confronta le righe scritte; le foto del
 banco nelle due luci; la battuta resta nel budget (la Base dentro la nota).
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/base
-Stato: [~] in corso · coder dal 2026-11-15, da main
+Stato: [~] PR #379 (bozza, feat/base-filtro-ordina @ 1a9b48d71), due revisioni e correzioni fatte; aspetta CI e baseline dal runner
 
 ## T16 · Base: nuova vista, menu della colonna, riepiloghi
 
