@@ -18,6 +18,7 @@
 use fub_abi::command::{ParamKind, ParamSpec};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
+use fub_abi::rules::{media, text_policy};
 use fub_abi::session::{ContextMask, PaneMode, SelectionSet};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
@@ -237,7 +238,8 @@ impl ViewProvider for StatsView {
             // Una nota che non c'è è uno stato da dire, non un errore: la view
             // si apre anche su un id scritto a mano.
             return match counted_text(host, &DocId::new(doc)) {
-                Ok(text) => Ok(build_document_counts(count(&text))),
+                Ok(Some(text)) => Ok(build_document_counts(count(&text))),
+                Ok(None) => Ok(not_text()),
                 Err(PluginError::NotFound(_)) => Ok(row(Text::key(NO_DOC)).with_key(NO_DOC)),
                 Err(error) => Err(error),
             };
@@ -262,8 +264,14 @@ impl ViewProvider for StatsView {
         let Some(doc) = context.doc.as_ref() else {
             return Ok(row(Text::key(NO_ACTIVE_DOC)));
         };
+        // Un PDF, un'immagine: un file che non è testo non ha parole, e lo si
+        // dice. Restituire l'errore della lettura farebbe fallire il pannello a
+        // ogni ridisegno, cioè un avviso a ogni movimento del cursore.
+        let Some(text) = counted_text(host, doc)? else {
+            return Ok(not_text());
+        };
         Ok(build_stats_view(
-            count(&counted_text(host, doc)?),
+            count(&text),
             selection_stats(&context.selections),
             context.mode,
         ))
@@ -323,18 +331,55 @@ fn selection_stats(selections: &Option<SelectionSet>) -> Option<(usize, TextStat
 }
 
 /// Il testo che si conta di un documento: un formato strutturato si conta sul
-/// modello; la prosa, e un file che nessun formato rivendica, sul sorgente.
-fn counted_text(host: &dyn ReadApi, doc: &DocId) -> Result<String, PluginError> {
-    let structured = host.format_of(doc).is_some_and(|format| {
-        !format
-            .capabilities
-            .supports(fub_abi::options::source::PROSE)
-    });
-    if structured {
-        Ok(host.read_model(doc)?.text)
-    } else {
-        host.read_document(doc)
+/// modello; la prosa, e un file di testo che nessun formato rivendica, sul
+/// sorgente.
+///
+/// `None` = **non è testo**: un file che nessun formato rivendica e che non si
+/// decodifica come UTF-8 (un PDF, un'immagine). È una risposta, non un errore:
+/// il pannello la dice con parole sue invece di fallire.
+///
+/// Per un file senza formato si decide in due passi, dal più economico:
+///
+/// 1. il **nome**: se il MIME dedotto dall'estensione ([`media::mime_of`]) è
+///    di un tipo binario noto, il file non si apre nemmeno — un PDF da 40 MB
+///    non si legge per scoprire che non ha parole;
+/// 2. i **byte**: per tutto il resto (un `.txt`, un file senza estensione) si
+///    leggono i byte e si decodificano qui, con l'esito **tipizzato** di
+///    [`text_policy::decode`] — non con `read_document`, il cui rifiuto arriva
+///    come un [`PluginError::Io`] in prosa, indistinguibile da un disco che
+///    non risponde se non confrontando stringhe.
+fn counted_text(host: &dyn ReadApi, doc: &DocId) -> Result<Option<String>, PluginError> {
+    match host.format_of(doc) {
+        Some(format)
+            if !format
+                .capabilities
+                .supports(fub_abi::options::source::PROSE) =>
+        {
+            Ok(Some(host.read_model(doc)?.text))
+        }
+        Some(_) => host.read_document(doc).map(Some),
+        None if media::mime_of(doc).is_some_and(is_binary_mime) => Ok(None),
+        None => {
+            let bytes = host.read_document_bytes(doc)?;
+            Ok(text_policy::decode(&bytes).ok().map(str::to_owned))
+        }
     }
+}
+
+/// Un MIME che di sicuro non è testo da contare. Ciò che resta fuori (i
+/// `text/*`, il JSON, l'SVG e gli altri `+xml`, l'RTF) è testo nei byte, e si
+/// conta come prima: deciderlo dal nome lo toglierebbe a chi oggi lo conta.
+fn is_binary_mime(mime: &str) -> bool {
+    !(mime.starts_with("text/")
+        || mime.ends_with("+xml")
+        || mime == "application/json"
+        || mime == "application/rtf")
+}
+
+/// La risposta per un file che non è testo, con la sua chiave: chi legge la
+/// view da fuori (`fub-cli wordcount`) la riconosce senza leggere la frase.
+fn not_text() -> UiNode {
+    row(Text::key(NOT_TEXT)).with_key(NOT_TEXT)
 }
 
 /// Costruisce l'albero della view. Separato dal provider perché è pura
@@ -432,6 +477,9 @@ const VIEW_TITLE: &str = "view_title";
 const NO_ACTIVE_DOC: &str = "no_active_doc";
 /// La nota chiesta a `stats.document` non esiste.
 const NO_DOC: &str = "no_doc";
+/// Il file non è testo (un PDF, un'immagine): non ci sono parole da contare.
+/// È anche la chiave con cui `fub-cli wordcount` riconosce la risposta.
+const NOT_TEXT: &str = "not_text";
 /// `stats.document` chiamata senza la nota da contare.
 const E_DOC_PARAM: &str = "e_doc_param";
 /// I conteggi del documento, e quelli della selezione: due chiavi e non una con
@@ -468,6 +516,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(VIEW_TITLE, "Statistiche")
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
             .with(NO_DOC, "La nota non esiste.")
+            .with(
+                NOT_TEXT,
+                "Questo file non è testo: non ci sono parole da contare.",
+            )
             .with(E_DOC_PARAM, "Manca la nota da contare.")
             .with(DOC_PARAM, "Documento")
             .with(WORDS_TITLE, "Parole")
@@ -487,6 +539,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(VIEW_TITLE, "Statistics")
             .with(NO_ACTIVE_DOC, "No note open.")
             .with(NO_DOC, "The note does not exist.")
+            .with(
+                NOT_TEXT,
+                "This file is not text: there are no words to count.",
+            )
             .with(E_DOC_PARAM, "The note to count is missing.")
             .with(DOC_PARAM, "Document")
             .with(WORDS_TITLE, "Words")
@@ -804,6 +860,82 @@ mod tests {
             ),
             vec!["Nessuna nota aperta.".to_string()]
         );
+    }
+
+    /// Un PDF che nessun formato rivendica: il pannello si disegna e dice che
+    /// non è testo, in tutte e due le lingue, **senza aprire il file** — il
+    /// MIME dedotto dal nome basta a saperlo.
+    #[test]
+    fn a_binary_file_by_name_is_not_text_and_is_not_read() {
+        let host = MemoryHost::new().with_binary_document("Stampa.pdf", b"%PDF-\x80\x81");
+        host.set_active(Some("Stampa.pdf"));
+        let tree = StatsView
+            .render_view(&ViewInstance::only(STATS_VIEW), &host)
+            .expect("drawn, not failed");
+        assert_eq!(tree.key.as_deref(), Some(NOT_TEXT));
+        assert_eq!(
+            texts(&tree),
+            vec!["Questo file non è testo: non ci sono parole da contare.".to_string()]
+        );
+        assert_eq!(
+            rows(&tree, "en"),
+            vec!["This file is not text: there are no words to count.".to_string()]
+        );
+        assert_eq!(host.reads_on("Stampa.pdf"), (0, 0), "decided by the name");
+    }
+
+    /// Senza un MIME che lo dica, decidono i byte, con la decodifica tipizzata:
+    /// un file non UTF-8 non è testo, uno UTF-8 si conta come prima. Lo stesso
+    /// per la view del documento nominato, che `fub-cli wordcount` riconosce
+    /// dalla chiave.
+    #[test]
+    fn without_a_known_mime_the_bytes_decide() {
+        let host = MemoryHost::new()
+            .with_binary_document("dati.dat", b"ok\xff\xfe")
+            .with_document("leggimi.txt", "tre parole qui");
+        host.set_active(Some("dati.dat"));
+        let tree = StatsView
+            .render_view(&ViewInstance::only(STATS_VIEW), &host)
+            .expect("drawn, not failed");
+        assert_eq!(tree.key.as_deref(), Some(NOT_TEXT));
+        host.set_active(Some("leggimi.txt"));
+        assert_eq!(
+            texts(
+                &StatsView
+                    .render_view(&ViewInstance::only(STATS_VIEW), &host)
+                    .unwrap()
+            ),
+            vec!["Parole: 3 · Caratteri: 14".to_string()]
+        );
+        let named = ViewInstance {
+            view: STATS_DOCUMENT_VIEW.into(),
+            instance: "cli".into(),
+            params: serde_json::json!({ "doc": "dati.dat" }),
+        };
+        let said = StatsView.render_view(&named, &host).unwrap();
+        assert_eq!(said.key.as_deref(), Some(NOT_TEXT), "{said:?}");
+    }
+
+    /// I MIME testuali restano a chi decide dai byte: un CSV, un JSON, un SVG
+    /// senza formato si contavano, e si contano ancora.
+    #[test]
+    fn textual_mimes_are_not_binary() {
+        for mime in [
+            "text/csv",
+            "application/json",
+            "image/svg+xml",
+            "application/rtf",
+        ] {
+            assert!(!is_binary_mime(mime), "{mime}");
+        }
+        for mime in [
+            "application/pdf",
+            "image/png",
+            "audio/mpeg",
+            "application/zip",
+        ] {
+            assert!(is_binary_mime(mime), "{mime}");
+        }
     }
 
     #[test]
