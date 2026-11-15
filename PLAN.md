@@ -1316,7 +1316,7 @@ piena; un test della scheda della nota; `check-listeners` verde; le foto
 del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/note-peek.test.ts src/editors/text/profiles/markdown/link-card.dom.test.ts
-Stato: [~] in corso · coder dal 2026-11-15, da main
+Stato: [~] revisione e correzioni fatte (feat/sbirciata @ f11347bed, check verde) · aspetta la divisione di `document-bridge` (con main il chunk arriva a 501 kB) prima della PR
 
 ## T21a · I commenti nel formato: CriticMarkup nel provider Markdown
 
