@@ -167,6 +167,35 @@ describe("combobox della palette", () => {
     expect(fake.invokeCommand.mock.calls.map((call) => call[2])).toEqual(["dry_run", "apply"]);
   });
 
+  it("un comando da simulare che non dà un piano si chiude prima di consegnare l'esito: la nota aperta tiene il fuoco", async () => {
+    const vaultCommand: CommandSpec = {
+      ...command("vault.cmd", "Sul vault"),
+      scope: { writes: true, reach: "vault", reversible: true },
+    };
+    fake.invokeCommand.mockResolvedValue({ notify: null, effect: { kind: "navigate", doc: "Nota.md" }, undo: null, partial: null });
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const editor = document.createElement("textarea");
+    document.body.appendChild(editor);
+    // La shell apre la nota e le dà il fuoco, come `openDocument`.
+    host.onEffect.mockImplementation(async () => {
+      editor.focus();
+    });
+    try {
+      const { input } = await openPalette([vaultCommand]);
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      await vi.waitFor(() => expect(host.onEffect).toHaveBeenCalledWith({ kind: "navigate", doc: "Nota.md" }));
+      await Promise.resolve();
+      vi.runAllTimers();
+      expect(fake.invokeCommand.mock.calls.map((call) => call[2])).toEqual(["dry_run"]);
+      expect(document.getElementById("command-palette")).toBeNull();
+      expect(document.activeElement).toBe(editor);
+    } finally {
+      host.onEffect.mockReset();
+    }
+  });
+
   it("un kernel che non risponde non tiene chiusa la palette, e i suoi comandi arrivano dopo", async () => {
     await openPalette([command("cmd.old", "Vecchio")]);
     closeCommandPalette();

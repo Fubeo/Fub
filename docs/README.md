@@ -54,7 +54,7 @@ flowchart LR
 | [Annotazioni dei PDF](product/pdf-annotations.md) | scrivere accanto ai PDF |
 | [File delle app Craft](product/craft-files.md) | disegni, immagini e foto delle app Craft |
 | [La lavagna](product/lavagna.md) | schede, fili, inchiostro ed estratti nei file `.canvas` |
-| [Ricerca, link e grafo](product/search-links-and-graph.md) | trovare e seguire |
+| [Ricerca, link e grafo](product/search-links-and-graph.md), [spazio comandi (Ctrl O)](product/command-space.md) | trovare, seguire e comandare dalla tastiera |
 | [Compiti](product/tasks-and-reminders.md) | i compiti del vault per scadenza, e come si spuntano |
 | [Importare ed esportare](product/import-and-export.md) | dentro e fuori dal vault |
 | [Plugin ed estensioni](product/plugins-and-extensions.md) | come Fub cresce |
