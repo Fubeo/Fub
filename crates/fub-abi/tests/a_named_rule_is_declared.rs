@@ -1205,6 +1205,44 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/tasks/query.rs::words",
+            (
+                Family::ContextualCase,
+                "piega le parole di una riga del recinto ```tasks per riconoscere il vocabolario \
+                 del plugin Tasks (`not done`, `due before`, `sort by`), che il plugin legge senza \
+                 badare al caso. Non decide quando due nomi sono lo stesso nome: confronta con un \
+                 vocabolario chiuso, e la piegatura è quella di chi lo ha scritto.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::day_of",
+            (
+                Family::ContextualCase,
+                "riconosce `today`, `tomorrow`, `yesterday` in una riga del recinto ```tasks, \
+                 senza badare al caso come il plugin. Gemella di `words`: un vocabolario chiuso, \
+                 non un'identità di nomi.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::understood",
+            (
+                Family::ContextualCase,
+                "prepara l'ago di `path includes` **una volta**, minuscolo, perché `keeps` lo \
+                 cerca nel percorso piegato allo stesso modo. Diverge da `resolution_key` perché \
+                 non risolve un percorso: è una ricerca di testo dentro il percorso, come la fa \
+                 il plugin Tasks, letterale e senza caso.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::reads",
+            (
+                Family::ContextualCase,
+                "l'altro capo di `understood`: piega il percorso della nota per cercarci l'ago \
+                 di `path includes`, prima di leggerla e per ogni compito. Un contenimento di testo, non un'identità: «lavoro» trova \
+                 `Lavoro/Note.md` e `Archivio lavoro.md`, come nel plugin.",
+            ),
+        ),
+        (
             "crates/fub-format-base/src/formula.rs::call_known",
             (
                 Family::ContextualCase,
