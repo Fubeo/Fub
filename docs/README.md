@@ -49,6 +49,7 @@ flowchart LR
 | [Tasto destro, mini-barra e «/»](product/editor-menus.md) | i menu degli editor |
 | [Basi (file `.base`)](product/bases.md) | le viste, i filtri, i limiti e che cosa si scrive sul file |
 | [La riga dei dati](product/editor-note-facts.md) | modifica, collegamenti ed etichette sotto il titolo |
+| [I commenti nel testo](product/editor-comments.md) | il passo commentato in Scrittura, Lettura e Sorgente; cancellare e copiare |
 | [Correttore](product/proofing.md) | l'ortografia mentre si scrive |
 | [Documenti di Word](product/word-documents.md) | la videoscrittura nel vault |
 | [Annotazioni dei PDF](product/pdf-annotations.md) | scrivere accanto ai PDF |
