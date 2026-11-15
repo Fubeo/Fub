@@ -1021,7 +1021,7 @@ scorciatoia cambiata; un test del vault d'esempio in `support.rs`; la scena
 del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/frame; cargo nextest run -p fub-host support
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15, da main (feat/riga-dei-suggerimenti)
 
 ## T15a · Le toppe mirate del `.base`
 
