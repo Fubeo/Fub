@@ -39,12 +39,13 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   figlio del foglio dopo la barra di formato, che la cornice mostra solo dove
   la banda non c'è. L'ordine segue il ruolo: le modalità
   `live_preview` come la superficie le dichiara, il sorgente, una riga, la
-  lettura; una nota dà Live, Blocchi, Sorgente e Lettura. La figura è la
-  `icon` della `SurfaceMode` se `ui/icons.ts` la sa disegnare, sennò quella
-  del ruolo (penna, codice, occhio). La scorciatoia è quella del comando che
-  porta alla modalità, anche se la persona l'ha cambiata: `shell.mode.blocks`
-  per i Blocchi, il comando del ruolo per la prima modalità di quel ruolo,
-  nessuna per le altre. Il menu dà il fuoco al suo riquadro all'apertura e di
+  lettura; una nota dà Scrittura, Sorgente e Lettura (i Blocchi sono
+  confluiti in Scrittura: un id vecchio si riconosce da `SurfaceMode.formerIds`).
+  La figura è la `icon` della `SurfaceMode` se `ui/icons.ts` la sa disegnare,
+  sennò quella del ruolo (penna, codice, occhio). La scorciatoia è quella del
+  comando che porta alla modalità, anche se la persona l'ha cambiata: il
+  comando del ruolo per la prima modalità di quel ruolo, nessuna per le altre;
+  `shell.mode.blocks` resta e porta anche lui a Scrittura. Il menu dà il fuoco al suo riquadro all'apertura e di
   nuovo alla scelta, perché chiudendosi rende il fuoco a chi l'aveva.
 - **Tasto destro negli editor.** Un solo ascoltatore sul riquadro
   (`panels/document.ts`) chiede alla superficie il suo `contextMenu(at)` e lo
