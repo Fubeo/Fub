@@ -35,10 +35,15 @@ parte di quel blocco e si sposta con lui.
 
 ## Maniglie e menu
 
-Al passaggio del puntatore, e sul blocco del cursore, a sinistra del blocco
-compaiono il **«+»**, che aggiunge sotto un paragrafo vuoto (o una voce sorella
-sotto una voce), e la **maniglia**. La maniglia ha il nome del blocco («Blocco:
-Titolo 2, Elenco di attività») e apre un menu col clic o col tasto destro.
+Al passaggio del puntatore a sinistra del blocco compaiono, tenui, il
+**«+»**, che aggiunge sotto un paragrafo vuoto (o una voce sorella sotto una
+voce), e la **maniglia**: i due occhi del marchio. A riposo non si vedono;
+sugli schermi senza passaggio restano sul blocco del cursore. Stanno sempre a
+sinistra di ciò che si vede: una scheda o una tabella più larga della colonna
+li sposta. La maniglia sotto il puntatore prende l'accento e gli occhi
+crescono appena; il suggerimento dice «Trascina per spostare, clic per il
+menu». La maniglia ha il nome del blocco («Blocco: Titolo 2, Elenco di
+attività») e apre un menu col clic o col tasto destro.
 Aperto col mouse, nessuna voce ha l'anello del fuoco finché una freccia non
 la sceglie; da tastiera il fuoco va subito alla prima voce. Il menu ha:
 
@@ -53,8 +58,29 @@ la sceglie; da tastiera il fuoco va subito alla prima voce. Il menu ha:
   di sei caratteri: in coda all'ultima riga per paragrafi, titoli e voci, su una
   riga sua per gli altri. Un id che c'è già si riusa.
 
-La maniglia si trascina: una linea mostra dove il blocco cade, fra i fratelli
-dello stesso livello; vicino ai bordi la nota scorre; Esc annulla. Le maniglie
+La maniglia si trascina (dopo 4 px di movimento; al tocco tenendola premuta
+300 ms): gli occhi si socchiudono e il blocco **va in mano**. È il blocco vero,
+largo com'era (anche una tabella o una scheda più larga della colonna) e mai
+più alto di 104 px: uno più alto si accorcia davanti agli occhi mentre i
+vicini salgono, si taglia sfumando e porta il nome del suo tipo; più blocchi selezionati salgono insieme e dicono
+quanti sono. Fra i fratelli dello stesso livello si apre **il posto** dove
+cadrà, alto quanto il blocco in mano: grigio finché è quello d'origine,
+d'accento altrove; i vicini scivolano via per fargli spazio. Il posto cambia
+soltanto quando il centro del blocco in mano passa oltre la metà di un vicino,
+e torna indietro solo ripassandola: niente tremolii. In un'altra sezione
+un'etichetta in basso a destra dice «in «Sezione»»; per chi non vede, a ogni
+cambio di posto la regione viva dice «Posizione 4 di 14, in «I conti»».
+
+Di lato il blocco segue il puntatore per un terzo, al più 28 px. Una voce
+d'elenco spostata di 24 px a destra entra nella voce sopra; di 24 px a
+sinistra, in fondo alla sua lista, ne esce. Col puntatore sull'ultimo ottavo
+a destra di un vicino, o fuori dalla colonna a sinistra, 48 px oltre la
+maniglia da cui è partito (una deriva di lato non basta), compare una
+barra verticale sul bordo del vicino: lasciato lì, il blocco gli va
+**accanto**, in colonne (a sinistra non vale per le voci d'elenco, dove quel
+gesto porta fuori). Al rilascio il blocco cade nel posto con un solo
+passo d'annullamento; Esc, una finestra che perde il fuoco o il testo cambiato
+da fuori (che vince) lo riportano dov'era. Vicino ai bordi la nota scorre. Le maniglie
 stanno fuori dal testo ma sono pulsanti veri: il «+» e la maniglia del blocco
 del cursore si raggiungono con Tab, e con Vim acceso restano cliccabili.
 
@@ -127,14 +153,26 @@ transazione porta l'annotazione `blockGesture`, e un plugin legge i riquadri
 delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
 `moto`, soltanto con `transform` e `opacity`.
 
-- **Sollevare e posare.** Trascinato, il blocco sale (scala 1,015 e ombra) e i
-  fratelli fra il suo posto e la linea si scostano. Sale soltanto il blocco: la
-  testata della pagina e i widget degli altri blocchi restano fermi. Al rilascio
-  ognuno scivola al suo posto e il blocco atterra dall'immagine sollevata con un
-  piccolo rimbalzo e un alone d'accento; Esc lo riporta indietro allo stesso modo.
-  Trascinato sopra il frontmatter, il blocco si posa subito sotto di lui, che
-  non si trascina.
-- **Scambiare.** Mod+Shift+↑/↓ fa scivolare le righe dal posto vecchio. Il
+- **Prendere e posare.** Preso, il blocco cresce dell'1,5% e l'ombra si forma
+  in 240 ms con una molla appena accennata; in mano raggiunge il puntatore in
+  due o tre fotogrammi, si inclina al più di 1° quando corre di lato, e vicino
+  al posto ne è attratto. Sale soltanto il blocco: la testata della pagina e i
+  widget degli altri blocchi restano fermi. I vicini scivolano in 300 ms
+  superando l'arrivo di un soffio. Al rilascio il blocco si posa in 340 ms, e
+  poi niente: nessun alone. Esc (o il rilascio al suo posto) lo riporta a casa
+  in 300 ms da dove si vede e con la grandezza che ha, anche a metà presa:
+  l'ombra, il posto e le etichette svaniscono e i vicini tornano scivolando;
+  una presa nuova o il testo cambiato lo posano subito. Al tocco
+  presa e posa danno un colpetto aptico. Le misure si prendono alla presa e
+  di nuovo soltanto se cambia la parte montata da CodeMirror; per fotogramma si
+  scrive soltanto `transform`, il ciclo dei fotogrammi gira solo finché il
+  blocco non ha raggiunto il puntatore (e solo allora ha uno strato suo), e il
+  documento cambia al rilascio. Trascinato
+  sopra il frontmatter, il blocco si posa subito sotto di lui, che non si
+  trascina.
+- **Scambiare.** Mod+Shift+↑/↓ fa scivolare le righe dal posto vecchio, con
+  lo stesso moto della posa, e dice il posto come il trascinamento
+  («Posizione 3 di 5, in «I conti»»). Il
   frontmatter resta sempre il primo blocco: niente gli passa davanti, lui non
   scende, e «Sposta su» non compare sul primo testo che lo segue.
 - **Trasformare.** Il testo cresce o cala sul posto con la scala dei
@@ -149,10 +187,10 @@ delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
   di blocco in blocco.
 
 Oltre 60 righe in movimento, le righe si limitano a una dissolvenza. Col moto
-ridotto non si muove niente: chi nasce appare soltanto in dissolvenza, e
-l'immagine sollevata e le righe scostate stanno ferme dove il gesto le mette.
-Ogni gesto si dice anche nella regione viva dei Blocchi («Blocco spostato: ora
-è il terzo», «Ora è Titolo 2», «Aperto»).
+ridotto non si muove niente: chi nasce appare soltanto in dissolvenza, il
+posto appare senza scivolare e il blocco in mano si posa senza volo.
+Ogni gesto si dice anche nella regione viva dei Blocchi («Posizione 3 di 5, in
+«I conti»» dopo uno spostamento, «Ora è Titolo 2», «Aperto»).
 
 **Cursore morbido** (`editor.soft-cursor`, spento di norma) fa scivolare il
 cursore fra le righe quando ci si muove senza scrivere; vale soltanto in
@@ -268,7 +306,7 @@ testo si scrive lì. Le crea «Colonne» (`markdown.columns`) dalla barra o dal
 «/», con un blocco per colonna delle righe selezionate; nei Blocchi anche
 «Colonne» nel menu del blocco, che mette il blocco accanto al fratello che lo
 segue (o la selezione di blocchi, una colonna per blocco), e il blocco
-trascinato e lasciato sul bordo destro di un altro, che gli va accanto o in
+trascinato e lasciato sul bordo destro (o sinistro) di un altro, che gli va accanto o in
 fondo alle sue colonne. Un callout `[!columns]` con un solo `[!column]`, più
 di quattro o altro testo fra loro resta un callout. Gli altri programmi le
 leggono come citazioni annidate, e l'export come callout annidati.

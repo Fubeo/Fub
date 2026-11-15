@@ -5,7 +5,7 @@ import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorSelection, EditorState, type StateCommand } from "@codemirror/state";
 import { markdownGrammar } from "../grammar";
 import { blockModel } from "./model";
-import { moveBlockBy, moveRun, moveSiblings } from "./move";
+import { moveBlockBy, moveRun, moveSiblings, nestRun, outdentRun, reindent } from "./move";
 import { blockAnchor } from "./anchor";
 import { mergeUpChange } from "./keys";
 import { deleteRun, duplicateRun } from "./selection";
@@ -280,5 +280,58 @@ describe("la selezione segue lo spostamento", () => {
     const next = selected.update(spec).state;
     expect(next.doc.toString()).toBe("Due\n\nTre\n\nUno");
     expect(next.sliceDoc(next.selection.main.from, next.selection.main.to)).toBe("Due\n\nTre");
+  });
+});
+
+describe("annidare e portare fuori col gesto di lato", () => {
+  const apply = (state: EditorState, spec: ReturnType<typeof nestRun>) => {
+    expect(spec).not.toBeNull();
+    return state.update(spec!).state;
+  };
+
+  it("una voce annidata sotto la voce sopra prende il rientro dei figli, in un passo", () => {
+    const state = stateOf("- uno\n- due\n- tre", 0);
+    const due = indexAt(state, "- due");
+    const next = apply(state, nestRun(state, blocksOf(state), { first: due, last: due }, indexAt(state, "- uno")));
+    expect(next.doc.toString()).toBe("- uno\n  - due\n- tre");
+    let back = next;
+    undo({ state: next, dispatch: (tr) => { back = tr.state; } });
+    expect(back.doc.toString()).toBe("- uno\n- due\n- tre");
+  });
+
+  it("sotto una voce che ha già figli va in fondo, col loro rientro, e porta i suoi", () => {
+    const state = stateOf("1. uno\n   - a\n2. due\n   - b\n3. tre");
+    const due = indexAt(state, "2. due");
+    const next = apply(state, nestRun(state, blocksOf(state), { first: due, last: due }, indexAt(state, "1. uno")));
+    expect(next.doc.toString()).toBe("1. uno\n   - a\n   2. due\n      - b\n3. tre");
+  });
+
+  it("verso una voce più in basso, la voce va in fondo ai suoi figli", () => {
+    const state = stateOf("- uno\n- due\n- tre");
+    const uno = indexAt(state, "- uno");
+    const next = apply(state, nestRun(state, blocksOf(state), { first: uno, last: uno }, indexAt(state, "- tre")));
+    expect(next.doc.toString()).toBe("- due\n- tre\n  - uno");
+  });
+
+  it("una voce annidata portata fuori va subito dopo la sua voce, col suo rientro", () => {
+    const state = stateOf("- uno\n  - a\n  - b\n- due");
+    const a = indexAt(state, "  - a");
+    const next = apply(state, outdentRun(state, blocksOf(state), { first: a, last: a }));
+    expect(next.doc.toString()).toBe("- uno\n  - b\n- a\n- due");
+    const b = indexAt(state, "  - b");
+    expect(state.update(outdentRun(state, blocksOf(state), { first: b, last: b })!).state.doc.toString()).toBe("- uno\n  - a\n- b\n- due");
+  });
+
+  it("non annida ciò che non è una voce, né sotto ciò che non è una voce", () => {
+    const state = stateOf("Testo\n\n- uno\n\nAltro");
+    const blocks = blocksOf(state);
+    expect(nestRun(state, blocks, { first: indexAt(state, "Altro"), last: indexAt(state, "Altro") }, indexAt(state, "- uno"))).toBeNull();
+    expect(nestRun(state, blocks, { first: indexAt(state, "- uno"), last: indexAt(state, "- uno") }, indexAt(state, "Testo"))).toBeNull();
+    expect(outdentRun(state, blocks, { first: indexAt(state, "- uno"), last: indexAt(state, "- uno") })).toBeNull();
+  });
+
+  it("il rientro nuovo lascia vuote le righe vuote", () => {
+    expect(reindent("- a\n\n  testo", "", "  ")).toBe("  - a\n\n    testo");
+    expect(reindent("  - a\n    b", "  ", "")).toBe("- a\n  b");
   });
 });

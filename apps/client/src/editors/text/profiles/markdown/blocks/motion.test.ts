@@ -10,11 +10,10 @@ import { livePreview } from "../livepreview";
 import { liveReveal } from "../../../live-reveal";
 import { propertiesDisplay } from "../../../properties-display";
 import { blockGesture } from "../block-gesture";
-import { liveStrings } from "../strings";
 import { blocksMode } from "./index";
 import { blockModel } from "./model";
 import { moveSiblings, siblingsOf } from "./move";
-import { blockAt, gesturePhrase, inferGesture, pageArrives, placeName } from "./motion";
+import { blockAt, gesturePhrase, inferGesture, pageArrives } from "./motion";
 
 // Il blocco vivo (N13): che cosa si muove, quando, e che cosa si dice.
 
@@ -122,18 +121,20 @@ describe("i gesti che si fanno scrivendo", () => {
 });
 
 describe("le frasi della regione viva", () => {
-  it("il posto si dice a parole fino a dieci, poi in cifre", () => {
-    expect(placeName(0)).toBe(liveStrings.t("blocks.place.1"));
-    expect(placeName(2)).toBe("terzo");
-    expect(placeName(11)).toBe(liveStrings.t("blocks.place.n", { n: "12" }));
-  });
-
-  it("uno spostamento dice il posto nuovo fra i fratelli", () => {
+  it("uno spostamento dice il posto nuovo fra i fratelli, come il trascinamento", () => {
     const view = mount("Uno\n\nDue\n\nTre", 0);
     const blocks = view.state.field(blockModel).blocks;
     const spec = moveSiblings(view.state, blocks, 0, 0, -1)!;
     const next = view.state.update(spec).state;
-    expect(gesturePhrase(next, { kind: "swap", lead: spec.moved })).toBe("Blocco spostato: ora è il terzo");
+    expect(gesturePhrase(next, { kind: "swap", lead: spec.moved })).toBe("Posizione 3 di 3");
+  });
+
+  it("dopo un titolo dice anche la sezione", () => {
+    const view = mount("# I conti\n\nUno\n\nDue", 12);
+    const blocks = view.state.field(blockModel).blocks;
+    const spec = moveSiblings(view.state, blocks, 1, 1, -1)!;
+    const next = view.state.update(spec).state;
+    expect(gesturePhrase(next, { kind: "drop", lead: spec.moved })).toBe("Posizione 3 di 3, in «I conti»");
   });
 
   it("una trasformazione dice la specie nuova; una frase vuota non dice niente", () => {
@@ -147,7 +148,7 @@ describe("le frasi della regione viva", () => {
     const view = mount("Uno\n\nDue\n\nTre", 1);
     press(view, "ArrowDown", { ctrlKey: true, shiftKey: true });
     expect(view.state.doc.toString()).toBe("Due\n\nUno\n\nTre");
-    expect(live(view)).toBe("Blocco spostato: ora è il secondo");
+    expect(live(view)).toBe("Posizione 2 di 3");
     expect(view.dom.querySelector(".cm-fub-block-live")?.getAttribute("aria-live")).toBe("polite");
   });
 });
@@ -198,14 +199,15 @@ describe("che cosa si muove", () => {
     expect(moto.runs).toEqual([]);
   });
 
-  it("lo scambio fa scorrere le righe dal posto vecchio, con la molla", async () => {
+  it("lo scambio fa scorrere le righe dal posto vecchio, col moto della posa", async () => {
     const view = await mounted("Uno\n\nDue\n\nTre", 1);
     press(view, "ArrowDown", { ctrlKey: true, shiftKey: true });
     await frame();
     const lines = moto.runs.filter((run) => run.el.classList.contains("cm-line"));
     expect(lines.length).toBeGreaterThan(0);
     for (const run of lines) expect(run.spec.from).toHaveProperty("y");
-    expect(lines.every((run) => run.spec.spring === "soft")).toBe(true);
+    // Lo stesso moto del rilascio di un trascinamento: 340 ms, poi niente.
+    expect(lines.every((run) => run.spec.duration === 340)).toBe(true);
   });
 
   it("col moto ridotto uno scambio non muove niente", async () => {
