@@ -18,6 +18,7 @@ import { ensureDrawIcons } from "../editors/spatial/icons";
 import { ensureCanvasIcons } from "../editors/canvas/chrome/icons";
 import { useRichIcons } from "../editors/rich/icons";
 import { useMediaIcons } from "../editors/media/icons";
+import { useBaseIcons } from "../editors/base/icons";
 import { useRibbonIcons } from "../editors/grid/ribbon/icons";
 import { registerFormatIcons } from "../panels/format-bar";
 import { createColorPicker, type ColorPickerText } from "../kit/color/picker";
@@ -30,6 +31,7 @@ const REGISTRARS = [
   "../editors/canvas/chrome/icons.ts",
   "../editors/rich/icons.ts",
   "../editors/media/icons.ts",
+  "../editors/base/icons.ts",
   "../editors/grid/ribbon/icons.ts",
   "../panels/format-bar.ts",
   "../kit/color/picker.ts",
@@ -67,6 +69,7 @@ describe("i nomi che un tema può ridisegnare", () => {
     ensureCanvasIcons();
     life.add(useRichIcons());
     life.add(useMediaIcons());
+    life.add(useBaseIcons());
     life.add(useRibbonIcons());
     life.add(registerFormatIcons());
     createColorPicker({

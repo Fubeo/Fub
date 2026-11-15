@@ -65,7 +65,7 @@ import { askVaultProfile, isNewVault, mountOnboarding, type VaultProfileHooks } 
 import { mountIncomingLinks, URI_ALLOWED } from "./ui/incoming-links";
 import { mountWebViewer } from "./ui/web-viewer";
 import { confirm } from "./platform/confirm";
-import { registerBaseRenderer } from "./editors/base/surface";
+import { registerBaseRenderer } from "./editors/base/renderer";
 import { applyRailMachineSettings, mountRail, refreshRailShortcuts, syncRail } from "./panels/rail";
 import { applySlashSettings } from "./panels/slash/prefs";
 import { mountStrings, onLanguage, resolvedLanguage, t, type Key } from "./i18n/strings";
@@ -86,7 +86,7 @@ import {
   setEditorTheme,
   synchronize,
 } from "./panels/document";
-import { flushPendingSave } from "./state/document-session";
+import { expectDocumentWrite, flushPendingSave } from "./state/document-session";
 import { drainDocumentWindows, openCurrentInNewWindow } from "./state/document-windows";
 import { mountExplorer } from "./panels/explorer";
 import { mountPageIcons } from "./state/page-icons";
@@ -831,7 +831,9 @@ async function init(): Promise<Teardown> {
   // perché l'avvio a freddo si misura fino alla prima nota.
   mountPerfProbe(pageWindowLifetime);
   registerMermaidRenderer();
-  registerBaseRenderer((doc) => openDocument(doc));
+  // Una Base da file incorporata scrive il suo `.base` come una aperta:
+  // salva prima e annuncia la scrittura.
+  registerBaseRenderer((doc) => openDocument(doc), { flush: flushPendingSave, expect: expectDocumentWrite });
   // I tre collegamenti iniettati, e la ragione per cui lo sono: il pannello del
   // documento mostra l'anteprima (in Lettura) e l'anteprima apre i documenti;
   // il pannello del documento manda a cercare un tag e la ricerca apre i

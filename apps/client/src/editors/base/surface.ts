@@ -1,14 +1,14 @@
 // Named `.base` views on indexed notes. The surface owns only its local view
 // choice and rendering; edits go through registered commands with CAS.
 import { currentTheme, type Theme } from "../../theme/theme";
-import { EVERY_DOCUMENT } from "../../host/contract";
+import { COMMANDS, EVERY_DOCUMENT } from "../../host/contract";
 import { api } from "../../host/ipc";
-import { registerCustomRenderer } from "../../ui/custom";
+import type { CustomRenderContext } from "../../ui/custom";
 import { errorText, isErrorKind } from "../../host/errors";
 import { onLanguage, resolvedLanguage, t } from "../../i18n/strings";
 import type { DocumentUpdate } from "../core/text-operation";
 import { onEvent } from "../../state/kernel";
-import { openVaultRoot, vaultArg } from "../../state/vault";
+import { vaultArg } from "../../state/vault";
 import type { BufferedSurface, SurfaceCellSelectionSource, SurfaceMountContext } from "../core/registry";
 import type { Cell, Range } from "../../tabella/navigation";
 import { rangeBetween, selectedCells, selectsSeveral, touches } from "../../tabella/selection";
@@ -18,16 +18,56 @@ import { LOCAL_FETCH } from "../core/local-fetch";
 import {
   BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS,
   allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty, groupBaseRows,
-  fetchAllDocuments, parseBaseEmbed, parseBaseViews, persistBaseView,
-  planBaseView, prepareBaseMutations, restoreBaseView,
-  type BaseCellValue, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseSurfaceDeps,
+  fetchAllDocuments, listBaseViews, parseBaseEmbed, persistBaseView,
+  planBaseView, prepareBaseMutations, restoreBaseView, setBaseViewKey, writtenLines,
+  type BaseCellValue, type BaseDocumentWrites, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey,
 } from "./data";
+import { decimalOf, propertyKind, propertyValues, type ValueKind } from "./filter";
+import { mountBaseToolbar } from "./toolbar";
+import { notify } from "../../ui/notify";
 import { writeClipboardText } from "../../platform/clipboard";
 
 export interface BaseMountDeps extends BaseSurfaceDeps {
   readonly onOpenDocument: (doc: string) => void | Promise<void>;
   /** Trusted host-supplied exact-host allowlist; .base YAML cannot grant it. */
   readonly mapTileHosts?: readonly string[];
+  /// La revisione del file `.base` che la superficie mostra: i gesti della
+  /// barra la passano a `base.view.set`, che scrive solo se il file è ancora
+  /// quello. Assente, il comando scrive senza confronto.
+  readonly revision?: () => string | null;
+  /// Le scritture dei documenti aperti: prima di un gesto si salva il
+  /// `.base` se ha testo in sospeso, e la scrittura del gesto si annuncia
+  /// perché la ricarica non si dica. Assente (una prova), il gesto scrive e
+  /// basta.
+  readonly documentWrites?: BaseDocumentWrites;
+}
+/// La cartella dei modelli, per «Nuova da un modello»: la convenzione di
+/// `note.from_template` (`fub-features/src/template.rs`).
+const TEMPLATES_FOLDER = "Templates";
+const TEMPLATE_COMMAND = "note.from_template";
+/// Quanti modelli offre il menu di «Nuova».
+const TEMPLATE_LIMIT = 100;
+/// Quanto aspetta la barra il file riscritto dopo un gesto, prima di
+/// riaccendersi comunque: un host che non rimanda il testo non la lascia spenta.
+const WRITE_SETTLE_MS = 4000;
+/// Quante proprietà e quanti valori la barra raccoglie dalle righe.
+const PROPERTY_LIMIT = 200;
+/// Quanto aspetta, dopo la risposta di «Annulla», l'evento della riscrittura
+/// del `.base` prima di ritirarne l'annuncio. L'esito di `vault.undo` non dice
+/// quale file ha riscritto: se non era questo (niente da annullare, o
+/// l'ultima operazione era su un altro file) l'annuncio non resta a zittire
+/// per dieci secondi un cambio vero. L'evento parte mentre il comando scrive,
+/// prima della risposta; uno in ritardo oltre l'attesa si dice soltanto.
+const UNDO_EVENT_GRACE_MS = 1500;
+const SUGGESTION_LIMIT = 50;
+/// Un gesto della barra in volo: il testo di prima, quello che l'host ha
+/// rimandato (prima o dopo la risposta), e se il comando ha risposto e il
+/// piano del testo nuovo è letto.
+interface WriteAttempt {
+  readonly before: string;
+  after: string | null;
+  answered: boolean;
+  planned: boolean;
 }
 const SVG = "http://www.w3.org/2000/svg";
 const VISIBLE_STEP = 100;
@@ -42,6 +82,24 @@ const labels = () => ({
   view: t("menu.view"), search: t("rail.search"), retry: t("app.retry"),
   loading: t("search.loading"), more: t("search.more", { shown: VISIBLE_STEP, total: VISIBLE_STEP }),
 });
+/// I valori di ogni proprietà nelle righe lette, per nome: al più
+/// `PROPERTY_LIMIT` nomi.
+function readProperties(input: readonly BaseRowInput[]): Map<string, unknown[]> {
+  const values = new Map<string, unknown[]>();
+  for (const row of input) {
+    for (const { key, value } of row.properties ?? []) {
+      let list = values.get(key);
+      if (list === undefined) {
+        if (values.size >= PROPERTY_LIMIT) continue;
+        list = [];
+        values.set(key, list);
+      }
+      list.push(value);
+    }
+  }
+  return values;
+}
+
 function button(text: string, action: () => void): HTMLButtonElement {
   const element = document.createElement("button");
   element.type = "button";
@@ -57,51 +115,80 @@ function svg<K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<st
 
 export function mountBaseSurface(
   profile: string, context: SurfaceMountContext, deps: BaseMountDeps,
-  options: { view?: string | null; persistSelection?: boolean; container?: string | null } = {},
+  options: {
+    view?: string | null; persistSelection?: boolean; container?: string | null;
+    /// La Base è scritta dentro una nota (un blocco ```base```): i comandi
+    /// della vista riscrivono solo i file `.base`, quindi la barra la mostra
+    /// ma non la cambia.
+    sourceInNote?: boolean;
+  } = {},
 ): BufferedSurface {
   if (profile !== "base") throw new Error(`base surface profile ${profile} is not registered`);
   const root = document.createElement("div");
   root.className = "base-surface";
   root.dataset.format = BASE_FORMAT;
   root.dataset.theme = currentTheme();
-  const toolbar = document.createElement("div");
-  toolbar.className = "base-toolbar";
-  const views = document.createElement("select");
-  views.className = "base-views";
   // «Raggruppa»: una scelta della superficie, ricordata per vista come le
-  // corsie della bacheca; il file `.base` non si riscrive.
+  // corsie della bacheca; il file `.base` non si riscrive. Sta in «Ordina».
+  const groupControls = document.createElement("div");
+  groupControls.className = "base-grouping";
   const groupBy = document.createElement("select");
   groupBy.className = "base-group-by";
   const groupOrder = document.createElement("select");
   groupOrder.className = "base-group-order";
-  const search = document.createElement("input");
-  search.type = "search";
-  search.className = "base-search";
-  const newNote = button("+", () => void createNote());
-  const copyCsv = button(t("base.csv.copy"), () => void copyResults());
-  copyCsv.className = "base-csv-copy";
-  const downloadCsv = button(t("base.csv.export"), () => exportResults());
-  downloadCsv.className = "base-csv";
-  const status = document.createElement("div");
-  status.className = "base-status";
-  status.setAttribute("role", "status");
+  groupControls.append(groupBy, groupOrder);
+  const toolbar = mountBaseToolbar({
+    chooseView: (name) => chooseView(name),
+    write: (key, value) => void writeView(key, value),
+    search: () => { displayed = VISIBLE_STEP; forgetPick(); draw(); },
+    create: () => void createNote(),
+    templates: () => listTemplates(),
+    createFrom: (template) => void createFromTemplate(template),
+    more: () => [
+      { label: t("base.csv.copy"), run: () => void copyResults() },
+      { label: t("base.csv.export"), run: exportResults },
+    ],
+    grouping: groupControls,
+    openFile: (doc) => open(doc),
+  });
+  const { search, status } = toolbar;
   const body = document.createElement("div");
   body.className = "base-body";
-  toolbar.append(views, groupBy, groupOrder, search, newNote, copyCsv, downloadCsv, status);
-  root.append(toolbar, body);
+  root.append(toolbar.bar, toolbar.searchRow, toolbar.strip, body, toolbar.written);
   context.parent.replaceChildren(root);
 
   let destroyed = false;
   let readOnly = false;
   let source = "";
   let names: string[] = [];
+  let viewTypes: (string | null)[] = [];
+  // Una scrittura della barra in corso: la barra resta spenta finché il file
+  // riscritto non torna e il suo piano non è letto (`settle`).
+  let busy = false;
+  let creating = false;
+  let writing: WriteAttempt | null = null;
+  let settleTimer = 0;
+  // Gli annunci di «Annulla» che aspettano il loro evento (`UNDO_EVENT_GRACE_MS`).
+  const undoGraces = new Map<number, () => void>();
+  // L'esito dell'ultimo gesto che non ha scritto: resta nella riga di stato
+  // finché un gesto nuovo non lo sostituisce.
+  let notice: string | null = null;
   let activeView: string | null = options.view ?? null;
   let plan: BasePlan | null = null;
   let rows: BaseRow[] = [];
+  // Le proprietà lette per l'ultima ricarica, prima del filtro: le scelte e la
+  // specie di ogni proprietà non dipendono dal filtro di adesso, così un
+  // filtro che non trova niente si corregge con le stesse scelte.
+  let read: Map<string, unknown[]> = new Map();
+  // La specie di ogni proprietà, ricavata una volta per ricarica.
+  let kindCache = new Map<string, ValueKind>();
   let summaries: Record<string, BaseCellValue> = {};
   let displayed = VISIBLE_STEP;
   let error: string | null = null;
   let generation = 0;
+  // Il piano va riletto (il testo è cambiato) e nessuna ricarica l'ha ancora
+  // finito: vale anche per la ricarica che supera quella che l'aveva chiesto.
+  let replanWanted = false;
   let pending: AbortController | null = null;
   let tileCleanup: (() => void) | null = null;
   let writeEpoch = 0;
@@ -122,6 +209,12 @@ export function mountBaseSurface(
   // ci sono ancora: stessa nota, stessa colonna. Se ne va con Esc, con la
   // ricerca, cambiando vista, o quando una delle due non c'è più.
   let tableItems: readonly ({ group: string; count: number } | BaseRow)[] = [];
+  // Dove era scorsa la tabella: un ridisegno (il file riscritto da un gesto,
+  // una nota salvata) la rimette lì. Cambiare vista la riporta in cima.
+  let tableScroll = { top: 0, left: 0 };
+  // La vista è cambiata: il prossimo disegno non legge la tabella di prima,
+  // che è ancora lì, e parte dall'alto.
+  let scrollReset = false;
   let picked: { anchor: Cell; focus: Cell } | null = null;
   let pickedKeys: { anchor: CellKey; focus: CellKey } | null = null;
   let picking = false;
@@ -226,6 +319,7 @@ export function mountBaseSurface(
     return plan.columns.includes(choice) || choice === plan.group ? choice : plan.group;
   };
   const fillGroupBy = (): void => {
+    groupControls.hidden = !regroupable();
     groupBy.hidden = !regroupable();
     groupOrder.hidden = !regroupable() || grouping() === null;
     const order = orderOf();
@@ -267,25 +361,64 @@ export function mountBaseSurface(
     status.textContent = error;
     body.replaceChildren(button(labels().retry, () => void reload(true)));
   };
-  const fillOptions = (): void => {
-    views.replaceChildren(...names.map((name) => {
-      const option = document.createElement("option");
-      option.value = name;
-      option.textContent = name;
-      option.selected = name === activeView;
-      return option;
-    }));
+  // Chi può riscrivere il file `.base`, e se no perché.
+  const lock = () => readOnly ? "read_only" as const : options.sourceInNote ? "embedded" as const : null;
+  // Le proprietà che le righe hanno e i valori di ognuna: le scelte del filtro
+  // e delle colonne. Le raccoglie la barra quando le serve.
+  const rowProperties = (): string[] => [...read.keys()].slice(0, PROPERTY_LIMIT);
+  // I valori di una proprietà nelle righe, nella forma in cui si scrivono nel
+  // filtro (una data come 2026-03-18, un numero coi decimali della lingua lo
+  // mostra la barra).
+  const suggestions = (key: string): string[] => {
+    const values = new Set<string>();
+    for (const raw of read.get(key) ?? []) {
+      for (const { value } of propertyValues(raw)) {
+        values.add(String(value));
+        if (values.size >= SUGGESTION_LIMIT) return [...values];
+      }
+    }
+    return [...values].sort((a, b) => a.localeCompare(b));
   };
+  const kinds = (key: string): ValueKind => {
+    let kind = kindCache.get(key);
+    if (kind === undefined) {
+      kind = propertyKind(read.get(key) ?? []);
+      kindCache.set(key, kind);
+    }
+    return kind;
+  };
+  const pushModel = (): void => {
+    toolbar.update({
+      views: names.map((name, index) => ({ name, type: viewTypes[index] ?? null })),
+      active: activeView,
+      plan,
+      lock: lock(),
+      canCreate: !readOnly && !creating,
+      busy,
+      properties: rowProperties(),
+      suggestions,
+      kinds,
+      decimal: decimalOf(resolvedLanguage()),
+      containerFile: options.sourceInNote ? container : null,
+    });
+  };
+  const fillOptions = (): void => { pushModel(); };
   const reload = async (replan: boolean): Promise<void> => {
     const ticket = ++generation;
     pending?.abort();
     const request = new AbortController();
     pending = request;
     status.textContent = labels().loading;
+    const definition = source;
     try {
-      const definition = source;
-      if (replan || !plan) {
-        const nextNames = await parseBaseViews(deps, definition);
+      // Una ricarica che ne supera una col piano da rileggere (le righe
+      // cambiate subito dopo il testo nuovo, come il `document_changed` del
+      // file stesso) rilegge anche il piano: altrimenti la barra resterebbe
+      // sul piano del testo di prima.
+      if (replan) replanWanted = true;
+      if (replanWanted || !plan) {
+        const listed = await listBaseViews(deps, definition);
+        const nextNames = listed.names;
         if (!valid(ticket)) return;
         if (options.persistSelection === false && options.view && !nextNames.includes(options.view)) {
           throw new Error(`base: vista inesistente ${options.view}`);
@@ -300,8 +433,11 @@ export function mountBaseSurface(
         const nextPlan = await planBaseView(deps, definition, chosen);
         if (!valid(ticket)) return;
         names = nextNames;
+        viewTypes = listed.types;
         activeView = chosen;
         plan = nextPlan;
+        // Il piano del file riscritto è letto: la barra parte da lui.
+        planRead(definition);
         const savedGroup = await deps.viewState<unknown>(`base.group:${context.documentId}:${nextPlan.view}`);
         if (!valid(ticket)) return;
         if (savedGroup === null) groupChoices.delete(nextPlan.view);
@@ -320,6 +456,7 @@ export function mountBaseSurface(
         }
         fillOptions();
         fillGroupBy();
+        replanWanted = false;
       }
       const nextPlan = plan;
       if (!nextPlan) throw new Error("base: piano assente");
@@ -328,12 +465,16 @@ export function mountBaseSurface(
       const result = await deriveBaseRows(deps, definition, nextPlan.view, found.rows, Date.now(), container);
       if (!valid(ticket)) return;
       rows = result.rows;
+      read = readProperties(found.rows);
+      kindCache = new Map();
       summaries = result.summaries;
       displayed = VISIBLE_STEP;
       error = null;
       draw();
+      pushModel();
     } catch (failure) {
       if (!valid(ticket) || request.signal.aborted) return;
+      planRead(definition);
       presentError(failure);
     } finally {
       if (pending === request) pending = null;
@@ -346,7 +487,6 @@ export function mountBaseSurface(
     const view = plan.view;
     const epoch = writeEpoch;
     const definition = source;
-    newNote.disabled = true;
     try {
       const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key: column, expected, value }]);
       if (destroyed || readOnly || writeEpoch !== epoch || source !== definition || plan?.view !== view) return;
@@ -363,8 +503,150 @@ export function mountBaseSurface(
         draw();
         status.textContent = errorText(failure);
       } else presentError(failure);
-    } finally { newNote.disabled = readOnly; }
+    }
   };
+  // ---- I gesti della barra ------------------------------------------------
+  // Ogni gesto riscrive una sola chiave della vista, con la revisione del file
+  // che la superficie mostra. Il testo nuovo arriva come per ogni altra
+  // modifica (`syncDoc`), prima o dopo la risposta del comando: allora «Nel
+  // file .base» mostra le righe cambiate. La barra si riaccende quando ci sono
+  // tutte e tre le cose: la risposta, il testo nuovo e il suo piano.
+  const settle = (): void => {
+    window.clearTimeout(settleTimer);
+    settleTimer = 0;
+    writing = null;
+    if (!busy) return;
+    busy = false;
+    pushModel();
+  };
+  const maybeSettle = (): void => {
+    if (writing && writing.answered && writing.after !== null && writing.planned) settle();
+  };
+  // «Annulla» dopo un gesto: `vault.undo` disfa l'ultima operazione del
+  // vault, come dalla palette; anche la sua riscrittura si annuncia.
+  const undoWrite = async (): Promise<void> => {
+    const withdraw = deps.documentWrites?.expect(context.documentId);
+    try {
+      const outcome = await deps.invokeCommand(COMMANDS.undo);
+      if (outcome?.notify) notify(outcome.notify, "info");
+      if (withdraw) {
+        if (destroyed) withdraw();
+        else {
+          const timer = window.setTimeout(() => { undoGraces.delete(timer); withdraw(); }, UNDO_EVENT_GRACE_MS);
+          undoGraces.set(timer, withdraw);
+        }
+      }
+    } catch (failure) {
+      withdraw?.();
+      notify(t("commands.undo_failed", { reason: errorText(failure) }), "guasto");
+    }
+  };
+  const writeView = async (key: BaseViewKey, value: unknown): Promise<void> => {
+    if (!plan || lock() !== null || busy || destroyed) return;
+    const view = plan.view;
+    const attempt: WriteAttempt = { before: source, after: null, answered: false, planned: false };
+    writing = attempt;
+    busy = true;
+    notice = null;
+    pushModel();
+    const writes = deps.documentWrites;
+    let withdraw: (() => void) | undefined;
+    try {
+      // Il `.base` aperto anche come testo, con modifiche non ancora sul
+      // disco: prima si salvano. Se restano non salvate il gesto si ferma,
+      // perché scriverebbe sopra un file che non è quello sullo schermo.
+      if (writes) {
+        const unsaved = await writes.flush();
+        if (destroyed || writing !== attempt) return;
+        if (unsaved.includes(context.documentId)) {
+          notice = t("base.write.unsaved");
+          status.textContent = notice;
+          settle();
+          return;
+        }
+      }
+      // Annunciata prima del comando: il suo evento arriva mentre scrive.
+      withdraw = writes?.expect(context.documentId);
+      const written = await setBaseViewKey(deps, context.documentId, view, key, value, deps.revision?.() ?? null);
+      // Nessuna revisione: il file non è cambiato (o l'host non lo dice), e
+      // nessun evento consumerà l'annuncio.
+      if (written.revision === null) withdraw?.();
+      if (written.notify) {
+        notify(written.notify, "info", written.undo
+          ? { label: t("app.undo"), hint: written.undo.label, run: () => void undoWrite() }
+          : undefined);
+      }
+      if (destroyed || writing !== attempt) return;
+      // Niente scritto, niente testo nuovo da aspettare: la barra si riaccende.
+      if (written.revision === null && written.undo === null) { settle(); return; }
+      attempt.answered = true;
+      maybeSettle();
+      // Un host che non rimanda il testo non lascia la barra spenta: dopo un
+      // po' si riaccende, e il gesto dopo, con la revisione vecchia, andrà in
+      // conflitto invece di scrivere sopra.
+      if (writing === attempt) settleTimer = window.setTimeout(() => { settleTimer = 0; settle(); }, WRITE_SETTLE_MS);
+    } catch (failure) {
+      withdraw?.();
+      if (destroyed || writing !== attempt) return;
+      // Niente è stato scritto: il comando ha rifiutato il valore, o il file
+      // è cambiato altrove. La vista resta quella del file com'è.
+      notice = isErrorKind(failure, "conflict") ? t("base.write.conflict") : t("base.write.rejected", { reason: errorText(failure) });
+      status.textContent = notice;
+      settle();
+    }
+  };
+  // Il testo del file è cambiato: se è la risposta a un gesto, le righe
+  // scritte si mostrano.
+  const sourceArrived = (next: string): void => {
+    if (!writing || writing.after !== null) return;
+    writing.after = next;
+    toolbar.showWritten(writtenLines(writing.before, next));
+  };
+  // Il piano del testo `definition` è letto: se è quello del gesto, la barra
+  // può ripartire da lui.
+  const planRead = (definition: string): void => {
+    if (!writing || writing.after !== definition) return;
+    writing.planned = true;
+    maybeSettle();
+  };
+  function chooseView(name: string): void {
+    if (name === activeView || !names.includes(name)) return;
+    activeView = name;
+    plan = null;
+    tableScroll = { top: 0, left: 0 };
+    scrollReset = true;
+    forgetPick();
+    notice = null;
+    toolbar.showWritten(null);
+    const chosen = activeView;
+    if (options.persistSelection !== false) {
+      persistQueue = persistQueue.then(() => destroyed ? undefined : persistBaseView(deps, context.documentId, chosen)).catch(presentError);
+    }
+    pushModel();
+    void reload(true);
+  }
+  async function listTemplates(): Promise<{ path: string; label: string }[]> {
+    const response = await deps.queryIndex({
+      kind: "documents",
+      matching: { any: [{ all: [{ negated: false, predicate: { kind: "folder", path: TEMPLATES_FOLDER, descendants: true } }] }] },
+      sort: null, select: { kind: "keys", keys: [] }, page: { offset: 0, limit: TEMPLATE_LIMIT }, excerpts: "omit",
+    });
+    if (response.kind !== "documents") throw new Error("base: risposta modelli fuori tema");
+    return response.value.items
+      .filter((item) => typeof item.doc === "string" && /\.md$/i.test(item.doc))
+      .map((item) => ({ path: item.doc, label: item.doc.slice(item.doc.lastIndexOf("/") + 1).replace(/\.md$/i, "") }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+  async function createFromTemplate(template: string): Promise<void> {
+    if (readOnly || creating) return;
+    creating = true;
+    pushModel();
+    try {
+      await deps.invokeCommand(TEMPLATE_COMMAND, { template });
+      if (!destroyed) await reload(true);
+    } catch (failure) { if (!destroyed) presentError(failure); }
+    finally { creating = false; if (!destroyed) pushModel(); }
+  }
   const editable = (row: BaseRow, column: string): HTMLElement => {
     const field = document.createElement("span");
     field.className = "base-cell";
@@ -421,8 +703,12 @@ export function mountBaseSurface(
     tableItems = items;
     restorePick(items);
     const columns = (plan?.columns.length ?? 0) + 1;
-    const renderWindow = () => {
-      const range = uniformRowRange(items.length, viewport.scrollTop, viewport.clientHeight || TABLE_VIEWPORT_HEIGHT, TABLE_ROW_HEIGHT);
+    const renderWindow = (top = viewport.scrollTop) => {
+      // La finestra è alta quanto il suo contenuto fino al tetto: al primo
+      // disegno la tabella è ancora vuota e `clientHeight` ne direbbe solo
+      // l'intestazione, così le righe sotto le prime non comparirebbero mai
+      // senza uno scorrimento. Le righe da disegnare sono quelle del tetto.
+      const range = uniformRowRange(items.length, top, Math.max(viewport.clientHeight, TABLE_VIEWPORT_HEIGHT), TABLE_ROW_HEIGHT);
       if (!range) { tableBody.replaceChildren(); return; }
       const fragment = document.createDocumentFragment();
       if (range.start) fragment.append(spacer(range.start * TABLE_ROW_HEIGHT));
@@ -570,10 +856,15 @@ export function mountBaseSurface(
       pick({ anchor: picked.anchor, focus: next });
       reveal(next.row);
     });
-    viewport.addEventListener("scroll", renderWindow);
+    viewport.addEventListener("scroll", () => renderWindow());
     viewport.append(table);
     body.append(viewport);
-    renderWindow();
+    // Il primo disegno parte da dove la tabella di prima era scorsa: le righe
+    // di quel punto, poi lo scorrimento (che il browser ferma alla fine).
+    const { top, left } = tableScroll;
+    renderWindow(top);
+    viewport.scrollTop = top;
+    viewport.scrollLeft = left;
   };
   const drawCards = (page: BaseRow[], list: boolean): void => {
     const key = grouping();
@@ -841,6 +1132,10 @@ export function mountBaseSurface(
   const draw = (): void => {
     tileCleanup?.();
     tileCleanup = null;
+    const shown = body.querySelector<HTMLElement>(".base-table-viewport");
+    if (scrollReset) tableScroll = { top: 0, left: 0 };
+    else if (shown) tableScroll = { top: shown.scrollTop, left: shown.scrollLeft };
+    scrollReset = false;
     body.replaceChildren();
     // Le righe di prima non ci sono più: la scelta torna, se le sue celle ci
     // sono ancora, quando la tabella nuova si disegna (`restorePick`).
@@ -872,12 +1167,13 @@ export function mountBaseSurface(
       footer.className = "base-summaries";
       for (const [key, value] of Object.entries(summaries)) { const label = document.createElement("dt"); label.textContent = key; const amount = document.createElement("dd"); amount.textContent = cellText(value); footer.append(label, amount); }
       body.append(footer);
-      status.textContent = t("search.count_limited", { shown: matches.length, total: rows.length });
+      status.textContent = notice ?? t("search.count_limited", { shown: matches.length, total: rows.length });
     } catch (failure) { presentError(failure); }
   };
   async function createNote(lane?: string): Promise<void> {
-    if (readOnly) return;
-    newNote.disabled = true;
+    if (readOnly || creating) return;
+    creating = true;
+    pushModel();
     try {
       const defaults: Record<string, unknown> = Object.assign(Object.create(null), plan?.createDefaults ?? {});
       if (lane !== undefined && plan?.group) {
@@ -889,7 +1185,7 @@ export function mountBaseSurface(
       if (!destroyed) await reload(true);
     }
     catch (failure) { presentError(failure); }
-    finally { newNote.disabled = readOnly; }
+    finally { creating = false; if (!destroyed) pushModel(); }
   }
   async function copyResults(): Promise<void> {
     try { await writeClipboardText(baseRowsToCsv(filteredRows(), plan?.columns ?? [])); status.textContent = t("base.csv.copied"); }
@@ -935,29 +1231,14 @@ export function mountBaseSurface(
     onEvent("overflow", memberChanged),
   ];
   const relabel = () => {
-    views.setAttribute("aria-label", labels().view);
     groupBy.setAttribute("aria-label", t("base.group.by"));
     groupOrder.setAttribute("aria-label", t("base.group.order"));
     if (plan) fillGroupBy();
-    search.setAttribute("aria-label", labels().search);
-    search.placeholder = labels().search;
-    newNote.setAttribute("aria-label", t("explorer.new.hint"));
-    copyCsv.textContent = t("base.csv.copy");
-    downloadCsv.textContent = t("base.csv.export");
+    toolbar.relabel();
     if (!error && rows.length) draw();
   };
   const stopLanguage = onLanguage(relabel);
   relabel();
-  views.addEventListener("change", () => {
-    activeView = views.value;
-    plan = null;
-    forgetPick();
-    const chosen = activeView;
-    if (options.persistSelection !== false) {
-      persistQueue = persistQueue.then(() => destroyed ? undefined : persistBaseView(deps, context.documentId, chosen)).catch(presentError);
-    }
-    void reload(true);
-  });
   groupBy.addEventListener("change", () => {
     const view = plan?.view;
     if (!view) return;
@@ -975,7 +1256,6 @@ export function mountBaseSurface(
     persistQueue = persistQueue.then(() => destroyed ? undefined : deps.setViewState(`base.group-order:${context.documentId}:${view}`, order)).catch(presentError);
     draw();
   });
-  search.addEventListener("input", () => { displayed = VISIBLE_STEP; forgetPick(); draw(); });
 
   // Il tasto destro: la riga o la scheda sotto il puntatore (la sua nota), la
   // cella (il suo valore), l'intestazione (la sua colonna), o la vista intera.
@@ -983,7 +1263,7 @@ export function mountBaseSurface(
   const copy = (text: string): void => {
     void writeClipboardText(text).then(() => { status.textContent = t("editor_menu.copied"); }, presentError);
   };
-  const searchFor = (text: string): void => { search.value = text; displayed = VISIBLE_STEP; draw(); search.focus(); };
+  const searchFor = (text: string): void => { search.value = text; displayed = VISIBLE_STEP; draw(); toolbar.openSearch(); };
   const viewItems = (): SurfaceMenuItem[] => {
     const items: SurfaceMenuItem[] = [];
     if (names.length > 1) {
@@ -994,7 +1274,7 @@ export function mountBaseSurface(
           id: `base.view.${name}`,
           label: name,
           checked: name === activeView,
-          run: () => { if (name !== activeView) { views.value = name; views.dispatchEvent(new Event("change")); } },
+          run: () => chooseView(name),
         })),
       });
     }
@@ -1067,24 +1347,31 @@ export function mountBaseSurface(
     family: "structured", profile: "base", surfaceId: context.paneId, modes,
     setMode(mode: string) { if (!modes.some((candidate) => candidate.id === mode)) throw new RangeError(`surface mode ${mode} is not supported`); root.dataset.surfaceMode = mode; },
     buffer: {
-      setDoc(text: string) { source = text; void reload(true); },
-      syncDoc(update: DocumentUpdate | string) { const next = typeof update === "string" ? update : update.text; if (next !== source) { source = next; void reload(true); } },
+      setDoc(text: string) { sourceArrived(text); source = text; void reload(true); },
+      syncDoc(update: DocumentUpdate | string) { const next = typeof update === "string" ? update : update.text; if (next !== source) { sourceArrived(next); source = next; void reload(true); } },
       getDoc() { return source; },
     },
-    focus() { search.focus(); },
+    focus() {
+      if (!toolbar.searchRow.hidden) { search.focus(); return; }
+      (toolbar.bar.querySelector<HTMLElement>('button[tabindex="0"]') ?? toolbar.bar.querySelector<HTMLElement>("button"))?.focus();
+    },
     contextMenu: menuAt,
     cellSelection,
     setReadOnly(next: boolean) {
       if (readOnly === next) return;
-      if (next) writeEpoch++;
+      if (next) { writeEpoch++; toolbar.closePopover(); }
       readOnly = next;
       root.dataset.readOnly = String(next);
-      newNote.disabled = next;
+      pushModel();
       draw();
     },
     setTheme(theme: Theme) { root.dataset.theme = theme; },
     destroy() {
       destroyed = true; generation++; pending?.abort(); tileCleanup?.(); cellListeners.clear();
+      window.clearTimeout(settleTimer);
+      for (const [timer, withdraw] of undoGraces) { window.clearTimeout(timer); withdraw(); }
+      undoGraces.clear();
+      toolbar.destroy();
       for (const stop of stopEvents) stop();
       for (const [url, timer] of downloads) { window.clearTimeout(timer); URL.revokeObjectURL(url); }
       downloads.clear();
@@ -1093,43 +1380,58 @@ export function mountBaseSurface(
   };
 }
 
-/** Native fenced and file-backed Base embeds use the same surface and data ports. */
-export function registerBaseRenderer(onOpenDocument: (doc: string) => void | Promise<void>): void {
-  registerCustomRenderer(BASE_RENDERER_NS, (host, payload, _onAction, context) => {
-    const parsed = parseBaseEmbed({ node: "custom", ns: BASE_RENDERER_NS, payload, fallback: [] });
-    if (!parsed) return;
-    // Una base incorporata deriva `file.*` dalla nota che la contiene, non dal
-    // suo path `.base`: la nota la dice chi monta la resa.
-    const embed = { ...parsed, container: context.container ?? parsed.container };
-    let disposed = false;
-    // Il vault in cui la base è stata incorporata: le sue domande lo nominano
-    // anche se, nel frattempo, ne è stato aperto un altro (FUB-001).
-    const vault = openVaultRoot();
-    const surface = mountBaseSurface("base", {
-      paneId: `base:embed:${crypto.randomUUID()}`,
-      documentId: embed.base ?? embed.container ?? "",
-      parent: host,
-    }, {
-      queryIndex: (query) => api.queryIndex(query, ...vaultArg(vault)),
-      invokeCommand: api.invokeCommand,
-      viewState: api.viewState,
-      setViewState: api.setViewState,
-      onOpenDocument,
-    }, { view: embed.view, persistSelection: false, container: embed.container ?? embed.base ?? null });
-    const source = embed.source === undefined
-      ? api.readDocument(embed.base!, openVaultRoot()).then((document) => document.text)
-      : Promise.resolve(embed.source);
-    void source.then((text) => {
-      if (!disposed) surface.buffer.setDoc(text);
+/// Una Base incorporata in una nota, da un blocco ```` ```base ```` o da un
+/// `![[Nome.base]]`: la stessa superficie e le stesse porte di un `.base`
+/// aperto. La monta la resa registrata da `renderer.ts` quando questo modulo
+/// è arrivato; `vault` è quello in cui la resa è partita (FUB-001). Torna come
+/// smontarla, o niente se il payload non è una Base.
+export function mountBaseEmbed(host: HTMLElement, payload: unknown, context: CustomRenderContext, vault: string | undefined, onOpenDocument: (doc: string) => void | Promise<void>, documentWrites?: BaseDocumentWrites): (() => void) | undefined {
+  const parsed = parseBaseEmbed({ node: "custom", ns: BASE_RENDERER_NS, payload, fallback: [] });
+  if (!parsed) return;
+  // Una base incorporata deriva `file.*` dalla nota che la contiene, non dal
+  // suo path `.base`: la nota la dice chi monta la resa.
+  const embed = { ...parsed, container: context.container ?? parsed.container };
+  let disposed = false;
+  // La revisione del file `.base` letto: i gesti della barra la confrontano.
+  let revision: string | null = null;
+  const surface = mountBaseSurface("base", {
+    paneId: `base:embed:${crypto.randomUUID()}`,
+    documentId: embed.base ?? embed.container ?? "",
+    parent: host,
+  }, {
+    queryIndex: (query) => api.queryIndex(query, ...vaultArg(vault)),
+    invokeCommand: (command, args, mode) => api.invokeCommand(command, args, mode, ...vaultArg(vault)),
+    viewState: api.viewState,
+    setViewState: api.setViewState,
+    onOpenDocument,
+    revision: () => revision,
+    documentWrites,
+  }, { view: embed.view, persistSelection: false, container: embed.container ?? embed.base ?? null, sourceInNote: embed.source !== undefined });
+  if (embed.source !== undefined) {
+    surface.buffer.setDoc(embed.source);
+    return () => { disposed = true; surface.destroy(); };
+  }
+  // Una Base da file si rilegge quando il file cambia: un gesto della sua
+  // barra, un'altra finestra, il sorgente. Una lettura vecchia che arriva
+  // dopo una nuova non la sovrascrive.
+  let reading = 0;
+  let loaded = false;
+  const read = (): void => {
+    const ticket = ++reading;
+    api.readDocument(embed.base!, vault).then((document) => {
+      if (disposed || ticket !== reading) return;
+      revision = document.revision;
+      if (!loaded) { loaded = true; surface.buffer.setDoc(document.text); }
+      else surface.buffer.syncDoc(document.text);
     }, (error: unknown) => {
-      if (disposed) return;
+      if (disposed || ticket !== reading || loaded) return;
+      disposed = true;
+      stopChanges();
       surface.destroy();
       host.textContent = errorText(error);
     });
-    return () => { disposed = true; surface.destroy(); };
-  }, (payload) => {
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
-    const fields = payload as Record<string, unknown>;
-    return typeof fields.source === "string" || typeof fields.base === "string";
-  });
+  };
+  const stopChanges = onEvent("document_changed", (event) => { if (event.id === embed.base) read(); });
+  read();
+  return () => { disposed = true; stopChanges(); surface.destroy(); };
 }
