@@ -28,6 +28,10 @@
 | lo schema delle operazioni della lavagna, i problemi di forma (`validate`) | `crates/fub-canvas-core/src/spec.rs` e `docs/reference/canvas-schema.md` |
 | la lettura di Mermaid e delle scalette (`from_mermaid`, `from_outline`) e la loro disposizione | `crates/fub-canvas-core/src/import/`, `src/ops/import.rs` e `docs/reference/canvas-import.md` |
 | il controllo di una lista prima di scriverla (`check`) e il suo riassunto | `crates/fub-canvas-core/src/check.rs`, `summary.rs` e `docs/reference/canvas-check.md` |
+| le misure e i posti delle schede (`born_size`, `auto_place`, `place_near`, `nearest_sides`, `group_rect`) e le disposizioni (allinea, distribuisci, griglia, riga, colonna, albero) | `crates/fub-canvas-core/src/layout.rs` e `src/layout/arrange.rs`; le regole in `docs/reference/canvas-code.md` («Misure e posti») |
+| l'anteprima di una lavagna (il disegno SVG, poi il PNG) | `crates/fub-canvas-core/src/preview.rs`; il PNG e il comando `canvas.preview` in `crates/fub-features/src/lavagna/preview.rs`; `docs/reference/canvas-operations.md` |
+| i comandi della lavagna `canvas.apply`, `canvas.create`, `canvas.read`, `canvas.check`, `canvas.guide`, `canvas.preview` | `crates/fub-features/src/lavagna.rs` e `crates/fub-features/src/lavagna/` (un file per comando; `prefill.rs` le misure dei file, `guida.md` la guida); `docs/reference/canvas-operations.md` |
+| gli strumenti MCP della lavagna (`fub_canvas_guide`, `fub_canvas_read`, `fub_canvas_create`, `fub_canvas_apply`) | `crates/fub-cli/src/mcp/tools.rs` e `docs/reference/mcp-server.md` |
 | la proiezione dei documenti ricchi | `docs/reference/rich-projection.md` |
 | il protocollo della sessione live | `docs/reference/live-session.md` |
 | le porte IPC del motore del disegno | `docs/reference/drawing-ipc.md` |
