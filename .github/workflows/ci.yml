@@ -218,11 +218,16 @@ jobs:
         with:
           command: check
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
-      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          tool: cargo-sbom
-      - name: Genera l'SBOM
-        run: cargo sbom --output-format spdx_json_2_3 > fub-sbom.spdx.json
+          node-version: 22.12.0
+      # La SBOM nasce da `cargo metadata --locked` e dai checksum del lock, senza
+      # uno strumento scaricato, e lo script la confronta con `Cargo.lock` nei
+      # due versi prima di scriverla: una SBOM che perde un pacchetto fallisce.
+      - name: Genera l'SBOM e la confronta con Cargo.lock
+        run: |
+          node .github/scripts/sbom.mjs --self-test
+          node .github/scripts/sbom.mjs --out fub-sbom.spdx.json
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: sbom-spdx

@@ -376,6 +376,8 @@ appena qualcuno inserisce un item nel mezzo.
 - La cache Rust salva solo da `main` (budget di 10 GB); i job che possono
   riutilizzarla leggono la test cache di Linux con `shared-key: test` e non la
   risalvano.
+- Il job supply chain scrive la SBOM Rust con `.github/scripts/sbom.mjs`, da
+  `cargo metadata`, e fallisce se non corrisponde a `Cargo.lock`.
 - Il gate di release è `.github/scripts/check-release-gate.mjs`: aggiungere o
   rinominare un job richiede di aggiornarlo.
 - Un push fa girare la CI solo su `main`; una PR la fa girare a ogni push, e un

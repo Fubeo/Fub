@@ -441,7 +441,7 @@ file.
 - sorgenti delle dipendenze limitate dalla policy;
 - licenze controllate;
 - advisory e crate yanked bloccano la CI;
-- SBOM generata;
+- SBOM generata a ogni corsa e confrontata con `Cargo.lock` (`sbom.mjs`);
 - lockfile committati;
 - artefatti generati verificati;
 - dipendenze duplicate sensibili controllate.
