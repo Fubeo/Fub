@@ -27,9 +27,26 @@ Scrittura usa l'id di modalità `live_preview` e il ruolo `PaneMode::LivePreview
 di sempre: per il riquadro, il layout salvato e i comandi è la stessa voce che
 prima si chiamava Live. La vecchia modalità **Blocchi** non è più una voce: i
 [blocchi](editor-blocks.md) stanno dentro Scrittura. Un riquadro salvato in
-`blocks` da un Fub di prima si apre in Scrittura, e il layout non si riscrive;
-anche il comando `shell.mode.blocks` (Mod+Shift+B) porta a Scrittura, e c'è
-soltanto sulle note.
+`blocks` da un Fub di prima si apre in Scrittura, e il layout non si riscrive.
+
+Chi aveva scelto Live o Blocchi non deve accorgersi di niente:
+
+- **La modalità iniziale** (`editor.default-mode`, nelle Impostazioni, gruppo
+  Editor) offre Scrittura, Sorgente e Lettura. Il valore `blocks`, scritto da
+  un Fub di prima, resta valido: il file delle impostazioni non si riscrive, la
+  riga resta «cambiata da te», le note si aprono in Scrittura e il controllo
+  accende Scrittura. Nello schema `blocks` è l'ultima scelta, con l'etichetta di
+  Scrittura, e il pannello mostra una sola scelta per etichetta
+  (`visibleChoices` in `panels/settings-model.ts`). Un valore sconosciuto vale
+  il predefinito, Scrittura, come per ogni scelta.
+- **I comandi** tengono i loro id. `shell.mode.live` si chiama «Passa a
+  Scrittura»; `shell.mode.blocks` si chiama «Passa a Scrittura (era Blocchi)»,
+  porta anche lui a Scrittura e c'è soltanto sulle note. Le scorciatoie
+  restano dove sono: Mod+Shift+B di fabbrica, o quella che la persona aveva dato
+  ai Blocchi (`keys.shell.mode.blocks`).
+- I comandi delle modalità sono della finestra: un agente via MCP non li vede
+  in `fub_commands`, e `fub_invoke` li rifiuta allo stesso modo con l'id vecchio
+  e con quello nuovo.
 
 Quanto si vede dei segni lo dice `editor.live-reveal` (`mai` di serie), anche
 coi blocchi: col cursore dentro un `**grassetto**` i segni compaiono solo se
@@ -123,6 +140,8 @@ Non tutto diventa un link:
 - `apps/client/src/editors/core/surface-modes.ts`: `modeById`, che riconosce
   anche gli id di prima (`formerIds` di `SurfaceMode`);
 - `apps/client/src/state/document-controller.ts` e `state/mode-menu.ts`: la
-  modalità del riquadro e il commutatore della banda;
+  modalità del riquadro, i comandi `shell.mode.*` e il commutatore della banda;
+- `crates/fub-host/src/settings.rs`: `editor.default-mode` e le sue scelte;
+  `apps/client/src/panels/settings-model.ts`: le scelte che il pannello mostra;
 - `apps/client/src/editors/core/presence.ts`: i livelli di presenza;
 - `apps/client/bench/scene.mjs`: la scena `scrittura-a-riposo`.
