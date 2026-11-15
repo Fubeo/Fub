@@ -2837,3 +2837,11 @@ La più recente in cima: data · piano · decisione · perché.
     Impostazioni, si chiude anche la pagina.
   - Il riquadro di un hook fuori dal flusso si riconosce dalla geometria, non da
     `getComputedStyle`, che in happy-dom esauriva la memoria.
+- 2026-11-15 · manutenzione · Con main nel ramo (N6 fino a #367),
+  `docs/reference/permissions-and-security.md` arrivava a 586 righe, oltre la
+  soglia di 550. Installazione da cartella, tema collegato e id già installato
+  sono passati nella pagina nuova `docs/reference/theme-folder-security.md`, con i
+  rimandi da permissions-and-security, `theme-ipc.md` e `map/pagine.md`.
+  `run.mjs` del banco WebView tiene le opzioni delle due parti: `--gc` e
+  `--x11/--wayland`. Al posto della pausa fissa di 3 s c'è `closeSession`, che
+  aspetta la fine dell'app.
