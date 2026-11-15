@@ -5766,7 +5766,7 @@ avvio la crea, e il vault non cambia).
 Fatto quando: il job della release produce il `.flatpak`; T23 lo installa
 e fa i suoi tre compiti.
 Prova: la corsa a secco della release; il giro a mano di T23.
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15 per manifest, .desktop, metainfo e docs (coder/pa-t51 da main); il job di release.yml lo scrive l'orchestratore
 
 ## T52 · «Segnala un problema»
 
