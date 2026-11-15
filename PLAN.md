@@ -1272,7 +1272,7 @@ Fatto quando: `tasks-query.test.ts` per ogni riga capita e per quella
 sconosciuta; un test DOM del recinto e della spunta; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/tasks-query.test.ts
-Stato: [~] feat/vista-compiti @ dbf49b215, rimandato al coder (2026-11-14) dopo la revisione `code-review medium` e le foto: i compiti filtrati dal provider con una porta generica (niente letture e parse di 50 note nel client), la regola 📅 una sola in `fub-abi/rules` con la gemella in `rules/mirrored.ts`, il recinto dichiarato dalla SyntaxForm, la spunta atomica (oggi può spuntare un altro compito se la nota cambia), l'aggiornamento con gli eventi dell'indice, il recinto senza filtri utili trattato come vuoto, `path includes` letterale, `sort by due`, pagina e codice allineati, il titolo della nota sotto i compiti, niente data doppia nell'ispettore, messaggio umano per la riga non capita · Tocca allargato a tasks.rs, fub-search, fub-abi/rules, mirrored.ts e la spunta nell'host · 2026-11-14 secondo giro @ ab6263378: la seconda revisione trova 10 punti (wikilink tolti dal testo del compito, Live/Lettura/regola che leggono righe diverse, pastiglie che spezzano link e codice, colori della scadenza diversi fra lista e recinto, recinto che non torna dopo spegni/riaccendi, letture di tutte le note con compiti fatti, limite dopo il taglio, revisione controllata tardi): rimandato al coder
+Stato: [x] fatto · in main (#363, 99e633e9b, 2026-11-14) dopo le correzioni della revisione · prima: feat/vista-compiti @ dbf49b215, rimandato al coder (2026-11-14) dopo la revisione `code-review medium` e le foto: i compiti filtrati dal provider con una porta generica (niente letture e parse di 50 note nel client), la regola 📅 una sola in `fub-abi/rules` con la gemella in `rules/mirrored.ts`, il recinto dichiarato dalla SyntaxForm, la spunta atomica (oggi può spuntare un altro compito se la nota cambia), l'aggiornamento con gli eventi dell'indice, il recinto senza filtri utili trattato come vuoto, `path includes` letterale, `sort by due`, pagina e codice allineati, il titolo della nota sotto i compiti, niente data doppia nell'ispettore, messaggio umano per la riga non capita · Tocca allargato a tasks.rs, fub-search, fub-abi/rules, mirrored.ts e la spunta nell'host · 2026-11-14 secondo giro @ ab6263378: la seconda revisione trova 10 punti (wikilink tolti dal testo del compito, Live/Lettura/regola che leggono righe diverse, pastiglie che spezzano link e codice, colori della scadenza diversi fra lista e recinto, recinto che non torna dopo spegni/riaccendi, letture di tutte le note con compiti fatti, limite dopo il taglio, revisione controllata tardi): rimandato al coder
 
 ## T20 · Sbirciata, Alt clic, link come scheda
 
@@ -1596,7 +1596,7 @@ Fatto quando: i tre casi dell'incolla (su selezione, su riga vuota, dentro
 testo) hanno un test; un test DOM della scelta.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/paste.test.ts
-Stato: [~] PR #360 (feat/incolla-indirizzo) · la scelta sotto l'indirizzo è una barra da tastiera (un punto di Tab, frecce, Invio/Spazio, Esc tiene Link); Tab nella scelta chiude col Link
+Stato: [x] fatto · in main (#360, bb68a4036, 2026-11-14) · la scelta sotto l'indirizzo è una barra da tastiera (un punto di Tab, frecce, Invio/Spazio, Esc tiene Link); Tab nella scelta chiude col Link
 
 ## T26a · La regola al tocco
 
@@ -2584,7 +2584,7 @@ adattatori (Markdown, documento, foglio); una nota con dieci tabelle con la
 battuta nel budget; il confine verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/tabella src/editors/grid src/editors/text/profiles/markdown/table-grid.test.ts
-Stato: [~] PR #361 (feat/tabella-gesti-foglio @ f56bc6da8) · nel documento 25 casi della prova comune passano, 7 assenti col motivo (Ctrl+freccia salta di parola; carattere, F2+Esc e Tab che conferma non hanno una cella da aprire; niente ordinamento); i gesti che il testo usa già (Invio, Ctrl+R, Ctrl+«+», Maiusc+Spazio) valgono solo con celle scelte; Esc toglie il taglio, poi gli intervalli, poi le celle; la barra del dito ha Tab, Invio e «+ riga» (keydown vero, niente azioni nuove); baseline delle tabelle dal runner · 2026-11-14: CI completa verde, ma la revisione `code-review medium` di #361 trova 10 punti (Canc che svuota celle scelte prima dopo un Ctrl+clic, il segno del taglio che non segue i cambi da fuori, fillCopy che copia la testata, la tabella riscritta intera per una cella, le maniglie al tocco, reflow per riquadro, geometria duplicata): rimandato al coder, niente merge
+Stato: [x] fatto · in main (#361, e4a8e8e7c, 2026-11-14) con i 10 punti della revisione corretti · nel documento 25 casi della prova comune passano, 7 assenti col motivo (Ctrl+freccia salta di parola; carattere, F2+Esc e Tab che conferma non hanno una cella da aprire; niente ordinamento); i gesti che il testo usa già (Invio, Ctrl+R, Ctrl+«+», Maiusc+Spazio) valgono solo con celle scelte; Esc toglie il taglio, poi gli intervalli, poi le celle; la barra del dito ha Tab, Invio e «+ riga» (keydown vero, niente azioni nuove); baseline delle tabelle dal runner · 2026-11-14: CI completa verde, ma la revisione `code-review medium` di #361 trova 10 punti (Canc che svuota celle scelte prima dopo un Ctrl+clic, il segno del taglio che non segue i cambi da fuori, fillCopy che copia la testata, la tabella riscritta intera per una cella, le maniglie al tocco, reflow per riquadro, geometria duplicata): rimandato al coder, niente merge
 
 ## T51 · I gesti nuovi, per tabella e foglio
 
@@ -3624,7 +3624,7 @@ ed elenco; un test di «Copia come» da tastiera; il moto a fotogrammi fermi
 in `bench/motion.mjs`; il contrasto delle scorciatoie misurato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/ui/menu.test.ts src/ui/menu-budget.test.ts src/panels/editor-menu.test.ts
-Stato: [~] PR #358 (feat/menu-una-lingua) · il tocco di 200 ms prima del gesto (Esc annulla; subito con il movimento ridotto); si unisce prima di T3
+Stato: [x] fatto · in main (#358, d4d349b23, 2026-11-14) · il tocco di 200 ms prima del gesto (Esc annulla; subito con il movimento ridotto); si unisce prima di T3
 
 ## T82 · Lo spazio comandi nella stessa lingua
 
