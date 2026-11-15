@@ -2372,9 +2372,10 @@ function keepConfirmGesture(el: HTMLInputElement): void {
     el.dispatchEvent(new Event("change", { bubbles: true }));
   };
   el.addEventListener("blur", settle);
-  el.addEventListener("keydown", (event) => {
-    // Dopo il gesto: se il browser manda il suo `change` su Invio, arriva prima.
-    if (event.key === "Enter") setTimeout(settle, 0);
+  // Al rilascio di Invio e non alla pressione: il `change` che il browser
+  // manda su Invio, quando lo manda, è già arrivato.
+  el.addEventListener("keyup", (event) => {
+    if (event.key === "Enter") settle();
   });
 }
 

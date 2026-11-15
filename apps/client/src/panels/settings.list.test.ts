@@ -561,6 +561,7 @@ describe("la bozza di un campo sopravvive al ridisegno (#401)", () => {
     settingChanged(OTHER);
     await vi.waitFor(() => expect(control(DIARY)).not.toBe(before));
     control(DIARY).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    control(DIARY).dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true, cancelable: true }));
     await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(DIARY, "Diario/2026"));
     expect(fake.setSetting).toHaveBeenCalledTimes(1);
   });
