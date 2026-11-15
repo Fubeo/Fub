@@ -1,0 +1,113 @@
+{
+  "about": "Sulla pagina di un PDF (N6 T19): i punti sono punti PDF dall'angolo in alto a sinistra della pagina 3, e l'ancora è `page` con la misura data. Il tratto va nel livello della scheda; dove la pagina sta nella scheda lo sa la resa.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p1",
+        "type": "file",
+        "file": "Corsi/dispensa.pdf",
+        "x": 0,
+        "y": 0,
+        "width": 360,
+        "height": 509
+      },
+      {
+        "id": "f1",
+        "type": "file",
+        "file": "Corsi/voti.xlsx",
+        "x": 400,
+        "y": 0,
+        "width": 640,
+        "height": 420
+      },
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 600,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": {
+        "card": "p1",
+        "page": 3,
+        "page_size": [
+          595,
+          842
+        ]
+      },
+      "points": [
+        [
+          72,
+          100
+        ],
+        [
+          300,
+          100
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "p1",
+          "type": "file",
+          "x": 0,
+          "y": 0,
+          "width": 360,
+          "height": 509,
+          "file": "Corsi/dispensa.pdf",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "e220a8397b1dcdaf",
+                "tool": "pen",
+                "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "page",
+                  "page": 3,
+                  "width": 595,
+                  "height": 842
+                },
+                "ink": "1 s100 cxypt 7200,10000,128,0 22800,0,0,8"
+              }
+            ]
+          }
+        },
+        {
+          "id": "f1",
+          "type": "file",
+          "x": 400,
+          "y": 0,
+          "width": 640,
+          "height": 420,
+          "file": "Corsi/voti.xlsx"
+        },
+        {
+          "id": "t1",
+          "type": "text",
+          "x": 0,
+          "y": 600,
+          "width": 320,
+          "height": 160,
+          "text": "Ciclo dell'acqua"
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

@@ -23,6 +23,7 @@ import { liveStrings } from "./strings";
 import { pageIconsChanged } from "./livepreview";
 import { linkCardsChanged, type LinkCardSource } from "./link-card";
 import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
+import { followPath, followWikilink, type PeekLink, type WikilinkFollow, type WikilinkGesture } from "./link-gesture";
 import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
 import { settings } from "../../../../host/query";
 import { onEvent } from "../../../../state/kernel";
@@ -153,8 +154,9 @@ export interface MarkdownSurfaceOptions {
   onChange(change: EditorChange): void;
   /// Invocato quando cambia la selezione.
   onSelectionChange(): void;
-  /// Click su un wikilink nella resa.
-  onOpenWikilink(page: string, heading: string | null, block: string | null): void | Promise<void>;
+  /// Click su un wikilink nella resa. `from` è il documento di questa
+  /// superficie, da cui il nome si risolve.
+  onOpenWikilink(page: string, heading: string | null, block: string | null, from?: string): void | Promise<void>;
   onOpenPath(path: string, from?: string): void | Promise<void>;
   /// Clic su una figura (un file Craft, un PDF): apre il suo documento col
   /// gesto, e non crea mai una nota. Senza, la figura non apre niente.
@@ -162,7 +164,13 @@ export interface MarkdownSurfaceOptions {
   /// Apre un documento del vault per id (l'immagine resa nel visore).
   onOpenDocument?(id: string): void | Promise<void>;
   /// «Apri a lato» dal menu di un wikilink. Senza, la voce non c'è.
-  onOpenWikilinkBeside?(page: string, heading: string | null, block: string | null): void | Promise<void>;
+  onOpenWikilinkBeside?(page: string, heading: string | null, block: string | null, from?: string): void | Promise<void>;
+  /// La sbirciata (E11, T20): Alt col clic o Alt-Invio su un link a un
+  /// documento del vault, e la voce «Sbircia» del suo menu. `from` è il
+  /// documento di questa superficie. Senza, quei gesti aprono il documento.
+  onPeekLink?(link: PeekLink, from: string): void | Promise<void>;
+  /// Che cosa fa il clic che apre un link (`editor.link-click`). Senza, apre.
+  linkClick?(): "apri" | "sbircia";
   /// Un file nominato dalla nota aperto con un'altra app o mostrato
   /// nell'esploratore. Senza, le due voci non ci sono.
   onShowFile?(target: SystemTarget, from: string, where: "app" | "explorer"): void | Promise<void>;
@@ -314,8 +322,36 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// colonna si chiedono per la nota di questo vault, non per lo stesso
   /// percorso in un altro.
   const vault = openVaultRoot();
+  /// Il documento di questa superficie, letto a ogni gesto: una rinomina lo
+  /// cambia mentre la superficie è montata. I link si risolvono da qui, non
+  /// dal riquadro col fuoco (una sbirciata, una scheda della lavagna).
+  const linkSource = (): string => resources?.documentId ?? documentId;
   const openWikilink = (page: string, heading?: string | null, block?: string | null) =>
-    opts.onOpenWikilink(page, heading ?? null, block ?? null);
+    opts.onOpenWikilink(page, heading ?? null, block ?? null, linkSource());
+  /// Come si segue un link da questa superficie: aprire, sbirciare, e la
+  /// regola del clic (`open-link.ts`).
+  const follow: WikilinkFollow = {
+    openWikilink: (page, heading, block) => openWikilink(page, heading, block),
+    openPath: (path) => opts.onOpenPath(path, linkSource()),
+    ...(opts.onPeekLink ? { peekLink: (link: PeekLink) => opts.onPeekLink!(link, linkSource()) } : {}),
+    ...(opts.linkClick ? { linkClick: () => opts.linkClick!() } : {}),
+  };
+  /// Il clic su un link della resa (la Lettura, un blocco reso): Alt sbircia,
+  /// ogni altro clic è il clic che apre e segue `editor.link-click`.
+  const clickWikilink = (page: string, heading?: string, block?: string, gesture?: WikilinkGesture) =>
+    followWikilink(follow, page, heading ?? null, block ?? null, gesture ?? "click");
+  const clickPath = (path: string, _from?: string, gesture?: WikilinkGesture) =>
+    followPath(follow, path, gesture ?? "click");
+  /// Le schede dei collegamenti, con le schede delle note lette da questo
+  /// documento: il nome di un wikilink si risolve dalla nota che lo contiene.
+  const cards = opts.linkCards;
+  const linkCards: LinkCardSource | undefined = cards && {
+    view: (url) => cards.view(url),
+    request: (url) => cards.request(url),
+    watch: (changed) => cards.watch(changed),
+    ...(cards.note ? { note: (page: string) => cards.note!(page, linkSource()) } : {}),
+    ...(cards.holdNote ? { holdNote: (page: string) => cards.holdNote!(page, linkSource()) } : {}),
+  };
   /// La griglia di tabella che ha il fuoco: le azioni della barra agiscono
   /// sulle sue celle invece che sul cursore del testo.
   let tableGrid: TableGridActions | null = null;
@@ -366,6 +402,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     ...(opts.noteFacts ? { noteFacts: noteFactsExtensions({ current: () => facts, actions: factsActions }) } : {}),
     callbacks: {
       openWikilink,
+      ...(follow.peekLink ? { peekLink: follow.peekLink } : {}),
+      ...(follow.linkClick ? { linkClick: follow.linkClick } : {}),
       searchTag: opts.onSearchTag,
       // Come in Lettura: il percorso si risolve rispetto a questo documento,
       // e un documento che non c'è lo dice invece di tacere.
@@ -379,7 +417,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       slashEnabled: () => Boolean(slashMenu && slashHost?.enabled()),
       pageIcon: opts.pageIcons?.icon,
       isPerson: opts.pageIcons?.isPerson,
-      linkCard: opts.linkCards,
+      linkCard: linkCards,
       tableGrid: {
         active: (grid) => {
           tableGrid = grid;
@@ -395,8 +433,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         ...actions,
         get documentId() { return resources?.documentId ?? documentId; },
         resources,
-        openWikilink,
-        openPath: opts.onOpenPath,
+        openWikilink: clickWikilink,
+        openPath: clickPath,
         openFigure: opts.onOpenFigure,
         searchTag: opts.onSearchTag,
         toggleTask: readOnly ? undefined : actions.toggleTask,
@@ -811,8 +849,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     return {
       get documentId() { return resources?.documentId ?? documentId; },
       resources,
-      openWikilink,
-      openPath: opts.onOpenPath,
+      openWikilink: clickWikilink,
+      openPath: clickPath,
       openFigure: opts.onOpenFigure,
       searchTag: opts.onSearchTag,
       toggleTask,
@@ -1181,9 +1219,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       return {
         target: { kind: "wikilink", name: link.text },
         context: [
-          { id: "markdown.link.open", label: t("editor_menu.link.open_note"), chord: "Alt-Enter", run: () => void openWikilink(page, link.heading, link.block) },
+          ...(opts.onPeekLink
+            ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), chord: "Alt-Enter", run: () => void opts.onPeekLink!({ kind: "wiki", page, heading: link.heading, block: link.block }, docId()) }]
+            : []),
+          { id: "markdown.link.open", label: t("editor_menu.link.open_note"), ...(opts.onPeekLink ? {} : { chord: "Alt-Enter" }), run: () => void openWikilink(page, link.heading, link.block) },
           ...(opts.onOpenWikilinkBeside
-            ? [{ id: "markdown.link.beside", label: t("editor_menu.link.beside"), run: () => void opts.onOpenWikilinkBeside!(page, link.heading, link.block) }]
+            ? [{ id: "markdown.link.beside", label: t("editor_menu.link.beside"), run: () => void opts.onOpenWikilinkBeside!(page, link.heading, link.block, docId()) }]
             : []),
           ...(shown && canPreviewLink() ? [{ id: "markdown.link.preview", label: t("editor_menu.link.preview"), run: () => void previewLink(shown) }] : []),
           MENU_RULE,
@@ -1204,9 +1245,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     return {
       target: { kind: "link", name: site },
       context: [
-        external
-          ? { id: "markdown.link.web", label: t("editor_menu.link.browser"), chord: "Alt-Enter", run: () => openWebLink(link.url, false) }
-          : { id: "markdown.link.open", label: t("editor_menu.link.open_note"), chord: "Alt-Enter", run: () => void Promise.resolve(opts.onOpenPath(decodeURI(link.url), docId())).catch(() => {}) },
+        ...(external
+          ? [{ id: "markdown.link.web", label: t("editor_menu.link.browser"), chord: "Alt-Enter", run: () => openWebLink(link.url, false) }]
+          : [
+            ...(opts.onPeekLink
+              ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), chord: "Alt-Enter", run: () => void opts.onPeekLink!({ kind: "path", path: decodeURI(link.url) }, docId()) }]
+              : []),
+            { id: "markdown.link.open", label: t("editor_menu.link.open_note"), ...(opts.onPeekLink ? {} : { chord: "Alt-Enter" }), run: () => void Promise.resolve(opts.onOpenPath(decodeURI(link.url), docId())).catch(() => {}) },
+          ]),
         { id: "markdown.link.copy", label: t(external ? "editor_menu.link.copy_url" : "editor_menu.link.copy"), run: () => copyText(link.url, t("editor_menu.copied")) },
         ...edit,
         ...remove,

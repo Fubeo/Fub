@@ -1,0 +1,21 @@
+{
+  "about": "`ends: \"none\"`: nessuna punta. Il file scrive `toEnd: \"none\"`, perché la punta di serie è `arrow`.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+    ]
+  },
+  "ops": [{ "op": "connect", "from": "a", "to": "b", "ends": "none" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+        { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+      ],
+      "edges": [{ "id": "e220a8397b1dcdaf", "fromNode": "a", "toNode": "b", "toEnd": "none" }]
+    },
+    "created": ["e220a8397b1dcdaf"]
+  }
+}

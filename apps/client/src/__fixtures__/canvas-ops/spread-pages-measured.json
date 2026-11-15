@@ -1,0 +1,97 @@
+{
+  "about": "Le misure delle pagine danno l'altezza come bornSize della GUI (arrotondata all'intero, non agganciata): A4 509, orizzontale 254, Letter 466; la pagina dopo parte al primo multiplo di 8 che lascia 24.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "spread_pages",
+      "id": "p",
+      "pages": [
+        3,
+        1,
+        2,
+        2
+      ],
+      "page_count": 3,
+      "page_sizes": [
+        [
+          595,
+          842
+        ],
+        [
+          842,
+          595
+        ],
+        [
+          612,
+          792
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "p",
+          "type": "file",
+          "x": 560,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf"
+        },
+        {
+          "id": "910a2dec89025cc1",
+          "type": "file",
+          "x": 944,
+          "y": 400,
+          "width": 360,
+          "height": 509,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=1"
+        },
+        {
+          "id": "beeb8da1658eec67",
+          "type": "file",
+          "x": 1328,
+          "y": 400,
+          "width": 360,
+          "height": 254,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=2"
+        },
+        {
+          "id": "f893a2eefb32555e",
+          "type": "file",
+          "x": 1712,
+          "y": 400,
+          "width": 360,
+          "height": 466,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=3"
+        }
+      ],
+      "edges": []
+    },
+    "created": [
+      "910a2dec89025cc1",
+      "beeb8da1658eec67",
+      "f893a2eefb32555e"
+    ]
+  }
+}

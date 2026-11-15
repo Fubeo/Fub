@@ -1,0 +1,32 @@
+{
+  "about": "Duplicare una parte: il ramo con la sua freccia, copiato sotto l'originale con il nome nuovo. Le copie si chiamano in modo diverso, perché i testi del corpus sono unici.",
+  "prompt": "Copia il ramo «Costi» → «Ricavi» con la sua freccia, sotto l'originale, e chiama le copie «Costi bis» e «Ricavi bis».",
+  "before": {
+    "nodes": [
+      { "id": "co", "type": "text", "text": "Costi", "x": 0, "y": 0, "width": 320, "height": 160 },
+      { "id": "ri", "type": "text", "text": "Ricavi", "x": 400, "y": 0, "width": 320, "height": 160 }
+    ],
+    "edges": [
+      { "id": "e1", "fromNode": "co", "toNode": "ri", "fromSide": "right", "toSide": "left", "toEnd": "arrow" }
+    ]
+  },
+  "ops_today": [
+    { "op": "add_card", "node": { "id": "co2", "type": "text", "text": "Costi bis", "x": 0, "y": 216, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "ri2", "type": "text", "text": "Ricavi bis", "x": 400, "y": 216, "width": 320, "height": 160 } },
+    { "op": "connect", "edge": { "fromNode": "co2", "toNode": "ri2", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } }
+  ],
+  "ops": [
+    { "op": "duplicate", "ids": ["co", "ri"], "dx": 0, "dy": 216, "as": ["co2", "ri2"] },
+    { "op": "set", "id": "co2", "fields": { "text": "Costi bis" } },
+    { "op": "set", "id": "ri2", "fields": { "text": "Ricavi bis" } }
+  ],
+  "needs": [],
+  "checks": [
+    { "has_card": { "text": "Costi" } },
+    { "has_card": { "text": "Costi bis" } },
+    { "has_edge": { "from_text": "Costi", "to_text": "Ricavi" } },
+    { "has_edge": { "from_text": "Costi bis", "to_text": "Ricavi bis" } },
+    { "count": { "kind": "edge", "n": 2 } },
+    { "count": { "kind": "text", "n": 4 } }
+  ]
+}

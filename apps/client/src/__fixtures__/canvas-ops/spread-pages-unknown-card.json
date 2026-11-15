@@ -1,0 +1,33 @@
+{
+  "about": "La scheda del PDF non c'è: `UnknownNode`.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "spread_pages",
+      "id": "x",
+      "page_count": 3
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "UnknownNode",
+      "index": 0,
+      "id": "x"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "about": "Un sequenceDiagram non è un flowchart: Invalid.",
+  "before": {
+    "nodes": [],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "from_mermaid",
+      "text": "sequenceDiagram\n  Alice->>Bob: ciao"
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

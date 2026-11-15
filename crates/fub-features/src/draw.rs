@@ -405,7 +405,36 @@ use embed::{
 };
 use export::{check_target, not_utf8, unreadable, Drawing, File, Format, Outcome, Page};
 pub use export::{DrawioExport, ExcalidrawExport, JpegExport, PdfExport, PngExport, SvgExport};
+/// Il PNG di un SVG che un altro comando ha scritto: l'anteprima della lavagna.
+pub(crate) use write::svg_png;
 use write::{write_pdf, write_raster, write_svg};
+
+/// Le misure di tutte le pagine di un PDF, dalla prima, come si mostrano
+/// (punti, con la rotazione), per le schede PDF della lavagna: la prima per
+/// `add_card` e `resize`, tutte (e il loro numero) per `spread_pages` ed
+/// `excerpt`. `None` se il PDF è cifrato, non si apre o non ha pagine: la
+/// scheda prende le misure di serie.
+pub(crate) fn pdf_page_sizes(bytes: &[u8]) -> Option<Vec<(f64, f64)>> {
+    let document = open_pdf(bytes)?;
+    let sizes: Vec<(f64, f64)> = document
+        .get_pages()
+        .values()
+        .map(|&page| annotated::Geometry::of(&document, page).size())
+        .collect();
+    (!sizes.is_empty()).then_some(sizes)
+}
+
+/// Il PDF aperto, se si apre senza password.
+fn open_pdf(bytes: &[u8]) -> Option<lopdf::Document> {
+    let options = lopdf::LoadOptions::with_max_decompressed_size(annotated::STREAM_MAX);
+    let document = lopdf::Document::load_mem_with_options(bytes, options).ok()?;
+    // Un PDF che si apre senza password è già decifrato: se `/Encrypt` c'è
+    // ancora, la password serve, come nell'esportazione delle annotazioni.
+    if document.trailer.has(b"Encrypt") {
+        return None;
+    }
+    Some(document)
+}
 
 #[cfg(test)]
 use embed::{raster, FACES};

@@ -1,0 +1,41 @@
+{
+  "about": "on con l'id di una scheda col livello estraneo: Fub non ci scrive.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "t",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "fub:ink": {
+          "v": 2,
+          "strokes": []
+        }
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "erase_along",
+      "on": "t1",
+      "points": [
+        [
+          0,
+          0
+        ]
+      ],
+      "size": 8
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "ForeignLayer",
+      "index": 0
+    }
+  }
+}

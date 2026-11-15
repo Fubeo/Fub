@@ -1,0 +1,48 @@
+{
+  "about": "Un punto è [x, y] o [x, y, pressione].",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "text": "Evaporazione",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": "board",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          5
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

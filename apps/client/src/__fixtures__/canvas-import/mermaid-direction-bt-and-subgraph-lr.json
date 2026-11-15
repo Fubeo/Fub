@@ -1,0 +1,90 @@
+{
+  "about": "Il verso BT dal basso in alto, e un subgraph col suo `direction LR`.",
+  "op": {
+    "op": "from_mermaid",
+    "text": "flowchart BT\n  Radice --> gruppo\n  subgraph gruppo [In riga]\n    direction LR\n    X --> Y --> Z\n  end"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "gruppo",
+          "type": "group",
+          "x": 0,
+          "y": 0,
+          "width": 1200,
+          "height": 208,
+          "label": "In riga"
+        },
+        {
+          "id": "Radice",
+          "type": "text",
+          "x": 440,
+          "y": 304,
+          "width": 320,
+          "height": 160,
+          "text": "Radice"
+        },
+        {
+          "id": "X",
+          "type": "text",
+          "x": 24,
+          "y": 24,
+          "width": 320,
+          "height": 160,
+          "text": "X"
+        },
+        {
+          "id": "Y",
+          "type": "text",
+          "x": 440,
+          "y": 24,
+          "width": 320,
+          "height": 160,
+          "text": "Y"
+        },
+        {
+          "id": "Z",
+          "type": "text",
+          "x": 856,
+          "y": 24,
+          "width": 320,
+          "height": 160,
+          "text": "Z"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "Radice",
+          "toNode": "gruppo",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "fromNode": "X",
+          "toNode": "Y",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "06c45d188009454f",
+          "fromNode": "Y",
+          "toNode": "Z",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "gruppo",
+      "Radice",
+      "X",
+      "Y",
+      "Z",
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4",
+      "06c45d188009454f"
+    ],
+    "notes": []
+  }
+}

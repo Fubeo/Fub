@@ -1,0 +1,8 @@
+{
+  "about": "set con un colore che la tavola non legge non si legge: come add_card e connect, la lista è malformata, e nessuna scheda cambia.",
+  "before": {
+    "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }]
+  },
+  "ops": [{ "op": "set", "id": "a", "fields": { "color": "gren" } }],
+  "expect": { "outcome": "malformed" }
+}

@@ -1,0 +1,84 @@
+{
+  "about": "on: \"auto\" con il tratto che esce per più di metà dalla scheda più in alto: è libero, anche se una scheda sotto lo prenderebbe tutto.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 0,
+        "width": 800,
+        "height": 400
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "text": "Evaporazione",
+        "x": 100,
+        "y": 40,
+        "width": 100,
+        "height": 100
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "points": [
+        [
+          180,
+          60
+        ],
+        [
+          260,
+          60
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "t1",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 800,
+          "height": 400,
+          "text": "Ciclo dell'acqua"
+        },
+        {
+          "id": "t2",
+          "type": "text",
+          "x": 100,
+          "y": 40,
+          "width": 100,
+          "height": 100,
+          "text": "Evaporazione"
+        }
+      ],
+      "fub:ink": {
+        "v": 1,
+        "strokes": [
+          {
+            "id": "e220a8397b1dcdaf",
+            "tool": "pen",
+            "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+            "color": "#0072b2",
+            "anchor": {
+              "kind": "free"
+            },
+            "ink": "1 s100 cxypt 18000,6000,128,0 8000,0,0,8"
+          }
+        ]
+      }
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

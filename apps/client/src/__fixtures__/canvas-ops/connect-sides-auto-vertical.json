@@ -1,0 +1,21 @@
+{
+  "about": "`sides: \"auto\"` con «c» sotto «a»: i centri sono più distanti in verticale, quindi dal lato basso di «a» al lato alto di «c».",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "c", "type": "text", "x": 0, "y": 300, "width": 320, "height": 160, "text": "c" }
+    ]
+  },
+  "ops": [{ "op": "connect", "from": "a", "to": "c", "sides": "auto" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+        { "id": "c", "type": "text", "x": 0, "y": 300, "width": 320, "height": 160, "text": "c" }
+      ],
+      "edges": [{ "id": "e220a8397b1dcdaf", "fromNode": "a", "toNode": "c", "fromSide": "bottom", "toSide": "top", "toEnd": "arrow" }]
+    },
+    "created": ["e220a8397b1dcdaf"]
+  }
+}
