@@ -1911,7 +1911,7 @@ Fatto quando: `cargo test -p fub-canvas-wasm` prova le due esportazioni;
 annulla, e i quattro «Disponi»; R7 e R8 passano con le voci nuove.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-wasm; cd
 apps/client && npx vitest run src/editors/canvas && npm run typecheck
-Stato: [ ] da fare
+Stato: [~] coder fatto (coder/lic-t25 @ 4cdb3da41); revisione fatta: il giro copia→incolla sulla stessa lavagna dava `duplicate_id`, Disponi muto coi gruppi, avvisi contati male, due parser; coder rilanciato con le correzioni
 
 ## T26 · Chiusura: il conto a zero e le misure del corpus
 
