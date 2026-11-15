@@ -3,24 +3,27 @@
 // riga, un filtro) che il resto usa.
 //
 // Il modo è uno stato a sé, non un pezzo del testo: il prefisso scritto in
-// testa al campo lo cambia e sparisce, così un modo senza prefisso (i modelli)
-// vale quanto gli altri e ogni modo tiene la sua domanda pulita.
+// testa al campo lo cambia e sparisce, così ogni modo tiene la sua domanda
+// pulita. «Tutto» non ha prefisso: è il modo di chi non scrive prefissi, e
+// dentro ci stanno le note per nome, il testo delle note e i titoli della nota
+// aperta. Tab non cambia modo: mostra le azioni della riga (`actions.ts`).
 
-export type Mode = "files" | "commands" | "search" | "headings" | "tags" | "line" | "templates";
+/// I modi. `all` è «Tutto»; `line` è «Riga», col prefisso `:`.
+export type Mode = "all" | "commands" | "tags" | "people" | "blocks" | "help" | "line";
 
-/// I modi nell'ordine in cui Tab li percorre e la fila li mostra.
-export const MODES: readonly Mode[] = ["files", "commands", "search", "headings", "tags", "line", "templates"];
+/// I modi nell'ordine in cui la fila li mostra.
+export const MODES: readonly Mode[] = ["all", "commands", "tags", "people", "blocks", "help", "line"];
 
-/// Il carattere che, scritto per primo, porta in un modo. I file sono il modo
-/// di chi non scrive prefissi; ai modelli si arriva solo con Tab o col comando.
+/// Il carattere che, scritto per primo, porta in un modo. «Tutto» non ne ha:
+/// si torna lì togliendo il prefisso, o cancellando a campo vuoto.
 export const PREFIX: Readonly<Record<Mode, string | null>> = {
-  files: null,
+  all: null,
   commands: ">",
-  search: "?",
-  headings: "@",
   tags: "#",
+  people: "@",
+  blocks: "/",
+  help: "?",
   line: ":",
-  templates: null,
 };
 
 export interface Reading {
@@ -41,12 +44,6 @@ export function read(mode: Mode, value: string): Reading {
   return { mode, text: value };
 }
 
-/// Il modo accanto, in tondo: `1` il prossimo, `-1` il precedente.
-export function neighbour(mode: Mode, step: 1 | -1): Mode {
-  const at = MODES.indexOf(mode);
-  return MODES[(at + step + MODES.length) % MODES.length]!;
-}
-
 /// Ciò che ogni modo ha chiesto per ultimo. Vive quanto chi la tiene.
 export interface Memory {
   recall(mode: Mode): string;
@@ -61,8 +58,10 @@ export function createMemory(): Memory {
   };
 }
 
-/// Dove va ciò che si apre.
-export type OpenWay = "here" | "split" | "tab" | "window";
+/// Dove va ciò che si apre: qui, a lato (un riquadro in più), o in una
+/// linguetta. Una linguetta è ciò che ogni apertura già fa: `tab` si apre come
+/// `here`, ed è la voce «Apri in una linguetta» della scheda di un link.
+export type OpenWay = "here" | "split" | "tab";
 
 export interface Modifiers {
   ctrlKey?: boolean;
@@ -71,12 +70,12 @@ export interface Modifiers {
   altKey?: boolean;
 }
 
-/// Invio apre, Mod-Invio divide, Maiusc-Invio apre in una linguetta, e
-/// Alt-Invio in una finestra dove la piattaforma ne ha più d'una. Di due
-/// modificatori vince il primo di quest'ordine: finestra, divisione, linguetta.
-export function openWay(keys: Modifiers, windows: boolean): OpenWay {
-  if (keys.altKey && windows) return "window";
-  if (keys.ctrlKey || keys.metaKey) return "split";
+/// Invio apre qui, Ctrl-Invio (o Cmd-Invio) a lato. Alt-Invio è la sbirciata
+/// quando la sbirciata ci sarà; fino ad allora apre a lato. Maiusc-Invio apre in una linguetta,
+/// cioè come Invio: il gesto che crea una nota vale solo dove non c'è niente
+/// da aprire. Di due modificatori vince Ctrl (o Cmd), poi Alt, poi Maiusc.
+export function openWay(keys: Modifiers): OpenWay {
+  if (keys.ctrlKey || keys.metaKey || keys.altKey) return "split";
   if (keys.shiftKey) return "tab";
   return "here";
 }

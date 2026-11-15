@@ -5,8 +5,10 @@
 // i gesti del foglio (`documentIntent`): Canc svuota, Ctrl+C e Ctrl+X passano
 // TSV e una tabella HTML, Invio e Tab fanno girare la cella attiva, Ctrl+D e
 // Ctrl+R riempiono, Ctrl+«+» e Ctrl+«−» inseriscono e tolgono righe o
-// colonne, Maiusc+F8 aggiunge intervalli; Ctrl+Spazio e Ctrl+Maiusc+Spazio
-// scelgono la colonna e la tabella anche senza celle scelte. «Unisci celle»
+// colonne, Alt con le frecce sposta le righe o le colonne scelte, Maiusc+F8
+// aggiunge intervalli; Ctrl+Spazio e Ctrl+Maiusc+Spazio scelgono la colonna e
+// la tabella anche senza celle scelte, e Ctrl+; scrive la data di oggi dove
+// sta il cursore (con celle scelte, nella cella attiva). «Unisci celle»
 // unisce una riga.
 //
 // Taglia non svuota: segna le celle (`is-cell-cut`), e l'incolla che segue le
@@ -21,7 +23,7 @@
 // transazione sola: Ctrl+Z lo annulla in un passo.
 // Il perché di non usare `prosemirror-tables` sta nell'ADR 0225.
 
-import type { Node as PmNode, ResolvedPos } from "prosemirror-model";
+import { Fragment, type Node as PmNode, type ResolvedPos } from "prosemirror-model";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import type { TableCaps } from "../../tabella/adapter";
@@ -30,7 +32,8 @@ import { structureEdit } from "../../tabella/commands";
 import { documentIntent } from "../../tabella/keys";
 import { boundedShape, isMultiCell, nextInRange, type Cell, type Move, type Range } from "../../tabella/navigation";
 import { fillCopy, rangeBetween, touches, wholeRange, withRange } from "../../tabella/selection";
-import { t } from "../../i18n/strings";
+import { todayText } from "../../tabella/series";
+import { resolvedLanguage, t } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
 import { richSchema } from "./schema";
@@ -198,6 +201,24 @@ function emptied(box: CellBox): PmNode {
   return cellType.create(box.node.attrs, para.create(first?.type === para ? first.attrs : null));
 }
 
+/// La cella `cell` con la data `text` di Ctrl+;. Una cella di solo testo
+/// semplice (un paragrafo, senza stili né oggetti) prende la data al posto
+/// del testo, come nella tabella delle note. Una cella più ricca non perde
+/// niente: la data va in fondo al suo primo paragrafo, dopo uno spazio, o in
+/// un paragrafo nuovo in testa se la cella non comincia con un paragrafo.
+function withToday(cell: PmNode, text: string): PmNode {
+  const first = cell.firstChild;
+  let plain = cell.childCount === 1 && first?.type === para;
+  first?.content.forEach((inline) => {
+    if (!inline.isText || inline.marks.length > 0) plain = false;
+  });
+  if (plain) return cellType.create(cell.attrs, para.create(first!.attrs, richSchema.text(text)));
+  if (!first?.isTextblock) return cell.copy(Fragment.from(para.create(null, richSchema.text(text))).append(cell.content));
+  const space = first.textContent === "" || /\s$/.test(first.textContent) ? "" : " ";
+  const dated = first.copy(first.content.append(Fragment.from(richSchema.text(space + text))));
+  return cell.copy(cell.content.replaceChild(0, dated));
+}
+
 /// Svuota le celle scelte, in tutti gli intervalli: ognuna resta, con un
 /// paragrafo vuoto come il suo primo, e resta scelta.
 export function clearCells(state: EditorState, dispatch?: (tr: Transaction) => void): boolean {
@@ -337,6 +358,40 @@ function onKey(view: EditorView, event: KeyboardEvent): boolean {
         others: [],
         adding: false,
       }, tr).scrollIntoView());
+      return true;
+    }
+    case "shift-lines": {
+      // Le righe (o le colonne) delle celle scelte, di un posto, in un passo;
+      // le celle scelte vanno con loro.
+      if (!view.editable || !multi || current.others.length > 0) return true;
+      const rows = intent.axis === "rows";
+      const edit = rows
+        ? { kind: "move-rows" as const, from: range.r0, to: range.r1, by: intent.by }
+        : { kind: "move-columns" as const, from: range.c0, to: range.c1, by: intent.by };
+      const tr = state.tr;
+      if (!applyTableEdit(tr, here.table, here.tablePos, edit)) return true;
+      const shift = (cell: Cell): Cell => (rows ? { row: cell.row + intent.by, column: cell.column } : { row: cell.row, column: cell.column + intent.by });
+      view.dispatch(chooseCells(state, {
+        ...current,
+        anchor: shift(current.anchor),
+        head: shift(current.head),
+        active: current.active ? shift(current.active) : undefined,
+      }, tr).scrollIntoView());
+      return true;
+    }
+    case "today": {
+      if (!view.editable) return true;
+      const text = todayText(new Date(), resolvedLanguage());
+      if (multi) {
+        // Con celle scelte la data va nella cella attiva (`withToday`).
+        const box = boxCovering(boxes, active.row, active.column);
+        if (!box) return true;
+        const tr = state.tr;
+        rewriteCells(tr, here.tablePos, [box], (cell) => withToday(cell.node, text), active);
+        view.dispatch(keepCells(tr, own).scrollIntoView());
+        return true;
+      }
+      view.dispatch(state.tr.insertText(text).scrollIntoView());
       return true;
     }
     case "move": {
