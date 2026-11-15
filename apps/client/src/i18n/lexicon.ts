@@ -39,6 +39,8 @@ export const LEXICON: readonly LexiconEntry[] = [
   { say: "personalizzato", instead: ["Personalizzata", "Custom"], why: "Il profilo, al maschile e in italiano" },
   { say: "più avanti", instead: ["In arrivo", "Prossimamente"], why: "Non promette una data" },
   { say: "solo come file", instead: ["Solo file", "Non supportato", "Formato sconosciuto"], why: "Il file c'è e si apre altrove: dice che cosa si può fare lo stesso" },
+  // L'editor (EC, A-12): la modalità in cui si scrive è una sola.
+  { say: "Scrittura", instead: ["Live", "Modalità Blocchi"], why: "Una modalità sola per scrivere, Live e Blocchi insieme: è la parola dei documenti di Word (Pagina, Scrittura, Lettura)" },
 ];
 
 /// Le varianti, tutte: nessuna voce di menu le contiene. «Arancio» è anche

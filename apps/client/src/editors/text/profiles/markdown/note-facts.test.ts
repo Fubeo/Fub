@@ -260,7 +260,7 @@ describe("nella superficie", () => {
     ed.destroy();
   });
 
-  it("in Live sotto il titolo, in Sorgente no, in Lettura dopo il primo h1", () => {
+  it("in Scrittura sotto il titolo, in Sorgente no, in Lettura dopo il primo h1", () => {
     setLanguage("it");
     const { ed, parent, draw, openLinks, searchTag } = surface();
     draw(FACTS);
@@ -287,11 +287,10 @@ describe("nella superficie", () => {
     ed.destroy();
   });
 
-  it("nei Blocchi sotto il titolo della testata, e non anche nel testo", async () => {
+  it("in Scrittura sotto il titolo della testata, e non anche nel testo", () => {
     const { ed, parent, draw } = surface();
     draw(FACTS);
-    ed.setMode("blocks");
-    await vi.waitFor(() => expect(parent.querySelector(".cm-fub-page")).not.toBeNull());
+    expect(parent.querySelector(".cm-fub-page")).not.toBeNull();
     const rows = parent.querySelectorAll(".note-facts");
     expect(rows.length).toBe(1);
     expect(rows[0]!.previousElementSibling?.classList.contains("cm-fub-page-title")).toBe(true);
