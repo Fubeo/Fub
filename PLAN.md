@@ -440,7 +440,7 @@ Esc e l'annuncio; le foto del banco, chiaro e scuro, somigliano alle righe
 828 e 853 del prototipo; la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks
-Stato: [~] PR #377 (feat/maniglia-due-occhi), revisione fatta, aspetta CI e baseline
+Stato: [x] in main · PR #377, merge a3ee357dc (2026-11-15), CI completa verde, baseline blocchi-03-menu dal runner
 
 ## T2b · Fuori dalla colonna e lo scorrimento al bordo
 
@@ -483,7 +483,7 @@ sposta un blocco sotto un altro titolo dalla Struttura e l'annulla lo
 rimette; le scene di T2 trovano il cartellino.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15 (feat/fuori-dalla-colonna da main a3ee357dc)
 
 ## T3 · La modalità Scrittura
 
