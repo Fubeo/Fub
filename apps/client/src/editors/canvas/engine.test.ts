@@ -3,7 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { MENU_RULE, type SurfaceMenuItem } from "../core/editor-menu";
 import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
-import { CANVAS_ZOOM_STEP, CARD_PAUSE_MS, CanvasEngine, EDGE_SCROLL_MAX, EDGE_SCROLL_ZONE, MAX_CANVAS_HISTORY, NEXT_CARD_GAP, edgeScrollSpeed, MEASURE_IMAGE_TIMEOUT_MS, proposedNoteName, type CanvasChange, type CanvasCorePort, type CanvasDepositCards, type CanvasEngineOptions } from "./engine";
+import { CANVAS_ZOOM_STEP, CARD_PAUSE_MS, CanvasEngine, EDGE_SCROLL_MAX, eraseAlongSegments, erasePathPieces, EDGE_SCROLL_ZONE, MAX_CANVAS_HISTORY, NEXT_CARD_GAP, edgeScrollSpeed, MEASURE_IMAGE_TIMEOUT_MS, proposedNoteName, type CanvasChange, type CanvasCorePort, type CanvasDepositCards, type CanvasEngineOptions } from "./engine";
 import type { CanvasDocument } from "./model";
 import { readCanvasClipboard } from "./clipboard";
 import { ENTRIES_DRAG_TYPE } from "../../ui/drag-types";
@@ -38,6 +38,8 @@ import {
   type CardView,
 } from "./cards";
 import { CardCache } from "./card-cache";
+import { quantizeInk, type InkSample } from "../../ink/sample";
+import { encodeInk, inkFromQuantized } from "../spatial/ink/codec";
 
 // Le impostazioni della lavagna (T35): il motore monta `watchPreferences`, e la
 // prova tiene le sue funzioni per cambiare «La rotella del mouse» a lavagna
@@ -8074,6 +8076,45 @@ describe("i gesti scrivono con le operazioni (T24)", () => {
     engine.destroy();
   });
 
+  it("se il nucleo rifiuta i riquadri del trascinamento, non li ricompila a ogni movimento", () => {
+    let calls = 0;
+    const port: CanvasCorePort = {
+      ready: canvasCoreReady,
+      openNow: (text) => {
+        const core = openCoreNow(text);
+        if (!core) return null;
+        return new Proxy(core, {
+          get(target, key, receiver) {
+            const value = Reflect.get(target, key, receiver) as unknown;
+            if (key !== "compile") return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+            return () => {
+              calls += 1;
+              throw new CanvasCoreError("limit", "troppe schede");
+            };
+          },
+        });
+      },
+    };
+    const { engine, host, changes } = mounted(SOURCE, { core: port, attachments: { deposit: vi.fn(), resolvePaths: vi.fn(async () => []) } });
+    const over = (x: number, files: number) => {
+      const event = new DragEvent("dragover", { bubbles: true, cancelable: true });
+      const data = { files: [], items: Array.from({ length: files }, () => ({ kind: "file" })), types: ["Files"], getData: () => "" };
+      Object.defineProperties(event, { dataTransfer: { value: data }, clientX: { value: x }, clientY: { value: 120 } });
+      viewportOf(host).dispatchEvent(event);
+    };
+    for (let step = 0; step < 20; step++) over(200 + step * 40, 2);
+    expect(calls).toBe(1);
+    expect(host.querySelectorAll(".canvas-drop-ghost")).toHaveLength(0);
+    // Un altro numero di file è un'altra prova.
+    over(200, 3);
+    expect(calls).toBe(2);
+    viewportOf(host).dispatchEvent(new DragEvent("dragleave", { bubbles: true }));
+    over(200, 3);
+    expect(calls).toBe(3);
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
   it("i riquadri del trascinamento si compilano una volta all'entrata; uscire dalla lavagna non scrive niente", () => {
     const { engine, host, changes, compiled } = open({ attachments: { deposit: vi.fn(), resolvePaths: vi.fn(async () => []) } });
     const ghosts = () => [...host.querySelectorAll<HTMLElement>(".canvas-drop-ghost")];
@@ -8129,4 +8170,98 @@ describe("i gesti scrivono con le operazioni (T24)", () => {
     expect(engine.getDoc()).toBe(SOURCE);
     engine.destroy();
   });
+
+  /** Il punto dello schermo di un punto della lavagna, dalla trasformazione della scena. */
+  function screen(host: HTMLElement, x: number, y: number): { clientX: number; clientY: number } {
+    const match = /translate\((-?[\d.e+-]+)px, (-?[\d.e+-]+)px\) scale\(([\d.e+-]+)\)/.exec(host.querySelector<HTMLElement>(".canvas-stage")!.style.transform);
+    if (!match) throw new Error("la scena non dice la sua trasformazione");
+    return { clientX: x * Number(match[3]) + Number(match[1]), clientY: y * Number(match[3]) + Number(match[2]) };
+  }
+
+  it("un gruppo con più di 1000 schede si trascina: una `move` con tutte le schede, senza `contents`, un passo", () => {
+    const inside = Array.from({ length: 1500 }, (_, i) => ({
+      id: `k${i}`, type: "text", x: 8 + (i % 50) * 16, y: 48 + Math.floor(i / 50) * 16, width: 8, height: 8, text: "",
+    }));
+    const source = JSON.stringify({ nodes: [{ id: "big", type: "group", x: 0, y: 0, width: 816, height: 560, label: "Tanti" }, ...inside], edges: [] });
+    const { engine, host, changes, compiled } = open({}, source);
+    choose(host, "big");
+    const zoom = zoomOf(host);
+    const head = card(host, "big").querySelector(".canvas-node-handle") ?? card(host, "big");
+    const from = screen(host, 400, 20);
+    pointer(head, "pointerdown", from.clientX, from.clientY);
+    pointer(viewportOf(host), "pointermove", from.clientX + 96 * zoom, from.clientY + 48 * zoom, { altKey: true });
+    pointer(viewportOf(host), "pointerup", from.clientX + 96 * zoom, from.clientY + 48 * zoom, { altKey: true, buttons: 0 });
+    const move = lastOps(compiled);
+    expect(move).toHaveLength(1);
+    expect(move[0]).toMatchObject({ op: "move", dx: 96, dy: 48 });
+    expect(move[0]).not.toHaveProperty("contents");
+    expect((move[0]!.ids as string[]).sort()).toEqual(["big", ...inside.map((node) => node.id)].sort());
+    // Con `contents` il nucleo la rifiuta: oltre `MAX_MOVED`.
+    const core = openCoreNow(source)!;
+    try {
+      expect(() => core.compile([{ op: "move", ids: ["big"], dx: 96, dy: 48, contents: true }], 1n)).toThrow(CanvasCoreError);
+    } finally {
+      core.close();
+    }
+    expect(changes).toHaveLength(1);
+    expect(nodeOf(engine, "big")).toMatchObject({ x: 96, y: 48 });
+    expect(nodeOf(engine, "k1499")).toMatchObject({ x: 8 + 49 * 16 + 96, y: 48 + 29 * 16 + 48 });
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(source);
+    engine.destroy();
+  }, 60_000);
+
+  /** Un tratto libero della lavagna da `(x, y)` verso destra: `count` campioni a `step` unità l'uno dall'altro. */
+  function longStroke(x: number, y: number, count: number, step: number): { source: string; points: number[] } {
+    const samples: InkSample[] = Array.from({ length: count }, (_, i) => ({ x: x + i * step, y, t: i * 10, p: 0.5 }));
+    const stroke = {
+      id: "lungo",
+      tool: "pen",
+      brush: "pf1 size=2 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+      color: "#0072b2",
+      anchor: { kind: "free" },
+      ink: encodeInk(inkFromQuantized(quantizeInk(samples, 100))),
+    };
+    return {
+      source: JSON.stringify({ nodes: [], edges: [], "fub:ink": { v: 1, strokes: [stroke] } }),
+      points: samples.flatMap((sample) => [sample.x, sample.y]),
+    };
+  }
+
+  /**
+   * Il cammino della gomma come lo scrive la tela, a pezzi: il nucleo accetta
+   * la lista in un passo, e rifiuta il cammino intero in un'operazione.
+   */
+  function erasesInPieces(source: string, units: { points: number[] }[], path: [number, number][], radius: number): CanvasIntentOp[] {
+    const pieces = erasePathPieces(path, eraseAlongSegments(units, radius));
+    expect(pieces.length).toBeGreaterThan(1);
+    for (const piece of pieces) expect(piece.length).toBeLessThanOrEqual(10_000);
+    for (let i = 1; i < pieces.length; i++) expect(pieces[i]![0]).toEqual(pieces[i - 1]![pieces[i - 1]!.length - 1]);
+    expect(pieces.flatMap((piece, i) => piece.slice(i === 0 ? 0 : 1))).toEqual(path);
+    const ops = pieces.map((piece) => ({ op: "erase_along", points: piece, size: radius * 2, on: "board" }));
+    const core = openCoreNow(source)!;
+    try {
+      expect(() => core.compile([{ op: "erase_along", points: path, size: radius * 2, on: "board" }], 1n)).toThrow(CanvasCoreError);
+      const compiled = core.compile(ops, 1n);
+      expect(compiled.patches.length).toBeGreaterThan(0);
+    } finally {
+      core.close();
+    }
+    return ops;
+  }
+
+  it("una passata di più di 10 000 punti va in pezzi di fila che il nucleo accetta in una lista", () => {
+    const { source, points } = longStroke(100, 300, 160, 1);
+    // Avanti e indietro sul tratto in x = 150: 10 050 punti.
+    const path = Array.from({ length: 10_050 }, (_, i): [number, number] => [150, i % 2 === 0 ? 290 : 310]);
+    erasesInPieces(source, [{ points }], path, 8);
+  });
+
+  it("una passata che supera il lavoro del nucleo va in pezzi di fila che il nucleo accetta in una lista", () => {
+    // Un tratto lungo 300 000 unità a campioni distanti 300: il nucleo fa un
+    // passo ogni metà della portata della gomma, per ogni segmento vicino.
+    const { source, points } = longStroke(0, 300, 1000, 300);
+    const path = Array.from({ length: 1000 }, (_, i): [number, number] => [150, i % 2 === 0 ? 290 : 310]);
+    erasesInPieces(source, [{ points }], path, 8);
+  }, 60_000);
 });

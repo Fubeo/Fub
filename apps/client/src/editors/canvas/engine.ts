@@ -284,6 +284,23 @@ const MEASURE_IMAGE_PARALLEL = 4;
  * ogni entrata non vale un'anteprima.
  */
 const MAX_DROP_GHOSTS = 1000;
+/**
+ * I punti al più del cammino di un `erase_along`: `MAX_ERASE_POINTS` del
+ * nucleo (`crates/fub-canvas-core/src/ops/erase.rs`), quanti campioni ha un
+ * tratto. Un cammino più lungo va in più operazioni.
+ */
+const ERASE_ALONG_MAX_POINTS = 10_000;
+/**
+ * Il lavoro che la tela concede a un `erase_along`: metà di `MAX_ERASE_WORK`
+ * del nucleo (50 000 000 distanze), perché la stima della tela
+ * (`eraseAlongSegments`) non sa i segmenti che il nucleo trova vicini.
+ */
+const ERASE_ALONG_WORK = 25_000_000;
+/**
+ * Le schede al più di una `move` con `contents`, quelle date più quelle dei
+ * gruppi: `MAX_MOVED` del nucleo (`crates/fub-canvas-core/src/ops/adjust.rs`).
+ */
+const MOVE_CONTENTS_MAX = 1_000;
 const utf8 = new TextEncoder();
 const MAX_INTERACTIVE_NODES = 2_000;
 const MAX_INTERACTIVE_EDGES = 4_000;
@@ -1467,6 +1484,45 @@ function externalUrl(value: string): string | null {
   }
 }
 
+/**
+ * Quanti segmenti al più ha il cammino di un `erase_along` sui tratti `units`
+ * (i punti in coordinate della lavagna) con la gomma di raggio `radius`:
+ * sotto `MAX_ERASE_POINTS` del nucleo, e sotto metà del suo `MAX_ERASE_WORK`.
+ * Il lavoro del nucleo (`split_work` in `crates/fub-ink-codec/src/cut.rs`) è,
+ * per ogni segmento del cammino vicino a un tratto, uno più un passo per
+ * coppia di campioni più la lunghezza del tratto diviso metà della portata
+ * (raggio più metà dello spessore): la stima prende il raggio da solo, e
+ * conta ogni segmento vicino a ogni tratto. In unità della lavagna la scala
+ * della scheda si semplifica.
+ */
+export function eraseAlongSegments(units: readonly { readonly points: readonly number[] }[], radius: number): number {
+  let work = 0;
+  for (const { points } of units) {
+    let length = 0;
+    for (let i = 2; i + 1 < points.length; i += 2) {
+      length += Math.hypot(points[i]! - points[i - 2]!, points[i + 1]! - points[i - 1]!);
+    }
+    work += 1 + points.length / 2 + (2 * length) / radius;
+  }
+  const perSegment = Number.isFinite(work) && work > 0 ? work : 1;
+  return Math.max(1, Math.min(ERASE_ALONG_MAX_POINTS - 1, Math.floor(ERASE_ALONG_WORK / perSegment)));
+}
+
+/**
+ * Il cammino `path` in pezzi di fila di al più `segments` segmenti: l'ultimo
+ * punto di un pezzo è il primo del seguente, così nessun tratto fra due punti
+ * resta senza gomma. Un cammino corto è un pezzo solo.
+ */
+export function erasePathPieces(path: readonly Spot[], segments: number): Spot[][] {
+  const step = Math.max(1, Math.floor(segments));
+  if (path.length <= step + 1) return [path.slice()];
+  const pieces: Spot[][] = [];
+  for (let start = 0; start < path.length - 1; start += step) {
+    pieces.push(path.slice(start, Math.min(path.length, start + step + 1)));
+  }
+  return pieces;
+}
+
 export class CanvasEngine {
   readonly #root: HTMLElement;
   readonly #toolbar: HTMLElement;
@@ -1577,6 +1633,12 @@ export class CanvasEngine {
   #dropGhosts: HTMLElement | null = null;
   /** I riquadri del trascinamento di file in corso, calcolati all'entrata (T24). */
   #dropGhost: DropGhost | null = null;
+  /**
+   * Per quanti file sono stati calcolati i riquadri: con `#dropGhost` a `null`
+   * vuol dire «nessun riquadro» (troppi file, il nucleo li rifiuta), e non si
+   * ricompila a ogni movimento finché il numero resta quello.
+   */
+  #dropGhostCount: number | null = null;
   /** La griglia (T71): i punti sotto le schede, nella vista; `null` prima del montaggio. */
   #grid: HTMLElement | null = null;
   /** Le guide del gesto in corso (T71): un solo elemento sopra le schede; `null` a gesto fermo. */
@@ -3903,37 +3965,77 @@ export class CanvasEngine {
 
   /**
    * La gomma «Solo il pezzo» come `erase_along` (T24): un'operazione per
-   * livello toccato, col cammino fatto e la sua larghezza, nelle coordinate
-   * della lavagna per i tratti liberi (`on: "board"`) e in quelle della scheda
+   * posto toccato, col cammino fatto e la sua larghezza: nelle coordinate
+   * della lavagna per i tratti liberi (`on: "board"`), in quelle della scheda
    * per i suoi (`on` col suo id, con la proporzione del contenuto che
-   * mostra). `null` se un tratto tagliato sta sulla pagina di un PDF o sulla
-   * cella di un foglio: dove la scheda li mostra lo sa solo la resa, e il
-   * nucleo non li taglia; allora la tela scrive i pezzi che ha tagliato lei.
+   * mostra), in punti della pagina mostrata per quelli di un PDF
+   * (`on: {card, page, page_size}`) e in pixel del foglio dall'angolo della
+   * cella per quelli di una cella (`on: {card, sheet, cell}`). `null` se la
+   * scheda non dice più dove mostra la pagina o la cella di un tratto tagliato
+   * (allora la tela scrive i pezzi che ha tagliato lei).
    */
   #eraseAlongOps(cuts: readonly InkErasing[], path: readonly Spot[], radius: number): CanvasIntentOp[] | null {
     const doc = this.#doc;
     if (!doc || path.length === 0 || !(radius > 0)) return null;
-    const holders: (string | null)[] = [];
+    // Dove taglia ogni operazione: la radice, una scheda, una sua pagina o una
+    // sua cella, con l'angolo e la scala con cui la scheda la mostra (come
+    // `erasableInk`): il cammino ci torna con `(punto − angolo) / scala`.
+    const targets = new Map<string, { readonly on: unknown; readonly x: number; readonly y: number; readonly s: number; readonly aspect?: number }>();
     for (const { unit } of cuts) {
-      if (unit.stroke.page !== null || unit.stroke.cell !== null) return null;
-      if (!holders.includes(unit.node)) holders.push(unit.node);
-    }
-    const ops: CanvasIntentOp[] = [];
-    for (const holder of holders) {
-      if (holder === null) {
-        ops.push({ op: "erase_along", points: path.map(([x, y]) => [x, y]), size: radius * 2, on: "board" });
+      const { page, cell } = unit.stroke;
+      if (unit.node === null) {
+        targets.set("board", { on: "board", x: 0, y: 0, s: 1 });
         continue;
       }
-      const node = doc.nodes.find((one) => one.id === holder);
-      if (!node) continue;
-      const aspect = this.#layerAspect({ node: holder });
-      ops.push({
-        op: "erase_along",
-        points: path.map(([x, y]) => [x - node.x, y - node.y]),
-        size: radius * 2,
-        on: holder,
-        ...(validAspect(aspect) ? { aspect } : {}),
-      });
+      const node = doc.nodes.find((one) => one.id === unit.node);
+      if (!node) return null;
+      if (cell !== null) {
+        const box = this.#cellRectOf(node.id, cell.sheet, cell.cell);
+        if (!box || !(box.zoom > 0) || !Number.isFinite(box.rect.x) || !Number.isFinite(box.rect.y)) return null;
+        targets.set(`cell\u0000${node.id}\u0000${cell.sheet}\u0000${cell.cell}`, {
+          on: { card: node.id, sheet: cell.sheet, cell: cell.cell },
+          x: node.x + box.rect.x,
+          y: node.y + box.rect.y,
+          s: box.zoom,
+        });
+      } else if (page !== null) {
+        const box = this.#pageBoxOf(node.id);
+        if (!box || box.page !== page) return null;
+        // `pageFit`: il fattore minore, dall'angolo del rettangolo.
+        const s = Math.min(box.rect.width / box.size.width, box.rect.height / box.size.height);
+        if (!(s > 0) || !Number.isFinite(s)) return null;
+        targets.set(`page\u0000${node.id}\u0000${page}`, {
+          on: { card: node.id, page, page_size: [box.size.width, box.size.height] },
+          x: node.x + box.rect.x,
+          y: node.y + box.rect.y,
+          s,
+        });
+      } else if (!targets.has(`card\u0000${node.id}`)) {
+        const aspect = this.#layerAspect({ node: node.id });
+        targets.set(`card\u0000${node.id}`, {
+          on: node.id,
+          x: node.x,
+          y: node.y,
+          s: 1,
+          ...(validAspect(aspect) ? { aspect } : {}),
+        });
+      }
+    }
+    // Un cammino lungo va in pezzi di fila che si toccano in un estremo: ogni
+    // pezzo resta sotto i tetti del nucleo (punti e lavoro), e la lista
+    // resta una, cioè un passo d'annulla.
+    const pieces = erasePathPieces(path, eraseAlongSegments(cuts.map(({ unit }) => unit), radius));
+    const ops: CanvasIntentOp[] = [];
+    for (const target of targets.values()) {
+      for (const piece of pieces) {
+        ops.push({
+          op: "erase_along",
+          points: piece.map(([x, y]) => [(x - target.x) / target.s, (y - target.y) / target.s]),
+          size: (radius * 2) / target.s,
+          on: target.on,
+          ...(target.aspect === undefined ? {} : { aspect: target.aspect }),
+        });
+      }
     }
     return ops;
   }
@@ -6207,13 +6309,14 @@ export class CanvasEngine {
     // I riquadri si calcolano una volta, all'entrata (o quando cambia il
     // numero dei file): poi seguono il puntatore sulla griglia, senza
     // chiamare il nucleo a ogni movimento.
-    let ghost = this.#dropGhost;
-    if (!ghost || ghost.count !== count) {
-      ghost = this.#dropGhostShape(count, pointer);
-      this.#dropGhost = ghost;
+    if (this.#dropGhostCount !== count) {
+      this.#dropGhost = this.#dropGhostShape(count, pointer);
+      this.#dropGhostCount = count;
     }
+    const ghost = this.#dropGhost;
     if (!ghost) {
-      this.#hideDropGhosts();
+      this.#dropGhosts?.remove();
+      this.#dropGhosts = null;
       return;
     }
     const shiftX = snap(pointer.x) - ghost.x;
@@ -6302,6 +6405,7 @@ export class CanvasEngine {
     this.#dropGhosts?.remove();
     this.#dropGhosts = null;
     this.#dropGhost = null;
+    this.#dropGhostCount = null;
   }
 
   // --- la griglia e le guide (T71) -------------------------------------------
@@ -10783,11 +10887,17 @@ export class CanvasEngine {
   /**
    * La `move` di un trascinamento (T24): le schede scelte dello spostamento
    * del gesto; un gruppo porta le schede che ci stanno dentro (`contents`,
-   * T10), come le ha portate la vista. `null` se non si è mosso niente.
+   * T10), come le ha portate la vista. Oltre `MOVE_CONTENTS_MAX` schede
+   * portate il nucleo rifiuta `contents`: allora la `move` dice tutte le
+   * schede che la vista ha portato, una per una. `null` se non si è mosso
+   * niente.
    */
   #dragOps(drag: CardDrag): CanvasIntentOp[] | null {
     if (drag.ids.length === 0 || (drag.dx === 0 && drag.dy === 0)) return null;
     const groups = drag.ids.some((id) => this.#doc?.nodes.find((node) => node.id === id)?.type === "group");
+    if (groups && drag.origin.size > MOVE_CONTENTS_MAX) {
+      return [{ op: "move", ids: [...drag.origin.keys()], dx: drag.dx, dy: drag.dy }];
+    }
     return [{ op: "move", ids: [...drag.ids], dx: drag.dx, dy: drag.dy, ...(groups ? { contents: true } : {}) }];
   }
 
