@@ -1,9 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { t } from "../../../../i18n/strings";
+import { EditorState } from "@codemirror/state";
+import { resolvedLanguage, t } from "../../../../i18n/strings";
+import { frontmatterLanguage } from "./proof";
 import { declareClipboard } from "../../../../platform/clipboard";
 import { closeContextMenu } from "../../../../ui/menu";
 import { caseApplies, expectedOf, playCase, seenOf, TABLE_CONFORMANCE, type ConformanceClipboard, type ConformanceTarget } from "../../../../tabella/conformance";
+import { framePointer } from "../../../../tabella/frame/test-support";
 import { TableGrid, tableMenu, type TableGridHost } from "./table-grid";
 import type { TableData } from "./table-model";
 
@@ -19,7 +22,7 @@ afterEach(() => {
 
 /// Una griglia con un host che scrive subito: la tabella nuova torna alla
 /// griglia come farebbe l'editor dopo la transazione.
-function mount(rows: string[][], readOnly = false) {
+function mount(rows: string[][], readOnly = false, language: string | null = null) {
   const writes: TableData[] = [];
   const left: string[] = [];
   const undo = vi.fn();
@@ -36,6 +39,7 @@ function mount(rows: string[][], readOnly = false) {
     leave: (where) => void left.push(where),
     cellHtml: () => null,
     activate: () => false,
+    language: () => language,
     focused: vi.fn(),
     changed: vi.fn(),
   };
@@ -367,6 +371,22 @@ describe("le azioni della barra sulla griglia", () => {
     expect(writes[0]!.rows).toEqual([["Nome", "Voto"], ["Ada", "10"]]);
     expect(grid.selection.focus).toEqual({ row: 1, col: 1 });
   });
+
+  it("la maniglia segue la lingua della nota: «Mar» in una nota inglese è marzo anche con Fub in italiano", () => {
+    expect(resolvedLanguage()).toMatch(/^it/);
+    const english = frontmatterLanguage(EditorState.create({ doc: "---\nlang: en-GB\n---\n\n| Month | Hours |\n" }));
+    expect(english).toBe("en-GB");
+    const rows = [["Month", "Hours"], ["Mar", "8"], ["", "7"]];
+    const { grid, writes } = mount(rows, false, english);
+    grid.focus({ row: 1, col: 0 });
+    framePointer(grid.element, { kind: "fill-double" });
+    expect(writes[writes.length - 1]!.rows[2]![0]).toBe("Apr");
+    // Senza lingua nella nota vale quella di Fub: «Mar» è martedì.
+    const { grid: italian, writes: written } = mount(rows.map((row) => [...row]));
+    italian.focus({ row: 1, col: 0 });
+    framePointer(italian.element, { kind: "fill-double" });
+    expect(written[written.length - 1]!.rows[2]![0]).toBe("Mer");
+  });
 });
 
 describe("la prova comune della Tabella, sul Markdown", () => {
@@ -385,13 +405,22 @@ describe("la prova comune della Tabella, sul Markdown", () => {
     });
     (document.activeElement ?? document.body).dispatchEvent(event);
   };
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   for (const test of TABLE_CONFORMANCE) {
     it.runIf(caseApplies(test, target))(test.name, async () => {
-      const { grid } = mount(test.rows.map((row) => [...row]));
+      if (test.today) {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date(test.today));
+      }
+      const { grid, writes } = mount(test.rows.map((row) => [...row]));
       grid.focus("first");
       const seen = await playCase(test, {
         key: (name, init) => key(document.activeElement ?? document.body, name, init),
         command: (id) => void grid.runAction(id),
+        pointer: (gesture) => framePointer(grid.element, gesture),
+        edits: () => writes.length,
         clipboard,
         cells: () => grid.data.rows.map((row) => [...row]),
         active: () => ({ row: grid.active.row, column: grid.active.col }),

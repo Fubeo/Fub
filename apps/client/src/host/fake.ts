@@ -1141,7 +1141,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
     const text = docs.get(id)?.text ?? "";
     switch (p.kind) {
       case "text": {
-        const haystack = p.case_sensitive ? `${id}\n${text}` : `${id}\n${text}`.toLowerCase();
+        // I campi come la regex: `name` è il nome (qui il path), `body` il
+        // testo; nessun campo, tutti e due. Una ricerca per nome che trovasse
+        // anche il testo metterebbe fra i nomi note che il kernel non dà.
+        const scope = p.fields.length === 0 ? `${id}\n${text}` : p.fields.flatMap((field) => (field === "name" ? [id] : field === "body" ? [text] : [])).join("\n");
+        const haystack = p.case_sensitive ? scope : scope.toLowerCase();
         const needle = p.case_sensitive ? p.text : p.text.toLowerCase();
         return p.mode === "phrase" ? haystack.includes(needle) : needle.split(/\s+/).filter(Boolean).every((term) => haystack.includes(term));
       }

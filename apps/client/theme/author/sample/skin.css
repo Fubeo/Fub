@@ -7485,10 +7485,87 @@ kbd,
   width: var(--space-7);
   min-width: var(--space-7);
 }
+/* Le intestazioni si cliccano: la lettera sceglie la colonna, il numero la
+   riga. Il puntatore sopra e la scelta danno un fondo arrotondato, disegnato
+   dentro la cella (le celle di una tabella a bordi uniti non si
+   arrotondano). */
+.cm-editor .cm-content .tb-grid .tb-letter,
+.cm-editor .cm-content .tb-grid .tb-rowhead {
+  position: relative;
+  z-index: 0;
+  cursor: pointer;
+}
+.cm-editor .cm-content .tb-grid .tb-letter::before,
+.cm-editor .cm-content .tb-grid .tb-rowhead::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border-radius: var(--radius-xs);
+}
+.cm-editor .cm-content .tb-grid .tb-letter:hover,
+.cm-editor .cm-content .tb-grid .tb-rowhead:hover {
+  color: var(--text);
+}
+.cm-editor .cm-content .tb-grid .tb-letter:hover::before,
+.cm-editor .cm-content .tb-grid .tb-rowhead:hover::before {
+  background: var(--bg-hover);
+}
 .cm-editor .cm-content .tb-grid .tb-letter.is-selected,
 .cm-editor .cm-content .tb-grid .tb-rowhead.is-selected {
   color: var(--accent);
   font-weight: var(--weight-bold);
+}
+.cm-editor .cm-content .tb-grid .tb-letter.is-selected::before,
+.cm-editor .cm-content .tb-grid .tb-rowhead.is-selected::before {
+  background: var(--accent-wash);
+}
+/* Mentre si trascinano le intestazioni scelte il puntatore dice che si
+   sposta qualcosa, e una linea d'accento segna dove arriverà. */
+.cm-editor .cm-content .tb-grid.is-moving-lines,
+.cm-editor .cm-content .tb-grid.is-moving-lines .tb-letter,
+.cm-editor .cm-content .tb-grid.is-moving-lines .tb-rowhead,
+.cm-editor .cm-content .tb-grid.is-moving-lines .tb-cell {
+  cursor: grabbing;
+}
+.cm-editor .cm-content .tb-grid .tb-drop {
+  position: absolute;
+  z-index: 4;
+  width: 2px;
+  height: 2px;
+  margin: -1px 0 0 -1px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.cm-editor .cm-content .tb-grid .tb-drop[data-axis="column"] {
+  margin-top: 0;
+}
+.cm-editor .cm-content .tb-grid .tb-drop[data-axis="row"] {
+  margin-left: 0;
+}
+.cm-editor .cm-content .tb-grid .tb-drop[hidden] {
+  display: none;
+}
+/* Il campo della cella aperta non è un controllo dei moduli: niente anello
+   né angoli suoi, il segno è l'anello della cella attiva. */
+.cm-editor .cm-content .tb-grid .tb-input,
+.cm-editor .cm-content .tb-grid .tb-input:focus-visible {
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+}
+/* Il completamento dalla colonna: il resto proposto è scelto, col fondo
+   lavato d'accento invece della selezione piena, finché la proposta è lì
+   (`is-proposal`); il testo scelto a mano ha la selezione di sempre.
+   CodeMirror dà al campo a fuoco dentro il suo contenuto la selezione di
+   sistema con `!important` (`hideNativeSelection`): soltanto un
+   `!important` più specifico la batte. */
+.cm-editor .cm-content .tb-grid .tb-input.is-proposal::selection {
+  background: var(--accent-wash) !important;
 }
 /* Il puntatore sulle celle resta la freccia: la tabella non è un foglio di
    calcolo che chiede una croce. */

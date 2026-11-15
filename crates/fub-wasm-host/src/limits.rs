@@ -118,6 +118,20 @@ const MEMORY_CEILING: usize = 64 * 1024 * 1024;
 /// migliaio di voci, tre ordini di grandezza sotto.
 const TABLE_CEILING: usize = MEMORY_CEILING / 8;
 
+/// Quanti byte di `wasi:random` può chiedere **una chiamata** del contratto,
+/// sommando tutte le sue richieste: **1 MiB**.
+///
+/// Il tetto di una richiesta (64 KiB, in `component.rs`) ferma la lunghezza da
+/// gigabyte, non il ciclo che chiede 64 KiB alla volta finché la scadenza non
+/// scatta: cinque secondi di generatore del sistema sono centinaia di MiB
+/// allocati e copiati dall'host. Un guest vero chiede semi e chiavi da decine
+/// di byte, e il seme delle `HashMap` della std ne chiede sedici: un MiB sta
+/// quattro ordini di grandezza sopra. Il budget ha la stessa parentesi della
+/// scadenza — riparte in [`renew`] a ogni chiamata — quindi insieme danno anche
+/// il ritmo: al più un MiB per chiamata, e le chiamate le fa l'host. Oltre, la
+/// richiesta è una trap, come la lunghezza fuori tetto.
+pub(crate) const RANDOM_BUDGET: u64 = 1024 * 1024;
+
 // ---------------------------------------------------------------------------
 // Il motore, e il suo battito
 // ---------------------------------------------------------------------------
@@ -340,6 +354,7 @@ pub(crate) fn arm(store: &mut Store<State>) {
 /// funzione è `pub(crate)` invece di stare dentro [`arm`].
 pub(crate) fn renew(store: &mut Store<State>) {
     store.set_epoch_deadline(TIMEOUT_IN_TICKS);
+    store.data_mut().refill_random();
 }
 
 #[cfg(test)]
