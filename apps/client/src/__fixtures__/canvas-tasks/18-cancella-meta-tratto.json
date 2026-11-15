@@ -1,5 +1,5 @@
 {
-  "about": "Cancellare metà di un tratto: la gomma che taglia toglie un pezzo al centro, e il tratto resta in due. Serve l'inchiostro in codice (N4), quindi con main non si può. Il tratto è scritto come lo documenta N4 (`fub:ink`).",
+  "about": "Cancellare metà di un tratto: la gomma che taglia toglie un pezzo al centro, e il tratto resta in due. Con le operazioni di main si toglie il tratto e si scrivono a mano i due pezzi, coi campioni già tagliati; erase_along li calcola come la gomma «Solo il pezzo». Il tratto è scritto come lo documenta N4 (`fub:ink`).",
   "prompt": "Con la gomma che taglia, togli un pezzetto al centro del tratto a pennarello sullo schizzo «Schizzo»: restano due tratti.",
   "before": {
     "nodes": [
@@ -18,10 +18,14 @@
               "id": "s-mh0k2q1x-4f9a-1",
               "tool": "pen",
               "at": "2026-11-02T09:20:31.250Z",
-              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
-              "color": "#0072b2",
-              "anchor": { "kind": "card", "width": 320, "height": 160 },
-              "ink": "1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8"
+              "brush": "pf1 size=6 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=marker",
+              "color": "#d55e00",
+              "anchor": {
+                "kind": "card",
+                "width": 320,
+                "height": 160
+              },
+              "ink": "1 s100 cxypt 4000,8000,128,0 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8"
             }
           ]
         }
@@ -29,12 +33,73 @@
     ],
     "edges": []
   },
-  "ops_today": null,
-  "ops": [
-    { "op": "erase_along", "on": "sc", "points": [[150, -8], [150, 168]], "size": 16 }
+  "ops_today": [
+    {
+      "op": "erase_strokes",
+      "layer": {
+        "node": "sc"
+      },
+      "ids": [
+        "s-mh0k2q1x-4f9a-1"
+      ]
+    },
+    {
+      "op": "add_strokes",
+      "layer": {
+        "node": "sc"
+      },
+      "strokes": [
+        {
+          "tool": "pen",
+          "at": "2026-11-02T09:20:31.250Z",
+          "brush": "pf1 size=6 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=marker",
+          "color": "#d55e00",
+          "anchor": {
+            "kind": "card",
+            "width": 320,
+            "height": 160
+          },
+          "ink": "1 s100 cxypt 4000,8000,128,0 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 900,0,0,4"
+        },
+        {
+          "tool": "pen",
+          "at": "2026-11-02T09:20:31.302Z",
+          "brush": "pf1 size=6 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=marker",
+          "color": "#d55e00",
+          "anchor": {
+            "kind": "card",
+            "width": 320,
+            "height": 160
+          },
+          "ink": "1 s100 cxypt 17100,8000,128,0 900,0,0,4 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8"
+        }
+      ]
+    }
   ],
-  "needs": ["erase_along"],
+  "ops": [
+    {
+      "op": "erase_along",
+      "on": "sc",
+      "points": [
+        [
+          160,
+          -8
+        ],
+        [
+          160,
+          168
+        ]
+      ],
+      "size": 16
+    }
+  ],
+  "needs": [],
   "checks": [
-    { "strokes": { "on_text": "Schizzo", "n": 2 } }
+    {
+      "strokes": {
+        "on_text": "Schizzo",
+        "n": 2
+      }
+    }
   ]
 }

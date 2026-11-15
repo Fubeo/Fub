@@ -106,6 +106,7 @@ fn sample(kind: FieldKind) -> Value {
         FieldKind::Shape => json!({"kind": "line", "x1": 0, "y1": 0, "x2": 8, "y2": 0}),
         FieldKind::PenSize => json!(2),
         FieldKind::InkColor => json!("blue"),
+        FieldKind::Positive => json!(2),
         FieldKind::Any => Value::Null,
     }
 }
@@ -126,7 +127,7 @@ fn wrong(kind: FieldKind) -> Option<Value> {
         FieldKind::Pair => Some(json!("a")),
         FieldKind::Layer => Some(json!(1)),
         FieldKind::Strokes => Some(json!("a")),
-        FieldKind::Shape | FieldKind::PenSize => Some(json!("a")),
+        FieldKind::Shape | FieldKind::PenSize | FieldKind::Positive => Some(json!("a")),
         FieldKind::InkColor => Some(json!(1)),
     }
 }

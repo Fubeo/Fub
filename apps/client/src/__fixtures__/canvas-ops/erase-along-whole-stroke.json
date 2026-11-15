@@ -1,0 +1,70 @@
+{
+  "about": "Un cammino che copre tutto il tratto lo toglie senza pezzi; era l'ultimo della scheda, e la chiave fub:ink sparisce.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "text": "a",
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 60,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 100,
+                "height": 60
+              },
+              "ink": "1 s100 cxypt 2000,3000,128,0 1000,0,0,8 1000,0,0,8"
+            }
+          ]
+        },
+        "fub:tag": "dopo"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "erase_along",
+      "on": "a",
+      "points": [
+        [
+          10,
+          30
+        ],
+        [
+          50,
+          30
+        ]
+      ],
+      "size": 20
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 60,
+          "text": "a",
+          "fub:tag": "dopo"
+        }
+      ]
+    },
+    "created": []
+  }
+}

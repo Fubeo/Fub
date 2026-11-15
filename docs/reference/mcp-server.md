@@ -230,7 +230,7 @@ una nota: si legge con qualunque radice.
   (`add_card`, `connect`, `move`, `resize`, `set`, `remove`, `reorder`,
   `color`, `align`, `distribute`, `duplicate`, `reverse`, `group`, `layout`,
   `insert`, `convert`, `from_mermaid`, `from_outline`, `add_strokes`,
-  `erase_strokes`, `draw`; i campi
+  `erase_strokes`, `draw`, `erase_along`; i campi
   sono in `fub_canvas_guide`, la forma in
   [Operazioni sulla lavagna](canvas-operations.md), e ciò che si legge di
   Mermaid e delle scalette in [Da Mermaid e da una scaletta](canvas-import.md))
