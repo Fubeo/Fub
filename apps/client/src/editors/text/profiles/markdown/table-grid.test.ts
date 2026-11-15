@@ -22,7 +22,7 @@ afterEach(() => {
 
 /// Una griglia con un host che scrive subito: la tabella nuova torna alla
 /// griglia come farebbe l'editor dopo la transazione.
-function mount(rows: string[][], readOnly = false, language: string | null = null) {
+function mount(rows: string[][], readOnly = false, language: string | null = null, activate: TableGridHost["activate"] = () => false) {
   const writes: TableData[] = [];
   const left: string[] = [];
   const undo = vi.fn();
@@ -38,7 +38,7 @@ function mount(rows: string[][], readOnly = false, language: string | null = nul
     redo: vi.fn(),
     leave: (where) => void left.push(where),
     cellHtml: () => null,
-    activate: () => false,
+    activate,
     language: () => language,
     focused: vi.fn(),
     changed: vi.fn(),
@@ -63,6 +63,19 @@ function mouse(target: Element, type: string, init: MouseEventInit = {}): void {
 const ROWS = [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]];
 
 describe("la griglia", () => {
+  it("Mod col clic e Alt col clic su una cella chiedono all'ospite di seguire il link; il clic semplice sceglie", () => {
+    const activate = vi.fn(() => true);
+    const { cell } = mount(ROWS, false, null, activate);
+    mouse(cell(1, 0), "mousedown");
+    expect(activate).not.toHaveBeenCalled();
+    for (const init of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }]) {
+      const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, ...init });
+      cell(1, 0).dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    }
+    expect(activate).toHaveBeenCalledTimes(3);
+  });
+
   it("disegna celle, lettere delle colonne e numeri delle righe", () => {
     const { root, cell } = mount(ROWS);
     expect(root.getAttribute("role")).toBe("grid");

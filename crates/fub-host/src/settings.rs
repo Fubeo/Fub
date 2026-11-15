@@ -208,6 +208,10 @@ pub const EDITOR_PROPERTIES: &str = "editor.properties";
 /// `always` anche sul testo scelto a barra accesa; `menu` soltanto col tasto
 /// destro; `off` mai.
 pub const EDITOR_MINIBAR: &str = "editor.minibar";
+/// Che cosa fa il clic che apre un link a una nota: `apri` la porta nel
+/// riquadro, come sempre; `sbircia` la apre nella sbirciata, sopra la destra
+/// del foglio. Alt col clic (o Alt-Invio) sbircia comunque.
+pub const EDITOR_LINK_CLICK: &str = "editor.link-click";
 /// Il «/» a inizio riga o dopo uno spazio apre il menu dei blocchi e dei
 /// comandi, filtrato da ciò che si scrive dopo. Spento, il «/» resta testo.
 pub const EDITOR_SLASH: &str = "editor.slash";
@@ -826,6 +830,16 @@ fn editor_settings() -> Vec<SettingSpec> {
             UiOption::new("always", Text::key(C_EDITOR_MINIBAR_ALWAYS)),
             UiOption::new("menu", Text::key(C_EDITOR_MINIBAR_MENU)),
             UiOption::new("off", Text::key(C_EDITOR_MINIBAR_OFF)),
+        ],
+    ));
+    settings.push(choice(
+        EDITOR_LINK_CLICK,
+        C_EDITOR_LINK_CLICK,
+        C_EDITOR_LINK_CLICK_DESC,
+        "apri",
+        vec![
+            UiOption::new("apri", Text::key(C_EDITOR_LINK_CLICK_OPEN)),
+            UiOption::new("sbircia", Text::key(C_EDITOR_LINK_CLICK_PEEK)),
         ],
     ));
     settings.push(
@@ -1548,6 +1562,10 @@ const C_EDITOR_MINIBAR_AUTO: &str = "core.editor.minibar.auto";
 const C_EDITOR_MINIBAR_ALWAYS: &str = "core.editor.minibar.always";
 const C_EDITOR_MINIBAR_MENU: &str = "core.editor.minibar.menu";
 const C_EDITOR_MINIBAR_OFF: &str = "core.editor.minibar.off";
+const C_EDITOR_LINK_CLICK: &str = "core.editor.link_click";
+const C_EDITOR_LINK_CLICK_DESC: &str = "core.editor.link_click.desc";
+const C_EDITOR_LINK_CLICK_OPEN: &str = "core.editor.link_click.open";
+const C_EDITOR_LINK_CLICK_PEEK: &str = "core.editor.link_click.peek";
 const C_EDITOR_SLASH: &str = "core.editor.slash";
 const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
 const C_EDITOR_SLASH_HIDDEN: &str = "core.editor.slash.hidden";
@@ -2184,6 +2202,10 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_MINIBAR_ALWAYS, "Col tasto destro e su ogni testo scelto")
         .with(C_EDITOR_MINIBAR_MENU, "Soltanto col tasto destro")
         .with(C_EDITOR_MINIBAR_OFF, "Mai")
+        .with(C_EDITOR_LINK_CLICK, "Clic su un link a una nota")
+        .with(C_EDITOR_LINK_CLICK_DESC, "Che cosa fa il clic che apre un link: portare la nota nel riquadro, o aprirla nella sbirciata, sopra la destra del foglio, dove si scrive senza lasciare la nota di prima. Alt col clic, o Alt Invio, sbircia sempre.")
+        .with(C_EDITOR_LINK_CLICK_OPEN, "Apre la nota")
+        .with(C_EDITOR_LINK_CLICK_PEEK, "Sbircia la nota")
         .with(C_EDITOR_SLASH, "Menu «/» nel testo")
         .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
         .with(C_EDITOR_SLASH_HIDDEN, "Voci nascoste dal menu «/»")
@@ -2815,6 +2837,10 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_MINIBAR_ALWAYS, "On right-click and on any selected text")
         .with(C_EDITOR_MINIBAR_MENU, "Only on right-click")
         .with(C_EDITOR_MINIBAR_OFF, "Never")
+        .with(C_EDITOR_LINK_CLICK, "Clicking a link to a note")
+        .with(C_EDITOR_LINK_CLICK_DESC, "What the click that opens a link does: bring the note into the pane, or open it in the peek, over the right of the sheet, where you write without leaving the note you were in. Alt with the click, or Alt Enter, always peeks.")
+        .with(C_EDITOR_LINK_CLICK_OPEN, "Opens the note")
+        .with(C_EDITOR_LINK_CLICK_PEEK, "Peeks at the note")
         .with(C_EDITOR_SLASH, "«/» menu in the text")
         .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
         .with(C_EDITOR_SLASH_HIDDEN, "Items hidden from the «/» menu")
