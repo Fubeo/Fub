@@ -49,3 +49,14 @@ export declare const SCENE: readonly Scene[];
 export declare const LIGHTS: readonly Light[];
 export declare function photoFilename(scene: Scene, light: Light): string;
 export declare function sceneUrl(base: string, scene: Scene, light: Light): string;
+
+/// Una scatola in coordinate della pagina, come `getBoundingClientRect`.
+export interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+/// Dove cliccare il velo del cassetto, in coordinate del velo, lontano dalle
+/// scatole `avoid` (il cassetto, i bordi da cui i cassetti si affacciano).
+export declare function scrimClickPoint(scrim: Box, avoid: readonly Box[], top?: number): { x: number; y: number };

@@ -74,11 +74,12 @@ export function intoColumns(state: EditorState, blocks: readonly Block[], picked
   return { changes: detached(state, { from, to, insert: text }, from, to), scrollIntoView: true, userEvent: "input.columns" };
 }
 
-/// Lasciare la tratta `run` sul bordo destro del blocco `target` (H5, K3): la
-/// tratta diventa una colonna a destra del blocco. Un blocco qualunque fa col
-/// lasciato due colonne; delle colonne con meno di quattro ne prendono una in
-/// fondo. La tratta lascia il suo posto. `null` se non si può.
-export function dropAsColumn(state: EditorState, blocks: readonly Block[], run: BlockRun, target: number): TransactionSpec | null {
+/// Lasciare la tratta `run` sul bordo destro (o sinistro) del blocco `target`
+/// (H5, K3, E2 «Accanto»): la tratta diventa una colonna a destra (o a
+/// sinistra) del blocco. Un blocco qualunque fa col lasciato due colonne;
+/// delle colonne con meno di quattro ne prendono una in fondo (o in testa).
+/// La tratta lascia il suo posto. `null` se non si può.
+export function dropAsColumn(state: EditorState, blocks: readonly Block[], run: BlockRun, target: number, side: "left" | "right" = "right"): TransactionSpec | null {
   if (target >= run.first && target <= run.last) return null;
   const host = blocks[target];
   if (!host || host.parent !== -1 || host.kind === "frontmatter") return null;
@@ -93,9 +94,18 @@ export function dropAsColumn(state: EditorState, blocks: readonly Block[], run: 
   const doc = state.doc;
   const moving = doc.sliceString(blocks[run.first]!.from, blocks[run.last]!.to);
   const added = column(moving, nl);
-  const insert = count === null
-    ? [`> [!columns]`, [column(doc.sliceString(host.from, host.to), nl), added].join(between(nl))].join(nl)
-    : doc.sliceString(host.from, host.to) + between(nl) + added;
+  const hostText = doc.sliceString(host.from, host.to);
+  let insert: string;
+  if (count === null) {
+    const pair = [column(hostText, nl), added];
+    insert = [`> [!columns]`, (side === "left" ? pair.reverse() : pair).join(between(nl))].join(nl);
+  } else if (side === "left") {
+    // Dopo la riga `> [!columns]`, prima della prima colonna.
+    const head = doc.lineAt(host.from);
+    insert = head.text + nl + added + between(nl) + doc.sliceString(head.to + 1, host.to);
+  } else {
+    insert = hostText + between(nl) + added;
+  }
   // La tratta se ne va con le righe vuote che la separavano dal vicino sopra,
   // o da quello sotto se è la prima.
   const gone = a > 0

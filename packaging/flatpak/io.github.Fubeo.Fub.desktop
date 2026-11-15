@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Fub
+GenericName=Knowledge manager
+GenericName[it]=Gestore della conoscenza
+Comment=Notes, documents, spreadsheets, PDFs and drawings in your own folders
+Comment[it]=Note, documenti, fogli di calcolo, PDF e disegni nelle tue cartelle
+Exec=fub %u
+Icon=io.github.Fubeo.Fub
+Terminal=false
+Categories=Office;
+Keywords=notes;markdown;vault;knowledge;pdf;canvas;
+Keywords[it]=note;markdown;vault;conoscenza;pdf;lavagna;
+MimeType=x-scheme-handler/fub;
+StartupNotify=true
+StartupWMClass=fub
