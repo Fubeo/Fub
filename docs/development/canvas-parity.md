@@ -64,9 +64,10 @@ o `plan`.
   `spec::OPS`; che `OPS` coincida con le varianti di serde lo controlla
   `tests/spec.rs`.
 - **R7, la GUI.** `parity.test.ts` monta la tela in più stati: il vuoto, le
-  schede `t1`, `f1` e `l1` da sole, due o tre schede insieme, un arco e un
-  gruppo. Raccoglie gli id di menu (anche nei sottomenu), barra, campi e
-  appunti. Ogni id ha una voce, e ogni voce trova il suo id. I gesti sono
+  schede `t1`, `f1`, `l1`, il PDF `p1` e la nota `n1` da sole, due o tre schede
+  insieme, un arco, un gruppo e lo strumento Penna. La tela ha il selettore dei
+  file, le note e le parti finte, così mostra i loro comandi. Raccoglie gli id
+  di menu (anche nei sottomenu), barra, campi e appunti. Ogni id ha una voce, e ogni voce trova il suo id. I gesti sono
   quelli della costante `GESTURES`, i tasti quelli di `KEYS`. Ogni tasto delle
   voci si preme su `t1`, e dopo una mossa per l'annulla: il file cambia se e
   solo se la voce dice `writes: file`.
@@ -185,3 +186,6 @@ modello.
   lo dice.
 - Le voci di una fonte fuori da `merged`, che R7 non legge. Ogni voce di una
   fonte in `merged` ha almeno un `gui` che R7 controlla.
+- I pulsanti della barra della selezione (`data-command`, non
+  `data-canvas-action`) e i comandi delle porte che la tela di R7 non ha (Apri
+  a lato, Sposta nel cestino, l'anteprima web): R7 non li vede.

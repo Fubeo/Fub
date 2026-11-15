@@ -7,7 +7,7 @@
       "id": "N6.card.drop_vault",
       "name": "Trascina un file dall'albero: misure per tipo",
       "source": "N6",
-      "gui": [{ "plan": "N6 T9" }, { "plan": "N6 T15" }],
+      "gui": [{ "gesture": "drop-vault-file" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "add_card", "file": "Corsi/foto.png", "content_size": [4032, 3024] }]
@@ -16,7 +16,7 @@
       "id": "N6.card.drop_many",
       "name": "Trascina molti file: griglia e gruppo",
       "source": "N6",
-      "gui": [{ "plan": "N6 T9" }],
+      "gui": [{ "gesture": "drop-vault-files" }],
       "writes": "file",
       "state": "code",
       "ops": [
@@ -30,7 +30,7 @@
       "id": "N6.text.grow",
       "name": "La scheda di testo cresce col testo",
       "source": "N6",
-      "gui": [{ "plan": "N6 T44" }, { "plan": "N6 T46" }],
+      "gui": [{ "gesture": "type-grows" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "resize", "id": "t1", "fit": "content" }],
@@ -40,7 +40,7 @@
       "id": "N6.text.new_below",
       "name": "Ctrl+Invio: una scheda sotto",
       "source": "N6",
-      "gui": [{ "plan": "N6 T44" }],
+      "gui": [{ "gesture": "write-next-below" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "add_card", "text": "Poi", "near": "t1", "side": "bottom" }]
@@ -49,7 +49,7 @@
       "id": "N6.text.new_right",
       "name": "Ctrl+Maiusc+Invio: una scheda a destra, collegata",
       "source": "N6",
-      "gui": [{ "plan": "N6 T44" }],
+      "gui": [{ "gesture": "write-next-right" }],
       "writes": "file",
       "state": "code",
       "ops": [
@@ -58,10 +58,38 @@
       ]
     },
     {
+      "id": "N6.text.style",
+      "name": "La misura e l'allineamento del testo",
+      "source": "N6",
+      "gui": [
+        { "toolbar": "text-size-s" },
+        { "toolbar": "text-size-m" },
+        { "toolbar": "text-size-l" },
+        { "toolbar": "text-size-xl" },
+        { "toolbar": "text-align-start" },
+        { "toolbar": "text-align-center" },
+        { "toolbar": "text-align-end" }
+      ],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "fub:text": { "v": 1, "size": "l", "align": "center" } } }]
+    },
+    {
       "id": "N6.color.names",
       "name": "I colori con un nome",
       "source": "N6",
-      "gui": [{ "plan": "N6 T47" }],
+      "gui": [
+        { "menu": "canvas.color.notes" },
+        { "menu": "canvas.color.gray" },
+        { "menu": "canvas.color.brown" },
+        { "menu": "canvas.color.orange" },
+        { "menu": "canvas.color.yellow" },
+        { "menu": "canvas.color.green" },
+        { "menu": "canvas.color.blue" },
+        { "menu": "canvas.color.purple" },
+        { "menu": "canvas.color.pink" },
+        { "menu": "canvas.color.red" }
+      ],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "color", "ids": ["t1"], "color": "note-blue" }]
@@ -70,7 +98,7 @@
       "id": "N6.group.selection",
       "name": "Raggruppa la selezione",
       "source": "N6",
-      "gui": [{ "plan": "N6 T51" }],
+      "gui": [{ "key": "Mod+G" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "group", "ids": ["f1", "p1"] }]
@@ -79,7 +107,7 @@
       "id": "N6.resize.fit",
       "name": "Doppio clic sulla maniglia: misura del contenuto",
       "source": "N6",
-      "gui": [{ "plan": "N6 T66" }],
+      "gui": [{ "gesture": "dblclick-handle" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "resize", "id": "p1", "fit": "content", "content_size": [595, 842] }],
@@ -89,7 +117,7 @@
       "id": "N6.edge.nearest",
       "name": "Collega senza mirare: i lati più vicini",
       "source": "N6",
-      "gui": [{ "plan": "N6 T67" }],
+      "gui": [{ "gesture": "connect-to-card" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "connect", "from": "t1", "to": "f1", "sides": "auto" }]
@@ -98,7 +126,7 @@
       "id": "N6.edge.drop_empty",
       "name": "Lascia il filo nel vuoto: una scheda nuova collegata",
       "source": "N6",
-      "gui": [{ "plan": "N6 T67" }],
+      "gui": [{ "gesture": "connect-to-empty" }],
       "writes": "file",
       "state": "code",
       "ops": [
@@ -110,7 +138,7 @@
       "id": "N6.clipboard.paste",
       "name": "Incolla schede copiate",
       "source": "N6",
-      "gui": [{ "plan": "N6 T68" }],
+      "gui": [{ "clipboard": "paste" }],
       "writes": "file",
       "state": "code",
       "ops": [
@@ -147,10 +175,19 @@
       "note": "Il nucleo dà gli id nuovi, riattacca gli archi e sposta il blocco (`insert`, T13); i tratti liberi degli appunti (`fub:ink` della radice) non entrano in `insert`: la GUI li incolla con le operazioni dell'inchiostro."
     },
     {
+      "id": "N6.clipboard.cut",
+      "name": "Taglia le schede",
+      "source": "N6",
+      "gui": [{ "clipboard": "cut" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "remove", "ids": ["t2"] }]
+    },
+    {
       "id": "N6.convert.extract",
       "name": "Estrai in una nota",
       "source": "N6",
-      "gui": [{ "plan": "N6 T70" }],
+      "gui": [{ "menu": "canvas.extract_note" }],
       "writes": "file",
       "state": "composed",
       "ops": [{ "op": "convert", "id": "t2", "file": "Corsi/Ripasso.md" }],
@@ -160,7 +197,7 @@
       "id": "N6.convert.copy_here",
       "name": "Copia qui il testo del file",
       "source": "N6",
-      "gui": [{ "plan": "N6 T70" }],
+      "gui": [{ "menu": "canvas.copy_note_text" }],
       "writes": "file",
       "state": "composed",
       "ops": [{ "op": "add_card", "text": "(il testo letto)", "near": "f1", "side": "right" }],
@@ -170,7 +207,7 @@
       "id": "N6.card.relink",
       "name": "Ritrova un file mancante, sostituisci il file",
       "source": "N6",
-      "gui": [{ "plan": "N6 T16" }, { "plan": "N6 T70" }],
+      "gui": [{ "menu": "canvas.replace_file" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "set", "id": "f1", "fields": { "file": "Archivio/voti.xlsx" } }]
@@ -179,7 +216,7 @@
       "id": "N6.pages.spread",
       "name": "Spargi le pagine del PDF",
       "source": "N6",
-      "gui": [{ "plan": "N6 T72" }],
+      "gui": [{ "menu": "canvas.spread_pages" }],
       "writes": "file",
       "state": "by_hand",
       "ops": [
@@ -216,15 +253,7 @@
       "id": "N6.parts.excerpt",
       "name": "Estratti: pagine, zona, sezioni, ritaglio",
       "source": "N6",
-      "gui": [
-        { "plan": "N6 T73" },
-        { "plan": "N6 T74" },
-        { "plan": "N6 T75" },
-        { "plan": "N6 T78" },
-        { "plan": "N6 T80" },
-        { "plan": "N6 T81" },
-        { "plan": "N6 T82" }
-      ],
+      "gui": [{ "menu": "canvas.parts" }],
       "writes": "file",
       "state": "by_hand",
       "ops": [
@@ -242,7 +271,7 @@
       "id": "N6.ink.page",
       "name": "Inchiostro sulla pagina del PDF",
       "source": "N6",
-      "gui": [{ "plan": "N6 T19" }],
+      "gui": [{ "gesture": "pen-on-page" }],
       "writes": "file",
       "state": "missing",
       "computes": "l'ancora di pagina",
@@ -259,7 +288,7 @@
       "id": "N6.ink.cell",
       "name": "Inchiostro attaccato a una cella",
       "source": "N6",
-      "gui": [{ "plan": "N6 T37" }, { "plan": "N6 T38" }],
+      "gui": [{ "gesture": "pen-on-cell" }],
       "writes": "file",
       "state": "missing",
       "computes": "l'ancora di cella",
@@ -276,7 +305,7 @@
       "id": "N6.ink.lasso",
       "name": "Lazo: sposta i tratti",
       "source": "N6",
-      "gui": [{ "plan": "N6 T86" }],
+      "gui": [{ "gesture": "lasso-move" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "move_strokes", "layer": "board", "ids": ["s1"], "dx": 40, "dy": 0 }],
@@ -286,7 +315,7 @@
       "id": "N6.ink.restyle",
       "name": "Cambia penna o colore ai tratti",
       "source": "N6",
-      "gui": [{ "plan": "N6 T86" }],
+      "gui": [{ "gesture": "lasso-restyle" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "restyle_strokes", "layer": "board", "ids": ["s1"], "color": "#d55e00" }],
@@ -296,7 +325,7 @@
       "id": "N6.ink.shapes",
       "name": "Forme dal tratto e linea dritta",
       "source": "N6",
-      "gui": [{ "plan": "N6 T87" }],
+      "gui": [{ "gesture": "pen-shape" }],
       "writes": "file",
       "state": "code",
       "ops": [
@@ -313,7 +342,7 @@
       "id": "N6.card.write_inside",
       "name": "Scrivi dentro una scheda di nota o di foglio",
       "source": "N6",
-      "gui": [{ "plan": "N6 T40" }, { "plan": "N6 T41" }, { "plan": "N6 T42" }, { "plan": "N6 T43" }],
+      "gui": [{ "gesture": "write-in-card" }],
       "writes": "other-file",
       "state": "port",
       "port": "fub_write sulla nota; i comandi dei fogli per le celle",
@@ -323,7 +352,7 @@
       "id": "N6.inspector.raw",
       "name": "L'ispettore: numeri e nodo grezzo",
       "source": "N6",
-      "gui": [{ "plan": "N6 T59" }],
+      "gui": [{ "gesture": "inspector-edit" }],
       "writes": "file",
       "state": "code",
       "ops": [
@@ -338,7 +367,7 @@
       "id": "N6.put_page",
       "name": "Metti la pagina sulla lavagna",
       "source": "N6",
-      "gui": [{ "plan": "N6 T84" }],
+      "gui": [{ "gesture": "put-page" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "add_card", "file": "Corsi/dispensa.pdf", "subpath": "#page=5" }]
@@ -347,7 +376,7 @@
       "id": "N6.guides",
       "name": "Guide e griglia durante il gesto",
       "source": "N6",
-      "gui": [{ "plan": "N6 T71" }],
+      "gui": [{ "gesture": "snap-guides" }],
       "writes": "file",
       "state": "exception",
       "note": "Le guide aiutano la mano mentre trascina; il codice scrive numeri esatti, o usa `align`, `distribute`, `layout`, e `near`."
@@ -356,7 +385,7 @@
       "id": "N6.ink.owner",
       "name": "A chi va il tratto mentre si scrive (e Alt per libero)",
       "source": "N6",
-      "gui": [{ "plan": "N6 T69" }],
+      "gui": [{ "gesture": "pen-on-card" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "draw", "on": "auto", "points": [[40, 460], [44, 460]] }],
@@ -366,17 +395,7 @@
       "id": "N6.view",
       "name": "Vista, navigatore, indietro e avanti, cerca, lettore da vicino, entrare nella scheda",
       "source": "N6",
-      "gui": [
-        { "plan": "N6 T14" },
-        { "plan": "N6 T35" },
-        { "plan": "N6 T36" },
-        { "plan": "N6 T53" },
-        { "plan": "N6 T55" },
-        { "plan": "N6 T56" },
-        { "plan": "N6 T57" },
-        { "plan": "N6 T60" },
-        { "plan": "N6 T76" }
-      ],
+      "gui": [{ "menu": "canvas.navigator.hide" }],
       "writes": "nothing",
       "state": "view"
     },
@@ -384,7 +403,7 @@
       "id": "N6.chrome",
       "name": "Catalogo, barra della selezione, menu radiale, lavagna vuota",
       "source": "N6",
-      "gui": [{ "plan": "N6 T48" }, { "plan": "N6 T51" }, { "plan": "N6 T62" }, { "plan": "N6 T63" }],
+      "gui": [{ "menu": "canvas.radial" }],
       "writes": "nothing",
       "state": "view",
       "note": "Ospitano comandi; ognuno ha la sua voce qui. Dopo N6 ogni comando del catalogo dichiara la sua operazione (T23)."
@@ -393,7 +412,7 @@
       "id": "N6.settings",
       "name": "Impostazioni della lavagna, dove vanno i file trascinati",
       "source": "N6",
-      "gui": [{ "plan": "N6 T33" }, { "plan": "N6 T34" }],
+      "gui": [{ "gesture": "board-settings" }],
       "writes": "nothing",
       "state": "exception",
       "note": "Impostazioni di Fub, non contenuto della lavagna."

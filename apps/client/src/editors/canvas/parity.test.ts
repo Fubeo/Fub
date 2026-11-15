@@ -7,7 +7,8 @@
 // gesto, in `docs/development/canvas-parity.md`.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenu, SurfaceMenuEntry } from "../core/editor-menu";
-import type { CanvasEngine } from "./engine";
+import type { CanvasEngine, CanvasNotesPort } from "./engine";
+import type { PartsPickerPort } from "./parts-picker";
 import { mountCanvas } from "./test-mount";
 import { canvasCoreReady } from "./wasm/core";
 import boardFile from "../../__fixtures__/canvas-parity/board.json";
@@ -72,6 +73,24 @@ const GESTURES: Readonly<Record<string, string>> = {
   "pen-free": "la penna, o il mouse che scrive, traccia sul vuoto: un tratto libero della lavagna",
   "erase-stroke": "la gomma (la punta che cancella, o lo strumento Gomma) passa su un tratto: lo toglie intero",
   "erase-piece": "la gomma «Solo il pezzo» strofina un tratto: ne taglia il pezzo toccato",
+  "drop-vault-file": "trascina un file dall'albero del vault sulla tela: una scheda file, con la misura della sua specie",
+  "drop-vault-files": "trascina molti file dall'albero: una scheda ciascuno, in griglia",
+  "type-grows": "si scrive in una scheda di testo: la scheda cresce col testo",
+  "write-next-below": "Ctrl+Invio mentre si scrive in una scheda di testo: una scheda nuova sotto",
+  "write-next-right": "Ctrl+Maiusc+Invio mentre si scrive in una scheda di testo: una scheda nuova a destra",
+  "dblclick-handle": "doppio clic su una maniglia: la scheda prende la misura del suo contenuto",
+  "connect-to-card": "Collega lascia il filo su una scheda: il filo va ai lati più vicini",
+  "connect-to-empty": "Collega lascia il filo nel vuoto: nasce una scheda, col filo",
+  "pen-on-page": "la penna traccia sopra una pagina di un PDF: il tratto va con la pagina",
+  "pen-on-cell": "la penna traccia sopra un foglio: il tratto va con la sua cella",
+  "lasso-move": "il Lazo sceglie dei tratti e li trascina: si spostano, anche in un'altra scheda",
+  "lasso-restyle": "con dei tratti scelti col Lazo, la barra della selezione ne cambia colore o spessore",
+  "pen-shape": "la penna ferma a fine tratto, o Maiusc: il tratto diventa una forma",
+  "write-in-card": "si scrive dentro una scheda di nota o di foglio: cambia il file della scheda",
+  "inspector-edit": "l'ispettore cambia i numeri o il nodo grezzo di una scheda",
+  "put-page": "una pagina di un PDF messa sulla lavagna: una scheda di quella pagina",
+  "snap-guides": "trascinando una scheda, le guide e la griglia la agganciano",
+  "board-settings": "le Impostazioni della lavagna, fuori dalla tela",
 };
 
 /**
@@ -100,6 +119,7 @@ const KEYS: readonly string[] = [
   "Shift+ArrowUp",
   "Shift+ArrowDown",
   "D",
+  "Mod+G",
 ];
 
 /** I tasti dell'annulla: si premono dopo una mossa, perché annullano qualcosa. */
@@ -107,10 +127,22 @@ const AFTER_A_MOVE = new Set(["Mod+Z", "Mod+Shift+Z", "Mod+Y"]);
 /** I tasti del ripeti rifanno ciò che l'annulla ha tolto: prima si annulla. */
 const AFTER_AN_UNDO = new Set(["Mod+Shift+Z", "Mod+Y"]);
 
+/**
+ * Le note e le parti finte: con loro la tela offre i comandi delle schede di
+ * nota (Estrai in una nota, Copia il testo qui, Parti…), che R7 deve vedere.
+ * Nessuno li esegue: le risposte non contano.
+ */
+const NOTES: CanvasNotesPort = {
+  freeName: async (_folder, name) => name,
+  create: async (folder, name) => `${folder}/${name}.md`,
+  read: async () => "",
+};
+const PARTS: PartsPickerPort = { outline: async () => [] };
+
 /** Uno stato della tela: la selezione che R7 monta, e il punto dove si apre il menu. */
 interface State {
   readonly name: string;
-  readonly select: (host: HTMLElement) => void;
+  readonly select: (host: HTMLElement, engine: CanvasEngine) => void;
   /** Una scheda, un arco (`edge:<id>`), o `null` per il vuoto. */
   readonly at: string | null;
 }
@@ -120,6 +152,10 @@ const STATES: readonly State[] = [
   { name: "t1", select: (host) => select(host, "t1"), at: "t1" },
   { name: "f1", select: (host) => select(host, "f1"), at: "f1" },
   { name: "l1", select: (host) => select(host, "l1"), at: "l1" },
+  { name: "p1", select: (host) => select(host, "p1"), at: "p1" },
+  { name: "n1", select: (host) => select(host, "n1"), at: "n1" },
+  // La riga della penna (N4): il suo menu c'è solo con uno strumento d'inchiostro.
+  { name: "penna", select: (_host, engine) => run(engine, "canvas.tool.pen"), at: null },
   {
     name: "t1+t2",
     select: (host) => {
@@ -157,6 +193,13 @@ function declared(kind: GuiKind): Declared[] {
       return value === undefined ? [] : [{ voice, value }];
     }),
   );
+}
+
+/** Esegue il comando `id` del catalogo della tela, come la ricerca dei comandi. */
+function run(engine: CanvasEngine, id: string): void {
+  const command = engine.commands().find((one) => one.id === id);
+  if (!command) throw new Error(`la tela non ha il comando «${id}»`);
+  command.run();
 }
 
 function viewportOf(host: HTMLElement): HTMLElement {
@@ -241,8 +284,8 @@ function openMenu(engine: CanvasEngine, target: Element, shown: Shown): void {
 function showAll(): Shown {
   const shown: Shown = { menus: new Set(), actions: new Set(), fields: new Set(), clipboard: new Set() };
   for (const state of STATES) {
-    const { engine, host } = mountCanvas(BOARD, { onPickFile: () => null });
-    state.select(host);
+    const { engine, host } = mountCanvas(BOARD, { onPickFile: () => null, notes: NOTES, parts: PARTS });
+    state.select(host, engine);
     readDom(host, shown);
     // Il menu del punto dello stato, e quello del vuoto: due menu diversi.
     const points = state.at === null ? [viewportOf(host)] : [elementOf(host, state.at), viewportOf(host)];

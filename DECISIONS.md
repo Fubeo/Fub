@@ -114,9 +114,18 @@ La più recente in cima: data · piano · decisione · perché.
   `restyle_strokes` resta `text` (`#rrggbb` lo controlla la compilazione, come
   in N6), così `validate` e serde dicono la stessa cosa · le operazioni restano
   quelle di N6, senza cambiarne la forma; lo schema le descrive com'è.
+- 2026-11-15 · manutenzione · R7 dopo N6: N6 entra in `merged` e le sue voci
+  hanno i `gui` veri al posto dei `plan` (menu, tasti, appunti, e gesti nuovi
+  in `GESTURES`); le voci di main e N4 che la GUI di N6 ha rifatto (il colore,
+  Allinea e Distribuisci in un menu, Disponi, Collega…) dicono i loro id nuovi;
+  due voci nuove, `N6.text.style` (la misura e l'allineamento, T92) e
+  `N6.clipboard.cut`. `parity.test.ts` monta anche `p1`, la nota `n1` (nuova in
+  `board.json`) e lo strumento Penna, con le note e le parti finte, e conosce
+  `Mod+G` · senza, R7 non vede i comandi che le voci di N6 dichiarano, e il
+  pulsante delle penne di N4 esiste solo con la Penna.
 - 2026-11-15 · manutenzione · Il `Fit` privato dell'inchiostro di N6 in
-  `ops.rs` diventa `InkFit`: `ops::Fit` è già pubblico (il `fit: content` di
-  `resize`, T10). La lettura dell'inchiostro (`describe/ink.rs`, T17) tiene la
+  `ops.rs` diventa `AspectFit` (`InkFit` è quello di `ink.rs`, da T18):
+  `ops::Fit` è già pubblico (il `fit: content` di `resize`, T10). La lettura dell'inchiostro (`describe/ink.rs`, T17) tiene la
   sua regola di misura; per le ancore `page` e `cell` di N6 fa come le
   operazioni sui tratti (il nucleo non sa dove la pagina o la cella sta nella
   scheda): il tratto conta nella riga dell'outline ma non nel riquadro, e in

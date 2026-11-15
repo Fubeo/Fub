@@ -150,7 +150,7 @@
         { "menu": "canvas.color.4" },
         { "menu": "canvas.color.5" },
         { "menu": "canvas.color.6" },
-        { "field": "node-color" }
+        { "toolbar": "color-menu" }
       ],
       "writes": "file",
       "state": "code",
@@ -170,7 +170,7 @@
       "id": "main.color.hex",
       "name": "Colora con un colore scritto",
       "source": "main",
-      "gui": [{ "field": "node-color-hex" }],
+      "gui": [{ "menu": "canvas.color.other" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "set", "id": "t1", "fields": { "color": "#0064b0" } }]
@@ -203,7 +203,12 @@
       "id": "main.order.front",
       "name": "Porta sopra",
       "source": "main",
-      "gui": [{ "menu": "canvas.order" }, { "menu": "canvas.bring_front" }, { "toolbar": "bring-front" }],
+      "gui": [
+        { "menu": "canvas.order" },
+        { "menu": "canvas.arrange" },
+        { "menu": "canvas.bring_front" },
+        { "toolbar": "bring-front" }
+      ],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "reorder", "ids": ["t1"] }]
@@ -229,12 +234,7 @@
         { "menu": "canvas.align.top" },
         { "menu": "canvas.align.middle" },
         { "menu": "canvas.align.bottom" },
-        { "toolbar": "left" },
-        { "toolbar": "center" },
-        { "toolbar": "right" },
-        { "toolbar": "top" },
-        { "toolbar": "middle" },
-        { "toolbar": "bottom" }
+        { "toolbar": "align-menu" }
       ],
       "writes": "file",
       "state": "code",
@@ -245,10 +245,10 @@
       "name": "Distribuisci",
       "source": "main",
       "gui": [
+        { "menu": "canvas.distribute" },
         { "menu": "canvas.distribute_x" },
         { "menu": "canvas.distribute_y" },
-        { "toolbar": "distribute-x" },
-        { "toolbar": "distribute-y" }
+        { "toolbar": "align-menu" }
       ],
       "writes": "file",
       "state": "code",
@@ -331,7 +331,7 @@
       "id": "main.edge.connect",
       "name": "Collega due schede",
       "source": "main",
-      "gui": [{ "gesture": "connect-handle" }],
+      "gui": [{ "gesture": "connect-handle" }, { "menu": "canvas.connect" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "connect", "from": "t2", "to": "f1" }]
@@ -367,7 +367,7 @@
       "id": "main.edge.color",
       "name": "Colora l'arco",
       "source": "main",
-      "gui": [{ "field": "edge-color" }, { "field": "edge-color-hex" }],
+      "gui": [{ "menu": "canvas.color" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "set", "id": "e1", "fields": { "color": "4" } }]
