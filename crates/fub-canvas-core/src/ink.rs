@@ -510,7 +510,7 @@ pub(crate) struct InkFit {
 }
 
 impl InkFit {
-    const IDENTITY: InkFit = InkFit {
+    pub(crate) const IDENTITY: InkFit = InkFit {
         s: 1.0,
         dx: 0.0,
         dy: 0.0,
@@ -520,29 +520,38 @@ impl InkFit {
     /// centra, `fixed` resta alla misura di riferimento. Un tratto libero non
     /// si porta. È `inkFit` di `apps/client/src/editors/canvas/ink-fit.ts`,
     /// provato coi suoi vettori (`canvas-ink-fit/`).
-    pub(crate) fn of(node: Option<&CanvasNode>, anchor: InkAnchor) -> InkFit {
-        let (Some(node), InkAnchor::Card { width, height }) = (node, anchor) else {
-            return InkFit::IDENTITY;
+    ///
+    /// `None` per un tratto attaccato alla pagina di un PDF o alla cella di un
+    /// foglio: dove la pagina o la cella sta dentro la scheda lo sa la resa,
+    /// non il nucleo, come per `move_strokes` e `restyle_strokes`.
+    pub(crate) fn of(node: Option<&CanvasNode>, anchor: &InkAnchor) -> Option<InkFit> {
+        let (width, height) = match anchor {
+            InkAnchor::Page { .. } | InkAnchor::Cell { .. } => return None,
+            InkAnchor::Free => return Some(InkFit::IDENTITY),
+            InkAnchor::Card { width, height } => (*width, *height),
+        };
+        let Some(node) = node else {
+            return Some(InkFit::IDENTITY);
         };
         if !scales(node) {
-            return InkFit::IDENTITY;
+            return Some(InkFit::IDENTITY);
         }
         // Le misure di una scheda sono interi entro ±(2^53−1): il cast è esatto.
         #[allow(clippy::cast_precision_loss)]
         let (w, h) = (node.width as f64, node.height as f64);
         if w < 0.0 || h < 0.0 {
-            return InkFit {
+            return Some(InkFit {
                 s: 0.0,
                 dx: 0.0,
                 dy: 0.0,
-            };
+            });
         }
         let s = (w / width).min(h / height);
-        InkFit {
+        Some(InkFit {
             s,
             dx: (w - width * s) / 2.0,
             dy: (h - height * s) / 2.0,
-        }
+        })
     }
 
     pub(crate) fn point(self, [x, y]: [f64; 2]) -> [f64; 2] {

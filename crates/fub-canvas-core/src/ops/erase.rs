@@ -4,7 +4,7 @@
 //! tocca si taglia dove passa il cerchio (`split_ink` e `cut_brush` di
 //! `fub-ink-codec`, copiati da `ink/tools/split.ts`), e i pezzi che restano
 //! prendono il suo posto, nel suo ordine. Le regole stanno in
-//! `docs/reference/canvas-ink.md`, «In codice».
+//! `docs/reference/canvas-ink-code.md`.
 //!
 //! - **Dove.** `on` si legge come per `draw` ([`Compiler::on_target`]): con
 //!   `auto` (di serie) i punti sono della lavagna e il cammino tocca i tratti
@@ -368,7 +368,11 @@ impl<'a> Holder<'a> {
     ) -> Result<Option<Vec<InkPiece>>, OpError> {
         // Come `erasableInk` e `cutInk`: lo spostamento della resa si somma
         // all'angolo della scheda, e il cammino torna nelle unità del tratto.
-        let fit = InkFit::of(self.node, drawn.anchor);
+        // Un tratto di pagina o di cella: il nucleo non sa dove sta nella
+        // scheda, e la gomma in codice non lo tocca (`on` pagina o cella è T19).
+        let Some(fit) = InkFit::of(self.node, &drawn.anchor) else {
+            return Ok(None);
+        };
         if fit.s.is_nan() || fit.s <= 0.0 {
             return Ok(None);
         }
