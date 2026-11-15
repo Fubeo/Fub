@@ -118,17 +118,25 @@ Non tutto diventa un link:
 
 ## La sbirciata
 
-Alt col clic su un wikilink, o `Alt+Invio` col cursore sul link, apre la nota
+Alt col clic su un wikilink o su un link Markdown a una nota (`[testo](Carte/B.md)`),
+o `Alt+Invio` col cursore sul link, o «Sbircia» dal menu del link, apre la nota
 in un pannello sopra la destra del foglio, sotto le linguette: la
-**sbirciata**. Al telefono prende tutto il foglio. La nota è aperta per
+**sbirciata**. Il nome si risolve dalla nota che contiene il link, anche
+quando il link sta dentro un'altra sbirciata. Al telefono prende tutto il foglio. La nota è aperta per
 scrivere in Scrittura, con lo stesso buffer di un riquadro che la mostra già:
 cursore, scorrimento e annulla sono della sbirciata.
 
 - In testata la cartella della nota e tre pulsanti: **Apri qui** porta la nota
-  nel riquadro, **A lato** in un riquadro accanto, **×** chiude. All'apertura
-  il fuoco va sul pulsante che chiude.
-- **Esc** salva e chiude, e il fuoco torna dov'era; un Esc che l'editor usa già
-  (il menu «/», un completamento) resta suo.
+  nel riquadro, **A lato** in un riquadro accanto, alla stessa selezione, **×**
+  chiude. All'apertura il fuoco va nel testo della nota (su **Crea la nota**,
+  se la nota non c'è).
+- Finché il fuoco è nella sbirciata, i comandi dell'editor, la barra, la
+  ricerca nella nota e il contesto parlano della nota sbirciata.
+- **Esc** salva e chiude, e il fuoco torna dov'era. Un Esc che l'editor usa
+  già (il menu «/», un completamento, il modo normale di vim) resta suo:
+  allora serve un secondo Esc, subito dopo, per chiudere.
+- Dal lanciatore, `Alt+Invio` o l'azione **Sbircia** aprono una nota nella
+  sbirciata; un file che non è una nota si apre a lato.
 - Promuovere o chiudere non perde testo: prima l'editor consegna quello che
   tiene alla sessione, poi il riquadro prende la nota, poi la sbirciata si
   chiude.
@@ -139,32 +147,45 @@ cursore, scorrimento e annulla sono della sbirciata.
 - Ce n'è una per finestra: aprirne un'altra salva e chiude quella di prima.
   Cambiare vault o chiudere il riquadro la chiudono.
 
-Il clic che apre un link, Ctrl/Cmd col clic sul testo o il clic su una scheda
-della nota, lo decide `editor.link-click` in Impostazioni › Editor: `apri`, di
-serie, porta la nota nel riquadro; `sbircia` la apre nella sbirciata. Alt col
-clic sbircia sempre; «Apri» del menu del link apre sempre. Il clic semplice sul
-testo di un link resta del cursore.
+### Il clic su un link
+
+Un solo criterio per wikilink e link Markdown a una nota, nel testo, nelle
+celle delle tabelle e sulle schede (`link-gesture.ts`):
+
+- il clic che segue un link lo decide `editor.link-click` in Impostazioni ›
+  Editor: `apri`, di serie, porta la nota nel riquadro; `sbircia` la apre nella
+  sbirciata;
+- sul testo che si scrive il clic semplice resta del cursore e segue il link
+  Ctrl/Cmd col clic (Cmd su Mac); in Lettura e su una scheda della nota segue
+  il clic semplice;
+- in un blocco reso della Scrittura (una tabella, un embed) il clic semplice
+  entra nel blocco e Ctrl/Cmd col clic segue il link, come sul testo;
+- Alt col clic sbircia sempre; «Apri» del menu del link apre sempre.
 
 ## La scheda della nota
 
 Un paragrafo fatto soltanto di un wikilink (`[[Biblioteca civica]]`, anche con
 sezione o alias) si vede, fuori dal cursore, come la scheda della nota a cui
-porta: icona, titolo, descrizione, data e copertina, prese dalle proprietà
+porta: icona, titolo, descrizione, data, quante note la collegano e copertina,
+prese dall'indice e dalle proprietà
 della nota (`icon:`, `description:`, la prima fra `date:`, `updated:`,
 `modified:` e `created:`, `cover:`). Il titolo è l'alias, se c'è, altrimenti il
 nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
 `rgb(…)`, `oklch(…)`), e per ogni altro valore la striscia del tema.
 
 - Il file resta il wikilink; col cursore dentro il paragrafo torna il link.
-- Il clic segue `editor.link-click`, Alt col clic sbircia, Ctrl/Cmd col clic
-  apre. Il clic non porta il cursore dentro: ci si entra con le frecce.
+- Il clic segue `editor.link-click`, Alt col clic sbircia; Ctrl/Cmd col clic
+  vale come il clic. Il clic non porta il cursore dentro: ci si entra con le
+  frecce.
 - Finché l'indice non ha risposto, e per un link che non porta a una nota (una
   nota che non c'è, un PDF), il paragrafo resta link. Un embed (`![[…]]`), un
   link a un punto della nota stessa (`[[#Sezione]]`) o un link con altro testo
   accanto non sono una scheda.
-- Le proprietà arrivano con una domanda all'indice (`query_index`) per scheda,
-  non per battuta; quando l'indice cambia si richiedono, e la Scrittura
-  ridisegna soltanto le schede davvero cambiate.
+- Le proprietà arrivano dall'indice (`query_index`) con una sola domanda per
+  tutte le schede nuove, non per battuta: l'editor tiene i nomi dei paragrafi
+  che possono diventare schede e li ricontrolla poco dopo che cambiano. Quando
+  l'indice cambia si richiedono solo le schede tenute, e la Scrittura ridisegna
+  soltanto quelle davvero cambiate.
 
 ## Dove sta nel codice
 
@@ -179,8 +200,11 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
   l'editor montato dalla porta delle schede (`state/card-editors.ts`);
   `state/document-controller.ts` la cabla al riquadro col fuoco e legge
   `editor.link-click`;
+- `apps/client/src/editors/text/profiles/markdown/link-gesture.ts`: il
+  criterio del clic su un link (`textLinkGesture`, `renderedLinkGesture`,
+  `followWikilink`, `followPath`);
 - `apps/client/src/editors/text/profiles/markdown/open-link.ts`: Alt-Invio e
-  i clic sui wikilink (`followWikilink`);
+  il link sotto il cursore;
 - `apps/client/src/editors/text/profiles/markdown/link-card.ts`
   (`NoteCardWidget`) e `apps/client/src/state/note-cards.ts`: la scheda della
   nota e le sue proprietà;
