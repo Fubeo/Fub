@@ -43,28 +43,10 @@
   scrollbar-color: var(--border-strong) transparent;
 }
 
-/* Una voce: una riga sola da 34, con il segno, il nome e a destra, in
-   monospazio grigio, la scorciatoia o la freccia del sottomenu. */
-.context-menu button {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 34px;
-  padding: var(--space-2) 10px var(--space-2) var(--space-3);
-  border: none;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--text);
-  font-size: calc(var(--text-base) + 0.5px);
-  font-weight: var(--weight-regular);
-  line-height: var(--leading-tight);
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
-}
+/* Una voce è una riga del kit (`kit/row.ts`, vestita in `skin/kit.css`): una
+   linea sola da 34, con il segno, il nome e a destra, in monospazio grigio,
+   la scorciatoia o la freccia del sottomenu. Qui sta ciò che è solo del
+   menu. */
 /* **La scelta è una sola**, e la dice la pastiglia che scivola da una voce
    all'altra: la voce accesa ha il fuoco, che il puntatore sposta e che resta
    dov'è quando il puntatore esce. L'anello della tastiera sta dentro la voce,
@@ -83,38 +65,6 @@
 }
 .context-menu button:focus-visible {
   outline-offset: calc(var(--focus-ring-width) * -1);
-}
-.context-menu .menu-lit .menu-icon {
-  color: var(--accent);
-}
-
-.context-menu .menu-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* La scorciatoia: a destra, in monospazio, nel grigio che regge il contrasto
-   nelle due luci; senza tasto disegnato attorno. Sta prima della spunta, che
-   chiude la riga. */
-.context-menu .menu-hint {
-  flex: none;
-  order: 2;
-  margin-left: auto;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: calc(var(--text-xs) + 0.5px);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-.context-menu .menu-more {
-  font-family: var(--font-ui);
-  font-size: var(--text-md);
 }
 
 /* Le voci che sono un aspetto: una striscia dei suoi colori prima del nome. */
@@ -139,21 +89,6 @@
 .context-menu .menu-swatches:has(> .menu-swatch:only-child) {
   border-radius: var(--radius-pill);
 }
-/* Le voci con una figura: 24 px prima del nome, in grigio, d'accento sulla
-   voce accesa. Chi non ha la sua ne tiene il posto, perché i nomi stiano
-   allineati. */
-.context-menu .menu-icon {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  color: var(--muted);
-}
-.context-menu .menu-icon > svg {
-  width: 16px;
-  height: 16px;
-}
 /* L'anteprima di uno stile: «Aa» nel colore del menu se lo stile non ne
    dice uno, e il quadratino con un filo che lo stacca dal fondo. */
 .menu-sample {
@@ -164,18 +99,8 @@
   border-radius: var(--radius-xs);
   box-shadow: 0 0 0 1px var(--border);
 }
-/* Mai una seconda riga: la spiegazione sta a destra in grigio, e si taglia.
-   Con una scorciatoia la sente soltanto chi ascolta. */
-.context-menu .menu-description {
-  flex: 0 1 auto;
-  order: 1;
-  max-width: 55%;
-  margin-left: auto;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  text-overflow: ellipsis;
-}
+/* La spiegazione sta nella nota della riga, a destra in grigio. Con una
+   scorciatoia la sente soltanto chi ascolta. */
 .context-menu .menu-description.menu-quiet {
   position: absolute;
   width: 1px;
@@ -234,13 +159,8 @@
   outline-color: var(--danger-contrast);
 }
 
-/* Una voce che ora non si può scegliere resta al suo posto, spenta, e non
-   risponde al puntatore. */
-.context-menu button[aria-disabled="true"] {
-  color: var(--text);
-  opacity: 0.4;
-  cursor: default;
-}
+/* Una voce che ora non si può scegliere resta al suo posto, spenta (la riga
+   del kit); quella distruttiva resta rossa. */
 .context-menu button.danger[aria-disabled="true"] {
   color: var(--danger);
 }
@@ -258,17 +178,24 @@
 }
 
 /* Un gruppo con un nome è per chi ascolta: chi guarda vede le voci e il
-   filetto che le stacca. L'etichetta si vede dove il gruppo la porta, come
-   «Altri comandi» scrivendo: minuscola, 11,5 px, quieta. */
+   filetto che le stacca. L'etichetta (del kit) si vede dove il gruppo la
+   porta, come «Altri comandi» scrivendo. */
 .context-menu .menu-group {
   display: flex;
   flex-direction: column;
 }
+
+/* Il nome, la freccia e l'etichetta del menu restano ganci del contratto
+   d'autore (`menu-label`, `menu-more`, `menu-group-label`) accanto a quelli
+   del kit, perché un tema che li vestiva continui a valere. L'aspetto è della
+   riga e dell'etichetta del kit; qui solo ciò che è del menu: l'etichetta
+   non si sceglie, il nome e la freccia non si selezionano col trascinamento. */
 .context-menu .menu-group-label {
-  padding: 9px var(--space-4) var(--space-2);
-  color: var(--muted);
-  font-size: calc(var(--text-xs) + 0.5px);
-  font-weight: var(--weight-medium);
+  cursor: default;
+}
+.context-menu .menu-label,
+.context-menu .menu-more {
+  user-select: none;
 }
 
 /* **La testata** dice che cosa si è toccato, in una riga: l'icona d'accento,
@@ -344,23 +271,8 @@
   background: var(--accent);
   box-shadow: none;
 }
-.context-menu .menu-clipboard .menu-quick {
-  justify-content: center;
-  gap: 7px;
-  min-height: 32px;
-  padding: 0 var(--space-2);
-  color: var(--text);
-  font-size: calc(var(--text-sm) + 0.5px);
-}
-.context-menu .menu-clipboard .menu-quick > svg {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  color: var(--muted);
-}
-.context-menu .menu-clipboard .menu-quick.menu-lit > svg {
-  color: var(--accent);
-}
+/* Le parti sono tessere del kit, affiancate; qui il filo fra l'una e
+   l'altra e l'inchiostro della parte premuta, sulla linguetta d'accento. */
 .context-menu .menu-clipboard .menu-quick + .menu-quick::before {
   content: "";
   position: absolute;
@@ -374,15 +286,12 @@
 .context-menu .menu-clipboard.menu-pressed .menu-quick::before {
   opacity: 0;
 }
-.context-menu .menu-clipboard .menu-quick.menu-pressed,
-.context-menu .menu-clipboard .menu-quick.menu-pressed > svg {
+.context-menu .menu-clipboard .menu-quick.menu-pressed {
   color: var(--accent-contrast);
 }
-.context-menu .menu-clipboard .menu-quick.menu-pressed > svg,
 .context-menu .menu-choice.menu-pressed > svg {
   display: none;
 }
-.context-menu .menu-clipboard .menu-quick.menu-pressed::after,
 .context-menu .menu-choice.menu-pressed::after {
   content: "";
   order: -1;
@@ -396,17 +305,8 @@
    coi segni dei formati, stretti in ogni lingua. Il nome del formato compare
    accanto alla voce mentre la riga è accesa. */
 .context-menu .menu-choices {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 34px;
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-control);
-  color: var(--text);
-  font-size: calc(var(--text-base) + 0.5px);
-  white-space: nowrap;
+  line-height: inherit;
   cursor: default;
 }
 .context-menu .menu-choice-name {
@@ -419,7 +319,16 @@
   gap: 3px;
 }
 .context-menu .menu-choices .menu-choice {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
   justify-content: center;
+  border: none;
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  cursor: pointer;
   gap: 0;
   width: 28px;
   min-height: 26px;
@@ -502,13 +411,8 @@
 
 /* Col dito le voci sono alte quanto un dito. */
 @media (pointer: coarse) {
-  .context-menu button,
-  .context-menu .menu-choices,
   .context-menu .menu-glide {
     min-height: 44px;
-  }
-  .context-menu .menu-clipboard .menu-quick {
-    min-height: 40px;
   }
 }
 
