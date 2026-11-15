@@ -105,6 +105,7 @@ import {
   searchText,
   sectionAnchor,
   show,
+  shownChoice,
   type Control,
 } from "./settings-model";
 
@@ -1886,8 +1887,9 @@ function selectField(entry: SettingEntry, id: string, options: UiOption[]): HTML
   // `settings.json` scritto a mano, o uno schema che ha cambiato le proprie
   // scelte fra due versioni del plugin. Senza questa riga nessuna `option`
   // risulterebbe scelta e il browser mostrerebbe la prima — cioè un valore
-  // falso, che è peggio di un valore strano.
-  const current = String(entry.value);
+  // falso, che è peggio di un valore strano. Una scelta nascosta (un valore di
+  // prima con l'etichetta di un'altra, `visibleChoices`) mostra quella.
+  const current = shownChoice(entry);
   if (!options.some((o) => o.value === current)) {
     const outside = document.createElement("option");
     outside.value = current;
@@ -1899,7 +1901,7 @@ function selectField(entry: SettingEntry, id: string, options: UiOption[]): HTML
     const el = document.createElement("option");
     el.value = option.value;
     el.textContent = optionLabel(option);
-    el.selected = option.value === entry.value;
+    el.selected = option.value === current;
     select.append(el);
   }
   // Di nuovo a tendina piena: `selected` messo su un'opzione non ancora
@@ -1994,7 +1996,7 @@ function timezoneSuggestions(input: HTMLInputElement): HTMLDataListElement | nul
 /// un gesto suo: sceglie la luce della serie, e con un tema installato attivo
 /// nessuna delle tre luci è quella corrente.
 function segmentedField(entry: SettingEntry, id: string, options: UiOption[]): HTMLElement {
-  const current = String(entry.value);
+  const current = shownChoice(entry);
   const customThemeActive = entry.spec.key === THEME_KEY && currentThemeId() !== SERIES_THEME_ID;
   const group = document.createElement("div");
   group.className = "segmented segmented--wide setting-segmented";
