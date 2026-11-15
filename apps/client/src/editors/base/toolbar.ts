@@ -73,6 +73,8 @@ export interface BaseToolbarActions {
   readonly grouping: HTMLElement;
   /// «Apri come file»: apre il documento che contiene la Base.
   readonly openFile: (doc: string) => void;
+  /// Le voci di «+»: i tipi di vista da aggiungere al file.
+  readonly newViews: () => MenuItem[];
 }
 
 export interface BaseToolbar {
@@ -89,6 +91,9 @@ export interface BaseToolbar {
   openSearch(): void;
   /// Chiude il popover aperto, se c'è.
   closePopover(): void;
+  /// Apre accanto a `anchor` il campo per il nome nuovo della proprietà
+  /// `name`; `submit` riceve il nome scritto.
+  openRename(anchor: HTMLElement, name: string, submit: (next: string) => void): void;
   relabel(): void;
   destroy(): void;
 }
@@ -157,6 +162,9 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
   bar.setAttribute("role", "toolbar");
   const tabs = element("div", "base-tabs");
   tabs.setAttribute("role", "group");
+  // «+»: una vista nuova, accanto alle linguette, fuori dal loro scorrere.
+  const newViewButton = toolButton("base-tool-new-view", "base-plus");
+  newViewButton.setAttribute("aria-haspopup", "menu");
   const space = element("span", "base-bar-space");
   const filterButton = toolButton("base-tool-filter", "base-filter");
   const filterCount = element("span", "base-tool-count");
@@ -172,7 +180,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
   templateButton.type = "button";
   templateButton.append(icon("base-chevron-down"));
   newGroup.append(newButton, templateButton);
-  bar.append(tabs, space, filterButton, sortButton, columnsButton, searchButton, moreButton, newGroup);
+  bar.append(tabs, newViewButton, space, filterButton, sortButton, columnsButton, searchButton, moreButton, newGroup);
 
   const searchRow = element("div", "base-search-row");
   searchRow.hidden = true;
@@ -626,6 +634,15 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     actions.search();
   });
   lifetime.listen(moreButton, "click", () => showContextMenu(moreButton, actions.more(), { label: t("base.tool.more") }));
+  lifetime.listen(newViewButton, "click", () => {
+    if (!writable()) return;
+    newViewButton.setAttribute("aria-expanded", "true");
+    showContextMenu(newViewButton, actions.newViews(), {
+      label: t("base.view.new"),
+      header: { icon: "base-plus", kind: t("base.view.new") },
+      onClose: () => newViewButton.setAttribute("aria-expanded", "false"),
+    });
+  });
   lifetime.listen(newButton, "click", () => actions.create());
   lifetime.listen(templateButton, "click", () => void openTemplates());
 
@@ -635,6 +652,24 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     search.focus();
   }
 
+  // Le linguette che non stanno nella barra: le viste non scelte restano la
+  // sola figura (come sotto i 700 px), e la scelta resta in vista. Si misura
+  // quando le viste cambiano e quando la barra cambia larghezza.
+  const fitTabs = (): void => {
+    tabs.classList.remove("compact");
+    if (tabs.scrollWidth > tabs.clientWidth + 1) tabs.classList.add("compact");
+    const chosen = tabs.querySelector<HTMLElement>('.base-tab[aria-pressed="true"]');
+    if (chosen && tabs.scrollWidth > tabs.clientWidth + 1) {
+      const left = chosen.offsetLeft - tabs.offsetLeft;
+      if (left < tabs.scrollLeft) tabs.scrollLeft = left;
+      else if (left + chosen.offsetWidth > tabs.scrollLeft + tabs.clientWidth) tabs.scrollLeft = left + chosen.offsetWidth - tabs.clientWidth;
+    }
+  };
+  if (typeof ResizeObserver === "function") {
+    const watcher = new ResizeObserver(() => fitTabs());
+    watcher.observe(bar);
+    lifetime.add(() => watcher.disconnect());
+  }
   const drawTabs = (): void => {
     const keep = document.activeElement instanceof HTMLElement && tabs.contains(document.activeElement) ? document.activeElement.dataset.view : undefined;
     tabs.replaceChildren(...model.views.map(({ name, type }) => {
@@ -649,6 +684,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     }));
     tabs.hidden = model.views.length === 0;
     if (keep !== undefined) tabs.querySelector<HTMLElement>(`[data-view="${CSS.escape(keep)}"]`)?.focus();
+    fitTabs();
   };
   const chip = (text: string, iconName: string, removeLabel: string, remove: (() => void) | null): HTMLElement => {
     const each = element("span", "base-chip");
@@ -690,6 +726,10 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     sortButton.classList.toggle("on", (plan?.sort.length ?? 0) > 0);
     columnsButton.classList.toggle("on", (plan?.order.length ?? 0) > 0);
     for (const button of [filterButton, sortButton, columnsButton]) button.disabled = plan === null;
+    // «+» scrive il file: spento dove il file non si scrive, col perché nel
+    // titolo.
+    newViewButton.disabled = model.lock !== null || plan === null;
+    newViewButton.title = model.lock === null ? t("base.view.new") : t(model.lock === "read_only" ? "base.lock.read_only" : "base.lock.embedded");
     filterButton.setAttribute("aria-label", count ? t("base.tool.filter_count", { count }) : t("base.tool.filter"));
     newButton.disabled = !model.canCreate;
     templateButton.disabled = !model.canCreate;
@@ -710,6 +750,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     columnsButton.title = t("base.tool.properties");
     searchButton.setAttribute("aria-label", t("base.tool.search"));
     searchButton.title = t("base.tool.search");
+    newViewButton.setAttribute("aria-label", t("base.view.new"));
     moreButton.setAttribute("aria-label", t("base.tool.more"));
     moreButton.title = t("base.tool.more");
     newButton.textContent = t("base.new");
@@ -753,6 +794,36 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     },
     openSearch,
     closePopover,
+    openRename(anchor, name, submit) {
+      const content = element("form", "base-rename");
+      const title = element("label", "base-pop-title", t("base.rename.title", { name }));
+      const field = document.createElement("input");
+      field.type = "text";
+      field.className = "base-rename-field";
+      field.spellcheck = false;
+      field.value = name;
+      field.id = identifier("base-rename-field");
+      title.htmlFor = field.id;
+      const hint = element("p", "base-pop-note", t("base.rename.hint"));
+      const foot = element("div", "base-pop-foot");
+      const cancel = textButton({ label: t("base.filter.cancel"), onPress: () => closePopover() });
+      const confirm = textButton({ label: t("base.rename.apply"), kind: "primary", onPress: () => send() });
+      // Un nome nuovo, non vuoto e su una riga sola.
+      const usable = (): boolean => { const next = field.value.trim(); return next !== "" && next !== name && !/[\r\n]/.test(next); };
+      const send = (): void => {
+        if (!usable()) return;
+        const next = field.value.trim();
+        closePopover();
+        submit(next);
+      };
+      confirm.disabled = true;
+      field.addEventListener("input", () => { confirm.disabled = !usable(); });
+      content.addEventListener("submit", (event) => { event.preventDefault(); send(); });
+      foot.append(cancel, confirm);
+      content.append(title, field, hint, foot);
+      open(anchor, t("base.rename.title", { name }), "base-rename-popover", content, null);
+      field.select();
+    },
     relabel,
     destroy() { closePopover(); lifetime.close(); },
   };

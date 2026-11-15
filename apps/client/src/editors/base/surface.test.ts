@@ -287,8 +287,12 @@ describe("il tasto destro nella base", () => {
 
       pointing.mockReturnValue(host.querySelector('th[data-column="status"]'));
       const column = surface.contextMenu!({ x: 1, y: 1 })!;
-      expect(column.target).toEqual({ kind: "column", ref: "status" });
-      expect((column.context as readonly SurfaceMenuItem[]).map((item) => item.id)).toEqual(["base.group.column", "base.column.copy"]);
+      expect(column.target).toEqual({ kind: "column", ref: "status", name: "status" });
+      // Le voci del clic sull'intestazione, negli stessi gruppi.
+      expect(column.context!.map((item) => typeof item === "string" ? item : item.id)).toEqual([
+        "base.column.sort.asc", "base.column.sort.desc", "—", "base.column.group", "base.column.summary",
+        "—", "base.column.rename", "base.column.type", "—", "base.column.copy", "base.column.hide",
+      ]);
 
       surface.setReadOnly!(true);
       pointing.mockReturnValue(host.querySelector('[data-doc="00000.md"] .base-cell'));

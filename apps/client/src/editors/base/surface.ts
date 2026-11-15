@@ -16,14 +16,19 @@ import type { SurfaceMenu, SurfaceMenuItem } from "../core/editor-menu";
 import { uniformRowRange } from "../core/row-window";
 import { LOCAL_FETCH } from "../core/local-fetch";
 import {
-  BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS,
-  allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty, groupBaseRows,
+  BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS, NEW_VIEW_KINDS,
+  addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty, groupBaseRows,
   fetchAllDocuments, listBaseViews, parseBaseEmbed, persistBaseView,
-  planBaseView, prepareBaseMutations, restoreBaseView, setBaseViewKey, writtenLines,
-  type BaseCellValue, type BaseDocumentWrites, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey,
+  planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, setBaseViewKey, writtenLines,
+  type BaseCellValue, type BaseDocumentWrites, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
 } from "./data";
-import { decimalOf, propertyKind, propertyValues, type ValueKind } from "./filter";
+import { decimalOf, filterValue, propertyKind, propertyValues, type ValueKind } from "./filter";
 import { mountBaseToolbar } from "./toolbar";
+import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSurfaceItems, renamedInView, type ColumnEntry } from "./column-menu";
+import { listFooter, tableFooter } from "./footer";
+import { viewIcon } from "./icons";
+import { sortedBy } from "./sort";
+import { showContextMenu, type MenuItem } from "../../ui/menu";
 import { notify } from "../../ui/notify";
 import { writeClipboardText } from "../../platform/clipboard";
 
@@ -68,7 +73,17 @@ interface WriteAttempt {
   after: string | null;
   answered: boolean;
   planned: boolean;
+  /// Dice a chi ha chiesto il gesto come è finito, quando la barra si
+  /// riaccende: `true` se il file è stato scritto.
+  readonly finish: (written: boolean) => void;
 }
+/// I comandi del vault che il menu della colonna usa (`fub-features`).
+const PROPERTY_RENAME = "property.key.rename";
+const PROPERTY_TYPE_SET = "property.type.set";
+/// I nomi delle proprietà da cui una vista mappa nuova prende le coordinate,
+/// se le righe le hanno.
+const LATITUDE_KEYS = ["lat", "latitude", "latitudine"];
+const LONGITUDE_KEYS = ["lon", "lng", "long", "longitude", "longitudine"];
 const SVG = "http://www.w3.org/2000/svg";
 const VISIBLE_STEP = 100;
 const TABLE_ROW_HEIGHT = 36;
@@ -77,7 +92,7 @@ const TABLE_VIEWPORT_HEIGHT = 560;
 /// chiave della colonna (`FILE_COLUMN` per la colonna della nota, che non è
 /// una proprietà e non si confonde con nessuna).
 interface CellKey { readonly doc: string; readonly column: string }
-const FILE_COLUMN = "\u0000file";
+const FILE_COLUMN = NOTE_COLUMN;
 const labels = () => ({
   view: t("menu.view"), search: t("rail.search"), retry: t("app.retry"),
   loading: t("search.loading"), more: t("search.more", { shown: VISIBLE_STEP, total: VISIBLE_STEP }),
@@ -150,6 +165,7 @@ export function mountBaseSurface(
     ],
     grouping: groupControls,
     openFile: (doc) => open(doc),
+    newViews: () => newViewItems(),
   });
   const { search, status } = toolbar;
   const body = document.createElement("div");
@@ -308,6 +324,13 @@ export function mountBaseSurface(
   const groupOpen = (name: string) => collapsedGroups.get(plan?.view ?? "")?.has(name) !== true;
   // Assente: vale il `group:` del file; "" è «senza gruppi».
   const groupChoices = new Map<string, string>();
+  // Toglie la scelta di questa finestra per la vista: vale il `group:` del
+  // file.
+  const forgetGroupChoice = (view: string): void => {
+    if (!groupChoices.has(view)) return;
+    groupChoices.delete(view);
+    persistQueue = persistQueue.then(() => destroyed ? undefined : deps.setViewState(`base.group:${context.documentId}:${view}`, null)).catch(presentError);
+  };
   const groupOrders = new Map<string, BaseGroupOrder>();
   const orderOf = (): BaseGroupOrder => groupOrders.get(plan?.view ?? "") ?? "rows";
   const regroupable = () => plan?.viewType === "table" || plan?.viewType === "cards" || plan?.viewType === "list";
@@ -394,7 +417,7 @@ export function mountBaseSurface(
       plan,
       lock: lock(),
       canCreate: !readOnly && !creating,
-      busy,
+      busy: busy || sequencing > 0,
       properties: rowProperties(),
       suggestions,
       kinds,
@@ -511,16 +534,19 @@ export function mountBaseSurface(
   // modifica (`syncDoc`), prima o dopo la risposta del comando: allora «Nel
   // file .base» mostra le righe cambiate. La barra si riaccende quando ci sono
   // tutte e tre le cose: la risposta, il testo nuovo e il suo piano.
-  const settle = (): void => {
+  // La barra si riaccende: il gesto in volo è finito, scritto o no.
+  const settle = (written = false): void => {
     window.clearTimeout(settleTimer);
     settleTimer = 0;
+    const attempt = writing;
     writing = null;
+    attempt?.finish(written);
     if (!busy) return;
     busy = false;
     pushModel();
   };
   const maybeSettle = (): void => {
-    if (writing && writing.answered && writing.after !== null && writing.planned) settle();
+    if (writing && writing.answered && writing.after !== null && writing.planned) settle(true);
   };
   // «Annulla» dopo un gesto: `vault.undo` disfa l'ultima operazione del
   // vault, come dalla palette; anche la sua riscrittura si annuncia.
@@ -541,14 +567,43 @@ export function mountBaseSurface(
       notify(t("commands.undo_failed", { reason: errorText(failure) }), "guasto");
     }
   };
-  const writeView = async (key: BaseViewKey, value: unknown): Promise<void> => {
-    if (!plan || lock() !== null || busy || destroyed) return;
-    const view = plan.view;
-    const attempt: WriteAttempt = { before: source, after: null, answered: false, planned: false };
+  // Un gesto che scrive il `.base` con un comando (`invoke`, che riceve la
+  // revisione da confrontare). Torna quando la barra si riaccende: `true` se
+  // il file è stato scritto. `quiet` tace la frase del comando (un passo di
+  // un gesto che ne fa più d'uno, che dice la sua alla fine); `before` è il
+  // testo da cui «Nel file .base» conta le righe cambiate.
+  const perform = (invoke: (base: string | null) => Promise<BaseViewWrite>, options: { quiet?: boolean; before?: string } = {}): Promise<boolean> => new Promise<boolean>((resolve) => {
+    if (!plan || lock() !== null || busy || destroyed) { resolve(false); return; }
+    let finished = false;
+    const attempt: WriteAttempt = {
+      before: options.before ?? source, after: null, answered: false, planned: false,
+      finish: (written) => { if (!finished) { finished = true; resolve(written); } },
+    };
     writing = attempt;
     busy = true;
     notice = null;
     pushModel();
+    void run(attempt, invoke, options.quiet === true).finally(() => { if (writing !== attempt) attempt.finish(false); });
+  });
+  // I gesti di più passi (una vista nuova, una proprietà rinominata) tengono
+  // la barra spenta fra un passo e l'altro: un gesto che entrasse fra due
+  // passi partirebbe da un piano a metà.
+  let sequencing = 0;
+  const writeView = async (key: BaseViewKey, value: unknown): Promise<void> => {
+    if (!plan || sequencing > 0) return;
+    // Raggruppare dal menu della colonna scrive `group` nel file: la scelta
+    // di questa finestra (in «Ordina») non gli resta sopra.
+    // Il ricordo si toglie prima del comando: la rilettura del piano nuovo non
+    // deve ritrovarlo.
+    const view = plan.view;
+    if (key === "group" && groupChoices.has(view)) {
+      forgetGroupChoice(view);
+      await persistQueue;
+      if (destroyed) return;
+    }
+    await perform((base) => setBaseViewKey(deps, context.documentId, view, key, value, base));
+  };
+  const run = async (attempt: WriteAttempt, invoke: (base: string | null) => Promise<BaseViewWrite>, quiet: boolean): Promise<void> => {
     const writes = deps.documentWrites;
     let withdraw: (() => void) | undefined;
     try {
@@ -567,15 +622,16 @@ export function mountBaseSurface(
       }
       // Annunciata prima del comando: il suo evento arriva mentre scrive.
       withdraw = writes?.expect(context.documentId);
-      const written = await setBaseViewKey(deps, context.documentId, view, key, value, deps.revision?.() ?? null);
+      const written = await invoke(deps.revision?.() ?? null);
       // Nessuna revisione: il file non è cambiato (o l'host non lo dice), e
       // nessun evento consumerà l'annuncio.
       if (written.revision === null) withdraw?.();
-      if (written.notify) {
+      if (written.notify && !quiet) {
         notify(written.notify, "info", written.undo
           ? { label: t("app.undo"), hint: written.undo.label, run: () => void undoWrite() }
           : undefined);
       }
+      lastWrite = written;
       if (destroyed || writing !== attempt) return;
       // Niente scritto, niente testo nuovo da aspettare: la barra si riaccende.
       if (written.revision === null && written.undo === null) { settle(); return; }
@@ -584,7 +640,7 @@ export function mountBaseSurface(
       // Un host che non rimanda il testo non lascia la barra spenta: dopo un
       // po' si riaccende, e il gesto dopo, con la revisione vecchia, andrà in
       // conflitto invece di scrivere sopra.
-      if (writing === attempt) settleTimer = window.setTimeout(() => { settleTimer = 0; settle(); }, WRITE_SETTLE_MS);
+      if (writing === attempt) settleTimer = window.setTimeout(() => { settleTimer = 0; settle(true); }, WRITE_SETTLE_MS);
     } catch (failure) {
       withdraw?.();
       if (destroyed || writing !== attempt) return;
@@ -608,6 +664,150 @@ export function mountBaseSurface(
     if (!writing || writing.after !== definition) return;
     writing.planned = true;
     maybeSettle();
+  };
+  // L'esito dell'ultimo comando scritto: la frase e l'annulla di un gesto di
+  // più passi si dicono alla fine.
+  let lastWrite: BaseViewWrite | null = null;
+  // ---- «+»: una vista nuova --------------------------------------------
+  // Il nome libero per una vista del tipo detto: «Tabella», «Tabella 2»…
+  const freeName = (type: BaseViewKind): string => {
+    const base = t(`base.view.kind.${type}`);
+    if (!names.includes(base)) return base;
+    for (let n = 2; ; n++) if (!names.includes(`${base} ${n}`)) return `${base} ${n}`;
+  };
+  // Le proprietà delle righe che fanno da latitudine e longitudine.
+  const coordinates = (): { lat_key: string; lon_key: string } | null => {
+    if (plan?.map) return { lat_key: plan.map.lat_key, lon_key: plan.map.lon_key };
+    const keys = rowProperties();
+    const find = (names: readonly string[]) => keys.find((key) => names.includes(key.toLowerCase()));
+    const lat = find(LATITUDE_KEYS), lon = find(LONGITUDE_KEYS);
+    return lat && lon ? { lat_key: lat, lon_key: lon } : null;
+  };
+  // Le corsie di una bacheca nuova: il gruppo della vista aperta, o la prima
+  // colonna che è una proprietà.
+  const lanes = (): string | null => grouping() ?? plan?.group ?? plan?.columns.find((column) => columnProperty(column) !== null) ?? null;
+  const newViewItems = (): MenuItem[] => NEW_VIEW_KINDS.map((type): MenuItem => {
+    const missing = type === "kanban" && lanes() === null ? t("base.view.needs_lanes")
+      : type === "map" && coordinates() === null ? t("base.view.needs_coordinates") : null;
+    return {
+      label: t(`base.view.kind.${type}`), icon: viewIcon(type),
+      ...(missing === null ? { run: () => void addView(type) } : { disabled: true, description: missing }),
+    };
+  });
+  // La vista nuova eredita il filtro e le colonne di quella aperta; una
+  // bacheca anche le corsie, una mappa le coordinate. Sono più scritture, una
+  // chiave per volta come ogni gesto: alla fine la vista si apre, e
+  // «Annulla» la toglie con tutte le sue chiavi.
+  const addView = async (type: BaseViewKind): Promise<void> => {
+    if (!plan || sequencing > 0 || busy) return;
+    const from = plan;
+    const name = freeName(type);
+    const keys: [BaseViewKey, unknown][] = [];
+    const filters = filterValue(from.filters);
+    if (filters !== null) keys.push(["filters", filters]);
+    const columns = from.order.length ? from.order : from.columns;
+    if (columns.length) keys.push(["order", [...columns]]);
+    if (type === "kanban") { const key = lanes(); if (key) keys.push(["group", { key }]); }
+    if (type === "map") { const map = coordinates(); if (map) keys.push(["map", map]); }
+    const start = source;
+    sequencing++;
+    try {
+      if (!await perform((base) => addBaseView(deps, context.documentId, name, type, base), { quiet: true, before: start })) return;
+      const added = lastWrite;
+      for (const [key, value] of keys) {
+        if (!await perform((base) => setBaseViewKey(deps, context.documentId, name, key, value, base), { quiet: true, before: start })) break;
+      }
+      if (destroyed) return;
+      if (names.includes(name)) chooseView(name);
+      notify(added?.notify ?? t("base.view.added", { name }), "info", {
+        label: t("app.undo"), hint: t("base.view.remove_hint", { name }),
+        run: () => void perform((base) => removeBaseView(deps, context.documentId, name, base)),
+      });
+    } finally { sequencing--; pushModel(); }
+  };
+
+  // ---- Il menu della colonna -------------------------------------------
+  const labelOf = (key: string): string => key === NOTE_COLUMN ? t("menu.file") : plan?.columnLabels[key] ?? plan?.columnLabels[`prop.${key.replace(/^prop\./, "")}`] ?? key.replace(/^prop\./, "");
+  const columnEntries = (column: string): ColumnEntry[] | null => {
+    if (!plan) return null;
+    return columnMenu({
+      plan, column, label: labelOf(column), kind: column === NOTE_COLUMN ? "text" : columnKind(rows, column),
+      grouping: grouping(), regroupable: regroupable(), lock: lock(), busy: busy || sequencing > 0, readOnly,
+    }, {
+      write: (key, value) => void writeView(key, value),
+      rename: (key) => startRename(key),
+      setType: (key, type) => void setPropertyType(key, type),
+      copy: (key) => copy(filteredRows().map((row) => key === NOTE_COLUMN ? row.doc : cellText(row.values[key])).join("\n")),
+    });
+  };
+  const openColumnMenu = (anchor: HTMLElement, column: string): void => {
+    const entries = columnEntries(column);
+    if (!entries) return;
+    anchor.setAttribute("aria-expanded", "true");
+    showContextMenu(anchor, columnMenuItems(entries), {
+      label: t("base.column.menu", { name: labelOf(column) }),
+      header: { icon: "base-table", kind: t("base.column.kind"), name: labelOf(column) },
+      onClose: () => anchor.setAttribute("aria-expanded", "false"),
+    });
+  };
+  // Il nome nuovo della proprietà, chiesto accanto all'intestazione.
+  const startRename = (column: string): void => {
+    const property = columnProperty(column);
+    if (property === null || readOnly) return;
+    const anchor = body.querySelector<HTMLElement>(`th[data-column="${CSS.escape(column)}"] .base-head`) ?? toolbar.bar;
+    toolbar.openRename(anchor, property, (next) => void renameProperty(property, next));
+  };
+  // Rinomina la proprietà in ogni nota (`property.key.rename`), poi le viste
+  // di questo file che la nominano: ogni chiave toccata, una per volta, con
+  // la revisione. Le altre Basi del vault non si toccano.
+  const renameProperty = async (from: string, to: string): Promise<void> => {
+    if (readOnly || sequencing > 0 || busy) return;
+    sequencing++;
+    pushModel();
+    try {
+      let said: string | null = null;
+      try {
+        const outcome = await deps.invokeCommand(PROPERTY_RENAME, { old_key: from, new_key: to });
+        said = typeof outcome?.notify === "string" && outcome.notify ? outcome.notify : null;
+      } catch (failure) {
+        if (destroyed) return;
+        notice = t("base.rename.failed", { reason: errorText(failure) });
+        status.textContent = notice;
+        return;
+      }
+      if (destroyed) return;
+      const done: string[] = [];
+      // Solo un `.base` si riscrive: una Base dentro una nota resta com'è.
+      if (lock() === null) {
+        const start = source;
+        for (const view of [...names]) {
+          let viewPlan: BasePlan;
+          try { viewPlan = await planBaseView(deps, source, view); } catch { continue; }
+          if (destroyed) return;
+          for (const [key, value] of renamedInView(viewPlan, from, to)) {
+            if (!await perform((base) => setBaseViewKey(deps, context.documentId, view, key, value, base), { quiet: true, before: start })) break;
+            done.push(view);
+          }
+        }
+      }
+      if (destroyed) return;
+      notify(said ?? t("base.rename.done", { from, to }), "info");
+      notice = done.length ? t("base.rename.views", { count: new Set(done).size }) : null;
+      if (notice) status.textContent = notice;
+    } finally { sequencing--; if (!destroyed) pushModel(); }
+  };
+  const setPropertyType = async (column: string, type: string): Promise<void> => {
+    const property = columnProperty(column);
+    if (property === null || readOnly) return;
+    try {
+      const outcome = await deps.invokeCommand(PROPERTY_TYPE_SET, { key: property, type });
+      if (typeof outcome?.notify === "string" && outcome.notify) notify(outcome.notify, "info");
+      if (!destroyed) void reload(false);
+    } catch (failure) {
+      if (destroyed) return;
+      notice = t("base.type.failed", { reason: errorText(failure) });
+      status.textContent = notice;
+    }
   };
   function chooseView(name: string): void {
     if (name === activeView || !names.includes(name)) return;
@@ -684,7 +884,33 @@ export function mountBaseSurface(
     table.className = "base-table";
     table.style.tableLayout = "fixed";
     const head = table.createTHead().insertRow();
-    for (const column of ["", ...(plan?.columns ?? [])]) { const th = document.createElement("th"); if (column) th.dataset.column = column; th.textContent = column ? plan?.columnLabels[column] ?? column : t("menu.file"); head.append(th); }
+    // L'intestazione di una colonna apre il suo menu: Ordina, Raggruppa,
+    // Riepilogo, Rinomina, Tipo, Nascondi.
+    for (const column of [NOTE_COLUMN, ...(plan?.columns ?? [])]) {
+      const th = document.createElement("th");
+      th.dataset.column = column;
+      const label = labelOf(column);
+      const trigger = document.createElement("button");
+      trigger.type = "button";
+      trigger.className = "base-head";
+      trigger.setAttribute("aria-haspopup", "menu");
+      trigger.setAttribute("aria-expanded", "false");
+      trigger.setAttribute("aria-label", t("base.column.menu", { name: label }));
+      const name = document.createElement("span");
+      name.className = "base-head-label";
+      name.textContent = label;
+      trigger.append(name);
+      const sorted = plan ? sortedBy(plan.sort, column === NOTE_COLUMN ? "file.name" : column) : null;
+      if (sorted) {
+        const mark = document.createElement("span");
+        mark.className = "base-head-sort";
+        mark.textContent = sorted.descending ? "↓" : "↑";
+        trigger.append(mark);
+      }
+      trigger.addEventListener("click", () => openColumnMenu(trigger, column));
+      th.append(trigger);
+      head.append(th);
+    }
     const tableBody = table.createTBody();
     const spacer = (height: number): HTMLTableRowElement => {
       const tr = document.createElement("tr");
@@ -857,6 +1083,12 @@ export function mountBaseSurface(
       reveal(next.row);
     });
     viewport.addEventListener("scroll", () => renderWindow());
+    // Il piede: il conteggio sotto la nota, i riepiloghi del core sotto le
+    // loro colonne. Resta in fondo alla finestra mentre si scorre.
+    table.append(tableFooter({
+      columns: plan?.columns ?? [], summaries: plan?.summaries ?? [], values: summaries, count: page.length,
+      locale: resolvedLanguage(), labelOf,
+    }));
     viewport.append(table);
     body.append(viewport);
     // Il primo disegno parte da dove la tabella di prima era scorsa: le righe
@@ -1163,10 +1395,9 @@ export function mountBaseSurface(
       else if (plan?.viewType === "kanban") drawKanban(page);
       else if (plan?.viewType === "map") drawMap(page);
       if (plan?.viewType !== "table" && displayed < matches.length) body.append(button(t("search.more", { shown: Math.min(displayed, matches.length), total: matches.length }), () => { displayed += VISIBLE_STEP; draw(); }));
-      const footer = document.createElement("dl");
-      footer.className = "base-summaries";
-      for (const [key, value] of Object.entries(summaries)) { const label = document.createElement("dt"); label.textContent = key; const amount = document.createElement("dd"); amount.textContent = cellText(value); footer.append(label, amount); }
-      body.append(footer);
+      if (plan && plan.viewType !== "table") {
+        body.append(listFooter({ columns: plan.columns, summaries: plan.summaries, values: summaries, count: matches.length, locale: resolvedLanguage(), labelOf }));
+      }
       status.textContent = notice ?? t("search.count_limited", { shown: matches.length, total: rows.length });
     } catch (failure) { presentError(failure); }
   };
@@ -1294,24 +1525,12 @@ export function mountBaseSurface(
     if (under instanceof HTMLInputElement && under.type === "text" && under.selectionStart !== under.selectionEnd) return null;
     if (under instanceof HTMLSelectElement || under === search) return null;
     if (!body.contains(under)) return null;
+    // L'intestazione: le stesse voci del clic, nello stesso ordine.
     const header = under.closest<HTMLElement>("th[data-column]");
     if (header) {
       const column = header.dataset.column!;
-      const items: SurfaceMenuItem[] = [];
-      if (regroupable()) {
-        items.push({
-          id: "base.group.column",
-          label: t("base.group.by_named", { name: plan.columnLabels[column] ?? column }),
-          checked: grouping() === column,
-          run: () => { groupBy.value = grouping() === column ? "" : column; groupBy.dispatchEvent(new Event("change")); },
-        });
-      }
-      items.push({
-        id: "base.column.copy",
-        label: t("base_menu.column.copy"),
-        run: () => copy(filteredRows().map((row) => cellText(row.values[column])).join("\n")),
-      });
-      return { target: { kind: "column", ref: column }, context: items, tail: viewItems() };
+      const entries = columnEntries(column) ?? [];
+      return { target: { kind: "column", ref: column, name: labelOf(column) }, context: columnSurfaceItems(entries), tail: viewItems() };
     }
     const doc = under.closest<HTMLElement>("[data-doc]")?.dataset.doc;
     const row = doc === undefined ? undefined : rows.find((each) => each.doc === doc);
