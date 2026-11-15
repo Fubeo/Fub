@@ -692,11 +692,20 @@ async function render(): Promise<void> {
   // a mano dov'era, e torna in cima solo quando cambia la scheda.
   const scrollTop = scrollEl.scrollTop;
   // Il fuoco dentro il corpo resta dov'era se il suo controllo sopravvive al
-  // ridisegno (la pagina «Componenti» è sempre la stessa).
+  // ridisegno (la pagina «Componenti» è sempre la stessa). Se invece il
+  // controllo è stato ricostruito — ogni riga lo è, a ogni `setting_changed`,
+  // anche per una chiave che non è la sua — il fuoco va sul controllo nuovo
+  // della stessa riga: senza, cadeva su BODY e chi usa la tastiera ripartiva
+  // dall'inizio della pagina (A03). Solo nella stessa scheda: cambiandola, il
+  // controllo di prima non c'è più per nessuno.
   const focused = bodyEl.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+  const snapshot = focused ? focusSnapshot() : null;
   bodyEl.replaceChildren(...nodes);
   if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
   scrollEl.scrollTop = renderedTab === tab ? scrollTop : 0;
+  if (snapshot && !focused?.isConnected && renderedTab === tab && document.activeElement === document.body) {
+    restoreFocus(snapshot);
+  }
   renderedTab = tab;
   syncToolbar();
   buildToc();
@@ -2179,7 +2188,13 @@ function focusSnapshot(): FocusSnapshot {
 /// Rimette il focus sullo stesso controllo della stessa riga dopo il rebuild.
 function restoreFocus(snapshot: FocusSnapshot): void {
   scrollEl.scrollTop = snapshot.scrollTop;
-  if (snapshot.rowKey === null || snapshot.rowKey === "") return;
+  if (snapshot.rowKey === null || snapshot.rowKey === "") {
+    // Fuori da una riga (un bottone di sezione, il catalogo dei temi) vale
+    // soltanto l'id: senza, non c'è un posto sicuro dove rimettere il fuoco.
+    const own = snapshot.controlId ? bodyEl.querySelector<HTMLElement>(`[id="${snapshot.controlId}"]`) : null;
+    if (own && document.activeElement !== own) own.focus({ preventScroll: true });
+    return;
+  }
   const selector = `[data-setting-key="${snapshot.rowKey}"]`;
   const scope = bodyEl.querySelector(selector);
   // Niente `CSS.escape`: gli id contengono punti (`setting-editor.line_numbers`)
