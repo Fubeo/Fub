@@ -324,8 +324,8 @@ nessuna resa ne monta altre.
 
 Oltre `MAX_INTERACTIVE_NODES` (2000 schede) la scena mostra il messaggio
 della lavagna troppo grande e nessuna vista; tornati sotto, le schede
-rinascono. L'inchiostro si ridisegna dopo ogni resa; un tratto scritto
-aggiorna solo il suo livello.
+rinascono. Ogni passo locale che l'ha portata oltre si annulla e si ripete lo
+stesso. L'inchiostro si ridisegna dopo ogni resa; un tratto, solo il suo livello.
 
 ## Il file che manca
 

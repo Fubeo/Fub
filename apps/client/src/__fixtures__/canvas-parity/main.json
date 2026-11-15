@@ -255,6 +255,38 @@
       "ops": [{ "op": "distribute", "ids": ["t1", "t2", "l1"], "axis": "x" }]
     },
     {
+      "id": "main.layout",
+      "name": "Disponi in griglia, riga, colonna o albero",
+      "source": "main",
+      "gui": [
+        { "menu": "canvas.layout.grid" },
+        { "menu": "canvas.layout.row" },
+        { "menu": "canvas.layout.column" },
+        { "menu": "canvas.layout.tree" }
+      ],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "layout", "ids": ["t1", "t2"], "kind": "grid" }]
+    },
+    {
+      "id": "main.code.copy",
+      "name": "Copia come codice",
+      "source": "main",
+      "gui": [{ "menu": "canvas.copy_code" }],
+      "writes": "nothing",
+      "state": "view",
+      "note": "Mette negli appunti la lista di operazioni che rifà la scelta o la lavagna (`canvas_describe`, la forma `code` di `canvas.read`)."
+    },
+    {
+      "id": "main.code.paste",
+      "name": "Incolla codice",
+      "source": "main",
+      "gui": [{ "menu": "canvas.paste_code" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "add_card", "text": "Dal codice", "x": 1400, "y": 0 }]
+    },
+    {
       "id": "main.select",
       "name": "Scegli schede e archi",
       "source": "main",

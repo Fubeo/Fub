@@ -2,12 +2,14 @@
 
 > **Ambito:** il controllo di una lista di operazioni prima di scriverla: i
 > problemi, il riassunto di che cosa cambierebbe, gli avvisi sulle schede che la
-> lista tocca e la lettura di dopo; il comando `canvas.check`.
+> lista tocca e la lettura di dopo; il comando `canvas.check`; «Copia come
+> codice», «Incolla codice» e «Disponi» nella lavagna.
 > **Fonti autorevoli:** `crates/fub-canvas-core/src/check.rs` (il controllo),
 > `summary.rs` (il riassunto), i loro test in
 > `crates/fub-canvas-core/tests/check.rs`, i vettori in
 > `apps/client/src/__fixtures__/canvas-ops/`, e il comando in
-> `crates/fub-features/src/lavagna/check.rs`.
+> `crates/fub-features/src/lavagna/check.rs`; nella lavagna
+> `apps/client/src/editors/canvas/engine.ts`, `code-text.ts` e `code-paste.ts`.
 
 Questa pagina dice che cosa si legge di una lista prima di scriverla. Le
 operazioni e la loro forma stanno in
@@ -147,3 +149,67 @@ Con una lista che non si scrive, `ok` è `false`, `summary` e `outline_after` so
 "/0/op", "message": "no operation has this name", "text": {"key":
 "canvas.check.p_unknown_op"}}`. I codici sono quelli di questa pagina e
 dello [schema](canvas-schema.md).
+
+## Nella lavagna
+
+Il menu del tasto destro su una scheda e quello sul vuoto hanno «Copia come
+codice» (`canvas.copy_code`) e «Incolla codice» (`canvas.paste_code`): così un
+pezzo di lavagna passa a un assistente, e le sue modifiche tornano.
+
+- **Copia come codice** mette negli appunti, come testo, la lista che rifà ciò
+  che è scelto: le schede, gli archi fra loro e il loro inchiostro (da
+  `canvas_describe`), e i tratti liberi scelti col Lazo in una `add_strokes`
+  della radice; senza scelta la lavagna intera con l'inchiostro, la forma
+  [`code`](canvas-code.md#il-codice) di `canvas.read`. Un arco senza le sue
+  due schede o un tratto di scheda senza la scheda non si copiano da soli: la
+  voce è spenta col perché. Non scrive, vale anche in sola lettura, ed è
+  spenta su una lavagna vuota. Le chiavi sconosciute della radice non ci sono:
+  le porta solo la forma `json`.
+- **Incolla codice** legge il primo `text/plain` degli appunti una volta sola
+  (`readCodeList` di `code-text.ts`: senza il BOM, `JSON.parse`) e dà lo
+  stesso valore a `canvas_check` e poi alla scrittura, con lo stesso seme: gli
+  id nati sono quelli del riassunto. Un testo vuoto, non JSON, non una lista,
+  una lista vuota, un numero che JSON non dice esatto (`1e999`), un testo con
+  un surrogato spaiato o più di 64 livelli uno dentro l'altro hanno ognuno il
+  suo avviso, e la lista non arriva al nucleo. Il primo problema del controllo
+  (l'operazione contata da uno, il percorso, la frase e, se c'è, «Forse: …»)
+  lo dice l'avviso, e così una lista che non cambia niente; dopo un avviso il
+  fuoco torna alla tela. Un nuovo «Incolla codice» toglie subito l'avviso di
+  prima.
+- Se no una finestra del kit dà il riassunto («1 scheda nuova, 2 schede
+  spostate») e gli avvisi contati per specie («2 coppie di schede che si
+  coprono»), con a parte le note delle operazioni. «Incolla» scrive in un
+  passo d'annulla e sceglie le schede nate; «Annulla» ed Esc non scrivono.
+- **Gli id che la lavagna ha già.** La lista di «Copia come codice» nomina le
+  schede col loro id: incollata sulla stessa lavagna, il nucleo direbbe
+  `duplicate_id`. Allora la finestra lo dice e offre due scelte, tradotte in
+  operazioni che il nucleo ha già (`code-paste.ts`), ognuna col suo
+  riassunto e un passo d'annulla. **Aggiorna le schede** (la proposta): ogni
+  `add_card` con un id della lavagna diventa la `set` di quella scheda, al
+  suo posto nell'ordine; ogni `connect` con l'id di un arco la `set`
+  dell'arco; un tratto cambiato si sostituisce con lo stesso id, uno uguale
+  resta. Il riassunto le conta come «schede aggiornate». Ciò che la lista non
+  nomina resta com'è: una scheda che manca dalla lista non si toglie.
+  **Aggiungi come copie**: le schede e gli archi coi nomi presi prendono un id
+  nuovo, e le operazioni che li nominano lo seguono, solo nei campi che `OPS`
+  di `spec.rs` dichiara id di schede o archi (`align.to` resta com'è; un test
+  confronta la tabella con `OPS`). Il blocco cade come un Ctrl+V: l'angolo
+  sul puntatore, sulla griglia, e un passo più in là se si incolla di nuovo
+  lì. Una scelta che non cambia niente o che il nucleo
+  rifiuta non ha il suo bottone, e la finestra ne dice il perché. Un id usato
+  per un'altra specie (una scheda di testo contro un gruppo o un arco) non si
+  traduce: l'avviso lo dice, e niente cambia.
+- Se mentre si decide la lavagna cambia, o diventa di sola lettura o troppo
+  grande, non si scrive e l'avviso lo dice. In sola lettura e su una lavagna
+  troppo grande la voce è spenta.
+- **L'annulla oltre il limite.** Ogni passo locale che porta la lavagna oltre
+  il limite interattivo (2000 schede) si annulla e si ripete lo stesso, se il
+  testo è ancora quello che il passo ha lasciato, e la lavagna torna
+  interattiva ([le schede](canvas-cards.md)).
+- **Disponi** (`canvas.layout.grid`, `.row`, `.column`, `.tree`, nel
+  sottomenu Disponi › di una scheda e del vuoto) scrive
+  [`layout`](canvas-code.md#layout) sulle schede scelte o, senza scelta, sulle
+  schede libere come le conta il nucleo: non i gruppi e non le schede dentro
+  un gruppo. È spento con una scheda sola scelta, con meno di due schede
+  libere, in sola lettura e su una lavagna troppo grande. Se le schede sono
+  già disposte così, l'avviso lo dice.

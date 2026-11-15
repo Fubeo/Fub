@@ -238,7 +238,7 @@ Un comando che scrive ha `op`, le sue [operazioni d'intento](canvas-code.md#le-o
 | `canvas.fit`, `canvas.fit_selection` | `Maiusc+1`, `Ctrl+0`; `Maiusc+2` |
 | `canvas.zoom_in`, `canvas.zoom_out`, `canvas.zoom_reset` | `+`, `Ctrl+=`; `-`, `Ctrl+-`; `0` |
 | `canvas.grid_toggle` (la griglia di questa lavagna), `canvas.bare` (l'interfaccia, [lo spazio di lavoro](canvas-view.md#lo-spazio-di-lavoro)): le mostrano e le nascondono | `Ctrl+'`; `Ctrl+.` |
-| `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*` | nessuno |
+| `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*`, `canvas.layout.*`, `canvas.copy_code`, `canvas.paste_code` ([la lavagna come codice](canvas-check.md#nella-lavagna)) | nessuno |
 | `canvas.open_beside`, `canvas.open_viewer`, `canvas.crop`, `canvas.web_preview`, `canvas.spread_pages` (solo su un PDF), `canvas.connect`, `canvas.trash_file`, `canvas.extract_note`, `canvas.copy_note_text`, `canvas.replace_file` ([convertire](canvas-convert.md)) (il menu della scheda); `canvas.open_beside_here` ([la vista](canvas-view.md#apri-a-lato-per-questo)); `canvas.finger_writes` («Il dito scrive» della colonna, anche in sola lettura) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
 | `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end`, `canvas.text_size.s`, `.m`, `.l`, `.xl`, `canvas.text_align.start`, `.center`, `.end` (la riga delle opzioni) | nessuno |
 
@@ -269,8 +269,8 @@ comandi del catalogo col loro nome e il loro tasto:
    (`onOpenPathBeside`); Spargi le pagine…, per un PDF (sotto); Estrai in una nota…, Copia il testo qui, Sostituisci il file… ([convertire](canvas-convert.md)); Collega… · `C`;
 2. Colore › come scelte esclusive: Nessuno, i sei di JSON Canvas col
    pallino, «Colori delle note ›» coi nove, «Altro…», che apre il selettore
-   del kit (i colori in `canvas-format.md`); Disponi › (Porta davanti,
-   Porta dietro, Allinea ›, Distribuisci ›); Duplica;
+   del kit (i colori in `canvas-format.md`); Disponi › (Porta davanti, Porta
+   dietro, Allinea ›, Distribuisci ›; In griglia, In riga, In colonna, Ad albero: `layout`); Duplica; Copia come codice, Incolla codice ([la lavagna come codice](canvas-check.md#nella-lavagna));
 3. in fondo, in rosso: Togli dalla lavagna · `Canc`; Sposta anche il file nel
    cestino, solo con schede di file e se l'host dà `onTrashPath`.
 

@@ -106,6 +106,10 @@ export type CanvasColorId = CanvasColorChoice;
 export const CANVAS_ALIGN = ["left", "center", "right", "top", "middle", "bottom"] as const;
 export type CanvasAlign = (typeof CANVAS_ALIGN)[number];
 
+/// Le disposizioni di «Disponi», nell'ordine del menu: i `kind` di `layout`.
+export const CANVAS_LAYOUTS = ["grid", "row", "column", "tree"] as const;
+export type CanvasLayout = (typeof CANVAS_LAYOUTS)[number];
+
 /// Le quattro direzioni delle frecce.
 export const CANVAS_NUDGE = ["left", "right", "up", "down"] as const;
 export type CanvasNudge = (typeof CANVAS_NUDGE)[number];
@@ -223,6 +227,16 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   })),
   { id: "canvas.distribute_x", label: "canvas.distribute_x", group: "arrange", keys: [], context: "selection" },
   { id: "canvas.distribute_y", label: "canvas.distribute_y", group: "arrange", keys: [], context: "selection" },
+  // «Disponi» (LIC T25): l'operazione `layout` sulle schede scelte o, senza
+  // scelta, su tutte quelle fuori dai gruppi.
+  ...CANVAS_LAYOUTS.map((kind): CanvasCommandSpec => ({
+    id: `canvas.layout.${kind}`, label: `canvas.layout.${kind}`, group: "arrange", keys: [], context: "always",
+  })),
+  // La lavagna come codice (LIC T25): la scelta, o tutta la lavagna, negli
+  // appunti come lista di operazioni; e una lista dagli appunti, controllata
+  // e confermata, in un passo d'annulla.
+  { id: "canvas.copy_code", label: "canvas.copy_code", group: "always", keys: [], context: "always" },
+  { id: "canvas.paste_code", label: "canvas.paste_code", group: "always", keys: [], context: "always" },
   { id: "canvas.fit", label: "canvas.fit", group: "view", keys: ["Shift-1", "Mod-0"], context: "always" },
   { id: "canvas.fit_selection", label: "canvas.fit_selection", group: "view", keys: ["Shift-2"], context: "selection" },
   { id: "canvas.zoom_in", label: "canvas.zoom_in", group: "view", keys: ["+", "Mod-=", "Mod-+"], context: "always" },
