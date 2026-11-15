@@ -671,7 +671,7 @@ la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/page
 src/editors/text/profiles/markdown/corpus.test.ts
-Stato: [~] in corso · coder dal 2026-11-15, da main
+Stato: [~] PR #376 (feat/testata-scrittura-lettura), revisione fatta, aspetta CI e baseline
 
 ## T7 · Il titolo e il primo H1
 
