@@ -4558,7 +4558,7 @@ Casi limite: il tratto di penna che il banco non sa fare con la pressione
 (si usa la pressione fissa, e il resoconto lo dice).
 Fatto quando: `npm run bench:giro -- --solo=lavagna` è verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --solo=lavagna --out=$TMPDIR/giro
-Stato: [ ] da fare
+Stato: [x] integrato 2026-11-15 (coder/pa-t28 @ 085ede4ef) · `bench:giro --solo=lavagna` verde nelle due luci, giro intero verde (29 compiti); check verde 20 passi · il 17 sono due compiti (`penna`, `gomma`); si parte da `Lavagne/Vuota.canvas` perché il finto non fa `canvas.create`; la pressione è vera (CDP, `force` 0,25→0,85, `p` nel file), quindi il caso limite della pressione fissa non serve · difetti trovati, fuori Tocca: la testata di una scheda di testo nuova mostra l'id interno (`nodeTitle()` in `engine.ts` ripiega su `node.id`); ogni campione di penna finisce due volte nel file (`pointerrawupdate` e `pointermove`, forse solo da CDP)
 
 ## T29 · Il giro sul banco: ricette, componenti e aspetto
 
