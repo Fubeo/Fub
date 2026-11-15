@@ -871,6 +871,11 @@ pub const OPS: &[OpSpec] = &[
                 default: Some("\"auto\""),
                 doc_it: "In che coordinate sono i punti e che cosa si taglia: `\"auto\"` (coordinate della lavagna; i tratti liberi e quelli delle schede sotto il cammino), `\"board\"` (la lavagna, solo i tratti liberi) o l'id di una scheda (le sue coordinate, 0,0 in alto a sinistra; solo i suoi tratti).",
             },
+            optional(
+                "aspect",
+                FieldKind::Float,
+                "Come in `move_strokes`: la proporzione del contenuto della scheda di `on`, se si sa. Solo con `on` sull'id di una scheda.",
+            ),
         ],
         examples: &[
             r#"{"op":"erase_along","points":[[41,15],[41,35]],"size":2}"#,

@@ -114,7 +114,9 @@ struct Decoded {
 
 impl Decoded {
     fn of(id: &str, drawn: &DrawnStroke, node: Option<&CanvasNode>) -> Decoded {
-        let placed = Fit::of(node, &drawn.anchor);
+        // La lettura non sa la proporzione del contenuto della scheda (la sa
+        // la resa): la misura è quella di N4, senza `aspect`.
+        let placed = Fit::of(node, &drawn.anchor, None);
         let fit = placed.unwrap_or(Fit::IDENTITY);
         let anchor = placed.is_none().then(|| content_anchor(&drawn.anchor));
         let fitted: Vec<[f64; 2]> = (0..drawn.ink.len())
@@ -218,7 +220,7 @@ pub(super) fn summary(value: &Value, layer: &LayerRef, node: Option<&CanvasNode>
             StrokeState::Drawn(drawn) => {
                 // Un tratto di pagina o di cella conta, ma il nucleo non sa
                 // dove sta nella scheda: non entra nel riquadro.
-                let Some(fit) = Fit::of(node, &drawn.anchor) else {
+                let Some(fit) = Fit::of(node, &drawn.anchor, None) else {
                     continue;
                 };
                 let around =
@@ -496,7 +498,7 @@ mod tests {
                 width: vector["ref"]["width"].as_f64().unwrap(),
                 height: vector["ref"]["height"].as_f64().unwrap(),
             };
-            let fit = Fit::of(Some(&node), &anchor).expect("un'ancora card");
+            let fit = Fit::of(Some(&node), &anchor, None).expect("un'ancora card");
             let expect = &vector["expect"];
             let mode = if scales(&node) { "scale" } else { "fixed" };
             assert_eq!(mode, expect["mode"], "{name}");

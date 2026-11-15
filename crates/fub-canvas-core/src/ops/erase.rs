@@ -12,9 +12,11 @@
 //!   di una scheda i punti sono nelle sue coordinate e il cammino tocca solo
 //!   i suoi tratti.
 //! - **Le unità.** Il cammino torna nelle unità del tratto con l'inverso della
-//!   trasformazione della resa ([`InkFit`]), e il raggio, `size / 2`, cresce
-//!   di metà dello spessore del tratto: il cerchio taglia dove tocca
-//!   l'inchiostro, non solo la linea di mezzo. È il conto di `cutInk`.
+//!   trasformazione della resa ([`InkFit`], con la proporzione del contenuto
+//!   `aspect` se `on` è una scheda e chi scrive la sa), e il raggio,
+//!   `size / 2`, cresce di metà dello spessore del tratto: il cerchio taglia
+//!   dove tocca l'inchiostro, non solo la linea di mezzo. È il conto di
+//!   `cutInk`.
 //! - **I pezzi.** Ogni pezzo è un tratto nuovo coi campi di quello tagliato
 //!   (anche gli sconosciuti), un id nuovo dal seme, `at` spostato all'inizio
 //!   del pezzo, il suo `ink` nella stessa scala e il pennello tagliato. Un
@@ -23,9 +25,10 @@
 //!   dall'ultimo al primo, poi si mettono i pezzi dove stavano: le toppe di
 //!   `cutStrokePatches`, che l'inversa disfa in fila. Valgono tutte o
 //!   nessuna, come ogni operazione.
-//! - **Ciò che non si taglia.** Un tratto che Fub non disegna, o un livello
-//!   estraneo, non si tocca: se può stare sotto il cammino, una nota
-//!   ([`NoteCode::InkKept`]) lo dice.
+//! - **Ciò che non si taglia.** Un tratto che Fub non disegna, un tratto
+//!   attaccato alla pagina di un PDF o alla cella di un foglio (dove stanno
+//!   nella scheda lo sa solo la resa), o un livello estraneo, non si tocca: se
+//!   può stare sotto il cammino, una nota ([`NoteCode::InkKept`]) lo dice.
 
 use std::collections::HashSet;
 
@@ -36,7 +39,8 @@ use serde_json::Value;
 use super::draw::OnTarget;
 use super::{refuse, Compiler, NoteCode, OpError};
 use crate::ink::{
-    DrawnStroke, InkFit, InkLayer, InkStroke, LayerRef, StrokeState, INK_KEY, INK_MAX_BYTES,
+    DrawnStroke, InkAnchor, InkFit, InkLayer, InkStroke, LayerRef, StrokeState, INK_KEY,
+    INK_MAX_BYTES,
 };
 use crate::layout::Rect;
 use crate::model::CanvasNode;
@@ -64,6 +68,11 @@ pub struct EraseAlongArgs {
     /// `"auto"` (di serie), `"board"` o l'id di una scheda.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on: Option<String>,
+    /// La proporzione (larghezza su altezza) del contenuto che la scheda di
+    /// `on` mostra, se chi scrive la sa, come in `move_strokes`: solo con `on`
+    /// sull'id di una scheda. Non si scrive nel file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aspect: Option<f64>,
 }
 
 /// Se `size` è una larghezza che `erase_along` accetta: un numero maggiore di
@@ -93,6 +102,8 @@ struct Holder<'a> {
     /// L'angolo della scheda nelle coordinate del cammino: quello sulla
     /// lavagna con `auto`, 0,0 con `on` sulla scheda.
     origin: (f64, f64),
+    /// La proporzione del contenuto della scheda, se `on` è lei e si sa.
+    aspect: Option<f64>,
 }
 
 /// Un tratto tagliato: dove stava e i pezzi che lo sostituiscono, ancora senza
@@ -163,7 +174,8 @@ impl Compiler {
     ) -> Result<Vec<CanvasPatch>, OpError> {
         let path = path_points(index, &args.points)?;
         let radius = args.size / 2.0;
-        let (layers, notes) = self.erase_cuts(index, args.on.as_deref(), &path, radius)?;
+        let (layers, notes) =
+            self.erase_cuts(index, (args.on.as_deref(), args.aspect), &path, radius)?;
         for detail in notes {
             self.note(index, NoteCode::InkKept, detail);
         }
@@ -179,16 +191,25 @@ impl Compiler {
     fn erase_cuts(
         &self,
         index: usize,
-        on: Option<&str>,
+        (on, aspect): (Option<&str>, Option<f64>),
         path: &[Spot],
         radius: f64,
     ) -> Result<(Vec<LayerCut>, Vec<String>), OpError> {
         let target = self.on_target(index, on)?;
+        // Con `auto` il cammino passa su più schede, ognuna col suo contenuto:
+        // una proporzione sola non direbbe di quale.
+        if aspect.is_some() && !matches!(target, OnTarget::Card(_)) {
+            return Err(OpError::Invalid {
+                index,
+                reason: "`aspect` needs `on` set to the id of a node".to_owned(),
+            });
+        }
         let board = Holder {
             layer: LayerRef::Board,
             node: None,
             value: self.working.extra.get(INK_KEY),
             origin: (0.0, 0.0),
+            aspect: None,
         };
         let holders: Vec<Holder<'_>> = match target {
             OnTarget::Auto => self
@@ -198,12 +219,12 @@ impl Compiler {
                 .filter(|node| node.extra.contains_key(INK_KEY))
                 .map(|node| {
                     let rect = Rect::of_node(node);
-                    Holder::card(node, (rect.x, rect.y))
+                    Holder::card(node, (rect.x, rect.y), None)
                 })
                 .chain(std::iter::once(board))
                 .collect(),
             OnTarget::Board => vec![board],
-            OnTarget::Card(node) => vec![Holder::card(node, (0.0, 0.0))],
+            OnTarget::Card(node) => vec![Holder::card(node, (0.0, 0.0), aspect)],
         };
         let area = Area::around(path.iter().copied(), radius);
         let mut layers = Vec::new();
@@ -244,6 +265,16 @@ impl Compiler {
                         continue;
                     }
                 };
+                if let Some(kind) = unplaced(&drawn) {
+                    if holder.may_hold(&area, Some(stroke)) {
+                        notes.push(format!(
+                            "stroke {:?} of {} is anchored to a {kind}, and where the {kind} is shown in the card is known only to the renderer, so it is not cut",
+                            stroke.id,
+                            holder.name(),
+                        ));
+                    }
+                    continue;
+                }
                 if let Some(pieces) = holder.cut(index, &drawn, path, radius, &mut work)? {
                     cuts.push(StrokeCut {
                         at,
@@ -313,12 +344,13 @@ impl Compiler {
 
 impl<'a> Holder<'a> {
     /// Il livello della scheda `node`, col suo angolo in `origin`.
-    fn card(node: &'a CanvasNode, origin: (f64, f64)) -> Holder<'a> {
+    fn card(node: &'a CanvasNode, origin: (f64, f64), aspect: Option<f64>) -> Holder<'a> {
         Holder {
             layer: LayerRef::Node(node.id.clone()),
             node: Some(node),
             value: node.extra.get(INK_KEY),
             origin,
+            aspect,
         }
     }
 
@@ -368,9 +400,9 @@ impl<'a> Holder<'a> {
     ) -> Result<Option<Vec<InkPiece>>, OpError> {
         // Come `erasableInk` e `cutInk`: lo spostamento della resa si somma
         // all'angolo della scheda, e il cammino torna nelle unità del tratto.
-        // Un tratto di pagina o di cella: il nucleo non sa dove sta nella
-        // scheda, e la gomma in codice non lo tocca (`on` pagina o cella è T19).
-        let Some(fit) = InkFit::of(self.node, &drawn.anchor) else {
+        // Un tratto di pagina o di cella non arriva qui ([`unplaced`]): senza
+        // misura non si taglia.
+        let Some(fit) = InkFit::of(self.node, &drawn.anchor, self.aspect) else {
             return Ok(None);
         };
         if fit.s.is_nan() || fit.s <= 0.0 {
@@ -392,6 +424,18 @@ impl<'a> Holder<'a> {
             ));
         }
         Ok(split_ink(&samples, &local, reach))
+    }
+}
+
+/// `"page"` o `"cell"` per un tratto attaccato alla pagina di un PDF o alla
+/// cella di un foglio: il nucleo non sa dove la scheda li mostra (la pagina
+/// che si vede, il riquadro della cella), e la gomma in codice non li taglia.
+/// `None` per gli altri tratti.
+fn unplaced(drawn: &DrawnStroke) -> Option<&'static str> {
+    match drawn.anchor {
+        InkAnchor::Page { .. } => Some("page"),
+        InkAnchor::Cell { .. } => Some("cell"),
+        InkAnchor::Card { .. } | InkAnchor::Free => None,
     }
 }
 
@@ -846,5 +890,95 @@ mod tests {
         assert!(compiled.patches.is_empty(), "{:?}", compiled.patches);
         // Il tratto si disegna (nessuna nota `ink_kept`): il caso arriva al taglio.
         assert!(compiled.notes.is_empty(), "{:?}", compiled.notes);
+    }
+
+    /// Un tratto di pagina o di cella non si taglia: dove la scheda mostra la
+    /// pagina o la cella lo sa solo la resa. Se il cammino passa sulla scheda,
+    /// la nota `ink_kept` lo dice, con l'ancora; se no, niente nota.
+    #[test]
+    fn il_tratto_di_pagina_o_di_cella_resta_e_la_nota_lo_dice() {
+        let anchored = |id: &str, anchor: Value| {
+            json!({"id": id, "tool": "pen", "brush": BALL, "color": "#0072b2",
+                   "anchor": anchor, "ink": "1 s100 cxy 1000,1000 4000,0"})
+        };
+        let canvas = board(&json!({
+            "nodes": [
+                {"id": "p1", "type": "file", "file": "Corsi/dispensa.pdf", "x": 0, "y": 0,
+                 "width": 300, "height": 400, "fub:ink": {"v": 1, "strokes": [
+                     anchored("sp", json!({"kind": "page", "page": 2, "width": 595, "height": 842}))]}},
+                {"id": "x1", "type": "file", "file": "Corsi/voti.xlsx", "x": 1000, "y": 0,
+                 "width": 300, "height": 200, "fub:ink": {"v": 1, "strokes": [
+                     anchored("sc", json!({"kind": "cell", "sheet": "Foglio1", "cell": "B3"}))]}}
+            ],
+            "edges": []
+        }));
+        for (on, id, kind) in [("p1", "sp", "page"), ("x1", "sc", "cell")] {
+            let compiled = run(
+                &canvas,
+                json!({"op": "erase_along", "on": on, "points": [[10, 10], [50, 10]], "size": 40}),
+            )
+            .expect("non è un errore");
+            assert!(compiled.patches.is_empty(), "{on}: {:?}", compiled.patches);
+            assert_eq!(compiled.notes.len(), 1, "{on}: {:?}", compiled.notes);
+            assert_eq!(compiled.notes[0].code, NoteCode::InkKept);
+            let detail = &compiled.notes[0].detail;
+            assert!(
+                detail.contains(&format!("stroke \"{id}\""))
+                    && detail.contains(&format!("anchored to a {kind}")),
+                "{detail}"
+            );
+        }
+        // Con `auto` lontano dalle due schede: nessuna nota.
+        let far = run(
+            &canvas,
+            json!({"op": "erase_along", "points": [[600, 600]], "size": 4}),
+        )
+        .expect("non è un errore");
+        assert!(
+            far.patches.is_empty() && far.notes.is_empty(),
+            "{:?}",
+            far.notes
+        );
+    }
+
+    /// `aspect` è la proporzione del contenuto della scheda di `on`, come in
+    /// `move_strokes`: sull'immagine 600 × 200 con un tratto disegnato a
+    /// 300 × 300 e un contenuto 2:1, il tratto a x = 30 sta a x = 140 della
+    /// scheda; senza, a x = 220. Con `auto` o `board` non vale.
+    #[test]
+    fn la_proporzione_del_contenuto_sposta_il_taglio() {
+        let canvas = board(&json!({
+            "nodes": [{"id": "f1", "type": "file", "file": "Foto/lavagna.png", "x": 0, "y": 0,
+                       "width": 600, "height": 200, "fub:ink": {"v": 1, "strokes": [
+                {"id": "s1", "tool": "pen", "brush": BALL, "color": "#0072b2",
+                 "anchor": {"kind": "card", "width": 300, "height": 300},
+                 "ink": "1 s100 cxy 3000,10000 0,10000"}]}}],
+            "edges": []
+        }));
+        let erase = |x: f64, aspect: Option<f64>| {
+            let mut op = json!({"op": "erase_along", "on": "f1",
+                                "points": [[x, -1000], [x, 1000]], "size": 4});
+            if let Some(aspect) = aspect {
+                op["aspect"] = json!(aspect);
+            }
+            run(&canvas, op).expect("si compila").patches.len()
+        };
+        assert_eq!(erase(140.0, None), 0, "senza proporzione il tratto è a 220");
+        assert!(erase(220.0, None) > 0);
+        assert!(erase(140.0, Some(2.0)) > 0, "con 2:1 il tratto è a 140");
+        assert_eq!(erase(220.0, Some(2.0)), 0);
+        // Una proporzione che non vale dà la regola senza.
+        assert!(erase(220.0, Some(-1.0)) > 0);
+        for on in [None, Some("board")] {
+            let mut op = json!({"op": "erase_along", "points": [[140, 0]], "size": 4, "aspect": 2});
+            if let Some(on) = on {
+                op["on"] = json!(on);
+            }
+            let error = run(&canvas, op).expect_err("aspect senza una scheda");
+            assert!(
+                matches!(error, OpError::Invalid { index: 0, .. }),
+                "{error:?}"
+            );
+        }
     }
 }

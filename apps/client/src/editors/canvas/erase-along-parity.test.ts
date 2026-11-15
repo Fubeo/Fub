@@ -87,7 +87,10 @@ function guiAfter(vector: Vector): Map<string, Json[]> {
       result.set(key, [...layer.strokes]);
       continue;
     }
-    const units = new Map(erasableInk([stateOf(layer)]).map((unit) => [unit.id, unit]));
+    // `aspect` è la proporzione del contenuto della scheda di `on`: la tela
+    // la dà a `erasableInk` con `aspects`, per scheda.
+    const aspects = (node: string): number | null => (node === on && typeof op.aspect === "number" ? op.aspect : null);
+    const units = new Map(erasableInk([stateOf(layer)], undefined, aspects).map((unit) => [unit.id, unit]));
     const strokes: Json[] = [];
     for (const record of layer.strokes) {
       const unit = units.get(record.id);
@@ -108,6 +111,7 @@ describe("erase_along come la gomma «Solo il pezzo»", () => {
     const names = applied.map(([name]) => name);
     expect(names).toContain("erase-along-cuts-in-half.json");
     expect(names).toContain("erase-along-auto-board-and-card.json");
+    expect(names).toContain("erase-along-aspect.json");
   });
 
   for (const [name, vector] of applied) {

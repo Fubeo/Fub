@@ -392,6 +392,29 @@ fn the_board_recompiled_from_its_code_keeps_the_order_of_cards_and_edges() {
     assert_eq!(round_trip(&canvas), Ok(()));
 }
 
+/// Un colore che Fub non conosce (`CanvasColor::Unknown`) fa il giro intero:
+/// `code` lo scrive nella forma intera, `compile` e le toppe lo tengono, e la
+/// lavagna di dopo si valida. Lo rifiuta solo la scrittura di una sessione
+/// che non l'ha letto (`check_colors` in `commit.rs`).
+#[test]
+fn an_unknown_colour_survives_the_round_trip() {
+    let canvas = board(
+        r##"{
+          "nodes": [
+            {"id":"a","type":"text","x":0,"y":0,"width":10,"height":10,"text":"a","color":"rosso"},
+            {"id":"b","type":"text","x":20,"y":0,"width":10,"height":10,"text":"b"}
+          ],
+          "edges": [{"id":"e1","fromNode":"a","toNode":"b","color":"#12"}]
+        }"##,
+    );
+    assert_eq!(round_trip(&canvas), Ok(()));
+    let ops = code(&canvas, &DescribeOptions::default());
+    let compiled = compile(&Canvas::default(), &ops, 1).expect("il codice si compila");
+    let mut after = Canvas::default();
+    patch::apply(&mut after, &compiled.patches).expect("le toppe si applicano");
+    after.validate().expect("la lavagna di dopo si valida");
+}
+
 #[test]
 fn an_empty_board_has_no_operations_and_the_json_of_an_empty_file() {
     let empty = board("");

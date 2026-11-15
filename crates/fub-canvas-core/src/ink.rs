@@ -515,16 +515,35 @@ impl InkFit {
         dx: 0.0,
         dy: 0.0,
     };
+    /// Il tratto non si vede: una misura che non vale.
+    pub(crate) const HIDDEN: InkFit = InkFit {
+        s: 0.0,
+        dx: 0.0,
+        dy: 0.0,
+    };
 
+    /// Come la resa porta un tratto con l'ancora `anchor` nella scheda
+    /// `node` (`None` per la radice): la regola di «La misura della scheda»
+    /// di `docs/reference/canvas-ink.md`, l'unica del nucleo. È `inkFit` di
+    /// `apps/client/src/editors/canvas/ink-fit.ts`, provata coi suoi vettori
+    /// (`canvas-ink-fit/` e `canvas-ink-fit-aspect/`).
+    ///
     /// Il modo della scheda ([`scales`]): `scale` scala senza deformarsi e si
-    /// centra, `fixed` resta alla misura di riferimento. Un tratto libero non
-    /// si porta. È `inkFit` di `apps/client/src/editors/canvas/ink-fit.ts`,
-    /// provato coi suoi vettori (`canvas-ink-fit/`).
+    /// centra, `fixed` resta alla misura di riferimento; un tratto libero non
+    /// si porta. Con una proporzione del contenuto `aspect` che vale (finita e
+    /// maggiore di zero) il riquadro del contenuto nella misura di riferimento
+    /// va su quello nella misura di adesso (T39, T98); senza, o con una che
+    /// non vale, la regola di N4. Una misura che non vale dà `s = 0`: il
+    /// tratto non si vede. Mai `NaN`.
     ///
     /// `None` per un tratto attaccato alla pagina di un PDF o alla cella di un
     /// foglio: dove la pagina o la cella sta dentro la scheda lo sa la resa,
-    /// non il nucleo, come per `move_strokes` e `restyle_strokes`.
-    pub(crate) fn of(node: Option<&CanvasNode>, anchor: &InkAnchor) -> Option<InkFit> {
+    /// non il nucleo.
+    pub(crate) fn of(
+        node: Option<&CanvasNode>,
+        anchor: &InkAnchor,
+        aspect: Option<f64>,
+    ) -> Option<InkFit> {
         let (width, height) = match anchor {
             InkAnchor::Page { .. } | InkAnchor::Cell { .. } => return None,
             InkAnchor::Free => return Some(InkFit::IDENTITY),
@@ -539,11 +558,31 @@ impl InkFit {
         // Le misure di una scheda sono interi entro ±(2^53−1): il cast è esatto.
         #[allow(clippy::cast_precision_loss)]
         let (w, h) = (node.width as f64, node.height as f64);
-        if w < 0.0 || h < 0.0 {
+        if !(width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0) {
+            return Some(InkFit::HIDDEN);
+        }
+        if !(w.is_finite() && h.is_finite() && w >= 0.0 && h >= 0.0) {
+            return Some(InkFit::HIDDEN);
+        }
+        if let Some(aspect) = aspect.filter(|aspect| aspect.is_finite() && *aspect > 0.0) {
+            let (Some(from), Some(to)) = (
+                content_box((width, height), aspect),
+                content_box((w, h), aspect),
+            ) else {
+                return Some(InkFit::HIDDEN);
+            };
+            // `content_box` dà misure finite: qui zero è l'unico caso.
+            if from.2 <= 0.0 {
+                return Some(InkFit::HIDDEN);
+            }
+            let s = to.2 / from.2;
+            if !s.is_finite() {
+                return Some(InkFit::HIDDEN);
+            }
             return Some(InkFit {
-                s: 0.0,
-                dx: 0.0,
-                dy: 0.0,
+                s,
+                dx: to.0 - s * from.0,
+                dy: to.1 - s * from.1,
             });
         }
         let s = (w / width).min(h / height);
@@ -557,6 +596,16 @@ impl InkFit {
     pub(crate) fn point(self, [x, y]: [f64; 2]) -> [f64; 2] {
         [self.dx + self.s * x, self.dy + self.s * y]
     }
+}
+
+/// Il riquadro `(x, y, larghezza, altezza)` del contenuto di proporzione
+/// `aspect` in una scheda `w × h`: il più grande che ci sta intero, al centro
+/// (`contentBox` del client). `None` se non è finito.
+fn content_box((w, h): (f64, f64), aspect: f64) -> Option<(f64, f64, f64, f64)> {
+    let width = w.min(h * aspect);
+    let height = width / aspect;
+    (width.is_finite() && height.is_finite())
+        .then(|| ((w - width) / 2.0, (h - height) / 2.0, width, height))
 }
 
 /// Le estensioni che fanno scalare l'inchiostro: le immagini di `mimeForExt`
@@ -1330,5 +1379,105 @@ mod tests {
         );
         let keys: Vec<&String> = written.as_object().unwrap().keys().collect();
         assert_eq!(keys, ["kind", "sheet", "cell"]);
+    }
+
+    /// La misura di una scheda con un'ancora `card` di riferimento
+    /// `width × height`.
+    fn ink_fit(node: &CanvasNode, width: f64, height: f64, aspect: Option<f64>) -> InkFit {
+        InkFit::of(Some(node), &InkAnchor::Card { width, height }, aspect)
+            .expect("un'ancora card ha sempre una misura")
+    }
+
+    /// La scheda di un vettore di `canvas-ink-fit/`, alla misura `size`.
+    fn fit_card(card: &Value, size: &Value) -> CanvasNode {
+        let mut fields = card.as_object().cloned().unwrap_or_default();
+        fields.insert("id".to_owned(), json!("n"));
+        fields.insert("x".to_owned(), json!(0));
+        fields.insert("y".to_owned(), json!(0));
+        fields.insert("width".to_owned(), size["width"].clone());
+        fields.insert("height".to_owned(), size["height"].clone());
+        serde_json::from_value(Value::Object(fields)).expect("la scheda del vettore")
+    }
+
+    /// `s`, `x`, `y` e i punti di un vettore (`expect`).
+    fn same_fit(name: &str, fit: InkFit, expect: &Value) {
+        for (key, got) in [("s", fit.s), ("x", fit.dx), ("y", fit.dy)] {
+            let want = expect[key].as_f64().expect("un numero");
+            assert!(
+                (got - want).abs() < 1e-9,
+                "{name}: {key} = {got}, non {want}"
+            );
+        }
+        for point in expect["points"].as_array().into_iter().flatten() {
+            let coordinate = |field: &str, at: usize| point[field][at].as_f64().expect("un numero");
+            let got = (
+                fit.dx + fit.s * coordinate("from", 0),
+                fit.dy + fit.s * coordinate("from", 1),
+            );
+            let want = (coordinate("to", 0), coordinate("to", 1));
+            assert!(
+                (got.0 - want.0).abs() < 1e-9 && (got.1 - want.1).abs() < 1e-9,
+                "{name}: il punto va in {got:?}, non in {want:?}"
+            );
+        }
+    }
+
+    /// Con la proporzione del contenuto (T39, T98) la misura si calcola come
+    /// nel client: i vettori di `inkFit` con `aspect`
+    /// (`apps/client/src/__fixtures__/canvas-ink-fit-aspect/`).
+    #[test]
+    fn the_fit_with_the_content_aspect_follows_the_client_vectors() {
+        let folder = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/client/src/__fixtures__/canvas-ink-fit-aspect");
+        let mut seen = 0;
+        for entry in std::fs::read_dir(folder).expect("la cartella dei vettori") {
+            let path = entry.expect("una voce").path();
+            let text = std::fs::read_to_string(&path).expect("il file");
+            let vector: Value = serde_json::from_str(&text).expect("JSON");
+            let name = vector["name"].as_str().unwrap_or_default();
+            let node = fit_card(&vector["card"], &vector["size"]);
+            let width = vector["ref"]["width"].as_f64().expect("ref.width");
+            let height = vector["ref"]["height"].as_f64().expect("ref.height");
+            let aspect = vector["aspect"].as_f64();
+            let expect = &vector["expect"];
+            assert_eq!(scales(&node), expect["mode"] == "scale", "{name}: il modo");
+            same_fit(name, ink_fit(&node, width, height, aspect), expect);
+            seen += 1;
+        }
+        assert!(seen >= 7, "troppo pochi vettori: {seen}");
+    }
+
+    /// Una proporzione che non vale (zero, negativa, non finita) dà la
+    /// regola senza proporzione, e non cambia mai una scheda `fixed`.
+    #[test]
+    fn a_content_aspect_that_is_not_valid_gives_the_rule_without_it() {
+        let image = fit_card(
+            &json!({ "type": "file", "file": "Foto/lavagna.png" }),
+            &json!({ "width": 600, "height": 200 }),
+        );
+        let plain = ink_fit(&image, 300.0, 300.0, None);
+        for aspect in [0.0, -2.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                ink_fit(&image, 300.0, 300.0, Some(aspect)),
+                plain,
+                "{aspect}"
+            );
+        }
+        assert_ne!(ink_fit(&image, 300.0, 300.0, Some(2.0)), plain);
+        let note = fit_card(
+            &json!({ "type": "text", "text": "" }),
+            &json!({ "width": 600, "height": 200 }),
+        );
+        assert_eq!(ink_fit(&note, 300.0, 300.0, Some(2.0)), InkFit::IDENTITY);
+        // La scheda di misura zero: il tratto non si vede, mai `NaN`.
+        let flat = fit_card(
+            &json!({ "type": "file", "file": "Foto/lavagna.png" }),
+            &json!({ "width": 0, "height": 200 }),
+        );
+        let fit = ink_fit(&flat, 300.0, 300.0, Some(2.0));
+        assert!(
+            fit.s == 0.0 && fit.dx.is_finite() && fit.dy.is_finite(),
+            "{fit:?}"
+        );
     }
 }
