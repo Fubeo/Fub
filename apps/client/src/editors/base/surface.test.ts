@@ -5,6 +5,7 @@ import { forwardNotice } from "../../state/kernel";
 import type { SurfaceMenuItem } from "../core/editor-menu";
 import { mountBaseSurface } from "./surface";
 import type { BaseDocumentWrites } from "./data";
+import { filterProperties, parseFilter } from "./filter";
 import type { NoticeAction } from "../../ui/notify";
 
 // Gli avvisi della shell: la prova guarda che cosa la Base dice e quale gesto
@@ -326,8 +327,24 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
     rows?: { doc: string; properties: { key: string; value: unknown }[] }[];
     /// `base.view.set` risponde «niente da cambiare», senza revisione.
     unchanged?: boolean;
+    /// Come il core: il piano chiede solo le proprietà delle colonne e del
+    /// filtro, le righe arrivano con quelle, e il filtro toglie le righe.
+    narrow?: boolean;
+    /// Anche la seconda vista è una tabella.
+    twoTables?: boolean;
   }
-  const mount = (initial: Keys = {}, { documentWrites, onOpenDocument, rows: ownRows, unchanged, ...options }: MountOptions = {}) => {
+  // Un filtro della prova come lo applicherebbe il core, per le sole forme
+  // che le prove scrivono: una condizione «contiene» o «è» su una proprietà.
+  const keeps = (filter: unknown, properties: { key: string; value: unknown }[]): boolean => {
+    const condition = (filter as { condition?: { property?: string; op: string; value?: unknown } }).condition;
+    if (!condition?.property) return true;
+    const found = properties.find(({ key }) => key === condition.property);
+    if (!found) return false;
+    const text = String((found.value as { value?: unknown })?.value ?? found.value).toLowerCase();
+    const wanted = String(condition.value).toLowerCase();
+    return condition.op === "is" ? text === wanted : text.includes(wanted);
+  };
+  const mount = (initial: Keys = {}, { documentWrites, onOpenDocument, rows: ownRows, unchanged, narrow, twoTables, ...options }: MountOptions = {}) => {
     const keys: Keys = { ...initial };
     const rows = ownRows ?? notes;
     let revision = 1;
@@ -335,21 +352,28 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const queryIndex = async (request: IndexQuery): Promise<IndexResult> => {
-      if (request.kind === "documents") return { kind: "documents", value: { offset: 0, total: rows.length, items: rows } };
+      if (request.kind === "documents") {
+        const select = request.select;
+        const items = select?.kind === "keys" ? rows.map(({ doc, properties }) => ({ doc, properties: properties.filter(({ key }) => select.keys.includes(key)) })) : rows;
+        return { kind: "documents", value: { offset: 0, total: rows.length, items } };
+      }
       if (request.kind !== "custom" || typeof request.query !== "object" || !request.query || !("op" in request.query)) throw new Error("unexpected query");
       const query = request.query as { op: string; view?: string | null };
-      if (query.op === "parse") return { kind: "custom", value: { views: ["Tabella", "Bacheca"], types: ["table", "kanban"] } };
+      if (query.op === "parse") return { kind: "custom", value: { views: ["Tabella", "Bacheca"], types: ["table", twoTables ? "table" : "kanban"] } };
       if (query.op === "plan") {
         const board = query.view === "Bacheca";
+        const columns = (keys.order as string[] | undefined) ?? ["stato", "artista"];
+        const required = [...new Set([...columns, ...(board ? [] : filterProperties(parseFilter(keys.filters ?? "all")))])];
         return { kind: "custom", value: {
-          view: board ? "Bacheca" : "Tabella", view_type: board ? "kanban" : "table",
-          columns: (keys.order as string[] | undefined) ?? ["stato", "artista"], column_labels: {},
-          required_props: [], all_properties: true, group: board ? "stato" : null, limit: null, map: null, create_defaults: {},
+          view: board ? "Bacheca" : "Tabella", view_type: board && !twoTables ? "kanban" : "table",
+          columns, column_labels: {},
+          required_props: narrow ? required : [], all_properties: !narrow, group: board && !twoTables ? "stato" : null, limit: null, map: null, create_defaults: {},
           filters: board ? "all" : keys.filters ?? "all", sort: board ? [] : keys.sort ?? [], order: board ? [] : keys.order ?? [],
         } };
       }
       if (query.op === "derive") {
-        return { kind: "custom", value: { summaries: {}, rows: rows.map(({ doc, properties }) => ({
+        const shown = narrow && query.view !== "Bacheca" ? rows.filter(({ properties }) => keeps(keys.filters ?? "all", properties)) : rows;
+        return { kind: "custom", value: { summaries: {}, rows: shown.map(({ doc, properties }) => ({
           doc, values: Object.fromEntries(properties.map(({ key, value }) => [key, { kind: "text", value: String(value) }])),
         })) } };
       }
@@ -795,5 +819,131 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
       await vi.waitFor(() => expect(host.querySelector(".base-kanban")).not.toBeNull());
       expect(tabs().map((tab) => tab.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
     } finally { done(); }
+  });
+
+  // Le righe con una proprietà che non è una colonna: il piano non la chiede,
+  // e le righe lette non la portano.
+  const works = [
+    { doc: "Opere/Nebbia.md", properties: [{ key: "stato", value: "Arrivata" }, { key: "artista", value: "Elena Sala" }, { key: "tecnica", value: "Olio" }] },
+    { doc: "Opere/Campo.md", properties: [{ key: "stato", value: "In prestito" }, { key: "artista", value: "Pietro Neri" }, { key: "tecnica", value: "Tempera" }] },
+  ];
+  const applyButton = (pop: HTMLElement) => [...pop.querySelectorAll<HTMLButtonElement>("button")].find((each) => each.textContent === "Applica")!;
+
+  it("una proprietà che le righe lette non portano si filtra lo stesso: la barra avverte, Applica resta", async () => {
+    const { host, invokeCommand, deliver, done } = mount({}, { rows: works, narrow: true });
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-filter")!.click();
+      let pop = popover("base-filter-popover");
+      const search = pop.querySelector<HTMLInputElement>(".base-filter-search")!;
+      search.value = "[tecnica:olio]";
+      search.dispatchEvent(new Event("input"));
+      expect(pop.textContent).toContain("«tecnica» non è fra le proprietà delle righe lette: controlla il nome prima di applicare.");
+      expect(applyButton(pop).disabled).toBe(false);
+      applyButton(pop).click();
+      expect(JSON.parse(lastSet(invokeCommand)!.value as string)).toEqual({ condition: { property: "tecnica", op: "contains", value: "olio" } });
+      deliver();
+      await settled(host);
+      await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(1));
+      // Ora il piano la chiede: è fra le proprietà, e non c'è più niente da dire.
+      host.querySelector<HTMLButtonElement>(".base-tool-filter")!.click();
+      pop = popover("base-filter-popover");
+      expect([...pop.querySelectorAll<HTMLSelectElement>(".base-filter-subject option")].map((each) => each.value)).toContain("tecnica");
+      const again = pop.querySelector<HTMLInputElement>(".base-filter-search")!;
+      again.value = "[tecnica:tempera]";
+      again.dispatchEvent(new Event("input"));
+      expect(pop.textContent).not.toContain("non è fra le proprietà");
+    } finally { done(); }
+  });
+
+  it("un filtro che non trova niente si corregge: le scelte e i valori vengono dalle righe lette", async () => {
+    const { host, deliver, done } = mount({ filters: { condition: { property: "stato", op: "is", value: "Arivata" } } }, { rows: works, narrow: true });
+    try {
+      await vi.waitFor(() => expect(host.querySelector(".base-table")).not.toBeNull());
+      expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(0);
+      host.querySelector<HTMLButtonElement>(".base-tool-filter")!.click();
+      const pop = popover("base-filter-popover");
+      expect(pop.querySelector<HTMLSelectElement>(".base-filter-subject")!.value).toBe("stato");
+      expect([...pop.querySelectorAll("datalist option")].map((each) => (each as HTMLOptionElement).value)).toEqual(["Arrivata", "In prestito"]);
+      const value = pop.querySelector<HTMLInputElement>(".base-filter-value")!;
+      value.value = "Arrivata";
+      value.dispatchEvent(new Event("input"));
+      expect(pop.textContent).not.toContain("non è fra le proprietà");
+      applyButton(pop).click();
+      deliver();
+      await settled(host);
+      await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(1));
+    } finally { done(); }
+  });
+
+  it("un numero scritto nella lingua per una proprietà mista si cerca come testo, e la barra lo dice", async () => {
+    const rows = [
+      { doc: "Opere/Nebbia.md", properties: [{ key: "stato", value: { kind: "text", value: "Arrivata" } }, { key: "valore", value: { kind: "number", value: 2600 } }] },
+      { doc: "Opere/Campo.md", properties: [{ key: "stato", value: { kind: "text", value: "In prestito" } }, { key: "valore", value: { kind: "text", value: "da stimare" } }] },
+    ];
+    const { host, done } = mount({}, { rows });
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-filter")!.click();
+      const pop = popover("base-filter-popover");
+      press(pop, "Aggiungi una condizione");
+      const subject = pop.querySelector<HTMLSelectElement>(".base-filter-subject")!;
+      subject.value = "valore";
+      subject.dispatchEvent(new Event("change"));
+      const value = pop.querySelector<HTMLInputElement>(".base-filter-value")!;
+      value.value = "3000,5";
+      value.dispatchEvent(new Event("input"));
+      expect(pop.textContent).toContain("«3000,5» si cerca come testo, perché questa proprietà non ha solo numeri. Per cercare il numero scrivi 3000.5.");
+      expect(applyButton(pop).disabled).toBe(false);
+    } finally { done(); }
+  });
+
+  it("cambiare vista riporta la tabella in cima", async () => {
+    const rows = Array.from({ length: 80 }, (_, index) => ({ doc: `Opere/${String(index).padStart(2, "0")}.md`, properties: [{ key: "stato", value: "Arrivata" }] }));
+    const { host, done } = mount({}, { rows, twoTables: true });
+    try {
+      await vi.waitFor(() => expect(host.querySelector(".base-table tbody tr[data-doc]")).not.toBeNull());
+      const viewport = host.querySelector<HTMLElement>(".base-table-viewport")!;
+      viewport.scrollTop = 900;
+      viewport.dispatchEvent(new Event("scroll"));
+      host.querySelectorAll<HTMLButtonElement>(".base-tab")[1]!.click();
+      await vi.waitFor(() => expect(host.querySelector<HTMLElement>(".base-table-viewport")).not.toBe(viewport));
+      await settled(host);
+      expect(host.querySelector<HTMLElement>(".base-table-viewport")!.scrollTop).toBe(0);
+    } finally { done(); }
+  });
+
+  it("Annulla ritira il suo annuncio se l'evento del .base non arriva, e subito se la Base si chiude", async () => {
+    const withdraws: ReturnType<typeof vi.fn>[] = [];
+    const documentWrites: BaseDocumentWrites = {
+      flush: async () => [],
+      expect: () => { const withdraw = vi.fn(); withdraws.push(withdraw); return withdraw; },
+    };
+    const { host, deliver, done } = mount({}, { documentWrites });
+    notified.length = 0;
+    let closed = false;
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-sort")!.click();
+      const add = popover("base-sort-popover").querySelector<HTMLSelectElement>(".base-sort-add")!;
+      add.value = "stato";
+      add.dispatchEvent(new Event("change"));
+      await vi.waitFor(() => expect(notified.length).toBe(1));
+      deliver();
+      await settled(host);
+      const action = notified[0]!.action as NoticeAction;
+      // «Annulla» ha annullato un'altra cosa (o niente): nessun evento del
+      // .base, e l'annuncio non resta a zittire un cambio vero.
+      await action.run();
+      expect(withdraws).toHaveLength(2);
+      expect(withdraws[1]).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(withdraws[1]).toHaveBeenCalledTimes(1), { timeout: 4000 });
+      expect(withdraws[0]).not.toHaveBeenCalled();
+      // Chiusa la Base, l'attesa non resta appesa.
+      await action.run();
+      done();
+      closed = true;
+      expect(withdraws[2]).toHaveBeenCalledTimes(1);
+    } finally { if (!closed) done(); }
   });
 });

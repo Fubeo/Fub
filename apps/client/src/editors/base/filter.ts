@@ -448,10 +448,7 @@ export type SearchProblem =
   | { readonly kind: "syntax"; readonly fault: SearchFault }
   /// La riga dice qualcosa che il filtro della Base non sa fare: cercare nel
   /// testo, nei titoli, nei compiti. `term` è il pezzo della riga.
-  | { readonly kind: "unsupported"; readonly term: string }
-  /// La riga nomina una proprietà che nessuna riga di questa Base ha, né una
-  /// colonna: un nome sbagliato non diventa in silenzio un filtro vuoto.
-  | { readonly kind: "unknown_property"; readonly key: string };
+  | { readonly kind: "unsupported"; readonly term: string };
 
 export type SearchFilter = { readonly ok: FilterDef } | { readonly problem: SearchProblem };
 
@@ -491,21 +488,44 @@ function literalDef(literal: QueryLiteral): FilterDef | string {
 }
 
 /// La riga di ricerca come filtro della Base. Una riga vuota è nessun filtro.
-/// `known` dice se una proprietà esiste in questa Base; senza, ogni nome vale.
-export function filterOfSearch(text: string, known?: (key: string) => boolean): SearchFilter {
+export function filterOfSearch(text: string): SearchFilter {
   const parsed = parseSearch(text, false);
   if ("fault" in parsed) return { problem: { kind: "syntax", fault: parsed.fault } };
-  return filterOfQuery(parsed.ok, known);
+  return filterOfQuery(parsed.ok);
 }
 
-function filterOfQuery(query: QueryExpr, known?: (key: string) => boolean): SearchFilter {
+/// Le proprietà che un filtro nomina, ognuna una volta, nell'ordine del
+/// filtro. Le cartelle, le formule e i tag non sono proprietà.
+export function filterProperties(filter: FilterDef): string[] {
+  const keys: string[] = [];
+  const walk = (node: FilterDef): void => {
+    if (typeof node === "string" || "opaque" in node) return;
+    if ("and" in node) node.and.forEach(walk);
+    else if ("or" in node) node.or.forEach(walk);
+    else if ("not" in node) walk(node.not);
+    else if (node.condition.property !== undefined && !keys.includes(node.condition.property)) keys.push(node.condition.property);
+  };
+  walk(filter);
+  return keys;
+}
+
+/// Il valore di una condizione a vista si cerca come testo anche se si legge
+/// come un numero nella forma della lingua (`3000,5`): succede a una proprietà
+/// che non ha solo numeri, dove il modello confronta il testo. Torna il numero
+/// nella forma canonica da scrivere per cercarlo come numero, o `null`.
+export function numberAsText(condition: VisualCondition, typing: ValueTyping): string | null {
+  if (condition.subject === null || VALUELESS.has(condition.op) || typing.decimal === ".") return null;
+  if (typing.kind(condition.subject.trim()) !== "other") return null;
+  if (typeof typedValue(condition.value, "other", typing.decimal) !== "string") return null;
+  const number = readNumber(condition.value, typing.decimal);
+  return number === null ? null : String(number);
+}
+
+function filterOfQuery(query: QueryExpr): SearchFilter {
   const clauses: FilterDef[] = [];
   for (const clause of query.any) {
     const parts: FilterDef[] = [];
     for (const literal of clause.all) {
-      if (known && literal.predicate.kind === "property" && !known(literal.predicate.filter.key)) {
-        return { problem: { kind: "unknown_property", key: literal.predicate.filter.key } };
-      }
       const def = literalDef(literal);
       if (typeof def === "string") return { problem: { kind: "unsupported", term: def } };
       parts.push(def);

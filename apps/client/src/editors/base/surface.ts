@@ -20,9 +20,9 @@ import {
   allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty, groupBaseRows,
   fetchAllDocuments, listBaseViews, parseBaseEmbed, persistBaseView,
   planBaseView, prepareBaseMutations, restoreBaseView, setBaseViewKey, writtenLines,
-  type BaseCellValue, type BaseDocumentWrites, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseSurfaceDeps, type BaseViewKey,
+  type BaseCellValue, type BaseDocumentWrites, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey,
 } from "./data";
-import { decimalOf, propertyKind, propertyValues } from "./filter";
+import { decimalOf, propertyKind, propertyValues, type ValueKind } from "./filter";
 import { mountBaseToolbar } from "./toolbar";
 import { notify } from "../../ui/notify";
 import { writeClipboardText } from "../../platform/clipboard";
@@ -52,6 +52,13 @@ const TEMPLATE_LIMIT = 100;
 const WRITE_SETTLE_MS = 4000;
 /// Quante proprietà e quanti valori la barra raccoglie dalle righe.
 const PROPERTY_LIMIT = 200;
+/// Quanto aspetta, dopo la risposta di «Annulla», l'evento della riscrittura
+/// del `.base` prima di ritirarne l'annuncio. L'esito di `vault.undo` non dice
+/// quale file ha riscritto: se non era questo (niente da annullare, o
+/// l'ultima operazione era su un altro file) l'annuncio non resta a zittire
+/// per dieci secondi un cambio vero. L'evento parte mentre il comando scrive,
+/// prima della risposta; uno in ritardo oltre l'attesa si dice soltanto.
+const UNDO_EVENT_GRACE_MS = 1500;
 const SUGGESTION_LIMIT = 50;
 /// Un gesto della barra in volo: il testo di prima, quello che l'host ha
 /// rimandato (prima o dopo la risposta), e se il comando ha risposto e il
@@ -75,6 +82,24 @@ const labels = () => ({
   view: t("menu.view"), search: t("rail.search"), retry: t("app.retry"),
   loading: t("search.loading"), more: t("search.more", { shown: VISIBLE_STEP, total: VISIBLE_STEP }),
 });
+/// I valori di ogni proprietà nelle righe lette, per nome: al più
+/// `PROPERTY_LIMIT` nomi.
+function readProperties(input: readonly BaseRowInput[]): Map<string, unknown[]> {
+  const values = new Map<string, unknown[]>();
+  for (const row of input) {
+    for (const { key, value } of row.properties ?? []) {
+      let list = values.get(key);
+      if (list === undefined) {
+        if (values.size >= PROPERTY_LIMIT) continue;
+        list = [];
+        values.set(key, list);
+      }
+      list.push(value);
+    }
+  }
+  return values;
+}
+
 function button(text: string, action: () => void): HTMLButtonElement {
   const element = document.createElement("button");
   element.type = "button";
@@ -143,12 +168,20 @@ export function mountBaseSurface(
   let creating = false;
   let writing: WriteAttempt | null = null;
   let settleTimer = 0;
+  // Gli annunci di «Annulla» che aspettano il loro evento (`UNDO_EVENT_GRACE_MS`).
+  const undoGraces = new Map<number, () => void>();
   // L'esito dell'ultimo gesto che non ha scritto: resta nella riga di stato
   // finché un gesto nuovo non lo sostituisce.
   let notice: string | null = null;
   let activeView: string | null = options.view ?? null;
   let plan: BasePlan | null = null;
   let rows: BaseRow[] = [];
+  // Le proprietà lette per l'ultima ricarica, prima del filtro: le scelte e la
+  // specie di ogni proprietà non dipendono dal filtro di adesso, così un
+  // filtro che non trova niente si corregge con le stesse scelte.
+  let read: Map<string, unknown[]> = new Map();
+  // La specie di ogni proprietà, ricavata una volta per ricarica.
+  let kindCache = new Map<string, ValueKind>();
   let summaries: Record<string, BaseCellValue> = {};
   let displayed = VISIBLE_STEP;
   let error: string | null = null;
@@ -179,6 +212,9 @@ export function mountBaseSurface(
   // Dove era scorsa la tabella: un ridisegno (il file riscritto da un gesto,
   // una nota salvata) la rimette lì. Cambiare vista la riporta in cima.
   let tableScroll = { top: 0, left: 0 };
+  // La vista è cambiata: il prossimo disegno non legge la tabella di prima,
+  // che è ancora lì, e parte dall'alto.
+  let scrollReset = false;
   let picked: { anchor: Cell; focus: Cell } | null = null;
   let pickedKeys: { anchor: CellKey; focus: CellKey } | null = null;
   let picking = false;
@@ -329,30 +365,28 @@ export function mountBaseSurface(
   const lock = () => readOnly ? "read_only" as const : options.sourceInNote ? "embedded" as const : null;
   // Le proprietà che le righe hanno e i valori di ognuna: le scelte del filtro
   // e delle colonne. Le raccoglie la barra quando le serve.
-  const rowProperties = (): string[] => {
-    const keys = new Set<string>();
-    for (const row of rows) {
-      for (const key of Object.keys(row.properties)) {
-        keys.add(key);
-        if (keys.size >= PROPERTY_LIMIT) return [...keys];
-      }
-    }
-    return [...keys];
-  };
+  const rowProperties = (): string[] => [...read.keys()].slice(0, PROPERTY_LIMIT);
   // I valori di una proprietà nelle righe, nella forma in cui si scrivono nel
   // filtro (una data come 2026-03-18, un numero coi decimali della lingua lo
   // mostra la barra).
   const suggestions = (key: string): string[] => {
     const values = new Set<string>();
-    for (const row of rows) {
-      for (const { value } of propertyValues(row.properties[key])) {
+    for (const raw of read.get(key) ?? []) {
+      for (const { value } of propertyValues(raw)) {
         values.add(String(value));
         if (values.size >= SUGGESTION_LIMIT) return [...values];
       }
     }
     return [...values].sort((a, b) => a.localeCompare(b));
   };
-  const kinds = (key: string) => propertyKind(rows.map((row) => row.properties[key]));
+  const kinds = (key: string): ValueKind => {
+    let kind = kindCache.get(key);
+    if (kind === undefined) {
+      kind = propertyKind(read.get(key) ?? []);
+      kindCache.set(key, kind);
+    }
+    return kind;
+  };
   const pushModel = (): void => {
     toolbar.update({
       views: names.map((name, index) => ({ name, type: viewTypes[index] ?? null })),
@@ -431,6 +465,8 @@ export function mountBaseSurface(
       const result = await deriveBaseRows(deps, definition, nextPlan.view, found.rows, Date.now(), container);
       if (!valid(ticket)) return;
       rows = result.rows;
+      read = readProperties(found.rows);
+      kindCache = new Map();
       summaries = result.summaries;
       displayed = VISIBLE_STEP;
       error = null;
@@ -493,6 +529,13 @@ export function mountBaseSurface(
     try {
       const outcome = await deps.invokeCommand(COMMANDS.undo);
       if (outcome?.notify) notify(outcome.notify, "info");
+      if (withdraw) {
+        if (destroyed) withdraw();
+        else {
+          const timer = window.setTimeout(() => { undoGraces.delete(timer); withdraw(); }, UNDO_EVENT_GRACE_MS);
+          undoGraces.set(timer, withdraw);
+        }
+      }
     } catch (failure) {
       withdraw?.();
       notify(t("commands.undo_failed", { reason: errorText(failure) }), "guasto");
@@ -571,6 +614,7 @@ export function mountBaseSurface(
     activeView = name;
     plan = null;
     tableScroll = { top: 0, left: 0 };
+    scrollReset = true;
     forgetPick();
     notice = null;
     toolbar.showWritten(null);
@@ -1089,7 +1133,9 @@ export function mountBaseSurface(
     tileCleanup?.();
     tileCleanup = null;
     const shown = body.querySelector<HTMLElement>(".base-table-viewport");
-    if (shown) tableScroll = { top: shown.scrollTop, left: shown.scrollLeft };
+    if (scrollReset) tableScroll = { top: 0, left: 0 };
+    else if (shown) tableScroll = { top: shown.scrollTop, left: shown.scrollLeft };
+    scrollReset = false;
     body.replaceChildren();
     // Le righe di prima non ci sono più: la scelta torna, se le sue celle ci
     // sono ancora, quando la tabella nuova si disegna (`restorePick`).
@@ -1323,6 +1369,8 @@ export function mountBaseSurface(
     destroy() {
       destroyed = true; generation++; pending?.abort(); tileCleanup?.(); cellListeners.clear();
       window.clearTimeout(settleTimer);
+      for (const [timer, withdraw] of undoGraces) { window.clearTimeout(timer); withdraw(); }
+      undoGraces.clear();
       toolbar.destroy();
       for (const stop of stopEvents) stop();
       for (const [url, timer] of downloads) { window.clearTimeout(timer); URL.revokeObjectURL(url); }

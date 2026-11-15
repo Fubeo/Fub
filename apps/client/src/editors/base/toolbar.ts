@@ -22,7 +22,7 @@ import { showContextMenu, type MenuItem } from "../../ui/menu";
 import type { BasePlan, BaseViewKey, BaseWritten } from "./data";
 import {
   CANONICAL, FOLDER_OPS, VALUELESS,
-  conjuncts, filterOfSearch, filterOfVisual, filterValue, isOpaque, propertyOps, sameFilter, searchOf, valueProblem, visualOf, withoutConjunct,
+  conjuncts, filterOfSearch, filterOfVisual, filterProperties, filterValue, isOpaque, numberAsText, propertyOps, sameFilter, searchOf, valueProblem, visualOf, withoutConjunct,
   type FilterDef, type SearchProblem, type ValueKind, type ValueTyping, type VisualCondition, type VisualOp,
 } from "./filter";
 import { useBaseIcons, viewIcon } from "./icons";
@@ -147,7 +147,6 @@ function nearestSearch(conditions: readonly VisualCondition[], typing: ValueTypi
 
 function problemText(problem: SearchProblem): string {
   if (problem.kind === "syntax") return new SearchSyntaxError(problem.fault).message;
-  if (problem.kind === "unknown_property") return t("base.filter.unknown_property", { key: problem.key });
   return t("base.filter.unsupported", { term: problem.term });
 }
 
@@ -273,6 +272,10 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     // La forma a vista legge i numeri nella lingua e le date in ISO, secondo
     // la specie che la proprietà ha nelle righe.
     const typed = typing();
+    // Le proprietà che la Base conosce: le colonne e quelle delle righe lette.
+    // Un nome che non c'è non ferma «Applica» (le righe lette non hanno tutte
+    // le proprietà del vault): la nota avverte, perché un nome sbagliato non
+    // diventi in silenzio un filtro che non trova niente.
     const known = (key: string): boolean => subjects(plan, []).includes(plain(key));
     // Le due bozze. `mode` dice quale ha toccato per ultima chi usa la Base:
     // è quella che «Applica» scrive.
@@ -370,9 +373,13 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     // dice, e «Applica» aspetta.
     const showValueProblem = (): void => {
       const wrong = mode === "visual" ? (draft ?? []).map((condition) => [condition, valueProblem(condition, typed)] as const).find(([, kind]) => kind !== null) : undefined;
+      // Un numero scritto nella lingua per una proprietà che non ha solo
+      // numeri si cerca come testo: la nota lo dice, «Applica» resta.
+      const asText = wrong || mode !== "visual" ? undefined : (draft ?? []).map((condition) => [condition, numberAsText(condition, typed)] as const).find(([, number]) => number !== null);
       visualNote.textContent = wrong
         ? t(wrong[1] === "number" ? "base.filter.not_number" : "base.filter.not_date", { value: wrong[0].value.trim(), example: typed.decimal === "," ? "3,5" : "3.5" })
-        : defaultNote();
+        : asText ? t("base.filter.number_as_text", { value: asText[0].value.trim(), number: asText[1]! })
+          : defaultNote();
       visualNote.hidden = visualNote.textContent === "";
       updateApply();
     };
@@ -396,7 +403,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     const syncVisual = (): void => {
       mode = "search";
       touched = true;
-      const result = filterOfSearch(searchField.value, known);
+      const result = filterOfSearch(searchField.value);
       if ("problem" in result) {
         problem = result.problem;
         parsed = null;
@@ -407,8 +414,9 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       }
       problem = null;
       parsed = result.ok;
-      searchNote.textContent = "";
-      searchNote.hidden = true;
+      const unknown = filterProperties(result.ok).find((key) => !known(key));
+      searchNote.textContent = unknown === undefined ? "" : t("base.filter.unknown_property", { key: plain(unknown) });
+      searchNote.hidden = unknown === undefined;
       draft = visualOf(result.ok, typed);
       drawRows();
     };

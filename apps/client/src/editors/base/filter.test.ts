@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  allOf, conditionDef, conjuncts, filterOfSearch, filterOfVisual, filterValue, isOpaque, parseFilter, sameFilter,
+  allOf, conditionDef, conjuncts, filterOfSearch, filterOfVisual, filterProperties, filterValue, isOpaque, numberAsText, parseFilter, sameFilter,
   propertyKind, propertyOps, propertyValues, readNumber, searchOf, typedValue, valueProblem, visualOf, withoutConjunct,
   type FilterDef, type ValueTyping,
 } from "./filter";
@@ -150,6 +150,33 @@ describe("i valori nella loro specie", () => {
     expect(propertyKind([date, { kind: "text", value: "presto" }])).toBe("other");
     expect(propertyKind([undefined])).toBe("other");
   });
+
+  it("una data con l'orario è il suo giorno, come la confronta il modello", () => {
+    // Il giorno scritto, anche quando il fuso lo sposterebbe in UTC: il
+    // modello confronta una data senza orario col giorno civile
+    // (`civil_days` in `crates/fub-features/src/base.rs`).
+    const early = { kind: "date", value: { year: 2026, month: 3, day: 18, time: { hour: 1, minute: 30, second: 0, offset_minutes: 120 } } };
+    const local = { kind: "date", value: { year: 2026, month: 3, day: 18, time: { hour: 9, minute: 0, second: 0, offset_minutes: null } } };
+    expect(propertyValues(early)).toEqual([{ value: "2026-03-18", kind: "date" }]);
+    expect(propertyValues(local)).toEqual([{ value: "2026-03-18", kind: "date" }]);
+    expect(propertyKind([early, local])).toBe("date");
+  });
+
+  it("un numero della lingua in una proprietà mista si cerca come testo, e la barra lo dice", () => {
+    const mixed = typing({});
+    const italian: ValueTyping = { kind: mixed.kind, decimal: "," };
+    expect(numberAsText({ subject: "valore", op: "is", value: "3000,5" }, italian)).toBe("3000.5");
+    expect(filterOfVisual([{ subject: "valore", op: "is", value: "3000,5" }], italian))
+      .toEqual({ condition: { property: "valore", op: "is", value: "3000,5" } });
+    // La forma canonica è già un numero; un testo non è un numero; col punto
+    // la lingua e il file dicono lo stesso.
+    expect(numberAsText({ subject: "valore", op: "is", value: "3000" }, italian)).toBeNull();
+    expect(numberAsText({ subject: "valore", op: "is", value: "presto" }, italian)).toBeNull();
+    expect(numberAsText({ subject: "valore", op: "is", value: "3000,5" }, { kind: mixed.kind, decimal: "." })).toBeNull();
+    expect(numberAsText({ subject: "valore", op: "is_empty", value: "3,5" }, italian)).toBeNull();
+    // Una proprietà numero legge la lingua: niente da dire.
+    expect(numberAsText({ subject: "valore", op: "is", value: "3000,5" }, { ...typing({ valore: "number" }), decimal: "," })).toBeNull();
+  });
 });
 
 describe("la forma di ricerca dei valori", () => {
@@ -170,9 +197,19 @@ describe("la forma di ricerca dei valori", () => {
     }
   });
 
-  it("una proprietà che la Base non ha non diventa un filtro vuoto", () => {
-    const known = (key: string) => key === "stato";
-    expect(filterOfSearch("[stato:Arrivata]", known)).toEqual({ ok: stato });
-    expect(filterOfSearch("[sttao:Arrivata]", known)).toEqual({ problem: { kind: "unknown_property", key: "sttao" } });
+  it("un nome di proprietà che le righe non hanno resta un filtro: la barra avverte, non ferma", () => {
+    expect(filterOfSearch("[sttao:Arrivata]")).toEqual({ ok: { condition: { property: "sttao", op: "contains", value: "Arrivata" } } });
+  });
+
+  it("le proprietà che un filtro nomina, una volta ciascuna, senza cartelle né tag", () => {
+    const filter: FilterDef = { and: [
+      { condition: { property: "stato", op: "is", value: "a" } },
+      { or: [{ condition: { property: "valore", op: "greater_than", value: 3 } }, { not: { condition: { property: "stato", op: "is_empty" } } }] },
+      { condition: { file: "path", op: "in_folder", value: "Opere" } },
+      { condition: { tag: "lavoro", op: "has_tag" } },
+    ] };
+    expect(filterProperties(filter)).toEqual(["stato", "valore"]);
+    expect(filterProperties("all")).toEqual([]);
+    expect(filterProperties({ opaque: [1] })).toEqual([]);
   });
 });

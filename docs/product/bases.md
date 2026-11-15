@@ -157,8 +157,12 @@ oppure una condizione. Una condizione dice su che cosa agisce (`property`,
 
 Un valore scritto come testo vale per quello che è il valore della nota: una
 data ISO (`"2026-03-18"`) contro una data si confronta come data, un numero in
-forma canonica (`"3000"`, `"2.5"`) contro un numero come numero. «contiene» non
-distingue le maiuscole, come la ricerca; su un numero è l'uguaglianza.
+forma canonica (`"3000"`, `"2.5"`) contro un numero come numero. Una data senza
+orario dice un giorno: contro una data con l'orario si confronta il giorno
+scritto nella nota, non l'istante (`2026-03-18T09:30+01:00` «è» `2026-03-18`,
+«dopo» parte dal 19), anche per un orario senza fuso; una data con l'orario nel
+filtro confronta l'istante. «contiene» non distingue le maiuscole, come la
+ricerca; su un numero è l'uguaglianza.
 
 Un filtro scritto come testo libero, che il modello non legge, rende il file
 illeggibile come Base: la Base lo mostra come sorgente e non lo tocca.
@@ -204,7 +208,8 @@ del file resta byte per byte:
 
 - i commenti, anche quelli fra due viste o sulla riga di una chiave; in una
   lista di valori riscritta (le colonne di `order` spostate) i commenti di
-  ogni voce, in coda alla riga o subito sopra, vanno con la loro voce;
+  ogni voce, in coda alla riga o sopra (anche staccati da una riga vuota, come
+  il titolo di un gruppo di colonne), vanno con la loro voce;
 - l'ordine delle chiavi che non si toccano;
 - le virgolette, i rientri e le righe vuote;
 - le fini di riga (`\n` o `\r\n`) e l'assenza dell'a capo in fondo al file;
@@ -271,7 +276,9 @@ un gesto è in volo la barra non ne accetta un altro.
 Il file riscritto da un gesto si ricarica **in silenzio**: niente avviso «è
 cambiato su disco», perché il cambio l'ha chiesto chi usa la Base, e la tabella
 resta dove era scorsa. La frase del comando arriva come avviso con «Annulla»,
-che disfa l'ultima operazione del vault come dalla tavolozza. Un cambio fatto da
+che disfa l'ultima operazione del vault come dalla tavolozza: se quella non
+riscrive il `.base` (niente da annullare, o era su un altro file), la Base non
+resta in attesa e un cambio che arriva dopo si dice. Un cambio fatto da
 un'altra app, da un'altra finestra o da un altro comando si dice come sempre.
 Se il `.base` è aperto anche come testo con modifiche non salvate, il gesto
 prima le salva; se non si salvano, il gesto non parte e la barra lo dice.
@@ -279,15 +286,21 @@ prima le salva; se non si salvano, il gesto non parte e la barra lo dice.
 La riga di ricerca diventa filtro quando ogni suo pezzo è una proprietà con un
 valore (`[stato:Arrivata]`, `[valore:>3000]`), unito con uno spazio (tutte vere)
 o con `OR`, anche negato (`-[stato:Prenotata]`). Il testo libero no: la Base
-dice perché non lo scrive e lascia il filtro com'era. Neppure una proprietà
-che le righe non hanno e che non è una colonna: un nome sbagliato non diventa
-in silenzio un filtro che non trova niente.
+dice perché non lo scrive e lascia il filtro com'era. Una proprietà che non è
+una colonna e che le righe lette non hanno si applica lo stesso (le righe
+portano solo le proprietà che la vista chiede), ma la Base avverte di
+controllare il nome: un nome sbagliato non diventa in silenzio un filtro che
+non trova niente. Le scelte e i valori suggeriti vengono dalle righe lette
+prima del filtro, così un filtro che non trova niente si corregge.
 
 Nella forma a vista una proprietà che nelle righe è sempre una data o sempre
 un numero si scrive nella sua specie: la data come `2026-03-18`, il numero coi
 decimali della lingua (`3,5` in italiano, `3.5` in inglese; `1.000` è mille).
 Il file riceve la data ISO e il numero, e un valore che non si legge così la
 Base lo dice e non lo applica. Per una data e un numero non c'è «contiene».
+Una proprietà con numeri e testi si filtra come testo: un numero scritto coi
+decimali della lingua (`3000,5`) resta testo, e la Base dice come scriverlo per
+cercare il numero (`3000.5`).
 La riga di ricerca usa sempre la forma canonica (`[valore:>3000.5]`).
 
 Se il filtro cambia nel file mentre il pannello è aperto, il pannello si
