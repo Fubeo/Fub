@@ -329,6 +329,15 @@ class HandlesView {
   /// Il blocco sotto il punto `(x, y)` della finestra.
   pointAt(x: number, y: number, target: EventTarget | null): void {
     if (this.drag || (target instanceof Node && this.root.contains(target))) return;
+    // La testata della pagina non è un blocco: sopra di lei (e sul
+    // frontmatter che copre) le maniglie non compaiono.
+    if (target instanceof Element && target.closest(".cm-fub-page")) {
+      if (this.hovered) {
+        this.hovered = null;
+        this.schedule();
+      }
+      return;
+    }
     const pos = this.view.posAtCoords({ x, y }, false);
     const blocks = this.view.state.field(blockModel).blocks;
     const found = innermostAt(blocks, pos);

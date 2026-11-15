@@ -1,9 +1,8 @@
 // Le proprietà della testata (E3): quali stanno in evidenza e come si
 // disegnano. Senza tipo, le prime quattro del frontmatter; le altre stanno
 // dietro «Altre N proprietà». Le chiavi che la testata mostra a modo suo
-// (icona, copertina, classi della pagina) non sono righe; le etichette
-// stanno nella riga dei dati, e fra le proprietà vengono dopo quelle in
-// evidenza. Il valore è quello che il frontmatter dice, in una riga: gli
+// (icona, copertina, classi della pagina) non sono righe, e nemmeno le
+// etichette, che stanno nella riga dei dati come nel prototipo. Il valore è quello che il frontmatter dice, in una riga: gli
 // editor dei tipi arrivano con T8, e intanto il clic riapre lo YAML.
 import { t } from "../../../../../i18n/strings";
 import { iconEl } from "../../../../../ui/icons";
@@ -18,8 +17,8 @@ export const FEATURED_LIMIT = 4;
 /// posizione, le classi della pagina (il menu «…»).
 export const PAGE_KEYS: ReadonlySet<string> = new Set(["icon", "cover", "cover-y", "cssclasses"]);
 
-/// Le etichette: le mostra la riga dei dati.
-const FACT_KEYS: ReadonlySet<string> = new Set(["tags", "tag"]);
+/// Le etichette: le mostra la riga dei dati, che le legge dall'indice.
+export const FACT_KEYS: ReadonlySet<string> = new Set(["tags", "tag"]);
 
 export interface FeaturedSplit {
   readonly featured: readonly PropertyEntry[];
@@ -32,8 +31,8 @@ export function featuredProperties(entries: readonly PropertyEntry[]): FeaturedS
   const featured: PropertyEntry[] = [];
   const rest: PropertyEntry[] = [];
   for (const entry of entries) {
-    if (PAGE_KEYS.has(entry.key)) continue;
-    if (featured.length < FEATURED_LIMIT && !FACT_KEYS.has(entry.key)) featured.push(entry);
+    if (PAGE_KEYS.has(entry.key) || FACT_KEYS.has(entry.key)) continue;
+    if (featured.length < FEATURED_LIMIT) featured.push(entry);
     else rest.push(entry);
   }
   return { featured, rest };
@@ -94,9 +93,9 @@ export function propertiesElement(model: PageProperties, host: PropertiesHost, l
   const total = model.featured.length + model.rest.length;
   if (total === 0 && !host.editable) return null;
   const section = document.createElement("div");
-  // `cm-fub-properties`: il tasto destro dà il menu delle proprietà, come
-  // sul frontmatter.
-  section.className = "cm-fub-page-props cm-fub-properties";
+  // Il tasto destro qui dà il menu delle proprietà, come sul frontmatter
+  // (`surface.ts`, `writingMenu`).
+  section.className = "cm-fub-page-props";
   section.setAttribute("role", "group");
   section.setAttribute("aria-label", t("editor.properties.label"));
   let more = host.more.open;

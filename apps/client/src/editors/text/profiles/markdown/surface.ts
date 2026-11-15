@@ -1295,7 +1295,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       element = document.elementFromPoint(at.x, at.y);
       if (!element || !parent.contains(element) || !element.closest(".cm-editor")) return null;
       // Le proprietà rese hanno i loro gesti, e soltanto quelli.
-      if (element.closest(".cm-fub-properties")) return propertiesMenu();
+      if (element.closest(".cm-fub-properties, .cm-fub-page-props")) return propertiesMenu();
       const picture = element.closest<HTMLElement>(".cm-fub-image[data-fub-image]");
       if (picture) {
         const menu = imageMenu(picture);

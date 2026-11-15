@@ -1237,6 +1237,32 @@ const WORKBOOK_CHROME: readonly SettingEntry[] = WORKBOOK_DOC === null ? [] : [
   source: "default",
 }));
 
+/// Come la nota mostra le proprietà (`editor.properties`), per le scene
+/// della testata (T6): `?properties=visible|hidden`. Senza, la voce non c'è e
+/// vale il default dell'host (`source`), così le altre scene non cambiano.
+const PROPERTIES_PARAM = params.get("properties");
+const PROPERTIES_DISPLAY: readonly SettingEntry[] = PROPERTIES_PARAM !== "visible" && PROPERTIES_PARAM !== "hidden" ? [] : [{
+  spec: {
+    key: "editor.properties",
+    label: "Proprietà",
+    description: "Come la nota mostra il frontmatter.",
+    group: "Editor",
+    scope: "vault",
+    kind: {
+      kind: "choice",
+      default: "source",
+      options: [
+        { value: "visible", label: "In evidenza" },
+        { value: "hidden", label: "Nascoste" },
+        { value: "source", label: "Come YAML" },
+      ],
+    },
+    program_writable: true,
+  },
+  value: PROPERTIES_PARAM,
+  source: "vault",
+}];
+
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
 /// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
@@ -1643,7 +1669,7 @@ const options: Options = {
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
   ],
-  settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME],
+  settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.

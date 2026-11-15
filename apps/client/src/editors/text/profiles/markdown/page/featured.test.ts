@@ -22,9 +22,9 @@ describe("le proprietà in evidenza", () => {
       .toEqual({ featured: ["stato"], rest: [] });
   });
 
-  it("le etichette stanno nella riga dei dati: vengono dopo quelle in evidenza", () => {
-    expect(keys("tags: [mostra]\nstato: In corso\naliases: [Mostra]"))
-      .toEqual({ featured: ["stato", "aliases"], rest: ["tags"] });
+  it("le etichette stanno nella riga dei dati: non sono righe", () => {
+    expect(keys("tags: [mostra]\nstato: In corso\naliases: [Mostra]\ntag: x"))
+      .toEqual({ featured: ["stato", "aliases"], rest: [] });
   });
 
   it("trenta proprietà: quattro in evidenza, ventisei dietro «Altre»", () => {

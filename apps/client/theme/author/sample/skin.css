@@ -6154,9 +6154,12 @@ button.cm-fub-page-icon:hover {
   font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
+/* Nome e valore stanno sulla stessa linea di base: anche quando il valore va
+   a capo, o quando sul telefono il tocco lo alza a 44 px. */
 .cm-fub-page-prop {
   display: grid;
   grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+  align-items: baseline;
 }
 .cm-fub-page-prop-key {
   display: block;
