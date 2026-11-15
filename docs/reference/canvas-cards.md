@@ -455,10 +455,9 @@ Chi scrive dentro una scheda usa l'editor vero del file, sulla stessa
 `DocumentSession` di un riquadro: stesse bozze, conflitti e salvataggio. La
 tela non importa nessun editor (il confine di CodeMirror): riceve
 `CardEditorPort` (`editors/canvas/cards.ts`), che la shell costruisce in
-`state/card-editors.ts` (un `import()` al primo uso, mai all'avvio:
-`NOT_AT_STARTUP`) con le sessioni e il registro delle superfici della
-finestra e passa con `canvasCards.editors` e `surface.ts` (`CardEditing`).
-Senza porta le schede restano in lettura.
+`state/card-editors.ts` (al primo uso, con un `import()`) con le sessioni e
+il registro delle superfici della finestra e passa con `canvasCards.editors`
+e `surface.ts` (`CardEditing`). Senza porta le schede restano in lettura.
 
 `open(path, host, { compact, readOnly, lifetime, heading })`, con `heading` che
 porta la vista al titolo (`headingOffset`); l'editor dà la sua barra di formato
