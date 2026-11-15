@@ -617,7 +617,7 @@ cambiare la chiave non riapre la nota; la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks; cargo nextest run -p fub-host
 settings
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15, da main (feat/blocchi-preferenza)
 
 ## T6 · La testata in Scrittura e Lettura
 
