@@ -224,21 +224,7 @@ disegno: un comando spento si vede col perché; i cinque usati da poco in quella
 lavagna stanno in cima (stato di vista `canvas.commands:<documento>`; se non si
 scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 
-Un comando che cambia la lavagna ha anche `op`: le sue operazioni d'intento,
-la stessa forma che scrive `canvas.apply` ([la lavagna in
-codice](canvas-code.md)). Il menu, la barra, i campi della barra di un filo e i
-tasti scrivono così: la tela fa le operazioni, il nucleo le compila
-(`compile`, col seme di `seed` delle opzioni, se no uno a caso) e la tela
-scrive le toppe in un passo d'annulla. Una scheda nata così ha l'id che il
-nucleo dà col seme, sedici cifre esadecimali. Se il nucleo rifiuta, non si
-scrive niente: la barra lo dice («Questa modifica non si è potuta fare…») e un
-campo torna al valore della lavagna. Il posto che sceglie la GUI resta suo e si
-scrive nell'operazione: una scheda del menu nasce al centro della vista con la
-misura di sempre (320×160, un collegamento 320×120, un gruppo 480×320), Collega
-scrive i lati più vicini, «Copia il testo qui» il primo posto libero accanto
-alla nota. Inverti il filo resta una `set`: tiene le punte sulla loro scheda,
-mentre `reverse` le tiene sul ruolo. I gesti col puntatore e gli appunti
-scrivono ancora con le toppe della tela.
+Un comando che scrive ha `op`, le sue [operazioni d'intento](canvas-code.md#le-operazioni): menu, barra, campi e tasti le fanno compilare al nucleo (col seme di `seed`, se no a caso) e le scrivono in un passo d'annulla; se il nucleo rifiuta non cambia niente, la barra lo dice e il campo torna com'era. Il posto, i lati più vicini e la misura di sempre li sceglie la GUI e li scrive nell'operazione; Inverti il filo resta una `set` (le punte restano sulla loro scheda).
 
 | Comandi | Tasti |
 |---|---|

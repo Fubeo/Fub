@@ -215,11 +215,9 @@ casi con i numeri stanno in `apps/client/src/__fixtures__/canvas-layout.json`.
   `md` e `markdown` sono `note`; `docx`, `doc`, `dot`, `rtf` e `odt` sono
   `document`; `xlsx`, `xlsm`, `xltx` e `xltm` sono `sheet`; `pdf` è `pdf`;
   `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `bmp`, `ico`, `avif`, `heic`,
-  `tif` e `tiff` sono `image`; `vectorcraft`, `figcraft` e `pcraft` (i file
-  di VectorCraft, FigCraft e PhotoCraft) sono `craft`; tutto il resto, o
-  nessuna estensione, è `file`.
-  Un punto nelle cartelle non conta (`cartella.v2/nota` non ha estensione), e
-  un punto in testa al nome non apre un'estensione (`.md` è `file`).
+  `tif` e `tiff` sono `image`; `vectorcraft`, `figcraft`, `pcraft` sono `craft`;
+  il resto, o nessuna estensione, è `file`. Un punto nelle cartelle non conta
+  (`cartella.v2/nota`), né uno in testa al nome (`.md` è `file`).
 - **Misure di nascita.** Il testo è largo 320, o 480 se una riga ha più di 36
   caratteri, e alto quanto dice la stima qui sotto. `note` e `document` sono
   320×240; `sheet` 480×304; `pdf` 360 di larghezza, e alto `round(360·h/w)` se
