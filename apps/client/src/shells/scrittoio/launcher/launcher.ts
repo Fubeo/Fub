@@ -724,8 +724,8 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       }
     };
 
-    /// Il modo scelto resta in vista quando la fila scorre (sul telefono, dove
-    /// i sette modi non stanno tutti in una riga). Si sposta solo la fila.
+    /// Il modo scelto resta in vista se la fila scorre (una finestra stretta;
+    /// sul telefono i modi vanno a capo). Si sposta solo la fila.
     const keepInView = (each: Mode): void => {
       const button = tabs.tab(each);
       if (!button) return;

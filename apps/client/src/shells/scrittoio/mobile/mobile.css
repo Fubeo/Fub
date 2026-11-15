@@ -241,10 +241,16 @@
     display: none;
   }
 
-  /* I sette modi stanno su una riga che scorre in orizzontale, senza barra
-     (la regola di base del lanciatore): il Tab non cambia più modo, e non c'è
-     una fila da mandare a capo. Il segno del modo non segue lo scorrimento: il
-     modo scelto resta detto dal suo colore. */
+  /* I sette modi non stanno in una riga, e una fila che scorre qui non ha
+     niente che prenda il fuoco (nessuna linguetta è una fermata del Tab): axe
+     la rifiuta (`scrollable-region-focusable`). Vanno a capo. Il segno scorre
+     lungo una riga sola; su due non saprebbe dove stare, e il modo scelto
+     resta detto dal suo colore. */
+  :root[data-client-shell="mobile"] .launcher-modes {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
   :root[data-client-shell="mobile"] .launcher-modes > .kit-tab-indicator {
     display: none;
   }
