@@ -192,11 +192,13 @@ describe("il codice", () => {
     expect(view.state.doc.line(3).text.startsWith("\t") || view.state.doc.line(3).text.startsWith("  ")).toBe(true);
   });
 
-  it("Mod-a prende prima il codice, poi tutto", () => {
+  it("Mod-a prende prima il codice, poi tutti i blocchi", () => {
     const view = mount(`Prima\n\n${doc}`, 15);
     press(view, "a", { ctrlKey: true });
     expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe("const a = 1;\nconst b = 2;");
-    expect(press(view, "a", { ctrlKey: true })).toBe(false);
+    expect(press(view, "a", { ctrlKey: true })).toBe(true);
+    expect(view.state.field(blockSelection)).not.toBeNull();
+    expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe(`Prima\n\n${doc}`);
   });
 
   it("fuori dal codice Tab resta quello di sempre", () => {
