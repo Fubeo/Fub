@@ -14,6 +14,7 @@
 // il browser apre al clic: il banco prende il clic, e mette il file al posto
 // dell'utente.
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { waiter } from "./test-wait";
 import type { CommandSpec } from "./host/contract";
 import type { FakeHost } from "./host/fake";
 
@@ -87,27 +88,9 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-/// Ogni quanto si riguarda la condizione: un giro del ciclo degli eventi.
-const TURN_MS = 10;
-
-/// Aspetta che una condizione diventi vera, o fallisce dicendo cosa aspettava.
-///
-/// Il limite si conta in **giri** concessi alla shell, non sull'orologio:
-/// `within` vale `within / TURN_MS` giri, e ognuno rende il turno al ciclo degli
-/// eventi per almeno `TURN_MS`. Da sola la macchina fa un giro ogni `TURN_MS`
-/// circa, e il limite dura quanto diceva prima; molto carica, il processo ha
-/// meno CPU, il lavoro della shell fra due giri dura di più e i giri arrivano
-/// più radi: l'attesa si allunga con il lavoro invece di scadere a metà di un
-/// gesto che sta andando. Una condizione che non arriva mai fallisce lo stesso,
-/// col suo nome; il tetto di sicurezza resta il tempo della prova.
-async function waitFor(thing: string, cond: () => boolean, within = 4000): Promise<void> {
-  for (let turns = Math.ceil(within / TURN_MS); turns > 0; turns -= 1) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, TURN_MS));
-  }
-  if (cond()) return;
-  throw new Error(`non è mai successo: ${thing}`);
-}
+/// Aspetta che una condizione diventi vera, contando i giri del ciclo degli
+/// eventi invece dell'orologio (`test-wait.ts`, #396).
+const waitFor = waiter(4000);
 
 const labelOf = (b: Element): string => b.querySelector(".menu-label")?.textContent ?? b.textContent ?? "";
 
