@@ -1856,7 +1856,7 @@ Fatto quando: R8 passa su ogni voce `gesture` e `clipboard` di `merged`;
 vettori del nucleo); `engine.test.ts` passa; `npm run typecheck` passa.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas && npm run typecheck
-Stato: [~] coder fatto (coder/lic-t24 @ 278ef9ee4, check 19/20, il rosso per carico) · aspetta la revisione
+Stato: [x] fatto · integrato nel piano (merge di coder/lic-t24 @ 79460e63b, 2026-11-15) · revisione e correzioni fatte; sulla combinazione: cargo fub-canvas-core verde, Vitest lavagna e inchiostro 2469/2469, typecheck verde
 
 ## T25 · Copia e incolla come codice, «Disponi»
 
