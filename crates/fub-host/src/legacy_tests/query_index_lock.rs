@@ -20,7 +20,20 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 /// Watchdog for the writer in the detached-callback regression. The callback
 /// is released only after this result arrives, so a retained workspace guard
 /// deterministically turns into a failed assertion instead of a test hang.
-const WRITER_LIMIT: Duration = Duration::from_secs(2);
+///
+/// Tetto di sicurezza, non misura: lo scrittore corretto finisce appena ha
+/// preso il lucchetto, e la prova va avanti subito. Con due secondi, su una
+/// macchina molto carica, lo scrittore non faceva in tempo a partire e la
+/// prova accusava un guard che nessuno teneva (#396). Un guard trattenuto
+/// davvero non si libera mai prima di [`RELEASE_LIMIT`], quindi il tetto
+/// largo boccia il difetto lo stesso: ci mette solo di più a dirlo.
+const WRITER_LIMIT: Duration = Duration::from_secs(30);
+/// Quanto i provider sospesi aspettano di essere rilasciati prima di
+/// arrendersi. Deve superare [`WRITER_LIMIT`]: se il provider si liberasse
+/// da sé prima, libererebbe anche il guard che un difetto gli lascia addosso,
+/// e lo scrittore che la prova deve bocciare passerebbe. Nel caso buono il
+/// rilascio arriva subito.
+const RELEASE_LIMIT: Duration = Duration::from_secs(60);
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -113,7 +126,7 @@ impl IndexProvider for BlockingCustomIndex {
         self.release
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .recv_timeout(TIMEOUT)
+            .recv_timeout(RELEASE_LIMIT)
             .map_err(|_| PluginError::Internal("query probe was not released".into()))?;
         Ok(answer(serde_json::json!({ "source": "old" })))
     }
@@ -139,7 +152,7 @@ impl IndexProvider for BlockingSettingsIndex {
         self.release
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .recv_timeout(TIMEOUT)
+            .recv_timeout(RELEASE_LIMIT)
             .map_err(|_| PluginError::Internal("settings probe was not released".into()))?;
         Ok(IndexResult::Settings(Vec::new()))
     }
