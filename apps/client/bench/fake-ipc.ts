@@ -84,6 +84,7 @@ import {
   treeSceneSetting,
 } from "./craft-fixture";
 import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
+import { baseFixture } from "./base-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
@@ -286,6 +287,17 @@ const BOARDS: Readonly<Record<string, string>> = params.get("lavagna") === "1"
       }, null, "\t"),
     }
   : {};
+
+/// La Base delle scene `base-*` (`?base=1`, T15): `Opere.base` e le note di
+/// `Opere/`, con le domande `fub.base` e il comando `base.view.set` che il
+/// finto da solo non ha. Gli attrezzi del finto li chiede quando servono,
+/// cioè dopo che il finto è nato.
+const BASE = params.get("base") === "1"
+  ? baseFixture(() => ({
+      revision: async (doc) => (await host.module.api.readDocument(doc)).revision,
+      writeFromOutside: (doc, text) => host.writeFromOutside(doc, text),
+    }))
+  : null;
 
 /// Gli stati della barra dei fogli che la cartella generata non ha
 /// (`?grid=table|readonly`, insieme a `?workbook=1`): una copia delle sue
@@ -1688,6 +1700,7 @@ const options: Options = {
     ...(LIVE === null ? {} : { [LIVE_DOC]: LIVE.text }),
     ...(PDF_SCENE === null ? {} : pdfSceneFiles(PDF_SCENE)),
     ...(TREE_SCENE === null ? {} : treeSceneFiles()),
+    ...(BASE === null ? {} : BASE.files),
   },
   resources: NEW_VAULT ? {} : {
     ...RESOURCES,
@@ -1706,6 +1719,7 @@ const options: Options = {
   ],
   settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME],
   syntaxForms: [...MARKDOWN_SYNTAX],
+  ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
     gridBytes: {
@@ -1968,6 +1982,9 @@ export const api: typeof host.module.api = {
       const payload = treeScenePreview(doc, (args as { size?: unknown }).size === "large" ? "large" : "small");
       if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
     }
+    // Il gesto della barra della Base delle scene `base-*`.
+    const based = BASE?.invoke(id, args);
+    if (based) return based as ReturnType<typeof behind.invokeCommand>;
     return behind.invokeCommand(id, args, ...rest);
   },
   queryIndex: async (q) => {
@@ -1982,6 +1999,17 @@ export const api: typeof host.module.api = {
     }
     const response = RESPONSES[q.kind];
     const result = response ? response(q) : await behind.queryIndex(q);
+    if (BASE !== null && q.kind === "documents" && result.kind === "documents") {
+      // Le proprietà delle note della Base, come le leggerebbe l'indice dal
+      // frontmatter: il finto non le legge.
+      return {
+        ...result,
+        value: { ...result.value, items: result.value.items.map((hit) => {
+          const properties = BASE.properties(hit.doc);
+          return properties === null ? hit : { ...hit, properties };
+        }) },
+      };
+    }
     if (q.kind === "documents" && result.kind === "documents" && LIVE !== null && q.select?.kind === "keys") {
       // Le classi della nota della Live (`cssclasses: [wide]`), come le
       // leggerebbe l'indice dal frontmatter: le scene della pagina larga.

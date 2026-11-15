@@ -237,6 +237,60 @@ In tutti questi casi il file resta com'era: la toppa controlla prima di
 scrivere che il testo nuovo si rilegga come Base valida e che il suo albero sia
 quello atteso, con la sola modifica chiesta.
 
+## La barra della Base
+
+Sopra la Base c'è una barra. A sinistra le viste del file come linguette, con
+la figura del loro tipo: un clic sceglie la vista. Quando manca spazio (sotto i
+700 px della pagina) le viste non scelte restano solo la figura; più strette
+ancora, anche quella scelta. A destra gli attrezzi:
+
+| Attrezzo | Che cosa fa | Che cosa scrive |
+|---|---|---|
+| Filtro | compone il filtro della vista a vista (proprietà, operatore, valore) o come riga di ricerca (`[stato:Arrivata]`); le due forme mostrano lo stesso filtro | `filters` |
+| Ordina | le chiavi dell'ordinamento con la direzione, e il raggruppamento di questa finestra | `sort` |
+| Proprietà | quali colonne mostrare e in che ordine: si trascinano, o Alt+↑ e Alt+↓ dalla tastiera | `order` |
+| Cerca | filtra le righe mentre scrivi | niente |
+| «…» | copia ed esporta le righe come CSV | niente |
+| Nuova | crea una nota con le proprietà iniziali della vista; la freccia accanto la crea da un modello della cartella `Templates` | la nota nuova |
+
+Sotto la barra il filtro e l'ordinamento della vista si vedono come etichette;
+la × di un'etichetta toglie quella condizione o quella chiave. Ogni gesto
+scrive una sola chiave con `base.view.set`, con la revisione del file che la Base
+mostra: le altre chiavi, i commenti e le altre viste restano com'erano.
+Dopo il gesto, «Nel file .base» (in fondo alla Base, chiuso finché non lo apri)
+mostra la riga da cui il file è cambiato e le righe uscite ed entrate. Mentre
+un gesto è in volo la barra non ne accetta un altro.
+
+La riga di ricerca diventa filtro quando ogni suo pezzo è una proprietà con un
+valore (`[stato:Arrivata]`, `[valore:>3000]`), unito con uno spazio (tutte vere)
+o con `OR`, anche negato (`-[stato:Prenotata]`). Il testo libero no: la Base
+dice perché non lo scrive e lascia il filtro com'era. La riga `[stato:Arrivata]`
+vuol dire «contiene»: un «è» della forma a vista, riscritto come ricerca,
+diventa «contiene», e la Base lo avverte. Un filtro scritto nel file che la
+forma a vista non sa dire (un `or`, un `not` su una proprietà) resta come riga
+di ricerca, e la Base lo dice; uno che neppure la ricerca sa dire (una formula,
+un valore lista) la Base non lo riscrive, lo dice, e si cambia dal file `.base`.
+
+Le proprietà che Filtro e Proprietà propongono sono quelle che le righe caricate
+hanno, con i loro valori come suggerimenti.
+
+Il gesto non scrive, e la barra lo dice sotto le etichette, quando:
+
+- il comando rifiuta la toppa (vedi «Quando il file non si tocca»): il motivo
+  è quello del comando;
+- il file è cambiato da fuori dopo che la Base l'ha letto: la vista mostra il
+  file com'è ora, e il gesto si rifà da lì;
+- la Base è in sola lettura: gli attrezzi che scrivono sono spenti, filtro,
+  ordine e colonne si guardano soltanto;
+- la Base sta in un blocco ```` ```base ```` dentro una nota: i comandi scrivono
+  solo un file `.base`, e la barra lo dice. Il filtro e le colonne si cambiano
+  dal blocco.
+
+Il piano della vista (`op: "plan"` della query `fub.base`) porta per questo,
+oltre alle colonne, il filtro (`filters`), l'ordinamento (`sort`) e le colonne
+scritte (`order`) come il modello li legge; l'elenco delle viste (`op:
+"parse"`) porta il tipo di ognuna (`types`).
+
 ## Dove si vede una Base
 
 Una Base si mette in una nota con un blocco di codice ```` ```base ```` oppure con
