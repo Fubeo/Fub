@@ -1871,7 +1871,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-canvas-core/src/describe/ink.rs::scales",
+            "crates/fub-canvas-core/src/ink.rs::scales",
             (
                 Family::AsciiCase,
                 "abbassa l'estensione del file di una scheda per dire se il suo inchiostro scala \
