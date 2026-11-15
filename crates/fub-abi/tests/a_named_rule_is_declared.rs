@@ -193,6 +193,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/base.rs::contains",
+            (
+                Family::ContextualCase,
+                "è `rules/properties.rs::contains` detta sul valore valutato di una Base \
+                 (`BaseValue`), che non è un `PropertyValue` e non passa da quella funzione: \
+                 piega i due capi allo stesso modo perché `[stato:arrivata]` nella ricerca e \
+                 «stato contiene arrivata» nel filtro di una Base trovino le stesse note.",
+            ),
+        ),
+        (
             "crates/fub-features/src/tags.rs::matches_case_insensitive",
             (
                 Family::ContextualCase,
