@@ -26,6 +26,11 @@ dalla registrazione, e chiede il codice con `import()` solo quando un documento
 lo apre (`load`, `isLoaded`). Il plugin di `apps/client/vite.config.ts` scrive
 i chunk che ogni pagina carica all'avvio e ferma la build se fra questi c'è il
 codice di un pezzo spegnibile (pdf.js, lavagna, disegni, documenti, fogli).
+La Base è del nucleo e non si spegne, ma si carica allo stesso modo: la
+registrazione usa i nomi di `apps/client/src/editors/base/ids.ts`, la
+superficie arriva con `import()` al primo `.base` aperto, e la resa delle Basi
+incorporate in una nota (`apps/client/src/editors/base/renderer.ts`) la carica
+col primo blocco da disegnare.
 
 Un file il cui pezzo è spento si apre «solo come file»: la famiglia
 `file-only` di `apps/client/src/state/document-controller.ts` non viene dal
