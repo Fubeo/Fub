@@ -150,6 +150,76 @@ describe("pipeline della penna", () => {
     expect(delivered(1)).toHaveLength(3);
   });
 
+  /// Un `pointerrawupdate` della penna.
+  function rawUpdate(init: Init): PointerEvent {
+    return pointerEvent("pointerrawupdate", { ...PEN, button: -1, buttons: 1, pressure: 0.5, ...init });
+  }
+
+  /// Un evento con i suoi coalescenti e le sue predizioni, che happy-dom non dà.
+  function withLists(event: PointerEvent, coalesced: PointerEvent[], predicted: PointerEvent[] = []): PointerEvent {
+    Object.defineProperty(event, "getCoalescedEvents", { value: () => coalesced });
+    Object.defineProperty(event, "getPredictedEvents", { value: () => predicted });
+    return event;
+  }
+
+  it("il pointermove che riporta un campione di pointerrawupdate con un altro istante non lo raddoppia", () => {
+    attach();
+    // Come Chromium con l'orologio finto di Playwright (il banco): ogni
+    // campione arriva con pointerrawupdate e torna col pointermove, che ha
+    // l'istante del suo invio, qualche ms dopo.
+    dispatch(down({ ...PEN, clientX: 10, clientY: 20, pressure: 0.4, timeStamp: 100 }));
+    dispatch(rawUpdate({ clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 104 }));
+    dispatch(move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 118 }));
+    dispatch(rawUpdate({ clientX: 16, clientY: 25, pressure: 0.7, timeStamp: 120 }));
+    dispatch(move({ ...PEN, clientX: 16, clientY: 25, pressure: 0.7, timeStamp: 134 }));
+    dispatch(up({ ...PEN, clientX: 16, clientY: 25, timeStamp: 140 }));
+    expect(delivered(1).map((sample) => sample.t)).toEqual([0, 4, 20]);
+    expect(ends()[0]!.samples.map((sample) => [sample.x, sample.y, sample.t])).toEqual([[5, 10, 0], [6, 11, 4], [8, 12.5, 20]]);
+  });
+
+  it("i coalescenti del pointermove che riportano più campioni di pointerrawupdate non entrano; uno senza gemello sì", () => {
+    attach();
+    dispatch(down({ ...PEN, clientX: 10, clientY: 20, pressure: 0.4, timeStamp: 100 }));
+    dispatch(rawUpdate({ clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 104 }));
+    dispatch(rawUpdate({ clientX: 14, clientY: 23, pressure: 0.6, timeStamp: 108 }));
+    const echoes = [
+      move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 116 }),
+      move({ ...PEN, clientX: 14, clientY: 23, pressure: 0.6, timeStamp: 118 }),
+      // Questo pointerrawupdate non è arrivato: il campione è vero e resta.
+      move({ ...PEN, clientX: 20, clientY: 30, pressure: 0.6, timeStamp: 120 }),
+    ];
+    dispatch(withLists(move({ ...PEN, clientX: 20, clientY: 30, pressure: 0.6, timeStamp: 120 }), echoes));
+    expect(delivered(1).map((sample) => [sample.x, sample.t])).toEqual([[5, 0], [6, 4], [7, 8], [10, 20]]);
+  });
+
+  it("una penna ferma: due campioni uguali in istanti diversi restano due, e il pointermove non ne aggiunge", () => {
+    attach();
+    dispatch(down({ ...PEN, clientX: 10, clientY: 20, pressure: 0.4, timeStamp: 100 }));
+    dispatch(rawUpdate({ clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 104 }));
+    dispatch(rawUpdate({ clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 112 }));
+    const echoes = [
+      move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 120 }),
+      move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 126 }),
+    ];
+    const future = [move({ ...PEN, clientX: 14, clientY: 24, pressure: 0.6, timeStamp: 134 })];
+    dispatch(withLists(move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 126 }), echoes, future));
+    expect(delivered(1).map((sample) => sample.t)).toEqual([0, 4, 12]);
+    // La predizione del pointermove arriva lo stesso.
+    expect(latest()).toEqual({ kind: "predicted", id: 1, samples: [{ x: 7, y: 12, p: 0.6, t: 34, a: 90, z: 0 }] });
+    // Un terzo campione uguale, solo nel pointermove, è un campione vero.
+    dispatch(move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 140 }));
+    expect(delivered(1).map((sample) => sample.t)).toEqual([0, 4, 12, 40]);
+  });
+
+  it("il pointermove che riporta i campioni e rilascia il tasto chiude il tratto", () => {
+    attach();
+    dispatch(down({ ...PEN, clientX: 10, clientY: 20, pressure: 0.4, timeStamp: 100 }));
+    dispatch(rawUpdate({ clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 104 }));
+    dispatch(move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, buttons: 0, timeStamp: 118 }));
+    expect(kinds()).toEqual(["start", "samples", "samples", "end"]);
+    expect(ends()[0]!.samples.map((sample) => sample.t)).toEqual([0, 4]);
+  });
+
   it("l'inclinazione vera si conserva in gradi in tutto il tratto", () => {
     attach();
     dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0, altitudeAngle: Math.PI / 4, azimuthAngle: Math.PI }));
