@@ -224,7 +224,7 @@ disegno: un comando spento si vede col perché; i cinque usati da poco in quella
 lavagna stanno in cima (stato di vista `canvas.commands:<documento>`; se non si
 scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 
-Un comando che scrive ha `op`, le sue [operazioni d'intento](canvas-code.md#le-operazioni): menu, barra, campi e tasti le fanno compilare al nucleo (col seme di `seed`, se no a caso) e le scrivono in un passo d'annulla; se il nucleo rifiuta non cambia niente, la barra lo dice e il campo torna com'era. Il posto, i lati più vicini e la misura di sempre li sceglie la GUI e li scrive nell'operazione; Inverti il filo resta una `set` (le punte restano sulla loro scheda).
+Un comando che scrive ha `op`, le sue [operazioni d'intento](canvas-code.md#le-operazioni): menu, barra, campi e tasti le fanno compilare al nucleo (col seme di `seed`, se no a caso) e le scrivono in un passo d'annulla; se il nucleo rifiuta non cambia niente, la barra lo dice e il campo torna com'era. Il posto e la misura di sempre li sceglie la GUI e li scrive nell'operazione. Collega è `connect` con `sides: "auto"`, Inverti il filo è `reverse` (le punte restano sulla loro scheda), Raggruppa è `group`, e Ctrl+D è `duplicate`, che copia anche i fili fra le schede copiate. Le schede e i fili che nascono così, e quelli del doppio clic e dello strumento Testo, hanno l'id del seme, sedici cifre esadecimali ([gli id nuovi](canvas-code.md#gli-id-nuovi)), non più `n-…`; i gesti, gli appunti e Ctrl+Invio dentro una scheda danno ancora `newNodeId`.
 
 | Comandi | Tasti |
 |---|---|

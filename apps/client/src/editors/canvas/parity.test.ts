@@ -543,6 +543,9 @@ const SETUP: Readonly<Record<string, R8Setup>> = {
     // t1 non ha colore nella lavagna di prova: prima lo prende, poi lo perde.
     act: ({ engine }) => {
       run(engine, "canvas.color.3");
+      // Senza il colore 3 scritto, «nessun colore» non toglierebbe niente e
+      // la voce passerebbe a vuoto.
+      if (engine.getDoc() === BOARD) throw new Error("`canvas.color.3` non ha scritto il colore");
       run(engine, "canvas.color.none");
     },
     undos: 2,
@@ -565,13 +568,11 @@ const SETUP: Readonly<Record<string, R8Setup>> = {
   "main.distribute": runCommand("canvas.distribute_x"),
   "main.edge.connect": {
     ...runCommand("canvas.connect"),
-    ops: () => [{ op: "connect", from: "t2", to: "f1", sides: { from: "left", to: "top" } }],
-    why: "Collega della GUI scrive i lati più vicini (`nearestSides`), qui sinistra e sopra; `sides: auto` del nucleo confronta i centri e darebbe sotto e sopra",
+    ops: () => [{ op: "connect", from: "t2", to: "f1", sides: "auto" }],
+    why: "Collega della GUI scrive i lati più vicini, `sides: \"auto\"`; le `ops` della voce in main.json non dicono `sides`, che di serie non scrive lati, e l'inventario R8 lo legge e basta",
   },
   "main.edge.reconnect": { via: "edge-toNode", act: ({ host }) => setField(host, "edge-toNode", "f1") },
-  "main.edge.reverse": {
-    skip: "la GUI tiene le punte sulla loro scheda (#353), `reverse` le tiene sul ruolo e sposta la freccia: le regole non coincidono (rapporto di T23)",
-  },
+  "main.edge.reverse": runCommand("canvas.edge.reverse"),
   "main.edge.label": { via: "edge-label", act: ({ host }) => setField(host, "edge-label", "perché") },
   // La voce dice il sottomenu «Colore» (`canvas.color`): la sua voce 4.
   "main.edge.color": { via: "canvas.color", act: ({ engine }) => run(engine, "canvas.color.4") },
@@ -712,8 +713,20 @@ async function r8Problems(voice: Voice, setup: R8Run): Promise<string[]> {
     if (engine.getDoc() !== expected) {
       problems.push(`\`${voice.id}\`: la GUI scrive\n${engine.getDoc()}\nla forma in codice\n${expected}`);
     }
-    for (let step = 0; step < (setup.undos ?? 1); step++) engine.undo();
-    if (engine.getDoc() !== BOARD) problems.push(`\`${voice.id}\`: ${setup.undos ?? 1} annulla non tornano a board.json`);
+    // Esattamente `undos` passi d'annulla: ognuno annulla qualcosa, l'ultimo
+    // torna a board.json, e dopo non resta nessun passo.
+    const undos = setup.undos ?? 1;
+    for (let step = 0; step < undos; step++) {
+      if (!engine.undo()) {
+        problems.push(`\`${voice.id}\`: la GUI ha fatto ${step} passi d'annulla, non ${undos}`);
+        break;
+      }
+      if (step < undos - 1 && engine.getDoc() === BOARD) {
+        problems.push(`\`${voice.id}\`: ${step + 1} annulla tornano già a board.json, non ${undos}`);
+      }
+    }
+    if (engine.getDoc() !== BOARD) problems.push(`\`${voice.id}\`: ${undos} annulla non tornano a board.json`);
+    if (engine.undo()) problems.push(`\`${voice.id}\`: la GUI ha fatto più di ${undos} passi d'annulla`);
     return problems;
   } finally {
     engine.destroy();

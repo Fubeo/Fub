@@ -76,10 +76,11 @@ o `plan`.
   tasto, ha una riga in `SETUP` di `parity.test.ts`: la tela si monta su
   `board.json` col seme `1`, sceglie gli id delle `ops` della voce (o quelli
   della riga), fa l'azione con uno dei `gui` della voce, e il documento deve
-  essere quello di `compile(ops, 1)` su un secondo nucleo. Poi gli annulla
-  della riga (di serie uno) tornano a `board.json`. Una riga può dare le
-  operazioni da confrontare, con lo stesso `op` della voce, quando il posto o il
-  contenuto li sceglie la GUI (il centro della vista, i lati più vicini), e dice
+  essere quello di `compile(ops, 1)` su un secondo nucleo. Poi la GUI deve
+  avere fatto esattamente gli annulla della riga (di serie uno): ognuno annulla
+  qualcosa, l'ultimo torna a `board.json` e dopo non ne resta. Una riga può dare
+  le operazioni da confrontare, con lo stesso `op` della voce, quando il posto o
+  il contenuto li sceglie la GUI (il centro della vista, `sides: "auto"`), e dice
   perché; una voce che non si confronta ha `skip` col perché, al più cinque.
   `commands.test.ts` controlla che ogni comando di quelle voci abbia `op`.
 

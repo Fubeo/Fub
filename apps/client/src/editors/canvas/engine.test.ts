@@ -7549,3 +7549,241 @@ describe("menu, barra, campi e tasti scrivono con le operazioni (T23)", () => {
     engine.destroy();
   });
 });
+
+describe("le correzioni di T23: la GUI scrive come prima", () => {
+  /** Tre schede, una col colore e una con un campo sconosciuto, e due fili. */
+  const SOURCE = JSON.stringify({
+    nodes: [
+      { id: "a", type: "text", x: 40, y: 40, width: 240, height: 140, text: "Prima", color: "2" },
+      { id: "b", type: "text", x: 400, y: 104, width: 240, height: 140, text: "Seconda", vendor: { keep: true } },
+      { id: "f", type: "file", x: 40, y: 320, width: 240, height: 140, file: "Corsi/voti.xlsx" },
+    ],
+    edges: [{ id: "e1", fromNode: "a", toNode: "b", toEnd: "arrow", label: "poi" }, { id: "e2", fromNode: "b", toNode: "f" }],
+  });
+  /** L'id che il nucleo dà alla prima scheda nata con il seme 1. */
+  const BORN = "910a2dec89025cc1";
+  /** I nodi e i fili di `SOURCE` come li scrive la tela, per i testi attesi. */
+  const NODE_A = '{"id":"a","type":"text","x":40,"y":40,"width":240,"height":140,"text":"Prima","color":"2"}';
+  const NODE_B = '{"id":"b","type":"text","x":400,"y":104,"width":240,"height":140,"text":"Seconda","vendor":{"keep":true}}';
+  const NODE_F = '{"id":"f","type":"file","x":40,"y":320,"width":240,"height":140,"file":"Corsi/voti.xlsx"}';
+  const EDGES = '[{"id":"e1","fromNode":"a","toNode":"b","toEnd":"arrow","label":"poi"},{"id":"e2","fromNode":"b","toNode":"f"}]';
+  const bornText = (x: number, y: number, text: string) =>
+    `{"nodes":[${NODE_A},${NODE_B},${NODE_F},{"id":"${BORN}","type":"text","x":${x},"y":${y},"width":320,"height":160,"text":"${text}"}],"edges":${EDGES}}`;
+
+  const viewport = (host: HTMLElement) => host.querySelector<HTMLElement>(".canvas-viewport")!;
+
+  function pick(host: HTMLElement, id: string, additive = false): void {
+    host.querySelector(`.canvas-node[data-node="${id}"]`)!.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 3, shiftKey: additive, clientX: 0, clientY: 0 }),
+    );
+    viewport(host).dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3, clientX: 0, clientY: 0 }));
+  }
+
+  function press(host: HTMLElement, init: KeyboardEventInit): void {
+    viewport(host).dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
+  }
+
+  function chooseEdge(host: HTMLElement, id: string): void {
+    const picker = host.querySelector<HTMLSelectElement>('select[data-canvas-field="select-edge"]')!;
+    picker.value = id;
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function cut(host: HTMLElement): void {
+    const values: Record<string, string> = {};
+    const data = {
+      values, files: [], items: [],
+      get types() { return Object.keys(values); },
+      getData: (type: string) => values[type] ?? "",
+      setData: (type: string, value: string) => { values[type] = value; },
+    } as unknown as DataTransfer;
+    const event = new Event("cut", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: data });
+    viewport(host).focus();
+    viewport(host).dispatchEvent(event);
+  }
+
+  const command = (engine: CanvasEngine, id: string) => engine.commands().find((one) => one.id === id)!;
+
+  /** Il nucleo vero, che rifiuta i commit, o le compilazioni che `compile` sceglie. */
+  function refusingCore(refuse: { commit?: boolean; compile?: (ops: readonly CanvasIntentOp[]) => boolean }): CanvasCorePort {
+    return {
+      ready: canvasCoreReady,
+      openNow: (text) => {
+        const core = openCoreNow(text);
+        if (!core) return null;
+        return new Proxy(core, {
+          get(target, key, receiver) {
+            if (key === "commit" && refuse.commit) {
+              return () => {
+                throw new CanvasCoreError("limit", "troppo grande");
+              };
+            }
+            const chosen = refuse.compile;
+            if (key === "compile" && chosen) {
+              return (ops: readonly CanvasIntentOp[], seed?: bigint) => {
+                if (chosen(ops)) throw new CanvasCoreError("rejected", "rifiutata");
+                return target.compile(ops, seed);
+              };
+            }
+            const value = Reflect.get(target, key, receiver) as unknown;
+            // I metodi del nucleo leggono i suoi campi privati: si chiamano su di lui.
+            return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+          },
+        });
+      },
+    };
+  }
+
+  it("Ctrl+G su una scheda fuori dalla griglia: i bordi del gruppo si agganciano uno per uno, come prima (304×104)", () => {
+    const source = JSON.stringify({ nodes: [{ id: "a", type: "text", text: "x", x: -125, y: -60, width: 250, height: 60 }], edges: [] });
+    const { engine, host } = mounted(source, { seed: () => 1n });
+    pick(host, "a");
+    press(host, { key: "g", ctrlKey: true });
+    const group = readCanvas(engine.getDoc()).nodes.find((node) => node.type === "group")!;
+    expect([group.x, group.y, group.width, group.height]).toEqual([-152, -80, 304, 104]);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(source);
+    engine.destroy();
+  });
+
+  it("Ctrl+D ripetuto: la prima copia si aggancia, le altre ripetono lo spostamento senza aggancio, come prima (T68)", () => {
+    const source = JSON.stringify({ nodes: [{ id: "a", type: "text", text: "x", x: 13, y: 5, width: 200, height: 100 }], edges: [] });
+    const { engine, host, changes } = mounted(source, { seed: () => 1n });
+    pick(host, "a");
+    for (let i = 0; i < 3; i++) press(host, { key: "d", ctrlKey: true });
+    expect(readCanvas(engine.getDoc()).nodes.map((node) => [node.x, node.y])).toEqual([[13, 5], [48, 40], [83, 75], [118, 110]]);
+    expect(changes).toHaveLength(3);
+    for (let i = 0; i < 3; i++) expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(source);
+    engine.destroy();
+  });
+
+  it("«Inverti il filo» tiene le punte sulla loro scheda (#353) e scrive con `reverse`", () => {
+    const { engine, host } = mounted(SOURCE, { seed: () => 1n });
+    chooseEdge(host, "e1");
+    expect(command(engine, "canvas.edge.reverse").op!()).toEqual([{ op: "reverse", ids: ["e1"] }]);
+    command(engine, "canvas.edge.reverse").run();
+    expect(readCanvas(engine.getDoc()).edges[0]).toEqual({ id: "e1", fromNode: "b", fromEnd: "arrow", toNode: "a", toEnd: "none", label: "poi" });
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(SOURCE);
+    engine.destroy();
+  });
+
+  it("«Collega…» sceglie i lati coi punti di mezzo più vicini, non coi centri", () => {
+    const source = JSON.stringify({
+      nodes: [
+        { id: "t2", type: "text", text: "Ripasso", x: 400, y: 0, width: 320, height: 160 },
+        { id: "f1", type: "text", text: "Voti", x: 0, y: 400, width: 480, height: 304 },
+      ],
+      edges: [],
+    });
+    const { engine, host } = mounted(source, { seed: () => 1n });
+    pick(host, "t2");
+    pick(host, "f1", true);
+    command(engine, "canvas.connect").run();
+    expect(readCanvas(engine.getDoc()).edges[0]).toMatchObject({ fromNode: "t2", toNode: "f1", fromSide: "left", toSide: "top", toEnd: "arrow" });
+    engine.destroy();
+  });
+
+  it("un campo della barra che il commit rifiuta (un limite) torna al valore del modello", () => {
+    const { engine, host, changes } = mounted(SOURCE, { core: refusingCore({ commit: true }) });
+    chooseEdge(host, "e1");
+    const label = host.querySelector<HTMLInputElement>('[data-canvas-field="edge-label"]')!;
+    label.value = "dopo";
+    label.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(SOURCE);
+    expect(host.querySelector<HTMLInputElement>('[data-canvas-field="edge-label"]')!.value).toBe("poi");
+    engine.destroy();
+  });
+
+  it("«Estrai in una nota» che il nucleo rifiuta dà un avviso solo, quello che dice che la nota c'è", async () => {
+    notices.notify.mockClear();
+    const notes = {
+      freeName: vi.fn(async (_folder: string, name: string) => name),
+      create: vi.fn(async (_folder: string, name: string) => `${name}.md`),
+      read: vi.fn(async () => ""),
+    };
+    const core = refusingCore({ compile: (ops) => ops.some((op) => op.op === "convert") });
+    const { engine, host, changes } = mounted(SOURCE, { notes, core });
+    pick(host, "a");
+    command(engine, "canvas.extract_note").run();
+    const dialog = () => [...document.querySelectorAll<HTMLElement>(".kit-dialog")].pop()!;
+    await vi.waitFor(() => expect(dialog().querySelector('[data-action="extract"]')).not.toBeNull());
+    dialog().querySelector<HTMLButtonElement>('[data-action="extract"]')!.click();
+    await vi.waitFor(() => expect(notices.notify).toHaveBeenCalledTimes(1));
+    expect(notices.notify.mock.calls[0]![0]).toBe(t("canvas.extract.stale", { name: "Prima" }));
+    expect(host.querySelector(".canvas-intake-error")?.textContent ?? "").toBe("");
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(SOURCE);
+    engine.destroy();
+  });
+
+  // I gesti di T24 che T23 ha fatto passare dalle operazioni: i testi attesi
+  // sono quelli che la tela scriveva prima di T23 (origin/piano/lavagna-in-codice),
+  // con l'id della scheda nata che ora viene dal seme.
+  it("Taglia (Ctrl+X) toglie con `remove` come prima: le schede e i loro fili, un passo d'annulla", () => {
+    let { engine, host, changes } = mounted(SOURCE, { seed: () => 1n });
+    pick(host, "b");
+    cut(host);
+    expect(engine.getDoc()).toBe(`{"nodes":[${NODE_A},${NODE_F}],"edges":[]}`);
+    expect(changes).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(SOURCE);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+
+    ({ engine, host, changes } = mounted(SOURCE, { seed: () => 1n }));
+    pick(host, "a");
+    pick(host, "f", true);
+    cut(host);
+    expect(engine.getDoc()).toBe(`{"nodes":[${NODE_B}],"edges":[]}`);
+    expect(changes).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(SOURCE);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+
+  it("il doppio clic nel vuoto fa nascere la scheda con `add_card` come prima, e il testo è un passo suo", () => {
+    const { engine, host, changes } = mounted(SOURCE, { seed: () => 1n });
+    viewport(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: 700, clientY: 500 }));
+    expect(engine.getDoc()).toBe(bornText(640, 448, ""));
+    const input = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor")!;
+    input.value = "Nuova";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    engine.commitPending();
+    expect(engine.getDoc()).toBe(bornText(640, 448, "Nuova"));
+    expect(changes).toHaveLength(2);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(bornText(640, 448, ""));
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(SOURCE);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+
+  it("la scheda nata col doppio clic e lasciata vuota se ne va con `remove`, senza passi d'annulla, come prima", () => {
+    const { engine, host, changes } = mounted(SOURCE, { seed: () => 1n });
+    viewport(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: 700, clientY: 500 }));
+    host.querySelector(".canvas-text-editor")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(engine.getDoc()).toBe(SOURCE);
+    expect(changes.map((change) => change.text === SOURCE)).toEqual([false, true]);
+    expect(engine.undo()).toBe(false);
+    expect(engine.redo()).toBe(false);
+    engine.destroy();
+  });
+
+  it("lo strumento Testo fa nascere la scheda con `add_card` come prima, in un passo d'annulla", () => {
+    const { engine, host, changes } = mounted(SOURCE, { seed: () => 1n });
+    command(engine, "canvas.tool.text").run();
+    viewport(host).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 4, clientX: 900, clientY: 600 }));
+    expect(engine.getDoc()).toBe(bornText(840, 552, ""));
+    expect(changes).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(SOURCE);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+});

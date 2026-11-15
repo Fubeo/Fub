@@ -185,7 +185,7 @@ import {
   type CanvasPatch,
   type InkPatch,
 } from "./operation";
-import { edgeEnd, reversedEdge, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
+import { edgeEnd, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
 import {
   EDGE_SIDES,
   edgeAt,
@@ -4902,9 +4902,10 @@ export class CanvasEngine {
    * Compila le operazioni d'intento `ops` sul modello di adesso, dopo aver
    * registrato il testo in sospeso. `null` se la tela non scrive (sola
    * lettura, troppo grande, il nucleo non ancora pronto) o se il nucleo le
-   * rifiuta: allora l'avviso `refused` lo dice.
+   * rifiuta: allora l'avviso `refused` lo dice (nessun avviso con `null`:
+   * lo dà chi chiama).
    */
-  #compileIntent(ops: readonly CanvasIntentOp[], refused: Key): CanvasCompiled | null {
+  #compileIntent(ops: readonly CanvasIntentOp[], refused: Key | null): CanvasCompiled | null {
     const core = this.#core;
     if (!core || this.#destroyed || this.#readOnly || this.#isSceneOversized()) return null;
     this.#recordPending();
@@ -4916,7 +4917,7 @@ export class CanvasEngine {
         return null;
       }
       if (error instanceof CanvasCoreError) {
-        this.#showNotice(t(refused));
+        if (refused !== null) this.#showNotice(t(refused));
         return null;
       }
       throw error;
@@ -4929,17 +4930,25 @@ export class CanvasEngine {
    * d'annulla, come le scrive `canvas.apply`. Torna gli id nati (schede, poi
    * fili, come `created`), o `null` se non ha scritto niente: nessuna
    * operazione, nessuna toppa, la tela che non scrive, o il nucleo che le
-   * rifiuta (lo dice l'avviso, e un campo della barra torna al valore del
-   * modello).
+   * rifiuta (lo dice l'avviso `refused`, o nessuno con `null`, quando lo dà
+   * chi chiama). Se il nucleo rifiuta la compilazione o il commit (un limite),
+   * i campi della barra tornano al valore del modello.
    */
-  #writeOps(ops: readonly CanvasIntentOp[] | null): readonly string[] | null {
+  #writeOps(
+    ops: readonly CanvasIntentOp[] | null,
+    refused: Key | null = "canvas.change_refused",
+  ): readonly string[] | null {
     if (!ops || ops.length === 0) return null;
-    const compiled = this.#compileIntent(ops, "canvas.change_refused");
+    const compiled = this.#compileIntent(ops, refused);
     if (!compiled) {
       if (!this.#destroyed) this.#drawToolbar();
       return null;
     }
-    if (compiled.patches.length === 0 || !this.#commit(compiled.patches, "input")) return null;
+    if (compiled.patches.length === 0) return null;
+    if (!this.#commit(compiled.patches, "input")) {
+      if (!this.#destroyed) this.#drawToolbar();
+      return null;
+    }
     return compiled.created;
   }
 
@@ -6268,8 +6277,10 @@ export class CanvasEngine {
       if (!this.#destroyed) notify(t("canvas.extract.stale", { name: shown }), "info", open);
       return;
     }
-    // La nota c'è: la scheda diventa sua con `convert` (id, posto, fili e inchiostro restano).
-    if (!this.#writeOps([{ op: "convert", id, file: path }])) {
+    // La nota c'è: la scheda diventa sua con `convert` (id, posto, fili e
+    // inchiostro restano). Se il nucleo la rifiuta l'avviso è uno solo,
+    // `canvas.extract.stale`: dice che la nota c'è e la apre.
+    if (!this.#writeOps([{ op: "convert", id, file: path }], null)) {
       notify(t("canvas.extract.stale", { name: shown }), "info", open);
       return;
     }
@@ -7384,8 +7395,9 @@ export class CanvasEngine {
     }
     const tool = toolOfCommand(id);
     if (tool !== null) {
-      // C con due schede scelte le collega: la sola volta che uno strumento scrive.
-      const pair = tool === "connect" ? { op: () => this.#connectPairOps() } : {};
+      // C con due schede scelte le collega: la sola volta che uno strumento
+      // scrive. Con un filo scelto C non collega (`run` sotto), e così `op`.
+      const pair = tool === "connect" ? { op: () => (this.#edgeSelection.length > 0 ? null : this.#connectPairOps()) } : {};
       return {
         disabled: () => (CANVAS_WRITING_TOOLS.has(tool) ? writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null) : null),
         ...pair,
@@ -8128,15 +8140,13 @@ export class CanvasEngine {
   }
 
   /**
-   * L'inversione del filo `edge` com'è nella GUI: estremi e lati si
-   * scambiano, e le punte restano sulla scheda a cui stavano (`reversedEdge`,
-   * #353). È una `set` e non `reverse`, che invece tiene le punte sul ruolo e
-   * così sposta la freccia: le due regole non coincidono (rapporto di T23).
+   * L'inversione del filo `edge`: `reverse` del nucleo, che scambia estremi e
+   * lati e tiene le punte sulla scheda a cui stavano, come `reversedEdge` di
+   * `model.ts` (#353). `null` se il filo non c'è.
    */
   #reverseOps(edge: string | undefined): CanvasIntentOp[] | null {
     const current = edge === undefined ? undefined : this.#doc?.edges.find((one) => one.id === edge);
-    const op = current ? setOp(current, reversedEdge(current)) : null;
-    return op ? [op] : null;
+    return current ? [{ op: "reverse", ids: [current.id] }] : null;
   }
 
   /**
@@ -10457,30 +10467,31 @@ export class CanvasEngine {
     this.#writeOps(this.#connectOps(from.id, to.id));
   }
 
-  /** La `connect` delle due schede scelte (C, «Collega…»); `null` se non sono due. */
+  /**
+   * La `connect` delle due schede scelte («Collega…», e C senza fili scelti);
+   * `null` se non sono due.
+   */
   #connectPairOps(): CanvasIntentOp[] | null {
-    if (this.#edgeSelection.length > 0) return null;
     const chosen = this.#selectedNodes();
     return chosen.length === 2 ? this.#connectOps(chosen[0]!.id, chosen[1]!.id) : null;
   }
 
   /**
-   * La `connect` da `from` a `to`, coi lati di `edges.ts` (i punti medi più
-   * vicini: `nearestSides`) e le punte scelte nella riga di Collega (T50):
-   * `arrow` di serie, `none`, o la sola punta all'inizio, che la forma breve
-   * non ha (allora l'arco intero). I lati sono scritti: `sides: "auto"` del
-   * nucleo confronta i centri, e su due schede di misure diverse può dare
-   * altri lati (rapporto di T23). `null` se una delle due non c'è.
+   * La `connect` da `from` a `to`, coi lati più vicini (`sides: "auto"`, la
+   * regola di `nearestSides` di `edges.ts`) e le punte scelte nella riga di
+   * Collega (T50): `arrow` di serie, `none`, o la sola punta all'inizio, che
+   * la forma breve non ha (allora l'arco intero, coi lati di
+   * `nearestSides`). `null` se una delle due non c'è.
    */
   #connectOps(from: string, to: string): CanvasIntentOp[] | null {
     const a = this.#doc?.nodes.find((node) => node.id === from);
     const b = this.#doc?.nodes.find((node) => node.id === to);
     if (!a || !b) return null;
-    const { fromSide, toSide } = nearestSides(a, b);
     if (this.#tips === "start") {
+      const { fromSide, toSide } = nearestSides(a, b);
       return [{ op: "connect", edge: { fromNode: from, toNode: to, fromSide, toSide, ...this.#tipEnds() } }];
     }
-    const sides = { from: fromSide, to: toSide };
+    const sides = "auto";
     return [this.#tips === "none" ? { op: "connect", from, to, sides, ends: "none" } : { op: "connect", from, to, sides }];
   }
 
