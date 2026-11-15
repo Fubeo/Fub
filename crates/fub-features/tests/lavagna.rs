@@ -1240,6 +1240,8 @@ fn la_guida_senza_topic_da_il_testo_e_tutte_le_operazioni() {
             "layout",
             "insert",
             "convert",
+            "spread_pages",
+            "excerpt",
             "from_mermaid",
             "from_outline",
             "add_strokes",
@@ -1252,7 +1254,7 @@ fn la_guida_senza_topic_da_il_testo_e_tutte_le_operazioni() {
     );
     assert_eq!(
         payload["schema"]["items"]["oneOf"].as_array().map(Vec::len),
-        Some(24)
+        Some(26)
     );
     let examples = payload["examples"].as_array().expect("gli esempi");
     assert!(examples.len() >= 7, "almeno un esempio per operazione");
@@ -1284,7 +1286,7 @@ fn la_guida_con_un_topic_da_solo_la_sua_voce() {
 
     // Un topic vuoto è come non averlo.
     let blank = guide_cmd(&mut ws, json!({ "topic": "  " })).expect("la guida");
-    assert_eq!(custom(&blank)["ops"].as_array().map(Vec::len), Some(24));
+    assert_eq!(custom(&blank)["ops"].as_array().map(Vec::len), Some(26));
 }
 
 #[test]
@@ -1728,5 +1730,176 @@ mod con_draw {
             planned_pixels == written_pixels,
             "l'anteprima e la lavagna scritta disegnano lo stesso"
         );
+    }
+
+    /// Un PDF vero con una pagina per misura, in punti.
+    fn pdf_pages(sizes: &[(f32, f32)]) -> Vec<u8> {
+        let mut document = Document::with_version("1.5");
+        let pages = document.new_object_id();
+        let kids: Vec<Object> = sizes
+            .iter()
+            .map(|&(width, height)| {
+                document
+                    .add_object(dictionary! {
+                        "Type" => "Page",
+                        "Parent" => pages,
+                        "MediaBox" => vec![0.into(), 0.into(), width.into(), height.into()],
+                    })
+                    .into()
+            })
+            .collect();
+        let count = i64::try_from(kids.len()).expect("poche pagine");
+        document.objects.insert(
+            pages,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => kids,
+                "Count" => count,
+            }),
+        );
+        let catalog = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+        document.trailer.set("Root", catalog);
+        let mut out = Vec::new();
+        document.save_to(&mut out).expect("il PDF si scrive");
+        out
+    }
+
+    /// Le schede della lavagna scritta che mostrano il file `file`, con il loro
+    /// `subpath`, nell'ordine del file.
+    fn cards_of(ws: &Workspace, file: &str) -> Vec<Value> {
+        let canvas: Value = serde_json::from_str(&source(ws, BOARD)).expect("la lavagna è JSON");
+        canvas["nodes"]
+            .as_array()
+            .expect("le schede")
+            .iter()
+            .filter(|node| node["file"] == file)
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn spargere_le_pagine_legge_dal_pdf_il_conto_e_le_misure() {
+        // Tre pagine: A4 dritta, A4 girata, Letter. Senza `page_count` e
+        // `page_sizes` il comando li legge dal file, e le pagine nascono con le
+        // misure della GUI: 360×509, 360×254, 360×466.
+        let (_vault, mut ws) = vault_with(&[(
+            "Corsi/dispensa.pdf",
+            pdf_pages(&[(595.0, 842.0), (842.0, 595.0), (612.0, 792.0)]),
+        )]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0, "width": 360, "height": 480 },
+                { "op": "spread_pages", "id": "pdf" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("le pagine si spargono");
+        let pages: Vec<(Value, Value, Value, Value)> = cards_of(&ws, "Corsi/dispensa.pdf")
+            .into_iter()
+            .filter(|node| node["id"] != "pdf")
+            .map(|node| {
+                (
+                    node["subpath"].clone(),
+                    node["x"].clone(),
+                    node["width"].clone(),
+                    node["height"].clone(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            pages,
+            vec![
+                (json!("#page=1"), json!(784), json!(360), json!(509)),
+                (json!("#page=2"), json!(1168), json!(360), json!(254)),
+                (json!("#page=3"), json!(1552), json!(360), json!(466)),
+            ]
+        );
+    }
+
+    #[test]
+    fn controllare_dice_le_pagine_tagliate_e_senza_pdf_serve_il_conto() {
+        let (_vault, mut ws) = vault_with(&[(
+            "Corsi/dispensa.pdf",
+            pdf_pages(&[(595.0, 842.0), (595.0, 842.0)]),
+        )]);
+        let outcome = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0 },
+                { "op": "spread_pages", "id": "pdf", "pages": "2-9" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto");
+        let payload = custom(&outcome);
+        assert_eq!(payload["ok"], true, "{payload}");
+        let warning = payload["warnings"]
+            .as_array()
+            .expect("gli avvisi")
+            .iter()
+            .find(|warning| warning["code"] == "pages_cut")
+            .cloned()
+            .unwrap_or_else(|| panic!("l'avviso delle pagine tagliate: {payload}"));
+        assert_eq!(warning["index"], 1, "{warning}");
+        // Un PDF che non c'è: il conto non si legge, e la lista è rifiutata.
+        let before = source(&ws, BOARD);
+        let error = plugin_error(
+            apply(
+                &mut ws,
+                json!({ "doc": BOARD, "ops": json!([
+                    { "op": "add_card", "id": "via", "file": "Corsi/manca.pdf", "x": 400, "y": 0 },
+                    { "op": "spread_pages", "id": "via" }
+                ]).to_string() }),
+                InvokeMode::Apply,
+            )
+            .expect_err("senza il conto delle pagine"),
+        );
+        assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+        assert_eq!(source(&ws, BOARD), before, "il file non cambia");
+    }
+
+    #[test]
+    fn l_estratto_prende_le_proporzioni_della_pagina_e_dell_immagine() {
+        // La zona di un quarto della seconda pagina (842×595 girata): 842 × 148,75
+        // punti, larga 360 → 360×64. Il ritaglio di metà di un PNG 4×2 è un
+        // quadrato: 480×480.
+        let (_vault, mut ws) = vault_with(&[
+            (
+                "Corsi/dispensa.pdf",
+                pdf_pages(&[(595.0, 842.0), (842.0, 595.0)]),
+            ),
+            ("schemi/foto.png", png_file(4, 2)),
+        ]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0, "width": 360, "height": 480 },
+                { "op": "add_card", "id": "foto", "file": "schemi/foto.png", "x": 400, "y": 600, "width": 480, "height": 240 },
+                { "op": "excerpt", "id": "pdf", "part": { "kind": "region", "page": 2, "rect": [0, 0, 1, 0.25] } },
+                { "op": "excerpt", "id": "foto", "part": { "kind": "image", "rect": [0, 0, 0.5, 1] } }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("gli estratti nascono");
+        let region = cards_of(&ws, "Corsi/dispensa.pdf")
+            .into_iter()
+            .find(|node| node["id"] != "pdf")
+            .expect("l'estratto del PDF");
+        assert_eq!(
+            (&region["width"], &region["height"], &region["subpath"]),
+            (&json!(360), &json!(64), &json!("#page=2")),
+            "{region}"
+        );
+        let crop = cards_of(&ws, "schemi/foto.png")
+            .into_iter()
+            .find(|node| node["id"] != "foto")
+            .expect("l'estratto dell'immagine");
+        assert_eq!(
+            (&crop["width"], &crop["height"]),
+            (&json!(480), &json!(480)),
+            "{crop}"
+        );
+        assert_eq!(crop["fub:parts"]["kind"], "image", "{crop}");
     }
 }

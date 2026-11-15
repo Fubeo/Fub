@@ -113,6 +113,7 @@ fn kind_name(kind: FieldKind) -> &'static str {
         FieldKind::PenSize => "pen_size",
         FieldKind::InkColor => "ink_color",
         FieldKind::Positive => "positive",
+        FieldKind::Pages => "pages",
         FieldKind::Any => "any",
     }
 }

@@ -98,6 +98,11 @@ più vicini.
 - **Un file, un collegamento, un gruppo**: `file`, `url`, `label` (un'etichetta
   da sola fa un gruppo). Per un'immagine o un PDF, `content_size` con i pixel o i
   punti della prima pagina dà le misure giuste.
+- **Le pagine di un PDF**: `{"op": "spread_pages", "id": "p1", "pages": "1-5"}`
+  fa una scheda per pagina in fila accanto alla scheda del PDF; il numero e le
+  misure delle pagine li legge `canvas.apply` dal file. Un estratto:
+  `{"op": "excerpt", "id": "p1", "part": {"kind": "pages", "pages": [3, 4]}}`
+  nasce accanto; con `"in_place": true` è la scheda stessa a cambiare.
 - **Un arco**: `{"op": "connect", "from": "t1", "to": "t2", "sides": "auto"}`.
   `sides` è `auto`, o `{"from": "right", "to": "left"}`; di serie nessun lato.
   `ends` è `arrow` di serie, poi `none` o `both`.

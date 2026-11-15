@@ -413,6 +413,26 @@ use write::{write_pdf, write_raster, write_svg};
 /// rotazione), per le misure di una scheda PDF della lavagna. `None` se il PDF
 /// è cifrato, non si apre o non ha pagine: la scheda prende le misure di serie.
 pub(crate) fn pdf_first_page(bytes: &[u8]) -> Option<(f64, f64)> {
+    let document = open_pdf(bytes)?;
+    let first = *document.get_pages().values().next()?;
+    Some(annotated::Geometry::of(&document, first).size())
+}
+
+/// Le misure di tutte le pagine di un PDF, dalla prima, come si mostrano
+/// (punti, con la rotazione): per `spread_pages` ed `excerpt` della lavagna,
+/// che ne contano anche il numero. `None` come [`pdf_first_page`].
+pub(crate) fn pdf_page_sizes(bytes: &[u8]) -> Option<Vec<(f64, f64)>> {
+    let document = open_pdf(bytes)?;
+    let sizes: Vec<(f64, f64)> = document
+        .get_pages()
+        .values()
+        .map(|&page| annotated::Geometry::of(&document, page).size())
+        .collect();
+    (!sizes.is_empty()).then_some(sizes)
+}
+
+/// Il PDF aperto, se si apre senza password.
+fn open_pdf(bytes: &[u8]) -> Option<lopdf::Document> {
     let options = lopdf::LoadOptions::with_max_decompressed_size(annotated::STREAM_MAX);
     let document = lopdf::Document::load_mem_with_options(bytes, options).ok()?;
     // Un PDF che si apre senza password è già decifrato: se `/Encrypt` c'è
@@ -420,8 +440,7 @@ pub(crate) fn pdf_first_page(bytes: &[u8]) -> Option<(f64, f64)> {
     if document.trailer.has(b"Encrypt") {
         return None;
     }
-    let first = *document.get_pages().values().next()?;
-    Some(annotated::Geometry::of(&document, first).size())
+    Some(document)
 }
 
 #[cfg(test)]
