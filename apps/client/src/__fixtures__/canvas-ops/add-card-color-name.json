@@ -1,0 +1,13 @@
+{
+  "about": "Un nome di colore dà il colore che scrive il file: «cyan» diventa \"5\". Il numero \"5\" darebbe lo stesso colore.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "c", "text": "Colorata", "color": "cyan" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "c", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "color": "5", "text": "Colorata" }],
+      "edges": []
+    },
+    "created": ["c"]
+  }
+}

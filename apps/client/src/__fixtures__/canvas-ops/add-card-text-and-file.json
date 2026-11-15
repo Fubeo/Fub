@@ -1,0 +1,9 @@
+{
+  "about": "Due contenuti insieme (`text` e `file`) non dicono che scheda sia: è Invalid, e la scheda prima non si scrive.",
+  "before": {},
+  "ops": [
+    { "op": "add_card", "id": "ok", "text": "ok" },
+    { "op": "add_card", "id": "no", "text": "due", "file": "b.png" }
+  ],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 1 } }
+}

@@ -1,0 +1,13 @@
+{
+  "about": "Un #rrggbb in maiuscolo si scrive in minuscolo, come nel file: #FF8800 diventa #ff8800.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "c", "text": "Arancio", "color": "#FF8800" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "c", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "color": "#ff8800", "text": "Arancio" }],
+      "edges": []
+    },
+    "created": ["c"]
+  }
+}

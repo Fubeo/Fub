@@ -1,0 +1,11 @@
+{
+  "about": "Un lato che non esiste dentro `sides` non si legge: la lista è malformata.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+    ]
+  },
+  "ops": [{ "op": "connect", "from": "a", "to": "b", "sides": { "from": "middle" } }],
+  "expect": { "outcome": "malformed" }
+}

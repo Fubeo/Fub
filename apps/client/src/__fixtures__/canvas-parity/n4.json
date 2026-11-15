@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "source": "N4",
+  "max_missing": 0,
+  "entries": [
+    {
+      "id": "N4.ink.pen_card",
+      "name": "Scrivi con la penna sopra una scheda",
+      "source": "N4",
+      "gui": [{ "gesture": "pen-on-card" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [
+        {
+          "op": "draw",
+          "on": "auto",
+          "points": [[40, 460], [44, 460], [48, 460]],
+          "pen": "ballpoint",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "id": "N4.ink.pen_free",
+      "name": "Scrivi con la penna sul vuoto",
+      "source": "N4",
+      "gui": [{ "gesture": "pen-free" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "draw", "on": "board", "points": [[1500, 0], [1504, 4]], "pen": "ballpoint" }]
+    },
+    {
+      "id": "N4.ink.highlighter",
+      "name": "Evidenzia",
+      "source": "N4",
+      "gui": [{ "toolbar": "ink-pen" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [
+        {
+          "op": "draw",
+          "on": "t1",
+          "points": [[20, 40], [220, 40]],
+          "pen": "highlighter",
+          "color": "yellow"
+        }
+      ]
+    },
+    {
+      "id": "N4.ink.menu",
+      "name": "Scegli penna, colore e spessore",
+      "source": "N4",
+      "gui": [{ "toolbar": "ink-pen" }],
+      "writes": "nothing",
+      "state": "view",
+      "note": "La scelta non scrive; in codice sono gli argomenti `pen`, `color`, `size` di `draw`."
+    },
+    {
+      "id": "N4.ink.erase_stroke",
+      "name": "Gomma: togli il tratto intero",
+      "source": "N4",
+      "gui": [{ "gesture": "erase-stroke" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "erase_strokes", "layer": { "node": "f1" }, "ids": ["s1"] }],
+      "note": "Gli id dei tratti li dà `canvas.read` (T8, con l'inchiostro da T17)."
+    },
+    {
+      "id": "N4.ink.erase_piece",
+      "name": "Gomma: taglia il pezzo strofinato",
+      "source": "N4",
+      "gui": [{ "gesture": "erase-piece" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "erase_along", "points": [[100, 450], [140, 450]], "size": 12 }]
+    },
+    {
+      "id": "N4.ink.mouse",
+      "name": "Scrivi col mouse, tasto D",
+      "source": "N4",
+      "gui": [{ "toolbar": "ink-mouse" }, { "key": "D" }],
+      "writes": "nothing",
+      "state": "view"
+    }
+  ]
+}

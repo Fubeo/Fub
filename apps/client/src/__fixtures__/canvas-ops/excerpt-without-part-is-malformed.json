@@ -1,0 +1,27 @@
+{
+  "about": "Senza `part` l'operazione non si legge.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "excerpt",
+      "id": "p"
+    }
+  ],
+  "expect": {
+    "outcome": "malformed"
+  }
+}

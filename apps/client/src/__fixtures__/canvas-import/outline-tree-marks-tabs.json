@@ -1,0 +1,115 @@
+{
+  "about": "Una scaletta con segni d'elenco, un tab e righe vuote: i segni si tolgono, un tab è un livello, gli id sono il prefisso più il numero della riga.",
+  "op": {
+    "op": "from_outline",
+    "text": "1. Progetto\n  - Ricerca\n\t\t* Interviste\n    + Sondaggio\n\n  - Sviluppo\n    2) Prototipo",
+    "prefix": "s-"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "s-1",
+          "type": "text",
+          "x": 0,
+          "y": 230,
+          "width": 320,
+          "height": 160,
+          "text": "Progetto"
+        },
+        {
+          "id": "s-2",
+          "type": "text",
+          "x": 416,
+          "y": 92,
+          "width": 320,
+          "height": 160,
+          "text": "Ricerca"
+        },
+        {
+          "id": "s-3",
+          "type": "text",
+          "x": 832,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Interviste"
+        },
+        {
+          "id": "s-4",
+          "type": "text",
+          "x": 832,
+          "y": 184,
+          "width": 320,
+          "height": 160,
+          "text": "Sondaggio"
+        },
+        {
+          "id": "s-6",
+          "type": "text",
+          "x": 416,
+          "y": 368,
+          "width": 320,
+          "height": 160,
+          "text": "Sviluppo"
+        },
+        {
+          "id": "s-7",
+          "type": "text",
+          "x": 832,
+          "y": 368,
+          "width": 320,
+          "height": 160,
+          "text": "Prototipo"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "s-1",
+          "toNode": "s-2",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "fromNode": "s-2",
+          "toNode": "s-3",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "06c45d188009454f",
+          "fromNode": "s-2",
+          "toNode": "s-4",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "f88bb8a8724c81ec",
+          "fromNode": "s-1",
+          "toNode": "s-6",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "1b39896a51a8749b",
+          "fromNode": "s-6",
+          "toNode": "s-7",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "s-1",
+      "s-2",
+      "s-3",
+      "s-4",
+      "s-6",
+      "s-7",
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4",
+      "06c45d188009454f",
+      "f88bb8a8724c81ec",
+      "1b39896a51a8749b"
+    ],
+    "notes": []
+  }
+}

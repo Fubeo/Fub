@@ -1,0 +1,118 @@
+{
+  "about": "insert sotto lez: il blocco (688 × 160) andrebbe in 0, 184, ma la scheda o occupa il posto; il blocco scivola a destra di o, a 24, come una scheda di place_near.",
+  "before": {
+    "nodes": [
+      {
+        "id": "lez",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Lezione"
+      },
+      {
+        "id": "o",
+        "type": "text",
+        "x": 0,
+        "y": 184,
+        "width": 320,
+        "height": 100,
+        "text": "Occupa"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "insert",
+      "fragment": {
+        "version": 1,
+        "nodes": [
+          {
+            "id": "d",
+            "type": "text",
+            "x": 0,
+            "y": 0,
+            "width": 320,
+            "height": 160,
+            "text": "Domanda"
+          },
+          {
+            "id": "r",
+            "type": "text",
+            "x": 368,
+            "y": 0,
+            "width": 320,
+            "height": 160,
+            "text": "Risposta"
+          }
+        ],
+        "edges": [
+          {
+            "id": "x",
+            "fromNode": "d",
+            "toNode": "r"
+          }
+        ]
+      },
+      "near": "lez",
+      "side": "bottom"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "lez",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Lezione"
+        },
+        {
+          "id": "o",
+          "type": "text",
+          "x": 0,
+          "y": 184,
+          "width": 320,
+          "height": 100,
+          "text": "Occupa"
+        },
+        {
+          "id": "e220a8397b1dcdaf",
+          "type": "text",
+          "x": 344,
+          "y": 184,
+          "width": 320,
+          "height": 160,
+          "text": "Domanda"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "type": "text",
+          "x": 712,
+          "y": 184,
+          "width": 320,
+          "height": 160,
+          "text": "Risposta"
+        }
+      ],
+      "edges": [
+        {
+          "id": "06c45d188009454f",
+          "fromNode": "e220a8397b1dcdaf",
+          "toNode": "6e789e6aa1b965f4"
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4",
+      "06c45d188009454f"
+    ]
+  }
+}

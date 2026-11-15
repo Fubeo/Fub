@@ -104,6 +104,62 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-15 · manutenzione · La revisione del merge: `erase_along` su un
+  tratto di pagina o di cella non taglia (la pagina che la scheda mostra e il
+  riquadro della cella li sa solo la resa) e scrive la nota `ink_kept` con la
+  ragione, se il cammino passa sulla scheda; prima non diceva niente. E prende
+  `aspect`, la proporzione del contenuto come `move_strokes`, ma solo con `on`
+  su una scheda (con `auto` il cammino passa su più contenuti: `Invalid`);
+  `erase-along-aspect.json` lo prova anche contro la gomma della tela · tagliare
+  quei tratti in codice vorrebbe la pagina mostrata e il riquadro della cella,
+  che il nucleo non ha: la nota dice che restano.
+- 2026-11-15 · manutenzione · `origin/main` (222c6d476, con N6 #302) entra nella
+  lavagna in codice. Le operazioni del Lazo di N6, `move_strokes` e
+  `restyle_strokes`, entrano in `spec::OPS` (con esempi, nella guida, nella
+  descrizione MCP di `fub_canvas_apply` e in `mcp-server.md`) e in
+  `CanvasOp::name`: R6 e `ogni_variante_ha_la_sua_voce` vogliono ogni variante
+  nello schema. Per `dx`, `dy`, `size` e `aspect`, che N6 legge come numeri con
+  la virgola, lo schema ha un tipo nuovo, `float`; il `color` di
+  `restyle_strokes` resta `text` (`#rrggbb` lo controlla la compilazione, come
+  in N6), così `validate` e serde dicono la stessa cosa · le operazioni restano
+  quelle di N6, senza cambiarne la forma; lo schema le descrive com'è.
+- 2026-11-15 · manutenzione · R7 dopo N6: N6 entra in `merged` e le sue voci
+  hanno i `gui` veri al posto dei `plan` (menu, tasti, appunti, e gesti nuovi
+  in `GESTURES`); le voci di main e N4 che la GUI di N6 ha rifatto (il colore,
+  Allinea e Distribuisci in un menu, Disponi, Collega…) dicono i loro id nuovi;
+  due voci nuove, `N6.text.style` (la misura e l'allineamento, T92) e
+  `N6.clipboard.cut`. `parity.test.ts` monta anche `p1`, la nota `n1` (nuova in
+  `board.json`) e lo strumento Penna, con le note e le parti finte, e conosce
+  `Mod+G` · senza, R7 non vede i comandi che le voci di N6 dichiarano, e il
+  pulsante delle penne di N4 esiste solo con la Penna.
+- 2026-11-15 · manutenzione · Una sola regola di misura dell'inchiostro:
+  `InkFit::of(node, anchor, aspect)` in `ink.rs`, con la proporzione del
+  contenuto di N6 (T39, T98); `ops.rs` (il `Fit` privato di N6, con i suoi
+  `scales` e `SCALED_EXTENSIONS`) la usa, e la riga doppia esce dal registro
+  di `a_named_rule_is_declared.rs`. La lettura dell'inchiostro (`describe/ink.rs`,
+  T17) la usa senza proporzione, che non sa; per le ancore `page` e `cell` di N6 fa come le
+  operazioni sui tratti (il nucleo non sa dove la pagina o la cella sta nella
+  scheda): il tratto conta nella riga dell'outline ma non nel riquadro, e in
+  `ink_read` porta `anchor` coi punti nelle unità dell'ancora · senza, i punti
+  di una pagina PDF sembrerebbero della scheda. T19 può ridefinirlo.
+- 2026-11-15 · manutenzione · `CanvasColor::Unknown` di N6 (un colore che Fub
+  non conosce): l'outline lo scrive com'è, la forma breve non lo scrive (la
+  scheda va nella forma intera), l'anteprima la disegna grigia come la tela ·
+  il colore del file non si perde nella lettura, e fa il giro di `code` →
+  `compile` → toppe intero (test `an_unknown_colour_survives_the_round_trip`);
+  lo rifiuta solo `check_colors` della scrittura di una sessione che non l'ha
+  letto, come il vettore 31 di N6.
+- 2026-11-15 · manutenzione · Dopo il merge `docs/reference/canvas-ink.md` era a
+  667 righe (tetto 550): la sezione «In codice» (T16–T17) va in una pagina sua,
+  `docs/reference/canvas-ink-code.md`, con un rimando in `canvas-ink.md`, la voce
+  in `docs/map/pagine.md` e i link di `canvas-code.md` e `canvas-operations.md`
+  aggiornati. T18 e T19, che il piano manda a «In codice» di `canvas-ink.md`,
+  scrivono in `canvas-ink-code.md` · il codice batte il piano sui tetti, e la
+  parte in codice dell'inchiostro è un argomento suo, come le ancore di N6.
+- 2026-11-15 · manutenzione · Il registro di `main` aveva perso, con #302, la
+  testata giusta (presa da `piano/fub-pre-alpha`, 7a2f5483b) e quattro voci
+  (N4 T23a del 2026-11-13; la PR #298, il riallineamento di T25 e la prova con
+  Obsidian di T24 del 2026-11-14): qui ci sono tutte.
 - 2026-11-13 · N6 T20a · L'orchestratore aggiunge il task del gesto che perde
   il rilascio. Perché: T20 ha visto la lavagna ferma in uno spostamento mai
   chiuso (nessuna scheda viva) quando il rilascio non arriva, e nella vita
@@ -593,6 +649,13 @@ La più recente in cima: data · piano · decisione · perché.
   PLAN.md resta quello di N4 e DECISIONS.md tiene le righe di tutti e due:
   senza il merge la PR #298 era in conflitto con la sua base e la CI non
   partiva.
+- 2026-11-13 · N4 T23a · L'orchestratore scrive da solo il task che profila e
+  corregge i 174 ms a penna sopra il foglio vivo, invece di chiedere
+  all'utente la forma del task (come diceva la voce del 2026-11-11). Perché:
+  il 2026-11-13 l'utente ha dato autonomia sulle scelte tecniche («fai sempre
+  la scelta che porterà al massimo della qualità»), e vuole l'app
+  «estremamente fluida»; la meta di 33 ms non si alza. Il costo che sta nelle
+  schede di N6 diventa un task del piano di N6, non una correzione in N4.
 - 2026-11-13 · K5 T30 · il piano si chiude col sì dell'utente; restano fuori, come issue o limiti noti: il tetto alle istanze dei motori per vault (`issue-istanze-motore.md`), i `detail` delle parti solo in italiano, il campo «Testo» per un `<text>` senza `tspan`, `ripristina` fuori da `catch_panic`, le proposte a monte per VectorCraft (bozza non inviata) e il test instabile `close_a_vault_and_latest_round_in_which_and_again_open` visto una volta sotto carico · non cambiano il comportamento che K5 promette, e ognuno è più piccolo o più largo del piano.
 - 2026-11-13 · K5 T30 · la prova sull'app vera ha trovato gli errori delle sei porte del disegno consegnati con la chiave del catalogo (un oggetto sul filo): il client leggeva ogni `unserved` come un guasto, e un disegno riaperto a motore spento restava «fermo» anche dopo la riaccensione. Corretto nel proprietario, `fub-app` (`drawing_port` passa da `for_the_shell`, come Componenti), non rilassando `asPluginError` nel client; il `BadArgs` di un sync resta un fermo della sessione (con «Riprova») e si sono corretti commento e docs che dicevano il contrario · il contratto vuole messaggi già tradotti, e cambiare il comportamento della sessione in T30 non serviva: un `BadArgs` del sync è solo un difetto, e il fermo è la strada sicura.
 - 2026-11-13 · K5 T23 · accettati i due `kind` nuovi del chip (`reduced`, `stopped`) in `editors/core/registry.ts` al posto di `body`, e il ramo resta con `bench/scene.test.ts` rosso finché le 6 baseline delle scene nuove non arrivano dal runner (primo passo di T30) · Perché: il prototipo approvato usa quei due segni (vuoto e rosso), e le baseline si fanno solo sul runner Linux.
@@ -1478,6 +1541,15 @@ La più recente in cima: data · piano · decisione · perché.
 - 2026-11-02 · K3 · Scheda grafica e archivio dei caratteri non entrano in K3:
   nessun motore acceso li usa e `wgpu` sarebbe una dipendenza nuova; arrivano
   col primo motore che li chiede · domanda D-1 per l'utente.
+
+- 2026-11-05 · lavagna-in-codice · le risposte dell'utente: D1 (a), D2
+  (a), D3 (a), D4 (a), D5 (b), D6 (a). Con D5 (b) l'anteprima scrive il
+  testo vero delle schede con i caratteri che `draw` incorpora già
+  (`draw.rs`, `FACES`: Inter, Literata, JetBrains Mono, SIL OFL 1.1), mai
+  quelli di sistema · perché: l'utente vuole la qualità maggiore; il
+  costo in byte che la domanda temeva è già pagato da `draw`, quindi niente
+  dipendenze né caratteri nuovi, e la stessa lavagna dà gli stessi pixel
+  ovunque.
 - 2026-11-05 · caricamento · scelta dell'utente (A): il banco del moto non
   conta come residuo la `transform: scale(1, 1)` che CodeMirror lascia sui
   suoi strati (`.cm-layer`) dopo la cascata d'avvio, che scala il riquadro a
@@ -2634,6 +2706,76 @@ La più recente in cima: data · piano · decisione · perché.
   dati di T12 spinge l'ultima del DOM sotto la banda); la pastiglia del titolo non
   fa più crescere la riga del cursore (salto di 7–9 px, già su `main`) · le
   baseline di T25 si prendono dopo, con questi cambi dentro.
+- 2026-11-13 · parità · T1 toglie `{ "gesture": "marquee" }` dalla voce `main.select`: in main trascinare nel vuoto sposta la vista, non sceglie. Nemmeno N6 lo fa (la Selezione nel vuoto chiama `#beginPan`), anche se il suo suggerimento `canvas.options.select_hint` dice «trascina nel vuoto per sceglierne più d'una»: è un difetto di N6, tracciato come N6 T20b. Quando N6 lo porta, la voce `N6.select.marquee` entra in `n6.json` col suo gesto · l'inventario registra ciò che c'è, non ciò che un suggerimento promette.
+- 2026-11-13 · nucleo · T2 si scosta dal piano in punti piccoli, tenuti: `CardKind` sta in `layout.rs`; `place_near` riceve specie, testo e contenuto e torna `Option<Rect>`; `group_rect` torna `Option<Rect>`; una misura non finita torna a quella di serie. La specie di un file segue `cardKindOf` di N6 (il `#` del sottopercorso si toglie, un nome che comincia col punto non ha estensione) e la regola ha la sua riga in `a_named_rule_is_declared.rs`. `drop-layout.ts` di N6 arrotonda all'intero le misure di immagini e PDF, il piano dice `snap`: si allinea in T9 e T24 · la GUI e il codice devono dare la stessa scheda.
+- 2026-11-14 · decisioni · L'ADR di questo piano diventa la 0244 (era 0241): 0241 è di N4 (`0241-inchiostro-sulla-lavagna.md`), 0242 e 0243 di N6; i tre rami andranno in `main` e due file con lo stesso numero si scontrerebbero.
+- 2026-11-14 · nucleo · T10 tenuto con i suoi scostamenti (varianti newtype, `width`/`height` facoltativi in `resize`, `set` che normalizza e rifiuta `#abc` in ingresso, `pdf_first_page`). Le tre code del suo rapporto (anteprima che non misura i file, descrizione MCP, tetto di `move` con `contents`) diventano T10b, scritto dall'orchestratore per la regola di autonomia: anteprima e scrittura devono dare la stessa lavagna.
+- 2026-11-14 · nucleo · T11, `reverse`: la freccia cambia verso (scelta a del coder). L'operazione inverte nodi e lati e tiene le punte per ruolo (`fromEnd` alla partenza, `toEnd` all'arrivo), così «Inverti la direzione» fa ciò che dice; lo scambio letterale di `engine.ts` (#reverse) scambiava anche le punte e la freccia restava dov'era. In T23 la GUI passa all'operazione del nucleo e cambia ciò che si vede (R8).
+- 2026-11-14 · T12 · `N6.card.drop_many` passa nella parità da `by_hand` a
+  `code`: R4 non ammette `target_ops` che compilano, e il gruppo oltre 12
+  schede lo compone T24 (`layout` poi `group`) · la voce dice ciò che il nucleo
+  sa fare oggi.
+- 2026-11-14 · T12 · La griglia del nucleo adotta la regola di N6 (la colonna
+  dopo parte al primo multiplo di 8 che lascia almeno 24), non il contrario:
+  nuovo task T12a · è il comportamento che l'utente vede già nel rilascio dei
+  file, e tiene le schede sulla griglia di 8 della tela.
+- 2026-11-14 · T12a · Il nucleo non porta il minimo di 40 px di `roundSize` di N6:
+  `layout` conta la scheda con la sua misura vera · `roundSize` vale per le
+  misure di nascita delle schede nuove, che sono già ≥ 40 quando T24 le passa a
+  `layout`; una scheda più piccola scritta a mano nel file resta com'è, e la
+  griglia non deve gonfiarla.
+- 2026-11-14 · T13 · Il frammento di `insert` lo legge il compilatore: i suoi errori
+  sono `Invalid`, e un campo della radice che non conosce (anche `fub:ink`) è
+  `Invalid` invece di sparire · i tratti liberi di un frammento non si perdono in
+  silenzio; T24 li incolla con le operazioni dell'inchiostro.
+- 2026-11-14 · T20 · `from_outline` si dispone di serie verso destra (`right`), non verso il basso: lo chiedono i compiti 02 e 19 del corpus, che sono come un modello scrive una scaletta · i compiti sono il riferimento del piano per la forma attesa.
+- 2026-11-14 · T20 · L'esito di `canvas.apply` porta sempre `notes` e `notes_omitted` (campi aggiunti): un client che rifiuta i campi sconosciuti li vedrebbe, ma i client di Fub (GUI, CLI, MCP) li leggono o li ignorano · ciò che l'importazione perde si dice sempre, anche quando è niente.
+- 2026-11-14 · workflow · La PR #298 si era chiusa da sola il 2026-11-10: GitHub
+  chiude una PR quando ne cancella il ramo base (`piano/n3-logica-in-rust`, dopo il
+  merge di N3). Riaperta con base `main`. La PR #302 (N6) ha base
+  `piano/n4-inchiostro`: va portata su `main` prima del merge di N4, o si chiude
+  allo stesso modo · un ramo base cancellato chiude senza avviso le PR sopra.
+- 2026-11-14 · T25 · Riallineato con `main` (0caf21879, poi db07c9995): le due
+  sezioni sulla lavagna a penna passano in `docs/architecture/ink-on-canvas.md`
+  perché `ink-and-tools.md` superava la soglia di 450 righe; in `overview.md` il
+  blocco Mermaid di `fub-ink-codec` è unito al precedente · nessuna soglia alzata.
+- 2026-11-14 · T24 · La prova con Obsidian l'ha fatta l'orchestratore, su
+  indicazione dell'utente («Non aspettare la mia approvazione, te vai! Io avevo già
+  approvato il piano. Se è conforme, allora ci sei»): Obsidian 1.13.7 di questo PC,
+  avviato isolato (HOME temporanea, `xvfb-run`, senza GPU, porta CDP 9333), vault
+  di prova vuoto nello scratchpad, «Spostami» trascinata e «Ridimensionami» tirata
+  dall'angolo col mouse (eventi veri, non scritture nel file), lavagna chiusa.
+  `confronta.mjs` → uscita 0, 8 livelli uguali per valore (n3 400×300 → 500×360,
+  n4 1400,500 → 1100,760). Primo caso di T24: ADR 0241 accolta, sezione «Obsidian»
+  riscritta senza la copia B · D-12 non serve.
+- 2026-11-14 · T15 · `lib.rs` di `fub-ink-codec` riesporta tutto ciò che
+  `pens.rs` rende pubblico, come già fa per `brush` e `ink`. `pen_brush` è uguale
+  a `penBrush` dentro l'intervallo delle misure. Fuori stringe con `clamp_size`
+  come i menu, e NaN vale la misura di serie. Lo specchio copre solo l'intervallo,
+  il test Rust copre il resto. Resta aperto per T16: `PenTool` ripete `InkTool`
+  di `fub-canvas-core` (stesse stringhe), da non convertire a mano due volte.
+- 2026-11-14 · T17 · Nel json `fub:ink` resta com'è nel file: la lettura
+  decodificata è `describe::ink_read`, nel campo `ink_read` del payload di
+  canvas.read, così una scheda presa dal modello e rimandata con `set` non perde
+  l'inchiostro (test byte per byte). Niente rifiuto difensivo in `set`/`add_card`:
+  un tratto che sembra una lettura non si distingue da uno vero che non si disegna.
+  max_chars con json taglia solo i punti di `ink_read` (`points_omitted`), il
+  modello mai. Nel `code` `add_strokes` porta un livello solo se il testo scritto
+  da Fub è uguale a quello del file; il resto sta nella scheda intera. `kind_of_path`
+  tiene il taglio al `#` (vettori di canvas-layout), il fit dell'inchiostro no,
+  come nella GUI: scritto in canvas-ink.md. Revisione media: un solo difetto (la
+  descrizione di max_chars), corretto.
+- 2026-11-15 · T16 · `draw` scrive il tool del tratto con `PenTool::as_str()`
+  di `fub-ink-codec`: è l'unico punto di conversione, e lo rilegge come `InkTool`
+  solo il controllo di `add_strokes` (un test lega le parole di tutte le penne).
+  Un gruppo vale come `on`, come in engine.ts:1656 (ogni livello non estraneo).
+  `on` come pagina o cella resta a T19 (malformato fino ad allora). Nessun `at`
+  sui tratti (il nucleo non ha orologio); pressione costante, `sim=0`. Le forme
+  sono scelte del nucleo (stella r/2, ellisse con almeno 64 parti dall'alto, ali
+  della freccia max(12, 3·size) a 30°). Revisione media: path di ForeignLayer
+  (/i/on o /i), regola dell'ancora detta giusta in spec, `draw` in
+  canvas-operations.md, corretti. canvas-code.md è a 550 righe, sulla soglia:
+  la prossima aggiunta accorcia o divide la pagina.
 - 2026-11-13 · lavagna · Il trascinamento nel vuoto col mouse sceglie con un rettangolo, come in Obsidian, e la vista si sposta con Spazio, tasto di mezzo, rotella, Mano e dito (T20b); un'impostazione tiene il comportamento di prima («sposta la vista») · il suggerimento della Selezione prometteva già il rettangolo, e chi viene da Obsidian se lo aspetta; l'impostazione non toglie niente a chi si è abituato.
 - 2026-11-13 · fluidità · Il profilo di N4 T23a mette i fotogrammi lunghi della penna sopra il foglio vivo in codice di N6, non dell'inchiostro: i riquadri dei bersagli (T20c), la croce della penna ereditata su tutta la lavagna (T20d), il commit e l'`onChange` al rilascio (T20e). Sono task di N6, prima del cancello (T21) · l'utente vuole l'app «estremamente fluida», e la meta di 33 ms vale sopra il foglio vivo come altrove.
 - 2026-11-13 · N6 T20d · accettato il velo della croce sopra le schede (il menu, il filo, il doppio clic, la rotella e il deposito guardano sotto di lui); il velo resta quando il mouse esce dalla vista, e lo tolgono solo un dito o la penna fuori dal raggio; nuovo T20f per i 30–40 ms di pittura dei riquadri di T20c all'inizio del tratto, prima di T21 · Perché: con `cursor` sul viewport ogni pressione di D ricalcolava lo stile di tutta la lavagna (67–152 ms); il velo cambia un elemento solo. Toglierlo all'uscita del mouse farebbe perdere `:hover` e ridipingere la scheda a ogni rientro. I riquadri sono di T20c e la correzione chiede una misura sua.
@@ -2645,3 +2787,40 @@ La più recente in cima: data · piano · decisione · perché.
   già approvato il piano. Se è conforme, allora ci sei». Il prototipo T25 (`PLAN-ui/
   lavagna-schede.html`) vale come approvato con le varianti consigliate (D-10 (a):
   bordo d'accento, «Esc per uscire», «↩ N» e «×2»); T22 parte senza mostrarlo prima.
+- 2026-11-15 · T14 · Le pagine sparse seguono `spreadLayout` della GUI (la
+  prima al primo multiplo di 8 che lascia 24 dopo la scheda, a capo ogni 10,
+  gruppo oltre 12), non «a 48» del piano: la GUI e il codice devono dare la
+  stessa scheda. Le misure di nascita hanno una regola sola, `layout::born_size`:
+  ora arrotonda all'intero come `bornSize` (A-16, la voce del 2026-11-13 che
+  rimandava l'allineamento a T9 e T24), così `add_card` e le pagine sparse dello
+  stesso PDF nascono uguali (una A4 360×509, non 512); la GUI ha una funzione
+  sola (`bornSize`, usata dal deposito e da «Spargi»). Un lato di nascita oltre
+  100 000 (`MAX_BORN_SIDE`: una zona quasi senza larghezza, una pagina assurda)
+  vale la misura di serie, dove la GUI non ha tetto. `page_count` letto dal file
+  vince su quello dato, con la nota `page_count_from_file`; `excerpt` ha anche
+  lui `page_count` e rifiuta le pagine oltre l'ultima. L'etichetta del gruppo
+  la mette `canvas.apply` nella lingua di chi scrive (`canvas.spread.group`); il
+  nucleo da solo scrive «N pagine». `in_place` tiene l'altezza: è come il
+  selettore delle sezioni, non come il ritaglio della GUI. File toccati fuori da
+  «Tocca»: `fub-canvas-core` `check.rs`, `layout.rs`, `tests/{check,spec,
+  op_vectors}.rs`; `canvas-layout.json`, `canvas-ops/add-card-pdf-page.json`;
+  `fub-features` `draw.rs`, `lavagna.rs`, `lavagna/{apply,check,preview,guide}.rs`,
+  `guida.md`, `tests/lavagna.rs`; `fub-cli` `mcp/tools.rs`, `tests/mcp.rs`;
+  `apps/client/src/editors/canvas/spread-pages-parity.test.ts`; in `docs/`
+  `canvas-check`, `canvas-code` (resta a 549 righe), `canvas-schema`,
+  `canvas-parts`, `mcp-server`, `map/pagine` e la nuova `canvas-pages-code`.
+
+- 2026-11-15 · LIC T19 · Il vettore `draw-on-page-object-is-malformed.json` e il test `on_e_una_parola_o_un_id_finche_non_arrivano_pagina_e_cella` di `tests/spec.rs` erano nati provvisori («arrivano con LIC T19»): T19 li sostituisce con `draw-on-page-of-a-text-card-is-rejected.json` e coi test della pagina e della cella. È una deroga alla regola «un vettore di `canvas-ops/` che c'è non cambia esito», valida solo per questi due, perché il loro esito diceva soltanto che la pagina non c'era ancora.
+- 2026-11-15 · LIC T23 · Le voci di parità di T14: `N6.pages.spread` entra in R8 («Spargi le pagine» scrive l'operazione `spread_pages`, con le misure delle pagine non ancora misurate a [0,0]); `N6.parts.excerpt` resta saltata con la sua ragione, perché sono quattro gesti e il ritaglio arriva con T24. `spreadLayout` del client resta solo come oracolo dei test: la pulizia è di T26.
+- 2026-11-15 · LIC T23 · Il nucleo segue la GUI dove la revisione ha trovato differenze: `group_rect` aggancia a 8 i quattro bordi e ne ricava le misure, come «Raggruppa» (fuori griglia dà 304×104, non 296×112); `duplicate` aggancia solo lo spostamento di serie, uno scritto resta com'è, come Ctrl+D ripetuto (T68); `reverse` porta lati e punte con la loro scheda, come `reversedEdge` (#353), e scrive solo le punte diverse da quelle di serie del loro posto (due inversioni tolgono punte di serie scritte); `sides: "auto"` prova le sedici coppie di punti di mezzo come `nearestSides`, a pari distanza vince la prima nell'ordine top, right, bottom, left, una scheda con sé stessa va right→top, lo stesso rettangolo top→top, e il confronto è esatto negli interi (la GUI usa `hypot`, può differire solo su coordinate enormi).
+- 2026-11-15 · LIC T23 · L'orchestratore aggiunge `"sides": "auto"` alle `ops` di `main.edge.connect` in `canvas-parity/main.json`, perché «Collega» della GUI scrive i lati più vicini; R8 confronta la voce senza sovrascriverne le `ops`. La forma breve di `connect` resta senza lati di serie: il contratto non cambia.
+- 2026-11-15 · LIC T23 · Ctrl+Invio dentro una scheda (`#addTextNext`) e i gesti e gli appunti di T24 danno ancora id da `newNodeId`, scritto in `canvas-input.md`: li porta T24. I comandi e gli id del seme sono in `canvas-input.md`, perché `canvas-cards.md` non ha una sezione «Comandi e tasti».
+- 2026-11-15 · LIC T19 · Correzioni della revisione: l'ancora di pagina scala col fattore minore fra larghezza e altezza (vettore con `page_size` [1190,1000], s = 1,1876, e test unitario di `on_page` con NaN, zero, infinito e negativi); una `page_size` data che differisce dal file di più di mezzo punto per lato dà la nota `page_size_not_file` (nuovo `NoteCode`/`WarningCode` `PageSizeNotFile`); un numero di pagina oltre 2^53−1 è `bad_value` e malformato, con la regola in un posto solo (`ink::page_from_number`, usata dall'ancora letta, da serde e da `validate`; lo schema ha `maximum`); `ink_read` dà `width` e `height` per le ancore di pagina. Nei test di parità il rettangolo della pagina ha le proporzioni della pagina mostrata ({12,44, W/k, H/k}, k = 595/360), come `pageBox` della GUI.
+- 2026-11-15 · LIC T19 · Differenza del client, fuori da T19: la penna (`strokeRecord`) scala con larghezza della pagina / larghezza del rettangolo, mentre la resa (`pageFit`) usa il fattore minore. Coincidono finché il rettangolo ha le proporzioni della pagina, come fa sempre `pageBox`; se un giorno il rettangolo può avere altre proporzioni, la penna va portata sul fattore minore del nucleo. Da guardare con T24 (l'inchiostro passa da `add_strokes`).
+- 2026-11-15 · T24 · Q1 della revisione: `main.card.drop_files` nell'inventario passa ad `add_card` con `id` e poi `layout` a griglia, come `N6.card.drop_many` e come la decisione T23 su `main.edge.connect`; lo cambia l'orchestratore perché l'inventario è in «Non toccare». T24 toglie il suo skip e aggiunge la riga SETUP del gesto `drop-files`.
+- 2026-11-15 · T24 · Q2: un frammento con un arco penzolante resta testo: `readCanvasClipboard` di N6 T68 lo segna come rotto prima di `insert`, e Fub non ne produce mai. Il caso limite del piano («insert lo rifiuta») vale per chi chiama il nucleo direttamente.
+- 2026-11-15 · T24 · Accolte dalla revisione: una sola `move` per gesto; un file solo è `add_card` senza `layout` (stesso posto, come `N6.card.drop_vault`); le patch dell'ispettore restano a mano fino a T26 (`chrome/inspector.ts` non è nel Tocca); la regola dei lati resta in TypeScript per il filo partito da un lato, l'estremo riattaccato e la sola punta, perché la forma breve del nucleo non ha un `to` automatico; `bornSize` e `spreadLayout` restano esportati in `drop-layout.ts` come confronto per i test fino a T26. Non accolto: R8 oltre il tetto di 5; con T19 la gomma di pagina e cella passa a `erase_along` già in T24.
+- 2026-11-15 · T24 · R8 ha scoperto che sulla pagina mostrata a metà la penna scriveva gli assottigliamenti senza scalarli (size 4, taper 2/8, mentre draw scrive 4/16: le penne danno l'assottigliamento in proporzione alla misura, `pen_brush`). `ink-record.ts` ora con k≠1 scala anche gli assottigliamenti di pf1; nib1 resta com'è. È una correzione del record, non della codifica dei punti di N4, che resta invariata.
+- 2026-11-15 · T24 · Un gruppo oltre `MAX_MOVED` (1000) si trascina con una `move` sugli id espliciti senza `contents`; una passata di gomma oltre `MAX_ERASE_POINTS` o il lavoro si divide in pezzi consecutivi in una lista sola (un passo d'annulla). Resta per T26: l'anteprima della gomma «Solo il pezzo» ricalcola il taglio su tutto il cammino a ogni movimento (costo quadratico, già prima di T24: ~12 ms a movimento oltre 10 000 punti).
+
+- 2026-11-15 · LIC T25 · «Incolla codice» di una lista con schede già presenti (il giro copia → assistente → incolla): la finestra offre «Aggiorna le schede» (proposta: aggiornamento al posto, archi e altre schede intatti, nessuna cancellazione) e «Aggiungi come copie» (id nuovi, riferimenti rimappati), un solo annulla; traduzione fuori dal nucleo se le operazioni bastano. Il testo degli appunti si legge una volta in TS e `canvas_check` perde `{text}` (ABI interno). · Perché: senza, il «Perché» del piano non funziona mai sulla stessa lavagna; aggiornare senza cancellare non perde dati.

@@ -1,10 +1,15 @@
-// Dove nascono le schede portate sulla lavagna: la misura di nascita di ogni
-// specie, la griglia in cui si dispongono più elementi lasciati cadere
-// insieme, il gruppo che li raccoglie quando sono tanti, e la tabella
-// Markdown in cui diventano le celle copiate da un foglio.
+// Ciò che la tela sa delle schede portate sulla lavagna senza essere una
+// regola del nucleo: i file lasciati cadere e il loro ordine (la GUI li mette
+// in fila per nome prima di darli a `add_card`), la soglia del gruppo, la
+// misura minima che l'ispettore controlla, e la tabella Markdown in cui
+// diventano le celle copiate da un foglio. Le misure di nascita, la griglia e
+// il gruppo li fa il nucleo (`add_card`, `layout`, `group`, T24).
 //
-// Solo funzioni pure, senza DOM: la tela (T15) le chiama al rilascio e per i
-// rettangoli tratteggiati mentre si trascina, i test senza montare niente.
+// `bornSize` e `spreadLayout` restano solo come oracolo di
+// `spread-pages-parity.test.ts` (la regola è del nucleo, `spread_pages`): la
+// pulizia è di LIC T26.
+//
+// Solo funzioni pure, senza DOM.
 
 import type { CardKind, CardSize, Rect } from "./cards";
 
@@ -18,10 +23,11 @@ export const DROP_SNAP = 8;
 /// ripetuta qui per lo stesso motivo e controllata dallo stesso test.
 export const DROP_MIN_SIZE = 40;
 
-/// Lo spazio fra le schede della griglia, e il margine del gruppo intorno.
+/// Lo spazio fra le pagine sparse di `spreadLayout`, e il margine del gruppo intorno.
 export const DROP_GAP = 24;
 
-/// Oltre questo numero di elementi, le schede nate stanno in un gruppo.
+/// Oltre questo numero di file lasciati cadere (o di pagine sparse), le schede
+/// nate stanno in un gruppo: la tela aggiunge `group` alle operazioni.
 export const DROP_GROUP_THRESHOLD = 12;
 
 /// Le misure di nascita (D-11, prima opzione). Non si agganciano alla griglia
@@ -79,91 +85,21 @@ export function bornSize(
   });
 }
 
-/// Un elemento lasciato cadere: il file, la sua specie, la sua misura.
-export interface DropItem {
+/// Un file lasciato cadere: il percorso e, quando si sanno, le dimensioni del
+/// suo contenuto (i pixel di un'immagine), che vanno in `content_size`.
+export interface DropFile {
   readonly path: string;
-  readonly kind: CardKind;
-  readonly size: CardSize;
-}
-
-/// Una scheda disposta: il file e il suo rettangolo sulla lavagna.
-export interface DropCard {
-  readonly path: string;
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
-
-export interface DropLayout {
-  /// Le schede in ordine di nome, nell'ordine in cui la griglia le riempie.
-  readonly cards: readonly DropCard[];
-  /// Il gruppo che le contiene, oltre 12 elementi; sennò `null`.
-  readonly group: Rect | null;
+  readonly contentSize?: readonly [number, number];
 }
 
 const NAME_ORDER = new Intl.Collator(undefined, { numeric: true });
 
-/// Dispone gli elementi in griglia a partire dal punto `at`.
-///
-/// Ordine per nome del file (con i numeri in ordine di valore: «foto 2»
-/// prima di «foto 10»); a parità di nome, per percorso intero. Le colonne
-/// sono `ceil(sqrt(n))` e si riempiono per righe; ogni colonna è larga
-/// quanto la sua scheda più larga, ogni riga alta quanto la più alta. La
-/// colonna o la riga dopo parte al primo multiplo di 8 che lascia almeno 24
-/// px dopo la precedente (`nextStart`). L'angolo in alto a sinistra della
-/// prima scheda è il punto, agganciato a 8 px come la tela; le misure
-/// restano intere (A-16). Oltre 12 elementi, `group` è il rettangolo che
-/// contiene le schede con 24 px di margine per lato.
-export function dropLayout(
-  items: readonly DropItem[],
-  at: { readonly x: number; readonly y: number },
-): DropLayout {
-  const n = items.length;
-  if (n === 0) return { cards: [], group: null };
-
-  const ordered = [...items]
-    .map((item) => ({ path: item.path, size: roundSize(item.size) }))
-    .sort(byName);
-  const columns = Math.ceil(Math.sqrt(n));
-  const rows = Math.ceil(n / columns);
-
-  const columnWidth = new Array<number>(columns).fill(0);
-  const rowHeight = new Array<number>(rows).fill(0);
-  ordered.forEach((item, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    columnWidth[column] = Math.max(columnWidth[column]!, item.size.width);
-    rowHeight[row] = Math.max(rowHeight[row]!, item.size.height);
-  });
-
-  const originX = snap(at.x);
-  const originY = snap(at.y);
-  const columnX = offsets(originX, columnWidth);
-  const rowY = offsets(originY, rowHeight);
-
-  const cards = ordered.map((item, index): DropCard => ({
-    path: item.path,
-    x: columnX[index % columns]!,
-    y: rowY[Math.floor(index / columns)]!,
-    width: item.size.width,
-    height: item.size.height,
-  }));
-
-  if (n <= DROP_GROUP_THRESHOLD) return { cards, group: null };
-  let right = -Infinity;
-  let bottom = -Infinity;
-  for (const card of cards) {
-    right = Math.max(right, card.x + card.width);
-    bottom = Math.max(bottom, card.y + card.height);
-  }
-  const group: Rect = {
-    x: originX - DROP_GAP,
-    y: originY - DROP_GAP,
-    width: right - originX + 2 * DROP_GAP,
-    height: bottom - originY + 2 * DROP_GAP,
-  };
-  return { cards, group };
+/// I file nell'ordine in cui nascono le loro schede: per nome del file (con i
+/// numeri in ordine di valore, «foto 2» prima di «foto 10»); a parità di
+/// nome, per percorso intero, poi per unità di codice. La griglia del nucleo
+/// li riempie per righe in quest'ordine.
+export function sortedDrop<T extends { readonly path: string }>(items: readonly T[]): T[] {
+  return [...items].sort(byName);
 }
 
 /// Quante pagine per riga, in «Spargi le pagine» (T72): a capo dopo 10.
@@ -254,18 +190,6 @@ function fileName(path: string): string {
   const hash = path.indexOf("#");
   const file = hash < 0 ? path : path.slice(0, hash);
   return file.slice(file.lastIndexOf("/") + 1);
-}
-
-/// Le posizioni di partenza di colonne (o righe) di misure date: ognuna parte
-/// dove finisce la precedente, con lo spazio dovuto.
-function offsets(origin: number, sizes: readonly number[]): number[] {
-  const starts: number[] = [];
-  let at = origin;
-  for (const size of sizes) {
-    starts.push(at);
-    at = nextStart(at + size);
-  }
-  return starts;
 }
 
 /// Il primo multiplo di 8 che lascia almeno `DROP_GAP` dopo `end`, il bordo

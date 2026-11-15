@@ -1,0 +1,6 @@
+{
+  "about": "Un `add_card` senza scheda e senza forma breve (né testo, né file, né link, né etichetta) non dice che cosa aggiungere: è Invalid.",
+  "before": {},
+  "ops": [{ "op": "add_card" }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

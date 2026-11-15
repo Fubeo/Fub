@@ -1,0 +1,41 @@
+{
+  "about": "Una rotazione che non è un multiplo di 90 non si scrive (`rotate`): `Invalid`.",
+  "before": {
+    "nodes": [
+      {
+        "id": "i",
+        "type": "file",
+        "x": 0,
+        "y": 0,
+        "width": 480,
+        "height": 360,
+        "file": "Corsi/foto.png"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "excerpt",
+      "id": "i",
+      "part": {
+        "kind": "image",
+        "rect": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "rotate": 45
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

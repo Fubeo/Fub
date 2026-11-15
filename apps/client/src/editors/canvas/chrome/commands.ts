@@ -20,6 +20,7 @@ import type { Key } from "../../../i18n/strings";
 import { keyName, keyboardPlatform, modifierName, parseChords, type KeyboardPlatform } from "../../../ui/commands";
 import { CANVAS_COLOR_CHOICES, colorCommandLabel, type CanvasColorChoice } from "../colors";
 import { TEXT_ALIGNS, TEXT_SIZES } from "../text-style";
+import type { CanvasIntentOp } from "../wasm/core";
 
 /// Quando un comando vale: sempre, con uno strumento, con una selezione.
 export type CanvasCommandContext = "always" | "tool" | "selection";
@@ -31,6 +32,19 @@ export interface CanvasCommandArgs {
   readonly at?: { readonly x: number; readonly y: number };
   readonly edge?: string;
 }
+
+/// Ciò che serve alla forma in codice di un comando (T23): dove e su quale
+/// collegamento, come per `run`, e `value`, ciò che il comando chiede prima
+/// di scrivere (il file scelto nel selettore, il colore di «Altro…», il
+/// percorso della nota appena nata, il testo letto o scritto nel campo).
+export interface CanvasOpInput extends CanvasCommandArgs {
+  readonly value?: string;
+}
+
+/// Le operazioni d'intento di un comando che scrive, adesso: la stessa forma
+/// che scrive `canvas.apply`. `null` se adesso non scrive niente (la scelta
+/// è vuota, o manca `value`).
+export type CanvasCommandOp = (input?: CanvasOpInput) => readonly CanvasIntentOp[] | null;
 
 /// Un comando della lavagna, com'è adesso.
 export interface CanvasCommand {
@@ -50,6 +64,9 @@ export interface CanvasCommand {
   readonly danger: boolean;
   /// Perché adesso non si può, o `null` se si può.
   disabled(): string | null;
+  /// Le sue operazioni, se scrive il file: `run` le compila col nucleo e le
+  /// scrive in un passo d'annulla, dopo aver chiesto `value` se serve.
+  readonly op?: CanvasCommandOp;
   run(args?: CanvasCommandArgs): void;
 }
 
@@ -88,6 +105,10 @@ export type CanvasColorId = CanvasColorChoice;
 /// I lati e i modi di allineare, nell'ordine del menu.
 export const CANVAS_ALIGN = ["left", "center", "right", "top", "middle", "bottom"] as const;
 export type CanvasAlign = (typeof CANVAS_ALIGN)[number];
+
+/// Le disposizioni di «Disponi», nell'ordine del menu: i `kind` di `layout`.
+export const CANVAS_LAYOUTS = ["grid", "row", "column", "tree"] as const;
+export type CanvasLayout = (typeof CANVAS_LAYOUTS)[number];
 
 /// Le quattro direzioni delle frecce.
 export const CANVAS_NUDGE = ["left", "right", "up", "down"] as const;
@@ -206,6 +227,16 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   })),
   { id: "canvas.distribute_x", label: "canvas.distribute_x", group: "arrange", keys: [], context: "selection" },
   { id: "canvas.distribute_y", label: "canvas.distribute_y", group: "arrange", keys: [], context: "selection" },
+  // «Disponi» (LIC T25): l'operazione `layout` sulle schede scelte o, senza
+  // scelta, su tutte quelle fuori dai gruppi.
+  ...CANVAS_LAYOUTS.map((kind): CanvasCommandSpec => ({
+    id: `canvas.layout.${kind}`, label: `canvas.layout.${kind}`, group: "arrange", keys: [], context: "always",
+  })),
+  // La lavagna come codice (LIC T25): la scelta, o tutta la lavagna, negli
+  // appunti come lista di operazioni; e una lista dagli appunti, controllata
+  // e confermata, in un passo d'annulla.
+  { id: "canvas.copy_code", label: "canvas.copy_code", group: "always", keys: [], context: "always" },
+  { id: "canvas.paste_code", label: "canvas.paste_code", group: "always", keys: [], context: "always" },
   { id: "canvas.fit", label: "canvas.fit", group: "view", keys: ["Shift-1", "Mod-0"], context: "always" },
   { id: "canvas.fit_selection", label: "canvas.fit_selection", group: "view", keys: ["Shift-2"], context: "selection" },
   { id: "canvas.zoom_in", label: "canvas.zoom_in", group: "view", keys: ["+", "Mod-=", "Mod-+"], context: "always" },
@@ -253,6 +284,8 @@ export interface CanvasCommandBehaviour {
   /// lato su B3», T45); `null` o assente: il nome del catalogo.
   label?(): string | null;
   disabled(): string | null;
+  /// Le operazioni d'intento, per un comando che scrive il file (T23).
+  op?: CanvasCommandOp;
   run(args?: CanvasCommandArgs): void;
 }
 
@@ -276,6 +309,7 @@ export function buildCanvasCommands(
       boardKeys: spec.boardKeys === true,
       danger: spec.danger === true,
       disabled: () => does.disabled(),
+      ...(does.op ? { op: does.op } : {}),
       run: (args) => does.run(args),
     });
   }

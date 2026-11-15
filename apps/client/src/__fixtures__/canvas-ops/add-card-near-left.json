@@ -1,0 +1,16 @@
+{
+  "about": "A sinistra di «a», a 48: x = 100 − 48 − 320 = −268. Il bordo destro della scheda nuova sta a 48 da «a».",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" }] },
+  "ops": [{ "op": "add_card", "id": "b", "text": "Prima", "near": "a", "side": "left" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" },
+        { "id": "b", "type": "text", "x": -268, "y": 100, "width": 320, "height": 160, "text": "Prima" }
+      ],
+      "edges": []
+    },
+    "created": ["b"]
+  }
+}

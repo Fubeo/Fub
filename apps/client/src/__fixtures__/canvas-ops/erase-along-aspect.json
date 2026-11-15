@@ -1,0 +1,102 @@
+{
+  "about": "Con aspect la gomma porta il cammino nelle unità del tratto come la resa con la proporzione del contenuto (T39, T98): sull'immagine 600 × 200 il tratto, disegnato a 300 × 300 su un contenuto 2:1, va da x = 100 a x = 260 della scheda, e il cammino a x = 180 lo taglia a metà. Senza aspect lo stesso cammino non lo toccherebbe: il tratto starebbe da x = 200 a x = 280.",
+  "before": {
+    "nodes": [
+      {
+        "id": "f1",
+        "type": "file",
+        "file": "Foto/lavagna.png",
+        "x": 40,
+        "y": 40,
+        "width": 600,
+        "height": 200,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s-1",
+              "tool": "pen",
+              "brush": "pf1 size=2 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 300,
+                "height": 300
+              },
+              "ink": "1 s100 cxy 0,15000 2000,0 2000,0 2000,0 2000,0 2000,0 2000,0"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": []
+  },
+  "seed": 7,
+  "ops": [
+    {
+      "op": "erase_along",
+      "on": "f1",
+      "points": [
+        [
+          180,
+          50
+        ],
+        [
+          180,
+          150
+        ]
+      ],
+      "size": 8,
+      "aspect": 2
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "f1",
+          "type": "file",
+          "x": 40,
+          "y": 40,
+          "width": 600,
+          "height": 200,
+          "file": "Foto/lavagna.png",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "63cbe1e459320dd7",
+                "tool": "pen",
+                "brush": "pf1 size=2 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 300,
+                  "height": 300
+                },
+                "ink": "1 s100 cxyt 0,15000,0 2000,0,0 2000,0,0 1600,0,0"
+              },
+              {
+                "id": "044c3cd7f43c661c",
+                "tool": "pen",
+                "brush": "pf1 size=2 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 300,
+                  "height": 300
+                },
+                "ink": "1 s100 cxyt 6400,15000,0 1600,0,0 2000,0,0 2000,0,0"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "created": [
+      "63cbe1e459320dd7",
+      "044c3cd7f43c661c"
+    ]
+  }
+}

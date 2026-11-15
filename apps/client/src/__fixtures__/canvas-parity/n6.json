@@ -1,0 +1,387 @@
+{
+  "version": 1,
+  "source": "N6",
+  "max_missing": 0,
+  "entries": [
+    {
+      "id": "N6.card.drop_vault",
+      "name": "Trascina un file dall'albero: misure per tipo",
+      "source": "N6",
+      "gui": [{ "gesture": "drop-vault-file" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "add_card", "file": "Corsi/foto.png", "content_size": [4032, 3024] }]
+    },
+    {
+      "id": "N6.card.drop_many",
+      "name": "Trascina molti file: griglia e gruppo",
+      "source": "N6",
+      "gui": [{ "gesture": "drop-vault-files" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [
+        { "op": "add_card", "id": "a", "file": "Corsi/a.md" },
+        { "op": "add_card", "id": "b", "file": "Corsi/b.md" },
+        { "op": "layout", "ids": ["a", "b"], "kind": "grid" }
+      ],
+      "note": "La griglia è del nucleo (`layout`, T12): ceil(√n) colonne, passo 24. Il gruppo oltre 12 schede (N6 T9) non è in questa forma: si aggiunge con `group` sulle schede, come farà la GUI con T24."
+    },
+    {
+      "id": "N6.text.grow",
+      "name": "La scheda di testo cresce col testo",
+      "source": "N6",
+      "gui": [{ "gesture": "type-grows" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "resize", "id": "t1", "fit": "content" }],
+      "note":"La GUI misura il testo nel DOM; il codice stima con la regola di `text_size` (eccezione dom-text-fit: può differire di qualche riga)."
+    },
+    {
+      "id": "N6.text.new_below",
+      "name": "Ctrl+Invio: una scheda sotto",
+      "source": "N6",
+      "gui": [{ "gesture": "write-next-below" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "add_card", "text": "Poi", "near": "t1", "side": "bottom" }]
+    },
+    {
+      "id": "N6.text.new_right",
+      "name": "Ctrl+Maiusc+Invio: una scheda a destra, collegata",
+      "source": "N6",
+      "gui": [{ "gesture": "write-next-right" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [
+        { "op": "add_card", "id": "n", "text": "Perché", "near": "l1", "side": "right" },
+        { "op": "connect", "from": "l1", "to": "n", "sides": { "from": "right", "to": "left" } }
+      ]
+    },
+    {
+      "id": "N6.text.style",
+      "name": "La misura e l'allineamento del testo",
+      "source": "N6",
+      "gui": [
+        { "toolbar": "text-size-s" },
+        { "toolbar": "text-size-m" },
+        { "toolbar": "text-size-l" },
+        { "toolbar": "text-size-xl" },
+        { "toolbar": "text-align-start" },
+        { "toolbar": "text-align-center" },
+        { "toolbar": "text-align-end" }
+      ],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "fub:text": { "v": 1, "size": "l", "align": "center" } } }]
+    },
+    {
+      "id": "N6.color.names",
+      "name": "I colori con un nome",
+      "source": "N6",
+      "gui": [
+        { "menu": "canvas.color.notes" },
+        { "menu": "canvas.color.gray" },
+        { "menu": "canvas.color.brown" },
+        { "menu": "canvas.color.orange" },
+        { "menu": "canvas.color.yellow" },
+        { "menu": "canvas.color.green" },
+        { "menu": "canvas.color.blue" },
+        { "menu": "canvas.color.purple" },
+        { "menu": "canvas.color.pink" },
+        { "menu": "canvas.color.red" }
+      ],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "color", "ids": ["t1"], "color": "note-blue" }]
+    },
+    {
+      "id": "N6.group.selection",
+      "name": "Raggruppa la selezione",
+      "source": "N6",
+      "gui": [{ "key": "Mod+G" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "group", "ids": ["f1", "p1"] }]
+    },
+    {
+      "id": "N6.resize.fit",
+      "name": "Doppio clic sulla maniglia: misura del contenuto",
+      "source": "N6",
+      "gui": [{ "gesture": "dblclick-handle" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "resize", "id": "p1", "fit": "content", "content_size": [595, 842] }],
+      "note": "`content_size` è una pagina A4 (595×842 punti) data a mano, perché la lavagna di prova non ha il file: col file nel vault la misura la legge `canvas.apply`."
+    },
+    {
+      "id": "N6.edge.nearest",
+      "name": "Collega senza mirare: i lati più vicini",
+      "source": "N6",
+      "gui": [{ "gesture": "connect-to-card" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "connect", "from": "t1", "to": "f1", "sides": "auto" }]
+    },
+    {
+      "id": "N6.edge.drop_empty",
+      "name": "Lascia il filo nel vuoto: una scheda nuova collegata",
+      "source": "N6",
+      "gui": [{ "gesture": "connect-to-empty" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [
+        { "op": "add_card", "id": "n", "text": "", "near": "f1", "side": "bottom" },
+        { "op": "connect", "from": "f1", "to": "n", "sides": "auto" }
+      ]
+    },
+    {
+      "id": "N6.clipboard.paste",
+      "name": "Incolla schede copiate",
+      "source": "N6",
+      "gui": [{ "clipboard": "paste" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [
+        {
+          "op": "insert",
+          "fragment": {
+            "version": 1,
+            "nodes": [
+              {
+                "id": "t1",
+                "type": "text",
+                "text": "Perché la media è bassa?",
+                "x": 0,
+                "y": 0,
+                "width": 320,
+                "height": 160
+              },
+              {
+                "id": "t2",
+                "type": "text",
+                "text": "Ripasso",
+                "x": 400,
+                "y": 0,
+                "width": 320,
+                "height": 160
+              }
+            ],
+            "edges": [{ "id": "e1", "fromNode": "t1", "toNode": "t2", "toEnd": "arrow" }]
+          },
+          "x": 1400,
+          "y": 0
+        }
+      ],
+      "note": "Il nucleo dà gli id nuovi, riattacca gli archi e sposta il blocco (`insert`, T13); i tratti liberi degli appunti (`fub:ink` della radice) non entrano in `insert`: la GUI li incolla con le operazioni dell'inchiostro."
+    },
+    {
+      "id": "N6.clipboard.cut",
+      "name": "Taglia le schede",
+      "source": "N6",
+      "gui": [{ "clipboard": "cut" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "remove", "ids": ["t2"] }]
+    },
+    {
+      "id": "N6.convert.extract",
+      "name": "Estrai in una nota",
+      "source": "N6",
+      "gui": [{ "menu": "canvas.extract_note" }],
+      "writes": "file",
+      "state": "composed",
+      "ops": [{ "op": "convert", "id": "t2", "file": "Corsi/Ripasso.md" }],
+      "port": "note.create (o fub_create) scrive la nota col testo, poi l'operazione"
+    },
+    {
+      "id": "N6.convert.copy_here",
+      "name": "Copia qui il testo del file",
+      "source": "N6",
+      "gui": [{ "menu": "canvas.copy_note_text" }],
+      "writes": "file",
+      "state": "composed",
+      "ops": [{ "op": "add_card", "text": "(il testo letto)", "near": "f1", "side": "right" }],
+      "port": "fub_read del file"
+    },
+    {
+      "id": "N6.card.relink",
+      "name": "Ritrova un file mancante, sostituisci il file",
+      "source": "N6",
+      "gui": [{ "menu": "canvas.replace_file" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "f1", "fields": { "file": "Archivio/voti.xlsx" } }]
+    },
+    {
+      "id": "N6.pages.spread",
+      "name": "Spargi le pagine del PDF",
+      "source": "N6",
+      "gui": [{ "menu": "canvas.spread_pages" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "spread_pages", "id": "p1", "pages": "1-2", "page_count": 12 }],
+      "note": "Le misure e i posti sono quelli di `spreadLayout` e `bornSize` della GUI (`spread-pages-parity.test.ts`). `page_count` e `page_sizes` li legge `canvas.apply` dal PDF; qui, senza file, il conto si dà."
+    },
+    {
+      "id": "N6.parts.excerpt",
+      "name": "Estratti: pagine, zona, sezioni, ritaglio",
+      "source": "N6",
+      "gui": [{ "menu": "canvas.parts" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [
+        { "op": "excerpt", "id": "n1", "part": { "kind": "sections", "sections": ["Varianza", "Media"] }, "in_place": true },
+        { "op": "excerpt", "id": "p1", "part": { "kind": "pages", "pages": [3, 4] } }
+      ],
+      "note": "Con `in_place` la scheda stessa diventa l'estratto, come il selettore delle sezioni; senza, l'estratto è una scheda nuova accanto. A differenza del ritaglio della GUI l'altezza non cambia: `#finishCrop` la rifà dalle proporzioni della zona (`#cropHeightFor`, misurata sul DOM), anche con «Togli il ritaglio» (vettore `excerpt-image-crop-in-place-keeps-height.json`)."
+    },
+    {
+      "id": "N6.ink.page",
+      "name": "Inchiostro sulla pagina del PDF",
+      "source": "N6",
+      "gui": [{ "gesture": "pen-on-page" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [
+        {
+          "op": "draw",
+          "on": { "card": "p1", "page": 3, "page_size": [595, 842] },
+          "points": [[72, 100], [300, 100]]
+        }
+      ],
+      "note": "L'ancora `page` di N6 T19, coi punti in punti PDF dall'angolo della pagina. `page_size` e `page_count` li legge `canvas.apply` dal PDF; qui, senza file, la misura si dà. La gomma che taglia sulla pagina è `erase_along` con lo stesso `on`. `draw-anchor-parity.test.ts` rilegge i tratti di `draw` con le regole della tela."
+    },
+    {
+      "id": "N6.ink.cell",
+      "name": "Inchiostro attaccato a una cella",
+      "source": "N6",
+      "gui": [{ "gesture": "pen-on-cell" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [
+        {
+          "op": "draw",
+          "on": { "card": "f1", "sheet": "Foglio1", "cell": "B3" },
+          "points": [[2, 10], [60, 10]]
+        }
+      ],
+      "note": "L'ancora `cell` di N6 T37, coi punti in pixel del foglio al 100% dall'angolo della cella. La gomma che taglia sulla cella è `erase_along` con lo stesso `on`."
+    },
+    {
+      "id": "N6.ink.lasso",
+      "name": "Lazo: sposta i tratti",
+      "source": "N6",
+      "gui": [{ "gesture": "lasso-move" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "move_strokes", "layer": "board", "ids": ["s1"], "dx": 40, "dy": 0 }],
+      "note": "L'operazione la porta N6 T86, in snake_case (Differenze); la sua forma esatta la decide N6."
+    },
+    {
+      "id": "N6.ink.restyle",
+      "name": "Cambia penna o colore ai tratti",
+      "source": "N6",
+      "gui": [{ "gesture": "lasso-restyle" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "restyle_strokes", "layer": "board", "ids": ["s1"], "color": "#d55e00" }],
+      "note": "Come sopra: N6 T86."
+    },
+    {
+      "id": "N6.ink.shapes",
+      "name": "Forme dal tratto e linea dritta",
+      "source": "N6",
+      "gui": [{ "gesture": "pen-shape" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [
+        {
+          "op": "draw",
+          "on": "board",
+          "shape": { "kind": "rect", "x": 1400, "y": 0, "width": 200, "height": 100 },
+          "pen": "marker",
+          "color": "vermilion"
+        }
+      ]
+    },
+    {
+      "id": "N6.card.write_inside",
+      "name": "Scrivi dentro una scheda di nota o di foglio",
+      "source": "N6",
+      "gui": [{ "gesture": "write-in-card" }],
+      "writes": "other-file",
+      "state": "port",
+      "port": "fub_write sulla nota; i comandi dei fogli per le celle",
+      "note": "Cambia il file della scheda, non la lavagna."
+    },
+    {
+      "id": "N6.inspector.raw",
+      "name": "L'ispettore: numeri e nodo grezzo",
+      "source": "N6",
+      "gui": [{ "gesture": "inspector-edit" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [
+        {
+          "op": "set",
+          "id": "t1",
+          "fields": { "x": 16, "fub:nota": "campo di un altro programma" }
+        }
+      ]
+    },
+    {
+      "id": "N6.put_page",
+      "name": "Metti la pagina sulla lavagna",
+      "source": "N6",
+      "gui": [{ "gesture": "put-page" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "add_card", "file": "Corsi/dispensa.pdf", "subpath": "#page=5" }]
+    },
+    {
+      "id": "N6.guides",
+      "name": "Guide e griglia durante il gesto",
+      "source": "N6",
+      "gui": [{ "gesture": "snap-guides" }],
+      "writes": "file",
+      "state": "exception",
+      "note": "Le guide aiutano la mano mentre trascina; il codice scrive numeri esatti, o usa `align`, `distribute`, `layout`, e `near`."
+    },
+    {
+      "id": "N6.ink.owner",
+      "name": "A chi va il tratto mentre si scrive (e Alt per libero)",
+      "source": "N6",
+      "gui": [{ "gesture": "pen-on-card" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "draw", "on": "auto", "points": [[40, 460], [44, 460]] }],
+      "note": "`on: \"auto\"` usa la regola di N4 T3 (e di N6 T19 e T38 quando ci sono); `on: \"board\"` è Alt."
+    },
+    {
+      "id": "N6.view",
+      "name": "Vista, navigatore, indietro e avanti, cerca, lettore da vicino, entrare nella scheda",
+      "source": "N6",
+      "gui": [{ "menu": "canvas.navigator.hide" }],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "N6.chrome",
+      "name": "Catalogo, barra della selezione, menu radiale, lavagna vuota",
+      "source": "N6",
+      "gui": [{ "menu": "canvas.radial" }],
+      "writes": "nothing",
+      "state": "view",
+      "note": "Ospitano comandi; ognuno ha la sua voce qui. Dopo N6 ogni comando del catalogo dichiara la sua operazione (T23)."
+    },
+    {
+      "id": "N6.settings",
+      "name": "Impostazioni della lavagna, dove vanno i file trascinati",
+      "source": "N6",
+      "gui": [{ "gesture": "board-settings" }],
+      "writes": "nothing",
+      "state": "exception",
+      "note": "Impostazioni di Fub, non contenuto della lavagna."
+    }
+  ]
+}

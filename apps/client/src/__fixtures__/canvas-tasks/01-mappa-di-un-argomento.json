@@ -1,0 +1,42 @@
+{
+  "about": "Una mappa di un argomento: un centro e cinque idee intorno, collegate. Lavagna vuota.",
+  "prompt": "Fammi una mappa sull'acqua: al centro «Ciclo dell'acqua», e intorno cinque idee collegate: Evaporazione, Condensazione, Precipitazione, Infiltrazione, Scorrimento.",
+  "before": { "nodes": [], "edges": [] },
+  "ops_today": [
+    { "op": "add_card", "node": { "id": "c", "type": "text", "text": "Ciclo dell'acqua", "x": 400, "y": 320, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "i1", "type": "text", "text": "Evaporazione", "x": 768, "y": 320, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "i2", "type": "text", "text": "Condensazione", "x": 400, "y": 504, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "i3", "type": "text", "text": "Precipitazione", "x": 32, "y": 320, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "i4", "type": "text", "text": "Infiltrazione", "x": 400, "y": 136, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "i5", "type": "text", "text": "Scorrimento", "x": 768, "y": 504, "width": 320, "height": 160 } },
+    { "op": "connect", "edge": { "fromNode": "c", "toNode": "i1", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "c", "toNode": "i2", "fromSide": "bottom", "toSide": "top", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "c", "toNode": "i3", "fromSide": "left", "toSide": "right", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "c", "toNode": "i4", "fromSide": "top", "toSide": "bottom", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "i2", "toNode": "i5", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } }
+  ],
+  "ops": [
+    { "op": "add_card", "id": "c", "text": "Ciclo dell'acqua" },
+    { "op": "add_card", "id": "i1", "text": "Evaporazione", "near": "c", "side": "right" },
+    { "op": "add_card", "id": "i2", "text": "Condensazione", "near": "c", "side": "bottom" },
+    { "op": "add_card", "id": "i3", "text": "Precipitazione", "near": "c", "side": "left" },
+    { "op": "add_card", "id": "i4", "text": "Infiltrazione", "near": "c", "side": "top" },
+    { "op": "add_card", "id": "i5", "text": "Scorrimento", "near": "i2", "side": "right" },
+    { "op": "connect", "from": "c", "to": "i1", "sides": "auto" },
+    { "op": "connect", "from": "c", "to": "i2", "sides": "auto" },
+    { "op": "connect", "from": "c", "to": "i3", "sides": "auto" },
+    { "op": "connect", "from": "c", "to": "i4", "sides": "auto" },
+    { "op": "connect", "from": "i2", "to": "i5", "sides": "auto" }
+  ],
+  "needs": [],
+  "checks": [
+    { "count": { "kind": "text", "n": 6 } },
+    { "has_card": { "text": "Ciclo dell'acqua" } },
+    { "has_edge": { "from_text": "Ciclo dell'acqua", "to_text": "Evaporazione" } },
+    { "has_edge": { "from_text": "Ciclo dell'acqua", "to_text": "Condensazione" } },
+    { "has_edge": { "from_text": "Ciclo dell'acqua", "to_text": "Precipitazione" } },
+    { "has_edge": { "from_text": "Ciclo dell'acqua", "to_text": "Infiltrazione" } },
+    { "has_edge": { "from_text": "Condensazione", "to_text": "Scorrimento" } },
+    { "no_overlap": {} }
+  ]
+}
