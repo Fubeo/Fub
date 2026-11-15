@@ -174,7 +174,18 @@ jobs:
           sdk="$ANDROID_HOME/cmdline-tools/latest/bin"
           yes | "$sdk/sdkmanager" --licenses > /dev/null || true
           "$sdk/sdkmanager" --install "$FUB_SYSTEM_IMAGE" emulator platform-tools > /dev/null
+          # Una cartella sola per chi crea l'AVD e per chi lo avvia: senza,
+          # `avdmanager` lo scriveva dove l'emulatore non guarda
+          # («Unknown AVD name [fub]»).
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           echo no | "$sdk/avdmanager" create avd --force -n fub -k "$FUB_SYSTEM_IMAGE" -d pixel_6
+          if ! "$ANDROID_HOME/emulator/emulator" -list-avds | grep -qx fub; then
+            echo "::error::l'AVD fub non si trova in $ANDROID_AVD_HOME"
+            ls -la "$ANDROID_AVD_HOME"
+            exit 1
+          fi
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
       # Fino a 5 minuti per l'avvio; poi il job fallisce e lo dice.
@@ -182,8 +193,20 @@ jobs:
         run: |
           nohup emulator -avd fub -no-window -no-audio -no-boot-anim -no-snapshot \
             -gpu swiftshader_indirect -memory 4096 > "$RUNNER_TEMP/emulatore.log" 2>&1 &
-          adb wait-for-device
+          emulatore=$!
+          # Ogni attesa ha un limite, e un emulatore che muore lo dice subito:
+          # `adb wait-for-device` da solo aspettava fino alla fine del job.
+          if ! timeout 180 adb wait-for-device; then
+            echo "::error::l'emulatore non si è collegato ad adb in 3 minuti"
+            tail -n 50 "$RUNNER_TEMP/emulatore.log"
+            exit 1
+          fi
           for i in $(seq 1 60); do
+            if ! kill -0 "$emulatore" 2> /dev/null; then
+              echo "::error::l'emulatore si è chiuso durante l'avvio"
+              tail -n 50 "$RUNNER_TEMP/emulatore.log"
+              exit 1
+            fi
             if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
               echo "avviato dopo circa $((i * 5)) s"
               adb shell input keyevent 82 || true
