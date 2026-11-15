@@ -253,8 +253,13 @@ uno per file accanto che dice in testa che cosa prova. `avvio`: dal primo avvio
 senza vault all'albero, alla scrittura in Live e alle quattro modalità. `scrivere`
 (non al telefono): «/» e maniglia, tasto destro, palette, due riquadri, rinomina
 coi link, ricerca e «In entrata»; ricarica con `?formatbar=1&slash=1`, senza cui
-il finto non dà i comandi di formato. `guasti` (non al telefono): conflitti,
-errori, cestino, tastiera. Al primo compito che fallisce il giro si ferma, dice
+il finto non dà i comandi di formato. `lavagna` (non al telefono): una scheda
+scritta dalla lavagna vuota, un'altra col Testo, un filo con Collega, un tratto
+della penna su una scheda e la Gomma che lo toglie, controllati nel `.canvas`;
+ricarica con `?lavagna=1`, senza cui il vault del banco non ha lavagne, e la
+penna passa dal protocollo del browser (`pointerType: "pen"`, con la
+pressione). `guasti` (non al telefono): conflitti, errori, cestino, tastiera.
+Al primo compito che fallisce il giro si ferma, dice
 quale e perché, fotografa (`…-errore.png`) ed esce con 1. Foto e referto
 (`giro.json`) in `--out` (di serie `bench/.output/giro/`), porta da `FUB_BENCH_PORT` o `--port`.
 
