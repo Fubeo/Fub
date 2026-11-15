@@ -10,6 +10,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(VIEW_TITLE, "Proprietà")
             .with(EMPTY_NO_NOTES, "Nessuna nota aperta.")
             .with(EMPTY_NO_PROPS, "Questa nota non ha proprietà.")
+            .with(
+                EMPTY_NO_FORMAT,
+                "Questo file non è una nota: non ha proprietà da mostrare.",
+            )
             .with(ADD_KEY_LABEL, "Chiave")
             .with(ADD_VALUE_LABEL, "Valore")
             .with(ADD_SUBMIT, "Aggiungi")
@@ -189,6 +193,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(VIEW_TITLE, "Properties")
             .with(EMPTY_NO_NOTES, "No note open.")
             .with(EMPTY_NO_PROPS, "This note has no properties.")
+            .with(
+                EMPTY_NO_FORMAT,
+                "This file is not a note: it has no properties to show.",
+            )
             .with(ADD_KEY_LABEL, "Key")
             .with(ADD_VALUE_LABEL, "Value")
             .with(ADD_SUBMIT, "Add")

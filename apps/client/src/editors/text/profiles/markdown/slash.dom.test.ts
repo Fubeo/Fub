@@ -38,6 +38,7 @@ function editor() {
       const fake: FakePanel = { events, transform, updates: [], keys: [], closed: false };
       panels.push(fake);
       const dom = document.createElement("div");
+      dom.className = "slash-finto";
       return {
         dom,
         listId: "lista-finta",
@@ -238,6 +239,82 @@ describe("il menu «/» nel testo", () => {
       expect(openSlashMenu(view.state)).toBeNull();
     } finally {
       destroy();
+    }
+  });
+
+  it("l'altezza del pannello resta la stessa da una misura all'altra, scrivendo, cancellando e scorrendo", () => {
+    // L'altezza naturale del pannello la dà il suo CSS, come nella pelle.
+    const sheet = document.createElement("style");
+    sheet.textContent = ".cm-tooltip.slash-finto { height: 400px; }";
+    document.head.append(sheet);
+    const { engine, view, type, destroy } = editor();
+    try {
+      // Una finestra bassa: l'area del documento va da 154 a 526 e la riga
+      // del «/» sta in fondo, da 480 a 500. Sotto non c'è il minimo, sopra ci
+      // sono 310 px: il pannello si apre sopra, alto 310.
+      let line = 480;
+      const area = () => new DOMRect(0, 154, 700, 372);
+      view.scrollDOM.getBoundingClientRect = area;
+      view.dom.getBoundingClientRect = area;
+      view.contentDOM.getBoundingClientRect = area;
+      // Lo spazio dei tooltip di CodeMirror è la finestra, che qui misura 0.
+      Object.defineProperty(document.documentElement, "clientHeight", { configurable: true, value: 560 });
+      Object.defineProperty(document.documentElement, "clientWidth", { configurable: true, value: 700 });
+      view.coordsAtPos = () => ({ left: 120, right: 120, top: line, bottom: line + 20 });
+      const measure = () => (view as unknown as { measure(): void }).measure();
+      const panel = () => document.querySelector<HTMLElement>(".slash-finto")!;
+      engine.setDoc("Riunione\n");
+      view.dispatch({ selection: EditorSelection.cursor(engine.getDoc().length) });
+      type("/");
+      // Il pannello sta dove dice il suo `style.top` (fixed, finestra senza
+      // scala), alto quanto dice il suo stile; `lift` è l'entrata o l'uscita
+      // a metà, che lo trasforma senza toccare il suo stile.
+      let lift = 0;
+      panel().getBoundingClientRect = () => {
+        const style = panel().style;
+        return new DOMRect(104, (parseFloat(style.top) || 0) + lift, 620, parseFloat(style.height) || 400);
+      };
+      const heights: string[] = [];
+      const look = () => {
+        measure();
+        heights.push(`${panel().style.top} ${panel().style.height}`);
+      };
+      look();
+      look();
+      look();
+      // Si scrive mentre il pannello è ancora a metà dell'entrata.
+      lift = -6;
+      type("d");
+      look();
+      type("a");
+      look();
+      lift = 0;
+      for (let i = 0; i < 2; i++) {
+        const at = view.state.selection.main.head;
+        view.dispatch({ changes: { from: at - 1, to: at }, userEvent: "delete.backward" });
+        look();
+      }
+      // Sopra la riga, attaccato (480 − 8 − 310 = 162), sempre uguale.
+      expect(heights).toEqual(Array(heights.length).fill("162px 310px"));
+      expect(panel().classList.contains("cm-tooltip-above")).toBe(true);
+      // Il documento scorre e la riga sale di 40 px: il pannello la segue e
+      // si accorcia (sopra restano 270 px), due misure di fila uguali.
+      line = 440;
+      view.scrollDOM.dispatchEvent(new Event("scroll"));
+      look();
+      look();
+      expect(heights.slice(-2)).toEqual(["162px 270px", "162px 270px"]);
+      // La riga esce dall'area: CodeMirror nasconde il pannello, e resta
+      // nascosto.
+      line = 600;
+      view.scrollDOM.dispatchEvent(new Event("scroll"));
+      look();
+      expect(panel().style.top).toBe("-10000px");
+    } finally {
+      destroy();
+      sheet.remove();
+      Reflect.deleteProperty(document.documentElement, "clientHeight");
+      Reflect.deleteProperty(document.documentElement, "clientWidth");
     }
   });
 });

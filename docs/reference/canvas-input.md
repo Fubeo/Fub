@@ -135,7 +135,10 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
   mancante»; il testo resta nella bozza della sessione.
 - **Uscire.** Esc, un clic fuori o la scheda che si spegne: l'editor registra
   il testo e salva (`leave()`), poi si smonta e la nota rifà la resa col
-  testo nuovo. Con Esc la scheda resta scelta, col fuoco.
+  testo nuovo. Con Esc la scheda resta scelta, col fuoco. La shell monta
+  l'editor con `escapeLeaves` (`state/card-editors.ts`): in Scrittura Esc
+  sul testo non seleziona il blocco del cursore come in un riquadro, e una
+  selezione di blocchi già fatta si chiude col primo Esc.
 
 ## Scrivere in una scheda di testo
 
