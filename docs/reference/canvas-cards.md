@@ -457,7 +457,10 @@ tela non importa nessun editor (il confine di CodeMirror): riceve
 `CardEditorPort` (`editors/canvas/cards.ts`), che la shell costruisce in
 `state/card-editors.ts` con le sessioni e il registro delle superfici della
 finestra e passa con `canvasCards.editors` e `surface.ts` (`CardEditing`).
-Senza porta le schede restano in lettura.
+Senza porta le schede restano in lettura. Il modulo della porta arriva con un
+`import()` alla prima apertura (`document-controller.ts`), come la lavagna:
+nessuna finestra lo carica all'avvio, e il build lo controlla
+(`NOT_AT_STARTUP` in `vite.config.ts`).
 
 `open(path, host, { compact, readOnly, lifetime, heading })`, con `heading` che
 porta la vista al titolo (`headingOffset`); l'editor dà la sua barra di formato
@@ -467,8 +470,9 @@ porta la vista al titolo (`headingOffset`); l'editor dà la sua barra di formato
 - prenota la sessione (`retain`) e la tiene finché l'editor vive, anche
   dopo una rinomina (`renamed()` la riprende sul nome nuovo); fuori dal
   controllore una sessione si lascia solo con `releaseSession`
-  (`shell-layout.ts`, `document-bridge.ts`), che la lascia aperta se una
-  scheda ci scrive: un riquadro chiuso non la chiude sotto la scheda;
+  (`state/card-writes.ts`, per `shell-layout.ts` e `document-bridge.ts`),
+  che la lascia aperta se una scheda ci scrive: un riquadro chiuso non la
+  chiude sotto la scheda;
 - legge il file con `readForSurface` e chiede la superficie al registro per
   `format_id` e `source_kind`, come un riquadro, nella sua modalità
   predefinita; la monta in `host` e la attacca (`attachSurface`);
