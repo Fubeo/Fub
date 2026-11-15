@@ -1,0 +1,68 @@
+{
+  "about": "L'estratto di due pagine nasce accanto al PDF, a 48 a destra: una scheda nuova sullo stesso file col `subpath` della prima pagina e `fub:parts`; senza misura della pagina è 360×480.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "excerpt",
+      "id": "p",
+      "part": {
+        "kind": "pages",
+        "pages": [
+          3,
+          4
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "p",
+          "type": "file",
+          "x": 560,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf"
+        },
+        {
+          "id": "910a2dec89025cc1",
+          "type": "file",
+          "x": 968,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=3",
+          "fub:parts": {
+            "kind": "pages",
+            "pages": [
+              3,
+              4
+            ]
+          }
+        }
+      ],
+      "edges": []
+    },
+    "created": [
+      "910a2dec89025cc1"
+    ]
+  }
+}

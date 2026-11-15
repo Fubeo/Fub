@@ -50,10 +50,11 @@ use fub_abi::command::{
 use fub_abi::error::PluginError;
 use fub_abi::model::DocId;
 use fub_abi::settings::{SettingKind, SettingSpec};
+use fub_abi::text::Strings;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{CommandProvider, HostApi};
 use fub_abi::ui::UiOption;
-use fub_canvas_core::ops::CanvasOp;
+use fub_canvas_core::ops::{chosen_pages, CanvasOp, CompileNote, SPREAD_GROUP_ABOVE};
 use fub_canvas_core::{Canvas, CanvasError};
 use serde_json::Value;
 
@@ -174,6 +175,9 @@ const E_NO_DOC: &str = "canvas.apply.e_no_doc";
 const E_NOT_CANVAS: &str = "canvas.apply.e_not_canvas";
 const E_OPS_JSON: &str = "canvas.apply.e_ops_json";
 const E_OPS_EMPTY: &str = "canvas.apply.e_ops_empty";
+/// L'etichetta di serie del gruppo delle pagine sparse: la stessa frase di
+/// `canvas.spread.group` della GUI.
+const S_SPREAD_GROUP: &str = "canvas.spread.group";
 const E_SEED: &str = "canvas.apply.e_seed";
 const E_BASE: &str = "canvas.apply.e_base";
 const E_OPEN_LIMIT: &str = "canvas.apply.e_open_limit";
@@ -536,26 +540,71 @@ fn seed(raw: &str) -> Result<u64, PluginError> {
         .map_err(|_| PluginError::BadArgs(Text::message(E_SEED, vec![Arg::text("seed", raw)])))
 }
 
-/// Le misure del contenuto che le operazioni chiedono e non portano: il
-/// `content_size` di un'immagine o di un PDF (vedi `prefill`). Senza `draw` non
-/// si legge nessun file, e le operazioni restano come sono.
+/// Le operazioni pronte per il nucleo: le misure dei file che chiedono e non
+/// portano ([`measure_ops`]) e l'etichetta del gruppo di `spread_pages` nella
+/// lingua di chi scrive ([`name_spreads`]). Dà le note di ciò che ha corretto,
+/// da mettere prima di quelle della compilazione.
+fn prepare_ops(host: &dyn HostApi, canvas: &Canvas, ops: &mut [CanvasOp]) -> Vec<CompileNote> {
+    let notes = measure_ops(host, canvas, ops);
+    name_spreads(host, ops);
+    notes
+}
+
+/// Come [`prepare_ops`], su una lista JSON com'è scritta (per `canvas.check` e
+/// `canvas.preview`). Se la lista non si legge (e lo dirà il controllo), o non
+/// cambia, torna com'era.
+fn prepare_list(host: &dyn HostApi, canvas: &Canvas, list: Value) -> (Value, Vec<CompileNote>) {
+    let Ok(mut ops) = serde_json::from_value::<Vec<CanvasOp>>(list.clone()) else {
+        return (list, Vec::new());
+    };
+    let before = ops.clone();
+    let notes = prepare_ops(host, canvas, &mut ops);
+    if ops == before {
+        return (list, notes);
+    }
+    (serde_json::to_value(&ops).unwrap_or(list), notes)
+}
+
+/// Le misure del contenuto che le operazioni chiedono e non portano (vedi
+/// `prefill`). Senza `draw` non si legge nessun file, e le operazioni restano
+/// come sono.
 #[cfg(feature = "draw")]
-fn measure_ops(host: &dyn HostApi, canvas: &Canvas, ops: &mut [CanvasOp]) {
-    prefill::fill_ops(host, canvas, ops);
+fn measure_ops(host: &dyn HostApi, canvas: &Canvas, ops: &mut [CanvasOp]) -> Vec<CompileNote> {
+    prefill::fill_ops(host, canvas, ops)
 }
 
 #[cfg(not(feature = "draw"))]
-fn measure_ops(_host: &dyn HostApi, _canvas: &Canvas, _ops: &mut [CanvasOp]) {}
-
-/// Come [`measure_ops`], su una lista JSON com'è scritta (per `canvas.check`).
-#[cfg(feature = "draw")]
-fn measure_list(host: &dyn HostApi, canvas: &Canvas, list: Value) -> Value {
-    prefill::fill_list(host, canvas, list)
+fn measure_ops(_host: &dyn HostApi, _canvas: &Canvas, _ops: &mut [CanvasOp]) -> Vec<CompileNote> {
+    Vec::new()
 }
 
-#[cfg(not(feature = "draw"))]
-fn measure_list(_host: &dyn HostApi, _canvas: &Canvas, list: Value) -> Value {
-    list
+/// L'etichetta del gruppo di uno `spread_pages` che ne fa uno (oltre
+/// [`SPREAD_GROUP_ABOVE`] pagine) e non la dà: «N pagine» nella lingua di chi
+/// scrive, come `canvas.spread.group` della GUI. Il nucleo non ha lingua, e da
+/// solo scrive «N pagine». Senza conto delle pagine, o con pagine che non
+/// vanno, lo dirà la compilazione.
+fn name_spreads(host: &dyn HostApi, ops: &mut [CanvasOp]) {
+    for op in ops.iter_mut() {
+        let CanvasOp::SpreadPages(args) = op else {
+            continue;
+        };
+        if args.label.is_some() {
+            continue;
+        }
+        let chosen = args
+            .page_count
+            .and_then(|count| u64::try_from(count).ok())
+            .filter(|count| *count >= 1)
+            .and_then(|count| chosen_pages(args.pages.as_ref(), count).ok());
+        let Some(chosen) = chosen.filter(|chosen| chosen.pages.len() > SPREAD_GROUP_ABOVE) else {
+            continue;
+        };
+        let text = Text::message(
+            S_SPREAD_GROUP,
+            vec![Arg::text("count", chosen.pages.len().to_string())],
+        );
+        args.label = Some(Strings::new(&catalog(), "it", &host.user_locale()).render(&text));
+    }
 }
 
 /// Una lavagna che il nucleo non sa leggere (R1–R10 di `canvas-format.md`).
@@ -641,6 +690,7 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "Nessuna operazione da applicare.",
         "No operations to apply.",
     ),
+    (S_SPREAD_GROUP, "{count} pagine", "{count} pages"),
     (
         E_SEED,
         "Il seme «{seed}» non è un intero da 0 a 18446744073709551615.",

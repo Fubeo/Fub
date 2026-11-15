@@ -107,6 +107,7 @@ fn sample(kind: FieldKind) -> Value {
         FieldKind::PenSize => json!(2),
         FieldKind::InkColor => json!("blue"),
         FieldKind::Positive => json!(2),
+        FieldKind::Pages => json!("1-3"),
         FieldKind::Any => Value::Null,
     }
 }
@@ -130,7 +131,7 @@ fn wrong(kind: FieldKind) -> Option<Value> {
         FieldKind::Layer => Some(json!(1)),
         FieldKind::Strokes => Some(json!("a")),
         FieldKind::Shape | FieldKind::PenSize | FieldKind::Positive => Some(json!("a")),
-        FieldKind::InkColor => Some(json!(1)),
+        FieldKind::InkColor | FieldKind::Pages => Some(json!(1)),
     }
 }
 
@@ -191,7 +192,19 @@ fn gli_esempi_compilano_sulla_lavagna_d_esempio() {
     let canvas = example_canvas().expect("la lavagna d'esempio si legge");
     for op in OPS {
         for text in op.examples {
-            let parsed: CanvasOp = serde_json::from_str(text).expect("un esempio si legge");
+            let mut parsed: CanvasOp = serde_json::from_str(text).expect("un esempio si legge");
+            // Il conto delle pagine lo mette `canvas.apply`, che legge il PDF:
+            // gli esempi non lo danno. Il `schemi/dispensa.pdf` della lavagna
+            // d'esempio ha 12 pagine.
+            match &mut parsed {
+                CanvasOp::SpreadPages(args) if args.page_count.is_none() => {
+                    args.page_count = Some(12);
+                }
+                CanvasOp::Excerpt(args) if args.page_count.is_none() => {
+                    args.page_count = Some(12);
+                }
+                _ => {}
+            }
             compile(&canvas, &[parsed], 1)
                 .unwrap_or_else(|e| panic!("{}: {text} non compila: {e}", op.name));
         }
@@ -412,6 +425,31 @@ fn un_id_non_testuale_dentro_una_lista_ha_il_suo_posto() {
     assert_eq!(problems[0].code, ProblemCode::WrongType);
     assert_eq!(problems[0].path, "/0/ids/1");
     assert_eq!(problems[0].fix, None);
+}
+
+#[test]
+fn le_pagine_in_lista_sono_interi_da_uno_gia_nella_forma() {
+    let problems = validate(&json!([
+        {"op": "spread_pages", "id": "p1", "pages": [1, "2", 1.5, 0, 3.0, true]}
+    ]));
+    let found: Vec<(ProblemCode, &str)> = problems
+        .iter()
+        .map(|problem| (problem.code, problem.path.as_str()))
+        .collect();
+    assert_eq!(
+        found,
+        vec![
+            (ProblemCode::WrongType, "/0/pages/1"),
+            (ProblemCode::WrongType, "/0/pages/2"),
+            (ProblemCode::BadValue, "/0/pages/3"),
+            (ProblemCode::WrongType, "/0/pages/5"),
+        ]
+    );
+    assert!(validate(&json!([{"op": "spread_pages", "id": "p1", "pages": "1-3, 9"}])).is_empty());
+    assert_eq!(
+        validate(&json!([{"op": "spread_pages", "id": "p1", "pages": 3}]))[0].code,
+        ProblemCode::WrongType
+    );
 }
 
 #[test]

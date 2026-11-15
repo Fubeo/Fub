@@ -1356,7 +1356,7 @@ Fatto quando: `cargo test -p fub-canvas-core` passa; il compito del corpus
 con il PDF sparso non ha `needs`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cargo
 test -p fub-features --features lavagna,draw --test lavagna
-Stato: [~] in corso
+Stato: [x] fatto · integrato 2026-11-15 (coder/lic-t14 @ 21bfd799c, merge 6fa8d8171) · revisione media: parità con la GUI provata su 200 000 testi e 20 000 disposizioni; il conto del file vince su `page_count` (nota `page_count_from_file`); `excerpt` rifiuta le pagine oltre l'ultima; tetto di nascita 100 000; una sola regola `layout::born_size`, arrotondata come `bornSize` (A4 360×509 anche con `add_card`); etichetta del gruppo nella lingua di chi scrive · per T19: `pdf_first_page` non c'è più, si usa `pdf_page_sizes`
 
 ## T15 · Le penne in Rust
 

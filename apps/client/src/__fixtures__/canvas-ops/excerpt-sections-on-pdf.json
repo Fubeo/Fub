@@ -1,0 +1,37 @@
+{
+  "about": "Le sezioni non vanno su un PDF: la parte non va bene per il file (`file` di parts.rs), `Invalid`.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "excerpt",
+      "id": "p",
+      "part": {
+        "kind": "sections",
+        "sections": [
+          "A"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

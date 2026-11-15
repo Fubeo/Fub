@@ -1,0 +1,79 @@
+{
+  "about": "La zona di una pagina prende le proporzioni del suo rettangolo sulla pagina (un quarto di A4: 360×127) e nasce sotto il PDF, a 24, con `near` e `side`.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "excerpt",
+      "id": "p",
+      "part": {
+        "kind": "region",
+        "page": 2,
+        "rect": [
+          0,
+          0.5,
+          1,
+          0.25
+        ]
+      },
+      "side": "bottom",
+      "content_size": [
+        595,
+        842
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "p",
+          "type": "file",
+          "x": 560,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf"
+        },
+        {
+          "id": "910a2dec89025cc1",
+          "type": "file",
+          "x": 560,
+          "y": 904,
+          "width": 360,
+          "height": 127,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=2",
+          "fub:parts": {
+            "kind": "region",
+            "page": 2,
+            "rect": [
+              0,
+              0.5,
+              1,
+              0.25
+            ]
+          }
+        }
+      ],
+      "edges": []
+    },
+    "created": [
+      "910a2dec89025cc1"
+    ]
+  }
+}

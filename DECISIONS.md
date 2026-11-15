@@ -2787,3 +2787,25 @@ La più recente in cima: data · piano · decisione · perché.
   già approvato il piano. Se è conforme, allora ci sei». Il prototipo T25 (`PLAN-ui/
   lavagna-schede.html`) vale come approvato con le varianti consigliate (D-10 (a):
   bordo d'accento, «Esc per uscire», «↩ N» e «×2»); T22 parte senza mostrarlo prima.
+- 2026-11-15 · T14 · Le pagine sparse seguono `spreadLayout` della GUI (la
+  prima al primo multiplo di 8 che lascia 24 dopo la scheda, a capo ogni 10,
+  gruppo oltre 12), non «a 48» del piano: la GUI e il codice devono dare la
+  stessa scheda. Le misure di nascita hanno una regola sola, `layout::born_size`:
+  ora arrotonda all'intero come `bornSize` (A-16, la voce del 2026-11-13 che
+  rimandava l'allineamento a T9 e T24), così `add_card` e le pagine sparse dello
+  stesso PDF nascono uguali (una A4 360×509, non 512); la GUI ha una funzione
+  sola (`bornSize`, usata dal deposito e da «Spargi»). Un lato di nascita oltre
+  100 000 (`MAX_BORN_SIDE`: una zona quasi senza larghezza, una pagina assurda)
+  vale la misura di serie, dove la GUI non ha tetto. `page_count` letto dal file
+  vince su quello dato, con la nota `page_count_from_file`; `excerpt` ha anche
+  lui `page_count` e rifiuta le pagine oltre l'ultima. L'etichetta del gruppo
+  la mette `canvas.apply` nella lingua di chi scrive (`canvas.spread.group`); il
+  nucleo da solo scrive «N pagine». `in_place` tiene l'altezza: è come il
+  selettore delle sezioni, non come il ritaglio della GUI. File toccati fuori da
+  «Tocca»: `fub-canvas-core` `check.rs`, `layout.rs`, `tests/{check,spec,
+  op_vectors}.rs`; `canvas-layout.json`, `canvas-ops/add-card-pdf-page.json`;
+  `fub-features` `draw.rs`, `lavagna.rs`, `lavagna/{apply,check,preview,guide}.rs`,
+  `guida.md`, `tests/lavagna.rs`; `fub-cli` `mcp/tools.rs`, `tests/mcp.rs`;
+  `apps/client/src/editors/canvas/spread-pages-parity.test.ts`; in `docs/`
+  `canvas-check`, `canvas-code` (resta a 549 righe), `canvas-schema`,
+  `canvas-parts`, `mcp-server`, `map/pagine` e la nuova `canvas-pages-code`.

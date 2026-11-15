@@ -53,7 +53,7 @@ pub(super) fn canvas_preview(
         Some(list) => {
             // Le misure dei file entrano prima del disegno, come in `canvas.apply`
             // e `canvas.check`: l'anteprima e la scrittura danno la stessa altezza.
-            let list = measure_list(&*host, core.canvas(), list);
+            let (list, _) = prepare_list(&*host, core.canvas(), list);
             Cow::Owned(
                 preview::after_ops(core.canvas(), &list, seed)
                     .map_err(|problems| refused(&doc, &problems))?,
