@@ -353,7 +353,7 @@ I guard documentali controllano:
 - raggiungibilità delle pagine;
 - dimensioni;
 - struttura Markdown;
-- blocchi Mermaid;
+- blocchi Mermaid, resi in Chromium con la sandbox accesa;
 - tabelle;
 - riferimenti legacy e cronaca vietata;
 - allineamento del ciclo locale.
