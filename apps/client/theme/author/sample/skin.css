@@ -5566,19 +5566,19 @@ kbd,
 }
 /* Il corpo è un editor vero, come quello di un riquadro: colonna e carattere
    li dà la pelle del documento. Il testo è un po' più piccolo di quello del
-   riquadro, come nel prototipo (16,5 px su 18): la misura scelta nelle
-   Preferenze (`--text-reading`) scala con lui. La proporzione si calcola sul
-   pannello, dove `--text-reading` è ancora quella della pagina, e il corpo
-   la riprende: una proprietà che nomina sé stessa non varrebbe niente. */
-.note-peek {
-  --note-peek-reading: calc(var(--text-reading) * 11 / 12);
-}
+   riquadro, come nel prototipo (16,5 px su 18), e scala con la misura scelta
+   nelle Preferenze (`--text-reading`). La pelle non ridichiara il token: rifà
+   solo la misura del testo dell'editor e dei blocchi resi, con un selettore
+   più forte del tema di CodeMirror. */
 .note-peek-body {
-  --text-reading: var(--note-peek-reading);
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+.note-peek-body .cm-editor .cm-content,
+.note-peek-body .cm-editor .markdown-rendered {
+  font-size: calc(var(--text-reading) * 11 / 12);
 }
 .note-peek-message {
   display: grid;

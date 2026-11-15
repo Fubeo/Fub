@@ -118,7 +118,7 @@ Non tutto diventa un link:
 
 ## La sbirciata
 
-Alt col clic su un wikilink o su un link Markdown a una nota (`[testo](Carte/B.md)`),
+Alt col clic su un wikilink o su un link Markdown a una nota,
 o `Alt+Invio` col cursore sul link, o «Sbircia» dal menu del link, apre la nota
 in un pannello sopra la destra del foglio, sotto le linguette: la
 **sbirciata**. Il nome si risolve dalla nota che contiene il link, anche
