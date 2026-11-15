@@ -15,6 +15,7 @@ import { mountReadingHeader } from "./header";
 import { mountMarkdown } from "../mount";
 import type { MarkdownResourceChange, MarkdownResources } from "../../../../../ui/markdown-resources";
 import corpus from "../../../../../__fixtures__/corpus-syntax.json";
+import skin from "../../../../../theme/scrittoio/skin.css?raw";
 
 // La testata della pagina (T6, E3): la stessa in Scrittura e in Lettura.
 // Copertina, icona, titolo, proprietà in evidenza, «Altre N», «Aggiungi una
@@ -415,5 +416,16 @@ describe("sul corpus", () => {
         element.remove();
       }
     }
+  });
+});
+
+describe("la testata misurata da CodeMirror", () => {
+  // CodeMirror misura un widget di blocco col suo riquadro, senza margini: un
+  // margine di un figlio che uscisse dalla testata (il filo sotto la riga dei
+  // dati, la copertina nel margine di cima) le toglierebbe altezza nella
+  // mappa, e `posAtCoords` darebbe la riga dopo quella sotto il puntatore.
+  it("tiene dentro di sé i margini dei figli", () => {
+    const rule = /(?:^|\n)\.cm-fub-page \{([^}]*)\}/.exec(skin.replace(/\/\*[\s\S]*?\*\//g, ""));
+    expect(rule?.[1]).toMatch(/display:\s*flow-root;/);
   });
 });

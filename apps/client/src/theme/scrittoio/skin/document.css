@@ -625,7 +625,12 @@
    dell'interfaccia. Gli strumenti si vedono al passaggio, nello spazio che
    c'è già: comparendo non spostano niente. La densità la seguono da sé: i
    passi `--space-*` e l'altezza `--control-h` si stringono in «Compatta». */
+/* `flow-root`: i margini dei figli (la copertina che sale nel margine di
+   cima, il filo sotto la riga dei dati) restano dentro la testata. CodeMirror
+   la misura col suo riquadro, senza margini: un margine che ne uscisse
+   farebbe cadere `posAtCoords` una riga più in là. */
 .cm-fub-page {
+  display: flow-root;
   position: relative;
   margin: 0;
   color: var(--doc-fg);
@@ -904,8 +909,11 @@ button.cm-fub-page-icon:focus-visible {
   font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
-/* La riga dei dati chiude la testata, con un filo che la stacca dal testo. */
+/* La riga dei dati chiude la testata, con un filo che la stacca dal testo.
+   Interlinea intera e dispari: le icone di 15 px e le etichette cadono su
+   pixel interi, e il testo sotto la testata non parte da mezzo pixel. */
 .cm-fub-page > .note-facts {
+  line-height: 19px;
   margin-bottom: var(--space-8);
   border-bottom: 1px solid var(--doc-rule-soft);
 }
