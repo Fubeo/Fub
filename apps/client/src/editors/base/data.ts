@@ -4,6 +4,8 @@ import { EVERY_DOCUMENT, type DocumentMatch, type Excerpts, type IndexQuery, typ
 import type { Theme } from "../../theme/theme";
 import type { DocumentUpdate } from "../core/text-operation";
 import type { SurfaceMode, SurfaceMountContext } from "../core/registry";
+import { parseFilter, type FilterDef } from "./filter";
+import { parseOrder, parseSort, type SortEntry } from "./sort";
 
 export const BASE_OWNER = "fub.shell.base";
 export const BASE_PROFILE = "base";
@@ -30,7 +32,7 @@ export function allowedBaseTileUrl(template: string, kind: "raster" | "vector", 
 
 export interface BaseSurfaceDeps {
   readonly queryIndex: (query: IndexQuery) => Promise<IndexResult>;
-  readonly invokeCommand: (command: string, args?: Record<string, unknown>, mode?: InvokeMode) => Promise<{ notify?: string | null }>;
+  readonly invokeCommand: (command: string, args?: Record<string, unknown>, mode?: InvokeMode) => Promise<{ notify?: string | null; effect?: unknown }>;
   readonly viewState: <T>(key: string) => Promise<T | null>;
   readonly setViewState: (key: string, value: unknown) => Promise<void>;
 }
@@ -74,6 +76,12 @@ export interface BasePlan {
   readonly limit: number | null;
   readonly map: BaseMapConfig | null;
   readonly createDefaults: Record<string, unknown>;
+  /// Il filtro della vista, come lo legge il modello (`"all"` se non c'è).
+  readonly filters: FilterDef;
+  /// L'ordinamento scritto nella vista, nell'ordine del file.
+  readonly sort: SortEntry[];
+  /// Le colonne scritte nella vista (`order`); vuota se il modello le deduce.
+  readonly order: string[];
 }
 export interface BaseDerived { readonly rows: BaseRow[]; readonly summaries: Record<string, BaseCellValue> }
 export interface BaseMutation {
@@ -97,7 +105,18 @@ async function baseQuery(deps: BaseSurfaceDeps, query: unknown): Promise<Record<
   return object(response.value, "risposta");
 }
 export async function parseBaseViews(deps: BaseSurfaceDeps, source: string): Promise<string[]> {
-  return strings((await baseQuery(deps, { version: 1, op: "parse", source })).views, "viste");
+  return (await listBaseViews(deps, source)).names;
+}
+/// Le viste del file: i nomi e, nello stesso ordine, il tipo di ognuna
+/// (`null` quando il core non lo dice), per le figure delle linguette.
+export interface BaseViewList { readonly names: string[]; readonly types: (string | null)[] }
+export async function listBaseViews(deps: BaseSurfaceDeps, source: string): Promise<BaseViewList> {
+  const raw = await baseQuery(deps, { version: 1, op: "parse", source });
+  const names = strings(raw.views, "viste");
+  const types = Array.isArray(raw.types) && raw.types.length === names.length
+    ? raw.types.map((type) => typeof type === "string" ? type : null)
+    : names.map(() => null);
+  return { names, types };
 }
 export async function planBaseView(deps: BaseSurfaceDeps, source: string, view: string | null): Promise<BasePlan> {
   const raw = await baseQuery(deps, { version: 1, op: "plan", source, view });
@@ -137,7 +156,52 @@ export async function planBaseView(deps: BaseSurfaceDeps, source: string, view: 
     map = { lat_key: m.lat_key, lon_key: m.lon_key, label_key: m.label_key as string | null, color_key: m.color_key as string | null, provider };
   }
   if (raw.view_type === "map" && !map) throw new Error("base: vista mappa senza coordinate");
-  return { view: raw.view, viewType: raw.view_type as BaseViewKind, columns, columnLabels: columnLabels as Record<string, string>, requiredProps, allProperties: raw.all_properties, group: optionalKey("group"), limit: limit as number | null, map, createDefaults };
+  return {
+    view: raw.view, viewType: raw.view_type as BaseViewKind, columns, columnLabels: columnLabels as Record<string, string>, requiredProps,
+    allProperties: raw.all_properties, group: optionalKey("group"), limit: limit as number | null, map, createDefaults,
+    filters: parseFilter(raw.filters), sort: parseSort(raw.sort), order: parseOrder(raw.order),
+  };
+}
+
+/// Le chiavi di una vista che i gesti della barra riscrivono.
+export type BaseViewKey = "filters" | "sort" | "order";
+/// Il comando di T15a che scrive una chiave di una vista (`fub-features`).
+export const BASE_VIEW_SET = "base.view.set";
+
+/// Scrive la chiave `key` della vista `view` del file `doc` con
+/// `base.view.set`: `value` è il valore JSON, `null` toglie la chiave. Con
+/// `base` il comando scrive solo se il file è ancora quella revisione, e
+/// altrimenti risponde con un conflitto. Torna la revisione che il comando
+/// ha scritto, se la dice.
+export async function setBaseViewKey(deps: Pick<BaseSurfaceDeps, "invokeCommand">, doc: string, view: string, key: BaseViewKey, value: unknown, base: string | null): Promise<string | null> {
+  const args: Record<string, unknown> = { doc, view, key };
+  if (value !== null && value !== undefined) args.value = JSON.stringify(value);
+  if (base !== null) args.base = base;
+  const outcome = await deps.invokeCommand(BASE_VIEW_SET, args);
+  const effect = outcome?.effect as { kind?: unknown; ns?: unknown; payload?: unknown } | undefined;
+  const revision = effect?.kind === "custom" && effect.ns === "fub.base" ? (effect.payload as { revision?: unknown } | null)?.revision : undefined;
+  return typeof revision === "string" ? revision : null;
+}
+
+/// Le righe che un gesto ha scritto: il pezzo del testo nuovo che non c'era,
+/// fra le righe uguali in testa e in coda, e quante righe di prima ha preso il
+/// suo posto. È ciò che «Nel file .base» mostra.
+export interface BaseWritten {
+  /// Le righe di prima che non ci sono più.
+  readonly removed: string[];
+  /// Le righe nuove.
+  readonly added: string[];
+  /// Il numero (da 1) della prima riga cambiata nel testo nuovo.
+  readonly line: number;
+}
+export function writtenLines(before: string, after: string): BaseWritten | null {
+  if (before === after) return null;
+  const old = before.split(/\r?\n/), now = after.split(/\r?\n/);
+  let head = 0;
+  while (head < old.length && head < now.length && old[head] === now[head]) head++;
+  let tail = 0;
+  while (tail < old.length - head && tail < now.length - head && old[old.length - 1 - tail] === now[now.length - 1 - tail]) tail++;
+  return { removed: old.slice(head, old.length - tail), added: now.slice(head, now.length - tail), line: head + 1 };
 }
 export interface BaseSelection {
   readonly matching: QueryExpr;

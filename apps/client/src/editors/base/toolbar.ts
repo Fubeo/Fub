@@ -1,0 +1,669 @@
+// La barra della Base: le viste come linguette, poi Filtro, Ordina, Proprietà,
+// Cerca, «…» e «Nuova»; sotto, le etichette del filtro e dell'ordinamento, e
+// in fondo «Nel file .base», le righe che l'ultimo gesto ha scritto.
+//
+// La barra non scrive niente da sé: ogni gesto calcola il valore nuovo di una
+// sola chiave della vista (`filters`, `sort`, `order`) con le funzioni pure di
+// `filter.ts` e `sort.ts`, e lo passa a chi l'ha montata (`write`), che lo
+// scrive con `base.view.set` e la revisione del file. Un gesto che non cambia
+// niente non scrive. Mentre una scrittura aspetta il file nuovo la barra è
+// spenta: il gesto dopo partirebbe da un piano vecchio e cancellerebbe il primo.
+//
+// «Cerca» filtra le righe sullo schermo e non tocca il file; «Raggruppa» è
+// una scelta della superficie (sta in Ordina perché cambia l'ordine che si
+// vede), ricordata per vista.
+import { SearchSyntaxError } from "../../host/query";
+import { t } from "../../i18n/strings";
+import { openPopover, rovingToolbar, textButton, type PopoverHandle, type RovingToolbar } from "../../kit";
+import { identifier } from "../../ui/a11y";
+import { iconEl } from "../../ui/icons";
+import { openLifetime } from "../../ui/lifetime";
+import { showContextMenu, type MenuItem } from "../../ui/menu";
+import type { BasePlan, BaseViewKey, BaseWritten } from "./data";
+import {
+  FOLDER_OPS, PROPERTY_OPS, VALUELESS,
+  conjuncts, filterOfSearch, filterOfVisual, filterValue, isOpaque, sameFilter, searchOf, visualOf, withoutConjunct,
+  type FilterDef, type SearchProblem, type VisualCondition, type VisualOp,
+} from "./filter";
+import { useBaseIcons, viewIcon } from "./icons";
+import { moveColumn, sameColumns, sameKey, sortValue, sortedBy, toggleColumn, withoutSort, type SortEntry } from "./sort";
+
+/// Perché il file `.base` non si riscrive da qui: la superficie è in sola
+/// lettura, o la Base è scritta dentro una nota (un blocco ```base```), che i
+/// comandi della vista non riscrivono.
+export type BaseLock = "read_only" | "embedded" | null;
+
+export interface BaseToolbarModel {
+  readonly views: readonly { readonly name: string; readonly type: string | null }[];
+  readonly active: string | null;
+  readonly plan: BasePlan | null;
+  readonly lock: BaseLock;
+  /// Si possono creare note (la superficie non è in sola lettura).
+  readonly canCreate: boolean;
+  /// Una scrittura aspetta il file nuovo.
+  readonly busy: boolean;
+  /// Le proprietà che le righe hanno, senza `prop.`: le scelte del filtro e le
+  /// colonne che si possono mostrare.
+  readonly properties: readonly string[];
+  /// I valori che una proprietà ha nelle righe, per suggerirli nel filtro.
+  readonly suggestions: (key: string) => readonly string[];
+}
+
+export interface BaseToolbarActions {
+  readonly chooseView: (name: string) => void;
+  /// Scrive la chiave `key` della vista attiva; `null` la toglie.
+  readonly write: (key: BaseViewKey, value: unknown) => void;
+  /// Il testo di «Cerca» è cambiato: filtra le righe sullo schermo.
+  readonly search: () => void;
+  readonly create: () => void;
+  /// I modelli fra cui scegliere per «Nuova da un modello».
+  readonly templates: () => Promise<readonly { readonly path: string; readonly label: string }[]>;
+  readonly createFrom: (template: string) => void;
+  /// Le voci di «…»: copiare ed esportare le righe.
+  readonly more: () => MenuItem[];
+  /// I controlli di «Raggruppa», che la superficie possiede.
+  readonly grouping: HTMLElement;
+}
+
+export interface BaseToolbar {
+  readonly bar: HTMLElement;
+  readonly searchRow: HTMLElement;
+  readonly search: HTMLInputElement;
+  readonly strip: HTMLElement;
+  readonly status: HTMLElement;
+  readonly written: HTMLDetailsElement;
+  update(model: BaseToolbarModel): void;
+  /// Mostra le righe scritte dall'ultimo gesto; `null` le nasconde.
+  showWritten(written: BaseWritten | null): void;
+  /// Apre la riga di «Cerca» e ci mette il fuoco.
+  openSearch(): void;
+  /// Chiude il popover aperto, se c'è.
+  closePopover(): void;
+  relabel(): void;
+  destroy(): void;
+}
+
+const FOLDER = "\u0000folder";
+
+const plain = (key: string): string => key.replace(/^prop\./, "");
+const labelOf = (plan: BasePlan, key: string): string =>
+  plan.columnLabels[key] ?? plan.columnLabels[`prop.${plain(key)}`] ?? plain(key);
+const opLabel = (op: VisualOp): string => t(`base.filter.op.${op}`);
+
+function icon(name: string): SVGElement | Text {
+  return iconEl(name) ?? document.createTextNode("");
+}
+function toolButton(className: string, iconName: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `base-tool ${className}`;
+  button.append(icon(iconName));
+  return button;
+}
+/// Una voce di un elenco a tendina (gli argomenti di `new Option`).
+function option(text: string, value = text, _defaultSelected = false, selected = false): HTMLOptionElement {
+  const each = document.createElement("option");
+  each.value = value;
+  each.textContent = text;
+  each.selected = selected;
+  return each;
+}
+function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+/// Il testo di una condizione di primo livello, per la sua etichetta.
+export function conjunctText(plan: BasePlan, part: FilterDef): string {
+  const visual = visualOf(part);
+  if (visual && visual.length === 1) {
+    const condition = visual[0]!;
+    const subject = condition.subject === null ? t("base.filter.folder") : labelOf(plan, condition.subject);
+    return VALUELESS.has(condition.op) ? `${subject} ${opLabel(condition.op)}` : `${subject} ${opLabel(condition.op)} ${condition.value}`;
+  }
+  return searchOf(part) ?? t("base.chip.manual");
+}
+
+/// La ricerca più vicina a una forma a vista che ha «è» o «non è»: la ricerca
+/// sa dire soltanto «contiene».
+function nearestSearch(conditions: readonly VisualCondition[]): string | null {
+  const near = conditions.map((condition): VisualCondition => condition.op === "is"
+    ? { ...condition, op: "contains" }
+    : condition.op === "is_not" ? { ...condition, op: "not_contains" } : condition);
+  return searchOf(filterOfVisual(near));
+}
+
+function problemText(problem: SearchProblem): string {
+  if (problem.kind === "syntax") return new SearchSyntaxError(problem.fault).message;
+  return t("base.filter.unsupported", { term: problem.term });
+}
+
+export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
+  const lifetime = openLifetime();
+  lifetime.add(useBaseIcons());
+  const bar = element("div", "base-bar");
+  bar.setAttribute("role", "toolbar");
+  const tabs = element("div", "base-tabs");
+  tabs.setAttribute("role", "group");
+  const space = element("span", "base-bar-space");
+  const filterButton = toolButton("base-tool-filter", "base-filter");
+  const filterCount = element("span", "base-tool-count");
+  filterButton.append(filterCount);
+  const sortButton = toolButton("base-tool-sort", "base-sort");
+  const columnsButton = toolButton("base-tool-columns", "base-sliders");
+  const searchButton = toolButton("base-tool-search", "search");
+  const moreButton = toolButton("base-tool-more", "more");
+  const newGroup = element("span", "base-new");
+  const newButton = element("button", "base-new-note");
+  newButton.type = "button";
+  const templateButton = element("button", "base-new-template");
+  templateButton.type = "button";
+  templateButton.append(icon("base-chevron-down"));
+  newGroup.append(newButton, templateButton);
+  bar.append(tabs, space, filterButton, sortButton, columnsButton, searchButton, moreButton, newGroup);
+
+  const searchRow = element("div", "base-search-row");
+  searchRow.hidden = true;
+  const search = document.createElement("input");
+  search.type = "search";
+  search.className = "base-search";
+  searchRow.append(icon("search"), search);
+
+  const strip = element("div", "base-strip");
+  const chips = element("div", "base-chips");
+  const note = element("p", "base-note");
+  note.hidden = true;
+  const status = element("div", "base-status");
+  status.setAttribute("role", "status");
+  strip.append(chips, note, status);
+
+  const written = document.createElement("details");
+  written.className = "base-written";
+  written.hidden = true;
+  const writtenSummary = document.createElement("summary");
+  const writtenLines = element("pre", "base-written-lines");
+  written.append(writtenSummary, writtenLines);
+
+  let model: BaseToolbarModel = { views: [], active: null, plan: null, lock: null, canCreate: false, busy: false, properties: [], suggestions: () => [] };
+  let popover: PopoverHandle | null = null;
+  let refreshPopover: (() => void) | null = null;
+  const roving: RovingToolbar = rovingToolbar(bar, { controls: () => [...bar.querySelectorAll<HTMLElement>("button")] }, lifetime);
+
+  const writable = () => model.lock === null && model.plan !== null && !model.busy;
+
+  const closePopover = (): void => {
+    popover?.close();
+    popover = null;
+    refreshPopover = null;
+  };
+  const open = (anchor: HTMLElement, label: string, className: string, content: HTMLElement, refresh: (() => void) | null): void => {
+    closePopover();
+    anchor.setAttribute("aria-expanded", "true");
+    const handle = openPopover({
+      anchor, content, label, lifetime, className: `base-popover ${className}`, align: "end",
+      onClose: () => {
+        anchor.setAttribute("aria-expanded", "false");
+        if (popover === handle) { popover = null; refreshPopover = null; }
+      },
+    });
+    popover = handle;
+    refreshPopover = refresh;
+  };
+
+  // ---- Filtro -------------------------------------------------------------
+  const subjects = (plan: BasePlan, extra: readonly (string | null)[]): string[] => {
+    const keys: string[] = [];
+    const add = (key: string) => { const name = plain(key); if (name && !name.startsWith("file.") && !name.startsWith("formula.") && !keys.includes(name)) keys.push(name); };
+    for (const column of plan.columns) add(column);
+    for (const key of [...model.properties].sort((a, b) => a.localeCompare(b))) add(key);
+    for (const key of extra) if (key !== null) add(key);
+    return keys;
+  };
+  const openFilter = (): void => {
+    const plan = model.plan;
+    if (!plan) return;
+    const content = element("div", "base-filter");
+    const titleId = identifier("base-filter-title");
+    const title = element("p", "base-pop-title", t("base.filter.title", { name: plan.view }));
+    title.id = titleId;
+    const rowsBox = element("div", "base-filter-rows");
+    const visualNote = element("p", "base-pop-note");
+    const addButton = textButton({ label: t("base.filter.add"), onPress: () => { mode = "visual"; draft = [...(draft ?? []), { subject: subjects(plan, [])[0] ?? "", op: "is", value: "" }]; drawRows(); syncSearch(); } });
+    addButton.classList.add("base-filter-add");
+    const searchTitle = element("label", "base-pop-title", t("base.filter.search"));
+    const searchField = document.createElement("input");
+    searchField.type = "text";
+    searchField.className = "base-filter-search";
+    searchField.spellcheck = false;
+    searchField.id = identifier("base-filter-search");
+    searchTitle.htmlFor = searchField.id;
+    const searchNote = element("p", "base-pop-note");
+    const foot = element("div", "base-pop-foot");
+    const cancel = textButton({ label: t("base.filter.cancel"), onPress: () => closePopover() });
+    const apply = textButton({ label: t("base.filter.apply"), kind: "primary", onPress: () => applyFilter() });
+    foot.append(cancel, apply);
+    content.append(title, rowsBox, visualNote, addButton, searchTitle, searchField, searchNote, foot);
+
+    // Le due bozze. `mode` dice quale ha toccato per ultima chi usa la Base:
+    // è quella che «Applica» scrive.
+    let draft: VisualCondition[] | null = visualOf(plan.filters);
+    const initialSearch = searchOf(plan.filters);
+    let mode: "visual" | "search" = draft !== null ? "visual" : "search";
+    let parsed: FilterDef | null = plan.filters;
+    let problem: SearchProblem | null = null;
+    const opaque = isOpaque(plan.filters) || (draft === null && initialSearch === null);
+    searchField.value = initialSearch ?? (draft ? nearestSearch(draft) ?? "" : "");
+    const datalists: HTMLDataListElement[] = [];
+
+    const conditionRow = (condition: VisualCondition, index: number): HTMLElement => {
+      const row = element("div", "base-filter-row");
+      const subject = element("select", "base-filter-subject");
+      subject.setAttribute("aria-label", t("base.filter.subject"));
+      for (const key of subjects(plan, [condition.subject])) {
+        subject.append(option(labelOf(plan, key), key, false, condition.subject === key));
+      }
+      subject.append(option(t("base.filter.folder"), FOLDER, false, condition.subject === null));
+      subject.value = condition.subject ?? FOLDER;
+      const op = element("select", "base-filter-op");
+      op.setAttribute("aria-label", t("base.filter.op"));
+      for (const each of condition.subject === null ? FOLDER_OPS : PROPERTY_OPS) op.append(option(opLabel(each), each, false, each === condition.op));
+      op.value = condition.op;
+      const value = document.createElement("input");
+      value.type = "text";
+      value.className = "base-filter-value";
+      value.value = condition.value;
+      value.hidden = VALUELESS.has(condition.op);
+      value.setAttribute("aria-label", t("base.filter.value"));
+      const suggestions = condition.subject === null ? [] : model.suggestions(condition.subject);
+      if (suggestions.length) {
+        const list = document.createElement("datalist");
+        list.id = identifier("base-filter-values");
+        for (const each of suggestions) list.append(option(each));
+        datalists.push(list);
+        value.setAttribute("list", list.id);
+        row.append(list);
+      }
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "base-filter-remove";
+      remove.setAttribute("aria-label", t("base.filter.remove"));
+      remove.append(icon("close"));
+      const edit = (next: VisualCondition, redraw: boolean) => {
+        mode = "visual";
+        draft = (draft ?? []).map((each, at) => at === index ? next : each);
+        if (redraw) drawRows();
+        syncSearch();
+      };
+      subject.addEventListener("change", () => {
+        const folder = subject.value === FOLDER;
+        const was = draft?.[index] ?? condition;
+        const ops = folder ? FOLDER_OPS : PROPERTY_OPS;
+        edit({ subject: folder ? null : subject.value, op: ops.includes(was.op) ? was.op : ops[0]!, value: was.value }, true);
+      });
+      op.addEventListener("change", () => {
+        const was = draft?.[index] ?? condition;
+        edit({ ...was, op: op.value as VisualOp }, VALUELESS.has(op.value as VisualOp) !== VALUELESS.has(was.op));
+      });
+      value.addEventListener("input", () => edit({ ...(draft?.[index] ?? condition), value: value.value }, false));
+      remove.addEventListener("click", () => {
+        mode = "visual";
+        draft = (draft ?? []).filter((_, at) => at !== index);
+        drawRows();
+        syncSearch();
+      });
+      row.append(subject, op, value, remove);
+      return row;
+    };
+    const drawRows = (): void => {
+      datalists.length = 0;
+      rowsBox.replaceChildren(...(draft ?? []).map(conditionRow));
+      visualNote.hidden = draft !== null && !opaque;
+      visualNote.textContent = opaque ? t("base.filter.only_source") : draft === null ? t("base.filter.only_search") : "";
+      if (draft !== null && draft.length === 0) {
+        visualNote.hidden = false;
+        visualNote.textContent = t("base.filter.empty");
+      }
+      addButton.hidden = opaque;
+      updateApply();
+    };
+    // La forma a vista è cambiata: la ricerca la ridice, o dice la più vicina.
+    const syncSearch = (): void => {
+      const current = draft ?? [];
+      const exact = searchOf(filterOfVisual(current));
+      problem = null;
+      parsed = filterOfVisual(current);
+      if (exact !== null) {
+        searchField.value = exact;
+        searchNote.textContent = "";
+      } else {
+        searchField.value = nearestSearch(current) ?? "";
+        searchNote.textContent = t("base.filter.search_contains");
+      }
+      searchNote.hidden = searchNote.textContent === "";
+      updateApply();
+    };
+    // La ricerca è cambiata: la forma a vista la ridice, se sa.
+    const syncVisual = (): void => {
+      mode = "search";
+      const result = filterOfSearch(searchField.value);
+      if ("problem" in result) {
+        problem = result.problem;
+        parsed = null;
+        searchNote.textContent = problemText(result.problem);
+        searchNote.hidden = false;
+        updateApply();
+        return;
+      }
+      problem = null;
+      parsed = result.ok;
+      searchNote.textContent = "";
+      searchNote.hidden = true;
+      draft = visualOf(result.ok);
+      drawRows();
+    };
+    const finalFilter = (): FilterDef | null => mode === "visual" ? filterOfVisual(draft ?? []) : parsed;
+    const updateApply = (): void => {
+      const next = finalFilter();
+      apply.disabled = opaque || !writable() || next === null || problem !== null || sameFilter(next, plan.filters);
+    };
+    const applyFilter = (): void => {
+      const next = finalFilter();
+      if (opaque || !writable() || next === null || problem !== null) return;
+      closePopover();
+      if (!sameFilter(next, plan.filters)) actions.write("filters", filterValue(next));
+    };
+    searchField.addEventListener("input", syncVisual);
+    searchField.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); applyFilter(); } });
+    searchField.disabled = opaque;
+    searchNote.hidden = true;
+    if (draft !== null && initialSearch === null) { searchNote.textContent = t("base.filter.search_contains"); searchNote.hidden = false; }
+    drawRows();
+    open(filterButton, t("base.filter.title", { name: plan.view }), "base-filter-popover", content, null);
+  };
+
+  // ---- Ordina -------------------------------------------------------------
+  const sortContent = (): HTMLElement => {
+    const plan = model.plan!;
+    const content = element("div", "base-sort");
+    content.append(element("p", "base-pop-title", t("base.sort.title", { name: plan.view })));
+    const list = element("div", "base-sort-rows");
+    const write = (next: SortEntry[]) => { if (writable()) actions.write("sort", sortValue(next)); };
+    for (const entry of plan.sort) {
+      const row = element("div", "base-sort-row");
+      const name = element("span", "base-sort-name", labelOf(plan, entry.key));
+      const direction = element("select", "base-sort-direction");
+      direction.setAttribute("aria-label", t("base.sort.direction", { name: labelOf(plan, entry.key) }));
+      direction.append(option(t("base.sort.asc"), "asc", false, !entry.descending), option(t("base.sort.desc"), "desc", false, entry.descending));
+      direction.value = entry.descending ? "desc" : "asc";
+      direction.disabled = !writable();
+      direction.addEventListener("change", () => write(plan.sort.map((each) => sameKey(each.key, entry.key) ? { key: each.key, descending: direction.value === "desc" } : each)));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "base-sort-remove";
+      remove.setAttribute("aria-label", t("base.sort.remove", { name: labelOf(plan, entry.key) }));
+      remove.append(icon("close"));
+      remove.disabled = !writable();
+      remove.addEventListener("click", () => write(withoutSort(plan.sort, entry.key)));
+      row.append(name, direction, remove);
+      list.append(row);
+    }
+    if (plan.sort.length === 0) list.append(element("p", "base-pop-note", t("base.sort.none")));
+    const add = element("select", "base-sort-add");
+    add.setAttribute("aria-label", t("base.sort.add"));
+    add.append(option(t("base.sort.add"), "", true, true));
+    const candidates = [...plan.columns.filter((key) => !key.startsWith("formula.")), ...subjects(plan, []).filter((key) => !plan.columns.some((column) => sameKey(column, key)))];
+    for (const key of candidates) if (!sortedBy(plan.sort, key)) add.append(option(labelOf(plan, key), key));
+    add.disabled = !writable() || add.options.length === 1;
+    add.addEventListener("change", () => { if (add.value) write([...plan.sort, { key: add.value, descending: false }]); });
+    content.append(list, add);
+    if (!actions.grouping.hidden) {
+      content.append(element("p", "base-pop-title", t("base.group.by")), actions.grouping);
+    }
+    return content;
+  };
+  const openSort = (): void => {
+    const plan = model.plan;
+    if (!plan) return;
+    const box = element("div", "base-pop-box");
+    box.append(sortContent());
+    open(sortButton, t("base.sort.title", { name: plan.view }), "base-sort-popover", box, () => {
+      if (model.plan) box.replaceChildren(sortContent());
+      popover?.reposition();
+    });
+  };
+
+  // ---- Proprietà ----------------------------------------------------------
+  const columnsContent = (): HTMLElement => {
+    const plan = model.plan!;
+    const content = element("div", "base-columns");
+    content.append(element("p", "base-pop-title", t("base.columns.title", { name: plan.view })));
+    const shown = plan.order.length ? plan.order : plan.columns;
+    const hidden = subjects(plan, []).filter((key) => !shown.some((column) => sameKey(column, key)));
+    const list = element("ul", "base-column-list");
+    const write = (next: string[]) => { if (writable() && !sameColumns(next, shown)) actions.write("order", next.length ? next : null); };
+    let dragged: number | null = null;
+    const row = (key: string, index: number | null): HTMLLIElement => {
+      const item = element("li", "base-column");
+      item.dataset.column = key;
+      const grip = element("span", "base-column-grip");
+      grip.append(icon("base-grip"));
+      grip.setAttribute("aria-hidden", "true");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = index !== null;
+      box.id = identifier("base-column");
+      box.disabled = !writable();
+      const label = element("label", "base-column-label", labelOf(plan, key));
+      label.htmlFor = box.id;
+      box.addEventListener("change", () => write(toggleColumn(shown, key, box.checked)));
+      // Una casella si spunta anche con Invio, come Spazio: la tastiera non
+      // deve sapere quale dei due tasti la casella ascolta.
+      box.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") { event.preventDefault(); box.click(); return; }
+        if (index === null || !event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+        event.preventDefault();
+        write(moveColumn(shown, index, index + (event.key === "ArrowUp" ? -1 : 1)));
+      });
+      if (index !== null) {
+        item.draggable = writable();
+        grip.title = t("base.columns.move", { name: labelOf(plan, key) });
+        item.addEventListener("dragstart", (event) => {
+          dragged = index;
+          event.dataTransfer?.setData("text/plain", key);
+          if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+          item.classList.add("dragging");
+        });
+        item.addEventListener("dragend", () => { dragged = null; item.classList.remove("dragging"); });
+        item.addEventListener("dragover", (event) => { if (dragged !== null) event.preventDefault(); });
+        item.addEventListener("drop", (event) => {
+          event.preventDefault();
+          if (dragged !== null && dragged !== index) write(moveColumn(shown, dragged, index));
+          dragged = null;
+        });
+      } else item.classList.add("base-column-hidden");
+      item.append(grip, box, label);
+      return item;
+    };
+    list.append(...shown.map((key, index) => row(key, index)), ...hidden.map((key) => row(key, null)));
+    content.append(list, element("p", "base-pop-note", t("base.columns.hint")));
+    return content;
+  };
+  const openColumns = (): void => {
+    const plan = model.plan;
+    if (!plan) return;
+    const box = element("div", "base-pop-box");
+    box.append(columnsContent());
+    open(columnsButton, t("base.columns.title", { name: plan.view }), "base-columns-popover", box, () => {
+      if (!model.plan) return;
+      // Il fuoco resta sulla stessa colonna dopo che il file è cambiato.
+      const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>(".base-column")?.dataset.column;
+      box.replaceChildren(columnsContent());
+      if (focused !== undefined) box.querySelector<HTMLInputElement>(`.base-column[data-column="${CSS.escape(focused)}"] input`)?.focus();
+      popover?.reposition();
+    });
+  };
+
+  // ---- Nuova --------------------------------------------------------------
+  const openTemplates = async (): Promise<void> => {
+    let items: MenuItem[];
+    try {
+      const templates = await actions.templates();
+      items = templates.length
+        ? templates.map((each) => ({ label: each.label, icon: "template", run: () => actions.createFrom(each.path) }))
+        : [{ label: t("base.new.no_templates"), disabled: true }];
+    } catch (failure) {
+      items = [{ label: failure instanceof Error ? failure.message : String(failure), disabled: true }];
+    }
+    if (!lifetime.closed && templateButton.isConnected) showContextMenu(templateButton, items, { label: t("base.new.template") });
+  };
+
+  lifetime.listen(filterButton, "click", openFilter);
+  lifetime.listen(sortButton, "click", openSort);
+  lifetime.listen(columnsButton, "click", openColumns);
+  lifetime.listen(searchButton, "click", () => {
+    if (searchRow.hidden) { openSearch(); return; }
+    // Chiudere la ricerca la svuota: righe nascoste da un campo che non si
+    // vede sarebbero un filtro che nessuno ricorda.
+    searchRow.hidden = true;
+    searchButton.setAttribute("aria-pressed", "false");
+    if (search.value) { search.value = ""; actions.search(); }
+  });
+  lifetime.listen(search, "input", () => actions.search());
+  lifetime.listen(search, "keydown", (event) => {
+    if (event.key !== "Escape" || search.value === "") return;
+    event.stopPropagation();
+    search.value = "";
+    actions.search();
+  });
+  lifetime.listen(moreButton, "click", () => showContextMenu(moreButton, actions.more(), { label: t("base.tool.more") }));
+  lifetime.listen(newButton, "click", () => actions.create());
+  lifetime.listen(templateButton, "click", () => void openTemplates());
+
+  function openSearch(): void {
+    searchRow.hidden = false;
+    searchButton.setAttribute("aria-pressed", "true");
+    search.focus();
+  }
+
+  const drawTabs = (): void => {
+    const keep = document.activeElement instanceof HTMLElement && tabs.contains(document.activeElement) ? document.activeElement.dataset.view : undefined;
+    tabs.replaceChildren(...model.views.map(({ name, type }) => {
+      const tab = element("button", "base-tab");
+      tab.type = "button";
+      tab.dataset.view = name;
+      tab.title = name;
+      tab.setAttribute("aria-pressed", String(name === model.active));
+      tab.append(icon(viewIcon(type)), element("span", "base-tab-label", name));
+      tab.addEventListener("click", () => { if (name !== model.active) actions.chooseView(name); });
+      return tab;
+    }));
+    tabs.hidden = model.views.length === 0;
+    if (keep !== undefined) tabs.querySelector<HTMLElement>(`[data-view="${CSS.escape(keep)}"]`)?.focus();
+  };
+  const chip = (text: string, iconName: string, removeLabel: string, remove: (() => void) | null): HTMLElement => {
+    const each = element("span", "base-chip");
+    each.append(icon(iconName), element("span", "base-chip-text", text));
+    if (remove) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute("aria-label", removeLabel);
+      button.append(icon("close"));
+      button.disabled = model.busy;
+      button.addEventListener("click", remove);
+      each.append(button);
+    }
+    return each;
+  };
+  const drawChips = (): void => {
+    const plan = model.plan;
+    const items: HTMLElement[] = [];
+    if (plan) {
+      const removable = model.lock === null;
+      if (isOpaque(plan.filters)) items.push(chip(t("base.chip.manual"), "base-filter", "", null));
+      else conjuncts(plan.filters).forEach((part, index) => {
+        const text = conjunctText(plan, part);
+        items.push(chip(text, "base-filter", t("base.chip.remove_filter", { name: text }), removable ? () => { if (writable()) actions.write("filters", filterValue(withoutConjunct(plan.filters, index))); } : null));
+      });
+      for (const entry of plan.sort) {
+        const text = `${labelOf(plan, entry.key)} ${entry.descending ? "↓" : "↑"}`;
+        items.push(chip(text, "base-sort", t("base.chip.remove_sort", { name: labelOf(plan, entry.key) }), removable ? () => { if (writable()) actions.write("sort", sortValue(withoutSort(plan.sort, entry.key))); } : null));
+      }
+    }
+    chips.replaceChildren(...items);
+    chips.hidden = items.length === 0;
+  };
+  const drawTools = (): void => {
+    const plan = model.plan;
+    const count = plan && !isOpaque(plan.filters) ? conjuncts(plan.filters).length : plan && isOpaque(plan.filters) ? 1 : 0;
+    filterCount.textContent = count ? String(count) : "";
+    filterButton.classList.toggle("on", count > 0);
+    sortButton.classList.toggle("on", (plan?.sort.length ?? 0) > 0);
+    columnsButton.classList.toggle("on", (plan?.order.length ?? 0) > 0);
+    for (const button of [filterButton, sortButton, columnsButton]) button.disabled = plan === null;
+    filterButton.setAttribute("aria-label", count ? t("base.tool.filter_count", { count }) : t("base.tool.filter"));
+    newButton.disabled = !model.canCreate;
+    templateButton.disabled = !model.canCreate;
+    newGroup.hidden = !model.canCreate && model.lock === "read_only";
+    note.hidden = model.lock === null;
+    note.textContent = model.lock === null ? "" : t(model.lock === "read_only" ? "base.lock.read_only" : "base.lock.embedded");
+    bar.setAttribute("aria-busy", String(model.busy));
+  };
+
+  const relabel = (): void => {
+    bar.setAttribute("aria-label", t("base.bar"));
+    tabs.setAttribute("aria-label", t("base.views"));
+    sortButton.setAttribute("aria-label", t("base.tool.sort"));
+    sortButton.title = t("base.tool.sort");
+    filterButton.title = t("base.tool.filter");
+    columnsButton.setAttribute("aria-label", t("base.tool.properties"));
+    columnsButton.title = t("base.tool.properties");
+    searchButton.setAttribute("aria-label", t("base.tool.search"));
+    searchButton.title = t("base.tool.search");
+    moreButton.setAttribute("aria-label", t("base.tool.more"));
+    moreButton.title = t("base.tool.more");
+    newButton.textContent = t("base.new");
+    templateButton.setAttribute("aria-label", t("base.new.template"));
+    templateButton.title = t("base.new.template");
+    search.setAttribute("aria-label", t("base.tool.search"));
+    search.placeholder = t("base.search.placeholder");
+    writtenSummary.textContent = t("base.written");
+    for (const button of [filterButton, sortButton, columnsButton]) button.setAttribute("aria-haspopup", "dialog");
+    for (const button of [moreButton, templateButton]) button.setAttribute("aria-haspopup", "menu");
+    if (!searchButton.hasAttribute("aria-pressed")) searchButton.setAttribute("aria-pressed", "false");
+    drawTools();
+    drawChips();
+  };
+
+  return {
+    bar, searchRow, search, strip, status, written,
+    update(next) {
+      const viewChanged = next.plan?.view !== model.plan?.view;
+      model = next;
+      drawTabs();
+      drawTools();
+      drawChips();
+      if (viewChanged) closePopover();
+      else refreshPopover?.();
+      roving.refresh();
+    },
+    showWritten(lines) {
+      written.hidden = lines === null;
+      if (lines === null) { writtenLines.replaceChildren(); return; }
+      // Una riga per elemento, col segno davanti: chi legge vede che cosa è
+      // uscito e che cosa è entrato, e da quale riga del file.
+      const line = (text: string, kind: "removed" | "added") =>
+        element("span", `base-written-${kind}`, `${kind === "removed" ? "−" : "+"} ${text}`);
+      writtenLines.replaceChildren(
+        element("span", "base-written-where", t("base.written.line", { line: lines.line })),
+        ...lines.removed.map((text) => line(text, "removed")),
+        ...lines.added.map((text) => line(text, "added")),
+      );
+    },
+    openSearch,
+    closePopover,
+    relabel,
+    destroy() { closePopover(); lifetime.close(); },
+  };
+}

@@ -3,7 +3,7 @@ import type { IndexQuery, IndexResult } from "../../host/contract";
 import {
   allowedBaseTileUrl, baseRowsToCsv, cellText, deriveBaseRows, expectedProperty, fetchAllDocuments,
   parseBaseEmbed, parseBaseViews, planBaseView, prepareBaseMutations,
-  persistBaseView, restoreBaseView, type BaseSurfaceDeps,
+  persistBaseView, restoreBaseView, setBaseViewKey, writtenLines, type BaseSurfaceDeps,
 } from "./data";
 
 function deps(queryIndex: (query: IndexQuery) => Promise<IndexResult>): BaseSurfaceDeps {
@@ -128,5 +128,24 @@ describe("Base contract", () => {
     expect(allowedBaseTileUrl(template, "vector", ["tiles.example.test"], 1, 0, 0)).toBeNull();
     expect(allowedBaseTileUrl(template, "raster", ["tiles.example.test"], 1, 0, 0)).toBe("https://tiles.example.test/1/0/0.png");
     expect(allowedBaseTileUrl("https://tiles.example.test/{z}/{x}/{y}.svg", "vector", ["tiles.example.test"], 1, 1, 1)).toBe("https://tiles.example.test/1/1/1.svg");
+  });
+});
+
+describe("i gesti della barra con base.view.set", () => {
+  it("manda una sola chiave, il valore come JSON e la revisione; null toglie la chiave", async () => {
+    const invokeCommand = vi.fn(async () => ({ notify: null, effect: { kind: "custom", ns: "fub.base", payload: { revision: "r2" } } }));
+    expect(await setBaseViewKey({ invokeCommand }, "Opere.base", "Tabella", "sort", [{ key: "stato", descending: false }], "r1")).toBe("r2");
+    expect(invokeCommand).toHaveBeenLastCalledWith("base.view.set", { doc: "Opere.base", view: "Tabella", key: "sort", value: '[{"key":"stato","descending":false}]', base: "r1" });
+    await setBaseViewKey({ invokeCommand }, "Opere.base", "Tabella", "filters", null, null);
+    expect(invokeCommand).toHaveBeenLastCalledWith("base.view.set", { doc: "Opere.base", view: "Tabella", key: "filters" });
+  });
+
+  it("«Nel file .base» sono le righe fra quelle uguali in testa e in coda", () => {
+    const before = "views:\n  - name: Tabella\n    type: table\n  - name: Bacheca\n";
+    expect(writtenLines(before, before)).toBeNull();
+    expect(writtenLines(before, before.replace("    type: table\n", "    type: table\n    sort:\n      - key: stato\n"))).toEqual({
+      removed: [], added: ["    sort:", "      - key: stato"], line: 4,
+    });
+    expect(writtenLines("a\nb\nc\n", "a\nB\nc\n")).toEqual({ removed: ["b"], added: ["B"], line: 2 });
   });
 });

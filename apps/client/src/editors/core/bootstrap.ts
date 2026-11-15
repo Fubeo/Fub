@@ -733,6 +733,8 @@ export function createDocumentSurfaceRegistry(
           viewState: api.viewState,
           setViewState: api.setViewState,
           onOpenDocument: options.onOpenDocument,
+          // La revisione del `.base` aperto, per i gesti della barra (CAS).
+          revision: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
         });
       },
     },
