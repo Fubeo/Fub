@@ -70,9 +70,9 @@ giro storto.
   giri (`l1Values`); istanza, prima apertura e primo commit restano del
   primo giro, il solo a freddo;
 - un nucleo davvero più lento sposta tutti i giri: con la mediana dei p95 a
-  50 schede intorno ai 5 ms di oggi, la soglia di 22 cade con un'apertura
-  quattro volte più lenta; quella a 2.000 schede (mediana 18, soglia 51) con
-  una tre volte più lenta.
+  50 schede intorno ai 5 ms di questa misura, la soglia di 22 cade con
+  un'apertura quattro volte più lenta; quella a 2.000 schede (mediana 18,
+  soglia 51) con una tre volte più lenta.
 
 ## Che cosa non è misurato
 
