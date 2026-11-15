@@ -31,7 +31,9 @@ fn the_model_reads_the_frontmatter_cases_as_the_fixture_says() {
     for case in cases {
         let name = case["name"].as_str().expect("ogni caso ha un nome");
         let source = case["source"].as_str().expect("ogni caso ha una sorgente");
-        let readable = case["readable"].as_bool().expect("ogni caso dice se si legge");
+        let readable = case["readable"]
+            .as_bool()
+            .expect("ogni caso dice se si legge");
         let model = MarkdownProvider::new()
             .parse(&source.into(), &ParseContext::obsidian("nota.md"))
             .expect("markdown parses");
@@ -40,7 +42,9 @@ fn the_model_reads_the_frontmatter_cases_as_the_fixture_says() {
             Some(Block::Custom { custom_kind: kind, .. }) if kind == custom_kind::FRONTMATTER_UNPARSED
         );
         if unparsed == readable {
-            wrong.push(format!("«{name}»: la fixture dice readable={readable}, il modello no"));
+            wrong.push(format!(
+                "«{name}»: la fixture dice readable={readable}, il modello no"
+            ));
         }
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
