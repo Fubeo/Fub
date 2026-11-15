@@ -270,12 +270,8 @@ comandi del catalogo col loro nome e il loro tasto:
    per una pagina); Ritaglia e ruota, per un'immagine sola, non in sola
    lettura ([gli estratti](canvas-parts.md)); Apri a lato, per una scheda di file, se l'host la dà
    (`onOpenPathBeside`); Spargi le pagine…, per un PDF (sotto); Estrai in una nota…, Copia il testo qui, Sostituisci il file… ([convertire](canvas-convert.md)); Collega… · `C`;
-2. Colore › come scelte esclusive: Nessuno, i sei di JSON Canvas col
-   pallino, «Colori delle note ›» coi nove, «Altro…», che apre il selettore
-   del kit (i colori in `canvas-format.md`); Disponi › (Porta davanti, Porta
-   dietro, Allinea ›, Distribuisci ›; In griglia, In riga, In colonna, Ad albero: `layout`); Duplica; Copia come codice, Incolla codice ([la lavagna come codice](canvas-check.md#nella-lavagna));
-3. in fondo, in rosso: Togli dalla lavagna · `Canc`; Sposta anche il file nel
-   cestino, solo con schede di file e se l'host dà `onTrashPath`.
+2. Colore › come scelte esclusive: Nessuno, i sei di JSON Canvas col pallino, «Colori delle note ›» coi nove, «Altro…», che apre il selettore del kit (i colori in `canvas-format.md`); Disponi › (Porta davanti, Porta dietro, Allinea ›, Distribuisci ›; In griglia, In riga, In colonna, Ad albero: `layout`); Duplica; Copia come codice, Incolla codice ([la lavagna come codice](canvas-check.md#nella-lavagna));
+3. in fondo, in rosso: Togli dalla lavagna · `Canc`; Sposta anche il file nel cestino, solo con schede di file e se l'host dà `onTrashPath`.
 
 Con più schede non ci sono Apri né Collega…; in sola lettura le voci che
 cambiano la lavagna sono spente col perché, non nascoste.
