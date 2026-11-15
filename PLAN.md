@@ -1021,7 +1021,7 @@ scorciatoia cambiata; un test del vault d'esempio in `support.rs`; la scena
 del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/frame; cargo nextest run -p fub-host support
-Stato: [~] coder e revisione fatti (feat/riga-dei-suggerimenti @ d04ab93b9, porta in `editors/core/hints.ts`); con main `document-bridge` sale a 506 298 byte, sopra il tetto: la PR aspetta la divisione del pacchetto, poi baseline dal runner
+Stato: [~] PR #383 (feat/riga-dei-suggerimenti @ 29ab25389, con main dopo #380: `document-bridge` 404 kB); aspetta CI completa e baseline dal runner
 
 ## T15a · Le toppe mirate del `.base`
 
@@ -1091,7 +1091,7 @@ Fatto quando: un test per gesto confronta le righe scritte; le foto del
 banco nelle due luci; la battuta resta nel budget (la Base dentro la nota).
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/base
-Stato: [~] PR #379 (feat/base-filtro-ordina @ f167009f6, con main), due revisioni e correzioni fatte; aspetta CI e baseline dal runner
+Stato: [x] fatto (2026-11-15) · PR #379 in `main` (618fc0243), CI completa verde, 12 baseline dal runner
 
 ## T16 · Base: nuova vista, menu della colonna, riepiloghi
 
@@ -1316,7 +1316,7 @@ piena; un test della scheda della nota; `check-listeners` verde; le foto
 del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/note-peek.test.ts src/editors/text/profiles/markdown/link-card.dom.test.ts
-Stato: [~] revisione e correzioni fatte (feat/sbirciata @ f11347bed, check verde) · aspetta la divisione di `document-bridge` (con main il chunk arriva a 501 kB) prima della PR
+Stato: [~] PR #385 (feat/sbirciata @ 29f253239, con main dopo #380: conflitto risolto sulla porta pigra delle schede, `document-bridge` 400 kB); aspetta CI e baseline
 
 ## T21a · I commenti nel formato: CriticMarkup nel provider Markdown
 
@@ -1407,7 +1407,7 @@ budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/comments
 src/editors/text/profiles/markdown/corpus.test.ts
-Stato: [~] coder e correzioni fatti (feat/commenti-nell-editor @ 16329ed8e più main, check verde, battuta uguale a main entro il rumore); con main `document-bridge` sale a 509 852 byte: la PR aspetta la divisione del pacchetto, poi baseline dal runner
+Stato: [~] PR #384 (feat/commenti-nell-editor @ d193575c7, con main dopo #380; `comments/syntax.ts` nel chunk `markdown-render`); aspetta CI e baseline
 
 ## T22 · Commenti: margine, discussione, Risolvi
 
