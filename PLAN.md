@@ -1119,7 +1119,7 @@ Fatto quando: un test per voce del menu che scrive la chiave giusta; il
 piede in un test DOM; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/base
-Stato: [~] in corso · coder dal 2026-11-15 (feat/base-viste-colonne da main 618fc0243)
+Stato: [~] fatto dal coder (feat/base-viste-colonne @ 8d6a82671), in revisione · 8 baseline nuove dal runner (base-nuova-vista, base-colonna, base-piede, base-venti) e 6 scene base-* che cambiano · difetto visto nelle foto: con venti viste le linguette in più scorrono senza segno
 
 ## T17a · Calendario e linea del tempo nel modello del `.base`
 
