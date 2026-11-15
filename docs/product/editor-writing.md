@@ -120,12 +120,12 @@ Le regole:
   nelle Preferenze con «Riga dei suggerimenti» (`editor.hints`, accesa di
   serie).
 
-La pubblica la nota in Scrittura, attraverso la porta della riga
-(`openHintSource`); un altro editor che vuole i suoi suggerimenti apre la sua
-fonte coi suoi tasti. Anche il segnaposto della riga vuota dice i due tasti del testo:
-«Scrivi, oppure / per i blocchi e @ per persone e date». Il vault della demo ha
-«Il giro dell'editor», una nota con dieci cose da provare, ciascuna un compito
-da spuntare.
+La pubblica la nota in Scrittura, attraverso la porta degli editor
+(`openHintSource` in `editors/core/hints.ts`); un altro editor che vuole i suoi
+suggerimenti apre la sua fonte coi suoi tasti. Anche il segnaposto della riga
+vuota dice i due tasti del testo: «Scrivi, oppure / per i blocchi e @ per
+persone e date». Il vault della demo ha «Il giro dell'editor», una nota con
+dieci cose da provare, ciascuna un compito da spuntare.
 
 ## Incollare un indirizzo
 
@@ -183,10 +183,11 @@ Non tutto diventa un link:
 - `crates/fub-host/src/settings.rs`: `editor.default-mode` e le sue scelte;
   `apps/client/src/panels/settings-model.ts`: le scelte che il pannello mostra;
 - `apps/client/src/editors/core/presence.ts`: i livelli di presenza;
-- `apps/client/src/shells/scrittoio/frame/hints-row.ts`: la riga dei
-  suggerimenti, la porta (`openHintSource`) e i tasti della persona
-  (`resolveHints`); `editors/text/profiles/markdown/hints.ts`: i contesti della
-  nota (`markdownHints`); `crates/fub-host/src/settings.rs`: `editor.hints`;
+- `apps/client/src/editors/core/hints.ts`: la porta dei suggerimenti
+  (`openHintSource`, `currentHints`, `onHintsChanged`);
+  `shells/scrittoio/frame/hints-row.ts`: la riga che la ascolta e i tasti della
+  persona (`resolveHints`); `editors/text/profiles/markdown/hints.ts`: i
+  contesti della nota (`markdownHints`); `crates/fub-host/src/settings.rs`: `editor.hints`;
   `crates/fub-host/src/support.rs`: «Il giro dell'editor» nella demo;
 - `apps/client/bench/scene.mjs`: le scene `scrittura-a-riposo` e
   `riga-dei-suggerimenti`.

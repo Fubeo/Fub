@@ -39,6 +39,7 @@
 | `DocumentSession` | `apps/client/src/state/document-session.ts` |
 | `TextEngine` (il padrone di CodeMirror) | `apps/client/src/editors/text/engine.ts` |
 | il registro delle superfici | `apps/client/src/editors/core/registry.ts` |
+| la porta dei suggerimenti (`openHintSource`) e la riga della banda | `apps/client/src/editors/core/hints.ts`; la riga in `apps/client/src/shells/scrittoio/frame/hints-row.ts` |
 | `SHELL_COMMANDS` e i suoi mirror | `crates/fub-host/src/shell.rs` e `apps/client/src/ui/shell-keys.generated.ts` |
 | `PluginManifest` (`provides`, `requires`) | `crates/fub-abi/src/traits/plugin.rs` |
 | `plugins.disabled` (spegnere per vault) | `crates/fub-host/src/settings.rs` |

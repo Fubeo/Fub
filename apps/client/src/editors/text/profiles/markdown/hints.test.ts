@@ -8,7 +8,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorSelection, EditorState, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { currentHints, resetHintSources, type HintContext, type HintItem } from "../../../../shells/scrittoio/frame/hints-row";
+import { currentHints, resetHintSources, type HintContext, type HintItem } from "../../../core/hints";
 import { blocksMode } from "./blocks";
 import { selectCursorBlock } from "./blocks/selection";
 import { markdownGrammar } from "./grammar";

@@ -31,14 +31,8 @@ vi.mock("../../../i18n/strings", async (original) => ({
   },
 }));
 
-import {
-  HINTS_PAUSE_MS,
-  mountHintsRow,
-  openHintSource,
-  resetHintSources,
-  resolveHints,
-  type HintContext,
-} from "./hints-row";
+import { openHintSource, resetHintSources, type HintContext } from "../../../editors/core/hints";
+import { HINTS_PAUSE_MS, mountHintsRow, resolveHints } from "./hints-row";
 
 function entry(id: string, binding: string | null, declared: string | null = binding, layer: CommandEntry["layer"] = "global"): CommandEntry {
   return { id, title: id, description: "", layer, binding, declared, spec: null, run: () => {} };

@@ -3,10 +3,11 @@
 // Ctrl+K collega» con del testo scelto, «/ inserisce un blocco · @ persone e
 // date» su una riga qualunque.
 //
-// È una porta. Chi ha il fuoco (un editor, il suo «/») apre una fonte e dice
-// che cosa sta facendo come elenco di voci: un id di comando con la frase che
-// lo accompagna, o un tasto che non è un comando (le frecce di un elenco, il
-// «/» che si scrive). La riga scrive i comandi coi tasti **della persona**:
+// La porta sta in `editors/core/hints.ts`: chi ha il fuoco (un editor, il suo
+// «/») apre una fonte e dice che cosa sta facendo come elenco di voci: un id di
+// comando con la frase che lo accompagna, o un tasto che non è un comando (le
+// frecce di un elenco, il «/» che si scrive). Qui c'è la riga, che si abbona
+// alla porta e scrive i comandi coi tasti **della persona**:
 // l'accordo di `allCommands()`, cambiato nelle Preferenze o dichiarato, letto
 // con `displayBinding`. Una scorciatoia tolta dalla persona toglie la voce; due
 // comandi sullo stesso tasto lasciano la voce a quello che il tasto esegue.
@@ -18,6 +19,7 @@
 //
 // È `aria-hidden`: i gesti si annunciano da sé (il grassetto messo, il blocco
 // scelto), la riga no. Non c'è al telefono né sotto i 620 px (`frame.css`).
+import { currentHints, type HintItem, onHintsChanged } from "../../../editors/core/hints";
 import { settings } from "../../../host/query";
 import { onLanguage } from "../../../i18n/strings";
 import { onEvent } from "../../../state/kernel";
@@ -43,85 +45,10 @@ export const HINTS_SETTING = "editor.hints";
 /// La pausa senza cambiamenti dopo la quale la riga si riscrive (ms).
 export const HINTS_PAUSE_MS = 300;
 
-/// Una voce della riga.
-///
-/// - `command`: un comando, coi tasti che la persona gli ha dato. `chord` è
-///   l'accordo con cui la superficie lo esegue da sé (il grassetto di
-///   CodeMirror, `Mod-b`): vale finché il comando non ha un accordo suo, né
-///   dichiarato né scelto. Senza nessuno dei due la voce non c'è.
-/// - `keys`: tasti che non sono un comando (le frecce di un elenco, il «/» che
-///   si scrive, `Mod-Enter` di CodeMirror): uno o più, nella sintassi delle
-///   scorciatoie (`Shift-ArrowUp`) o come nome di un tasto (`/`, `Escape`,
-///   `Mod` per il modificatore tenuto).
-export type HintItem =
-  | { readonly command: string; readonly chord?: string | null; readonly say: string }
-  | { readonly keys: readonly string[]; readonly say: string };
-
-/// Il contesto di chi ha il fuoco: un nome (per i test e per il tema, che lo
-/// legge in `data-context`) e le voci, nell'ordine in cui si dicono.
-export interface HintContext {
-  readonly id: string;
-  readonly items: readonly HintItem[];
-}
-
 /// Una voce come la riga la scrive: i tasti già letti e la frase.
 export interface HintPart {
   readonly keys: readonly string[];
   readonly say: string;
-}
-
-/// La fonte che una superficie apre: `changed` dopo ogni cosa che può aver
-/// cambiato il contesto (selezione, testo, fuoco), `close` quando la superficie
-/// se ne va. `changed(true)` la porta in cima: è chi ha appena preso il fuoco.
-export interface HintSource {
-  changed(raise?: boolean): void;
-  close(): void;
-}
-
-interface Source {
-  readonly read: () => HintContext | null;
-  closed: boolean;
-}
-
-/// Le fonti aperte, dalla più vecchia alla più recente in cima. Vince la più
-/// recente che ha qualcosa da dire: un editor che perde il fuoco risponde
-/// `null`, e la riga passa a chi l'ha preso.
-const sources: Source[] = [];
-
-/// La riga montata, se c'è: senza riga (la finestra di un documento, i test
-/// degli editor) una fonte che avvisa non costa niente.
-let row: { schedule(): void } | null = null;
-
-/// Apre una fonte di suggerimenti. `read` si chiama soltanto dopo la pausa,
-/// mai durante la battuta: può leggere lo stato dell'editor con calma.
-export function openHintSource(read: () => HintContext | null): HintSource {
-  const source: Source = { read, closed: false };
-  sources.push(source);
-  return {
-    changed(raise = false) {
-      if (source.closed) return;
-      if (raise && sources[sources.length - 1] !== source) {
-        sources.splice(sources.indexOf(source), 1);
-        sources.push(source);
-      }
-      row?.schedule();
-    },
-    close() {
-      if (source.closed) return;
-      source.closed = true;
-      sources.splice(sources.indexOf(source), 1);
-      row?.schedule();
-    },
-  };
-}
-
-/// Il contesto che vince adesso, o `null`.
-export function currentHints(): HintContext | null {
-  for (let i = sources.length - 1; i >= 0; i--) {
-    const context = sources[i]!.read();
-    if (context) return context;
-  }
-  return null;
 }
 
 /// Un tasto come si legge: `Mod` è Ctrl (⌘ sul Mac), `Shift-ArrowUp` è
@@ -226,8 +153,8 @@ function fit(element: HTMLElement): void {
   }
 }
 
-/// Monta la riga nella banda, prima di `before` (il lato destro). Una riga
-/// sola per finestra: una seconda prende il posto della prima.
+/// Monta la riga nella banda, prima di `before` (il lato destro). La banda ne
+/// monta una per finestra; la riga ascolta la porta finché vive.
 export function mountHintsRow(lifetime: Lifetime, band: HTMLElement, before: Element | null): HTMLElement {
   const element = document.createElement("span");
   element.id = "status-hints";
@@ -280,12 +207,8 @@ export function mountHintsRow(lifetime: Lifetime, band: HTMLElement, before: Ele
     seen = changes;
     timer = setTimeout(fire, HINTS_PAUSE_MS);
   };
-  const mine = { schedule };
-  row = mine;
-  lifetime.add(() => {
-    clearTimeout(timer);
-    if (row === mine) row = null;
-  });
+  lifetime.add(onHintsChanged(schedule));
+  lifetime.add(() => clearTimeout(timer));
 
   // Una finestra più larga o più stretta rifà la misura con le voci di prima.
   if (typeof ResizeObserver !== "undefined") {
@@ -324,10 +247,4 @@ export function mountHintsRow(lifetime: Lifetime, band: HTMLElement, before: Ele
   }));
   draw();
   return element;
-}
-
-/// Solo per i test: nessuna fonte rimasta da un test all'altro.
-export function resetHintSources(): void {
-  sources.length = 0;
-  row = null;
 }

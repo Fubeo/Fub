@@ -119,7 +119,8 @@ vi.mock("../../../ui/tooltip", () => ({
   setTooltip: (el: Element, text: string) => world.tooltips.set(el, text),
 }));
 
-import { HINTS_PAUSE_MS, openHintSource, resetHintSources } from "./hints-row";
+import { openHintSource, resetHintSources } from "../../../editors/core/hints";
+import { HINTS_PAUSE_MS } from "./hints-row";
 import { mountStatusBand } from "./status-band";
 
 let life: Lifetime;

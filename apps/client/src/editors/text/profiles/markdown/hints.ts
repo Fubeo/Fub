@@ -3,8 +3,8 @@
 // dice che cosa scrivere. Nessuno dei due è nel file né in ciò che si copia, e
 // i lettori di schermo leggono la pastiglia come un pulsante, il segnaposto no.
 //
-// Lo stesso plugin dice alla riga dei suggerimenti della banda (T14,
-// `shells/scrittoio/frame/hints-row.ts`) che cosa si sta facendo: riga
+// Lo stesso plugin dice alla riga dei suggerimenti della banda, attraverso la
+// porta di `editors/core/hints.ts`, che cosa si sta facendo: riga
 // qualunque, testo scelto, compito, link, blocchi scelti, titolo della pagina,
 // «/» aperto. A ogni transazione avvisa soltanto; il contesto lo legge la riga
 // dopo la pausa.
@@ -13,7 +13,7 @@ import { type EditorState, type Extension, Facet, type Line } from "@codemirror/
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import { createList, openPopover, type PopoverHandle } from "../../../../kit";
 import { openLifetime } from "../../../../ui/lifetime";
-import { openHintSource, type HintContext, type HintItem, type HintSource } from "../../../../shells/scrittoio/frame/hints-row";
+import { openHintSource, type HintContext, type HintItem, type HintSource } from "../../../core/hints";
 import { lineHeading, MARKDOWN_ACTIONS, markdownActionState } from "./actions";
 import { blockModel } from "./blocks/model";
 import { blockSelection, escapeLeaves } from "./blocks/selection";
