@@ -2809,3 +2809,5 @@ La più recente in cima: data · piano · decisione · perché.
   `apps/client/src/editors/canvas/spread-pages-parity.test.ts`; in `docs/`
   `canvas-check`, `canvas-code` (resta a 549 righe), `canvas-schema`,
   `canvas-parts`, `mcp-server`, `map/pagine` e la nuova `canvas-pages-code`.
+
+- 2026-11-15 · LIC T19 · Il vettore `draw-on-page-object-is-malformed.json` e il test `on_e_una_parola_o_un_id_finche_non_arrivano_pagina_e_cella` di `tests/spec.rs` erano nati provvisori («arrivano con LIC T19»): T19 li sostituisce con `draw-on-page-of-a-text-card-is-rejected.json` e coi test della pagina e della cella. È una deroga alla regola «un vettore di `canvas-ops/` che c'è non cambia esito», valida solo per questi due, perché il loro esito diceva soltanto che la pagina non c'era ancora.
