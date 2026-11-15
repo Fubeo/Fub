@@ -19,7 +19,9 @@ export interface BlockGesture {
   /// Dove si vedeva l'immagine sollevata al momento del rilascio: di quanto
   /// (px) il suo angolo stava lontano dal posto vecchio del protagonista, e
   /// la sua scala dall'angolo in alto a sinistra. L'atterraggio parte da lì.
-  readonly lift?: { readonly x: number; readonly y: number; readonly scale?: number };
+  /// `clip`: fin dove (px dal suo bordo alto) il blocco in mano si vedeva;
+  /// le righe di un blocco alto oltre il taglio entrano in dissolvenza.
+  readonly lift?: { readonly x: number; readonly y: number; readonly scale?: number; readonly clip?: number };
   /// Il tratto del documento che sparisce senza che il testo cambi: il corpo
   /// di un ripiegabile che si chiude.
   readonly hides?: { readonly from: number; readonly to: number };

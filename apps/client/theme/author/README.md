@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **1832 hook**, **7 stati** (856 assegnazioni su 254 componenti) e lascia ridichiarare alla persona **189 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **1841 hook**, **7 stati** (856 assegnazioni su 254 componenti) e lascia ridichiarare alla persona **189 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
 Dichiara anche **66 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
@@ -12,7 +12,7 @@ Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
 - **cornice** (1437 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
 - **segno** (135 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
-- **contenuto** (260 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
+- **contenuto** (269 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
 Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.
 
@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 495 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 497 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup base-board base-cards base-chevron-down
@@ -114,22 +114,22 @@ gr-shape-ellipse gr-shape-line gr-shape-outline gr-shape-rectangle gr-shape-roun
 gr-shape-triangle gr-shapes gr-sheet gr-show-formulas gr-sort gr-sort-asc gr-sort-desc
 gr-sort-filter gr-styles gr-subtotal gr-sum gr-symbol gr-table gr-table-style gr-text gr-text-box
 gr-text-columns gr-theme gr-ungroup gr-unlock gr-unmerge gr-validation gr-view-normal gr-what-if
-gr-wrap gr-zoom gr-zoom-100 gr-zoom-selection graph hash heading heart help history home image inbox
-info keyboard kit-eyedropper line-number media-dark-pages media-fit-width media-page-next
-media-page-previous media-show-annotations media-thumbnails media-two-pages minus monitor moon more
-music notes outline palette panel-left panel-right pen people pin plus properties publish query
-rc-align-center rc-align-justify rc-align-left rc-align-right rc-break-column rc-break-page
-rc-bullets rc-chevron-down rc-chevron-up rc-clear rc-column-after rc-column-before rc-column-delete
-rc-column-left rc-column-right rc-columns rc-comment-new rc-comments rc-count rc-drawing
-rc-drawing-edit rc-find rc-footer rc-header rc-image rc-indent-less rc-indent-more rc-ink-eraser
-rc-ink-highlighter rc-ink-lasso rc-ink-medium rc-ink-pen rc-ink-pen-only rc-ink-select rc-ink-stroke
-rc-ink-thick rc-ink-thin rc-link rc-look-adapted rc-margins rc-merge rc-mode-page rc-mode-reading
-rc-mode-writing rc-note rc-numbers rc-orientation rc-page rc-painter rc-paper-size rc-quote rc-redo
-rc-replace rc-rev-accept rc-rev-accept-all rc-rev-next rc-rev-previous rc-rev-reject
-rc-rev-reject-all rc-row-after rc-row-before rc-row-delete rc-row-down rc-row-up rc-spacing rc-split
-rc-styles rc-table rc-toc rc-track rc-undo rc-wrap rc-wrap-behind rc-wrap-front rc-wrap-inline
-rc-wrap-square rc-zoom-in rc-zoom-out rc-zoom-reset restore ring search settings sort split square
-star stats sun sync tag tasks template trash vault view warning
+gr-wrap gr-zoom gr-zoom-100 gr-zoom-selection graph grip-eyes grip-eyes-held hash heading heart help
+history home image inbox info keyboard kit-eyedropper line-number media-dark-pages media-fit-width
+media-page-next media-page-previous media-show-annotations media-thumbnails media-two-pages minus
+monitor moon more music notes outline palette panel-left panel-right pen people pin plus properties
+publish query rc-align-center rc-align-justify rc-align-left rc-align-right rc-break-column
+rc-break-page rc-bullets rc-chevron-down rc-chevron-up rc-clear rc-column-after rc-column-before
+rc-column-delete rc-column-left rc-column-right rc-columns rc-comment-new rc-comments rc-count
+rc-drawing rc-drawing-edit rc-find rc-footer rc-header rc-image rc-indent-less rc-indent-more
+rc-ink-eraser rc-ink-highlighter rc-ink-lasso rc-ink-medium rc-ink-pen rc-ink-pen-only rc-ink-select
+rc-ink-stroke rc-ink-thick rc-ink-thin rc-link rc-look-adapted rc-margins rc-merge rc-mode-page
+rc-mode-reading rc-mode-writing rc-note rc-numbers rc-orientation rc-page rc-painter rc-paper-size
+rc-quote rc-redo rc-replace rc-rev-accept rc-rev-accept-all rc-rev-next rc-rev-previous
+rc-rev-reject rc-rev-reject-all rc-row-after rc-row-before rc-row-delete rc-row-down rc-row-up
+rc-spacing rc-split rc-styles rc-table rc-toc rc-track rc-undo rc-wrap rc-wrap-behind rc-wrap-front
+rc-wrap-inline rc-wrap-square rc-zoom-in rc-zoom-out rc-zoom-reset restore ring search settings sort
+split square star stats sun sync tag tasks template trash vault view warning
 ```
 
 ## Limiti e pubblicazione

@@ -32,7 +32,7 @@
 // che tiene. Le baseline si contano come Vite le vede, cioè come file.
 import { describe, expect, it } from "vitest";
 
-import { LIGHTS as lights, SCENE as scene, photoFilename as foto, sceneUrl } from "./scene.mjs";
+import { LIGHTS as lights, SCENE as scene, photoFilename as foto, sceneUrl, scrimClickPoint } from "./scene.mjs";
 import { SAMPLES } from "./samples";
 import sourceNode from "../src/ui/node.ts?raw";
 
@@ -212,5 +212,42 @@ describe("the component catalog", () => {
   it("does not let two samples cover the same kind", () => {
     const all = SAMPLES.flatMap((c) => c.covers);
     expect(new Set(all).size, "two samples contend for one kind").toBe(all.length);
+  });
+});
+
+// Il clic che richiude il cassetto dell'albero lascia lì il puntatore. Sul
+// bordo destro c'è la striscia da cui l'ispettore chiuso si affaccia
+// (`frame/peek.ts`): un puntatore fermo lì lo fa comparire sopra la nota, e la
+// foto a 800 e 900 px lo prendeva o no secondo il tempo.
+describe("il clic che richiude il cassetto dell'albero", () => {
+  const scrim = { x: 48, y: 40, width: 752, height: 724 };
+  const drawer = { x: 48, y: 40, width: 320, height: 724 };
+  const edges = [
+    { x: 790, y: 40, width: 10, height: 724 },
+    { x: 48, y: 40, width: 10, height: 724 },
+  ];
+  const inside = (point: { x: number; y: number }, box: { x: number; y: number; width: number; height: number }) => {
+    const x = scrim.x + point.x;
+    const y = scrim.y + point.y;
+    return x >= box.x && x < box.x + box.width && y >= box.y && y < box.y + box.height;
+  };
+
+  it("non cade sul bordo dell'ispettore né sul cassetto", () => {
+    const point = scrimClickPoint(scrim, [drawer, ...edges]);
+    for (const box of [drawer, ...edges]) expect(inside(point, box)).toBe(false);
+    expect(point.y).toBe(8);
+    expect(point.x).toBeGreaterThan(0);
+    expect(point.x).toBeLessThan(scrim.width);
+  });
+
+  it("ignora ciò che non attraversa la riga del clic, come il cassetto del telefono", () => {
+    const sheet = { x: 0, y: 400, width: 800, height: 364 };
+    const point = scrimClickPoint(scrim, [sheet, edges[0]!]);
+    expect(inside(point, edges[0]!)).toBe(false);
+    expect(point.y).toBe(8);
+  });
+
+  it("lancia se la riga è tutta coperta", () => {
+    expect(() => scrimClickPoint(scrim, [{ ...scrim }])).toThrow(/tutto coperto/);
   });
 });
