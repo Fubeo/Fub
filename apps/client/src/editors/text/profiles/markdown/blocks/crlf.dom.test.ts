@@ -139,6 +139,8 @@ describe("i blocchi in una nota CRLF", () => {
     const columns = "> [!columns]\n> > [!column]\n> > A\n>\n> > [!column]\n> > B\n\nC";
     both(columns, null, (state) => dropAsColumn(state, blocksOf(state), { first: indexAt(state, "C"), last: indexAt(state, "C") }, 0, "left"),
       "> [!columns]\n> > [!column]\n> > C\n>\n> > [!column]\n> > A\n>\n> > [!column]\n> > B");
+    both(columns, null, (state) => dropAsColumn(state, blocksOf(state), { first: indexAt(state, "C"), last: indexAt(state, "C") }, 0, "right"),
+      "> [!columns]\n> > [!column]\n> > A\n>\n> > [!column]\n> > B\n>\n> > [!column]\n> > C");
   });
 
   it("«Trasforma in» scrive le righe nuove come righe", () => {
