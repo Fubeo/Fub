@@ -41,7 +41,7 @@ import { cellAt, cellBoxes, selectedCells } from "./cell-selection";
 import { canComment } from "./comments";
 import { goToRevision, resolveAll, resolveRevision } from "./review";
 import { richSchema } from "./schema";
-import { emptyCellLike, emptyRowLike, evenColumns } from "./table-structure";
+import { applyTableEdit, emptyCellLike, emptyRowLike, evenColumns } from "./table-structure";
 import { tracking } from "./track";
 
 const { para, row: rowType, cell: cellType, table: tableType, brk } = richSchema.nodes;
@@ -491,26 +491,21 @@ export function insertRow(where: "before" | "after"): Command {
   };
 }
 
+/// Sposta la riga del cursore di un posto, col cambio di tabella di tutti i
+/// gesti (`applyTableEdit`): Ctrl+Alt con le frecce e Alt con le frecce
+/// sulle celle scelte seguono la stessa regola.
 export function moveRow(delta: -1 | 1): Command {
   return (state, dispatch) => {
     const at = rowAt(state.selection.$from);
     if (!at) return false;
-    const target = at.rowIndex + delta;
-    if (target < 0 || target >= at.table.childCount) return false;
+    const tr = state.tr;
+    if (!applyTableEdit(tr, at.table, at.tablePos, { kind: "move-rows", from: at.rowIndex, to: at.rowIndex, by: delta })) return false;
     if (dispatch) {
-      const other = at.table.child(target);
+      const table = tr.doc.nodeAt(at.tablePos)!;
+      let pos = at.tablePos + 1;
+      for (let r = 0; r < at.rowIndex + delta; r += 1) pos += table.child(r).nodeSize;
       const offset = state.selection.from - at.rowPos;
-      const tr = state.tr;
-      if (delta < 0) {
-        const otherPos = at.rowPos - other.nodeSize;
-        tr.replaceWith(otherPos, at.rowPos + at.row.nodeSize, [at.row, other]);
-        tr.setSelection(TextSelection.near(tr.doc.resolve(otherPos + offset)));
-      } else {
-        const end = at.rowPos + at.row.nodeSize + other.nodeSize;
-        tr.replaceWith(at.rowPos, end, [other, at.row]);
-        tr.setSelection(TextSelection.near(tr.doc.resolve(at.rowPos + other.nodeSize + offset)));
-      }
-      dispatch(tr.scrollIntoView());
+      dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(pos + offset))).scrollIntoView());
     }
     return true;
   };
@@ -561,13 +556,20 @@ function rebuildColumns(
   at.table.forEach((row) => rows.push(rowType.create(row.attrs, cells(row))));
   const table = tableType.create(at.table.attrs, rows);
   const tr = state.tr.replaceWith(at.tablePos, at.tablePos + at.table.nodeSize, table);
+  dispatch(cursorInCell(tr, at, cell, offset).scrollIntoView());
+}
+
+/// Mette in `tr` il cursore nella cella `cell` della riga di `at`, nella
+/// tabella che `tr` ha appena rifatto, `offset` dopo l'inizio della cella.
+function cursorInCell(tr: Transaction, at: InRow, cell: number, offset: number): Transaction {
+  const table = tr.doc.nodeAt(at.tablePos)!;
   let pos = at.tablePos + 1;
   for (let r = 0; r < at.rowIndex; r += 1) pos += table.child(r).nodeSize;
   const row = table.child(at.rowIndex);
   pos += 1;
   for (let c = 0; c < cell; c += 1) pos += row.child(c).nodeSize;
   const inside = Math.min(pos + 1 + offset, pos + row.child(cell).nodeSize - 1);
-  dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(inside))).scrollIntoView());
+  return tr.setSelection(TextSelection.near(tr.doc.resolve(inside)));
 }
 
 /// Una colonna vuota accanto a quella del cursore: ogni cella copia le
@@ -590,20 +592,17 @@ export function insertColumn(where: "before" | "after"): Command {
   };
 }
 
+/// Sposta la colonna del cursore di un posto, col cambio di tabella di tutti
+/// i gesti (`applyTableEdit`): con celle unite in larghezza non si sposta.
 export function moveColumn(delta: -1 | 1): Command {
   return (state, dispatch) => {
-    const at = columnAt(state);
-    const target = (at?.cellIndex ?? -2) + delta;
-    if (!at || target < 0 || target >= at.row.childCount) return false;
-    if (dispatch) {
-      const cells = (row: PmNode) => {
-        const out: PmNode[] = [];
-        row.forEach((cell) => out.push(cell));
-        [out[at.cellIndex], out[target]] = [out[target]!, out[at.cellIndex]!];
-        return out;
-      };
-      rebuildColumns(state, dispatch, at, cells, target, at.offset);
-    }
+    const { $from } = state.selection;
+    const at = rowAt($from);
+    if (!at) return false;
+    const cellIndex = $from.index(at.depth);
+    const tr = state.tr;
+    if (!applyTableEdit(tr, at.table, at.tablePos, { kind: "move-columns", from: cellIndex, to: cellIndex, by: delta })) return false;
+    if (dispatch) dispatch(cursorInCell(tr, at, cellIndex + delta, $from.pos - $from.start(at.depth + 1)).scrollIntoView());
     return true;
   };
 }

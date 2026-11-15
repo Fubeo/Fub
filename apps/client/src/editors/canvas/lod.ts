@@ -58,20 +58,20 @@ export function cardDetail(level: DetailLevel, seen: boolean, keepLive = false):
 /// Il titolo grande di una scheda: il nome del file senza cartella (con la
 /// sezione, se ne mostra una), l'indirizzo senza `https://`, il nome di un
 /// testo (`textCardName`: la prima riga senza i segni del Markdown), il nome di
-/// un gruppo. Una scheda senza niente da dire ha il titolo vuoto: il CSS taglia
-/// quelli lunghi.
+/// un gruppo. Una scheda senza niente da dire ha il titolo vuoto, mai l'id
+/// interno: il CSS taglia quelli lunghi.
 export function farTitle(node: CanvasNode): string {
   switch (node.type) {
     case "file": {
       const file = typeof node.file === "string" ? node.file : "";
       const name = file.split("/").pop() ?? "";
       const subpath = typeof node.subpath === "string" ? node.subpath.replace(/^#+/, "") : "";
-      if (name === "") return node.id;
+      if (name === "") return "";
       return subpath === "" ? name : `${name} › ${subpath.replace(/#/g, " › ")}`;
     }
     case "link": {
       const url = typeof node.url === "string" ? node.url : "";
-      return url.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/$/, "") || node.id;
+      return url.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/$/, "");
     }
     case "text":
       return textCardName(typeof node.text === "string" ? node.text : "");

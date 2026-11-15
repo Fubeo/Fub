@@ -799,6 +799,47 @@ describe("le tabelle della superficie Markdown", () => {
     expect(ed.editorActions.state("markdown.bold").active).toBe(true);
     ed.destroy();
   });
+
+  it("le celle scelte seguono la tabella quando cambia senza cambiare la scelta: annulla, ripeti, disco", () => {
+    const { ed, parent } = editor();
+    ed.buffer.setDoc("| a |\n| --- |\n| 1 |\n| 2 |\n");
+    const grid = parent.querySelector<HTMLElement>(".tb-grid")!;
+    grid.focus();
+    const press = (key: string, shiftKey = false) =>
+      grid.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
+    press("ArrowDown");
+    press("ArrowDown", true);
+    const values = () => [...(ed.cellSelection!.read()?.values() ?? [])];
+    expect(values()).toEqual(["1", "2"]);
+    const heard = vi.fn();
+    const stop = ed.cellSelection!.subscribe(heard);
+    // Una modifica dalla barra, poi annulla: la somma deve rileggere.
+    expect(ed.editorActions.run("markdown.bold")).toBe(true);
+    heard.mockClear();
+    expect(ed.undo()).toBe(true);
+    expect(heard).toHaveBeenCalled();
+    expect(values()).toEqual(["1", "2"]);
+    // La stessa nota ricaricata dal disco con altri numeri.
+    heard.mockClear();
+    ed.buffer.syncDoc("| a |\n| --- |\n| 5 |\n| 7 |\n");
+    expect(heard).toHaveBeenCalled();
+    expect(values()).toEqual(["5", "7"]);
+    stop();
+    ed.destroy();
+  });
+
+  it("le celle scelte portano la lingua della nota, anche scritta «it_IT»", () => {
+    const { ed, parent } = editor();
+    ed.buffer.setDoc("---\nlang: it_IT\n---\n| a |\n| --- |\n| 1.240 |\n| 860 |\n");
+    const grid = parent.querySelector<HTMLElement>(".tb-grid")!;
+    grid.focus();
+    const press = (key: string, shiftKey = false) =>
+      grid.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
+    press("ArrowDown");
+    press("ArrowDown", true);
+    expect(ed.cellSelection!.read()?.locale).toBe("it-IT");
+    ed.destroy();
+  });
 });
 
 describe("i disegni incorporati nella Lettura", () => {
@@ -909,7 +950,55 @@ describe("i disegni incorporati nella Lettura", () => {
   });
 });
 
-describe("i Blocchi in due riquadri (H16)", () => {
+describe("Scrittura: i Blocchi dentro la resa viva (T3)", () => {
+  it("si apre in Scrittura, coi Blocchi montati dal primo disegno; Sorgente e Lettura non li hanno", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("# Titolo\n\nUno\n\nDue");
+    expect(ed.modes.map((mode) => mode.id)).toEqual(["source", "live_preview", "reading"]);
+    expect(ed.modes.map((mode) => mode.label())).toEqual(["Sorgente", "Scrittura", "Lettura"]);
+    expect(ed.defaultMode).toBe("live_preview");
+    expect(view().scrollDOM.querySelector(".cm-fub-block-handles")).not.toBeNull();
+    ed.setMode("source");
+    expect(view().scrollDOM.querySelector(".cm-fub-block-handles")).toBeNull();
+    ed.setMode("live_preview");
+    expect(view().scrollDOM.querySelector(".cm-fub-block-handles")).not.toBeNull();
+    ed.destroy();
+  });
+
+  it("chi chiede i Blocchi di prima ottiene Scrittura; un id che la nota non conosce lancia", () => {
+    const { ed, parent } = editor();
+    ed.setMode("source");
+    ed.setMode("blocks");
+    expect(parent.dataset.markdownMode).toBe("live_preview");
+    expect(() => ed.setMode("wysiwyg")).toThrow(RangeError);
+    ed.destroy();
+  });
+
+  it("in sola lettura niente maniglie né strumenti della testata, e la Lettura resta possibile", async () => {
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("---\nicon: 🧳\n---\nUno\n\nDue");
+    ed.setReadOnly(true);
+    view().focus();
+    view().dispatch({ selection: { anchor: view().state.doc.length } });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(view().scrollDOM.querySelector<HTMLElement>(".cm-fub-block-handles")!.hidden).toBe(true);
+    expect(view().dom.querySelector(".cm-fub-page-tools")).toBeNull();
+    ed.setMode("reading");
+    expect(reading().textContent).toContain("Due");
+    ed.destroy();
+  });
+
+  it("le maniglie e gli strumenti della testata dichiarano la loro presenza (al passaggio)", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("---\nicon: 🧳\n---\nUno\n\nDue");
+    expect(view().scrollDOM.querySelector(".cm-fub-block-handles")?.getAttribute("data-presence")).toBe("hover");
+    expect(view().scrollDOM.querySelector(".cm-fub-block-drop")?.getAttribute("data-presence")).toBe("request");
+    expect(view().dom.querySelector(".cm-fub-page-tools")?.getAttribute("data-presence")).toBe("hover");
+    ed.destroy();
+  });
+});
+
+describe("Scrittura in due riquadri (H16)", () => {
   it("la selezione di blocchi resta del suo riquadro e le modifiche dell'altro non sono battute", async () => {
     const { blockSelection } = await import("./blocks/selection");
     const doc = "Uno\n\nDue\n\nTre";
@@ -917,9 +1006,8 @@ describe("i Blocchi in due riquadri (H16)", () => {
     const source = editor();
     blocks.ed.buffer.setDoc(doc);
     source.ed.buffer.setDoc(doc);
-    blocks.ed.setMode("blocks");
     source.ed.setMode("source");
-    await vi.waitFor(() => expect(blocks.view().scrollDOM.querySelector(".cm-fub-block-handles")).not.toBeNull());
+    expect(blocks.view().scrollDOM.querySelector(".cm-fub-block-handles")).not.toBeNull();
 
     blocks.view().dispatch({ selection: { anchor: doc.indexOf("Tre") } });
     blocks.view().contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));

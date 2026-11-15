@@ -181,6 +181,12 @@ impl VaultStorage for FsStorage {
         }
         Ok(())
     }
+    fn move_in_no_replace(&self, outside: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        // Senza una radice aperta i due path sono ambientali comunque: la
+        // mossa è la stessa di una dentro il vault.
+        self.rename_no_replace(outside, to)
+    }
+
     fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
         if let Some(parent) = to.parent() {
             std::fs::create_dir_all(parent)?;

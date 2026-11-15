@@ -24,7 +24,8 @@ Il component model isola la memoria. Il runtime corrente:
 - non collega WASI, tranne `wasi:random/random` e `insecure-seed` (il seme
   delle `HashMap` della std dalla Rust 1.95), a ogni patch della 0.2: danno
   byte dal generatore crittografico del sistema (al massimo 64 KiB per
-  richiesta) perché un guest che genera identità o chiavi non riceva valori
+  richiesta e 1 MiB sommando le richieste di una chiamata del contratto,
+  budget che riparte con la scadenza; oltre è una trap) perché un guest che genera identità o chiavi non riceva valori
   prevedibili; ogni altro import WASI è collegato a una trap;
 - non concede filesystem o rete diretti;
 - impone un limite alla memoria lineare e agli elementi di ogni tabella, che

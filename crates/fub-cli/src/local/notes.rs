@@ -312,6 +312,14 @@ pub fn wordcount(
             fub_abi::Text::Literal(id.as_str().to_string()),
         )));
     }
+    // Un file che non è testo (un PDF, un'immagine): la view lo dice con la
+    // sua chiave invece di contare, e qui diventa un rifiuto dell'argomento.
+    if tree.key.as_deref() == Some("not_text") {
+        return Err(Failure::bad_args(format!(
+            "{}: non è un file di testo, non ci sono parole da contare",
+            id.as_str()
+        )));
+    }
     let count = |key: &str| {
         count_of(&tree, key)
             .ok_or_else(|| Failure::local(format!("stats.document non ha detto `{key}`")))

@@ -982,6 +982,45 @@ describe("CanvasEngine: il testo di una scheda", () => {
     engine.destroy();
   });
 
+  it("una scheda senza testo, anche mentre si scrive, dice la sua specie a parole: mai l'id interno", () => {
+    vi.useFakeTimers();
+    const source = JSON.stringify({
+      nodes: [
+        { id: "n-mszrueo0-a4o7t6-1", type: "text", x: 40, y: 40, width: 240, height: 140, text: "" },
+        { id: "n-titolo", type: "text", x: 400, y: 40, width: 240, height: 140, text: "\n# Idee **nuove**\naltro" },
+        { id: "n-gruppo", type: "group", x: 40, y: 240, width: 600, height: 300, label: "  " },
+      ],
+      edges: [{ id: "e1", fromNode: "n-mszrueo0-a4o7t6-1", toNode: "n-titolo" }],
+    });
+    const { engine, host } = mounted(source);
+    const head = (id: string) => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"] .canvas-node-handle`)!;
+    const title = (id: string) => head(id).querySelector(".canvas-node-title")!.textContent;
+    const connect = (id: string) => head(id).querySelector(".canvas-connect")!.getAttribute("aria-label");
+    const textKind = t("canvas_menu.header", { kind: t("canvas_menu.kind.text") });
+    expect(title("n-mszrueo0-a4o7t6-1")).toBe(textKind);
+    expect(connect("n-mszrueo0-a4o7t6-1")).toBe(t("canvas.connect", { card: textKind }));
+    // Un testo col nome: la prima riga scritta, senza i segni del Markdown.
+    expect(title("n-titolo")).toBe("Idee nuove");
+    expect(connect("n-titolo")).toBe(t("canvas.connect", { card: t("canvas.a11y.titled", { kind: textKind, name: "Idee nuove" }) }));
+    expect(title("n-gruppo")).toBe(t("canvas.a11y.group"));
+    // Mentre si scrive, prima del commit: la testata e il campo non dicono l'id.
+    const input = openField(host, "n-mszrueo0-a4o7t6-1");
+    type(input, "Appunto");
+    expect(input.getAttribute("aria-label")).toBe(t("canvas.edit_text", { card: textKind }));
+    expect(title("n-mszrueo0-a4o7t6-1")).toBe(textKind);
+    // Il nome di → segue il testo registrato.
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(title("n-mszrueo0-a4o7t6-1")).toBe("Appunto");
+    expect(connect("n-mszrueo0-a4o7t6-1")).toBe(t("canvas.connect", { card: t("canvas.a11y.titled", { kind: textKind, name: "Appunto" }) }));
+    input.blur();
+    // Né a schermo né nei nomi per il lettore di schermo.
+    const shown = host.textContent ?? "";
+    for (const id of ["n-mszrueo0-a4o7t6-1", "n-titolo", "n-gruppo"]) expect(shown).not.toContain(id);
+    const labels = [...host.querySelectorAll("[aria-label]")].map((el) => el.getAttribute("aria-label") ?? "");
+    for (const id of ["n-mszrueo0-a4o7t6-1", "n-titolo", "n-gruppo"]) expect(labels.join("\n")).not.toContain(id);
+    engine.destroy();
+  });
+
   it("Invio in una scheda di testo va a capo e registra; Ctrl+Invio e Cmd+Invio registrano, chiudono e aprono la scheda dopo (A15, T44)", () => {
     vi.useFakeTimers();
     const { engine, host, changes } = mounted();

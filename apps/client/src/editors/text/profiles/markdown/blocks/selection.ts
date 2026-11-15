@@ -9,6 +9,7 @@ import {
   EditorSelection,
   type EditorState,
   type Extension,
+  Facet,
   Prec,
   StateEffect,
   StateField,
@@ -207,8 +208,13 @@ const duplicate = whenSelected((view, blocks, selected) => {
   return true;
 });
 
+/// Esc è dell'ospite dell'editor (`BlocksOptions.escapeLeaves`, una scheda
+/// della lavagna): sul testo non seleziona il blocco, così l'ospite lo riceve
+/// libero ed esce; una selezione di blocchi già fatta Esc la chiude ancora.
+export const escapeLeaves = Facet.define<boolean, boolean>({ combine: (values) => values.some(Boolean) });
+
 export const blockSelectionKeys: readonly KeyBinding[] = [
-  { key: "Escape", run: (view) => leave(view) || selectCursorBlock(view) },
+  { key: "Escape", run: (view) => leave(view) || (!view.state.facet(escapeLeaves) && selectCursorBlock(view)) },
   { key: "Enter", run: leave },
   { key: "ArrowUp", run: step(-1, false) },
   { key: "ArrowDown", run: step(1, false) },

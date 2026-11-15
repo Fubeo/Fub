@@ -513,14 +513,17 @@ impl Component {
 const WASI_RANDOM_LIMIT: u64 = 64 * 1024;
 
 /// `len` byte dal generatore crittografico del sistema, o una trap se la
-/// richiesta supera [`WASI_RANDOM_LIMIT`] o il sistema non ne dà.
-fn wasi_random_bytes(len: u64) -> wasmtime::Result<Vec<u8>> {
+/// richiesta supera [`WASI_RANDOM_LIMIT`], se la chiamata in corso ha già
+/// speso il suo budget (`crate::limits::RANDOM_BUDGET`) o se il sistema non ne
+/// dà.
+fn wasi_random_bytes(state: &mut State, len: u64) -> wasmtime::Result<Vec<u8>> {
     use ring::rand::SecureRandom;
     if len > WASI_RANDOM_LIMIT {
         return Err(wasmtime::Error::msg(format!(
             "get-random-bytes: {len} byte richiesti, il limite è {WASI_RANDOM_LIMIT}"
         )));
     }
+    state.take_random(len).map_err(wasmtime::Error::new)?;
     let mut bytes = vec![0u8; len as usize];
     ring::rand::SystemRandom::new()
         .fill(&mut bytes)
@@ -552,8 +555,8 @@ fn cap_the_rest(
             // Il seme delle `HashMap` della std di Rust dalla 1.95: lo si dà
             // dal generatore del sistema, che basta anche al caso «insicuro».
             let mut instance = linker.instance(name)?;
-            instance.func_new("insecure-seed", |_, _, results| {
-                let bytes = wasi_random_bytes(16)?;
+            instance.func_new("insecure-seed", |mut store, _, results| {
+                let bytes = wasi_random_bytes(store.data_mut(), 16)?;
                 let word = |at: usize| {
                     let mut word = [0u8; 8];
                     word.copy_from_slice(&bytes[at..at + 8]);
@@ -569,17 +572,22 @@ fn cap_the_rest(
             // un guest che ci fa un uuid o una chiave non deve ricevere sempre
             // gli stessi byte (I70). Nessun'altra porta di WASI si apre.
             let mut instance = linker.instance(name)?;
-            instance.func_new("get-random-bytes", |_, params, results| {
+            instance.func_new("get-random-bytes", |mut store, params, results| {
                 let Some(Val::U64(len)) = params.first() else {
                     return Err(wasmtime::Error::msg(
                         "get-random-bytes: argomento non valido",
                     ));
                 };
-                results[0] = Val::List(wasi_random_bytes(*len)?.into_iter().map(Val::U8).collect());
+                results[0] = Val::List(
+                    wasi_random_bytes(store.data_mut(), *len)?
+                        .into_iter()
+                        .map(Val::U8)
+                        .collect(),
+                );
                 Ok(())
             })?;
-            instance.func_new("get-random-u64", |_, _, results| {
-                let bytes = wasi_random_bytes(8)?;
+            instance.func_new("get-random-u64", |mut store, _, results| {
+                let bytes = wasi_random_bytes(store.data_mut(), 8)?;
                 let mut word = [0u8; 8];
                 word.copy_from_slice(&bytes);
                 results[0] = Val::U64(u64::from_le_bytes(word));
@@ -1552,23 +1560,75 @@ mod tests {
         select_supported_export, unsupported_versioned_export, wasi_random_bytes,
         wasi_random_interface, FORMAT_EXPORT, FORMAT_INTERFACE, WASI_RANDOM_LIMIT,
     };
+    use crate::borrow::State;
+    use crate::limits::RANDOM_BUDGET;
     use std::sync::Mutex;
 
     /// `wasi:random` dà la lunghezza chiesta e byte che cambiano: prima dava
     /// sempre gli stessi otto, a qualunque lunghezza (I70).
     #[test]
     fn wasi_random_serves_the_requested_length_and_never_repeats() {
-        assert_eq!(wasi_random_bytes(0).unwrap().len(), 0);
-        let first = wasi_random_bytes(32).unwrap();
-        let second = wasi_random_bytes(32).unwrap();
+        let mut state = State::empty();
+        assert_eq!(wasi_random_bytes(&mut state, 0).unwrap().len(), 0);
+        let first = wasi_random_bytes(&mut state, 32).unwrap();
+        let second = wasi_random_bytes(&mut state, 32).unwrap();
         assert_eq!(first.len(), 32);
         assert_ne!(first, second, "two draws of 32 bytes do not coincide");
         assert_eq!(
-            wasi_random_bytes(WASI_RANDOM_LIMIT).unwrap().len(),
+            wasi_random_bytes(&mut state, WASI_RANDOM_LIMIT)
+                .unwrap()
+                .len(),
             64 * 1024
         );
-        assert!(wasi_random_bytes(WASI_RANDOM_LIMIT + 1).is_err());
+        assert!(wasi_random_bytes(&mut state, WASI_RANDOM_LIMIT + 1).is_err());
     }
+
+    /// Le richieste di una chiamata si sommano: un guest che chiede 64 KiB alla
+    /// volta in un ciclo si ferma al budget, con una trap, e il budget torna
+    /// pieno alla chiamata dopo (M8 dell'audit).
+    #[test]
+    fn wasi_random_has_a_cumulative_budget_per_call() {
+        let engine = crate::limits::engine();
+        let mut store = wasmtime::Store::new(&engine, State::empty());
+        crate::limits::arm(&mut store);
+        let rounds = RANDOM_BUDGET / WASI_RANDOM_LIMIT;
+        assert!(rounds >= 2, "the budget holds more than one request");
+        for _ in 0..rounds {
+            wasi_random_bytes(store.data_mut(), WASI_RANDOM_LIMIT).unwrap();
+        }
+        let spent = wasi_random_bytes(store.data_mut(), 1).unwrap_err();
+        assert!(
+            spent.to_string().contains("ne restano 0"),
+            "the trap says the budget is spent: {spent}"
+        );
+        // Anche i semi piccoli contano.
+        assert!(wasi_random_bytes(store.data_mut(), 8).is_err());
+
+        crate::limits::renew(&mut store);
+        assert_eq!(
+            wasi_random_bytes(store.data_mut(), 16).unwrap().len(),
+            16,
+            "a new call starts with a full budget"
+        );
+    }
+
+    /// Il budget non si supera arrivandoci a pezzi disuguali: la richiesta che
+    /// non entra intera è rifiutata senza consumare, quella esatta passa.
+    #[test]
+    fn wasi_random_budget_edges() {
+        let mut state = State::empty();
+        let partial = RANDOM_BUDGET - 10;
+        let mut asked = 0;
+        while asked + WASI_RANDOM_LIMIT <= partial {
+            wasi_random_bytes(&mut state, WASI_RANDOM_LIMIT).unwrap();
+            asked += WASI_RANDOM_LIMIT;
+        }
+        wasi_random_bytes(&mut state, partial - asked).unwrap();
+        assert!(wasi_random_bytes(&mut state, 11).is_err());
+        assert_eq!(wasi_random_bytes(&mut state, 10).unwrap().len(), 10);
+        assert!(wasi_random_bytes(&mut state, 1).is_err());
+    }
+
     /// `random` e `insecure-seed` si servono a ogni patch della 0.2: la std
     /// della 1.89 importa `random@0.2.3`, quella della 1.95
     /// `insecure-seed@0.2.4` e `@0.2.6`.

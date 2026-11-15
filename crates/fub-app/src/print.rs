@@ -17,7 +17,10 @@
 //!
 //! Il programma si chiama con il percorso come argomento, mai attraverso una
 //! shell: `xdg-open` su Linux e sugli altri Unix, `open` su macOS,
-//! `explorer.exe` su Windows.
+//! `explorer.exe` su Windows. E si chiama per percorso assoluto, preso fra le
+//! cartelle del sistema ([`system_program`]), mai cercato nel `PATH`: un
+//! programma con lo stesso nome messo prima nel `PATH` riceverebbe un percorso
+//! del vault.
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -141,25 +144,86 @@ fn sweep(base: &Path, now: SystemTime) {
     }
 }
 
-/// Il programma che apre `path` col programma che il sistema sceglie.
-pub(crate) fn opener(path: &Path) -> Command {
+/// Le cartelle in cui si cerca un programma del sistema: quelle che scrive
+/// l'amministratore, nell'ordine in cui le installano le distribuzioni (la
+/// penultima è quella di NixOS, l'ultima di Guix). Il `PATH` no: lo decide
+/// l'ambiente di chi avvia l'app.
+#[cfg(all(unix, not(target_os = "macos")))]
+const SYSTEM_DIRS: &[&str] = &[
+    "/usr/bin",
+    "/bin",
+    "/usr/local/bin",
+    "/run/current-system/sw/bin",
+    "/run/current-system/profile/bin",
+];
+/// Su macOS `open` e i suoi pari stanno in `/usr/bin`, che il sistema protegge.
+#[cfg(target_os = "macos")]
+const SYSTEM_DIRS: &[&str] = &["/usr/bin"];
+
+/// Il percorso assoluto del programma del sistema `name`, o niente se nessuna
+/// delle cartelle del sistema lo ha. Mai dal `PATH`.
+#[cfg(unix)]
+pub(crate) fn system_program(name: &str) -> Option<PathBuf> {
+    find_program(SYSTEM_DIRS.iter().map(Path::new), name)
+}
+
+/// Il percorso assoluto di `name` nella cartella di Windows: `explorer.exe`
+/// sta lì. La cartella è quella che il sistema dà in `SystemRoot`, se è un
+/// percorso assoluto, e altrimenti `C:\Windows`. `SystemRoot` viene
+/// dall'ambiente di chi avvia l'app, come il `PATH`: è il rischio residuo
+/// scritto in `docs/reference/permissions-and-security.md`, finché `fub-app`
+/// non ha una dipendenza che chiami `GetSystemWindowsDirectoryW`.
+#[cfg(windows)]
+pub(crate) fn system_program(name: &str) -> Option<PathBuf> {
+    let root = std::env::var_os("SystemRoot")
+        .map(PathBuf::from)
+        .filter(|root| root.is_absolute())
+        .unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
+    let path = root.join(name);
+    path.is_file().then_some(path)
+}
+
+/// Il primo `dir/name` che è un programma di cui fidarsi.
+#[cfg(unix)]
+fn find_program<'a>(dirs: impl IntoIterator<Item = &'a Path>, name: &str) -> Option<PathBuf> {
+    dirs.into_iter()
+        .filter(|dir| dir.is_absolute())
+        .map(|dir| dir.join(name))
+        .find(|path| trusted_program(path))
+}
+
+/// Un file regolare (anche in fondo a un collegamento, come in NixOS),
+/// eseguibile, che né il gruppo né gli altri possono riscrivere.
+#[cfg(unix)]
+fn trusted_program(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).is_ok_and(|meta| {
+        let mode = meta.permissions().mode();
+        meta.is_file() && mode & 0o111 != 0 && mode & 0o022 == 0
+    })
+}
+
+/// Il programma che apre `path` col programma che il sistema sceglie, o
+/// niente se il sistema non ce l'ha nelle sue cartelle.
+pub(crate) fn opener(path: &Path) -> Option<Command> {
     #[cfg(target_os = "macos")]
-    let mut command = Command::new("open");
+    let program = system_program("open")?;
     #[cfg(target_os = "windows")]
-    let mut command = Command::new("explorer.exe");
+    let program = system_program("explorer.exe")?;
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let mut command = Command::new("xdg-open");
+    let program = system_program("xdg-open")?;
+    let mut command = Command::new(program);
     command
         .arg(path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    command
+    Some(command)
 }
 
 /// Apre `path` nel programma del sistema.
 fn open_with_system(path: &Path) -> PrintOutcome {
-    if launched(opener(path)) {
+    if opener(path).is_some_and(launched) {
         PrintOutcome::Opened
     } else {
         PrintOutcome::NoViewer
@@ -290,6 +354,63 @@ mod tests {
             }),
             serde_json::json!({"status": "unwritable", "reason": "disk full"})
         );
+    }
+
+    /// Il programma del sistema si prende per percorso assoluto da una delle
+    /// sue cartelle, mai dal `PATH`: un `xdg-open` messo davanti nel `PATH`
+    /// non riceve il percorso del file (B2 dell'audit).
+    #[cfg(unix)]
+    #[test]
+    fn the_system_program_comes_from_the_system_folders_and_never_from_path() {
+        use std::os::unix::fs::PermissionsExt;
+        let write = |path: &Path, mode: u32| {
+            fs::write(path, b"#!/bin/sh\n").unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+        };
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let dirs = [first.path(), second.path()];
+
+        assert_eq!(find_program(dirs, "apri"), None);
+        // Non eseguibile, o riscrivibile dal gruppo o dagli altri: non conta.
+        write(&first.path().join("apri"), 0o644);
+        assert_eq!(find_program(dirs, "apri"), None);
+        write(&first.path().join("apri"), 0o775);
+        assert_eq!(find_program(dirs, "apri"), None);
+        write(&first.path().join("apri"), 0o757);
+        assert_eq!(find_program(dirs, "apri"), None);
+        // Una cartella col nome è una cartella, non un programma.
+        fs::create_dir(second.path().join("apri")).unwrap();
+        assert_eq!(find_program(dirs, "apri"), None);
+        write(&first.path().join("apri"), 0o755);
+        assert_eq!(find_program(dirs, "apri"), Some(first.path().join("apri")));
+        // Una cartella relativa non si guarda: dipenderebbe dalla cartella
+        // corrente.
+        assert_eq!(find_program([Path::new(".")], "apri"), None);
+
+        // Un programma che sta fuori dalle cartelle del sistema non si trova.
+        let name = "fub-programma-fuori-dal-sistema";
+        let elsewhere = tempfile::tempdir().unwrap();
+        write(&elsewhere.path().join(name), 0o755);
+        assert_eq!(system_program(name), None);
+
+        // Quello che `opener` chiama è un percorso assoluto di una cartella del
+        // sistema, dove il sistema ce l'ha.
+        if let Some(command) = opener(Path::new("/tmp/nota.pdf")) {
+            let program = Path::new(command.get_program());
+            assert!(program.is_absolute(), "{program:?}");
+            assert!(SYSTEM_DIRS
+                .iter()
+                .any(|dir| program.parent() == Some(Path::new(dir))));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_program_every_linux_has_is_found_by_absolute_path() {
+        let sh = system_program("sh").expect("every Linux has sh in a system folder");
+        assert!(sh.is_absolute());
+        assert!(sh.starts_with("/usr/bin") || sh.starts_with("/bin") || sh.starts_with("/run"));
     }
 
     #[cfg(unix)]

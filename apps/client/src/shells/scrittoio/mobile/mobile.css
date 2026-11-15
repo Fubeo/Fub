@@ -242,15 +242,24 @@
   }
 
   /* I sette modi non stanno in una riga, e una fila che scorre qui non ha
-     niente che prenda il fuoco (il Tab cambia modo dal campo): vanno a capo.
-     Il segno scorre lungo una riga sola; su due non saprebbe dove stare, e il
-     modo scelto resta detto dal suo colore. */
+     niente che prenda il fuoco (nessuna linguetta è una fermata del Tab): axe
+     la rifiuta (`scrollable-region-focusable`). Vanno a capo. Il segno scorre
+     lungo una riga sola; su due non saprebbe dove stare, e il modo scelto
+     resta detto dal suo colore. */
   :root[data-client-shell="mobile"] .launcher-modes {
     flex-wrap: wrap;
     overflow-x: visible;
   }
 
   :root[data-client-shell="mobile"] .launcher-modes > .kit-tab-indicator {
+    display: none;
+  }
+
+  /* Niente tasti sul telefono: i bottoni del piede («Azioni», «Crea la nota»,
+     «Apri nel pannello») dicono solo la parola. «Apri nel pannello» sparisce
+     quando non c'è una domanda da portare, così non sembra un comando spento. */
+  :root[data-client-shell="mobile"] .launcher-panel .launcher-key,
+  :root[data-client-shell="mobile"] .launcher-panel:disabled {
     display: none;
   }
 

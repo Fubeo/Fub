@@ -75,7 +75,7 @@ import { mountSettings, openSettingsAt } from "./panels/settings";
 import { currentTheme, mountTheme } from "./theme/theme";
 import { fallito, fase, pronta } from "./avvio/consegna";
 import { onContentLookChange } from "./theme/content-look";
-import { focusedContextMode, focusedModeId } from "./state/document-controller";
+import { focusedContextMode } from "./state/document-controller";
 import { reducedMotion } from "./theme/reduced-motion";
 import {
   mountDocument,
@@ -1052,16 +1052,10 @@ async function init(): Promise<Teardown> {
     },
     has: (id) => allCommands().some((e) => e.id === id),
     // Le tre modalità sono una scelta: si spunta quella del foglio a fuoco.
-    // I Blocchi hanno il ruolo della Live: le due voci si distinguono per id.
     choice: (id) => {
-      if (id === "shell.mode.blocks") {
-        const mode = focusedModeId();
-        return mode ? { choice: "radio", checked: mode === "blocks" } : undefined;
-      }
       const context = MODE_COMMANDS[id];
       const current = context ? focusedContextMode() : undefined;
-      const blocks = focusedModeId() === "blocks";
-      return context && current ? { choice: "radio", checked: current === context && !(blocks && context === "live_preview") } : undefined;
+      return context && current ? { choice: "radio", checked: current === context } : undefined;
     },
     // «Cambia luce» dice verso quale luce si va.
     label: (id) =>

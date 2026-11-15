@@ -337,6 +337,27 @@ pub trait VaultStorage: Send + Sync {
     /// sovrascritto.
     fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()>;
 
+    /// Riporta dentro il supporto, in `to`, la voce `outside` che sta **fuori**
+    /// (un file rimesso dal cestino del sistema), soltanto se `to` è libero.
+    ///
+    /// Non è una [`rename_no_replace`](VaultStorage::rename_no_replace) con la
+    /// sorgente altrove: la sorgente è un path del sistema che il supporto non
+    /// possiede, la destinazione invece passa dagli stessi presidi di ogni
+    /// scrittura del vault — per un supporto ancorato a una cartella aperta,
+    /// la risoluzione dentro quella cartella e i suoi lucchetti. Una cartella
+    /// sostituita da un collegamento fra il controllo e la mossa non porta il
+    /// file fuori dal vault.
+    ///
+    /// Il default rifiuta con `Unsupported`: un supporto che non sta su un
+    /// filesystem non ha niente da riprendere da fuori.
+    fn move_in_no_replace(&self, outside: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        let _ = (outside, to);
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "il supporto non riprende voci da fuori",
+        ))
+    }
+
     /// Toglie un **file**. Per una cartella c'è [`VaultStorage::remove_dir_all`].
     fn remove(&self, path: &Utf8Path) -> io::Result<()>;
 

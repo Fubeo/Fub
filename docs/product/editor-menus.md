@@ -31,6 +31,33 @@ accanto («Copia come HTML»), ← e → cambiano formato e Invio copia; chi asc
 sente il nome intero su ogni tastino. Con più scelte, o senza un segno
 riconoscibile, resta il sottomenu.
 
+Le parti del menu sono i pezzi della **lingua dei menu** del kit, gli stessi
+che usano lo spazio comandi e il «/»:
+
+- **la riga** (`kit/row.ts`): una linea sola da 34 px (38 nello spazio
+  comandi), con la figura da 24, il nome che si taglia coi puntini, a destra
+  la nota in grigio o la scorciatoia in monospazio, e la freccia di un
+  sottomenu;
+- **la tessera** (`kit/tile.ts`): affiancata, come le parti della barra degli
+  appunti, o in pila, una figura in un quadrato da 40 px con gli angoli da 11
+  e il nome sotto; senza icona, il quadrato porta un segno o la prima lettera
+  del nome;
+- **l'etichetta di un gruppo** (`kit/group-label.ts`): 11,5 px, quieta; per chi
+  ascolta, il gruppo ha già il suo nome, o lo prende da lei.
+
+Ogni pezzo ha gli stessi stati: acceso (la figura d'accento, sul fondo del
+passaggio per la riga e sulla linguetta chiara e rialzata per la tessera
+affiancata), premuto (la spunta d'accento al posto della figura, la linguetta
+d'accento per la tessera affiancata, senza moto quando il movimento è ridotto)
+e spento, che resta al suo posto e dice il perché. Chi fa scivolare una sua
+pastiglia da un pezzo all'altro, come il menu, lo dichiara sul contenitore
+(`markGlideHost`), e lì i pezzi non mettono il loro fondo. Il catalogo li
+mostra nella scena `kit-lingua` del banco (`bench/kit.html?lingua`).
+
+Nessun menu scrive i tasti per muoversi dentro di lui (frecce, Invio, Esc):
+li mostra la riga dei suggerimenti. Una scorciatoia con un modificatore, come
+Ctrl+Invio, è un gesto e si scrive.
+
 **La scelta è una sola**, fra la barra e l'elenco: la indica una pastiglia che
 scivola da una voce all'altra, o nella barra una linguetta chiara e rialzata.
 Il puntatore la sposta e quando esce dal menu resta dov'era; mai due cose
@@ -112,8 +139,14 @@ selezione con la barra accesa), `menu` (solo col tasto destro) e `off`.
 ## Il «/» nel testo
 
 Il **«/»** scritto a inizio riga o dopo uno spazio apre il pannello dei blocchi
-sotto la riga, o sopra se sotto non c'è posto. In Live e in Blocchi è lo
-stesso; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
+sotto la riga. Se sotto non ci sta intero si accorcia, e l'elenco o il passo
+scorrono dentro (con la scelta delle frecce, la rotella e il dito: il fuoco
+resta nell'editor), fino a 220 px; solo se sotto non c'è neanche quello si apre sopra la
+riga. Non esce mai dall'area del documento: testata, barra degli strumenti e
+barra della finestra restano scoperte (`slashPlacement` in
+`editors/text/profiles/markdown/slash.ts`). Sul telefono è un foglio in fondo
+alla finestra. Vale in ogni modalità di scrittura; il «+» della maniglia mette
+un blocco vuoto e ci apre il «/».
 
 - **La testata** mostra ciò che si è scritto, il contesto («riga vuota:
   diventa il blocco scelto», «dopo il testo: un blocco nuovo sotto») e il
@@ -169,7 +202,7 @@ parametri (`markdown.table` con `rows` e `cols`).
 | PDF | copia e copia con la citazione `[[file.pdf#page=N]]` del testo scelto, copia il link alla pagina, annota, il link `![[ ]]`, apri esterno |
 | Audio e video | sul lettore il menu del sistema; attorno, il link `![[ ]]` e apri esterno |
 
-In modalità Blocchi la maniglia di un blocco apre il suo menu col clic e col
+In Scrittura la maniglia di un blocco apre il suo menu col clic e col
 tasto destro, con la testata «Blocco» e l'inizio del testo: Trasforma in ▸,
 Colore ▸ (Testo e Fondo, coi nove colori dei Blocchi), Duplica, Copia il link
 al blocco, Sposta su e giù, Affianca in colonne, e «Elimina il blocco» per
@@ -237,8 +270,14 @@ griglia delle tabelle in Live ha il suo
 - `apps/client/src/editors/text/profiles/markdown/surface.ts` e `menu.ts`: le
   voci di una nota e ciò che sta sotto il puntatore;
 - `apps/client/src/i18n/lexicon.ts`: il lessico dei menu;
+- `apps/client/src/kit/row.ts`, `tile.ts` e `group-label.ts`: riga, tessera ed
+  etichetta, vestite in `apps/client/src/theme/scrittoio/skin/kit.css`;
 - `apps/client/src/ui/menu-budget.test.ts` coi casi di `ui/menu-cases.ts`: il
-  bilancio di ogni menu;
+  bilancio di ogni menu (al più nove voci e quattro gruppi al primo livello,
+  nessun tasto per muoversi scritto nel menu);
+- `apps/client/src/editors/text/profiles/markdown/three-doors.test.ts`: le
+  stesse azioni di blocco dal tasto destro, dalla barra di formato, dalla
+  maniglia e da Ctrl O, e nessun pulsante sopra un blocco a riposo;
 - `apps/client/src/ui/system-menu.ts`: il menu della WebView spento dove Fub
   non ne ha uno;
 - `apps/client/src/panels/mini-bar.ts`: la mini-barra;

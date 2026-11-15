@@ -286,6 +286,16 @@
     "kit-list",
     "kit-list-item",
     "kit-list-highlight",
+    "kit-row",
+    "kit-row-icon",
+    "kit-row-label",
+    "kit-row-note",
+    "kit-row-keys",
+    "kit-row-more",
+    "kit-tile",
+    "kit-tile-icon",
+    "kit-tile-label",
+    "kit-group-label",
     "kit-tabs",
     "kit-tab",
     "kit-tab-label",
@@ -344,6 +354,11 @@
     "status-mode-arrow",
     "status-standing",
     "status-standing-mark",
+    "status-sum",
+    "status-sum-part",
+    "status-sum-value",
+    "status-sum-dot",
+    "views-status",
     "files-panel",
     "plain-list",
     "drawer-sidebar-open",
@@ -381,7 +396,6 @@
     "icon-grid",
     "icon-grid--figures",
     "icon-none",
-    "views-status",
     "declared-view-panel",
     "declared-view",
     "ui-stack",
@@ -690,6 +704,10 @@
     "is-selected",
     "is-active",
     "is-fill",
+    "tb-drop",
+    "is-moving-lines",
+    "tb-input",
+    "is-proposal",
     "has-cell-selection",
     "is-cell-selected",
     "is-cell-cut",
@@ -2042,6 +2060,16 @@
     "kit-list": "cornice",
     "kit-list-item": "cornice",
     "kit-list-highlight": "cornice",
+    "kit-row": "cornice",
+    "kit-row-icon": "cornice",
+    "kit-row-label": "cornice",
+    "kit-row-note": "cornice",
+    "kit-row-keys": "cornice",
+    "kit-row-more": "cornice",
+    "kit-tile": "cornice",
+    "kit-tile-icon": "cornice",
+    "kit-tile-label": "cornice",
+    "kit-group-label": "cornice",
     "kit-tabs": "cornice",
     "kit-tab": "cornice",
     "kit-tab-label": "cornice",
@@ -2100,6 +2128,11 @@
     "status-mode-arrow": "cornice",
     "status-standing": "cornice",
     "status-standing-mark": "cornice",
+    "status-sum": "cornice",
+    "status-sum-part": "cornice",
+    "status-sum-value": "cornice",
+    "status-sum-dot": "cornice",
+    "views-status": "cornice",
     "files-panel": "cornice",
     "plain-list": "cornice",
     "drawer-sidebar-open": "cornice",
@@ -2137,7 +2170,6 @@
     "icon-grid": "cornice",
     "icon-grid--figures": "cornice",
     "icon-none": "cornice",
-    "views-status": "cornice",
     "declared-view-panel": "cornice",
     "declared-view": "cornice",
     "ui-stack": "cornice",
@@ -2446,6 +2478,10 @@
     "is-selected": "segno",
     "is-active": "segno",
     "is-fill": "segno",
+    "tb-drop": "segno",
+    "is-moving-lines": "segno",
+    "tb-input": "segno",
+    "is-proposal": "segno",
     "has-cell-selection": "contenuto",
     "is-cell-selected": "segno",
     "is-cell-cut": "segno",
@@ -4159,6 +4195,50 @@
       ]
     },
     {
+      "name": "kit-row",
+      "part": "kit",
+      "hooks": [
+        "kit-row",
+        "kit-row-icon",
+        "kit-row-label",
+        "kit-row-note",
+        "kit-row-keys",
+        "kit-row-more"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "kit-tile",
+      "part": "kit",
+      "hooks": [
+        "kit-tile",
+        "kit-tile-icon",
+        "kit-tile-label"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "disabled"
+      ]
+    },
+    {
+      "name": "kit-group-label",
+      "part": "kit",
+      "hooks": [
+        "kit-group-label"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "kit-tabs",
       "part": "kit",
       "hooks": [
@@ -4394,7 +4474,12 @@
         "status-mode",
         "status-mode-arrow",
         "status-standing",
-        "status-standing-mark"
+        "status-standing-mark",
+        "status-sum",
+        "status-sum-part",
+        "status-sum-value",
+        "status-sum-dot",
+        "views-status"
       ],
       "states": [
         "rest",
@@ -5460,7 +5545,11 @@
         "is-multi",
         "is-selected",
         "is-active",
-        "is-fill"
+        "is-fill",
+        "tb-drop",
+        "is-moving-lines",
+        "tb-input",
+        "is-proposal"
       ],
       "states": [
         "rest",
@@ -9599,10 +9688,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1754,
+    "hooks": 1772,
     "state_names": 7,
-    "assigned_states": 837,
-    "components": 249,
+    "assigned_states": 847,
+    "components": 252,
     "preference_tokens": 189
   }
 }

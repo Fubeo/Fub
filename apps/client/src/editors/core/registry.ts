@@ -47,6 +47,18 @@ export interface SurfaceMode {
    * know the name, the mode takes the figure of its role (`state/mode-menu.ts`).
    */
   readonly icon?: string;
+  /**
+   * One line under the label in the mode menu that says what the mode is
+   * for. Without it the menu shows the label alone.
+   */
+  readonly description?: () => string;
+  /**
+   * Ids this mode answers to besides its own: modes the surface no longer
+   * declares because they merged into this one (the Markdown `blocks`, now
+   * inside Scrittura). A saved pane or a command that names one gets this
+   * mode; the menu never lists them.
+   */
+  readonly formerIds?: readonly string[];
 }
 
 export interface SurfaceMountContext {
@@ -78,6 +90,13 @@ export interface SurfaceMountContext {
    * `false`: a pane always mounts the whole editor.
    */
   readonly compact?: boolean;
+  /**
+   * Escape belongs to the host, which leaves the surface with it (a board
+   * card, compact or not): the surface keeps Escape only to close what it has
+   * open (a menu, a selection of blocks) and gives it no meaning of its own.
+   * Absent means `false`: in a pane Escape is the surface's.
+   */
+  readonly escapeLeaves?: boolean;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */
@@ -296,6 +315,29 @@ export interface SurfaceActiveCellSource {
 }
 
 /**
+ * The cells a surface has selected, as it shows them: the status band sums
+ * them in the shell, with no IPC (E24). A Markdown table, a Base and a sheet
+ * card give the same port, so the same selection gives the same number.
+ */
+export interface SurfaceCellSelection {
+  /** The BCP 47 tag the shown numbers are written in: `it`, `en-US`. */
+  readonly locale: string;
+  /**
+   * Each selected cell once, header rows excluded: a number the format already
+   * types as one, or the text the cell shows. Read once per selection change,
+   * never per keystroke.
+   */
+  values(): Iterable<string | number>;
+}
+
+export interface SurfaceCellSelectionSource {
+  /** The selection now; `null` with no cells or a single cell selected. */
+  read(): SurfaceCellSelection | null;
+  /** Called when the selection or the selected values may have changed. */
+  subscribe(listener: () => void): () => void;
+}
+
+/**
  * How far the document can be written, as the chip by its path says it.
  * `reduced` and `stopped` say that it is written with fewer means than usual:
  * a drawing without its engine, switched off (or not in this build) or
@@ -435,6 +477,8 @@ export interface EditorSurface {
   readonly status?: SurfaceStatus;
   /** The active cell of a grid, for a host that hides the formula bar. */
   readonly activeCell?: SurfaceActiveCellSource;
+  /** The cells selected in a table or a Base, for the sum in the status band. */
+  readonly cellSelection?: SurfaceCellSelectionSource;
   /** How far the document can be written, by its path. */
   readonly standing?: SurfaceStanding;
   /**

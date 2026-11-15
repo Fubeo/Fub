@@ -17,6 +17,7 @@
 // `drawing.e2e.test.ts`.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeHost } from "./host/fake";
+import type { SettingEntry } from "./host/contract";
 import type { EditorSurface, SurfaceRegistration } from "./editors/core/registry";
 import { mountedTextEditors, undoDepth } from "./editors/text/test-support";
 
@@ -164,11 +165,12 @@ const VAULT = {
 
 /// Monta la shell vera sul vault finto e aspetta l'avvio. I file `.draw`
 /// arrivano col formato della famiglia finta: è il backend a dire il formato,
-/// e l'host finto ne conosce soltanto quattro.
-async function start(file: Record<string, string> = VAULT): Promise<FakeHost> {
+/// e l'host finto ne conosce soltanto quattro. `settings` sono le righe che il
+/// backend serve, come le ha scritte la persona.
+async function start(file: Record<string, string> = VAULT, settings: SettingEntry[] = []): Promise<FakeHost> {
   vi.resetModules();
   box.draws = [];
-  const host = createFakeHost({ file });
+  const host = createFakeHost({ file, settings });
   const api = host.module.api as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
   // La lettura semplice e quella sotto la chiave di una sessione.
   for (const port of ["readDocument", "openDocument"] as const) {
@@ -215,6 +217,34 @@ async function open(doc: string): Promise<void> {
 }
 
 const MODE_COMMANDS = ["shell.mode.reading", "shell.mode.live", "shell.mode.source"];
+
+/// Una scorciatoia cambiata dalla persona, come la serve il backend: le chiavi
+/// `keys.shell.*` sono di macchina.
+function keyRow(key: string, value: string): SettingEntry {
+  return {
+    spec: { key, label: key, description: "", group: "", scope: "machine", kind: { kind: "text", default: "" }, program_writable: false },
+    value,
+    source: "machine",
+  } as SettingEntry;
+}
+
+/// `editor.default-mode` com'è dichiarata in `crates/fub-host/src/settings.rs`.
+function initialModeRow(value: string): SettingEntry {
+  const options = [
+    { value: "live_preview", label: "Scrittura" },
+    { value: "source", label: "Sorgente" },
+    { value: "reading", label: "Lettura" },
+    { value: "blocks", label: "Scrittura" },
+  ];
+  return {
+    spec: {
+      key: "editor.default-mode", label: "Modalità iniziale", description: "", group: "Editor", scope: "machine",
+      kind: { kind: "choice", default: "live_preview", options }, program_writable: false,
+    },
+    value,
+    source: "machine",
+  } as SettingEntry;
+}
 const SOURCE_COMMANDS = ["shell.doc.source.open", "shell.doc.source.side", "shell.doc.source.close"];
 
 /// I comandi fra `ids` che la palette e la tastiera offrono adesso.
@@ -229,6 +259,12 @@ async function run(id: string): Promise<void> {
   if (!entry) throw new Error(`il comando ${id} non è disponibile`);
   await entry.run?.();
   await settle();
+}
+
+function press(init: KeyboardEventInit): void {
+  (document.activeElement ?? document.body).dispatchEvent(
+    new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
+  );
 }
 
 function pressModE(): void {
@@ -257,7 +293,7 @@ describe("i comandi delle modalità seguono il ruolo dichiarato", () => {
   // Cosa offriva la shell prima, famiglia per famiglia, e cosa offre adesso.
   // Le sole differenze sono due e volute: il testo semplice non offre più
   // «Passa a Sorgente», che non portava da nessuna parte, e la tela offre
-  // «Passa a Live», che dal suo JSON torna alle carte.
+  // «Passa a Scrittura», che dal suo JSON torna alle carte.
   it("ogni famiglia offre soltanto i comandi che la cambierebbero", async () => {
     await start();
     const cases: [string, string[]][] = [
@@ -323,22 +359,83 @@ describe("i comandi delle modalità seguono il ruolo dichiarato", () => {
     expect(paneMode(), "la nota ritrova la sua Sorgente").toBe("source");
   });
 
-  it("i Blocchi hanno il loro comando, soltanto nelle note, e Mod-e ne torna", async () => {
+  it("il comando dei Blocchi porta a Scrittura, soltanto nelle note, e Mod-e ne torna (T3)", async () => {
     await start();
     await open("lavagna.canvas");
     expect(await offered(["shell.mode.blocks"]), "la tela non ha Blocchi").toEqual([]);
     await open("Benvenuto.md");
+    await run("shell.mode.source");
     expect(await offered(["shell.mode.blocks"])).toEqual(["shell.mode.blocks"]);
     await run("shell.mode.blocks");
-    expect(paneMode()).toBe("blocks");
+    expect(paneMode(), "i Blocchi sono dentro Scrittura").toBe("live_preview");
+    expect(focusedPane().querySelector(".cm-fub-block-handles"), "Scrittura monta le maniglie dei blocchi").not.toBeNull();
     pressModE();
     await settle();
     expect(paneMode()).toBe("reading");
     pressModE();
     await settle();
-    expect(paneMode(), "Mod-e torna ai Blocchi, non alla Live").toBe("blocks");
+    expect(paneMode(), "Mod-e torna a Scrittura").toBe("live_preview");
+    await run("shell.mode.source");
     await run("shell.mode.live");
-    expect(paneMode(), "dai Blocchi Live porta alla Live, anche se hanno lo stesso ruolo").toBe("live_preview");
+    expect(paneMode()).toBe("live_preview");
+  });
+
+  it("un riquadro salvato nei Blocchi si apre in Scrittura (T3)", async () => {
+    await start({ ...VAULT, "Altra.md": "# Altra\n" });
+    const layout = await import("./state/layout");
+    // Il riquadro ricorda `blocks`, come l'ha salvato un Fub di prima.
+    layout.setMode(layout.layout.focus, "text", "blocks");
+    await open("Altra.md");
+    expect(paneMode()).toBe("live_preview");
+    expect(focusedPane().querySelector(".cm-fub-block-handles")).not.toBeNull();
+    // Il layout non si riscrive: un Fub di prima ritrova i suoi Blocchi.
+    expect(layout.layout.panes[layout.layout.focus]!.modes["text"]).toBe("blocks");
+  });
+
+  it("Scrittura e il comando dei Blocchi si chiamano col nome nuovo e portano tutti e due a Scrittura (T4)", async () => {
+    await start();
+    await open("Benvenuto.md");
+    const { allCommands } = await import("./ui/commands");
+    const title = (id: string) => allCommands().find((entry) => entry.id === id)?.title;
+    expect(title("shell.mode.live")).toBe("Passa a Scrittura");
+    expect(title("shell.mode.blocks")).toBe("Passa a Scrittura (era Blocchi)");
+    for (const id of ["shell.mode.live", "shell.mode.blocks"]) {
+      await run("shell.mode.source");
+      expect(paneMode()).toBe("source");
+      // Chi esegue un comando per id — la palette, un bottone di una barra, un
+      // menu — passa da qui: l'id vecchio vale quanto il nuovo.
+      await run(id);
+      expect(paneMode(), id).toBe("live_preview");
+    }
+  });
+
+  it("la scorciatoia di fabbrica dei Blocchi porta a Scrittura (T4)", async () => {
+    await start();
+    await open("Benvenuto.md");
+    await run("shell.mode.source");
+    press({ key: "B", ctrlKey: true, shiftKey: true });
+    await settle();
+    expect(paneMode(), "Mod-Shift-b, la scorciatoia di sempre").toBe("live_preview");
+  });
+
+  it("la scorciatoia che la persona aveva dato ai Blocchi resta sua e porta a Scrittura (T4)", async () => {
+    await start(VAULT, [keyRow("keys.shell.mode.blocks", "Mod-Alt-k")]);
+    await open("Benvenuto.md");
+    const { allCommands } = await import("./ui/commands");
+    expect(allCommands().find((entry) => entry.id === "shell.mode.blocks")?.binding).toBe("Mod-Alt-k");
+    await run("shell.mode.source");
+    press({ key: "k", ctrlKey: true, altKey: true });
+    await settle();
+    expect(paneMode(), "la scorciatoia della persona").toBe("live_preview");
+  });
+
+  it("una modalità iniziale scritta come Blocchi apre le note in Scrittura (T4)", async () => {
+    await start({ ...VAULT, "Altra.md": "# Altra\n" }, [initialModeRow("blocks")]);
+    const layout = await import("./state/layout");
+    expect(layout.layout.panes[layout.layout.focus]!.modes["text"], "il valore passa com'è").toBe("blocks");
+    await open("Altra.md");
+    expect(paneMode()).toBe("live_preview");
+    expect(focusedPane().querySelector(".cm-fub-block-handles")).not.toBeNull();
   });
 
   it("sulla tela Live torna dal JSON alle carte", async () => {
@@ -649,12 +746,12 @@ describe("la modalità si sceglie dalla banda", () => {
     await start();
     await open("Benvenuto.md");
     expect(button().hidden).toBe(false);
-    expect(name()).toBe("Live");
+    expect(name()).toBe("Scrittura");
     button().focus();
     button().click();
     await settle();
     expect(button().getAttribute("aria-expanded")).toBe("true");
-    expect(radios().map(labelOf)).toEqual(["Live", "Blocchi", "Sorgente", "Lettura"]);
+    expect(radios().map(labelOf)).toEqual(["Scrittura", "Sorgente", "Lettura"]);
     radios().find((item) => labelOf(item) === "Sorgente")!.click();
     await settle();
     expect(paneMode()).toBe("source");
@@ -700,7 +797,7 @@ describe("la modalità si sceglie dalla banda", () => {
       button().focus();
       button().click();
       await settle();
-      expect(radios().map(labelOf)).toEqual(["Live", "Blocchi", "Sorgente", "Lettura"]);
+      expect(radios().map(labelOf)).toEqual(["Scrittura", "Sorgente", "Lettura"]);
       // Chi chiude il menu dice di aver gestito il tasto.
       expect(escape().defaultPrevented).toBe(true);
       await settle();

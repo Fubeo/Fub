@@ -15,9 +15,15 @@
 // le celle tagliate restano tratteggiate finché non si incolla (Esc rinuncia).
 // Ctrl+D riempie in giù, Ctrl+R a destra; Ctrl+«+» e Ctrl+«−» inseriscono e
 // tolgono righe o colonne secondo ciò che è scelto; Maiusc+F8 e Ctrl+clic
-// aggiungono un intervallo agli altri. Dentro la cella Invio conferma e
-// scende, Tab conferma e avanza, Esc annulla. Tirare la maniglia nell'angolo
-// della selezione riempie la serie.
+// aggiungono un intervallo agli altri. Alt con le frecce sposta le righe o le
+// colonne scelte; Alt+= scrive la somma delle celle sopra, come valore;
+// Ctrl+; la data di oggi. Dentro la cella Invio conferma e scende (anche con
+// Alt), Tab conferma e avanza, Esc annulla; scrivendo, il completamento
+// propone un valore della colonna col resto selezionato (`completion.ts`).
+// Tirare la maniglia nell'angolo della selezione riempie la serie (numeri,
+// «Voce 1», giorni e mesi), il doppio clic la porta fino in fondo. Le lettere
+// e i numeri si cliccano per scegliere colonne e righe; trascinate quando
+// sono già scelte, le spostano.
 //
 // # Il moto
 //
@@ -30,15 +36,17 @@
 // Un tocco sceglie una cella; le due maniglie agli angoli della selezione si
 // tirano per allargarla; un tocco lungo apre il menu.
 
-import { t } from "../../i18n/strings";
+import { resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import type { TableAlign, TableBlock, TableCaps, TableClipboard, TableEdit, TableMenuEntry, TableSize } from "../adapter";
 import { clipboardData, clipboardRows, cutMoves, cutTarget, pasteTargets, tellCutOnce, type CutMark } from "../clipboard";
 import { structureEdit, TABLE_ALIGNS, TABLE_COMMANDS, tableCommand, type TableCommandContext, type TableTarget } from "../commands";
+import { columnCompletion, type ColumnCompletion } from "../completion";
 import { editingIntent, sheetIntent, type TableFormat } from "../keys";
 import { boundedShape, dataEdge, isMultiCell, nextInRange, type Cell, type Move, type Range, type Shape } from "../navigation";
-import { fillCopy, fillRange, rangeBetween, wholeRange, withRange } from "../selection";
-import { fillSeries } from "../series";
+import { fillCopy, fillRange, fillToEndRange, rangeBetween, wholeRange, withRange } from "../selection";
+import { fillSeries, todayText } from "../series";
+import { sumAbove } from "../sum";
 import { animate } from "../../moto";
 import { motionAllowed, offsetWithin, playChange, SELECT_EASE, SELECT_MS, snapshotChange, type ChangeSnapshot } from "./motion";
 
@@ -75,6 +83,10 @@ export interface TableFrameHost {
   /// Un avviso breve per chi scrive (un gesto che con più intervalli non si
   /// fa). Senza, il gesto rifiutato tace.
   notice?(text: string): void;
+  /// La lingua della tabella (quella che la nota dichiara, per esempio), o
+  /// `null`: la serie e la somma la usano dove due letture sono possibili
+  /// («mar» martedì o marzo, «1.000» mille o uno). Senza, vale quella di Fub.
+  language?(): string | null;
   focused?(): void;
   changed?(): void;
   /// `false` se la griglia non è una fermata del Tab: una tabella dentro un
@@ -94,7 +106,47 @@ interface Editing {
   readonly original: string;
   /// Gli ascoltatori del campo, chiusi con la modifica.
   readonly life: Lifetime;
+  /// Il completamento dalla colonna, letta all'apertura della cella; `null`
+  /// nell'intestazione.
+  readonly completion: ColumnCompletion | null;
+  /// Il valore della colonna proposto adesso, scritto come nella colonna:
+  /// se la cella si conferma con quel testo (le maiuscole non contano), la
+  /// cella prende il valore della colonna. `null` senza proposta.
+  proposal: string | null;
+  /// Vero mentre il campo scrive la proposta: l'evento `input` che ne nasce
+  /// non è una battuta, e non completa di nuovo.
+  proposing: boolean;
 }
+
+/// La classe del campo mentre il resto proposto è selezionato: solo lì la
+/// selezione si colora con l'accento.
+const PROPOSAL = "is-proposal";
+
+/// I tasti che da soli non scrivono e non spostano il cursore: tenerli non
+/// toglie il colore della proposta.
+const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "CapsLock"]);
+
+/// Gli avvisi che la Tabella dà una volta sola in una sessione: il primo
+/// completamento, la prima somma scritta come valore, il primo «=».
+const told = new Set<Key>();
+
+/// Dice `key` con `notice`, se in questa sessione non l'ha ancora detto.
+function tellOnce(notice: ((text: string) => void) | undefined, key: Key): void {
+  if (!notice || told.has(key)) return;
+  told.add(key);
+  notice(t(key));
+}
+
+/// Dimentica gli avvisi già dati: per le prove, che cominciano da capo.
+export function forgetToldNotices(): void {
+  told.clear();
+}
+
+/// Un'intestazione sotto il puntatore: il numero di una riga o la lettera di
+/// una colonna.
+type LineHit = { readonly kind: "row" | "col"; readonly row: number; readonly column: number };
+/// Ciò che sta sotto il puntatore: una cella, un'intestazione o l'angolo.
+type GridHit = LineHit | { readonly kind: "cell" | "corner"; readonly row: number; readonly column: number };
 
 /// Il prefisso delle classi della Tabella.
 const C = "tb";
@@ -114,6 +166,9 @@ export class TableFrame {
   readonly #selectionBox: HTMLElement;
   readonly #activeBox: HTMLElement;
   readonly #cutBox: HTMLElement;
+  /// Il segno di dove andranno le righe o le colonne trascinate per le
+  /// intestazioni.
+  readonly #dropMark: HTMLElement;
   /// Le maniglie del tocco agli angoli della selezione.
   readonly #handles: readonly [HTMLElement, HTMLElement];
   readonly #id = `tb-${++serial}`;
@@ -164,10 +219,11 @@ export class TableFrame {
     this.#fillHandle = document.createElement("div");
     this.#fillHandle.className = `${C}-fill`;
     this.#fillHandle.setAttribute("aria-hidden", "true");
-    this.#fillHandle.title = t("table.menu.fill");
+    this.#fillHandle.title = t("table.fill.handle");
     this.#selectionBox = overlay(`${C}-sel`);
     this.#activeBox = overlay(`${C}-act`);
     this.#cutBox = overlay(`${C}-cut`);
+    this.#dropMark = overlay(`${C}-drop`);
     this.#handles = [overlay(`${C}-handle`), overlay(`${C}-handle`)];
     this.#handles[0].dataset.end = "start";
     this.#handles[1].dataset.end = "end";
@@ -191,6 +247,7 @@ export class TableFrame {
     this.#life.listen(this.#grid, "cut", (event) => this.#copy(event, true));
     this.#life.listen(this.#grid, "paste", (event) => this.#paste(event));
     this.#life.listen(this.#fillHandle, "mousedown", (event) => this.#fillDrag(event));
+    this.#life.listen(this.#fillHandle, "dblclick", (event) => this.#fillToEnd(event));
     for (const handle of this.#handles) this.#life.listen(handle, "pointerdown", (event) => this.#handleDrag(event, handle));
     this.#life.add(() => this.#cancelPress());
     this.#render();
@@ -437,7 +494,7 @@ export class TableFrame {
     }
     table.append(head, body);
     this.#otherBoxes = [];
-    this.#grid.replaceChildren(table, this.#selectionBox, this.#cutBox, this.#activeBox, this.#fillHandle, ...this.#handles);
+    this.#grid.replaceChildren(table, this.#selectionBox, this.#cutBox, this.#activeBox, this.#dropMark, this.#fillHandle, ...this.#handles);
     this.#grid.setAttribute("aria-rowcount", String(rows));
     this.#grid.setAttribute("aria-colcount", String(columns));
   }
@@ -766,6 +823,19 @@ export class TableFrame {
         break;
       }
       case "add-ranges": this.#toggleAdding(); break;
+      case "shift-lines": {
+        if (this.#host.readOnly() || this.#refuseMany()) break;
+        const id = intent.axis === "rows"
+          ? (intent.by < 0 ? "markdown.table.row.up" : "markdown.table.row.down")
+          : (intent.by < 0 ? "markdown.table.column.left" : "markdown.table.column.right");
+        this.runCommand(id);
+        break;
+      }
+      case "sum": this.#sumAbove(); break;
+      case "today":
+        if (this.#host.readOnly()) return;
+        this.#write(this.active, todayText(new Date(), resolvedLanguage()));
+        break;
       case "leave": this.#escape(); break;
       case "menu": this.#openMenu(null); break;
       case "type":
@@ -808,6 +878,36 @@ export class TableFrame {
     this.apply({ kind: "set", blocks: this.ranges.map((range) => blank(range)) });
   }
 
+  /// La lingua della tabella: quella che l'ospite dice (la nota che la
+  /// dichiara), altrimenti quella di Fub.
+  #language(): string {
+    return this.#host.language?.() || resolvedLanguage();
+  }
+
+  /// Scrive `text` nella cella `at`, in un passo, e la selezione resta.
+  /// `false` se la cella diceva già così o adesso non si può.
+  #write(at: Cell, text: string): boolean {
+    if (this.#host.cellText(at.row, at.column) === text) return false;
+    return this.apply({ kind: "set", blocks: [{ row: at.row, column: at.column, rows: [[text]] }] });
+  }
+
+  /// Alt+=: la somma dei numeri subito sopra la cella attiva, fino al primo
+  /// valore che non è un numero o all'intestazione, scritta come valore. È un
+  /// numero che non si aggiorna: la prima volta lo si dice.
+  #sumAbove(): void {
+    if (this.#host.readOnly() || this.#refuseMany()) return;
+    const { row, column } = this.active;
+    const above: string[] = [];
+    for (let r = row - 1; r >= this.#host.caps().headerRows; r--) above.push(this.#host.cellText(r, column));
+    const total = sumAbove(above, this.#language());
+    if (total === null) {
+      this.#host.notice?.(t("table.sum.none"));
+      return;
+    }
+    this.#write(this.active, total);
+    tellOnce(this.#host.notice, "table.sum.value");
+  }
+
   /// Ctrl+D e Ctrl+R: la prima riga (o colonna) scelta nelle altre, o quella
   /// sopra (a sinistra) nella sola scelta. L'intestazione non scende nel
   /// corpo.
@@ -839,6 +939,13 @@ export class TableFrame {
     }
     switch (intent.kind) {
       case "format": this.#host.formatInput?.(intent.which, editing.input); break;
+      case "today": {
+        const input = editing.input;
+        const start = input.selectionStart ?? input.value.length;
+        const end = input.selectionEnd ?? start;
+        input.setRangeText(todayText(new Date(), resolvedLanguage()), start, end, "end");
+        break;
+      }
       case "commit":
         this.#finishEditing(true);
         // Dentro una selezione di più celle Invio gira, e la selezione resta.
@@ -884,11 +991,45 @@ export class TableFrame {
     cell.replaceChildren(input);
     delete cell.dataset.shown;
     const life = openLifetime();
-    this.#editing = { row, column, input, mode, original, life };
+    // La colonna si legge adesso, una volta: a ogni battuta il completamento
+    // cerca soltanto fra i valori già letti.
+    const completion = row >= this.#host.caps().headerRows ? this.#columnCompletion(row, column) : null;
+    const editing: Editing = { row, column, input, mode, original, life, completion, proposal: null, proposing: false };
+    this.#editing = editing;
     this.#placeOverlays();
     input.focus({ preventScroll: true });
     const at = caret ?? input.value.length;
     input.setSelectionRange(at, at);
+    if (completion) {
+      // Si completa a ogni lettera scritta, non mentre l'IME compone: lì si
+      // completa quando la composizione finisce. Cancellare non completa, così
+      // Canc toglie la proposta. Ogni testo nuovo toglie la proposta di prima.
+      life.listen(input, "input", (event) => {
+        if (editing.proposing) return;
+        this.#dropProposal(editing);
+        const typed = event as InputEvent;
+        if (!typed.isComposing && (typed.inputType === "insertText" || typed.inputType === "insertCompositionText")) this.#complete(editing);
+      });
+      // Il colore della proposta vale finché il resto è selezionato: un tasto
+      // o un clic nel campo lo toglie, anche quando la proposta resta (una
+      // freccia che porta il cursore in fondo).
+      life.listen(input, "keydown", (event) => {
+        if (!MODIFIERS.has((event as KeyboardEvent).key)) input.classList.remove(PROPOSAL);
+      });
+      life.listen(input, "pointerdown", () => input.classList.remove(PROPOSAL));
+      let composed: ReturnType<typeof setTimeout> | null = null;
+      life.listen(input, "compositionend", () => {
+        if (composed !== null) clearTimeout(composed);
+        composed = setTimeout(() => {
+          composed = null;
+          if (this.#editing === editing) this.#complete(editing);
+        }, 0);
+      });
+      life.add(() => {
+        if (composed !== null) clearTimeout(composed);
+      });
+      if (mode === "replace" && initial !== undefined) this.#complete(editing);
+    }
     // Il fuoco che esce dalla tabella conferma: un clic nel testo non butta
     // ciò che si era scritto.
     life.listen(input, "blur", () => {
@@ -900,6 +1041,52 @@ export class TableFrame {
     });
   }
 
+  /// Il completamento per la cella `row`, `column`: i valori delle altre celle
+  /// del corpo nella stessa colonna.
+  #columnCompletion(row: number, column: number): ColumnCompletion {
+    const { rows } = this.#host.size();
+    const values: string[] = [];
+    for (let r = this.#host.caps().headerRows; r < rows; r++) if (r !== row) values.push(this.#host.cellText(r, column));
+    return columnCompletion(values);
+  }
+
+  /// Propone il resto di un valore della colonna, selezionato, se il cursore
+  /// è in fondo a ciò che si è scritto. La prima volta dice come si usa.
+  ///
+  /// Il resto entra come una scrittura del campo (`insertText`), non
+  /// riscrivendo il valore: così l'annulla del campo lo conosce, e Ctrl+Z
+  /// torna a ciò che si era scritto. Dove il browser non lo sa fare, il resto
+  /// entra con `setRangeText`.
+  #complete(editing: Editing): void {
+    const { input, completion } = editing;
+    const typed = input.value;
+    if (!completion || input.selectionStart !== typed.length || input.selectionEnd !== typed.length) return;
+    const proposal = completion.suggest(typed);
+    if (proposal === null) return;
+    const rest = proposal.slice(typed.length);
+    editing.proposing = true;
+    let inserted = false;
+    try {
+      inserted = input.ownerDocument.execCommand("insertText", false, rest);
+    } catch {
+      inserted = false;
+    } finally {
+      editing.proposing = false;
+    }
+    if (!inserted && input.value === typed) input.setRangeText(rest, typed.length, typed.length, "end");
+    if (input.value !== typed + rest) return;
+    input.setSelectionRange(typed.length, input.value.length);
+    editing.proposal = proposal;
+    input.classList.add(PROPOSAL);
+    tellOnce(this.#host.notice, "table.completion.told");
+  }
+
+  /// Toglie la proposta: il testo del campo resta com'è.
+  #dropProposal(editing: Editing): void {
+    editing.proposal = null;
+    editing.input.classList.remove(PROPOSAL);
+  }
+
   /// Chiude la modifica: `commit` scrive il testo, altrimenti si torna a
   /// quello di prima. Il fuoco torna alla tabella se era nel campo.
   #finishEditing(commit: boolean, refocus = true): void {
@@ -908,11 +1095,19 @@ export class TableFrame {
     this.#editing = null;
     editing.life.close();
     const hadFocus = editing.input.ownerDocument.activeElement === editing.input;
-    const value = editing.input.value.replace(/\r?\n/g, " ");
+    const typed = editing.input.value.replace(/\r?\n/g, " ");
+    // La proposta accettata scrive il valore della colonna com'è scritto lì:
+    // «r» e Invio dà «Roma», come in Excel.
+    const { proposal } = editing;
+    const value = proposal !== null && typed.toLocaleLowerCase() === proposal.toLocaleLowerCase() ? proposal : typed;
     const cell = this.#cells[editing.row]?.[editing.column];
     if (cell) delete cell.dataset.shown;
     if (commit && value !== editing.original) {
-      this.apply({ kind: "set", blocks: [{ row: editing.row, column: editing.column, rows: [[value]] }] });
+      const written = this.apply({ kind: "set", blocks: [{ row: editing.row, column: editing.column, rows: [[value]] }] });
+      // Chi scrive una formula la vede restare testo: lo si dice una volta.
+      // Non per «==» (un segno scritto, non una formula) né per un «=» che
+      // non sta in testa.
+      if (written && value.startsWith("=") && !value.startsWith("==")) tellOnce(this.#host.notice, "table.formula.text");
     }
     this.#fill();
     this.#paintSelection();
@@ -921,7 +1116,7 @@ export class TableFrame {
 
   // ── Puntatore ──────────────────────────────────────────────────────────────
 
-  #positionOf(target: EventTarget | null): { kind: "cell" | "row" | "col" | "corner"; row: number; column: number } | null {
+  #positionOf(target: EventTarget | null): GridHit | null {
     const element = target instanceof Element ? target.closest<HTMLElement>("td, th") : null;
     if (!element || !this.#grid.contains(element)) return null;
     if (element.classList.contains(`${C}-corner`)) return { kind: "corner", row: 0, column: 0 };
@@ -950,30 +1145,22 @@ export class TableFrame {
     event.preventDefault();
     this.#finishEditing(true, false);
     this.#grid.focus({ preventScroll: true });
+    // Un'intestazione già scelta si trascina: le sue righe o colonne vanno
+    // dove la si lascia, come nei fogli di Google.
+    if ((hit.kind === "col" || hit.kind === "row") && !event.shiftKey && !event.ctrlKey && !event.metaKey && this.#movable(hit)) {
+      this.#moveLines(hit);
+      return;
+    }
     // Ctrl+clic aggiunge un intervallo agli altri, come nei fogli di calcolo.
     const adding = (event.ctrlKey || event.metaKey) && !event.shiftKey;
     if (adding) this.#others = withRange(this.#others, this.range);
     const keep = adding || this.#adding;
-    const { rows, columns } = this.#host.size();
     if (hit.kind === "corner") {
       this.#selectAll();
       return;
     }
     if (hit.kind === "col" || hit.kind === "row") {
-      const others = keep ? this.#others : [];
-      if (hit.kind === "col") {
-        const from = event.shiftKey ? this.#anchor.column : hit.column;
-        this.#anchor = { row: 0, column: from };
-        this.#focus = { row: rows - 1, column: hit.column };
-      } else {
-        const from = event.shiftKey ? this.#anchor.row : hit.row;
-        this.#anchor = { row: from, column: 0 };
-        this.#focus = { row: hit.row, column: columns - 1 };
-      }
-      this.#active = null;
-      this.#others = others;
-      this.#paintSelection();
-      this.#host.changed?.();
+      this.#selectLines(hit, event.shiftKey, keep);
       return;
     }
     if (keep && !event.shiftKey) {
@@ -988,6 +1175,140 @@ export class TableFrame {
     this.#follow((over) => {
       if (over.row !== this.#focus.row || over.column !== this.#focus.column) this.#select(over, true);
     }, () => {});
+  }
+
+  /// Un clic su un'intestazione: una lettera sceglie la colonna, un numero la
+  /// riga; con Maiusc dall'àncora fin lì, e `keep` tiene gli altri intervalli.
+  #selectLines(hit: LineHit, extend: boolean, keep: boolean): void {
+    const { rows, columns } = this.#host.size();
+    const others = keep ? this.#others : [];
+    if (hit.kind === "col") {
+      const from = extend ? this.#anchor.column : hit.column;
+      this.#anchor = { row: 0, column: from };
+      this.#focus = { row: rows - 1, column: hit.column };
+    } else {
+      const from = extend ? this.#anchor.row : hit.row;
+      this.#anchor = { row: from, column: 0 };
+      this.#focus = { row: hit.row, column: columns - 1 };
+    }
+    this.#active = null;
+    this.#others = others;
+    this.#paintSelection();
+    this.#host.changed?.();
+  }
+
+  /// Se l'intestazione `hit` si può trascinare: sta dentro una selezione di
+  /// colonne (o righe) intere, l'unica, e il formato le sa spostare. Le righe
+  /// d'intestazione non si spostano.
+  #movable(hit: GridHit): boolean {
+    if (this.#host.readOnly() || this.#others.length > 0 || this.#adding) return false;
+    const range = this.range;
+    const bounds = this.#bounds();
+    const caps = this.#host.caps();
+    if (hit.kind === "col") {
+      return caps.moveColumns && range.r0 === bounds.r0 && range.r1 === bounds.r1 && range.c1 - range.c0 < bounds.c1 && hit.column >= range.c0 && hit.column <= range.c1;
+    }
+    if (hit.kind === "row") {
+      return caps.moveRows && range.c0 === bounds.c0 && range.c1 === bounds.c1 && range.r0 >= caps.headerRows
+        && range.r1 - range.r0 < bounds.r1 - caps.headerRows && hit.row >= range.r0 && hit.row <= range.r1;
+    }
+    return false;
+  }
+
+  /// Dove andrebbero le righe (o colonne) scelte col puntatore sulla riga (o
+  /// colonna) `over`: lo spostamento, dentro la tabella e sotto
+  /// l'intestazione. Zero dentro la selezione stessa.
+  #lineShift(axis: "col" | "row", over: number): number {
+    const range = this.range;
+    const [first, last] = axis === "col" ? [range.c0, range.c1] : [range.r0, range.r1];
+    const { rows, columns } = this.#host.size();
+    const low = axis === "col" ? 0 : this.#host.caps().headerRows;
+    const high = (axis === "col" ? columns : rows) - 1;
+    const by = over < first ? over - first : over > last ? over - last : 0;
+    return Math.max(low - first, Math.min(high - last, by));
+  }
+
+  /// Trascina le intestazioni scelte: un segno mostra dove andranno, e al
+  /// rilascio si spostano in un passo solo. Un clic senza trascinare sceglie
+  /// soltanto quella riga o colonna.
+  #moveLines(hit: LineHit): void {
+    const axis = hit.kind;
+    const start = axis === "col" ? hit.column : hit.row;
+    let by = 0;
+    let moved = false;
+    this.#drag?.close();
+    const drag = openLifetime();
+    this.#drag = drag;
+    const doc = this.#grid.ownerDocument;
+    drag.listen(doc, "mousemove", (move) => {
+      const under = move.target instanceof Element && this.#grid.contains(move.target)
+        ? move.target
+        : doc.elementFromPoint?.(move.clientX, move.clientY) ?? null;
+      const over = this.#positionOf(under);
+      if (!over) return;
+      const index = axis === "col" ? over.column : over.row;
+      if (index < 0) return;
+      if (index !== start) moved = true;
+      if (!moved) return;
+      by = this.#lineShift(axis, index);
+      this.#grid.classList.add("is-moving-lines");
+      this.#placeDrop(axis, by);
+    });
+    const end = () => {
+      drag.close();
+      if (this.#drag === drag) this.#drag = null;
+      this.#grid.classList.remove("is-moving-lines");
+      this.#placeDrop(axis, 0);
+    };
+    drag.listen(doc, "mouseup", () => {
+      end();
+      if (!moved) {
+        this.#selectLines(hit, false, false);
+        return;
+      }
+      if (by === 0) return;
+      const range = this.range;
+      const target: TableTarget = axis === "col"
+        ? { anchor: { row: this.#anchor.row, column: this.#anchor.column + by }, focus: { row: this.#focus.row, column: this.#focus.column + by } }
+        : { anchor: { row: this.#anchor.row + by, column: this.#anchor.column }, focus: { row: this.#focus.row + by, column: this.#focus.column } };
+      this.apply(axis === "col"
+        ? { kind: "move-columns", from: range.c0, to: range.c1, by }
+        : { kind: "move-rows", from: range.r0, to: range.r1, by }, target);
+    });
+    drag.add(() => this.#grid.classList.remove("is-moving-lines"));
+  }
+
+  /// Il segno di dove andranno le righe o le colonne trascinate: una linea
+  /// sul bordo della riga (o colonna) dopo la quale, o prima della quale,
+  /// arriveranno. Nascosto con `by` zero.
+  #placeDrop(axis: "col" | "row", by: number): void {
+    const mark = this.#dropMark;
+    const range = this.range;
+    const bounds = this.#bounds();
+    if (by === 0) {
+      mark.hidden = true;
+      return;
+    }
+    const line = axis === "col" ? (by < 0 ? range.c0 + by : range.c1 + by) : (by < 0 ? range.r0 + by : range.r1 + by);
+    const box = axis === "col" ? this.#box({ r0: bounds.r0, c0: line, r1: bounds.r1, c1: line }) : this.#box({ r0: line, c0: bounds.c0, r1: line, c1: bounds.c1 });
+    if (!box) {
+      mark.hidden = true;
+      return;
+    }
+    mark.dataset.axis = axis === "col" ? "column" : "row";
+    const edge = by < 0 ? 0 : 1;
+    if (axis === "col") {
+      mark.style.left = `${box.left + edge * box.width}px`;
+      mark.style.top = `${box.top}px`;
+      mark.style.width = "";
+      mark.style.height = `${box.height}px`;
+    } else {
+      mark.style.left = `${box.left}px`;
+      mark.style.top = `${box.top + edge * box.height}px`;
+      mark.style.width = `${box.width}px`;
+      mark.style.height = "";
+    }
+    mark.hidden = false;
   }
 
   /// Segue il puntatore fino al rilascio, cella per cella.
@@ -1031,8 +1352,11 @@ export class TableFrame {
   }
 
   /// Riempie `target` a partire da `source`, che vi sta dentro a un capo:
-  /// ogni riga (o colonna) continua la sua serie.
+  /// ogni riga (o colonna) continua la sua serie. Dove due serie dicono la
+  /// stessa parola, o un numero si legge in due modi, vale la lingua della
+  /// tabella (`#language`).
   fill(source: Range, target: Range): boolean {
+    const language = this.#language();
     const down = target.r1 > source.r1;
     const up = target.r0 < source.r0;
     const right = target.c1 > source.c1;
@@ -1045,7 +1369,7 @@ export class TableFrame {
       for (let c = source.c0; c <= source.c1; c++) {
         const seed: string[] = [];
         for (let r = source.r0; r <= source.r1; r++) seed.push(this.#host.cellText(r, c));
-        const values = fillSeries(seed, count, up);
+        const values = fillSeries(seed, count, up, language);
         values.forEach((value, i) => rows[up ? count - 1 - i : i]!.push(value));
       }
       blocks.push({ row: top, column: source.c0, rows });
@@ -1056,7 +1380,7 @@ export class TableFrame {
       for (let r = source.r0; r <= source.r1; r++) {
         const seed: string[] = [];
         for (let c = source.c0; c <= source.c1; c++) seed.push(this.#host.cellText(r, c));
-        const values = fillSeries(seed, count, left);
+        const values = fillSeries(seed, count, left, language);
         rows.push(left ? values.reverse() : values);
       }
       blocks.push({ row: source.r0, column: first, rows });
@@ -1065,6 +1389,19 @@ export class TableFrame {
       return false;
     }
     return this.apply({ kind: "set", blocks }, { anchor: { row: target.r0, column: target.c0 }, focus: { row: target.r1, column: target.c1 } });
+  }
+
+  /// Il doppio clic sulla maniglia: la serie scende quanto la colonna
+  /// accanto, senza scrivere sopra una cella piena (`fillToEndRange`).
+  #fillToEnd(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (this.#host.readOnly() || this.#refuseMany()) return;
+    const source = this.range;
+    const { rows, columns } = this.#host.size();
+    const filled = (row: number, column: number) => this.#host.cellText(row, column).trim() !== "";
+    const target = fillToEndRange(source, rows, columns, filled, this.#host.caps().headerRows);
+    if (target) this.fill(source, target);
   }
 
   #dblclick(event: MouseEvent): void {

@@ -39,12 +39,13 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   figlio del foglio dopo la barra di formato, che la cornice mostra solo dove
   la banda non c'è. L'ordine segue il ruolo: le modalità
   `live_preview` come la superficie le dichiara, il sorgente, una riga, la
-  lettura; una nota dà Live, Blocchi, Sorgente e Lettura. La figura è la
-  `icon` della `SurfaceMode` se `ui/icons.ts` la sa disegnare, sennò quella
-  del ruolo (penna, codice, occhio). La scorciatoia è quella del comando che
-  porta alla modalità, anche se la persona l'ha cambiata: `shell.mode.blocks`
-  per i Blocchi, il comando del ruolo per la prima modalità di quel ruolo,
-  nessuna per le altre. Il menu dà il fuoco al suo riquadro all'apertura e di
+  lettura; una nota dà Scrittura, Sorgente e Lettura (i Blocchi sono
+  confluiti in Scrittura: un id vecchio si riconosce da `SurfaceMode.formerIds`).
+  La figura è la `icon` della `SurfaceMode` se `ui/icons.ts` la sa disegnare,
+  sennò quella del ruolo (penna, codice, occhio). La scorciatoia è quella del
+  comando che porta alla modalità, anche se la persona l'ha cambiata: il
+  comando del ruolo per la prima modalità di quel ruolo, nessuna per le altre;
+  `shell.mode.blocks` resta e porta anche lui a Scrittura. Il menu dà il fuoco al suo riquadro all'apertura e di
   nuovo alla scelta, perché chiudendosi rende il fuoco a chi l'aveva.
 - **Tasto destro negli editor.** Un solo ascoltatore sul riquadro
   (`panels/document.ts`) chiede alla superficie il suo `contextMenu(at)` e lo
@@ -92,6 +93,12 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   una linguetta di nota diventa finestra, solo con
   `platformSupports("multipleWindows")` e dove il motore consegna `dragend`
   fuori finestra. Ogni gesto ha il suo comando nel menu della linguetta.
+- **Fuoco dopo un'apertura.** Quando `openDocument` finisce, il fuoco va
+  all'editor del documento aperto, ma solo se nel frattempo nessuno l'ha
+  portato altrove: se sta ancora dov'era al gesto, da nessuna parte o in un
+  riquadro. Un documento lento da aprire (un `.docx` da impaginare) non toglie
+  il fuoco al lanciatore, a un dialogo o a un campo aperti intanto, e il loro
+  Invio non finisce nel documento.
 - **Menu contestuale estendibile.** Le view sulla superficie `context_menu`
   (`ui/context-views.ts`) si aggiungono in coda al menu di una nota, di una
   cartella o di un file dell'albero. Il bersaglio del clic non è nel contesto

@@ -157,6 +157,14 @@ interrotta.
 Dove il browser lo dà, l'adattatore ascolta anche `pointerrawupdate`, che
 arriva prima del `pointermove` del fotogramma: i suoi campioni vanno subito
 alla sessione, e il `pointermove` che segue non ripete quelli già arrivati.
+Di solito il `pointermove` li riporta con lo stesso istante, ma non è promesso:
+con l'orologio finto di Playwright (quello del banco) ogni evento prende
+l'istante del suo invio. La sessione riconosce un doppione solo dall'istante: per questo l'adattatore ricorda i campioni di `pointerrawupdate`
+finché un `pointermove` non li riporta, e scarta il campione del `pointermove`
+che ha gli stessi valori (coordinate del client, pressione, inclinazione,
+rotazione, tasti) di uno di loro, consumandolo. Un campione senza gemello entra
+come sempre; due campioni uguali in istanti diversi di una penna ferma restano
+due.
 L'anteprima resta incrementale (`pf1-live.ts`) e non usa
 `requestAnimationFrame` (DEC-26).
 

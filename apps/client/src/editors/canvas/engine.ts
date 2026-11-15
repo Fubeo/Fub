@@ -44,7 +44,7 @@ import {
   type Rect,
 } from "./cards";
 import { textCardName } from "./card-name";
-import { boardReading, cardLabel, changeAnnouncement, nearestCard, stepInOrder, type BoardReading, type CardDirection } from "./a11y";
+import { boardReading, cardLabel, cardTitle, changeAnnouncement, nearestCard, stepInOrder, type BoardReading, type CardDirection } from "./a11y";
 import { applyCardDetails, cardDetail, detailLevel, farTitle, type CardDetail } from "./lod";
 import {
   cutInk,
@@ -978,6 +978,12 @@ interface CardEntry {
   missingFor: string | null;
   /** Il nome per il lettore di schermo scritto adesso su `article` (T61); `null` se non ancora. */
   label: string | null;
+  /**
+   * La scheda e il giro della lingua con cui la testata ha scritto i suoi nomi (il
+   * titolo, quello da lontano, quello di →); `null` se non ancora. Uguali, la resa
+   * non li ricalcola.
+   */
+  titled: { readonly node: CanvasNode; readonly round: number } | null;
 }
 
 interface Viewport {
@@ -12438,7 +12444,7 @@ export class CanvasEngine {
     const entry: CardEntry = {
       id, article: el, title, connect, node, type: node.type, body,
       bodyKey: null, resize: null, teardown: null, view: null, viewLife: null, viewSize: null, missingFor: null,
-      far, detail: null, find: null, label: null,
+      far, detail: null, find: null, label: null, titled: null,
     };
     el.addEventListener("focus", () => {
       // Col fuoco il nome dev'essere quello di adesso, anche prima del giro
@@ -12511,11 +12517,17 @@ export class CanvasEngine {
     // Il nome per il lettore di schermo (T61) lo scrive `#scheduleLabels`, solo
     // quando il documento cambia: non qui, a ogni resa.
     el.classList.toggle("selected", this.#selection.includes(node.id));
-    const title = nodeTitle(node);
-    if (entry.title.textContent !== title) entry.title.textContent = title;
-    const far = farTitle(node);
-    if (entry.far.textContent !== far) entry.far.textContent = far;
-    entry.connect.setAttribute("aria-label", t("canvas.connect", { id: node.id }));
+    // I nomi della testata dipendono solo dalla scheda e dalla lingua.
+    if (entry.titled?.node !== node || entry.titled.round !== this.#languageRound) {
+      entry.titled = { node, round: this.#languageRound };
+      const title = nodeTitle(node);
+      if (entry.title.textContent !== title) entry.title.textContent = title;
+      const far = farTitle(node);
+      if (entry.far.textContent !== far) entry.far.textContent = far;
+      // Il nome di → è quello del lettore di schermo: la specie e il nome della scheda.
+      const connectLabel = t("canvas.connect", { card: cardTitle(node) });
+      if (entry.connect.getAttribute("aria-label") !== connectLabel) entry.connect.setAttribute("aria-label", connectLabel);
+    }
     // «↩ N» e «×N» dopo il titolo, e la luce delle gemelle (T22).
     this.#syncHead(entry);
     // La testata dell'estratto (T75): le parti e ↗, prima di →.
@@ -12954,7 +12966,7 @@ export class CanvasEngine {
     const input = node.type === "text" ? document.createElement("textarea") : document.createElement("input");
     input.className = node.type === "text" ? "canvas-text-editor" : "canvas-field-editor";
     input.value = node[field] ?? "";
-    input.setAttribute("aria-label", t("canvas.edit_text", { id: node.id }));
+    input.setAttribute("aria-label", t("canvas.edit_text", { card: cardTitle(node) }));
     const lifetime = new AbortController();
     const editor: CardEditor = {
       id: node.id, field, input, place: input, live: null, article, lifetime, composing: false, recordOnInput: false,
@@ -13462,17 +13474,33 @@ function writingName(node: CanvasNode): string {
   return base.replace(/\.(md|markdown)$/i, "");
 }
 
+/** Quanto è lungo, al più, il nome di un testo nella testata della scheda. */
+const TITLE_TEXT_MAX = 48;
+
+/**
+ * Il titolo nella testata di una scheda e nell'elenco del filo: il file, l'indirizzo,
+ * il nome di un testo (`textCardName`: la prima riga non vuota senza i segni del
+ * Markdown), l'etichetta di un gruppo. Una scheda che non ha ancora niente da dire
+ * (un testo appena nato, mentre si scrive) dice la sua specie a parole, «Scheda di
+ * testo»: mai l'id interno, che una persona non deve vedere né sentire.
+ */
 function nodeTitle(node: CanvasNode): string {
+  let title = "";
   switch (node.type) {
     case "text":
-      return (node.text ?? "").split("\n", 1)[0]?.slice(0, 48) || node.id;
+      title = textCardName(typeof node.text === "string" ? node.text : "").slice(0, TITLE_TEXT_MAX);
+      break;
     case "file":
-      return node.file ?? node.id;
+      title = node.file ?? "";
+      break;
     case "link":
-      return node.url ?? node.id;
+      title = node.url ?? "";
+      break;
     case "group":
-      return node.label || node.id;
+      title = (node.label ?? "").trim();
+      break;
   }
+  return title || cardTitle(node, "");
 }
 
 function nodeText(node: CanvasNode): string {

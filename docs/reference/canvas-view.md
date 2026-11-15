@@ -361,6 +361,13 @@ scrive i nomi sulle schede.
   l'elenco sta nell'ispettore. I nomi si riscrivono solo quando cambia il
   documento o la lingua, a thread libero, 250 schede per passo, e solo dove il
   testo cambia; la scheda che prende il fuoco ha subito il suo.
+- **Mai l'id interno.** Il pulsante → («Collega: Scheda di testo Idee») e il
+  campo che scrive («Modifica il testo: …») dicono la specie e il nome della
+  scheda come la testata del menu. Il titolo della testata è il nome di un
+  testo (`textCardName`), il file, l'indirizzo o l'etichetta; una scheda che
+  non ha ancora niente da dire, come un testo appena nato mentre si scrive,
+  mostra la sua specie («Scheda di testo», «Gruppo»). Il titolo grande da
+  lontano resta vuoto.
 - **La regione viva** della tela (quella di «Niente da annullare.») dice ciò
   che un commit ha cambiato: «Hai tolto dalla lavagna: …», «Hai collegato … a
   …», «Hai spostato: …» (una frase, in quest'ordine), o quante schede. Testo,
