@@ -33,7 +33,7 @@ use crate::clock::{wall_clock_ms, HostClock};
 use crate::counter::{Counter, WriterId};
 use crate::limits::{
     Limits, LOG_HARD_BYTES, LOG_SOFT_BYTES, MAX_MESSAGE, MAX_PENDING_BYTES, MAX_PENDING_COMMITS,
-    MAX_SNAPSHOT, PAIRING_TTL, RATE_COOLDOWN, RESUME_WINDOW, RETAINED_NACKS,
+    MAX_SECRET_FAILURES, MAX_SNAPSHOT, PAIRING_TTL, RATE_COOLDOWN, RESUME_WINDOW, RETAINED_NACKS,
 };
 use crate::pairing::{qr_svg, PairingTarget, QrTooLong};
 use crate::protocol::{
@@ -53,6 +53,8 @@ const MAX_DETAIL: usize = 64 * 1024;
 struct Offer {
     secret: PairingSecret,
     expires: Instant,
+    /// I `hello` con un segreto sbagliato arrivati per questo QR.
+    failures: u32,
     pairing: Pairing,
 }
 
@@ -224,6 +226,7 @@ impl Session {
         Ok(Offer {
             secret,
             expires,
+            failures: 0,
             pairing: Pairing {
                 payload,
                 qr_svg: svg,
@@ -287,7 +290,7 @@ impl Session {
                 }
                 let offer = self
                     .offer
-                    .as_ref()
+                    .as_mut()
                     .filter(|offer| now < offer.expires)
                     .ok_or_else(|| {
                         Violation::new(
@@ -298,6 +301,17 @@ impl Session {
                 let valid =
                     PairingSecret::parse(text).is_some_and(|secret| secret.matches(&offer.secret));
                 if !valid {
+                    offer.failures += 1;
+                    if offer.failures >= MAX_SECRET_FAILURES {
+                        // Il QR ha visto troppi segreti sbagliati: non vale
+                        // più, e la shell lo sa come una scadenza.
+                        self.offer = None;
+                        self.events.push(LiveEvent::PairingExpired);
+                        return Err(Violation::new(
+                            CloseCode::SecretRejected,
+                            "too many wrong pairing secrets: the QR is spent",
+                        ));
+                    }
                     return Err(Violation::new(
                         CloseCode::SecretRejected,
                         "the pairing secret is wrong",
