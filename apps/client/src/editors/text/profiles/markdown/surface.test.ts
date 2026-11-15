@@ -802,6 +802,47 @@ describe("le tabelle della superficie Markdown", () => {
     expect(ed.editorActions.state("markdown.bold").active).toBe(true);
     ed.destroy();
   });
+
+  it("le celle scelte seguono la tabella quando cambia senza cambiare la scelta: annulla, ripeti, disco", () => {
+    const { ed, parent } = editor();
+    ed.buffer.setDoc("| a |\n| --- |\n| 1 |\n| 2 |\n");
+    const grid = parent.querySelector<HTMLElement>(".tb-grid")!;
+    grid.focus();
+    const press = (key: string, shiftKey = false) =>
+      grid.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
+    press("ArrowDown");
+    press("ArrowDown", true);
+    const values = () => [...(ed.cellSelection!.read()?.values() ?? [])];
+    expect(values()).toEqual(["1", "2"]);
+    const heard = vi.fn();
+    const stop = ed.cellSelection!.subscribe(heard);
+    // Una modifica dalla barra, poi annulla: la somma deve rileggere.
+    expect(ed.editorActions.run("markdown.bold")).toBe(true);
+    heard.mockClear();
+    expect(ed.undo()).toBe(true);
+    expect(heard).toHaveBeenCalled();
+    expect(values()).toEqual(["1", "2"]);
+    // La stessa nota ricaricata dal disco con altri numeri.
+    heard.mockClear();
+    ed.buffer.syncDoc("| a |\n| --- |\n| 5 |\n| 7 |\n");
+    expect(heard).toHaveBeenCalled();
+    expect(values()).toEqual(["5", "7"]);
+    stop();
+    ed.destroy();
+  });
+
+  it("le celle scelte portano la lingua della nota, anche scritta «it_IT»", () => {
+    const { ed, parent } = editor();
+    ed.buffer.setDoc("---\nlang: it_IT\n---\n| a |\n| --- |\n| 1.240 |\n| 860 |\n");
+    const grid = parent.querySelector<HTMLElement>(".tb-grid")!;
+    grid.focus();
+    const press = (key: string, shiftKey = false) =>
+      grid.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
+    press("ArrowDown");
+    press("ArrowDown", true);
+    expect(ed.cellSelection!.read()?.locale).toBe("it-IT");
+    ed.destroy();
+  });
 });
 
 describe("i disegni incorporati nella Lettura", () => {

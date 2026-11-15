@@ -11,8 +11,8 @@
 // Un comando è disponibile soltanto dove porterebbe a qualcosa: una
 // superficie con una modalità sola non ne offre nessuno, e il toggle chiede
 // una lettura e almeno una scrittura fra cui alternare. La disponibilità è
-// della superficie, non della modalità corrente: «Passa a Live» resta
-// nell'elenco anche stando già in Live, come il bottone attivo del
+// della superficie, non della modalità corrente: «Passa a Scrittura» resta
+// nell'elenco anche stando già in Scrittura, come il bottone attivo del
 // commutatore, perché una scorciatoia assegnata dall'utente che sparisse a
 // seconda della modalità ricadrebbe sull'editor sotto, con un effetto diverso.
 
