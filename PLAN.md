@@ -574,7 +574,7 @@ Fatto quando: un test di `settings.rs` legge `blocks` come Scrittura e il
 file delle impostazioni resta byte per byte; i mirror sono rigenerati e
 verdi; un test del controller prova i due comandi.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-host settings
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15, ramo feat/scrittura-dai-modi-vecchi da main (17179d70b e seguenti)
 
 ## T5 · I blocchi come preferenza
 
