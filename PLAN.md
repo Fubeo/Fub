@@ -1407,7 +1407,7 @@ budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/comments
 src/editors/text/profiles/markdown/corpus.test.ts
-Stato: [~] in corso · coder dal 2026-11-15, da main
+Stato: [~] coder e correzioni fatti (feat/commenti-nell-editor @ 16329ed8e più main, check verde, battuta uguale a main entro il rumore); con main `document-bridge` sale a 509 852 byte: la PR aspetta la divisione del pacchetto, poi baseline dal runner
 
 ## T22 · Commenti: margine, discussione, Risolvi
 
