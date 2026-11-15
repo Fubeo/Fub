@@ -1356,7 +1356,7 @@ Fatto quando: `cargo test -p fub-canvas-core` passa; il compito del corpus
 con il PDF sparso non ha `needs`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cargo
 test -p fub-features --features lavagna,draw --test lavagna
-Stato: [ ] da fare
+Stato: [~] in corso
 
 ## T15 · Le penne in Rust
 
