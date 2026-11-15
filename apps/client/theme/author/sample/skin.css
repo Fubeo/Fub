@@ -11948,8 +11948,10 @@ kbd,
   box-shadow: 0 2px 0 -1px var(--highlight);
   color: inherit;
 }
+/* Col cursore dentro, il fondo due volte: il giallo pieno del prototipo, in
+   entrambe le luci, senza un colore nuovo. */
 .cm-editor .cm-content .cm-fub-comment-range-on {
-  background: var(--doc-highlight);
+  background: linear-gradient(var(--doc-highlight), var(--doc-highlight)), var(--doc-highlight);
 }
 .cm-editor .cm-content .cm-fub-comment-source {
   border-radius: 3px;
