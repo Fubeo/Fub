@@ -139,6 +139,30 @@ catalogo, come Excel: su un intervallo che non prende righe o colonne intere
 Mod+«+» e Mod+«−» chiedono come spostare le celle. La griglia dei fogli è
 descritta in [Editor e anteprima](editor-and-preview.md#la-griglia).
 
+## La somma nella banda
+
+Con due o più celle numeriche scelte in una tabella della nota in Live o nella
+tabella di una Base, la banda in fondo mostra «Somma · Media · Conteggio» al
+posto del conto delle parole; con una cella sola, o senza numeri, torna il
+conto. Il conto si fa nella shell, senza chiamate al core, in un passo solo
+anche su diecimila celle.
+
+- Un numero si legge com'è scritto nella lingua della nota (`lang:` nel
+  frontmatter, se no quella dell'app): «1.240,5» in italiano, «1,240.5» in
+  inglese, lo spazio come separatore in francese; vale anche la forma del
+  computer «1240.5». Segno, valute (€ $ £ ¥) e percento sono permessi; testo,
+  date e celle vuote non contano. Il grassetto o il codice attorno al numero
+  non lo cambiano. La riga d'intestazione non conta mai.
+- Il conteggio è quello delle celle numeriche. I risultati si scrivono nella
+  lingua delle celle, con i decimali delle celle (la media almeno due).
+- Un clic su una voce la copia negli appunti e lo dice con un avviso; il tasto
+  destro sulla banda sceglie le voci (anche Minimo e Massimo). La scelta dura
+  quanto la sessione, e almeno una voce resta accesa.
+- Nella Base le celle si scelgono con il clic, Maiusc+clic, il trascinamento,
+  Maiusc con le frecce (le righe dei gruppi si saltano); Escape, la ricerca o
+  una vista nuova le lasciano. Una Base dentro una nota non porta la somma
+  nella banda.
+
 ## Dove si trova
 
 - `apps/client/src/tabella/` (tasti, navigazione, selezione, comandi, appunti,
@@ -150,3 +174,5 @@ descritta in [Editor e anteprima](editor-and-preview.md#la-griglia).
 - `apps/client/src/editors/grid/engine.ts` e `shortcuts.ts`
 - `apps/client/src/panels/format-bar.ts` (i tasti della tabella per il dito)
 - `apps/client/src/theme/scrittoio/skin/tabella.css`
+- `apps/client/src/shells/scrittoio/frame/selection-sum.ts` (la somma nella
+  banda) e `apps/client/src/editors/base/surface.ts` (le celle della Base)
