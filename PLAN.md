@@ -5766,7 +5766,7 @@ avvio la crea, e il vault non cambia).
 Fatto quando: il job della release produce il `.flatpak`; T23 lo installa
 e fa i suoi tre compiti.
 Prova: la corsa a secco della release; il giro a mano di T23.
-Stato: [~] PR #386 (feat/flatpak @ bf54478b8): manifest, .desktop, metainfo, docs e i tre job di release.yml; aspetta CI completa e la corsa a secco della release (workflow_dispatch)
+Stato: [x] in main · PR #386, merge 53cae4922 (2026-11-15), CI completa verde · corsa a secco di release.yml (workflow_dispatch, corsa 43727823507) verde: installer delle tre piattaforme, bundle .flatpak 62 MB, SHA-256 e provenienza; la verifica della bozza salta senza tag, come previsto
 
 ## T52 · «Segnala un problema»
 
