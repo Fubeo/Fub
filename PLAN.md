@@ -1021,7 +1021,7 @@ scorciatoia cambiata; un test del vault d'esempio in `support.rs`; la scena
 del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/frame; cargo nextest run -p fub-host support
-Stato: [~] PR #383 (feat/riga-dei-suggerimenti @ 29ab25389, con main dopo #380: `document-bridge` 404 kB); aspetta CI completa e baseline dal runner
+Stato: [~] PR #383 (feat/riga-dei-suggerimenti @ a90cd4752): la riga porta `data-pending` mentre sta per riscriversi, il banco lo aspetta e semina `Math.random` (difetto di CodeMirror nella selezione: issue #399); 4 baseline dal runner allineate a main; aspetta CI e le baseline `live-*` dal runner
 
 ## T15a · Le toppe mirate del `.base`
 
