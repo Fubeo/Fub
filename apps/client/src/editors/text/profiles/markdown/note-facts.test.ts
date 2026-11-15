@@ -260,7 +260,7 @@ describe("nella superficie", () => {
     ed.destroy();
   });
 
-  it("in Scrittura sotto il titolo, in Sorgente no, in Lettura dopo il primo h1", () => {
+  it("in Scrittura e in Lettura in fondo alla testata, in Sorgente no", () => {
     setLanguage("it");
     const { ed, parent, draw, openLinks, searchTag } = surface();
     draw(FACTS);
@@ -270,7 +270,9 @@ describe("nella superficie", () => {
     ed.setMode("reading");
     const reading = parent.querySelector<HTMLElement>(".markdown-rendered")!;
     const row = reading.querySelector<HTMLElement>(".note-facts")!;
-    expect(row.previousElementSibling?.tagName).toBe("H1");
+    // La testata della Lettura è quella di Scrittura: la riga la chiude.
+    expect(row.parentElement?.classList.contains("cm-fub-page")).toBe(true);
+    expect(row.previousElementSibling?.classList.contains("cm-fub-page-title")).toBe(true);
     row.querySelectorAll<HTMLElement>(".note-fact")[1]!.click();
     row.querySelector<HTMLElement>(".note-tag")!.click();
     expect(openLinks).toHaveBeenCalledTimes(1);
@@ -280,6 +282,7 @@ describe("nella superficie", () => {
     const unmount = ed.mountPresentation(host);
     expect(host.querySelector("h1")).not.toBeNull();
     expect(host.querySelector(".note-facts")).toBeNull();
+    expect(host.querySelector(".cm-fub-page")).toBeNull();
     unmount();
     ed.setMode("live_preview");
     expect(reading.querySelector(".note-facts")).toBeNull();

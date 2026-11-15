@@ -3,8 +3,11 @@
 // che resta l'unica cosa che si scrive. Due gesti lo scrivono senza mouse:
 // `Mod-;` apre una riga nuova per una proprietà, `Alt-↑/↓` sulla riga di una
 // chiave sposta la voce intera, con le righe rientrate che le appartengono.
+// In Scrittura le proprietà le mostra la testata della pagina
+// (`page/header.ts`, `headerShowsProperties`): qui resta lo YAML.
 import {
   EditorState,
+  Facet,
   StateField,
   Transaction,
   type Extension,
@@ -34,6 +37,9 @@ export interface PropertyBlock {
   /// La riga di chiusura (`---` o `...`).
   readonly closing: number;
   readonly entries: readonly PropertyEntry[];
+  /// Una riga di primo livello che non è una chiave, un commento o una riga
+  /// vuota: YAML non la legge, e le voci qui sopra non dicono tutto.
+  readonly unreadable: boolean;
 }
 
 const KEY_LINE = /^(?:"((?:[^"\\]|\\.)*)"|'((?:[^']|'')*)'|([^\s#:"'-][^:]*?|-[^\s:][^:]*?))\s*:(?:\s+(.*))?$/;
@@ -72,6 +78,7 @@ export function propertyBlock(state: EditorState): PropertyBlock | null {
   const opening = doc.lineAt(range.from);
   const closing = doc.lineAt(range.to > 0 && doc.sliceString(range.to - 1, range.to) === "\n" ? range.to - 1 : range.to);
   const entries: PropertyEntry[] = [];
+  let unreadable = false;
   let current: { key: string; head: string; rest: string[]; from: number; to: number; line: number } | null = null;
   const close = () => {
     if (current) entries.push({ key: current.key, value: display(current.head, current.rest), from: current.from, to: current.to, line: current.line });
@@ -91,14 +98,17 @@ export function propertyBlock(state: EditorState): PropertyBlock | null {
     close();
     if (text.trim() === "" || text.startsWith("#")) continue;
     const match = KEY_LINE.exec(text);
-    if (!match) continue;
+    if (!match) {
+      unreadable = true;
+      continue;
+    }
     const key = match[1] !== undefined ? match[1].replace(/\\"/g, "\"")
       : match[2] !== undefined ? match[2].replace(/''/g, "'")
       : match[3]!.trim();
     current = { key, head: match[4] ?? "", rest: [], from: line.from, to: line.to, line: number };
   }
   close();
-  return { from: opening.from, to: closing.to, closing: closing.number, entries };
+  return { from: opening.from, to: closing.to, closing: closing.number, entries, unreadable };
 }
 
 /// Il frontmatter è coperto dal widget? Lo è finché nessuna selezione ci
@@ -106,6 +116,19 @@ export function propertyBlock(state: EditorState): PropertyBlock | null {
 function folded(state: EditorState, block: PropertyBlock): boolean {
   if (state.facet(propertiesDisplay) === "source") return false;
   return !state.selection.ranges.some((range) => range.to > block.from && range.from <= block.to);
+}
+
+/// La testata della pagina mostra le proprietà (`page/header.ts`): chiuso, il
+/// frontmatter non ha più un widget suo e sta tutto nella testata; illeggibile,
+/// resta YAML sotto il titolo, e la testata lo dice.
+export const headerShowsProperties = Facet.define<boolean, boolean>({
+  combine: (values) => values.some(Boolean),
+});
+
+/// Il frontmatter si vede come YAML da scrivere: in `source`, o perché una
+/// selezione ci è entrata.
+export function frontmatterOpen(state: EditorState, block: PropertyBlock): boolean {
+  return !folded(state, block);
 }
 
 class PropertiesWidget extends WidgetType {
@@ -166,6 +189,10 @@ interface PropertiesState {
 
 function decorate(state: EditorState, block: PropertyBlock | null): PropertiesState {
   if (!block || !folded(state, block)) return { block, decorations: Decoration.none };
+  if (state.facet(headerShowsProperties)) {
+    if (block.unreadable) return { block, decorations: Decoration.none };
+    return { block, decorations: Decoration.set([Decoration.replace({ block: true }).range(block.from, block.to)]) };
+  }
   const mode = state.facet(propertiesDisplay) === "hidden" ? "hidden" : "visible";
   const widget = new PropertiesWidget(mode, block.entries);
   return { block, decorations: Decoration.set([Decoration.replace({ block: true, widget }).range(block.from, block.to)]) };
@@ -174,7 +201,8 @@ function decorate(state: EditorState, block: PropertyBlock | null): PropertiesSt
 const properties = StateField.define<PropertiesState>({
   create: (state) => decorate(state, propertyBlock(state)),
   update(value, transaction) {
-    const display = transaction.startState.facet(propertiesDisplay) !== transaction.state.facet(propertiesDisplay);
+    const display = transaction.startState.facet(propertiesDisplay) !== transaction.state.facet(propertiesDisplay)
+      || transaction.startState.facet(headerShowsProperties) !== transaction.state.facet(headerShowsProperties);
     if (!transaction.docChanged && !transaction.selection && !display) return value;
     return decorate(transaction.state, transaction.docChanged ? propertyBlock(transaction.state) : value.block);
   },
@@ -192,16 +220,23 @@ const guardOpening = EditorState.transactionFilter.of((transaction) => {
   if (!block || before.decorations.size === 0) return transaction;
   // `null`: nessuna modifica tocca il frontmatter; `""`: una lo cancella o
   // ce n'è più d'una, e la transazione non passa.
+  // Le voci fra le due righe `---` le scrive la testata della pagina (icona,
+  // copertina, «Aggiungi una proprietà»): passano, perché non toccano né
+  // l'apertura né la chiusura. Col frontmatter coperto nessun cursore ci sta,
+  // e una battuta non ci arriva.
+  const doc = transaction.startState.doc;
+  const openingEnd = doc.lineAt(block.from).to;
+  const closingFrom = doc.line(block.closing).from;
   const seen: { inserted: string | null } = { inserted: null };
   transaction.changes.iterChanges((fromA, toA, _fromB, _toB, text) => {
     if (fromA > block.to || toA < block.from) return;
+    if (fromA > openingEnd && toA <= closingFrom) return;
     const pure = fromA === block.from && toA === block.from && seen.inserted === null;
     seen.inserted = pure ? text.toString() : "";
   });
   const inserted = seen.inserted;
   if (inserted === null) return transaction;
   if (inserted === "") return {};
-  const doc = transaction.startState.doc;
   const at = block.to < doc.length ? block.to + 1 : block.to;
   const insert = block.to < doc.length ? inserted : `\n${inserted}`;
   return {
@@ -220,20 +255,28 @@ const openOnClick = EditorView.domEventHandlers({
     const target = event.target instanceof Element ? event.target : null;
     const widget = target?.closest(".cm-fub-properties");
     if (!widget || !view.contentDOM.contains(widget)) return false;
-    const block = view.state.field(properties).block;
-    if (!block) return false;
-    event.preventDefault();
     const row = target?.closest<HTMLElement>(".cm-fub-properties-row");
-    const doc = view.state.doc;
-    const at = row?.dataset.at !== undefined ? Number(row.dataset.at) : NaN;
-    const anchor = Number.isSafeInteger(at) && at >= block.from && at <= block.to
-      ? doc.lineAt(at).to
-      : doc.line(Math.min(doc.lineAt(block.from).number + 1, block.closing)).from;
-    view.dispatch({ selection: { anchor }, scrollIntoView: true, userEvent: "select.pointer" });
-    view.focus();
-    return true;
+    const at = row?.dataset.at !== undefined ? Number(row.dataset.at) : null;
+    if (!view.state.field(properties).block) return false;
+    event.preventDefault();
+    return openPropertyAt(view, at, "select.pointer");
   },
 });
+
+/// Riapre lo YAML alla fine della voce che comincia in `at`, o sulla prima
+/// riga del frontmatter: il cursore ci entra, e il frontmatter si scrive.
+/// `false` se la nota non ha frontmatter.
+export function openPropertyAt(view: EditorView, at: number | null, userEvent = "select"): boolean {
+  const block = propertyBlock(view.state);
+  if (!block) return false;
+  const doc = view.state.doc;
+  const anchor = at !== null && Number.isSafeInteger(at) && at >= block.from && at <= block.to
+    ? doc.lineAt(at).to
+    : doc.line(Math.min(doc.lineAt(block.from).number + 1, block.closing)).from;
+  view.dispatch({ selection: { anchor }, scrollIntoView: true, userEvent });
+  view.focus();
+  return true;
+}
 
 /// `Mod-;`: una riga vuota per una proprietà nuova, prima della chiusura del
 /// frontmatter; senza frontmatter, lo crea in cima. Il cursore ci entra, e lo
@@ -291,10 +334,12 @@ function scalar(value: string, inList = false): string {
 }
 
 /// Scrive (o toglie, con `null`) la proprietà `key`, con tutte le righe della
-/// voce che c'era; senza frontmatter lo crea in cima. È la modifica, da
+/// voce che c'era; un numero si scrive come numero YAML, non fra virgolette.
+/// Senza frontmatter lo crea in cima. È la modifica, da
 /// mandare con una transazione: chi chiama sceglie l'evento.
-export function setProperty(state: EditorState, key: string, value: string | readonly string[] | null): { from: number; to: number; insert: string } | null {
+export function setProperty(state: EditorState, key: string, value: string | number | readonly string[] | null): { from: number; to: number; insert: string } | null {
   const text = value === null ? null
+    : typeof value === "number" ? `${key}: ${Number.isFinite(value) ? value : 0}`
     : typeof value === "string" ? `${key}: ${scalar(value)}`
     : `${key}: [${value.map((item) => scalar(item, true)).join(", ")}]`;
   const block = propertyBlock(state);
@@ -318,7 +363,11 @@ export function setProperty(state: EditorState, key: string, value: string | rea
 
 /// Le voci di una proprietà a elenco (`[a, b]` o una per riga), una per una.
 export function propertyList(state: EditorState, key: string): string[] {
-  const value = propertyValue(state, key);
+  return listItems(propertyValue(state, key));
+}
+
+/// Le voci di un valore letto (`a, b`), una per una.
+export function listItems(value: string | null): string[] {
   return value === null ? [] : value.split(/,\s*|\s+/).map((item) => item.trim()).filter(Boolean);
 }
 

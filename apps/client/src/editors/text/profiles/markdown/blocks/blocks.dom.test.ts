@@ -337,8 +337,10 @@ describe("il trascinamento solleva soltanto il blocco", () => {
     const view = mount(doc, doc.indexOf("Due"), undefined, propertiesDisplay.of("visible"));
     const inner = lifted(view, 0);
     expect(inner.querySelector(".cm-fub-page"), "la testata resta ferma").toBeNull();
-    // Le proprietà sono il blocco del frontmatter: salgono con lui.
-    expect(inner.querySelector(".cm-fub-properties")).not.toBeNull();
+    // Le proprietà le mostra la testata (T6): restano ferme con lei, e il
+    // frontmatter coperto non porta un widget suo.
+    expect(inner.querySelector(".cm-fub-properties, .cm-fub-page-props")).toBeNull();
+    expect(view.contentDOM.querySelector(".cm-fub-page .cm-fub-page-props")).not.toBeNull();
     expect(rows(inner).join("|")).not.toContain("Uno");
   });
 

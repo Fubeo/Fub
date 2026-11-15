@@ -17,6 +17,8 @@ import { onLanguage, t } from "../../../../i18n/strings";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
 import { blocksMode, pageArrives } from "./blocks";
+import { mountReadingHeader, type PageOptions } from "./page/header";
+import { propertiesDisplay } from "../../properties-display";
 import { liveStrings } from "./strings";
 import { pageIconsChanged } from "./livepreview";
 import { linkCardsChanged, type LinkCardSource } from "./link-card";
@@ -488,7 +490,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // I Blocchi sono dentro Scrittura, la modalità in cui la nota si apre:
   // si montano con l'editor, non dopo, perché testata e maniglie ci siano
   // dal primo disegno e nessun secondo `reconfigure` sposti il testo.
-  const blocksExtension: Extension = blocksMode({
+  // La testata della pagina è la stessa in Scrittura e in Lettura
+  // (`page/header.ts`): le stesse opzioni per tutte e due.
+  const pageOptions: PageOptions = {
     page: () => pageName(resources?.documentId ?? documentId),
     notify: (message, tone) => notify(message, tone),
     folderPage: () => isFolderPage(resources?.documentId ?? documentId),
@@ -501,9 +505,18 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     subpage: opts.onNewSubpage
       ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
       : undefined,
+  };
+  const blocksExtension: Extension = blocksMode({
+    ...pageOptions,
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,
   });
+  /// «Altre N proprietà» nella testata della Lettura, fra una resa e l'altra.
+  let readingMoreOpen = false;
+  const readingMore = {
+    get open() { return readingMoreOpen; },
+    set: (open: boolean) => { readingMoreOpen = open; },
+  };
   presentation(mode);
 
   const engine = createTextEngine(parent, {
@@ -558,6 +571,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     if (!labels) return;
     readingFactsLife = openLifetime();
     const row = renderNoteFacts(labels, factsActions, readingFactsLife);
+    // In fondo alla testata della pagina, come in Scrittura.
+    const header = reading.querySelector(":scope > .cm-fub-page");
+    if (header) {
+      header.append(row);
+      return;
+    }
     const title = [...reading.querySelectorAll("h1")].find((h1) => !h1.closest(".embed-loaded, [data-ui-slot]"));
     if (title) title.after(row);
     else reading.prepend(row);
@@ -772,11 +791,16 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     unmountReading?.();
     // In sola lettura vera le caselle risultano disabilitate, così la
     // superficie non sembra interattiva mentre la cancellazione è sospesa.
-    unmountReading = mountMarkdown(
+    const unmountBody = mountMarkdown(
       reading,
       renderMarkdown(text, forms).html,
       renderedOptions(readOnly ? undefined : toggleTaskAt),
     );
+    const unmountHeader = engine.readState((state) => mountReadingHeader(reading, state, pageOptions, state.facet(propertiesDisplay), readingMore));
+    unmountReading = () => {
+      unmountHeader();
+      unmountBody();
+    };
     placeReadingFacts();
     if (anchor) scrollReadingTo(anchor.from, anchor.top);
   }
@@ -1627,8 +1651,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       // copia. Negli altri modi si rende il buffer corrente.
       if (mode === "reading") {
         host.replaceChildren(...Array.from(reading.childNodes, (node) => node.cloneNode(true)));
-        // La riga dei dati non è della nota: la copia non la porta.
-        for (const row of host.querySelectorAll(".note-facts")) row.remove();
+        // La testata e la riga dei dati non sono della nota: la copia non le
+        // porta, e il frontmatter torna com'è nella resa.
+        for (const row of host.querySelectorAll(".note-facts, .cm-fub-page")) row.remove();
+        for (const block of host.querySelectorAll<HTMLElement>(".block-frontmatter-unparsed[hidden]")) block.hidden = false;
         return () => host.replaceChildren();
       }
       return mountMarkdown(host, renderMarkdown(normalizeLineBreaks(engine.getDoc()), forms).html, renderedOptions());

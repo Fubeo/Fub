@@ -524,30 +524,294 @@
 .cm-fub-block-menu [data-danger="true"] {
   color: var(--doc-danger);
 }
-/* La testata della pagina (H12): icona, copertina e titolo in cima ai
-   Blocchi. Il titolo è il nome del file, nel carattere del testo; gli
-   strumenti parlano con quello dell'interfaccia e si vedono al passaggio. */
-.cm-editor .cm-fub-page-cover {
-  border-radius: var(--radius-control);
-  background: var(--sheet-2);
-}
-.cm-editor .cm-fub-page-title {
+/* ── La testata della pagina (E3, H12) ──────────────────────────────────── */
+/* La stessa in Scrittura e in Lettura: copertina, icona, titolo, proprietà
+   in evidenza, poi la riga dei dati. Il titolo è il nome del file, nel
+   carattere del testo; strumenti e proprietà parlano con quello
+   dell'interfaccia. Gli strumenti si vedono al passaggio, nello spazio che
+   c'è già: comparendo non spostano niente. La densità la seguono da sé: i
+   passi `--space-*` e l'altezza `--control-h` si stringono in «Compatta». */
+.cm-fub-page {
+  position: relative;
+  margin: 0;
   color: var(--doc-fg);
   font-family: var(--font-reading);
+  white-space: normal;
+  cursor: default;
 }
-.cm-editor .cm-fub-page-title::placeholder {
-  color: var(--doc-gutter-fg);
+/* La copertina esce dalla colonna fino ai bordi della pagina, come un
+   frontespizio: copre il margine di cima e quelli di lato. */
+.cm-fub-page-cover {
+  position: relative;
+  height: 112px;
+  margin: calc(-1 * var(--space-9)) calc(-1 * var(--space-9)) 0;
+  overflow: hidden;
+  background: var(--doc-fill-soft);
 }
-.cm-editor .cm-fub-page-tool {
-  border-radius: var(--radius-control);
+.cm-fub-page-cover p {
+  height: 100%;
+  margin: 0;
+}
+.cm-fub-page-cover img {
+  display: block;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  object-fit: cover;
+}
+/* Un'immagine che non si trova: il segnaposto della resa, al centro. */
+.cm-fub-page-cover .image-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
   color: var(--doc-gutter-fg);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
 }
-.cm-editor .cm-fub-page-tool:hover,
-.cm-editor .cm-fub-page-icon:hover {
-  background: var(--sheet-2);
+.cm-fub-page-cover-tools {
+  position: absolute;
+  right: var(--space-7);
+  bottom: var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  opacity: 0;
+}
+.cm-fub-page-cover:hover .cm-fub-page-cover-tools,
+.cm-fub-page-cover:focus-within .cm-fub-page-cover-tools,
+.cm-fub-page-cover[data-reposition] .cm-fub-page-cover-tools {
+  opacity: 1;
+}
+.cm-fub-page-cover-tool,
+.cm-fub-page-cover-hint {
+  height: 26px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--doc-bg) 86%, transparent);
   color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: 26px;
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+}
+.cm-fub-page-cover-hint {
+  color: var(--doc-gutter-fg);
+  cursor: default;
+}
+.cm-fub-page-cover-tool:hover {
+  background: var(--doc-bg);
+}
+.cm-fub-page-cover[data-reposition] {
+  cursor: grab;
+}
+.cm-fub-page-cover:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* L'icona: grande, e sopra la copertina ne prende il bordo di sotto. */
+.cm-fub-page-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-dialog);
+  background: none;
+  color: inherit;
+  font-size: 54px;
+  line-height: 1;
+}
+button.cm-fub-page-icon {
+  cursor: pointer;
+}
+.cm-fub-page-icon > svg {
+  width: 0.8em;
+  height: 0.8em;
+}
+.cm-fub-page-cover + .cm-fub-page-icon {
+  margin-top: -36px;
+}
+.cm-fub-page-cover + .cm-fub-page-tools,
+.cm-fub-page-cover + .cm-fub-page-title {
+  margin-top: var(--space-6);
+}
+/* Senza copertina la testata comincia dove comincia il testo. */
+.cm-fub-page-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  min-height: 28px;
+  margin: var(--space-2) 0 2px calc(-1 * var(--space-3));
+  opacity: 0;
+}
+.cm-fub-page:hover .cm-fub-page-tools,
+.cm-fub-page:focus-within .cm-fub-page-tools {
+  opacity: 1;
+}
+.cm-fub-page-tool {
+  height: 26px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.cm-fub-page-tool:hover,
+button.cm-fub-page-icon:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+/* Il titolo: in Scrittura è un campo, e un campo taglia ciò che esce dalla
+   sua scatola; l'altezza la dà la riga del titolo, non quella dei campi
+   della pelle, sennò la cima delle lettere resta fuori. */
+.cm-fub-page-title {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--doc-fg);
+  font-family: var(--font-reading);
+  font-size: 2.2em;
+  font-weight: var(--weight-bold);
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+  overflow-wrap: break-word;
+}
+.cm-fub-page-title::placeholder {
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-page-title:focus-visible {
+  outline: none;
+}
+/* Le proprietà: il nome a sinistra, il valore a destra; una riga per voce,
+   alta quanto un controllo della densità. */
+.cm-fub-page-props {
+  display: grid;
+  row-gap: 1px;
+  margin: 0 0 var(--space-2) calc(-1 * var(--space-3));
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+.cm-fub-page-prop {
+  display: grid;
+  grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+}
+.cm-fub-page-prop-key {
+  display: block;
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  color: var(--doc-gutter-fg);
+  line-height: var(--control-h);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cm-fub-page-prop-value {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--control-h);
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--doc-fg);
+  font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+button.cm-fub-page-prop-value {
+  cursor: pointer;
+}
+.cm-fub-page-prop-value[data-empty] {
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-page-props-more,
+.cm-fub-page-props-add {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-3);
+  min-height: var(--row-h);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--doc-gutter-fg);
+  font: inherit;
+  cursor: pointer;
+}
+.cm-fub-page-props-more > svg,
+.cm-fub-page-props-add > svg {
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-page-props-more[aria-expanded="false"] > svg {
+  transform: rotate(90deg);
+}
+button.cm-fub-page-prop-value:hover,
+.cm-fub-page-props-more:hover,
+.cm-fub-page-props-add:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+button.cm-fub-page-prop-value:focus-visible,
+.cm-fub-page-props-more:focus-visible,
+.cm-fub-page-props-add:focus-visible,
+.cm-fub-page-tool:focus-visible,
+.cm-fub-page-cover-tool:focus-visible,
+button.cm-fub-page-icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* Il frontmatter che YAML non legge: la testata lo dice, sopra lo YAML. */
+.cm-fub-page-unreadable {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--doc-danger);
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill-soft);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+/* La riga dei dati chiude la testata, con un filo che la stacca dal testo. */
+.cm-fub-page > .note-facts {
+  margin-bottom: var(--space-8);
+  border-bottom: 1px solid var(--doc-rule-soft);
+}
+/* Il foglio stretto (il telefono, due fogli affiancati): la copertina si
+   abbassa e segue i margini più corti della colonna, il titolo cede. */
+@container sheet (max-width: 560px) {
+  .cm-fub-page-cover {
+    height: 88px;
+    margin: calc(-1 * var(--space-8)) calc(-1 * var(--space-7)) 0;
+  }
+  .cm-fub-page-title {
+    font-size: 1.85em;
+  }
+  .cm-fub-page-prop {
+    grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
+  }
 }
 /* Il segno della scelta in vigore nel menu «…» della pagina. */
 .cm-fub-block-menu .cm-fub-page-check {
