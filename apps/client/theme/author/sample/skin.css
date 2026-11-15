@@ -5976,6 +5976,9 @@ kbd,
 .cm-editor .cm-fub-block-lift-grip {
   color: var(--accent-soft);
 }
+.cm-editor .cm-fub-block-lift-tags {
+  font-family: var(--font-ui);
+}
 .cm-editor .cm-fub-block-lift-more {
   color: var(--doc-gutter-fg);
   background: var(--doc-fill-soft);
