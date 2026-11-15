@@ -1,0 +1,193 @@
+name: baseline dal runner
+
+# Quando la CI di una PR cade soltanto sul banco visivo, questo workflow
+# committa sul ramo della PR le foto che il runner ha scattato (le nuove e le
+# cambiate) e rilancia `ci.yml` a mano con `riuso_di`: la corsa nuova rifà
+# soltanto il banco visivo e conta gli altri job come nella corsa caduta
+# (docs/development/testing-and-quality.md#le-baseline-dal-runner).
+#
+# Sicurezza. `workflow_run` esegue sempre la versione di questo file che sta
+# sul ramo predefinito, e il checkout qui sotto è quello del ramo predefinito
+# (`github.sha` di un `workflow_run` è l'ultimo commit di `main`): lo script
+# `.github/scripts/baseline-dal-runner.mjs` è quindi quello di `main`, mai
+# quello della PR. Del ramo della PR qui non si esegue niente: niente
+# `npm ci`, niente script, nemmeno un checkout dei suoi file. Si leggono i suoi
+# oggetti git, si scrive il commit con i comandi di basso livello di git e si
+# spinge senza forza. L'artefatto è scritto dal codice della PR: lo script lo
+# legge voce per voce e scrive soltanto PNG piatti dal nome sicuro.
+#
+# Agisce soltanto sulle corse `pull_request` di un ramo di questo repository
+# (mai un fork, mai il ramo predefinito): la corsa che rilancia è un
+# `workflow_dispatch`, quindi non può farlo ripartire. Un push col
+# `GITHUB_TOKEN` non fa partire `pull_request`, per questo il rilancio è a
+# mano. Chi non vuole il commit automatico mette alla PR l'etichetta
+# `baseline-a-mano`.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: baseline-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  baseline:
+    name: le baseline del banco visivo dal runner
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      # il commit delle baseline sul ramo della PR
+      contents: write
+      # lanciare `ci.yml` e `npm-supply-chain.yml` con `workflow_dispatch`;
+      # comprende la lettura dei job e degli artefatti della corsa caduta
+      actions: write
+      # trovare la PR del ramo e leggerne le etichette
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PREDEFINITO: ${{ github.event.repository.default_branch }}
+      CORSA: ${{ github.event.workflow_run.id }}
+      CORSA_URL: ${{ github.event.workflow_run.html_url }}
+      TESTA: ${{ github.event.workflow_run.head_sha }}
+      RAMO: ${{ github.event.workflow_run.head_branch }}
+    steps:
+      # Il ramo predefinito, con le credenziali per il push (vedi sopra).
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+
+      - name: la corsa è caduta soltanto sul banco visivo, e il ramo è fermo lì
+        id: decidi
+        run: |
+          set -euo pipefail
+          no() {
+            echo "Nessun commit di baseline: $1" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "agisci=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          git check-ref-format --branch "$RAMO" > /dev/null || no "il nome del ramo non è valido"
+          [ "$RAMO" != "$PREDEFINITO" ] || no "la corsa è del ramo predefinito"
+          [[ "$TESTA" =~ ^[0-9a-f]{40}$ ]] || no "la testa della corsa non è uno SHA"
+          d="$RUNNER_TEMP/decidi"
+          mkdir -p "$d"
+          gh api --paginate "repos/$REPO/actions/runs/$CORSA/jobs?filter=latest&per_page=100" \
+            --jq '.jobs[] | {name, status, conclusion}' > "$d/job.ndjson"
+          set +e
+          motivo=$(node .github/scripts/baseline-dal-runner.mjs solo-banco "$d/job.ndjson")
+          rc=$?
+          set -e
+          [ "$rc" -eq 0 ] || { [ "$rc" -eq 3 ] && no "$(echo "$motivo" | tr '\n' ' ')"; } || exit "$rc"
+          # La PR aperta di questo ramo, con la testa della corsa.
+          # `-f` con `-X GET` codifica i parametri: un nome di ramo può avere
+          # `&` o `#`.
+          gh api -X GET "repos/$REPO/pulls" -f state=open -f head="${REPO%%/*}:$RAMO" -F per_page=100 > "$d/pr.json"
+          [ "$(jq length "$d/pr.json")" = 1 ] || no "non c'è una sola PR aperta dal ramo $RAMO"
+          [ "$(jq -r '.[0].head.repo.full_name' "$d/pr.json")" = "$REPO" ] || no "la PR viene da un altro repository"
+          [ "$(jq -r '.[0].head.sha' "$d/pr.json")" = "$TESTA" ] || no "la PR è andata avanti dopo la corsa"
+          ! jq -e '.[0].labels | any(.name == "baseline-a-mano")' "$d/pr.json" > /dev/null \
+            || no "la PR ha l'etichetta baseline-a-mano"
+          echo "pr=$(jq -r '.[0].number' "$d/pr.json")" >> "$GITHUB_OUTPUT"
+          # Il ramo è ancora sulla testa della corsa.
+          [ "$(git ls-remote origin "refs/heads/$RAMO" | awk -v r="refs/heads/$RAMO" '$2 == r { print $1 }')" = "$TESTA" ] \
+            || no "il ramo $RAMO non è più su $TESTA"
+          echo "agisci=true" >> "$GITHUB_OUTPUT"
+
+      - name: le foto del runner, convalidate
+        id: foto
+        if: steps.decidi.outputs.agisci == 'true'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/foto"
+          mkdir -p "$d/artefatto" "$d/ramo"
+          gh api --paginate "repos/$REPO/actions/runs/$CORSA/artifacts?per_page=100" \
+            --jq '.artifacts[] | select((.name | startswith("banco-visivo-")) and (.expired | not)) | {id, size_in_bytes}' \
+            > "$d/artefatti.ndjson"
+          if [ "$(wc -l < "$d/artefatti.ndjson")" != 1 ]; then
+            echo "Nessun commit di baseline: la corsa non ha un solo artefatto banco-visivo-*." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "agisci=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          id=$(jq -r .id "$d/artefatti.ndjson")
+          # Lo stesso limite dello script, prima di scaricare.
+          [ "$(jq -r .size_in_bytes "$d/artefatti.ndjson")" -le 268435456 ] || { echo "artefatto troppo grande" >&2; exit 1; }
+          gh api "repos/$REPO/actions/artifacts/$id/zip" > "$d/artefatto/a.zip"
+          # Le baseline del ramo, dai soli oggetti git: `git archive` scrive
+          # file e cartelle della sola cartella delle baseline.
+          git fetch --no-tags --depth=1 origin "$TESTA"
+          if git cat-file -e "$TESTA:apps/client/bench/baseline" 2> /dev/null; then
+            git archive --format=tar "$TESTA" apps/client/bench/baseline | tar -x --no-same-owner -C "$d/ramo"
+          fi
+          mkdir -p "$d/ramo/apps/client/bench/baseline"
+          node .github/scripts/baseline-dal-runner.mjs convalida "$d/artefatto/a.zip" \
+            "$d/ramo/apps/client/bench/baseline" apps/client/bench/baseline "$d/uscita" > "$d/elenco"
+          cat "$d/elenco"
+          if [ ! -s "$d/elenco" ]; then
+            echo "Nessun commit di baseline: nessuna foto nuova o cambiata nell'artefatto (una scena instabile?)." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "agisci=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "agisci=true" >> "$GITHUB_OUTPUT"
+
+      - name: il commit delle baseline sul ramo della PR
+        if: steps.foto.outputs.agisci == 'true'
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/foto"
+          # Un indice a parte, partito dall'albero della testa: il ramo della PR
+          # non si estrae mai sul disco.
+          export GIT_INDEX_FILE="$RUNNER_TEMP/indice"
+          git read-tree "$TESTA"
+          {
+            echo "test(banco): baseline dal runner (corsa $CORSA)"
+            echo
+            echo "Le foto che il banco visivo ha scattato sul runner nella corsa"
+            echo "$CORSA_URL, senza una baseline uguale sul ramo:"
+            echo
+            while read -r tipo nome; do
+              printf '%-8s %s\n' "$tipo" "$nome"
+              blob=$(git hash-object -w "$d/uscita/$nome")
+              git update-index --add --cacheinfo "100644,$blob,apps/client/bench/baseline/$nome"
+            done < "$d/elenco"
+          } > "$d/messaggio"
+          albero=$(git write-tree)
+          commit=$(git commit-tree "$albero" -p "$TESTA" -F "$d/messaggio")
+          # Senza forza: se il ramo è andato avanti, il push fallisce e basta.
+          git push origin "$commit:refs/heads/$RAMO"
+          {
+            echo "### Baseline committate sul ramo $RAMO"
+            echo
+            echo "Commit \`$commit\`; si guardano prima di unire la PR."
+            echo
+            echo '```text'
+            cat "$d/elenco"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # La corsa nuova riusa la vecchia se il ramo conosce già `riuso_di`; un
+      # ramo partito da prima riceve la CI completa. Il controllo npm non ha
+      # niente da riusare: è corto e si rilancia così com'è.
+      - name: la CI sul commit delle baseline
+        if: steps.foto.outputs.agisci == 'true'
+        run: |
+          set -euo pipefail
+          if git show "$TESTA:.github/workflows/ci.yml" | grep -q '^      riuso_di:$'; then
+            gh workflow run ci.yml --repo "$REPO" --ref "$RAMO" -f riuso_di="$CORSA"
+          else
+            gh workflow run ci.yml --repo "$REPO" --ref "$RAMO"
+          fi
+          gh workflow run npm-supply-chain.yml --repo "$REPO" --ref "$RAMO"
