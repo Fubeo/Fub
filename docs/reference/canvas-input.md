@@ -270,8 +270,7 @@ comandi del catalogo col loro nome e il loro tasto:
 2. Colore › come scelte esclusive: Nessuno, i sei di JSON Canvas col
    pallino, «Colori delle note ›» coi nove, «Altro…», che apre il selettore
    del kit (i colori in `canvas-format.md`); Disponi › (Porta davanti, Porta
-   dietro, Allinea ›, Distribuisci ›; In griglia, In riga, In colonna, Ad albero:
-   `layout`); Duplica; Copia come codice, Incolla codice ([sotto](canvas-check.md#nella-lavagna));
+   dietro, Allinea ›, Distribuisci ›; In griglia, In riga, In colonna, Ad albero: `layout`); Duplica; Copia come codice, Incolla codice ([la lavagna come codice](canvas-check.md#nella-lavagna));
 3. in fondo, in rosso: Togli dalla lavagna · `Canc`; Sposta anche il file nel
    cestino, solo con schede di file e se l'host dà `onTrashPath`.
 
