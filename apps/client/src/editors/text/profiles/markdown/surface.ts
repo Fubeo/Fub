@@ -20,7 +20,8 @@ import { blocksMode, pageArrives } from "./blocks";
 import { liveStrings } from "./strings";
 import { pageIconsChanged } from "./livepreview";
 import { linkCardsChanged, type LinkCardSource } from "./link-card";
-import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
+import { mountMarkdown, sourceElementAt, type LinkGesture, type MarkdownMountOptions } from "./mount";
+import { followWikilink, type WikilinkFollow } from "./open-link";
 import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
 import { settings } from "../../../../host/query";
 import { onEvent } from "../../../../state/kernel";
@@ -159,6 +160,11 @@ export interface MarkdownSurfaceOptions {
   onOpenDocument?(id: string): void | Promise<void>;
   /// «Apri a lato» dal menu di un wikilink. Senza, la voce non c'è.
   onOpenWikilinkBeside?(page: string, heading: string | null, block: string | null): void | Promise<void>;
+  /// La sbirciata (E11, T20): Alt col clic o Alt-Invio su un wikilink, e la
+  /// voce «Sbircia» del suo menu. Senza, quei gesti aprono la nota.
+  onPeekWikilink?(page: string, heading: string | null, block: string | null): void | Promise<void>;
+  /// Che cosa fa il clic che apre un link (`editor.link-click`). Senza, apre.
+  linkClick?(): "apri" | "sbircia";
   /// Un file nominato dalla nota aperto con un'altra app o mostrato
   /// nell'esploratore. Senza, le due voci non ci sono.
   onShowFile?(target: SystemTarget, from: string, where: "app" | "explorer"): void | Promise<void>;
@@ -308,6 +314,17 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const resources = acquireMarkdownResources(documentId);
   const openWikilink = (page: string, heading?: string | null, block?: string | null) =>
     opts.onOpenWikilink(page, heading ?? null, block ?? null);
+  /// Come si segue un wikilink da questa superficie: aprire, sbirciare, e la
+  /// regola del clic (`open-link.ts`).
+  const follow: WikilinkFollow = {
+    openWikilink: (page, heading, block) => openWikilink(page, heading, block),
+    ...(opts.onPeekWikilink ? { peekWikilink: (page: string, heading: string | null, block: string | null) => opts.onPeekWikilink!(page, heading, block) } : {}),
+    ...(opts.linkClick ? { linkClick: () => opts.linkClick!() } : {}),
+  };
+  /// Il clic su un wikilink della resa (la Lettura, un blocco reso): Alt
+  /// sbircia, Ctrl apre, il clic semplice segue `editor.link-click`.
+  const clickWikilink = (page: string, heading?: string, block?: string, gesture?: LinkGesture) =>
+    followWikilink(follow, page, heading ?? null, block ?? null, gesture?.altKey ? "peek" : gesture?.modKey ? "open" : "click");
   /// La griglia di tabella che ha il fuoco: le azioni della barra agiscono
   /// sulle sue celle invece che sul cursore del testo.
   let tableGrid: TableGridActions | null = null;
@@ -358,6 +375,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     ...(opts.noteFacts ? { noteFacts: noteFactsExtensions({ current: () => facts, actions: factsActions }) } : {}),
     callbacks: {
       openWikilink,
+      ...(follow.peekWikilink ? { peekWikilink: follow.peekWikilink } : {}),
+      ...(follow.linkClick ? { linkClick: follow.linkClick } : {}),
       searchTag: opts.onSearchTag,
       // Come in Lettura: il percorso si risolve rispetto a questo documento,
       // e un documento che non c'è lo dice invece di tacere.
@@ -383,7 +402,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         ...actions,
         get documentId() { return resources?.documentId ?? documentId; },
         resources,
-        openWikilink,
+        openWikilink: clickWikilink,
         openPath: opts.onOpenPath,
         openFigure: opts.onOpenFigure,
         searchTag: opts.onSearchTag,
@@ -735,7 +754,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     return {
       get documentId() { return resources?.documentId ?? documentId; },
       resources,
-      openWikilink,
+      openWikilink: clickWikilink,
       openPath: opts.onOpenPath,
       openFigure: opts.onOpenFigure,
       searchTag: opts.onSearchTag,
@@ -1097,7 +1116,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       return {
         target: { kind: "wikilink", name: link.text },
         context: [
-          { id: "markdown.link.open", label: t("editor_menu.link.open_note"), chord: "Alt-Enter", run: () => void openWikilink(page, link.heading, link.block) },
+          ...(opts.onPeekWikilink
+            ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), chord: "Alt-Enter", run: () => void opts.onPeekWikilink!(page, link.heading, link.block) }]
+            : []),
+          { id: "markdown.link.open", label: t("editor_menu.link.open_note"), ...(opts.onPeekWikilink ? {} : { chord: "Alt-Enter" }), run: () => void openWikilink(page, link.heading, link.block) },
           ...(opts.onOpenWikilinkBeside
             ? [{ id: "markdown.link.beside", label: t("editor_menu.link.beside"), run: () => void opts.onOpenWikilinkBeside!(page, link.heading, link.block) }]
             : []),

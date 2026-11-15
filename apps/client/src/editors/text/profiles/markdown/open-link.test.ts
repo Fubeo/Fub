@@ -6,7 +6,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { createTextEngine } from "../../engine";
 import { createMarkdownProfile } from "./profile";
 import { markdownGrammar } from "./grammar";
-import { linkAt } from "./open-link";
+import { followWikilink, linkAt } from "./open-link";
 
 const state = (doc: string) =>
   EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) });
@@ -110,5 +110,77 @@ describe("Alt-Invio", () => {
     e.press();
     expect(e.openWikilink).not.toHaveBeenCalled();
     e.dispose();
+  });
+});
+
+describe("i gesti della sbirciata (E11)", () => {
+  function editor(doc: string, cursor: number, linkClick: "apri" | "sbircia" = "apri") {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const openWikilink = vi.fn();
+    const peekWikilink = vi.fn();
+    const profile = createMarkdownProfile({
+      callbacks: { openWikilink, peekWikilink, linkClick: () => linkClick, searchTag: () => {}, openPath: () => {} },
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    const engine = createTextEngine(host, {
+      onChange: () => {},
+      onSelectionChange: () => {},
+      extensions: () => profile.extensions(),
+    });
+    engine.setDoc(doc);
+    const view = EditorView.findFromDOM(host)!;
+    view.dispatch({ selection: { anchor: cursor } });
+    const press = () =>
+      runScopeHandlers(view, new KeyboardEvent("keydown", { key: "Enter", altKey: true }), "editor");
+    return { view, openWikilink, peekWikilink, press, dispose: () => { engine.destroy(); host.remove(); } };
+  }
+
+  it("Alt-Invio su un wikilink sbircia, col punto che nomina, e non scrive niente", () => {
+    const e = editor("vedi [[Nota#Sezione]]", 9);
+    expect(e.press()).toBe(true);
+    expect(e.peekWikilink).toHaveBeenCalledWith("Nota", "Sezione", null);
+    expect(e.openWikilink).not.toHaveBeenCalled();
+    expect(e.view.state.doc.toString()).toBe("vedi [[Nota#Sezione]]");
+    e.dispose();
+  });
+
+  it("Alt col clic su un wikilink nel testo sbircia, Ctrl apre, il clic semplice resta del cursore", () => {
+    const e = editor("Vedi [[Biblioteca civica]] qui\n\nAltro", 34);
+    const link = e.view.contentDOM.querySelector<HTMLElement>(".cm-fub-wikilink[data-wikilink-page]");
+    expect(link).not.toBeNull();
+    const press = (init: MouseEventInit) => {
+      const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, ...init });
+      link!.dispatchEvent(event);
+      return event;
+    };
+    press({});
+    expect(e.peekWikilink).not.toHaveBeenCalled();
+    expect(e.openWikilink).not.toHaveBeenCalled();
+    expect(press({ altKey: true }).defaultPrevented).toBe(true);
+    expect(e.peekWikilink).toHaveBeenCalledWith("Biblioteca civica", null, null);
+    press({ ctrlKey: true });
+    expect(e.openWikilink).toHaveBeenCalledWith("Biblioteca civica", null, null);
+    e.dispose();
+  });
+
+  it("il clic che apre segue editor.link-click; Alt sbircia sempre; l'apertura chiesta apre sempre", () => {
+    const openWikilink = vi.fn();
+    const peekWikilink = vi.fn();
+    let rule: "apri" | "sbircia" = "apri";
+    const follow = { openWikilink, peekWikilink, linkClick: () => rule };
+    void followWikilink(follow, "A", null, null, "click");
+    expect(openWikilink).toHaveBeenLastCalledWith("A", null, null);
+    void followWikilink(follow, "B", null, "b1", "peek");
+    expect(peekWikilink).toHaveBeenLastCalledWith("B", null, "b1");
+    rule = "sbircia";
+    void followWikilink(follow, "C", "S", null, "click");
+    expect(peekWikilink).toHaveBeenLastCalledWith("C", "S", null);
+    void followWikilink(follow, "D", null, null, "open");
+    expect(openWikilink).toHaveBeenLastCalledWith("D", null, null);
+    // Una finestra senza sbirciata apre, qualunque sia il gesto.
+    const plain = vi.fn();
+    void followWikilink({ openWikilink: plain, linkClick: () => "sbircia" }, "E", null, null, "peek");
+    expect(plain).toHaveBeenCalledWith("E", null, null);
   });
 });

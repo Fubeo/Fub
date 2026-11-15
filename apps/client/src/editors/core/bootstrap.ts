@@ -95,6 +95,11 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onOpenFigure?: (doc: string) => void | Promise<void>;
   /// «Apri a lato» dal menu di un wikilink: la nota in un riquadro accanto.
   readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
+  /// La sbirciata (E11, T20) dai wikilink delle note: Alt col clic, Alt-Invio,
+  /// «Sbircia» nel menu del link.
+  readonly onPeekWikilink?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
+  /// Che cosa fa il clic che apre un link di una nota (`editor.link-click`).
+  readonly linkClick?: () => "apri" | "sbircia";
   /// «Apri a lato» dal menu di una scheda della lavagna: il file `path` (con
   /// il suo `#…`) in un riquadro accanto, come `onOpenPath`.
   readonly onOpenPathBeside?: (path: string, from?: string) => void | Promise<void>;
@@ -663,6 +668,8 @@ export function createDocumentSurfaceRegistry(
             onOpenPath: options.onOpenPath,
             ...(options.onOpenFigure ? { onOpenFigure: options.onOpenFigure } : {}),
             onOpenWikilinkBeside: options.onOpenWikilinkBeside,
+            ...(options.onPeekWikilink ? { onPeekWikilink: options.onPeekWikilink } : {}),
+            ...(options.linkClick ? { linkClick: options.linkClick } : {}),
             onOpenDocument: options.onOpenDocument,
             onShowFile: options.onShowFile,
             onImportRemoteImage: options.onImportRemoteImage,

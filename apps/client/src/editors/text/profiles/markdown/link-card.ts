@@ -4,12 +4,21 @@
 // link. La scheda la fa `fub.linkcard` e **soltanto su richiesta**: aprire una
 // nota legge la cache e basta, e la scheda che non c'è offre «Mostra
 // l'anteprima». Le schede le tiene `state/link-cards.ts`; qui c'è la resa.
+//
+// La scheda della nota (E11, T20) sta accanto: un paragrafo fatto soltanto di
+// un wikilink, fuori dal cursore, si vede come la nota a cui porta, con icona,
+// titolo, descrizione, data e copertina presi dalle sue proprietà
+// (`state/note-cards.ts`, con `query_index`). Il file resta il wikilink; col
+// cursore dentro torna il link, come per la pagina web.
 
 import { StateEffect } from "@codemirror/state";
 import { EditorView, WidgetType } from "@codemirror/view";
 import { rovingToolbar } from "../../../../kit/toolbar-keys";
+import { wikilink } from "../../../../rules/syntax";
+import { drawPageMark } from "../../../../ui/page-mark";
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { isAllowedLink } from "../../../../ui/sanitize";
+import { followWikilink, type WikilinkFollow } from "./open-link";
 import { liveStrings } from "./strings";
 
 /// La scheda di una pagina, come la consegna `fub.linkcard`.
@@ -30,13 +39,39 @@ export type LinkCardView =
   | { readonly kind: "loading" }
   | { readonly kind: "failed"; readonly reason: string };
 
+/// La scheda di una nota del vault, dalle sue proprietà.
+export interface NoteCard {
+  /// Il documento a cui il link porta.
+  readonly doc: string;
+  readonly title: string;
+  /// Il valore di `icon:` (un'emoji, una figura `fub:`), o vuoto.
+  readonly icon: string;
+  readonly description: string;
+  /// La data da mostrare, già detta a parole, o vuota.
+  readonly date: string;
+  /// La copertina (`cover:`): un colore CSS si mostra com'è, ogni altro valore
+  /// come la striscia di copertina del tema; vuota, nessuna copertina.
+  readonly cover: string;
+}
+
+/// Che cosa si sa della nota a cui porta un wikilink.
+export type NoteCardView =
+  | { readonly kind: "card"; readonly card: NoteCard }
+  /// La domanda è partita: intanto il link resta link.
+  | { readonly kind: "loading" }
+  /// Il link non porta a nessuna nota: resta link (e Alt col clic offre di crearla).
+  | { readonly kind: "missing" };
+
 /// Le schede come le legge la shell.
 export interface LinkCardSource {
   /// Ciò che si sa di `url`; la prima domanda guarda la cache.
   view(url: string): LinkCardView;
   /// «Mostra l'anteprima»: scarica la pagina, se il permesso lo consente.
   request(url: string): void;
-  /// Avvisa quando una scheda cambia; torna lo smontaggio.
+  /// Ciò che si sa della nota `page` (il bersaglio del wikilink com'è
+  /// scritto, senza sezione né blocco). Assente: un wikilink da solo resta link.
+  note?(page: string): NoteCardView;
+  /// Avvisa quando una scheda cambia (di pagina web o di nota); torna lo smontaggio.
   watch(changed: () => void): () => void;
 }
 
@@ -53,6 +88,113 @@ export function bareUrl(source: string): string | null {
   const url = found?.[1];
   if (!url || url.length > MAX_URL || !/^https?:\/\/[^/?#]/.test(url) || !isAllowedLink(url)) return null;
   return url;
+}
+
+/// Il wikilink di un paragrafo che non dice nient'altro, o `null`: un embed
+/// (`![[…]]`), un link a un punto della nota stessa (`[[#Sezione]]`) o più
+/// di un link non sono una scheda.
+export function bareWikilink(source: string): { page: string; heading: string | null; block: string | null; alias: string | null } | null {
+  if (source.length > MAX_URL + 8) return null;
+  const trimmed = source.trim();
+  if (trimmed.includes("\n")) return null;
+  const found = wikilink(trimmed);
+  const only = found[0];
+  if (found.length !== 1 || !only || only.embed || only.from !== 0 || only.to !== trimmed.length || only.page === "") return null;
+  return { page: only.page, heading: only.heading, block: only.block, alias: only.alias };
+}
+
+/// Un colore CSS scritto per intero (`#abc`, `#aabbcc`, `rgb(…)`, `hsl(…)`,
+/// `oklch(…)`): soltanto questi la copertina mette nello stile.
+export function coverColor(cover: string): string | null {
+  const value = cover.trim();
+  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)) return value;
+  if (/^(?:rgb|rgba|hsl|hsla|oklch)\(\s*[0-9.,%\s/deg-]+\)$/i.test(value)) return value;
+  return null;
+}
+
+/// La scheda di una nota al posto del paragrafo del suo wikilink (E11).
+export class NoteCardWidget extends WidgetType {
+  constructor(
+    readonly page: string,
+    readonly heading: string | null,
+    readonly block: string | null,
+    readonly alias: string | null,
+    readonly card: NoteCard,
+  ) { super(); }
+  eq(other: NoteCardWidget): boolean {
+    return other.page === this.page && other.heading === this.heading && other.block === this.block
+      && other.alias === this.alias && JSON.stringify(other.card) === JSON.stringify(this.card);
+  }
+  get estimatedHeight(): number { return 84; }
+  toDOM(): HTMLElement {
+    const { card } = this;
+    const root = document.createElement("div");
+    root.className = "cm-fub-note-card";
+    root.contentEditable = "false";
+    root.dataset.wikilinkPage = this.page;
+    if (this.heading) root.dataset.wikilinkHeading = this.heading;
+    if (this.block) root.dataset.wikilinkBlock = this.block;
+    const title = this.alias || card.title;
+    root.setAttribute("role", "group");
+    root.setAttribute("aria-label", liveStrings.t("notecard.label", { title }));
+    const main = document.createElement("button");
+    main.type = "button";
+    main.className = "cm-fub-note-card-main";
+    main.title = liveStrings.t("notecard.hint");
+    const body = document.createElement("span");
+    body.className = "cm-fub-note-card-body";
+    const head = span("cm-fub-note-card-title", "");
+    if (card.icon) {
+      const mark = document.createElement("span");
+      mark.className = "cm-fub-note-card-icon";
+      mark.setAttribute("aria-hidden", "true");
+      if (drawPageMark(mark, card.icon)) head.append(mark);
+    }
+    head.append(document.createTextNode(title));
+    body.append(head);
+    if (card.description) body.append(span("cm-fub-note-card-desc", card.description));
+    if (card.date) body.append(span("cm-fub-note-card-meta", card.date));
+    main.append(body);
+    if (card.cover) {
+      const cover = document.createElement("span");
+      cover.className = "cm-fub-note-card-cover";
+      cover.setAttribute("aria-hidden", "true");
+      const color = coverColor(card.cover);
+      if (color) cover.style.background = color;
+      main.append(cover);
+    }
+    root.append(main);
+    return root;
+  }
+  ignoreEvent(event: Event): boolean { return event instanceof KeyboardEvent; }
+}
+
+/// I gesti della scheda della nota: il clic la segue come il clic che apre un
+/// link (`editor.link-click`), Alt col clic la sbircia, Ctrl col clic (Cmd
+/// sul Mac) la apre comunque. Il `mousedown` non arriva all'editor, così il
+/// cursore non entra nel paragrafo e la scheda non torna link sotto il dito;
+/// ci si entra con le frecce.
+export function noteCardGestures(follow: WikilinkFollow) {
+  const hit = (event: Event): HTMLElement | null => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target?.closest(".cm-fub-note-card-main")) return null;
+    return target.closest<HTMLElement>(".cm-fub-note-card");
+  };
+  return EditorView.domEventHandlers({
+    mousedown(event) {
+      if (event.button !== 0 || !hit(event)) return false;
+      event.preventDefault();
+      return true;
+    },
+    click(event) {
+      const root = hit(event);
+      if (!root) return false;
+      event.preventDefault();
+      const gesture = event.altKey ? "peek" : event.ctrlKey || event.metaKey ? "open" : "click";
+      void followWikilink(follow, root.dataset.wikilinkPage ?? "", root.dataset.wikilinkHeading ?? null, root.dataset.wikilinkBlock ?? null, gesture);
+      return true;
+    },
+  });
 }
 
 /// L'icona si mostra soltanto se è un'immagine raster inline: la scheda non

@@ -74,6 +74,8 @@ import { linkedPageIcon } from "./page-icons";
 import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./people";
 import { dailyPath, firstWeekday } from "./dates";
 import { linkCardView, requestLinkCard } from "./link-cards";
+import { isNoteDoc, mountNoteCards, noteCardView, watchNoteCards } from "./note-cards";
+import { createNotePeek, LINK_CLICK_KEY, linkClickOf, type LinkClick, type NotePeek, type PeekTarget } from "./note-peek";
 import type { Theme } from "../theme/theme";
 import { contentLookPreference, markLook, resolveLook, type Look } from "../theme/content-look";
 import { api } from "../host/ipc";
@@ -272,6 +274,8 @@ export interface PaneView {
   /// disegna `file` dentro `host`, che sta già nel riquadro. Arriva di nuovo a
   /// ogni cambio (la dimensione letta, «Accendi …» in corso, un rifiuto).
   drawFileOnly(pane: Pane, host: HTMLElement, file: FileOnly): void;
+  /// Il foglio del riquadro, sopra la cui destra si apre la sbirciata (T20).
+  peekHost(pane: Pane): HTMLElement;
 }
 
 /// Ciò che il riquadro «solo come file» mostra e i suoi due gesti.
@@ -369,6 +373,7 @@ let view: PaneView = {
   focusedTab: () => null,
   recorderHost: unmounted,
   drawFileOnly: unmounted,
+  peekHost: unmounted,
 };
 let surfaceRegistry: DocumentSurfaceRegistry;
 let theme: Theme | null = null;
@@ -566,6 +571,72 @@ function cardEditorsHub(): CardEditorHub {
     unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
   });
   return cardEditorHub;
+}
+
+/// La sbirciata della finestra (E11, T20): una sola, sopra il riquadro col
+/// fuoco, con l'editor della nota montato dalla porta delle schede. Nasce al
+/// primo uso.
+let notePeek: NotePeek | null = null;
+function notePeekPort(): NotePeek {
+  notePeek ??= createNotePeek({
+    resolve: async (target) => {
+      const found = await resolvedReference(
+        { kind: "wiki", value: { page: target.page, heading: target.heading, block: target.block } },
+        activeDoc() ?? undefined,
+      );
+      if (!found) return { kind: "missing", page: target.page };
+      return isNoteDoc(found.doc) ? { kind: "note", doc: found.doc } : { kind: "other", doc: found.doc };
+    },
+    editors: cardEditors,
+    host: () => {
+      const pane = panes.get(layout.focus);
+      return pane ? view.peekHost(pane) : null;
+    },
+    openHere: (doc) => openDocument(doc, { gesture: true }),
+    openBeside: (doc) => openDocumentBeside(doc, "row"),
+    // Un PDF, un foglio: la sbirciata è per le note, il resto si apre a lato.
+    openOther: async (doc, target) => {
+      const page = linkedPdfPage(doc, target.heading);
+      await openDocumentBeside(doc, "row", page === null ? {} : { page });
+    },
+    create: (page) => createNote(page),
+    onMoved: (listener) => onEvent("document_renamed", (event) => listener(event.from, event.to)),
+    failed: (message) => notify(message, "guasto"),
+  });
+  return notePeek;
+}
+
+/// Il clic che apre un link: `editor.link-click`, letto all'avvio e a ogni
+/// cambio. Finché non è letto vale quello di serie.
+let linkClick: LinkClick = "apri";
+function watchLinkClick(lifetime: Lifetime): void {
+  let asked = 0;
+  const read = (): void => {
+    const mine = ++asked;
+    void settings().then((entries) => {
+      if (mine !== asked || lifetime.closed) return;
+      linkClick = linkClickOf(entries.find((entry) => entry.spec.key === LINK_CLICK_KEY)?.value);
+    }, () => {});
+  };
+  read();
+  lifetime.add(onEvent("setting_changed", (event) => {
+    if (event.key === LINK_CLICK_KEY) read();
+  }));
+  lifetime.add(onEvent("vault_opened", read));
+  lifetime.add(() => {
+    asked++;
+    linkClick = "apri";
+  });
+}
+
+/// Alt col clic, Alt-Invio o «Sbircia» su un link a una nota: la sbirciata.
+export function peekWikilink(target: PeekTarget): Promise<void> {
+  return notePeekPort().open(target);
+}
+
+/// La sbirciata, per chi la chiude o la guarda (i banchi, i comandi).
+export function notePeekState(): ReturnType<NotePeek["shown"]> {
+  return notePeek?.shown() ?? null;
 }
 
 /// I gruppi della barra di formato di una scheda (T41): tutti tranne la
@@ -1105,8 +1176,15 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     window.clearTimeout(contextTimer);
     contextTimer = undefined;
   });
-  // Gli editor dentro le schede muoiono con la shell, come i riquadri.
+  // Gli editor dentro le schede muoiono con la shell, come i riquadri; la
+  // sbirciata, che ne usa uno, prima di loro.
   lifetime.add(() => cardEditors.destroyAll());
+  lifetime.add(() => {
+    notePeek?.dismiss();
+    notePeek = null;
+  });
+  mountNoteCards(lifetime);
+  watchLinkClick(lifetime);
   surfaceRegistry = createDocumentSurfaceRegistry({
     // Una superficie di scheda scrive dalla sua porta; le altre sono riquadri.
     onChange: (paneId, change) => {
@@ -1123,6 +1201,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     // Il clic su un link è un gesto: la scheda che nasce lo sa (T23).
     onOpenWikilink: (page, heading, block) =>
       openWikilink(page, heading ?? undefined, block ?? undefined, undefined, { gesture: true }),
+    onPeekWikilink: (page, heading, block) =>
+      peekWikilink({ page, heading, block }).catch((error: unknown) => notify(errorText(error), "guasto")),
+    linkClick: () => linkClick,
     onOpenWikilinkBeside: async (page, heading, block) => {
       const target = await resolvedReference({ kind: "wiki", value: { page, heading, block } }, activeDoc() ?? undefined);
       if (!target) throw new Error(t("preview.target_missing"));
@@ -1244,7 +1325,16 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     linkCards: {
       view: linkCardView,
       request: requestLinkCard,
-      watch: (changed) => on("link-cards", changed),
+      // Il wikilink da solo in un paragrafo è la scheda della nota (T20).
+      note: noteCardView,
+      watch: (changed) => {
+        const web = on("link-cards", changed);
+        const notes = watchNoteCards(changed);
+        return () => {
+          web();
+          notes();
+        };
+      },
     },
     runShellCommand: (id) => deps.runCommand(id),
     ...(deps.openSettings ? { onOpenSettings: (key: string) => deps.openSettings?.(key) } : {}),
@@ -2154,6 +2244,8 @@ function enqueueDraw<T>(job: () => Promise<T>): Promise<T> {
 export function resetDocumentsForVault(): Promise<string[]> {
   return enqueueDraw(async () => {
     clearAllRemovedNotices();
+    // La sbirciata è del vault di prima.
+    notePeek?.dismiss();
     for (const [id, r] of panes) {
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, id);
       detachSurface(r);
@@ -2225,6 +2317,8 @@ function buildStructure(): void {
       // abbonamento a una sessione che il riquadro non mostra più.
       detachSurface(r);
       destroySurface(r);
+      // La sbirciata sopra questo riquadro se ne va con lui.
+      if (notePeek?.isIn(r.root)) notePeek.dismiss();
       view.releaseFrame(r);
       view.removePane(r);
       panes.delete(id);

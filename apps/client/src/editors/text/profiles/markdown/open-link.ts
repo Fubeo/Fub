@@ -1,9 +1,17 @@
-// `Alt-Invio`: apre il link sotto il cursore, come `Mod-click` lo apre col mouse.
+// `Alt-Invio` e i clic sui link della nota.
 //
-// Vale in Live e in Sorgente — la tastiera non ha bisogno della resa — e passa
-// dagli stessi esiti del click in Lettura: un wikilink va a `openWikilink` con
-// pagina, sezione e blocco; un `href` passa da `isAllowedLink`, la policy di
-// Lettura, e poi da `routeHref`: ancora, documento del vault o indirizzo esterno.
+// `Alt-Invio` vale in Scrittura e in Sorgente — la tastiera non ha bisogno
+// della resa. Su un wikilink apre la sbirciata (E11, T20: `state/note-peek.ts`),
+// la nota sopra la destra del foglio; senza sbirciata (una finestra che non la
+// offre) apre la nota. Su un `href` passa dagli stessi esiti del clic in
+// Lettura: `isAllowedLink`, la policy di Lettura, e poi `routeHref`: ancora,
+// documento del vault o indirizzo esterno.
+//
+// Col puntatore, su un wikilink della Scrittura: Alt col clic sbircia,
+// Ctrl col clic (Cmd sul Mac) è il clic che apre. Che cosa fa il clic che apre
+// lo dice `editor.link-click` (`followWikilink`): `apri`, di serie, porta la
+// nota nel riquadro; `sbircia` la apre nella sbirciata. Il clic semplice resta
+// del cursore, perché il link è testo che si scrive.
 
 import { syntaxTree } from "@codemirror/language";
 import { Prec, type EditorState, type Extension } from "@codemirror/state";
@@ -16,6 +24,35 @@ import { decodeDestination, normalizeLabel, routeHref } from "./link-syntax";
 import type { LivePreviewCallbacks } from "./livepreview";
 import { isStrictlyInsideCode } from "./parser";
 import { linkReferences, renderMarkdownState } from "./render";
+
+/// Il gesto con cui si segue un wikilink: il clic che apre (la regola la dice
+/// `editor.link-click`), la sbirciata chiesta (Alt), l'apertura chiesta (il
+/// menu «Apri»).
+export type WikilinkGesture = "click" | "peek" | "open";
+
+/// Chi segue un wikilink: aprire, sbirciare (se la finestra lo sa fare), e la
+/// regola del clic.
+export interface WikilinkFollow {
+  openWikilink(page: string, heading: string | null, block: string | null): void | Promise<void>;
+  peekWikilink?(page: string, heading: string | null, block: string | null): void | Promise<void>;
+  linkClick?(): "apri" | "sbircia";
+}
+
+/// Segue il wikilink col gesto `gesture`: la sbirciata se è chiesta, o se il
+/// clic che apre deve sbirciare; altrimenti la nota si apre. Senza
+/// sbirciata, si apre sempre.
+export function followWikilink(
+  follow: WikilinkFollow,
+  page: string,
+  heading: string | null,
+  block: string | null,
+  gesture: WikilinkGesture,
+): void | Promise<void> {
+  const peek = follow.peekWikilink;
+  const wantsPeek = gesture === "peek" || (gesture === "click" && follow.linkClick?.() === "sbircia");
+  if (peek && wantsPeek) return peek(page, heading, block);
+  return follow.openWikilink(page, heading, block);
+}
 
 export type LinkAtCursor =
   | { kind: "wikilink"; page: string; heading: string | null; block: string | null }
@@ -111,18 +148,49 @@ function followHref(view: EditorView, href: string, callbacks: LivePreviewCallba
   return true;
 }
 
+/// Il wikilink della Scrittura sotto il puntatore (una decorazione del testo,
+/// non un blocco reso: quelli li apre la resa, `mount.ts`), letto dagli
+/// attributi che la Scrittura gli dà.
+function wikilinkUnder(view: EditorView, event: MouseEvent): { page: string; heading: string | null; block: string | null } | null {
+  const target = event.target instanceof Element ? event.target : null;
+  const link = target?.closest<HTMLElement>(".cm-fub-wikilink[data-wikilink-page]");
+  if (!link || !view.contentDOM.contains(link) || link.closest(".cm-markdown-block")) return null;
+  return {
+    page: link.dataset.wikilinkPage ?? "",
+    heading: link.dataset.wikilinkHeading ?? null,
+    block: link.dataset.wikilinkBlock ?? null,
+  };
+}
+
 export function openLinkKeymap(callbacks: LivePreviewCallbacks): Extension {
-  return Prec.high(keymap.of([{
-    key: "Alt-Enter",
-    run(view: EditorView) {
-      const main = view.state.selection.main;
-      const found = linkAt(view.state, main.head);
-      if (!found) return false;
-      if (found.kind === "wikilink") {
-        callbacks.openWikilink(found.page, found.heading, found.block);
+  return [
+    Prec.high(keymap.of([{
+      key: "Alt-Enter",
+      run(view: EditorView) {
+        const main = view.state.selection.main;
+        const found = linkAt(view.state, main.head);
+        if (!found) return false;
+        if (found.kind === "wikilink") {
+          void followWikilink(callbacks, found.page, found.heading, found.block, "peek");
+          return true;
+        }
+        return followHref(view, found.href, callbacks);
+      },
+    }])),
+    // Il `mousedown` e non il `click`: il cursore non deve spostarsi né
+    // aggiungere una seconda selezione (Ctrl col clic, in CodeMirror) sul link
+    // che si sta seguendo.
+    Prec.high(EditorView.domEventHandlers({
+      mousedown(event, view) {
+        if (event.button !== 0 || event.shiftKey) return false;
+        const mod = event.ctrlKey || event.metaKey;
+        if (mod === event.altKey) return false;
+        const link = wikilinkUnder(view, event);
+        if (!link) return false;
+        event.preventDefault();
+        void followWikilink(callbacks, link.page, link.heading, link.block, event.altKey ? "peek" : "click");
         return true;
-      }
-      return followHref(view, found.href, callbacks);
-    },
-  }]));
+      },
+    })),
+  ];
 }

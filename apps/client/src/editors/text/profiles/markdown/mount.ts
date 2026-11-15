@@ -26,10 +26,20 @@ import { showContextMenu, type MenuItem } from "../../../../ui/menu";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { routeHref } from "./link-syntax";
 
+/** The modifiers of a click on a link of the rendered note. */
+export interface LinkGesture {
+  readonly altKey: boolean;
+  readonly modKey: boolean;
+}
+
 export interface MarkdownMountOptions {
   readonly documentId?: string;
   readonly resources?: MarkdownResources;
-  readonly openWikilink?: (page: string, heading?: string, block?: string) => void | Promise<void>;
+  /**
+   * The click on a wikilink. `gesture` says which modifiers came with it (Alt
+   * asks for the peek, Ctrl/Cmd for opening): the host decides what they mean.
+   */
+  readonly openWikilink?: (page: string, heading?: string, block?: string, gesture?: LinkGesture) => void | Promise<void>;
   readonly openPath?: (path: string, from?: string) => void | Promise<void>;
   /**
    * Opens the document a figure shows (a Craft file, a PDF) with the gesture.
@@ -253,7 +263,8 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
     if (link.classList.contains("wikilink") && options.openWikilink) {
       event.preventDefault();
       const page = link.dataset.wikilinkPage ?? "";
-      void Promise.resolve().then(() => options.openWikilink?.(page, link.dataset.wikilinkHeading, link.dataset.wikilinkBlock))
+      const gesture: LinkGesture = { altKey: event.altKey, modKey: event.ctrlKey || event.metaKey };
+      void Promise.resolve().then(() => options.openWikilink?.(page, link.dataset.wikilinkHeading, link.dataset.wikilinkBlock, gesture))
         .catch((error: unknown) => {
           if (life.closed) return;
           link.classList.add("unresolved");

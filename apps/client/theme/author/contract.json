@@ -503,6 +503,27 @@
     "sheet-notices",
     "sheet-notice",
     "sheet-notice-text",
+    "note-peek",
+    "note-peek-head",
+    "note-peek-place",
+    "note-peek-place-text",
+    "note-peek-gap",
+    "note-peek-here",
+    "note-peek-side",
+    "note-peek-close",
+    "note-peek-body",
+    "note-peek-message",
+    "note-peek-message-title",
+    "note-peek-message-text",
+    "note-peek-create",
+    "cm-fub-note-card",
+    "cm-fub-note-card-main",
+    "cm-fub-note-card-body",
+    "cm-fub-note-card-title",
+    "cm-fub-note-card-icon",
+    "cm-fub-note-card-desc",
+    "cm-fub-note-card-meta",
+    "cm-fub-note-card-cover",
     "markdown-rendered",
     "cm-editor",
     "cm-content",
@@ -2263,6 +2284,27 @@
     "sheet-notices": "cornice",
     "sheet-notice": "cornice",
     "sheet-notice-text": "cornice",
+    "note-peek": "cornice",
+    "note-peek-head": "cornice",
+    "note-peek-place": "cornice",
+    "note-peek-place-text": "cornice",
+    "note-peek-gap": "cornice",
+    "note-peek-here": "cornice",
+    "note-peek-side": "cornice",
+    "note-peek-close": "cornice",
+    "note-peek-body": "cornice",
+    "note-peek-message": "cornice",
+    "note-peek-message-title": "cornice",
+    "note-peek-message-text": "cornice",
+    "note-peek-create": "cornice",
+    "cm-fub-note-card": "cornice",
+    "cm-fub-note-card-main": "cornice",
+    "cm-fub-note-card-body": "cornice",
+    "cm-fub-note-card-title": "cornice",
+    "cm-fub-note-card-icon": "cornice",
+    "cm-fub-note-card-desc": "cornice",
+    "cm-fub-note-card-meta": "cornice",
+    "cm-fub-note-card-cover": "cornice",
     "markdown-rendered": "contenuto",
     "cm-editor": "contenuto",
     "cm-content": "contenuto",
@@ -4980,6 +5022,51 @@
       ],
       "states": [
         "rest"
+      ]
+    },
+    {
+      "name": "note-peek",
+      "part": "sheets",
+      "hooks": [
+        "note-peek",
+        "note-peek-head",
+        "note-peek-place",
+        "note-peek-place-text",
+        "note-peek-gap",
+        "note-peek-here",
+        "note-peek-side",
+        "note-peek-close",
+        "note-peek-body",
+        "note-peek-message",
+        "note-peek-message-title",
+        "note-peek-message-text",
+        "note-peek-create"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "note-card",
+      "part": "sheets",
+      "hooks": [
+        "cm-fub-note-card",
+        "cm-fub-note-card-main",
+        "cm-fub-note-card-body",
+        "cm-fub-note-card-title",
+        "cm-fub-note-card-icon",
+        "cm-fub-note-card-desc",
+        "cm-fub-note-card-meta",
+        "cm-fub-note-card-cover"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
       ]
     },
     {
@@ -9611,10 +9698,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1758,
+    "hooks": 1779,
     "state_names": 7,
-    "assigned_states": 837,
-    "components": 249,
+    "assigned_states": 845,
+    "components": 251,
     "preference_tokens": 189
   }
 }

@@ -277,6 +277,8 @@ const view: PaneView = {
   focusedTab,
   recorderHost: (pane) => frameOf(pane).toolbarEl,
   drawFileOnly: (_pane, host, file) => drawFileOnly(host, file),
+  // La sbirciata sta nel riquadro, sotto le linguette (lo dice il tema).
+  peekHost: (pane) => pane.root,
 };
 
 /// La vita dei pulsanti dell'ultimo disegno di ciascun riquadro «solo come
