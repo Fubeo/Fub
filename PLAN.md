@@ -617,7 +617,7 @@ cambiare la chiave non riapre la nota; la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks; cargo nextest run -p fub-host
 settings
-Stato: [~] PR #381 (feat/blocchi-preferenza @ 47903c532), revisione e correzioni fatte, check verde; aspetta CI e baseline `menu-riquadro-*` dal runner
+Stato: [x] in main · PR #381, merge 30fb4d9a5 (2026-11-15), con le baseline `menu-riquadro-*` e `settings-external-apps-*` dal runner
 
 ## T6 · La testata in Scrittura e Lettura
 
