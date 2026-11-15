@@ -1001,7 +1001,7 @@ export const SCENE = onPage("shell", [
   ...[
     ["testata-01-scrittura", "testata", "La testata in Scrittura: copertina, icona, titolo, proprietà in evidenza", "live_preview"],
     ["testata-02-lettura", "testata", "La stessa testata in Lettura: senza strumenti né «Aggiungi»", "reading"],
-    ["testata-03-lettura-stretta", "testata", "La testata in Lettura a 700 px", "reading", { width: 700, height: 800 }],
+    ["testata-03-lettura-stretta", "testata", "La testata in Lettura nella finestra minima, 800 px", "reading", { width: 800, height: 800 }],
     ["testata-04-altre", "testata", "La testata con «Altre 2 proprietà» aperto", "live_preview", null, "more"],
     ["testata-05-vuota", "testata-vuota", "La testata di una nota senza frontmatter: il titolo e «Aggiungi una proprietà»", "live_preview"],
     ["testata-06-illeggibile", "testata-illeggibile", "La testata col frontmatter illeggibile: lo dice, e lo YAML resta sotto", "live_preview"],
@@ -1013,13 +1013,6 @@ export const SCENE = onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openHeader(page, mode, gesture),
   })),
-  ...onPage("mobile", [{
-    id: "mobile-testata",
-    title: "Il telefono: la testata in Scrittura, con la copertina bassa e le colonne strette",
-    query: "live=testata&properties=visible",
-    viewport: PHONE,
-    prepare: (page) => openHeader(page, "live_preview"),
-  }]),
   // Scrittura coi Blocchi: la stessa nota, con la maniglia del blocco sotto il
   // puntatore e quella del blocco del cursore; poi la selezione di blocchi e il
   // menu.
@@ -1393,6 +1386,15 @@ export const SCENE = onPage("shell", [
   // dal basso, la barra di formattazione sta sopra la tastiera. La finestra è
   // quella di un telefono in piedi; l'ultima scena lo sdraia.
   onPage("mobile", [
+    // La testata della pagina (T6) sul telefono: la copertina bassa, le
+    // colonne delle proprietà strette.
+    {
+      id: "mobile-testata",
+      title: "Il telefono: la testata in Scrittura, con la copertina bassa e le colonne strette",
+      query: "live=testata&properties=visible",
+      viewport: PHONE,
+      prepare: (page) => openHeader(page, "live_preview"),
+    },
     {
       id: "mobile-startup",
       title: "Il telefono: il foglio, la barra del titolo ridotta, la barra inferiore",
