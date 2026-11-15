@@ -45,11 +45,14 @@ che usano lo spazio comandi e il «/»:
 - **l'etichetta di un gruppo** (`kit/group-label.ts`): 11,5 px, quieta; per chi
   ascolta, il gruppo ha già il suo nome, o lo prende da lei.
 
-Ogni pezzo ha gli stessi stati: acceso (la figura d'accento; il fondo della
-scelta è la pastiglia di chi lo monta), premuto (la spunta d'accento al posto
-della figura, senza moto quando il movimento è ridotto) e spento, che resta al
-suo posto e dice il perché. Il catalogo li mostra nella scena `kit-lingua` del
-banco.
+Ogni pezzo ha gli stessi stati: acceso (la figura d'accento, sul fondo del
+passaggio per la riga e sulla linguetta chiara e rialzata per la tessera
+affiancata), premuto (la spunta d'accento al posto della figura, la linguetta
+d'accento per la tessera affiancata, senza moto quando il movimento è ridotto)
+e spento, che resta al suo posto e dice il perché. Chi fa scivolare una sua
+pastiglia da un pezzo all'altro, come il menu, lo dichiara sul contenitore
+(`markGlideHost`), e lì i pezzi non mettono il loro fondo. Il catalogo li
+mostra nella scena `kit-lingua` del banco (`bench/kit.html?lingua`).
 
 Nessun menu scrive i tasti per muoversi dentro di lui (frecce, Invio, Esc):
 li mostra la riga dei suggerimenti. Una scorciatoia con un modificatore, come

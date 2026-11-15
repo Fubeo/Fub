@@ -2110,6 +2110,12 @@ kbd,
   width: 16px;
   height: 16px;
 }
+/* Accesa, la riga prende il fondo del passaggio, lo stesso della pastiglia
+   del menu, e la figura si fa d'accento. Dove chi la monta fa scivolare la sua
+   pastiglia (`markGlideHost`), il fondo è quello. */
+.kit-row[data-lit] {
+  background: var(--overlay-hover);
+}
 .kit-row[data-lit] .kit-row-icon {
   color: var(--accent);
 }
@@ -2209,6 +2215,18 @@ kbd,
 .kit-tile[data-lit] .kit-tile-icon {
   color: var(--accent);
 }
+/* Affiancata, accesa è la linguetta chiara e rialzata della barra; premuta,
+   la linguetta si fa d'accento. Dove chi la monta fa scivolare la sua
+   linguetta (`markGlideHost`), il fondo è quello. */
+.kit-tile[data-shape="inline"][data-lit] {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-1);
+}
+.kit-tile[data-shape="inline"][data-pressed] {
+  background: var(--accent);
+  box-shadow: none;
+  color: var(--accent-contrast);
+}
 .kit-tile-label {
   min-width: 0;
   overflow: hidden;
@@ -2284,6 +2302,15 @@ kbd,
   opacity: 0.4;
   cursor: default;
 }
+/* Sotto una pastiglia che scivola il fondo è suo. Il contenitore sta in
+   `:where`, senza peso: chi monta i pezzi può ancora dare un fondo suo a uno
+   stato (la voce che tiene aperto il sottomenu). */
+:where([data-kit-glide]) .kit-row[data-lit],
+:where([data-kit-glide]) .kit-tile[data-shape="inline"][data-lit],
+:where([data-kit-glide]) .kit-tile[data-shape="inline"][data-pressed] {
+  background: transparent;
+  box-shadow: none;
+}
 
 /* **L'etichetta di un gruppo**: minuscola, 11,5 px, quieta nel colore e
    piena nel peso, come nel prototipo (600). Nel «/» e nello spazio comandi
@@ -2338,6 +2365,17 @@ kbd,
   .kit-tile[data-shape="stack"][data-lit] .kit-tile-icon {
     outline: 2px solid Highlight;
     outline-offset: -2px;
+  }
+  /* Il fondo dell'accesa sparisce: lo dice un contorno, se non c'è una
+     pastiglia che scivola col suo. */
+  .kit-row[data-lit],
+  .kit-tile[data-shape="inline"][data-lit] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  :where([data-kit-glide]) .kit-row[data-lit],
+  :where([data-kit-glide]) .kit-tile[data-shape="inline"][data-lit] {
+    outline: none;
   }
   /* La spunta è un fondo ritagliato: senza un colore del sistema sparirebbe. */
   .kit-row[data-pressed] .kit-row-icon::after,

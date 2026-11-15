@@ -527,10 +527,14 @@ function head(grid: HTMLElement, last: string): void {
 
 // Riga, tessera ed etichetta (`kit/row.ts`, `kit/tile.ts`, `kit/group-label.ts`),
 // i pezzi comuni al menu, allo spazio comandi e al «/». Campioni fermi, come la
-// lista qui sopra: la riga accesa e la tessera premuta sono stati, non gesti, e
-// il fondo della scelta è di chi monta i pezzi (la pastiglia del menu), quindi
-// qui non c'è.
-{
+// lista qui sopra: la riga accesa e la tessera premuta sono stati, non gesti.
+// Accesa, una riga ha il suo fondo e una tessera affiancata la sua linguetta,
+// perché qui nessuno fa scivolare una pastiglia.
+//
+// La sezione c'è solo con `?lingua` (la scena `kit-lingua`): il resto del
+// catalogo sta in una finestra senza scorrere, e le sue scene e il banco del
+// movimento, che fotografano la cima della pagina, restano quelle di prima.
+if (params.has("lingua")) {
   const rows = el("div", "vassoio");
   rows.setAttribute("role", "menu");
   rows.setAttribute("aria-label", "Righe del menu");

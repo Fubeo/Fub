@@ -87,6 +87,14 @@ export function markPressed(element: HTMLElement, on: boolean): void {
   else delete element.dataset.pressed;
 }
 
+/// Dichiara che `container` disegna da sé la scelta delle righe e delle
+/// tessere che porta: una pastiglia che scivola dall'una all'altra (il menu).
+/// Lì i pezzi accesi o premuti non mettono il loro fondo, che sotto la
+/// pastiglia si vedrebbe doppio; altrove il fondo è loro.
+export function markGlideHost(container: HTMLElement): void {
+  container.dataset.kitGlide = "";
+}
+
 /// Una riga della lingua dei menu.
 export function createRow(options: RowOptions): RowHandle {
   const tag = options.tag ?? "button";

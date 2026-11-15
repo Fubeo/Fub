@@ -14,7 +14,7 @@ import { figureLabel, figureValue, PAGE_FIGURES } from "./page-mark";
 import { enterSurface, exitSurface } from "./motion";
 import { DURATION, enter, flip, motionLevel, stagger } from "../moto";
 import { createGroupLabel } from "../kit/group-label";
-import { createRow, markLit, markPressed } from "../kit/row";
+import { createRow, markGlideHost, markLit, markPressed } from "../kit/row";
 import { createTile } from "../kit/tile";
 
 export interface MenuItem {
@@ -498,6 +498,9 @@ function renderMenu(
   let items = initialItems;
   const menu = document.createElement("div");
   menu.className = "context-menu";
+  // La scelta la disegnano la pastiglia dell'elenco e la linguetta della barra
+  // degli appunti, che scivolano: i pezzi del kit non mettono il loro fondo.
+  markGlideHost(menu);
   // Un menu è un menu: il ruolo è ciò che fa annunciare «menu, cinque voci» e
   // permette di uscirne sapendo di esserci entrati.
   menu.setAttribute("role", "menu");

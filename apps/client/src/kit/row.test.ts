@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { accessibleName } from "../ui/a11y-check";
-import { createRow, markLit, markPressed } from "./row";
+import { createRow, markGlideHost, markLit, markPressed } from "./row";
 
 const classesOf = (row: HTMLElement): string[] => [...row.children].map((part) => part.className);
 
@@ -100,5 +100,11 @@ describe("createRow", () => {
     markPressed(element, false);
     expect(element.hasAttribute("data-lit")).toBe(false);
     expect(element.hasAttribute("data-pressed")).toBe(false);
+  });
+
+  it("chi fa scivolare la sua pastiglia lo dichiara sul contenitore", () => {
+    const menu = document.createElement("div");
+    markGlideHost(menu);
+    expect(menu.hasAttribute("data-kit-glide")).toBe(true);
   });
 });

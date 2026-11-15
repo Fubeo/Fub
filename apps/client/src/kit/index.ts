@@ -59,7 +59,7 @@ export { pressable } from "./press";
 // comandi e al «/».
 export { createTile } from "./tile";
 export type { TileOptions, TileParts } from "./tile";
-export { createRow, markLit, markPressed } from "./row";
+export { createRow, markGlideHost, markLit, markPressed } from "./row";
 export type { RowHandle, RowOptions, RowParts } from "./row";
 export { createGroupLabel } from "./group-label";
 export type { GroupLabelOptions } from "./group-label";

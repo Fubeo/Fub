@@ -1328,6 +1328,7 @@ export const SCENE = onPage("shell", [
     {
       id: "kit-lingua",
       title: "Il kit: la lingua dei menu, righe, tessere ed etichette nei loro stati",
+      query: "lingua",
       viewport: KIT_WINDOW,
       prepare: async (page) => {
         // La sezione sta in fondo alla colonna di destra: la si porta in cima.
