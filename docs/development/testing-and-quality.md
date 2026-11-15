@@ -263,7 +263,8 @@ Un confronto locale fuori da questo ambiente può superare il limite per
 rasterizzazione di testo o canvas pur senza una regressione applicativa. Va
 esaminato il diff; non va promosso a baseline. Un cambiamento intenzionale
 richiede invece revisione del foglio, spiegazione delle scene coinvolte e
-rigenerazione nell'ambiente Ubuntu validato.
+rigenerazione nell'ambiente Ubuntu validato: sulle PR la fa la CI
+([le baseline dal runner](#le-baseline-dal-runner)).
 
 Lo strato d'avvio ha quattro scene: `avvio-attesa` (il marchio e la riga del
 vault che si apre), `avvio-lento` («Ci vuole più del solito.», a 10 s),
@@ -385,6 +386,31 @@ appena qualcuno inserisce un item nel mezzo.
   `gh api repos/Fubeo/Fub/actions/jobs/<job>/logs`; un artefatto:
   `gh api repos/Fubeo/Fub/actions/artifacts/<id>/zip`, perché `gh run
   download` ne rifiuta alcuni.
+
+### Le baseline dal runner
+
+Quando la CI di una PR pronta cade **soltanto** sul banco visivo,
+[`baseline.yml`](../../.github/workflows/baseline.yml) committa sul ramo, come
+`github-actions[bot]`, le foto del runner nuove e cambiate (mai cancellazioni),
+poi rilancia `npm-supply-chain.yml` e `ci.yml` con `riuso_di=<corsa>` (senza,
+se il ramo è partito prima di questo input). Non agisce su un fork, sul ramo
+predefinito, se il ramo è andato avanti o se la PR ha l'etichetta
+`baseline-a-mano`; non esegue codice della PR e convalida l'artefatto prima di
+scrivere un file. Le regole e le loro prove stanno in
+[`baseline-dal-runner.mjs`](../../.github/scripts/baseline-dal-runner.mjs).
+
+Nella corsa rilanciata il job `cosa cambia` decide il **riuso**: se il commit
+ha per unico genitore la testa della corsa `riuso_di`, cambia solo
+`apps/client/bench/baseline/*.png` e in quella corsa ogni job tranne il banco
+visivo era verde o saltato, con i test sui tre sistemi, gli altri job si
+saltano e contano come in quella corsa; gira soltanto il banco visivo. Il
+riepilogo della corsa dice quali job riusa, o perché gira tutto. Il riuso non
+vale per il cancello del rilascio, che vuole ogni job verde.
+
+Il banco visivo della corsa rilanciata fotografa la testa del ramo, non il
+merge di prova con `main`: se `main` nel frattempo ha cambiato la grafica può
+cadere, e le baseline si sistemano a mano. Le foto del commit del bot si
+guardano comunque, nel foglio di contatto dell'artefatto, prima di unire.
 
 ## Matrice per modifica
 
