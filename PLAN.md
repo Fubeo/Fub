@@ -4653,7 +4653,7 @@ non salta in silenzio).
 Fatto quando: il job è verde su una PR pronta e l'artifact ha la foto della
 scrivania.
 Prova: scripts/check.sh --rapido; la corsa del job sulla PR
-Stato: [~] PR #392 (ci/apk-emulatore @ d6482b76a): job `android-emulatore` in `mobile.yml` (APK x86_64 di debug, KVM, API 34, 20 s senza crash, foto come artifact), solo PR pronte e `main`; primo giro: APK fatto, fermo su `/dev/kvm`, corretto; aspetta CI
+Stato: [x] fatto · PR #392 unita in main (2026-11-15), CI completa verde; l'emulatore apre l'APK x86_64 (API 34) senza crash e lo fotografa (corsa 43757432168). La foto ha trovato un difetto vero: sul telefono `fub_host::config_dir()` è `None` (né `HOME` né `XDG_CONFIG_HOME`), Fub non ricorda impostazioni, vault e viste → issue #409, in correzione
 
 ## T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina
 
