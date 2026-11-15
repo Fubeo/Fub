@@ -43,6 +43,23 @@ export function viewIcon(type: string | null): string {
   }
 }
 
+/// La specie di valore che una colonna mostra, per la figura della sua
+/// intestazione (`valueShape` in `column-menu.ts`).
+export type ValueShape = "text" | "number" | "date" | "bool" | "list" | "link";
+
+/// La figura davanti al nome di una colonna, per la specie dei suoi valori.
+/// La colonna della nota ha quella del testo, come il titolo.
+export function columnIcon(shape: ValueShape): string {
+  switch (shape) {
+    case "number": return "hash";
+    case "date": return "calendar";
+    case "bool": return "check";
+    case "list": return "fmt-bullets";
+    case "link": return "fmt-link";
+    default: return "fmt-text";
+  }
+}
+
 let mounted = 0;
 let teardowns: Teardown[] = [];
 

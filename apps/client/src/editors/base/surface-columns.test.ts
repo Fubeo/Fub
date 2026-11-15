@@ -190,7 +190,7 @@ describe("il piede coi riepiloghi del core", () => {
       expect(foot.querySelector(".base-foot-count")!.textContent).toBe("2 note");
       const cell = foot.querySelector('td[data-column="valore"]')!;
       expect(cell.querySelector(".base-foot-name")!.textContent).toBe("Somma");
-      expect(cell.querySelector(".base-foot-value")!.textContent).toBe("2000,5");
+      expect(cell.querySelector(".base-foot-value")!.textContent).toBe("2.000,5");
       expect(foot.querySelector('td[data-column="stato"]')!.textContent).toBe("");
     } finally { done(); }
   });
@@ -199,7 +199,7 @@ describe("il piede coi riepiloghi del core", () => {
     const { host, done } = mount([{ name: "Schede", type: "cards", keys: { summaries: [{ key: "valore", aggregate: "sum" }] } }]);
     try {
       await vi.waitFor(() => expect(host.querySelector(".base-summaries")).not.toBeNull());
-      expect(host.querySelector(".base-summaries")!.textContent).toBe("2 notevalore · Somma2000,5");
+      expect(host.querySelector(".base-summaries")!.textContent).toBe("2 notevalore · Somma2.000,5");
     } finally { done(); }
   });
 });
@@ -272,24 +272,260 @@ describe("«+»: una vista nuova", () => {
 });
 
 describe("venti viste", () => {
-  it("le linguette che non stanno nella barra restano figure, col nome per chi ascolta", async () => {
+  it("le linguette che non stanno restano figure, poi le ultime vanno in «Altre N viste»; la scelta resta in barra", async () => {
     // happy-dom non misura: la barra dice di essere stretta finché le
-    // linguette mostrano il nome.
+    // linguette mostrano il nome, e da figure ne entrano sei (cinque viste e
+    // «Altre N viste»).
     const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth");
-    Object.defineProperty(HTMLElement.prototype, "scrollWidth", { configurable: true, get(this: HTMLElement) { return this.classList.contains("base-tabs") && !this.classList.contains("compact") ? 2000 : 0; } });
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", { configurable: true, get(this: HTMLElement) {
+      if (!this.classList.contains("base-tabs")) return 0;
+      if (!this.classList.contains("compact")) return 2000;
+      return [...this.querySelectorAll<HTMLElement>(".base-tab")].filter((tab) => !tab.hidden).length > 6 ? 2000 : 0;
+    } });
     const views = Array.from({ length: 20 }, (_, index) => ({ name: `Vista ${index + 1}`, type: index % 2 ? "cards" : "table", keys: {} }));
     const { host, done } = mount(views);
     try {
       await ready(host);
       const tabs = host.querySelector(".base-tabs")!;
-      expect(tabs.querySelectorAll(".base-tab")).toHaveLength(20);
+      expect(tabs.querySelectorAll(".base-tab[data-view]")).toHaveLength(20);
       await vi.waitFor(() => expect(tabs.classList.contains("compact")).toBe(true));
-      for (const tab of tabs.querySelectorAll<HTMLElement>(".base-tab")) expect(tab.title).toMatch(/^Vista \d+$/);
+      for (const tab of tabs.querySelectorAll<HTMLElement>(".base-tab[data-view]")) expect(tab.title).toMatch(/^Vista \d+$/);
+      const shown = () => [...tabs.querySelectorAll<HTMLElement>(".base-tab[data-view]")].filter((tab) => !tab.hidden).map((tab) => tab.dataset.view);
+      expect(shown()).toEqual(["Vista 1", "Vista 2", "Vista 3", "Vista 4", "Vista 5"]);
+      const more = tabs.querySelector<HTMLButtonElement>(".base-tab-more")!;
+      expect(tabs.lastElementChild).toBe(more);
+      expect(more.hidden).toBe(false);
+      expect(more.getAttribute("aria-label")).toBe("Altre 15 viste");
+      more.click();
+      expect([...document.querySelectorAll("#context-menu .menu-label")].map((each) => each.textContent)).toEqual(Array.from({ length: 15 }, (_, index) => `Vista ${index + 6}`));
+      pick("Vista 12");
+      await vi.waitFor(() => expect(host.querySelector('.base-tab[aria-pressed="true"]')?.getAttribute("data-view")).toBe("Vista 12"));
+      // La vista scelta resta nella barra, anche se viene dopo le altre.
+      await vi.waitFor(() => expect(shown()).toContain("Vista 12"));
+      expect(shown()).toHaveLength(5);
       expect(host.querySelector(".base-tool-new-view")).not.toBeNull();
     } finally {
       done();
       if (width) Object.defineProperty(HTMLElement.prototype, "scrollWidth", width);
       else delete (HTMLElement.prototype as { scrollWidth?: number }).scrollWidth;
     }
+  });
+});
+
+describe("i casi della revisione", () => {
+  // Il comando `base.view.set` di una chiave che il core rifiuta.
+  const refusing = (invokeCommand: ReturnType<typeof mount>["invokeCommand"], refuse: (args: Record<string, unknown>) => boolean) => {
+    const real = invokeCommand.getMockImplementation()!;
+    invokeCommand.mockImplementation(async (command: string, args: Record<string, unknown> = {}) => {
+      if (command === "base.view.set" && refuse(args)) throw new Error("chiave rifiutata");
+      return real(command, args);
+    });
+  };
+
+  it("«+» copia com'è un filtro che la Base non sa ridire", async () => {
+    const filter = { condition: { property: "stato", op: "is", value: ["Arrivata", "In prestito"] } };
+    const { host, invokeCommand, done } = mount([{ name: "Tabella", type: "table", keys: { filters: filter } }]);
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-new-view")!.click();
+      pick("Schede");
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("base.view.set", expect.objectContaining({ view: "Schede", key: "filters", value: JSON.stringify(filter) })));
+      await settled(host);
+    } finally { done(); }
+  });
+
+  it("un passo di «+» rifiutato: la vista resta aperta com'era, il motivo resta e l'avviso lo dice con «Annulla»", async () => {
+    const { host, invokeCommand, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["valore", "stato"] } }]);
+    refusing(invokeCommand, (args) => args.key === "order");
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-new-view")!.click();
+      pick("Schede");
+      await vi.waitFor(() => expect(notified[notified.length - 1]?.tone).toBe("guasto"));
+      await settled(host);
+      const last = notified[notified.length - 1]!;
+      expect(last.message).toBe("Vista «Schede» aggiunta, ma non con tutto: il motivo è sotto la barra.");
+      expect(last.action?.label).toBe("Annulla");
+      expect(host.querySelector('.base-tab[aria-pressed="true"]')?.getAttribute("data-view")).toBe("Tabella");
+      expect(host.querySelector(".base-status")!.textContent).toContain("chiave rifiutata");
+    } finally { done(); }
+  });
+
+  it("una rinomina che non arriva a una vista lo dice, con la vista e il motivo", async () => {
+    const { host, invokeCommand, done } = mount([
+      { name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } },
+      { name: "Schede", type: "cards", keys: { order: ["stato"] } },
+    ]);
+    refusing(invokeCommand, (args) => args.view === "Schede");
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>('th[data-column="stato"] .base-head')!.click();
+      pick("Rinomina la proprietà…");
+      const field = document.querySelector<HTMLInputElement>(".base-rename-field")!;
+      field.value = "fase";
+      field.dispatchEvent(new Event("input"));
+      document.querySelector<HTMLFormElement>(".base-rename")!.requestSubmit();
+      await vi.waitFor(() => expect(notified[notified.length - 1]?.tone).toBe("guasto"));
+      await settled(host);
+      expect(notified[notified.length - 1]!.message).toBe("«stato» ora si chiama «fase» nelle note, ma non in tutte le viste");
+      await vi.waitFor(() => expect(host.querySelector(".base-status")!.textContent).toBe("Queste viste hanno ancora il nome vecchio: Schede. Niente è stato scritto nel file .base: chiave rifiutata"));
+    } finally { done(); }
+  });
+
+  it("cambiare vista chiude il menu di «+»", async () => {
+    const { host, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } }, { name: "Schede", type: "cards", keys: {} }]);
+    try {
+      await ready(host);
+      const plus = host.querySelector<HTMLButtonElement>(".base-tool-new-view")!;
+      plus.click();
+      expect(plus.getAttribute("aria-expanded")).toBe("true");
+      host.querySelector<HTMLButtonElement>('.base-tab[data-view="Schede"]')!.click();
+      expect(plus.getAttribute("aria-expanded")).toBe("false");
+    } finally { done(); }
+  });
+
+  it("tornati alla vista, il menu della colonna si riapre", async () => {
+    const { host, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } }, { name: "Schede", type: "cards", keys: {} }]);
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-new-view")!.click();
+      host.querySelector<HTMLButtonElement>('.base-tab[data-view="Schede"]')!.click();
+      await vi.waitFor(() => expect(host.querySelector(".base-cards, .base-list")).not.toBeNull());
+      host.querySelector<HTMLButtonElement>('.base-tab[data-view="Tabella"]')!.click();
+      await ready(host);
+      await settled(host);
+      const head = host.querySelector<HTMLButtonElement>('th[data-column="stato"] .base-head')!;
+      head.click();
+      expect(head.getAttribute("aria-expanded"), String(head.isConnected)).toBe("true");
+      expect([...document.querySelectorAll("#context-menu .menu-label")].map((each) => each.textContent)).toContain("Nascondi");
+    } finally { done(); }
+  });
+
+  it("cambiare vista chiude il menu della colonna, e una voce rimasta non scrive", async () => {
+    const { host, invokeCommand, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } }, { name: "Schede", type: "cards", keys: {} }]);
+    try {
+      await ready(host);
+      await settled(host);
+      const head = host.querySelector<HTMLButtonElement>('th[data-column="stato"] .base-head')!;
+      head.click();
+      expect(head.getAttribute("aria-expanded")).toBe("true");
+      const hide = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")].find((each) => each.querySelector(".menu-label")?.textContent === "Nascondi")!;
+      host.querySelector<HTMLButtonElement>('.base-tab[data-view="Schede"]')!.click();
+      expect(head.getAttribute("aria-expanded")).toBe("false");
+      hide.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(invokeCommand.mock.calls.filter(([command]) => command === "base.view.set")).toEqual([]);
+    } finally { done(); }
+  });
+
+  it("«+» è spento mentre un gesto scrive il file", async () => {
+    const { host, invokeCommand, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } }]);
+    const real = invokeCommand.getMockImplementation()!;
+    const gate = { release: () => {} };
+    invokeCommand.mockImplementation(async (command: string, args: Record<string, unknown> = {}) => {
+      if (command === "base.view.set") await new Promise<void>((resolve) => { gate.release = resolve; });
+      return real(command, args);
+    });
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>('th[data-column="valore"] .base-head')!.click();
+      pick("Ordina crescente");
+      const plus = host.querySelector<HTMLButtonElement>(".base-tool-new-view")!;
+      await vi.waitFor(() => expect(plus.disabled).toBe(true));
+      expect(plus.title).toBe("Il file si sta scrivendo: un momento.");
+      gate.release();
+      await settled(host);
+      await vi.waitFor(() => expect(plus.disabled).toBe(false));
+    } finally { done(); }
+  });
+
+  it("togliere un gruppo scelto solo in questa finestra toglie la scelta e non scrive il file", async () => {
+    const { host, invokeCommand, stored, done } = mount([{ name: "Tabella", type: "table", keys: {} }]);
+    stored.set("base.group:Opere.base:Tabella", "stato");
+    try {
+      await ready(host);
+      await vi.waitFor(() => expect(host.querySelectorAll("tr.base-group-row").length).toBe(2));
+      host.querySelector<HTMLButtonElement>('th[data-column="stato"] .base-head')!.click();
+      pick("Raggruppa");
+      await vi.waitFor(() => expect(host.querySelectorAll("tr.base-group-row").length).toBe(0));
+      expect(stored.has("base.group:Opere.base:Tabella")).toBe(false);
+      expect(invokeCommand.mock.calls.filter(([command]) => command === "base.view.set")).toEqual([]);
+    } finally { done(); }
+  });
+
+  it("un gruppo che il file rifiuta lascia la scelta di questa finestra", async () => {
+    const { host, invokeCommand, stored, done } = mount([{ name: "Tabella", type: "table", keys: {} }]);
+    stored.set("base.group:Opere.base:Tabella", "valore");
+    refusing(invokeCommand, (args) => args.key === "group");
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>('th[data-column="stato"] .base-head')!.click();
+      pick("Raggruppa");
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("base.view.set", expect.objectContaining({ key: "group" })));
+      await settled(host);
+      await vi.waitFor(() => expect(stored.get("base.group:Opere.base:Tabella")).toBe("valore"));
+    } finally { done(); }
+  });
+
+  it("con la ricerca il piede dice «1 di 2 note» e i riepiloghi restano su tutte, attenuati", async () => {
+    const { host, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"], summaries: [{ key: "valore", aggregate: "sum" }] } }]);
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-search")!.click();
+      const search = host.querySelector<HTMLInputElement>(".base-search")!;
+      search.value = "Nebbia";
+      search.dispatchEvent(new Event("input"));
+      await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(1));
+      const foot = host.querySelector(".base-table tfoot")!;
+      expect(foot.querySelector(".base-foot-count")!.textContent).toBe("1 di 2 note");
+      const summary = foot.querySelector('td[data-column="valore"] .base-foot-summary')!;
+      expect(summary.classList.contains("base-foot-dimmed")).toBe(true);
+      expect(summary.querySelector(".base-foot-value")!.textContent).toBe("2.000,5");
+      expect(summary.querySelector<HTMLElement>(".base-foot-value")!.title).toBe("su tutte le 2 note della vista");
+      expect(summary.querySelector(".sr-only")!.textContent).toContain("su tutte le 2 note della vista");
+    } finally { done(); }
+  });
+});
+
+describe("la tabella come nel prototipo", () => {
+  it("la prima colonna è il titolo della nota (anche per `file.name`), in grassetto, col percorso nel suggerimento", async () => {
+    const { host, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["file.name", "stato", "valore"] } }]);
+    try {
+      await ready(host);
+      expect([...host.querySelectorAll(".base-table thead th")].map((th) => th.getAttribute("data-column"))).toEqual(["\u0000file", "stato", "valore"]);
+      const title = host.querySelector<HTMLButtonElement>('tr[data-doc="Opere/Nebbia.md"] td[data-cell="0"] .base-title')!;
+      expect(title.textContent).toBe("Nebbia");
+      expect(title.title).toBe("Opere/Nebbia.md");
+    } finally { done(); }
+  });
+
+  it("l'intestazione ha la figura della specie dei valori, e i numeri si leggono nel formato della lingua", async () => {
+    const { host, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } }]);
+    try {
+      await ready(host);
+      expect(host.querySelector<HTMLElement>('th[data-column="valore"] .base-head')!.dataset.shape).toBe("number");
+      expect(host.querySelector<HTMLElement>('th[data-column="stato"] .base-head')!.dataset.shape).toBe("text");
+      const field = host.querySelector<HTMLInputElement>('tr[data-doc="Opere/Nebbia.md"] .base-cell[data-column="valore"] input')!;
+      expect(field.value).toBe("1.200");
+      // Col fuoco il campo torna al valore com'è, quello che si scrive.
+      field.dispatchEvent(new Event("focus"));
+      expect(field.value).toBe("1200");
+      field.dispatchEvent(new Event("blur"));
+      expect(field.value).toBe("1.200");
+    } finally { done(); }
+  });
+
+  it("«Nuova nota» in fondo alle righe crea una nota come «Nuova», e non c'è in sola lettura", async () => {
+    const { host, surface, invokeCommand, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } }]);
+    try {
+      await ready(host);
+      const add = host.querySelector<HTMLButtonElement>(".base-table tbody .base-add-row-button")!;
+      expect(add.textContent).toBe("Nuova nota");
+      expect(host.querySelector(".base-table tbody")!.lastElementChild!.classList.contains("base-add-row")).toBe(true);
+      add.click();
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("note.create", {}));
+      surface.setReadOnly!(true);
+      await vi.waitFor(() => expect(host.querySelector(".base-add-row")).toBeNull());
+    } finally { done(); }
   });
 });

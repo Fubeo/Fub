@@ -19,6 +19,11 @@ export interface BaseFooterInput {
   readonly values: Readonly<Record<string, BaseCellValue>>;
   /// Quante note la vista mostra.
   readonly count: number;
+  /// Quante note ha la vista senza la ricerca.
+  readonly total: number;
+  /// La ricerca della barra filtra le righe: i riepiloghi restano su tutte
+  /// le note della vista, e il piede lo dice.
+  readonly searching: boolean;
   /// La lingua dei numeri e delle date.
   readonly locale: string;
   /// Il nome di una colonna, per i riepiloghi che non stanno sotto una
@@ -26,15 +31,31 @@ export interface BaseFooterInput {
   readonly labelOf: (key: string) => string;
 }
 
+// `useGrouping: "always"` è di Intl.NumberFormat v3 (Chrome 106, Safari
+// 15.4): i tipi della libreria qui lo conoscono solo come booleano. Un motore
+// che non lo sa lo legge come `true`, cioè il separatore da cinque cifre.
+const ALWAYS_GROUPED = { maximumFractionDigits: 2, useGrouping: "always" } as unknown as Intl.NumberFormatOptions;
+
 /// Il valore di un riepilogo come si legge: i numeri coi separatori della
 /// lingua, le date come giorno e mese (e l'anno se non è questo), un errore
 /// come la parola «errore».
 export function summaryText(value: BaseCellValue | undefined, locale: string, now = new Date()): string {
   if (!value || value.kind === "empty") return "—";
+  return shownText(value, locale, now);
+}
+
+/// Un valore come si legge in una cella o nel piede, nel formato della
+/// lingua (le stesse regole del riepilogo). È solo da guardare: la cella che
+/// si scrive, il CSV, le copie e la ricerca restano sul valore com'è
+/// (`cellText`).
+export function shownText(value: BaseCellValue | undefined, locale: string, now = new Date()): string {
+  if (!value || value.kind === "empty") return "";
   switch (value.kind) {
     case "number":
     case "duration":
-      return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value.value);
+      // Il separatore delle migliaia anche a quattro cifre («2.600»), come
+      // nel prototipo: l'italiano da solo lo mette solo da cinque.
+      return new Intl.NumberFormat(locale, ALWAYS_GROUPED).format(value.value);
     case "date": {
       const date = new Date(value.value);
       const sameYear = date.getUTCFullYear() === now.getUTCFullYear();
@@ -69,12 +90,29 @@ function part(summary: BaseSummaryDef, input: BaseFooterInput, withColumn: boole
     amount.title = value.value;
   }
   each.append(name, amount);
+  if (input.searching) {
+    // Il riepilogo non segue la ricerca: si vede più tenue e lo dice.
+    const all = plural(input.total, "base.footer.on_all_one", "base.footer.on_all", { total: new Intl.NumberFormat(input.locale).format(input.total) });
+    each.classList.add("base-foot-dimmed");
+    if (!amount.title) amount.title = all;
+    const note = document.createElement("span");
+    note.className = "sr-only";
+    note.textContent = ` (${all})`;
+    each.append(note);
+  }
   return each;
 }
 
-/// Il conteggio delle note della vista.
-export function countText(count: number, locale: string): string {
-  return plural(count, "base.footer.count_one", "base.footer.count", { count: new Intl.NumberFormat(locale).format(count) });
+/// Il conteggio delle note della vista; con la ricerca, quante di quante
+/// («3 di 50 note»).
+export function countText(count: number, locale: string, total?: number): string {
+  const format = new Intl.NumberFormat(locale);
+  if (total !== undefined) return plural(total, "base.footer.count_of_one", "base.footer.count_of", { count: format.format(count), total: format.format(total) });
+  return plural(count, "base.footer.count_one", "base.footer.count", { count: format.format(count) });
+}
+
+function footerCount(input: BaseFooterInput): string {
+  return countText(input.count, input.locale, input.searching ? input.total : undefined);
 }
 
 /// I riepiloghi divisi per colonna: quelli di una colonna mostrata (senza
@@ -103,7 +141,7 @@ export function tableFooter(input: BaseFooterInput): HTMLTableSectionElement {
   const first = row.insertCell();
   const count = document.createElement("span");
   count.className = "base-foot-count";
-  count.textContent = countText(input.count, input.locale);
+  count.textContent = footerCount(input);
   first.append(count, ...loose.map((summary) => part(summary, input, true)));
   for (const column of input.columns) {
     const cell = row.insertCell();
@@ -120,7 +158,7 @@ export function listFooter(input: BaseFooterInput): HTMLElement {
   foot.className = "base-summaries";
   const count = document.createElement("span");
   count.className = "base-foot-count";
-  count.textContent = countText(input.count, input.locale);
+  count.textContent = footerCount(input);
   foot.append(count, ...input.summaries.map((summary) => part(summary, input, true)));
   return foot;
 }

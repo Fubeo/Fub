@@ -60,7 +60,7 @@ describe("Base table windows", () => {
       await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBeGreaterThan(0));
       expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBeLessThan(50);
       const viewport = host.querySelector<HTMLElement>(".base-table-viewport")!;
-      viewport.scrollTop = 10_000 * 36;
+      viewport.scrollTop = 10_000 * 38;
       viewport.dispatchEvent(new Event("scroll"));
       expect(host.querySelector('[data-doc="10000.md"]')).not.toBeNull();
       expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBeLessThan(50);
@@ -815,7 +815,7 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
     const { host, done } = mount();
     try {
       await ready(host);
-      const tabs = () => [...host.querySelectorAll<HTMLButtonElement>(".base-tab")];
+      const tabs = () => [...host.querySelectorAll<HTMLButtonElement>(".base-tab[data-view]")];
       expect(tabs().map((tab) => [tab.textContent, tab.getAttribute("aria-pressed"), tab.querySelector("svg")?.dataset.icon])).toEqual([
         ["Tabella", "true", "base-table"], ["Bacheca", "false", "base-board"],
       ]);

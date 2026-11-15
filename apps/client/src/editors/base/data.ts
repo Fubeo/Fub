@@ -72,6 +72,9 @@ export interface BaseMapConfig {
     readonly attribution: string | null;
     readonly network: boolean;
   } | null;
+  /// La mappa come il piano la dà, chiavi in più comprese: chi la riscrive
+  /// cambia solo ciò che deve.
+  readonly raw?: Readonly<Record<string, unknown>>;
 }
 export interface BasePlan {
   readonly view: string;
@@ -93,6 +96,11 @@ export interface BasePlan {
   /// I riepiloghi scritti nella vista, nell'ordine del file, ognuno col nome
   /// con cui `derive` ne dà il valore.
   readonly summaries: BaseSummaryDef[];
+  /// Le proprietà del calendario (`date`) e della linea del tempo (`start`,
+  /// `end`), scritte sotto `fub:`; `null` se la vista non le ha.
+  readonly dateKey: string | null;
+  readonly startKey: string | null;
+  readonly endKey: string | null;
 }
 /// Gli aggregati di un riepilogo (`AggregateKind` di `fub-format-base`).
 export type BaseAggregate =
@@ -210,19 +218,23 @@ export async function planBaseView(deps: BaseSurfaceDeps, source: string, view: 
       provider = { kind: p.kind, url_template: p.url_template as string | null, attribution: p.attribution as string | null, network: p.network };
     }
     for (const key of ["label_key", "color_key"]) if (m[key] !== null && typeof m[key] !== "string") throw new Error(`base: ${key} malformato`);
-    map = { lat_key: m.lat_key, lon_key: m.lon_key, label_key: m.label_key as string | null, color_key: m.color_key as string | null, provider };
+    map = { lat_key: m.lat_key, lon_key: m.lon_key, label_key: m.label_key as string | null, color_key: m.color_key as string | null, provider, raw: { ...m } };
   }
   if (raw.view_type === "map" && !map) throw new Error("base: vista mappa senza coordinate");
   return {
     view: raw.view, viewType: raw.view_type as BaseViewKind, columns, columnLabels: columnLabels as Record<string, string>, requiredProps,
     allProperties: raw.all_properties, group: optionalKey("group"), limit: limit as number | null, map, createDefaults,
     filters: parseFilter(raw.filters), sort: parseSort(raw.sort), order: parseOrder(raw.order), summaries: parseSummaries(raw.summaries),
+    // Un host che non le dice (prima di T16) vale come una vista senza.
+    dateKey: raw.date_key === undefined ? null : optionalKey("date_key"),
+    startKey: raw.start_key === undefined ? null : optionalKey("start_key"),
+    endKey: raw.end_key === undefined ? null : optionalKey("end_key"),
   };
 }
 
 /// Le chiavi di una vista che i gesti della barra, del menu della colonna e
 /// di «+» riscrivono.
-export type BaseViewKey = "filters" | "sort" | "order" | "group" | "summaries" | "map";
+export type BaseViewKey = "filters" | "sort" | "order" | "group" | "summaries" | "map" | "date" | "start" | "end";
 /// I comandi di T15a che scrivono un `.base` (`fub-features/src/base.rs`).
 export const BASE_VIEW_SET = "base.view.set";
 export const BASE_VIEW_ADD = "base.view.add";

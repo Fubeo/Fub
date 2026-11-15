@@ -18,7 +18,7 @@ import { openPopover, rovingToolbar, textButton, type PopoverHandle, type Roving
 import { identifier } from "../../ui/a11y";
 import { iconEl } from "../../ui/icons";
 import { openLifetime } from "../../ui/lifetime";
-import { showContextMenu, type MenuItem } from "../../ui/menu";
+import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
 import type { BasePlan, BaseViewKey, BaseWritten } from "./data";
 import {
   CANONICAL, FOLDER_OPS, VALUELESS,
@@ -91,6 +91,8 @@ export interface BaseToolbar {
   openSearch(): void;
   /// Chiude il popover aperto, se c'è.
   closePopover(): void;
+  /// Chiude il menu di «+» o quello delle viste che non stanno, se è aperto.
+  closeMenu(): void;
   /// Apre accanto a `anchor` il campo per il nome nuovo della proprietà
   /// `name`; `submit` riceve il nome scritto.
   openRename(anchor: HTMLElement, name: string, submit: (next: string) => void): void;
@@ -634,14 +636,26 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     actions.search();
   });
   lifetime.listen(moreButton, "click", () => showContextMenu(moreButton, actions.more(), { label: t("base.tool.more") }));
+  // Il menu aperto da un pulsante della barra, se c'è: la superficie lo
+  // chiude quando la vista cambia.
+  let menuOpen = false;
+  const closeMenu = (): void => {
+    if (!menuOpen) return;
+    menuOpen = false;
+    closeContextMenu();
+  };
+  lifetime.add(closeMenu);
+  const openMenu = (anchor: HTMLButtonElement, items: MenuItem[], label: string, header?: { icon: string; kind: string }): void => {
+    anchor.setAttribute("aria-expanded", "true");
+    menuOpen = true;
+    showContextMenu(anchor, items, {
+      label, ...(header ? { header } : {}),
+      onClose: () => { menuOpen = false; anchor.setAttribute("aria-expanded", "false"); },
+    });
+  };
   lifetime.listen(newViewButton, "click", () => {
     if (!writable()) return;
-    newViewButton.setAttribute("aria-expanded", "true");
-    showContextMenu(newViewButton, actions.newViews(), {
-      label: t("base.view.new"),
-      header: { icon: "base-plus", kind: t("base.view.new") },
-      onClose: () => newViewButton.setAttribute("aria-expanded", "false"),
-    });
+    openMenu(newViewButton, actions.newViews(), t("base.view.new"), { icon: "base-plus", kind: t("base.view.new") });
   });
   lifetime.listen(newButton, "click", () => actions.create());
   lifetime.listen(templateButton, "click", () => void openTemplates());
@@ -652,19 +666,54 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     search.focus();
   }
 
-  // Le linguette che non stanno nella barra: le viste non scelte restano la
-  // sola figura (come sotto i 700 px), e la scelta resta in vista. Si misura
+  // Le linguette che non stanno nella barra: prima le viste non scelte
+  // restano la sola figura (come sotto i 700 px); se ancora non stanno, le
+  // ultime vanno in «Altre N viste», l'ultima cosa delle linguette, che le
+  // elenca in un menu. La vista scelta resta sempre nella barra. Si misura
   // quando le viste cambiano e quando la barra cambia larghezza.
+  const moreTabs = element("button", "base-tab base-tab-more");
+  moreTabs.type = "button";
+  moreTabs.setAttribute("aria-haspopup", "menu");
+  moreTabs.setAttribute("aria-expanded", "false");
+  const moreCount = element("span", "base-tab-more-count");
+  moreTabs.append(icon("base-chevron-down"), moreCount);
+  let hiddenViews: string[] = [];
+  const labelMore = (): void => {
+    moreCount.textContent = String(hiddenViews.length);
+    const label = t("base.view.more", { count: hiddenViews.length });
+    moreTabs.setAttribute("aria-label", label);
+    moreTabs.title = label;
+  };
+  const overflowing = (): boolean => tabs.scrollWidth > tabs.clientWidth + 1;
   const fitTabs = (): void => {
+    const all = [...tabs.querySelectorAll<HTMLElement>(".base-tab[data-view]")];
+    for (const tab of all) tab.hidden = false;
+    hiddenViews = [];
+    moreTabs.hidden = true;
     tabs.classList.remove("compact");
-    if (tabs.scrollWidth > tabs.clientWidth + 1) tabs.classList.add("compact");
-    const chosen = tabs.querySelector<HTMLElement>('.base-tab[aria-pressed="true"]');
-    if (chosen && tabs.scrollWidth > tabs.clientWidth + 1) {
-      const left = chosen.offsetLeft - tabs.offsetLeft;
-      if (left < tabs.scrollLeft) tabs.scrollLeft = left;
-      else if (left + chosen.offsetWidth > tabs.scrollLeft + tabs.clientWidth) tabs.scrollLeft = left + chosen.offsetWidth - tabs.clientWidth;
+    if (!overflowing()) return;
+    tabs.classList.add("compact");
+    if (!overflowing()) return;
+    moreTabs.hidden = false;
+    labelMore();
+    for (const tab of all.reverse()) {
+      if (!overflowing()) break;
+      if (tab.getAttribute("aria-pressed") === "true") continue;
+      tab.hidden = true;
+      hiddenViews.unshift(tab.dataset.view!);
+      labelMore();
     }
   };
+  lifetime.listen(moreTabs, "click", () => {
+    const items = hiddenViews.map((name): MenuItem => {
+      const type = model.views.find((view) => view.name === name)?.type ?? null;
+      return {
+        label: name, icon: viewIcon(type), choice: "radio", checked: name === model.active,
+        run: () => { if (name !== model.active) actions.chooseView(name); },
+      };
+    });
+    openMenu(moreTabs, items, t("base.view.more", { count: hiddenViews.length }));
+  });
   if (typeof ResizeObserver === "function") {
     const watcher = new ResizeObserver(() => fitTabs());
     watcher.observe(bar);
@@ -681,7 +730,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       tab.append(icon(viewIcon(type)), element("span", "base-tab-label", name));
       tab.addEventListener("click", () => { if (name !== model.active) actions.chooseView(name); });
       return tab;
-    }));
+    }), moreTabs);
     tabs.hidden = model.views.length === 0;
     if (keep !== undefined) tabs.querySelector<HTMLElement>(`[data-view="${CSS.escape(keep)}"]`)?.focus();
     fitTabs();
@@ -728,8 +777,11 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     for (const button of [filterButton, sortButton, columnsButton]) button.disabled = plan === null;
     // «+» scrive il file: spento dove il file non si scrive, col perché nel
     // titolo.
-    newViewButton.disabled = model.lock !== null || plan === null;
-    newViewButton.title = model.lock === null ? t("base.view.new") : t(model.lock === "read_only" ? "base.lock.read_only" : "base.lock.embedded");
+    // «+» scrive il file: spento come gli attrezzi che scrivono, anche
+    // mentre un gesto è in volo.
+    newViewButton.disabled = !writable();
+    newViewButton.title = model.lock !== null ? t(model.lock === "read_only" ? "base.lock.read_only" : "base.lock.embedded")
+      : model.busy ? t("base.column.busy") : t("base.view.new");
     filterButton.setAttribute("aria-label", count ? t("base.tool.filter_count", { count }) : t("base.tool.filter"));
     newButton.disabled = !model.canCreate;
     templateButton.disabled = !model.canCreate;
@@ -794,6 +846,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     },
     openSearch,
     closePopover,
+    closeMenu,
     openRename(anchor, name, submit) {
       const content = element("form", "base-rename");
       const title = element("label", "base-pop-title", t("base.rename.title", { name }));

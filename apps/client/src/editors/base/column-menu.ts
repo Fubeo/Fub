@@ -21,6 +21,7 @@ import { MENU_RULE, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/
 import type { BaseAggregate, BaseCellValue, BasePlan, BaseRow, BaseSummaryDef, BaseViewKey } from "./data";
 import { summariesValue } from "./data";
 import type { FilterDef } from "./filter";
+import type { ValueShape } from "./icons";
 import { sameKey, sortBy, sortValue, sortedBy, toggleColumn } from "./sort";
 import type { BaseLock } from "./toolbar";
 
@@ -38,6 +39,28 @@ export function columnKind(rows: readonly BaseRow[], key: string): ColumnKind {
     const kind = value.kind === "number" ? "number" : value.kind === "date" ? "date" : null;
     if (kind === null || (seen !== null && seen !== kind)) return "text";
     seen = kind;
+  }
+  return seen ?? "text";
+}
+
+/// La specie dei valori di una colonna, per la figura dell'intestazione: la
+/// sola specie dei valori pieni, o il testo se sono misti o non ce n'è. È da
+/// guardare: il tipo della proprietà lo tiene il core (menu «Tipo»), e il
+/// client non lo legge per ogni colonna.
+export function valueShape(rows: readonly BaseRow[], key: string): ValueShape {
+  if (key === NOTE_COLUMN) return "text";
+  let seen: ValueShape | null = null;
+  for (const row of rows) {
+    const value: BaseCellValue | undefined = row.values[key];
+    if (!value || value.kind === "empty" || value.kind === "error") continue;
+    const shape: ValueShape = value.kind === "number" || value.kind === "duration" ? "number"
+      : value.kind === "date" ? "date"
+      : value.kind === "bool" ? "bool"
+      : value.kind === "list" ? "list"
+      : value.kind === "link" || value.kind === "file" ? "link"
+      : "text";
+    if (seen !== null && seen !== shape) return "text";
+    seen = shape;
   }
   return seen ?? "text";
 }
@@ -196,11 +219,14 @@ export function columnMenu(model: ColumnMenuModel, actions: ColumnMenuActions): 
   entries.push(...groupGroup);
   const property = columnProperty(column);
   if (property !== null) {
-    const noteReason = model.readOnly ? t("base.lock.read_only") : null;
+    // Rinomina e Tipo cambiano tutto il vault: in una Base dentro una nota
+    // il blocco resterebbe col nome vecchio, quindi sono spenti anche lì.
+    const noteReason = model.readOnly ? t("base.lock.read_only") : model.lock === "embedded" ? t("base.column.embedded_property") : null;
+    const notes = noteReason === null;
     entries.push(
-      { id: "base.column.rename", label: t("base.column.rename"), icon: "pen", separator: true, ...off(!model.readOnly, noteReason), run: () => actions.rename(column) },
+      { id: "base.column.rename", label: t("base.column.rename"), icon: "pen", separator: true, ...off(notes, noteReason), run: () => actions.rename(column) },
       {
-        id: "base.column.type", label: t("base.column.type"), icon: "properties", ...off(!model.readOnly, noteReason),
+        id: "base.column.type", label: t("base.column.type"), icon: "properties", ...off(notes, noteReason),
         items: PROPERTY_TYPES.map((type) => ({ id: `base.column.type.${type}`, label: t(`base.type.${type}`), enabled: true, run: () => actions.setType(column, type) })),
       },
     );
@@ -284,8 +310,10 @@ function renamedFilter(filter: FilterDef, from: string, to: string): FilterDef |
 }
 
 /// Le chiavi di una vista da riscrivere quando la proprietà `from` si chiama
-/// `to`: le colonne, l'ordinamento, il gruppo, i riepiloghi e il filtro che la
-/// nominano, ognuna col suo valore nuovo. Vuota se la vista non la nomina.
+/// `to`: le colonne, l'ordinamento, il gruppo, le coordinate della mappa, le
+/// date del calendario e della linea del tempo, i riepiloghi e il filtro che
+/// la nominano, ognuna col suo valore nuovo. Vuota se la vista non la nomina.
+/// Le formule non si riscrivono.
 export function renamedInView(plan: BasePlan, from: string, to: string): [BaseViewKey, unknown][] {
   const out: [BaseViewKey, unknown][] = [];
   const filters = renamedFilter(plan.filters, from, to);
@@ -295,6 +323,19 @@ export function renamedInView(plan: BasePlan, from: string, to: string): [BaseVi
   }
   if (plan.order.some((key) => sameKey(key, from))) out.push(["order", plan.order.map((key) => renamedKey(key, from, to))]);
   if (plan.group !== null && sameKey(plan.group, from)) out.push(["group", { key: renamedKey(plan.group, from, to) }]);
+  if (plan.map !== null && (sameKey(plan.map.lat_key, from) || sameKey(plan.map.lon_key, from) || (plan.map.label_key !== null && sameKey(plan.map.label_key, from)) || (plan.map.color_key !== null && sameKey(plan.map.color_key, from)))) {
+    const map = plan.map;
+    const moved = (key: string | null) => key === null ? null : renamedKey(key, from, to);
+    // Le chiavi in più della mappa restano com'erano.
+    out.push(["map", {
+      ...(map.raw ?? { ...(map.provider !== null ? { provider: map.provider } : {}) }),
+      lat_key: moved(map.lat_key), lon_key: moved(map.lon_key),
+      label_key: moved(map.label_key), color_key: moved(map.color_key),
+    }]);
+  }
+  for (const [key, value] of [["date", plan.dateKey], ["start", plan.startKey], ["end", plan.endKey]] as const) {
+    if (value !== null && sameKey(value, from)) out.push([key, renamedKey(value, from, to)]);
+  }
   if (plan.summaries.some((summary) => summary.expression === null && sameKey(summary.key, from))) {
     out.push(["summaries", summariesValue(plan.summaries.map((summary) => summary.expression === null ? { ...summary, key: renamedKey(summary.key, from, to) } : summary))]);
   }

@@ -19,6 +19,8 @@ const input = (extra: Partial<BaseFooterInput> = {}): BaseFooterInput => ({
     "stato:countfilled": { kind: "number", value: 7 },
   },
   count: 12,
+  total: 12,
+  searching: false,
   locale: "it",
   labelOf: (key) => key === "museo" ? "Museo" : key,
   ...extra,

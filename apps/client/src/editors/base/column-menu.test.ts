@@ -16,7 +16,7 @@ const summary = (key: string, aggregate: BaseSummaryDef["aggregate"], extra: Par
 const plan = (extra: Partial<BasePlan> = {}): BasePlan => ({
   view: "Tabella", viewType: "table", columns: ["stato", "valore", "consegna"], columnLabels: {},
   requiredProps: [], allProperties: false, group: null, limit: null, map: null, createDefaults: {},
-  filters: "all", sort: [], order: ["stato", "valore", "consegna"], summaries: [],
+  filters: "all", sort: [], order: ["stato", "valore", "consegna"], summaries: [], dateKey: null, startKey: null, endKey: null,
   ...extra,
 });
 
@@ -150,9 +150,16 @@ describe("le voci del menu della colonna scrivono la chiave giusta", () => {
         expect(entry.description, id).toBeTruthy();
       }
       expect(find(entries, "base.column.copy").enabled).toBe(true);
-      // Le note si rinominano anche da una Base incorporata.
-      expect(find(entries, "base.column.rename").enabled).toBe(lock === "embedded");
+      // Nemmeno Rinomina e Tipo: rinominare dal blocco di una nota lascerebbe
+      // il blocco sulla chiave vecchia. Il perché lo dice.
+      for (const id of ["base.column.rename", "base.column.type"]) {
+        const entry = find(entries, id);
+        expect(entry.enabled, `${lock} ${id}`).toBe(false);
+        expect(entry.description, `${lock} ${id}`).toBeTruthy();
+      }
     }
+    const embedded = columnMenu(model("valore", { lock: "embedded" }), actions());
+    expect(find(embedded, "base.column.rename").description).toContain("file .base");
   });
 });
 
@@ -216,5 +223,19 @@ describe("i conti puri del menu", () => {
       ["summaries", [{ key: "fase", aggregate: "count" }, { key: "valore", aggregate: "sum" }]],
     ]);
     expect(renamedInView(view, "assente", "altro")).toEqual([]);
+  });
+
+  it("la rinomina riscrive anche le chiavi della mappa e delle date, e lascia le chiavi in più della mappa", () => {
+    const map = plan({
+      viewType: "map", order: [],
+      map: { lat_key: "lat", lon_key: "lon", label_key: "stato", color_key: null, provider: null, raw: { lat_key: "lat", lon_key: "lon", label_key: "stato", zoom: 7 } },
+    });
+    expect(renamedInView(map, "stato", "fase")).toEqual([
+      ["map", { lat_key: "lat", lon_key: "lon", label_key: "fase", color_key: null, zoom: 7 }],
+    ]);
+    const timeline = plan({ order: [], startKey: "inizio", endKey: "fine" });
+    expect(renamedInView(timeline, "fine", "termine")).toEqual([["end", "termine"]]);
+    const calendar = plan({ order: [], dateKey: "consegna" });
+    expect(renamedInView(calendar, "consegna", "scadenza")).toEqual([["date", "scadenza"]]);
   });
 });

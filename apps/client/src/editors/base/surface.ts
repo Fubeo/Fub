@@ -6,6 +6,7 @@ import { api } from "../../host/ipc";
 import type { CustomRenderContext } from "../../ui/custom";
 import { errorText, isErrorKind } from "../../host/errors";
 import { onLanguage, resolvedLanguage, t } from "../../i18n/strings";
+import { iconEl } from "../../ui/icons";
 import type { DocumentUpdate } from "../core/text-operation";
 import { onEvent } from "../../state/kernel";
 import { vaultArg } from "../../state/vault";
@@ -22,13 +23,13 @@ import {
   planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, setBaseViewKey, writtenLines,
   type BaseCellValue, type BaseDocumentWrites, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
 } from "./data";
-import { decimalOf, filterValue, propertyKind, propertyValues, type ValueKind } from "./filter";
+import { decimalOf, filterValue, isOpaque, propertyKind, propertyValues, type ValueKind } from "./filter";
 import { mountBaseToolbar } from "./toolbar";
-import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSurfaceItems, renamedInView, type ColumnEntry } from "./column-menu";
-import { listFooter, tableFooter } from "./footer";
-import { viewIcon } from "./icons";
-import { sortedBy } from "./sort";
-import { showContextMenu, type MenuItem } from "../../ui/menu";
+import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSurfaceItems, renamedInView, valueShape, type ColumnEntry } from "./column-menu";
+import { listFooter, shownText, tableFooter } from "./footer";
+import { columnIcon, viewIcon } from "./icons";
+import { sameKey, sortedBy } from "./sort";
+import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
 import { notify } from "../../ui/notify";
 import { writeClipboardText } from "../../platform/clipboard";
 
@@ -86,13 +87,21 @@ const LATITUDE_KEYS = ["lat", "latitude", "latitudine"];
 const LONGITUDE_KEYS = ["lon", "lng", "long", "longitude", "longitudine"];
 const SVG = "http://www.w3.org/2000/svg";
 const VISIBLE_STEP = 100;
-const TABLE_ROW_HEIGHT = 36;
+const TABLE_ROW_HEIGHT = 38;
 const TABLE_VIEWPORT_HEIGHT = 560;
 /// Una cella della tabella al di là di un ridisegno: la nota della riga e la
 /// chiave della colonna (`FILE_COLUMN` per la colonna della nota, che non è
 /// una proprietà e non si confonde con nessuna).
 interface CellKey { readonly doc: string; readonly column: string }
 const FILE_COLUMN = NOTE_COLUMN;
+/// La colonna `file.name` del file: nella tabella è la colonna della nota
+/// (il titolo), non una seconda colonna col nome.
+const NOTE_NAME = "file.name";
+/// Il titolo di una nota in tabella: il nome del file senza cartella e
+/// senza `.md`. Il percorso intero sta nel suggerimento.
+export function noteTitle(doc: string): string {
+  return doc.slice(doc.lastIndexOf("/") + 1).replace(/\.md$/i, "");
+}
 const labels = () => ({
   view: t("menu.view"), search: t("rail.search"), retry: t("app.retry"),
   loading: t("search.loading"), more: t("search.more", { shown: VISIBLE_STEP, total: VISIBLE_STEP }),
@@ -239,7 +248,10 @@ export function mountBaseSurface(
   const cellsChanged = (): void => {
     for (const listener of [...cellListeners]) listener();
   };
-  const columnKey = (column: number): string | null => (column === 0 ? FILE_COLUMN : plan?.columns[column - 1] ?? null);
+  // Le colonne della tabella dopo quella della nota: quelle della vista,
+  // tolto `file.name` che è la colonna della nota stessa.
+  const gridColumns = (): string[] => (plan?.columns ?? []).filter((column) => column !== NOTE_NAME);
+  const columnKey = (column: number): string | null => (column === 0 ? FILE_COLUMN : gridColumns()[column - 1] ?? null);
   const keyOf = (cell: Cell): CellKey | null => {
     const item = tableItems[cell.row];
     const column = columnKey(cell.column);
@@ -269,7 +281,7 @@ export function mountBaseSurface(
     if (!keys) return;
     const find = (key: CellKey): Cell | null => {
       const row = items.findIndex((item) => !("group" in item) && item.doc === key.doc);
-      const column = key.column === FILE_COLUMN ? 0 : (plan?.columns.indexOf(key.column) ?? -1) + 1;
+      const column = key.column === FILE_COLUMN ? 0 : gridColumns().indexOf(key.column) + 1;
       return row >= 0 && (column > 0 || key.column === FILE_COLUMN) ? { row, column } : null;
     };
     const anchor = find(keys.anchor);
@@ -282,7 +294,7 @@ export function mountBaseSurface(
   /// testo. Un errore non è un valore da sommare.
   const shownValue = (row: BaseRow, column: number): string | number => {
     if (column === 0) return row.doc;
-    const key = plan?.columns[column - 1];
+    const key = gridColumns()[column - 1];
     const value = key === undefined ? undefined : row.values[key];
     if (value?.kind === "number") return value.value;
     if (value?.kind === "error") return "";
@@ -410,7 +422,10 @@ export function mountBaseSurface(
     }
     return kind;
   };
+  // Il pulsante della riga «Nuova nota» della tabella disegnata, se c'è.
+  let newRowButton: HTMLButtonElement | null = null;
   const pushModel = (): void => {
+    if (newRowButton) newRowButton.disabled = readOnly || creating;
     toolbar.update({
       views: names.map((name, index) => ({ name, type: viewTypes[index] ?? null })),
       active: activeView,
@@ -591,17 +606,33 @@ export function mountBaseSurface(
   let sequencing = 0;
   const writeView = async (key: BaseViewKey, value: unknown): Promise<void> => {
     if (!plan || sequencing > 0) return;
-    // Raggruppare dal menu della colonna scrive `group` nel file: la scelta
-    // di questa finestra (in «Ordina») non gli resta sopra.
-    // Il ricordo si toglie prima del comando: la rilettura del piano nuovo non
-    // deve ritrovarlo.
     const view = plan.view;
-    if (key === "group" && groupChoices.has(view)) {
+    const local = groupChoices.get(view);
+    // Togliere un gruppo scelto solo in questa finestra (in «Ordina») toglie
+    // la scelta, non il `group:` del file.
+    if (key === "group" && value === null && local && !(plan.group !== null && sameKey(plan.group, local))) {
+      forgetGroupChoice(view);
+      fillGroupBy();
+      draw();
+      pushModel();
+      return;
+    }
+    // Raggruppare dal menu della colonna scrive `group` nel file: la scelta
+    // di questa finestra non gli resta sopra. Si toglie prima del comando,
+    // perché la rilettura del piano nuovo non la ritrovi; se il file non è
+    // scritto, torna com'era.
+    const forgotten = key === "group" ? local : undefined;
+    if (forgotten !== undefined) {
       forgetGroupChoice(view);
       await persistQueue;
       if (destroyed) return;
     }
-    await perform((base) => setBaseViewKey(deps, context.documentId, view, key, value, base));
+    const written = await perform((base) => setBaseViewKey(deps, context.documentId, view, key, value, base));
+    if (forgotten !== undefined && !written && !destroyed && !groupChoices.has(view)) {
+      groupChoices.set(view, forgotten);
+      persistQueue = persistQueue.then(() => destroyed ? undefined : deps.setViewState(`base.group:${context.documentId}:${view}`, forgotten)).catch(presentError);
+      if (plan?.view === view) { fillGroupBy(); draw(); pushModel(); }
+    }
   };
   const run = async (attempt: WriteAttempt, invoke: (base: string | null) => Promise<BaseViewWrite>, quiet: boolean): Promise<void> => {
     const writes = deps.documentWrites;
@@ -703,8 +734,9 @@ export function mountBaseSurface(
     const from = plan;
     const name = freeName(type);
     const keys: [BaseViewKey, unknown][] = [];
-    const filters = filterValue(from.filters);
-    if (filters !== null) keys.push(["filters", filters]);
+    // Un filtro che la Base non sa ridire si copia com'è scritto nel file.
+    const filters = isOpaque(from.filters) ? from.filters.opaque : filterValue(from.filters);
+    if (filters !== null && filters !== undefined) keys.push(["filters", filters]);
     const columns = from.order.length ? from.order : from.columns;
     if (columns.length) keys.push(["order", [...columns]]);
     if (type === "kanban") { const key = lanes(); if (key) keys.push(["group", { key }]); }
@@ -714,29 +746,53 @@ export function mountBaseSurface(
     try {
       if (!await perform((base) => addBaseView(deps, context.documentId, name, type, base), { quiet: true, before: start })) return;
       const added = lastWrite;
+      let complete = true;
       for (const [key, value] of keys) {
-        if (!await perform((base) => setBaseViewKey(deps, context.documentId, name, key, value, base), { quiet: true, before: start })) break;
+        if (!await perform((base) => setBaseViewKey(deps, context.documentId, name, key, value, base), { quiet: true, before: start })) { complete = false; break; }
       }
       if (destroyed) return;
-      if (names.includes(name)) chooseView(name);
-      notify(added?.notify ?? t("base.view.added", { name }), "info", {
+      const undo = {
         label: t("app.undo"), hint: t("base.view.remove_hint", { name }),
         run: () => void perform((base) => removeBaseView(deps, context.documentId, name, base)),
-      });
+      };
+      // Un passo rifiutato: la vista c'è ma non ha tutto. Il motivo resta
+      // sotto la barra (la vista aperta non cambia), e l'avviso lo dice.
+      if (!complete) {
+        notify(t("base.view.added_partly", { name }), "guasto", undo);
+        return;
+      }
+      if (names.includes(name)) chooseView(name);
+      notify(added?.notify ?? t("base.view.added", { name }), "info", undo);
     } finally { sequencing--; pushModel(); }
   };
 
   // ---- Il menu della colonna -------------------------------------------
-  const labelOf = (key: string): string => key === NOTE_COLUMN ? t("menu.file") : plan?.columnLabels[key] ?? plan?.columnLabels[`prop.${key.replace(/^prop\./, "")}`] ?? key.replace(/^prop\./, "");
+  const labelOf = (key: string): string => key === NOTE_COLUMN ? plan?.columnLabels[NOTE_NAME] ?? t("menu.file") : plan?.columnLabels[key] ?? plan?.columnLabels[`prop.${key.replace(/^prop\./, "")}`] ?? key.replace(/^prop\./, "");
+  // Il menu della colonna e quello di «+» sono di un piano: quando la vista
+  // cambia o il file ne dà uno diverso, si chiudono, e una scelta arrivata
+  // dopo non scrive. Lo stesso piano riletto (un'altra nota cambiata) li
+  // lascia com'erano.
+  const planKey = (of: BasePlan | null): string => of === null ? "" : JSON.stringify(of);
+  let menuOpen = false;
+  const closeMenus = (): void => {
+    toolbar.closeMenu();
+    if (!menuOpen) return;
+    menuOpen = false;
+    closeContextMenu();
+  };
   const columnEntries = (column: string): ColumnEntry[] | null => {
     if (!plan) return null;
+    const opened = planKey(plan);
+    // Una scelta fatta da un menu di un piano che non c'è più non scrive:
+    // il valore sarebbe del piano vecchio, con la revisione nuova.
+    const current = () => !destroyed && planKey(plan) === opened;
     return columnMenu({
       plan, column, label: labelOf(column), kind: column === NOTE_COLUMN ? "text" : columnKind(rows, column),
       grouping: grouping(), regroupable: regroupable(), lock: lock(), busy: busy || sequencing > 0, readOnly,
     }, {
-      write: (key, value) => void writeView(key, value),
-      rename: (key) => startRename(key),
-      setType: (key, type) => void setPropertyType(key, type),
+      write: (key, value) => { if (current()) void writeView(key, value); },
+      rename: (key) => { if (current()) startRename(key); },
+      setType: (key, type) => { if (current()) void setPropertyType(key, type); },
       copy: (key) => copy(filteredRows().map((row) => key === NOTE_COLUMN ? row.doc : cellText(row.values[key])).join("\n")),
     });
   };
@@ -744,16 +800,17 @@ export function mountBaseSurface(
     const entries = columnEntries(column);
     if (!entries) return;
     anchor.setAttribute("aria-expanded", "true");
+    menuOpen = true;
     showContextMenu(anchor, columnMenuItems(entries), {
       label: t("base.column.menu", { name: labelOf(column) }),
       header: { icon: "base-table", kind: t("base.column.kind"), name: labelOf(column) },
-      onClose: () => anchor.setAttribute("aria-expanded", "false"),
+      onClose: () => { menuOpen = false; anchor.setAttribute("aria-expanded", "false"); },
     });
   };
   // Il nome nuovo della proprietà, chiesto accanto all'intestazione.
   const startRename = (column: string): void => {
     const property = columnProperty(column);
-    if (property === null || readOnly) return;
+    if (property === null || readOnly || lock() !== null) return;
     const anchor = body.querySelector<HTMLElement>(`th[data-column="${CSS.escape(column)}"] .base-head`) ?? toolbar.bar;
     toolbar.openRename(anchor, property, (next) => void renameProperty(property, next));
   };
@@ -761,7 +818,7 @@ export function mountBaseSurface(
   // di questo file che la nominano: ogni chiave toccata, una per volta, con
   // la revisione. Le altre Basi del vault non si toccano.
   const renameProperty = async (from: string, to: string): Promise<void> => {
-    if (readOnly || sequencing > 0 || busy) return;
+    if (readOnly || lock() !== null || sequencing > 0 || busy) return;
     sequencing++;
     pushModel();
     try {
@@ -776,29 +833,47 @@ export function mountBaseSurface(
         return;
       }
       if (destroyed) return;
+      // Le viste riscritte per intero, e quelle rimaste col nome vecchio in
+      // tutto o in parte.
       const done: string[] = [];
-      // Solo un `.base` si riscrive: una Base dentro una nota resta com'è.
-      if (lock() === null) {
-        const start = source;
-        for (const view of [...names]) {
-          let viewPlan: BasePlan;
-          try { viewPlan = await planBaseView(deps, source, view); } catch { continue; }
+      const missed: string[] = [];
+      let reason: string | null = null;
+      const start = source;
+      for (const view of [...names]) {
+        let viewPlan: BasePlan;
+        try { viewPlan = await planBaseView(deps, source, view); } catch (failure) {
           if (destroyed) return;
-          for (const [key, value] of renamedInView(viewPlan, from, to)) {
-            if (!await perform((base) => setBaseViewKey(deps, context.documentId, view, key, value, base), { quiet: true, before: start })) break;
-            done.push(view);
-          }
+          missed.push(view);
+          reason ??= errorText(failure);
+          continue;
         }
+        if (destroyed) return;
+        const keys = renamedInView(viewPlan, from, to);
+        if (keys.length === 0) continue;
+        let whole = true;
+        for (const [key, value] of keys) {
+          if (!await perform((base) => setBaseViewKey(deps, context.documentId, view, key, value, base), { quiet: true, before: start })) { whole = false; break; }
+        }
+        if (destroyed) return;
+        if (whole) done.push(view);
+        else { missed.push(view); reason ??= notice; }
       }
       if (destroyed) return;
+      if (missed.length) {
+        // L'errore resta: le note hanno il nome nuovo, queste viste no.
+        notice = t("base.rename.views_missed", { views: missed.join(", "), reason: reason ?? "" });
+        status.textContent = notice;
+        notify(t("base.rename.partly", { from, to }), "guasto");
+        return;
+      }
       notify(said ?? t("base.rename.done", { from, to }), "info");
-      notice = done.length ? t("base.rename.views", { count: new Set(done).size }) : null;
+      notice = done.length ? t("base.rename.views", { count: done.length }) : null;
       if (notice) status.textContent = notice;
     } finally { sequencing--; if (!destroyed) pushModel(); }
   };
   const setPropertyType = async (column: string, type: string): Promise<void> => {
     const property = columnProperty(column);
-    if (property === null || readOnly) return;
+    if (property === null || readOnly || lock() !== null) return;
     try {
       const outcome = await deps.invokeCommand(PROPERTY_TYPE_SET, { key: property, type });
       if (typeof outcome?.notify === "string" && outcome.notify) notify(outcome.notify, "info");
@@ -811,6 +886,7 @@ export function mountBaseSurface(
   };
   function chooseView(name: string): void {
     if (name === activeView || !names.includes(name)) return;
+    closeMenus();
     activeView = name;
     plan = null;
     tableScroll = { top: 0, left: 0 };
@@ -869,12 +945,35 @@ export function mountBaseSurface(
       control.defaultValue = control.value;
       control.setAttribute("aria-label", `${row.doc} ${column}`);
       control.addEventListener("change", () => void editCell(row, column, control.value === "" ? null : JSON.stringify(control.value)));
+      // Un numero si legge coi separatori della lingua; col fuoco il campo
+      // torna al valore com'è, quello che si scrive.
+      const shown = shownText(value, resolvedLanguage());
+      if (value?.kind === "number" && shown !== control.value) {
+        const raw = control.value;
+        control.value = shown;
+        control.addEventListener("focus", () => { if (control.value === shown) control.value = raw; });
+        control.addEventListener("blur", () => { if (control.value === raw) control.value = shown; });
+      }
       field.append(control);
     } else {
-      field.textContent = cellText(value);
+      field.textContent = shownText(value, resolvedLanguage());
       if (value?.kind === "error") field.classList.add("base-cell-error");
     }
     return field;
+  };
+  const newNoteRow = (columns: number): HTMLTableRowElement => {
+    const tr = document.createElement("tr");
+    tr.className = "base-add-row";
+    const cell = tr.insertCell();
+    cell.colSpan = columns;
+    const add = button(t("base.table.new_row"), () => void createNote());
+    add.className = "base-add-row-button";
+    add.disabled = creating;
+    const figure = iconEl("base-plus");
+    if (figure) { figure.setAttribute("aria-hidden", "true"); add.prepend(figure); }
+    newRowButton = add;
+    cell.append(add);
+    return tr;
   };
   const drawTable = (page: BaseRow[]): void => {
     const viewport = document.createElement("div");
@@ -886,7 +985,7 @@ export function mountBaseSurface(
     const head = table.createTHead().insertRow();
     // L'intestazione di una colonna apre il suo menu: Ordina, Raggruppa,
     // Riepilogo, Rinomina, Tipo, Nascondi.
-    for (const column of [NOTE_COLUMN, ...(plan?.columns ?? [])]) {
+    for (const column of [NOTE_COLUMN, ...gridColumns()]) {
       const th = document.createElement("th");
       th.dataset.column = column;
       const label = labelOf(column);
@@ -899,6 +998,15 @@ export function mountBaseSurface(
       const name = document.createElement("span");
       name.className = "base-head-label";
       name.textContent = label;
+      // La figura della specie dei valori, davanti al nome.
+      const shape = valueShape(rows, column);
+      trigger.dataset.shape = shape;
+      const figure = iconEl(columnIcon(shape));
+      if (figure) {
+        figure.classList.add("base-head-icon");
+        figure.setAttribute("aria-hidden", "true");
+        trigger.append(figure);
+      }
       trigger.append(name);
       const sorted = plan ? sortedBy(plan.sort, column === NOTE_COLUMN ? "file.name" : column) : null;
       if (sorted) {
@@ -916,7 +1024,7 @@ export function mountBaseSurface(
       const tr = document.createElement("tr");
       tr.setAttribute("aria-hidden", "true");
       const td = tr.insertCell();
-      td.colSpan = (plan?.columns.length ?? 0) + 1;
+      td.colSpan = gridColumns().length + 1;
       td.style.cssText = `height:${height}px;padding:0;border:0`;
       return tr;
     };
@@ -928,14 +1036,17 @@ export function mountBaseSurface(
       : page;
     tableItems = items;
     restorePick(items);
-    const columns = (plan?.columns.length ?? 0) + 1;
+    const columns = gridColumns().length + 1;
+    // «Nuova nota» in fondo alle righe: la stessa cosa di «Nuova» nella barra,
+    // che non c'è in sola lettura.
+    const addRow = readOnly ? null : newNoteRow(columns);
     const renderWindow = (top = viewport.scrollTop) => {
       // La finestra è alta quanto il suo contenuto fino al tetto: al primo
       // disegno la tabella è ancora vuota e `clientHeight` ne direbbe solo
       // l'intestazione, così le righe sotto le prime non comparirebbero mai
       // senza uno scorrimento. Le righe da disegnare sono quelle del tetto.
       const range = uniformRowRange(items.length, top, Math.max(viewport.clientHeight, TABLE_VIEWPORT_HEIGHT), TABLE_ROW_HEIGHT);
-      if (!range) { tableBody.replaceChildren(); return; }
+      if (!range) { tableBody.replaceChildren(...(addRow ? [addRow] : [])); return; }
       const fragment = document.createDocumentFragment();
       if (range.start) fragment.append(spacer(range.start * TABLE_ROW_HEIGHT));
       for (let index = range.start; index <= range.end; index++) {
@@ -946,7 +1057,7 @@ export function mountBaseSurface(
           tr.dataset.group = item.group;
           tr.style.height = `${TABLE_ROW_HEIGHT}px`;
           const cell = tr.insertCell();
-          cell.colSpan = (plan?.columns.length ?? 0) + 1;
+          cell.colSpan = columns;
           cell.append(groupToggle(item.group, item.count));
           fragment.append(tr);
           continue;
@@ -959,8 +1070,12 @@ export function mountBaseSurface(
         const fileCell = tr.insertCell();
         fileCell.dataset.cell = "0";
         fileCell.style.cssText = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
-        fileCell.append(button(row.doc, () => open(row.doc)));
-        for (const [position, column] of (plan?.columns ?? []).entries()) {
+        // Il titolo della nota, in grassetto, apre la nota.
+        const title = button(noteTitle(row.doc), () => open(row.doc));
+        title.className = "base-title";
+        title.title = row.doc;
+        fileCell.append(title);
+        for (const [position, column] of gridColumns().entries()) {
           const cell = tr.insertCell();
           cell.dataset.cell = String(position + 1);
           cell.style.cssText = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
@@ -969,6 +1084,7 @@ export function mountBaseSurface(
         fragment.append(tr);
       }
       if (range.end + 1 < items.length) fragment.append(spacer((items.length - range.end - 1) * TABLE_ROW_HEIGHT));
+      if (addRow) fragment.append(addRow);
       tableBody.replaceChildren(fragment);
       paint();
     };
@@ -1086,8 +1202,8 @@ export function mountBaseSurface(
     // Il piede: il conteggio sotto la nota, i riepiloghi del core sotto le
     // loro colonne. Resta in fondo alla finestra mentre si scorre.
     table.append(tableFooter({
-      columns: plan?.columns ?? [], summaries: plan?.summaries ?? [], values: summaries, count: page.length,
-      locale: resolvedLanguage(), labelOf,
+      columns: gridColumns(), summaries: plan?.summaries ?? [], values: summaries, count: page.length,
+      total: rows.length, searching: search.value.trim() !== "", locale: resolvedLanguage(), labelOf,
     }));
     viewport.append(table);
     body.append(viewport);
@@ -1361,7 +1477,12 @@ export function mountBaseSurface(
     wrapper.append(zoomIn, zoomOut, atlas, attribution);
     body.append(wrapper);
   };
+  // Un piano diverso (un'altra vista, o il file cambiato) chiude i menu
+  // aperti su quello di prima; lo stesso piano riletto no.
+  let drawnPlan = "";
   const draw = (): void => {
+    const drawing = planKey(plan);
+    if (drawing !== drawnPlan) { closeMenus(); drawnPlan = drawing; }
     tileCleanup?.();
     tileCleanup = null;
     const shown = body.querySelector<HTMLElement>(".base-table-viewport");
@@ -1396,7 +1517,7 @@ export function mountBaseSurface(
       else if (plan?.viewType === "map") drawMap(page);
       if (plan?.viewType !== "table" && displayed < matches.length) body.append(button(t("search.more", { shown: Math.min(displayed, matches.length), total: matches.length }), () => { displayed += VISIBLE_STEP; draw(); }));
       if (plan && plan.viewType !== "table") {
-        body.append(listFooter({ columns: plan.columns, summaries: plan.summaries, values: summaries, count: matches.length, locale: resolvedLanguage(), labelOf }));
+        body.append(listFooter({ columns: plan.columns, summaries: plan.summaries, values: summaries, count: matches.length, total: rows.length, searching: search.value.trim() !== "", locale: resolvedLanguage(), labelOf }));
       }
       status.textContent = notice ?? t("search.count_limited", { shown: matches.length, total: rows.length });
     } catch (failure) { presentError(failure); }
@@ -1586,6 +1707,7 @@ export function mountBaseSurface(
     },
     setTheme(theme: Theme) { root.dataset.theme = theme; },
     destroy() {
+      closeMenus();
       destroyed = true; generation++; pending?.abort(); tileCleanup?.(); cellListeners.clear();
       window.clearTimeout(settleTimer);
       for (const [timer, withdraw] of undoGraces) { window.clearTimeout(timer); withdraw(); }
@@ -1626,6 +1748,8 @@ export function mountBaseEmbed(host: HTMLElement, payload: unknown, context: Cus
     revision: () => revision,
     documentWrites,
   }, { view: embed.view, persistSelection: false, container: embed.container ?? embed.base ?? null, sourceInNote: embed.source !== undefined });
+  // La scatola della Base dentro una nota sta in colonna col testo (la pelle).
+  host.querySelector<HTMLElement>(":scope > .base-surface")?.setAttribute("data-embedded", "true");
   if (embed.source !== undefined) {
     surface.buffer.setDoc(embed.source);
     return () => { disposed = true; surface.destroy(); };
