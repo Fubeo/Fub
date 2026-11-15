@@ -232,6 +232,12 @@ pub const EDITOR_LIVE_REVEAL: &str = "editor.live-reveal";
 /// segue e mostra in grigio la chiusura che manca; lo spazio chiude apice e
 /// pedice. Spenta, i segni restano testo finché non si chiudono.
 pub const EDITOR_LIVE_GUIDE: &str = "editor.live-guide";
+/// I blocchi di Scrittura: accesi (di serie) ogni blocco ha maniglia e «+», Esc
+/// seleziona il blocco, Mod+A prende il blocco e poi tutti i blocchi, Mod+D
+/// duplica il blocco; spenti, Scrittura si comporta come un editor di testo
+/// (Mod+A il corpo della nota, Mod+D la prossima occorrenza). La testata della
+/// pagina resta in tutti e due i casi. Cambia senza riaprire la nota.
+pub const EDITOR_BLOCKS: &str = "editor.blocks";
 /// Le animazioni della shell: `""` segue il sistema, `calm` toglie rimbalzi e
 /// scene, `reduced` le spegne anche quando il sistema non lo chiede. Nessun
 /// valore scavalca la richiesta di moto ridotto del sistema.
@@ -690,6 +696,14 @@ fn editor_settings() -> Vec<SettingSpec> {
             UiOption::new("riga", Text::key(C_EDITOR_LIVE_REVEAL_LINE)),
         ],
     ));
+    // I blocchi come preferenza (D1, E2): una voce a sé, subito dopo i segni
+    // di Scrittura, perché sono la prima scelta su come si scrive.
+    settings.push(
+        SettingSpec::toggle(EDITOR_BLOCKS, Text::key(C_EDITOR_BLOCKS), true)
+            .describing(Text::key(C_EDITOR_BLOCKS_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
     settings.extend(
         [
             (
@@ -1554,6 +1568,8 @@ const C_EDITOR_LIVE_REVEAL_ELEMENT: &str = "core.editor.live_reveal.element";
 const C_EDITOR_LIVE_REVEAL_LINE: &str = "core.editor.live_reveal.line";
 const C_EDITOR_LIVE_GUIDE: &str = "core.editor.live_guide";
 const C_EDITOR_LIVE_GUIDE_DESC: &str = "core.editor.live_guide.desc";
+const C_EDITOR_BLOCKS: &str = "core.editor.blocks";
+const C_EDITOR_BLOCKS_DESC: &str = "core.editor.blocks.desc";
 const C_MODE_SOURCE: &str = "core.mode.source";
 const C_MODE_WRITING: &str = "core.mode.writing";
 const C_MODE_READING: &str = "core.mode.reading";
@@ -2183,6 +2199,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Della riga del cursore")
         .with(C_EDITOR_LIVE_GUIDE, "Guida mentre scrivi")
         .with(C_EDITOR_LIVE_GUIDE_DESC, "In Scrittura un segno aperto dà subito lo stile al testo e mostra in grigio la chiusura che manca; lo spazio chiude apice e pedice.")
+        .with(C_EDITOR_BLOCKS, "Blocchi: maniglie e selezione")
+        .with(C_EDITOR_BLOCKS_DESC, "Accesi, ogni blocco ha la maniglia e il «+», Esc seleziona il blocco e Ctrl A prende il blocco, poi tutti. Spenti, Scrittura è un editor di testo: Ctrl A seleziona tutto il testo e Ctrl D la prossima occorrenza.")
         .with(C_MODE_SOURCE, "Sorgente")
         .with(C_MODE_WRITING, "Scrittura")
         .with(C_MODE_READING, "Lettura")
@@ -2812,6 +2830,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Of the line at the cursor")
         .with(C_EDITOR_LIVE_GUIDE, "Guide while typing")
         .with(C_EDITOR_LIVE_GUIDE_DESC, "In Writing an opened mark styles the text at once and shows the missing close in grey; a space closes superscript and subscript.")
+        .with(C_EDITOR_BLOCKS, "Blocks: handles and selection")
+        .with(C_EDITOR_BLOCKS_DESC, "On, every block has its handle and «+», Esc selects the block and Ctrl A takes the block, then all of them. Off, Writing is a text editor: Ctrl A selects all the text and Ctrl D the next occurrence.")
         .with(C_MODE_SOURCE, "Source")
         .with(C_MODE_WRITING, "Writing")
         .with(C_MODE_READING, "Reading")
@@ -3428,6 +3448,21 @@ mod tests {
         assert_eq!(default, "mai");
         let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
         assert_eq!(values, ["mai", "elemento", "riga"]);
+        assert!(!spec.program_writable);
+    }
+
+    /// I blocchi sono una preferenza della macchina, accesa di serie, subito
+    /// dopo i segni di Scrittura: chi la spegne scrive come in un editor di
+    /// testo, e un programma non la cambia.
+    #[test]
+    fn blocks_are_a_machine_switch_on_by_default_after_the_writing_marks() {
+        let machine = core_machine_settings();
+        let at = |key: &str| machine.iter().position(|spec| spec.key == key);
+        assert_eq!(at(EDITOR_BLOCKS), at(EDITOR_LIVE_REVEAL).map(|i| i + 1));
+        let spec = &machine[at(EDITOR_BLOCKS).expect("i blocchi fra le impostazioni")];
+        assert!(matches!(spec.kind, SettingKind::Toggle { default: true }));
+        assert_eq!(spec.group, Text::key(C_GROUP_EDITOR));
+        assert_eq!(spec.label, Text::key(C_EDITOR_BLOCKS));
         assert!(!spec.program_writable);
     }
 

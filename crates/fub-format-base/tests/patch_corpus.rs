@@ -351,3 +351,73 @@ fn una_chiave_di_data_nella_vista_sbagliata_si_rifiuta() {
         Err(PatchError::NotForView(ViewKey::End))
     ));
 }
+
+/// Spostare una colonna riscrive la lista di `order`, ma i commenti delle voci
+/// vanno con la loro voce: quello in coda alla riga e quello sulla riga sopra.
+#[test]
+fn spostare_una_colonna_porta_con_se_i_commenti_della_voce() {
+    let before = "views:\n  - type: table\n    name: Opere\n    order:\n      - file.name\n      # la colonna dello stato\n      - stato   # colonna stato\n      - artista\n";
+    let moved = written(
+        before,
+        &set(
+            "Opere",
+            ViewKey::Order,
+            json!(["file.name", "artista", "stato"]),
+        ),
+    );
+    assert_eq!(
+        moved,
+        "views:\n  - type: table\n    name: Opere\n    order:\n      - file.name\n      - artista\n      # la colonna dello stato\n      - stato   # colonna stato\n"
+    );
+    let read = BaseDefinition::parse(&moved).expect("il file si rilegge");
+    assert_eq!(read.views[0].order, ["file.name", "artista", "stato"]);
+    // Una voce tolta si porta via i suoi commenti; le altre tengono i loro.
+    let dropped = written(
+        before,
+        &set("Opere", ViewKey::Order, json!(["artista", "file.name"])),
+    );
+    assert_eq!(
+        dropped,
+        "views:\n  - type: table\n    name: Opere\n    order:\n      - artista\n      - file.name\n"
+    );
+    // Una voce scritta fra virgolette si riconosce lo stesso.
+    let quoted = "views:\n  - type: table\n    name: Opere\n    order:\n      - \"file.name\" # il titolo\n      - stato\n";
+    let swapped = written(
+        quoted,
+        &set("Opere", ViewKey::Order, json!(["stato", "file.name"])),
+    );
+    assert_eq!(
+        swapped,
+        "views:\n  - type: table\n    name: Opere\n    order:\n      - stato\n      - file.name # il titolo\n"
+    );
+}
+
+#[test]
+fn un_commento_staccato_da_una_riga_vuota_si_sposta_con_la_voce_sotto() {
+    // Il titolo di un gruppo di colonne, separato dalla riga vuota: non è in
+    // coda alla voce sopra, e non sparisce quando l'ordine si riscrive.
+    let before = "views:\n  - type: table\n    name: Opere\n    order:\n      - file.name\n\n      # i dati del prestito\n\n      - stato\n      - artista\n";
+    let moved = written(
+        before,
+        &set(
+            "Opere",
+            ViewKey::Order,
+            json!(["stato", "file.name", "artista"]),
+        ),
+    );
+    assert_eq!(
+        moved,
+        "views:\n  - type: table\n    name: Opere\n    order:\n      # i dati del prestito\n\n      - stato\n      - file.name\n      - artista\n"
+    );
+    let read = BaseDefinition::parse(&moved).expect("il file si rilegge");
+    assert_eq!(read.views[0].order, ["stato", "file.name", "artista"]);
+    // Le righe vuote senza commento non si tengono, come prima.
+    let plain = "views:\n  - type: table\n    name: Opere\n    order:\n      - file.name\n\n      - stato\n";
+    assert_eq!(
+        written(
+            plain,
+            &set("Opere", ViewKey::Order, json!(["stato", "file.name"]))
+        ),
+        "views:\n  - type: table\n    name: Opere\n    order:\n      - stato\n      - file.name\n"
+    );
+}

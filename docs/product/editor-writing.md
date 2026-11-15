@@ -11,7 +11,7 @@
 Una nota Markdown ha tre modalità:
 
 - **Scrittura**, dove si scrive sulla pagina resa: i segni Markdown si
-  attenuano o spariscono, e ogni blocco ha la sua maniglia;
+  attenuano o spariscono, e coi blocchi accesi ogni blocco ha la sua maniglia;
 - **Sorgente**, con la sintassi esplicita;
 - **Lettura**, la resa senza cursore di testo (**Ctrl+E** ci va e torna alla
   modalità di prima).
@@ -54,6 +54,23 @@ la preferenza lo chiede. In sola lettura maniglie, testata e strumenti della
 pagina sono spenti, e Lettura resta possibile. Una nota aperta in due riquadri
 può stare in Scrittura in uno e in Sorgente nell'altro: il testo è uno, ogni
 riquadro ha la sua modalità.
+
+## Blocchi accesi o spenti
+
+Come si comporta Scrittura lo dice la preferenza della macchina
+`editor.blocks` («Blocchi: maniglie e selezione», gruppo Editor delle
+Impostazioni; accesa di fabbrica). Accesa, Scrittura è un editor a
+[blocchi](editor-blocks.md), alla Notion: maniglie e «+», Esc che seleziona il
+blocco, Mod+A che prende il blocco e poi tutti i blocchi. Spenta, è un editor
+di testo: niente maniglie, Esc non seleziona blocchi, Mod+A prende il corpo
+della nota, Mod+D sceglie la prossima occorrenza e Mod+Shift+↑/↓ sposta le
+righe; la testata della pagina, i segni della Live e il «/» restano. La tabella
+completa sta in [I blocchi spenti](editor-blocks.md#i-blocchi-spenti).
+
+La preferenza si cambia anche dal menu «…» del riquadro di una nota, gruppo
+Scrittura: la voce ha la spunta, dice che cosa fa Mod+A in quello stato, e un
+avviso conferma il cambio. Ogni nota aperta in Scrittura cambia subito, senza
+riaprirsi: testo, selezione, scorrimento e cronologia restano.
 
 ## Tre livelli di presenza
 
@@ -209,7 +226,11 @@ Non tutto diventa un link:
 ## Dove sta nel codice
 
 - `apps/client/src/editors/text/profiles/markdown/surface.ts`: le tre modalità
-  (`MARKDOWN_MODES`), `markdownModeOf`, il montaggio dei blocchi in Scrittura;
+  (`MARKDOWN_MODES`), `markdownModeOf`, il montaggio dei blocchi in Scrittura
+  e il cambio di `editor.blocks` sulla vista aperta; `blocks/keys.ts`: i tasti
+  coi blocchi accesi (`blockKeysExtension`) e spenti (`plainKeysExtension`);
+- `apps/client/src/state/editor-blocks.ts`: la preferenza `editor.blocks`;
+  `apps/client/src/panels/document.ts`: la voce del menu «…»;
 - `apps/client/src/editors/core/surface-modes.ts`: `modeById`, che riconosce
   anche gli id di prima (`formerIds` di `SurfaceMode`);
 - `apps/client/src/state/document-controller.ts` e `state/mode-menu.ts`: la

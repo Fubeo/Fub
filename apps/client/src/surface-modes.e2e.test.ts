@@ -823,3 +823,68 @@ describe("la modalità si sceglie dalla banda", () => {
     expect(button().hidden).toBe(false);
   });
 });
+
+describe("i blocchi come preferenza dal menu del riquadro (T5)", () => {
+  const BLOCKS = "Blocchi: maniglie e selezione";
+  const blocksRow = (value: boolean): SettingEntry => ({
+    spec: {
+      key: "editor.blocks",
+      label: BLOCKS,
+      description: "",
+      group: "Editor",
+      scope: "machine",
+      kind: { kind: "toggle", default: true },
+      program_writable: false,
+    },
+    value,
+    source: "machine",
+  });
+  const entry = async (): Promise<HTMLButtonElement | undefined> => {
+    focusedPane().querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
+    await settle();
+    return [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")]
+      .find((button) => button.querySelector(".menu-label")?.textContent === BLOCKS);
+  };
+  const handles = () => focusedPane().querySelector(".cm-fub-block-handles") !== null;
+  const toasts = () => [...document.querySelectorAll(".toast-text")].map((toast) => toast.textContent ?? "").join("\n");
+
+  it("in una nota la voce spegne e riaccende i blocchi senza riaprire la nota", async () => {
+    await start(VAULT, [blocksRow(true)]);
+    await open("Benvenuto.md");
+    const [view] = mountedTextEditors();
+    expect(handles()).toBe(true);
+    const on = await entry();
+    expect(on?.getAttribute("aria-checked")).toBe("true");
+    on!.click();
+    await waitFor("i blocchi spenti", () => !handles());
+    expect(mountedTextEditors()).toEqual([view]);
+    expect(toasts()).toContain("Blocchi spenti");
+    const off = await entry();
+    expect(off?.getAttribute("aria-checked")).toBe("false");
+    off!.click();
+    await waitFor("i blocchi accesi", () => handles());
+    expect(mountedTextEditors()).toEqual([view]);
+    expect(toasts()).toContain("Blocchi accesi");
+  });
+
+  it("una scrittura che non riesce lascia la spunta e le maniglie come prima, e lo dice", async () => {
+    const host = await start(VAULT, [blocksRow(true)]);
+    // Il backend vero non persiste e non annuncia una scrittura rifiutata. Il
+    // `fault` del finto scrive il valore prima di rifiutare (lo dice la
+    // skill del banco): qui la porta rifiuta e basta, come l'host.
+    const api = host.module.api as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    api.setSetting = () => Promise.reject({ kind: "io", message: "disco pieno" });
+    await open("Benvenuto.md");
+    expect(handles()).toBe(true);
+    (await entry())!.click();
+    await waitFor("l'avviso del guasto", () => toasts().includes("disco pieno"));
+    expect(handles()).toBe(true);
+    expect((await entry())?.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("fuori da una nota la voce non c'è", async () => {
+    await start(VAULT, [blocksRow(true)]);
+    await open("schizzo.draw");
+    expect(await entry()).toBeUndefined();
+  });
+});

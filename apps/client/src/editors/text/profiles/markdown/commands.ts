@@ -870,7 +870,7 @@ function headerDelimiters(doc: Text): Set<number> {
 
 /// Alt-↑/↓ porterebbe una riga dentro la testata o fuori da essa, oppure
 /// sposterebbe una delle sue due righe `---`.
-function movesHeader(state: EditorState, dir: -1 | 1): boolean {
+export function movesHeader(state: EditorState, dir: -1 | 1): boolean {
   const delimiters = headerDelimiters(state.doc);
   if (delimiters.size === 0) return false;
   return selectedLines(state).some((line) => delimiters.has(line.number) || delimiters.has(line.number + dir));
@@ -886,7 +886,7 @@ function copiesHeader(state: EditorState): boolean {
 /// Un comando del testo che la testata non deve subire: se la mossa la
 /// toccherebbe non fa niente, e il tasto si ferma lì, come le voci di proprietà
 /// ai bordi del frontmatter.
-function keepingHeader(run: (view: EditorView) => boolean, touches: (state: EditorState) => boolean): (view: EditorView) => boolean {
+export function keepingHeader(run: (view: EditorView) => boolean, touches: (state: EditorState) => boolean): (view: EditorView) => boolean {
   return (view) => (!view.state.readOnly && touches(view.state) ? true : run(view));
 }
 
