@@ -18,7 +18,8 @@
 // tastiera e guasti), una riga qui e il suo file accanto.
 import { avvio } from "./avvio.mjs";
 import { scrivere } from "./scrivere.mjs";
+import { editor } from "./editor.mjs";
 import { lavagna } from "./lavagna.mjs";
 import { guasti } from "./guasti.mjs";
 
-export const GRUPPI = [avvio, scrivere, lavagna, guasti];
+export const GRUPPI = [avvio, scrivere, editor, lavagna, guasti];

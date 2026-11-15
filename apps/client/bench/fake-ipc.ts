@@ -50,6 +50,8 @@ import type {
   DrawingGesture,
   DrawingLoss,
   DrawingOutcome,
+  GridBytesSession,
+  GridBytesWindow,
   IndexQuery,
   IndexResult,
   JobStatus,
@@ -90,6 +92,7 @@ import {
 import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
+import { GiroWorkbook, giroResources } from "./giro-fixture";
 import {
   generateGraphFixture as graphFixture,
   type GraphFixture,
@@ -466,6 +469,26 @@ const TREE_SCENE = treeSceneCase(params.get("albero"));
 if (TREE_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE !== null || PDF_SCENE !== null)) {
   throw new RangeError("albero is a vault of its own");
 }
+
+/// I finti del gruppo «editor» del giro (`?giro=editor`, vedi
+/// `giro-fixture.ts`): il manuale in PDF di quattro pagine e, con
+/// `?workbook=1`, la cartella che risponde alla formula e all'ordine che il
+/// giro chiede e ricorda che cosa il salvataggio ha innestato, al posto della
+/// modifica registrata delle scene.
+const GIRO_EDITOR = params.get("giro") === "editor";
+if (GIRO_EDITOR && (GRID_CASE !== null || RESULT_CASE !== null)) throw new RangeError("giro=editor has a workbook of its own");
+const GIRO_WORKBOOK = GIRO_EDITOR && WORKBOOK_DOC !== null
+  ? new GiroWorkbook(
+    WORKBOOK_DOC,
+    // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
+    BENCH_SESSION as unknown as GridBytesSession,
+    XLSX_GRID.windows.find((window) => window.sheet === BENCH_SESSION.active) as unknown as GridBytesWindow,
+    // Il finto di sotto e il suo registro nascono più giù: si leggono alla
+    // prima chiamata.
+    { openGridBytes: (...args) => behind.openGridBytes(...args) },
+    (call) => host.calls.push(call),
+  )
+  : null;
 
 /// Il cestino con tre file (`?cestino=3`): la scena del telefono che guarda
 /// i bottoni «Ripristina» di righe vicine. Le altre scene lo hanno vuoto.
@@ -1733,6 +1756,7 @@ const options: Options = {
     ...(RAW_SCENE === null ? {} : rawSceneResources(RAW_SCENE)),
     ...(PDF_SCENE === null ? {} : pdfSceneResources()),
     ...(TREE_SCENE === null ? {} : treeSceneResources()),
+    ...(GIRO_EDITOR ? giroResources() : {}),
   },
   root: ROOT,
   view: VIEWS,
@@ -1755,7 +1779,7 @@ const options: Options = {
     gridBytes: {
       surface: XLSX_GRID.surface,
       session: BENCH_SESSION,
-      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window].map(benchWindow),
+      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window, ...(GIRO_WORKBOOK?.windows ?? [])].map(benchWindow),
       commits: [XLSX_GRID.edit.commit],
       ...(BENCH_OUTCOMES === undefined ? {} : { outcomes: BENCH_OUTCOMES }),
     } as GridBytesFake,
@@ -2187,6 +2211,18 @@ export const api: typeof host.module.api = {
   },
   listBundles: () => Promise.resolve(inShellLanguage(BUNDLE)),
   knownVaults: () => Promise.resolve(KNOWN_VAULTS),
+  // La cartella del gruppo «editor» del giro (`giro-fixture.ts`): risponde
+  // lei alla formula e all'ordine, e sa che cosa il salvataggio ha innestato.
+  ...(GIRO_WORKBOOK === null ? {} : {
+    openGridBytes: (...args: Parameters<typeof behind.openGridBytes>) => GIRO_WORKBOOK.openGridBytes(...args),
+    applyGridBytes: (...args: Parameters<typeof behind.applyGridBytes>) => GIRO_WORKBOOK.applyGridBytes(...args),
+    gridBytesCommand: (...args: Parameters<typeof behind.gridBytesCommand>) => GIRO_WORKBOOK.gridBytesCommand(...args),
+    writeDocument: async (...args: Parameters<typeof behind.writeDocument>) => {
+      const revision = await behind.writeDocument(...args);
+      GIRO_WORKBOOK.saved(args[0], args[1]);
+      return revision;
+    },
+  }),
 };
 
 export const onKernelEvent = host.module.onKernelEvent;

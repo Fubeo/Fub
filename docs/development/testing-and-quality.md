@@ -247,22 +247,22 @@ npm run bench:giro -- --out=$TMPDIR/giro --telefono   # mobile.html a 390×844
 npm run bench:giro -- --solo=avvio --luce=light       # un gruppo, nella luce giorno
 ```
 
-Il corridore è `bench/giro.mjs`; i gruppi, in ordine, sono in `bench/giro/elenco.mjs`,
-uno per file accanto che dice in testa che cosa prova. `avvio`: dal primo avvio
-senza vault all'albero, alla scrittura in Live e alle quattro modalità. `scrivere`
-(non al telefono): «/» e maniglia, tasto destro, palette, due riquadri, rinomina
-coi link, ricerca e «In entrata»; ricarica con `?formatbar=1&slash=1`, senza cui
-il finto non dà i comandi di formato. `lavagna` (non al telefono, `?lavagna=1`): schede,
-un filo, la penna (`pointerType: "pen"`, con la pressione) e la Gomma, visti nel `.canvas`.
-`guasti` (non al telefono): conflitti, errori, cestino, tastiera. Al primo compito che
-fallisce il giro si ferma, dice quale e perché, fotografa (`…-errore.png`) ed esce con 1.
-Foto e referto (`giro.json`) in `--out` (di serie `bench/.output/giro/`), porta da `FUB_BENCH_PORT` o `--port`.
+Il corridore è `bench/giro.mjs`; i gruppi, in ordine, sono in `bench/giro/elenco.mjs`, uno per file
+accanto che dice in testa che cosa prova. `avvio`: dal primo avvio senza vault all'albero, alla scrittura
+in Live e alle quattro modalità. `scrivere` (non al telefono): «/» e maniglia, tasto destro, palette, due
+riquadri, rinomina coi link, ricerca e «In entrata»; ricarica con `?formatbar=1&slash=1`, senza cui il
+finto non dà i comandi di formato. `editor` (non al telefono): una frase in un Word, formula e «Ordina» in
+un Excel, un rettangolo in un SVG, una ricerca in un PDF; `giro=editor` (`bench/giro-fixture.ts`) dà il
+PDF e un foglio che serve solo quei comandi. `lavagna` (non al telefono, `?lavagna=1`): schede, un filo,
+la penna (`pointerType: "pen"`, con la pressione) e la Gomma, visti nel `.canvas`. `guasti` (non al
+telefono): conflitti, errori, cestino, tastiera. Al primo compito che fallisce il giro si ferma, dice
+quale e perché, fotografa (`…-errore.png`) ed esce con 1. Foto e referto (`giro.json`) in `--out` (di
+serie `bench/.output/giro/`), porta da `FUB_BENCH_PORT` o `--port`.
 
-Che cosa **non** prova: i pixel (senza baseline, si guardano: `bench:verify`),
-il motore vero (risponde il finto host; i suoi «Struttura» e «Collegamenti»
-sono uguali per ogni nota, e la sua rinomina riscrive solo i wikilink), il
-sistema operativo (finestre, dialoghi, WebView e installer: il selettore di
-cartella risponde il vault del banco). Restano al giro a mano sugli installer.
+Che cosa **non** prova: i pixel (senza baseline, si guardano: `bench:verify`), il motore vero
+(risponde il finto host; i suoi «Struttura» e «Collegamenti» sono uguali per ogni nota, la sua
+rinomina riscrive solo i wikilink, i valori del foglio sono a mano), il sistema operativo (finestre,
+dialoghi, WebView e installer, al giro a mano; il selettore dà il vault del banco).
 
 Varianti usate dalle prove di accettazione della Graph View e dei disegni
 grandi:
