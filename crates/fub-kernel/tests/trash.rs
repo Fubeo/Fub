@@ -1385,7 +1385,12 @@ impl VaultStorage for ReplacedAfterCensus {
         // La seconda domanda sull'identità della voce è quella dello sweep,
         // subito prima di distruggere: il censimento è finito, e l'altro
         // processo arriva adesso.
-        if path.as_str().contains(".trash/One")
+        // Su Windows il percorso ha `\` fra le parti: si guarda la cartella
+        // e il nome, non la stringa.
+        let in_trash = path.components().any(|part| part.as_str() == ".trash");
+        let is_one = path.file_name().is_some_and(|name| name.starts_with("One"));
+        if in_trash
+            && is_one
             && self
                 .replaced
                 .swap(true, std::sync::atomic::Ordering::SeqCst)
