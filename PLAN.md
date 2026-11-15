@@ -1316,7 +1316,7 @@ piena; un test della scheda della nota; `check-listeners` verde; le foto
 del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/note-peek.test.ts src/editors/text/profiles/markdown/link-card.dom.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15, da main
 
 ## T21a · I commenti nel formato: CriticMarkup nel provider Markdown
 
