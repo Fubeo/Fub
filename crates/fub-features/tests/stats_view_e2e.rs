@@ -185,3 +185,21 @@ fn a_text_file_without_a_format_is_still_counted() {
         vec!["Parole: 2 · Caratteri: 8".to_string()]
     );
 }
+
+/// Un commento CriticMarkup non cambia le parole di una nota: il pannello
+/// conta il passo, non i segni né la discussione. È il numero della banda
+/// («N parole») e di `fub-cli wordcount`.
+#[test]
+fn a_comment_does_not_change_the_counts() {
+    let vault = Vault::new();
+    std::fs::write(
+        vault.root.join("Con.md"),
+        "Un {==testo==}{>>@Anna 2026-11-08 17:40: tre parole qui<<} finale.\n",
+    )
+    .unwrap();
+    std::fs::write(vault.root.join("Senza.md"), "Un testo finale.\n").unwrap();
+    let ws = vault.open();
+    let with = texts(&render_open(&ws, "Con.md"));
+    assert_eq!(with, texts(&render_open(&ws, "Senza.md")));
+    assert_eq!(with, vec!["Parole: 3 · Caratteri: 17".to_string()]);
+}

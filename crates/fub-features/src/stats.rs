@@ -18,6 +18,7 @@
 use fub_abi::command::{ParamKind, ParamSpec};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
+use fub_abi::model::{custom_kind, Block, DocumentModel, Inline, Span};
 use fub_abi::rules::{media, text_policy};
 use fub_abi::session::{ContextMask, PaneMode, SelectionSet};
 use fub_abi::text::{Arg, StringCatalog, Text};
@@ -357,13 +358,106 @@ fn counted_text(host: &dyn ReadApi, doc: &DocId) -> Result<Option<String>, Plugi
         {
             Ok(Some(host.read_model(doc)?.text))
         }
-        Some(_) => host.read_document(doc).map(Some),
+        Some(_) => {
+            let source = host.read_document(doc)?;
+            // Un commento ha sempre un messaggio: senza `{>>` il sorgente si
+            // conta com'è, senza chiedere il modello.
+            if !source.contains("{>>") {
+                return Ok(Some(source));
+            }
+            let model = host.read_model(doc)?;
+            Ok(Some(without_comments(&source, &model)))
+        }
         None if media::mime_of(doc).is_some_and(is_binary_mime) => Ok(None),
         None => {
             let bytes = host.read_document_bytes(doc)?;
             Ok(text_policy::decode(&bytes).ok().map(str::to_owned))
         }
     }
+}
+
+/// Il sorgente di una nota in prosa senza ciò che dei commenti non è testo:
+/// i due segni del passo (`custom_kind::COMMENT_RANGE`, `{==` e `==}`) e ogni
+/// messaggio coi suoi segni (`custom_kind::COMMENT_MESSAGE`). Il passo resta,
+/// perché è testo della nota: `Un {==testo==}{>>@Anna: tre parole<<} finale.`
+/// si conta come `Un testo finale.`.
+///
+/// Gli span vengono dal modello dello stesso sorgente, in byte. La visita è
+/// quella di `search::schema::comment_texts`, che trova i messaggi: i blocchi
+/// col loro testo in riga, le enfasi e le etichette dei link, dove un commento
+/// può stare. Uno span che non cade su confini di carattere del sorgente (un
+/// modello letto da un'altra versione del file) si lascia stare: si conta
+/// qualche parola in più, mai un sorgente tagliato a metà.
+fn without_comments(source: &str, model: &DocumentModel) -> String {
+    fn inlines(nodes: &[Inline], out: &mut Vec<Span>) {
+        for node in nodes {
+            match node {
+                Inline::Custom {
+                    custom_kind, span, ..
+                } if custom_kind == custom_kind::COMMENT_RANGE
+                    || custom_kind == custom_kind::COMMENT_MESSAGE =>
+                {
+                    out.push(*span);
+                }
+                Inline::Emph(children)
+                | Inline::Strong(children)
+                | Inline::Superscript(children)
+                | Inline::Subscript(children)
+                | Inline::Strikethrough(children) => inlines(children, out),
+                Inline::Link {
+                    label: Some(label), ..
+                } => inlines(label, out),
+                _ => {}
+            }
+        }
+    }
+    fn blocks(nodes: &[Block], out: &mut Vec<Span>) {
+        for block in nodes {
+            match block {
+                Block::Heading { inlines: i, .. } | Block::Paragraph { inlines: i, .. } => {
+                    inlines(i, out);
+                }
+                Block::List { items, .. } => {
+                    for item in items {
+                        blocks(&item.blocks, out);
+                    }
+                }
+                Block::Quote { blocks: b, .. } | Block::Custom { blocks: b, .. } => blocks(b, out),
+                Block::Table { head, rows, .. } => {
+                    for row in head.iter().chain(rows) {
+                        for cell in &row.cells {
+                            inlines(&cell.inlines, out);
+                        }
+                    }
+                }
+                Block::CodeBlock { .. }
+                | Block::ThematicBreak { .. }
+                | Block::ReferenceDefinition { .. } => {}
+            }
+        }
+    }
+    let mut cuts = Vec::new();
+    blocks(&model.body, &mut cuts);
+    if cuts.is_empty() {
+        return source.to_string();
+    }
+    cuts.sort_by_key(|span| span.start);
+    let mut out = String::with_capacity(source.len());
+    let mut at = 0;
+    for span in cuts {
+        let fits = at <= span.start
+            && span.start <= span.end
+            && span.end <= source.len()
+            && source.is_char_boundary(span.start)
+            && source.is_char_boundary(span.end);
+        if !fits {
+            continue;
+        }
+        out.push_str(&source[at..span.start]);
+        at = span.end;
+    }
+    out.push_str(&source[at..]);
+    out
 }
 
 /// Un MIME che di sicuro non è testo da contare. Ciò che resta fuori (i
@@ -598,6 +692,64 @@ mod tests {
                 other => panic!("unexpected node: {other:?}"),
             })
             .collect()
+    }
+
+    /// Un commento non cambia il conteggio: i segni del passo e il messaggio
+    /// non sono testo della nota, il passo sì. Anche dentro un'enfasi.
+    #[test]
+    fn a_comment_counts_like_the_text_without_it() {
+        fn piece(kind: &str, from: usize, to: usize) -> Inline {
+            Inline::Custom {
+                custom_kind: kind.to_string(),
+                attrs: serde_json::Value::Null,
+                span: Span::new(from, to),
+            }
+        }
+        let source =
+            "Un {==testo==}{>>@Anna 2026-11-08 17:40: tre parole qui<<} *fi{==n==}{>>x<<}ale*.";
+        let open = source.find("{==").unwrap();
+        let close = source.find("==}").unwrap();
+        let message = source.find("{>>").unwrap();
+        let message_end = source.find("<<}").unwrap() + 3;
+        let inner_open = source.rfind("{==").unwrap();
+        let inner_close = source.rfind("==}").unwrap();
+        let inner_message = source.rfind("{>>").unwrap();
+        let inner_end = source.rfind("<<}").unwrap() + 3;
+        let mut model = DocumentModel::empty(DocId::new("nota.md"));
+        model.body = vec![Block::Paragraph {
+            inlines: vec![
+                Inline::Text("Un ".into()),
+                piece(custom_kind::COMMENT_RANGE, open, open + 3),
+                Inline::Text("testo".into()),
+                piece(custom_kind::COMMENT_RANGE, close, close + 3),
+                piece(custom_kind::COMMENT_MESSAGE, message, message_end),
+                Inline::Text(" ".into()),
+                Inline::Emph(vec![
+                    Inline::Text("fi".into()),
+                    piece(custom_kind::COMMENT_RANGE, inner_open, inner_open + 3),
+                    Inline::Text("n".into()),
+                    piece(custom_kind::COMMENT_RANGE, inner_close, inner_close + 3),
+                    piece(custom_kind::COMMENT_MESSAGE, inner_message, inner_end),
+                    Inline::Text("ale".into()),
+                ]),
+            ],
+            anchor: None,
+            span: Span::new(0, source.len()),
+        }];
+        let counted = without_comments(source, &model);
+        assert_eq!(counted, "Un testo *finale*.");
+        assert_eq!(count(&counted), count("Un testo *finale*."));
+        // Senza commenti nel modello il sorgente resta com'è.
+        let plain = DocumentModel::empty(DocId::new("nota.md"));
+        assert_eq!(without_comments(source, &plain), source);
+        // Uno span fuori dal sorgente non lo taglia.
+        let mut stale = DocumentModel::empty(DocId::new("nota.md"));
+        stale.body = vec![Block::Paragraph {
+            inlines: vec![piece(custom_kind::COMMENT_MESSAGE, 4, source.len() + 10)],
+            anchor: None,
+            span: Span::new(0, 1),
+        }];
+        assert_eq!(without_comments(source, &stale), source);
     }
 
     #[test]
