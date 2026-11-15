@@ -3144,12 +3144,17 @@ kbd,
   background: var(--danger-wash);
   color: var(--danger);
 }
-/* Sopra il velo rosso o giallo di un avviso l'accento arriva a 4,4:1:
-   l'azione prende l'inchiostro d'accento più forte (più scuro alla luce, più
-   chiaro al buio). Il passaggio resta com'è. */
+/* Sopra il velo rosso o giallo di un avviso l'azione prende l'inchiostro
+   d'accento più forte (più scuro alla luce, più chiaro al buio), che sul
+   velo si legge meglio dell'accento. Il passaggio resta com'è: il fondo
+   d'accento e il colore dell'accento. */
 .conflict-banner .link-button,
 .sheet-notice .link-button {
   color: var(--accent-soft);
+}
+.conflict-banner .link-button:hover,
+.sheet-notice .link-button:hover {
+  color: var(--accent);
 }
 
 /* **La striscia degli spazi**: un pozzetto come le schede dell'ispettore.
@@ -8428,9 +8433,11 @@ kbd,
 }
 /* I segni della griglia sulla carta del file prendono l'accento della carta
    (la regola è in `structure.css`, che ridichiara i ruoli); qui la cella in
-   modifica ha il fondo della carta, non quello dei pannelli, e il quadratino
-   del riempimento il bordo della carta. */
-.look-file .grid-cell-editor {
+   modifica e il testo di un oggetto hanno il fondo della carta, sotto
+   l'inchiostro della carta, non quello dei pannelli, e il quadratino del
+   riempimento il bordo della carta. */
+.look-file .grid-cell-editor,
+.look-file .grid-object-text-editor {
   background: var(--doc-bg);
 }
 .look-file .grid-fill-handle {

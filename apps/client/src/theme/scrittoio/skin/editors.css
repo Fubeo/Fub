@@ -812,9 +812,11 @@
 }
 /* I segni della griglia sulla carta del file prendono l'accento della carta
    (la regola è in `structure.css`, che ridichiara i ruoli); qui la cella in
-   modifica ha il fondo della carta, non quello dei pannelli, e il quadratino
-   del riempimento il bordo della carta. */
-.look-file .grid-cell-editor {
+   modifica e il testo di un oggetto hanno il fondo della carta, sotto
+   l'inchiostro della carta, non quello dei pannelli, e il quadratino del
+   riempimento il bordo della carta. */
+.look-file .grid-cell-editor,
+.look-file .grid-object-text-editor {
   background: var(--doc-bg);
 }
 .look-file .grid-fill-handle {
