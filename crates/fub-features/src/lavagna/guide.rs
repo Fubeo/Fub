@@ -96,6 +96,7 @@ fn kind_name(kind: FieldKind) -> &'static str {
         FieldKind::Id => "id",
         FieldKind::Ids => "ids",
         FieldKind::Number => "number",
+        FieldKind::Float => "float",
         FieldKind::Text => "text",
         FieldKind::Bool => "bool",
         FieldKind::Enum(_) => "enum",

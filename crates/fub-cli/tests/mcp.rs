@@ -1095,9 +1095,11 @@ fn le_lavagne_si_leggono_e_si_guidano() {
             "insert",
             "layout",
             "move",
+            "move_strokes",
             "remove",
             "reorder",
             "resize",
+            "restyle_strokes",
             "reverse",
             "set"
         ]

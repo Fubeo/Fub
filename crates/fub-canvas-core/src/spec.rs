@@ -58,6 +58,8 @@ pub enum FieldKind {
     Ids,
     /// Un intero: anche `1.0` o `1e2` sono interi, `1.5` no.
     Number,
+    /// Un numero qualunque, anche con la virgola.
+    Float,
     /// Una stringa.
     Text,
     /// `true` o `false`.
@@ -781,6 +783,70 @@ pub const OPS: &[OpSpec] = &[
             r#"{"op":"draw","on":"board","shape":{"kind":"arrow","x1":330,"y1":80,"x2":390,"y2":80},"size":3}"#,
         ],
     },
+    OpSpec {
+        name: "move_strokes",
+        summary_it: "Sposta i tratti `ids` del livello `layer` di `dx`, `dy`; con `to` li porta in un altro livello, con i punti nelle unità della nuova ancora. È il Lazo della GUI.",
+        fields: &[
+            required(
+                "layer",
+                FieldKind::Layer,
+                "Il livello: `\"board\"` per i tratti liberi, `{\"node\": id}` per quelli di una scheda.",
+            ),
+            required("ids", FieldKind::Ids, "Gli id dei tratti da spostare."),
+            required(
+                "dx",
+                FieldKind::Float,
+                "Lo spostamento in orizzontale, in unità della lavagna; anche con la virgola.",
+            ),
+            required(
+                "dy",
+                FieldKind::Float,
+                "Lo spostamento in verticale, come `dx`.",
+            ),
+            optional(
+                "to",
+                FieldKind::Layer,
+                "Il livello dove vanno i tratti, se non è `layer`. Un tratto il cui id è già preso lì prende un id nuovo, che sta fra quelli creati.",
+            ),
+            optional(
+                "aspect",
+                FieldKind::Float,
+                "La proporzione (larghezza su altezza) del contenuto che la scheda di `layer` mostra, se chi scrive la sa; non si scrive nel file.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"move_strokes","layer":"board","ids":["s1"],"dx":40,"dy":-16}"#,
+            r#"{"op":"move_strokes","layer":"board","ids":["s1"],"dx":0,"dy":0,"to":{"node":"t1"}}"#,
+        ],
+    },
+    OpSpec {
+        name: "restyle_strokes",
+        summary_it: "Cambia il colore e lo spessore del pennello dei tratti `ids` del livello `layer`. Almeno uno dei due.",
+        fields: &[
+            required(
+                "layer",
+                FieldKind::Layer,
+                "Il livello: `\"board\"` per i tratti liberi, `{\"node\": id}` per quelli di una scheda.",
+            ),
+            required("ids", FieldKind::Ids, "Gli id dei tratti da cambiare."),
+            optional(
+                "color",
+                FieldKind::Text,
+                "Il colore nuovo, `#rrggbb`.",
+            ),
+            optional(
+                "size",
+                FieldKind::Float,
+                "Lo spessore nuovo del pennello, in unità della lavagna, maggiore di zero.",
+            ),
+            optional(
+                "aspect",
+                FieldKind::Float,
+                "Come in `move_strokes`: la proporzione del contenuto della scheda di `layer`, se si sa.",
+            ),
+        ],
+        examples: &[r##"{"op":"restyle_strokes","layer":"board","ids":["s1"],"color":"#d55e00","size":4}"##],
+    },
 ];
 
 /// La lavagna su cui girano gli esempi di [`OPS`]: due schede di testo, una
@@ -975,6 +1041,7 @@ fn check_field(
         }
         FieldKind::Bool => wrong_unless(value.is_boolean(), index, path, problems),
         FieldKind::Number => wrong_unless(is_integer(value), index, path, problems),
+        FieldKind::Float => wrong_unless(value.is_number(), index, path, problems),
         FieldKind::Node | FieldKind::Edge | FieldKind::Object => {
             wrong_unless(value.is_object(), index, path, problems);
         }
@@ -1529,6 +1596,7 @@ fn field_schema(field: &FieldSpec) -> Value {
         FieldKind::Id | FieldKind::Text => json!({ "type": "string" }),
         FieldKind::Ids => json!({ "type": "array", "items": { "type": "string" } }),
         FieldKind::Number => json!({ "type": "integer" }),
+        FieldKind::Float => json!({ "type": "number" }),
         FieldKind::Bool => json!({ "type": "boolean" }),
         FieldKind::Enum(values) => json!({ "type": "string", "enum": values }),
         FieldKind::Node | FieldKind::Edge | FieldKind::Object | FieldKind::Patch => {

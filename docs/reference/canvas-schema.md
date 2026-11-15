@@ -20,7 +20,7 @@ e coincide con serde campo per campo (`tests/spec.rs`). Un'operazione nuova
 entra in `OPS` nello stesso task.
 
 I tipi dei campi sono `id`, `ids` (una lista di id), `number` (un intero: anche
-`1.0` e `1e2` lo sono, `1.5` no), `text`, `bool`, `enum` (una stringa presa da
+`1.0` e `1e2` lo sono, `1.5` no), `float` (un numero, anche con la virgola), `text`, `bool`, `enum` (una stringa presa da
 un elenco), `node` (una scheda), `edge` (un arco), `color` (un nome, `"1"`…`"6"`
 o `#rrggbb`, o `null`), `sides` (`"auto"` o `{from, to}`), `pair` (due numeri,
 `[w, h]`), `object`, `patch` (i campi nuovi di `set`, col suo `color`), `points`
