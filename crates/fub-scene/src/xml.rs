@@ -296,6 +296,43 @@ impl Document<'_> {
 /// `desc`: è la lettura dei file oltre il limite di §11, che indicizza solo
 /// titolo e riepilogo.
 pub(crate) fn parse(source: &str, head_only: bool) -> Result<Document<'_>> {
+    parse_within(source, head_only, usize::MAX).map_err(|stop| match stop {
+        Stop::Xml(error) => error,
+        Stop::Nodes { .. } => unreachable!("nessun documento ha usize::MAX nodi"),
+    })
+}
+
+/// Perché una lettura con un tetto ai nodi si è fermata.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Stop {
+    /// Il documento non è XML ben formato.
+    Xml(XmlError),
+    /// Il documento ha più nodi del tetto: `offset` è il byte dove comincia
+    /// il primo di troppo.
+    Nodes { offset: usize },
+}
+
+impl From<XmlError> for Stop {
+    fn from(error: XmlError) -> Self {
+        Stop::Xml(error)
+    }
+}
+
+/// Legge tutto `source`, ma si ferma appena l'arena supera `max_nodes` nodi
+/// (elementi, testi, commenti, istruzioni): ogni nodo costa memoria oltre ai
+/// suoi byte, e un file di elementi vuoti ne chiede molta più di quanto pesa.
+pub(crate) fn parse_capped(
+    source: &str,
+    max_nodes: usize,
+) -> std::result::Result<Document<'_>, Stop> {
+    parse_within(source, false, max_nodes)
+}
+
+fn parse_within(
+    source: &str,
+    head_only: bool,
+    max_nodes: usize,
+) -> std::result::Result<Document<'_>, Stop> {
     let bom = bom_len(source);
     let mut reader = Reader::from_str(source);
     let config = reader.config_mut();
@@ -316,7 +353,11 @@ pub(crate) fn parse(source: &str, head_only: bool) -> Result<Document<'_>> {
             Ok(event) => event,
             Err(error) => {
                 let offset = bom + reader.error_position() as usize;
-                return fail(offset, kind_of(&error));
+                return Err(XmlError {
+                    offset,
+                    kind: kind_of(&error),
+                }
+                .into());
             }
         };
         let start = position;
@@ -343,8 +384,11 @@ pub(crate) fn parse(source: &str, head_only: bool) -> Result<Document<'_>> {
             Event::CData(_) => parser.cdata(start, end)?,
             Event::DocType(_) => parser.doctype(start, end)?,
         }
+        if parser.nodes.len() > max_nodes {
+            return Err(Stop::Nodes { offset: start });
+        }
     }
-    parser.finish(stop)
+    Ok(parser.finish(stop)?)
 }
 
 /// La forma tipizzata di un errore di `quick-xml`.
