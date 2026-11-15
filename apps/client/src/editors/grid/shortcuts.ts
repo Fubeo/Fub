@@ -112,7 +112,10 @@ export function shortcutDialog(event: KeyboardEvent, context: ShortcutContext): 
 /// Il comando della scorciatoia di `event`, o `null`.
 export function shortcutCommand(event: KeyboardEvent, context: ShortcutContext): ShortcutCommand | null {
   const control = event.ctrlKey || event.metaKey;
-  if (event.altKey && !control && event.code === "Equal" && !event.shiftKey) return plain("formulas.autoSum");
+  // Alt+= conta il carattere, con Maiusc o senza: su una tastiera italiana
+  // «=» è Maiusc+0, e il tasto «Equal» lì scrive «ì». Su macOS Opzione lo
+  // cambia in «≠», che vale lo stesso.
+  if (event.altKey && !control && (event.key === "=" || event.key === "≠")) return plain("formulas.autoSum");
   if (!control || event.altKey) return null;
   // Ctrl+«+» e Ctrl+«-»: in Excel inseriscono e tolgono righe o colonne
   // intere senza chiedere niente; su un intervallo chiedono come.
