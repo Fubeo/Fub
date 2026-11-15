@@ -55,6 +55,21 @@ const NOT_AT_STARTUP: readonly { readonly what: string; readonly chunk?: RegExp;
   { what: "editors/grid", module: /\/src\/editors\/grid\// },
 ];
 
+/// I chunk che la resa delle note (`markdown-render`) e il renderer delle
+/// viste (`ui-views`) possono importare: i runtime e le grammatiche sotto di
+/// loro, i chunk condivisi che Rollup nomina dal primo modulo (`icons`,
+/// `strings`, `menu`) e loro due.
+const UNDER_THE_RENDER: ReadonlySet<string> = new Set([
+  "editor-runtime",
+  "markdown-grammar",
+  "text-engine",
+  "icons",
+  "strings",
+  "menu",
+  "markdown-render",
+  "ui-views",
+]);
+
 /// Un id di modulo detto a partire dal client: `src/...` o `node_modules/...`.
 function shortId(id: string): string {
   const clean = id.replace(/\?.*$/, "");
@@ -167,8 +182,8 @@ export default defineConfig({
         }
         reportStartup(this, bundle);
         // Vero se dal chunk `from` si arriva, per import statici, a un chunk
-        // per cui `target` è vero.
-        const reaches = (from: string, target: (chunk: Rollup.OutputChunk) => boolean): boolean => {
+        // che si chiama `name`.
+        const reaches = (from: string, name: string): boolean => {
           const seen = new Set<string>();
           const walk = (fileName: string): boolean => {
             const chunk = bundle[fileName];
@@ -176,14 +191,11 @@ export default defineConfig({
             seen.add(fileName);
             return chunk.imports.some((dependency) => {
               const next = bundle[dependency];
-              return (next?.type === "chunk" && target(next)) || walk(dependency);
+              return (next?.type === "chunk" && next.name === name) || walk(dependency);
             });
           };
           return walk(from);
         };
-        // Il chunk del ponte dei documenti, qualunque nome gli dia Rollup.
-        const bridge = (chunk: Rollup.OutputChunk): boolean =>
-          Object.keys(chunk.modules).some((id) => /\/src\/state\/document-bridge\.ts$/.test(id));
         for (const chunk of Object.values(bundle)) {
           if (chunk.type !== "chunk") continue;
           const modules = Object.keys(chunk.modules);
@@ -199,15 +211,23 @@ export default defineConfig({
           // nessuno di loro la importa, nemmeno attraverso un altro. Un ciclo
           // fra chunk si carica, ma l'ordine in cui i moduli partono non è più
           // quello del codice.
-          if (chunk.name.startsWith("drawing-") && reaches(chunk.fileName, (next) => next.name === "surface")) {
+          if (chunk.name.startsWith("drawing-") && reaches(chunk.fileName, "surface")) {
             this.error(`${chunk.fileName}: un chunk dei disegni non importa la superficie`);
           }
           // La resa delle note e il renderer delle viste stanno sotto il
-          // ponte dei documenti, che li importa: se uno dei due lo importasse,
-          // anche attraverso un altro, un modulo nuovo che importano è rimasto
-          // nel ponte e va aggiunto alla sua regola in `manualChunks`.
-          if ((chunk.name === "markdown-render" || chunk.name === "ui-views") && reaches(chunk.fileName, bridge)) {
-            this.error(`${chunk.fileName}: ${chunk.name} non importa il ponte dei documenti; un modulo che importa sta ancora nel ponte`);
+          // ponte dei documenti e importano soltanto i chunk sotto di loro.
+          // Un chunk nuovo fra i loro import vuol dire un modulo che importano
+          // e che la loro regola in `manualChunks` non nomina: Rollup lo ha
+          // estratto a parte (all'avvio, un file in più) o lo ha lasciato nel
+          // ponte (un ciclo). Va aggiunto alla regola. Se invece un chunk
+          // condiviso ha soltanto cambiato nome, va cambiato qui.
+          if (chunk.name === "markdown-render" || chunk.name === "ui-views") {
+            const strays = chunk.imports
+              .map((file) => bundle[file])
+              .filter((next): next is Rollup.OutputChunk => next?.type === "chunk" && !UNDER_THE_RENDER.has(next.name));
+            if (strays.length) {
+              this.error(`${chunk.fileName}: ${chunk.name} importa ${strays.map((next) => next.fileName).join(", ")}, fuori dai chunk attesi (${[...UNDER_THE_RENDER].join(", ")}); un modulo che importa manca dalla sua regola in \`manualChunks\``);
+            }
           }
           const limit = parser ? MERMAID_PARSER_BUDGET : CHUNK_BUDGET;
           const bytes = Buffer.byteLength(chunk.code, "utf8");
@@ -407,8 +427,9 @@ export default defineConfig({
           // L'elenco è chiuso verso il basso: ogni modulo che questi importano
           // e che starebbe nel ponte sta qui. Uno lasciato fuori, con
           // `onlyExplicitManualChunks`, finirebbe in un chunk estratto a parte
-          // o farebbe un ciclo fra questo chunk e il ponte; il ciclo lo ferma
-          // il plugin `bundle-size-budgets`.
+          // o farebbe un ciclo fra questo chunk e il ponte: il plugin
+          // `bundle-size-budgets` ferma la build in tutti e due i casi
+          // (`UNDER_THE_RENDER`).
           if (/\/src\/editors\/text\/profiles\/markdown\/(render|render-inline|strings|grammar|link-syntax|details|toc|callout-head)\.ts$|\/src\/rules\/syntax(\.generated)?\.ts$|\/src\/ui\/sanitize\.ts$/.test(id)) {
             return "markdown-render";
           }
