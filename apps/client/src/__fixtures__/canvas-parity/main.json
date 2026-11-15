@@ -47,8 +47,8 @@
       "gui": [{ "gesture": "drop-files" }],
       "writes": "file",
       "state": "code",
-      "ops": [{ "op": "add_card", "file": "Corsi/a.md" }, { "op": "add_card", "file": "Corsi/b.md" }],
-      "note": "I byte di un file che viene da fuori entrano con il deposito degli allegati: eccezione external-bytes. Il codice mette in fila file già nel vault."
+      "ops": [{ "op": "add_card", "id": "a", "file": "Corsi/a.md" }, { "op": "add_card", "id": "b", "file": "Corsi/b.md" }, { "op": "layout", "ids": ["a", "b"], "kind": "grid" }],
+      "note": "I byte di un file che viene da fuori entrano con il deposito degli allegati: eccezione external-bytes. Il codice mette in fila file già nel vault: un `add_card` per file con il suo `id`, poi `layout` a griglia nel punto del rilascio (T24), come N6.card.drop_many."
     },
     {
       "id": "main.card.paste_text",
