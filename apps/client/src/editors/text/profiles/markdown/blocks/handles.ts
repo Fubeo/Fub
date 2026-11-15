@@ -28,11 +28,11 @@ import { colorsAt, CONTENT_COLORS, lineText, setContentColor, type ColorKind, ty
 import { blockAnchor, blockLink } from "./anchor";
 import { columnsRun, dropAsColumn, intoColumns } from "./columns";
 import { blockModel, blockStartingAt, innermostAt, kindName, type Block } from "./model";
-import { type BlockRun, isListItem, moveRun, moveSiblings, nestRun, outdentRun, pinnedFirst, siblingsOf } from "./move";
+import { type BlockRun, isListItem, moveRun, moveSiblings, nestRun, outdentRun, pinnedFirst, sectionAt, siblingsOf } from "./move";
 import { blockSelection, cursorBlock, deleteRun, duplicateRun, runOfSelection, selectBlocks, setBlockSelection } from "./selection";
 import { canTransform, targetOf, transformTo, type TransformTarget, unwrap } from "./transform";
 import {
-  announceGesture, dragPose, type DragPose, LIFT_SCALE, ownsRow, partedShift, type PartedRun, samePose, setDragPose,
+  announceGesture, dragPose, type DragPose, isPageHeader, LIFT_SCALE, ownsRow, partedShift, type PartedRun, samePose, setDragPose,
 } from "./motion";
 import {
   besideSide, heldHeight, type Lean, leanOf, magnet, NEST_PX, neighbourAt, nextPlace, type PlaceGeometry, shiftOf,
@@ -235,6 +235,15 @@ interface Hold {
   /// blocco: un widget di blocco col margine (la testata della pagina) non
   /// entra nella mappa delle altezze. Letto alla presa, vale per ogni misura.
   readonly skew: number;
+  /// La scala della vista (una scheda sulla lavagna con lo zoom): i px dello
+  /// schermo diviso questa danno i px di CodeMirror.
+  readonly sx: number;
+  readonly sy: number;
+  /// Dove sta ogni fratello fuori dalla tratta fra i vicini di `geo`.
+  readonly otherIndex: ReadonlyMap<number, number>;
+  /// Il posto per cui la posa delle righe è già scritta: a posto fermo, un
+  /// movimento del puntatore non la ricalcola.
+  partedKey: string;
   readonly column: { readonly left: number; readonly right: number };
   /// Il titolo della sezione d'origine, e l'ultima cosa annunciata.
   readonly section: string | null;
@@ -294,6 +303,11 @@ const LIFT_EASING = "cubic-bezier(0.3, 1.45, 0.5, 1)";
 /// I vicini scivolano in 300 ms, superando l'arrivo di un paio di pixel.
 const PART_MS = 300;
 const PART_EASING = "cubic-bezier(0.22, 1.18, 0.36, 1)";
+/// Il posto entra in dissolvenza in 200 ms; l'etichetta della sezione
+/// cresce in 180 ms con un rimbalzo.
+const SLOT_IN_MS = 200;
+const TAG_IN_MS = 180;
+const TAG_IN_EASING = "cubic-bezier(0.3, 1.4, 0.5, 1)";
 /// Il margine fra il blocco in mano e i bordi della parte visibile (px).
 const KEEP_IN = 4;
 /// Il rientro della carta attorno alle righe del blocco in mano (px).
@@ -324,23 +338,6 @@ function textTop(view: EditorView, pos: number): number {
   return line.top;
 }
 
-/// Il titolo di un blocco titolo, senza i segni.
-function headingText(state: EditorState, block: Block): string {
-  return state.doc.lineAt(block.from).text.replace(/^\s*#{1,6}\s+/, "").replace(/\s+#+\s*$/, "").trim();
-}
-
-/// Il titolo della sezione in cui cade `pos`: l'ultimo titolo prima di lui,
-/// saltando la tratta in mano. `null` prima del primo titolo.
-function sectionAt(state: EditorState, blocks: readonly Block[], pos: number, skip: { from: number; to: number }): string | null {
-  let found: string | null = null;
-  for (const block of blocks) {
-    if (block.from >= pos) break;
-    if (block.kind !== "heading" || (block.from >= skip.from && block.from <= skip.to)) continue;
-    found = headingText(state, block);
-  }
-  return found;
-}
-
 class HandlesView {
   readonly life = openLifetime();
   readonly root = document.createElement("div");
@@ -356,6 +353,9 @@ class HandlesView {
   drag: Drag | null = null;
   /// Il clic che segue un trascinamento non apre il menu.
   swallowClick = false;
+  /// I widget di blocco (una tabella, una scheda) messi in posa a mano: le
+  /// decorazioni di riga della posa non li raggiungono.
+  readonly posed = new Set<HTMLElement>();
   readonly hoverable: boolean;
 
   constructor(readonly view: EditorView) {
@@ -365,7 +365,7 @@ class HandlesView {
     this.root.hidden = true;
     this.add.type = "button";
     this.add.className = "cm-fub-block-add";
-    // Il «+» è disegnato, come i puntini della maniglia: non dipende dal
+    // Il «+» è disegnato, come gli occhi della maniglia: non dipende dal
     // carattere del documento, che lo farebbe piccolo o sottile.
     const plus = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     plus.setAttribute("class", "cm-fub-block-add-plus");
@@ -432,6 +432,8 @@ class HandlesView {
     life.listen(this.root, "contextmenu", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      // La pressione lunga del tocco è la presa, non il menu.
+      if (this.drag) return;
       if (event.target instanceof Node && this.grip.contains(event.target)) {
         const pointer = event.button === 2 && (event.clientX !== 0 || event.clientY !== 0);
         this.openMenu(pointer, pointer ? event : null);
@@ -443,13 +445,18 @@ class HandlesView {
 
   update(update: ViewUpdate): void {
     const drag = this.drag;
-    if (drag?.moving) {
+    if (drag) {
       // Il testo cambiato da fuori durante il gesto (un altro riquadro, il
-      // disco): il gesto si annulla e il testo nuovo vince. Non si può
-      // spedire una transazione dentro un aggiornamento: appena dopo.
+      // disco), anche prima che il blocco sia preso: il gesto si annulla e il
+      // testo nuovo vince. Non si può spedire una transazione dentro un
+      // aggiornamento: appena dopo.
       if (update.docChanged) queueMicrotask(() => { if (this.drag === drag) this.endDrag(false); });
       // La parte montata da CodeMirror è cambiata: si rimisura.
       else if (drag.hold && (update.viewportChanged || update.geometryChanged)) this.remeasure(drag);
+      // CodeMirror può aver rifatto i widget: la posa si riscrive a DOM nuovo.
+      if (drag.hold) {
+        this.view.requestMeasure({ key: "cm-fub-drag-widgets", read: () => null, write: () => this.poseWidgets() });
+      }
     }
     if (update.docChanged) {
       const map = (key: BlockKey | null) => (key ? { from: update.changes.mapPos(key.from, 1), depth: key.depth } : null);
@@ -833,8 +840,8 @@ class HandlesView {
   }
 
   /// Da coordinate del documento a quelle dello scorrimento.
-  docBase(scroller: { top: number }): number {
-    return this.view.documentTop - scroller.top + this.view.scrollDOM.scrollTop;
+  docBase(scroller: { top: number }, sy: number): number {
+    return (this.view.documentTop - scroller.top) / sy + this.view.scrollDOM.scrollTop;
   }
 
   /// La parte montata è cambiata: le misure si rifanno e la posa si ridice.
@@ -844,13 +851,18 @@ class HandlesView {
       read: () => {
         const hold = drag.hold;
         if (!hold || this.drag !== drag) return null;
-        return this.measure(hold.run, hold.sibs, this.docBase(hold.scroller) + hold.skew);
+        return this.measure(hold.run, hold.sibs, this.docBase(hold.scroller, hold.sy) + hold.skew);
       },
       write: (geo) => {
         const hold = drag.hold;
         if (!geo || !hold || this.drag !== drag) return;
         hold.geo = { ...geo, top: hold.geo.top };
-        this.layout(drag, false);
+        hold.partedKey = "";
+        // Siamo dentro l'aggiornamento di CodeMirror, che non accetta una
+        // transazione: la posa nuova delle righe si scrive appena dopo.
+        queueMicrotask(() => {
+          if (this.drag === drag && drag.hold === hold) this.layout(drag, false);
+        });
       },
     });
   }
@@ -875,28 +887,45 @@ class HandlesView {
     const box = scrollDOM.getBoundingClientRect();
     const scroller = { top: box.top, left: box.left };
     const content = view.contentDOM.getBoundingClientRect();
-    const rects = rows.map((row) => row.getBoundingClientRect());
+    // Una vista scalata (una scheda sulla lavagna con lo zoom): i rettangoli
+    // sono px dello schermo, le altezze di CodeMirror e gli stili px suoi.
+    const sx = view.scaleX || 1;
+    const sy = view.scaleY || 1;
+    // Una riga col suo primo figlio: una scheda o una tabella più larga
+    // della colonna resta intera in mano.
+    const rects = rows.map((row) => {
+      const rect = row.getBoundingClientRect();
+      const kid = row.firstElementChild?.getBoundingClientRect();
+      if (!kid || kid.width <= 0) return rect;
+      return { top: rect.top, height: rect.height, left: Math.min(rect.left, kid.left), right: Math.max(rect.right, kid.right) };
+    });
     const rowsLeft = Math.min(...rects.map((rect) => rect.left));
-    const width = Math.max(...rects.map((rect) => rect.right)) - rowsLeft;
+    const width = (Math.max(...rects.map((rect) => rect.right)) - rowsLeft) / sx;
     const sibs = siblingsOf(blocks, run.first);
-    const toScrollX = (x: number) => x - scroller.left + scrollDOM.scrollLeft;
-    const toScrollY = (y: number) => y - scroller.top + scrollDOM.scrollTop;
+    const toScrollX = (x: number) => (x - scroller.left) / sx + scrollDOM.scrollLeft;
+    const toScrollY = (y: number) => (y - scroller.top) / sy + scrollDOM.scrollTop;
     // La prima riga del blocco dice dove sta davvero: le altezze di
-    // CodeMirror si correggono di quanto sbagliano lì.
-    const base = this.docBase(scroller);
+    // CodeMirror si correggono di quanto sbagliano lì (la testata della
+    // pagina ha un margine che la mappa delle altezze non conosce). La riga
+    // si legge a riposo, come per le maniglie: un moto in corsa non conta.
+    const base = this.docBase(scroller, sy);
     const first = this.measure(run, sibs, base);
-    const skew = rects[0]!.height > 0 ? toScrollY(rects[0]!.top) - first.top : 0;
+    const moving = liveState(rows[0]!)?.pose.y ?? 0;
+    const skew = rects[0]!.height > 0 ? toScrollY(rects[0]!.top) - moving - first.top : 0;
     const geo = Math.abs(skew) < 0.5 ? first : this.measure(run, sibs, base + skew);
     const held = heldHeight(geo.height);
     const left = toScrollX(rowsLeft) - CARD_PAD;
     // La maniglia resta sotto il puntatore: il punto della presa, dentro il
     // blocco compatto.
     const grab = Math.max(12, Math.min(held - 12, toScrollY(drag.startY) - geo.top));
-    const gripBox = this.grip.getBoundingClientRect();
+    const gripRect = this.grip.getBoundingClientRect();
+    const gripBox = { left: gripRect.left, width: gripRect.width / sx, height: gripRect.height / sy };
 
     const el = document.createElement("div");
     el.className = "cm-fub-block-lift";
     el.setAttribute("aria-hidden", "true");
+    // Una copia: niente fuoco dentro, e nessun id doppio.
+    el.setAttribute("inert", "");
     el.style.left = `${left}px`;
     el.style.top = `${geo.top}px`;
     el.style.width = `${width + 2 * CARD_PAD}px`;
@@ -919,7 +948,18 @@ class HandlesView {
       copy.style.paddingBottom = style.paddingBottom;
       inner.append(copy);
     }
+    for (const node of [inner, ...Array.from(inner.querySelectorAll("[id]"))]) node.removeAttribute("id");
     card.append(inner);
+    const reduced = motionLevel() === "reduced";
+    // Un blocco alto si fa compatto davanti agli occhi: la sua copia intera
+    // sta sopra la carta e svanisce mentre i vicini salgono, e l'ombra si
+    // accorcia con lei. Soltanto `opacity` e `transform`.
+    const tall = geo.height > held && !reduced ? document.createElement("div") : null;
+    if (tall) {
+      tall.className = "cm-fub-block-lift-full";
+      tall.style.height = `${geo.height}px`;
+      tall.append(inner.cloneNode(true));
+    }
     const grip = document.createElement("span");
     grip.className = "cm-fub-block-lift-grip";
     const eyes = iconEl("grip-eyes-held");
@@ -941,7 +981,7 @@ class HandlesView {
     to.className = "cm-fub-block-lift-to";
     to.hidden = true;
     tags.append(to);
-    el.append(shade, card, grip, tags);
+    el.append(shade, card, ...(tall ? [tall] : []), grip, tags);
 
     const slot = document.createElement("div");
     slot.className = "cm-fub-block-slot";
@@ -955,22 +995,37 @@ class HandlesView {
       slot.remove();
     });
 
-    const sibSet = new Set(sibs.filter((i) => i < run.first || i > run.last));
+    const others = sibs.filter((i) => i < run.first || i > run.last);
     drag.hold = {
-      run, sibs, others: sibs.filter((i) => sibSet.has(i)), geo, place: geo.origin, lean: "none", beside: null,
+      run, sibs, others, geo, place: geo.origin, lean: "none", beside: null,
       el, card, shade, to, slot, left, held, grab, scroller,
       column: { left: content.left, right: content.right },
       section: sectionAt(state, blocks, span.from, span), said: "",
       skew: Math.abs(skew) < 0.5 ? 0 : skew,
+      sx, sy, otherIndex: new Map(others.map((i, k) => [i, k])), partedKey: "",
       tx: 0, ty: 0, cx: 0, cy: 0, tilt: 0,
     };
-    this.layout(drag, false);
-    // La presa: cresce dell'1,5% e l'ombra si forma.
+    // I vicini sotto un blocco alto salgono scivolando, non a scatto.
+    this.layout(drag, true);
+    // Il posto entra in dissolvenza.
+    animate(slot, { from: { opacity: 0 }, duration: SLOT_IN_MS, easing: "ease-out" });
+    // La presa: cresce dell'1,5% (la scala a riposo sta nel CSS) e l'ombra si
+    // forma.
     animate(card, { from: { scale: 1 / LIFT_SCALE }, duration: LIFT_MS, easing: LIFT_EASING });
-    animate(shade, { from: { scale: 1 / LIFT_SCALE, opacity: 0 }, duration: LIFT_MS, easing: LIFT_EASING });
+    if (tall) {
+      const grow = geo.height / held;
+      animate(shade, {
+        from: { scaleX: 1 / LIFT_SCALE, scaleY: grow / LIFT_SCALE, y: ((grow - 1) * held) / 2, opacity: 0 },
+        duration: PART_MS,
+        easing: PART_EASING,
+      });
+      void animate(tall, { from: { opacity: 1 }, to: { opacity: 0 }, duration: SLOT_IN_MS, easing: "ease-out" }).finished.then(() => tall.remove());
+    } else {
+      animate(shade, { from: { scale: 1 / LIFT_SCALE, opacity: 0 }, duration: LIFT_MS, easing: LIFT_EASING });
+    }
     // In mano segue il puntatore in due o tre fotogrammi; col moto ridotto
-    // va dove deve senza volo.
-    drag.life.add(onFrame(() => this.follow(drag)));
+    // va dove deve senza volo, e il ciclo dei fotogrammi non si accende.
+    if (!reduced) drag.life.add(onFrame(() => this.follow(drag)));
   }
 
   /// Dove cadrebbe il blocco col puntatore dov'è: il posto fra i vicini, il
@@ -984,8 +1039,8 @@ class HandlesView {
     const blocks = state.field(blockModel).blocks;
     if (indexOf(blocks, drag.key) < 0) return this.endDrag(false);
     const scrollDOM = view.scrollDOM;
-    const pointerY = drag.y - hold.scroller.top + scrollDOM.scrollTop;
-    const dx = drag.x - drag.startX;
+    const pointerY = (drag.y - hold.scroller.top) / hold.sy + scrollDOM.scrollTop;
+    const dx = (drag.x - drag.startX) / hold.sx;
     // Il blocco in mano non esce mai dalla parte visibile.
     // (Una vista senza altezza, mai impaginata, non ha bordi da rispettare.)
     const lo = scrollDOM.scrollTop + KEEP_IN;
@@ -999,7 +1054,7 @@ class HandlesView {
     const n = hold.others.length;
     // Sull'ultimo ottavo a destra o a sinistra di un vicino: «Accanto».
     hold.beside = null;
-    const side = geo.fixed ? null : besideSide(drag.x, dx, hold.column.left, hold.column.right, list);
+    const side = geo.fixed ? null : besideSide(drag.x, drag.startX, hold.column.left, hold.column.right, list);
     if (side) {
       const k = neighbourAt(geo, geo.origin, pointerY);
       const target = k >= 0 ? hold.others[k]! : -1;
@@ -1050,21 +1105,26 @@ class HandlesView {
     }
     // «Accanto»: una barra verticale sul bordo del vicino.
     if (hold.beside) {
-      const k = hold.others.indexOf(hold.beside.target);
+      const k = hold.otherIndex.get(hold.beside.target)!;
       const t = shownTop(geo, k, geo.origin);
       const h = geo.neighbours[k]!.height;
       const x = hold.beside.side === "right" ? hold.column.right : hold.column.left;
       this.drop.hidden = false;
       this.drop.dataset.beside = "true";
       this.drop.style.top = `${t}px`;
-      this.drop.style.left = `${x - hold.scroller.left + view.scrollDOM.scrollLeft - 1}px`;
+      this.drop.style.left = `${(x - hold.scroller.left) / hold.sx + view.scrollDOM.scrollLeft - 1}px`;
       this.drop.style.width = "2px";
       this.drop.style.height = `${Math.max(16, h)}px`;
     } else {
       this.drop.hidden = true;
       delete this.drop.dataset.beside;
     }
-    this.part(this.partedFor(hold), slide);
+    // La posa delle righe dipende soltanto dal posto: a posto fermo resta.
+    const key = hold.beside ? "beside" : String(place);
+    if (key !== hold.partedKey) {
+      hold.partedKey = key;
+      this.part(this.partedFor(hold), slide);
+    }
     // L'etichetta, soltanto quando serve, e l'annuncio a ogni cambio.
     const pos = place < n ? blocks[hold.others[place]!]!.from : n > 0 ? blocks[hold.others[n - 1]!]!.to + 1 : blocks[hold.run.first]!.from;
     const span = { from: blocks[hold.run.first]!.from, to: blocks[hold.run.last]!.to };
@@ -1073,8 +1133,10 @@ class HandlesView {
     const label = moved && section !== hold.section
       ? (section === null ? liveStrings.t("blocks.drag.top") : liveStrings.t("blocks.drag.in", { name: section }))
       : "";
+    const appears = hold.to.hidden && label !== "";
     hold.to.hidden = label === "";
     hold.to.textContent = label;
+    if (appears) animate(hold.to, { from: { scale: 0.85, opacity: 0 }, duration: TAG_IN_MS, easing: TAG_IN_EASING });
     this.announce(hold, blocks, section);
   }
 
@@ -1119,8 +1181,8 @@ class HandlesView {
     };
     const sibs = hold.sibs;
     sibs.forEach((i, at) => {
-      const k = hold.others.indexOf(i);
-      if (k < 0) return;
+      const k = hold.otherIndex.get(i);
+      if (k === undefined) return;
       const end = at + 1 < sibs.length ? blocks[sibs[at + 1]!]!.from - 1 : blocks[i]!.to;
       push(blocks[i]!.from, end, shiftOf(geo, k, place));
     });
@@ -1164,12 +1226,13 @@ class HandlesView {
     if (!hold) return null;
     const rect = hold.card.getBoundingClientRect();
     const scrollDOM = this.view.scrollDOM;
-    const left = hold.left + hold.scroller.left - scrollDOM.scrollLeft;
-    const top = hold.geo.top + hold.scroller.top - scrollDOM.scrollTop;
-    const scale = hold.card.offsetWidth > 0 ? rect.width / hold.card.offsetWidth : 1;
+    // Tutto in px di CodeMirror, come le righe che la posa muove.
+    const x = (rect.left - hold.scroller.left) / hold.sx + scrollDOM.scrollLeft - hold.left;
+    const y = (rect.top - hold.scroller.top) / hold.sy + scrollDOM.scrollTop - hold.geo.top;
+    const scale = hold.card.offsetWidth > 0 ? rect.width / hold.sx / hold.card.offsetWidth : 1;
     return {
-      x: rect.left - left,
-      y: rect.top - top,
+      x,
+      y,
       scale,
       ...(hold.geo.height > hold.held ? { clip: hold.held } : {}),
     };
@@ -1190,6 +1253,7 @@ class HandlesView {
     const rows: { el: Element; pos: number; y: number }[] = [];
     if (slide) {
       for (const child of Array.from(view.contentDOM.children)) {
+        if (isPageHeader(child)) continue;
         let pos: number;
         try {
           pos = view.posAtDOM(child, 0);
@@ -1202,6 +1266,7 @@ class HandlesView {
       }
     }
     view.dispatch({ effects: setDragPose.of(next) });
+    this.poseWidgets();
     for (const row of rows) {
       halt(row.el);
       animate(row.el, {
@@ -1213,7 +1278,51 @@ class HandlesView {
   }
 
   /// `quiet`: lo smontaggio, che non può più toccare la vista.
+  /// I widget di blocco nella posa del trascinamento: invisibili se sono del
+  /// blocco in mano, scostati come le righe se stanno sotto il posto.
+  /// Soltanto `opacity` e `translate`, come le decorazioni delle righe.
+  poseWidgets(): void {
+    const view = this.view;
+    const pose = view.state.field(dragPose);
+    const seen = new Set<HTMLElement>();
+    for (const child of Array.from(view.contentDOM.children)) {
+      if (!(child instanceof HTMLElement) || child.classList.contains("cm-line") || isPageHeader(child)) continue;
+      let pos: number;
+      try {
+        pos = view.posAtDOM(child, 0);
+      } catch {
+        continue;
+      }
+      const lifted = !!pose.lifted && pos >= pose.lifted.from && pos <= pose.lifted.to;
+      const dy = partedShift(pose.parted, pos);
+      if (!lifted && dy === 0) continue;
+      child.style.opacity = lifted ? "0" : "";
+      child.style.translate = dy === 0 ? "" : `0 ${dy}px`;
+      seen.add(child);
+    }
+    for (const el of this.posed) {
+      if (seen.has(el)) continue;
+      el.style.opacity = "";
+      el.style.translate = "";
+    }
+    this.posed.clear();
+    for (const el of seen) this.posed.add(el);
+  }
+
   endDrag(commit: boolean, quiet = false): void {
+    try {
+      this.finishDrag(commit, quiet);
+    } finally {
+      // Dopo la transazione: il moto della posa legge i widget dov'erano.
+      for (const el of this.posed) {
+        el.style.opacity = "";
+        el.style.translate = "";
+      }
+      this.posed.clear();
+    }
+  }
+
+  finishDrag(commit: boolean, quiet: boolean): void {
     const drag = this.drag;
     if (!drag) return;
     this.drag = null;
@@ -1292,7 +1401,8 @@ export const blockHandles: Extension = [
       zIndex: "201",
       display: "flex",
       alignItems: "center",
-      gap: "2px",
+      // Il «+» e la maniglia si toccano, come nel prototipo.
+      gap: "0",
       transform: "translateX(calc(-100% - 0.4rem))",
     },
     ".cm-fub-block-handles[hidden]": { display: "none" },
@@ -1346,9 +1456,31 @@ export const blockHandles: Extension = [
       transformOrigin: "24px 50%",
       willChange: "transform",
     },
-    ".cm-fub-block-lift-shade, .cm-fub-block-lift-card": { position: "absolute", inset: "0", borderRadius: "10px" },
+    // In mano la carta e la sua ombra sono più grandi dell'1,5%, dal bordo
+    // sinistro: la presa ci arriva da 1/LIFT_SCALE, la posa riparte da qui.
+    ".cm-fub-block-lift-shade, .cm-fub-block-lift-card": {
+      position: "absolute",
+      inset: "0",
+      borderRadius: "10px",
+      scale: String(LIFT_SCALE),
+      transformOrigin: "0 50%",
+    },
+    // La copia intera di un blocco alto, che alla presa svanisce dalla
+    // grandezza vera (la carta, sotto, parte da lì).
+    ".cm-fub-block-lift-full": {
+      position: "absolute",
+      top: "0",
+      left: "0",
+      right: "0",
+      overflow: "hidden",
+      padding: "0 8px",
+      boxSizing: "border-box",
+      borderRadius: "10px",
+      opacity: "0",
+      pointerEvents: "none",
+    },
     ".cm-fub-block-lift-card": { overflow: "hidden", padding: "0 8px", boxSizing: "border-box" },
-    ".cm-fub-block-lift-card > .cm-content": { minHeight: "0", width: "100%" },
+    ".cm-fub-block-lift-card > .cm-content, .cm-fub-block-lift-full > .cm-content": { minHeight: "0", width: "100%" },
     // Un blocco alto, tagliato: sfuma verso il fondo (il colore è della pelle).
     ".cm-fub-block-lift-card[data-clipped]::after": {
       content: '""',

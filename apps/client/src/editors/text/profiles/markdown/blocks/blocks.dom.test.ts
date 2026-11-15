@@ -16,6 +16,7 @@ import { blockSelection, selectCursorBlock } from "./selection";
 import { addBelow, colorRanges, gripLabel, handlesView } from "./handles";
 import { setContentColor } from "../color";
 import { blockModel } from "./model";
+import { dragPose, LIFT_SCALE } from "./motion";
 import { closeContextMenu } from "../../../../../ui/menu";
 import { openSlashMenu, slashMenuExtension, type SlashMenuSource } from "../slash";
 import { propertiesDisplay } from "../../../properties-display";
@@ -561,6 +562,117 @@ describe("il blocco in mano (E2)", () => {
     expect(lift.querySelector<HTMLElement>(".cm-fub-block-lift-card")?.dataset.clipped).toBe("true");
     expect(lift.querySelector(".cm-fub-block-lift-more")?.textContent).toBeTruthy();
     expect(hand.slot()?.style.height).toBe("104px");
+    hand.handles.endDrag(false);
+  });
+});
+
+describe("il blocco in mano (E2), i casi limite", () => {
+  const DOC = "Uno\n\nDue\n\n# I conti\n\nTre";
+  const live = (view: EditorView) => view.dom.querySelector(".cm-fub-block-live")?.textContent?.trim() ?? "";
+
+  it("a riposo carta e ombra sono più grandi dell'1,5%: la presa cresce, non cala", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(30);
+    expect(hand.lift()).not.toBeNull();
+    // La regola del tema: la scala a riposo è LIFT_SCALE, e la presa parte da
+    // 1/LIFT_SCALE (cioè dalla grandezza vera) verso quella.
+    const css = Array.from(document.querySelectorAll("style"), (style) => style.textContent ?? "").join("\n");
+    const rule = /\.cm-fub-block-lift-shade,\s*\.cm-fub-block-lift-card[^{]*\{([^}]*)\}/.exec(css.replace(/\.ͼ\w+ /g, ""));
+    expect(rule, "la regola della carta in mano").not.toBeNull();
+    expect(rule![1]).toContain(`scale: ${LIFT_SCALE}`);
+    expect(LIFT_SCALE).toBeGreaterThan(1);
+    hand.handles.endDrag(false);
+  });
+
+  it("la copia in mano non ha id né fuoco", () => {
+    const view = mount("Uno ^abc123\n\nDue", 0);
+    rowsOf20(view);
+    view.contentDOM.querySelector(".cm-line")?.setAttribute("id", "riga");
+    const hand = grab(view, 0, 10);
+    hand.move(30);
+    const lift = hand.lift()!;
+    expect(lift.hasAttribute("inert")).toBe(true);
+    expect(lift.getAttribute("aria-hidden")).toBe("true");
+    expect(lift.querySelector("[id]")).toBeNull();
+    hand.handles.endDrag(false);
+  });
+
+  it("la misura rifatta dentro l'aggiornamento di CodeMirror non spedisce una transazione lì dentro", async () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const hand = grab(view, 0, 10);
+    hand.move(150);
+    // Le righe cambiano altezza (la finestra si stringe): la posa cambia.
+    vi.spyOn(view, "lineBlockAt").mockImplementation((pos: number) => {
+      const top = (view.state.doc.lineAt(pos).number - 1) * 30;
+      return { from: 0, to: 0, top, bottom: top + 30, height: 30, type: 0, widget: null, widgetLineBreaks: 0 } as ReturnType<EditorView["lineBlockAt"]>;
+    });
+    const before = view.state.field(dragPose).parted;
+    hand.handles.remeasure(hand.handles.drag!);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await Promise.resolve();
+    expect(errors.mock.calls.flat().join(" ")).not.toMatch(/update is in progress/);
+    expect(view.state.field(dragPose).parted, "la posa nuova è scritta, appena dopo").not.toEqual(before);
+    errors.mockRestore();
+    hand.handles.endDrag(false);
+  });
+
+  it("Mod-Shift-↓ dice il posto come il trascinamento", () => {
+    const view = mount("# I conti\n\nUno\n\nDue", 12);
+    press(view, "ArrowDown", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString()).toBe("# I conti\n\nDue\n\nUno");
+    expect(live(view)).toBe("Posizione 3 di 3, in «I conti»");
+  });
+
+  it("il testo cambiato prima della presa annulla il gesto", async () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    view.dispatch({ changes: { from: view.state.doc.length, insert: "\n\nQuattro" } });
+    await Promise.resolve();
+    expect(hand.handles.drag).toBeNull();
+    hand.move(150);
+    expect(hand.lift()).toBeNull();
+  });
+
+  it("durante un gesto il tasto destro (la pressione lunga) non apre il menu", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.grip.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 5, clientY: 5 }));
+    expect(document.querySelector("#context-menu")).toBeNull();
+    hand.handles.endDrag(false);
+    closeContextMenu();
+  });
+
+  it("in una vista scalata (la lavagna con lo zoom) il posto si conta in px di CodeMirror", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    Object.defineProperty(view, "scaleX", { value: 2, configurable: true });
+    Object.defineProperty(view, "scaleY", { value: 2, configurable: true });
+    // Il puntatore a 150 px di schermo è a 75 px di CodeMirror: dopo «Due»,
+    // non in fondo come sarebbe a scala 1.
+    let hand = grab(view, 0, 20);
+    hand.move(150);
+    expect(live(view)).toBe("Posizione 2 di 4");
+    hand.handles.endDrag(false);
+    // A 300 px di schermo, 150 di CodeMirror: in fondo.
+    hand = grab(view, 0, 20);
+    hand.move(300);
+    hand.up(300);
+    expect(view.state.doc.toString()).toBe("Due\n\n# I conti\n\nTre\n\nUno");
+  });
+
+  it("«Accanto» a sinistra chiede il puntatore ben oltre il bordo: una deriva non basta", () => {
+    const view = mount(DOC, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(70, -24);
+    expect(view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-drop")?.hidden, "nessuna barra").toBe(true);
+    expect(live(view)).toBe("Posizione 2 di 4");
     hand.handles.endDrag(false);
   });
 });

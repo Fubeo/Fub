@@ -27,7 +27,7 @@ import { softCursor } from "../../../soft-cursor";
 import { blockGesture, type BlockGesture } from "../block-gesture";
 import { liveStrings } from "../strings";
 import { blockModel, kindName, type Block } from "./model";
-import { siblingsOf } from "./move";
+import { sectionAt, siblingsOf } from "./move";
 import { blockSelection, runOfSelection } from "./selection";
 
 /// Oltre questo numero di righe in moto, sola dissolvenza: un gesto che
@@ -95,7 +95,7 @@ function textSize(el: HTMLElement): number {
 /// La testata della pagina (`page.ts`) sta sopra il primo blocco, alla sua
 /// stessa posizione, ma non è di nessun blocco: nessun gesto la solleva né la
 /// muove.
-function isPageHeader(el: Element): boolean {
+export function isPageHeader(el: Element): boolean {
   return el.classList.contains("cm-fub-page");
 }
 
@@ -253,12 +253,17 @@ export function inferGesture(update: ViewUpdate): BlockGesture | null {
   return { kind: "transform", lead: { from: now.from, to: now.to } };
 }
 
-/// Il posto di un blocco fra i fratelli, detto a parole: «il terzo».
-export function placeName(index: number): string {
-  const n = index + 1;
-  return n <= 10
-    ? liveStrings.t(`blocks.place.${n}` as "blocks.place.1")
-    : liveStrings.t("blocks.place.n", { n: String(n) });
+/// Dove sta un blocco, detto come il trascinamento: «Posizione 4 di 14, in
+/// «I conti»», con la sezione (il titolo prima di lui, lui escluso).
+export function placePhrase(state: EditorState, blocks: readonly Block[], index: number): string {
+  const sibs = siblingsOf(blocks, index);
+  const block = blocks[index]!;
+  const n = String(sibs.indexOf(index) + 1);
+  const total = String(sibs.length);
+  const section = sectionAt(state, blocks, block.from, { from: block.from, to: block.to });
+  return section === null
+    ? liveStrings.t("blocks.drag.place", { n, total })
+    : liveStrings.t("blocks.drag.place.in", { n, total, name: section });
 }
 
 /// La frase della regione viva per un gesto, nel documento nuovo.
@@ -271,8 +276,7 @@ export function gesturePhrase(state: EditorState, gesture: BlockGesture): string
     case "drop":
     case "swap": {
       if (!lead || !blocks) return liveStrings.t("blocks.moved");
-      const index = blocks.indexOf(lead);
-      return liveStrings.t("blocks.moved.at", { place: placeName(siblingsOf(blocks, index).indexOf(index)) });
+      return placePhrase(state, blocks, blocks.indexOf(lead));
     }
     case "transform":
       return lead ? liveStrings.t("blocks.transformed", { kind: kindName(lead) }) : null;

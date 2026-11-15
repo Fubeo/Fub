@@ -55,8 +55,9 @@ la sceglie; da tastiera il fuoco va subito alla prima voce. Il menu ha:
 
 La maniglia si trascina (dopo 4 px di movimento; al tocco tenendola premuta
 300 ms): gli occhi si socchiudono e il blocco **va in mano**. È il blocco vero,
-largo com'era e mai più alto di 104 px: uno più alto si taglia sfumando e
-porta il nome del suo tipo; più blocchi selezionati salgono insieme e dicono
+largo com'era (anche una tabella o una scheda più larga della colonna) e mai
+più alto di 104 px: uno più alto si accorcia davanti agli occhi mentre i
+vicini salgono, si taglia sfumando e porta il nome del suo tipo; più blocchi selezionati salgono insieme e dicono
 quanti sono. Fra i fratelli dello stesso livello si apre **il posto** dove
 cadrà, alto quanto il blocco in mano: grigio finché è quello d'origine,
 d'accento altrove; i vicini scivolano via per fargli spazio. Il posto cambia
@@ -68,7 +69,8 @@ cambio di posto la regione viva dice «Posizione 4 di 14, in «I conti»».
 Di lato il blocco segue il puntatore per un terzo, al più 28 px. Una voce
 d'elenco spostata di 24 px a destra entra nella voce sopra; di 24 px a
 sinistra, in fondo alla sua lista, ne esce. Col puntatore sull'ultimo ottavo
-a destra di un vicino, o portato di 24 px a sinistra della presa, compare una
+a destra di un vicino, o fuori dalla colonna a sinistra, 48 px oltre la
+maniglia da cui è partito (una deriva di lato non basta), compare una
 barra verticale sul bordo del vicino: lasciato lì, il blocco gli va
 **accanto**, in colonne (a sinistra non vale per le voci d'elenco, dove quel
 gesto porta fuori). Al rilascio il blocco cade nel posto con un solo
@@ -129,7 +131,8 @@ delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
   sopra il frontmatter, il blocco si posa subito sotto di lui, che non si
   trascina.
 - **Scambiare.** Mod+Shift+↑/↓ fa scivolare le righe dal posto vecchio, con
-  lo stesso moto della posa. Il
+  lo stesso moto della posa, e dice il posto come il trascinamento
+  («Posizione 3 di 5, in «I conti»»). Il
   frontmatter resta sempre il primo blocco: niente gli passa davanti, lui non
   scende, e «Sposta su» non compare sul primo testo che lo segue.
 - **Trasformare.** Il testo cresce o cala sul posto con la scala dei
@@ -146,8 +149,8 @@ delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
 Oltre 60 righe in movimento, le righe si limitano a una dissolvenza. Col moto
 ridotto non si muove niente: chi nasce appare soltanto in dissolvenza, il
 posto appare senza scivolare e il blocco in mano si posa senza volo.
-Ogni gesto si dice anche nella regione viva dei Blocchi («Blocco spostato: ora
-è il terzo», «Ora è Titolo 2», «Aperto»).
+Ogni gesto si dice anche nella regione viva dei Blocchi («Posizione 3 di 5, in
+«I conti»» dopo uno spostamento, «Ora è Titolo 2», «Aperto»).
 
 **Cursore morbido** (`editor.soft-cursor`, spento di norma) fa scivolare il
 cursore fra le righe quando ci si muove senza scrivere; vale soltanto in

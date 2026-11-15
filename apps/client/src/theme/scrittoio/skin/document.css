@@ -497,6 +497,9 @@
   color: var(--accent-soft);
   background: var(--accent-veil);
 }
+.cm-editor .cm-fub-block-grip[data-held] .cm-fub-block-grip-held {
+  color: var(--accent-soft);
+}
 .cm-editor .cm-fub-block-grip-eyes svg {
   transition: transform 0.16s cubic-bezier(0.3, 1.5, 0.5, 1);
 }
@@ -514,17 +517,15 @@
 .cm-editor .cm-fub-block-lift {
   color: var(--doc-fg);
 }
-.cm-editor .cm-fub-block-lift-card {
+.cm-editor .cm-fub-block-lift-card,
+.cm-editor .cm-fub-block-lift-full {
   background: var(--doc-bg);
 }
 .cm-editor .cm-fub-block-lift-card[data-clipped]::after {
   background: linear-gradient(transparent, var(--doc-bg) 85%);
 }
 .cm-editor .cm-fub-block-lift-shade {
-  box-shadow:
-    0 0 0 1px var(--border-strong),
-    0 18px 40px -18px rgb(0 0 0 / 0.42),
-    0 4px 10px -5px rgb(0 0 0 / 0.16);
+  box-shadow: 0 0 0 1px var(--border-strong), var(--shadow-3);
 }
 .cm-editor .cm-fub-block-lift-grip {
   color: var(--accent-soft);
@@ -551,7 +552,7 @@
 }
 /* «Accanto»: la barra sul bordo del vicino. */
 .cm-editor .cm-fub-block-drop {
-  background: var(--accent);
+  background: var(--doc-drop-line);
 }
 /* Il blocco vivo (N13). La selezione di blocchi è un velo sopra le righe,
    così passa sopra il fondo del codice e la riga attiva; la passata del

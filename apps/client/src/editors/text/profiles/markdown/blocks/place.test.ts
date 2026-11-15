@@ -158,13 +158,14 @@ describe("di lato", () => {
     expect(leanOf(100, { ...can, list: false })).toBe("none");
   });
 
-  it("sull'ultimo ottavo a destra, o portato oltre il bordo sinistro, il posto diventa «Accanto»", () => {
-    expect(besideSide(790, 760, 0, 800, false)).toBe("right");
-    expect(besideSide(699, 660, 0, 800, false)).toBeNull();
-    expect(besideSide(50, 20, 0, 800, false), "la presa porta il puntatore sul testo: non è «Accanto»").toBeNull();
-    expect(besideSide(-50, -24, 0, 800, false), "portato oltre il bordo sinistro").toBe("left");
-    expect(besideSide(-50, -23, 0, 800, false)).toBeNull();
-    expect(besideSide(-50, -40, 0, 800, true), "in un elenco la sinistra porta fuori").toBeNull();
-    expect(besideSide(790, 760, 0, 800, true)).toBe("right");
+  it("sull'ultimo ottavo a destra, o ben oltre il bordo sinistro, il posto diventa «Accanto»", () => {
+    // La colonna va da 100 a 900; la maniglia, dove parte il gesto, sta a 74.
+    expect(besideSide(890, 74, 100, 900, false)).toBe("right");
+    expect(besideSide(799, 74, 100, 900, false)).toBeNull();
+    expect(besideSide(120, 74, 100, 900, false), "la presa porta il puntatore sul testo: non è «Accanto»").toBeNull();
+    expect(besideSide(50, 74, 100, 900, false), "una deriva di 24 px a sinistra non basta").toBeNull();
+    expect(besideSide(26, 74, 100, 900, false), "48 px oltre la presa, fuori dalla colonna").toBe("left");
+    expect(besideSide(10, 74, 100, 900, true), "in un elenco la sinistra porta fuori").toBeNull();
+    expect(besideSide(890, 74, 100, 900, true)).toBe("right");
   });
 });

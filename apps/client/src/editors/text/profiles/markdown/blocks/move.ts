@@ -283,3 +283,20 @@ export function moveBlockBy(dir: -1 | 1): StateCommand {
     return true;
   };
 }
+
+/// Il titolo di un blocco titolo, senza i segni.
+export function headingText(state: EditorState, block: Block): string {
+  return state.doc.lineAt(block.from).text.replace(/^\s*#{1,6}\s+/, "").replace(/\s+#+\s*$/, "").trim();
+}
+
+/// Il titolo della sezione in cui cade `pos`: l'ultimo titolo prima di lui,
+/// saltando la tratta `skip` (quella in mano, o quella appena spostata). `null` prima del primo titolo.
+export function sectionAt(state: EditorState, blocks: readonly Block[], pos: number, skip: { from: number; to: number }): string | null {
+  let found: string | null = null;
+  for (const block of blocks) {
+    if (block.from >= pos) break;
+    if (block.kind !== "heading" || (block.from >= skip.from && block.from <= skip.to)) continue;
+    found = headingText(state, block);
+  }
+  return found;
+}

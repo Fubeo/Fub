@@ -23,6 +23,8 @@ export const SIDEWAYS_MAX = 28;
 export const NEST_PX = 24;
 /// La parte del blocco, a destra o a sinistra, dove il posto diventa «Accanto».
 export const BESIDE_SHARE = 1 / 8;
+/// Di quanto (px) il puntatore va oltre il bordo sinistro per «Accanto» a sinistra.
+export const BESIDE_LEFT_PX = 48;
 /// Entro quanti px dal posto la calamita accosta il blocco in mano.
 export const MAGNET_PX = 36;
 
@@ -128,16 +130,15 @@ export function leanOf(dx: number, options: { readonly list: boolean; readonly c
 
 /// Il bordo di un blocco dove il posto diventa «Accanto»: a destra, il
 /// puntatore `x` nell'ultimo ottavo della colonna `[left, right]`; a sinistra,
-/// il blocco portato oltre il bordo sinistro, cioè il puntatore spostato a
-/// sinistra della presa di almeno `NEST_PX` (`dx`). La maniglia sta già a
-/// sinistra del testo: un ottavo misurato dal bordo della colonna scatterebbe
-/// a ogni presa. A sinistra non vale per le voci d'elenco, dove quel gesto
-/// porta fuori.
-export function besideSide(x: number, dx: number, left: number, right: number, list: boolean): "left" | "right" | null {
+/// il puntatore oltre il bordo sinistro della colonna e oltre la presa
+/// (`startX`, la maniglia, che sta già nel margine) di almeno `BESIDE_LEFT_PX`.
+/// Una deriva di lato mentre si porta il blocco su o giù non basta. A
+/// sinistra non vale per le voci d'elenco, dove quel gesto porta fuori.
+export function besideSide(x: number, startX: number, left: number, right: number, list: boolean): "left" | "right" | null {
   const width = right - left;
   if (width <= 0) return null;
   if (x >= right - width * BESIDE_SHARE) return "right";
-  if (!list && dx <= -NEST_PX) return "left";
+  if (!list && x <= Math.min(left, startX) - BESIDE_LEFT_PX) return "left";
   return null;
 }
 
