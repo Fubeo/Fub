@@ -503,7 +503,11 @@ class HandlesView {
   current(): number {
     const state = this.view.state;
     if (state.readOnly) return -1;
-    const blocks = state.field(blockModel).blocks;
+    // Una misura chiesta prima di spegnere i blocchi (`editor.blocks`) può
+    // arrivare dopo: senza il modello non c'è niente da servire.
+    const model = state.field(blockModel, false);
+    if (!model) return -1;
+    const blocks = model.blocks;
     for (const key of [this.pinned, this.hoverable ? this.hovered : null]) {
       const index = indexOf(blocks, key);
       if (index >= 0) return index;
@@ -618,7 +622,11 @@ class HandlesView {
   /// essere cambiato mentre il menu era aperto.
   withRun(key: BlockKey, run: (state: EditorState, blocks: readonly Block[], found: BlockRun, index: number) => void): void {
     const state = this.view.state;
-    const blocks = state.field(blockModel).blocks;
+    // Spenti i blocchi (`editor.blocks`) mentre il menu era aperto, il modello
+    // non c'è più: la voce non fa niente.
+    const model = state.field(blockModel, false);
+    if (!model) return;
+    const blocks = model.blocks;
     const index = indexOf(blocks, key);
     if (index < 0 || state.readOnly) return;
     run(state, blocks, runFor(state, blocks, index), index);
@@ -1510,6 +1518,9 @@ class HandlesView {
 
   destroy(): void {
     this.returning?.land(true);
+    // Il menu del blocco non sopravvive alle maniglie: spenti i blocchi, le
+    // sue voci non avrebbero più un blocco su cui lavorare.
+    if (this.menu) closeContextMenu();
     this.endDrag(false, true);
     this.view.dom.classList.remove("cm-fub-blocks-dragging");
     this.life.close();

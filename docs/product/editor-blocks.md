@@ -14,6 +14,11 @@ segni Markdown lo dice `editor.live-reveal`, come in tutta Scrittura. Il file
 resta Markdown puro: nessun blocco ha un id nascosto né un formato a parte, e
 Sorgente mostra gli stessi byte.
 
+I blocchi sono una preferenza della macchina, `editor.blocks` (accesa di
+fabbrica): si cambia dalle Impostazioni o dal menu «…» del riquadro
+(«Blocchi: maniglie e selezione», gruppo Scrittura), e la nota aperta cambia
+subito, senza riaprirsi; vedi [I blocchi spenti](#i-blocchi-spenti).
+
 Blocchi non è più una modalità a sé. Un riquadro salvato in `blocks`, e
 **Mod+Shift+B** (`shell.mode.blocks`, soltanto sulle note), portano a
 Scrittura. Il codice dei blocchi si carica con l'editor della nota, non come un
@@ -94,13 +99,20 @@ sono selezionati.
 - Mod+Shift+↑/↓ sposta il blocco del cursore, o la selezione di blocchi, fra i
   fratelli; le voci numerate si rinumerano; un annulla torna indietro in un
   passo.
+- Mod+A seleziona prima il testo del blocco del cursore, senza i suoi segni
+  (il testo di un titolo, di una voce, del codice); la seconda volta tutti i
+  blocchi del corpo come selezione di blocchi, titolo e proprietà fuori; la
+  terza non fa altro. Una nota col solo frontmatter non ha niente da prendere.
+- Mod+D duplica il blocco del cursore, sotto, e il cursore passa nella copia
+  allo stesso punto; con una selezione di blocchi la duplica tutta. Il
+  frontmatter non si duplica come blocco, perché farebbe una seconda testata:
+  col cursore nel suo YAML Mod+D passa alla copia della riga del testo, che
+  copia la riga di una proprietà come le altre righe e non copia mai le righe
+  `---`.
 - Alt+↑/↓ sulle righe del testo (fuori dalle proprietà) non portano una riga
-  del corpo dentro il frontmatter, né le sue righe `---` fuori. Mod+D non copia
-  le righe `---` della testata, che farebbero una seconda testata; le proprietà
-  si copiano come le altre righe.
+  del corpo dentro il frontmatter, né le sue righe `---` fuori.
 - Backspace all'inizio di un paragrafo lo unisce al testo del blocco sopra.
-- Dentro un blocco di codice Tab e Shift+Tab rientrano il codice e Mod+A
-  seleziona prima il codice, poi tutta la nota.
+- Dentro un blocco di codice Tab e Shift+Tab rientrano il codice.
 - Mod+Alt+0 fa un paragrafo, Mod+Alt+1…3 un titolo, 4 un'attività, 5 un
   elenco puntato, 6 uno numerato, 7 un ripiegabile, 8 un blocco di codice;
   valgono anche in Live.
@@ -110,6 +122,29 @@ si fanno da parte: Esc resta di Vim. In una scheda della lavagna Esc è della
 scheda, che esce dalla scrittura: sul testo non seleziona il blocco, e una
 selezione di blocchi già fatta la chiude prima di uscire
 (`SurfaceMountContext.escapeLeaves`).
+
+## I blocchi spenti
+
+Con `editor.blocks` spenta Scrittura è un editor di testo: la testata della
+pagina e i segni della Live restano, il «/» resta, e i gesti cambiano così.
+
+| Gesto | Blocchi accesi | Blocchi spenti |
+| --- | --- | --- |
+| Maniglia e «+» | al passaggio e sul blocco del cursore | non ci sono |
+| Mod+A | il testo del blocco, poi tutti i blocchi | il corpo della nota, dal primo all'ultimo blocco; titolo e proprietà fuori; la seconda volta niente |
+| Esc | seleziona il blocco del cursore | chiude ciò che è aperto; con Vim resta di Vim |
+| Mod+Shift+↑/↓ | sposta il blocco o la selezione di blocchi | sposta la riga, o le righe scelte, senza entrare nella testata |
+| Mod+D | duplica il blocco | sceglie la prossima occorrenza, con un cursore in più |
+| Trascinare | il blocco, dalla maniglia | il testo scelto |
+| «Trasforma il blocco» | nel menu della maniglia e nel tasto destro | nel tasto destro |
+
+Una nota senza frontmatter dà a Mod+A tutto il testo. «Seleziona tutto» del
+tasto destro fa ciò che fa Mod+A nei due stati. Spegnere i blocchi con
+una selezione di blocchi attiva la lascia come selezione di testo sulle stesse
+righe, e chiude il menu della maniglia se era aperto. Durante una
+composizione (IME) il cambio aspetta che la composizione
+finisca, o che il fuoco lasci la nota. In una scheda della lavagna Esc resta
+della scheda nei due stati.
 
 ## Il movimento
 
@@ -367,5 +402,8 @@ schede stanno nella cache del bundle, ricostruibile. «Pagina web»
 - `apps/client/src/editors/text/profiles/markdown/link-card.ts` e
   `apps/client/src/state/link-cards.ts`: la scheda nella Live e le risposte di
   `crates/fub-host/src/link_card.rs`;
-- `crates/fub-host/src/settings.rs`: la modalità dei riquadri nuovi e il
-  cursore morbido.
+- `apps/client/src/state/editor-blocks.ts`: la preferenza `editor.blocks`,
+  letta all'avvio della finestra e dalla superficie, scritta dal menu «…»
+  del riquadro;
+- `crates/fub-host/src/settings.rs`: la modalità dei riquadri nuovi, il
+  cursore morbido e `editor.blocks`.
