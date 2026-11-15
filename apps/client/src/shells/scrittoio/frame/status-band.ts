@@ -10,10 +10,15 @@
 // foglio, le parole, la lingua). Se conta lui le parole, il conteggio della
 // view dichiarata si fa da parte: lo stesso numero da due fonti non si dice.
 //
+// Con due o più celle numeriche scelte (una tabella della nota, una Base) la
+// banda dice la somma al posto del conto delle parole (`selection-sum.ts`):
+// la superficie a fuoco dà le celle (`EditorSurface.cellSelection`), il conto
+// si fa qui.
+//
 // «Si scrive», lo stato normale del documento a fuoco, lo dice la banda a voce
 // bassa, subito prima della modalità; premuto apre la spiegazione del chip
 // della testata (`panels/standing.ts`). Gli altri stati restano nel chip.
-import type { SurfaceMode, SurfacePaperFit, SurfaceStanding, SurfaceStatus } from "../../../editors/core/registry";
+import type { SurfaceCellSelectionSource, SurfaceMode, SurfacePaperFit, SurfaceStanding, SurfaceStatus } from "../../../editors/core/registry";
 import { settings, vaultStatus } from "../../../host/query";
 import { onLanguage, t } from "../../../i18n/strings";
 import { paneOf, selectedMode } from "../../../state/document-controller";
@@ -30,6 +35,7 @@ import { Race } from "../../../ui/race";
 import { setTooltip } from "../../../ui/tooltip";
 import { animate, DURATION, prepareExit } from "../../../moto";
 import { byId, follow } from "./dom";
+import { BandSum, summarizeSelection } from "./selection-sum";
 
 /// Da quanto piccolo entra un segno che si accende: la molla elastica lo porta
 /// oltre la misura, una volta, e lo posa.
@@ -199,6 +205,7 @@ export function mountStatusBand(lifetime: Lifetime): void {
     if (menuFor !== null && !paneOf(menuFor)) closeContextMenu();
     drawFit();
     drawSurface();
+    drawSum();
   };
   const openMenu = (): void => {
     if (!mode || mode.hidden) return;
@@ -306,6 +313,33 @@ export function mountStatusBand(lifetime: Lifetime): void {
     // Un battito solo, con la molla elastica: niente lampeggio.
     for (const el of beats) animate(el, { from: { scale: BEAT_SCALE }, spring: "elastic", whenReduced: "none", lifetime });
   }
+  // La somma delle celle scelte, dove stanno le parole: subito dopo le view di
+  // stato, che si fanno da parte finché la somma c'è.
+  const sum = new BandSum(lifetime);
+  const declared = byId("views-status");
+  if (declared?.parentElement === band) declared.after(sum.element);
+  else band.append(sum.element);
+  let counted: SurfaceCellSelectionSource | null = null;
+  let stopCounting: (() => void) | null = null;
+  lifetime.add(() => stopCounting?.());
+  lifetime.add(() => delete band.dataset.selectionSum);
+  function drawSum(): void {
+    const tab = state.vaultRoot ? activeTab() : null;
+    const source = tab?.k === "doc" ? paneOf(layout.focus)?.surface?.cellSelection ?? null : null;
+    if (source !== counted) {
+      stopCounting?.();
+      counted = source;
+      stopCounting = source?.subscribe(drawSum) ?? null;
+    }
+    // Un giro sui valori per cambio di selezione: la superficie avvisa solo
+    // quando la selezione o le celle scelte cambiano, mai per battuta.
+    const selection = source?.read() ?? null;
+    const summary = selection ? summarizeSelection(selection) : null;
+    sum.show(summary);
+    if (summary) band!.dataset.selectionSum = "";
+    else delete band!.dataset.selectionSum;
+  }
+
   // L'adattamento della carta: soltanto dove la superficie lo offre adesso
   // (un documento in Pagina). Premuto, un altro clic torna alla carta vera.
   const fitOf = () => {

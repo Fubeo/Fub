@@ -612,6 +612,92 @@ describe("la carta adattata alla vista", () => {
   });
 });
 
+describe("la somma delle celle scelte (T55)", () => {
+  /// Un riquadro che dà le celle scelte, come una tabella della nota o una
+  /// Base: `chosen` è ciò che la superficie mostra adesso.
+  function cellsPane(chosen: { values: (string | number)[] | null }) {
+    const listeners = new Set<() => void>();
+    let reads = 0;
+    const pane = {
+      surface: {
+        modes: [{ id: "a" }],
+        cellSelection: {
+          read: () => {
+            reads++;
+            return chosen.values ? { locale: "it", values: () => chosen.values! } : null;
+          },
+          subscribe(listener: () => void) {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+        },
+      },
+    };
+    const changed = () => {
+      for (const listener of [...listeners]) listener();
+    };
+    return { pane, changed, listeners, reads: () => reads };
+  }
+  const sumEl = () => document.getElementById("status-sum");
+  const values = () => [...sumEl()!.querySelectorAll("button[data-stat]:not([hidden]) .status-sum-value")].map((each) => each.textContent);
+
+  it("con due celle numeriche dice somma, media e conteggio, e le parole si fanno da parte", () => {
+    const chosen = { values: null as (string | number)[] | null };
+    const { pane, changed } = cellsPane(chosen);
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    expect(sumEl()?.hidden).toBe(true);
+    expect(el("status-band").hasAttribute("data-selection-sum")).toBe(false);
+    chosen.values = ["1.240", "860", "Trasporti", "", "420"];
+    changed();
+    expect(sumEl()?.hidden).toBe(false);
+    expect(values()).toEqual(["2.520", "840", "3"]);
+    expect(el("status-band").hasAttribute("data-selection-sum")).toBe(true);
+    // Una cella numerica sola: torna il conto delle parole.
+    chosen.values = ["12", "testo"];
+    changed();
+    expect(sumEl()?.hidden).toBe(true);
+    expect(el("status-band").hasAttribute("data-selection-sum")).toBe(false);
+  });
+
+  it("legge le celle una volta per avviso della superficie, non per ogni evento della shell", () => {
+    const chosen = { values: ["1", "2"] as (string | number)[] | null };
+    const { pane, changed, reads } = cellsPane(chosen);
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    const before = reads();
+    changed();
+    expect(reads()).toBe(before + 1);
+  });
+
+  it("segue il riquadro a fuoco: un altro riquadro la spegne e smette di ascoltare", () => {
+    const { pane, listeners } = cellsPane({ values: ["1", "2"] });
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    expect(sumEl()?.hidden).toBe(false);
+    expect(listeners.size).toBe(1);
+    world.pane = surface(2);
+    emit("layout");
+    expect(sumEl()?.hidden).toBe(true);
+    expect(listeners.size).toBe(0);
+    expect(el("status-band").hasAttribute("data-selection-sum")).toBe(false);
+  });
+
+  it("chiusa la banda, la voce se ne va e la superficie non è più ascoltata", () => {
+    const { pane, listeners } = cellsPane({ values: ["1", "2"] });
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    life.close();
+    expect(sumEl()).toBeNull();
+    expect(listeners.size).toBe(0);
+    expect(el("status-band").hasAttribute("data-selection-sum")).toBe(false);
+  });
+});
+
 describe("le voci della superficie", () => {
   function statusPane() {
     const listeners = new Set<() => void>();
