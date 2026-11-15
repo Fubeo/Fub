@@ -181,7 +181,8 @@ geometria; il gesto in `engine.ts`) e sceglie le schede che tocca, con gli
 archi fra due di loro. Maiusc aggiunge alla scelta che c'è; senza Maiusc la
 sostituisce. Il rettangolo si disegna al movimento, la scelta si aggiorna una
 volta per fotogramma, e al rilascio resta dov'è. Esc lo annulla: la scelta
-torna com'era. Un clic senza spostamento (fino a 3 px) toglie la scelta come
+torna com'era. Esc ferma anche il trascinamento e il ridimensionamento di una
+scheda: le schede tornano dov'erano e il file non cambia. Un clic senza spostamento (fino a 3 px) toglie la scelta come
 prima, e con Maiusc la lascia. Una scheda sotto il punto di partenza prende il
 gesto, e il rettangolo non parte dal suo corpo. In sola lettura sceglie e
 basta. Il Lazo non cambia: sceglie anche i tratti a mano libera, il
@@ -224,7 +225,9 @@ disegno: un comando spento si vede col perché; i cinque usati da poco in quella
 lavagna stanno in cima (stato di vista `canvas.commands:<documento>`; se non si
 scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 
-Un comando che scrive ha `op`, le sue [operazioni d'intento](canvas-code.md#le-operazioni): menu, barra, campi e tasti le fanno compilare al nucleo (col seme di `seed`, se no a caso) e le scrivono in un passo d'annulla; se il nucleo rifiuta non cambia niente, la barra lo dice e il campo torna com'era. Il posto e la misura di sempre li sceglie la GUI e li scrive nell'operazione. Collega è `connect` con `sides: "auto"`, Inverti il filo è `reverse` (le punte restano sulla loro scheda), Raggruppa è `group`, e Ctrl+D è `duplicate`, che copia anche i fili fra le schede copiate. Le schede e i fili che nascono così, e quelli del doppio clic e dello strumento Testo, hanno l'id del seme, sedici cifre esadecimali ([gli id nuovi](canvas-code.md#gli-id-nuovi)), non più `n-…`; i gesti, gli appunti e Ctrl+Invio dentro una scheda danno ancora `newNodeId`.
+Un comando che scrive ha `op`, le sue [operazioni d'intento](canvas-code.md#le-operazioni): menu, barra, campi e tasti le fanno compilare al nucleo (col seme di `seed`, se no a caso) e le scrivono in un passo d'annulla; se il nucleo rifiuta non cambia niente, la barra lo dice e il campo torna com'era. Il posto e la misura di sempre li sceglie la GUI e li scrive nell'operazione. Collega è `connect` con `sides: "auto"`, Inverti il filo è `reverse` (le punte restano sulla loro scheda), Raggruppa è `group`, e Ctrl+D è `duplicate`, che copia anche i fili fra le schede copiate. Le schede e i fili che nascono così, e quelli del doppio clic e dello strumento Testo, hanno l'id del seme, sedici cifre esadecimali ([gli id nuovi](canvas-code.md#gli-id-nuovi)), non più `n-…`.
+
+Anche i gesti scrivono con le operazioni (LIC T24), compilate dal nucleo e scritte in un passo d'annulla: trascinare schede è una `move` sola con lo spostamento del gesto (un gruppo con `contents: true`, così porta le schede che contiene); ridimensionare è `resize` con le misure del gesto, preceduta da una `move` se l'angolo in alto a sinistra si sposta; il filo lasciato sul corpo di una scheda è `connect` con `sides: "auto"`, lasciato da un punto ha i suoi lati, e riattaccato è una `set` dell'estremo; le schede incollate sono `insert` del frammento, il testo incollato `add_card` nella forma breve; i file lasciati cadere sono descritti in [Il rilascio e l'incolla](canvas-cards.md#il-rilascio-e-lincolla). L'inchiostro: la fine di un tratto è `add_strokes`, la forma che lo sostituisce `erase_strokes` e `add_strokes` con lo stesso id, la gomma `erase_strokes` o `erase_along` (sui tratti attaccati alla pagina di un PDF o alla cella di un foglio la tela taglia ancora i pezzi da sé), il Lazo `move_strokes` e `restyle_strokes`. Le misure del gesto sono in unità della lavagna a ogni zoom. Mentre si trascina la tela mostra le posizioni da sé: è vista, e il file cambia solo al rilascio. Le schede che un gesto fa nascere (i file lasciati, Collega nel vuoto, Ctrl+Invio) prendono l'id da `newId` delle opzioni della tela, di serie `newNodeId()`; quelle incollate li prendono dal nucleo.
 
 | Comandi | Tasti |
 |---|---|

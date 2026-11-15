@@ -73,7 +73,7 @@ o `plan`.
   solo se la voce dice `writes: file`.
 - **R8, la GUI scrive come il codice.** Ogni voce `code` o `composed` di una
   fonte in `merged`, che scrive il file e ha un menu, una barra, un campo o un
-  tasto, ha una riga in `SETUP` di `parity.test.ts`: la tela si monta su
+  tasto, un gesto o gli appunti, ha una riga in `SETUP` di `parity.test.ts`: la tela si monta su
   `board.json` col seme `1`, sceglie gli id delle `ops` della voce (o quelli
   della riga), fa l'azione con uno dei `gui` della voce, e il documento deve
   essere quello di `compile(ops, 1)` su un secondo nucleo. Poi la GUI deve
@@ -81,7 +81,10 @@ o `plan`.
   qualcosa, l'ultimo torna a `board.json` e dopo non ne resta. Una riga può dare
   le operazioni da confrontare, con lo stesso `op` della voce, quando il posto o
   il contenuto li sceglie la GUI (il centro della vista, `sides: "auto"`), e dice
-  perché; una voce che non si confronta ha `skip` col perché, al più cinque.
+  perché. Una riga può anche dare opzioni alla tela (`options`, per esempio
+  `newId` per gli id delle schede che un gesto fa nascere) e una `normalize`
+  che toglie dai due documenti quello che solo la GUI scrive, come l'ora dei
+  tratti (`at`), sempre col perché. Una voce che non si confronta ha `skip` col perché, al più cinque.
   `commands.test.ts` controlla che ogni comando di quelle voci abbia `op`.
 
 ## Dove stanno i test

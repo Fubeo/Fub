@@ -4,8 +4,11 @@
 > scheda di file: le specie, le misure con cui nascono, i due modi di una
 > scheda, le regole che scelgono le schede vive e le immagini ferme.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/cards.ts` e le prove
-> in `apps/client/src/editors/canvas/cards.test.ts`; per le misure di nascita,
-> `apps/client/src/editors/canvas/drop-layout.ts` e le sue prove; per le
+> in `apps/client/src/editors/canvas/cards.test.ts`; per le misure di nascita
+> e la griglia, il nucleo (`born_size` e `layout` in
+> `crates/fub-canvas-core/src/layout.rs`, i vettori in
+> `apps/client/src/__fixtures__/canvas-ops/`); per l'ordine dei file lasciati
+> cadere, `apps/client/src/editors/canvas/drop-layout.ts`; per le
 > estensioni, `apps/client/src/ui/format-kind.ts` e
 > `apps/client/src/editors/media/media-types.ts`.
 
@@ -77,20 +80,21 @@ scheda non diventa mai il disegno vivo. Una specie senza renderer registrato
 ## Le misure di nascita
 
 Una scheda portata sulla lavagna nasce con la misura della sua specie. Le
-misure stanno in `drop-layout.ts`, con `bornSize` e `dropLayout`:
+misure le dà il nucleo (`born_size` in `crates/fub-canvas-core/src/layout.rs`)
+quando la tela scrive `add_card` senza misura (LIC T24):
 
 | Specie | Misura di nascita |
 |---|---|
 | `note`, `document` | 320×240 |
-| `sheet` | 480×300 |
+| `sheet` | 480×304 |
 | `pdf` | 360 di larghezza, con le proporzioni della prima pagina; 360×480 finché la prima pagina non si sa |
 | `image` | il lato lungo 480, con le proporzioni dell'immagine; 480×360 finché la misura non si sa |
 | `web` | 320×120 |
 | `file`, `craft` | 320×160 |
 
-«Spargi le pagine…» (T72) dà a ogni pagina la misura della sua: la stessa
-`bornSize`, con le proporzioni di quella pagina. La disposizione delle schede
-(`spreadLayout`, righe di dieci, gruppo oltre dodici) sta in `drop-layout.ts`.
+La misura del contenuto (i pixel di un'immagine) va nel campo `content_size`
+di `add_card`. «Spargi le pagine…» (T72) dà a ogni pagina la misura della sua
+con l'operazione `spread_pages` del nucleo.
 
 Le misure di nascita non si agganciano alla griglia di 8 px: si arrotondano
 all'intero più vicino, e nessun lato scende sotto 40 px, la misura minima
@@ -99,20 +103,26 @@ stretta, come 1×4000, ha il lato corto a 40 px: lì la proporzione non si
 tiene. Ridimensionare a mano una scheda, invece, aggancia a 8 px come prima
 (salvo con Maiusc, che tiene le proporzioni).
 
-Quando si lasciano insieme più schede, si dispongono in griglia: `ceil(sqrt(n))`
-colonne, riempite per righe nell'ordine del nome del file. Le posizioni si
-agganciano a 8 px. La colonna o la riga dopo parte al primo multiplo di 8 che
-lascia almeno 24 px dopo il bordo della precedente, cioè dopo la sua scheda più
-larga o la più alta della riga. Dopo un foglio alto 300 la riga sotto parte
-328 px più in basso, con 28 px di spazio. Oltre 12 schede, un gruppo le
-raccoglie con 24 px di margine per lato.
+Quando si lasciano insieme più schede, si dispongono con `layout` di tipo
+`grid` del nucleo: `ceil(sqrt(n))` colonne, riempite per righe nell'ordine in
+cui la tela dà le schede, cioè per nome del file (`sortedDrop` in
+`drop-layout.ts`: `Intl.Collator` coi numeri per valore, «foto 2» prima di
+«foto 10»). Le posizioni si agganciano a 8 px, e la colonna o la riga dopo
+parte al primo multiplo di 8 che lascia almeno 24 px dopo il bordo della
+precedente (la regola è in [La lavagna come codice](canvas-code.md)). Oltre 12
+schede, `group` le raccoglie in un gruppo.
 
 ### Il rilascio e l'incolla
 
-La tela (`#intake` in `engine.ts`) usa queste regole quando arrivano file
-trascinati dal computer o dall'albero, o incollati:
+La tela (`#intake` in `engine.ts`) scrive i file trascinati dal computer o
+dall'albero, o incollati, con una lista sola di operazioni (LIC T24): un
+`add_card` per file, con il suo `id` (dall'opzione `newId` della tela, di serie
+`newNodeId()`) e `content_size` quando la misura si sa; con più file, poi,
+`layout {ids, kind: "grid", x, y}`; oltre 12, `group`. Un file solo nasce
+con `x` e `y` del punto, senza `layout`. Un file che è già in una scheda ne fa
+nascere un'altra.
 
-- la griglia parte dal punto del rilascio. Un incolla parte dall'ultimo
+- la griglia parte dal punto del rilascio, agganciato a 8. Un incolla parte dall'ultimo
   punto in cui il puntatore è stato visto sulla vista. Se il puntatore ne è
   uscito, parte dal centro della vista;
 - la misura di un'immagine viene dalla porta `measureImage` (in
@@ -125,17 +135,23 @@ trascinati dal computer o dall'albero, o incollati:
   cioè sotto di loro;
 - le schede, il gruppo e il file cambiato di una scheda (sotto) entrano in
   un commit solo, che un annulla toglie tutto insieme;
-- lasciato su una scheda di file, il primo file ne prende il posto e gli
-  altri nascono in griglia;
+- lasciato su una scheda di file, il primo file ne prende il posto (una
+  `set` del suo `file`, senza `subpath`) e gli altri nascono in griglia;
 - le celle copiate diventano una scheda di testo con una tabella Markdown:
   l'HTML con una tabella passa dalla porta `clipboardMarkdown` (la
   conversione dell'incolla dell'editor Markdown), il testo a tabulazioni su
-  più righe da `parseTsv` e `markdownTable`; una riga sola resta testo;
+  più righe da `parseTsv` e `markdownTable`; una riga sola resta testo. Un
+  testo incollato è `add_card` nella forma breve (`text` o `url`, `x`, `y`):
+  la misura la dà il nucleo;
 - mentre si trascinano file o voci dell'albero, rettangoli tratteggiati
   (`canvas-drop-ghost`) mostrano dove nasceranno le schede, uno per file in
   `dataTransfer.items`, o uno solo se non si sa (le voci dell'albero, WebKit
   che non dice i tipi); oltre dodici, la cornice del gruppo col numero
-  (`canvas-drop-ghost-group`). Spariscono all'uscita e al rilascio.
+  (`canvas-drop-ghost-group`). I rettangoli si calcolano una volta
+  all'entrata, compilando senza scrivere le stesse operazioni del rilascio
+  (al più 1000 file), poi seguono il puntatore di `snap(puntatore) −
+  snap(origine)`, senza chiamare il nucleo a ogni movimento. Spariscono
+  all'uscita, senza scrivere niente, e al rilascio.
 
 Il deposito dei file del computer (`depositCanvasFiles`) si ferma al primo
 file che l'host rifiuta, con un `CanvasDepositError` che porta i percorsi
