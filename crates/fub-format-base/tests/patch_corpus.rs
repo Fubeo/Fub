@@ -351,3 +351,43 @@ fn una_chiave_di_data_nella_vista_sbagliata_si_rifiuta() {
         Err(PatchError::NotForView(ViewKey::End))
     ));
 }
+
+/// Spostare una colonna riscrive la lista di `order`, ma i commenti delle voci
+/// vanno con la loro voce: quello in coda alla riga e quello sulla riga sopra.
+#[test]
+fn spostare_una_colonna_porta_con_se_i_commenti_della_voce() {
+    let before = "views:\n  - type: table\n    name: Opere\n    order:\n      - file.name\n      # la colonna dello stato\n      - stato   # colonna stato\n      - artista\n";
+    let moved = written(
+        before,
+        &set(
+            "Opere",
+            ViewKey::Order,
+            json!(["file.name", "artista", "stato"]),
+        ),
+    );
+    assert_eq!(
+        moved,
+        "views:\n  - type: table\n    name: Opere\n    order:\n      - file.name\n      - artista\n      # la colonna dello stato\n      - stato   # colonna stato\n"
+    );
+    let read = BaseDefinition::parse(&moved).expect("il file si rilegge");
+    assert_eq!(read.views[0].order, ["file.name", "artista", "stato"]);
+    // Una voce tolta si porta via i suoi commenti; le altre tengono i loro.
+    let dropped = written(
+        before,
+        &set("Opere", ViewKey::Order, json!(["artista", "file.name"])),
+    );
+    assert_eq!(
+        dropped,
+        "views:\n  - type: table\n    name: Opere\n    order:\n      - artista\n      - file.name\n"
+    );
+    // Una voce scritta fra virgolette si riconosce lo stesso.
+    let quoted = "views:\n  - type: table\n    name: Opere\n    order:\n      - \"file.name\" # il titolo\n      - stato\n";
+    let swapped = written(
+        quoted,
+        &set("Opere", ViewKey::Order, json!(["stato", "file.name"])),
+    );
+    assert_eq!(
+        swapped,
+        "views:\n  - type: table\n    name: Opere\n    order:\n      - stato\n      - file.name # il titolo\n"
+    );
+}

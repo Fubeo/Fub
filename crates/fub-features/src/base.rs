@@ -9,7 +9,7 @@ use fub_abi::command::{
 };
 use fub_abi::edit::{EditRequest, Revision};
 use fub_abi::error::PluginError;
-use fub_abi::model::{LinkTarget, PropertyDate, PropertyScalar, PropertyValue};
+use fub_abi::model::{DateFormats, LinkTarget, PropertyDate, PropertyScalar, PropertyValue};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     CommandProvider, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind,
@@ -619,9 +619,43 @@ fn compare_filter(left: &BaseValue, right: &BaseValue) -> Option<Ordering> {
         _ => None,
     }
 }
+/// Il valore di una condizione letto nella specie della proprietà che
+/// confronta. Il file `.base` scritto a mano, o da un'altra app, dice spesso
+/// `value: "2026-03-01"` o `value: "3000"` fra virgolette: una data ISO si
+/// confronta con una data e un numero scritto come testo con un numero,
+/// invece di non trovare niente. Solo la forma canonica: la data ISO-8601 e il
+/// numero col punto (`3000.5`); la lingua dell'interfaccia la traduce la
+/// barra prima di scrivere. Un testo che non si legge resta testo.
+fn aligned(left: &BaseValue, right: BaseValue) -> BaseValue {
+    let BaseValue::Text(text) = &right else {
+        return right;
+    };
+    let text = text.trim();
+    let read = match left {
+        BaseValue::Date(_) => {
+            match PropertyValue::normalize(&Value::String(text.into()), &DateFormats::ISO) {
+                PropertyValue::Date(date) => date_ms(date).map(BaseValue::Date),
+                _ => None,
+            }
+        }
+        BaseValue::Number(_) => text
+            .parse::<f64>()
+            .ok()
+            .filter(|number| number.is_finite())
+            .map(BaseValue::Number),
+        _ => None,
+    };
+    read.unwrap_or(right)
+}
+/// `contains` come quello della ricerca (`fub_abi::rules::properties`):
+/// elenco → appartenenza, testo → sottostringa senza distinguere le
+/// maiuscole, il resto → uguaglianza. Le stesse parole nella barra di ricerca
+/// e nel filtro della Base dicono la stessa cosa.
 fn contains(left: &BaseValue, right: &BaseValue) -> bool {
     match (left, right) {
-        (BaseValue::Text(text), BaseValue::Text(needle)) => text.contains(needle),
+        (BaseValue::Text(text), BaseValue::Text(needle)) => {
+            text.to_lowercase().contains(needle.to_lowercase().as_str())
+        }
         (BaseValue::List(items), wanted) => items.contains(wanted),
         _ => left == right,
     }
@@ -661,6 +695,7 @@ fn matches_filter(filter: &FilterDef, ctx: &RowContext) -> bool {
                 .as_ref()
                 .map(|s| BaseValue::Text(s.clone()))
                 .unwrap_or_else(|| json_value(value));
+            let right = aligned(&left, right);
             match op {
                 FilterOp::Is => left == right,
                 FilterOp::IsNot => left != right,
@@ -1934,16 +1969,93 @@ mod tests {
     }
     #[test]
     fn heterogeneous_comparisons_do_not_turn_numbers_into_text() {
-        let source = "filters:\n  condition: {property: score, op: greater_than, value: '2'}\nviews:\n  - {name: Filtered, type: table, order: [score]}\n";
+        let source = "filters:\n  condition: {property: score, op: greater_than, value: '9'}\nviews:\n  - {name: Filtered, type: table, order: [score]}\n";
         let derived = respond(
             json!({"version":1,"op":"derive","source":source,"view":"Filtered","now_ms":0,"rows":[
                 {"doc":"number.md","props":{"score":{"kind":"number","value":10}}},
-                {"doc":"text.md","props":{"score":{"kind":"text","value":"3"}}}
+                {"doc":"text.md","props":{"score":{"kind":"text","value":"x"}}}
             ]}),
         )
         .unwrap();
-        assert_eq!(derived["rows"].as_array().unwrap().len(), 1);
-        assert_eq!(derived["rows"][0]["doc"], "text.md");
+        // Il numero non diventa testo: `10 > '9'` vale come numeri, mentre
+        // come testo «10» verrebbe prima di «9». Il testo resta testo.
+        let docs: Vec<_> = derived["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["doc"].as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(docs, ["number.md", "text.md"]);
+    }
+
+    /// Le righe che un filtro della vista lascia, su opere con una data, un
+    /// numero e uno stato.
+    fn kept(filter: &str) -> Vec<String> {
+        let source = format!(
+            "views:\n  - name: T\n    type: table\n    filters:\n      condition: {filter}\n"
+        );
+        let date = |m: u8, d: u8| json!({"kind":"date","value":{"year":2026,"month":m,"day":d,"time":null}});
+        let derived = respond(json!({"version":1,"op":"derive","source":source,"view":"T","now_ms":0,"rows":[
+            {"doc":"A.md","props":{"consegna":date(2,24),"valore":{"kind":"number","value":2600.0},"stato":{"kind":"text","value":"Arrivata"}}},
+            {"doc":"B.md","props":{"consegna":date(3,18),"valore":{"kind":"number","value":7300.5},"stato":{"kind":"text","value":"In viaggio"}}}
+        ]}))
+        .unwrap();
+        derived["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["doc"].as_str().unwrap().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn una_data_e_un_numero_scritti_come_testo_si_confrontano_per_quello_che_sono() {
+        assert_eq!(
+            kept("{property: consegna, op: greater_than, value: '2026-03-01'}"),
+            ["B.md"]
+        );
+        assert_eq!(
+            kept("{property: consegna, op: less_than, value: '2026-03-01'}"),
+            ["A.md"]
+        );
+        assert_eq!(
+            kept("{property: consegna, op: is, value: '2026-03-18'}"),
+            ["B.md"]
+        );
+        assert_eq!(
+            kept("{property: consegna, op: is_not, value: '2026-03-18'}"),
+            ["A.md"]
+        );
+        assert_eq!(
+            kept("{property: valore, op: greater_than, value: '3000.5'}"),
+            ["B.md"]
+        );
+        assert_eq!(kept("{property: valore, op: is, value: '2600'}"), ["A.md"]);
+        assert_eq!(
+            kept("{property: valore, op: contains, value: 2600}"),
+            ["A.md"]
+        );
+        // La forma della lingua non è del file: «3000,5» resta un testo, e un
+        // testo non si ordina con un numero.
+        assert!(kept("{property: valore, op: greater_than, value: '3000,5'}").is_empty());
+        // Una data che non si legge resta testo, e non trova niente.
+        assert!(kept("{property: consegna, op: greater_than, value: 'marzo'}").is_empty());
+    }
+
+    #[test]
+    fn contiene_non_distingue_le_maiuscole_come_la_ricerca() {
+        assert_eq!(
+            kept("{property: stato, op: contains, value: arrivata}"),
+            ["A.md"]
+        );
+        assert_eq!(
+            kept("{property: stato, op: contains, value: VIAGGIO}"),
+            ["B.md"]
+        );
+        assert_eq!(
+            kept("{property: stato, op: not_contains, value: VIAGGIO}"),
+            ["A.md"]
+        );
     }
 
     #[test]

@@ -934,13 +934,14 @@ fn set_key_splices(
                 }]),
                 Some(value) => {
                     let prefix = &content(doc.lines[start])[..existing.col];
-                    let rows = render_key(
+                    let mut rows = render_key(
                         &existing.raw,
                         prefix,
                         value,
                         comment_of(on_line),
                         existing.col,
                     )?;
+                    keep_item_comments(&mut rows, doc, start + 1..end, value, existing.col);
                     Ok(vec![Splice {
                         start,
                         end,
@@ -1048,6 +1049,89 @@ fn render_key(
             .map(|line| format!("{}{line}", " ".repeat(col + 2))),
     );
     Ok(rows)
+}
+
+/// Una voce di una lista di scalari scritta nel file: il suo valore, le righe
+/// di commento subito sopra e il commento in coda alla sua riga.
+struct ItemComments {
+    value: Value,
+    above: Vec<String>,
+    inline: String,
+}
+
+/// Le voci della lista di scalari scritta nelle righe `lines`, coi loro
+/// commenti. `None` se le righe non sono soltanto voci di una riga, commenti e
+/// righe vuote (una lista di mappe, un valore su più righe): allora non si
+/// prova a riconoscere niente.
+fn scalar_items(doc: &Doc<'_>, lines: std::ops::Range<usize>) -> Option<Vec<ItemComments>> {
+    let mut items = Vec::new();
+    let mut above = Vec::new();
+    for index in lines {
+        let text = content(doc.lines[index]);
+        if is_blank(text) {
+            // Un commento staccato da una riga vuota non è della voce sotto.
+            above.clear();
+            continue;
+        }
+        if is_comment(text) {
+            above.push(text.trim_start().to_string());
+            continue;
+        }
+        let rest = text.trim_start().strip_prefix("- ")?;
+        let code = code_of(rest).trim();
+        let value: Value = serde_yaml_ng::from_str(code).ok()?;
+        if value.is_array() || value.is_object() {
+            return None;
+        }
+        items.push(ItemComments {
+            value,
+            above: std::mem::take(&mut above),
+            inline: comment_of(rest).to_string(),
+        });
+    }
+    Some(items)
+}
+
+/// Una lista di scalari riscritta (`order` con una colonna spostata) rimette
+/// accanto a ogni voce i commenti che aveva nel file: le righe di commento
+/// subito sopra e quello in coda. La voce si riconosce dal valore, non dal
+/// posto; una voce tolta si porta via i suoi. `rows` è la chiave seguita da
+/// una riga per voce, come la scrive [`render_key`].
+fn keep_item_comments(
+    rows: &mut Vec<String>,
+    doc: &Doc<'_>,
+    lines: std::ops::Range<usize>,
+    value: &Value,
+    col: usize,
+) {
+    let Value::Array(values) = value else {
+        return;
+    };
+    if rows.len() != values.len() + 1 || values.iter().any(|v| v.is_array() || v.is_object()) {
+        return;
+    }
+    let Some(mut old) = scalar_items(doc, lines) else {
+        return;
+    };
+    if old
+        .iter()
+        .all(|item| item.above.is_empty() && item.inline.is_empty())
+    {
+        return;
+    }
+    let indent = " ".repeat(col + 2);
+    let mut out = vec![rows[0].clone()];
+    for (row, value) in rows[1..].iter().zip(values) {
+        match old.iter().position(|item| &item.value == value) {
+            Some(found) => {
+                let item = old.remove(found);
+                out.extend(item.above.into_iter().map(|line| format!("{indent}{line}")));
+                out.push(format!("{row}{}", item.inline));
+            }
+            None => out.push(row.clone()),
+        }
+    }
+    *rows = out;
 }
 
 /// Una lista o una mappa con voci va su più righe, sotto la chiave.
