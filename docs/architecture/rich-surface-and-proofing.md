@@ -338,35 +338,20 @@ Markdown non dipende da questa famiglia; senza la feature `rich` dell'host
 questi documenti tornano file a byte.
 
 L'aspetto del contenuto
-([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)): le
-modalità `document` (Pagina) e `reading` (Lettura) offrono `file` e
-`adattato`, `writing` (Scrittura) offre `tema`. I valori del file (carattere,
-misura, colore, evidenziato, spazi, interlinea) stanno sull'elemento come
-variabili di dato `--file-*`, e li disegna la meccanica di `structure.css`
-sotto `look-file` e `look-adattato`; in Scrittura nessuna regola li legge, e
-cambiare modalità non ridisegna il documento. Nell'aspetto adattato
-`editors/rich/tints.ts` porta ogni colore del file sulla carta del tema con
-`theme/adapt.ts`, come decorazione, perché il colore dipende dalla carta e
-non dal documento. Le regole della pelle sul contenuto valgono solo sotto
-`.look-tema`, e il gate del sanitizer lo fa rispettare. I segni del documento
-(revisioni, correttore, ricerca, commenti) prendono i ruoli della carta su
-cui stanno, dalla pelle, e la superficie non scrive ruoli del tema
-sull'elemento.
-
-Sotto `look-file` la carta del file è chiara in ogni luce: la regola della
-carta in `structure.css` (`.look-file .rich-desk, .look-file .grid-viewport`)
-ricollega i ruoli `--doc-*` ai `--paper-*` del tema, coi ripieghi della serie
-per un tema che non li dichiara. Sulla carta stanno anche l'anello del fuoco
-(`--focus-ring`) e il cursore (`--doc-caret`), che prendono `--paper-link`, e
-i colori della sintassi (`--syn-*`), che prendono l'inchiostro della carta:
-in una formula, come in Excel, hanno colore solo i riferimenti
-(`--doc-author-*`). Così al buio niente del tema chiaro finisce sul bianco.
-La griglia di un foglio fa lo stesso con i suoi segni (la cella attiva e
-quella scelta, la selezione, il riempimento, la cella in modifica, gli
-oggetti, il segno dei commenti): ridichiarano `--accent` e `--accent-veil`
-dalla carta, nella stessa `structure.css` (la pelle non dichiara variabili),
-e in `skin/editors.css` la cella in modifica ha il fondo della carta. Le intestazioni di righe e colonne sono cornice e restano del
-tema.
+([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)): Pagina
+(`document`) e Lettura (`reading`) offrono `file` e `adattato`, Scrittura
+(`writing`) `tema`. I valori del file (carattere, misura, colore, evidenziato,
+spazi, interlinea) stanno sull'elemento come variabili di dato `--file-*`, e li
+disegna la meccanica di `structure.css` sotto `look-file` e `look-adattato`; in
+Scrittura nessuna regola li legge, e cambiare modalità non ridisegna il
+documento. Nell'aspetto adattato `editors/rich/tints.ts` porta ogni colore del
+file sulla carta del tema con `theme/adapt.ts`, come decorazione: il colore
+dipende dalla carta, non dal documento. La pelle veste il contenuto solo sotto
+`.look-tema` (gate del sanitizer). I segni del documento (revisioni,
+correttore, ricerca, commenti) prendono dalla pelle i ruoli della carta su cui
+stanno, mai ruoli del tema scritti sull'elemento. In `look-file` anche
+l'anello, il cursore, la sintassi (d'inchiostro, come in Excel) e l'accento dei
+segni della griglia, non le intestazioni, vengono dai `--paper-*`.
 
 Il moto della carta (`editors/rich/rich-motion.ts`) segue la regola del palco:
 il testo è sempre al suo posto finale, e si muove la sagoma di ogni foglio
