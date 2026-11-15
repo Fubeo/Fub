@@ -1944,4 +1944,4 @@ Fatto quando: `cargo test -p fub-canvas-core --test parity` e
 `max_missing` 0 (o con le eccezioni approvate); `check-doc-links.mjs` e le
 altre guardie dei documenti passano; `scripts/check.sh` è verde.
 Prova: scripts/check.sh
-Stato: [~] in corso · coder dal 2026-11-15 (coder/lic-t26 da 162852532)
+Stato: [x] fatto (2026-11-15) · coder/lic-t26 @ 66c6cbc83: `max_missing` 0 in main, n4, n6; eccezioni N6.guides e N6.settings del Fuori scope; corpus 4,2 → 2,6 operazioni, 48,6 → 22,7 righe; check.sh completo verde 60 passi (SALTA solo il kernel per Windows, target assente qui)
