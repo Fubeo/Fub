@@ -76,13 +76,15 @@ in quella Rust compilata in WebAssembly
 ## Il nucleo della lavagna
 
 La misura di N3 (T15): il modulo `fub-canvas-wasm` in Node e nella WebView
-di Linux, con la CSP dell'app
+di Linux, con la CSP dell'app, e quella del runner da cui vengono le soglie
+della CI
 ([`bench/webview/canvas.mjs`](../../apps/client/bench/webview/canvas.mjs),
 scenario L1).
 
 | Data | Sistema | Macchina | Pagina |
 |---|---|---|---|
 | 2026-11-03 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | AMD Ryzen 7 7730U, condivisa | [Il nucleo della lavagna in WebAssembly](2026-11-03-lavagna-wasm.md) |
+| 2026-11-15 | Linux 7.0 (Azure), X11 sotto Xvfb, WebKitGTK | runner della CI, AMD EPYC 7763, 4 nuclei | [Il nucleo della lavagna sul runner della CI](2026-11-15-lavagna-wasm-runner.md) |
 
 ## L'inchiostro sulla lavagna
 
