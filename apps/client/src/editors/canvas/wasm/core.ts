@@ -163,6 +163,88 @@ export interface CanvasCompiled {
   readonly created: string[];
 }
 
+/** Un problema del controllo (`check`): la forma di `docs/reference/canvas-code.md`, «Il controllo». */
+export interface CanvasCheckProblem {
+  readonly code: string;
+  /** L'operazione, da zero; `null` per la lista intera (anche un testo vuoto o che non è JSON). */
+  readonly index: number | null;
+  /** Il puntatore JSON del campo (`/2/ids/0`); `""` per la lista intera. */
+  readonly path: string;
+  /** La frase fissa in inglese del nucleo, per chi indaga. */
+  readonly message: string;
+  /** Il nome o gli id più vicini, separati da «, ». */
+  readonly suggestion?: string;
+  /** L'operazione intera corretta, quando la correzione è una sola. */
+  readonly fix?: unknown;
+}
+
+/** Un avviso del controllo: le schede coinvolte, o l'operazione di una nota. */
+export interface CanvasCheckWarning {
+  readonly code: string;
+  readonly ids: readonly string[];
+  readonly estimated_height?: number;
+  readonly index?: number;
+  readonly detail?: string;
+}
+
+/** Una scheda nata o tolta, col testo accorciato se ne ha uno. */
+export interface CanvasSummaryCard {
+  readonly id: string;
+  readonly text?: string;
+}
+
+/** Un punto e una misura della lavagna, come li dice il riassunto. */
+type SummaryPlace = { readonly x: number; readonly y: number };
+type SummarySize = { readonly width: number; readonly height: number };
+
+/** Una scheda rimasta che cambia: posto, misura, altri campi. */
+export interface CanvasSummaryChange extends CanvasSummaryCard {
+  readonly moved?: { readonly from: SummaryPlace; readonly to: SummaryPlace };
+  readonly resized?: { readonly from: SummarySize; readonly to: SummarySize };
+  readonly fields?: readonly string[];
+}
+
+/** Un arco nato, tolto o cambiato. */
+export interface CanvasSummaryEdge {
+  readonly id: string;
+  readonly fromNode: string;
+  readonly toNode: string;
+  readonly fields?: readonly string[];
+}
+
+/** Un tratto nato, tolto o cambiato, col suo livello. */
+export interface CanvasSummaryStroke {
+  readonly id: string;
+  readonly layer: LayerRef;
+}
+
+/** Il riassunto di ciò che una lista cambierebbe (`summary.rs` del nucleo). */
+export interface CanvasSummary {
+  readonly cards_added: readonly CanvasSummaryCard[];
+  readonly cards_removed: readonly CanvasSummaryCard[];
+  readonly cards_changed: readonly CanvasSummaryChange[];
+  readonly edges_added: readonly CanvasSummaryEdge[];
+  readonly edges_removed: readonly CanvasSummaryEdge[];
+  readonly edges_changed: readonly CanvasSummaryEdge[];
+  readonly order_changed: boolean;
+  readonly strokes_added?: readonly CanvasSummaryStroke[];
+  readonly strokes_removed?: readonly CanvasSummaryStroke[];
+  readonly strokes_changed?: readonly CanvasSummaryStroke[];
+}
+
+/** Il rapporto del controllo: con `ok` falso ci sono solo i problemi. */
+export interface CanvasCheckReport {
+  readonly ok: boolean;
+  readonly problems: readonly CanvasCheckProblem[];
+  readonly warnings: readonly CanvasCheckWarning[];
+  readonly warnings_omitted: number;
+  readonly summary: CanvasSummary | null;
+  readonly outline_after: string | null;
+}
+
+/** La lista da controllare: come JSON, o come testo da leggere (quello degli appunti). */
+export type CanvasCheckInput = { readonly ops: unknown } | { readonly text: string };
+
 /**
  * Perché il nucleo non disegna un tratto di un livello valido: la prima
  * ragione nell'ordine dei vettori (`docs/reference/canvas-ink.md`).
@@ -198,6 +280,19 @@ export interface CanvasCore {
   preview(patches: readonly CanvasPatch[]): string;
   /** Compila le operazioni d'intento sul modello, senza cambiarlo. */
   compile(ops: readonly CanvasIntentOp[], seed?: number | bigint | string): CanvasCompiled;
+  /**
+   * La lavagna come codice: la lista di operazioni che la ricrea, nel testo
+   * che scrive `canvas.read` in forma `code` (JSON con i rientri). Con `ids`,
+   * solo quelle schede e gli archi fra loro, senza l'inchiostro libero.
+   */
+  describe(ids?: readonly string[]): string;
+  /**
+   * Controlla una lista sul modello, senza cambiarlo: il rapporto del nucleo
+   * (problemi, avvisi, riassunto). Un testo vuoto o che non è JSON è un
+   * problema `invalid` del rapporto, non un errore. Lo stesso seme di
+   * `compile` dà gli stessi id.
+   */
+  check(input: CanvasCheckInput, seed?: number | bigint | string): CanvasCheckReport;
   /** L'indice della scheda il cui oggetto contiene il byte `byte` (UTF-8, BOM compreso), o `null`. */
   nodeAt(byte: number): number | null;
   /**
@@ -222,6 +317,8 @@ interface CoreExports {
   canvas_commit(handle: number, ptr: number, len: number): number;
   canvas_preview(handle: number, ptr: number, len: number): number;
   canvas_compile(handle: number, ptr: number, len: number): number;
+  canvas_describe(handle: number, ptr: number, len: number): number;
+  canvas_check(handle: number, ptr: number, len: number): number;
   canvas_model(handle: number): number;
   canvas_node_at(handle: number, byte: number): number;
   canvas_ink_layers(handle: number): number;
@@ -232,7 +329,7 @@ interface CoreExports {
 
 const FUNCTIONS = [
   "fub_alloc", "fub_free", "canvas_open", "canvas_reset", "canvas_commit", "canvas_preview",
-  "canvas_compile", "canvas_model", "canvas_node_at", "canvas_ink_layers", "canvas_close", "result_ptr",
+  "canvas_compile", "canvas_describe", "canvas_check", "canvas_model", "canvas_node_at", "canvas_ink_layers", "canvas_close", "result_ptr",
   "result_len",
 ] as const;
 
@@ -469,6 +566,16 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
+/** La richiesta col seme degli id nuovi, se c'è: un numero sicuro, o le sue cifre in una stringa. */
+function withSeed<T extends object>(request: T, seed: number | bigint | string | undefined): T & { seed?: number | string } {
+  if (seed === undefined) return request;
+  if (typeof seed === "number" && !Number.isSafeInteger(seed)) {
+    // Un numero oltre 2⁵³ non è più quello scritto: il seme esatto va come stringa.
+    throw new CanvasCoreError("request", `the seed ${seed} is not a safe integer: pass it as a bigint or a string`);
+  }
+  return { ...request, seed: typeof seed === "bigint" ? seed.toString() : seed };
+}
+
 type Invoke = (target: Instance, input: Uint8Array | null, run: (ptr: number, len: number) => number) => Answer;
 
 class Core implements CanvasCore {
@@ -527,15 +634,21 @@ class Core implements CanvasCore {
 
   compile(ops: readonly CanvasIntentOp[], seed?: number | bigint | string): CanvasCompiled {
     this.#live();
-    const request: { ops: readonly CanvasIntentOp[]; seed?: number | string } = { ops };
-    if (seed !== undefined) {
-      if (typeof seed === "number" && !Number.isSafeInteger(seed)) {
-        // Un numero oltre 2⁵³ non è più quello scritto: il seme esatto va come stringa.
-        throw new CanvasCoreError("request", `the seed ${seed} is not a safe integer: pass it as a bigint or a string`);
-      }
-      request.seed = typeof seed === "bigint" ? seed.toString() : seed;
-    }
+    const request = withSeed({ ops }, seed);
     return this.#json(encodeJson(request), (ptr, len) => this.#target.exports.canvas_compile(this.#handle, ptr, len)) as CanvasCompiled;
+  }
+
+  describe(ids?: readonly string[]): string {
+    this.#live();
+    const request = ids === undefined ? { form: "code" } : { form: "code", ids };
+    const answer = this.#json(encodeJson(request), (ptr, len) => this.#target.exports.canvas_describe(this.#handle, ptr, len)) as { text: string };
+    return answer.text;
+  }
+
+  check(input: CanvasCheckInput, seed?: number | bigint | string): CanvasCheckReport {
+    this.#live();
+    const request = withSeed("text" in input ? { text: input.text } : { ops: input.ops }, seed);
+    return this.#json(encodeJson(request), (ptr, len) => this.#target.exports.canvas_check(this.#handle, ptr, len)) as CanvasCheckReport;
   }
 
   nodeAt(byte: number): number | null {
