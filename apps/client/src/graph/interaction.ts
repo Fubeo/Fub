@@ -700,11 +700,13 @@ export function createInteraction(options: InteractionOptions): Interaction {
   const onFocus = (): void => {
     // Anello di focus sul canvas stesso: il token --focus-ring se il tema lo
     // definisce, altrimenti l'outline di default del browser. Il token vive
-    // su :root, quindi si legge da documentElement.
+    // su :root, quindi si legge da documentElement. Il canvas riempie il suo
+    // riquadro, che taglierebbe un anello fuori dal bordo: l'anello rientra
+    // della sua larghezza e sta dentro.
     const fc = getComputedStyle(document.documentElement).getPropertyValue("--focus-ring").trim();
     if (fc) {
       canvas.style.outline = `2px solid ${fc}`;
-      canvas.style.outlineOffset = "1px";
+      canvas.style.outlineOffset = "-2px";
     }
   };
 
