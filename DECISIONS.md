@@ -104,6 +104,15 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-15 · manutenzione · La revisione del merge: `erase_along` su un
+  tratto di pagina o di cella non taglia (la pagina che la scheda mostra e il
+  riquadro della cella li sa solo la resa) e scrive la nota `ink_kept` con la
+  ragione, se il cammino passa sulla scheda; prima non diceva niente. E prende
+  `aspect`, la proporzione del contenuto come `move_strokes`, ma solo con `on`
+  su una scheda (con `auto` il cammino passa su più contenuti: `Invalid`);
+  `erase-along-aspect.json` lo prova anche contro la gomma della tela · tagliare
+  quei tratti in codice vorrebbe la pagina mostrata e il riquadro della cella,
+  che il nucleo non ha: la nota dice che restano.
 - 2026-11-15 · manutenzione · `origin/main` (222c6d476, con N6 #302) entra nella
   lavagna in codice. Le operazioni del Lazo di N6, `move_strokes` e
   `restyle_strokes`, entrano in `spec::OPS` (con esempi, nella guida, nella
@@ -123,10 +132,12 @@ La più recente in cima: data · piano · decisione · perché.
   `board.json`) e lo strumento Penna, con le note e le parti finte, e conosce
   `Mod+G` · senza, R7 non vede i comandi che le voci di N6 dichiarano, e il
   pulsante delle penne di N4 esiste solo con la Penna.
-- 2026-11-15 · manutenzione · Il `Fit` privato dell'inchiostro di N6 in
-  `ops.rs` diventa `AspectFit` (`InkFit` è quello di `ink.rs`, da T18):
-  `ops::Fit` è già pubblico (il `fit: content` di `resize`, T10). La lettura dell'inchiostro (`describe/ink.rs`, T17) tiene la
-  sua regola di misura; per le ancore `page` e `cell` di N6 fa come le
+- 2026-11-15 · manutenzione · Una sola regola di misura dell'inchiostro:
+  `InkFit::of(node, anchor, aspect)` in `ink.rs`, con la proporzione del
+  contenuto di N6 (T39, T98); `ops.rs` (il `Fit` privato di N6, con i suoi
+  `scales` e `SCALED_EXTENSIONS`) la usa, e la riga doppia esce dal registro
+  di `a_named_rule_is_declared.rs`. La lettura dell'inchiostro (`describe/ink.rs`,
+  T17) la usa senza proporzione, che non sa; per le ancore `page` e `cell` di N6 fa come le
   operazioni sui tratti (il nucleo non sa dove la pagina o la cella sta nella
   scheda): il tratto conta nella riga dell'outline ma non nel riquadro, e in
   `ink_read` porta `anchor` coi punti nelle unità dell'ancora · senza, i punti
@@ -134,8 +145,10 @@ La più recente in cima: data · piano · decisione · perché.
 - 2026-11-15 · manutenzione · `CanvasColor::Unknown` di N6 (un colore che Fub
   non conosce): l'outline lo scrive com'è, la forma breve non lo scrive (la
   scheda va nella forma intera), l'anteprima la disegna grigia come la tela ·
-  il colore del file non si perde nella lettura; ricompilarlo dà `Invalid`, come
-  il vettore 31 di N6.
+  il colore del file non si perde nella lettura, e fa il giro di `code` →
+  `compile` → toppe intero (test `an_unknown_colour_survives_the_round_trip`);
+  lo rifiuta solo `check_colors` della scrittura di una sessione che non l'ha
+  letto, come il vettore 31 di N6.
 - 2026-11-15 · manutenzione · Dopo il merge `docs/reference/canvas-ink.md` era a
   667 righe (tetto 550): la sezione «In codice» (T16–T17) va in una pagina sua,
   `docs/reference/canvas-ink-code.md`, con un rimando in `canvas-ink.md`, la voce

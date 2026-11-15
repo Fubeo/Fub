@@ -184,7 +184,9 @@ di una lavagna ridà la stessa lavagna: le stesse schede e gli stessi archi,
 nello stesso ordine, con i campi sconosciuti. È la prova che `code` non perde
 nulla, e `crates/fub-canvas-core/tests/describe.rs` la fa su ogni lavagna che
 si apre nei vettori di `canvas-ops/` (prima e dopo l'operazione), di
-`canvas-read/` e di `canvas-ink/`, inchiostro compreso.
+`canvas-read/` e di `canvas-ink/`, inchiostro compreso. Anche un colore che Fub
+non conosce fa il giro: lo rifiuta solo la scrittura di una sessione che non
+l'ha letto ([«I colori»](canvas-format.md#i-colori)).
 
 Il giro ha tre casi che non tornano uguali, e sono detti qui:
 
@@ -527,7 +529,7 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila (`index
 | `UnknownEdge` | `remove`, `set` o `color` di un id che non è né una scheda né un arco; `reverse` di un id che non è un arco |
 | `DuplicateId` | un id dato che è già preso (anche in `as`); un id ripetuto nella lista di `move`, `remove`, `reorder`, `color`, `align`, `distribute`, `duplicate` o `layout` |
 | `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie, il gruppo o il frammento; un `insert` porta più di 10 000 schede; i [limiti](canvas-import.md#i-limiti-e-gli-errori) di `from_mermaid` e `from_outline`; un tratto di `draw` o un cammino di `erase_along` con più di 10 000 punti; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
-| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto; un testo che `from_mermaid` o `from_outline` non legge ([i loro errori](canvas-import.md#i-limiti-e-gli-errori)); un tratto che non si disegnerebbe; i punti o la forma di `draw` che non fanno un tratto, un cammino di `erase_along` vuoto o troppo costoso ([gli errori](canvas-ink-code.md)) |
+| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto; un testo che `from_mermaid` o `from_outline` non legge ([i loro errori](canvas-import.md#i-limiti-e-gli-errori)); un tratto che non si disegnerebbe; i punti o la forma di `draw` che non fanno un tratto, un cammino di `erase_along` vuoto o troppo costoso, o col suo `aspect` senza una scheda in `on` ([gli errori](canvas-ink-code.md)) |
 | `UnknownStroke` | `erase_strokes`, `move_strokes` o `restyle_strokes` di un id che non è un tratto del livello |
 | `ForeignLayer` | un'operazione dell'inchiostro (`draw` ed `erase_along` compresi) su un livello estraneo |
 
@@ -535,15 +537,9 @@ I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file
 (`before`, `seed`, `ops`, `expect`); `tests/op_vectors.rs` li fa girare e
 controlla che l'inversa delle toppe ridia `before`.
 
-## Lo schema
+## Lo schema e il controllo
 
-Lo schema delle operazioni (`spec.rs`: i campi e i loro tipi, lo schema JSON della
-lista, i problemi di forma di `validate`) sta in
-[Lo schema delle operazioni](canvas-schema.md). Un'operazione nuova entra in `OPS`
-nello stesso task.
-
-## Il controllo
-
-Il controllo di una lista prima di scriverla (`check`: i problemi, il riassunto
-di che cosa cambia, gli avvisi e la lettura di dopo) sta in
-[Il controllo della lavagna](canvas-check.md).
+Lo schema delle operazioni (`spec.rs`: campi, tipi, lo schema JSON della lista,
+i problemi di forma di `validate`) sta in [Lo schema delle operazioni](canvas-schema.md);
+un'operazione nuova entra in `OPS` nello stesso task. Il controllo di una lista
+prima di scriverla (`check`) sta in [Il controllo della lavagna](canvas-check.md).

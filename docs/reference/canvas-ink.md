@@ -204,9 +204,10 @@ I vettori stanno in `apps/client/src/__fixtures__/canvas-ink-fit/`, un caso
 per file, scritti a mano: `name`, `description`, la scheda (`card`, con
 `type` e `file`), `ref` (`W`, `H`), `size` (`w`, `h`) e in `expect` il modo,
 `s`, `x` (`dx`), `y` (`dy`) e qualche punto `from` → `to`. Il nucleo Rust
-li fa girare con `ink_fit`. Quelli con la proporzione stanno accanto, in
-`canvas-ink-fit-aspect/`, con il campo in più `aspect`: li provano il
-client (`ink-fit.test.ts`) e il nucleo, con `ink_fit` e la proporzione.
+li fa girare con `InkFit::of` (`ink.rs`), l'unica regola del nucleo. Quelli
+con la proporzione stanno accanto, in `canvas-ink-fit-aspect/`, con il campo
+in più `aspect`: li provano il client (`ink-fit.test.ts`) e il nucleo, con
+`InkFit::of` e la proporzione.
 
 ## Il livello estraneo
 

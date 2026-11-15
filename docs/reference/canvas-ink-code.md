@@ -92,15 +92,21 @@ I vettori di `draw` sono `canvas-ops/draw-*.json`.
 ## `erase_along`
 
 La gomma «Solo il pezzo» in codice (`ops/erase.rs`): `points` (da 1 a 10 000
-`[x, y]`, se no `Invalid` o `TooMany`), `size` (maggiore di zero) e `on`. Ogni
-tratto toccato si taglia dove passa il cerchio, e i pezzi prendono il suo posto.
+`[x, y]`, se no `Invalid` o `TooMany`), `size` (maggiore di zero), `on` e
+`aspect`. Ogni tratto toccato si taglia dove passa il cerchio, e i pezzi
+prendono il suo posto.
 
 - **`on`:** `"auto"` (di serie) vuole punti della lavagna e taglia i tratti
   di ogni scheda e quelli liberi; `"board"` solo quelli liberi; l'id di una
   scheda vuole le sue unità (0,0 in alto a sinistra) e taglia solo i suoi
   (`UnknownNode`, `ForeignLayer` come per `draw`).
+- **`aspect`:** la proporzione del contenuto della scheda di `on` (larghezza
+  su altezza), come in `move_strokes`: la tela la dà a `erasableInk` con
+  `aspects`. Vale solo con `on` sull'id di una scheda (con `auto` o `board` è
+  `Invalid`: il cammino passa su più contenuti); una che non vale (zero,
+  negativa) dà la regola senza. Non si scrive nel file.
 - **Il taglio:** il cammino torna nelle unità del tratto con l'inverso della
-  sua resa (anche su un'immagine scalata), e il raggio, `size / 2` diviso la
+  sua resa (anche su un'immagine scalata, con `aspect` se c'è), e il raggio, `size / 2` diviso la
   scala, cresce di metà dello spessore del pennello: il conto di `cutInk`,
   con `split_ink` e `cut_brush` (`fub-ink-codec/src/cut.rs`, copia di
   `ink/tools/split.ts`). Un raggio la cui metà arrotonda a zero non taglia.
@@ -118,9 +124,11 @@ tratto toccato si taglia dove passa il cerchio, e i pezzi prendono il suo posto.
 - **Le toppe:** per livello, si tolgono i tratti tagliati dall'ultimo al
   primo e si mettono i pezzi al loro posto (`cutStrokePatches`); niente tocchi, niente toppe.
 - **Ciò che resta:** un tratto che non si disegna, un livello estraneo e un
-  tratto con l'ancora di pagina o di cella (il nucleo non sa dove sta nella
-  scheda) non si toccano; con `auto` o `board`, se possono stare sotto il cammino, la
-  nota `ink_kept` lo dice. Oltre 50 milioni di distanze stimate
+  tratto con l'ancora di pagina o di cella non si toccano: la pagina che la
+  scheda mostra e il riquadro della cella li sa la resa, non il nucleo, e la
+  gomma della tela li taglia solo lì. Se possono stare sotto il cammino (per
+  una scheda, se il cammino la tocca), la nota `ink_kept` lo dice, con la
+  ragione (`anchored to a page`, `anchored to a cell`). Oltre 50 milioni di distanze stimate
   (`split_work`) il cammino è troppo fitto: `Invalid`.
 
 `ink-cut.json`, scritto a mano, prova il taglio in Rust (`cut_vectors.rs`) e
@@ -143,7 +151,10 @@ dicono anche l'inchiostro, con le regole di questa pagina: le stesse di
   con l'[ancora di pagina o di cella](canvas-ink-anchors.md) resta nelle unità
   della sua ancora (punti PDF della pagina, pixel del foglio dalla cella):
   dove la pagina o la cella sta nella scheda lo sa la resa, non il nucleo,
-  come per le operazioni sui tratti. Punti e
+  come per le operazioni sui tratti. La lettura non applica la proporzione del
+  contenuto (`aspect` di `move_strokes` ed `erase_along`): non la sa, e porta
+  la misura con la regola senza; su un'immagine con un'altra proporzione i
+  punti letti possono non cadere dove la tela li disegna. Punti e
   riquadri si arrotondano a 0,1, lo spessore `size` a 0,01; il riquadro va dal
   punto più in alto a sinistra a quello più in basso a destra, senza lo
   spessore.
