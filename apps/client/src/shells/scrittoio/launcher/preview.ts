@@ -12,8 +12,10 @@
 // la riga basta a scegliere. Per questo è inerte e fuori dall'albero
 // dell'accessibilità: i collegamenti resi dentro non diventano fermate del Tab,
 // e chi ascolta non sente una pagina che cambia sotto ogni freccia.
+import { mediaKindOfId } from "../../../editors/media/media-types";
 import { renderPreview } from "../../../host/query";
 import { t } from "../../../i18n/strings";
+import { formatKindOf } from "../../../ui/format-kind";
 import type { Lifetime } from "../../../ui/lifetime";
 import { Race } from "../../../ui/race";
 import { setSanitizedHtml } from "../../../ui/sanitize";
@@ -34,6 +36,13 @@ export interface Preview {
   /// La nota da mostrare; `null` svuota il riquadro. Chiedere quella che già
   /// si mostra, o che si sta aspettando, non fa niente.
   follow(doc: string | null): void;
+}
+
+/// Un file che non è un documento (un PDF, un'immagine, un audio): il canale
+/// dati non ha una resa da dargli, e chiederla vorrebbe dire un guasto per
+/// riga. Lo dice il riquadro, senza domanda.
+function mediaFile(doc: string): boolean {
+  return formatKindOf(doc) === null && mediaKindOfId(doc) !== "other";
 }
 
 /// Ciò che si vede e non è testo: una resa fatta solo di questo non è vuota.
@@ -111,9 +120,9 @@ export function createPreview(lifetime: Lifetime): Preview {
       wanted = doc;
       settle();
       race.cancel();
-      if (doc === null) {
+      if (doc === null || mediaFile(doc)) {
         page.replaceChildren();
-        say(null);
+        say(doc === null ? null : t("launcher.preview.file"));
         return;
       }
       // Ciò che si vedeva resta finché arriva il resto: il riquadro non
