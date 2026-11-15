@@ -102,6 +102,11 @@ export const EDITORS: PartAnatomy = {
     // un'interruzione fra due fogli, e l'intestazione che si scrive sul posto.
     // Sono segni di Fub sulla carta, non il testo del file.
     { name: "rich-sheet-marks", layer: "segno", states: [S("rest"), S("focused")], hooks: ["rich-sheet-head", "rich-sheet-foot", "rich-sheet-name", "rich-running-bar", "rich-running-label", "rich-running-area", "rich-token"] },
+    // I compiti nella nota: la pastiglia della scadenza (Live e Lettura) è un
+    // segno di Fub sulla carta; il recinto ```tasks``` è la vista del
+    // componente dei compiti, vestita da blocco della carta.
+    { name: "task-due", layer: "segno", layers: { "cm-fub-code": "contenuto" }, states: REST, hooks: ["cm-fub-due", "cm-fub-due-near", "cm-fub-due-overdue", "cm-fub-due-bad", "task-due", "task-due-near", "task-due-overdue", "task-due-bad", "cm-fub-code"] },
+    { name: "tasks-block", layer: "segno", layers: { "markdown-rendered": "contenuto", "ui-stack": "cornice", "ui-checkbox": "cornice", "ui-field-label": "cornice", "ui-badge": "cornice", "ui-button": "cornice", "ui-text": "cornice", "ui-empty-state": "cornice", "ui-empty-title": "cornice", "intent-danger": "cornice", "intent-primary": "cornice" }, states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["markdown-rendered", "block-tasks", "block-query-note", "ui-stack", "ui-checkbox", "ui-field-label", "ui-badge", "ui-button", "ui-text", "ui-empty-state", "ui-empty-title", "intent-danger", "intent-primary"] },
     { name: "canvas-edge", layer: "contenuto", layers: { "canvas-edge-hit": "segno", "canvas-edge-reconnect": "segno", "canvas-edge-draft": "segno" }, states: [S("rest"), S("hover"), S("selected"), S("dragging")], hooks: ["canvas-edge", "canvas-edge-draft", "canvas-edge-hit", "canvas-edge-line", "canvas-edge-arrow", "canvas-edge-label", "canvas-edge-reconnect"] },
     // Si scrive in una scheda di nota (T41): l'anello della scheda che
     // scrive, «Esc per uscire» pieno, lo stato del salvataggio e «Sola

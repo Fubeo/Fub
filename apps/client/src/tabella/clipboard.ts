@@ -135,6 +135,54 @@ export function pasteTargets(selection: Range, block: { readonly rows: number; r
   return targets;
 }
 
+/// Il segno del taglio: le celle tagliate restano dove sono, tratteggiate,
+/// finché non si incolla. `text` è il TSV che il taglio ha scritto negli
+/// appunti: l'incolla sposta soltanto se gli appunti dicono ancora quello e
+/// le celle tagliate non sono cambiate nel frattempo.
+export interface CutMark {
+  readonly range: Range;
+  readonly text: string;
+}
+
+/// Se l'incolla di `pasted` sposta le celle del segno: gli appunti sono
+/// quelli del taglio e le celle tagliate dicono ancora `now`.
+export function cutMoves(mark: CutMark, pasted: string, now: string): boolean {
+  // Gli appunti di sistema possono tornare con `\r\n` al posto di `\n`.
+  const plain = (text: string) => text.replace(/\r\n?/g, "\n");
+  return plain(pasted) === plain(mark.text) && now === mark.text;
+}
+
+/// Dove va un taglio incollato: dall'angolo in alto a sinistra della
+/// selezione, grande quanto le celle tagliate. Un taglio si incolla una volta.
+export function cutDestination(source: Range, selection: Range): Range {
+  return {
+    r0: selection.r0,
+    c0: selection.c0,
+    r1: selection.r0 + source.r1 - source.r0,
+    c1: selection.c0 + source.c1 - source.c0,
+  };
+}
+
+let cutTold = false;
+
+/// Se il taglio deve ancora dire che cosa farà l'incolla: soltanto la prima
+/// volta della sessione, in qualunque tabella. Il segno resta tratteggiato e
+/// sposta soltanto nella sua tabella; altrove l'incolla copia, e chi taglia
+/// lo deve sapere prima di incollare.
+export function tellCutOnce(): boolean {
+  if (cutTold) return false;
+  cutTold = true;
+  return true;
+}
+
+/// Dove va un taglio incollato in una tabella di `size`, se ci sta. Oltre il
+/// bordo il taglio non si sposta e non allarga la tabella: `null`, e
+/// l'incolla è uno qualunque. La stessa regola per la cornice e il documento.
+export function cutTarget(source: Range, selection: Range, size: { readonly rows: number; readonly columns: number }): Range | null {
+  const destination = cutDestination(source, selection);
+  return destination.r1 < size.rows && destination.c1 < size.columns ? destination : null;
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }

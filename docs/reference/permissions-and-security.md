@@ -265,8 +265,15 @@ label. Nega le nuove finestre e i download.
   e lo dice. In prova il comando non chiama la rete.
 
 Un link `https` di una nota va al browser di sistema. Va al visore con Alt+clic
-o quando `viewer.links` è acceso. Un indirizzo che il visore non apre resta al
-browser di sistema.
+o quando `viewer.links` è acceso. Un indirizzo `http` che il visore non apre
+va al browser di sistema; ogni altro schema non si apre, con o senza visore
+montato (`apps/client/src/ui/web-viewer.ts`). Un nodo `web_view` di una vista
+incornicia soltanto un indirizzo `https:`.
+
+Le letture del client con `fetch` (asset del vault, file dell'app, tessere
+della mappa) non seguono redirect e non portano credenziali né referrer:
+passano da `LOCAL_FETCH` in `apps/client/src/editors/core/local-fetch.ts`, e un
+test ferma un `fetch` senza quelle opzioni.
 
 ## Host nativo del clipper
 
@@ -287,6 +294,33 @@ famiglia sbagliata per il browser nominato è un errore d'uso. Un file con quel
 nome che non è un manifest dell'host resta com'è; `--uninstall` toglie
 soltanto ciò che l'host ha scritto. Quando l'invio ripiega, il popup scrive i
 due comandi con l'id vero dell'estensione.
+
+L'estensione non ha permessi di host all'installazione. Quelli che può
+chiedere dopo, uno per uno dalle opzioni, per l'assistente e per le immagini
+da scaricare, sono i siti `https` e il loopback `http` (`127.0.0.1`,
+`localhost`), uguali nel manifest di Chromium (MV3) e in quello di Firefox
+(MV2); mai `<all_urls>`. Il permesso del browser non basta: una richiesta a un
+sito remoto parte soltanto se l'utente ha concesso quell'origine anche nelle opzioni
+(`apps/clipper/src/interpreter.js`).
+
+La chiave dell'assistente remoto, se l'utente la scrive nelle opzioni, sta
+nello spazio locale dell'estensione (`storage.local`, voce `fub-ai-key`): il
+popup la legge in memoria per la sola domanda e la dimentica dopo, e non
+entra mai in una pagina, in un indirizzo `fub://` o in una cattura. Il rischio
+che resta: chi legge il profilo del browser con i diritti dell'utente, o un
+difetto che esegua codice nella pagina delle opzioni, legge anche la chiave.
+Il pulsante «Forget API key» delle opzioni la toglie.
+
+La conversione della pagina in Markdown (`apps/clipper/src/convert.js`, gemella
+di `crates/fub-importers/src/html.rs`, che la usano anche gli importatori e il
+salvataggio del visore) legge un `href` come lo legge il browser: senza
+caratteri di controllo ai bordi, senza tab e a capo in mezzo. Lo schema si
+giudica sull'indirizzo che il Markdown risolverà, con escape ed entità sciolti.
+Con `javascript:`, `vbscript:` o `data:`, anche mascherati da un'entità
+(`javascript&colon;`, `&#106;avascript:`) o da un escape (`javascript\:`), il
+link cade e la sua etichetta resta testo, senza parentesi quadre. Gli altri
+schemi e i percorsi relativi (`a&amp;b.html`) restano destinazioni, perché un
+importatore porta i suoi (`evernote://`): la resa li filtra di nuovo.
 
 ## Server MCP
 
