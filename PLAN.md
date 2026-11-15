@@ -5846,7 +5846,7 @@ domanda per nome (`notesByName`) 120 ms dopo l'ultima battuta, come il
 lanciatore; R07: vista e ricerca per vault in RAM (`state/per-vault.ts`, al
 più 32); R08: la scheda della view resta davanti, e la seconda
 `synchronize()` resta perché toglierla fa fallire la prova · resta A03, dopo
-S2 T10; le caselle di #237 dopo il merge
+S2 T10; le caselle di #237 dopo il merge · A03 in PR #400 (2026-11-15): si riproduceva a ogni `setting_changed` (`render()` ricostruiva le righe, fuoco su BODY), fuoco rimesso con `focusSnapshot`/`restoreFocus`; trovato lì #401 (bozza di un campo persa), coder al lavoro
 
 ## T54 · L'editor di testo vestito dal tema
 
