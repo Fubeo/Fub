@@ -193,13 +193,13 @@ fn a_text_file_without_a_format_is_still_counted() {
 fn a_comment_does_not_change_the_counts() {
     let vault = Vault::new();
     std::fs::write(
-        vault.root.join("Con.md"),
+        vault.root.join("Commentata.md"),
         "Un {==testo==}{>>@Anna 2026-11-08 17:40: tre parole qui<<} finale.\n",
     )
     .unwrap();
     std::fs::write(vault.root.join("Senza.md"), "Un testo finale.\n").unwrap();
     let ws = vault.open();
-    let with = texts(&render_open(&ws, "Con.md"));
+    let with = texts(&render_open(&ws, "Commentata.md"));
     assert_eq!(with, texts(&render_open(&ws, "Senza.md")));
     assert_eq!(with, vec!["Parole: 3 · Caratteri: 17".to_string()]);
 }
@@ -211,9 +211,9 @@ fn a_comment_does_not_change_the_counts() {
 fn a_selected_comment_counts_only_its_passage() {
     let vault = Vault::new();
     let source = "Un {==testo==}{>>@Anna 2026-11-08 17:40: tre parole qui<<} finale.\n";
-    std::fs::write(vault.root.join("Con.md"), source).unwrap();
+    std::fs::write(vault.root.join("Commentata.md"), source).unwrap();
     let ws = vault.open();
-    let doc = DocId::new("Con.md");
+    let doc = DocId::new("Commentata.md");
     let end = source.find(" finale").unwrap();
     let selected = &source[..end];
     let expected = vec![
