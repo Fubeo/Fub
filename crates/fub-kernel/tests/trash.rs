@@ -1260,3 +1260,219 @@ fn drafts(ws: &Workspace) -> Vec<String> {
         .map(|b| b.doc.to_string())
         .collect()
 }
+
+/// Un cestino del sistema che sposta il file e basta.
+struct MovesTo(Utf8PathBuf);
+
+impl fub_kernel::os_trash::OsTrashBackend for MovesTo {
+    fn move_file_to_os_trash(&self, source: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
+        std::fs::rename(source, &self.0)?;
+        Ok(self.0.clone())
+    }
+}
+
+/// **Il ritorno dal cestino del sistema passa dallo storage del vault** (B11
+/// dell'audit). Prima la mossa usava il filesystem nudo: se la cartella della
+/// nota diventava un collegamento verso fuori, il file finiva fuori dal vault.
+/// Adesso la destinazione si risolve dentro la radice aperta, la mossa si
+/// rifiuta e il file resta nel cestino del sistema.
+#[cfg(unix)]
+#[test]
+fn the_rollback_from_the_system_trash_stays_inside_the_vault() {
+    let vault_dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(vault_dir.path().to_owned()).unwrap();
+    let system_trash = tempfile::tempdir().unwrap();
+    let destination = Utf8PathBuf::from_path_buf(system_trash.path().join("Nota.md")).unwrap();
+    let elsewhere = tempfile::tempdir().unwrap();
+    std::fs::create_dir(root.join("dir")).unwrap();
+    std::fs::write(root.join("dir/Nota.md"), b"# Nota\n").unwrap();
+
+    let vault = fub_kernel::Vault::open(&root).unwrap();
+    let doc = DocId::new("dir/Nota.md");
+    let moved = vault
+        .prepare_trash(&doc)
+        .unwrap()
+        .invoke_os(&MovesTo(destination.clone()))
+        .unwrap();
+    assert!(matches!(
+        moved,
+        fub_kernel::vault::CompletedOsTrashMove::Os(_)
+    ));
+
+    // La cartella rimasta vuota diventa un collegamento verso fuori.
+    std::fs::remove_dir(root.join("dir")).unwrap();
+    std::os::unix::fs::symlink(elsewhere.path(), root.join("dir")).unwrap();
+
+    assert!(moved.rollback().is_err());
+    assert!(
+        !elsewhere.path().join("Nota.md").exists(),
+        "the rollback wrote outside the vault"
+    );
+    assert_eq!(std::fs::read(&destination).unwrap(), b"# Nota\n");
+}
+
+/// Il caso buono: il ritorno rimette la nota al suo posto.
+#[test]
+fn the_rollback_from_the_system_trash_puts_the_note_back() {
+    let vault_dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(vault_dir.path().to_owned()).unwrap();
+    let system_trash = tempfile::tempdir().unwrap();
+    let destination = Utf8PathBuf::from_path_buf(system_trash.path().join("Nota.md")).unwrap();
+    std::fs::create_dir(root.join("dir")).unwrap();
+    std::fs::write(root.join("dir/Nota.md"), b"# Nota\n").unwrap();
+
+    let vault = fub_kernel::Vault::open(&root).unwrap();
+    let doc = DocId::new("dir/Nota.md");
+    let moved = vault
+        .prepare_trash(&doc)
+        .unwrap()
+        .invoke_os(&MovesTo(destination.clone()))
+        .unwrap();
+    moved.rollback().unwrap();
+    assert_eq!(
+        std::fs::read(root.join("dir/Nota.md")).unwrap(),
+        b"# Nota\n"
+    );
+    assert!(!destination.exists());
+}
+
+/// Un altro processo sostituisce una voce del cestino appena censita: la
+/// scrive di nuovo allo stesso nome, con un altro contenuto.
+struct ReplacedAfterCensus {
+    inner: FsStorage,
+    replaced: std::sync::atomic::AtomicBool,
+    /// Invece di sostituire la voce, il supporto si guasta mentre lo sweep
+    /// chiede la sua identità.
+    fails: bool,
+}
+
+impl VaultStorage for ReplacedAfterCensus {
+    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        self.inner.read(path)
+    }
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        self.inner.write(path, bytes)
+    }
+    fn update(
+        &self,
+        path: &Utf8Path,
+        merge: fub_kernel::storage::Merge<'_>,
+    ) -> std::io::Result<()> {
+        self.inner.update(path, merge)
+    }
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.append(path, bytes)
+    }
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename(from, to)
+    }
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename_no_replace(from, to)
+    }
+    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove(path)
+    }
+    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        self.inner.list(dir)
+    }
+    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        self.inner.stat(path)
+    }
+    fn file_identity(
+        &self,
+        path: &Utf8Path,
+    ) -> std::io::Result<Option<fub_kernel::storage::FileIdentity>> {
+        // La seconda domanda sull'identità della voce è quella dello sweep,
+        // subito prima di distruggere: il censimento è finito, e l'altro
+        // processo arriva adesso.
+        // Su Windows il percorso ha `\` fra le parti: si guarda la cartella
+        // e il nome, non la stringa.
+        let in_trash = path.components().any(|part| part.as_str() == ".trash");
+        let is_one = path.file_name().is_some_and(|name| name.starts_with("One"));
+        if in_trash
+            && is_one
+            && self
+                .replaced
+                .swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
+            if self.fails {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "the disk refuses",
+                ));
+            }
+            self.inner
+                .write(path, b"replaced by another process")
+                .expect("the other process writes");
+        }
+        self.inner.file_identity(path)
+    }
+    fn change_stamp(&self, path: &Utf8Path) -> std::io::Result<Option<u64>> {
+        self.inner.change_stamp(path)
+    }
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove_empty_dir(dir)
+    }
+}
+
+/// **Svuotare il cestino distrugge soltanto il file che ha contato** (B14
+/// dell'audit). Una voce sostituita da un altro processo Fub fra il censimento
+/// e la rimozione resta, con il contenuto nuovo; le altre se ne vanno.
+#[test]
+fn emptying_the_trash_keeps_an_entry_replaced_after_the_census() {
+    let fx = Fixture::new();
+    fx.put("One.txt", "first");
+    fx.put("Two.txt", "second");
+    let storage = Arc::new(ReplacedAfterCensus {
+        inner: FsStorage,
+        replaced: std::sync::atomic::AtomicBool::new(false),
+        fails: false,
+    });
+    let mut ws = fx.workspace_on(storage);
+
+    ws.delete_document(&DocId::new("One.txt")).unwrap();
+    ws.delete_document(&DocId::new("Two.txt")).unwrap();
+    let one = ws
+        .list_trash()
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.original == DocId::new("One.txt"))
+        .expect("One is in the trash")
+        .id;
+
+    assert_eq!(ws.empty_trash().unwrap(), 1, "only Two is destroyed");
+    assert_eq!(
+        std::fs::read(fx.root.join(one.as_str())).unwrap(),
+        b"replaced by another process",
+        "the replaced entry was destroyed"
+    );
+}
+
+/// **Un guasto del supporto non passa per una voce cambiata.** Se chiedere
+/// l'identità della voce fallisce davvero, lo svuotamento risale l'errore
+/// invece di dire «fatto» con la voce ancora nel cestino (0193).
+#[test]
+fn emptying_the_trash_reports_a_storage_failure_on_the_recheck() {
+    let fx = Fixture::new();
+    fx.put("One.txt", "first");
+    let storage = Arc::new(ReplacedAfterCensus {
+        inner: FsStorage,
+        replaced: std::sync::atomic::AtomicBool::new(false),
+        fails: true,
+    });
+    let mut ws = fx.workspace_on(storage);
+
+    ws.delete_document(&DocId::new("One.txt")).unwrap();
+    let one = ws.list_trash().unwrap()[0].id.clone();
+
+    assert!(
+        ws.empty_trash().is_err(),
+        "a failing disk is not an empty trash"
+    );
+    assert_eq!(
+        std::fs::read(fx.root.join(one.as_str())).unwrap(),
+        b"first",
+        "the entry stays in the trash"
+    );
+    assert_eq!(ws.list_trash().unwrap().len(), 1, "and keeps its sidecar");
+}

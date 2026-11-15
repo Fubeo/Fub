@@ -60,6 +60,22 @@ consentire una fuga.
 
 Un handle di transfer non diventa automaticamente un path filesystem.
 
+Quando Fub disfa un trasferimento nel cestino del sistema, il file torna
+passando dallo storage del vault (`VaultStorage::move_in_no_replace`): la
+destinazione si risolve dentro la radice aperta, con i suoi lucchetti, e una
+cartella diventata un collegamento verso fuori fa fallire il ritorno invece di
+portare il file fuori dal vault.
+
+L'azzeramento della demo apre la sua cartella senza seguire un collegamento al
+suo posto, legge `.fub-demo.json` da quella cartella aperta e la svuota
+attraverso lo stesso handle; poi toglie per nome la radice rimasta vuota. Una
+cartella messa al posto della demo dopo il controllo non si svuota, e la
+rimozione finale la rifiuta perché non è vuota. Il marcatore si toglie per
+ultimo: un azzeramento fermato a metà lascia una demo che il prossimo finisce.
+Su Windows cap-std (cap-primitives 4.0.3) fa rename, `remove_file` e
+`remove_dir_all` ricostruendo il percorso dall'handle aperto: qui e
+nell'export in una cartella resta una finestra stretta fino all'operazione.
+
 ## Temi installati
 
 Un tema non riceve capability e non può dichiarare permessi. L'host accetta
@@ -140,7 +156,9 @@ contano solo per chi li dichiara
 Il runtime:
 
 - usa Wasmtime component model;
-- non collega WASI;
+- non collega WASI, tranne `wasi:random` (`random` e `insecure-seed`): al
+  più 64 KiB per richiesta e 1 MiB sommando le richieste di una chiamata del
+  contratto, oltre è una trap;
 - non concede filesystem o rete direttamente;
 - serve soltanto le famiglie host disponibili;
 - applica limiti alla memoria lineare e alle tabelle;
@@ -392,6 +410,29 @@ coda, perché il job non è suo. Il biglietto non va nel log né nell'esito.
 L'app riceve soltanto una copia del documento in una cartella privata 0700,
 che si cancella sempre (vedi
 [Anteprime con la CLI](craft-formats.md#anteprime-con-la-cli)).
+
+## Programmi del sistema
+
+«Mostra nella cartella del sistema», «Apri con un'altra app» e «Stampa…»
+passano un percorso a un programma del sistema (`xdg-open` e `dbus-send` su
+Linux, `open` su macOS, `explorer.exe` su Windows): come argomento, mai
+attraverso una shell, e per percorso assoluto, senza cercarlo nel `PATH`
+(`crates/fub-app/src/print.rs`). Su Unix il programma si prende dalle
+cartelle che scrive l'amministratore (`/usr/bin`, `/bin`, `/usr/local/bin` e
+quelle di NixOS e Guix; su macOS solo `/usr/bin`), ed è buono se è un file
+regolare, eseguibile e non riscrivibile dal gruppo o dagli altri; su Windows
+viene dalla cartella di sistema (`SystemRoot`). Se non c'è, l'esito è
+«nessun programma» e la shell lo dice. Un file del vault che si eseguirebbe
+aprendolo si mostra e non si apre.
+
+La regola vale per il **primo** programma, non per quelli che lancia lui.
+`xdg-open` è uno script che cerca `gio`, `kde-open` e i loro pari nel `PATH`
+ereditato, come fa l'`Exec=` dei file `.desktop`; il `PATH` del figlio resta
+quello dell'utente, perché restringerlo romperebbe le app in `~/.local/bin`.
+Chi scrive in una cartella di quel `PATH` sceglie quindi l'app che apre il
+file. Su Windows anche `SystemRoot` viene dall'ambiente di chi avvia Fub: la
+via robusta, `GetSystemWindowsDirectoryW`, vorrebbe una dipendenza nuova di
+`fub-app`, che è una scelta di supply chain del maintainer.
 
 ## Supply chain
 
