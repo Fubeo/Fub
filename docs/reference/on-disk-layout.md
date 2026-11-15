@@ -21,7 +21,12 @@ La cartella viene scelta in ordine:
 
 1. `FUB_CONFIG_DIR`;
 2. `fub-config/` accanto all'eseguibile se esiste `fub.portable`;
-3. cartella di configurazione dell'utente per il sistema operativo.
+3. cartella di configurazione dell'utente per il sistema operativo, più
+   `fub/`: `%APPDATA%` su Windows, `$HOME/Library/Application Support` su
+   macOS e iOS, `$XDG_CONFIG_HOME` (se assoluto) o `$HOME/.config` sugli
+   altri Unix, e su Android la cartella privata dell'app
+   (`Context.getFilesDir()`), che il guscio passa con
+   `FUB_ANDROID_FILES_DIR` (vedi [La cornice del telefono](../architecture/phone-frame.md#il-lato-rust)).
 
 | Percorso relativo | Classe | Schema | Contenuto |
 |---|---|---:|---|
