@@ -17,7 +17,9 @@
 //! un'immagine né un PDF non si legge affatto: è la sua estensione a dirlo.
 //!
 //! Il numero delle pagine letto dal file vince su quello dato: se sono diversi,
-//! la nota `page_count_from_file` lo dice.
+//! la nota `page_count_from_file` lo dice. Una misura data invece resta: per
+//! la pagina di `on`, se il file ne dice un'altra, la nota `page_size_not_file`
+//! lo dice.
 
 use std::collections::HashMap;
 
@@ -232,20 +234,48 @@ fn fill_excerpt(
     note
 }
 
+/// Quanto il `page_size` dato può scostarsi, per lato, dalla misura della
+/// pagina nel file senza nota: mezzo punto PDF, quanto sposta l'arrotondamento
+/// all'intero (`[595, 842]` per un A4 di `595.276 × 841.89`).
+const PAGE_SIZE_TOLERANCE: f64 = 0.5;
+
 /// `page_count` e `page_size` di un `on` sulla pagina di un PDF (`draw`,
 /// `erase_along`): il conto del file, e la misura della pagina se non è data.
-/// Una pagina oltre l'ultima resta senza misura: la rifiuta la compilazione,
-/// col conto.
-fn fill_page(index: usize, on: &mut OnPage, pages: &[[f64; 2]]) -> Option<CompileNote> {
-    let note = count_from_file(index, &mut on.page_count, pages.len());
-    if on.page_size.is_none() {
-        on.page_size = on
-            .page
-            .checked_sub(1)
-            .and_then(|at| usize::try_from(at).ok())
-            .and_then(|at| pages.get(at).copied());
+/// Una misura data resta, ma se il file ne dice un'altra (oltre
+/// [`PAGE_SIZE_TOLERANCE`]) la nota `page_size_not_file` lo dice. Una pagina
+/// oltre l'ultima resta senza misura: la rifiuta la compilazione, col conto.
+fn fill_page(index: usize, on: &mut OnPage, pages: &[[f64; 2]]) -> Vec<CompileNote> {
+    let mut notes: Vec<CompileNote> = count_from_file(index, &mut on.page_count, pages.len())
+        .into_iter()
+        .collect();
+    let read = on
+        .page
+        .checked_sub(1)
+        .and_then(|at| usize::try_from(at).ok())
+        .and_then(|at| pages.get(at).copied());
+    match (on.page_size, read) {
+        (None, read) => on.page_size = read,
+        (Some(given), Some(read)) => {
+            // Un lato che non è un numero (`NaN`) non è vicino: la nota c'è,
+            // e il rifiuto lo dà la compilazione.
+            let near = given
+                .iter()
+                .zip(read)
+                .all(|(given, read)| (given - read).abs() <= PAGE_SIZE_TOLERANCE);
+            if !near {
+                notes.push(CompileNote {
+                    index,
+                    code: NoteCode::PageSizeNotFile,
+                    detail: format!(
+                        "`page_size` is {} × {}, but page {} of the PDF is {} × {}: the given size is kept",
+                        given[0], given[1], on.page, read[0], read[1]
+                    ),
+                });
+            }
+        }
+        (Some(_), None) => {}
     }
-    note
+    notes
 }
 
 /// La misura della pagina `page` (da 1) di un PDF.

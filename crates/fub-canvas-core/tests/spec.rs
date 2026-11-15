@@ -703,6 +703,7 @@ fn on_e_una_parola_una_pagina_o_una_cella_per_validate_e_per_serde() {
         json!({"card": "p1", "page": 3}),
         json!({"card": "p1", "page": 3.0, "page_size": [595, 842.5], "page_count": 12}),
         json!({"card": "p1", "page": 1, "page_size": null, "page_count": null}),
+        json!({"card": "p1", "page": 9_007_199_254_740_991_u64}),
         json!({"card": "f1", "sheet": "Voti di marzo", "cell": "B3"}),
         json!({"card": "f1", "sheet": "Foglio1", "cell": "XFD1048576"}),
     ];
@@ -723,6 +724,22 @@ fn on_e_una_parola_una_pagina_o_una_cella_per_validate_e_per_serde() {
         ),
         (
             json!({"card": "p1", "page": -2}),
+            ProblemCode::BadValue,
+            "/0/on/page",
+        ),
+        // Oltre 2^53−1 la pagina non si satura: non è una pagina.
+        (
+            json!({"card": "p1", "page": 1e300}),
+            ProblemCode::BadValue,
+            "/0/on/page",
+        ),
+        (
+            json!({"card": "p1", "page": 9_007_199_254_740_992_u64}),
+            ProblemCode::BadValue,
+            "/0/on/page",
+        ),
+        (
+            json!({"card": "p1", "page": u64::MAX}),
             ProblemCode::BadValue,
             "/0/on/page",
         ),

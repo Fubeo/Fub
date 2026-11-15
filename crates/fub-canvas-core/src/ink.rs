@@ -867,7 +867,14 @@ fn sheet_name(value: Option<&Value>) -> Option<&str> {
 /// Un numero di pagina: un intero da 1 a 2^53−1, per valore (`3`, `3.0`,
 /// `3e0`), come lo legge JavaScript.
 fn page_number(value: Option<&Value>) -> Option<u64> {
-    let number = value?.as_f64()?;
+    page_from_number(value?.as_f64()?)
+}
+
+/// La regola di un numero di pagina, in un posto solo: un intero da 1 a
+/// 2^53−1 (`Number.isSafeInteger` e almeno 1). Vale per l'ancora che si legge
+/// e per `on.page` di `draw` ed `erase_along`, in `validate` e in serde: una
+/// pagina oltre 2^53−1 non si satura, non è una pagina.
+pub(crate) fn page_from_number(number: f64) -> Option<u64> {
     #[allow(clippy::cast_precision_loss)]
     let bound = crate::model::MAX_SAFE_INTEGER as f64;
     if !(number.fract() == 0.0 && (1.0..=bound).contains(&number)) {
@@ -1172,6 +1179,37 @@ mod tests {
         let canvas = parse(source).unwrap();
         assert!(read_layers(&canvas).is_empty());
         assert!(canvas.edges[0].extra.contains_key(INK_KEY));
+    }
+
+    #[test]
+    fn on_page_takes_the_smaller_factor_from_the_corner() {
+        let a4 = (595.0, 842.0);
+        // La misura di quando il tratto si è scritto: l'identità.
+        assert_eq!(InkFit::on_page(a4, a4), InkFit::IDENTITY);
+        // Il doppio nei due sensi: 2, dall'angolo.
+        let doubled = InkFit::on_page(a4, (1190.0, 1684.0));
+        assert_eq!((doubled.s, doubled.dx, doubled.dy), (2.0, 0.0, 0.0));
+        // Proporzioni diverse: il minore (1000/842), non il maggiore (2) né
+        // la media, e niente centratura.
+        let wide = InkFit::on_page(a4, (1190.0, 1000.0));
+        assert_eq!(wide.s, 1000.0 / 842.0);
+        assert_eq!((wide.dx, wide.dy), (0.0, 0.0));
+        assert_eq!(wide.point([186.0, 100.0]), [186.0 * wide.s, 100.0 * wide.s]);
+        let tall = InkFit::on_page(a4, (297.5, 1684.0));
+        assert_eq!(tall.s, 0.5);
+        // `NaN` da una parte vince sull'altra, come `Math.min`: non si vede.
+        assert_eq!(InkFit::on_page(a4, (f64::NAN, 842.0)), InkFit::HIDDEN);
+        assert_eq!(InkFit::on_page(a4, (595.0, f64::NAN)), InkFit::HIDDEN);
+        assert_eq!(InkFit::on_page((f64::NAN, 842.0), a4), InkFit::HIDDEN);
+        // Zero: mostrata a zero non si vede; scritta a zero dà infinito.
+        assert_eq!(InkFit::on_page(a4, (0.0, 842.0)), InkFit::HIDDEN);
+        assert_eq!(InkFit::on_page(a4, (595.0, 0.0)), InkFit::HIDDEN);
+        assert_eq!(InkFit::on_page((0.0, 0.0), a4), InkFit::HIDDEN);
+        assert_eq!(
+            InkFit::on_page(a4, (f64::INFINITY, f64::INFINITY)),
+            InkFit::HIDDEN
+        );
+        assert_eq!(InkFit::on_page(a4, (-595.0, 842.0)), InkFit::HIDDEN);
     }
 
     #[test]

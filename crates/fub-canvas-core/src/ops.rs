@@ -293,10 +293,16 @@ pub enum NoteCode {
     /// Le pagine chieste da `spread_pages` oltre l'ultima del PDF si
     /// tagliano.
     PagesCut,
-    /// Il `page_count` dato a `spread_pages` o a `excerpt` non è quello del
+    /// Il `page_count` dato a `spread_pages`, a `excerpt` o a `on` sulla pagina
+    /// di un PDF (`draw`, `erase_along`) non è quello del
     /// PDF: vale quello letto dal file. La scrive chi legge il file
     /// (`canvas.apply`, `canvas.check`), non la compilazione.
     PageCountFromFile,
+    /// Il `page_size` dato a `on` sulla pagina di un PDF (`draw`,
+    /// `erase_along`) non è la misura della pagina nel file: vale quello dato,
+    /// e la nota lo dice. La scrive chi legge il file, come
+    /// [`NoteCode::PageCountFromFile`].
+    PageSizeNotFile,
 }
 
 fn is_zero(value: &usize) -> bool {

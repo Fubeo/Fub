@@ -14,7 +14,7 @@
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
-use crate::ink::CellAddress;
+use crate::ink::{page_from_number, CellAddress};
 use crate::model::{Canvas, CanvasError};
 use crate::ops::{color, draw, erase};
 
@@ -1318,7 +1318,7 @@ fn check_ink_on(index: usize, path: String, value: &Value, problems: &mut Vec<Pr
             "page" if !is_integer(value) => Some(ProblemCode::WrongType),
             "page" => value
                 .as_f64()
-                .filter(|page| *page >= 1.0)
+                .and_then(page_from_number)
                 .is_none()
                 .then_some(ProblemCode::BadValue),
             "page_size" => {
@@ -1891,7 +1891,7 @@ fn field_schema(field: &FieldSpec) -> Value {
                     "type": "object",
                     "properties": {
                         "card": { "type": "string" },
-                        "page": { "type": "integer", "minimum": 1 },
+                        "page": { "type": "integer", "minimum": 1, "maximum": crate::model::MAX_SAFE_INTEGER },
                         "page_size": {
                             "type": "array",
                             "items": { "type": "number" },

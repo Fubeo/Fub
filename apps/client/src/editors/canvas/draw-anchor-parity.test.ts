@@ -11,9 +11,12 @@ import type { CanvasNode } from "./model";
 //
 // - `decodeStroke` legge l'ancora `page` (la pagina e la sua misura) o `cell`
 //   (il foglio e l'indirizzo) come la scrive il nucleo;
-// - `erasableInk` mette i campioni dove la tela li disegna, con la pagina o
-//   la cella nell'angolo della scheda, un'unità della lavagna per punto PDF o
-//   pixel del foglio;
+// - `erasableInk` mette i campioni dove la tela li disegna: con la pagina o
+//   la cella nell'angolo della scheda alla scala 1, e con la pagina in
+//   `{x: 12, y: 44}`, 595/360 punti PDF per unità (un A4 in
+//   `360 × 509.4…`, le proporzioni della pagina come `pageBox()`) e la cella
+//   in `{x: 104, y: 60}`, così `pageFit` e `boardToContent` non sono
+//   l'identità;
 // - `strokeRecord`, la penna della tela, scrive dagli stessi punti la stessa
 //   ancora e gli stessi campioni.
 
@@ -45,15 +48,33 @@ function written(vector: Vector): { node: CanvasNode; record: Json } {
   return { node: node as unknown as CanvasNode, record };
 }
 
-/// Dove la scheda mostra la pagina o la cella di `on`: nel suo angolo, alla
-/// scala 1.
-function content(on: Json): { page: CardPageBox | null; cell: CardCellBox | null } {
+/// Dove la scheda mostra la pagina o la cella: nel suo angolo alla scala 1,
+/// o spostata e (la pagina) scalata.
+type Placement = "corner" | "moved";
+const K = 595 / 360;
+const PLACEMENTS: readonly Placement[] = ["corner", "moved"];
+
+/// Dove la scheda mostra la pagina o la cella di `on`.
+function content(on: Json, placement: Placement): { page: CardPageBox | null; cell: CardCellBox | null } {
   if (typeof on.page === "number") {
     const [width, height] = on.page_size as [number, number];
-    return { page: { page: on.page, size: { width, height }, rect: { x: 0, y: 0, width, height } }, cell: null };
+    const rect = placement === "corner" ? { x: 0, y: 0, width, height } : { x: 12, y: 44, width: width / K, height: height / K };
+    return { page: { page: on.page, size: { width, height }, rect }, cell: null };
   }
-  return { page: null, cell: { sheet: on.sheet, cell: on.cell, rect: { x: 0, y: 0, width: 64, height: 20 }, zoom: 1 } };
+  const rect = placement === "corner" ? { x: 0, y: 0, width: 64, height: 20 } : { x: 104, y: 60, width: 64, height: 20 };
+  return { page: null, cell: { sheet: on.sheet, cell: on.cell, rect, zoom: 1 } };
 }
+
+/// Come la tela porta l'ancora sulla lavagna: `pageFit` per la pagina (il
+/// fattore minore, dall'angolo del rettangolo), lo zoom per la cella.
+function fitOf(box: { page: CardPageBox | null; cell: CardCellBox | null }): { s: number; x: number; y: number } {
+  if (box.page) {
+    const { size, rect } = box.page;
+    return { s: Math.min(rect.width / size.width, rect.height / size.height), x: rect.x, y: rect.y };
+  }
+  return { s: box.cell!.zoom, x: box.cell!.rect.x, y: box.cell!.rect.y };
+}
+
 
 /// I campioni del tratto nelle unità dell'ancora.
 function samplesOf(stroke: DrawableStroke): Array<{ x: number; y: number }> {
@@ -69,14 +90,16 @@ describe("i tratti di draw sulla pagina e sulla cella si leggono con le regole d
     expect(names).toContain("draw-on-cell-last.json");
   });
 
-  for (const [name, vector] of applied) {
-    it(name, () => {
+  for (const [name, vector] of applied) for (const placement of PLACEMENTS) {
+    it(`${name} (${placement})`, () => {
       const op = vector.ops[0]!;
       const on = op.on as Json;
       const { node, record } = written(vector);
       const stroke = decodeStroke(record);
       expect(stroke, "la tela disegna il tratto").not.toBeNull();
-      const box = content(on);
+      const box = content(on, placement);
+      const fit = fitOf(box);
+      if (placement === "moved") expect(fit.s === 1 && fit.x === 0 && fit.y === 0, "non è l'identità").toBe(false);
       if (box.page) {
         expect(stroke!.page).toBe(on.page);
         expect(stroke!.ref).toEqual({ width: on.page_size[0], height: on.page_size[1] });
@@ -87,7 +110,7 @@ describe("i tratti di draw sulla pagina e sulla cella si leggono con le regole d
         expect(stroke!.ref).toBeNull();
       }
 
-      // Dove la tela lo mette: la pagina o la cella nell'angolo della scheda.
+      // Dove la tela lo mette: la pagina o la cella dove la scheda la mostra.
       const state = {
         layer: { node: node.id },
         node,
@@ -103,8 +126,8 @@ describe("i tratti di draw sulla pagina e sulla cella si leggono con le regole d
       const placed = units[0]!.points;
       expect(placed).toHaveLength(local.length * 2);
       local.forEach((sample, i) => {
-        expect(placed[2 * i]).toBeCloseTo(node.x + sample.x, 9);
-        expect(placed[2 * i + 1]).toBeCloseTo(node.y + sample.y, 9);
+        expect(placed[2 * i]).toBeCloseTo(node.x + fit.x + fit.s * sample.x, 9);
+        expect(placed[2 * i + 1]).toBeCloseTo(node.y + fit.y + fit.s * sample.y, 9);
       });
       if (Array.isArray(op.points)) {
         // I punti dati sono quelli scritti, nelle unità dell'ancora.
@@ -115,9 +138,11 @@ describe("i tratti di draw sulla pagina e sulla cella si leggono con le regole d
         });
       }
 
-      // La penna della tela, dagli stessi punti sulla lavagna, scrive la
-      // stessa ancora e gli stessi campioni.
-      const samples: InkSample[] = local.map((sample, i) => ({ x: node.x + sample.x, y: node.y + sample.y, p: 0.5, t: i * 8 }));
+      // La penna della tela, dai punti dove la tela li mostra, scrive la
+      // stessa ancora e gli stessi campioni. (Sulla pagina la penna usa il
+      // fattore della larghezza, la resa il minore: col rettangolo nelle
+      // proporzioni della pagina coincidono.)
+      const samples: InkSample[] = local.map((sample, i) => ({ x: placed[2 * i]!, y: placed[2 * i + 1]!, p: 0.5, t: i * 8 }));
       const gui = strokeRecord({ samples, pressure: true, split: false }, node, defaultInkLook(1, true), NOW, box.page ?? box.cell);
       if (!gui.ok) throw new Error(`la tela rifiuta il tratto: ${gui.reason}`);
       expect(gui.record.anchor).toEqual(record.anchor);

@@ -23,13 +23,14 @@ use fub_ink_codec::{
     clamp_size, ink_color, pen, pen_brush, Ink, PenSpec, PenTool, Sample, Scale, DEFAULT_PEN,
     MAX_PEN_SIZE, MIN_PEN_SIZE,
 };
+use serde::de::Visitor;
 use serde::{de, Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 
 use super::anchor::{anchor_at, stroke_bounds};
 use super::color::parse_hex;
 use super::{refuse, saturating_integer, saturating_option, Compiler, OpError};
-use crate::ink::{CellAddress, InkAnchor, InkLayer, LayerRef, INK_KEY};
+use crate::ink::{page_from_number, CellAddress, InkAnchor, InkLayer, LayerRef, INK_KEY};
 use crate::layout::{self, CardKind, Rect};
 use crate::model::CanvasNode;
 use crate::patch::CanvasPatch;
@@ -194,17 +195,41 @@ impl<'de> Deserialize<'de> for InkOn {
     }
 }
 
-/// Se `page` è un numero di pagina che `on` accetta: da 1.
-pub fn is_page_number(page: i64) -> bool {
-    page >= 1
-}
-
+/// La pagina di `on`: un intero da 1 a 2^53−1, per valore
+/// ([`crate::ink::page_from_number`]). Oltre 2^53−1 non si satura: si
+/// rifiuta.
 fn page_number<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u64, D::Error> {
-    let page = saturating_integer(deserializer)?;
-    u64::try_from(page)
-        .ok()
-        .filter(|_| is_page_number(page))
-        .ok_or_else(|| de::Error::custom(format_args!("{page} is not a page: pages start at 1")))
+    struct Page;
+
+    impl Visitor<'_> for Page {
+        type Value = u64;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a page, an integer from 1 to 2^53-1")
+        }
+
+        fn visit_i64<E: de::Error>(self, value: i64) -> Result<u64, E> {
+            u64::try_from(value)
+                .map_err(|_| E::custom(format_args!("{value} is not a page: pages start at 1")))
+                .and_then(|value| self.visit_u64(value))
+        }
+
+        fn visit_u64<E: de::Error>(self, value: u64) -> Result<u64, E> {
+            // Oltre 2^53 il cast arrotonda, ma resta oltre il limite.
+            #[allow(clippy::cast_precision_loss)]
+            self.visit_f64(value as f64)
+        }
+
+        fn visit_f64<E: de::Error>(self, value: f64) -> Result<u64, E> {
+            page_from_number(value).ok_or_else(|| {
+                E::custom(format_args!(
+                    "{value} is not a page: pages are integers from 1 to 2^53-1"
+                ))
+            })
+        }
+    }
+
+    deserializer.deserialize_any(Page)
 }
 
 fn sheet_name<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
