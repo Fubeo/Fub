@@ -87,6 +87,9 @@ const OPEN: &str = "open";
 const VIEW_TITLE: &str = "view_title";
 const EMPTY_NO_NOTES: &str = "empty_no_note";
 const EMPTY_NO_PROPS: &str = "empty_no_props";
+/// Il file aperto non lo rivendica nessun formato (un PDF, un'immagine): non
+/// ha un frontmatter, quindi non ha proprietà da mostrare né da aggiungere.
+const EMPTY_NO_FORMAT: &str = "empty_no_format";
 const ADD_KEY_LABEL: &str = "add_key_label";
 const ADD_VALUE_LABEL: &str = "add_value_label";
 const ADD_SUBMIT: &str = "add_submit";
