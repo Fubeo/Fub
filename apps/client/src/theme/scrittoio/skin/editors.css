@@ -3677,6 +3677,12 @@
 .base-table tbody tr:hover > td {
   background: var(--sheet-2);
 }
+/* Le celle scelte per la somma nella banda (E24): lo stesso velo della
+   selezione della Tabella. */
+.base-table tbody td[data-picked],
+.base-table tbody tr:hover > td[data-picked] {
+  background: var(--accent-veil);
+}
 /* Il nome della nota apre la nota: inchiostro pieno, e la matita blu al
    passaggio. Vale per la tabella, le schede e la bacheca. */
 .base-table td > button,

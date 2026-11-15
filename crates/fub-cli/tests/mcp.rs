@@ -731,6 +731,45 @@ fn fub_invoke_parte_in_prova_ed_esegue_soltanto_con_apply() {
     assert!(!f.vault.join("Agente/piano.md").exists());
 }
 
+/// I comandi delle modalità sono della shell: li esegue la finestra, non il
+/// kernel, e l'MCP non li vede. Un agente che chiama l'id vecchio dei Blocchi
+/// riceve lo stesso rifiuto tipato dell'id di Scrittura, in prova e con
+/// `apply`, e non cambia niente: nessuno dei due raggiunge un riquadro (T4).
+#[test]
+fn i_comandi_delle_modalita_restano_della_shell_anche_con_l_id_vecchio() {
+    let f = fixture();
+    let mut server = writer(&f);
+    let commands = server.ok("fub_commands", json!({ "limit": 200 }));
+    let ids: Vec<&str> = commands["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|c| c["id"].as_str())
+        .collect();
+    assert!(!ids.iter().any(|id| id.starts_with("shell.")), "{ids:?}");
+    let before = std::fs::read_to_string(f.vault.join("Note/mercato.md")).unwrap();
+    for apply in [false, true] {
+        let live = server.refused(
+            "fub_invoke",
+            json!({ "command": "shell.mode.live", "apply": apply }),
+        );
+        let blocks = server.refused(
+            "fub_invoke",
+            json!({ "command": "shell.mode.blocks", "apply": apply }),
+        );
+        assert!(blocks.starts_with("bad_args"), "{blocks}");
+        assert_eq!(
+            blocks.replace("shell.mode.blocks", "shell.mode.live"),
+            live,
+            "l'id vecchio e il nuovo hanno lo stesso rifiuto"
+        );
+    }
+    assert_eq!(
+        std::fs::read_to_string(f.vault.join("Note/mercato.md")).unwrap(),
+        before
+    );
+}
+
 #[test]
 fn fub_create_non_sovrascrive_mai() {
     let f = fixture();
