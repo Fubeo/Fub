@@ -224,10 +224,6 @@ const SUB_SHIFT = 12;
 /// I segni dei formati che una scelta in riga sa disegnare (`icons.ts`).
 const SIGNS: ReadonlySet<string> = new Set(["copy-markdown", "copy-html", "copy-text"]);
 
-/// Il segno di una scelta: la sua icona, se è uno dei segni dei formati, o
-/// quello del formato che il suo nome dice. Le superfici di oggi dichiarano
-/// «Copia come ▸» senza icone (`SurfaceMenuItem`), e i nomi dei formati sono
-/// quelli del catalogo.
 /// Accende o spegne una parte del menu: la classe `menu-lit`, che il banco del
 /// moto e le scene leggono, e lo stato del kit, che veste righe e tessere.
 function light(el: HTMLElement, on: boolean): void {
@@ -235,6 +231,10 @@ function light(el: HTMLElement, on: boolean): void {
   markLit(el, on);
 }
 
+/// Il segno di una scelta: la sua icona, se è uno dei segni dei formati, o
+/// quello del formato che il suo nome dice. Le superfici di oggi dichiarano
+/// «Copia come ▸» senza icone (`SurfaceMenuItem`), e i nomi dei formati sono
+/// quelli del catalogo.
 function signOf(item: MenuItem): string | null {
   if (item.icon !== undefined && SIGNS.has(item.icon)) return item.icon;
   const named = new Map<string, string>([

@@ -103,19 +103,29 @@ function doorGaps(group: readonly string[], doors: Readonly<Record<Door, Readonl
 
 /// I pulsanti che si vedono sul foglio fermo: non al passaggio né a
 /// richiesta (`data-presence`, che la pelle nasconde a riposo) e non
-/// contenuto. Il contenuto è quello della scena «a riposo» del banco
-/// (`writingAtRest` in `bench/scene.mjs`): l'icona della pagina, la riga dei
-/// dati, la testata del blocco di codice. In più il triangolo della sezione
-/// a scomparsa, che è il blocco stesso come la casella di un compito, e
-/// «+ riga»/«+ colonna» della tabella, che il tema della tabella nasconde
-/// finché il puntatore non ci passa (`.tb-frame:hover`) senza ancora il segno
-/// della presenza.
-const CONTENT = ".cm-fub-page-icon, .note-facts *, .cm-fub-code-header button, .cm-fub-details-arrow, .tb-add";
-function buttonsAtRest(sheet: Element): string[] {
+/// contenuto. Il contenuto è l'icona della pagina e la riga dei dati, come
+/// nella scena «a riposo» del banco (`writingAtRest` in `bench/scene.mjs`), e
+/// il triangolo della sezione a scomparsa, che è il blocco stesso come la
+/// casella di un compito. In più «+ riga»/«+ colonna» della tabella, che il
+/// tema della tabella nasconde finché il puntatore non ci passa
+/// (`.tb-frame:hover`) senza ancora il segno della presenza.
+const CONTENT = ".cm-fub-page-icon, .note-facts *, .cm-fub-details-arrow, .tb-add";
+function buttonsAtRest(sheet: Element): Element[] {
   return [...sheet.querySelectorAll("button, [role=button]")]
-    .filter((el) => !el.closest("[data-presence]") && !el.matches(CONTENT) && !el.closest("[hidden]"))
-    .map((el) => `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`);
+    .filter((el) => !el.closest("[data-presence]") && !el.matches(CONTENT) && !el.closest("[hidden]"));
 }
+const nameOf = (el: Element): string => `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`;
+
+/// I pulsanti che oggi si vedono a riposo e non dovrebbero, col perché: il
+/// prototipo non vuole pulsanti sul foglio. Ognuno è un buco aperto; quando
+/// sparisce, il test chiede di toglierlo da qui.
+const KNOWN_AT_REST: ReadonlyMap<string, string> = new Map([
+  [
+    ".cm-fub-code-header button",
+    "Lingua, A capo e Copia nella testata del blocco di codice si vedono sempre (skin/document.css): " +
+      "vanno nel gruppo «Codice» della barra di formato (T11) o al passaggio",
+  ],
+]);
 
 /// Le azioni di un menu della superficie, dentro i sottomenu.
 function actionsOf(entries: readonly SurfaceMenuEntry[] | undefined): string[] {
@@ -198,7 +208,7 @@ describe("le guardie delle tre porte", () => {
       <div data-presence="hover"><button class="cm-fub-block-add"></button></div>
       <div class="cm-fub-code-header"><button class="cm-fub-code-copy"></button></div>
       <div class="cm-widget"><button class="diagramma-esporta"></button><span role="button" class="stile"></span></div>`;
-    expect(buttonsAtRest(sheet)).toEqual(["button.diagramma-esporta", "span.stile"]);
+    expect(buttonsAtRest(sheet).map(nameOf)).toEqual(["button.cm-fub-code-copy", "button.diagramma-esporta", "span.stile"]);
   });
 });
 
@@ -236,6 +246,11 @@ describe("le tre porte", () => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     const sheet = parent.querySelector(".cm-editor");
     expect(sheet).not.toBeNull();
-    expect(buttonsAtRest(sheet!)).toEqual([]);
+    const seen = buttonsAtRest(sheet!);
+    const known = [...KNOWN_AT_REST.keys()];
+    expect(seen.filter((el) => !known.some((selector) => el.matches(selector))).map(nameOf)).toEqual([]);
+    for (const selector of known) {
+      expect(seen.some((el) => el.matches(selector)), `${selector} non si vede più a riposo: va tolto dai buchi`).toBe(true);
+    }
   });
 });

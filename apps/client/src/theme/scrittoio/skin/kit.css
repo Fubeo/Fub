@@ -1474,8 +1474,6 @@
 /* **La riga**: una linea sola da 34, con la figura, il nome e a destra, in
    grigio, la nota o, in monospazio, la scorciatoia. */
 .kit-row {
-  position: relative;
-  z-index: 1;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1558,6 +1556,21 @@
   font-family: var(--font-ui);
   font-size: var(--text-md);
 }
+/* Premuta, come la tessera: la figura lascia il posto alla spunta d'accento
+   e il nome si fa d'accento. Niente si muove: col moto ridotto è identica. */
+.kit-row[data-pressed] {
+  color: var(--accent);
+}
+.kit-row[data-pressed] .kit-row-icon > svg {
+  display: none;
+}
+.kit-row[data-pressed] .kit-row-icon::after {
+  content: "";
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
+}
 /* Spenta resta al suo posto, e non risponde al puntatore. */
 .kit-row[aria-disabled="true"] {
   color: var(--text);
@@ -1568,8 +1581,6 @@
 /* **La tessera**. Affiancata è una parte di una barra: la figura e il nome in
    fila, alta 32. */
 .kit-tile {
-  position: relative;
-  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1658,8 +1669,10 @@
 .kit-tile[data-pressed] .kit-tile-icon > svg {
   display: none;
 }
-.kit-tile[data-pressed] .kit-tile-icon::after {
+.kit-tile[data-pressed] .kit-tile-icon::after,
+.kit-tile[data-pressed]:not(:has(.kit-tile-icon))::before {
   content: "";
+  flex: none;
   width: 12px;
   height: 12px;
   background: currentColor;
@@ -1675,24 +1688,24 @@
   cursor: default;
 }
 
-/* **L'etichetta di un gruppo**: minuscola, 11,5 px, quieta. Nel «/» e nello
-   spazio comandi resta in cima mentre l'elenco scorre. */
+/* **L'etichetta di un gruppo**: minuscola, 11,5 px, quieta nel colore e
+   piena nel peso, come nel prototipo (600). Nel «/» e nello spazio comandi
+   resta in cima mentre l'elenco scorre, con un poco più d'aria sopra. */
 .kit-group-label {
   padding: 9px var(--space-4) var(--space-2);
   color: var(--muted);
   font-size: calc(var(--text-xs) + 0.5px);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-bold);
 }
 .kit-group-label[data-sticky] {
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  padding: 10px var(--space-4) var(--space-2);
   background: var(--bg-elev);
 }
 
 /* Col dito una riga è alta quanto un dito, e una parte della barra quasi. */
 @media (pointer: coarse) {
-  .kit-row {
+  .kit-row,
+  .kit-row[data-size="large"] {
     min-height: 44px;
   }
   .kit-tile[data-shape="inline"] {
@@ -1728,6 +1741,12 @@
   .kit-tile[data-shape="stack"][data-lit] .kit-tile-icon {
     outline: 2px solid Highlight;
     outline-offset: -2px;
+  }
+  /* La spunta è un fondo ritagliato: senza un colore del sistema sparirebbe. */
+  .kit-row[data-pressed] .kit-row-icon::after,
+  .kit-tile[data-pressed] .kit-tile-icon::after,
+  .kit-tile[data-pressed]:not(:has(.kit-tile-icon))::before {
+    background: CanvasText;
   }
   /* Qui una sfumatura non si disegna: i fondi che non sono immagini vere
      spariscono. La linea diventa il colore della zona intera. */

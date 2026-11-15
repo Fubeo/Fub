@@ -5,6 +5,7 @@
 // Il gruppo, per chi ascolta, lo dice chi lo monta: un `role="group"` col suo
 // nome. L'etichetta è per chi guarda; con `labels` diventa anche il nome del
 // gruppo (`aria-labelledby`), senza dirlo due volte.
+import "./kit.css";
 
 export interface GroupLabelOptions {
   readonly text: string;

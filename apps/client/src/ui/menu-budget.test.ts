@@ -64,6 +64,9 @@ function budgetIssues(menu: ComposedEditorMenu, miniBar: boolean, drawn: string)
 }
 
 /// Disegna il menu come lo apre la shell e ne legge il testo, piede compreso.
+/// Le scorciatoie scritte (`.kit-row-keys`) restano fuori: un accordo con un
+/// modificatore è un gesto, e le scorciatoie le controlla già `namesNavigation`
+/// voce per voce, con la regola del modificatore.
 function drawnText(menu: ComposedEditorMenu): string {
   showContextMenu({ x: 10, y: 10 }, [...menu.items], {
     pointer: true,
@@ -71,9 +74,11 @@ function drawnText(menu: ComposedEditorMenu): string {
     clipboard: menu.clipboard,
     searchable: menu.searchable,
   });
-  const text = document.querySelector(".context-menu")?.textContent ?? "";
+  const drawn = document.querySelector(".context-menu")?.cloneNode(true) as HTMLElement | undefined;
   closeContextMenu();
-  return text;
+  if (!drawn) return "";
+  for (const keys of drawn.querySelectorAll(".kit-row-keys")) keys.remove();
+  return drawn.textContent ?? "";
 }
 
 afterEach(() => {
@@ -111,9 +116,16 @@ describe("la guardia del bilancio", () => {
     ]);
   });
 
-  it("lascia stare la scorciatoia di un gesto che usa Invio con un modificatore", () => {
+  it("lascia stare la scorciatoia di un gesto che usa Invio con un modificatore, anche disegnata", () => {
     const menu: ComposedEditorMenu = { clipboard: [], items: [{ label: "Apri di lato", hint: "Ctrl+Invio", run: () => {} }], searchable: [] };
-    expect(budgetIssues(menu, false, "Apri di lato")).toEqual([]);
+    // La scorciatoia si disegna davvero, con la sua parola «Invio»…
+    showContextMenu({ x: 10, y: 10 }, [...menu.items], { pointer: true });
+    expect(document.querySelector(".context-menu .kit-row-keys")?.textContent).toMatch(/Invio/u);
+    closeContextMenu();
+    // …e la guardia non la prende per un tasto che muove nel menu.
+    const drawn = drawnText(menu);
+    expect(drawn).toContain("Apri di lato");
+    expect(budgetIssues(menu, false, drawn)).toEqual([]);
   });
 });
 

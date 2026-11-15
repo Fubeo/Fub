@@ -18,6 +18,7 @@
 import { iconEl } from "../ui/icons";
 import { attachTooltip } from "../ui/tooltip";
 import type { Lifetime } from "../ui/lifetime";
+import "./kit.css";
 
 export interface TileParts {
   readonly icon?: string;

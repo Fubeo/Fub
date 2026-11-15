@@ -540,9 +540,12 @@ function head(grid: HTMLElement, last: string): void {
   group.append(createGroupLabel({ text: "Nota", labels: group }));
   const lit = createRow({ label: "Fissa la linguetta", icon: "pin", keys: "Ctrl+Maiusc+P", role: "menuitem" });
   markLit(lit.element, true);
+  const pressed = createRow({ label: "Copia il link", icon: "backlinks", role: "menuitem" });
+  markPressed(pressed.element, true);
   group.append(
     createRow({ label: "Apri in un nuovo foglio", icon: "notes", keys: "Ctrl+Invio", role: "menuitem" }).element,
     lit.element,
+    pressed.element,
     createRow({ label: "Cronologia", icon: "history", note: "Solo per le note salvate", disabled: true, role: "menuitem" }).element,
     createRow({ label: "Un nome lunghissimo che non sta nella riga e si taglia coi puntini", holdIcon: true, role: "menuitem" }).element,
     createRow({ label: "Sposta in", icon: "folder", more: true, role: "menuitem" }).element,
@@ -575,6 +578,15 @@ function head(grid: HTMLElement, last: string): void {
   markPressed(paste, true);
   bar.append(cut, copy, paste);
   bar.inert = true;
+  // Una parte senza figura, premuta: la spunta compare lo stesso.
+  const bare = el("div");
+  bare.style.display = "grid";
+  bare.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
+  bare.style.width = "196px";
+  const plain = createTile({ label: "Testo" });
+  markPressed(plain, true);
+  bare.append(createTile({ label: "HTML" }), plain);
+  bare.inert = true;
 
   const stack = (label: string, options: Omit<Parameters<typeof createTile>[0], "shape" | "label"> = {}, dress?: (tile: HTMLButtonElement) => void): HTMLElement => {
     const tile = createTile({ label, shape: "stack", ...options, lifetime });
@@ -597,9 +609,10 @@ function head(grid: HTMLElement, last: string): void {
 
   const row = el("div", "fila");
   row.append(
-    cell("righe: riposo, accesa, spenta col perché, nome lungo, sottomenu", rows),
+    cell("righe: riposo, accesa, premuta, spenta col perché, nome lungo, sottomenu", rows),
     cell("righe da 38 e l'etichetta che resta in cima", large),
     cell("tessere affiancate: riposo, accesa, premuta", bar),
+    cell("senza figura: riposo, premuta", bare),
   );
   section("La lingua dei menu", "right", row, cell("tessere in pila", tiles));
 }

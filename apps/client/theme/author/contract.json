@@ -1465,6 +1465,7 @@
     "menu-lit",
     "menu-separator",
     "menu-group",
+    "menu-group-label",
     "menu-empty",
     "menu-head",
     "menu-head-kind",
@@ -1484,7 +1485,9 @@
     "menu-finding",
     "menu-path",
     "context-submenu",
+    "menu-more",
     "context-strip",
+    "menu-label",
     "menu-hint",
     "menu-description",
     "menu-quiet",
@@ -3228,6 +3231,7 @@
     "menu-lit": "cornice",
     "menu-separator": "cornice",
     "menu-group": "cornice",
+    "menu-group-label": "cornice",
     "menu-empty": "cornice",
     "menu-head": "cornice",
     "menu-head-kind": "cornice",
@@ -3247,7 +3251,9 @@
     "menu-finding": "cornice",
     "menu-path": "cornice",
     "context-submenu": "cornice",
+    "menu-more": "cornice",
     "context-strip": "cornice",
+    "menu-label": "cornice",
     "menu-hint": "cornice",
     "menu-description": "cornice",
     "menu-quiet": "cornice",
@@ -7272,6 +7278,7 @@
         "menu-lit",
         "menu-separator",
         "menu-group",
+        "menu-group-label",
         "menu-empty"
       ],
       "states": [
@@ -7341,7 +7348,8 @@
       "name": "context-submenu",
       "part": "menus",
       "hooks": [
-        "context-submenu"
+        "context-submenu",
+        "menu-more"
       ],
       "states": [
         "rest"
@@ -7362,6 +7370,7 @@
       "name": "menu-item",
       "part": "menus",
       "hooks": [
+        "menu-label",
         "menu-hint",
         "menu-description",
         "menu-quiet",
@@ -9654,7 +9663,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1761,
+    "hooks": 1764,
     "state_names": 7,
     "assigned_states": 847,
     "components": 252,

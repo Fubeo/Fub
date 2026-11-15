@@ -185,6 +185,19 @@
   flex-direction: column;
 }
 
+/* Il nome, la freccia e l'etichetta del menu restano ganci del contratto
+   d'autore (`menu-label`, `menu-more`, `menu-group-label`) accanto a quelli
+   del kit, perché un tema che li vestiva continui a valere. L'aspetto è della
+   riga e dell'etichetta del kit; qui solo ciò che è del menu: l'etichetta
+   non si sceglie, il nome e la freccia non si selezionano col trascinamento. */
+.context-menu .menu-group-label {
+  cursor: default;
+}
+.context-menu .menu-label,
+.context-menu .menu-more {
+  user-select: none;
+}
+
 /* **La testata** dice che cosa si è toccato, in una riga: l'icona d'accento,
    la specie in grassetto e il nome in grigio. Non si sceglie e non prende il
    fuoco. */

@@ -15,6 +15,7 @@
 // Le parti portano `kit-row-<parte>` e, accanto, la classe che dà chi monta
 // (`parts`): così una superficie tiene i suoi nomi e la pelle comune resta una.
 import { iconEl } from "../ui/icons";
+import "./kit.css";
 
 /// Le classi di chi monta, parte per parte, accanto a quelle del kit.
 export interface RowParts {
