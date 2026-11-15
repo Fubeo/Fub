@@ -8,6 +8,7 @@ import { type KeyBinding } from "@codemirror/view";
 import { backtickFence } from "../actions";
 import { calloutHead } from "../callout-head";
 import { blockGesture } from "../block-gesture";
+import { withLineBreaks } from "./lines";
 import { blockModel, buildBlocks, subtreeEnd, type Block, type BlockKind } from "./model";
 
 export type TransformTarget =
@@ -253,7 +254,7 @@ export function transformTo(target: TransformTarget, only?: readonly number[]): 
       const next = rewrap(target, parts, numberFor(state, blocks, index));
       const old = state.doc.sliceString(block.from, block.to);
       if (next.text === old) continue;
-      changes.push({ from: block.from, to: block.to, insert: next.text });
+      changes.push({ from: block.from, to: block.to, insert: withLineBreaks(state, next.text) });
       heads.push({ from: block.from, old: parts.column, column: next.column, at: block.from });
     }
     if (changes.length === 0) return false;

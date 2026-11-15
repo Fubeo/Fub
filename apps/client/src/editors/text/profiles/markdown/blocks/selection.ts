@@ -23,6 +23,7 @@ import { Decoration, type DecorationSet, EditorView, keymap, type KeyBinding } f
 import { getCM } from "@replit/codemirror-vim";
 import { liveStrings } from "../strings";
 import { blockGesture } from "../block-gesture";
+import { withLineBreaks } from "./lines";
 import { blockModel, blockStartingAt, innermostAt, type Block } from "./model";
 import { type BlockRun, siblingsOf } from "./move";
 import { modelOf } from "./transform";
@@ -136,14 +137,16 @@ export function duplicateRun(state: EditorState, blocks: readonly Block[], run: 
   const a = sibs.indexOf(run.first);
   const b = sibs.indexOf(run.last);
   const span = spanOf(blocks, run);
+  // Con "\n", come `sliceString`: le lunghezze sono posizioni del documento.
+  const doc = state.doc;
   const gap = b + 1 < sibs.length
-    ? state.sliceDoc(span.to, blocks[sibs[b + 1]!]!.from)
-    : a > 0 ? state.sliceDoc(blocks[sibs[a - 1]!]!.to, span.from) : blocks[run.first]!.parent >= 0 ? "\n" : "\n\n";
-  const text = state.sliceDoc(span.from, span.to);
+    ? doc.sliceString(span.to, blocks[sibs[b + 1]!]!.from)
+    : a > 0 ? doc.sliceString(blocks[sibs[a - 1]!]!.to, span.from) : blocks[run.first]!.parent >= 0 ? "\n" : "\n\n";
+  const text = doc.sliceString(span.from, span.to);
   const from = span.to + gap.length;
   const value: BlockSelection = { anchor: from, head: from + (blocks[run.last]!.from - span.from), depth: blocks[run.first]!.depth };
   return {
-    changes: { from: span.to, insert: gap + text },
+    changes: { from: span.to, insert: withLineBreaks(state, gap + text) },
     selection: EditorSelection.single(from, from + text.length),
     effects: setBlockSelection.of(value),
     annotations: blockGesture.of({ kind: "born", lead: { from, to: from + text.length } }),

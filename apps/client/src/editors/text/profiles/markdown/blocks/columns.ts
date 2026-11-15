@@ -102,7 +102,7 @@ export function dropAsColumn(state: EditorState, blocks: readonly Block[], run: 
   } else if (side === "left") {
     // Dopo la riga `> [!columns]`, prima della prima colonna.
     const head = doc.lineAt(host.from);
-    insert = head.text + nl + added + between(nl) + doc.sliceString(head.to + 1, host.to);
+    insert = head.text + nl + added + between(nl) + state.sliceDoc(head.to + 1, host.to);
   } else {
     insert = hostText + between(nl) + added;
   }

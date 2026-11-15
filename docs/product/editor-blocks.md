@@ -12,7 +12,9 @@ nota Markdown: danno a ogni blocco una maniglia, un menu, il trascinamento e
 una selezione di blocchi, e in cima la testata della pagina. Quanto si vede dei
 segni Markdown lo dice `editor.live-reveal`, come in tutta Scrittura. Il file
 resta Markdown puro: nessun blocco ha un id nascosto né un formato a parte, e
-Sorgente mostra gli stessi byte.
+Sorgente mostra gli stessi byte. Gli a capo che un gesto scrive (spostare,
+duplicare, trasformare, il link al blocco, le colonne, «+») sono quelli della
+nota: una nota tutta CRLF resta tutta CRLF (`blocks/lines.ts`).
 
 I blocchi sono una preferenza della macchina, `editor.blocks` (accesa di
 fabbrica): si cambia dalle Impostazioni o dal menu «…» del riquadro

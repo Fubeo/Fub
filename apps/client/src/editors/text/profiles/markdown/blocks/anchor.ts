@@ -5,6 +5,7 @@
 // una riga vuota per i blocchi che finiscono con un delimitatore (codice,
 // tabella, citazione, callout, ripiegabile, riga, formula).
 import { type ChangeSpec, type EditorState } from "@codemirror/state";
+import { withLineBreaks } from "./lines";
 import { type Block, type BlockKind } from "./model";
 import { subtreeEnd } from "./model";
 
@@ -59,7 +60,7 @@ export function blockAnchor(state: EditorState, blocks: readonly Block[], index:
   const lone = LONE.exec(tail.text);
   if (lone && tail.from > block.from) return { fragment: `^${lone[1]}`, changes: null };
   const id = freshId(state, random);
-  return { fragment: `^${id}`, changes: { from: block.to, insert: `\n\n^${id}` } };
+  return { fragment: `^${id}`, changes: { from: block.to, insert: withLineBreaks(state, `\n\n^${id}`) } };
 }
 
 /// Il link wiki al blocco, nella nota `page` (vuota: questa nota).
