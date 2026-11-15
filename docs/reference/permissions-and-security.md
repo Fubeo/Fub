@@ -538,6 +538,10 @@ prima. L'HTML degli appunti non cambia.
 - Ruoli `Owner > Admin > Writer > Reader`, nel sync e nei siti: chi non è
   Owner concede, toglie o cambia soltanto ruoli sotto il proprio
   (`fub_services::acl::may_grant`, `check_revoke`).
+- Le quote di `services.json` (`ServiceQuotas`) sono tetti veri: 0 vuol dire
+  «niente», mai «senza limite». Con `max_vault_bytes: 0` il vault non tiene
+  né push né allegati (`413 vault quota exceeded`), come un sito pubblicato
+  con lo stesso tetto.
 
 ## Segnalazioni
 
