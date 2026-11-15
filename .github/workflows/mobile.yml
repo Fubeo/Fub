@@ -157,7 +157,18 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          test -r /dev/kvm && test -w /dev/kvm
+          # `trigger` non aspetta che la regola sia applicata: si aspetta la
+          # coda di udev, e se il permesso non è ancora arrivato lo si dà.
+          sudo udevadm settle --timeout=30 || true
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            sudo chmod a+rw /dev/kvm
+          fi
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            echo "::error::/dev/kvm c'è ma non si legge o non si scrive"
+            ls -l /dev/kvm
+            exit 1
+          fi
+          ls -l /dev/kvm
       - name: Immagine di sistema e AVD
         run: |
           sdk="$ANDROID_HOME/cmdline-tools/latest/bin"
