@@ -574,7 +574,7 @@ Fatto quando: un test di `settings.rs` legge `blocks` come Scrittura e il
 file delle impostazioni resta byte per byte; i mirror sono rigenerati e
 verdi; un test del controller prova i due comandi.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-host settings
-Stato: [~] PR #372 (feat/scrittura-dai-modi-vecchi, 2026-11-15) · T3 aveva già fatto il riquadro salvato e i comandi: qui test, impostazioni con `blocks` valido e nascosto (una scelta per etichetta nel pannello), titoli «Passa a Scrittura (era Blocchi)», test MCP · aspetta la CI
+Stato: [x] PR #372 unita in main (7df964711, 2026-11-15) · T3 aveva già fatto il riquadro salvato e i comandi: qui test, impostazioni con `blocks` valido e nascosto (una scelta per etichetta nel pannello), titoli «Passa a Scrittura (era Blocchi)», test MCP
 
 ## T5 · I blocchi come preferenza
 
