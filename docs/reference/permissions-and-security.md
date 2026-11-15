@@ -538,6 +538,14 @@ prima. L'HTML degli appunti non cambia.
 - Ruoli `Owner > Admin > Writer > Reader`, nel sync e nei siti: chi non è
   Owner concede, toglie o cambia soltanto ruoli sotto il proprio
   (`fub_services::acl::may_grant`, `check_revoke`).
+- Login con password (`fub_services::mfa::LoginLimits`): 5 fallimenti in 5
+  minuti bloccano quel nome da quell'origine, 20 fallimenti di un'origine su
+  nomi qualunque bloccano l'origine, 50 fallimenti di un nome da tutte le
+  origini bloccano il nome, ma non dalle origini dove l'account è entrato
+  negli ultimi 30 giorni. Chi sbaglia la password da altrove non chiude fuori
+  il titolare. L'origine è quella del limite per origine (peer TCP, o client
+  dichiarato da un proxy in `trusted_proxies`); i limiti vivono in memoria e
+  ripartono a ogni avvio.
 - Le quote di `services.json` (`ServiceQuotas`) sono tetti veri: 0 vuol dire
   «niente», mai «senza limite». Con `max_vault_bytes: 0` il vault non tiene
   né push né allegati (`413 vault quota exceeded`), come un sito pubblicato
