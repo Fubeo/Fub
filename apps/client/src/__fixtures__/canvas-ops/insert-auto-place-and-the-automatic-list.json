@@ -1,0 +1,100 @@
+{
+  "about": "Senza posto il frammento va nel posto automatico di add_card: sotto x, l'ultima scheda della lista automatica, a 24. Dopo, la lista riparte: la scheda automatica y va a 48 a destra di tutto, frammento compreso.",
+  "before": {
+    "nodes": [
+      {
+        "id": "lez",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Lezione"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "add_card",
+      "id": "x",
+      "text": "Prima",
+      "width": 320,
+      "height": 160
+    },
+    {
+      "op": "insert",
+      "fragment": {
+        "version": 1,
+        "nodes": [
+          {
+            "id": "a",
+            "type": "text",
+            "x": -100,
+            "y": -50,
+            "width": 400,
+            "height": 100,
+            "text": "Incollata"
+          }
+        ],
+        "edges": []
+      }
+    },
+    {
+      "op": "add_card",
+      "id": "y",
+      "text": "Dopo",
+      "width": 100,
+      "height": 100
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "lez",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Lezione"
+        },
+        {
+          "id": "x",
+          "type": "text",
+          "x": 368,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Prima"
+        },
+        {
+          "id": "e220a8397b1dcdaf",
+          "type": "text",
+          "x": 368,
+          "y": 184,
+          "width": 400,
+          "height": 100,
+          "text": "Incollata"
+        },
+        {
+          "id": "y",
+          "type": "text",
+          "x": 816,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "text": "Dopo"
+        }
+      ],
+      "edges": []
+    },
+    "created": [
+      "x",
+      "e220a8397b1dcdaf",
+      "y"
+    ]
+  }
+}

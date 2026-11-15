@@ -218,12 +218,6 @@ export function upsertNodePatch(
   };
 }
 
-export function removeNodePatch(doc: CanvasDocument, id: string): Extract<CanvasPatch, { kind: "remove-node" }> | null {
-  const before = nodeById(doc, id);
-  if (!before) return null;
-  return { kind: "remove-node", before: cloneNode(before), after: null, at: doc.nodes.findIndex((node) => node.id === id) };
-}
-
 export function upsertEdgePatch(
   doc: CanvasDocument,
   after: CanvasEdge,
@@ -235,13 +229,6 @@ export function upsertEdgePatch(
     before: before ? cloneEdge(before) : null,
     after: cloneEdge(after),
   };
-}
-
-/** `at` è la posizione dell'arco in `doc`: l'annulla lo rimette lì (R11). */
-export function removeEdgePatch(doc: CanvasDocument, id: string): Extract<CanvasPatch, { kind: "remove-edge" }> | null {
-  const at = doc.edges.findIndex((edge) => edge.id === id);
-  if (at < 0) return null;
-  return { kind: "remove-edge", before: cloneEdge(doc.edges[at]!), after: null, at };
 }
 
 /**

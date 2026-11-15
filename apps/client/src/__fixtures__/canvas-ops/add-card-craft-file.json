@@ -1,0 +1,16 @@
+{
+  "about": "Un disegno di VectorCraft è una scheda di specie craft (N6 T18): nasce 320×160, non con la misura della nota accanto (320×240); di serie a destra a 48, x = 0 + 320 + 48 = 368, la y della nota.",
+  "before": { "nodes": [{ "id": "n1", "type": "file", "file": "Corsi/ripasso.md", "x": 0, "y": 0, "width": 320, "height": 240 }] },
+  "ops": [{ "op": "add_card", "id": "c1", "file": "Disegni/logo.vectorcraft", "near": "n1" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "n1", "type": "file", "file": "Corsi/ripasso.md", "x": 0, "y": 0, "width": 320, "height": 240 },
+        { "id": "c1", "type": "file", "file": "Disegni/logo.vectorcraft", "x": 368, "y": 0, "width": 320, "height": 160 }
+      ],
+      "edges": []
+    },
+    "created": ["c1"]
+  }
+}

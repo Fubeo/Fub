@@ -16,8 +16,9 @@ use std::cell::Cell;
 use common::{expect_code, Via};
 use fub_canvas_core::model::MAX_SOURCE_BYTES;
 use fub_canvas_wasm::abi::{
-    canvas_close, canvas_commit, canvas_compile, canvas_ink_layers, canvas_model, canvas_node_at,
-    canvas_open, canvas_preview, canvas_reset, fub_alloc, fub_free, result_len, result_ptr,
+    canvas_check, canvas_close, canvas_commit, canvas_compile, canvas_describe, canvas_ink_layers,
+    canvas_model, canvas_node_at, canvas_open, canvas_preview, canvas_reset, fub_alloc, fub_free,
+    result_len, result_ptr,
 };
 use fub_canvas_wasm::api::MAX_INPUT_BYTES;
 use serde_json::{json, Value};
@@ -180,6 +181,18 @@ impl Via for Abi {
     fn ink_layers(&mut self, handle: u32) -> Result<Value, Value> {
         status(canvas_ink_layers(handle))
     }
+    fn describe(&mut self, handle: u32, request: &[u8]) -> Result<Value, Value> {
+        // SAFETY: come in `open`.
+        status(with_input(request, |ptr, len| unsafe {
+            canvas_describe(handle, ptr, len)
+        }))
+    }
+    fn check(&mut self, handle: u32, request: &[u8]) -> Result<Value, Value> {
+        // SAFETY: come in `open`.
+        status(with_input(request, |ptr, len| unsafe {
+            canvas_check(handle, ptr, len)
+        }))
+    }
     fn close(&mut self, handle: u32) -> Result<(), Value> {
         match canvas_close(handle) {
             0 => {
@@ -210,6 +223,16 @@ fn ink_layers_follow_the_commits() {
 #[test]
 fn stroke_commits_follow_the_model() {
     common::stroke_commits_follow_the_model(&mut Abi);
+}
+
+#[test]
+fn describe_gives_the_code_that_rebuilds_the_board() {
+    common::describe_gives_the_code(&mut Abi);
+}
+
+#[test]
+fn check_gives_the_report_of_the_core() {
+    common::check_gives_the_report(&mut Abi);
 }
 
 #[test]
@@ -262,6 +285,15 @@ fn zero_lengths_and_null_pointers() {
         assert_eq!(canvas_compile(handle, std::ptr::null(), 2), -1);
         assert_eq!(error_result()["code"], "request");
         assert_eq!(canvas_reset(handle, std::ptr::null(), 2), -1);
+        assert_eq!(error_result()["code"], "request");
+        assert_eq!(canvas_describe(handle, std::ptr::null(), 2), -1);
+        assert_eq!(error_result()["code"], "request");
+        assert_eq!(canvas_check(handle, std::ptr::null(), 2), -1);
+        assert_eq!(error_result()["code"], "request");
+        // Una richiesta vuota non è JSON, neanche per le due che leggono.
+        assert_eq!(canvas_describe(handle, std::ptr::null(), 0), -1);
+        assert_eq!(error_result()["code"], "request");
+        assert_eq!(canvas_check(handle, std::ptr::null(), 0), -1);
         assert_eq!(error_result()["code"], "request");
         // Una richiesta vuota non è JSON.
         assert_eq!(canvas_commit(handle, std::ptr::null(), 0), -1);

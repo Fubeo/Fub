@@ -1,0 +1,32 @@
+{
+  "about": "convert di una scheda che non c'è: UnknownNode.",
+  "before": {
+    "nodes": [
+      {
+        "id": "lez",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Lezione"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "convert",
+      "id": "nessuna",
+      "file": "Idee/a.md"
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "UnknownNode",
+      "index": 0,
+      "id": "nessuna"
+    }
+  }
+}

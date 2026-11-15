@@ -1,0 +1,126 @@
+{
+  "about": "layout tree (verso di serie, down) con gli archi r→c1, r→c2, c1→g1: r è centrata sopra c1 e c2 (x 172), c1 e c2 stanno a y 256 e g1 a y 512 (160 + 96 per strato). Senza ids sono tutte le schede, nell'ordine della lavagna.",
+  "before": {
+    "nodes": [
+      {
+        "id": "r",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "r"
+      },
+      {
+        "id": "c1",
+        "type": "text",
+        "x": 400,
+        "y": 400,
+        "width": 320,
+        "height": 160,
+        "text": "c1"
+      },
+      {
+        "id": "c2",
+        "type": "text",
+        "x": 800,
+        "y": 400,
+        "width": 320,
+        "height": 160,
+        "text": "c2"
+      },
+      {
+        "id": "g1",
+        "type": "text",
+        "x": 400,
+        "y": 800,
+        "width": 320,
+        "height": 160,
+        "text": "g1"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "fromNode": "r",
+        "toNode": "c1"
+      },
+      {
+        "id": "e2",
+        "fromNode": "r",
+        "toNode": "c2"
+      },
+      {
+        "id": "e3",
+        "fromNode": "c1",
+        "toNode": "g1"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "layout",
+      "kind": "tree"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "r",
+          "type": "text",
+          "x": 172,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "r"
+        },
+        {
+          "id": "c1",
+          "type": "text",
+          "x": 0,
+          "y": 256,
+          "width": 320,
+          "height": 160,
+          "text": "c1"
+        },
+        {
+          "id": "c2",
+          "type": "text",
+          "x": 344,
+          "y": 256,
+          "width": 320,
+          "height": 160,
+          "text": "c2"
+        },
+        {
+          "id": "g1",
+          "type": "text",
+          "x": 0,
+          "y": 512,
+          "width": 320,
+          "height": 160,
+          "text": "g1"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "fromNode": "r",
+          "toNode": "c1"
+        },
+        {
+          "id": "e2",
+          "fromNode": "r",
+          "toNode": "c2"
+        },
+        {
+          "id": "e3",
+          "fromNode": "c1",
+          "toNode": "g1"
+        }
+      ]
+    }
+  }
+}

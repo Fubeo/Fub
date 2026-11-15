@@ -1,0 +1,107 @@
+{
+  "about": "Con on sulla scheda la gomma taglia il tratto a metà: due pezzi al suo posto, con id dal seme, gli stessi campi (anche gli sconosciuti), at spostato all'inizio del pezzo, la rastremazione tolta solo ai tagli e i campioni fino al bordo del cerchio (raggio 8 più metà dello spessore). L'inversa rimette il tratto.",
+  "before": {
+    "nodes": [
+      {
+        "id": "sc",
+        "type": "text",
+        "text": "Schizzo",
+        "x": 400,
+        "y": 320,
+        "width": 320,
+        "height": 160,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s-1",
+              "tool": "pen",
+              "at": "2026-11-02T09:20:31.250Z",
+              "brush": "pf1 size=2 thinning=0.6 smoothing=0.5 streamline=0.5 taperStart=6 taperEnd=6 capStart=1 capEnd=1 sim=0 pen=fountain",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 320,
+                "height": 160
+              },
+              "ink": "1 s100 cxypt 4000,8000,128,0 4000,0,0,8 4000,0,0,8 4000,0,0,8 4000,0,0,8 4000,0,0,8 4000,0,0,8",
+              "fub:who": "anna"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": []
+  },
+  "seed": 7,
+  "ops": [
+    {
+      "op": "erase_along",
+      "on": "sc",
+      "points": [
+        [
+          160,
+          40
+        ],
+        [
+          160,
+          120
+        ]
+      ],
+      "size": 16
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "sc",
+          "type": "text",
+          "x": 400,
+          "y": 320,
+          "width": 320,
+          "height": 160,
+          "text": "Schizzo",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "63cbe1e459320dd7",
+                "tool": "pen",
+                "at": "2026-11-02T09:20:31.250Z",
+                "brush": "pf1 size=2 thinning=0.6 smoothing=0.5 streamline=0.5 taperStart=6 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=fountain",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 320,
+                  "height": 160
+                },
+                "ink": "1 s100 cxypt 4000,8000,128,0 4000,0,0,8 4000,0,0,8 3100,0,0,6",
+                "fub:who": "anna"
+              },
+              {
+                "id": "044c3cd7f43c661c",
+                "tool": "pen",
+                "at": "2026-11-02T09:20:31.276Z",
+                "brush": "pf1 size=2 thinning=0.6 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=6 capStart=1 capEnd=1 sim=0 pen=fountain",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 320,
+                  "height": 160
+                },
+                "ink": "1 s100 cxypt 16900,8000,128,0 3100,0,0,6 4000,0,0,8 4000,0,0,8",
+                "fub:who": "anna"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "created": [
+      "63cbe1e459320dd7",
+      "044c3cd7f43c661c"
+    ]
+  }
+}

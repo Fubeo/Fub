@@ -1,0 +1,57 @@
+{
+  "about": "Una pagina oltre 2^53−1 non si satura all'ultimo intero sicuro: non è una pagina (`validate` dà bad_value su /0/on/page).",
+  "before": {
+    "nodes": [
+      {
+        "id": "p1",
+        "type": "file",
+        "file": "Corsi/dispensa.pdf",
+        "x": 0,
+        "y": 0,
+        "width": 360,
+        "height": 509
+      },
+      {
+        "id": "f1",
+        "type": "file",
+        "file": "Corsi/voti.xlsx",
+        "x": 400,
+        "y": 0,
+        "width": 640,
+        "height": 420
+      },
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 600,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": {
+        "card": "p1",
+        "page": 1e300,
+        "page_size": [
+          595,
+          842
+        ]
+      },
+      "points": [
+        [
+          72,
+          100
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "malformed"
+  }
+}

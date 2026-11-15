@@ -58,10 +58,11 @@ export function createMemory(): Memory {
   };
 }
 
-/// Dove va ciò che si apre: qui, a lato (un riquadro in più), o in una
-/// linguetta. Una linguetta è ciò che ogni apertura già fa: `tab` si apre come
-/// `here`, ed è la voce «Apri in una linguetta» della scheda di un link.
-export type OpenWay = "here" | "split" | "tab";
+/// Dove va ciò che si apre: qui, a lato (un riquadro in più), in una
+/// linguetta, o nella sbirciata (una nota; un altro file va a lato). Una
+/// linguetta è ciò che ogni apertura già fa: `tab` si apre come `here`, ed è
+/// la voce «Apri in una linguetta» della scheda di un link.
+export type OpenWay = "here" | "split" | "tab" | "peek";
 
 export interface Modifiers {
   ctrlKey?: boolean;
@@ -70,12 +71,14 @@ export interface Modifiers {
   altKey?: boolean;
 }
 
-/// Invio apre qui, Ctrl-Invio (o Cmd-Invio) a lato. Alt-Invio è la sbirciata
-/// quando la sbirciata ci sarà; fino ad allora apre a lato. Maiusc-Invio apre in una linguetta,
-/// cioè come Invio: il gesto che crea una nota vale solo dove non c'è niente
-/// da aprire. Di due modificatori vince Ctrl (o Cmd), poi Alt, poi Maiusc.
+/// Invio apre qui, Ctrl-Invio (o Cmd-Invio) a lato, Alt-Invio sbircia (T20:
+/// una nota nella sbirciata, un altro file a lato). Maiusc-Invio apre in una
+/// linguetta, cioè come Invio: il gesto che crea una nota vale solo dove non
+/// c'è niente da aprire. Di due modificatori vince Ctrl (o Cmd), poi Alt, poi
+/// Maiusc.
 export function openWay(keys: Modifiers): OpenWay {
-  if (keys.ctrlKey || keys.metaKey || keys.altKey) return "split";
+  if (keys.ctrlKey || keys.metaKey) return "split";
+  if (keys.altKey) return "peek";
   if (keys.shiftKey) return "tab";
   return "here";
 }

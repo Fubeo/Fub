@@ -44,6 +44,7 @@ export const LEXICON: readonly LexiconEntry[] = [
   // La riga dei suggerimenti (T14, E6): un nome solo nelle Preferenze, nei
   // menu e nel giro dell'editor.
   { say: "Riga dei suggerimenti", instead: ["Barra dei suggerimenti", "Suggerimenti dei tasti", "Barra dei tasti"], why: "È una riga della banda, non una barra che si apre: dice dove sta" },
+  { say: "Sbirciata, Sbircia", instead: ["Anteprima modificabile", "Apri in sovrimpressione"], why: "La nota aperta sopra la destra del foglio, dove si scrive: «Anteprima» resta la scheda al passaggio, che si guarda e basta" },
 ];
 
 /// Le varianti, tutte: nessuna voce di menu le contiene. «Arancio» è anche

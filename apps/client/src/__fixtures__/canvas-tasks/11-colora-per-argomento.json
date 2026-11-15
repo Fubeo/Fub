@@ -1,0 +1,29 @@
+{
+  "about": "Colorare per argomento: quattro schede, due per colore. Le schede dell'acqua in rosso, quelle del suolo in verde.",
+  "prompt": "Colora di rosso le schede sull'acqua («Pioggia», «Fiume») e di verde quelle sul suolo («Argilla», «Sabbia»).",
+  "before": {
+    "nodes": [
+      { "id": "pi", "type": "text", "text": "Pioggia", "x": 0, "y": 0, "width": 320, "height": 160 },
+      { "id": "fi", "type": "text", "text": "Fiume", "x": 400, "y": 0, "width": 320, "height": 160 },
+      { "id": "ar", "type": "text", "text": "Argilla", "x": 0, "y": 216, "width": 320, "height": 160 },
+      { "id": "sa", "type": "text", "text": "Sabbia", "x": 400, "y": 216, "width": 320, "height": 160 }
+    ],
+    "edges": []
+  },
+  "ops_today": [
+    { "op": "set", "id": "pi", "fields": { "color": "1" } },
+    { "op": "set", "id": "fi", "fields": { "color": "1" } },
+    { "op": "set", "id": "ar", "fields": { "color": "4" } },
+    { "op": "set", "id": "sa", "fields": { "color": "4" } }
+  ],
+  "ops": [
+    { "op": "color", "ids": ["pi", "fi"], "color": "red" },
+    { "op": "color", "ids": ["ar", "sa"], "color": "green" }
+  ],
+  "needs": [],
+  "checks": [
+    { "color": { "texts": ["Pioggia", "Fiume"], "color": "red" } },
+    { "color": { "texts": ["Argilla", "Sabbia"], "color": "green" } },
+    { "no_overlap": {} }
+  ]
+}

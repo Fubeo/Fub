@@ -1,0 +1,96 @@
+{
+  "about": "La pressione data da 0 a 1, una misura, un id dato e un colore #RRGGBB, che si scrive minuscolo.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "text": "Evaporazione",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": "board",
+      "id": "firma",
+      "points": [
+        [
+          1000,
+          0,
+          0.2
+        ],
+        [
+          1010,
+          4,
+          0.8
+        ],
+        [
+          1020,
+          0,
+          1
+        ]
+      ],
+      "pen": "fountain",
+      "size": 5.5,
+      "color": "#D55E00"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "t1",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Ciclo dell'acqua"
+        },
+        {
+          "id": "t2",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Evaporazione"
+        }
+      ],
+      "fub:ink": {
+        "v": 1,
+        "strokes": [
+          {
+            "id": "firma",
+            "tool": "pen",
+            "brush": "pf1 size=5.5 thinning=0.6 smoothing=0.6 streamline=0.45 taperStart=11 taperEnd=44 capStart=1 capEnd=1 sim=0 pen=fountain",
+            "color": "#d55e00",
+            "anchor": {
+              "kind": "free"
+            },
+            "ink": "1 s100 cxypt 100000,0,51,0 1000,400,153,8 1000,-400,51,8"
+          }
+        ]
+      }
+    },
+    "created": [
+      "firma"
+    ]
+  }
+}

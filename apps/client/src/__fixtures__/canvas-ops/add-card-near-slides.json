@@ -1,0 +1,22 @@
+{
+  "about": "Il posto accanto ad «a» è preso da «Gia qui»: la scheda nuova scivola in basso sull'asse, a 24 sotto la presa, y = 100 + 160 + 24 = 284.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" },
+      { "id": "p", "type": "text", "x": 548, "y": 100, "width": 320, "height": 160, "text": "Gia qui" }
+    ]
+  },
+  "ops": [{ "op": "add_card", "id": "c", "text": "Nuova", "near": "a" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" },
+        { "id": "p", "type": "text", "x": 548, "y": 100, "width": 320, "height": 160, "text": "Gia qui" },
+        { "id": "c", "type": "text", "x": 548, "y": 284, "width": 320, "height": 160, "text": "Nuova" }
+      ],
+      "edges": []
+    },
+    "created": ["c"]
+  }
+}

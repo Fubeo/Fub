@@ -1,0 +1,50 @@
+{
+  "about": "layout con un arco fra gli id: dispone schede, quindi e1 è UnknownNode.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "a"
+      },
+      {
+        "id": "b",
+        "type": "text",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "b"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "fromNode": "a",
+        "toNode": "b"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "layout",
+      "ids": [
+        "a",
+        "e1"
+      ],
+      "kind": "row"
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "UnknownNode",
+      "index": 0,
+      "id": "e1"
+    }
+  }
+}

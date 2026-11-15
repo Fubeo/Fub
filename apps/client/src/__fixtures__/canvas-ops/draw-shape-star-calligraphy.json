@@ -1,0 +1,84 @@
+{
+  "about": "Una stella: una punta in alto, poi un vertice interno a metà raggio e una punta, in senso orario, chiusa. La Calligrafia dà la punta piatta nib1.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "text": "Evaporazione",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": "board",
+      "shape": {
+        "kind": "star",
+        "cx": 1000,
+        "cy": 500,
+        "r": 8,
+        "tips": 5
+      },
+      "pen": "calligraphy",
+      "color": "sky"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "t1",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Ciclo dell'acqua"
+        },
+        {
+          "id": "t2",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Evaporazione"
+        }
+      ],
+      "fub:ink": {
+        "v": 1,
+        "strokes": [
+          {
+            "id": "e220a8397b1dcdaf",
+            "tool": "pen",
+            "brush": "nib1 size=12 tip=1 angle=35 fixation=0.9 thinning=0.3 tilt=1 smoothing=0.6 streamline=0.5 sim=0 pen=calligraphy",
+            "color": "#56b4e9",
+            "anchor": {
+              "kind": "free"
+            },
+            "ink": "1 s100 cxypt 100000,49200,128,0 118,238,0,8 117,238,0,8 263,39,0,8 263,38,0,8 -190,185,0,8 -191,186,0,8 45,261,0,8 45,262,0,8 -235,-123,0,8 -235,-124,0,8 -235,124,0,8 -235,123,0,8 45,-262,0,8 45,-261,0,8 -191,-186,0,8 -190,-185,0,8 263,-38,0,8 263,-39,0,8 117,-238,0,8 118,-238,0,8"
+          }
+        ]
+      }
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

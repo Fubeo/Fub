@@ -287,7 +287,8 @@ campione del tratto, e quella di `fub-format-rich`, che ne scrive e legge
 l'InkML dell'inchiostro dei documenti; chi altro può dipenderne è un elenco
 chiuso, deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e
 allargato nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
-`fub-ink-codec` è il codec di `fub:ink` e la grammatica di `fub:brush`: sta
+`fub-ink-codec` è il codec di `fub:ink` e la grammatica di `fub:brush`, con
+le penne e la tavolozza copiate da quelle della GUI (`pens.rs`): sta
 fuori da `fub-scene` perché lo usa anche il nucleo della lavagna, che non deve
 portarsi dietro il lettore XML dei disegni, e dipende soltanto da `fub-ink`.
 

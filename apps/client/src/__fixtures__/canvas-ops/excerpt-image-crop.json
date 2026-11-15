@@ -1,0 +1,97 @@
+{
+  "about": "Il ritaglio di metà immagine, girato di 90 gradi, prende le proporzioni della zona girata: il lato lungo 480. `rotate` 450 si scrive 90; l'immagine non ha `subpath`.",
+  "before": {
+    "nodes": [
+      {
+        "id": "i",
+        "type": "file",
+        "x": 0,
+        "y": 0,
+        "width": 480,
+        "height": 360,
+        "file": "Corsi/foto.png"
+      },
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "excerpt",
+      "id": "i",
+      "part": {
+        "kind": "image",
+        "rect": [
+          0,
+          0,
+          0.5,
+          1
+        ],
+        "rotate": 450
+      },
+      "near": "p",
+      "side": "left",
+      "content_size": [
+        1600,
+        1200
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "i",
+          "type": "file",
+          "x": 0,
+          "y": 0,
+          "width": 480,
+          "height": 360,
+          "file": "Corsi/foto.png"
+        },
+        {
+          "id": "p",
+          "type": "file",
+          "x": 560,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf"
+        },
+        {
+          "id": "910a2dec89025cc1",
+          "type": "file",
+          "x": 32,
+          "y": 400,
+          "width": 480,
+          "height": 320,
+          "file": "Corsi/foto.png",
+          "fub:parts": {
+            "kind": "image",
+            "rect": [
+              0,
+              0,
+              0.5,
+              1
+            ],
+            "rotate": 90
+          }
+        }
+      ],
+      "edges": []
+    },
+    "created": [
+      "910a2dec89025cc1"
+    ]
+  }
+}

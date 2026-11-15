@@ -1,0 +1,11 @@
+{
+  "about": "Un colore che la tavola non conosce («gren») non si legge: la lista è malformata, come un lato sbagliato.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+    ]
+  },
+  "ops": [{ "op": "connect", "from": "a", "to": "b", "color": "gren" }],
+  "expect": { "outcome": "malformed" }
+}
