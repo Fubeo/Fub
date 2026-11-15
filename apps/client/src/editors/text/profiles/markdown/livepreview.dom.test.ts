@@ -301,6 +301,40 @@ describe("tabelle in Live", () => {
     return { parent, engine, cell, cleanup: () => { engine.destroy(); parent.remove(); } };
   }
 
+  it("un link in una cella segue la regola del clic: Mod segue editor.link-click, Alt sbircia", () => {
+    for (const rule of ["apri", "sbircia"] as const) {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const openWikilink = vi.fn();
+      const openPath = vi.fn();
+      const peekLink = vi.fn();
+      const engine = createTextEngine(parent, {
+        onChange() {},
+        onSelectionChange() {},
+        extensions: () => [
+          markdown({ base: markdownGrammar }),
+          livePreview({ openWikilink, openPath, peekLink, linkClick: () => rule, searchTag() {} }),
+        ],
+      });
+      try {
+        engine.setDoc("Testo\n\n| a | b |\n| --- | --- |\n| [[Nota]] | [testo](Carte/B.md) |\n");
+        const at = (selector: string) => parent.querySelector<HTMLElement>(`.tb-grid ${selector}`)!;
+        const down = (target: HTMLElement, init: MouseEventInit) =>
+          target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, ...init }));
+        down(at("[data-wikilink-page]"), { altKey: true });
+        expect(peekLink).toHaveBeenLastCalledWith({ kind: "wiki", page: "Nota", heading: null, block: null });
+        down(at("[data-wikilink-page]"), { ctrlKey: true });
+        if (rule === "apri") expect(openWikilink).toHaveBeenLastCalledWith("Nota", null, null);
+        else expect(peekLink).toHaveBeenCalledTimes(2);
+        down(at("a.internal-path"), { altKey: true });
+        expect(peekLink).toHaveBeenLastCalledWith({ kind: "path", path: "Carte/B.md" });
+      } finally {
+        engine.destroy();
+        parent.remove();
+      }
+    }
+  });
+
   it("sono griglie anche col cursore dentro, e non tornano sorgente", () => {
     const { parent, engine, cell, cleanup } = editorWith(table);
     try {

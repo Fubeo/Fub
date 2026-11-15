@@ -41,6 +41,7 @@ export const LEXICON: readonly LexiconEntry[] = [
   { say: "solo come file", instead: ["Solo file", "Non supportato", "Formato sconosciuto"], why: "Il file c'è e si apre altrove: dice che cosa si può fare lo stesso" },
   // L'editor (EC, A-12): la modalità in cui si scrive è una sola.
   { say: "Scrittura", instead: ["Live", "Modalità Blocchi"], why: "Una modalità sola per scrivere, Live e Blocchi insieme: è la parola dei documenti di Word (Pagina, Scrittura, Lettura)" },
+  { say: "Sbirciata, Sbircia", instead: ["Anteprima modificabile", "Apri in sovrimpressione"], why: "La nota aperta sopra la destra del foglio, dove si scrive: «Anteprima» resta la scheda al passaggio, che si guarda e basta" },
 ];
 
 /// Le varianti, tutte: nessuna voce di menu le contiene. «Arancio» è anche
