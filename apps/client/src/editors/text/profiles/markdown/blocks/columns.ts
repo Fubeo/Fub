@@ -3,7 +3,7 @@
 // callout `[!columns]` con un `[!column]` annidato per colonna, da due a
 // quattro, la stessa forma che la Lettura rende in griglia (`render.ts`).
 import { ChangeSet, type ChangeSpec, type EditorState, type TransactionSpec } from "@codemirror/state";
-import { withLineBreaks } from "./lines";
+import { withLineBreaks } from "../../../line-breaks";
 import { type Block } from "./model";
 import { type BlockRun, siblingsOf } from "./move";
 
