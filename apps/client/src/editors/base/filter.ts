@@ -161,12 +161,115 @@ export function withoutConjunct(filter: FilterDef, index: number): FilterDef {
 
 const strip = (key: string): string => key.replace(/^prop\./, "");
 
-/// Il valore scritto in un campo, come lo legge il modello: un numero o un
-/// booleano scritti come tali diventano numero e booleano, il resto testo.
-/// È la regola di `scalar` della ricerca, senza le date: il modello confronta
-/// una data del filtro come testo, e scriverla come oggetto la romperebbe.
-export function typedValue(text: string): string | number | boolean {
+/// La specie di una proprietà, come la mostrano le righe caricate: una data,
+/// un numero, o il resto. Decide come la forma a vista legge il valore scritto.
+export type ValueKind = "date" | "number" | "other";
+
+/// Come la forma a vista legge e mostra i valori: la specie di ogni proprietà
+/// e il separatore dei decimali della lingua dell'interfaccia. La forma di
+/// ricerca e il file usano sempre la forma canonica (`3000.5`, `2026-03-18`).
+export interface ValueTyping {
+  readonly kind: (key: string) => ValueKind;
+  readonly decimal: "," | ".";
+}
+
+/// Nessuna specie nota, il punto per i decimali: la forma del file.
+export const CANONICAL: ValueTyping = { kind: () => "other", decimal: "." };
+
+/// Il separatore dei decimali di una lingua: `,` in italiano, `.` in inglese.
+export function decimalOf(language: string): "," | "." {
+  try {
+    const part = new Intl.NumberFormat(language).formatToParts(1.5).find((each) => each.type === "decimal");
+    return part?.value === "," ? "," : ".";
+  } catch {
+    return ".";
+  }
+}
+
+const COMMA_PLAIN = /^[+-]?(\d+(,\d+)?|,\d+)$/;
+const COMMA_GROUPED = /^[+-]?\d{1,3}(\.\d{3})+(,\d+)?$/;
+const DOT_PLAIN = /^[+-]?(\d+(\.\d+)?|\.\d+)$/;
+const DOT_GROUPED = /^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$/;
+
+/// Un numero scritto nella forma della lingua, o `null`. Con la virgola per i
+/// decimali, `3,5` è tre e mezzo e `1.000` è mille; col punto, `3.5` e
+/// `1,000`. Le migliaia valgono solo a gruppi di tre: `3.5` in italiano non è
+/// un numero, perché non si sa se fosse tre e mezzo o trentacinque.
+export function readNumber(text: string, decimal: "," | "."): number | null {
+  const value = text.trim().replace(/[\s  ']/g, "");
+  const [plain, grouped, group] = decimal === "," ? [COMMA_PLAIN, COMMA_GROUPED, "."] : [DOT_PLAIN, DOT_GROUPED, ","];
+  if (!plain.test(value) && !grouped.test(value)) return null;
+  const number = Number(value.split(group).join("").replace(decimal, "."));
+  return Number.isFinite(number) ? number : null;
+}
+
+/// Un numero nella forma della lingua, senza separatore delle migliaia: si
+/// rilegge uguale con `readNumber`.
+export function formatNumber(value: number, decimal: "," | "."): string {
+  const text = String(value);
+  return /e/i.test(text) ? text : text.replace(".", decimal);
+}
+
+/// Una data scritta come `2026-03-18`, controllata sul calendario, o `null`.
+export function readDate(text: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text.trim());
+  if (!match) return null;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? match[0] : null;
+}
+
+/// Un valore di una proprietà com'è nelle righe: un `PropertyValue` del
+/// contratto (`{ kind, value }`, `fub_abi::model::property`) o uno scalare
+/// semplice. Torna i valori che si scrivono nel filtro, con la loro specie:
+/// una data come `2026-03-18` (l'orario non si filtra a vista), un numero e
+/// un booleano come sono, un testo; una lista dà le sue voci. Il resto (un
+/// collegamento, un oggetto, un valore vuoto) non dà niente.
+export function propertyValues(raw: unknown): { readonly value: string | number | boolean; readonly kind: ValueKind | "bool" }[] {
+  if (typeof raw === "string") return [{ value: raw, kind: "other" }];
+  if (typeof raw === "number") return Number.isFinite(raw) ? [{ value: raw, kind: "number" }] : [];
+  if (typeof raw === "boolean") return [{ value: raw, kind: "bool" }];
+  if (Array.isArray(raw)) return raw.flatMap(propertyValues);
+  if (!raw || typeof raw !== "object") return [];
+  const { kind, value } = raw as { kind?: unknown; value?: unknown };
+  if (kind === "text" && typeof value === "string") return [{ value, kind: "other" }];
+  if (kind === "number" || kind === "bool") return propertyValues(value);
+  if (kind === "list" && Array.isArray(value)) return value.flatMap(propertyValues);
+  if (kind === "date" && value && typeof value === "object") {
+    const { year, month, day } = value as { year?: unknown; month?: unknown; day?: unknown };
+    if (typeof year !== "number" || typeof month !== "number" || typeof day !== "number") return [];
+    const text = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return readDate(text) ? [{ value: text, kind: "date" }] : [];
+  }
+  return [];
+}
+
+/// La specie di una proprietà dai suoi valori nelle righe: una data o un
+/// numero se tutti i valori lo sono (e ce n'è almeno uno), altrimenti il
+/// resto. Una colonna mista si filtra come testo: il modello allinea comunque
+/// un valore canonico alla specie di ogni riga.
+export function propertyKind(raws: Iterable<unknown>): ValueKind {
+  let seen: ValueKind | "bool" | null = null;
+  for (const raw of raws) {
+    for (const each of propertyValues(raw)) {
+      if (seen === null) seen = each.kind;
+      else if (seen !== each.kind) return "other";
+    }
+  }
+  return seen === "date" || seen === "number" ? seen : "other";
+}
+
+/// Il valore scritto in un campo, come lo legge il modello. Per una proprietà
+/// numero il testo si legge nella forma della lingua e si scrive come numero;
+/// per una data si scrive la data ISO, che il modello confronta con le date.
+/// Senza specie nota vale la regola di `scalar` della ricerca: un numero o un
+/// booleano scritti nella forma canonica diventano numero e booleano, il resto
+/// testo. Un valore che non si legge nella sua specie resta testo:
+/// `valueProblem` lo dice prima che si scriva.
+export function typedValue(text: string, kind: ValueKind = "other", decimal: "," | "." = "."): string | number | boolean {
   const value = text.trim();
+  if (kind === "number") return readNumber(value, decimal) ?? value;
+  if (kind === "date") return readDate(value) ?? value;
   if (value === "true") return true;
   if (value === "false") return false;
   if (/^[+-]?(\d+\.?\d*|\.\d+)$/.test(value)) {
@@ -176,11 +279,28 @@ export function typedValue(text: string): string | number | boolean {
   return value;
 }
 
-const valueText = (value: FilterCondition["value"]): string => value === undefined ? "" : String(value);
+/// Perché il valore di una condizione a vista non si può scrivere: non è un
+/// numero per una proprietà numero, o non è una data per una data.
+export function valueProblem(condition: VisualCondition, typing: ValueTyping): "number" | "date" | null {
+  if (condition.subject === null || VALUELESS.has(condition.op) || condition.value.trim() === "") return null;
+  const kind = typing.kind(condition.subject.trim());
+  if (kind === "number" && readNumber(condition.value, typing.decimal) === null) return "number";
+  if (kind === "date" && readDate(condition.value) === null) return "date";
+  return null;
+}
+
+/// Gli operatori a vista per una proprietà della sua specie: un numero o una
+/// data non si «contengono».
+export function propertyOps(kind: ValueKind): readonly VisualOp[] {
+  return kind === "other" ? PROPERTY_OPS : PROPERTY_OPS.filter((op) => op !== "contains" && op !== "not_contains");
+}
+
+const valueText = (value: FilterCondition["value"], decimal: "," | "." = "."): string =>
+  value === undefined ? "" : typeof value === "number" ? formatNumber(value, decimal) : String(value);
 
 /// Una condizione del modello nella forma a vista, o `null` se la forma a
 /// vista non la sa dire.
-function visualCondition(node: FilterDef): VisualCondition | null {
+function visualCondition(node: FilterDef, decimal: "," | "."): VisualCondition | null {
   if (node === "all" || isOpaque(node)) return null;
   if ("not" in node) {
     const inner = node.not;
@@ -198,17 +318,17 @@ function visualCondition(node: FilterDef): VisualCondition | null {
   if (c.op === "is_empty" || c.op === "is_not_empty") return { subject, op: c.op, value: "" };
   if (c.value === undefined) return null;
   if (c.op === "is" || c.op === "is_not" || c.op === "contains" || c.op === "not_contains" || c.op === "greater_than" || c.op === "less_than") {
-    return { subject, op: c.op, value: valueText(c.value) };
+    return { subject, op: c.op, value: valueText(c.value, decimal) };
   }
   return null;
 }
 
 /// Il filtro nella forma a vista, o `null` se non la sa dire tutto.
-export function visualOf(filter: FilterDef): VisualCondition[] | null {
+export function visualOf(filter: FilterDef, typing: ValueTyping = CANONICAL): VisualCondition[] | null {
   if (isOpaque(filter)) return null;
   const out: VisualCondition[] = [];
   for (const part of conjuncts(filter)) {
-    const condition = visualCondition(part);
+    const condition = visualCondition(part, typing.decimal);
     if (!condition) return null;
     out.push(condition);
   }
@@ -225,19 +345,19 @@ export function completeCondition(condition: VisualCondition): boolean {
 }
 
 /// Una condizione a vista nel modello.
-export function conditionDef(condition: VisualCondition): FilterDef {
+export function conditionDef(condition: VisualCondition, typing: ValueTyping = CANONICAL): FilterDef {
   if (condition.subject === null) {
     const inFolder: FilterDef = { condition: { file: "path", op: "in_folder", value: folderPath(condition.value) } };
     return condition.op === "not_in_folder" ? { not: inFolder } : inFolder;
   }
   const property = condition.subject.trim();
   if (VALUELESS.has(condition.op)) return { condition: { property, op: condition.op as FilterOp } };
-  return { condition: { property, op: condition.op as FilterOp, value: typedValue(condition.value) } };
+  return { condition: { property, op: condition.op as FilterOp, value: typedValue(condition.value, typing.kind(property), typing.decimal) } };
 }
 
 /// Le condizioni a vista nel modello; quelle incomplete non contano.
-export function filterOfVisual(conditions: readonly VisualCondition[]): FilterDef {
-  return allOf(conditions.filter(completeCondition).map(conditionDef));
+export function filterOfVisual(conditions: readonly VisualCondition[], typing: ValueTyping = CANONICAL): FilterDef {
+  return allOf(conditions.filter(completeCondition).map((condition) => conditionDef(condition, typing)));
 }
 
 const folderPath = (value: string): string => value.trim().replace(/^\/+|\/+$/g, "");
@@ -246,10 +366,30 @@ const folderPath = (value: string): string => value.trim().replace(/^\/+|\/+$/g,
 // La forma di ricerca.
 // ---------------------------------------------------------------------------
 
-/// Un valore nella riga di ricerca: fra virgolette se ha spazi, parentesi
-/// quadre o virgolette, perché si rilegga uguale.
-function searchValue(value: string): string {
-  return /[\s"\]\[()]/.test(value) || value === "" ? `"${value.replace(/"/g, '\\"')}"` : value;
+/// Un valore dentro `[chiave:valore]`, o `null` se la riga non lo rileggerebbe
+/// uguale. Il parser (`rules/search-syntax.ts`) prende il valore fino alla
+/// prima `]`, lo spunta, toglie **un** paio di virgolette che lo racchiude —
+/// senza sequenze di escape — e lo legge come numero, data o booleano se ne ha
+/// la forma. Così spazi, parentesi, `:`, `-`, `OR` e virgolette in mezzo
+/// restano come sono; un valore racchiuso fra virgolette, o che comincia con
+/// `>` o `<`, va fra un altro paio di virgolette; una `]`, gli spazi ai bordi e
+/// un testo che si rileggerebbe numero o booleano non si dicono.
+function searchValue(value: string | number | boolean): string | null {
+  if (typeof value === "boolean") return String(value);
+  if (typeof value === "number") {
+    const text = String(value);
+    return /^[+-]?(\d+\.?\d*|\.\d+)$/.test(text) ? text : null;
+  }
+  if (value === "" || value.includes("]") || value.trim() !== value) return null;
+  // Una data ISO torna testo (il modello non ha date nel filtro): resta
+  // uguale. Un numero o un booleano scritti come testo tornerebbero numero.
+  if (value === "true" || value === "false" || (/^[0-9.+-]+$/.test(value) && /[0-9]/.test(value) && /^[+-]?(\d+\.?\d*|\.\d+)$/.test(value))) return null;
+  // Fra virgolette quando servono a rileggerlo uguale (un valore già fra
+  // virgolette, o che comincia come un confronto), e per leggerlo meglio
+  // quando ha spazi e nessuna virgoletta dentro.
+  const wrapped = (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) || /^[<>]/.test(value)
+    || (/\s/.test(value) && !value.includes('"'));
+  return wrapped ? `"${value}"` : value;
 }
 function searchKey(key: string): string | null {
   // Il parser taglia la chiave al primo `:` e alla prima `]`.
@@ -270,17 +410,14 @@ function searchCondition(node: FilterDef, negated = false): string | null {
   if (c.property === undefined) return null;
   const key = searchKey(strip(c.property));
   if (key === null) return null;
-  const value = c.value === undefined ? null : String(c.value);
-  // `>` e `<` davanti al valore li legge il parser come confronto: un valore
-  // che comincia così non si dice come «contiene».
-  const plain = (text: string) => !/^[<>]/.test(text) && text.trim() === text && text !== "";
+  const value = c.value === undefined ? null : searchValue(c.value);
   switch (c.op) {
-    case "contains": return value !== null && plain(value) ? `${dash}[${key}:${searchValue(value)}]` : null;
-    case "not_contains": return value !== null && plain(value) && !negated ? `-[${key}:${searchValue(value)}]` : null;
+    case "contains": return value !== null ? `${dash}[${key}:${value}]` : null;
+    case "not_contains": return value !== null && !negated ? `-[${key}:${value}]` : null;
     case "is_not_empty": return negated ? `-[${key}]` : `[${key}]`;
     case "is_empty": return negated ? `[${key}]` : `-[${key}]`;
-    case "greater_than": return value !== null && value.trim() !== "" ? `${dash}[${key}:>${searchValue(value)}]` : null;
-    case "less_than": return value !== null && value.trim() !== "" ? `${dash}[${key}:<${searchValue(value)}]` : null;
+    case "greater_than": return value !== null ? `${dash}[${key}:>${value}]` : null;
+    case "less_than": return value !== null ? `${dash}[${key}:<${value}]` : null;
     default: return null;
   }
 }
@@ -311,7 +448,10 @@ export type SearchProblem =
   | { readonly kind: "syntax"; readonly fault: SearchFault }
   /// La riga dice qualcosa che il filtro della Base non sa fare: cercare nel
   /// testo, nei titoli, nei compiti. `term` è il pezzo della riga.
-  | { readonly kind: "unsupported"; readonly term: string };
+  | { readonly kind: "unsupported"; readonly term: string }
+  /// La riga nomina una proprietà che nessuna riga di questa Base ha, né una
+  /// colonna: un nome sbagliato non diventa in silenzio un filtro vuoto.
+  | { readonly kind: "unknown_property"; readonly key: string };
 
 export type SearchFilter = { readonly ok: FilterDef } | { readonly problem: SearchProblem };
 
@@ -351,17 +491,21 @@ function literalDef(literal: QueryLiteral): FilterDef | string {
 }
 
 /// La riga di ricerca come filtro della Base. Una riga vuota è nessun filtro.
-export function filterOfSearch(text: string): SearchFilter {
+/// `known` dice se una proprietà esiste in questa Base; senza, ogni nome vale.
+export function filterOfSearch(text: string, known?: (key: string) => boolean): SearchFilter {
   const parsed = parseSearch(text, false);
   if ("fault" in parsed) return { problem: { kind: "syntax", fault: parsed.fault } };
-  return filterOfQuery(parsed.ok);
+  return filterOfQuery(parsed.ok, known);
 }
 
-function filterOfQuery(query: QueryExpr): SearchFilter {
+function filterOfQuery(query: QueryExpr, known?: (key: string) => boolean): SearchFilter {
   const clauses: FilterDef[] = [];
   for (const clause of query.any) {
     const parts: FilterDef[] = [];
     for (const literal of clause.all) {
+      if (known && literal.predicate.kind === "property" && !known(literal.predicate.filter.key)) {
+        return { problem: { kind: "unknown_property", key: literal.predicate.filter.key } };
+      }
       const def = literalDef(literal);
       if (typeof def === "string") return { problem: { kind: "unsupported", term: def } };
       parts.push(def);

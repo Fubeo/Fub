@@ -295,7 +295,11 @@ const BOARDS: Readonly<Record<string, string>> = params.get("lavagna") === "1"
 const BASE = params.get("base") === "1"
   ? baseFixture(() => ({
       revision: async (doc) => (await host.module.api.readDocument(doc)).revision,
-      writeFromOutside: (doc, text) => host.writeFromOutside(doc, text),
+      writeByCommand: async (doc, text) => {
+        const { revision } = await host.module.api.readDocument(doc);
+        await host.module.api.writeDocument(doc, text, { kind: "descends_from", value: revision });
+        host.emit({ type: "document_changed", id: doc });
+      },
     }))
   : null;
 

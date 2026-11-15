@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   allOf, conditionDef, conjuncts, filterOfSearch, filterOfVisual, filterValue, isOpaque, parseFilter, sameFilter,
-  searchOf, typedValue, visualOf, withoutConjunct, type FilterDef,
+  propertyKind, propertyOps, propertyValues, readNumber, searchOf, typedValue, valueProblem, visualOf, withoutConjunct,
+  type FilterDef, type ValueTyping,
 } from "./filter";
 
 const stato: FilterDef = { condition: { property: "stato", op: "contains", value: "Arrivata" } };
@@ -103,5 +104,75 @@ describe("le etichette del filtro", () => {
     expect(withoutConjunct(artista, 0)).toBe("all");
     expect(filterValue("all")).toBeNull();
     expect(sameFilter(both, { and: [stato, artista] })).toBe(true);
+  });
+});
+
+describe("i valori nella loro specie", () => {
+  const typing = (kinds: Record<string, "date" | "number">, decimal: "," | "." = ","): ValueTyping =>
+    ({ kind: (key) => kinds[key] ?? "other", decimal });
+
+  it("un numero si legge coi decimali della lingua e si scrive come numero", () => {
+    expect(readNumber("3,5", ",")).toBe(3.5);
+    expect(readNumber("1.000", ",")).toBe(1000);
+    expect(readNumber("1.000,25", ",")).toBe(1000.25);
+    // «3.5» in italiano non si sa se è tre e mezzo o trentacinque.
+    expect(readNumber("3.5", ",")).toBeNull();
+    expect(readNumber("3.5", ".")).toBe(3.5);
+    const valore = typing({ valore: "number" });
+    expect(filterOfVisual([{ subject: "valore", op: "greater_than", value: "3000,5" }], valore))
+      .toEqual({ condition: { property: "valore", op: "greater_than", value: 3000.5 } });
+    expect(visualOf({ condition: { property: "valore", op: "less_than", value: 2.5 } }, valore))
+      .toEqual([{ subject: "valore", op: "less_than", value: "2,5" }]);
+    expect(valueProblem({ subject: "valore", op: "greater_than", value: "tremila" }, valore)).toBe("number");
+    expect(valueProblem({ subject: "valore", op: "greater_than", value: "3000" }, valore)).toBeNull();
+  });
+
+  it("una data si scrive ISO, e una data che non c'è sul calendario non passa", () => {
+    const consegna = typing({ consegna: "date" });
+    expect(filterOfVisual([{ subject: "consegna", op: "less_than", value: "2026-03-18" }], consegna))
+      .toEqual({ condition: { property: "consegna", op: "less_than", value: "2026-03-18" } });
+    expect(valueProblem({ subject: "consegna", op: "is", value: "2026-02-30" }, consegna)).toBe("date");
+    expect(valueProblem({ subject: "consegna", op: "is", value: "18/03/2026" }, consegna)).toBe("date");
+    // Un numero e una data non si «contengono».
+    expect(propertyOps("date")).not.toContain("contains");
+    expect(propertyOps("number")).not.toContain("not_contains");
+    expect(propertyOps("other")).toContain("contains");
+  });
+
+  it("la specie di una proprietà viene dai valori delle righe, nella forma del contratto", () => {
+    const date = { kind: "date", value: { year: 2026, month: 3, day: 8, time: null } };
+    expect(propertyValues(date)).toEqual([{ value: "2026-03-08", kind: "date" }]);
+    expect(propertyValues({ kind: "list", value: [{ kind: "text", value: "a" }, { kind: "number", value: 2 }] }))
+      .toEqual([{ value: "a", kind: "other" }, { value: 2, kind: "number" }]);
+    expect(propertyValues({ kind: "unknown", value: { a: 1 } })).toEqual([]);
+    expect(propertyKind([date, undefined, date])).toBe("date");
+    expect(propertyKind([{ kind: "number", value: 3 }, 4])).toBe("number");
+    expect(propertyKind([date, { kind: "text", value: "presto" }])).toBe("other");
+    expect(propertyKind([undefined])).toBe("other");
+  });
+});
+
+describe("la forma di ricerca dei valori", () => {
+  const round = (value: string): void => {
+    const filter: FilterDef = { condition: { property: "nota", op: "contains", value } };
+    const line = searchOf(filter);
+    expect(line, value).not.toBeNull();
+    expect(filterOfSearch(line!), value).toEqual({ ok: filter });
+  };
+
+  it("un valore torna uguale dalla riga di ricerca: virgolette, due punti, accenti, parole della sintassi", () => {
+    for (const value of ['di "lui"', '"tutto fra virgolette"', "a:b", "città è", "-meno", "OR", "(fra parentesi)", "In prestito", ">tre", "2026-03-18"]) round(value);
+  });
+
+  it("un valore che la riga non sa dire resta solo a vista", () => {
+    for (const value of ["con ] dentro", " spazio in testa", "12", "true"]) {
+      expect(searchOf({ condition: { property: "nota", op: "contains", value } }), value).toBeNull();
+    }
+  });
+
+  it("una proprietà che la Base non ha non diventa un filtro vuoto", () => {
+    const known = (key: string) => key === "stato";
+    expect(filterOfSearch("[stato:Arrivata]", known)).toEqual({ ok: stato });
+    expect(filterOfSearch("[sttao:Arrivata]", known)).toEqual({ problem: { kind: "unknown_property", key: "sttao" } });
   });
 });

@@ -21,9 +21,9 @@ import { openLifetime } from "../../ui/lifetime";
 import { showContextMenu, type MenuItem } from "../../ui/menu";
 import type { BasePlan, BaseViewKey, BaseWritten } from "./data";
 import {
-  FOLDER_OPS, PROPERTY_OPS, VALUELESS,
-  conjuncts, filterOfSearch, filterOfVisual, filterValue, isOpaque, sameFilter, searchOf, visualOf, withoutConjunct,
-  type FilterDef, type SearchProblem, type VisualCondition, type VisualOp,
+  CANONICAL, FOLDER_OPS, VALUELESS,
+  conjuncts, filterOfSearch, filterOfVisual, filterValue, isOpaque, propertyOps, sameFilter, searchOf, valueProblem, visualOf, withoutConjunct,
+  type FilterDef, type SearchProblem, type ValueKind, type ValueTyping, type VisualCondition, type VisualOp,
 } from "./filter";
 import { useBaseIcons, viewIcon } from "./icons";
 import { moveColumn, sameColumns, sameKey, sortValue, sortedBy, toggleColumn, withoutSort, type SortEntry } from "./sort";
@@ -47,6 +47,14 @@ export interface BaseToolbarModel {
   readonly properties: readonly string[];
   /// I valori che una proprietà ha nelle righe, per suggerirli nel filtro.
   readonly suggestions: (key: string) => readonly string[];
+  /// La specie di una proprietà nelle righe: una data o un numero si scrivono
+  /// nel filtro come tali.
+  readonly kinds: (key: string) => ValueKind;
+  /// Il separatore dei decimali della lingua dell'interfaccia.
+  readonly decimal: "," | ".";
+  /// Per una Base scritta dentro una nota: la nota che la contiene, da aprire
+  /// come file. `null` se non c'è.
+  readonly containerFile: string | null;
 }
 
 export interface BaseToolbarActions {
@@ -63,6 +71,8 @@ export interface BaseToolbarActions {
   readonly more: () => MenuItem[];
   /// I controlli di «Raggruppa», che la superficie possiede.
   readonly grouping: HTMLElement;
+  /// «Apri come file»: apre il documento che contiene la Base.
+  readonly openFile: (doc: string) => void;
 }
 
 export interface BaseToolbar {
@@ -100,8 +110,8 @@ function toolButton(className: string, iconName: string): HTMLButtonElement {
   button.append(icon(iconName));
   return button;
 }
-/// Una voce di un elenco a tendina (gli argomenti di `new Option`).
-function option(text: string, value = text, _defaultSelected = false, selected = false): HTMLOptionElement {
+/// Una voce di un elenco a tendina, scelta se `selected`.
+function option(text: string, value = text, selected = false): HTMLOptionElement {
   const each = document.createElement("option");
   each.value = value;
   each.textContent = text;
@@ -116,8 +126,8 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: strin
 }
 
 /// Il testo di una condizione di primo livello, per la sua etichetta.
-export function conjunctText(plan: BasePlan, part: FilterDef): string {
-  const visual = visualOf(part);
+export function conjunctText(plan: BasePlan, part: FilterDef, typing: ValueTyping = CANONICAL): string {
+  const visual = visualOf(part, typing);
   if (visual && visual.length === 1) {
     const condition = visual[0]!;
     const subject = condition.subject === null ? t("base.filter.folder") : labelOf(plan, condition.subject);
@@ -128,15 +138,16 @@ export function conjunctText(plan: BasePlan, part: FilterDef): string {
 
 /// La ricerca più vicina a una forma a vista che ha «è» o «non è»: la ricerca
 /// sa dire soltanto «contiene».
-function nearestSearch(conditions: readonly VisualCondition[]): string | null {
+function nearestSearch(conditions: readonly VisualCondition[], typing: ValueTyping): string | null {
   const near = conditions.map((condition): VisualCondition => condition.op === "is"
     ? { ...condition, op: "contains" }
     : condition.op === "is_not" ? { ...condition, op: "not_contains" } : condition);
-  return searchOf(filterOfVisual(near));
+  return searchOf(filterOfVisual(near, typing));
 }
 
 function problemText(problem: SearchProblem): string {
   if (problem.kind === "syntax") return new SearchSyntaxError(problem.fault).message;
+  if (problem.kind === "unknown_property") return t("base.filter.unknown_property", { key: problem.key });
   return t("base.filter.unsupported", { term: problem.term });
 }
 
@@ -175,9 +186,14 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
   const chips = element("div", "base-chips");
   const note = element("p", "base-note");
   note.hidden = true;
+  // «Apri come file»: per una Base scritta dentro una nota, apre la nota, dove
+  // il blocco si cambia.
+  const openFileButton = textButton({ label: t("base.lock.open_file"), onPress: () => { if (model.containerFile) actions.openFile(model.containerFile); } });
+  openFileButton.classList.add("base-open-file");
+  openFileButton.hidden = true;
   const status = element("div", "base-status");
   status.setAttribute("role", "status");
-  strip.append(chips, note, status);
+  strip.append(chips, note, openFileButton, status);
 
   const written = document.createElement("details");
   written.className = "base-written";
@@ -186,7 +202,8 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
   const writtenLines = element("pre", "base-written-lines");
   written.append(writtenSummary, writtenLines);
 
-  let model: BaseToolbarModel = { views: [], active: null, plan: null, lock: null, canCreate: false, busy: false, properties: [], suggestions: () => [] };
+  let model: BaseToolbarModel = { views: [], active: null, plan: null, lock: null, canCreate: false, busy: false, properties: [], suggestions: () => [], kinds: () => "other", decimal: ".", containerFile: null };
+  const typing = (): ValueTyping => ({ kind: model.kinds, decimal: model.decimal });
   let popover: PopoverHandle | null = null;
   let refreshPopover: (() => void) | null = null;
   const roving: RovingToolbar = rovingToolbar(bar, { controls: () => [...bar.querySelectorAll<HTMLElement>("button")] }, lifetime);
@@ -240,21 +257,36 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     searchField.id = identifier("base-filter-search");
     searchTitle.htmlFor = searchField.id;
     const searchNote = element("p", "base-pop-note");
+    // Il file è cambiato altrove mentre il filtro si componeva: la bozza non
+    // si scrive sopra il filtro nuovo, e «Ricarica» lo mostra.
+    const staleNote = element("p", "base-pop-note base-filter-stale");
+    staleNote.setAttribute("role", "status");
+    staleNote.hidden = true;
+    const reloadButton = textButton({ label: t("base.filter.reload"), onPress: () => openFilter() });
+    reloadButton.hidden = true;
     const foot = element("div", "base-pop-foot");
     const cancel = textButton({ label: t("base.filter.cancel"), onPress: () => closePopover() });
     const apply = textButton({ label: t("base.filter.apply"), kind: "primary", onPress: () => applyFilter() });
-    foot.append(cancel, apply);
-    content.append(title, rowsBox, visualNote, addButton, searchTitle, searchField, searchNote, foot);
+    foot.append(cancel, reloadButton, apply);
+    content.append(title, rowsBox, visualNote, addButton, searchTitle, searchField, searchNote, staleNote, foot);
 
+    // La forma a vista legge i numeri nella lingua e le date in ISO, secondo
+    // la specie che la proprietà ha nelle righe.
+    const typed = typing();
+    const known = (key: string): boolean => subjects(plan, []).includes(plain(key));
     // Le due bozze. `mode` dice quale ha toccato per ultima chi usa la Base:
     // è quella che «Applica» scrive.
-    let draft: VisualCondition[] | null = visualOf(plan.filters);
+    let draft: VisualCondition[] | null = visualOf(plan.filters, typed);
     const initialSearch = searchOf(plan.filters);
     let mode: "visual" | "search" = draft !== null ? "visual" : "search";
     let parsed: FilterDef | null = plan.filters;
     let problem: SearchProblem | null = null;
+    // Chi usa la Base ha cambiato qualcosa nel popover, e se il file è
+    // cambiato da fuori dopo l'apertura.
+    let touched = false;
+    let stale = false;
     const opaque = isOpaque(plan.filters) || (draft === null && initialSearch === null);
-    searchField.value = initialSearch ?? (draft ? nearestSearch(draft) ?? "" : "");
+    searchField.value = initialSearch ?? (draft ? nearestSearch(draft, typed) ?? "" : "");
     const datalists: HTMLDataListElement[] = [];
 
     const conditionRow = (condition: VisualCondition, index: number): HTMLElement => {
@@ -262,13 +294,17 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       const subject = element("select", "base-filter-subject");
       subject.setAttribute("aria-label", t("base.filter.subject"));
       for (const key of subjects(plan, [condition.subject])) {
-        subject.append(option(labelOf(plan, key), key, false, condition.subject === key));
+        subject.append(option(labelOf(plan, key), key, condition.subject === key));
       }
-      subject.append(option(t("base.filter.folder"), FOLDER, false, condition.subject === null));
+      subject.append(option(t("base.filter.folder"), FOLDER, condition.subject === null));
       subject.value = condition.subject ?? FOLDER;
       const op = element("select", "base-filter-op");
       op.setAttribute("aria-label", t("base.filter.op"));
-      for (const each of condition.subject === null ? FOLDER_OPS : PROPERTY_OPS) op.append(option(opLabel(each), each, false, each === condition.op));
+      const opsFor = (key: string | null): readonly VisualOp[] => key === null ? FOLDER_OPS : propertyOps(typed.kind(key));
+      // L'operatore che la condizione ha resta fra le scelte anche se la
+      // specie non lo propone: il file l'ha scritto così.
+      const ops = opsFor(condition.subject);
+      for (const each of ops.includes(condition.op) ? ops : [...ops, condition.op]) op.append(option(opLabel(each), each, each === condition.op));
       op.value = condition.op;
       const value = document.createElement("input");
       value.type = "text";
@@ -292,6 +328,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       remove.append(icon("close"));
       const edit = (next: VisualCondition, redraw: boolean) => {
         mode = "visual";
+        touched = true;
         draft = (draft ?? []).map((each, at) => at === index ? next : each);
         if (redraw) drawRows();
         syncSearch();
@@ -299,16 +336,17 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       subject.addEventListener("change", () => {
         const folder = subject.value === FOLDER;
         const was = draft?.[index] ?? condition;
-        const ops = folder ? FOLDER_OPS : PROPERTY_OPS;
-        edit({ subject: folder ? null : subject.value, op: ops.includes(was.op) ? was.op : ops[0]!, value: was.value }, true);
+        const next = opsFor(folder ? null : subject.value);
+        edit({ subject: folder ? null : subject.value, op: next.includes(was.op) ? was.op : next[0]!, value: was.value }, true);
       });
       op.addEventListener("change", () => {
         const was = draft?.[index] ?? condition;
         edit({ ...was, op: op.value as VisualOp }, VALUELESS.has(op.value as VisualOp) !== VALUELESS.has(was.op));
       });
-      value.addEventListener("input", () => edit({ ...(draft?.[index] ?? condition), value: value.value }, false));
+      value.addEventListener("input", () => { edit({ ...(draft?.[index] ?? condition), value: value.value }, false); showValueProblem(); });
       remove.addEventListener("click", () => {
         mode = "visual";
+        touched = true;
         draft = (draft ?? []).filter((_, at) => at !== index);
         drawRows();
         syncSearch();
@@ -319,26 +357,36 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     const drawRows = (): void => {
       datalists.length = 0;
       rowsBox.replaceChildren(...(draft ?? []).map(conditionRow));
-      visualNote.hidden = draft !== null && !opaque;
-      visualNote.textContent = opaque ? t("base.filter.only_source") : draft === null ? t("base.filter.only_search") : "";
-      if (draft !== null && draft.length === 0) {
-        visualNote.hidden = false;
-        visualNote.textContent = t("base.filter.empty");
-      }
       addButton.hidden = opaque;
+      showValueProblem();
+    };
+    // Che cosa dice la nota sotto le condizioni quando nessun valore è
+    // sbagliato: perché la forma a vista manca, o che non c'è niente.
+    const defaultNote = (): string =>
+      opaque ? t("base.filter.only_source")
+        : draft === null ? t("base.filter.only_search")
+          : draft.length === 0 ? t("base.filter.empty") : "";
+    // Un valore che non si legge nella specie della sua proprietà: la nota lo
+    // dice, e «Applica» aspetta.
+    const showValueProblem = (): void => {
+      const wrong = mode === "visual" ? (draft ?? []).map((condition) => [condition, valueProblem(condition, typed)] as const).find(([, kind]) => kind !== null) : undefined;
+      visualNote.textContent = wrong
+        ? t(wrong[1] === "number" ? "base.filter.not_number" : "base.filter.not_date", { value: wrong[0].value.trim(), example: typed.decimal === "," ? "3,5" : "3.5" })
+        : defaultNote();
+      visualNote.hidden = visualNote.textContent === "";
       updateApply();
     };
     // La forma a vista è cambiata: la ricerca la ridice, o dice la più vicina.
     const syncSearch = (): void => {
       const current = draft ?? [];
-      const exact = searchOf(filterOfVisual(current));
+      const exact = searchOf(filterOfVisual(current, typed));
       problem = null;
-      parsed = filterOfVisual(current);
+      parsed = filterOfVisual(current, typed);
       if (exact !== null) {
         searchField.value = exact;
         searchNote.textContent = "";
       } else {
-        searchField.value = nearestSearch(current) ?? "";
+        searchField.value = nearestSearch(current, typed) ?? "";
         searchNote.textContent = t("base.filter.search_contains");
       }
       searchNote.hidden = searchNote.textContent === "";
@@ -347,7 +395,8 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     // La ricerca è cambiata: la forma a vista la ridice, se sa.
     const syncVisual = (): void => {
       mode = "search";
-      const result = filterOfSearch(searchField.value);
+      touched = true;
+      const result = filterOfSearch(searchField.value, known);
       if ("problem" in result) {
         problem = result.problem;
         parsed = null;
@@ -360,17 +409,18 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       parsed = result.ok;
       searchNote.textContent = "";
       searchNote.hidden = true;
-      draft = visualOf(result.ok);
+      draft = visualOf(result.ok, typed);
       drawRows();
     };
-    const finalFilter = (): FilterDef | null => mode === "visual" ? filterOfVisual(draft ?? []) : parsed;
+    const finalFilter = (): FilterDef | null => mode === "visual" ? filterOfVisual(draft ?? [], typed) : parsed;
+    const blocked = (): boolean => mode === "visual" && (draft ?? []).some((condition) => valueProblem(condition, typed) !== null);
     const updateApply = (): void => {
       const next = finalFilter();
-      apply.disabled = opaque || !writable() || next === null || problem !== null || sameFilter(next, plan.filters);
+      apply.disabled = stale || opaque || !writable() || next === null || problem !== null || blocked() || sameFilter(next, plan.filters);
     };
     const applyFilter = (): void => {
       const next = finalFilter();
-      if (opaque || !writable() || next === null || problem !== null) return;
+      if (stale || opaque || !writable() || next === null || problem !== null || blocked()) return;
       closePopover();
       if (!sameFilter(next, plan.filters)) actions.write("filters", filterValue(next));
     };
@@ -380,7 +430,23 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     searchNote.hidden = true;
     if (draft !== null && initialSearch === null) { searchNote.textContent = t("base.filter.search_contains"); searchNote.hidden = false; }
     drawRows();
-    open(filterButton, t("base.filter.title", { name: plan.view }), "base-filter-popover", content, null);
+    // Il piano è cambiato col popover aperto. Se il filtro nel file è lo
+    // stesso, la bozza resta buona: si scrive con la revisione nuova. Se è
+    // cambiato, una bozza intatta si rifà sul filtro nuovo; una toccata non
+    // si scrive sopra, e la nota lo dice con «Ricarica».
+    const refresh = (): void => {
+      const now = model.plan;
+      if (!now || stale) { updateApply(); return; }
+      if (sameFilter(now.filters, plan.filters)) { updateApply(); return; }
+      if (!touched) { openFilter(); return; }
+      stale = true;
+      staleNote.textContent = t("base.filter.stale");
+      staleNote.hidden = false;
+      reloadButton.hidden = false;
+      updateApply();
+      popover?.reposition();
+    };
+    open(filterButton, t("base.filter.title", { name: plan.view }), "base-filter-popover", content, refresh);
   };
 
   // ---- Ordina -------------------------------------------------------------
@@ -395,7 +461,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       const name = element("span", "base-sort-name", labelOf(plan, entry.key));
       const direction = element("select", "base-sort-direction");
       direction.setAttribute("aria-label", t("base.sort.direction", { name: labelOf(plan, entry.key) }));
-      direction.append(option(t("base.sort.asc"), "asc", false, !entry.descending), option(t("base.sort.desc"), "desc", false, entry.descending));
+      direction.append(option(t("base.sort.asc"), "asc", !entry.descending), option(t("base.sort.desc"), "desc", entry.descending));
       direction.value = entry.descending ? "desc" : "asc";
       direction.disabled = !writable();
       direction.addEventListener("change", () => write(plan.sort.map((each) => sameKey(each.key, entry.key) ? { key: each.key, descending: direction.value === "desc" } : each)));
@@ -412,7 +478,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     if (plan.sort.length === 0) list.append(element("p", "base-pop-note", t("base.sort.none")));
     const add = element("select", "base-sort-add");
     add.setAttribute("aria-label", t("base.sort.add"));
-    add.append(option(t("base.sort.add"), "", true, true));
+    add.append(option(t("base.sort.add"), "", true));
     const candidates = [...plan.columns.filter((key) => !key.startsWith("formula.")), ...subjects(plan, []).filter((key) => !plan.columns.some((column) => sameKey(column, key)))];
     for (const key of candidates) if (!sortedBy(plan.sort, key)) add.append(option(labelOf(plan, key), key));
     add.disabled = !writable() || add.options.length === 1;
@@ -454,9 +520,14 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       box.type = "checkbox";
       box.checked = index !== null;
       box.id = identifier("base-column");
-      box.disabled = !writable();
+      // Mai `disabled`: una casella spenta perde il fuoco, che finirebbe sul
+      // corpo della pagina a ogni gesto (la barra è occupata finché il file
+      // nuovo non arriva). Inerte invece: lo dice `aria-disabled`, e il clic
+      // e i tasti non fanno niente.
+      box.setAttribute("aria-disabled", String(!writable()));
       const label = element("label", "base-column-label", labelOf(plan, key));
       label.htmlFor = box.id;
+      box.addEventListener("click", (event) => { if (!writable()) event.preventDefault(); });
       box.addEventListener("change", () => write(toggleColumn(shown, key, box.checked)));
       // Una casella si spunta anche con Invio, come Spazio: la tastiera non
       // deve sapere quale dei due tasti la casella ascolta.
@@ -466,6 +537,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
         event.preventDefault();
         write(moveColumn(shown, index, index + (event.key === "ArrowUp" ? -1 : 1)));
       });
+      box.addEventListener("focus", () => { focusedColumn = key; });
       if (index !== null) {
         item.draggable = writable();
         grip.title = t("base.columns.move", { name: labelOf(plan, key) });
@@ -490,17 +562,25 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     content.append(list, element("p", "base-pop-note", t("base.columns.hint")));
     return content;
   };
+  // La colonna su cui stava il fuoco nel popover di Proprietà: ci torna
+  // dopo che il file è cambiato e le caselle si sono rifatte.
+  let focusedColumn: string | null = null;
   const openColumns = (): void => {
     const plan = model.plan;
     if (!plan) return;
     const box = element("div", "base-pop-box");
+    focusedColumn = null;
     box.append(columnsContent());
     open(columnsButton, t("base.columns.title", { name: plan.view }), "base-columns-popover", box, () => {
       if (!model.plan) return;
-      // Il fuoco resta sulla stessa colonna dopo che il file è cambiato.
-      const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>(".base-column")?.dataset.column;
+      // Il fuoco resta sulla stessa colonna dopo che il file è cambiato, se
+      // stava nel popover (o se le caselle rifatte l'hanno lasciato cadere).
+      const active = document.activeElement;
+      const inside = active instanceof Node && box.contains(active);
+      const lost = active === null || active === document.body;
+      const focused = inside ? (active as HTMLElement).closest<HTMLElement>(".base-column")?.dataset.column ?? focusedColumn : focusedColumn;
       box.replaceChildren(columnsContent());
-      if (focused !== undefined) box.querySelector<HTMLInputElement>(`.base-column[data-column="${CSS.escape(focused)}"] input`)?.focus();
+      if ((inside || lost) && focused !== null) box.querySelector<HTMLInputElement>(`.base-column[data-column="${CSS.escape(focused)}"] input`)?.focus();
       popover?.reposition();
     });
   };
@@ -583,7 +663,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       const removable = model.lock === null;
       if (isOpaque(plan.filters)) items.push(chip(t("base.chip.manual"), "base-filter", "", null));
       else conjuncts(plan.filters).forEach((part, index) => {
-        const text = conjunctText(plan, part);
+        const text = conjunctText(plan, part, typing());
         items.push(chip(text, "base-filter", t("base.chip.remove_filter", { name: text }), removable ? () => { if (writable()) actions.write("filters", filterValue(withoutConjunct(plan.filters, index))); } : null));
       });
       for (const entry of plan.sort) {
@@ -608,6 +688,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     newGroup.hidden = !model.canCreate && model.lock === "read_only";
     note.hidden = model.lock === null;
     note.textContent = model.lock === null ? "" : t(model.lock === "read_only" ? "base.lock.read_only" : "base.lock.embedded");
+    openFileButton.hidden = model.lock !== "embedded" || model.containerFile === null;
     bar.setAttribute("aria-busy", String(model.busy));
   };
 
@@ -624,6 +705,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     moreButton.setAttribute("aria-label", t("base.tool.more"));
     moreButton.title = t("base.tool.more");
     newButton.textContent = t("base.new");
+    openFileButton.textContent = t("base.lock.open_file");
     templateButton.setAttribute("aria-label", t("base.new.template"));
     templateButton.title = t("base.new.template");
     search.setAttribute("aria-label", t("base.tool.search"));

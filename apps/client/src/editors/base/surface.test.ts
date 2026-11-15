@@ -4,6 +4,15 @@ import type { IndexQuery, IndexResult } from "../../host/contract";
 import { forwardNotice } from "../../state/kernel";
 import type { SurfaceMenuItem } from "../core/editor-menu";
 import { mountBaseSurface } from "./surface";
+import type { BaseDocumentWrites } from "./data";
+import type { NoticeAction } from "../../ui/notify";
+
+// Gli avvisi della shell: la prova guarda che cosa la Base dice e quale gesto
+// offre, senza il centro avvisi.
+const notified = vi.hoisted(() => [] as { message: string; tone?: string; action?: unknown }[]);
+vi.mock("../../ui/notify", () => ({
+  notify: (message: string, tone?: string, action?: unknown) => { notified.push({ message, tone, action }); },
+}));
 
 const count = 20_000;
 const values = Array.from({ length: count }, (_, index) => ({
@@ -308,14 +317,25 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
     "  - name: Bacheca", "    type: kanban", "",
   ].join("\n");
   type Fail = { kind: string; message: string } | null;
-  const mount = (initial: Keys = {}, options: { sourceInNote?: boolean } = {}) => {
+  interface MountOptions {
+    sourceInNote?: boolean;
+    container?: string | null;
+    documentWrites?: BaseDocumentWrites;
+    onOpenDocument?: (doc: string) => void;
+    /// Le note al posto di quelle della prova: valori nella forma del contratto.
+    rows?: { doc: string; properties: { key: string; value: unknown }[] }[];
+    /// `base.view.set` risponde «niente da cambiare», senza revisione.
+    unchanged?: boolean;
+  }
+  const mount = (initial: Keys = {}, { documentWrites, onOpenDocument, rows: ownRows, unchanged, ...options }: MountOptions = {}) => {
     const keys: Keys = { ...initial };
+    const rows = ownRows ?? notes;
     let revision = 1;
     let fail: Fail = null;
     const host = document.createElement("div");
     document.body.append(host);
     const queryIndex = async (request: IndexQuery): Promise<IndexResult> => {
-      if (request.kind === "documents") return { kind: "documents", value: { offset: 0, total: notes.length, items: notes } };
+      if (request.kind === "documents") return { kind: "documents", value: { offset: 0, total: rows.length, items: rows } };
       if (request.kind !== "custom" || typeof request.query !== "object" || !request.query || !("op" in request.query)) throw new Error("unexpected query");
       const query = request.query as { op: string; view?: string | null };
       if (query.op === "parse") return { kind: "custom", value: { views: ["Tabella", "Bacheca"], types: ["table", "kanban"] } };
@@ -329,8 +349,8 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
         } };
       }
       if (query.op === "derive") {
-        return { kind: "custom", value: { summaries: {}, rows: notes.map(({ doc, properties }) => ({
-          doc, values: Object.fromEntries(properties.map(({ key, value }) => [key, { kind: "text", value }])),
+        return { kind: "custom", value: { summaries: {}, rows: rows.map(({ doc, properties }) => ({
+          doc, values: Object.fromEntries(properties.map(({ key, value }) => [key, { kind: "text", value: String(value) }])),
         })) } };
       }
       throw new Error("unexpected Base operation");
@@ -338,15 +358,16 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
     const invokeCommand = vi.fn(async (command: string, args?: Record<string, unknown>) => {
       if (command !== "base.view.set") return {};
       if (fail) throw fail;
+      if (unchanged) return { notify: "Niente da cambiare", effect: { kind: "none" }, undo: null };
       const key = args!.key as keyof Keys;
       if (args!.value === undefined) delete keys[key];
       else keys[key] = JSON.parse(args!.value as string);
       revision++;
-      return { notify: null, effect: { kind: "custom", ns: "fub.base", payload: { revision: `r${revision}` } } };
+      return { notify: `${key} scritto`, effect: { kind: "custom", ns: "fub.base", payload: { revision: `r${revision}` } }, undo: { label: `Rimetti ${key}` } };
     });
     const surface = mountBaseSurface("base", { paneId: "base-gesti", documentId: "Opere.base", parent: host }, {
-      queryIndex, invokeCommand, viewState: async () => null, setViewState: async () => {}, onOpenDocument: () => {},
-      revision: () => `r${revision}`,
+      queryIndex, invokeCommand, viewState: async () => null, setViewState: async () => {}, onOpenDocument: onOpenDocument ?? (() => {}),
+      revision: () => `r${revision}`, documentWrites,
     }, options);
     surface.buffer.setDoc(text(keys));
     return {
@@ -354,6 +375,8 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
       failNext: (next: Fail) => { fail = next; },
       // L'host rimanda il testo del file dopo il comando, come la sessione.
       deliver: () => surface.buffer.syncDoc(text(keys)),
+      // Il file cambiato da un'altra parte: un'altra finestra, il sorgente.
+      changeElsewhere: (change: (keys: Keys) => void) => { change(keys); revision++; surface.buffer.syncDoc(text(keys)); },
       done: () => { surface.destroy(); host.remove(); },
     };
   };
@@ -547,20 +570,201 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
       const apply = [...popover("base-filter-popover").querySelectorAll<HTMLButtonElement>("button")].find((each) => each.textContent === "Applica")!;
       expect(apply.disabled).toBe(true);
       host.querySelector<HTMLButtonElement>(".base-tool-columns")!.click();
-      expect([...popover("base-columns-popover").querySelectorAll<HTMLInputElement>("input")].every((box) => box.disabled)).toBe(true);
+      // Le caselle restano raggiungibili col fuoco, ma inerti.
+      const boxes = [...popover("base-columns-popover").querySelectorAll<HTMLInputElement>("input")];
+      expect(boxes.every((box) => box.getAttribute("aria-disabled") === "true" && !box.disabled)).toBe(true);
+      boxes[0]!.click();
+      expect(boxes[0]!.checked).toBe(true);
       expect(invokeCommand).not.toHaveBeenCalled();
     } finally { done(); }
   });
 
-  it("una Base scritta dentro una nota si guarda con la stessa barra, ma non si riscrive", async () => {
-    const { host, invokeCommand, done } = mount({ sort: [{ key: "stato", descending: false }] }, { sourceInNote: true });
+  it("una Base scritta dentro una nota si guarda con la stessa barra, non si riscrive, e si apre la sua nota", async () => {
+    const onOpenDocument = vi.fn();
+    const { host, invokeCommand, done } = mount({ sort: [{ key: "stato", descending: false }] }, { sourceInNote: true, container: "Mostra.md", onOpenDocument });
     try {
       await ready(host);
-      expect(host.querySelector(".base-note")!.textContent).toContain("scritta dentro la nota");
+      expect(host.querySelector(".base-note")!.textContent).toContain("un blocco dentro la nota");
       expect(host.querySelector(".base-chip button")).toBeNull();
       host.querySelector<HTMLButtonElement>(".base-tool-sort")!.click();
       expect(popover("base-sort-popover").querySelector<HTMLSelectElement>(".base-sort-add")!.disabled).toBe(true);
       expect(invokeCommand).not.toHaveBeenCalled();
+      const openFile = host.querySelector<HTMLButtonElement>(".base-open-file")!;
+      expect(openFile.hidden).toBe(false);
+      expect(openFile.textContent).toBe("Apri come file");
+      openFile.click();
+      expect(onOpenDocument).toHaveBeenCalledWith("Mostra.md");
+    } finally { done(); }
+  });
+
+  it("un gesto salva prima il .base, annuncia la sua scrittura e offre Annulla", async () => {
+    const order: string[] = [];
+    const withdraw = vi.fn();
+    const documentWrites: BaseDocumentWrites = {
+      flush: vi.fn(async () => { order.push("flush"); return []; }),
+      expect: vi.fn((doc: string) => { order.push(`expect ${doc}`); return withdraw; }),
+    };
+    const { host, invokeCommand, deliver, done } = mount({}, { documentWrites });
+    notified.length = 0;
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-sort")!.click();
+      const add = popover("base-sort-popover").querySelector<HTMLSelectElement>(".base-sort-add")!;
+      add.value = "stato";
+      add.dispatchEvent(new Event("change"));
+      await vi.waitFor(() => expect(notified.map((each) => each.message)).toEqual(["sort scritto"]));
+      expect(order).toEqual(["flush", "expect Opere.base"]);
+      // Annunciata prima del comando: il suo evento arriva mentre scrive.
+      expect(vi.mocked(documentWrites.expect).mock.invocationCallOrder[0]!).toBeLessThan(invokeCommand.mock.invocationCallOrder[0]!);
+      // Il comando ha scritto: l'annuncio lo consuma l'evento, non si ritira.
+      expect(withdraw).not.toHaveBeenCalled();
+      const action = notified[0]!.action as NoticeAction;
+      expect(action.label).toBe("Annulla");
+      expect(action.hint).toBe("Rimetti sort");
+      deliver();
+      await settled(host);
+      await action.run();
+      expect(invokeCommand).toHaveBeenLastCalledWith("vault.undo");
+      expect(documentWrites.expect).toHaveBeenCalledTimes(2);
+    } finally { done(); }
+  });
+
+  it("un gesto che non scrive ritira l'annuncio, e uno col .base non salvato non parte", async () => {
+    const withdraw = vi.fn();
+    let unsaved: string[] = [];
+    const documentWrites: BaseDocumentWrites = { flush: async () => unsaved, expect: () => withdraw };
+    const { host, invokeCommand, done } = mount({}, { documentWrites, unchanged: true });
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-sort")!.click();
+      const add = popover("base-sort-popover").querySelector<HTMLSelectElement>(".base-sort-add")!;
+      add.value = "stato";
+      add.dispatchEvent(new Event("change"));
+      await vi.waitFor(() => expect(withdraw).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(host.querySelector<HTMLSelectElement>(".base-sort-add")?.disabled ?? false).toBe(false));
+      unsaved = ["Opere.base"];
+      const sets = invokeCommand.mock.calls.length;
+      host.querySelector<HTMLButtonElement>(".base-tool-sort")!.click();
+      const again = popover("base-sort-popover").querySelector<HTMLSelectElement>(".base-sort-add")!;
+      again.value = "artista";
+      again.dispatchEvent(new Event("change"));
+      await vi.waitFor(() => expect(host.querySelector(".base-status")!.textContent).toContain("modifiche che non si sono potute salvare"));
+      expect(invokeCommand.mock.calls.length).toBe(sets);
+    } finally { done(); }
+  });
+
+  it("il filtro su una data si scrive in ISO; una data sbagliata lo dice e non si applica", async () => {
+    const date = (day: number) => ({ kind: "date", value: { year: 2026, month: 11, day, time: null } });
+    const rows = [
+      { doc: "Opere/Nebbia.md", properties: [{ key: "stato", value: { kind: "text", value: "Arrivata" } }, { key: "consegna", value: date(10) }] },
+      { doc: "Opere/Campo.md", properties: [{ key: "stato", value: { kind: "text", value: "In prestito" } }, { key: "consegna", value: date(20) }] },
+    ];
+    const { host, invokeCommand, done } = mount({}, { rows });
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-filter")!.click();
+      const pop = popover("base-filter-popover");
+      press(pop, "Aggiungi una condizione");
+      const subject = pop.querySelector<HTMLSelectElement>(".base-filter-subject")!;
+      subject.value = "consegna";
+      subject.dispatchEvent(new Event("change"));
+      const op = pop.querySelector<HTMLSelectElement>(".base-filter-op")!;
+      // Una data non si «contiene».
+      expect([...op.options].map((each) => each.value)).not.toContain("contains");
+      op.value = "less_than";
+      op.dispatchEvent(new Event("change"));
+      // Il suggerimento è la data come si scrive.
+      const value = pop.querySelector<HTMLInputElement>(".base-filter-value")!;
+      expect([...pop.querySelectorAll("datalist option")].map((each) => (each as HTMLOptionElement).value)).toEqual(["2026-11-10", "2026-11-20"]);
+      value.value = "15/11/2026";
+      value.dispatchEvent(new Event("input"));
+      expect(pop.textContent).toContain("«15/11/2026» non è una data: scrivila come 2026-03-18.");
+      const apply = [...pop.querySelectorAll<HTMLButtonElement>("button")].find((each) => each.textContent === "Applica")!;
+      expect(apply.disabled).toBe(true);
+      value.value = "2026-11-15";
+      value.dispatchEvent(new Event("input"));
+      expect(apply.disabled).toBe(false);
+      apply.click();
+      expect(JSON.parse(lastSet(invokeCommand)!.value as string)).toEqual({ condition: { property: "consegna", op: "less_than", value: "2026-11-15" } });
+    } finally { done(); }
+  });
+
+  it("il filtro cambiato nel file mentre si compone non si scrive sopra: Ricarica mostra quello nuovo", async () => {
+    const { host, invokeCommand, changeElsewhere, done } = mount({ filters: { condition: { property: "stato", op: "contains", value: "Arrivata" } } });
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-filter")!.click();
+      let pop = popover("base-filter-popover");
+      const value = pop.querySelector<HTMLInputElement>(".base-filter-value")!;
+      value.value = "In prestito";
+      value.dispatchEvent(new Event("input"));
+      changeElsewhere((keys) => { keys.filters = { condition: { property: "artista", op: "is", value: "Elena Sala" } }; });
+      await vi.waitFor(() => expect(pop.querySelector<HTMLElement>(".base-filter-stale")!.hidden).toBe(false));
+      const apply = [...pop.querySelectorAll<HTMLButtonElement>("button")].find((each) => each.textContent === "Applica")!;
+      expect(apply.disabled).toBe(true);
+      press(pop, "Ricarica");
+      pop = popover("base-filter-popover");
+      expect(pop.querySelector<HTMLSelectElement>(".base-filter-subject")!.value).toBe("artista");
+      expect(pop.querySelector<HTMLInputElement>(".base-filter-value")!.value).toBe("Elena Sala");
+      expect(lastSet(invokeCommand)).toBeUndefined();
+    } finally { done(); }
+  });
+
+  it("in Proprietà il fuoco resta sulla casella dopo che il file è tornato; Alt+↓ sposta, Esc chiude", async () => {
+    const { host, invokeCommand, deliver, done } = mount({ order: ["stato", "artista"] });
+    try {
+      await ready(host);
+      const button = host.querySelector<HTMLButtonElement>(".base-tool-columns")!;
+      button.click();
+      const box = () => popover("base-columns-popover").querySelector<HTMLInputElement>('.base-column[data-column="stato"] input')!;
+      box().focus();
+      box().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true }));
+      expect(JSON.parse(lastSet(invokeCommand)!.value as string)).toEqual(["artista", "stato"]);
+      // Mentre la scrittura aspetta il file la casella non perde il fuoco.
+      expect(document.activeElement).toBe(box());
+      deliver();
+      await settled(host);
+      await vi.waitFor(() => expect(document.activeElement).toBe(box()));
+      expect(box().getAttribute("aria-disabled")).toBe("false");
+      box().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await vi.waitFor(() => expect(document.querySelector(".base-columns-popover")).toBeNull());
+      expect(document.activeElement).toBe(button);
+    } finally { done(); }
+  });
+
+  it("il testo nuovo seguito dall'evento dello stesso file aggiorna la barra col piano nuovo", async () => {
+    const { host, deliver, done } = mount({ sort: [{ key: "stato", descending: false }] });
+    try {
+      await ready(host);
+      await vi.waitFor(() => expect(chips(host)).toEqual(["stato ↑"]));
+      host.querySelector<HTMLButtonElement>('.base-chip button[aria-label="Togli l\'ordinamento per stato"]')!.click();
+      await Promise.resolve();
+      // Il testo arriva e, nello stesso giro, l'evento del file: la ricarica
+      // delle righe che ne viene non deve lasciare la barra sul piano vecchio.
+      deliver();
+      forwardNotice({ event: { type: "document_changed", id: "Opere.base" }, origin: { actor: { kind: "user" }, batch: "b1" } });
+      await settled(host);
+      await vi.waitFor(() => expect(chips(host)).toEqual([]));
+    } finally { done(); }
+  });
+
+  it("un gesto lascia la tabella dove era scorsa", async () => {
+    const rows = Array.from({ length: 80 }, (_, index) => ({ doc: `Opere/${String(index).padStart(2, "0")}.md`, properties: [{ key: "stato", value: "Arrivata" }] }));
+    const { host, deliver, done } = mount({}, { rows });
+    try {
+      await vi.waitFor(() => expect(host.querySelector(".base-table tbody tr[data-doc]")).not.toBeNull());
+      const viewport = host.querySelector<HTMLElement>(".base-table-viewport")!;
+      viewport.scrollTop = 900;
+      viewport.dispatchEvent(new Event("scroll"));
+      host.querySelector<HTMLButtonElement>(".base-tool-sort")!.click();
+      const add = popover("base-sort-popover").querySelector<HTMLSelectElement>(".base-sort-add")!;
+      add.value = "stato";
+      add.dispatchEvent(new Event("change"));
+      deliver();
+      await settled(host);
+      const redrawn = host.querySelector<HTMLElement>(".base-table-viewport")!;
+      expect(redrawn).not.toBe(viewport);
+      expect(redrawn.scrollTop).toBe(900);
     } finally { done(); }
   });
 

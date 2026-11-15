@@ -6,6 +6,7 @@
 import { errorText } from "../../host/errors";
 import { openVaultRoot } from "../../state/vault";
 import { registerCustomRenderer } from "../../ui/custom";
+import type { BaseDocumentWrites } from "./data";
 import { BASE_RENDERER_NS } from "./ids";
 
 /// Un payload che la resa sa disegnare: il sorgente di un blocco o il path di
@@ -17,7 +18,7 @@ export function acceptsBaseEmbed(payload: unknown): boolean {
 }
 
 /** Native fenced and file-backed Base embeds use the same surface and data ports. */
-export function registerBaseRenderer(onOpenDocument: (doc: string) => void | Promise<void>): void {
+export function registerBaseRenderer(onOpenDocument: (doc: string) => void | Promise<void>, documentWrites?: BaseDocumentWrites): void {
   registerCustomRenderer(BASE_RENDERER_NS, (host, payload, _onAction, context) => {
     // Il vault in cui la base è stata incorporata: le sue domande lo nominano
     // anche se, nel frattempo, ne è stato aperto un altro (FUB-001). Si legge
@@ -28,7 +29,7 @@ export function registerBaseRenderer(onOpenDocument: (doc: string) => void | Pro
     void import("./surface").then(({ mountBaseEmbed }) => {
       // Smontata prima che il modulo arrivasse: non si monta più.
       if (disposed) return;
-      unmount = mountBaseEmbed(host, payload, context, vault, onOpenDocument);
+      unmount = mountBaseEmbed(host, payload, context, vault, onOpenDocument, documentWrites);
     }, (error: unknown) => {
       if (disposed) return;
       host.textContent = errorText(error);

@@ -29,9 +29,20 @@ export function allowedBaseTileUrl(template: string, kind: "raster" | "vector", 
 
 export interface BaseSurfaceDeps {
   readonly queryIndex: (query: IndexQuery) => Promise<IndexResult>;
-  readonly invokeCommand: (command: string, args?: Record<string, unknown>, mode?: InvokeMode) => Promise<{ notify?: string | null; effect?: unknown }>;
+  readonly invokeCommand: (command: string, args?: Record<string, unknown>, mode?: InvokeMode) => Promise<{ notify?: string | null; effect?: unknown; undo?: { readonly label: string } | null }>;
   readonly viewState: <T>(key: string) => Promise<T | null>;
   readonly setViewState: (key: string, value: unknown) => Promise<void>;
+}
+
+/// Le scritture dei documenti aperti, come le vede una Base: la coda di
+/// salvataggio e l'annuncio di una scrittura di un comando
+/// (`DocumentSessionCollection.expectWrite`, `state/document-session.ts`).
+export interface BaseDocumentWrites {
+  /// Svuota la coda di salvataggio; torna i documenti rimasti non salvati.
+  flush(): Promise<readonly string[]>;
+  /// Annuncia che un comando sta per riscrivere `doc`; torna chi ritira
+  /// l'annuncio se il comando non scrive.
+  expect(doc: string): () => void;
 }
 
 export type BaseViewKind = "table" | "cards" | "list" | "kanban" | "map";
@@ -168,16 +179,29 @@ export const BASE_VIEW_SET = "base.view.set";
 /// Scrive la chiave `key` della vista `view` del file `doc` con
 /// `base.view.set`: `value` è il valore JSON, `null` toglie la chiave. Con
 /// `base` il comando scrive solo se il file è ancora quella revisione, e
-/// altrimenti risponde con un conflitto. Torna la revisione che il comando
-/// ha scritto, se la dice.
-export async function setBaseViewKey(deps: Pick<BaseSurfaceDeps, "invokeCommand">, doc: string, view: string, key: BaseViewKey, value: unknown, base: string | null): Promise<string | null> {
+/// altrimenti risponde con un conflitto.
+export async function setBaseViewKey(deps: Pick<BaseSurfaceDeps, "invokeCommand">, doc: string, view: string, key: BaseViewKey, value: unknown, base: string | null): Promise<BaseViewWrite> {
   const args: Record<string, unknown> = { doc, view, key };
   if (value !== null && value !== undefined) args.value = JSON.stringify(value);
   if (base !== null) args.base = base;
   const outcome = await deps.invokeCommand(BASE_VIEW_SET, args);
   const effect = outcome?.effect as { kind?: unknown; ns?: unknown; payload?: unknown } | undefined;
   const revision = effect?.kind === "custom" && effect.ns === "fub.base" ? (effect.payload as { revision?: unknown } | null)?.revision : undefined;
-  return typeof revision === "string" ? revision : null;
+  const undo = outcome?.undo;
+  return {
+    revision: typeof revision === "string" ? revision : null,
+    notify: typeof outcome?.notify === "string" && outcome.notify !== "" ? outcome.notify : null,
+    undo: undo && typeof undo.label === "string" ? { label: undo.label } : null,
+  };
+}
+
+/// L'esito di `base.view.set`: la revisione scritta (`null` se il file non è
+/// cambiato, o se l'host non la dice), la frase da dire e, se il kernel sa
+/// disfarlo, la frase accanto ad «Annulla».
+export interface BaseViewWrite {
+  readonly revision: string | null;
+  readonly notify: string | null;
+  readonly undo: { readonly label: string } | null;
 }
 
 /// Le righe che un gesto ha scritto: il pezzo del testo nuovo che non c'era,

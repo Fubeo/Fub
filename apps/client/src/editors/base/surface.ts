@@ -1,7 +1,7 @@
 // Named `.base` views on indexed notes. The surface owns only its local view
 // choice and rendering; edits go through registered commands with CAS.
 import { currentTheme, type Theme } from "../../theme/theme";
-import { EVERY_DOCUMENT } from "../../host/contract";
+import { COMMANDS, EVERY_DOCUMENT } from "../../host/contract";
 import { api } from "../../host/ipc";
 import type { CustomRenderContext } from "../../ui/custom";
 import { errorText, isErrorKind } from "../../host/errors";
@@ -20,9 +20,11 @@ import {
   allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty, groupBaseRows,
   fetchAllDocuments, listBaseViews, parseBaseEmbed, persistBaseView,
   planBaseView, prepareBaseMutations, restoreBaseView, setBaseViewKey, writtenLines,
-  type BaseCellValue, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseSurfaceDeps, type BaseViewKey,
+  type BaseCellValue, type BaseDocumentWrites, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseSurfaceDeps, type BaseViewKey,
 } from "./data";
+import { decimalOf, propertyKind, propertyValues } from "./filter";
 import { mountBaseToolbar } from "./toolbar";
+import { notify } from "../../ui/notify";
 import { writeClipboardText } from "../../platform/clipboard";
 
 export interface BaseMountDeps extends BaseSurfaceDeps {
@@ -33,6 +35,11 @@ export interface BaseMountDeps extends BaseSurfaceDeps {
   /// barra la passano a `base.view.set`, che scrive solo se il file è ancora
   /// quello. Assente, il comando scrive senza confronto.
   readonly revision?: () => string | null;
+  /// Le scritture dei documenti aperti: prima di un gesto si salva il
+  /// `.base` se ha testo in sospeso, e la scrittura del gesto si annuncia
+  /// perché la ricarica non si dica. Assente (una prova), il gesto scrive e
+  /// basta.
+  readonly documentWrites?: BaseDocumentWrites;
 }
 /// La cartella dei modelli, per «Nuova da un modello»: la convenzione di
 /// `note.from_template` (`fub-features/src/template.rs`).
@@ -117,6 +124,7 @@ export function mountBaseSurface(
       { label: t("base.csv.export"), run: exportResults },
     ],
     grouping: groupControls,
+    openFile: (doc) => open(doc),
   });
   const { search, status } = toolbar;
   const body = document.createElement("div");
@@ -145,6 +153,9 @@ export function mountBaseSurface(
   let displayed = VISIBLE_STEP;
   let error: string | null = null;
   let generation = 0;
+  // Il piano va riletto (il testo è cambiato) e nessuna ricarica l'ha ancora
+  // finito: vale anche per la ricarica che supera quella che l'aveva chiesto.
+  let replanWanted = false;
   let pending: AbortController | null = null;
   let tileCleanup: (() => void) | null = null;
   let writeEpoch = 0;
@@ -165,6 +176,9 @@ export function mountBaseSurface(
   // ci sono ancora: stessa nota, stessa colonna. Se ne va con Esc, con la
   // ricerca, cambiando vista, o quando una delle due non c'è più.
   let tableItems: readonly ({ group: string; count: number } | BaseRow)[] = [];
+  // Dove era scorsa la tabella: un ridisegno (il file riscritto da un gesto,
+  // una nota salvata) la rimette lì. Cambiare vista la riporta in cima.
+  let tableScroll = { top: 0, left: 0 };
   let picked: { anchor: Cell; focus: Cell } | null = null;
   let pickedKeys: { anchor: CellKey; focus: CellKey } | null = null;
   let picking = false;
@@ -325,17 +339,20 @@ export function mountBaseSurface(
     }
     return [...keys];
   };
+  // I valori di una proprietà nelle righe, nella forma in cui si scrivono nel
+  // filtro (una data come 2026-03-18, un numero coi decimali della lingua lo
+  // mostra la barra).
   const suggestions = (key: string): string[] => {
     const values = new Set<string>();
     for (const row of rows) {
-      const raw = row.properties[key];
-      for (const value of Array.isArray(raw) ? raw : [raw]) {
-        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") values.add(String(value));
+      for (const { value } of propertyValues(row.properties[key])) {
+        values.add(String(value));
         if (values.size >= SUGGESTION_LIMIT) return [...values];
       }
     }
     return [...values].sort((a, b) => a.localeCompare(b));
   };
+  const kinds = (key: string) => propertyKind(rows.map((row) => row.properties[key]));
   const pushModel = (): void => {
     toolbar.update({
       views: names.map((name, index) => ({ name, type: viewTypes[index] ?? null })),
@@ -346,6 +363,9 @@ export function mountBaseSurface(
       busy,
       properties: rowProperties(),
       suggestions,
+      kinds,
+      decimal: decimalOf(resolvedLanguage()),
+      containerFile: options.sourceInNote ? container : null,
     });
   };
   const fillOptions = (): void => { pushModel(); };
@@ -357,7 +377,12 @@ export function mountBaseSurface(
     status.textContent = labels().loading;
     const definition = source;
     try {
-      if (replan || !plan) {
+      // Una ricarica che ne supera una col piano da rileggere (le righe
+      // cambiate subito dopo il testo nuovo, come il `document_changed` del
+      // file stesso) rilegge anche il piano: altrimenti la barra resterebbe
+      // sul piano del testo di prima.
+      if (replan) replanWanted = true;
+      if (replanWanted || !plan) {
         const listed = await listBaseViews(deps, definition);
         const nextNames = listed.names;
         if (!valid(ticket)) return;
@@ -397,6 +422,7 @@ export function mountBaseSurface(
         }
         fillOptions();
         fillGroupBy();
+        replanWanted = false;
       }
       const nextPlan = plan;
       if (!nextPlan) throw new Error("base: piano assente");
@@ -460,6 +486,18 @@ export function mountBaseSurface(
   const maybeSettle = (): void => {
     if (writing && writing.answered && writing.after !== null && writing.planned) settle();
   };
+  // «Annulla» dopo un gesto: `vault.undo` disfa l'ultima operazione del
+  // vault, come dalla palette; anche la sua riscrittura si annuncia.
+  const undoWrite = async (): Promise<void> => {
+    const withdraw = deps.documentWrites?.expect(context.documentId);
+    try {
+      const outcome = await deps.invokeCommand(COMMANDS.undo);
+      if (outcome?.notify) notify(outcome.notify, "info");
+    } catch (failure) {
+      withdraw?.();
+      notify(t("commands.undo_failed", { reason: errorText(failure) }), "guasto");
+    }
+  };
   const writeView = async (key: BaseViewKey, value: unknown): Promise<void> => {
     if (!plan || lock() !== null || busy || destroyed) return;
     const view = plan.view;
@@ -468,9 +506,36 @@ export function mountBaseSurface(
     busy = true;
     notice = null;
     pushModel();
+    const writes = deps.documentWrites;
+    let withdraw: (() => void) | undefined;
     try {
-      await setBaseViewKey(deps, context.documentId, view, key, value, deps.revision?.() ?? null);
+      // Il `.base` aperto anche come testo, con modifiche non ancora sul
+      // disco: prima si salvano. Se restano non salvate il gesto si ferma,
+      // perché scriverebbe sopra un file che non è quello sullo schermo.
+      if (writes) {
+        const unsaved = await writes.flush();
+        if (destroyed || writing !== attempt) return;
+        if (unsaved.includes(context.documentId)) {
+          notice = t("base.write.unsaved");
+          status.textContent = notice;
+          settle();
+          return;
+        }
+      }
+      // Annunciata prima del comando: il suo evento arriva mentre scrive.
+      withdraw = writes?.expect(context.documentId);
+      const written = await setBaseViewKey(deps, context.documentId, view, key, value, deps.revision?.() ?? null);
+      // Nessuna revisione: il file non è cambiato (o l'host non lo dice), e
+      // nessun evento consumerà l'annuncio.
+      if (written.revision === null) withdraw?.();
+      if (written.notify) {
+        notify(written.notify, "info", written.undo
+          ? { label: t("app.undo"), hint: written.undo.label, run: () => void undoWrite() }
+          : undefined);
+      }
       if (destroyed || writing !== attempt) return;
+      // Niente scritto, niente testo nuovo da aspettare: la barra si riaccende.
+      if (written.revision === null && written.undo === null) { settle(); return; }
       attempt.answered = true;
       maybeSettle();
       // Un host che non rimanda il testo non lascia la barra spenta: dopo un
@@ -478,6 +543,7 @@ export function mountBaseSurface(
       // conflitto invece di scrivere sopra.
       if (writing === attempt) settleTimer = window.setTimeout(() => { settleTimer = 0; settle(); }, WRITE_SETTLE_MS);
     } catch (failure) {
+      withdraw?.();
       if (destroyed || writing !== attempt) return;
       // Niente è stato scritto: il comando ha rifiutato il valore, o il file
       // è cambiato altrove. La vista resta quella del file com'è.
@@ -504,6 +570,7 @@ export function mountBaseSurface(
     if (name === activeView || !names.includes(name)) return;
     activeView = name;
     plan = null;
+    tableScroll = { top: 0, left: 0 };
     forgetPick();
     notice = null;
     toolbar.showWritten(null);
@@ -592,12 +659,12 @@ export function mountBaseSurface(
     tableItems = items;
     restorePick(items);
     const columns = (plan?.columns.length ?? 0) + 1;
-    const renderWindow = () => {
+    const renderWindow = (top = viewport.scrollTop) => {
       // La finestra è alta quanto il suo contenuto fino al tetto: al primo
       // disegno la tabella è ancora vuota e `clientHeight` ne direbbe solo
       // l'intestazione, così le righe sotto le prime non comparirebbero mai
       // senza uno scorrimento. Le righe da disegnare sono quelle del tetto.
-      const range = uniformRowRange(items.length, viewport.scrollTop, Math.max(viewport.clientHeight, TABLE_VIEWPORT_HEIGHT), TABLE_ROW_HEIGHT);
+      const range = uniformRowRange(items.length, top, Math.max(viewport.clientHeight, TABLE_VIEWPORT_HEIGHT), TABLE_ROW_HEIGHT);
       if (!range) { tableBody.replaceChildren(); return; }
       const fragment = document.createDocumentFragment();
       if (range.start) fragment.append(spacer(range.start * TABLE_ROW_HEIGHT));
@@ -745,10 +812,15 @@ export function mountBaseSurface(
       pick({ anchor: picked.anchor, focus: next });
       reveal(next.row);
     });
-    viewport.addEventListener("scroll", renderWindow);
+    viewport.addEventListener("scroll", () => renderWindow());
     viewport.append(table);
     body.append(viewport);
-    renderWindow();
+    // Il primo disegno parte da dove la tabella di prima era scorsa: le righe
+    // di quel punto, poi lo scorrimento (che il browser ferma alla fine).
+    const { top, left } = tableScroll;
+    renderWindow(top);
+    viewport.scrollTop = top;
+    viewport.scrollLeft = left;
   };
   const drawCards = (page: BaseRow[], list: boolean): void => {
     const key = grouping();
@@ -1016,6 +1088,8 @@ export function mountBaseSurface(
   const draw = (): void => {
     tileCleanup?.();
     tileCleanup = null;
+    const shown = body.querySelector<HTMLElement>(".base-table-viewport");
+    if (shown) tableScroll = { top: shown.scrollTop, left: shown.scrollLeft };
     body.replaceChildren();
     // Le righe di prima non ci sono più: la scelta torna, se le sue celle ci
     // sono ancora, quando la tabella nuova si disegna (`restorePick`).
@@ -1263,54 +1337,53 @@ export function mountBaseSurface(
 /// aperto. La monta la resa registrata da `renderer.ts` quando questo modulo
 /// è arrivato; `vault` è quello in cui la resa è partita (FUB-001). Torna come
 /// smontarla, o niente se il payload non è una Base.
-export function mountBaseEmbed(host: HTMLElement, payload: unknown, context: CustomRenderContext, vault: string | undefined, onOpenDocument: (doc: string) => void | Promise<void>): (() => void) | undefined {
-  {
-    const parsed = parseBaseEmbed({ node: "custom", ns: BASE_RENDERER_NS, payload, fallback: [] });
-    if (!parsed) return;
-    // Una base incorporata deriva `file.*` dalla nota che la contiene, non dal
-    // suo path `.base`: la nota la dice chi monta la resa.
-    const embed = { ...parsed, container: context.container ?? parsed.container };
-    let disposed = false;
-    // La revisione del file `.base` letto: i gesti della barra la confrontano.
-    let revision: string | null = null;
-    const surface = mountBaseSurface("base", {
-      paneId: `base:embed:${crypto.randomUUID()}`,
-      documentId: embed.base ?? embed.container ?? "",
-      parent: host,
-    }, {
-      queryIndex: (query) => api.queryIndex(query, ...vaultArg(vault)),
-      invokeCommand: (command, args, mode) => api.invokeCommand(command, args, mode, ...vaultArg(vault)),
-      viewState: api.viewState,
-      setViewState: api.setViewState,
-      onOpenDocument,
-      revision: () => revision,
-    }, { view: embed.view, persistSelection: false, container: embed.container ?? embed.base ?? null, sourceInNote: embed.source !== undefined });
-    if (embed.source !== undefined) {
-      surface.buffer.setDoc(embed.source);
-      return () => { disposed = true; surface.destroy(); };
-    }
-    // Una Base da file si rilegge quando il file cambia: un gesto della sua
-    // barra, un'altra finestra, il sorgente. Una lettura vecchia che arriva
-    // dopo una nuova non la sovrascrive.
-    let reading = 0;
-    let loaded = false;
-    const read = (): void => {
-      const ticket = ++reading;
-      api.readDocument(embed.base!, vault).then((document) => {
-        if (disposed || ticket !== reading) return;
-        revision = document.revision;
-        if (!loaded) { loaded = true; surface.buffer.setDoc(document.text); }
-        else surface.buffer.syncDoc(document.text);
-      }, (error: unknown) => {
-        if (disposed || ticket !== reading || loaded) return;
-        disposed = true;
-        stopChanges();
-        surface.destroy();
-        host.textContent = errorText(error);
-      });
-    };
-    const stopChanges = onEvent("document_changed", (event) => { if (event.id === embed.base) read(); });
-    read();
-    return () => { disposed = true; stopChanges(); surface.destroy(); };
+export function mountBaseEmbed(host: HTMLElement, payload: unknown, context: CustomRenderContext, vault: string | undefined, onOpenDocument: (doc: string) => void | Promise<void>, documentWrites?: BaseDocumentWrites): (() => void) | undefined {
+  const parsed = parseBaseEmbed({ node: "custom", ns: BASE_RENDERER_NS, payload, fallback: [] });
+  if (!parsed) return;
+  // Una base incorporata deriva `file.*` dalla nota che la contiene, non dal
+  // suo path `.base`: la nota la dice chi monta la resa.
+  const embed = { ...parsed, container: context.container ?? parsed.container };
+  let disposed = false;
+  // La revisione del file `.base` letto: i gesti della barra la confrontano.
+  let revision: string | null = null;
+  const surface = mountBaseSurface("base", {
+    paneId: `base:embed:${crypto.randomUUID()}`,
+    documentId: embed.base ?? embed.container ?? "",
+    parent: host,
+  }, {
+    queryIndex: (query) => api.queryIndex(query, ...vaultArg(vault)),
+    invokeCommand: (command, args, mode) => api.invokeCommand(command, args, mode, ...vaultArg(vault)),
+    viewState: api.viewState,
+    setViewState: api.setViewState,
+    onOpenDocument,
+    revision: () => revision,
+    documentWrites,
+  }, { view: embed.view, persistSelection: false, container: embed.container ?? embed.base ?? null, sourceInNote: embed.source !== undefined });
+  if (embed.source !== undefined) {
+    surface.buffer.setDoc(embed.source);
+    return () => { disposed = true; surface.destroy(); };
   }
+  // Una Base da file si rilegge quando il file cambia: un gesto della sua
+  // barra, un'altra finestra, il sorgente. Una lettura vecchia che arriva
+  // dopo una nuova non la sovrascrive.
+  let reading = 0;
+  let loaded = false;
+  const read = (): void => {
+    const ticket = ++reading;
+    api.readDocument(embed.base!, vault).then((document) => {
+      if (disposed || ticket !== reading) return;
+      revision = document.revision;
+      if (!loaded) { loaded = true; surface.buffer.setDoc(document.text); }
+      else surface.buffer.syncDoc(document.text);
+    }, (error: unknown) => {
+      if (disposed || ticket !== reading || loaded) return;
+      disposed = true;
+      stopChanges();
+      surface.destroy();
+      host.textContent = errorText(error);
+    });
+  };
+  const stopChanges = onEvent("document_changed", (event) => { if (event.id === embed.base) read(); });
+  read();
+  return () => { disposed = true; stopChanges(); surface.destroy(); };
 }

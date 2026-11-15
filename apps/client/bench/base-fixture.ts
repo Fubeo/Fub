@@ -8,7 +8,8 @@
 // comando che i gesti mandano (`base.view.set`). Tiene le viste come dati,
 // le riscrive come YAML nella forma che il modello scrive davvero (vedi
 // `crates/fub-features/tests/base_commands_e2e.rs`) e posa il testo nuovo come
-// una scrittura da fuori, così la superficie lo rilegge come col kernel. Non
+// la scrittura di un comando (un evento dell'utente), così la superficie lo
+// rilegge come col kernel e la sessione lo ricarica in silenzio. Non
 // è il modello: un filtro che qui passa non dimostra nulla del core, che ha i
 // suoi test. Solo le scene `base-*` hanno questi file: l'albero e i conteggi
 // delle altre restano quelli delle loro baseline.
@@ -66,7 +67,9 @@ function initialViews(): View[] {
   ];
 }
 
-const HEADER = "# Opere in prestito per la mostra di primavera.\nfilters: file.inFolder(\"Opere\")\n";
+// Il filtro di tutta la Base nella forma che il modello legge e scrive
+// (`FilterDef` di `fub-format-base`): l'albero, non l'espressione di Obsidian.
+const HEADER = "# Opere in prestito per la mostra di primavera.\nfilters:\n  condition:\n    file: path\n    op: in_folder\n    value: Opere\n";
 
 function scalar(value: Json): string {
   if (typeof value === "string") return /^[\w .-]+$/u.test(value) && !/^\d/.test(value) && value.trim() === value ? value : JSON.stringify(value);
@@ -116,9 +119,21 @@ function valueOf(work: Work, key: string): string | number | null {
   return typeof value === "string" || typeof value === "number" ? value : null;
 }
 
+/// Il valore scritto nel filtro allineato alla specie del valore della nota,
+/// come `aligned` in `crates/fub-features/src/base.rs`: una data ISO contro
+/// una data, un numero canonico contro un numero; il resto resta com'è.
+function aligned(key: string, actual: string | number | null, wanted: Json | undefined): Json | undefined {
+  if (typeof wanted !== "string") return wanted;
+  if (key === "consegna" && /^\d{4}-\d{2}-\d{2}$/.test(wanted)) return Date.parse(`${wanted}T00:00:00Z`);
+  if (typeof actual === "number" && /^[+-]?(\d+\.?\d*|\.\d+)$/.test(wanted)) return Number(wanted);
+  return wanted;
+}
+
 /// Una condizione del filtro sulle proprietà di una nota: gli operatori della
-/// forma a vista, con le regole del modello dove contano (un numero contro un
-/// numero, il resto come testo senza maiuscole).
+/// forma a vista, con le regole del modello (`matches_filter` in
+/// `crates/fub-features/src/base.rs`): una data contro una data, un numero
+/// contro un numero («contiene» su un numero è l'uguaglianza), il testo
+/// senza maiuscole.
 function holds(filter: Json, work: Work): boolean {
   if (filter === null || filter === "all") return true;
   if (typeof filter !== "object" || Array.isArray(filter)) return true;
@@ -133,16 +148,22 @@ function holds(filter: Json, work: Work): boolean {
     const inside = typeof condition.value === "string" && docOf(work).startsWith(`${condition.value}/`);
     return op === "in_folder" ? inside : true;
   }
-  const actual = typeof condition.property === "string" ? valueOf(work, condition.property) : null;
-  const wanted = condition.value;
+  const key = typeof condition.property === "string" ? condition.property.replace(/^prop\./, "") : "";
+  const raw = valueOf(work, key);
+  // Una data della nota vale come istante, come la cella che la mostra.
+  const actual = key === "consegna" && typeof raw === "string" ? Date.parse(`${raw}T00:00:00Z`) : raw;
+  const wanted = aligned(key, actual, condition.value);
   const text = (value: Json | string | number | null) => String(value ?? "").toLowerCase();
+  const numbers = typeof actual === "number" && typeof wanted === "number";
+  const same = numbers ? actual === wanted : text(actual) === text(wanted ?? null);
+  const contains = numbers ? actual === wanted : text(actual).includes(text(wanted ?? null));
   switch (op) {
-    case "is": return text(actual) === text(wanted ?? null);
-    case "is_not": return text(actual) !== text(wanted ?? null);
-    case "contains": return text(actual).includes(text(wanted ?? null));
-    case "not_contains": return !text(actual).includes(text(wanted ?? null));
-    case "greater_than": return typeof actual === "number" && typeof wanted === "number" ? actual > wanted : text(actual) > text(wanted ?? null);
-    case "less_than": return typeof actual === "number" && typeof wanted === "number" ? actual < wanted : text(actual) < text(wanted ?? null);
+    case "is": return same;
+    case "is_not": return !same;
+    case "contains": return contains;
+    case "not_contains": return !contains;
+    case "greater_than": return numbers ? actual > wanted : text(actual) > text(wanted ?? null);
+    case "less_than": return numbers ? actual < wanted : text(actual) < text(wanted ?? null);
     case "is_empty": return actual === null || actual === "";
     case "is_not_empty": return actual !== null && actual !== "";
     default: return true;
@@ -160,8 +181,9 @@ function cell(work: Work, key: string): Json {
 export interface BaseFixture {
   /// I file da mettere nel vault.
   readonly files: Readonly<Record<string, string>>;
-  /// Le proprietà di una nota, come l'indice le dà in `documents`.
-  properties(doc: string): { key: string; value: string | number }[] | null;
+  /// Le proprietà di una nota, come l'indice le dà in `documents`: valori
+  /// `PropertyValue` del contratto (`{ kind, value }`).
+  properties(doc: string): { key: string; value: Json }[] | null;
   /// La query custom `fub.base`.
   query(query: unknown): unknown;
   /// `base.view.set`, o `null` se il comando non è suo.
@@ -171,7 +193,9 @@ export interface BaseFixture {
 /// Gli attrezzi del finto con cui la scenografia legge e posa il file.
 export interface BaseFixtureHost {
   readonly revision: (doc: string) => Promise<string>;
-  readonly writeFromOutside: (doc: string, text: string) => void;
+  /// Scrive il file come un comando del kernel: i byte nuovi e un evento
+  /// dell'utente, non del watcher, come `base.view.set` nel vault vero.
+  readonly writeByCommand: (doc: string, text: string) => Promise<void>;
 }
 
 export function baseFixture(host: () => BaseFixtureHost): BaseFixture {
@@ -187,12 +211,14 @@ export function baseFixture(host: () => BaseFixtureHost): BaseFixture {
     files,
     properties: (doc) => {
       const work = works.get(doc);
-      return work ? [
-        { key: "stato", value: work.stato },
-        { key: "museo", value: work.museo },
-        { key: "valore", value: work.valore },
-        { key: "consegna", value: work.consegna },
-      ] : null;
+      if (!work) return null;
+      const [year, month, day] = work.consegna.split("-").map(Number);
+      return [
+        { key: "stato", value: { kind: "text", value: work.stato } },
+        { key: "museo", value: { kind: "text", value: work.museo } },
+        { key: "valore", value: { kind: "number", value: work.valore } },
+        { key: "consegna", value: { kind: "date", value: { year: year!, month: month!, day: day!, time: null } } },
+      ];
     },
     query: (raw) => {
       const query = raw as { op?: unknown; view?: unknown; rows?: unknown };
@@ -245,7 +271,7 @@ export function baseFixture(host: () => BaseFixtureHost): BaseFixture {
         if (typeof args.base === "string" && args.base !== now) throw { kind: "conflict", message: `conflict: «${BASE_DOC}» è cambiato sotto` };
         if (typeof args.value === "string") entries.set(args.key, JSON.parse(args.value) as Json);
         else entries.delete(args.key);
-        host().writeFromOutside(BASE_DOC, serialize(views));
+        await host().writeByCommand(BASE_DOC, serialize(views));
         return { notify: null, effect: { kind: "custom", ns: "fub.base", payload: { revision: await host().revision(BASE_DOC) } }, undo: null, partial: null };
       })();
     },

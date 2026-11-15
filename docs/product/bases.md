@@ -155,6 +155,11 @@ oppure una condizione. Una condizione dice su che cosa agisce (`property`,
 | `in_folder` | la nota sta in quella cartella o in una sua sottocartella |
 | `has_tag` | la nota ha quel tag |
 
+Un valore scritto come testo vale per quello che è il valore della nota: una
+data ISO (`"2026-03-18"`) contro una data si confronta come data, un numero in
+forma canonica (`"3000"`, `"2.5"`) contro un numero come numero. «contiene» non
+distingue le maiuscole, come la ricerca; su un numero è l'uguaglianza.
+
 Un filtro scritto come testo libero, che il modello non legge, rende il file
 illeggibile come Base: la Base lo mostra come sorgente e non lo tocca.
 
@@ -197,7 +202,9 @@ Ogni scrittura si annulla in un passo, e l'annulla riporta i byte di prima.
 Il comando cambia solo le righe della chiave o della vista che tocca. Il resto
 del file resta byte per byte:
 
-- i commenti, anche quelli fra due viste o sulla riga di una chiave;
+- i commenti, anche quelli fra due viste o sulla riga di una chiave; in una
+  lista di valori riscritta (le colonne di `order` spostate) i commenti di
+  ogni voce, in coda alla riga o subito sopra, vanno con la loro voce;
 - l'ordine delle chiavi che non si toccano;
 - le virgolette, i rientri e le righe vuote;
 - le fini di riga (`\n` o `\r\n`) e l'assenza dell'a capo in fondo al file;
@@ -261,10 +268,31 @@ Dopo il gesto, «Nel file .base» (in fondo alla Base, chiuso finché non lo apr
 mostra la riga da cui il file è cambiato e le righe uscite ed entrate. Mentre
 un gesto è in volo la barra non ne accetta un altro.
 
+Il file riscritto da un gesto si ricarica **in silenzio**: niente avviso «è
+cambiato su disco», perché il cambio l'ha chiesto chi usa la Base, e la tabella
+resta dove era scorsa. La frase del comando arriva come avviso con «Annulla»,
+che disfa l'ultima operazione del vault come dalla tavolozza. Un cambio fatto da
+un'altra app, da un'altra finestra o da un altro comando si dice come sempre.
+Se il `.base` è aperto anche come testo con modifiche non salvate, il gesto
+prima le salva; se non si salvano, il gesto non parte e la barra lo dice.
+
 La riga di ricerca diventa filtro quando ogni suo pezzo è una proprietà con un
 valore (`[stato:Arrivata]`, `[valore:>3000]`), unito con uno spazio (tutte vere)
 o con `OR`, anche negato (`-[stato:Prenotata]`). Il testo libero no: la Base
-dice perché non lo scrive e lascia il filtro com'era. La riga `[stato:Arrivata]`
+dice perché non lo scrive e lascia il filtro com'era. Neppure una proprietà
+che le righe non hanno e che non è una colonna: un nome sbagliato non diventa
+in silenzio un filtro che non trova niente.
+
+Nella forma a vista una proprietà che nelle righe è sempre una data o sempre
+un numero si scrive nella sua specie: la data come `2026-03-18`, il numero coi
+decimali della lingua (`3,5` in italiano, `3.5` in inglese; `1.000` è mille).
+Il file riceve la data ISO e il numero, e un valore che non si legge così la
+Base lo dice e non lo applica. Per una data e un numero non c'è «contiene».
+La riga di ricerca usa sempre la forma canonica (`[valore:>3000.5]`).
+
+Se il filtro cambia nel file mentre il pannello è aperto, il pannello si
+aggiorna; se avevi già cambiato qualcosa, la tua bozza non si scrive sopra il
+filtro nuovo: la Base lo dice, e «Ricarica» mostra il filtro com'è ora. La riga `[stato:Arrivata]`
 vuol dire «contiene»: un «è» della forma a vista, riscritto come ricerca,
 diventa «contiene», e la Base lo avverte. Un filtro scritto nel file che la
 forma a vista non sa dire (un `or`, un `not` su una proprietà) resta come riga
@@ -283,8 +311,9 @@ Il gesto non scrive, e la barra lo dice sotto le etichette, quando:
 - la Base è in sola lettura: gli attrezzi che scrivono sono spenti, filtro,
   ordine e colonne si guardano soltanto;
 - la Base sta in un blocco ```` ```base ```` dentro una nota: i comandi scrivono
-  solo un file `.base`, e la barra lo dice. Il filtro e le colonne si cambiano
-  dal blocco.
+  solo un file `.base`, quindi la barra la mostra in sola lettura e lo dice.
+  «Apri come file» apre la nota che contiene il blocco, dove filtro, ordine e
+  colonne si cambiano.
 
 Il piano della vista (`op: "plan"` della query `fub.base`) porta per questo,
 oltre alle colonne, il filtro (`filters`), l'ordinamento (`sort`) e le colonne

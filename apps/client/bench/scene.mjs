@@ -2238,8 +2238,6 @@ async function openLentDocx(page) {
   await page.mouse.move(0, 0);
 }
 
-/// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la
-/// griglia v2 abbia disegnato le sue celle.
 /// Apre `Opere.base` delle scene `base-*` e aspetta la tabella con le sue
 /// righe e la barra ferma. Dalla porta della shell e non dall'albero: il
 /// finto elenca un `.base` come file, e l'albero non lo apre.
@@ -2256,6 +2254,8 @@ async function openBase(page) {
   });
 }
 
+/// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la
+/// griglia v2 abbia disegnato le sue celle.
 async function openWorkbook(page) {
   await openFolder(page, "Dati");
   await page.click('#file-list .tree-row[data-path="Dati/Conti.xlsx"]');

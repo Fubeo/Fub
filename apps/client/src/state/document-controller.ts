@@ -1326,6 +1326,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       const base = documentSessions.inspect(doc)?.base;
       return base?.kind === "descends_from" ? base.value : null;
     },
+    documentWrites: { flush: flushPendingSave, expect: (doc) => documentSessions.expectWrite(doc) },
     media: {
       transport: mediaTransport,
       assetUrl: api.assetUrl,
@@ -3733,7 +3734,9 @@ async function applyExternalChange(id: string, outcome: ExternalChangeResult): P
     drawPaneConflict(id);
   } else if (outcome.kind === "untracked") {
     return;
-  } else if (outcome.kind === "reloaded" && outcome.changed) {
+  } else if (outcome.kind === "reloaded" && outcome.changed && !outcome.quiet) {
+    // `quiet`: la scrittura di un gesto della barra di una Base, annunciata
+    // con `expectWrite`. Il file nuovo è quello che la persona ha chiesto.
     addSheetNotice(id, "reloaded");
     drawPaneConflict(id);
   }

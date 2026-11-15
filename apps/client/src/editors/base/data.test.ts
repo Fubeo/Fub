@@ -133,11 +133,15 @@ describe("Base contract", () => {
 
 describe("i gesti della barra con base.view.set", () => {
   it("manda una sola chiave, il valore come JSON e la revisione; null toglie la chiave", async () => {
-    const invokeCommand = vi.fn(async () => ({ notify: null, effect: { kind: "custom", ns: "fub.base", payload: { revision: "r2" } } }));
-    expect(await setBaseViewKey({ invokeCommand }, "Opere.base", "Tabella", "sort", [{ key: "stato", descending: false }], "r1")).toBe("r2");
+    const invokeCommand = vi.fn(async () => ({ notify: "Ordine scritto", effect: { kind: "custom", ns: "fub.base", payload: { revision: "r2" } }, undo: { label: "Annulla l'ordine" } }));
+    expect(await setBaseViewKey({ invokeCommand }, "Opere.base", "Tabella", "sort", [{ key: "stato", descending: false }], "r1"))
+      .toEqual({ revision: "r2", notify: "Ordine scritto", undo: { label: "Annulla l'ordine" } });
     expect(invokeCommand).toHaveBeenLastCalledWith("base.view.set", { doc: "Opere.base", view: "Tabella", key: "sort", value: '[{"key":"stato","descending":false}]', base: "r1" });
     await setBaseViewKey({ invokeCommand }, "Opere.base", "Tabella", "filters", null, null);
     expect(invokeCommand).toHaveBeenLastCalledWith("base.view.set", { doc: "Opere.base", view: "Tabella", key: "filters" });
+    // Niente da cambiare: nessuna revisione, nessun «Annulla».
+    invokeCommand.mockResolvedValueOnce({ notify: "Niente da cambiare", effect: { kind: "none" } as never, undo: null as never });
+    expect(await setBaseViewKey({ invokeCommand }, "Opere.base", "Tabella", "filters", null, null)).toEqual({ revision: null, notify: "Niente da cambiare", undo: null });
   });
 
   it("«Nel file .base» sono le righe fra quelle uguali in testa e in coda", () => {
