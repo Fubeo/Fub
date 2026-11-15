@@ -65,24 +65,6 @@ export function valueShape(rows: readonly BaseRow[], key: string): ValueShape {
   return seen ?? "text";
 }
 
-/// Le specie di colonna corte: numeri, date, caselle. Nella tabella restano
-/// strette, larghe quanto l'intestazione o il piede.
-export function isShortShape(shape: ValueShape): boolean {
-  return shape === "number" || shape === "date" || shape === "bool";
-}
-
-/// La larghezza in pixel di una colonna corta, stimata dal testo senza
-/// misurare la pagina: l'intestazione (figura, nome, freccia dell'ordine) o
-/// il riepilogo del piede, il più lungo dei due; mai meno di 88 px, che bastano
-/// a «12.345» e a «24 feb». Una stima larga: meglio un po' d'aria che un
-/// numero tagliato.
-export function shortColumnWidth(label: string, sorted: boolean, foot: string): number {
-  const PAD = 20; // il rientro della cella, 10 px per lato
-  const head = PAD + 20 + label.length * 7.2 + (sorted ? 16 : 0);
-  const below = foot ? PAD + foot.length * 6.6 : 0;
-  return Math.ceil(Math.max(88, head, below));
-}
-
 /// I riepiloghi che si scelgono dal menu per una specie di colonna, nel loro
 /// ordine. Una colonna di testo ha solo il conteggio, le vuote e le piene; una
 /// data ha la prima e l'ultima al posto di minimo e massimo, perché il core

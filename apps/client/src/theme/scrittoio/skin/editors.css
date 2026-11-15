@@ -3721,7 +3721,12 @@
 .base-body:has(> .base-table-viewport) {
   padding: 0;
 }
+/* La tabella del prototipo (`.btab`): larga quanto la scatola, mai meno di
+   560 px (oltre, la finestra scorre di lato); le colonne prendono la misura
+   del loro contenuto, su una riga sola. */
 .base-table {
+  min-width: 560px;
+  font-size: var(--text-base);
   font-variant-numeric: tabular-nums;
 }
 .base-table th,
@@ -3729,6 +3734,10 @@
   padding: 0 10px;
   border-bottom: 1px solid var(--border);
   text-align: left;
+  white-space: nowrap;
+}
+.base-table td {
+  height: 38px;
 }
 /* Un filo fra le colonne, nell'intestazione, nelle righe e nel piede. */
 .base-table th + th,
@@ -3740,6 +3749,7 @@
   background: var(--sheet);
   color: var(--muted);
   font-weight: var(--weight-medium);
+  cursor: pointer;
 }
 /* L'intestazione è il pulsante del menu della colonna: occupa la cella, e al
    passaggio si accende come una riga. */
@@ -3850,10 +3860,12 @@
   opacity: 0.6;
 }
 .base-table tbody tr:not(.base-add-row):hover > td {
-  background: var(--sheet-2);
+  background: color-mix(in srgb, var(--overlay-hover) 70%, transparent);
 }
-/* Il titolo della nota, in grassetto come nel prototipo (`td.t`). */
+/* Il titolo della nota, in grassetto come nel prototipo (`td.t`), e intero:
+   la colonna si allarga per lui. */
 .base-table td > button.base-title {
+  max-width: none;
   font-weight: var(--weight-bold);
 }
 /* Le celle scelte per la somma nella banda (E24): lo stesso velo della
@@ -3902,8 +3914,6 @@
   border-color: transparent;
   border-radius: var(--radius-chip);
   background: transparent;
-  /* Un valore che non sta finisce coi puntini, come le celle che si leggono. */
-  text-overflow: ellipsis;
 }
 .base-cell input:where(:not([type="checkbox"])):hover {
   border-color: var(--border-strong);

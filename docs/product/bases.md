@@ -409,16 +409,15 @@ colonna `file.name` del file è questa stessa colonna, che prende anche la sua
 etichetta; le altre colonne seguono nell'ordine della vista. Ogni intestazione
 ha davanti la figura della specie dei suoi valori (testo, numero, data,
 casella, lista, collegamento), letta dalle righe come per i riepiloghi, e un
-filo divide le colonne. La colonna del titolo prende il 30% della tabella; le
-colonne corte (numeri, date, caselle) restano larghe quanto la loro
-intestazione o il loro piede; le altre si dividono il resto. Le larghezze si
-decidono una volta per disegno dalle specie dei valori, non dalle righe in
-vista, così non ballano mentre la tabella scorre; sotto la larghezza minima la
-tabella scorre di lato, e prima un valore troppo lungo finisce coi puntini. Le date si leggono come giorno e mese («2 mar», con
+filo divide le colonne. Le date si leggono come giorno e mese («2 mar», con
 l'anno se non è questo) e i numeri col separatore delle migliaia («2.600»):
 è solo da guardare, perché il campo di una cella col fuoco torna al valore
 com'è, e la ricerca, il CSV e le copie usano il valore. In fondo alle righe
 «Nuova nota» fa quello che fa «Nuova» nella barra; in sola lettura non c'è.
+
+Ogni valore sta su una riga sola e le colonne prendono la misura del loro
+contenuto: la tabella è larga quanto la scatola e mai meno di 560 px; quando
+non ci sta, scorre di lato dentro la scatola.
 
 ### Il piede
 
