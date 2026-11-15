@@ -41,7 +41,10 @@ nucleo fa ciò che fa la tela quando la penna si alza
   tratto tocca, allargato di metà misura. La scheda lo prende se contiene il
   centro del riquadro e almeno metà della sua area, e se il suo livello non
   è estraneo. Altrimenti il tratto resta libero. Una scheda prende i punti
-  meno il suo angolo, con l'ancora `card` della sua misura di adesso.
+  meno il suo angolo, con l'ancora `card` della sua misura di adesso. Anche
+  su un PDF o un foglio: la pagina o la cella sotto la penna, che la tela
+  sceglie (`pageAnchorAt`, `cellAnchorAt`), le sa la resa; per attaccare il
+  tratto a loro si scrive `on` con la pagina o la cella.
 - **`on: "board"`:** il tratto è libero, anche sopra una scheda, come la
   penna con Alt.
 - **`on` con l'id di una scheda:** i punti sono già nelle sue unità, con 0,0
@@ -49,8 +52,35 @@ nucleo fa ciò che fa la tela quando la penna si alza
   anche per un gruppo. Un id che non c'è è `UnknownNode`, un livello
   estraneo `ForeignLayer`. `auto` e `board` sono parole: una scheda con
   quell'id si raggiunge solo con `auto`.
-- **La pagina e la cella** (`{card, page}`, `{card, sheet, cell}`) non ci
-  sono: un oggetto in `on` non si legge.
+- **`on` sulla pagina di un PDF** (`{"card", "page", "page_size"?,
+  "page_count"?}`): i punti sono punti PDF dall'angolo in alto a sinistra
+  della pagina `page` (da 1), come si vede, e l'ancora è
+  `{"kind": "page", "page", "width", "height"}` di N6 T19, con la misura
+  `page_size` (`[larghezza, altezza]` in punti). Anche `size` è in punti.
+  `canvas.apply` e gli altri comandi leggono dal PDF il conto delle pagine
+  (`page_count`: se il file si legge vince lui, con l'avviso
+  `page_count_from_file`) e la misura della pagina `page`, se non è data
+  (`crates/fub-features/src/lavagna/prefill.rs`). Una misura data resta,
+  anche se il file ne dice un'altra; se differisce di più di mezzo punto per
+  lato, l'avviso `page_size_not_file` lo dice. Il file non si legge se
+  supera 32 MiB, se è cifrato o se lopdf non lo apre (malformato), come per
+  [le pagine in codice](canvas-pages-code.md): allora serve `page_size`, e il
+  conto si controlla solo se `page_count` è dato. La scheda deve essere un
+  PDF; senza misura (il file non si legge e `page_size` manca), con una
+  misura non positiva o una pagina oltre l'ultima, quando il conto si sa,
+  è `Invalid`. La pagina è un intero da 1 a 2^53−1: oltre non si satura,
+  `validate` dà `bad_value`. Dove la pagina sta nella scheda lo sa la resa: il nucleo
+  scrive l'ancora, la tela la porta sulla pagina che la scheda mostra.
+- **`on` sulla cella di un foglio** (`{"card", "sheet", "cell"}`): i punti
+  sono pixel del foglio al 100% dall'angolo in alto a sinistra della cella,
+  e l'ancora è `{"kind": "cell", "sheet", "cell"}` di N6 T37. `sheet` è il
+  nome del foglio com'è nel file, spazi compresi, non vuoto; `cell` è un
+  indirizzo A1 maiuscolo da `A1` a `XFD1048576` (`A0`, `b3`, `$B$3` non si
+  leggono: `bad_value`). La scheda deve essere un foglio
+  (`xlsx`, `xlsm`, `xltx`, `xltm`), se no `Invalid`.
+- Un oggetto in `on` con `page` è una pagina, con `sheet` o `cell` una
+  cella; i campi dell'altra forma, o uno senza nessuno dei tre, non si
+  leggono.
 
 Le forme, nelle coordinate di `on`:
 
@@ -87,7 +117,12 @@ I casi della regola dell'ancora sono in
 `apps/client/src/__fixtures__/ink-anchor.json`, scritti a mano: li fanno
 girare i test di `ops/anchor.rs` e
 `apps/client/src/editors/canvas/anchor-vectors.test.ts`, contro `anchor.ts`.
-I vettori di `draw` sono `canvas-ops/draw-*.json`.
+I vettori di `draw` sono `canvas-ops/draw-*.json`;
+`apps/client/src/editors/canvas/draw-anchor-parity.test.ts` rilegge quelli
+della pagina e della cella con le regole della tela (`decodeStroke`,
+`erasableInk`, con la pagina o la cella nell'angolo della scheda e spostate
+e scalate) e li riscrive con la sua penna (`strokeRecord`): la stessa
+ancora e gli stessi campioni.
 
 ## `erase_along`
 
@@ -99,11 +134,24 @@ prendono il suo posto.
 - **`on`:** `"auto"` (di serie) vuole punti della lavagna e taglia i tratti
   di ogni scheda e quelli liberi; `"board"` solo quelli liberi; l'id di una
   scheda vuole le sue unità (0,0 in alto a sinistra) e taglia solo i suoi
-  (`UnknownNode`, `ForeignLayer` come per `draw`).
+  (`UnknownNode`, `ForeignLayer` come per `draw`). La pagina e la cella si
+  scrivono come per `draw`, con gli stessi errori: con la pagina il cammino
+  è in punti PDF e taglia solo i tratti di quella pagina della scheda, con
+  la cella è in pixel del foglio dalla cella e taglia solo i tratti di
+  quella cella (lo stesso foglio e lo stesso indirizzo). Gli altri tratti
+  non si guardano: né quelli `card` della scheda né quelli liberi della
+  lavagna sopra di lei, anche se il cammino li attraversa. Dove stanno
+  rispetto alla pagina o alla cella lo sa la resa, mentre la gomma della
+  tela, che passa sulla scheda, taglia anche loro; per loro serve un altro
+  `erase_along`, con `on` sulla scheda o `"auto"`. Un tratto di pagina scritto a un'altra misura (il PDF
+  sostituito) si porta su `page_size` come fa la resa (`pageFit`: il
+  fattore minore, dall'angolo; `InkFit::on_page`); senza `page_size` il
+  cammino è nelle unità dell'ancora di ogni tratto.
 - **`aspect`:** la proporzione del contenuto della scheda di `on` (larghezza
   su altezza), come in `move_strokes`: la tela la dà a `erasableInk` con
   `aspects`. Vale solo con `on` sull'id di una scheda (con `auto` o `board` è
-  `Invalid`: il cammino passa su più contenuti); una che non vale (zero,
+  `Invalid`: il cammino passa su più contenuti, e lo è anche con la pagina o
+  la cella, che hanno già le loro unità); una che non vale (zero,
   negativa) dà la regola senza. Non si scrive nel file.
 - **Il taglio:** il cammino torna nelle unità del tratto con l'inverso della
   sua resa (anche su un'immagine scalata, con `aspect` se c'è), e il raggio, `size / 2` diviso la
@@ -123,17 +171,22 @@ prendono il suo posto.
   com'era, dove la tela, con `Date.parse`, lo sposta.
 - **Le toppe:** per livello, si tolgono i tratti tagliati dall'ultimo al
   primo e si mettono i pezzi al loro posto (`cutStrokePatches`); niente tocchi, niente toppe.
-- **Ciò che resta:** un tratto che non si disegna, un livello estraneo e un
-  tratto con l'ancora di pagina o di cella non si toccano: la pagina che la
-  scheda mostra e il riquadro della cella li sa la resa, non il nucleo, e la
-  gomma della tela li taglia solo lì. Se possono stare sotto il cammino (per
-  una scheda, se il cammino la tocca), la nota `ink_kept` lo dice, con la
-  ragione (`anchored to a page`, `anchored to a cell`). Oltre 50 milioni di distanze stimate
+- **Ciò che resta:** un tratto che non si disegna e un livello estraneo non
+  si toccano. Con `auto`, `board` o l'id di una scheda non si tocca nemmeno
+  un tratto con l'ancora di pagina o di cella: la pagina che la scheda
+  mostra e il riquadro della cella li sa la resa, non il nucleo, e si
+  tagliano con `on` sulla loro pagina o sulla loro cella. Se possono stare
+  sotto il cammino (per una scheda, se il cammino la tocca; con la pagina o
+  la cella, se la loro ancora dice quella pagina o quella cella), la nota
+  `ink_kept` lo dice, con la ragione (`anchored to a page`, `anchored to a
+  cell`). Oltre 50 milioni di distanze stimate
   (`split_work`) il cammino è troppo fitto: `Invalid`.
 
 `ink-cut.json`, scritto a mano, prova il taglio in Rust (`cut_vectors.rs`) e
 contro `split.ts` (`split-vectors.test.ts`); `erase-along-parity.test.ts` rifà
-i vettori `canvas-ops/erase-along-*.json` con la gomma della tela.
+i vettori `canvas-ops/erase-along-*.json` con la gomma della tela (con la
+pagina o la cella nell'angolo della scheda alla scala 1, e spostate e
+scalate a 595/360 punti per unità, e solo coi loro tratti).
 
 ## Leggere
 
@@ -194,9 +247,14 @@ ink board 1 40 25 2.2×0.4
   `strokes` vuoto). Un tratto che si disegna è
   `{id, color, size, tool, pen?, anchor?, bounds, points}`, con `pen` dal
   `pen=<id>` del pennello, `anchor` solo per un tratto di pagina
-  (`{"kind": "page", "page"}`) o di cella (`{"kind": "cell", "sheet",
-  "cell"}`), `bounds` come `{x, y, width, height}` e `points` come
-  `[[x, y], …]`; uno che non si disegna è `{id, bad}`, con la ragione.
+  (`{"kind": "page", "page", "width", "height"}`) o di cella
+  (`{"kind": "cell", "sheet", "cell"}`), `bounds` come
+  `{x, y, width, height}` e `points` come `[[x, y], …]`; uno che non si
+  disegna è `{id, bad}`, con la ragione. `width` e `height` sono la misura
+  della pagina quando il tratto si è scritto: i punti sono in quella scala.
+  Se il PDF ora ha una pagina di un'altra misura, chi li ripassa a
+  `erase_along` li porta prima sulla pagina di adesso, o dà `page_size`
+  uguale alla misura scritta.
 - **`max_chars`** taglia soltanto i punti di `ink_read`, mai il modello. Se la
   lettura scritta come JSON compatto supera il limite, si mostrano i primi
   punti nell'ordine dei tratti finché ci stanno: ogni tratto resta, col suo

@@ -1545,7 +1545,7 @@ leggono con le regole di N6 T19 e T37 (i loro vettori, con i tratti di
 `draw`).
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cargo
 test -p fub-features --features lavagna,draw --test lavagna
-Stato: [~] in corso · coder dal 2026-11-15
+Stato: [x] integrato nel ramo del piano (0f037caef, 2026-11-15) · revisione media e correzioni; scelte in DECISIONS.md
 
 ## T20 · Da Mermaid e da una scaletta
 
@@ -1856,7 +1856,7 @@ Fatto quando: R8 passa su ogni voce `gesture` e `clipboard` di `merged`;
 vettori del nucleo); `engine.test.ts` passa; `npm run typecheck` passa.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas && npm run typecheck
-Stato: [ ] da fare
+Stato: [~] coder fatto (coder/lic-t24 @ 278ef9ee4, check 19/20, il rosso per carico) · aspetta la revisione
 
 ## T25 · Copia e incolla come codice, «Disponi»
 

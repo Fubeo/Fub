@@ -31,7 +31,11 @@ o `#rrggbb`, o `null`), `sides` (`"auto"` o `{from, to}`), `pair` (due numeri,
 problemi sotto `/shape/…`), `pen_size` (un numero da 0,25 a 200; fuori è
 `bad_value`), `ink_color` (un nome della tavolozza dell'inchiostro o `#rrggbb`;
 un altro nome è `bad_value`, coi nomi vicini), `positive` (un numero maggiore di
-zero; `0` o meno è `bad_value`) e `any`. Un campo facoltativo `null` vale come
+zero; `0` o meno è `bad_value`), `ink_on` (`on` di `draw` ed `erase_along`:
+una stringa, la pagina `{card, page, page_size?, page_count?}` o la cella
+`{card, sheet, cell}`, coi problemi sotto `/on/…`; una pagina sotto 1, un
+foglio vuoto, una cella che non è da `A1` a `XFD1048576` o un oggetto senza
+`page`, `sheet` né `cell` sono `bad_value`) e `any`. Un campo facoltativo `null` vale come
 assente, per la forma e per serde.
 
 ## Lo schema JSON

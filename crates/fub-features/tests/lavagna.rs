@@ -2051,6 +2051,139 @@ mod con_draw {
     }
 
     #[test]
+    fn disegnare_sulla_pagina_legge_dal_pdf_la_misura_della_pagina_n() {
+        // Due pagine, la seconda girata: senza `page_size` l'ancora prende la
+        // misura della pagina 2 dal file, non quella della prima. Una pagina
+        // che il PDF non ha è rifiutata, e un conto dato diverso dal file
+        // perde, con l'avviso.
+        let (_vault, mut ws) = vault_with(&[(
+            "Corsi/dispensa.pdf",
+            pdf_pages(&[(595.0, 842.0), (842.0, 595.0)]),
+        )]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0 },
+                { "op": "draw", "id": "s1", "on": { "card": "pdf", "page": 2 }, "points": [[72, 100], [300, 100]] }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("il tratto si scrive");
+        let strokes = &card(&ws, "pdf")["fub:ink"]["strokes"];
+        assert_eq!(
+            strokes[0]["anchor"],
+            json!({ "kind": "page", "page": 2, "width": 842, "height": 595 }),
+            "{strokes}"
+        );
+        let before = source(&ws, BOARD);
+        for op in [
+            json!({ "op": "draw", "on": { "card": "pdf", "page": 3 }, "points": [[72, 100]] }),
+            json!({ "op": "draw", "on": { "card": "pdf", "page": 3, "page_size": [595, 842], "page_count": 9 }, "points": [[72, 100]] }),
+            json!({ "op": "erase_along", "on": { "card": "pdf", "page": 3 }, "points": [[72, 100]], "size": 4 }),
+        ] {
+            let error = plugin_error(
+                apply(
+                    &mut ws,
+                    json!({ "doc": BOARD, "ops": json!([op]).to_string() }),
+                    InvokeMode::Apply,
+                )
+                .expect_err("la pagina 3 non c'è"),
+            );
+            assert!(matches!(error, PluginError::BadArgs(_)), "{op}: {error:?}");
+        }
+        assert_eq!(source(&ws, BOARD), before, "il file non cambia");
+        let checked = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "erase_along", "on": { "card": "pdf", "page": 2, "page_count": 5 }, "points": [[186, 80], [186, 120]], "size": 8 }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto");
+        let payload = custom(&checked);
+        assert_eq!(payload["ok"], true, "{payload}");
+        assert!(
+            payload["warnings"]
+                .as_array()
+                .is_some_and(|warnings| warnings
+                    .iter()
+                    .any(|warning| warning["code"] == "page_count_from_file")),
+            "{payload}"
+        );
+    }
+
+    #[test]
+    fn una_misura_data_diversa_dal_pdf_resta_con_una_nota() {
+        // La pagina 1 è un A4 di 595.276 × 841.89: una misura data entro
+        // mezzo punto per lato tace; una diversa resta nell'ancora (vince
+        // chi la dà), e la nota `page_size_not_file` lo dice, in
+        // `canvas.check` e in `canvas.apply`.
+        let (_vault, mut ws) =
+            vault_with(&[("Corsi/dispensa.pdf", pdf_pages(&[(595.276, 841.89)]))]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0 }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("la scheda si scrive");
+        let codes = |payload: &Value, key: &str| -> Vec<String> {
+            payload[key]
+                .as_array()
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item["code"].as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let draw = |size: Value| json!({ "op": "draw", "on": { "card": "pdf", "page": 1, "page_size": size }, "points": [[72, 100], [300, 100]] });
+        let near = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([draw(json!([595, 842]))]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto");
+        let payload = custom(&near);
+        assert_eq!(payload["ok"], true, "{payload}");
+        assert!(
+            !codes(payload, "warnings").contains(&"page_size_not_file".to_owned()),
+            "{payload}"
+        );
+        let far = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([draw(json!([1190, 1684]))]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto");
+        let payload = custom(&far);
+        assert_eq!(payload["ok"], true, "{payload}");
+        assert!(
+            codes(payload, "warnings").contains(&"page_size_not_file".to_owned()),
+            "{payload}"
+        );
+        let applied = apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([draw(json!([1190, 1684]))]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("il tratto si scrive");
+        let payload = custom(&applied);
+        assert!(
+            codes(payload, "notes").contains(&"page_size_not_file".to_owned()),
+            "{payload}"
+        );
+        let strokes = &card(&ws, "pdf")["fub:ink"]["strokes"];
+        assert_eq!(
+            strokes[0]["anchor"],
+            json!({ "kind": "page", "page": 1, "width": 1190, "height": 1684 }),
+            "la misura data resta: {strokes}"
+        );
+    }
+
+    #[test]
     fn un_pdf_malformato_o_cifrato_non_da_misure() {
         let mut locked = pdf_turned(&[(595.0, 842.0, 0)]);
         let encrypt = locked.add_object(dictionary! {

@@ -3,7 +3,9 @@
 //! `fit: content`; il numero e le misure delle pagine di un PDF per
 //! `spread_pages` (`page_count`, `page_sizes`); il numero delle pagine e la
 //! misura della pagina o dell'immagine di un `excerpt` (`page_count`,
-//! `content_size`). Il nucleo non legge file: lo fa qui, con
+//! `content_size`); il numero delle pagine e la misura della pagina di un
+//! `on` sulla pagina di un PDF, per `draw` ed `erase_along` (`page_count`,
+//! `page_size`). Il nucleo non legge file: lo fa qui, con
 //! `read_document_bytes`, e misura con `imagesize` (le immagini) e con
 //! [`crate::draw::pdf_page_sizes`] (le pagine di un PDF). Ogni file si legge
 //! una volta sola per lista.
@@ -15,7 +17,9 @@
 //! un'immagine né un PDF non si legge affatto: è la sua estensione a dirlo.
 //!
 //! Il numero delle pagine letto dal file vince su quello dato: se sono diversi,
-//! la nota `page_count_from_file` lo dice.
+//! la nota `page_count_from_file` lo dice. Una misura data invece resta: per
+//! la pagina di `on`, se il file ne dice un'altra, la nota `page_size_not_file`
+//! lo dice.
 
 use std::collections::HashMap;
 
@@ -24,7 +28,8 @@ use fub_abi::traits::HostApi;
 use fub_canvas_core::layout::{self, CardKind};
 use fub_canvas_core::model::Canvas;
 use fub_canvas_core::ops::{
-    chosen_pages, CanvasOp, CompileNote, ExcerptArgs, NoteCode, SpreadPagesArgs,
+    chosen_pages, CanvasOp, CompileNote, DrawArgs, EraseAlongArgs, ExcerptArgs, InkOn, NoteCode,
+    OnPage, SpreadPagesArgs,
 };
 use fub_canvas_core::parts::{CanvasParts, PartsKind};
 use serde_json::Value;
@@ -131,6 +136,20 @@ pub(super) fn fill_ops(
                     notes.extend(fill_excerpt(index, &mut files, &file, args));
                 }
             }
+            CanvasOp::Draw(DrawArgs {
+                on: Some(InkOn::Page(on)),
+                ..
+            })
+            | CanvasOp::EraseAlong(EraseAlongArgs {
+                on: Some(InkOn::Page(on)),
+                ..
+            }) => {
+                if let Some(file) = card_file(canvas, &added, &on.card) {
+                    if let Some(pages) = files.pages(&file) {
+                        notes.extend(fill_page(index, on, pages));
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -213,6 +232,50 @@ fn fill_excerpt(
         Some(PartsKind::Sections { .. }) | None => None,
     };
     note
+}
+
+/// Quanto il `page_size` dato può scostarsi, per lato, dalla misura della
+/// pagina nel file senza nota: mezzo punto PDF, quanto sposta l'arrotondamento
+/// all'intero (`[595, 842]` per un A4 di `595.276 × 841.89`).
+const PAGE_SIZE_TOLERANCE: f64 = 0.5;
+
+/// `page_count` e `page_size` di un `on` sulla pagina di un PDF (`draw`,
+/// `erase_along`): il conto del file, e la misura della pagina se non è data.
+/// Una misura data resta, ma se il file ne dice un'altra (oltre
+/// [`PAGE_SIZE_TOLERANCE`]) la nota `page_size_not_file` lo dice. Una pagina
+/// oltre l'ultima resta senza misura: la rifiuta la compilazione, col conto.
+fn fill_page(index: usize, on: &mut OnPage, pages: &[[f64; 2]]) -> Vec<CompileNote> {
+    let mut notes: Vec<CompileNote> = count_from_file(index, &mut on.page_count, pages.len())
+        .into_iter()
+        .collect();
+    let read = on
+        .page
+        .checked_sub(1)
+        .and_then(|at| usize::try_from(at).ok())
+        .and_then(|at| pages.get(at).copied());
+    match (on.page_size, read) {
+        (None, read) => on.page_size = read,
+        (Some(given), Some(read)) => {
+            // Un lato che non è un numero (`NaN`) non è vicino: la nota c'è,
+            // e il rifiuto lo dà la compilazione.
+            let near = given
+                .iter()
+                .zip(read)
+                .all(|(given, read)| (given - read).abs() <= PAGE_SIZE_TOLERANCE);
+            if !near {
+                notes.push(CompileNote {
+                    index,
+                    code: NoteCode::PageSizeNotFile,
+                    detail: format!(
+                        "`page_size` is {} × {}, but page {} of the PDF is {} × {}: the given size is kept",
+                        given[0], given[1], on.page, read[0], read[1]
+                    ),
+                });
+            }
+        }
+        (Some(_), None) => {}
+    }
+    notes
 }
 
 /// La misura della pagina `page` (da 1) di un PDF.

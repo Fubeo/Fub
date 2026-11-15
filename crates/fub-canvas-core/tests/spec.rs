@@ -108,6 +108,7 @@ fn sample(kind: FieldKind) -> Value {
         FieldKind::InkColor => json!("blue"),
         FieldKind::Positive => json!(2),
         FieldKind::Pages => json!("1-3"),
+        FieldKind::InkOn => json!("auto"),
         FieldKind::Any => Value::Null,
     }
 }
@@ -131,7 +132,7 @@ fn wrong(kind: FieldKind) -> Option<Value> {
         FieldKind::Layer => Some(json!(1)),
         FieldKind::Strokes => Some(json!("a")),
         FieldKind::Shape | FieldKind::PenSize | FieldKind::Positive => Some(json!("a")),
-        FieldKind::InkColor | FieldKind::Pages => Some(json!(1)),
+        FieldKind::InkColor | FieldKind::Pages | FieldKind::InkOn => Some(json!(1)),
     }
 }
 
@@ -694,17 +695,144 @@ fn le_forme_di_draw_hanno_il_vicino_e_i_campi() {
 }
 
 #[test]
-fn on_e_una_parola_o_un_id_finche_non_arrivano_pagina_e_cella() {
-    let (problems, reads) = problems_and_serde(json!([{
-        "op": "draw",
-        "on": {"card": "p1", "page": 3},
-        "points": [[0, 0]]
-    }]));
-    assert!(!reads);
-    assert!(
-        has_problem(&problems, ProblemCode::WrongType, "/0/on"),
-        "{problems:?}"
-    );
+fn on_e_una_parola_una_pagina_o_una_cella_per_validate_e_per_serde() {
+    // Ciò che si legge, per le due operazioni: `validate` non dà problemi.
+    let good = [
+        json!("auto"),
+        json!("t1"),
+        json!({"card": "p1", "page": 3}),
+        json!({"card": "p1", "page": 3.0, "page_size": [595, 842.5], "page_count": 12}),
+        json!({"card": "p1", "page": 1, "page_size": null, "page_count": null}),
+        json!({"card": "p1", "page": 9_007_199_254_740_991_u64}),
+        json!({"card": "f1", "sheet": "Voti di marzo", "cell": "B3"}),
+        json!({"card": "f1", "sheet": "Foglio1", "cell": "XFD1048576"}),
+    ];
+    // Ciò che non si legge, e il problema che `validate` dà.
+    let bad = [
+        (json!(3), ProblemCode::WrongType, "/0/on"),
+        (json!({"card": "p1"}), ProblemCode::BadValue, "/0/on"),
+        (json!({"page": 3}), ProblemCode::MissingField, "/0/on/card"),
+        (
+            json!({"card": 1, "page": 3}),
+            ProblemCode::WrongType,
+            "/0/on/card",
+        ),
+        (
+            json!({"card": "p1", "page": 0}),
+            ProblemCode::BadValue,
+            "/0/on/page",
+        ),
+        (
+            json!({"card": "p1", "page": -2}),
+            ProblemCode::BadValue,
+            "/0/on/page",
+        ),
+        // Oltre 2^53−1 la pagina non si satura: non è una pagina.
+        (
+            json!({"card": "p1", "page": 1e300}),
+            ProblemCode::BadValue,
+            "/0/on/page",
+        ),
+        (
+            json!({"card": "p1", "page": 9_007_199_254_740_992_u64}),
+            ProblemCode::BadValue,
+            "/0/on/page",
+        ),
+        (
+            json!({"card": "p1", "page": u64::MAX}),
+            ProblemCode::BadValue,
+            "/0/on/page",
+        ),
+        (
+            json!({"card": "p1", "page": 1.5}),
+            ProblemCode::WrongType,
+            "/0/on/page",
+        ),
+        (
+            json!({"card": "p1", "page": "3"}),
+            ProblemCode::WrongType,
+            "/0/on/page",
+        ),
+        (
+            json!({"card": "p1", "page": 3, "page_size": [595]}),
+            ProblemCode::WrongType,
+            "/0/on/page_size",
+        ),
+        (
+            json!({"card": "p1", "page": 3, "page_count": 2.5}),
+            ProblemCode::WrongType,
+            "/0/on/page_count",
+        ),
+        (
+            json!({"card": "p1", "page": 3, "sheet": "Foglio1"}),
+            ProblemCode::UnknownField,
+            "/0/on/sheet",
+        ),
+        (
+            json!({"card": "f1", "sheet": "Foglio1", "cell": "A0"}),
+            ProblemCode::BadValue,
+            "/0/on/cell",
+        ),
+        (
+            json!({"card": "f1", "sheet": "Foglio1", "cell": "b3"}),
+            ProblemCode::BadValue,
+            "/0/on/cell",
+        ),
+        (
+            json!({"card": "f1", "sheet": "Foglio1", "cell": "XFE1"}),
+            ProblemCode::BadValue,
+            "/0/on/cell",
+        ),
+        (
+            json!({"card": "f1", "sheet": "", "cell": "B3"}),
+            ProblemCode::BadValue,
+            "/0/on/sheet",
+        ),
+        (
+            json!({"card": "f1", "cell": "B3"}),
+            ProblemCode::MissingField,
+            "/0/on/sheet",
+        ),
+        (
+            json!({"card": "f1", "sheet": "Foglio1", "cell": "B3", "zoom": 1}),
+            ProblemCode::UnknownField,
+            "/0/on/zoom",
+        ),
+    ];
+    let ops = [
+        json!({"op": "draw", "points": [[0, 0]]}),
+        json!({"op": "erase_along", "points": [[0, 0]], "size": 4}),
+    ];
+    for op in &ops {
+        for on in &good {
+            let mut op = op.clone();
+            op["on"] = on.clone();
+            let (problems, reads) = problems_and_serde(json!([op]));
+            assert!(reads && problems.is_empty(), "{op}: {problems:?}");
+        }
+        for (on, code, path) in &bad {
+            let mut op = op.clone();
+            op["on"] = on.clone();
+            let (problems, reads) = problems_and_serde(json!([op]));
+            assert!(!reads, "serde legge {op}");
+            assert!(has_problem(&problems, *code, path), "{op}: {problems:?}");
+        }
+    }
+}
+
+#[test]
+fn on_si_riscrive_com_era() {
+    for on in [
+        json!("board"),
+        json!({"card": "p1", "page": 3, "page_size": [595.0, 842.0], "page_count": 12}),
+        json!({"card": "f1", "sheet": "Voti di marzo", "cell": "XFD1048576"}),
+    ] {
+        let op: CanvasOp =
+            serde_json::from_value(json!({"op": "draw", "on": on, "points": [[0, 0]]}))
+                .expect("si legge");
+        let written = serde_json::to_value(&op).expect("si scrive");
+        assert_eq!(written["on"], on);
+    }
 }
 
 #[test]

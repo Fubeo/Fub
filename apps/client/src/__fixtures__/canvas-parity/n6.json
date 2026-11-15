@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "N6",
-  "max_missing": 2,
+  "max_missing": 0,
   "entries": [
     {
       "id": "N6.card.drop_vault",
@@ -241,16 +241,15 @@
       "source": "N6",
       "gui": [{ "gesture": "pen-on-page" }],
       "writes": "file",
-      "state": "missing",
-      "computes": "l'ancora di pagina",
-      "target_ops": [
+      "state": "code",
+      "ops": [
         {
           "op": "draw",
           "on": { "card": "p1", "page": 3, "page_size": [595, 842] },
           "points": [[72, 100], [300, 100]]
         }
       ],
-      "task": "T19"
+      "note": "L'ancora `page` di N6 T19, coi punti in punti PDF dall'angolo della pagina. `page_size` e `page_count` li legge `canvas.apply` dal PDF; qui, senza file, la misura si dà. La gomma che taglia sulla pagina è `erase_along` con lo stesso `on`. `draw-anchor-parity.test.ts` rilegge i tratti di `draw` con le regole della tela."
     },
     {
       "id": "N6.ink.cell",
@@ -258,16 +257,15 @@
       "source": "N6",
       "gui": [{ "gesture": "pen-on-cell" }],
       "writes": "file",
-      "state": "missing",
-      "computes": "l'ancora di cella",
-      "target_ops": [
+      "state": "code",
+      "ops": [
         {
           "op": "draw",
           "on": { "card": "f1", "sheet": "Foglio1", "cell": "B3" },
           "points": [[2, 10], [60, 10]]
         }
       ],
-      "task": "T19"
+      "note": "L'ancora `cell` di N6 T37, coi punti in pixel del foglio al 100% dall'angolo della cella. La gomma che taglia sulla cella è `erase_along` con lo stesso `on`."
     },
     {
       "id": "N6.ink.lasso",

@@ -287,6 +287,7 @@ impl Warning {
                 NoteCode::InkKept => WarningCode::InkKept,
                 NoteCode::PagesCut => WarningCode::PagesCut,
                 NoteCode::PageCountFromFile => WarningCode::PageCountFromFile,
+                NoteCode::PageSizeNotFile => WarningCode::PageSizeNotFile,
             },
             ids: Vec::new(),
             estimated_height: None,
@@ -323,6 +324,9 @@ pub enum WarningCode {
     /// Nota: il `page_count` dato non è quello del PDF, e vale quello letto
     /// dal file.
     PageCountFromFile,
+    /// Nota: il `page_size` dato a `on` non è la misura della pagina nel PDF,
+    /// e vale quello dato.
+    PageSizeNotFile,
 }
 
 /// Controlla `raw`, una lista di operazioni, sulla lavagna `canvas`, con gli id

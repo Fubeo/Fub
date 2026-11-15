@@ -187,14 +187,23 @@ impl Decoded {
     }
 }
 
-/// L'ancora di pagina (`{"kind": "page", "page"}`) o di cella (`{"kind":
+/// L'ancora di pagina (`{"kind": "page", "page", "width", "height"}`) o di cella (`{"kind":
 /// "cell", "sheet", "cell"}`) di un tratto, per la lettura dell'inchiostro.
 fn content_anchor(anchor: &InkAnchor) -> Value {
     let mut map = Map::new();
     match anchor {
-        InkAnchor::Page { page, .. } => {
+        InkAnchor::Page {
+            page,
+            width,
+            height,
+        } => {
             map.insert("kind".to_owned(), Value::from("page"));
             map.insert("page".to_owned(), Value::from(*page));
+            // La misura della pagina quando il tratto si è scritto: i punti
+            // sono in quella scala. Con il PDF sostituito da una pagina di
+            // un'altra misura, chi li ripassa a `erase_along` sa come portarli.
+            map.insert("width".to_owned(), number(*width));
+            map.insert("height".to_owned(), number(*height));
         }
         InkAnchor::Cell { sheet, cell } => {
             map.insert("kind".to_owned(), Value::from("cell"));
@@ -544,7 +553,14 @@ mod tests {
             (
                 "carta.pdf",
                 serde_json::json!({"kind": "page", "page": 2, "width": 595, "height": 842}),
-                serde_json::json!({"kind": "page", "page": 2}),
+                serde_json::json!({"kind": "page", "page": 2, "width": 595, "height": 842}),
+            ),
+            // La misura scritta torna com'è, decimali compresi: i punti sono
+            // in quella scala anche se il PDF ora ne ha un'altra.
+            (
+                "carta.pdf",
+                serde_json::json!({"kind": "page", "page": 3, "width": 595.276, "height": 841.89}),
+                serde_json::json!({"kind": "page", "page": 3, "width": 595.276, "height": 841.89}),
             ),
             (
                 "conti.xlsx",
