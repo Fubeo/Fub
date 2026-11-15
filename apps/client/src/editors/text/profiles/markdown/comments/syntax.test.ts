@@ -3,12 +3,11 @@ import { EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "../grammar";
-import { threadsIn } from "./mask";
-import { commentLevels, messageHeader, scanComments, threadCuts, threadTail, type CommentThread } from "./syntax";
+import { threadsIn } from "./threads";
+import { commentLevels, scanComments, threadCuts, threadTail, type CommentThread } from "./syntax";
 
 // La grammatica dei commenti della shell, gemella di `parse/comments.rs`: i
-// casi di là (l'intestazione) e quelli della convenzione
-// (`docs/reference/note-conventions.md`). Il corpus (`corpus.test.ts`) tiene le
+// casi della convenzione (`docs/reference/note-conventions.md`). Il corpus (`corpus.test.ts`) tiene le
 // due letture d'accordo sulle stesse sorgenti; qui le regole una per una.
 
 /// I commenti di un testo tutto in un tratto.
@@ -152,20 +151,5 @@ describe("i commenti nella nota", () => {
     const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] });
     ensureSyntaxTree(state, doc.length, 5_000);
     expect(threadsIn(state, 0, doc.length, [])).toEqual([]);
-  });
-});
-
-describe("l'intestazione di un messaggio", () => {
-  it("ha tre forme, e altrimenti è testo", () => {
-    expect(messageHeader("@Anna Bianchi 2026-11-08 17:40: va bene così")).toEqual({ author: "Anna Bianchi", date: "2026-11-08 17:40", text: "va bene così" });
-    expect(messageHeader("@Anna 2026-11-08: senza ora")).toEqual({ author: "Anna", date: "2026-11-08", text: "senza ora" });
-    expect(messageHeader("@Anna: senza data")).toEqual({ author: "Anna", date: null, text: "senza data" });
-    expect(messageHeader("2026-11-08 17:40: senza nome")).toEqual({ author: null, date: "2026-11-08 17:40", text: "senza nome" });
-    expect(messageHeader("scritto a mano: 10:30")).toEqual({ author: null, date: null, text: "scritto a mano: 10:30" });
-    expect(messageHeader("@Anna")).toEqual({ author: null, date: null, text: "@Anna" });
-  });
-
-  it("una data che non lo è fa parte del nome", () => {
-    expect(messageHeader("@Anna 2026-1-08: x")).toEqual({ author: "Anna 2026-1-08", date: null, text: "x" });
   });
 });

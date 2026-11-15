@@ -2,6 +2,7 @@
 // source coordinates, native selections and the existing inline decorations.
 import { StateEffect, type EditorState, type Extension, type Range, type Text, type Transaction } from "@codemirror/state";
 import {
+  CharCategory,
   EditorSelection,
   Facet,
   findClusterBreak,
@@ -81,6 +82,7 @@ import {
   nativeCuts,
   nativeInlines,
   scanInlineFootnotes,
+  writtenLink,
   type DollarMath,
   type NativeInline,
 } from "./render-inline";
@@ -468,16 +470,8 @@ export function computeDecorations(
   // accesa: i loro messaggi, dove l'albero non si decora.
   const commentsOn = commentsDeclared(forms);
   const messages: { from: number; to: number }[] = [];
-  const liveLink = (link: SyntaxNode): NativeInline | null => {
-    if (link.name === "Link" && FOOTNOTE_REFERENCE.test(doc.sliceString(link.from, link.to))) {
-      return { from: link.from, to: link.to };
-    }
-    const marks = link.getChildren("LinkMark");
-    const closer = marks.find((mark) => doc.sliceString(mark.from, mark.from + 1) === "]");
-    if (!marks.length || !closer || !link.getChild("URL")) return null;
-    if (link.name === "Image") return { from: link.from, to: link.to };
-    return { from: link.from, to: link.to, content: { from: marks[0].to, to: closer.from } };
-  };
+  const sliceDoc = (from: number, to: number) => doc.sliceString(from, to);
+  const liveLink = (link: SyntaxNode): NativeInline | null => writtenLink(sliceDoc, link);
 
   // Decorazione di riga per ogni riga del nodo, clampata a [from, to]:
   // due range visibili che toccano lo stesso blocco non devono duplicare.
@@ -1242,6 +1236,72 @@ export function hiddenDeletion(
     return { changes: { from, to }, range: EditorSelection.cursor(from) };
   });
   if (!special || blocked) return null;
+  return { ...result, scrollIntoView: true, userEvent: forward ? "delete.forward" : "delete.backward" };
+}
+
+/// La cancellazione di una parola (Mod-Backspace, Mod-Canc) con la politica
+/// `mai`, accanto ai segni nascosti (`hidden`): il cursore salta i segni e
+/// cancella la parola che si vede dopo di loro, come `deleteGroupBackward` e
+/// `deleteGroupForward` di CodeMirror, senza entrare nel segno che viene dopo.
+/// Senza questo la parola si fermava al segno: un segno nascosto è atomico, e
+/// un segno di commento non si cancella da solo (`comments/mask.ts`), quindi
+/// il gesto non faceva niente. `null` se nessun cursore sta accanto a un
+/// segno, o c'è una selezione: vale il tasto di sempre.
+export function hiddenGroupDeletion(
+  state: EditorState,
+  hidden: RangeSet<Decoration>,
+  forward: boolean,
+): TransactionSpec | null {
+  if (state.selection.ranges.some((range) => !range.empty)) return null;
+  const hiddenEdge = (pos: number): boolean => {
+    let found = false;
+    hidden.between(pos, pos, (from, to) => {
+      if ((!forward && to === pos && from < pos) || (forward && from === pos && to > pos)) found = true;
+    });
+    return found;
+  };
+  let special = false;
+  const result = state.changeByRange((range) => {
+    let start = range.head;
+    let skipped = false;
+    for (;;) {
+      let next = -1;
+      hidden.between(start, start, (from, to) => {
+        if (!forward && to === start && from < start) next = from;
+        if (forward && from === start && to > start) next = to;
+      });
+      if (next < 0) break;
+      start = next;
+      skipped = true;
+    }
+    if (skipped) special = true;
+    const line = state.doc.lineAt(start);
+    const categorize = state.charCategorizer(start);
+    let pos = start;
+    for (let category: CharCategory | null = null; ;) {
+      if (pos === (forward ? line.to : line.from)) {
+        if (pos === start && !skipped && line.number !== (forward ? state.doc.lines : 1)) pos += forward ? 1 : -1;
+        break;
+      }
+      if (pos !== start && hiddenEdge(pos)) break;
+      const next = findClusterBreak(line.text, pos - line.from, forward) + line.from;
+      const char = line.text.slice(Math.min(pos, next) - line.from, Math.max(pos, next) - line.from);
+      const nextCategory = categorize(char);
+      if (category !== null && nextCategory !== category) break;
+      if (char !== " " || pos !== start) category = nextCategory;
+      pos = next;
+    }
+    if (pos === start) return { range };
+    const from = Math.min(pos, start);
+    const to = Math.max(pos, start);
+    // La parola che è tutto il contenuto del suo elemento porta via anche i
+    // segni, come l'ultima lettera: nel file non resta un `****`.
+    let element = skipped ? elementOfContent(state, from, to) : null;
+    for (let outer = element; outer; outer = elementOfContent(state, outer.from, outer.to)) element = outer;
+    if (element) return { changes: { from: element.from, to: element.to }, range: EditorSelection.cursor(element.from) };
+    return { changes: { from, to }, range: EditorSelection.cursor(from) };
+  });
+  if (!special) return null;
   return { ...result, scrollIntoView: true, userEvent: forward ? "delete.forward" : "delete.backward" };
 }
 
@@ -3013,9 +3073,23 @@ export function livePreview(
     view.dispatch(plan);
     return true;
   };
+  // La parola intera (Mod-Backspace, Mod-Canc; Alt su macOS, come in
+  // `defaultKeymap`) salta i segni nello stesso modo, fino alla parola che si
+  // vede.
+  const deleteWordNear = (forward: boolean) => (view: EditorView): boolean => {
+    if (view.state.facet(liveReveal) !== "mai" || view.state.readOnly) return false;
+    const hidden = view.plugin(plugin)?.hidden;
+    if (!hidden) return false;
+    const plan = hiddenGroupDeletion(view.state, hidden, forward);
+    if (!plan) return false;
+    view.dispatch(plan);
+    return true;
+  };
   const deleteKeys = Prec.high(keymap.of([
     { key: "Backspace", run: deleteNear(false) },
     { key: "Delete", run: deleteNear(true) },
+    { key: "Mod-Backspace", mac: "Alt-Backspace", run: deleteWordNear(false) },
+    { key: "Mod-Delete", mac: "Alt-Delete", run: deleteWordNear(true) },
   ]));
   // Dopo che la vista ha posato il DOM: i blocchi resi che una modifica ha
   // spostato rimettono a posto le loro coordinate.

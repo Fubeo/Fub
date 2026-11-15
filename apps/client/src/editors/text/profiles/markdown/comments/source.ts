@@ -8,7 +8,7 @@ import type { Extension, Range } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
 import type { SyntaxForm } from "../../../../../host/contract";
-import { threadsIn } from "./mask";
+import { threadsIn } from "./threads";
 import { mayHaveComments } from "./syntax";
 
 const sourceMark = Decoration.mark({ class: "cm-fub-comment-source" });

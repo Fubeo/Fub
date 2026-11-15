@@ -4,7 +4,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "./grammar";
 import { computeDecorations, type LiveDeco, type LiveDecoKind } from "./livepreview";
 import { renderMarkdown } from "./render";
-import { threadsIn } from "./comments/mask";
+import { threadsIn } from "./comments/threads";
 import { parseWikilinkInner } from "../../../../rules/syntax";
 import corpus from "../../../../__fixtures__/corpus-syntax.json";
 

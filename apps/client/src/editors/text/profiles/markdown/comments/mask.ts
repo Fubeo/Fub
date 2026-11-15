@@ -10,18 +10,17 @@
 //
 // Cancellare tutto il testo di un passo toglie anche il commento, nello
 // stesso passo d'annullamento, e un avviso lo dice con «Annulla».
-import { syntaxTree } from "@codemirror/language";
 import { undo } from "@codemirror/commands";
-import { EditorState, StateEffect, Transaction, type Extension, type Text, type TransactionSpec } from "@codemirror/state";
+import { EditorSelection, EditorState, StateEffect, Transaction, type Extension, type Text, type TransactionSpec } from "@codemirror/state";
 import { EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
-import type { SyntaxNode } from "@lezer/common";
 import type { SyntaxForm } from "../../../../../host/contract";
 import { notify } from "../../../../../ui/notify";
 import type { LiveDeco, Reveal } from "../livepreview";
-import { commentsDeclared, containerComments, containerMath, isMathContainer, nativeInlines, writtenLink } from "../render-inline";
 import { liveStrings } from "../strings";
 import { liveReveal } from "../../../live-reveal";
+import { copiedMarkdown } from "./copy";
 import { MARK_LEN, mayHaveComments, threadCuts, threadTail, type CommentThread } from "./syntax";
+import { threadsIn } from "./threads";
 
 /// Come si disegna un commento con la rivelazione `reveal`. Con `mai`
 /// spariscono `{==` e la coda (`==}` e i messaggi); con `riga` ed `elemento`
@@ -53,32 +52,6 @@ export function commentDecorations(thread: CommentThread, reveal: Reveal, doc: T
     out.push({ ...threadTail(thread), kind: "hide" });
   }
   return out;
-}
-
-/// I commenti dei contenitori che toccano `[from, to]`, dall'albero dello
-/// stato. Per chi lavora fuori dalla resa: la cancellazione, la copia, la
-/// Sorgente.
-export function threadsIn(state: EditorState, from: number, to: number, forms?: readonly SyntaxForm[]): CommentThread[] {
-  if (!commentsDeclared(forms)) return [];
-  const doc = state.doc;
-  const slice = (a: number, b: number) => doc.sliceString(a, b);
-  const found: CommentThread[] = [];
-  syntaxTree(state).iterate({
-    from,
-    to,
-    enter(node) {
-      if (!isMathContainer(node.name)) return;
-      const text = slice(node.from, node.to);
-      if (mayHaveComments(text)) {
-        const container: SyntaxNode = node.node;
-        const formulas = containerMath(text, container).formulas;
-        const natives = nativeInlines(container, container.from, container.to, (link) => writtenLink(slice, link), formulas);
-        found.push(...containerComments(text, container, natives, formulas));
-      }
-      return false;
-    },
-  });
-  return found;
 }
 
 /// Il commento tolto con una cancellazione: dove stava nel testo di dopo, e
@@ -133,45 +106,109 @@ export function emptiedThreads(tr: Transaction, forms?: readonly SyntaxForm[]): 
 /// metà: se tocca i segni di un commento senza prenderlo tutto, cancella il
 /// testo che si vede e lascia i segni e i messaggi dove sono. Così selezionare
 /// il passo e cancellarlo, anche con un segno nascosto dentro la selezione,
-/// svuota il passo invece di rompere il commento. Soltanto le modifiche di un
-/// tratto solo, senza effetti oltre all'annuncio per il lettore di schermo
-/// (che resta): le altre restano come sono. `null` se la modifica non tocca
-/// segni.
+/// svuota il passo invece di rompere il commento. La regola vale per ogni
+/// pezzo di una modifica: più cursori, un trascinamento (`move.drop`, che
+/// toglie da un posto e scrive in un altro). Ciò che un pezzo scrive entra al
+/// primo carattere visibile che cancella; il testo trascinato, se è quello
+/// tolto, perde i segni dei commenti che taglia, come una copia. Le modifiche
+/// con effetti oltre all'annuncio per il lettore di schermo (che resta)
+/// restano come sono. `null` se la modifica non tocca segni. Un gesto che,
+/// tolti i segni, non cancella né scrive niente (prende soltanto un segno
+/// nascosto) non cambia il testo: i gesti di tastiera accanto ai segni li
+/// salta prima `livepreview.ts`, fino al testo che si vede.
 export function keepCommentMarks(tr: Transaction, forms?: readonly SyntaxForm[]): TransactionSpec | null {
   if (tr.effects.some((effect) => !effect.is(EditorView.announce))) return null;
-  let change: { fromA: number; toA: number; inserted: Text } | null = null;
-  let count = 0;
-  tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
-    count += 1;
-    change = { fromA, toA, inserted };
-  });
-  const only = change as { fromA: number; toA: number; inserted: Text } | null;
-  if (count !== 1 || !only || only.toA <= only.fromA) return null;
-  const { fromA, toA, inserted } = only;
   const doc = tr.startState.doc;
-  if (!mayHaveComments(doc.sliceString(doc.lineAt(fromA).from, doc.lineAt(toA).to))) return null;
-  const kept: { from: number; to: number }[] = [];
-  for (const thread of threadsIn(tr.startState, fromA, toA, forms)) {
-    if (fromA <= thread.from && thread.to <= toA) continue;
-    for (const cut of threadCuts(thread)) if (cut.from < toA && fromA < cut.to) kept.push(cut);
+  interface Piece {
+    readonly fromA: number;
+    readonly toA: number;
+    readonly fromB: number;
+    readonly toB: number;
+    inserted: string;
+    /// I tratti che restano da cancellare, e dove entra ciò che si scrive.
+    readonly cuts: readonly { from: number; to: number }[];
+    readonly insertAt: number;
   }
-  if (kept.length === 0) return null;
-  kept.sort((a, b) => a.from - b.from);
-  const pieces: { from: number; to: number }[] = [];
-  let at = fromA;
-  for (const cut of kept) {
-    if (cut.from > at) pieces.push({ from: at, to: Math.min(cut.from, toA) });
-    at = Math.max(at, cut.to);
+  const pieces: Piece[] = [];
+  let touched = false;
+  tr.changes.iterChanges((fromA, toA, fromB, toB, text) => {
+    const inserted = text.toString();
+    const unchanged = { fromA, toA, fromB, toB, inserted, cuts: toA > fromA ? [{ from: fromA, to: toA }] : [], insertAt: fromA };
+    if (toA <= fromA || !mayHaveComments(doc.sliceString(doc.lineAt(fromA).from, doc.lineAt(toA).to))) {
+      pieces.push(unchanged);
+      return;
+    }
+    const kept: { from: number; to: number }[] = [];
+    for (const thread of threadsIn(tr.startState, fromA, toA, forms)) {
+      if (fromA <= thread.from && thread.to <= toA) continue;
+      for (const cut of threadCuts(thread)) if (cut.from < toA && fromA < cut.to) kept.push(cut);
+    }
+    if (kept.length === 0) {
+      pieces.push(unchanged);
+      return;
+    }
+    touched = true;
+    kept.sort((a, b) => a.from - b.from);
+    const cuts: { from: number; to: number }[] = [];
+    let at = fromA;
+    for (const cut of kept) {
+      if (cut.from > at) cuts.push({ from: at, to: Math.min(cut.from, toA) });
+      at = Math.max(at, cut.to);
+    }
+    if (at < toA) cuts.push({ from: at, to: toA });
+    // Un pezzo tutto dentro i segni scrive dopo di loro, al bordo del primo
+    // segno che lo contiene: mai in mezzo a un segno.
+    const insertAt = cuts[0]?.from ?? at;
+    pieces.push({ fromA, toA, fromB, toB, inserted, cuts, insertAt });
+  });
+  if (!touched) return null;
+  // Il testo trascinato arriva dagli appunti del trascinamento, già ripulito
+  // (`commentCopy`); un motore che portasse il sorgente grezzo scriverebbe
+  // altrove un `{==` senza il resto.
+  if (tr.isUserEvent("move.drop")) {
+    for (const piece of pieces) {
+      if (piece.inserted === "") continue;
+      const source = pieces.find((other) => other.toA > other.fromA && doc.sliceString(other.fromA, other.toA) === piece.inserted);
+      if (source) piece.inserted = copiedMarkdown(tr.startState, source.fromA, source.toA, forms);
+    }
   }
-  if (at < toA) pieces.push({ from: at, to: toA });
-  const insertAt = pieces[0]?.from ?? fromA;
-  const specs = pieces.map((piece) => ({ from: piece.from, to: piece.to }));
-  if (inserted.length > 0) specs.push({ from: insertAt, to: insertAt, insert: inserted.toString() } as { from: number; to: number });
+  const specs: { from: number; to?: number; insert?: string }[] = [];
+  for (const piece of pieces) {
+    let wrote = piece.inserted === "";
+    for (const cut of piece.cuts) {
+      if (!wrote && cut.from === piece.insertAt) {
+        specs.push({ from: cut.from, to: cut.to, insert: piece.inserted });
+        wrote = true;
+      } else {
+        specs.push({ from: cut.from, to: cut.to });
+      }
+    }
+    if (!wrote) specs.push({ from: piece.insertAt, insert: piece.inserted });
+  }
   const changes = tr.startState.changes(specs);
+  // Dove va un punto del testo di dopo: dentro o al bordo di un pezzo, nello
+  // stesso posto del pezzo rifatto (ciò che si scrive resta intero); fra un
+  // pezzo e l'altro, il testo di prima che non cambia.
+  const inverse = tr.changes.invertedDesc;
+  const mapB = (pos: number): number => {
+    for (const piece of pieces) {
+      if (pos < piece.fromB || pos > piece.toB) continue;
+      const start = changes.mapPos(piece.insertAt, -1);
+      if (pos === piece.toB) return start + piece.inserted.length;
+      return start + Math.min(pos - piece.fromB, piece.inserted.length);
+    }
+    return changes.mapPos(inverse.mapPos(pos));
+  };
+  const selection = tr.selection
+    ? EditorSelection.create(
+        tr.selection.ranges.map((range) => EditorSelection.range(mapB(range.anchor), mapB(range.head))),
+        tr.selection.mainIndex,
+      )
+    : undefined;
   const userEvent = tr.annotation(Transaction.userEvent);
   return {
     changes,
-    selection: { anchor: changes.mapPos(insertAt, 1) },
+    ...(selection ? { selection } : {}),
     scrollIntoView: tr.scrollIntoView,
     effects: tr.effects,
     ...(userEvent ? { userEvent } : {}),
@@ -204,7 +241,8 @@ function removeEmptied(forms?: readonly SyntaxForm[]): Extension {
   });
 }
 
-/// L'avviso dopo un commento tolto, con «Annulla»: se il testo non è cambiato
+/// L'avviso dopo un commento tolto (o portato via da un taglio, che dice
+/// dove è andato), con «Annulla»: se il testo non è cambiato
 /// da allora, annulla la cancellazione (testo e commento tornano); altrimenti
 /// rimette i messaggi dove stava il passo, come commento sul punto, perché la
 /// discussione non vada persa e nessun testo scritto dopo si raddoppi.
@@ -222,7 +260,12 @@ const removalNotice = ViewPlugin.fromClass(class {
       const pending = { at: first.at, messages: removed.map((value) => value.messages).join(""), doc: update.state.doc };
       this.pending = pending;
       const view = this.view;
-      notify(liveStrings.t(removed.length > 1 ? "comments.removed.many" : "comments.removed"), "info", {
+      // Un taglio porta il commento negli appunti (`copy.ts`): l'avviso lo dice.
+      const cut = tr.isUserEvent("delete.cut");
+      const message = cut
+        ? removed.length > 1 ? "comments.cut.many" : "comments.cut"
+        : removed.length > 1 ? "comments.removed.many" : "comments.removed";
+      notify(liveStrings.t(message), "info", {
         label: liveStrings.t("comments.removed.undo"),
         hint: liveStrings.t("comments.removed.undo.hint"),
         run: () => {

@@ -193,6 +193,9 @@ const IT = {
   "comments.removed.many": "Commenti tolti insieme al testo commentato.",
   "comments.removed.undo": "Annulla",
   "comments.removed.undo.hint": "Rimette il commento con la sua discussione",
+  // Tagliare tutto il testo di un passo sposta anche il commento (come Word).
+  "comments.cut": "Il commento è andato col testo tagliato: incollalo per rimetterlo.",
+  "comments.cut.many": "I commenti sono andati col testo tagliato: incollalo per rimetterli.",
 } as const;
 
 const EN: Record<keyof typeof IT, string> = {
@@ -382,6 +385,8 @@ const EN: Record<keyof typeof IT, string> = {
   "comments.removed.many": "Comments removed together with the commented text.",
   "comments.removed.undo": "Undo",
   "comments.removed.undo.hint": "Brings back the comment and its discussion",
+  "comments.cut": "The comment went with the cut text: paste it to bring it back.",
+  "comments.cut.many": "The comments went with the cut text: paste it to bring them back.",
 };
 
 // Il catalogo nasce alla prima frase, non all'import: chi importa la Live

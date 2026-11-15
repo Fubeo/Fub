@@ -23,6 +23,8 @@ import { syntaxTree } from "@codemirror/language";
 import type { Tree } from "@lezer/common";
 import { markdownGrammar } from "./grammar";
 import { commentCutsOf, nativeCuts, nativeInlines } from "./render-inline";
+import { threadsIn } from "./comments/threads";
+import { mayHaveComments } from "./comments/syntax";
 import { textSpans } from "../../../../rules/syntax";
 import { type CursorElement, elementMarksAt, HTML_TWIN, type ElementMarks } from "./cursor-elements";
 import { emptyPairsOf, heldPairAt, openedPair, type EmptyPair } from "./empty-pair";
@@ -869,7 +871,29 @@ function toggleRange(state: EditorState, range: SelectionRange, element: FormatE
   const lead = text.length - text.trimStart().length;
   if (lead === text.length || onlyMarks(state, range.from, range.to)) return atCursor(state, range.to, element);
   const trail = text.length - text.trimEnd().length;
-  return onSelection(state, range, range.from + lead, range.to - trail, element);
+  const [from, to] = wholeComments(state, range.from + lead, range.to - trail);
+  return onSelection(state, range, from, to, element);
+}
+
+/// Il tratto `from`–`to` allargato ai commenti che taglia (`comments/`): i
+/// segni di un commento non si vedono in Scrittura, e un tratto che ne prende
+/// uno solo metterebbe i segni del formato in mezzo al commento
+/// (`**Il {==passo**==}{>>…<<}`). Un tratto che sta tutto dentro il testo di
+/// un passo resta com'è: si formatta il testo commentato.
+function wholeComments(state: EditorState, from: number, to: number): [number, number] {
+  const line = state.doc.lineAt(from);
+  if (!mayHaveComments(state.sliceDoc(line.from, state.doc.lineAt(to).to))) return [from, to];
+  let a = from;
+  let b = to;
+  for (const thread of threadsIn(state, from, to)) {
+    if (thread.to <= from || to <= thread.from) continue;
+    if (from <= thread.from && thread.to <= to) continue;
+    const passage = thread.passage;
+    if (passage && passage.contentFrom <= from && to <= passage.contentTo) continue;
+    a = Math.min(a, thread.from);
+    b = Math.max(b, thread.to);
+  }
+  return [a, b];
 }
 
 /// Il gesto di `element` su ogni selezione.

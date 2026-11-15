@@ -7,6 +7,7 @@ import { inContentSpace, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../
 import { readClipboard } from "../../../../platform/clipboard";
 import { escapeLinkLabel, linkDestination } from "./link-syntax";
 import { AddressChoiceWidget, bareUrl } from "./link-card";
+import { carriedMarkdown } from "./comments/copy";
 
 // Un commento CriticMarkup (`{>>…<<}`, T21) è Markdown di Fub: incollato da
 // una nota resta commento, invece di passare dall'HTML che non lo porta.
@@ -393,6 +394,14 @@ const addressChoiceGestures = EditorView.domEventHandlers({
 const pasteHandler = EditorView.domEventHandlers({
   paste(event, view) {
     if (view.state.readOnly || view.compositionStarted || !event.clipboardData) return false;
+    // Il testo di un passo tagliato in Fub torna col suo commento
+    // (`comments/copy.ts`); nel codice entra il testo semplice.
+    const carried = carriedMarkdown(event.clipboardData);
+    if (carried !== null && !isStrictlyInsideCode(view.state, view.state.selection.main.from)) {
+      event.preventDefault();
+      view.dispatch(view.state.replaceSelection(carried), { userEvent: "input.paste" });
+      return true;
+    }
     const link = linkOverSelection(view, event.clipboardData);
     if (link !== null) {
       event.preventDefault();
