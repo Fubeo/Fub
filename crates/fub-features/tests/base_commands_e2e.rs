@@ -349,3 +349,178 @@ fn una_chiave_gia_com_e_non_scrive_e_non_annulla_niente() {
     assert!(outcome.undo.is_none(), "niente da annullare");
     assert_eq!(source(&ws, BASE_FILE), BEFORE);
 }
+
+// I gesti della barra della Base (T15): ognuno manda una sola chiave, con il
+// valore nella forma che il client costruisce (`apps/client/src/editors/base/
+// filter.ts` e `sort.ts`). Qui si vede quali righe quel valore scrive, e che il
+// piano lo rilegge uguale.
+
+/// Una Base con la vista dei gesti in YAML a blocchi, e un'altra che nessun
+/// gesto tocca.
+const GESTI: &str = "# Opere in prestito.\nviews:\n  - name: Tabella   # la vista dei gesti\n    type: table\n  - name: Bacheca\n    type: kanban\n";
+
+/// Scrive `key` della vista Tabella con `value` (JSON, o niente per toglierla),
+/// con la revisione del file, e torna il testo nuovo.
+fn gesto(ws: &mut Workspace, key: &str, value: Option<Value>) -> String {
+    let base = revision(ws, BASE_FILE);
+    let mut args = json!({ "doc": BASE_FILE, "view": "Tabella", "key": key, "base": base });
+    if let Some(value) = value {
+        args["value"] = Value::String(value.to_string());
+    }
+    invoke(ws, BASE_VIEW_SET, args, InvokeMode::Apply).expect("il gesto si scrive");
+    source(ws, BASE_FILE)
+}
+
+/// Le righe che stanno fra la vista dei gesti e quella accanto.
+fn con(righe: &str) -> String {
+    GESTI.replace("    type: table\n", &format!("    type: table\n{righe}"))
+}
+
+#[test]
+fn il_filtro_composto_a_vista_scrive_solo_filters() {
+    let (_vault, mut ws) = with_base(GESTI);
+    let filtro = json!({ "and": [
+        { "condition": { "property": "stato", "op": "is", "value": "Arrivata" } },
+        { "condition": { "property": "valore", "op": "greater_than", "value": 3000 } },
+    ] });
+    assert_eq!(
+        gesto(&mut ws, "filters", Some(filtro)),
+        con("    filters:\n      and:\n      - condition:\n          property: stato\n          op: is\n          value: Arrivata\n      - condition:\n          property: valore\n          op: greater_than\n          value: 3000\n"),
+        "solo la chiave filters; commenti e vista accanto restano",
+    );
+}
+
+#[test]
+fn il_filtro_come_ricerca_scrive_l_oppure_e_l_ultima_etichetta_lo_toglie() {
+    let (_vault, mut ws) = with_base(GESTI);
+    let filtro = json!({ "or": [
+        { "condition": { "property": "stato", "op": "contains", "value": "Arrivata" } },
+        { "not": { "condition": { "file": "path", "op": "in_folder", "value": "Archivio" } } },
+    ] });
+    assert_eq!(
+        gesto(&mut ws, "filters", Some(filtro)),
+        con("    filters:\n      or:\n      - condition:\n          property: stato\n          op: contains\n          value: Arrivata\n      - not:\n          condition:\n            file: path\n            op: in_folder\n            value: Archivio\n"),
+    );
+    assert_eq!(
+        gesto(&mut ws, "filters", None),
+        GESTI,
+        "togliere l'ultima etichetta riporta i byte di prima"
+    );
+}
+
+#[test]
+fn ordina_e_proprieta_scrivono_sort_e_order_e_basta() {
+    let (_vault, mut ws) = with_base(GESTI);
+    let sort = "    sort:\n      - key: consegna\n        descending: true\n";
+    assert_eq!(
+        gesto(
+            &mut ws,
+            "sort",
+            Some(json!([{ "key": "consegna", "descending": true }]))
+        ),
+        con(sort),
+    );
+    assert_eq!(
+        gesto(
+            &mut ws,
+            "order",
+            Some(json!(["file.name", "stato", "consegna"]))
+        ),
+        con(&format!(
+            "    order:\n      - file.name\n      - stato\n      - consegna\n{sort}"
+        )),
+        "le colonne entrano senza toccare l'ordinamento",
+    );
+    assert_eq!(
+        gesto(
+            &mut ws,
+            "order",
+            Some(json!(["stato", "file.name", "consegna"]))
+        ),
+        con(&format!(
+            "    order:\n      - stato\n      - file.name\n      - consegna\n{sort}"
+        )),
+        "trascinare una colonna riscrive soltanto order",
+    );
+    assert_eq!(gesto(&mut ws, "order", None), con(sort));
+}
+
+/// Le righe che la vista Tabella del file lascia, su due opere con una data,
+/// un numero e uno stato per nota.
+fn righe(source: &str) -> Vec<String> {
+    use fub_abi::{IndexProvider, IndexQuery};
+    let date =
+        |m: u8, d: u8| json!({"kind":"date","value":{"year":2026,"month":m,"day":d,"time":null}});
+    let query = json!({"version":1,"op":"derive","source":source,"view":"Tabella","now_ms":0,"container":null,"rows":[
+        {"doc":"Opere/A.md","props":{"consegna":date(2,24),"valore":{"kind":"number","value":2600.0},"stato":{"kind":"text","value":"Arrivata"}}},
+        {"doc":"Opere/B.md","props":{"consegna":date(3,18),"valore":{"kind":"number","value":7300.5},"stato":{"kind":"text","value":"In viaggio"}}}
+    ]});
+    let answer = fub_features::BaseIndex::new()
+        .query(IndexQuery::Custom {
+            ns: "fub.base".into(),
+            query,
+        })
+        .expect("la vista si deriva");
+    let answer = serde_json::to_value(answer).expect("json");
+    let rows = answer
+        .pointer("/value/rows")
+        .or(answer.pointer("/rows"))
+        .and_then(Value::as_array)
+        .expect("righe");
+    rows.iter()
+        .map(|row| row["doc"].as_str().expect("doc").to_owned())
+        .collect()
+}
+
+#[test]
+fn un_filtro_su_una_data_e_su_un_numero_scritto_dalla_barra_trova_le_righe() {
+    let (_vault, mut ws) = with_base(GESTI);
+    // La barra scrive la data nella forma ISO e il numero come numero.
+    let scritto = gesto(
+        &mut ws,
+        "filters",
+        Some(
+            json!({ "condition": { "property": "consegna", "op": "greater_than", "value": "2026-03-01" } }),
+        ),
+    );
+    assert_eq!(
+        scritto,
+        con("    filters:\n      condition:\n        property: consegna\n        op: greater_than\n        value: 2026-03-01\n")
+    );
+    assert_eq!(righe(&scritto), ["Opere/B.md"]);
+    let scritto = gesto(
+        &mut ws,
+        "filters",
+        Some(json!({ "condition": { "property": "consegna", "op": "is", "value": "2026-03-18" } })),
+    );
+    assert_eq!(righe(&scritto), ["Opere/B.md"]);
+    let scritto = gesto(
+        &mut ws,
+        "filters",
+        Some(
+            json!({ "condition": { "property": "valore", "op": "greater_than", "value": 3000.5 } }),
+        ),
+    );
+    assert_eq!(
+        scritto,
+        con("    filters:\n      condition:\n        property: valore\n        op: greater_than\n        value: 3000.5\n")
+    );
+    assert_eq!(righe(&scritto), ["Opere/B.md"]);
+    // Un file scritto a mano col numero fra virgolette trova lo stesso.
+    assert_eq!(
+        righe(&con(
+            "    filters:\n      condition: {property: valore, op: greater_than, value: '3000'}\n"
+        )),
+        ["Opere/B.md"]
+    );
+    let scritto = gesto(
+        &mut ws,
+        "filters",
+        Some(json!({ "condition": { "property": "stato", "op": "contains", "value": "VIAGGIO" } })),
+    );
+    assert_eq!(
+        righe(&scritto),
+        ["Opere/B.md"],
+        "contiene non distingue le maiuscole"
+    );
+}

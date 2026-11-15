@@ -1,6 +1,9 @@
 // La selezione di blocchi (H7): Esc seleziona il blocco del cursore, Shift-↑/↓
 // allarga ai fratelli, ↑/↓ passano al blocco vicino, Canc e Backspace
-// eliminano, Mod-d duplica, Invio ed Esc tornano al testo. È della superficie,
+// eliminano, Invio ed Esc tornano al testo; Mod-d la duplica e Mod-a la fa di
+// tutti i blocchi (`keys.ts`, sopra la mappa del profilo). Esiste soltanto coi
+// blocchi accesi (`editor.blocks`): spegnerli toglie il campo, e ciò che era
+// scelto resta una selezione di testo. È della superficie,
 // come la selezione di testo: un altro riquadro sulla stessa nota non la vede.
 // Sotto c'è una selezione di CodeMirror che copre i blocchi interi, così
 // copiare, tagliare e incollare lavorano sul loro Markdown senza un ramo a
@@ -202,12 +205,6 @@ const remove = whenSelected((view, blocks, selected) => {
   return true;
 });
 
-const duplicate = whenSelected((view, blocks, selected) => {
-  if (view.state.readOnly) return false;
-  view.dispatch(duplicateRun(view.state, blocks, selected));
-  return true;
-});
-
 /// Esc è dell'ospite dell'editor (`BlocksOptions.escapeLeaves`, una scheda
 /// della lavagna): sul testo non seleziona il blocco, così l'ospite lo riceve
 /// libero ed esce; una selezione di blocchi già fatta Esc la chiude ancora.
@@ -222,7 +219,6 @@ export const blockSelectionKeys: readonly KeyBinding[] = [
   { key: "Shift-ArrowDown", run: step(1, true) },
   { key: "Delete", run: remove },
   { key: "Backspace", run: remove },
-  { key: "Mod-d", run: duplicate },
 ];
 
 const selectedLine = Decoration.line({ class: "cm-fub-block-selected" });
