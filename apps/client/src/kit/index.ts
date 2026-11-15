@@ -55,6 +55,15 @@ export type {
 
 export { pressable } from "./press";
 
+// La lingua dei menu: tessera, riga ed etichetta, comuni al menu, allo spazio
+// comandi e al «/».
+export { createTile } from "./tile";
+export type { TileOptions, TileParts } from "./tile";
+export { createRow, markLit, markPressed } from "./row";
+export type { RowHandle, RowOptions, RowParts } from "./row";
+export { createGroupLabel } from "./group-label";
+export type { GroupLabelOptions } from "./group-label";
+
 export { RESIST_LIMIT_PX, mountSplitter, resist } from "./splitter";
 export type { SplitterHandle, SplitterOptions } from "./splitter";
 

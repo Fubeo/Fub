@@ -31,6 +31,30 @@ accanto («Copia come HTML»), ← e → cambiano formato e Invio copia; chi asc
 sente il nome intero su ogni tastino. Con più scelte, o senza un segno
 riconoscibile, resta il sottomenu.
 
+Le parti del menu sono i pezzi della **lingua dei menu** del kit, gli stessi
+che usano lo spazio comandi e il «/»:
+
+- **la riga** (`kit/row.ts`): una linea sola da 34 px (38 nello spazio
+  comandi), con la figura da 24, il nome che si taglia coi puntini, a destra
+  la nota in grigio o la scorciatoia in monospazio, e la freccia di un
+  sottomenu;
+- **la tessera** (`kit/tile.ts`): affiancata, come le parti della barra degli
+  appunti, o in pila, una figura in un quadrato da 40 px con gli angoli da 11
+  e il nome sotto; senza icona, il quadrato porta un segno o la prima lettera
+  del nome;
+- **l'etichetta di un gruppo** (`kit/group-label.ts`): 11,5 px, quieta; per chi
+  ascolta, il gruppo ha già il suo nome, o lo prende da lei.
+
+Ogni pezzo ha gli stessi stati: acceso (la figura d'accento; il fondo della
+scelta è la pastiglia di chi lo monta), premuto (la spunta d'accento al posto
+della figura, senza moto quando il movimento è ridotto) e spento, che resta al
+suo posto e dice il perché. Il catalogo li mostra nella scena `kit-lingua` del
+banco.
+
+Nessun menu scrive i tasti per muoversi dentro di lui (frecce, Invio, Esc):
+li mostra la riga dei suggerimenti. Una scorciatoia con un modificatore, come
+Ctrl+Invio, è un gesto e si scrive.
+
 **La scelta è una sola**, fra la barra e l'elenco: la indica una pastiglia che
 scivola da una voce all'altra, o nella barra una linguetta chiara e rialzata.
 Il puntatore la sposta e quando esce dal menu resta dov'era; mai due cose
@@ -243,8 +267,14 @@ griglia delle tabelle in Live ha il suo
 - `apps/client/src/editors/text/profiles/markdown/surface.ts` e `menu.ts`: le
   voci di una nota e ciò che sta sotto il puntatore;
 - `apps/client/src/i18n/lexicon.ts`: il lessico dei menu;
+- `apps/client/src/kit/row.ts`, `tile.ts` e `group-label.ts`: riga, tessera ed
+  etichetta, vestite in `apps/client/src/theme/scrittoio/skin/kit.css`;
 - `apps/client/src/ui/menu-budget.test.ts` coi casi di `ui/menu-cases.ts`: il
-  bilancio di ogni menu;
+  bilancio di ogni menu (al più nove voci e quattro gruppi al primo livello,
+  nessun tasto per muoversi scritto nel menu);
+- `apps/client/src/editors/text/profiles/markdown/three-doors.test.ts`: le
+  stesse azioni di blocco dal tasto destro, dalla barra di formato, dalla
+  maniglia e da Ctrl O, e nessun pulsante sopra un blocco a riposo;
 - `apps/client/src/ui/system-menu.ts`: il menu della WebView spento dove Fub
   non ne ha uno;
 - `apps/client/src/panels/mini-bar.ts`: la mini-barra;
