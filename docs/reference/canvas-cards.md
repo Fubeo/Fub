@@ -5,10 +5,8 @@
 > scheda, le regole che scelgono le schede vive e le immagini ferme.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/cards.ts` e le prove
 > in `apps/client/src/editors/canvas/cards.test.ts`; per le misure di nascita
-> e la griglia, il nucleo (`born_size` e `layout` in
-> `crates/fub-canvas-core/src/layout.rs`, i vettori in
-> `apps/client/src/__fixtures__/canvas-ops/`); per l'ordine dei file lasciati
-> cadere, `apps/client/src/editors/canvas/drop-layout.ts`; per le
+> e la griglia, `crates/fub-canvas-core/src/layout.rs`; per l'ordine dei file
+> lasciati cadere, `apps/client/src/editors/canvas/drop-layout.ts`; per le
 > estensioni, `apps/client/src/ui/format-kind.ts` e
 > `apps/client/src/editors/media/media-types.ts`.
 
@@ -79,9 +77,8 @@ scheda non diventa mai il disegno vivo. Una specie senza renderer registrato
 
 ## Le misure di nascita
 
-Una scheda portata sulla lavagna nasce con la misura della sua specie. Le
-misure le dà il nucleo (`born_size` in `crates/fub-canvas-core/src/layout.rs`)
-quando la tela scrive `add_card` senza misura (LIC T24):
+Una scheda portata sulla lavagna nasce con la misura della sua specie, che dà
+il nucleo (`born_size`) quando la tela scrive `add_card` senza misura:
 
 | Specie | Misura di nascita |
 |---|---|
@@ -92,39 +89,28 @@ quando la tela scrive `add_card` senza misura (LIC T24):
 | `web` | 320×120 |
 | `file`, `craft` | 320×160 |
 
-La misura del contenuto (i pixel di un'immagine) va nel campo `content_size`
-di `add_card`. «Spargi le pagine…» (T72) dà a ogni pagina la misura della sua
-con l'operazione `spread_pages` del nucleo.
+La misura del contenuto va in `content_size`; «Spargi le pagine…» è `spread_pages`.
 
-Le misure di nascita non si agganciano alla griglia di 8 px: si arrotondano
-all'intero più vicino, e nessun lato scende sotto 40 px, la misura minima
-della tela. Così un'immagine 16:9 nasce 480×270, esatta. Un'immagine molto
-stretta, come 1×4000, ha il lato corto a 40 px: lì la proporzione non si
-tiene. Ridimensionare a mano una scheda, invece, aggancia a 8 px come prima
+Le misure di nascita non si agganciano a 8 px: si arrotondano all'intero, con
+nessun lato sotto 40 px (un'immagine 16:9 nasce 480×270; una 1×4000 ha il lato
+corto a 40 e perde la proporzione). Ridimensionare a mano aggancia a 8 px
 (salvo con Maiusc, che tiene le proporzioni).
 
-Quando si lasciano insieme più schede, si dispongono con `layout` di tipo
-`grid` del nucleo: `ceil(sqrt(n))` colonne, riempite per righe nell'ordine in
-cui la tela dà le schede, cioè per nome del file (`sortedDrop` in
-`drop-layout.ts`: `Intl.Collator` coi numeri per valore, «foto 2» prima di
-«foto 10»). Le posizioni si agganciano a 8 px, e la colonna o la riga dopo
-parte al primo multiplo di 8 che lascia almeno 24 px dopo il bordo della
-precedente (la regola è in [La lavagna come codice](canvas-code.md)). Oltre 12
-schede, `group` le raccoglie in un gruppo.
+Più schede lasciate insieme si dispongono con `layout` `grid`: `ceil(sqrt(n))`
+colonne, riempite per righe per nome del file (`sortedDrop`, «foto 2» prima di
+«foto 10»), agganciate a 8 px con almeno 24 px fra una e l'altra
+([La lavagna come codice](canvas-code.md)). Oltre 12, `group` le raccoglie.
 
 ### Il rilascio e l'incolla
 
-La tela (`#intake` in `engine.ts`) scrive i file trascinati dal computer o
-dall'albero, o incollati, con una lista sola di operazioni (LIC T24): un
-`add_card` per file, con il suo `id` (dall'opzione `newId` della tela, di serie
-`newNodeId()`) e `content_size` quando la misura si sa; con più file, poi,
-`layout {ids, kind: "grid", x, y}`; oltre 12, `group`. Un file solo nasce
-con `x` e `y` del punto, senza `layout`. Un file che è già in una scheda ne fa
-nascere un'altra.
+La tela (`#intake` in `engine.ts`) scrive i file trascinati o incollati con
+una lista di operazioni: un `add_card` per file, col suo `id` (opzione `newId`
+della tela, di serie `newNodeId()`) e `content_size` se si sa; con più file
+`layout {ids, kind: "grid", x, y}`, oltre 12 `group`. Un file solo nasce in
+`x`, `y`; un file già in una scheda ne fa nascere un'altra.
 
-- la griglia parte dal punto del rilascio, agganciato a 8. Un incolla parte dall'ultimo
-  punto in cui il puntatore è stato visto sulla vista. Se il puntatore ne è
-  uscito, parte dal centro della vista;
+- la griglia parte dal punto del rilascio, agganciato a 8; un incolla
+  dall'ultimo punto del puntatore sulla vista, o dal centro se ne è uscito;
 - la misura di un'immagine viene dalla porta `measureImage` (in
   `editors/core/bootstrap.ts`: i byte dalla `ResourceTransport`, la misura
   da `decodeImage` o dall'immagine decodificata). Se la porta manca,
@@ -147,11 +133,9 @@ nascere un'altra.
   (`canvas-drop-ghost`) mostrano dove nasceranno le schede, uno per file in
   `dataTransfer.items`, o uno solo se non si sa (le voci dell'albero, WebKit
   che non dice i tipi); oltre dodici, la cornice del gruppo col numero
-  (`canvas-drop-ghost-group`). I rettangoli si calcolano una volta
-  all'entrata, compilando senza scrivere le stesse operazioni del rilascio
-  (al più 1000 file), poi seguono il puntatore di `snap(puntatore) −
-  snap(origine)`, senza chiamare il nucleo a ogni movimento. Spariscono
-  all'uscita, senza scrivere niente, e al rilascio.
+  (`canvas-drop-ghost-group`). Si compilano una volta all'entrata, senza
+  scrivere (al più 1000 file), poi seguono il puntatore agganciato a 8;
+  spariscono all'uscita, senza scrivere niente, e al rilascio.
 
 Il deposito dei file del computer (`depositCanvasFiles`) si ferma al primo
 file che l'host rifiuta, con un `CanvasDepositError` che porta i percorsi
