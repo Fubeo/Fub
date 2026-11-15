@@ -73,9 +73,11 @@ o `plan`.
   solo se la voce dice `writes: file`.
 - **R8, la GUI scrive come il codice.** Ogni voce `code` o `composed` di una
   fonte in `merged`, che scrive il file e ha un menu, una barra, un campo o un
-  tasto, un gesto o gli appunti, ha una riga in `SETUP` di `parity.test.ts`: la tela si monta su
+  tasto, un gesto o gli appunti, ha una riga in `SETUP` di `parity.test.ts`:
+  un giro, o una lista di giri, uno per `via`, e ogni gesto e gesto degli
+  appunti della voce ha il suo. In ogni giro la tela si monta su
   `board.json` col seme `1`, sceglie gli id delle `ops` della voce (o quelli
-  della riga), fa l'azione con uno dei `gui` della voce, e il documento deve
+  della riga), fa l'azione con quel `gui` della voce, e il documento deve
   essere quello di `compile(ops, 1)` su un secondo nucleo. Poi la GUI deve
   avere fatto esattamente gli annulla della riga (di serie uno): ognuno annulla
   qualcosa, l'ultimo torna a `board.json` e dopo non ne resta. Una riga può dare
