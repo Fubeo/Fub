@@ -2849,6 +2849,33 @@ kbd,
   color: var(--text);
 }
 
+/* ── La banda: la somma delle celle scelte ───────────────────────────────── */
+/* «Somma 2.520 · Media 840 · Conteggio 3» al posto delle parole: la view
+   delle parole si fa da parte finché la somma c'è. Ogni conto è un bottone
+   che copia il suo numero; il primo numero è in inchiostro, gli altri a voce
+   bassa. */
+.status-band[data-selection-sum] .views-status > [data-view-id="stats"] {
+  display: none;
+}
+.status-sum {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  white-space: nowrap;
+}
+.status-sum-part {
+  gap: 0.3em;
+  padding: 0 var(--space-1);
+}
+.status-sum-part[data-lead] > .status-sum-value {
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+.status-sum-dot {
+  padding: 0 var(--space-1);
+  color: var(--muted);
+}
+
 /* ── La concentrazione ───────────────────────────────────────────────────── */
 
 /* La scrivania si spegne di un gradino: il foglio resta l'unica cosa chiara.
@@ -11182,6 +11209,12 @@ kbd,
 }
 .base-table tbody tr:hover > td {
   background: var(--sheet-2);
+}
+/* Le celle scelte per la somma nella banda (E24): lo stesso velo della
+   selezione della Tabella. */
+.base-table tbody td[data-picked],
+.base-table tbody tr:hover > td[data-picked] {
+  background: var(--accent-veil);
 }
 /* Il nome della nota apre la nota: inchiostro pieno, e la matita blu al
    passaggio. Vale per la tabella, le schede e la bacheca. */
