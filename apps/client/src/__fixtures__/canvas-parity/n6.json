@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "N6",
-  "max_missing": 4,
+  "max_missing": 2,
   "entries": [
     {
       "id": "N6.card.drop_vault",
@@ -218,36 +218,9 @@
       "source": "N6",
       "gui": [{ "menu": "canvas.spread_pages" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_card",
-          "node": {
-            "type": "file",
-            "file": "Corsi/dispensa.pdf",
-            "subpath": "#page=1",
-            "x": 944,
-            "y": 400,
-            "width": 360,
-            "height": 480
-          }
-        },
-        {
-          "op": "add_card",
-          "node": {
-            "type": "file",
-            "file": "Corsi/dispensa.pdf",
-            "subpath": "#page=2",
-            "x": 1328,
-            "y": 400,
-            "width": 360,
-            "height": 480
-          }
-        }
-      ],
-      "computes": "la fila accanto, l'a capo dopo 10, il gruppo sopra 12",
-      "target_ops": [{ "op": "spread_pages", "id": "p1", "pages": [1, 2] }],
-      "task": "T14"
+      "state": "code",
+      "ops": [{ "op": "spread_pages", "id": "p1", "pages": "1-2", "page_count": 12 }],
+      "note": "Le misure e i posti sono quelli di `spreadLayout` e `bornSize` della GUI (`spread-pages-parity.test.ts`). `page_count` e `page_sizes` li legge `canvas.apply` dal PDF; qui, senza file, il conto si dà."
     },
     {
       "id": "N6.parts.excerpt",
@@ -255,17 +228,12 @@
       "source": "N6",
       "gui": [{ "menu": "canvas.parts" }],
       "writes": "file",
-      "state": "by_hand",
+      "state": "code",
       "ops": [
-        {
-          "op": "set",
-          "id": "p1",
-          "fields": { "subpath": "#page=3", "fub:parts": { "kind": "pages", "pages": [3, 4] } }
-        }
+        { "op": "excerpt", "id": "n1", "part": { "kind": "sections", "sections": ["Varianza", "Media"] }, "in_place": true },
+        { "op": "excerpt", "id": "p1", "part": { "kind": "pages", "pages": [3, 4] } }
       ],
-      "computes": "la forma di `fub:parts` (N6 T73) e il `subpath` che la prima parte dà",
-      "target_ops": [{ "op": "excerpt", "id": "p1", "part": { "kind": "pages", "pages": [3, 4] } }],
-      "task": "T14"
+      "note": "Con `in_place` la scheda stessa diventa l'estratto, come il selettore delle sezioni; senza, l'estratto è una scheda nuova accanto. A differenza del ritaglio della GUI l'altezza non cambia: `#finishCrop` la rifà dalle proporzioni della zona (`#cropHeightFor`, misurata sul DOM), anche con «Togli il ritaglio» (vettore `excerpt-image-crop-in-place-keeps-height.json`)."
     },
     {
       "id": "N6.ink.page",

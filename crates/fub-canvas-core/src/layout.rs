@@ -18,15 +18,21 @@ pub mod arrange;
 use crate::model::{Canvas, CanvasEdgeSide, CanvasNode, CanvasNodeType, MAX_SAFE_INTEGER};
 
 /// Il passo dell'aggancio alla griglia: `CANVAS_SNAP` di `engine.ts`.
-const SNAP: f64 = 8.0;
+pub(crate) const SNAP: f64 = 8.0;
 /// Lo spazio fra schede impilate: sopra o sotto una scheda, sotto la
 /// precedente in una lista automatica, il margine dello scivolamento.
-const STACK_GAP: f64 = 24.0;
+/// `DROP_GAP` di `drop-layout.ts`.
+pub(crate) const STACK_GAP: f64 = 24.0;
 /// Lo spazio fra schede affiancate: a destra o a sinistra di una scheda, e a
 /// destra del contenuto per una scheda automatica.
 const SIDE_GAP: f64 = 48.0;
 /// La misura più piccola di un lato, per le misure che vengono dalle proporzioni.
 const MIN_SIDE: f64 = 40.0;
+/// Il lato più grande di una misura di nascita che viene dalle proporzioni:
+/// un PDF largo 360 con una pagina più di 277 volte alta che larga, o una zona
+/// quasi senza larghezza, non nasce alto miliardi. Oltre, come fuori dai limiti
+/// del modello, vale la misura di serie.
+pub const MAX_BORN_SIDE: f64 = 100_000.0;
 /// Quanti scivolamenti al più prima di rinunciare e andare oltre tutto.
 const MAX_SLIDES: usize = 1000;
 
@@ -173,10 +179,11 @@ pub fn kind_of_path(path: &str) -> CardKind {
 /// e l'altezza stimata da [`estimate_text_height`]. `content` è la misura del
 /// contenuto: i punti della prima pagina di un PDF, i pixel di un'immagine.
 /// Con una misura finita e positiva, un PDF è largo 360 e alto secondo la sua
-/// pagina, un'immagine ha il lato lungo 480 e l'altro secondo le proporzioni.
-/// Senza misura (o con una misura non finita, non positiva, o che fa uscire il
-/// lato dai limiti del modello) vale la misura di serie. Nessun lato, calcolato
-/// dalle proporzioni, scende sotto 40.
+/// pagina, un'immagine ha il lato lungo 480 e l'altro secondo le proporzioni,
+/// come `bornSize` di `drop-layout.ts`: il lato si arrotonda all'intero e non
+/// si aggancia (A-16). Senza misura (o con una misura non finita, non positiva,
+/// o che fa uscire il lato oltre [`MAX_BORN_SIDE`]) vale la misura di serie.
+/// Nessun lato, calcolato dalle proporzioni, scende sotto 40.
 pub fn born_size(kind: CardKind, text: Option<&str>, content: Option<(f64, f64)>) -> (f64, f64) {
     match kind {
         CardKind::Text => {
@@ -192,15 +199,15 @@ pub fn born_size(kind: CardKind, text: Option<&str>, content: Option<(f64, f64)>
         CardKind::Sheet => (480.0, 304.0),
         CardKind::Pdf => known_content(content)
             .and_then(|(width, height)| {
-                proportional(PDF_WIDTH * height / width).map(|side| (PDF_WIDTH, side))
+                born_side(PDF_WIDTH * height / width).map(|side| (PDF_WIDTH, side))
             })
             .unwrap_or((PDF_WIDTH, 480.0)),
         CardKind::Image => known_content(content)
             .and_then(|(width, height)| {
                 if width >= height {
-                    proportional(IMAGE_SIDE * height / width).map(|side| (IMAGE_SIDE, side))
+                    born_side(IMAGE_SIDE * height / width).map(|side| (IMAGE_SIDE, side))
                 } else {
-                    proportional(IMAGE_SIDE * width / height).map(|side| (side, IMAGE_SIDE))
+                    born_side(IMAGE_SIDE * width / height).map(|side| (side, IMAGE_SIDE))
                 }
             })
             .unwrap_or((IMAGE_SIDE, 360.0)),
@@ -494,7 +501,7 @@ fn line_chars(text: &str) -> impl Iterator<Item = usize> + '_ {
 }
 
 /// La misura del contenuto, se è finita e positiva nei due lati.
-fn known_content(content: Option<(f64, f64)>) -> Option<(f64, f64)> {
+pub(crate) fn known_content(content: Option<(f64, f64)>) -> Option<(f64, f64)> {
     content.filter(|(width, height)| positive(*width) && positive(*height))
 }
 
@@ -502,10 +509,19 @@ fn positive(value: f64) -> bool {
     value.is_finite() && value > 0.0
 }
 
-/// Un lato calcolato dalle proporzioni: agganciato, non sotto 40. Un valore che
+/// Un lato calcolato dalle proporzioni per [`content_height`]: agganciato, non sotto 40. Un valore che
 /// non è finito, o che non sta in un intero sicuro, non dà nulla: vale la
 /// misura di serie.
 fn proportional(value: f64) -> Option<f64> {
     let side = snap(value);
     (side.is_finite() && side <= MAX_SIDE).then_some(side.max(MIN_SIDE))
+}
+
+/// Un lato di nascita calcolato dalle proporzioni, come `roundSize` di
+/// `drop-layout.ts`: arrotondato all'intero, non sotto 40. Un valore che non è
+/// finito, o che supera [`MAX_BORN_SIDE`], non dà nulla: vale la misura di
+/// serie.
+fn born_side(value: f64) -> Option<f64> {
+    let side = value.round();
+    (side.is_finite() && side <= MAX_BORN_SIDE).then_some(side.max(MIN_SIDE))
 }

@@ -275,8 +275,9 @@ pub struct Warning {
 }
 
 impl Warning {
-    /// L'avviso di una nota della compilazione.
-    fn of_note(note: &CompileNote) -> Self {
+    /// L'avviso di una nota della compilazione, o di una nota di chi ha
+    /// riempito la lista prima di controllarla.
+    pub fn of_note(note: &CompileNote) -> Self {
         Self {
             code: match note.code {
                 NoteCode::ShapeDropped => WarningCode::ShapeDropped,
@@ -284,6 +285,8 @@ impl Warning {
                 NoteCode::LineSkipped => WarningCode::LineSkipped,
                 NoteCode::IndentRounded => WarningCode::IndentRounded,
                 NoteCode::InkKept => WarningCode::InkKept,
+                NoteCode::PagesCut => WarningCode::PagesCut,
+                NoteCode::PageCountFromFile => WarningCode::PageCountFromFile,
             },
             ids: Vec::new(),
             estimated_height: None,
@@ -314,6 +317,12 @@ pub enum WarningCode {
     /// Nota: un tratto che Fub non disegna, o un livello estraneo, sotto il
     /// cammino di `erase_along`, non si taglia.
     InkKept,
+    /// Nota: le pagine chieste da `spread_pages` oltre l'ultima del PDF si
+    /// tagliano.
+    PagesCut,
+    /// Nota: il `page_count` dato non è quello del PDF, e vale quello letto
+    /// dal file.
+    PageCountFromFile,
 }
 
 /// Controlla `raw`, una lista di operazioni, sulla lavagna `canvas`, con gli id

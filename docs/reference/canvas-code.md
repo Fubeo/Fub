@@ -220,11 +220,11 @@ casi con i numeri stanno in `apps/client/src/__fixtures__/canvas-layout.json`.
   un punto in testa al nome non apre un'estensione (`.md` è `file`).
 - **Misure di nascita.** Il testo è largo 320, o 480 se una riga ha più di 36
   caratteri, e alto quanto dice la stima qui sotto. `note` e `document` sono
-  320×240; `sheet` 480×304; `pdf` 360 di larghezza, e alto `snap(360·h/w)` se
+  320×240; `sheet` 480×304; `pdf` 360 di larghezza, e alto `round(360·h/w)` se
   si conosce la pagina, altrimenti 360×480. `image` ha il lato lungo a 480 e
-  l'altro `snap(480·corto/lungo)`, o 480×360 se la misura non si conosce;
+  l'altro `round(480·corto/lungo)`, o 480×360 se la misura non si conosce;
   `web` 320×120; `craft` e `file` 320×160; `group` 480×320. Un lato ricavato
-  dalle proporzioni non scende sotto 40.
+  dalle proporzioni è intero, non sotto 40; oltre 100 000 vale la serie.
 - **Stima del testo.** Ogni riga ha `cpl = max(8, floor((larghezza − 32) / 8))`
   caratteri. Le righe sono quelle separate da `\n` (o `\r\n`), e ognuna vale
   `max(1, ceil(caratteri / cpl))`, contando i punti di codice Unicode.
@@ -497,6 +497,10 @@ id, la disposizione e i limiti stanno in [Da Mermaid e da una scaletta](canvas-i
 `erase_along` taglia i tratti lungo un cammino largo `size`, come la gomma «Solo il pezzo». Campi, `on` ed errori: [L'inchiostro in codice](canvas-ink-code.md).
 I comandi del Lazo, `move_strokes` e `restyle_strokes`: [Toppa e operazioni](canvas-ink.md#toppa-e-operazioni).
 
+### `spread_pages` ed `excerpt`
+
+`spread_pages` fa una scheda per pagina di un PDF accanto alla sua scheda, come «Spargi le pagine…»; `excerpt` un estratto (`fub:parts`) di un file, nuovo o sul posto. Campi, misure ed errori: [Le pagine e gli estratti in codice](canvas-pages-code.md).
+
 ### Gli id nuovi
 
 Un id nuovo viene dal seme del chiamante (`seed`, un intero a 64 bit senza
@@ -525,11 +529,11 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila (`index
 
 | Errore | Quando |
 |---|---|
-| `UnknownNode` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout`, `convert` o l'`on` di `draw` ed `erase_along` con un id che non è una scheda; il `near` di `insert`, `from_mermaid` o `from_outline`; un arco verso una scheda che non c'è |
+| `UnknownNode` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout`, `convert`, `spread_pages`, `excerpt` o l'`on` di `draw` ed `erase_along` con un id che non è una scheda; il `near` di `insert`, `from_mermaid`, `from_outline` o `excerpt`; un arco verso una scheda che non c'è |
 | `UnknownEdge` | `remove`, `set` o `color` di un id che non è né una scheda né un arco; `reverse` di un id che non è un arco |
 | `DuplicateId` | un id dato che è già preso (anche in `as`); un id ripetuto nella lista di `move`, `remove`, `reorder`, `color`, `align`, `distribute`, `duplicate` o `layout` |
-| `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie, il gruppo o il frammento; un `insert` porta più di 10 000 schede; i [limiti](canvas-import.md#i-limiti-e-gli-errori) di `from_mermaid` e `from_outline`; un tratto di `draw` o un cammino di `erase_along` con più di 10 000 punti; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
-| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto; un testo che `from_mermaid` o `from_outline` non legge ([i loro errori](canvas-import.md#i-limiti-e-gli-errori)); un tratto che non si disegnerebbe; i punti o la forma di `draw` che non fanno un tratto, un cammino di `erase_along` vuoto o troppo costoso, o col suo `aspect` senza una scheda in `on` ([gli errori](canvas-ink-code.md)) |
+| `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie, il gruppo o il frammento; un `insert` porta più di 10 000 schede; i [limiti](canvas-import.md#i-limiti-e-gli-errori) di `from_mermaid` e `from_outline`; un tratto di `draw` o un cammino di `erase_along` con più di 10 000 punti; più di 1 000 pagine in uno `spread_pages`; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
+| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto; un testo che `from_mermaid` o `from_outline` non legge ([i loro errori](canvas-import.md#i-limiti-e-gli-errori)); un tratto che non si disegnerebbe; i punti o la forma di `draw` che non fanno un tratto, un cammino di `erase_along` vuoto o troppo costoso, o col suo `aspect` senza una scheda in `on` ([gli errori](canvas-ink-code.md)); le pagine o la parte di `spread_pages` ed `excerpt` ([i loro errori](canvas-pages-code.md#gli-errori)) |
 | `UnknownStroke` | `erase_strokes`, `move_strokes` o `restyle_strokes` di un id che non è un tratto del livello |
 | `ForeignLayer` | un'operazione dell'inchiostro (`draw` ed `erase_along` compresi) su un livello estraneo |
 

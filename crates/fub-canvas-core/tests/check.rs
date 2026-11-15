@@ -698,11 +698,12 @@ fn l_esempio_della_pagina_e_quello_che_dice_il_codice() {
                 "edges_changed": [],
                 "order_changed": false
             },
-            "outline_after": "cards 3 edges 1 groups 0 bounds 0 0 720×240\n\
+            "outline_after": "cards 4 edges 1 groups 0 bounds 0 0 1160×720\n\
         ink board 1 40 25 2.2×0.4\n\
         1 t1 text \"Ciclo dell'acqua\" 0 0 320×160\n\
         2 t2 text \"Evaporazione\" 400 0 320×160\n\
         3 f1 image \"schemi/acqua.png\" 0 40 320×200\n\
+        4 p1 pdf \"schemi/dispensa.pdf\" 800 240 360×480\n\
         e1 t1 -> t2 \"porta a\""
         })
     );

@@ -98,6 +98,9 @@ pub enum FieldKind {
     /// Un numero maggiore di zero, anche con la virgola: la larghezza della
     /// gomma di `erase_along`.
     Positive,
+    /// Le pagine di `spread_pages`: un testo come nel campo della GUI
+    /// (`"3-7, 9"`, `"20-"`) o una lista di numeri di pagina.
+    Pages,
     /// Un valore qualunque.
     Any,
 }
@@ -614,6 +617,80 @@ pub const OPS: &[OpSpec] = &[
         examples: &[r#"{"op":"convert","id":"t2","file":"Idee/Evaporazione.md"}"#],
     },
     OpSpec {
+        name: "spread_pages",
+        summary_it: "Spargi le pagine del PDF della scheda `id`: una scheda per pagina (`#page=N`), in fila alla sua destra, a capo dopo 10, e in un gruppo oltre 12, come «Spargi le pagine…» della GUI.",
+        fields: &[
+            required("id", FieldKind::Id, "La scheda del PDF."),
+            optional(
+                "pages",
+                FieldKind::Pages,
+                "Le pagine: un testo come nella GUI (`\"3-7, 9\"`, `\"20-\"` fino alla fine) o una lista di numeri, da 1. Di serie tutte. Le pagine oltre l'ultima si tagliano, e un avviso lo dice. Al più 1000.",
+            ),
+            optional(
+                "page_count",
+                FieldKind::Number,
+                "Quante pagine ha il PDF. `canvas.apply` lo legge dal file, e se il file si legge vince il file: si dà solo se il file non si legge.",
+            ),
+            optional(
+                "page_sizes",
+                FieldKind::Points,
+                "Le misure in punti delle pagine, `[[larghezza, altezza], …]` dalla prima. `canvas.apply` le legge dal file. Una pagina senza misura nasce 360×480.",
+            ),
+            optional(
+                "label",
+                FieldKind::Text,
+                "L'etichetta del gruppo, oltre 12 pagine. Di serie «N pagine».",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"spread_pages","id":"p1","pages":"1-3"}"#,
+            r#"{"op":"spread_pages","id":"p1","pages":[2,5],"label":"Capitolo 2"}"#,
+        ],
+    },
+    OpSpec {
+        name: "excerpt",
+        summary_it: "L'estratto della scheda di file `id`: una scheda nuova sullo stesso file, accanto, che mostra solo la parte `part` (pagine o una zona di un PDF, sezioni di una nota, un ritaglio di un'immagine). Con `in_place` è la scheda stessa a diventare l'estratto.",
+        fields: &[
+            required("id", FieldKind::Id, "La scheda di file."),
+            required(
+                "part",
+                FieldKind::Object,
+                "La parte, come il campo `fub:parts`: `{\"kind\": \"pages\", \"pages\": [3, 4]}`, `{\"kind\": \"region\", \"page\": 2, \"rect\": [x, y, w, h]}` (frazioni della pagina), `{\"kind\": \"sections\", \"sections\": [\"Titolo\"]}`, `{\"kind\": \"image\", \"rect\": [x, y, w, h], \"rotate\": 90}`.",
+            ),
+            optional(
+                "near",
+                FieldKind::Id,
+                "La scheda accanto alla quale nasce l'estratto. Di serie `id`.",
+            ),
+            FieldSpec {
+                name: "side",
+                kind: FieldKind::Enum(SIDES),
+                required: false,
+                default: Some("\"right\""),
+                doc_it: "Il lato di `near` dove nasce l'estratto.",
+            },
+            optional(
+                "content_size",
+                FieldKind::Pair,
+                "La misura del contenuto: i punti della pagina (pagine, zona) o i pixel dell'immagine. Dà le proporzioni; `canvas.apply` la legge dal file.",
+            ),
+            optional(
+                "page_count",
+                FieldKind::Number,
+                "Quante pagine ha il PDF: una pagina della parte oltre l'ultima è rifiutata. `canvas.apply` lo legge dal file, e se il file si legge vince il file.",
+            ),
+            optional(
+                "in_place",
+                FieldKind::Bool,
+                "Con `true` la scheda `id` diventa l'estratto, al suo posto e con le sue misure, come il selettore delle sezioni; a differenza del ritaglio della GUI l'altezza non cambia.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"excerpt","id":"p1","part":{"kind":"pages","pages":[3,4]}}"#,
+            r#"{"op":"excerpt","id":"f1","part":{"kind":"image","rect":[0,0,0.5,1]},"in_place":true}"#,
+        ],
+    },
+    OpSpec {
         name: "from_mermaid",
         summary_it: "Un diagramma Mermaid (`flowchart` o `graph`) diventa schede di testo, gruppi (`subgraph`) e archi, già disposti ad albero nel verso dell'intestazione, come un blocco in `x`, `y`, accanto a `near` o nel posto automatico. Ciò che la lavagna non tiene (forme, stili) torna nelle note.",
         fields: &[
@@ -891,7 +968,8 @@ const EXAMPLE_CANVAS: &str = r##"{
   "nodes": [
     {"id": "t1", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Ciclo dell'acqua"},
     {"id": "t2", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "Evaporazione"},
-    {"id": "f1", "type": "file", "x": 0, "y": 240, "width": 320, "height": 200, "file": "schemi/acqua.png"}
+    {"id": "f1", "type": "file", "x": 0, "y": 240, "width": 320, "height": 200, "file": "schemi/acqua.png"},
+    {"id": "p1", "type": "file", "x": 800, "y": 240, "width": 360, "height": 480, "file": "schemi/dispensa.pdf"}
   ],
   "edges": [{"id": "e1", "fromNode": "t1", "toNode": "t2", "label": "porta a"}],
   "fub:ink": {"v": 1, "strokes": [
@@ -1093,6 +1171,29 @@ fn check_field(
         FieldKind::PenSize => check_pen_size(index, path, value, problems),
         FieldKind::InkColor => check_ink_color(index, object, field, path, value, problems),
         FieldKind::Positive => check_positive(index, path, value, problems),
+        FieldKind::Pages => check_pages(index, path, value, problems),
+    }
+}
+
+/// Le pagine di `spread_pages`: un testo (lo legge la compilazione, come il
+/// campo della GUI) o una lista di interi da 1. Un elemento che non è un
+/// intero è `wrong_type`, un intero sotto 1 `bad_value`, col suo indice.
+fn check_pages(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    match value {
+        Value::String(_) => {}
+        Value::Array(items) => {
+            for (at, item) in items.iter().enumerate() {
+                let code = if !is_integer(item) {
+                    ProblemCode::WrongType
+                } else if item.as_f64().is_some_and(|page| page >= 1.0) {
+                    continue;
+                } else {
+                    ProblemCode::BadValue
+                };
+                problems.push(Problem::new(code, Some(index), format!("{path}/{at}")));
+            }
+        }
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
     }
 }
 
@@ -1699,6 +1800,12 @@ fn field_schema(field: &FieldSpec) -> Value {
             })
         }
         FieldKind::Positive => json!({ "type": "number", "exclusiveMinimum": 0 }),
+        FieldKind::Pages => json!({
+            "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "integer", "minimum": 1 } },
+            ],
+        }),
         FieldKind::Any => json!({}),
     };
     if let Value::Object(map) = &mut schema {

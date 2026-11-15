@@ -1090,6 +1090,7 @@ fn le_lavagne_si_leggono_e_si_guidano() {
             "duplicate",
             "erase_along",
             "erase_strokes",
+            "excerpt",
             "from_mermaid",
             "from_outline",
             "group",
@@ -1102,7 +1103,8 @@ fn le_lavagne_si_leggono_e_si_guidano() {
             "resize",
             "restyle_strokes",
             "reverse",
-            "set"
+            "set",
+            "spread_pages"
         ]
     );
     assert!(guide["schema"].is_object());

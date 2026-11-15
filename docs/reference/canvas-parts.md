@@ -143,7 +143,8 @@ I numeri si scrivono come li scrive JavaScript (`1e-7`,
 `0.30000000000000004`, `2.50` riscritto è `2.5`), le chiavi nell'ordine di
 sopra; una chiave sconosciuta che sembra un indice (`"1"`) va prima, come
 in un oggetto JavaScript. Nel nucleo è `write_parts`, nella shell
-`writeParts`; i due danno gli stessi byte.
+`writeParts`; i due danno gli stessi byte. In codice un estratto si scrive con
+`excerpt` ([Le pagine e gli estratti in codice](canvas-pages-code.md#excerpt)).
 
 ## Il selettore delle sezioni
 

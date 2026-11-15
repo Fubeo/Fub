@@ -2,11 +2,13 @@
 //! (`apps/client/src/__fixtures__/canvas-ops/`, uno per file).
 //!
 //! Ogni vettore ha `about`, `before` (una lavagna), `seed` facoltativo (0 se
-//! manca), `ops` e `expect {outcome, after?, created?, error?}`. `outcome` è
+//! manca), `ops` e `expect {outcome, after?, created?, notes?, error?}`. `outcome` è
 //! `applied` (le operazioni si compilano: le toppe, applicate con `draft` a
 //! `before`, danno `after`, e la loro inversa ridà `before`), `rejected`
 //! (`compile` dà l'errore `error`: `kind`, `index` e, se c'è, `id`) o
-//! `malformed` (le operazioni non si leggono). I modelli si confrontano come
+//! `malformed` (le operazioni non si leggono). `notes` sono le note della
+//! compilazione (`index`, `code`, `detail`): senza il campo, un vettore
+//! applicato non ne deve dare. I modelli si confrontano come
 //! valori JSON (R9). Il TypeScript leggerà gli stessi file.
 
 use std::path::PathBuf;
@@ -129,7 +131,10 @@ fn check(name: &str, vector: &Value) -> String {
         "applied" => {
             let ops = ops.unwrap_or_else(|e| panic!("{name}: le operazioni non si leggono: {e}"));
             let Compiled {
-                patches, created, ..
+                patches,
+                created,
+                notes,
+                ..
             } = compile(&before, &ops, seed)
                 .unwrap_or_else(|e| panic!("{name}: le operazioni non si compilano: {e}"));
             let after = draft(&before, &patches)
@@ -159,6 +164,12 @@ fn check(name: &str, vector: &Value) -> String {
                     .unwrap_or_else(|e| panic!("{name}: `created` non è una lista di id: {e}")),
             };
             assert_eq!(created, expected_created, "{name}: gli id creati");
+            let notes = serde_json::to_value(&notes).expect("le note si scrivono");
+            let expected_notes = match &expect["notes"] {
+                Value::Null => json!([]),
+                list => list.clone(),
+            };
+            assert_eq!(notes, expected_notes, "{name}: le note");
             // Stesso seme, stesse toppe.
             let again = compile(&before, &ops, seed).expect("si ricompila");
             assert_eq!(
@@ -241,6 +252,8 @@ fn ogni_operazione_ha_un_vettore() {
         "layout",
         "insert",
         "convert",
+        "spread_pages",
+        "excerpt",
         "from_mermaid",
         "from_outline",
         "add_strokes",
@@ -519,6 +532,12 @@ fn le_operazioni_si_riscrivono_uguali() {
         {"op": "insert", "fragment": {"version": 1, "nodes": [], "edges": []}, "near": "a", "side": "top"},
         {"op": "insert", "fragment": {"version": 1, "nodes": [], "edges": []}, "x": 8, "y": -8},
         {"op": "convert", "id": "a", "file": "Idee/a.md"},
+        {"op": "spread_pages", "id": "p"},
+        {"op": "spread_pages", "id": "p", "pages": "1-3, 7", "page_count": 9, "page_sizes": [[595.5, 842.5]], "label": "Dispensa"},
+        {"op": "spread_pages", "id": "p", "pages": [1, 2]},
+        {"op": "excerpt", "id": "p", "part": {"kind": "pages", "pages": [3]}, "page_count": 9},
+        {"op": "excerpt", "id": "p", "part": {"kind": "region", "page": 2, "rect": [0, 0, 1, 0.5]}, "near": "a", "side": "bottom", "content_size": [595.5, 842.5]},
+        {"op": "excerpt", "id": "n", "part": {"kind": "sections", "sections": ["A"]}, "in_place": true},
         {"op": "from_mermaid", "text": "graph LR\nA-->B"},
         {"op": "from_mermaid", "text": "graph LR\nA-->B", "x": 0, "y": 8, "prefix": "m-"},
         {"op": "from_mermaid", "text": "graph LR\nA-->B", "near": "a", "side": "left"},
