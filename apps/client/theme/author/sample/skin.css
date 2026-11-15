@@ -5811,7 +5811,7 @@ kbd,
 .pane-editor[data-markdown-mode="source"] .cm-content,
 .pane-editor[data-markdown-mode="live_preview"] .cm-content,
 .pane-editor[data-markdown-mode="blocks"] .cm-content {
-  max-width: calc(var(--content-width) + 200px);
+  max-width: min(100%, calc(var(--content-width) + 200px));
   padding-right: 96px;
   padding-left: 104px;
 }
@@ -5823,6 +5823,10 @@ kbd,
   padding-right: 96px;
   padding-left: 104px;
 }
+/* `min(100%, …)`: CodeMirror non lascia stringere `.cm-content` (flex-shrink 0),
+   e con la misura più larga del foglio (il carattere del testo non ancora
+   arrivato fa `ch` più largo) il testo uscirebbe a destra, e chi misura il
+   margine in quel momento (il filo dei titoli) lo troverebbe chiuso. */
 /* CodeMirror rientra ogni riga di 6px: in Lettura quel rientro non c'è, e la
    pagina salterebbe di lato passando da Live a Lettura. */
 .pane-editor[data-markdown-mode="live_preview"] .cm-content > .cm-line,
@@ -5837,7 +5841,7 @@ kbd,
   .pane-editor[data-markdown-mode="source"] .cm-content,
   .pane-editor[data-markdown-mode="live_preview"] .cm-content,
   .pane-editor[data-markdown-mode="blocks"] .cm-content {
-    max-width: calc(var(--content-width) + 112px);
+    max-width: min(100%, calc(var(--content-width) + 112px));
     padding-right: 48px;
     padding-left: 64px;
   }
@@ -5854,7 +5858,7 @@ kbd,
   .pane-editor[data-markdown-mode="source"] .cm-content,
   .pane-editor[data-markdown-mode="live_preview"] .cm-content,
   .pane-editor[data-markdown-mode="blocks"] .cm-content {
-    max-width: calc(var(--content-width) + 60px);
+    max-width: min(100%, calc(var(--content-width) + 60px));
     padding-right: 20px;
     padding-left: 40px;
   }
@@ -5878,7 +5882,7 @@ kbd,
   .pane-editor[data-markdown-mode="source"] .cm-content,
   .pane-editor[data-markdown-mode="live_preview"] .cm-content,
   .pane-editor[data-markdown-mode="blocks"] .cm-content {
-    max-width: calc(var(--content-width) + 60px);
+    max-width: min(100%, calc(var(--content-width) + 60px));
     padding-right: 20px;
     padding-left: 40px;
   }
@@ -5902,7 +5906,7 @@ kbd,
   .pane-editor[data-markdown-mode="source"] .cm-content,
   .pane-editor[data-markdown-mode="live_preview"] .cm-content,
   .pane-editor[data-markdown-mode="blocks"] .cm-content {
-    max-width: calc(var(--content-width) + 36px);
+    max-width: min(100%, calc(var(--content-width) + 36px));
     padding-right: 18px;
     padding-left: 18px;
   }

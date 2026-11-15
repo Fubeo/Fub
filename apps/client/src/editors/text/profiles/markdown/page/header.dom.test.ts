@@ -428,6 +428,16 @@ describe("la testata misurata da CodeMirror", () => {
     const rule = /(?:^|\n)\.cm-fub-page \{([^}]*)\}/.exec(skin.replace(/\/\*[\s\S]*?\*\//g, ""));
     expect(rule?.[1]).toMatch(/display:\s*flow-root;/);
   });
+
+  // `.cm-content` non si stringe (flex-shrink 0 di CodeMirror): una misura
+  // più larga del foglio (104 + 96 px di margine, `ch` del carattere non
+  // ancora arrivato) lo farebbe uscire a destra, e il filo dei titoli
+  // troverebbe chiuso il margine dove sta.
+  it("la colonna del testo non esce mai dal foglio", () => {
+    const widths = [...skin.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/\.cm-content \{[^}]*?max-width:\s*([^;]+);/g)].map((match) => match[1]!);
+    expect(widths.length).toBeGreaterThanOrEqual(5);
+    expect(widths.filter((width) => width.includes("--content-width") && !width.startsWith("min(100%,"))).toEqual([]);
+  });
 });
 
 describe("la riga degli strumenti della testata", () => {
