@@ -284,6 +284,7 @@ impl Warning {
                 NoteCode::LineSkipped => WarningCode::LineSkipped,
                 NoteCode::IndentRounded => WarningCode::IndentRounded,
                 NoteCode::InkKept => WarningCode::InkKept,
+                NoteCode::PagesCut => WarningCode::PagesCut,
             },
             ids: Vec::new(),
             estimated_height: None,
@@ -314,6 +315,9 @@ pub enum WarningCode {
     /// Nota: un tratto che Fub non disegna, o un livello estraneo, sotto il
     /// cammino di `erase_along`, non si taglia.
     InkKept,
+    /// Nota: le pagine chieste da `spread_pages` oltre l'ultima del PDF si
+    /// tagliano.
+    PagesCut,
 }
 
 /// Controlla `raw`, una lista di operazioni, sulla lavagna `canvas`, con gli id

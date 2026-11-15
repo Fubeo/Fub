@@ -88,12 +88,13 @@ stesso punto ci sono 1 999 000 coperture: il rapporto ne porta 100 e omette
 | `text_overflow` | il testo di una scheda di testo non ci sta nella sua altezza; `estimated_height` è quella che la stima di [«Misure e posti»](canvas-code.md#misure-e-posti) vuole | la scheda |
 | `shape_dropped`, `style_dropped`, `line_skipped`, `indent_rounded` | le note di [`from_mermaid` e `from_outline`](canvas-import.md#le-note) | nessuna |
 | `ink_kept` | la nota di [`erase_along`](canvas-ink-code.md#erase_along): un tratto che Fub non disegna, un tratto di pagina o di cella, o un livello estraneo, sotto il cammino non si taglia | nessuna |
+| `pages_cut` | la nota di [`spread_pages`](canvas-pages-code.md#spread_pages): le pagine chieste oltre l'ultima del PDF si tagliano | nessuna |
 
-Un esempio, con la lavagna d'esempio di `spec.rs` (`t1`, `t2`, `f1`, l'arco
+Un esempio, con la lavagna d'esempio di `spec.rs` (`t1`, `t2`, `f1`, il PDF `p1`, l'arco
 `e1` e il tratto libero `s1`) e il giro `[{"op": "move", "ids": ["f1"], "dx": 0, "dy": -200}]`:
 
 ```json
-{"ok": true, "problems": [], "warnings": [{"code": "overlap", "ids": ["t1", "f1"]}], "warnings_omitted": 0, "summary": {"cards_added": [], "cards_removed": [], "cards_changed": [{"id": "f1", "text": "schemi/acqua.png", "moved": {"from": {"x": 0, "y": 240}, "to": {"x": 0, "y": 40}}}], "edges_added": [], "edges_removed": [], "edges_changed": [], "order_changed": false}, "outline_after": "cards 3 edges 1 groups 0 bounds 0 0 720×240\nink board 1 40 25 2.2×0.4\n1 t1 text \"Ciclo dell'acqua\" 0 0 320×160\n2 t2 text \"Evaporazione\" 400 0 320×160\n3 f1 image \"schemi/acqua.png\" 0 40 320×200\ne1 t1 -> t2 \"porta a\""}
+{"ok": true, "problems": [], "warnings": [{"code": "overlap", "ids": ["t1", "f1"]}], "warnings_omitted": 0, "summary": {"cards_added": [], "cards_removed": [], "cards_changed": [{"id": "f1", "text": "schemi/acqua.png", "moved": {"from": {"x": 0, "y": 240}, "to": {"x": 0, "y": 40}}}], "edges_added": [], "edges_removed": [], "edges_changed": [], "order_changed": false}, "outline_after": "cards 4 edges 1 groups 0 bounds 0 0 1160×720\nink board 1 40 25 2.2×0.4\n1 t1 text \"Ciclo dell'acqua\" 0 0 320×160\n2 t2 text \"Evaporazione\" 400 0 320×160\n3 f1 image \"schemi/acqua.png\" 0 40 320×200\n4 p1 pdf \"schemi/dispensa.pdf\" 800 240 360×480\ne1 t1 -> t2 \"porta a\""}
 ```
 
 Con `[{"op": "move", "ids": ["t9"], "dx": 40, "dy": 0}]` non si scrive, e il

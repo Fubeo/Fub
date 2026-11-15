@@ -1,7 +1,7 @@
 //! Le operazioni d'intento sulla lavagna (`CanvasOp`): «aggiungi», «sposta»,
 //! «ridimensiona», «collega», «togli», «cambia», «porta sopra», «allinea»,
 //! «distribuisci», «duplica», «inverti», «raggruppa», «dispone», «incolla»,
-//! «trasforma in file», «da Mermaid», «da una scaletta», «aggiungi tratti»,
+//! «trasforma in file», «spargi le pagine», «estratto», «da Mermaid», «da una scaletta», «aggiungi tratti»,
 //! «cancella tratti», «disegna», «cancella lungo un cammino». Un agente o
 //! la sessione dal tablet pensano così, non in toppe con l'immagine di
 //! prima: [`compile`] traduce una lista di operazioni nelle toppe di
@@ -59,6 +59,7 @@ mod group;
 mod import;
 mod insert;
 mod layout;
+mod pages;
 mod reverse;
 
 pub use adjust::{ColorArgs, Fit, MoveArgs, ReorderArgs, ReorderTo, ResizeArgs};
@@ -73,6 +74,10 @@ pub use group::GroupArgs;
 pub use import::{FromMermaidArgs, FromOutlineArgs};
 pub use insert::{InsertArgs, MAX_INSERTED};
 pub use layout::{LayoutArgs, LayoutDirection, LayoutKind};
+pub use pages::{
+    chosen_pages, ChosenPages, ExcerptArgs, PageList, PagesProblem, SpreadPagesArgs,
+    MAX_SPREAD_PAGES,
+};
 pub use reverse::ReverseArgs;
 
 /// Un'operazione d'intento. La forma JSON ha il campo `op` per primo, in
@@ -132,6 +137,13 @@ pub enum CanvasOp {
     /// Una scheda di testo diventa una scheda di file, allo stesso posto. Le
     /// regole sono in `ops/convert.rs`.
     Convert(ConvertArgs),
+    /// Le pagine di un PDF in fila accanto alla sua scheda, una scheda per
+    /// pagina, come «Spargi le pagine…». Le regole sono in `ops/pages.rs`.
+    SpreadPages(SpreadPagesArgs),
+    /// L'estratto di una scheda di file (`fub:parts`): una scheda nuova sullo
+    /// stesso file, o la scheda stessa con `in_place`. Le regole sono in
+    /// `ops/pages.rs`.
+    Excerpt(ExcerptArgs),
     /// Un diagramma Mermaid (`flowchart`) diventa schede, gruppi e archi, già
     /// disposti. Il lettore è in `import/mermaid.rs`, le regole in
     /// `ops/import.rs`.
@@ -210,6 +222,8 @@ impl CanvasOp {
             Self::Layout(_) => "layout",
             Self::Insert(_) => "insert",
             Self::Convert(_) => "convert",
+            Self::SpreadPages(_) => "spread_pages",
+            Self::Excerpt(_) => "excerpt",
             Self::FromMermaid(_) => "from_mermaid",
             Self::FromOutline(_) => "from_outline",
             Self::AddStrokes { .. } => "add_strokes",
@@ -228,7 +242,8 @@ pub struct Compiled {
     /// Le toppe, nell'ordine in cui si applicano.
     pub patches: Vec<CanvasPatch>,
     /// Gli id di ogni scheda, arco e tratto aggiunti (`add_card`, `connect`,
-    /// `duplicate`, `group`, `insert`, `from_mermaid`, `from_outline`,
+    /// `duplicate`, `group`, `insert`, `spread_pages`, `excerpt`,
+    /// `from_mermaid`, `from_outline`,
     /// `add_strokes`, `draw`, i pezzi di `erase_along`), dati o generati,
     /// nell'ordine delle operazioni; e quelli nuovi dei tratti che
     /// `move_strokes` porta in un livello dove il loro id era già preso.
@@ -275,6 +290,9 @@ pub enum NoteCode {
     /// Un tratto che Fub non disegna, o un livello estraneo, sotto il cammino
     /// di `erase_along`: non si taglia.
     InkKept,
+    /// Le pagine chieste da `spread_pages` oltre l'ultima del PDF si
+    /// tagliano.
+    PagesCut,
 }
 
 fn is_zero(value: &usize) -> bool {
@@ -286,8 +304,9 @@ fn is_zero(value: &usize) -> bool {
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum OpError {
     /// L'operazione vuole una scheda che non c'è (`move`, `resize`, `reorder`,
-    /// `align`, `distribute`, `duplicate`, `group`, `convert`, il `near` di
-    /// `insert`, gli estremi di un arco).
+    /// `align`, `distribute`, `duplicate`, `group`, `convert`,
+    /// `spread_pages`, `excerpt`, il `near` di `insert`, gli estremi di un
+    /// arco).
     #[error("canvas op {index}: there is no node {id:?}")]
     UnknownNode { index: usize, id: String },
     /// `remove`, `set` o `color` di un id che non è né una scheda né un arco; e
@@ -300,7 +319,8 @@ pub enum OpError {
     #[error("canvas op {index}: id {id:?} is already taken or repeated")]
     DuplicateId { index: usize, id: String },
     /// La lavagna avrebbe più schede o archi del limite, un `insert` porta
-    /// più schede di [`MAX_INSERTED`], un tratto di `draw` avrebbe più punti
+    /// più schede di [`MAX_INSERTED`], uno `spread_pages` più pagine di
+    /// [`MAX_SPREAD_PAGES`], un tratto di `draw` avrebbe più punti
     /// di [`MAX_DRAW_POINTS`], o il cammino di `erase_along` ne ha più di
     /// [`MAX_ERASE_POINTS`].
     #[error("canvas op {index}: a canvas holds at most {limit} {what}")]
@@ -463,6 +483,8 @@ impl Compiler {
             CanvasOp::Layout(args) => self.layout(index, args)?,
             CanvasOp::Insert(args) => self.insert(index, args)?,
             CanvasOp::Convert(args) => self.convert(index, args)?,
+            CanvasOp::SpreadPages(args) => self.spread_pages(index, args)?,
+            CanvasOp::Excerpt(args) => self.excerpt(index, args)?,
             CanvasOp::FromMermaid(args) => self.import_mermaid(index, args)?,
             CanvasOp::FromOutline(args) => self.import_outline(index, args)?,
             CanvasOp::AddStrokes { layer, strokes } => self.add_strokes(index, layer, strokes)?,

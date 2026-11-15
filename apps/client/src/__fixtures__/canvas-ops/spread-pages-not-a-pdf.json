@@ -1,0 +1,41 @@
+{
+  "about": "La scheda di una nota non ha pagine da spargere: `Invalid`.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      },
+      {
+        "id": "n",
+        "type": "file",
+        "x": 0,
+        "y": 400,
+        "width": 320,
+        "height": 240,
+        "file": "Corsi/appunti.md"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "spread_pages",
+      "id": "n",
+      "page_count": 3
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}
