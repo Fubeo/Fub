@@ -979,7 +979,7 @@ Fatto quando: un test per prefisso, per azione e per il niente trovato; un
 test che l'anteprima non parte prima della pausa.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/launcher src/panels/quick-switcher.dom.test.ts
-Stato: [~] PR #357 (feat/ctrl-o-prefissi @ e1f0045f7, 2026-11-15: revisione media corretta, R1 verde con PDF e immagine da Ctrl O; aspetta CI e baseline dal runner) · «Crea la nota» nel piede, si crea solo se la risposta lo offre; gruppo «File» per nome dall'anagrafe; il fuoco di `openDocument` non ruba il lanciatore · Q1 consigliata · `@` solo Persone finché non c'è T39; niente Sbircia prima di T20; Rinomina e Sposta un'azione sola su `note.rename`; la finestra nuova esce dal lanciatore (resta nel menu di scheda e albero); stile dei gruppi e del pulsante «Azioni» in T82 · le intestazioni dei gruppi sono `presentation`, non opzioni (la WebView cercava la prima opzione); senza `outline` Tutto perde solo i Titoli; scena nuova `launcher-actions`; le baseline del lanciatore dal runner · CI 2026-11-14 (efb386800): rosso R1 della WebView (il primo risultato di «Lunga»/«Stampa»… non è il file) e nella foto `launcher-search` «nota» mette prima «Benvenuto» e poi «Nota lunga»: un nome che combacia deve venire prima; da correggere col coder prima delle baseline; rosso anche il banco dei disegni (tasto P 184 ms > 100), da rilanciare
+Stato: [x] fatto · PR #357 unita in main il 2026-11-15 (ca5ba6fc4) · «Crea la nota» nel piede; gruppo «File» per nome; `@` solo Persone finché non c'è T39; niente Sbircia prima di T20; Rinomina e Sposta un'azione sola; sul telefono i modi vanno a capo (axe); stile dei gruppi e del pulsante «Azioni» in T82; difetto: il segnaposto lungo si taglia al telefono
 
 ## T14 · La riga dei suggerimenti
 
@@ -2622,7 +2622,7 @@ tre adattatori; gli appunti con campioni veri di Excel, LibreOffice, Fogli e
 Word.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/tabella
-Stato: [~] PR #373 (feat/tabella-gesti-nuovi, 2026-11-15) · revisione media e 12 correzioni fatte · fuori: i campioni veri degli appunti (nel repo non ce ne sono, non si inventano: da catturare da Excel, LibreOffice, Fogli e Word) e il doppio clic del motore dei fogli sopra le celle piene · aspetta CI e baseline dal runner
+Stato: [x] fatto · PR #373 unita in main il 2026-11-15 (54329e583) · revisione media e 12 correzioni · fuori: i campioni veri degli appunti (da catturare da Excel, LibreOffice, Fogli e Word) e il doppio clic del motore dei fogli sopra le celle piene
 
 ## T52 · Tabella in foglio, foglio in tabella, incolla celle
 
