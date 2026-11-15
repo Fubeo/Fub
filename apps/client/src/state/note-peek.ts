@@ -19,7 +19,7 @@ import type { CardEditor, CardEditorPort } from "../editors/canvas/cards";
 import { t } from "../i18n/strings";
 import { animate } from "../moto";
 import { pageName } from "../rules/mirrored";
-import { icon, registerIcon } from "../ui/icons";
+import { icon } from "../ui/icons";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 
 /// Che cosa fa il clic che apre un link a una nota (`editor.link-click`).
@@ -98,18 +98,11 @@ export interface NotePeek {
   shown(): { readonly doc: string | null; readonly page: string; readonly state: PeekState } | null;
 }
 
-/// Le due figure della testata, come nel prototipo (righe 576 e seguenti):
-/// «Apri qui» allarga, «A lato» è un foglio con la colonna a destra.
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "peek-here": ["M14.25 3.75h6v6M20.25 3.75 13.5 10.5M9.75 20.25h-6v-6M3.75 20.25l6.75-6.75"],
-  "peek-side": ["M6 3.75h12a3 3 0 0 1 3 3v10.5a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6.75a3 3 0 0 1 3-3z", "M15 3.75v16.5"],
-};
-
-function ensureIcons(): void {
-  for (const [name, paths] of Object.entries(ICONS)) {
-    if (icon(name) === "") registerIcon(name, paths);
-  }
-}
+/// Le figure della testata, dal set della cornice (`shells/scrittoio/icons.ts`):
+/// «Apri qui» allarga il foglio, «A lato» è un foglio con la colonna a destra,
+/// come nel prototipo. Senza cornice il pulsante resta la sua parola.
+const HERE_ICON = "focus";
+const SIDE_ICON = "panel-right";
 
 /// La cartella di un documento, per la testata; la radice del vault non ha
 /// cartella e la testata dice il nome della nota.
@@ -156,7 +149,6 @@ export function createNotePeek(deps: NotePeekDeps): NotePeek {
   }
 
   function build(host: HTMLElement, page: string): Open {
-    ensureIcons();
     const life = openLifetime();
     const root = document.createElement("aside");
     root.className = "note-peek";
@@ -172,8 +164,8 @@ export function createNotePeek(deps: NotePeekDeps): NotePeek {
     place.append(placeText);
     const gap = document.createElement("span");
     gap.className = "note-peek-gap";
-    const here = button("note-peek-here", t("peek.here"), "peek-here", true);
-    const side = button("note-peek-side", t("peek.side"), "peek-side", true);
+    const here = button("note-peek-here", t("peek.here"), HERE_ICON, true);
+    const side = button("note-peek-side", t("peek.side"), SIDE_ICON, true);
     const close = button("note-peek-close", t("peek.close"), "close", false);
     head.append(place, gap, here, side, close);
     const body = document.createElement("div");

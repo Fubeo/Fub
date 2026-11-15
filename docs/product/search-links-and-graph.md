@@ -178,12 +178,10 @@ disturbare chi scrive. La scheda legge dal canale dati come gli embed, non apre
 sessioni né buffer, e si chiude uscendo dal link e dalla scheda o con Esc. Un
 link che non si risolve non apre niente.
 
-Nell'editor, Live o Sorgente, `Alt+Invio` sul link dove sta il cursore: un
-wikilink apre la nota nella
-[sbirciata](editor-writing.md#la-sbirciata), alla sezione o al blocco che
-nomina (Ctrl/Cmd+click la apre nel riquadro, o nella sbirciata se
-`editor.link-click` vale `sbircia`); un indirizzo esterno si apre solo se la
-policy di Lettura lo permette. Dentro il codice il tasto non apre niente. In Live `Maiusc+Alt+Invio`
+Nell'editor, Live o Sorgente, `Alt+Invio` su un wikilink apre la nota, alla
+sezione o al blocco che nomina, nella [sbirciata](editor-writing.md#la-sbirciata)
+(Ctrl/Cmd+click la apre come dice `editor.link-click`); su un indirizzo esterno
+lo apre solo se la policy di Lettura lo permette. Dentro il codice il tasto non apre niente. In Live `Maiusc+Alt+Invio`
 su un wikilink apre la sua scheda col fuoco sulle azioni; Esc torna al testo.
 
 «Copia il link a questo punto», dalla palette, mette negli appunti il link al
