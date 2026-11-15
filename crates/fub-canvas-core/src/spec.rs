@@ -15,7 +15,7 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 
 use crate::model::{Canvas, CanvasError};
-use crate::ops::{color, draw};
+use crate::ops::{color, draw, erase};
 
 /// Quanto può differire un nome sbagliato da quello giusto, perché sia un
 /// suggerimento: la distanza di Levenshtein al più di così.
@@ -93,6 +93,9 @@ pub enum FieldKind {
     /// Un colore d'inchiostro: un nome della tavolozza dell'inchiostro, o
     /// `#rrggbb`.
     InkColor,
+    /// Un numero maggiore di zero, anche con la virgola: la larghezza della
+    /// gomma di `erase_along`.
+    Positive,
     /// Un valore qualunque.
     Any,
 }
@@ -781,6 +784,33 @@ pub const OPS: &[OpSpec] = &[
             r#"{"op":"draw","on":"board","shape":{"kind":"arrow","x1":330,"y1":80,"x2":390,"y2":80},"size":3}"#,
         ],
     },
+    OpSpec {
+        name: "erase_along",
+        summary_it: "Passa la gomma che taglia lungo i punti (`points`), larga `size`: ogni tratto che tocca si taglia dove passa, e i pezzi che restano prendono il suo posto, come la gomma «Solo il pezzo». Un tratto coperto tutto se ne va.",
+        fields: &[
+            required(
+                "points",
+                FieldKind::Points,
+                "Il cammino della gomma, `[[x, y], …]`, nelle coordinate di `on`; al più 10 000 punti. Un punto solo è un cerchio.",
+            ),
+            required(
+                "size",
+                FieldKind::Positive,
+                "La larghezza della gomma, maggiore di zero, nelle coordinate di `on`: taglia ciò che sta a meno di `size / 2` dal cammino, contando lo spessore del tratto.",
+            ),
+            FieldSpec {
+                name: "on",
+                kind: FieldKind::Text,
+                required: false,
+                default: Some("\"auto\""),
+                doc_it: "In che coordinate sono i punti e che cosa si taglia: `\"auto\"` (coordinate della lavagna; i tratti liberi e quelli delle schede sotto il cammino), `\"board\"` (la lavagna, solo i tratti liberi) o l'id di una scheda (le sue coordinate, 0,0 in alto a sinistra; solo i suoi tratti).",
+            },
+        ],
+        examples: &[
+            r#"{"op":"erase_along","points":[[41,15],[41,35]],"size":2}"#,
+            r#"{"op":"erase_along","on":"t1","points":[[160,0],[160,160]],"size":16}"#,
+        ],
+    },
 ];
 
 /// La lavagna su cui girano gli esempi di [`OPS`]: due schede di testo, una
@@ -990,6 +1020,7 @@ fn check_field(
         FieldKind::Shape => check_shape(index, object, field, path, value, problems),
         FieldKind::PenSize => check_pen_size(index, path, value, problems),
         FieldKind::InkColor => check_ink_color(index, object, field, path, value, problems),
+        FieldKind::Positive => check_positive(index, path, value, problems),
     }
 }
 
@@ -1059,6 +1090,15 @@ fn check_shape(
             problem.suggestion = Some(near.join(", "));
         }
         problems.push(problem);
+    }
+}
+
+/// Un numero maggiore di zero.
+fn check_positive(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    match value.as_f64() {
+        Some(size) if erase::is_eraser_size(size) => {}
+        Some(_) => problems.push(Problem::new(ProblemCode::BadValue, Some(index), path)),
+        None => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
     }
 }
 
@@ -1585,6 +1625,7 @@ fn field_schema(field: &FieldSpec) -> Value {
                 ],
             })
         }
+        FieldKind::Positive => json!({ "type": "number", "exclusiveMinimum": 0 }),
         FieldKind::Any => json!({}),
     };
     if let Value::Object(map) = &mut schema {

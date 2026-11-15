@@ -2,7 +2,7 @@
 //! «ridimensiona», «collega», «togli», «cambia», «porta sopra», «allinea»,
 //! «distribuisci», «duplica», «inverti», «raggruppa», «dispone», «incolla»,
 //! «trasforma in file», «da Mermaid», «da una scaletta», «aggiungi tratti»,
-//! «cancella tratti», «disegna». Un agente o
+//! «cancella tratti», «disegna», «cancella lungo un cammino». Un agente o
 //! la sessione dal tablet pensano così, non in toppe con l'immagine di
 //! prima: [`compile`] traduce una lista di operazioni nelle toppe di
 //! [`crate::patch`], che sono la sola forma con cui una lavagna cambia.
@@ -47,6 +47,7 @@ mod connect;
 mod convert;
 pub(crate) mod draw;
 mod duplicate;
+pub(crate) mod erase;
 mod group;
 mod import;
 mod insert;
@@ -60,6 +61,7 @@ pub use connect::{AutoWord, ConnectArgs, Ends, SidePair, Sides};
 pub use convert::ConvertArgs;
 pub use draw::{DrawArgs, DrawShape, MAX_DRAW_POINTS, ON_AUTO, ON_BOARD};
 pub use duplicate::DuplicateArgs;
+pub use erase::{EraseAlongArgs, MAX_ERASE_POINTS, MAX_ERASE_WORK};
 pub use group::GroupArgs;
 pub use import::{FromMermaidArgs, FromOutlineArgs};
 pub use insert::{InsertArgs, MAX_INSERTED};
@@ -144,6 +146,10 @@ pub enum CanvasOp {
     /// il colore per nome; il tratto entra come con `add_strokes`. Le regole
     /// sono in `ops/draw.rs`.
     Draw(DrawArgs),
+    /// Taglia i tratti che il cammino `points`, largo `size`, tocca, come la
+    /// gomma «Solo il pezzo»: i pezzi che restano prendono il posto di ogni
+    /// tratto. Le regole sono in `ops/erase.rs`.
+    EraseAlong(EraseAlongArgs),
 }
 
 impl CanvasOp {
@@ -173,6 +179,7 @@ impl CanvasOp {
             Self::AddStrokes { .. } => "add_strokes",
             Self::EraseStrokes { .. } => "erase_strokes",
             Self::Draw(_) => "draw",
+            Self::EraseAlong(_) => "erase_along",
         }
     }
 }
@@ -184,7 +191,8 @@ pub struct Compiled {
     pub patches: Vec<CanvasPatch>,
     /// Gli id di ogni scheda, arco e tratto aggiunti (`add_card`, `connect`,
     /// `duplicate`, `group`, `insert`, `from_mermaid`, `from_outline`,
-    /// `add_strokes`, `draw`), dati o generati, nell'ordine delle operazioni.
+    /// `add_strokes`, `draw`, i pezzi di `erase_along`), dati o generati,
+    /// nell'ordine delle operazioni.
     pub created: Vec<String>,
     /// Ciò che le operazioni non hanno potuto tenere, nell'ordine delle
     /// operazioni: al più [`MAX_NOTES`]. Senza note il campo non si scrive.
@@ -225,6 +233,9 @@ pub enum NoteCode {
     LineSkipped,
     /// Un rientro della scaletta che non cade su un livello vale il più vicino.
     IndentRounded,
+    /// Un tratto che Fub non disegna, o un livello estraneo, sotto il cammino
+    /// di `erase_along`: non si taglia.
+    InkKept,
 }
 
 fn is_zero(value: &usize) -> bool {
@@ -250,8 +261,9 @@ pub enum OpError {
     #[error("canvas op {index}: id {id:?} is already taken or repeated")]
     DuplicateId { index: usize, id: String },
     /// La lavagna avrebbe più schede o archi del limite, un `insert` porta
-    /// più schede di [`MAX_INSERTED`], o un tratto di `draw` avrebbe più punti
-    /// di [`MAX_DRAW_POINTS`].
+    /// più schede di [`MAX_INSERTED`], un tratto di `draw` avrebbe più punti
+    /// di [`MAX_DRAW_POINTS`], o il cammino di `erase_along` ne ha più di
+    /// [`MAX_ERASE_POINTS`].
     #[error("canvas op {index}: a canvas holds at most {limit} {what}")]
     TooMany {
         index: usize,
@@ -269,7 +281,8 @@ pub enum OpError {
     /// `erase_strokes` di un id che non è un tratto del livello.
     #[error("canvas op {index}: there is no ink stroke {id:?} in the layer")]
     UnknownStroke { index: usize, id: String },
-    /// Il livello d'inchiostro è estraneo: Fub non ci scrive.
+    /// Il livello d'inchiostro è estraneo: Fub non ci scrive (anche l'`on` di
+    /// `erase_along` su una scheda col livello estraneo).
     #[error("canvas op {index}: the ink layer is foreign")]
     ForeignLayer { index: usize, layer: LayerRef },
 }
@@ -415,6 +428,7 @@ impl Compiler {
             CanvasOp::AddStrokes { layer, strokes } => self.add_strokes(index, layer, strokes)?,
             CanvasOp::EraseStrokes { layer, ids } => self.erase_strokes(index, layer, ids)?,
             CanvasOp::Draw(args) => self.draw(index, args)?,
+            CanvasOp::EraseAlong(args) => self.erase_along(index, args)?,
         };
         if patches.is_empty() {
             return Ok(());

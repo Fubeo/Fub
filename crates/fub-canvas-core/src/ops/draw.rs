@@ -29,6 +29,7 @@ use super::color::parse_hex;
 use super::{refuse, saturating_integer, Compiler, OpError};
 use crate::ink::{InkAnchor, InkLayer, LayerRef, INK_KEY};
 use crate::layout::Rect;
+use crate::model::CanvasNode;
 use crate::patch::CanvasPatch;
 
 /// Quanti punti al più ha un tratto di `draw`, dati o fatti da una forma: il
@@ -206,6 +207,19 @@ struct Point {
     p: f64,
 }
 
+/// Che cosa dice `on` di `draw` e di `erase_along`, letto sul modello di
+/// adesso.
+pub(super) enum OnTarget<'a> {
+    /// `"auto"`, di serie: coordinate della lavagna, e l'inchiostro va (o si
+    /// cerca) dove lo mette la penna.
+    Auto,
+    /// `"board"`: coordinate della lavagna, solo l'inchiostro libero.
+    Board,
+    /// L'id di una scheda (anche un gruppo): le sue coordinate, 0,0 in alto a
+    /// sinistra.
+    Card(&'a CanvasNode),
+}
+
 impl Compiler {
     /// `draw`: i punti, l'ancora, il pennello, poi `add_strokes` con un tratto.
     pub(super) fn draw(
@@ -257,6 +271,21 @@ impl Compiler {
         self.add_strokes(index, &layer, &[stroke])
     }
 
+    /// Che cosa dice `on`, sul modello di adesso: `auto` (di serie), `board` o
+    /// una scheda, che deve esserci (`UnknownNode`). La stessa lettura vale per
+    /// `draw` e per `erase_along`.
+    pub(super) fn on_target(
+        &self,
+        index: usize,
+        on: Option<&str>,
+    ) -> Result<OnTarget<'_>, OpError> {
+        Ok(match on.unwrap_or(ON_AUTO) {
+            ON_BOARD => OnTarget::Board,
+            ON_AUTO => OnTarget::Auto,
+            id => OnTarget::Card(self.node(index, id)?),
+        })
+    }
+
     /// Il livello, l'ancora e l'origine delle coordinate del tratto, da `on`.
     /// I punti di una scheda sono già nelle sue unità; con `auto` sono della
     /// lavagna, e vanno alla scheda che li prende (togliendo il suo angolo) o
@@ -268,9 +297,9 @@ impl Compiler {
         points: &[Point],
         size: f64,
     ) -> Result<(LayerRef, InkAnchor, (f64, f64)), OpError> {
-        match on.unwrap_or(ON_AUTO) {
-            ON_BOARD => Ok((LayerRef::Board, InkAnchor::Free, (0.0, 0.0))),
-            ON_AUTO => {
+        match self.on_target(index, on)? {
+            OnTarget::Board => Ok((LayerRef::Board, InkAnchor::Free, (0.0, 0.0))),
+            OnTarget::Auto => {
                 let nodes = &self.working.nodes;
                 let cards: Vec<Rect> = nodes.iter().map(Rect::of_node).collect();
                 let bounds = stroke_bounds(points.iter().map(|point| (point.x, point.y)), size);
@@ -294,14 +323,11 @@ impl Compiler {
                     None => (LayerRef::Board, InkAnchor::Free, (0.0, 0.0)),
                 })
             }
-            id => {
-                let node = self.node(index, id)?;
-                Ok((
-                    LayerRef::Node(node.id.clone()),
-                    InkAnchor::card_of(node),
-                    (0.0, 0.0),
-                ))
-            }
+            OnTarget::Card(node) => Ok((
+                LayerRef::Node(node.id.clone()),
+                InkAnchor::card_of(node),
+                (0.0, 0.0),
+            )),
         }
     }
 }

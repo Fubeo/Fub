@@ -409,6 +409,42 @@ girare i test di `ops/anchor.rs` e
 `apps/client/src/editors/canvas/anchor-vectors.test.ts`, contro `anchor.ts`.
 I vettori di `draw` sono `canvas-ops/draw-*.json`.
 
+### `erase_along`
+
+La gomma «Solo il pezzo» in codice (`ops/erase.rs`): `points` (`[[x, y], …]`,
+da 1 a 10 000, se no `Invalid` o `TooMany`), `size` (la larghezza, maggiore
+di zero, se no non si legge) e `on`. Ogni tratto che il cammino tocca si
+taglia dove passa il cerchio, e i pezzi che restano prendono il suo posto.
+
+- **`on`:** `"auto"` (di serie) vuole punti della lavagna e taglia i tratti
+  di ogni scheda e quelli liberi; `"board"` solo quelli liberi; l'id di una
+  scheda vuole le sue unità (0,0 in alto a sinistra) e taglia solo i suoi
+  (`UnknownNode`, `ForeignLayer` come per `draw`).
+- **Il taglio:** il cammino torna nelle unità del tratto con l'inverso della
+  sua resa (anche su un'immagine scalata), e il raggio, `size / 2` diviso la
+  scala, cresce di metà dello spessore del pennello: il conto di `cutInk`. I
+  campioni si tagliano con `split_ink` e il pennello con `cut_brush`
+  (`crates/fub-ink-codec/src/cut.rs`, copia di `ink/tools/split.ts`).
+- **I pezzi:** ogni campo del tratto nel suo ordine, anche gli sconosciuti;
+  un id nuovo dal seme, che salta quelli del livello e va in `created`; `at`
+  spostato dell'inizio del pezzo (ms arrotondati, in ISO con `Z`) se è una
+  data ISO con fuso o solo la data, com'era se no; il pennello tagliato, o il
+  testo di prima se il pezzo non tocca un taglio; `ink` nella stessa scala.
+  Un pezzo che non si scrive toglie il tratto intero, come nella tela. Un
+  tratto coperto tutto se ne va, e l'ultimo di un livello ne toglie la chiave.
+- **Le toppe:** per livello, prima si tolgono i tratti tagliati dall'ultimo
+  al primo, poi si mettono i pezzi dove stava il loro tratto (le toppe di
+  `cutStrokePatches`). Un cammino che non tocca niente non scrive toppe.
+- **Ciò che resta:** un tratto che non si disegna e un livello estraneo non
+  si toccano; con `auto` o `board`, se possono stare sotto il cammino, la
+  nota `ink_kept` lo dice.
+- **Il limite:** un cammino fitto su tratti lunghi costa troppo; oltre 50
+  milioni di distanze stimate (`split_work`) è `Invalid`.
+
+`apps/client/src/__fixtures__/ink-cut.json`, scritto a mano, prova il taglio
+in Rust (`crates/fub-ink-codec/tests/cut_vectors.rs`) e contro `split.ts`
+(`ink/tools/split-vectors.test.ts`). I vettori sono `canvas-ops/erase-along-*.json`.
+
 ### Leggere
 
 Le tre letture della lavagna ([La lavagna come codice](canvas-code.md#leggere))

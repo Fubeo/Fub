@@ -38,7 +38,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Number, Value};
 use thiserror::Error;
 
-use crate::model::{Canvas, CanvasNode};
+use crate::model::{Canvas, CanvasNode, CanvasNodeType};
 
 pub use fub_ink_codec::ink::{INK_MAX_BYTES, INK_MAX_SAMPLES};
 
@@ -411,6 +411,87 @@ impl InkAnchor {
         }
         Value::Object(map)
     }
+}
+
+/// Come i punti dell'ancora vanno nelle coordinate della scheda di adesso:
+/// `(dx + s · x, dy + s · y)`.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub(crate) struct InkFit {
+    pub(crate) s: f64,
+    pub(crate) dx: f64,
+    pub(crate) dy: f64,
+}
+
+impl InkFit {
+    const IDENTITY: InkFit = InkFit {
+        s: 1.0,
+        dx: 0.0,
+        dy: 0.0,
+    };
+
+    /// Il modo della scheda ([`scales`]): `scale` scala senza deformarsi e si
+    /// centra, `fixed` resta alla misura di riferimento. Un tratto libero non
+    /// si porta. È `inkFit` di `apps/client/src/editors/canvas/ink-fit.ts`,
+    /// provato coi suoi vettori (`canvas-ink-fit/`).
+    pub(crate) fn of(node: Option<&CanvasNode>, anchor: InkAnchor) -> InkFit {
+        let (Some(node), InkAnchor::Card { width, height }) = (node, anchor) else {
+            return InkFit::IDENTITY;
+        };
+        if !scales(node) {
+            return InkFit::IDENTITY;
+        }
+        // Le misure di una scheda sono interi entro ±(2^53−1): il cast è esatto.
+        #[allow(clippy::cast_precision_loss)]
+        let (w, h) = (node.width as f64, node.height as f64);
+        if w < 0.0 || h < 0.0 {
+            return InkFit {
+                s: 0.0,
+                dx: 0.0,
+                dy: 0.0,
+            };
+        }
+        let s = (w / width).min(h / height);
+        InkFit {
+            s,
+            dx: (w - width * s) / 2.0,
+            dy: (h - height * s) / 2.0,
+        }
+    }
+
+    pub(crate) fn point(self, [x, y]: [f64; 2]) -> [f64; 2] {
+        [self.dx + self.s * x, self.dy + self.s * y]
+    }
+}
+
+/// Le estensioni che fanno scalare l'inchiostro: le immagini di `mimeForExt`
+/// (`apps/client/src/editors/media/media-types.ts`) e il PDF.
+const SCALING_EXTENSIONS: [&str; 13] = [
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif", "heic", "tif", "tiff", "pdf",
+];
+
+/// Il modo `scale`: una scheda `file` il cui file è un'immagine o un PDF.
+///
+/// È `inkFitMode` della resa, che fa fede: l'estensione è quella di `extOf`
+/// (l'ultima parte del nome dopo un punto, in minuscolo; un nome come `.png`
+/// non ne ha) e un `#` nel campo `file` non taglia niente. Per questo non è
+/// [`crate::layout::card_kind`], che toglie dal primo `#` come la specie della
+/// scheda nella GUI: `foto#1.png` è una scheda `file` che scala.
+pub(crate) fn scales(node: &CanvasNode) -> bool {
+    if node.node_type != CanvasNodeType::File {
+        return false;
+    }
+    let Some(path) = node.file.as_deref() else {
+        return false;
+    };
+    let name = path.rsplit('/').next().unwrap_or(path);
+    if name.starts_with('.') && !name[1..].contains('.') {
+        return false;
+    }
+    let Some(point) = name.rfind('.') else {
+        return false;
+    };
+    let extension = name[point + 1..].to_ascii_lowercase();
+    SCALING_EXTENSIONS.contains(&extension.as_str())
 }
 
 /// Una misura come numero JSON: un intero se lo è, come la scriverebbe

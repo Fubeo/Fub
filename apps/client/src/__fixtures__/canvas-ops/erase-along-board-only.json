@@ -1,0 +1,100 @@
+{
+  "about": "Con on board il cammino tocca solo i tratti liberi: quello sotto, sulla scheda, resta. Il tratto libero è coperto tutto e se ne va, e con lui la chiave della radice.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "text": "a",
+        "x": 0,
+        "y": 0,
+        "width": 200,
+        "height": 100,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 200,
+                "height": 100
+              },
+              "ink": "1 s100 cxypt 0,5000,128,0 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": [],
+    "fub:ink": {
+      "v": 1,
+      "strokes": [
+        {
+          "id": "f1",
+          "tool": "pen",
+          "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+          "color": "#0072b2",
+          "anchor": {
+            "kind": "free"
+          },
+          "ink": "1 s100 cxypt 9000,5000,128,0 500,0,0,8 500,0,0,8 500,0,0,8 500,0,0,8"
+        }
+      ]
+    }
+  },
+  "ops": [
+    {
+      "op": "erase_along",
+      "on": "board",
+      "points": [
+        [
+          80,
+          50
+        ],
+        [
+          120,
+          50
+        ]
+      ],
+      "size": 20
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 100,
+          "text": "a",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "s1",
+                "tool": "pen",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 200,
+                  "height": 100
+                },
+                "ink": "1 s100 cxypt 0,5000,128,0 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "created": []
+  }
+}
