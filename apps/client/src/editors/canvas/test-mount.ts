@@ -1,5 +1,5 @@
 // L'aiuto che monta la tela nei test di parità. È una copia di `mounted` in
-// `engine.test.ts` (righe 62–99): quel file non si tocca, e chi cambia il
+// `engine.test.ts` (la funzione `mounted`): quel file non si tocca, e chi cambia il
 // montaggio lì lo cambia anche qui.
 import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
@@ -10,7 +10,7 @@ export function mountCanvas(source: string, overrides: Partial<CanvasEngineOptio
   const host = document.createElement("div");
   document.body.append(host);
   const changes: CanvasChange[] = [];
-  const opened: Array<{ page?: string; path?: string; url?: string; note?: string }> = [];
+  const opened: Array<{ page?: string; path?: string; url?: string }> = [];
   const engine = new CanvasEngine(host, {
     surfaceId: "test",
     formatId: "canvas",
@@ -23,9 +23,6 @@ export function mountCanvas(source: string, overrides: Partial<CanvasEngineOptio
     },
     onOpenPath: (path) => {
       opened.push({ path });
-    },
-    onCreateNote: (initialText) => {
-      opened.push({ note: initialText });
     },
     media: {
       openExternal: (url) => {
