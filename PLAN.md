@@ -3712,7 +3712,7 @@ finto e passano sul vero; le foto di T81 uguali.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/kit src/ui/menu-budget.test.ts
 src/editors/text/profiles/markdown/three-doors.test.ts
-Stato: [~] PR #374 (bozza), baseline dal runner
+Stato: [x] fatto · PR #374 unita in main (7970ee10f, 2026-11-15)
 
 ## T84 · Il «/» in una colonna
 
