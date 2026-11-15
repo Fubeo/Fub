@@ -228,15 +228,25 @@ async function microtasks(rounds = 8): Promise<void> {
   for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
+/// Ogni quanto si riguarda la condizione: un giro del ciclo degli eventi.
+const TURN_MS = 10;
+
 /// Aspetta che una condizione diventi vera, o fallisce dicendo cosa aspettava.
-/// Serve ai due pezzi che hanno un timer loro — il debounce della ricerca e
-/// quello del salvataggio — e a nient'altro.
+///
+/// Il limite si conta in **giri** concessi alla shell, non sull'orologio:
+/// `within` vale `within / TURN_MS` giri, e ognuno rende il turno al ciclo degli
+/// eventi per almeno `TURN_MS`. Da sola la macchina fa un giro ogni `TURN_MS`
+/// circa, e il limite dura quanto diceva prima; molto carica, il processo ha
+/// meno CPU, il lavoro della shell fra due giri dura di più e i giri arrivano
+/// più radi: l'attesa si allunga con il lavoro invece di scadere a metà di un
+/// gesto che sta andando. Una condizione che non arriva mai fallisce lo stesso,
+/// col suo nome; il tetto di sicurezza resta il tempo della prova.
 async function waitFor(thing: string, cond: () => boolean, within = 2000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
+  for (let turns = Math.ceil(within / TURN_MS); turns > 0; turns -= 1) {
     if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((r) => setTimeout(r, TURN_MS));
   }
+  if (cond()) return;
   throw new Error(`non è mai successo: ${thing}`);
 }
 
