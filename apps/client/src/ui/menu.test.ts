@@ -36,6 +36,9 @@ import sheetLightHigh from "../theme/scrittoio/sheet-light-high.css?raw";
 import sheetDark from "../theme/scrittoio/sheet-dark.css?raw";
 import sheetDarkHigh from "../theme/scrittoio/sheet-dark-high.css?raw";
 
+/** Il nome che il menu dà a una parte della voce, senza quello del kit accanto. */
+const menuPart = (part: Element): string => [...part.classList].filter((name) => !name.startsWith("kit-")).join(" ");
+
 /** Un evento di mouse verosimile, che è tutto ciò che le due funzioni leggono. */
 function clickEvent(): MouseEvent {
   return new MouseEvent("contextmenu", { clientX: 10, clientY: 10 });
@@ -258,11 +261,11 @@ describe("le voci con un'icona", () => {
     const picture = withIcon!.querySelector<HTMLElement>(".menu-icon")!;
     expect(picture.getAttribute("aria-hidden")).toBe("true");
     expect(picture.querySelector("svg")).not.toBeNull();
-    expect([...withIcon!.children].map((part) => part.className)).toEqual(["menu-icon", "menu-label"]);
+    expect([...withIcon!.children].map(menuPart)).toEqual(["menu-icon", "menu-label"]);
     // Il nome accessibile resta il nome: la figura non scrive niente.
     expect(withIcon!.textContent).toBe("Chiudi");
     // Una voce senza figura ne tiene il posto, vuoto, perché i nomi stiano allineati.
-    expect([...without!.children].map((part) => part.className)).toEqual(["menu-icon", "menu-label"]);
+    expect([...without!.children].map(menuPart)).toEqual(["menu-icon", "menu-label"]);
     expect(without!.querySelector(".menu-icon")!.getAttribute("aria-hidden")).toBe("true");
     expect(without!.querySelector(".menu-icon")!.childElementCount).toBe(0);
     expect(without!.textContent).toBe("Senza");
@@ -280,7 +283,7 @@ describe("le voci con un'icona", () => {
     showContextMenu(clickEvent(), [{ label: "Ignota", icon: "questa-icona-non-esiste", run: () => {} }]);
     const item = document.querySelector<HTMLButtonElement>("#context-menu button")!;
     expect(item.querySelector(".menu-icon")).toBeNull();
-    expect([...item.children].map((part) => part.className)).toEqual(["menu-label"]);
+    expect([...item.children].map(menuPart)).toEqual(["menu-label"]);
     showContextMenu(clickEvent(), [
       { label: "Ignota", icon: "questa-icona-non-esiste", run: () => {} },
       { label: "Nota", icon: "close", run: () => {} },
@@ -321,7 +324,7 @@ describe("le voci con un'icona", () => {
       ["menuitemradio", "true"],
       ["menuitemradio", "false"],
     ]);
-    expect([...items[0]!.children].map((part) => part.className)).toEqual(["menu-icon", "menu-label", "menu-check"]);
+    expect([...items[0]!.children].map(menuPart)).toEqual(["menu-icon", "menu-label", "menu-check"]);
     expect(items[0]!.querySelector(".menu-check")!.textContent).toBe("✓");
     expect(items[1]!.querySelector(".menu-check")!.textContent).toBe("");
     // La figura non cambia il nome della voce, né la sua azione.
