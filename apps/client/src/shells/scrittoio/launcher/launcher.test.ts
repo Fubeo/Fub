@@ -99,6 +99,9 @@ vi.mock("../../../state/document-controller", () => ({
   copyNoteLinks: async (docs: string[]) => {
     world.log.push(`copy links ${docs.join(",")}`);
   },
+  peekDocument: async (doc: string) => {
+    world.log.push(`peek ${doc}`);
+  },
 }));
 vi.mock("../../../state/organization", () => ({
   setPinned: async (doc: string, pinned: boolean) => {
@@ -631,12 +634,20 @@ describe("scegliere una riga", () => {
     expect(world.log).toEqual(["open Guida/Uno.md"]);
   });
 
-  it("Alt-Invio apre a lato finché la sbirciata non c'è, e non apre più finestre", async () => {
+  it("Alt-Invio sbircia una nota, e non apre più finestre", async () => {
     launcher.open("commands");
     press(field(), "Enter", { altKey: true });
     await settle();
-    expect(world.log).toEqual(["split p0 row", "open Guida/Uno.md"]);
+    expect(world.log).toEqual(["peek Guida/Uno.md"]);
     expect(world.log.some((line) => line.startsWith("window"))).toBe(false);
+  });
+
+  it("Alt-Invio su un file che non è una nota lo apre a lato", async () => {
+    world.answer = () => listed([note("Carte/Pianta.pdf")]);
+    launcher.open("all");
+    press(field(), "Enter", { altKey: true });
+    await settle();
+    expect(world.log).toEqual(["split p0 row", "open Carte/Pianta.pdf"]);
   });
 
   it("un clic sulla riga la sceglie", async () => {
@@ -843,11 +854,20 @@ describe("le azioni di una riga (Tab)", () => {
     press(field(), "Tab");
     const shown = rowsShown();
     expect(shown[0]).toBe('launcher.group.actions {"name":"Uno"}');
-    expect(shown).toHaveLength(6);
-    expect(titles()).toEqual(["launcher.action.open", "launcher.action.split", "launcher.action.rename", "launcher.action.copy_link", "launcher.action.pin"]);
+    expect(shown).toHaveLength(7);
+    expect(titles()).toEqual(["launcher.action.open", "launcher.action.split", "launcher.action.peek", "launcher.action.rename", "launcher.action.copy_link", "launcher.action.pin"]);
     expect(document.querySelector(".launcher-hints")!.textContent).toContain("launcher.hint.back");
     // Con le azioni aperte la domanda non si porta al pannello: il controllo sparisce.
     expect(toPanel().hidden).toBe(true);
+  });
+
+  it("Sbircia, fra le azioni, apre la nota nella sbirciata", async () => {
+    launcher.open("all");
+    press(field(), "Tab");
+    for (let step = 0; step < 2; step++) press(field(), "ArrowDown");
+    press(field(), "Enter");
+    await settle();
+    expect(world.log).toEqual(["peek Guida/Uno.md"]);
   });
 
   it("Esc torna dall'elenco di prima, e non chiude il lanciatore", () => {
@@ -914,7 +934,7 @@ describe("le azioni di una riga (Tab)", () => {
     launcher.open("all");
     press(field(), "Tab");
     // Dalla prima azione (Apri qui): tre giù, a Copia il link.
-    for (let step = 0; step < 3; step++) press(field(), "ArrowDown");
+    for (let step = 0; step < 4; step++) press(field(), "ArrowDown");
     press(field(), "Enter");
     await settle();
     expect(world.log).toEqual(["copy links Guida/Uno.md"]);
@@ -923,7 +943,7 @@ describe("le azioni di una riga (Tab)", () => {
   it("Appunta scrive l'appunto della nota, e la voce dice se è già appuntata", async () => {
     launcher.open("all");
     press(field(), "Tab");
-    for (let step = 0; step < 4; step++) press(field(), "ArrowDown");
+    for (let step = 0; step < 5; step++) press(field(), "ArrowDown");
     press(field(), "Enter");
     await settle();
     expect(world.log).toEqual(["pin Guida/Uno.md true"]);
@@ -935,8 +955,7 @@ describe("le azioni di una riga (Tab)", () => {
     try {
       launcher.open("all");
       press(field(), "Tab");
-      press(field(), "ArrowDown");
-      press(field(), "ArrowDown");
+      for (let step = 0; step < 3; step++) press(field(), "ArrowDown");
       press(field(), "Enter");
       await settle();
       expect(world.log).toEqual(["start note.rename"]);

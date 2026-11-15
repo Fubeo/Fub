@@ -430,7 +430,8 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         editor.teardowns.push(stop);
         return stop;
       },
-      destroy: () => destroy(editor),
+      surface: () => (editor.destroyed ? null : editor.surface),
+      destroy: (options) => destroy(editor, options?.quiet !== true),
     };
   }
 

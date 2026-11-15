@@ -1,0 +1,71 @@
+{
+  "about": "`sides: \"auto\"` sceglie la coppia di punti di mezzo più vicini, come Collega della GUI (nearestSides): da t2 a f1, più larga e più in basso, sinistra di t2 e alto di f1 (160 e 320). Confrontare i centri darebbe basso e alto.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t2",
+        "type": "text",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Ripasso"
+      },
+      {
+        "id": "f1",
+        "type": "text",
+        "x": 0,
+        "y": 400,
+        "width": 480,
+        "height": 304,
+        "text": "Voti"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "connect",
+      "from": "t2",
+      "to": "f1",
+      "sides": "auto"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "t2",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Ripasso"
+        },
+        {
+          "id": "f1",
+          "type": "text",
+          "x": 0,
+          "y": 400,
+          "width": 480,
+          "height": 304,
+          "text": "Voti"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "t2",
+          "toNode": "f1",
+          "fromSide": "left",
+          "toSide": "top",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

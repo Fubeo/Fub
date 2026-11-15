@@ -1,0 +1,36 @@
+{
+  "about": "La larghezza della gomma è un numero maggiore di zero: 0 non si legge.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "t",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "fub:ink": {
+          "v": 2,
+          "strokes": []
+        }
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "erase_along",
+      "points": [
+        [
+          0,
+          0
+        ]
+      ],
+      "size": 0
+    }
+  ],
+  "expect": {
+    "outcome": "malformed"
+  }
+}

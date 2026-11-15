@@ -8,7 +8,10 @@
 Il resto del formato dell'inchiostro (il livello, il tratto, le ancore
 `card` e `free`, come si disegna) sta in [L'inchiostro della
 lavagna](canvas-ink.md#lancora). Il perché delle ancore di contenuto sta
-nell'[ADR 0243](../decisions/0243-le-ancore-di-contenuto.md).
+nell'[ADR 0243](../decisions/0243-le-ancore-di-contenuto.md). Dal codice le
+scrive `draw`, e `erase_along` ne taglia i tratti, con `on` sulla pagina o
+sulla cella
+([L'inchiostro in codice](canvas-ink-code.md#draw)).
 
 ## L'ancora di pagina
 

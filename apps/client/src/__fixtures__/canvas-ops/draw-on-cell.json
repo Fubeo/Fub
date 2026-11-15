@@ -1,0 +1,109 @@
+{
+  "about": "Sulla cella di un foglio (N6 T37): i punti sono pixel del foglio al 100% dall'angolo in alto a sinistra della cella B3 del foglio «Voti di marzo», col nome com'è nel file, spazi compresi. L'ancora è `cell` e non scrive una misura.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p1",
+        "type": "file",
+        "file": "Corsi/dispensa.pdf",
+        "x": 0,
+        "y": 0,
+        "width": 360,
+        "height": 509
+      },
+      {
+        "id": "f1",
+        "type": "file",
+        "file": "Corsi/voti.xlsx",
+        "x": 400,
+        "y": 0,
+        "width": 640,
+        "height": 420
+      },
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 600,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": {
+        "card": "f1",
+        "sheet": "Voti di marzo",
+        "cell": "B3"
+      },
+      "points": [
+        [
+          2,
+          10
+        ],
+        [
+          60,
+          10
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "p1",
+          "type": "file",
+          "x": 0,
+          "y": 0,
+          "width": 360,
+          "height": 509,
+          "file": "Corsi/dispensa.pdf"
+        },
+        {
+          "id": "f1",
+          "type": "file",
+          "x": 400,
+          "y": 0,
+          "width": 640,
+          "height": 420,
+          "file": "Corsi/voti.xlsx",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "e220a8397b1dcdaf",
+                "tool": "pen",
+                "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "cell",
+                  "sheet": "Voti di marzo",
+                  "cell": "B3"
+                },
+                "ink": "1 s100 cxypt 200,1000,128,0 5800,0,0,8"
+              }
+            ]
+          }
+        },
+        {
+          "id": "t1",
+          "type": "text",
+          "x": 0,
+          "y": 600,
+          "width": 320,
+          "height": 160,
+          "text": "Ciclo dell'acqua"
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

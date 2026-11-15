@@ -1,0 +1,13 @@
+{
+  "about": "Con content_size [0, 0] non si sa la pagina: un PDF nasce con le misure di serie, 360×480.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 0, "y": 0, "content_size": [0, 0] }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "pdf", "type": "file", "file": "Corsi/dispensa.pdf", "x": 0, "y": 0, "width": 360, "height": 480 }],
+      "edges": []
+    },
+    "created": ["pdf"]
+  }
+}

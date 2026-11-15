@@ -1,0 +1,29 @@
+{
+  "about": "`pages` è un testo o una lista: un numero solo non si legge.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "spread_pages",
+      "id": "p",
+      "pages": 4,
+      "page_count": 9
+    }
+  ],
+  "expect": {
+    "outcome": "malformed"
+  }
+}

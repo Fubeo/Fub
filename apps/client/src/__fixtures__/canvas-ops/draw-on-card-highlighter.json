@@ -1,0 +1,88 @@
+{
+  "about": "on con l'id di una scheda: i punti sono già nelle sue unità, 0,0 in alto a sinistra. L'evidenziatore dà lo strumento highlighter, il suo pennello senza pressione e, senza colore, il giallo.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "text": "Evaporazione",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": "t2",
+      "points": [
+        [
+          20,
+          40
+        ],
+        [
+          220,
+          40
+        ]
+      ],
+      "pen": "highlighter"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "t1",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Ciclo dell'acqua"
+        },
+        {
+          "id": "t2",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Evaporazione",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "e220a8397b1dcdaf",
+                "tool": "highlighter",
+                "brush": "pf1 size=16 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=0 capEnd=0 sim=0 pen=highlighter",
+                "color": "#f0e442",
+                "anchor": {
+                  "kind": "card",
+                  "width": 320,
+                  "height": 160
+                },
+                "ink": "1 s100 cxypt 2000,4000,128,0 20000,0,0,8"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

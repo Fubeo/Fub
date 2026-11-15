@@ -1,0 +1,17 @@
+{
+  "about": "duplicate di un gruppo senza le sue schede: si copia il gruppo e basta, con la sua etichetta, come la GUI. t1 dentro al gruppo resta dov'è, e la copia del gruppo non porta nessuna scheda.",
+  "before": { "nodes": [
+    { "id": "g", "type": "group", "label": "Lezione", "x": 0, "y": 0, "width": 400, "height": 300 },
+    { "id": "t1", "type": "text", "x": 20, "y": 40, "width": 100, "height": 60, "text": "t1" }
+  ] },
+  "ops": [{ "op": "duplicate", "ids": ["g"] }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "g", "type": "group", "label": "Lezione", "x": 0, "y": 0, "width": 400, "height": 300 },
+      { "id": "t1", "type": "text", "x": 20, "y": 40, "width": 100, "height": 60, "text": "t1" },
+      { "id": "e220a8397b1dcdaf", "type": "group", "label": "Lezione", "x": 32, "y": 32, "width": 400, "height": 300 }
+    ] },
+    "created": ["e220a8397b1dcdaf"]
+  }
+}

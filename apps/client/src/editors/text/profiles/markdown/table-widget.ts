@@ -12,6 +12,8 @@ import { EditorView, ViewPlugin, WidgetType, keymap, type ViewUpdate } from "@co
 import { redo, undo } from "@codemirror/commands";
 import { isAllowedLink } from "../../../../ui/sanitize";
 import { withLineBreaks } from "../../line-breaks";
+import { followPath, followWikilink, textLinkGesture, type WikilinkFollow } from "./link-gesture";
+import { routeHref } from "./link-syntax";
 import { mountMathBlocks } from "./math";
 import { frontmatterLanguage } from "./proof";
 import type { MarkdownBlock } from "./render-types";
@@ -35,7 +37,7 @@ export interface TableGridCallbacks {
   changed(): void;
 }
 
-export interface TableWidgetCallbacks {
+export interface TableWidgetCallbacks extends WikilinkFollow {
   openWikilink(page: string, heading: string | null, block: string | null): void;
   searchTag(tag: string): void;
   readonly tableGrid?: TableGridCallbacks;
@@ -177,28 +179,42 @@ class TableController {
     return this.#widget.block.cells?.get(start) ?? null;
   }
 
-  /// Mod+clic su ciò che una cella rende: un link a una nota, un tag, un
-  /// indirizzo esterno che il sanificatore lascia passare.
+  /// Il clic su ciò che una cella rende, con la regola del testo che si
+  /// scrive (`link-gesture.ts`: la cella si scrive, il clic semplice la
+  /// sceglie): Mod col clic (Cmd sul Mac) segue un link a una nota come dice
+  /// `editor.link-click`, un tag, un indirizzo esterno che il sanificatore
+  /// lascia passare; Alt col clic sbircia un link a una nota.
   #activate(event: MouseEvent): boolean {
     const target = event.target instanceof Element ? event.target : null;
-    if (!target) return false;
+    const gesture = textLinkGesture(event);
+    if (!target || !gesture) return false;
     const callbacks = this.#widget.callbacks;
     const wiki = target.closest<HTMLElement>("[data-wikilink-page]");
     if (wiki) {
-      callbacks.openWikilink(
+      void followWikilink(
+        callbacks,
         wiki.dataset.wikilinkPage ?? "",
         wiki.dataset.wikilinkHeading ?? null,
         wiki.dataset.wikilinkBlock ?? null,
+        gesture,
       );
       return true;
     }
+    const anchor = target.closest<HTMLAnchorElement>("a[href]");
+    const href = anchor?.getAttribute("href") ?? "";
+    if (anchor && href !== "" && isAllowedLink(href) && callbacks.openPath) {
+      const route = routeHref(href);
+      if (route.kind === "path" && route.path !== "") {
+        void followPath(callbacks, route.path, gesture);
+        return true;
+      }
+    }
+    if (gesture === "peek") return false;
     const tag = target.closest<HTMLElement>(".tag[data-tag]");
     if (tag) {
       callbacks.searchTag(tag.dataset.tag ?? "");
       return true;
     }
-    const anchor = target.closest<HTMLAnchorElement>("a[href]");
-    const href = anchor?.getAttribute("href") ?? "";
     if (anchor && /^[a-z][\w+.-]*:/i.test(href) && isAllowedLink(href)) {
       window.open(href, "_blank", "noopener,noreferrer");
       return true;

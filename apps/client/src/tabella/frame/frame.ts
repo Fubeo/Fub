@@ -1131,7 +1131,9 @@ export class TableFrame {
   #mousedown(event: MouseEvent): void {
     if (this.#editing && event.target instanceof Node && this.#editing.input.contains(event.target)) return;
     if (event.target === this.#fillHandle || this.#handles.some((handle) => handle === event.target)) return;
-    if (event.button === 0 && (event.ctrlKey || event.metaKey) && this.#host.activate?.(event)) {
+    // Mod col clic segue un link della cella, Alt col clic lo sbircia: lo
+    // decide chi ospita la griglia.
+    if (event.button === 0 && (event.ctrlKey || event.metaKey || event.altKey) && this.#host.activate?.(event)) {
       event.preventDefault();
       return;
     }

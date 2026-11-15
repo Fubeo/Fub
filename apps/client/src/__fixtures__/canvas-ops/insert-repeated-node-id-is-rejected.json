@@ -1,0 +1,53 @@
+{
+  "about": "Due schede del frammento con lo stesso id: Invalid, gli archi non saprebbero a quale andare.",
+  "before": {
+    "nodes": [
+      {
+        "id": "lez",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Lezione"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "insert",
+      "fragment": {
+        "version": 1,
+        "nodes": [
+          {
+            "id": "d",
+            "type": "text",
+            "x": 0,
+            "y": 0,
+            "width": 320,
+            "height": 160,
+            "text": ""
+          },
+          {
+            "id": "d",
+            "type": "text",
+            "x": 400,
+            "y": 0,
+            "width": 320,
+            "height": 160,
+            "text": ""
+          }
+        ],
+        "edges": []
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

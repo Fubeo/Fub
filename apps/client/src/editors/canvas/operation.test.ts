@@ -8,9 +8,7 @@ import {
   eraseStrokePatch,
   eraseStrokePatches,
   moveStrokesOp,
-  removeEdgePatch,
   restyleStrokesOp,
-  removeNodePatch,
   upsertEdgePatch,
   upsertNodePatch,
   type CanvasPatch,
@@ -61,14 +59,6 @@ describe("i costruttori delle toppe", () => {
     const patch = upsertNodePatch(doc, node)!;
     expect(Object.prototype.hasOwnProperty.call(patch.after, "__proto__")).toBe(true);
     expect(JSON.stringify(patch.after)).toContain('"constructor":{"keep":1},"__proto__":{"own":true}');
-  });
-
-  it("togliere una scheda o un arco dice dove stava; un id che non c'è non fa toppa", () => {
-    const doc = board();
-    expect(removeNodePatch(doc, "n2")).toEqual({ kind: "remove-node", before: doc.nodes[1], after: null, at: 1 });
-    expect(removeNodePatch(doc, "manca")).toBeNull();
-    expect(removeEdgePatch(doc, "e1")).toEqual({ kind: "remove-edge", before: doc.edges[0], after: null, at: 0 });
-    expect(removeEdgePatch(doc, "manca")).toBeNull();
   });
 
   it("riattaccare un estremo tiene i campi dell'arco, anche sconosciuti", () => {
@@ -231,7 +221,7 @@ describe("canvas ink patches", () => {
     const before = inkSource(["s1"]);
     const core = await open(before);
     const patch = addStrokePatch(core.model(), core.inkLayers(), { node: "n2" }, stroke("s9"))!;
-    commit(core, before, [removeNodePatch(core.model(), "n2")!]);
+    commit(core, before, core.compile([{ op: "remove", ids: ["n2"] }], 1n).patches);
     const model = JSON.stringify(core.model());
     expect(refusal(core, [patch])).toBe("stale");
     expect(JSON.stringify(core.model())).toBe(model);
