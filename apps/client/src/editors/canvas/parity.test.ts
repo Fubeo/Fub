@@ -566,11 +566,7 @@ const SETUP: Readonly<Record<string, R8Setup>> = {
   "main.order.back": runCommand("canvas.send_back"),
   "main.align": runCommand("canvas.align.left"),
   "main.distribute": runCommand("canvas.distribute_x"),
-  "main.edge.connect": {
-    ...runCommand("canvas.connect"),
-    ops: () => [{ op: "connect", from: "t2", to: "f1", sides: "auto" }],
-    why: "Collega della GUI scrive i lati più vicini, `sides: \"auto\"`; le `ops` della voce in main.json non dicono `sides`, che di serie non scrive lati, e l'inventario R8 lo legge e basta",
-  },
+  "main.edge.connect": runCommand("canvas.connect"),
   "main.edge.reconnect": { via: "edge-toNode", act: ({ host }) => setField(host, "edge-toNode", "f1") },
   "main.edge.reverse": runCommand("canvas.edge.reverse"),
   "main.edge.label": { via: "edge-label", act: ({ host }) => setField(host, "edge-label", "perché") },
