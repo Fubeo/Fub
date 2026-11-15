@@ -98,14 +98,14 @@ describe("dove si apre", () => {
     expect(openWay({ shiftKey: true })).toBe("tab");
   });
 
-  it("Alt-Invio apre a lato finché la sbirciata non c'è, senza finestre", () => {
-    expect(openWay({ altKey: true })).toBe("split");
+  it("Alt-Invio sbircia", () => {
+    expect(openWay({ altKey: true })).toBe("peek");
   });
 
   it("di due modificatori vince Ctrl, poi Alt, poi Maiusc", () => {
     expect(openWay({ altKey: true, ctrlKey: true, shiftKey: true })).toBe("split");
     expect(openWay({ ctrlKey: true, shiftKey: true })).toBe("split");
-    expect(openWay({ altKey: true, shiftKey: true })).toBe("split");
+    expect(openWay({ altKey: true, shiftKey: true })).toBe("peek");
   });
 });
 

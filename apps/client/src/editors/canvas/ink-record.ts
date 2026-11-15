@@ -23,7 +23,7 @@
 // Niente DOM qui: solo dati, così le stesse funzioni servono alla lavagna e
 // ai test.
 
-import { brushForInput, checkInkBrush, formatInkBrush, parseInkBrush, type InkBrush } from "../../ink/brush";
+import { brushForInput, checkInkBrush, formatInkBrush, isNib1, parseInkBrush, type InkBrush } from "../../ink/brush";
 import { toLocal, type Affine } from "../../ink/geometry";
 import { inkPath } from "../../ink/outline";
 import { INK_HIGHLIGHTER_COLOR } from "../../ink/palette";
@@ -491,9 +491,14 @@ export function strokeRecord(
   }
   // Il pezzo che continua in un altro non si assottiglia alla fine. Sulla
   // pagina e sulla cella lo spessore va nelle unità dell'ancora, come i
-  // campioni.
+  // campioni, e con lui l'assottigliamento di `pf1`, che le penne danno in
+  // proporzione alla misura (`pen_brush` in `fub-ink-codec`), come `draw`.
   const input = closedAtLimit(brushForInput(look.brush, stroke.pressure), stroke.split);
-  const brush: InkBrush = k === 1 ? input : { ...input, size: input.size * k };
+  const brush: InkBrush = k === 1
+    ? input
+    : isNib1(input)
+      ? { ...input, size: input.size * k }
+      : { ...input, size: input.size * k, taperStart: input.taperStart * k, taperEnd: input.taperEnd * k };
   const brushText = formatInkBrush(brush);
   if (stroke.samples.length > INK_MAX_SAMPLES) return { ok: false, reason: "full" };
   const toAnchor = holder === null

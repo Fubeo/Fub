@@ -54,6 +54,11 @@ lavagna, scritto una volta sola:
   in byte UTF-8 del sorgente di prima, mai a metà di un carattere). Un
   rifiuto (`CommitError`) lascia `Core` com'era; i casi sono in
   `crates/fub-canvas-core/tests/commit.rs`.
+- `layout`: le misure e i posti di una scheda nuova (`card_kind`,
+  `born_size`, `auto_place`, `place_near`, `group_rect`), uguali alla GUI;
+  le regole in [la lavagna come codice](canvas-code.md).
+- `describe`: la lavagna letta come schema (`outline`), come operazioni che
+  la ricreano (`code`) e come modello (`json`), nella stessa pagina.
 
 Il nucleo è **puro**. Dipende soltanto da `serde`, `serde_json`, `thiserror`
 e dal codec dei tratti `fub-ink-codec` (che porta con sé il nucleo
@@ -390,10 +395,12 @@ se il file arriva.
 
 **Tagliare** copia e poi toglie le schede come «Togli dalla lavagna»: i file
 restano, e l'avviso lo dice con «Annulla». I tratti liberi copiati escono
-dal livello della radice nello stesso commit. Ctrl+D (Duplica) fa una copia
-sfalsata di 32; se le schede scelte sono le copie dell'ultimo Ctrl+D, la
-copia nuova ripete la distanza che c'è adesso fra quelle e le schede di
-partenza, anche dopo averle spostate.
+dal livello della radice nello stesso commit. Ctrl+D (Duplica) è `duplicate`
+del nucleo: fa una copia sfalsata di 32 e agganciata alla griglia di 8, coi
+fili fra le schede copiate; se le schede scelte sono le copie dell'ultimo
+Ctrl+D, la copia nuova ripete la distanza che c'è adesso fra quelle e le
+schede di partenza, anche dopo averle spostate, così com'è e senza
+aggancio (`duplicate` con `dx` e `dy` scritti).
 
 ## Parità
 

@@ -1,0 +1,13 @@
+{
+  "about": "Una pagina PDF di 595×842 punti (A4) nasce larga 360 e alta 509 (360·842/595 = 509,4, intero come `bornSize` della GUI e come le pagine di `spread_pages`), col sottopercorso della pagina; in fondo alla lista vuota va in 0,0.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "p5", "file": "Corsi/dispensa.pdf", "subpath": "#page=5", "content_size": [595, 842] }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "p5", "type": "file", "file": "Corsi/dispensa.pdf", "subpath": "#page=5", "x": 0, "y": 0, "width": 360, "height": 509 }],
+      "edges": []
+    },
+    "created": ["p5"]
+  }
+}

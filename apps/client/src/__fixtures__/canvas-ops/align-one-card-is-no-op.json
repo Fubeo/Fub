@@ -1,0 +1,13 @@
+{
+  "about": "align con una sola scheda: niente si sposta, anche se il lato (top) non è agganciato. Nessuna toppa.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 13, "y": 7, "width": 100, "height": 60, "text": "a" }
+  ] },
+  "ops": [{ "op": "align", "ids": ["a"], "to": "top" }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "a", "type": "text", "x": 13, "y": 7, "width": 100, "height": 60, "text": "a" }
+    ] }
+  }
+}

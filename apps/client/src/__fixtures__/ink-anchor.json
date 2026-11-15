@@ -1,0 +1,33 @@
+{
+  "about": "Casi scritti a mano della regola dell'ancora: strokeBounds e anchorAt di apps/client/src/editors/canvas/anchor.ts, che fanno fede, e la loro copia Rust in crates/fub-canvas-core/src/ops/anchor.rs (draw con on: \"auto\"). Li fanno girare anchor-vectors.test.ts (Vitest) e i test di ops/anchor.rs (cargo test -p fub-canvas-core). I numeri che JSON non scrive sono le stringhe \"NaN\", \"Infinity\" e \"-Infinity\". In anchor, refuse sono le schede che canHold non accetta, ed expect è l'id della scheda o null (il tratto è libero).",
+  "bounds": [
+    { "name": "un tocco solo ha l'area della misura", "points": [[8, 8]], "size": 4, "expect": { "x": 6, "y": 6, "width": 4, "height": 4 } },
+    { "name": "tre punti, allargati di metà misura", "points": [[0, 0], [10, 5], [4, -3]], "size": 2, "expect": { "x": -1, "y": -4, "width": 12, "height": 10 } },
+    { "name": "i punti non finiti si saltano", "points": [[1, 1], ["NaN", 5], [3, "Infinity"], [2, 2]], "size": 0, "expect": { "x": 1, "y": 1, "width": 1, "height": 1 } },
+    { "name": "senza punti il riquadro è vuoto nell'origine", "points": [], "size": 3, "expect": { "x": 0, "y": 0, "width": 0, "height": 0 } },
+    { "name": "solo punti non finiti: vuoto nell'origine", "points": [["-Infinity", 1], [2, "NaN"]], "size": 3, "expect": { "x": 0, "y": 0, "width": 0, "height": 0 } },
+    { "name": "una misura NaN vale 0", "points": [[5, 5], [7, 9]], "size": "NaN", "expect": { "x": 5, "y": 5, "width": 2, "height": 4 } },
+    { "name": "una misura negativa vale 0", "points": [[5, 5], [7, 9]], "size": -4, "expect": { "x": 5, "y": 5, "width": 2, "height": 4 } },
+    { "name": "una misura infinita vale 0", "points": [[5, 5], [7, 9]], "size": "Infinity", "expect": { "x": 5, "y": 5, "width": 2, "height": 4 } },
+    { "name": "coordinate con la virgola", "points": [[0.5, 0.25], [1.75, 2.5]], "size": 0.5, "expect": { "x": 0.25, "y": 0, "width": 1.75, "height": 2.75 } }
+  ],
+  "anchor": [
+    { "name": "nessuna scheda: libero", "nodes": [], "bounds": { "x": 0, "y": 0, "width": 10, "height": 10 }, "expect": null },
+    { "name": "dentro una scheda", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }], "bounds": { "x": 10, "y": 10, "width": 20, "height": 20 }, "expect": "a" },
+    { "name": "fuori da ogni scheda: libero", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }], "bounds": { "x": 200, "y": 200, "width": 20, "height": 20 }, "expect": null },
+    { "name": "due schede una sull'altra: vale quella più in alto", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }, { "id": "b", "x": 0, "y": 0, "width": 100, "height": 100 }], "bounds": { "x": 10, "y": 10, "width": 20, "height": 20 }, "expect": "b" },
+    { "name": "la più in alto tocca e non prende: libero anche se sotto c'è chi prenderebbe", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 200, "height": 200 }, { "id": "b", "x": 90, "y": 0, "width": 100, "height": 100 }], "bounds": { "x": 60, "y": 10, "width": 40, "height": 10 }, "expect": null },
+    { "name": "metà dell'area esatta e il centro sul bordo: prende", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }], "bounds": { "x": 50, "y": 10, "width": 100, "height": 10 }, "expect": "a" },
+    { "name": "meno di metà dell'area: libero", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }], "bounds": { "x": 60, "y": 10, "width": 100, "height": 10 }, "expect": null },
+    { "name": "canHold la rifiuta: libero, anche con una scheda sotto", "nodes": [{ "id": "b", "x": 0, "y": 0, "width": 100, "height": 100 }, { "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }], "refuse": ["a"], "bounds": { "x": 10, "y": 10, "width": 20, "height": 20 }, "expect": null },
+    { "name": "un punto sul bordo è dentro", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }], "bounds": { "x": 100, "y": 50, "width": 0, "height": 0 }, "expect": "a" },
+    { "name": "un punto appena fuori è libero", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }], "bounds": { "x": 101, "y": 50, "width": 0, "height": 0 }, "expect": null },
+    { "name": "una riga dritta per metà dentro, col centro sul bordo", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }], "bounds": { "x": 90, "y": 50, "width": 20, "height": 0 }, "expect": "a" },
+    { "name": "un riquadro infinito non è di nessuno", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }], "bounds": { "x": 10, "y": 10, "width": "Infinity", "height": 10 }, "expect": null },
+    { "name": "un riquadro con una misura negativa non è di nessuno", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }], "bounds": { "x": 10, "y": 10, "width": -5, "height": 10 }, "expect": null },
+    { "name": "un riquadro NaN non è di nessuno", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }], "bounds": { "x": "NaN", "y": 10, "width": 5, "height": 10 }, "expect": null },
+    { "name": "una scheda con una misura NaN, zero o una posizione infinita non tocca niente", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }, { "id": "b", "x": 0, "y": 0, "width": "NaN", "height": 100 }, { "id": "c", "x": 0, "y": 0, "width": 0, "height": 100 }, { "id": "d", "x": "-Infinity", "y": 0, "width": 100, "height": 100 }], "bounds": { "x": 10, "y": 10, "width": 20, "height": 20 }, "expect": "a" },
+    { "name": "una scheda enorme non fa traboccare l'area", "nodes": [{ "id": "a", "x": -1e300, "y": -1e300, "width": 1e301, "height": 1e301 }], "bounds": { "x": 0, "y": 0, "width": 10, "height": 10 }, "expect": "a" },
+    { "name": "una scheda sopra che non tocca non conta", "nodes": [{ "id": "a", "x": 0, "y": 0, "width": 100, "height": 100 }, { "id": "b", "x": 500, "y": 500, "width": 100, "height": 100 }], "bounds": { "x": 10, "y": 10, "width": 20, "height": 20 }, "expect": "a" }
+  ]
+}

@@ -19,6 +19,7 @@ import { formatKindOf } from "../../ui/format-kind";
 import type { SyntaxForm } from "../../host/contract";
 import type { SaveState } from "../../state/saving";
 import type { Lifetime } from "../../ui/lifetime";
+import type { EditorSurface } from "../core/registry";
 import { mediaKindOfId } from "../media/media-types";
 import type { CanvasNode } from "./model";
 import type { CanvasParts } from "./parts";
@@ -356,8 +357,14 @@ export interface CardEditor {
   context?(): CardEditorContext | null;
   /// Avvisa quando `context()` cambia; restituisce come smettere.
   onContext?(listener: (context: CardEditorContext | null) => void): () => void;
-  /// Stacca l'editor dalla sessione e lo smonta, una volta sola.
-  destroy(): void;
+  /// La superficie montata (per la sbirciata: le selezioni da portare al
+  /// riquadro, la barra di formato che agisce su di lei), o `null` se
+  /// l'editor è già smontato.
+  surface?(): EditorSurface | null;
+  /// Stacca l'editor dalla sessione e lo smonta, una volta sola. Con `quiet`
+  /// (la finestra o il vault che se ne vanno) un salvataggio che non riesce
+  /// lascia la bozza senza chiedere che farne, come `destroyAll`.
+  destroy(options?: { readonly quiet?: boolean }): void;
 }
 
 /// Come si apre l'editor delle note sopra il testo di una scheda di testo

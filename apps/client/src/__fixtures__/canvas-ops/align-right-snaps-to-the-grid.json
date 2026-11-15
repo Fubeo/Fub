@@ -1,0 +1,15 @@
+{
+  "about": "align right: il bordo destro comune è 300 (quello di b). a è larga 101: il suo x, 300 − 101 = 199, si aggancia a 200 come vuole la griglia di 8.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 101, "height": 60, "text": "a" },
+    { "id": "b", "type": "text", "x": 200, "y": 100, "width": 100, "height": 60, "text": "b" }
+  ] },
+  "ops": [{ "op": "align", "ids": ["a", "b"], "to": "right" }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "a", "type": "text", "x": 200, "y": 0, "width": 101, "height": 60, "text": "a" },
+      { "id": "b", "type": "text", "x": 200, "y": 100, "width": 100, "height": 60, "text": "b" }
+    ] }
+  }
+}

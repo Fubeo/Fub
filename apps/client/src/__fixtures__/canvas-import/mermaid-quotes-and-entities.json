@@ -1,0 +1,63 @@
+{
+  "about": "Il testo fra virgolette tiene le parentesi; `#quot;` diventa una virgoletta, `#35;` un cancelletto, `<br>` un a capo.",
+  "op": {
+    "op": "from_mermaid",
+    "text": "graph LR\n  A[\"Detto #quot;ciao#quot; (piano)\"] --> B[Numero #35;1]\n  B --> C[\"Riga uno<br>riga due\"]"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "A",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Detto \"ciao\" (piano)"
+        },
+        {
+          "id": "B",
+          "type": "text",
+          "x": 416,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Numero #1"
+        },
+        {
+          "id": "C",
+          "type": "text",
+          "x": 832,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Riga uno\nriga due"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "A",
+          "toNode": "B",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "fromNode": "B",
+          "toNode": "C",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "A",
+      "B",
+      "C",
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4"
+    ],
+    "notes": []
+  }
+}

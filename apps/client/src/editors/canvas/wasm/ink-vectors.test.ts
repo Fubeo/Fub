@@ -7,7 +7,7 @@
 // che non passa si corregge nel nucleo, non nel vettore.
 //
 // I vettori delle toppe (`canvas-patches/*-ink-*.json`) e delle operazioni
-// (`canvas-ops/*ink*.json`) che toccano l'inchiostro passano da
+// (`canvas-ops/*with-ink*.json`) che toccano l'inchiostro passano da
 // `vectors.test.ts` con gli altri; qui se ne conta il numero, così uno che
 // sparisce si vede.
 //
@@ -27,7 +27,12 @@ interface Vector {
 const INK_VECTORS = 32;
 /** Le toppe `ink` di `canvas-patches/` (87–103). */
 const INK_PATCH_VECTORS = 17;
-/** Le operazioni che portano l'inchiostro con la scheda, in `canvas-ops/`. */
+/**
+ * Le operazioni che portano l'inchiostro con la scheda, in `canvas-ops/`
+ * (`*with-ink*`). Resta fuori `insert-root-ink-is-rejected.json`: tocca
+ * l'inchiostro, ma è un rifiuto senza inchiostro portato, e la legge già
+ * `vectors.test.ts` con le altre operazioni.
+ */
 const INK_OP_VECTORS = 4;
 
 const inkFiles = import.meta.glob("../../../__fixtures__/canvas-ink/*", {
@@ -42,7 +47,7 @@ const patchFiles = import.meta.glob("../../../__fixtures__/canvas-patches/*ink*"
   eager: true,
 }) as Record<string, string>;
 
-const opFiles = import.meta.glob("../../../__fixtures__/canvas-ops/*ink*", {
+const opFiles = import.meta.glob("../../../__fixtures__/canvas-ops/*with-ink*", {
   query: "?raw",
   import: "default",
   eager: true,

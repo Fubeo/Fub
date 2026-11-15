@@ -1,0 +1,67 @@
+{
+  "about": "Con `in_place` è la scheda stessa a diventare l'estratto, come il selettore delle sezioni: posto e misure restano, il `subpath` e `fub:parts` cambiano, e i campi sconosciuti dell'estratto di prima restano.",
+  "before": {
+    "nodes": [
+      {
+        "id": "n",
+        "type": "file",
+        "x": 0,
+        "y": 400,
+        "width": 320,
+        "height": 240,
+        "file": "Corsi/appunti.md",
+        "subpath": "#A",
+        "fub:parts": {
+          "kind": "sections",
+          "sections": [
+            "A",
+            "B"
+          ],
+          "fub:nota": 1
+        }
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "excerpt",
+      "id": "n",
+      "part": {
+        "kind": "sections",
+        "sections": [
+          "Media",
+          "Varianza"
+        ]
+      },
+      "in_place": true
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "n",
+          "type": "file",
+          "x": 0,
+          "y": 400,
+          "width": 320,
+          "height": 240,
+          "file": "Corsi/appunti.md",
+          "subpath": "#Media",
+          "fub:parts": {
+            "kind": "sections",
+            "sections": [
+              "Media",
+              "Varianza"
+            ],
+            "fub:nota": 1
+          }
+        }
+      ],
+      "edges": []
+    }
+  }
+}

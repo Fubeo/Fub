@@ -1,0 +1,199 @@
+{
+  "about": "Oltre 12 pagine il gruppo prende l'etichetta data con `label`.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "spread_pages",
+      "id": "p",
+      "pages": "4-16",
+      "page_count": 40,
+      "label": "Capitolo 2"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "p",
+          "type": "file",
+          "x": 560,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf"
+        },
+        {
+          "id": "910a2dec89025cc1",
+          "type": "group",
+          "x": 920,
+          "y": 376,
+          "width": 3864,
+          "height": 1032,
+          "label": "Capitolo 2"
+        },
+        {
+          "id": "beeb8da1658eec67",
+          "type": "file",
+          "x": 944,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=4"
+        },
+        {
+          "id": "f893a2eefb32555e",
+          "type": "file",
+          "x": 1328,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=5"
+        },
+        {
+          "id": "71c18690ee42c90b",
+          "type": "file",
+          "x": 1712,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=6"
+        },
+        {
+          "id": "71bb54d8d101b5b9",
+          "type": "file",
+          "x": 2096,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=7"
+        },
+        {
+          "id": "c34d0bff90150280",
+          "type": "file",
+          "x": 2480,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=8"
+        },
+        {
+          "id": "e099ec6cd7363ca5",
+          "type": "file",
+          "x": 2864,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=9"
+        },
+        {
+          "id": "85e7bb0f12278575",
+          "type": "file",
+          "x": 3248,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=10"
+        },
+        {
+          "id": "491718de357e3da8",
+          "type": "file",
+          "x": 3632,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=11"
+        },
+        {
+          "id": "cb435c8e74616796",
+          "type": "file",
+          "x": 4016,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=12"
+        },
+        {
+          "id": "6775dc7701564f61",
+          "type": "file",
+          "x": 4400,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=13"
+        },
+        {
+          "id": "9afcd44d14cf8bfe",
+          "type": "file",
+          "x": 944,
+          "y": 904,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=14"
+        },
+        {
+          "id": "7476cf8a4baa5dc0",
+          "type": "file",
+          "x": 1328,
+          "y": 904,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=15"
+        },
+        {
+          "id": "87b341d690d7a28a",
+          "type": "file",
+          "x": 1712,
+          "y": 904,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=16"
+        }
+      ],
+      "edges": []
+    },
+    "created": [
+      "910a2dec89025cc1",
+      "beeb8da1658eec67",
+      "f893a2eefb32555e",
+      "71c18690ee42c90b",
+      "71bb54d8d101b5b9",
+      "c34d0bff90150280",
+      "e099ec6cd7363ca5",
+      "85e7bb0f12278575",
+      "491718de357e3da8",
+      "cb435c8e74616796",
+      "6775dc7701564f61",
+      "9afcd44d14cf8bfe",
+      "7476cf8a4baa5dc0",
+      "87b341d690d7a28a"
+    ]
+  }
+}

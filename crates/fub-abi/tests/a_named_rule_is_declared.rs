@@ -1900,17 +1900,6 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  nella shell, che i vettori di `canvas-parts/` tengono uguale.",
             ),
         ),
-        (
-            "crates/fub-canvas-core/src/ops.rs::scales",
-            (
-                Family::AsciiCase,
-                "abbassa l'estensione del file di una scheda per dire se il suo inchiostro \
-                 scala con lei (le immagini e il PDF, `.png`, `.pdf`, …) quando `move_strokes` \
-                 porta i tratti da un livello all'altro: sono token di formato, ASCII per \
-                 definizione. Diverge da `parts.rs::of` perché la lista è un'altra, quella di \
-                 `inkFitMode` nella shell, che i vettori di `canvas-ink-fit/` tengono uguale.",
-            ),
-        ),
         // -- CasoAscii: importatori (estensioni e nomi di formato) -------------
         (
             "crates/fub-importers/src/archive.rs::route_entry",
@@ -1956,6 +1945,57 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 "abbassa la chiave per riconoscere `null|true|false|~` prima di citarla in YAML: \
                  sono parole riservate del formato, ASCII per specifica. Diverge da \
                  `sanitize_component` perché qui la regola decide la citazione, non la pulizia.",
+            ),
+        ),
+        // -- CasoAscii: il nome più vicino di un'operazione o di un campo -------
+        (
+            "crates/fub-canvas-core/src/spec.rs::distance",
+            (
+                Family::AsciiCase,
+                "abbassa il nome che il modello ha scritto per dire quale nome gli somiglia \
+                 (`Add-Card` è vicino a `add_card`, `dX` a `dx`): i nomi delle operazioni e dei \
+                 campi sono ASCII. Non decide se un nome esiste: `validate` riconosce un nome solo \
+                 se è esatto, come serde, e la distanza serve al suggerimento e alla correzione. \
+                 Diverge da `kind_of_path` perché qui la piegatura non dice la specie di niente.",
+            ),
+        ),
+        // -- CasoAscii: la specie di una scheda della lavagna -------------------
+        (
+            "crates/fub-canvas-core/src/layout.rs::kind_of_path",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione di un file per dire la specie della sua scheda sulla lavagna \
+                 (`Foto.PNG` è un'immagine come `foto.png`), in minuscolo come `cardKindOf` della \
+                 GUI: la specie deve coincidere con la sua. Non riusa `mime_for_ext` di \
+                 `rules/media.rs`: `fub-canvas-core` dipende solo da serde, serde_json e thiserror \
+                 (`dependency_invariant`), e non può chiamare fub-abi. Diverge da `route_entry` e \
+                 `import_entry` perché l'estensione qui non sceglie un importatore: decide la misura \
+                 e la specie di una scheda, e non identifica né un nome né un path.",
+            ),
+        ),
+        (
+            "crates/fub-canvas-core/src/ink.rs::scales",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se il suo inchiostro scala \
+                 (`SCAN.PNG` scala come `scan.png`), in minuscolo come `extOf` di \
+                 `media-types.ts`, che la resa usa in `inkFitMode`: il modo deve coincidere col \
+                 suo, provato coi vettori di `canvas-ink-fit/`. Diverge da `kind_of_path` perché \
+                 la resa non taglia il nome al primo `#` (`foto#1.png` scala) e la specie della \
+                 scheda sì; non identifica né un nome né un path, decide solo dove si leggono i \
+                 punti.",
+            ),
+        ),
+        (
+            "crates/fub-canvas-core/src/ops/color.rs::parse_hex",
+            (
+                Family::AsciiCase,
+                "abbassa le cifre di un `#rrggbb` per scriverlo in minuscolo come nel file \
+                 (`#FF8800` diventa `#ff8800`). Le cifre sono già controllate con \
+                 `is_ascii_hexdigit`, quindi sono ASCII per costruzione: la corsia ASCII dà la \
+                 stessa risposta della contestuale. Non decide se il colore esiste: lo decide \
+                 `parse`, con la tavola dei nomi e questo controllo; un nome non è un esadecimale \
+                 e non passa di qui.",
             ),
         ),
         // -- CasoAscii: miscellanea (canali con la loro ragione) ---------------

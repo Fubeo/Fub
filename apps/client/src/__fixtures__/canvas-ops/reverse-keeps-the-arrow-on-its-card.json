@@ -1,0 +1,83 @@
+{
+  "about": "reverse come «Inverti il filo» della GUI (reversedEdge, #353): la freccia da causa a effetto, con la punta su effetto, diventa un arco da effetto a causa con la punta ancora su effetto, che ora è la partenza (fromEnd arrow). All'arrivo, su causa, nessuna punta: toEnd none si scrive perché non è la punta di serie dell'arrivo. I lati vanno con le schede, colore ed etichetta restano.",
+  "before": {
+    "nodes": [
+      {
+        "id": "causa",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Causa"
+      },
+      {
+        "id": "effetto",
+        "type": "text",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Effetto"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "fromNode": "causa",
+        "fromSide": "right",
+        "toNode": "effetto",
+        "toSide": "left",
+        "toEnd": "arrow",
+        "color": "4",
+        "label": "porta a"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "reverse",
+      "ids": [
+        "e1"
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "causa",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Causa"
+        },
+        {
+          "id": "effetto",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Effetto"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "fromNode": "effetto",
+          "fromSide": "left",
+          "fromEnd": "arrow",
+          "toNode": "causa",
+          "toSide": "right",
+          "toEnd": "none",
+          "color": "4",
+          "label": "porta a"
+        }
+      ]
+    }
+  }
+}

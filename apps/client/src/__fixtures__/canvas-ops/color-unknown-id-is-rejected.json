@@ -1,0 +1,11 @@
+{
+  "about": "Un id che non è né una scheda né un arco rifiuta l'intera operazione, come in remove e set: la scheda «a» non cambia.",
+  "before": {
+    "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }]
+  },
+  "ops": [{ "op": "color", "ids": ["a", "zz"], "color": "red" }],
+  "expect": {
+    "outcome": "rejected",
+    "error": { "kind": "UnknownEdge", "index": 0, "id": "zz" }
+  }
+}

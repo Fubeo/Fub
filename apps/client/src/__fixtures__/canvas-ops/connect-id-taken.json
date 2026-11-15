@@ -1,0 +1,11 @@
+{
+  "about": "Un id dato a mano per l'arco che è già una scheda è DuplicateId: l'arco non si scrive.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+    ]
+  },
+  "ops": [{ "op": "connect", "id": "a", "from": "a", "to": "b" }],
+  "expect": { "outcome": "rejected", "error": { "kind": "DuplicateId", "index": 0, "id": "a" } }
+}

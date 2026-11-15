@@ -1,0 +1,13 @@
+{
+  "about": "Un collegamento nasce come scheda link: il tipo viene da `url`, la misura di nascita è 320×120.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "l", "url": "https://example.org/a", "x": 0, "y": 0 }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "l", "type": "link", "x": 0, "y": 0, "width": 320, "height": 120, "url": "https://example.org/a" }],
+      "edges": []
+    },
+    "created": ["l"]
+  }
+}

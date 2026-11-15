@@ -55,9 +55,9 @@ export const NOTE_COMMANDS: readonly string[] = ["note.export", "note.duplicate"
 /// Le sezioni del «/» che sono blocchi da inserire nella nota, nel loro ordine.
 const BLOCK_SECTIONS: readonly SlashSection[] = ["text", "lists", "blocks", "code", "media", "page"];
 
-/// Le azioni di una riga (Tab): qui, a lato, rinomina, copia il link, appunta.
-/// La sbirciata non c'è ancora: le azioni la aggiungeranno.
-export type ActionId = "open" | "split" | "rename" | "copy-link" | "pin";
+/// Le azioni di una riga (Tab): qui, a lato, la sbirciata (una nota),
+/// rinomina, copia il link, appunta.
+export type ActionId = "open" | "split" | "peek" | "rename" | "copy-link" | "pin";
 
 /// Perché una nota è in elenco: fra le recenti, per nome, o per il suo testo.
 /// Solo chi viene dal testo lascia una ricerca fra le recenti.

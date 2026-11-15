@@ -1,0 +1,39 @@
+{
+  "about": "Con il conto delle pagine (`page_count`, che `canvas.apply` legge dal PDF) una pagina della parte oltre l'ultima è `invalid`, come in `spread_pages`: la pagina 5 di un PDF di 4.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 0,
+        "y": 0,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "excerpt",
+      "id": "p",
+      "part": {
+        "kind": "pages",
+        "pages": [
+          3,
+          5
+        ]
+      },
+      "page_count": 4
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

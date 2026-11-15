@@ -1,0 +1,8 @@
+{
+  "about": "Un esadecimale corto (#ABC) non si scrive: la tavola legge solo #rrggbb, con sei cifre.",
+  "before": {
+    "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }]
+  },
+  "ops": [{ "op": "color", "ids": ["a"], "color": "#ABC" }],
+  "expect": { "outcome": "malformed" }
+}

@@ -1,0 +1,19 @@
+{
+  "about": "reorder con to: back porta le schede in fondo, sotto le altre, nell'ordine dato: c resta sotto a a, e le altre (b, d) restano nel loro ordine sopra.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+    { "id": "b", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "b" },
+    { "id": "c", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "c" },
+    { "id": "d", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "d" }
+  ] },
+  "ops": [{ "op": "reorder", "ids": ["c", "a"], "to": "back" }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "c", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "c" },
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+      { "id": "b", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "b" },
+      { "id": "d", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "d" }
+    ] }
+  }
+}
