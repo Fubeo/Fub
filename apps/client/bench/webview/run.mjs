@@ -76,7 +76,10 @@ const R1_LATE_MS = 60_000;
 const R1_ROUNDS = 30;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
-/// col selettore rapido e la modalità che il referto nomina.
+/// col selettore rapido e la modalità che il referto nomina. Il lanciatore
+/// trova per nome anche PDF e immagini (launcher/sources.ts), e niente nome
+/// trovato non è una riga: un file che non c'è fa scadere l'attesa invece di
+/// aprire una nota nuova col suo nome.
 const MODES = [
   ["Lunga", "nota"],
   ["Lavagna", "lavagna"],
@@ -1091,6 +1094,9 @@ const SCENARIOS = {
     const empty = await settled(driverPid, pause);
     const steps = [];
     for (const [name, mode] of MODES) {
+      // Chi cerca per nome lo fa a indice pronto: aprire il precedente può
+      // rimettere l'indice al lavoro, e un nome cercato in quel momento manca.
+      await indexed(session);
       await openByName(session, name, "");
       await session.waitFor("return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))", [name], 60_000);
       await pause(MEMORY_QUIET_MS);

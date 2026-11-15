@@ -706,6 +706,37 @@ describe("navigazione accessibile dell'esploratore", () => {
     expect(tab.defaultPrevented).toBe(false);
   });
 
+  it("un'apertura che finisce tardi non toglie il fuoco a un campo aperto intanto, e Invio resta lì", async () => {
+    // R1 sullo schermo vero: si apre un documento lento, e prima che finisca si
+    // apre il lanciatore e si scrive. La fine dell'apertura portava il fuoco
+    // nell'editor, e l'Invio del lanciatore finiva nel documento.
+    const host = await start(VAULT);
+    const controller = await import("./state/document-controller");
+    const unlock = host.throttle("openDocument");
+    const opening = controller.openDocument("note/Riunione.md", { gesture: true });
+    await settle();
+    const field = document.createElement("input");
+    document.body.append(field);
+    field.focus();
+    unlock();
+    await opening;
+    await settle();
+    expect(textToVideo()).toContain("riunione");
+    expect(document.activeElement).toBe(field);
+    field.remove();
+
+    // Senza nessuno che l'abbia portato altrove, il fuoco va all'editor come prima.
+    (document.querySelector<HTMLElement>("#file-list .tree-row") ?? document.body).focus();
+    const again = host.throttle("openDocument");
+    const second = controller.openDocument("note/Spesa.md", { gesture: true });
+    await settle();
+    again();
+    await second;
+    await settle();
+    expect(textToVideo()).toContain("pane, latte");
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+  });
+
   it("rivela la nota attiva dentro una cartella chiusa, senza togliere il fuoco all'editor", async () => {
     await start(VAULT);
     const noteItem = () =>

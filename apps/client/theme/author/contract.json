@@ -700,6 +700,10 @@
     "is-selected",
     "is-active",
     "is-fill",
+    "tb-drop",
+    "is-moving-lines",
+    "tb-input",
+    "is-proposal",
     "has-cell-selection",
     "is-cell-selected",
     "is-cell-cut",
@@ -2466,6 +2470,10 @@
     "is-selected": "segno",
     "is-active": "segno",
     "is-fill": "segno",
+    "tb-drop": "segno",
+    "is-moving-lines": "segno",
+    "tb-input": "segno",
+    "is-proposal": "segno",
     "has-cell-selection": "contenuto",
     "is-cell-selected": "segno",
     "is-cell-cut": "segno",
@@ -5524,7 +5532,11 @@
         "is-multi",
         "is-selected",
         "is-active",
-        "is-fill"
+        "is-fill",
+        "tb-drop",
+        "is-moving-lines",
+        "tb-input",
+        "is-proposal"
       ],
       "states": [
         "rest",
@@ -9663,7 +9675,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1764,
+    "hooks": 1768,
     "state_names": 7,
     "assigned_states": 847,
     "components": 252,

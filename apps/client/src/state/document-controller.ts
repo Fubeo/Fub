@@ -3410,7 +3410,23 @@ function takeGesture(pane: string, doc: string): boolean {
   return true;
 }
 
+/// Alla fine di un'apertura il fuoco va all'editor solo se nessuno l'ha
+/// portato altrove intanto. Un'apertura lunga (un documento da impaginare)
+/// finisce quando chi usa Fub è già passato oltre: se nel frattempo ha aperto
+/// il lanciatore, un dialogo o un campo, quello che scrive e il suo Invio
+/// restano lì e non finiscono nel documento. Il fuoco è ancora dell'apertura
+/// se sta dov'era al gesto (`asked`), se non sta da nessuna parte, o se sta in
+/// un riquadro (l'editor di prima, che l'apertura sostituisce).
+function focusStillOpening(asked: Element | null): boolean {
+  const now = document.activeElement;
+  if (now === null || now === asked || now === document.body || now === document.documentElement) return true;
+  for (const r of panes.values()) if (r.root.contains(now)) return true;
+  return false;
+}
+
 export async function openDocument(id: string, options: OpenOptions = {}): Promise<void> {
+  // Dove sta il fuoco al gesto: alla fine si guarda se è ancora lì.
+  const asked = document.activeElement;
   // Reserve the target before entering the shared flush queue. Otherwise the
   // last-tab release can close the owner while this opening is still waiting
   // for that same queue.
@@ -3448,7 +3464,7 @@ export async function openDocument(id: string, options: OpenOptions = {}): Promi
       // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
       // selezione sarebbe quello del documento precedente.
       await publishContext();
-      if (selectedMode(panes.get(layout.focus))?.presentation !== "rendered") focusEditor();
+      if (selectedMode(panes.get(layout.focus))?.presentation !== "rendered" && focusStillOpening(asked)) focusEditor();
     });
   } finally {
     releaseIntent();
