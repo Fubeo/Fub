@@ -2339,6 +2339,7 @@ name = "fub-ink-codec"
 version = "0.1.0"
 dependencies = [
  "fub-ink",
+ "serde_json",
 ]
 
 [[package]]
