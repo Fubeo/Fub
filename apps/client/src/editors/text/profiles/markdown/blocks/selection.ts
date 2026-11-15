@@ -23,7 +23,7 @@ import { Decoration, type DecorationSet, EditorView, keymap, type KeyBinding } f
 import { getCM } from "@replit/codemirror-vim";
 import { liveStrings } from "../strings";
 import { blockGesture } from "../block-gesture";
-import { withLineBreaks } from "./lines";
+import { withLineBreaks } from "../../../line-breaks";
 import { blockModel, blockStartingAt, innermostAt, type Block } from "./model";
 import { type BlockRun, siblingsOf } from "./move";
 import { modelOf } from "./transform";

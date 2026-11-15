@@ -8,7 +8,7 @@ import { type KeyBinding } from "@codemirror/view";
 import { backtickFence } from "../actions";
 import { calloutHead } from "../callout-head";
 import { blockGesture } from "../block-gesture";
-import { withLineBreaks } from "./lines";
+import { withLineBreaks } from "../../../line-breaks";
 import { blockModel, buildBlocks, subtreeEnd, type Block, type BlockKind } from "./model";
 
 export type TransformTarget =

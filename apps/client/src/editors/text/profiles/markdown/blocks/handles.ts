@@ -27,7 +27,7 @@ import type { DetailsPair } from "../details";
 import { colorsAt, CONTENT_COLORS, lineText, setContentColor, type ColorKind, type ContentColor } from "../color";
 import { blockAnchor, blockLink } from "./anchor";
 import { columnsRun, dropAsColumn, intoColumns } from "./columns";
-import { withLineBreaks } from "./lines";
+import { withLineBreaks } from "../../../line-breaks";
 import { blockModel, blockStartingAt, innermostAt, kindName, type Block } from "./model";
 import { type BlockRun, isListItem, moveRun, moveSiblings, nestRun, outdentRun, pinnedFirst, sectionAt, siblingsOf } from "./move";
 import { blockSelection, cursorBlock, deleteRun, duplicateRun, runOfSelection, selectBlocks, setBlockSelection } from "./selection";

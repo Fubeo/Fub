@@ -6,7 +6,7 @@
 // rinumerazione (D4), che ascolta lo spostamento.
 import { EditorSelection, type EditorState, type SelectionRange, type StateCommand, type TransactionSpec } from "@codemirror/state";
 import { blockGesture } from "../block-gesture";
-import { withLineBreaks } from "./lines";
+import { withLineBreaks } from "../../../line-breaks";
 import { type Block, type BlockKind } from "./model";
 import { modelOf, touchedBlocks } from "./transform";
 

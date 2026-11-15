@@ -17,7 +17,7 @@ import { propertyBlock, propertyList, propertyValue, setProperty } from "../prop
 import { imageHtml } from "../render-inline";
 import { liveStrings } from "../strings";
 import { blocksOptions, type BlocksOptions } from "./handles";
-import { withLineBreaks } from "./lines";
+import { withLineBreaks } from "../../../line-breaks";
 import { noteFactsElement, noteFactsOf, sameLabels, type NoteFactsLabels } from "../note-facts";
 import { markPresence } from "../../../../core/presence";
 

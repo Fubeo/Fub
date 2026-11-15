@@ -5,7 +5,7 @@
 // una riga vuota per i blocchi che finiscono con un delimitatore (codice,
 // tabella, citazione, callout, ripiegabile, riga, formula).
 import { type ChangeSpec, type EditorState } from "@codemirror/state";
-import { withLineBreaks } from "./lines";
+import { withLineBreaks } from "../../../line-breaks";
 import { type Block, type BlockKind } from "./model";
 import { subtreeEnd } from "./model";
 
