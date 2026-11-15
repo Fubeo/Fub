@@ -52,6 +52,8 @@ const STABLE_IDS = [
   "canvas.group", "canvas.bring_front", "canvas.send_back",
   "canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom",
   "canvas.distribute_x", "canvas.distribute_y",
+  "canvas.layout.grid", "canvas.layout.row", "canvas.layout.column", "canvas.layout.tree",
+  "canvas.copy_code", "canvas.paste_code",
   "canvas.fit", "canvas.fit_selection", "canvas.zoom_in", "canvas.zoom_out", "canvas.zoom_reset", "canvas.grid_toggle",
   "canvas.navigator.hide", "canvas.navigator.show", "canvas.bare", "canvas.radial", "canvas.finger_writes",
   "canvas.pen_menu", "canvas.color_menu", "canvas.align_menu",
@@ -230,8 +232,10 @@ describe("la tela legge il catalogo", () => {
     // Il menu della scheda (T17): Disponi › con Allinea › e Distribuisci ›.
     const arrange = { "canvas.arrange": ["canvas.bring_front", "canvas.send_back", "—",
       { "canvas.align": ["canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom"] },
-      { "canvas.distribute": ["canvas.distribute_x", "canvas.distribute_y"] }] };
-    const tail = ["—", colors, arrange, "canvas.duplicate", "—", "canvas.delete"];
+      { "canvas.distribute": ["canvas.distribute_x", "canvas.distribute_y"] }, "—",
+      "canvas.layout.grid", "canvas.layout.row", "canvas.layout.column", "canvas.layout.tree"] };
+    // La lavagna come codice (LIC T25) dopo Duplica.
+    const tail = ["—", colors, arrange, "canvas.duplicate", "canvas.copy_code", "canvas.paste_code", "—", "canvas.delete"];
     const menus: Array<[readonly SurfaceMenuEntry[], unknown[]]> = [
       [menuOn(card("t")), ["canvas.edit", "canvas.connect", ...tail]],
       // Una scheda d'immagine si apre nel visore.
@@ -240,7 +244,9 @@ describe("la tela legge il catalogo", () => {
       // Un gruppo ha il menu di prima.
       [menuOn(card("g")), [colors, "canvas.duplicate", order, "canvas.fit_selection", "canvas.delete"]],
       [menuOn(host.querySelector('.canvas-edge-hit[data-edge="e1"]')), [colors, "canvas.edge.reverse", "canvas.delete"]],
-      [menuOn(viewport, { x: 300, y: 300 }), [{ "canvas.add": ["canvas.add.text", "canvas.add.link", "canvas.add.group"] }, "canvas.fit", "canvas.zoom_in", "canvas.zoom_out", "canvas.navigator.hide", "canvas.radial"]],
+      [menuOn(viewport, { x: 300, y: 300 }), [{ "canvas.add": ["canvas.add.text", "canvas.add.link", "canvas.add.group"] },
+        { "canvas.arrange": ["canvas.layout.grid", "canvas.layout.row", "canvas.layout.column", "canvas.layout.tree"] },
+        "canvas.copy_code", "canvas.paste_code", "—", "canvas.fit", "canvas.zoom_in", "canvas.zoom_out", "canvas.navigator.hide", "canvas.radial"]],
     ];
     // Tutte le schede scelte: niente Apri né Collega….
     pointing.mockRestore();

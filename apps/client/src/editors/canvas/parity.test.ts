@@ -16,6 +16,7 @@ import { createCardRegistry, type CardCellBox, type CardPageBox, type CardRender
 import type { CanvasEngine, CanvasEngineOptions, CanvasNotesPort } from "./engine";
 import type { PartsPickerPort } from "./parts-picker";
 import { mountCanvas } from "./test-mount";
+import { declareClipboard } from "../../platform/clipboard";
 import { canvasCoreReady, openCoreNow, type CanvasIntentOp } from "./wasm/core";
 import { setReducedMotionPreference } from "../../theme/reduced-motion";
 import { decodeInk, inkLength, inkPoint } from "../spatial/ink/codec";
@@ -903,6 +904,31 @@ const SETUP: Readonly<Record<string, R8Setup>> = {
   "main.order.back": runCommand("canvas.send_back"),
   "main.align": runCommand("canvas.align.left"),
   "main.distribute": runCommand("canvas.distribute_x"),
+  "main.layout": runCommand("canvas.layout.grid"),
+  "main.code.paste": {
+    via: "canvas.paste_code",
+    select: [],
+    act: async ({ engine, voice }) => {
+      // Gli appunti hanno la lista della voce, come la darebbe un assistente.
+      const text = JSON.stringify(voice.ops);
+      const blob = new Blob([text], { type: "text/plain" });
+      const stop = declareClipboard(async () => {}, {
+        write: async () => {},
+        read: async () => [{ types: ["text/plain"], getType: async () => blob }],
+        supports: () => true,
+      });
+      try {
+        run(engine, "canvas.paste_code");
+        await settle();
+        const confirm = document.querySelector<HTMLElement>('.kit-dialog [data-action="paste"]');
+        if (!confirm) throw new Error("Incolla codice non mostra il riassunto");
+        confirm.click();
+        await settle();
+      } finally {
+        stop();
+      }
+    },
+  },
   "main.edge.connect": [
     runCommand("canvas.connect"),
     {

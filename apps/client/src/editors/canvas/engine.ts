@@ -1,6 +1,6 @@
 import type { Theme } from "../../theme/theme";
 import type { SyntaxForm } from "../../host/contract";
-import { t, onLanguage, type Key } from "../../i18n/strings";
+import { t, onLanguage, plural, type Key } from "../../i18n/strings";
 import { MENU_RULE, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
 import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
@@ -61,6 +61,7 @@ import {
 } from "./ink-erase";
 import {
   CANVAS_ALIGN,
+  CANVAS_LAYOUTS,
   CANVAS_COLORS,
   CANVAS_TIPS,
   CANVAS_TOOL_KEYS,
@@ -75,6 +76,7 @@ import {
   type CanvasCommand,
   type CanvasCommandArgs,
   type CanvasCommandBehaviour,
+  type CanvasLayout,
   type CanvasNudge,
   type CanvasTip,
   type CanvasToolId,
@@ -83,6 +85,7 @@ import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, saveFingerWri
 import { openCanvasRadial, rememberRecent } from "./chrome/radial";
 import type { Radial, RadialPointer } from "../spatial/tools/radial";
 import { createCanvasEmpty, isEmptyBoard, transferOf, type CanvasEmpty } from "./chrome/empty";
+import { checkProblemText, clipboardText, codeList, summaryText } from "./code-text";
 import { createCanvasNavigator, type CanvasNavigator } from "./chrome/navigator";
 import { CanvasJumps } from "./jumps";
 import { applyFindMarks, boardFindIndex, findMarks, type FindMark, type FindNotesPort, type FindTarget } from "./find";
@@ -199,6 +202,7 @@ import {
   canvasCoreReady,
   changedModel,
   openCoreNow,
+  type CanvasCheckReport,
   type CanvasCommitted,
   type CanvasCompiled,
   type CanvasCore,
@@ -3053,7 +3057,10 @@ export class CanvasEngine {
       if (code === true && inkOnly) this.#paintInk();
       return code;
     }
-    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return "rejected";
+    // Il testo esatto del passo torna anche su una scena troppo grande: un
+    // giro che ha fatto nascere migliaia di schede («Incolla codice»,
+    // `canvas.apply`) si annulla, e la lavagna torna interattiva (LIC T25).
+    if (this.#destroyed || !this.#doc || this.#readOnly) return "rejected";
     const core = this.#core;
     if (!core) return "trap";
     const after = before.slice(0, step.start) + step.removed + before.slice(end);
@@ -5101,12 +5108,12 @@ export class CanvasEngine {
    * rifiuta: allora l'avviso `refused` lo dice (nessun avviso con `null`:
    * lo dà chi chiama).
    */
-  #compileIntent(ops: readonly CanvasIntentOp[], refused: Key | null): CanvasCompiled | null {
+  #compileIntent(ops: readonly CanvasIntentOp[], refused: Key | null, seed?: bigint): CanvasCompiled | null {
     const core = this.#core;
     if (!core || this.#destroyed || this.#readOnly || this.#isSceneOversized()) return null;
     this.#recordPending();
     try {
-      return core.compile(ops, this.#seed());
+      return core.compile(ops, seed ?? this.#seed());
     } catch (error) {
       if (lostCore(error)) {
         this.#lose();
@@ -5128,14 +5135,16 @@ export class CanvasEngine {
    * operazione, nessuna toppa, la tela che non scrive, o il nucleo che le
    * rifiuta (lo dice l'avviso `refused`, o nessuno con `null`, quando lo dà
    * chi chiama). Se il nucleo rifiuta la compilazione o il commit (un limite),
-   * i campi della barra tornano al valore del modello.
+   * i campi della barra tornano al valore del modello. `seed` è quello di un
+   * controllo già fatto («Incolla codice»), così gli id nati sono i suoi.
    */
   #writeOps(
     ops: readonly CanvasIntentOp[] | null,
     refused: Key | null = "canvas.change_refused",
+    seed?: bigint,
   ): readonly string[] | null {
     if (!ops || ops.length === 0) return null;
-    const compiled = this.#compileIntent(ops, refused);
+    const compiled = this.#compileIntent(ops, refused, seed);
     if (!compiled) {
       if (!this.#destroyed) this.#drawToolbar();
       return null;
@@ -6011,6 +6020,26 @@ export class CanvasEngine {
       return ids.length >= 3 ? [{ op: "distribute", ids, axis: axis === "distribute-x" ? "x" : "y" }] : null;
     }
     return ids.length >= 2 ? [{ op: "align", ids, to: axis }] : null;
+  }
+
+  /**
+   * «Disponi» (LIC T25): `layout` delle schede scelte, o, senza selezione,
+   * di tutte quelle fuori dai gruppi (il nucleo le sceglie se mancano gli
+   * `ids`). `null` con meno di due schede, come la voce spenta.
+   */
+  #layoutOps(kind: CanvasLayout): CanvasIntentOp[] | null {
+    const ids = this.#selectedNodes().map((node) => node.id);
+    if (ids.length >= 2) return [{ op: "layout", ids, kind }];
+    if (ids.length === 0 && (this.#doc?.nodes.length ?? 0) >= 2) return [{ op: "layout", kind }];
+    return null;
+  }
+
+  /** Perché «Disponi» è spento: una scheda sola, o una lavagna con meno di due schede. */
+  #layoutWhy(): string | null {
+    const chosen = this.#selectedNodes().length;
+    if (chosen === 1) return t("canvas.commands.why.two");
+    if (chosen >= 2 || (this.#doc?.nodes.length ?? 0) >= 2) return null;
+    return t(this.#doc?.nodes.length ? "canvas.commands.why.two" : "canvas.commands.why.empty");
   }
 
   #drawEdgeInspector(bar: HTMLElement): void {
@@ -7308,6 +7337,124 @@ export class CanvasEngine {
     });
   }
 
+  /**
+   * «Copia come codice» (LIC T25): le schede scelte, o la lavagna intera
+   * senza selezione, come la lista di operazioni che le rifà
+   * (`canvas_describe`), negli appunti come testo. Non scrive la lavagna.
+   */
+  #copyCode(): void {
+    const core = this.#core;
+    if (this.#destroyed || !core || !this.#doc) return;
+    this.#recordPending();
+    const ids = this.#selectedNodes().map((node) => node.id);
+    let text: string;
+    try {
+      text = core.describe(ids.length > 0 ? ids : undefined);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return;
+      }
+      if (error instanceof CanvasCoreError) {
+        this.#showNotice(t("editor_menu.copy_failed"));
+        return;
+      }
+      throw error;
+    }
+    writeClipboardText(text).catch(() => {
+      if (!this.#destroyed) this.#showNotice(t("editor_menu.copy_failed"));
+    });
+  }
+
+  /**
+   * «Incolla codice» (LIC T25): legge una lista di operazioni dagli appunti,
+   * la fa controllare al nucleo (`canvas_check`) e, se passa, mostra il
+   * riassunto e chiede. Con «Incolla» la scrive in un passo d'annulla, con
+   * lo stesso seme del controllo: gli id nati sono quelli del riassunto. Un
+   * problema, appunti vuoti o una lista che non cambia niente lo dice
+   * l'avviso, senza finestra; Esc o «Annulla» non scrivono.
+   */
+  async #pasteCode(): Promise<void> {
+    if (this.#destroyed || this.#readOnly || this.#isSceneOversized()) return;
+    let text: string;
+    try {
+      text = await clipboardText();
+    } catch {
+      if (!this.#destroyed) this.#showNotice(t("editor_menu.paste_failed"));
+      return;
+    }
+    const core = this.#core;
+    if (this.#destroyed || this.#readOnly || !core || !this.#doc || this.#isSceneOversized()) return;
+    this.#recordPending();
+    const seed = this.#seed();
+    const source = this.#source;
+    let report: CanvasCheckReport;
+    try {
+      report = core.check({ text }, seed);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return;
+      }
+      if (error instanceof CanvasCoreError) {
+        this.#showNotice(t("canvas.change_refused"));
+        return;
+      }
+      throw error;
+    }
+    if (!report.ok || !report.summary) {
+      this.#showNotice(checkProblemText(text, report.problems[0]));
+      return;
+    }
+    const said = summaryText(report.summary);
+    if (said === "") {
+      this.#showNotice(t("canvas.paste_code.nothing"));
+      return;
+    }
+    const warnings = report.warnings.length + report.warnings_omitted;
+    if (!(await this.#confirmPaste(said, warnings)) || this.#destroyed) return;
+    // Intanto la lavagna può essere cambiata (un altro riquadro, il disco):
+    // il riassunto non dice più il vero, e non si scrive.
+    if (this.#source !== source) {
+      this.#showNotice(t("canvas.paste_code.changed"));
+      return;
+    }
+    const ops = codeList(text);
+    if (!ops) return;
+    const created = this.#writeOps(ops, "canvas.change_refused", seed);
+    if (!created || this.#destroyed || !this.#doc) return;
+    const born = new Set(this.#doc.nodes.map((node) => node.id));
+    const cards = created.filter((id) => born.has(id));
+    if (cards.length > 0) {
+      this.#selection = cards;
+      this.#edgeSelection = [];
+      this.#displaySelection();
+      this.#options.onSelectionChange();
+    }
+  }
+
+  /** La conferma di «Incolla codice»: il riassunto, gli avvisi; «Annulla» di serie, Esc come «Annulla». */
+  #confirmPaste(summary: string, warnings: number): Promise<boolean> {
+    const own = openLifetime();
+    this.#life.add(() => own.close());
+    const said = t("canvas.paste_code.description", { summary });
+    const handle = openDialog<boolean>({
+      title: t("canvas.paste_code.title"),
+      description: warnings === 0 ? said
+        : `${said} ${plural(warnings, "canvas.paste_code.warnings.one", "canvas.paste_code.warnings")}`,
+      actions: [
+        { id: "cancel", label: t("app.cancel"), value: false, autofocus: true },
+        { id: "paste", label: t("canvas.paste_code.action"), kind: "primary", value: true },
+      ],
+      dismissValue: false,
+      lifetime: own,
+    });
+    return handle.result.then((yes) => {
+      own.close();
+      return yes;
+    });
+  }
+
   /** Un PDF che non si apre: «Spargi le pagine» si spegne, finché il file non cambia (T72). */
   #markBroken(path: string): void {
     if (this.#destroyed || this.#pdfBroken.has(path)) return;
@@ -7577,6 +7724,19 @@ export class CanvasEngine {
           const value = colorValueOf(choice);
           if (value === null) this.#openColorPicker(args?.edge);
           else this.#colorSelection(value, args?.edge);
+        },
+      };
+    }
+    if (id.startsWith("canvas.layout.")) {
+      // «Disponi» (LIC T25): `layout` sulle schede scelte, o su tutte quelle
+      // fuori dai gruppi; le posizioni le decide il nucleo.
+      const kind = id.slice("canvas.layout.".length) as CanvasLayout;
+      if (!(CANVAS_LAYOUTS as readonly string[]).includes(kind)) return null;
+      return {
+        disabled: () => writable() ?? this.#layoutWhy(),
+        op: () => this.#layoutOps(kind),
+        run: () => {
+          if (!this.#readOnly) this.#writeOps(this.#layoutOps(kind));
         },
       };
     }
@@ -7983,6 +8143,20 @@ export class CanvasEngine {
         return { disabled: withSelection, op: () => this.#reorderOps("front"), run: () => this.#reorderSelection("front") };
       case "canvas.send_back":
         return { disabled: withSelection, op: () => this.#reorderOps("back"), run: () => this.#reorderSelection("back") };
+      // La lavagna come codice (LIC T25). Copiare non scrive: vale anche in
+      // sola lettura. Incollare legge gli appunti, controlla e chiede.
+      case "canvas.copy_code":
+        return {
+          disabled: () => (this.#doc && !isEmptyBoard(this.#doc) ? null : t("canvas.commands.why.empty")),
+          run: () => this.#copyCode(),
+        };
+      case "canvas.paste_code":
+        return {
+          disabled: () => writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null),
+          // `value` è il testo degli appunti: la lista che scriverebbe, se è una lista.
+          op: (input) => codeList(input?.value),
+          run: () => void this.#pasteCode(),
+        };
       case "canvas.distribute_x":
       case "canvas.distribute_y": {
         const axis = id === "canvas.distribute_x" ? "distribute-x" : "distribute-y";
@@ -9013,6 +9187,16 @@ export class CanvasEngine {
             entry("canvas.add.group", here),
           ],
         },
+        // «Disponi ›» senza selezione (LIC T25): tutte le schede fuori dai gruppi.
+        {
+          id: "canvas.arrange",
+          label: t("canvas_menu.arrange"),
+          enabled: writable,
+          items: CANVAS_LAYOUTS.map((kind) => entry(`canvas.layout.${kind}`)),
+        },
+        entry("canvas.copy_code"),
+        entry("canvas.paste_code", undefined, false),
+        MENU_RULE,
         entry("canvas.fit", undefined, false),
         ...(at ? [entry("canvas.zoom_in", here, false), entry("canvas.zoom_out", here, false)] : []),
         // Nascondi o Mostra il navigatore (T55), quella che c'è.
@@ -9110,9 +9294,15 @@ export class CanvasEngine {
             ...state(readOnly ?? three),
             items: [entry("canvas.distribute_x"), entry("canvas.distribute_y")],
           },
+          // «Disponi» col nucleo (LIC T25): griglia, riga, colonna, albero.
+          MENU_RULE,
+          ...CANVAS_LAYOUTS.map((kind) => entry(`canvas.layout.${kind}`)),
         ],
       },
       entry("canvas.duplicate"),
+      // La lavagna come codice (LIC T25): «Incolla codice» apre la conferma, che prende il fuoco.
+      entry("canvas.copy_code"),
+      entry("canvas.paste_code", undefined, false),
       MENU_RULE,
       entry("canvas.delete"),
     );

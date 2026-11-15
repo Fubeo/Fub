@@ -38,6 +38,7 @@ import {
   type CardView,
 } from "./cards";
 import { CardCache } from "./card-cache";
+import { declareClipboard } from "../../platform/clipboard";
 import { quantizeInk, type InkSample } from "../../ink/sample";
 import { encodeInk, inkFromQuantized } from "../spatial/ink/codec";
 
@@ -198,7 +199,7 @@ describe("CanvasEngine", () => {
     expect(menu.target).toEqual({ kind: "node", ref: "f", label: "Scheda di immagine", name: "foto.png" });
     expect(host.querySelector('.canvas-node[data-node="f"]')!.classList.contains("selected")).toBe(true);
     const items = (menu.context ?? []).filter((entry): entry is SurfaceMenuItem => typeof entry !== "string");
-    expect(items.map((item) => item.id)).toEqual(["canvas.open_viewer", "canvas.connect", "canvas.color", "canvas.arrange", "canvas.duplicate", "canvas.delete"]);
+    expect(items.map((item) => item.id)).toEqual(["canvas.open_viewer", "canvas.connect", "canvas.color", "canvas.arrange", "canvas.duplicate", "canvas.copy_code", "canvas.paste_code", "canvas.delete"]);
     items[0]!.run!();
     expect(opened).toContainEqual({ path: "/allegati/foto.png" });
     (items[2]!.items as readonly SurfaceMenuItem[]).find((item) => item.id === "canvas.color.4")!.run!();
@@ -3118,9 +3119,10 @@ describe("il menu della scheda (T17)", () => {
       {
         "canvas.arrange": ["canvas.bring_front", "canvas.send_back", "—",
           { "canvas.align": ["canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom"] },
-          { "canvas.distribute": ["canvas.distribute_x", "canvas.distribute_y"] }],
+          { "canvas.distribute": ["canvas.distribute_x", "canvas.distribute_y"] }, "—",
+          "canvas.layout.grid", "canvas.layout.row", "canvas.layout.column", "canvas.layout.tree"],
       },
-      "canvas.duplicate", "—", "canvas.delete", "canvas.trash_file",
+      "canvas.duplicate", "canvas.copy_code", "canvas.paste_code", "—", "canvas.delete", "canvas.trash_file",
     ]);
     // I nomi e i tasti del catalogo.
     expect(item(context, "canvas.connect")).toMatchObject({ label: "Collega…", chord: "C" });
@@ -3132,7 +3134,7 @@ describe("il menu della scheda (T17)", () => {
     expect(item(context, "canvas.send_back").chord).toBe("Mod-[");
     // Rosso solo in fondo.
     const flat = context.filter((entry): entry is SurfaceMenuItem => typeof entry !== "string");
-    expect(flat.map((entry) => entry.danger === true)).toEqual([false, false, false, false, false, false, true, true]);
+    expect(flat.map((entry) => entry.danger === true)).toEqual([false, false, false, false, false, false, false, false, true, true]);
     // I colori: scelte esclusive, segnata quella della scheda.
     const colors = (item(context, "canvas.color").items as readonly Entry[])
       .flatMap((entry) => (typeof entry === "string" ? [] : Array.isArray(entry.items) ? (entry.items as readonly SurfaceMenuItem[]) : [entry]));
@@ -3199,7 +3201,7 @@ describe("il menu della scheda (T17)", () => {
     const menu = menuOn(engine, card(host, "t"));
     expect(menu.target).toEqual({ kind: "node", ref: "t", label: "Scheda di testo", name: "Prima riga" });
     const ids = (menu.context ?? []).flatMap((entry) => (typeof entry === "string" ? [] : [entry.id]));
-    expect(ids).toEqual(["canvas.edit", "canvas.connect", "canvas.color", "canvas.arrange", "canvas.duplicate", "canvas.delete"]);
+    expect(ids).toEqual(["canvas.edit", "canvas.connect", "canvas.color", "canvas.arrange", "canvas.duplicate", "canvas.copy_code", "canvas.paste_code", "canvas.delete"]);
     engine.destroy();
   });
 
@@ -3220,7 +3222,7 @@ describe("il menu della scheda (T17)", () => {
     const many = engine.contextMenu(null)!;
     expect(many.target.label).toBe("4 schede");
     const ids = (many.context ?? []).flatMap((entry) => (typeof entry === "string" ? [] : [entry.id]));
-    expect(ids).toEqual(["canvas.color", "canvas.arrange", "canvas.duplicate", "canvas.delete", "canvas.trash_file"]);
+    expect(ids).toEqual(["canvas.color", "canvas.arrange", "canvas.duplicate", "canvas.copy_code", "canvas.paste_code", "canvas.delete", "canvas.trash_file"]);
     // Le schede hanno colori diversi: nessuno segnato.
     expect((item(many.context, "canvas.color").items as readonly SurfaceMenuItem[]).some((entry) => entry.checked)).toBe(false);
     expect(item(many.context, "canvas.distribute").enabled).toBe(true);
@@ -3229,9 +3231,11 @@ describe("il menu della scheda (T17)", () => {
     engine.setReadOnly(true);
     const locked = menuOn(engine, card(host, "n1")).context;
     const why = t("canvas.commands.why.read_only");
-    for (const id of ["canvas.color", "canvas.arrange", "canvas.duplicate", "canvas.delete", "canvas.trash_file", "canvas.connect"]) {
+    for (const id of ["canvas.color", "canvas.arrange", "canvas.duplicate", "canvas.paste_code", "canvas.delete", "canvas.trash_file", "canvas.connect"]) {
       expect(item(locked, id), id).toMatchObject({ enabled: false, description: why });
     }
+    // «Copia come codice» non cambia la lavagna (LIC T25): resta acceso.
+    expect(item(locked, "canvas.copy_code").enabled).toBe(true);
     // Apri e Apri a lato non cambiano la lavagna: restano accesi.
     expect(item(locked, "canvas.open").enabled).toBe(true);
     expect(item(locked, "canvas.open_beside").enabled).toBe(true);
@@ -8264,4 +8268,276 @@ describe("i gesti scrivono con le operazioni (T24)", () => {
     const path = Array.from({ length: 1000 }, (_, i): [number, number] => [150, i % 2 === 0 ? 290 : 310]);
     erasesInPieces(source, [{ points }], path, 8);
   }, 60_000);
+});
+
+describe("la lavagna come codice: copia, incolla, disponi (LIC T25)", () => {
+  const STROKE = {
+    id: "s-a", tool: "pen",
+    brush: "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+    color: "#0072b2", anchor: { kind: "card", width: 240, height: 160 }, ink: "1 s100 cxy 4000,2500 120,40 95,-10",
+  };
+
+  /** Due schede collegate, una terza a parte; con `ink` un tratto su `a` e uno libero. */
+  function board(ink = false): string {
+    return JSON.stringify({
+      nodes: [
+        { id: "a", type: "text", x: 0, y: 0, width: 240, height: 160, text: "uno", ...(ink ? { "fub:ink": { v: 1, strokes: [STROKE] } } : {}) },
+        { id: "b", type: "text", x: 400, y: 0, width: 240, height: 160, text: "due" },
+        { id: "c", type: "text", x: 0, y: 400, width: 240, height: 160, text: "tre" },
+      ],
+      edges: [{ id: "e1", fromNode: "a", toNode: "b" }],
+      ...(ink ? { "fub:ink": { v: 1, strokes: [{ ...STROKE, id: "s-free", anchor: { kind: "free" } }] } } : {}),
+    });
+  }
+
+  const stops: Array<() => void> = [];
+  afterEach(() => {
+    for (const stop of stops.splice(0)) stop();
+  });
+
+  /** Gli appunti di una prova: `text` si legge come `text/plain` (`null`: vuoti), ciò che si scrive finisce in `written`. */
+  function clipboard(text: string | null): string[] {
+    const written: string[] = [];
+    stops.push(declareClipboard(async (value) => {
+      written.push(value);
+    }, {
+      write: async () => {},
+      read: async () => (text === null ? [] : [{ types: ["text/plain"], getType: async () => new Blob([text], { type: "text/plain" }) }]),
+      supports: () => true,
+    }));
+    return written;
+  }
+
+  function viewport(host: HTMLElement): HTMLElement {
+    return host.querySelector<HTMLElement>(".canvas-viewport")!;
+  }
+
+  function pick(host: HTMLElement, id: string, additive = false): void {
+    host.querySelector(`.canvas-node[data-node="${id}"]`)!.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 3, shiftKey: additive, clientX: 0, clientY: 0 }),
+    );
+    viewport(host).dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3, clientX: 0, clientY: 0 }));
+  }
+
+  function command(engine: CanvasEngine, id: string) {
+    return engine.commands().find((one) => one.id === id)!;
+  }
+
+  /** Lascia finire le promesse della tela (gli appunti, il dialogo). */
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 6; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  const notice = (host: HTMLElement) => host.querySelector(".canvas-intake-error")?.textContent ?? "";
+  const dialog = () => document.querySelector<HTMLElement>(".kit-dialog");
+
+  /** Il testo che il nucleo scrive per `ops` su `source`, col seme 1. */
+  function compiled(source: string, ops: readonly unknown[]): string {
+    const core = openCoreNow(source)!;
+    try {
+      return core.preview(core.compile(ops as CanvasIntentOp[], 1n).patches);
+    } finally {
+      core.close();
+    }
+  }
+
+  /** «Incolla codice» con `text` negli appunti, fino alla finestra (o all'avviso). */
+  async function pasteCode(engine: CanvasEngine, text: string | null): Promise<void> {
+    clipboard(text);
+    command(engine, "canvas.paste_code").run();
+    await settle();
+  }
+
+  it("«Copia come codice» senza scelta dà la lavagna intera, con una scelta solo quelle schede; non scrive", async () => {
+    const source = board();
+    const { engine, host, changes } = mounted(source, { seed: () => 1n });
+    const written = clipboard(null);
+    command(engine, "canvas.copy_code").run();
+    await settle();
+    expect(written).toHaveLength(1);
+    const all = JSON.parse(written[0]!) as Array<{ op: string; id?: string }>;
+    expect(all.filter((op) => op.op === "add_card").map((op) => op.id)).toEqual(["a", "b", "c"]);
+    expect(all.filter((op) => op.op === "connect")).toHaveLength(1);
+    // La lista rifà la lavagna: compilata su una lavagna vuota ne dà lo stesso modello.
+    expect(readCanvas(compiled("", all))).toEqual(readCanvas(source));
+
+    pick(host, "a");
+    pick(host, "c", true);
+    command(engine, "canvas.copy_code").run();
+    await settle();
+    const some = JSON.parse(written[1]!) as Array<{ op: string; id?: string }>;
+    expect(some.filter((op) => op.op === "add_card").map((op) => op.id)).toEqual(["a", "c"]);
+    expect(some.some((op) => op.op === "connect")).toBe(false);
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(source);
+    // In sola lettura si copia lo stesso; una lavagna vuota non ha niente da copiare.
+    engine.setReadOnly(true);
+    expect(command(engine, "canvas.copy_code").disabled()).toBeNull();
+    expect(command(engine, "canvas.paste_code").disabled()).toBe(t("canvas.commands.why.read_only"));
+    engine.setReadOnly(false);
+    engine.setDoc("");
+    expect(command(engine, "canvas.copy_code").disabled()).toBe(t("canvas.commands.why.empty"));
+    engine.destroy();
+  });
+
+  it("«Copia come codice» su una lavagna con tratti dà l'inchiostro nelle forme di T17", async () => {
+    const { engine } = mounted(board(true), { seed: () => 1n });
+    const written = clipboard(null);
+    command(engine, "canvas.copy_code").run();
+    await settle();
+    const ops = JSON.parse(written[0]!) as Array<{ op: string; layer?: unknown; strokes?: Array<{ id: string }> }>;
+    const ink = ops.filter((op) => op.op === "add_strokes");
+    expect(ink).toHaveLength(2);
+    expect(ink.some((op) => op.layer === "board")).toBe(true);
+    expect(ink.flatMap((op) => op.strokes ?? []).map((stroke) => stroke.id).sort()).toEqual(["s-a", "s-free"]);
+    expect(readCanvas(compiled("", ops))).toEqual(readCanvas(board(true)));
+    engine.destroy();
+  });
+
+  it("«Incolla codice»: il riassunto, poi «Incolla» scrive in un passo d'annulla e sceglie le schede nate", async () => {
+    const source = board();
+    const { engine, host, changes } = mounted(source, { seed: () => 1n });
+    const ops = [
+      { op: "add_card", text: "nuova", x: 800, y: 0 },
+      { op: "move", ids: ["c"], dx: 40, dy: 0 },
+    ];
+    await pasteCode(engine, JSON.stringify(ops));
+    expect(dialog()?.textContent).toContain("1 scheda nuova, 1 scheda spostata");
+    expect(changes).toHaveLength(0);
+    document.querySelector<HTMLElement>('.kit-dialog [data-action="paste"]')!.click();
+    await settle();
+    expect(dialog()).toBeNull();
+    // Come lo scrive il nucleo con lo stesso seme del controllo.
+    expect(engine.getDoc()).toBe(compiled(source, ops));
+    expect(changes).toHaveLength(1);
+    const born = readCanvas(engine.getDoc()).nodes.find((node) => node.type === "text" && node.text === "nuova")!;
+    expect(engine.selection().nodes).toEqual([born.id]);
+    expect(host.querySelector(`.canvas-node[data-node="${born.id}"]`)!.classList.contains("selected")).toBe(true);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(source);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+
+  it("Esc e «Annulla» chiudono la finestra senza scrivere", async () => {
+    const source = board();
+    const { engine, changes } = mounted(source, { seed: () => 1n });
+    const text = JSON.stringify([{ op: "remove", ids: ["c"] }]);
+    await pasteCode(engine, text);
+    expect(dialog()?.textContent).toContain("1 scheda tolta");
+    document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await settle();
+    expect(dialog()).toBeNull();
+    await pasteCode(engine, text);
+    document.querySelector<HTMLElement>('.kit-dialog [data-action="cancel"]')!.click();
+    await settle();
+    expect(dialog()).toBeNull();
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(source);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+
+  it("una scheda che non c'è: il primo problema, `unknown_node` col suggerimento, e nessuna finestra", async () => {
+    const source = board();
+    const { engine, host, changes } = mounted(source, { seed: () => 1n });
+    await pasteCode(engine, JSON.stringify([{ op: "add_card", text: "ok" }, { op: "move", ids: ["bb"], dx: 10, dy: 0 }]));
+    expect(dialog()).toBeNull();
+    const said = notice(host);
+    expect(said).toContain(t("canvas.code.problem.unknown_node"));
+    expect(said).toContain("Operazione 2, /1/ids/0");
+    expect(said).toContain("Forse: b");
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(source);
+    engine.destroy();
+  });
+
+  it("appunti vuoti, un testo che non è JSON o non è una lista: l'avviso, nessuna finestra", async () => {
+    const source = board();
+    const { engine, host, changes } = mounted(source, { seed: () => 1n });
+    await pasteCode(engine, null);
+    expect(notice(host)).toBe(t("canvas.paste_code.empty"));
+    await pasteCode(engine, "graph TD; A-->B");
+    expect(notice(host)).toBe(t("canvas.paste_code.not_list"));
+    await pasteCode(engine, "﻿  \n");
+    expect(notice(host)).toBe(t("canvas.paste_code.empty"));
+    await pasteCode(engine, JSON.stringify({ op: "add_card" }));
+    expect(notice(host)).toBe(t("canvas.paste_code.not_list"));
+    // Una lista che non cambia niente lo dice, senza chiedere.
+    await pasteCode(engine, "[]");
+    expect(notice(host)).toBe(t("canvas.paste_code.nothing"));
+    expect(dialog()).toBeNull();
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(source);
+    engine.destroy();
+  });
+
+  it("gli appunti che non si leggono lo dicono; una lavagna cambiata mentre si decide non scrive", async () => {
+    const source = board();
+    const { engine, host, changes } = mounted(source, { seed: () => 1n });
+    stops.push(declareClipboard(async () => {}, {
+      write: async () => {},
+      read: () => Promise.reject(new Error("negato")),
+      supports: () => true,
+    }));
+    command(engine, "canvas.paste_code").run();
+    await settle();
+    expect(notice(host)).toBe(t("editor_menu.paste_failed"));
+
+    await pasteCode(engine, JSON.stringify([{ op: "remove", ids: ["c"] }]));
+    expect(dialog()).not.toBeNull();
+    const parsed = JSON.parse(source) as { nodes: unknown[] };
+    const other = JSON.stringify({ ...parsed, nodes: parsed.nodes.slice(0, 2) });
+    engine.setDoc(other);
+    document.querySelector<HTMLElement>('.kit-dialog [data-action="paste"]')!.click();
+    await settle();
+    expect(notice(host)).toBe(t("canvas.paste_code.changed"));
+    expect(engine.getDoc()).toBe(other);
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("una lista che fa nascere 10 000 schede: il riassunto, poi un annulla solo torna a prima", async () => {
+    const source = board();
+    const { engine, host } = mounted(source, { seed: () => 1n });
+    const ops = Array.from({ length: 10_000 }, (_, i) => ({
+      op: "add_card", text: `s${i}`, x: 1000 + (i % 100) * 300, y: Math.floor(i / 100) * 200, width: 240, height: 160,
+    }));
+    await pasteCode(engine, JSON.stringify(ops));
+    expect(dialog()?.textContent).toContain(t("canvas.paste_code.cards_added", { n: 10_000 }));
+    document.querySelector<HTMLElement>('.kit-dialog [data-action="paste"]')!.click();
+    await settle();
+    expect(readCanvas(engine.getDoc()).nodes).toHaveLength(10_003);
+    // Oltre il limite interattivo la scena dice che è troppo grande; l'annulla la riporta.
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(source);
+    expect(host.querySelectorAll(".canvas-node")).toHaveLength(3);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  }, 120_000);
+
+  it("i quattro «Disponi»: `layout` sulle schede scelte, o su tutte senza scelta; un annulla ciascuno", () => {
+    const source = board();
+    for (const kind of ["grid", "row", "column", "tree"] as const) {
+      const { engine, host, changes } = mounted(source, { seed: () => 1n });
+      // Senza scelta: tutte le schede fuori dai gruppi.
+      command(engine, `canvas.layout.${kind}`).run();
+      expect(engine.getDoc(), kind).toBe(compiled(source, [{ op: "layout", kind }]));
+      expect(engine.undo()).toBe(true);
+      expect(engine.getDoc()).toBe(source);
+      // Con due schede scelte: solo loro.
+      pick(host, "b");
+      pick(host, "c", true);
+      command(engine, `canvas.layout.${kind}`).run();
+      expect(engine.getDoc(), kind).toBe(compiled(source, [{ op: "layout", ids: ["b", "c"], kind }]));
+      expect(engine.getDoc()).not.toBe(source);
+      expect(changes.length).toBeGreaterThanOrEqual(2);
+      expect(engine.undo()).toBe(true);
+      expect(engine.getDoc()).toBe(source);
+      // Una scheda sola: spento, col perché.
+      pick(host, "a");
+      expect(command(engine, `canvas.layout.${kind}`).disabled()).toBe(t("canvas.commands.why.two"));
+      engine.destroy();
+    }
+  });
 });

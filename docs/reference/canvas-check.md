@@ -2,12 +2,14 @@
 
 > **Ambito:** il controllo di una lista di operazioni prima di scriverla: i
 > problemi, il riassunto di che cosa cambierebbe, gli avvisi sulle schede che la
-> lista tocca e la lettura di dopo; il comando `canvas.check`.
+> lista tocca e la lettura di dopo; il comando `canvas.check`; «Copia come
+> codice», «Incolla codice» e «Disponi» nella lavagna.
 > **Fonti autorevoli:** `crates/fub-canvas-core/src/check.rs` (il controllo),
 > `summary.rs` (il riassunto), i loro test in
 > `crates/fub-canvas-core/tests/check.rs`, i vettori in
 > `apps/client/src/__fixtures__/canvas-ops/`, e il comando in
-> `crates/fub-features/src/lavagna/check.rs`.
+> `crates/fub-features/src/lavagna/check.rs`; nella lavagna
+> `apps/client/src/editors/canvas/engine.ts` e `code-text.ts`.
 
 Questa pagina dice che cosa si legge di una lista prima di scriverla. Le
 operazioni e la loro forma stanno in
@@ -147,3 +149,33 @@ Con una lista che non si scrive, `ok` è `false`, `summary` e `outline_after` so
 "/0/op", "message": "no operation has this name", "text": {"key":
 "canvas.check.p_unknown_op"}}`. I codici sono quelli di questa pagina e
 dello [schema](canvas-schema.md).
+
+## Nella lavagna
+
+Il menu del tasto destro su una scheda e quello sul vuoto hanno «Copia come
+codice» (`canvas.copy_code`) e «Incolla codice» (`canvas.paste_code`): così un
+pezzo di lavagna passa a un assistente, e le sue modifiche tornano.
+
+- **Copia come codice** mette negli appunti, come testo, la lista che rifà le
+  schede scelte e gli archi fra loro, o senza scelta la lavagna intera con
+  l'inchiostro: la forma [`code`](canvas-code.md#il-codice) di `canvas.read`,
+  da `canvas_describe` del modulo. Non scrive, e vale anche in sola lettura;
+  su una lavagna vuota è spento. Le chiavi sconosciute della radice non ci
+  sono: le porta solo la forma `json`.
+- **Incolla codice** legge il primo `text/plain` degli appunti e lo dà a
+  `canvas_check` col seme della tela. Appunti vuoti, un testo che non è JSON o
+  non è una lista, e il primo problema (l'operazione contata da uno, il
+  percorso, la frase e, se c'è, «Forse: …» col suggerimento) li dice l'avviso
+  della tela, e niente cambia; una lista che non cambia niente lo dice allo
+  stesso modo. Se no una finestra del kit dà il riassunto («1 scheda nuova,
+  2 schede spostate») e il numero degli avvisi, e chiede: «Incolla» compila la
+  lista con lo stesso seme, così gli id nati sono quelli del riassunto, la
+  scrive in un passo d'annulla e sceglie le schede nate; «Annulla» ed Esc non
+  scrivono. Se intanto la lavagna è cambiata, non scrive e lo dice. Un passo
+  che porta la lavagna oltre il limite interattivo (2000 schede) si annulla lo
+  stesso, e la lavagna torna interattiva. In sola lettura è spento.
+- **Disponi** (`canvas.layout.grid`, `.row`, `.column`, `.tree`, nel
+  sottomenu Disponi › di una scheda e del vuoto) scrive
+  [`layout`](canvas-code.md#layout) sulle schede scelte o, senza scelta, su
+  tutte quelle fuori dai gruppi. È spento con una scheda sola, su una lavagna
+  con meno di due schede e in sola lettura.
