@@ -1052,7 +1052,8 @@ fn render_key(
 }
 
 /// Una voce di una lista di scalari scritta nel file: il suo valore, le righe
-/// di commento subito sopra e il commento in coda alla sua riga.
+/// di commento sopra (con le righe vuote fra loro e la voce) e il commento in
+/// coda alla sua riga.
 struct ItemComments {
     value: Value,
     above: Vec<String>,
@@ -1069,8 +1070,13 @@ fn scalar_items(doc: &Doc<'_>, lines: std::ops::Range<usize>) -> Option<Vec<Item
     for index in lines {
         let text = content(doc.lines[index]);
         if is_blank(text) {
-            // Un commento staccato da una riga vuota non è della voce sotto.
-            above.clear();
+            // Un commento staccato da una riga vuota (il titolo di un gruppo
+            // di colonne) va con la voce sotto, riga vuota compresa: si sposta
+            // con lei invece di sparire. Una riga vuota senza commento sopra
+            // non si tiene, come prima della riscrittura.
+            if !above.is_empty() {
+                above.push(String::new());
+            }
             continue;
         }
         if is_comment(text) {
@@ -1125,7 +1131,13 @@ fn keep_item_comments(
         match old.iter().position(|item| &item.value == value) {
             Some(found) => {
                 let item = old.remove(found);
-                out.extend(item.above.into_iter().map(|line| format!("{indent}{line}")));
+                out.extend(item.above.into_iter().map(|line| {
+                    if line.is_empty() {
+                        line
+                    } else {
+                        format!("{indent}{line}")
+                    }
+                }));
                 out.push(format!("{row}{}", item.inline));
             }
             None => out.push(row.clone()),

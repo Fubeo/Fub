@@ -660,12 +660,43 @@ fn contains(left: &BaseValue, right: &BaseValue) -> bool {
         _ => left == right,
     }
 }
-fn matches_filter(filter: &FilterDef, ctx: &RowContext) -> bool {
+/// Il giorno civile di ogni proprietà data che ha anche un orario, come
+/// epoch-ms della mezzanotte di quel giorno: `2026-03-18T01:00+02:00` è il 18,
+/// anche se in UTC è ancora il 17. Serve a [`matches_filter`] per confrontare
+/// una data senza orario con il giorno, non con l'istante.
+fn civil_days(props: &BTreeMap<String, PropertyValue>) -> BTreeMap<String, i64> {
+    props
+        .iter()
+        .filter_map(|(key, value)| match value {
+            PropertyValue::Date(date) if date.time.is_some() => date_ms(PropertyDate {
+                time: None,
+                ..*date
+            })
+            .map(|day| (key.clone(), day)),
+            _ => None,
+        })
+        .collect()
+}
+/// Il valore di una condizione è una data senza orario (`2026-03-18`)?
+fn bare_date(value: &BaseValue) -> bool {
+    let BaseValue::Text(text) = value else {
+        return false;
+    };
+    matches!(
+        PropertyValue::normalize(&Value::String(text.trim().into()), &DateFormats::ISO),
+        PropertyValue::Date(PropertyDate { time: None, .. })
+    )
+}
+/// Una riga passa il filtro? Una data senza orario nel filtro dice un giorno:
+/// «è 2026-03-18» trova anche `2026-03-18T09:30+01:00`, «dopo» parte dal 19,
+/// «prima» si ferma al 17. È la regola della barra, che a vista mostra e
+/// scrive le date senza orario.
+fn matches_filter(filter: &FilterDef, ctx: &RowContext, days: &BTreeMap<String, i64>) -> bool {
     match filter {
         FilterDef::All => true,
-        FilterDef::And(parts) => parts.iter().all(|part| matches_filter(part, ctx)),
-        FilterDef::Or(parts) => parts.iter().any(|part| matches_filter(part, ctx)),
-        FilterDef::Not(part) => !matches_filter(part, ctx),
+        FilterDef::And(parts) => parts.iter().all(|part| matches_filter(part, ctx, days)),
+        FilterDef::Or(parts) => parts.iter().any(|part| matches_filter(part, ctx, days)),
+        FilterDef::Not(part) => !matches_filter(part, ctx, days),
         FilterDef::Condition {
             property,
             file,
@@ -688,13 +719,22 @@ fn matches_filter(filter: &FilterDef, ctx: &RowContext) -> bool {
             } else {
                 return false;
             };
-            if matches!(left, BaseValue::Error(_)) {
-                return false;
-            }
             let right = tag
                 .as_ref()
                 .map(|s| BaseValue::Text(s.clone()))
                 .unwrap_or_else(|| json_value(value));
+            // Il giorno anche per un orario senza fuso, che come istante non
+            // si legge (e resta un errore per ogni altro confronto).
+            let left = match property {
+                Some(name) if tag.is_none() && bare_date(&right) => days
+                    .get(name.strip_prefix("prop.").unwrap_or(name))
+                    .map(|day| BaseValue::Date(*day))
+                    .unwrap_or(left),
+                _ => left,
+            };
+            if matches!(left, BaseValue::Error(_)) {
+                return false;
+            }
             let right = aligned(&left, right);
             match op {
                 FilterOp::Is => left == right,
@@ -935,6 +975,7 @@ fn derive(
     let mut result = Vec::new();
     for input in rows {
         let time = row_time(plan, &input.props);
+        let days = civil_days(&input.props);
         let mut ctx = RowContext {
             props: input
                 .props
@@ -957,8 +998,8 @@ fn derive(
         for value in ctx.formulas.values() {
             check_intermediate(value)?;
         }
-        if !matches_filter(&plan.definition.filters, &ctx)
-            || !matches_filter(&plan.view.filters, &ctx)
+        if !matches_filter(&plan.definition.filters, &ctx, &days)
+            || !matches_filter(&plan.view.filters, &ctx, &days)
         {
             continue;
         }
@@ -2040,6 +2081,54 @@ mod tests {
         assert!(kept("{property: valore, op: greater_than, value: '3000,5'}").is_empty());
         // Una data che non si legge resta testo, e non trova niente.
         assert!(kept("{property: consegna, op: greater_than, value: 'marzo'}").is_empty());
+    }
+
+    /// Una data con l'orario e una data senza orario nel filtro: si confronta
+    /// il giorno civile, come lo mostra e lo scrive la barra.
+    #[test]
+    fn una_data_senza_orario_nel_filtro_confronta_il_giorno() {
+        let kept = |filter: &str| -> Vec<String> {
+            let source = format!(
+                "views:\n  - name: T\n    type: table\n    filters:\n      condition: {filter}\n"
+            );
+            let at = |d: u8, hour: u8, offset: Value| json!({"kind":"date","value":{"year":2026,"month":3,"day":d,"time":{"hour":hour,"minute":30,"second":0,"offset_minutes":offset}}});
+            let derived = respond(
+                json!({"version":1,"op":"derive","source":source,"view":"T","now_ms":0,"rows":[
+                    // Il 18 all'una e mezza a +02:00: in UTC è ancora il 17.
+                    {"doc":"presto.md","props":{"consegna":at(18, 1, json!(120))}},
+                    {"doc":"sera.md","props":{"consegna":at(18, 21, json!(0))}},
+                    // Un orario senza fuso: l'istante non si sa, il giorno sì.
+                    {"doc":"locale.md","props":{"consegna":at(18, 9, Value::Null)}},
+                    {"doc":"dopo.md","props":{"consegna":at(19, 0, json!(0))}},
+                    {"doc":"prima.md","props":{"consegna":at(17, 23, json!(0))}}
+                ]}),
+            )
+            .unwrap();
+            derived["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|row| row["doc"].as_str().unwrap().to_owned())
+                .collect()
+        };
+        assert_eq!(
+            kept("{property: consegna, op: is, value: '2026-03-18'}"),
+            ["locale.md", "presto.md", "sera.md"]
+        );
+        assert_eq!(
+            kept("{property: consegna, op: greater_than, value: '2026-03-18'}"),
+            ["dopo.md"]
+        );
+        assert_eq!(
+            kept("{property: consegna, op: less_than, value: '2026-03-18'}"),
+            ["prima.md"]
+        );
+        // Con l'orario nel filtro si confronta l'istante: l'orario senza fuso
+        // non ne ha uno, e non passa.
+        assert_eq!(
+            kept("{property: consegna, op: greater_than, value: '2026-03-18T12:00:00Z'}"),
+            ["dopo.md", "sera.md"]
+        );
     }
 
     #[test]

@@ -391,3 +391,33 @@ fn spostare_una_colonna_porta_con_se_i_commenti_della_voce() {
         "views:\n  - type: table\n    name: Opere\n    order:\n      - stato\n      - file.name # il titolo\n"
     );
 }
+
+#[test]
+fn un_commento_staccato_da_una_riga_vuota_si_sposta_con_la_voce_sotto() {
+    // Il titolo di un gruppo di colonne, separato dalla riga vuota: non è in
+    // coda alla voce sopra, e non sparisce quando l'ordine si riscrive.
+    let before = "views:\n  - type: table\n    name: Opere\n    order:\n      - file.name\n\n      # i dati del prestito\n\n      - stato\n      - artista\n";
+    let moved = written(
+        before,
+        &set(
+            "Opere",
+            ViewKey::Order,
+            json!(["stato", "file.name", "artista"]),
+        ),
+    );
+    assert_eq!(
+        moved,
+        "views:\n  - type: table\n    name: Opere\n    order:\n      # i dati del prestito\n\n      - stato\n      - file.name\n      - artista\n"
+    );
+    let read = BaseDefinition::parse(&moved).expect("il file si rilegge");
+    assert_eq!(read.views[0].order, ["stato", "file.name", "artista"]);
+    // Le righe vuote senza commento non si tengono, come prima.
+    let plain = "views:\n  - type: table\n    name: Opere\n    order:\n      - file.name\n\n      - stato\n";
+    assert_eq!(
+        written(
+            plain,
+            &set("Opere", ViewKey::Order, json!(["stato", "file.name"]))
+        ),
+        "views:\n  - type: table\n    name: Opere\n    order:\n      - stato\n      - file.name\n"
+    );
+}
