@@ -4539,7 +4539,7 @@ Casi limite: il motore finto che risponde tardi (il compito aspetta lo
 stato «pronto», non un tempo fisso).
 Fatto quando: `npm run bench:giro -- --solo=editor` è verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --solo=editor --out=$TMPDIR/giro
-Stato: [ ] da fare
+Stato: [x] integrato 2026-11-15 (coder/pa-t27 @ 235338da1) · `bench:giro --solo=editor` verde nelle due luci (4 compiti), giro intero verde; check verde 20 passi · fuori Tocca: `bench/giro-fixture.ts` e `fake-ipc.ts` con `?giro=editor` (un PDF vero di 4 pagine e `GiroWorkbook`, un finto del foglio che serve solo `=B2*12` e «Ordina dalla Z alla A»; le altre scene non cambiano) · limiti visti nel prodotto: la ricerca nel PDF dice «il primo a pagina 3» ma non ci salta e non evidenzia; il quarto livello di «Ordina e filtra» si apre a sinistra del genitore
 
 ## T28 · Il giro sul banco: la lavagna e la penna
 
