@@ -1091,7 +1091,7 @@ Fatto quando: un test per gesto confronta le righe scritte; le foto del
 banco nelle due luci; la battuta resta nel budget (la Base dentro la nota).
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/base
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15, da main
 
 ## T16 · Base: nuova vista, menu della colonna, riepiloghi
 
@@ -1407,7 +1407,7 @@ budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/comments
 src/editors/text/profiles/markdown/corpus.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder dal 2026-11-15, da main
 
 ## T22 · Commenti: margine, discussione, Risolvi
 
