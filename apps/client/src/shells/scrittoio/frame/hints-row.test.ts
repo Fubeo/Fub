@@ -32,7 +32,7 @@ vi.mock("../../../i18n/strings", async (original) => ({
 }));
 
 import { openHintSource, resetHintSources, type HintContext } from "../../../editors/core/hints";
-import { HINTS_PAUSE_MS, mountHintsRow, resolveHints } from "./hints-row";
+import { HINTS_PAUSE_MS, HINTS_PENDING_ATTRIBUTE, mountHintsRow, resolveHints } from "./hints-row";
 
 function entry(id: string, binding: string | null, declared: string | null = binding, layer: CommandEntry["layer"] = "global"): CommandEntry {
   return { id, title: id, description: "", layer, binding, declared, spec: null, run: () => {} };
@@ -182,6 +182,57 @@ describe("la riga nella banda", () => {
     expect(reads).toBe(1);
     expect(text()).toBe("/inserisce un blocco");
     expect(row().dataset.context).toBe("text");
+  });
+
+  it("porta data-pending finché la pausa è in corso, e lo toglie quando è ferma", async () => {
+    const element = mountHintsRow(life, band, end);
+    const pending = (): boolean => element.hasAttribute(HINTS_PENDING_ATTRIBUTE);
+    // Al montaggio l'impostazione è in lettura: la riga può ancora spegnersi.
+    expect(pending()).toBe(true);
+    await settle();
+    expect(pending()).toBe(false);
+    const hints = source();
+    context = { id: "text", items: [{ keys: ["/"], say: "inserisce un blocco" }] };
+    hints.changed(true);
+    expect(pending()).toBe(true);
+    // Battute dentro la pausa: resta in attesa, e non ha ancora scritto niente.
+    for (let i = 0; i < 5; i++) {
+      vi.advanceTimersByTime(HINTS_PAUSE_MS / 2);
+      hints.changed();
+      expect(pending()).toBe(true);
+    }
+    expect(text()).toBe("");
+    // Ferme le dita: la riga si riscrive e smette di essere in attesa nello
+    // stesso giro, mai l'una senza l'altra.
+    vi.advanceTimersByTime(HINTS_PAUSE_MS * 2);
+    expect(text()).toBe("/inserisce un blocco");
+    expect(pending()).toBe(false);
+    // Un avviso che non cambia niente arma comunque la pausa, e la chiude.
+    hints.changed();
+    expect(pending()).toBe(true);
+    vi.advanceTimersByTime(HINTS_PAUSE_MS);
+    expect(pending()).toBe(false);
+    expect(text()).toBe("/inserisce un blocco");
+  });
+
+  it("l'impostazione riletta la tiene in attesa fino alla risposta", async () => {
+    const element = mountHintsRow(life, band, end);
+    await settle();
+    world.settings = [setting("editor.hints", false)];
+    for (const listener of world.settingListeners) listener({ key: "editor.hints" });
+    expect(element.hasAttribute(HINTS_PENDING_ATTRIBUTE)).toBe(true);
+    await settle();
+    expect(row().hidden).toBe(true);
+    expect(element.hasAttribute(HINTS_PENDING_ATTRIBUTE)).toBe(false);
+  });
+
+  it("chiusa a metà pausa, non resta in attesa", async () => {
+    const element = mountHintsRow(life, band, end);
+    await settle();
+    source().changed(true);
+    expect(element.hasAttribute(HINTS_PENDING_ATTRIBUTE)).toBe(true);
+    life.close();
+    expect(element.hasAttribute(HINTS_PENDING_ATTRIBUTE)).toBe(false);
   });
 
   it("un contesto senza voci lascia la riga al suo posto, vuota", async () => {

@@ -17,6 +17,11 @@
 // il contesto solo quando chi scrive si ferma. Nessuna IPC: l'impostazione
 // `editor.hints` si legge al montaggio e quando cambia.
 //
+// Finché la riga sa già che si riscriverà da sé (una pausa in corso, la
+// lettura dell'impostazione in volo) porta `data-pending`: chi la guarda da
+// fuori, un test o chi fotografa la finestra, aspetta che l'attributo se ne
+// vada invece di indovinare un tempo.
+//
 // È `aria-hidden`: i gesti si annunciano da sé (il grassetto messo, il blocco
 // scelto), la riga no. Non c'è al telefono né sotto i 620 px (`frame.css`).
 import { currentHints, type HintItem, onHintsChanged } from "../../../editors/core/hints";
@@ -43,6 +48,9 @@ export const HINTS_SETTING = "editor.hints";
 
 /// La pausa senza cambiamenti dopo la quale la riga si riscrive (ms).
 export const HINTS_PAUSE_MS = 300;
+
+/// L'attributo che la riga porta mentre sta per riscriversi da sé.
+export const HINTS_PENDING_ATTRIBUTE = "data-pending";
 
 /// Una voce come la riga la scrive: i tasti già letti e la frase.
 export interface HintPart {
@@ -169,6 +177,16 @@ export function mountHintsRow(lifetime: Lifetime, band: HTMLElement, before: Ele
   let timer: ReturnType<typeof setTimeout> | undefined;
   let changes = 0;
   let seen = 0;
+  let reading = 0;
+
+  // In attesa finché c'è un timer armato o una lettura in volo: la riga cambierà
+  // ancora senza che nessuno la tocchi.
+  const markPending = (): void => {
+    const pending = !lifetime.closed && (timer !== undefined || reading > 0);
+    if (pending === element.hasAttribute(HINTS_PENDING_ATTRIBUTE)) return;
+    if (pending) element.setAttribute(HINTS_PENDING_ATTRIBUTE, "");
+    else element.removeAttribute(HINTS_PENDING_ATTRIBUTE);
+  };
 
   const draw = (): void => {
     if (lifetime.closed) return;
@@ -198,6 +216,7 @@ export function mountHintsRow(lifetime: Lifetime, band: HTMLElement, before: Ele
     }
     timer = undefined;
     draw();
+    markPending();
   };
   const schedule = (): void => {
     if (lifetime.closed) return;
@@ -205,9 +224,14 @@ export function mountHintsRow(lifetime: Lifetime, band: HTMLElement, before: Ele
     if (timer !== undefined) return;
     seen = changes;
     timer = setTimeout(fire, HINTS_PAUSE_MS);
+    markPending();
   };
   lifetime.add(onHintsChanged(schedule));
-  lifetime.add(() => clearTimeout(timer));
+  lifetime.add(() => {
+    clearTimeout(timer);
+    timer = undefined;
+    element.removeAttribute(HINTS_PENDING_ATTRIBUTE);
+  });
 
   // Una finestra più larga o più stretta rifà la misura con le voci di prima.
   if (typeof ResizeObserver !== "undefined") {
@@ -226,12 +250,19 @@ export function mountHintsRow(lifetime: Lifetime, band: HTMLElement, before: Ele
   const reads = new Race();
   lifetime.add(() => reads.cancel());
   const readSetting = (): void => {
-    void reads.last(async (expected) => {
-      const entries = await expected(settings().catch(() => null));
-      if (lifetime.closed || !entries) return;
-      on = entries.find((entry) => entry.spec.key === HINTS_SETTING)?.value !== false;
-      draw();
-    });
+    reading += 1;
+    markPending();
+    void reads
+      .last(async (expected) => {
+        const entries = await expected(settings().catch(() => null));
+        if (lifetime.closed || !entries) return;
+        on = entries.find((entry) => entry.spec.key === HINTS_SETTING)?.value !== false;
+        draw();
+      })
+      .finally(() => {
+        reading -= 1;
+        markPending();
+      });
   };
   readSetting();
   lifetime.add(onEvent("setting_changed", ({ key }) => {
