@@ -104,6 +104,40 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-15 · manutenzione · `origin/main` (222c6d476, con N6 #302) entra nella
+  lavagna in codice. Le operazioni del Lazo di N6, `move_strokes` e
+  `restyle_strokes`, entrano in `spec::OPS` (con esempi, nella guida, nella
+  descrizione MCP di `fub_canvas_apply` e in `mcp-server.md`) e in
+  `CanvasOp::name`: R6 e `ogni_variante_ha_la_sua_voce` vogliono ogni variante
+  nello schema. Per `dx`, `dy`, `size` e `aspect`, che N6 legge come numeri con
+  la virgola, lo schema ha un tipo nuovo, `float`; il `color` di
+  `restyle_strokes` resta `text` (`#rrggbb` lo controlla la compilazione, come
+  in N6), così `validate` e serde dicono la stessa cosa · le operazioni restano
+  quelle di N6, senza cambiarne la forma; lo schema le descrive com'è.
+- 2026-11-15 · manutenzione · Il `Fit` privato dell'inchiostro di N6 in
+  `ops.rs` diventa `InkFit`: `ops::Fit` è già pubblico (il `fit: content` di
+  `resize`, T10). La lettura dell'inchiostro (`describe/ink.rs`, T17) tiene la
+  sua regola di misura; per le ancore `page` e `cell` di N6 fa come le
+  operazioni sui tratti (il nucleo non sa dove la pagina o la cella sta nella
+  scheda): il tratto conta nella riga dell'outline ma non nel riquadro, e in
+  `ink_read` porta `anchor` coi punti nelle unità dell'ancora · senza, i punti
+  di una pagina PDF sembrerebbero della scheda. T19 può ridefinirlo.
+- 2026-11-15 · manutenzione · `CanvasColor::Unknown` di N6 (un colore che Fub
+  non conosce): l'outline lo scrive com'è, la forma breve non lo scrive (la
+  scheda va nella forma intera), l'anteprima la disegna grigia come la tela ·
+  il colore del file non si perde nella lettura; ricompilarlo dà `Invalid`, come
+  il vettore 31 di N6.
+- 2026-11-15 · manutenzione · Dopo il merge `docs/reference/canvas-ink.md` era a
+  667 righe (tetto 550): la sezione «In codice» (T16–T17) va in una pagina sua,
+  `docs/reference/canvas-ink-code.md`, con un rimando in `canvas-ink.md`, la voce
+  in `docs/map/pagine.md` e i link di `canvas-code.md` e `canvas-operations.md`
+  aggiornati. T18 e T19, che il piano manda a «In codice» di `canvas-ink.md`,
+  scrivono in `canvas-ink-code.md` · il codice batte il piano sui tetti, e la
+  parte in codice dell'inchiostro è un argomento suo, come le ancore di N6.
+- 2026-11-15 · manutenzione · Il registro di `main` aveva perso, con #302, la
+  testata giusta (presa da `piano/fub-pre-alpha`, 7a2f5483b) e quattro voci
+  (N4 T23a del 2026-11-13; la PR #298, il riallineamento di T25 e la prova con
+  Obsidian di T24 del 2026-11-14): qui ci sono tutte.
 - 2026-11-13 · N6 T20a · L'orchestratore aggiunge il task del gesto che perde
   il rilascio. Perché: T20 ha visto la lavagna ferma in uno spostamento mai
   chiuso (nessuna scheda viva) quando il rilascio non arriva, e nella vita
