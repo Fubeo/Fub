@@ -15,6 +15,10 @@ sha256 = "sha256:458214fa20739d58b58f703c0ef17cbc43f572945f255bc6f284635ff729324
 path = "patches/0002-pdf-opzionale.patch"
 sha256 = "sha256:0de78ca32607995e006165f7a990755cd1507a50dcf6406ce6623ae3f08af85f"
 
+[[patch]]
+path = "patches/0003-bitmap-trattenute.patch"
+sha256 = "sha256:7abe7e138cf464bb9f6dcd0f79cd016e07cc25b963d080228b78d452db192077"
+
 [[file]]
 path = "ASSETS.md"
 upstream = "sha256:2417b03b20596fb6d2b266c5acb2d31c1dd33a4922f1db49b4979f6d23975eaa"
@@ -3820,6 +3824,7 @@ upstream = "sha256:ae033f2f4589caaf5b495afc5178bd9bc78b652de5777d981d8aa5d5316bc
 [[file]]
 path = "crates/render/src/tests/placed_document.rs"
 upstream = "sha256:af7ce5ae0f2b2e6908f79d9de701ec6d83286949bc0cde8f2549791df57121e8"
+result = "sha256:925e51ec33b880888ae1b5ce841863b836b1d8dfb00d3d559062fa6f82080018"
 
 [[file]]
 path = "crates/render/src/tests/rasterize.rs"
