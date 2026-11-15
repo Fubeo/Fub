@@ -159,7 +159,7 @@ describe("il dito sposta e ingrandisce la lavagna", () => {
         const four = finger(host, 4, viewportOf(host), cx + 400, cy);
         three.move(cx, cy);
         four.move(cx + 1, cy);
-        expect(camera(host).zoom).toBe(0.1);
+        expect(camera(host).zoom).toBe(0.05);
       });
 
       it("la testata sposta la scheda, in un passo d'annulla", () => {

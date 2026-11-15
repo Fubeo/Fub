@@ -27,6 +27,7 @@ import type { SyntaxNode, Tree } from "@lezer/common";
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
 import { t } from "../../../../i18n/strings";
+import { dueLook, liveProjection, liveTaskEnd, localDay, projectedDue } from "./task-due";
 import { isAllowedLink } from "../../../../ui/sanitize";
 import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
@@ -169,6 +170,10 @@ export type LiveDecoKind =
   | "highlight"
   | "tag"
   | "done"
+  // la scadenza `📅 AAAA-MM-GG` di un compito: una pastiglia, rossa quando è
+  // passata (`data` "overdue"), arancio quando è vicina (`data` "near"),
+  // segnata quando la data non si legge (`data` "bad"), grigia altrimenti
+  | "task-due"
   | "quote-mark"
   | "sup"
   | "sub"
@@ -405,6 +410,12 @@ export function computeDecorations(
   // Dedupe delle decorazioni di riga: blocchi annidati (citazione dentro
   // citazione) non devono impilare due volte la stessa classe.
   const quoteRows = new Set<number>();
+  // Il giorno di chi guarda, per dire se una scadenza è vicina, e le
+  // pastiglie delle scadenze, che si posano per ultime (`wholePill`).
+  const today = localDay();
+  // Le pastiglie, ognuna col tratto del suo compito: la riga della casella e
+  // quelle che la continuano.
+  const pills: { pill: LiveDeco; from: number; to: number }[] = [];
 
   // Le formule fra dollari si leggono per contenitore con la regola della
   // Lettura (`containerMath`): un `$` aperto su una riga può chiudere sulla
@@ -990,12 +1001,113 @@ export function computeDecorations(
       if (checked && paragraphEnd + 1 < row.to) {
         out.push({ from: paragraphEnd + 1, to: row.to, kind: "done" });
       }
+      // La scadenza è una pastiglia anche sulla riga attiva: un segno sul
+      // testo, che resta com'è e si scrive dentro la pastiglia. La regola
+      // legge il testo del compito — il primo paragrafo, righe che lo
+      // continuano comprese — senza la sintassi (`task-due.ts`), come la
+      // ricerca e la vista: una data dentro un codice conta, un indirizzo no.
+      const tree = syntaxTree(state);
+      const taskEnd = liveTaskEnd(tree, boxFrom, row.to);
+      const source = taskEnd > row.to ? doc.sliceString(row.from, taskEnd) : text;
+      const due = projectedDue(liveProjection(tree, source, row.from, paragraphEnd, taskEnd));
+      if (due) {
+        const look = dueLook(due, checked, today);
+        pills.push({
+          pill: { from: due.source[0], to: due.source[1], kind: "task-due", data: look === "plain" ? undefined : look },
+          from: row.from,
+          to: Math.max(taskEnd, row.to),
+        });
+      }
     }
   }
 
   keepPunctuation(doc, out);
-  out.sort((a, b) => a.from - b.from || a.to - b.to);
+  out.push(...wholePills(pills, out));
+  // A pari tratto la pastiglia viene prima, cioè fuori: CodeMirror annida per
+  // primo il segno che trova per primo.
+  out.sort((a, b) => a.from - b.from || a.to - b.to || Number(b.kind === "task-due") - Number(a.kind === "task-due"));
   return out;
+}
+
+/// Le decorazioni che una pastiglia può attraversare: quelle di riga, e il
+/// barrato della voce fatta, che finisce col fine riga (dove la pastiglia, se
+/// continua, va comunque a capo).
+const LINE_KINDS: ReadonlySet<LiveDecoKind> = new Set(["quote-line", "codeblock-line", "callout-line", "done"]);
+
+/// La pastiglia della scadenza, allargata finché non taglia più niente.
+///
+/// Un segno che ne attraversa il bordo — il codice in cui sta la data, il
+/// wikilink che la porta, i suoi segni nascosti, un evidenziato — spezzerebbe
+/// la pastiglia in due toppe: CodeMirror chiude e riapre il segno che finisce
+/// prima. Così la pastiglia prende per intero l'elemento che tocca, come in
+/// Lettura (`markTaskDues`): sta dentro un elemento che la contiene o
+/// contiene quelli che tocca, mai a cavallo.
+///
+/// E un elemento di cui la pastiglia copre tutto ciò che si vede (il codice
+/// `` `📅 2026-11-16` `` fuori dalla riga del cursore) sta dentro di lei, coi
+/// suoi segni nascosti: intorno, il suo fondo farebbe una toppa sulla toppa.
+export function wholePill(pill: LiveDeco, others: readonly LiveDeco[]): LiveDeco {
+  let { from, to } = pill;
+  const marks = others.filter((d) => d !== pill && !LINE_KINDS.has(d.kind) && d.from < d.to);
+  const hides = marks.filter((d) => d.kind === "hide");
+  const hidden = (a: number, b: number) => {
+    for (let at = a; at < b; at++) {
+      if (!hides.some((d) => d.from <= at && at < d.to)) return false;
+    }
+    return true;
+  };
+  const grow = () => {
+    for (let grown = true; grown; ) {
+      grown = false;
+      for (const other of marks) {
+        const inside = other.from <= from && to <= other.to;
+        const around = from <= other.from && other.to <= to;
+        if (other.to <= from || to <= other.from || inside || around) continue;
+        from = Math.min(from, other.from);
+        to = Math.max(to, other.to);
+        grown = true;
+      }
+    }
+  };
+  grow();
+  const covered = marks.some((other) => other.kind !== "hide" && other.from <= from && to <= other.to
+    && hidden(other.from, from) && hidden(to, other.to));
+  if (covered) {
+    for (let moved = true; moved; ) {
+      moved = false;
+      for (const hide of hides) {
+        if (hide.to === from) { from = hide.from; moved = true; }
+        if (hide.from === to) { to = hide.to; moved = true; }
+      }
+    }
+    grow();
+  }
+  return { ...pill, from, to };
+}
+
+/// Le pastiglie intere (`wholePill`), guardando per ognuna soltanto i segni
+/// del suo compito: un segno in riga non esce dal paragrafo, e il paragrafo
+/// di un compito comincia alla riga della casella. I segni si ordinano una
+/// volta, e ogni pastiglia ne legge solo il tratto suo: nella battuta da 4 ms
+/// non si scorre tutto il viewport per ogni compito.
+export function wholePills(
+  pills: readonly { pill: LiveDeco; from: number; to: number }[],
+  decos: readonly LiveDeco[],
+): LiveDeco[] {
+  if (pills.length === 0) return [];
+  const sorted = decos.filter((d) => d.from < d.to && !LINE_KINDS.has(d.kind)).sort((a, b) => a.from - b.from);
+  return pills.map(({ pill, from, to }) => {
+    let low = 0;
+    let high = sorted.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (sorted[middle]!.from < from) low = middle + 1;
+      else high = middle;
+    }
+    const near: LiveDeco[] = [];
+    for (let at = low; at < sorted.length && sorted[at]!.from <= to; at++) near.push(sorted[at]!);
+    return wholePill(pill, near);
+  });
 }
 
 const REPLACED: ReadonlySet<LiveDecoKind> = new Set(["hide", "math", "image", "link-pill", "footnote-back"]);
@@ -1387,6 +1499,9 @@ function calloutLine(type: string): Decoration {
   return line;
 }
 const bulletMark = Decoration.mark({ class: "cm-fub-bullet" });
+const dueMark = Decoration.mark({ class: "cm-fub-due" });
+const dueNearMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-near" });
+const dueOverdueMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-overdue" });
 const taskMark = Decoration.mark({ class: "cm-fub-bullet cm-fub-bullet-task" });
 const marksMap: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
   (["h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "strike", "sup", "sub", "code", "link", "highlight", "done", "quote-mark", "near", "nobreak", "footnote-label"] as const).map(
@@ -1468,6 +1583,14 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
         },
       });
     }
+    case "task-due":
+      if (d.data === "near") return dueNearMark;
+      if (d.data === "overdue") return dueOverdueMark;
+      // Il titolo dice perché, nella lingua dell'interfaccia di adesso.
+      if (d.data === "bad") {
+        return Decoration.mark({ class: "cm-fub-due cm-fub-due-bad", attributes: { title: liveStrings.t("tasks.due.unreadable") } });
+      }
+      return dueMark;
     case "tag":
       return Decoration.mark({
         class: "cm-fub-tag",

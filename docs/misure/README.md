@@ -99,6 +99,17 @@ fotogrammi lunghi.
 | 2026-11-11 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb e sullo schermo | Intel Core i5-13600KF, GPU RTX 4070 sullo schermo | [Il foglio vivo sulla lavagna, la seconda misura](lavagna-inchiostro-foglio-2026-11-11.md) |
 | 2026-11-13 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | Intel Core i5-13600KF, condivisa e carica | [Dove va il tempo della penna sul foglio vivo, il profilo](lavagna-inchiostro-profilo-2026-11-13.md) |
 
+## I fogli vivi sulla lavagna
+
+La misura del cancello di N6 (S9 di
+[`bench/webview/run.mjs`](../../apps/client/bench/webview/run.mjs)): la
+lavagna di S3 con venti fogli `.xlsx` vivi, spostata e ingrandita come S3.
+
+| Data | Sistema | Macchina | Pagina |
+|---|---|---|---|
+| 2026-11-13 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | Intel Core i5-13600KF, condivisa, senza GPU sotto Xvfb | [La lavagna con venti fogli vivi](2026-11-13-lavagna-fogli-vivi-s9.md) |
+| 2026-11-14 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb, con `--x11` | Intel Core i5-13600KF, condivisa, senza GPU sotto Xvfb | [Il tasto in una scheda di nota, dopo le misure della lavagna](2026-11-14-lavagna-fogli-vivi-s9-tasto.md) |
+
 ## Le librerie a runtime
 
 La prova del livello 3 del piano dei componenti

@@ -1413,3 +1413,19 @@ describe("una voce che nomina una nota ne porta l'icona (S2 T13)", () => {
     host.remove();
   });
 });
+
+describe("il frame di un web_view", () => {
+  it("carica soltanto un indirizzo https; ogni altro schema lascia il frame vuoto", () => {
+    const frameFor = (url: string): HTMLIFrameElement => {
+      const host = document.createElement("div");
+      mountTree(host, { node: "web_view", url, height: 80 } as UiNode, vi.fn());
+      const frame = host.querySelector("iframe")!;
+      unmountTree(host);
+      return frame;
+    };
+    expect(frameFor("https://esempio.it/").getAttribute("src")).toBe("https://esempio.it/");
+    for (const url of ["javascript:alert(1)", "data:text/html,<script>x</script>", "about:blank", "http://esempio.it/", "fub-asset://localhost/a.html"]) {
+      expect(frameFor(url).hasAttribute("src")).toBe(false);
+    }
+  });
+});

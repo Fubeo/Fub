@@ -1,10 +1,12 @@
 // Un'immagine mostrata come PNG, per gli appunti: la usano il menu delle
 // immagini nella nota e il visualizzatore delle immagini.
 
+import { fetchLocal } from "./local-fetch";
+
 /// L'immagine come PNG: i byte stessi se lo sono già, altrimenti ridisegnati
 /// su una tela alla misura naturale. Una sorgente che non si legge rifiuta.
 export async function pngOf(picture: HTMLImageElement): Promise<Blob> {
-  const source = await (await fetch(picture.currentSrc || picture.src)).blob();
+  const source = await (await fetchLocal(picture.currentSrc || picture.src)).blob();
   if (source.type === "image/png") return source;
   const drawable: CanvasImageSource = await createImageBitmap(source).catch(() => picture);
   const width = "naturalWidth" in drawable ? drawable.naturalWidth : drawable.width;

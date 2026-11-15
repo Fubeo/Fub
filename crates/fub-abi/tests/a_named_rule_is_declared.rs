@@ -355,6 +355,19 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-kernel/src/same_content.rs::extension_of",
+            (
+                Family::ContextualCase,
+                "è il «tipo» con cui lo stesso contenuto (T101) confronta due nomi del vault fra \
+                 loro: l'estensione grezza, piegata in minuscolo e confrontata uguale, senza \
+                 interrogare il registro. `.md` e `.markdown` sono quindi due tipi, anche se il \
+                 registro li servisse con lo stesso formato: è prudente di proposito, perché \
+                 riusare un file non deve cambiare l'estensione del collegamento che lo nomina. \
+                 Prende l'estensione del solo nome, come `media.rs`, perché un file senza \
+                 estensione in una cartella col punto non diventi un tipo.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/transfer.rs::extension",
             (
                 Family::ContextualCase,
@@ -606,12 +619,21 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-ink/src/inkml.rs::hex_color",
+            (
+                Family::AsciiCase,
+                "porta il colore del pennello InkML in minuscolo, la forma di `fub-ink`, in lettura \
+                 e prima di scriverlo, dopo aver controllato sei cifre esadecimali ASCII. \
+                 Normalizza un numero, non confronta nomi.",
+            ),
+        ),
+        (
             "crates/fub-ink/src/inkml.rs::brush_of",
             (
                 Family::AsciiCase,
-                "legge il colore del pennello InkML in minuscolo, la forma di `fub-ink`, dopo \
-                 aver controllato sei cifre esadecimali ASCII. Normalizza un numero, non \
-                 confronta nomi.",
+                "legge i valori `rectangle` di `tip` e `true` di `ignorePressure` del pennello \
+                 InkML senza badare al caso, come li scrivono Word e OneNote: sono parole \
+                 chiuse di un vocabolario ASCII, non nomi di file o di chiavi.",
             ),
         ),
         (
@@ -1183,6 +1205,44 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/tasks/query.rs::words",
+            (
+                Family::ContextualCase,
+                "piega le parole di una riga del recinto ```tasks per riconoscere il vocabolario \
+                 del plugin Tasks (`not done`, `due before`, `sort by`), che il plugin legge senza \
+                 badare al caso. Non decide quando due nomi sono lo stesso nome: confronta con un \
+                 vocabolario chiuso, e la piegatura è quella di chi lo ha scritto.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::day_of",
+            (
+                Family::ContextualCase,
+                "riconosce `today`, `tomorrow`, `yesterday` in una riga del recinto ```tasks, \
+                 senza badare al caso come il plugin. Gemella di `words`: un vocabolario chiuso, \
+                 non un'identità di nomi.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::understood",
+            (
+                Family::ContextualCase,
+                "prepara l'ago di `path includes` **una volta**, minuscolo, perché `keeps` lo \
+                 cerca nel percorso piegato allo stesso modo. Diverge da `resolution_key` perché \
+                 non risolve un percorso: è una ricerca di testo dentro il percorso, come la fa \
+                 il plugin Tasks, letterale e senza caso.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::reads",
+            (
+                Family::ContextualCase,
+                "l'altro capo di `understood`: piega il percorso della nota per cercarci l'ago \
+                 di `path includes`, prima di leggerla e per ogni compito. Un contenimento di testo, non un'identità: «lavoro» trova \
+                 `Lavoro/Note.md` e `Archivio lavoro.md`, come nel plugin.",
+            ),
+        ),
+        (
             "crates/fub-format-base/src/formula.rs::call_known",
             (
                 Family::ContextualCase,
@@ -1322,6 +1382,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  domanda di `validate_source_url`, ma su un attributo HTML durante l'importazione. \
                  Diverge da lei perché qui non si rifiuta niente — si decide solo se scaricare — \
                  e la risposta sbagliata costa banda, non sicurezza.",
+            ),
+        ),
+        (
+            "crates/fub-importers/src/html.rs::safe_destination",
+            (
+                Family::AsciiCase,
+                "confronta lo schema di un `href` importato con gli schemi attivi (`javascript`, \
+                 `vbscript`, `data`) in ASCII: gli schemi sono ASCII e si travestono di maiuscole. \
+                 Diverge da `is_safe_href` perché qui la lista è di ciò che si toglie, non di ciò \
+                 che passa: un importatore porta i suoi schemi (`evernote://`) e la resa li \
+                 filtra di nuovo; il link tolto resta testo.",
             ),
         ),
         (
@@ -1797,6 +1868,28 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  stretta — là la chiave è del registro dei formati e la piegatura è larga.",
             ),
         ),
+        (
+            "crates/fub-canvas-core/src/parts.rs::of",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se un estratto \
+                 `fub:parts` le va bene (`.pdf`, `.md`, `.png`, …): sono token di formato, ASCII \
+                 per definizione. Diverge da `parse.rs::is_media_path` perché il nucleo della \
+                 lavagna non vede `fub-format-canvas`, e la lista è quella di `cardKindOf` \
+                 nella shell, che i vettori di `canvas-parts/` tengono uguale.",
+            ),
+        ),
+        (
+            "crates/fub-canvas-core/src/ops.rs::scales",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se il suo inchiostro \
+                 scala con lei (le immagini e il PDF, `.png`, `.pdf`, …) quando `move_strokes` \
+                 porta i tratti da un livello all'altro: sono token di formato, ASCII per \
+                 definizione. Diverge da `parts.rs::of` perché la lista è un'altra, quella di \
+                 `inkFitMode` nella shell, che i vettori di `canvas-ink-fit/` tengono uguale.",
+            ),
+        ),
         // -- CasoAscii: importatori (estensioni e nomi di formato) -------------
         (
             "crates/fub-importers/src/archive.rs::route_entry",
@@ -2025,7 +2118,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-scene/src/analysis.rs::active_content",
+            "crates/fub-scene/src/analysis.rs::is_active_attr",
             (
                 Family::AsciiCase,
                 "riconosce i gestori di evento `on*` senza badare al caso, per l'avviso S005: \

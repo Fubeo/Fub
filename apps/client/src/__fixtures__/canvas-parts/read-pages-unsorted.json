@@ -1,0 +1,16 @@
+{
+  "name": "read-pages-unsorted",
+  "description": "Le pagine non ordinate restano nell'ordine di scelta; quattro senza layout: una alla volta.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Libro.pdf\", \"subpath\": \"#page=9\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"pages\", \"pages\": [9, 2, 5, 1] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "ok",
+        "parts": "{\"kind\":\"pages\",\"pages\":[9,2,5,1]}",
+        "shows": "#page=9",
+        "layout": "one"
+      }
+    ]
+  }
+}

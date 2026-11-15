@@ -6,12 +6,22 @@
 // modo della scheda (`ink-fit.ts`) dice come segue la misura di adesso: con
 // `scale` (immagini e PDF) l'annidato è largo quanto la scheda, col `viewBox`
 // della misura di riferimento e `xMidYMid meet`, e il browser scala i percorsi
-// senza deformarli; con `fixed` è largo `W` e alto `H`, senza scala, e ciò che
+// senza deformarli. Se la scheda dice la proporzione del suo contenuto
+// (`contentAspect`, T39), il `viewBox` è il riquadro del contenuto nella
+// misura di riferimento (`contentBox`): `xMidYMid meet` lo porta sul
+// riquadro del contenuto della scheda di adesso, ed è `inkFit` con
+// `aspect`. Con `fixed` l'annidato è largo `W` e alto `H`, senza scala, e ciò che
 // esce dalla scheda si vede. I percorsi restano nelle unità in cui sono
 // scritti. Così, quando la lavagna sposta o ridimensiona una scheda cambiando
 // solo posizione e misura dell'elemento (`#renderLive`), l'inchiostro la segue
-// senza ridisegnare niente. L'inchiostro libero si disegna sullo stage (`paintBoard`), dopo le
-// schede, in coordinate della lavagna, come gli archi.
+// senza ridisegnare niente. L'inchiostro di una pagina di PDF (T19) si
+// disegna solo quando la scheda mostra quella pagina, sul rettangolo dove la
+// mostra, e la tela lo ridisegna quando la pagina cambia o la scheda cambia
+// misura. L'inchiostro di una cella (T38) si disegna solo quando la scheda
+// di foglio mostra quella cella, dall'angolo dove la mostra, tagliato alla
+// scheda; la tela lo ridisegna quando il foglio scorre. L'inchiostro libero
+// si disegna sullo stage (`paintBoard`), dopo le schede, in coordinate della
+// lavagna, come gli archi.
 //
 // Il colore è un valore del file e va come attributo `fill` (mai una
 // variabile del tema); quanto copre la penna (l'evidenziatore) va in
@@ -21,7 +31,8 @@
 // `InkPathCache` tiene i percorsi già calcolati per id, inchiostro e pennello,
 // e a ogni giro lascia andare quelli che non si disegnano più.
 
-import type { InkFitMode } from "./ink-fit";
+import type { CardCellBox, CardPageBox } from "./cards";
+import { contentBox, validAspect, type InkFitMode } from "./ink-fit";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -51,9 +62,15 @@ export interface DryStroke {
   /// Quanto copre la penna, sotto 1 (l'evidenziatore 0,5): va in
   /// `fill-opacity`, senza `multiply` (A22); manca se copre tutto.
   readonly opacity?: number;
-  /// La misura della scheda quando il tratto è stato scritto; `null` per
-  /// l'inchiostro libero.
+  /// La misura della scheda quando il tratto è stato scritto (della pagina,
+  /// in punti PDF, con `page`); `null` per l'inchiostro libero.
   readonly ref: InkRef | null;
+  /// La pagina dell'ancora `page` (T19): il tratto si disegna solo quando la
+  /// scheda mostra quella pagina. Manca con le altre ancore.
+  readonly page?: number;
+  /// La cella dell'ancora `cell` (T38): il tratto si disegna solo quando la
+  /// scheda di foglio mostra quella cella. Manca con le altre ancore.
+  readonly cell?: InkCellRef;
   /// Preso dalla gomma e non ancora cancellato: si vede attenuato.
   readonly faded?: boolean;
   /// Tagliato dalla gomma «Solo il pezzo» e non ancora scritto: il contorno
@@ -62,37 +79,177 @@ export interface DryStroke {
   readonly cut?: string;
 }
 
+/// Una cella di un foglio, come la scrive l'ancora `cell`.
+export interface InkCellRef {
+  readonly sheet: string;
+  readonly cell: string;
+}
+
+/// Dove la scheda mostra adesso una cella (`CardView.cellRect`, T38); `null`
+/// se non la mostra.
+export type InkCellsShown = (sheet: string, cell: string) => CardCellBox | null;
+
+/// Il `preserveAspectRatio` dell'inchiostro di pagina (T19): lo stesso
+/// fattore nei due sensi, il minore, dall'angolo in alto a sinistra della
+/// pagina. È `pageFit` di `ink-record.ts` detto al browser.
+export const INK_PAGE_ASPECT = "xMinYMin meet";
+
 /// Disegna i tratti `strokes` dentro l'elemento della scheda `host`, nell'ordine
 /// (il primo sotto), nel modo `mode` della scheda (`inkFitMode`). Una lista
 /// vuota toglie l'inchiostro della scheda.
-export function paintCard(host: HTMLElement, strokes: readonly DryStroke[], mode: InkFitMode): void {
-  const svg = ownLayer(host, "canvas-ink-card", strokes.length > 0);
+///
+/// Un tratto con l'ancora di pagina (`page`, T19) si disegna solo se `page`
+/// dice che la scheda mostra quella pagina: la pagina scritta va sul
+/// rettangolo `page.rect` (`INK_PAGE_ASPECT`), dentro un SVG che taglia alla
+/// scheda, così un tratto che esce dalla pagina si vede fino al bordo della
+/// scheda e non oltre. Gli altri tratti di pagina non hanno un percorso.
+///
+/// `aspect` è la proporzione del contenuto che la scheda mostra adesso
+/// (`contentAspect`, T39): con `scale` l'inchiostro segue il contenuto
+/// (`inkFit` con `aspect`); `null`, o una proporzione che non vale, segue
+/// tutta la scheda.
+///
+/// Un tratto con l'ancora di cella (`cell`, T38) si disegna solo se `cells`
+/// dice dove la scheda mostra quella cella: l'angolo della cella va
+/// sull'angolo di `rect`, un pixel del foglio vale `zoom` unità della
+/// lavagna, e la scheda taglia, come per la pagina. Senza `cells`, o con la
+/// cella fuori vista, il tratto non ha un percorso.
+export function paintCard(
+  host: HTMLElement,
+  strokes: readonly DryStroke[],
+  mode: InkFitMode,
+  page: CardPageBox | null = null,
+  aspect: number | null = null,
+  cells: InkCellsShown | null = null,
+): void {
+  const boxes = new Map<string, CardCellBox | null>();
+  const cellBox = (cell: InkCellRef): CardCellBox | null => {
+    const key = JSON.stringify([cell.sheet, cell.cell]);
+    let box = boxes.get(key);
+    if (box === undefined) {
+      box = cells ? validCellBox(cells(cell.sheet, cell.cell)) : null;
+      boxes.set(key, box);
+    }
+    return box;
+  };
+  const shown = strokes.filter((stroke) =>
+    stroke.cell !== undefined
+      ? cellBox(stroke.cell) !== null
+      : stroke.page === undefined || (page !== null && stroke.page === page.page));
+  const svg = ownLayer(host, "canvas-ink-card", shown.length > 0);
   if (!svg) return;
   setAttr(svg, "width", "100%");
   setAttr(svg, "height", "100%");
   // I tratti consecutivi con la stessa misura vanno nello stesso SVG annidato: con
   // un tratto solo per misura l'ordine dei tratti è quello della lista.
   const runs: DryStroke[][] = [];
-  for (const stroke of strokes) {
+  for (const stroke of shown) {
     const last = runs[runs.length - 1];
-    if (last && sameRef(last[0]!.ref, stroke.ref)) last.push(stroke);
+    if (last && sameRef(last[0]!.ref, stroke.ref) && last[0]!.page === stroke.page && sameCell(last[0]!.cell, stroke.cell)) last.push(stroke);
     else runs.push([stroke]);
   }
   for (let i = 0; i < runs.length; i++) {
     const run = runs[i]!;
     const nested = childAt(svg, i, "svg");
     const ref = run[0]!.ref;
+    const cell = run[0]!.cell;
+    if (cell !== undefined) {
+      paintCellRun(nested, run, cellBox(cell)!);
+      continue;
+    }
+    setAttr(nested, "data-ink-cell", null);
+    if (run[0]!.page !== undefined && page !== null && ref !== null) {
+      paintPageRun(nested, run, ref, page);
+      continue;
+    }
+    setAttr(nested, "data-ink-page", null);
+    clip(nested, false);
     // Senza misura (un tratto libero dato a una scheda) le unità sono i pixel
     // della scheda, in tutti e due i modi.
     const fixed = ref !== null && mode === "fixed" ? ref : null;
     const scaled = ref !== null && mode === "scale" ? ref : null;
     setAttr(nested, "width", fixed ? String(fixed.width) : "100%");
     setAttr(nested, "height", fixed ? String(fixed.height) : "100%");
-    setAttr(nested, "viewBox", scaled ? `0 0 ${scaled.width} ${scaled.height}` : null);
+    setAttr(nested, "viewBox", scaled ? scaleViewBox(scaled, aspect) : null);
     setAttr(nested, "preserveAspectRatio", scaled ? INK_SCALE_ASPECT : null);
     paintPaths(nested, run);
   }
   trim(svg, runs.length);
+}
+
+/// I tratti `run` della pagina `page`: `nested` è largo e alto quanto la
+/// scheda e la taglia (lo stile della pelle lascia uscire gli SVG annidati,
+/// qui si chiude dallo stile in linea); dentro, un SVG sul rettangolo della
+/// pagina, con la misura scritta `ref` come `viewBox`, che non taglia.
+function paintPageRun(nested: SVGElement, run: readonly DryStroke[], ref: InkRef, page: CardPageBox): void {
+  setAttr(nested, "data-ink-page", String(page.page));
+  setAttr(nested, "width", "100%");
+  setAttr(nested, "height", "100%");
+  setAttr(nested, "viewBox", null);
+  setAttr(nested, "preserveAspectRatio", null);
+  clip(nested, true);
+  const inner = childAt(nested, 0, "svg");
+  setAttr(inner, "x", String(page.rect.x));
+  setAttr(inner, "y", String(page.rect.y));
+  setAttr(inner, "width", String(page.rect.width));
+  setAttr(inner, "height", String(page.rect.height));
+  setAttr(inner, "viewBox", `0 0 ${ref.width} ${ref.height}`);
+  setAttr(inner, "preserveAspectRatio", INK_PAGE_ASPECT);
+  setAttr(inner, "overflow", "visible");
+  paintPaths(inner, run);
+  trim(nested, 1);
+}
+
+/// I tratti `run` della cella `box`: come la pagina, `nested` è largo e alto
+/// quanto la scheda e la taglia; dentro, un SVG dall'angolo della cella, coi
+/// pixel del foglio come `viewBox` (`zoom` unità della lavagna per pixel),
+/// che non taglia: il tratto esce dalla cella fino al bordo della scheda.
+function paintCellRun(nested: SVGElement, run: readonly DryStroke[], box: CardCellBox): void {
+  setAttr(nested, "data-ink-page", null);
+  setAttr(nested, "data-ink-cell", `${box.sheet}!${box.cell}`);
+  setAttr(nested, "width", "100%");
+  setAttr(nested, "height", "100%");
+  setAttr(nested, "viewBox", null);
+  setAttr(nested, "preserveAspectRatio", null);
+  clip(nested, true);
+  const inner = childAt(nested, 0, "svg");
+  setAttr(inner, "x", String(box.rect.x));
+  setAttr(inner, "y", String(box.rect.y));
+  setAttr(inner, "width", String(box.rect.width));
+  setAttr(inner, "height", String(box.rect.height));
+  setAttr(inner, "viewBox", `0 0 ${box.rect.width / box.zoom} ${box.rect.height / box.zoom}`);
+  setAttr(inner, "preserveAspectRatio", INK_PAGE_ASPECT);
+  setAttr(inner, "overflow", "visible");
+  paintPaths(inner, run);
+  trim(nested, 1);
+}
+
+/// `box` se si può disegnare: un rettangolo finito con una misura e uno
+/// zoom finito maggiore di zero; sennò `null`.
+function validCellBox(box: CardCellBox | null): CardCellBox | null {
+  if (box === null) return null;
+  const { rect, zoom } = box;
+  const finite = Number.isFinite(rect.x) && Number.isFinite(rect.y) && Number.isFinite(rect.width) && Number.isFinite(rect.height);
+  return finite && rect.width > 0 && rect.height > 0 && Number.isFinite(zoom) && zoom > 0 && Number.isFinite(1 / zoom) ? box : null;
+}
+
+/// Il `viewBox` di un SVG annidato `scale` con la misura scritta `ref`: tutta
+/// la misura, o col contenuto di proporzione `aspect` il suo riquadro
+/// (`contentBox`), che `xMidYMid meet` porta sul riquadro del contenuto
+/// della scheda di adesso.
+function scaleViewBox(ref: InkRef, aspect: number | null): string {
+  const box = validAspect(aspect) ? contentBox(ref, aspect) : null;
+  if (box === null || !(box.width > 0 && box.height > 0)) return `0 0 ${ref.width} ${ref.height}`;
+  return `${box.x} ${box.y} ${box.width} ${box.height}`;
+}
+
+/// Taglia (`true`) o lascia uscire ciò che l'SVG annidato `nested` disegna.
+function clip(nested: SVGElement, on: boolean): void {
+  if (on) {
+    if (nested.style.getPropertyValue("overflow") !== "hidden") nested.style.setProperty("overflow", "hidden");
+  } else if (nested.style.getPropertyValue("overflow") !== "") {
+    nested.style.removeProperty("overflow");
+  }
 }
 
 /// Disegna l'inchiostro libero sullo stage, dopo le schede, in coordinate della
@@ -114,6 +271,24 @@ export function fadeInkStroke(owner: HTMLElement, where: "card" | "board", id: s
   if (!path) return false;
   setAttr(path, "opacity", faded ? INK_FADED_OPACITY : null);
   return true;
+}
+
+/// Come `fadeInkStroke` per tutti i tratti `ids` di un livello, in una
+/// passata sola sui suoi percorsi: i tratti scelti col lazo (T86) possono
+/// essere migliaia. Dà quanti percorsi ha toccato.
+export function fadeInkStrokes(owner: HTMLElement, where: "card" | "board", ids: ReadonlySet<string>, faded: boolean): number {
+  const layer = where === "card" ? "canvas-ink-card" : "canvas-ink-board";
+  let touched = 0;
+  for (const child of owner.children) {
+    if (child.localName !== "svg" || !child.classList.contains(layer)) continue;
+    for (const path of child.querySelectorAll("path[data-ink-stroke]")) {
+      if (!ids.has(path.getAttribute("data-ink-stroke") ?? "")) continue;
+      setAttr(path, "opacity", faded ? INK_FADED_OPACITY : null);
+      touched += 1;
+    }
+    break;
+  }
+  return touched;
 }
 
 /// Mostra il taglio della gomma «Solo il pezzo» sul percorso già disegnato
@@ -230,6 +405,10 @@ function setAttr(element: Element, name: string, value: string | null): void {
   } else if (element.getAttribute(name) !== value) {
     element.setAttribute(name, value);
   }
+}
+
+function sameCell(a: InkCellRef | undefined, b: InkCellRef | undefined): boolean {
+  return a === b || (a !== undefined && b !== undefined && a.sheet === b.sheet && a.cell === b.cell);
 }
 
 function sameRef(a: InkRef | null, b: InkRef | null): boolean {

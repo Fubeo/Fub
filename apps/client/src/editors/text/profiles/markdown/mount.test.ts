@@ -205,6 +205,35 @@ describe("montaggio Markdown condiviso", () => {
     });
   });
 
+  it("chiusa, svuota il contenitore; con `keepOnTeardown` la resa resta, ferma e senza ascoltatori", async () => {
+    const html = renderMarkdown("Vedi [[Altra]].\n\n![[Lontana]]\n").html;
+    const late = deferred();
+    query.renderEmbed.mockReturnValueOnce(late.promise);
+    const emptied = document.createElement("div");
+    document.body.append(emptied);
+    mountMarkdown(emptied, renderMarkdown("Vedi [[Altra]].\n").html, { documentId: "Nota.md" })();
+    expect(emptied.childNodes).toHaveLength(0);
+
+    const openWikilink = vi.fn();
+    const kept = document.createElement("div");
+    document.body.append(kept);
+    const dispose = mountMarkdown(kept, html, { documentId: "Nota.md", openWikilink, keepOnTeardown: true });
+    dispose();
+    expect(kept.textContent).toContain("Vedi Altra.");
+    const link = kept.querySelector<HTMLElement>("[data-wikilink-page]");
+    expect(link?.dataset.wikilinkPage).toBe("Altra");
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+    link!.dispatchEvent(click);
+    expect(openWikilink).not.toHaveBeenCalled();
+    expect(click.defaultPrevented).toBe(false);
+    // Una trasclusione che arriva dopo la chiusura non riempie la resa ferma.
+    late.resolve({ doc_id: "Lontana.md", html: "<p>Tardiva</p>", parts: [] });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(kept.textContent).not.toContain("Tardiva");
+    expect(kept.querySelector(".embed-loaded")).toBeNull();
+  });
+
   it("consente un ritaglio della nota corrente ma interrompe il riferimento ricorsivo", async () => {
     const reference = '<div class="embed" data-embed-page="" data-embed-heading="Sezione"></div>';
     query.renderEmbed.mockResolvedValue({ doc_id: "Nota.md", html: `<p>Ritaglio</p>${reference}`, parts: [] });

@@ -197,12 +197,11 @@ operazioni producono sono descritte sopra, in «Le toppe».
 
 ## Inchiostro
 
-La toppa `ink` e le operazioni `add_strokes` ed `erase_strokes` stanno
-nell'[inchiostro della lavagna](canvas-ink.md#toppa-e-operazioni); `draw`, che
-scrive un tratto dai punti o da una forma con la penna e il colore per nome, sta
-in [In codice](canvas-ink.md#in-codice). `move` e
-`resize` non toccano l'inchiostro; `remove` lo porta via con la scheda, e
-l'annulla lo rimette.
+La toppa `ink` e le operazioni `add_strokes`, `erase_strokes`, `move_strokes` e
+`restyle_strokes` stanno nell'[inchiostro della lavagna](canvas-ink.md#toppa-e-operazioni);
+`draw`, che scrive un tratto dai punti o da una forma con la penna e il colore per
+nome, sta in [L'inchiostro in codice](canvas-ink-code.md). `move` e `resize` non toccano
+l'inchiostro; `remove` lo porta via con la scheda, e l'annulla lo rimette.
 
 ## Comandi
 
@@ -281,7 +280,7 @@ L'esito è l'effetto `Custom` con namespace `fub.lavagna` e payload
 posto `model` e `ink_read`. `model` è il file com'è, livelli `fub:ink` compresi:
 una scheda letta e rimandata con `set` non perde l'inchiostro. `ink_read` è
 solo da leggere: i tratti decodificati, come dice
-[In codice](canvas-ink.md#in-codice). `revision` è la revisione del file che si è letta: è la `base` di
+[L'inchiostro in codice](canvas-ink-code.md#leggere). `revision` è la revisione del file che si è letta: è la `base` di
 `canvas.check` e di `canvas.apply`. `counts` dà `cards`, `edges` e `groups` di
 ciò che si legge; `bounds` è il riquadro (`x`, `y`, `width`, `height`), o `null`
 se non c'è nessuna scheda. L'outline taglia a una riga intera, e l'ultima dice
@@ -412,7 +411,7 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
 | `fub_free(ptr, len)` | | | |
 | `canvas_open(ptr, len) -> u32` | i byte del file | l'handle, 0 se fallisce | `{"handle", "canvas"}` |
 | `canvas_reset(h, ptr, len) -> i32` | i byte del file | 0 o -1 | `{"canvas"}` |
-| `canvas_commit(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | `{"edit", "inverse"}` |
+| `canvas_commit(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | `{"edit", "inverse"}`, più `changed` per un commit di soli tratti |
 | `canvas_preview(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | il sorgente intero, come testo |
 | `canvas_compile(h, ptr, len) -> i32` | `{"ops", "seed"}` | 0 o -1 | `{"patches", "created"}` |
 | `canvas_model(h) -> i32` | | 0 o -1 | `{"canvas"}` |
@@ -433,6 +432,8 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
   coppia di surrogati. Non porta il sorgente intero, che con un file grande
   costerebbe a ogni gesto. `inverse` sono le toppe dell'annulla, da dare a un
   altro `canvas_commit`.
+  Un commit di soli tratti porta anche `changed`: le schede riscritte, o solo il cambio della loro lista `strokes` (`{"start", "remove", "insert"}`), e così per la radice;
+  sul modello di prima dà quello di `canvas_model` (forma in `Cores::commit` di `src/api.rs`, `changedModel` di `core.ts`). Il nucleo ritocca e rilegge solo le parti cambiate, con gli stessi byte.
 - `canvas_preview` dà il sorgente che darebbe `canvas_commit` con le stesse
   toppe, o lo stesso errore, e non cambia la lavagna: serve alle bozze, che
   vogliono il testo intero.

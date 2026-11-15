@@ -1,0 +1,26 @@
+{
+  "name": "write-unknown-size",
+  "description": "Un campo con una misura sconosciuta, cambiato, si riscrive senza i suoi campi.",
+  "node": {
+    "id": "t1",
+    "type": "text",
+    "x": 0,
+    "y": 0,
+    "width": 300,
+    "height": 120,
+    "text": "nota",
+    "fub:text": {
+      "v": 1,
+      "size": "xxl",
+      "shadow": true
+    }
+  },
+  "style": {
+    "size": "s",
+    "align": "center"
+  },
+  "expect": {
+    "outcome": "written",
+    "text": "{\"v\":1,\"size\":\"s\",\"align\":\"center\"}"
+  }
+}

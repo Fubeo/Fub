@@ -3,7 +3,7 @@
 // formato rifà uguale. Un vettore che non passa si corregge nella regola, non
 // nel vettore.
 import { describe, expect, it } from "vitest";
-import { fitPoint, inkFit, inkFitMode, type InkFitMode } from "./ink-fit";
+import { contentBox, fitPoint, inkFit, inkFitMode, type InkFitMode } from "./ink-fit";
 import type { CanvasNode } from "./model";
 
 interface Vector {
@@ -26,6 +26,22 @@ const FILES = import.meta.glob("../../__fixtures__/canvas-ink-fit/*.json", { imp
   Vector
 >;
 const VECTORS = Object.entries(FILES)
+  .map(([path, vector]) => [path.replace(/^.*\/([^/]+)\.json$/, "$1"), vector] as const)
+  .sort(([a], [b]) => a.localeCompare(b));
+
+/// I vettori con la proporzione del contenuto (T39), in una cartella loro:
+/// li legge anche il nucleo (`fub-canvas-core`, `ops.rs`, T98), che rifà la
+/// regola con l'`aspect` che il client gli dà in `move_strokes` e
+/// `restyle_strokes`.
+interface AspectVector extends Vector {
+  readonly aspect: number;
+}
+
+const ASPECT_FILES = import.meta.glob("../../__fixtures__/canvas-ink-fit-aspect/*.json", { import: "default", eager: true }) as Record<
+  string,
+  AspectVector
+>;
+const ASPECT_VECTORS = Object.entries(ASPECT_FILES)
   .map(([path, vector]) => [path.replace(/^.*\/([^/]+)\.json$/, "$1"), vector] as const)
   .sort(([a], [b]) => a.localeCompare(b));
 
@@ -52,6 +68,75 @@ describe("vettori della misura dell'inchiostro", () => {
       expect(x).toBeCloseTo(point.to[0], PRECISION);
       expect(y).toBeCloseTo(point.to[1], PRECISION);
     }
+  });
+});
+
+describe("vettori dell'inchiostro sul contenuto (T39)", () => {
+  it("ci sono tutti i vettori", () => {
+    // 7 vettori scritti a mano da T39: uno che sparisce si vede qui.
+    expect(ASPECT_VECTORS.length).toBe(7);
+  });
+
+  it.each(ASPECT_VECTORS)("%s", (file, vector) => {
+    expect(vector.name).toBe(file);
+    expect(vector.description.length).toBeGreaterThan(0);
+    expect(typeof vector.aspect).toBe("number");
+    const mode = inkFitMode(vector.card);
+    expect(mode).toBe(vector.expect.mode);
+    const fit = inkFit(mode, vector.ref, vector.size, vector.aspect);
+    expect(fit.s).toBeCloseTo(vector.expect.s, PRECISION);
+    expect(fit.x).toBeCloseTo(vector.expect.x, PRECISION);
+    expect(fit.y).toBeCloseTo(vector.expect.y, PRECISION);
+    for (const point of vector.expect.points) {
+      const [x, y] = fitPoint(fit, point.from[0], point.from[1]);
+      expect(x).toBeCloseTo(point.to[0], PRECISION);
+      expect(y).toBeCloseTo(point.to[1], PRECISION);
+    }
+  });
+});
+
+describe("l'inchiostro sul contenuto", () => {
+  it("con aspect = W / H è la regola di N4, per ogni vettore di N4", () => {
+    for (const [, vector] of VECTORS) {
+      const { width: W, height: H } = vector.ref;
+      if (!(W > 0 && H > 0)) continue;
+      const mode = inkFitMode(vector.card);
+      const without = inkFit(mode, vector.ref, vector.size);
+      const withAspect = inkFit(mode, vector.ref, vector.size, W / H);
+      expect(withAspect.s).toBeCloseTo(without.s, PRECISION);
+      expect(withAspect.x).toBeCloseTo(without.x, PRECISION);
+      expect(withAspect.y).toBeCloseTo(without.y, PRECISION);
+    }
+  });
+
+  it("aspect assente, null, non finito o non positivo dà la regola senza aspect", () => {
+    const ref = { width: 200, height: 100 };
+    const size = { width: 300, height: 400 };
+    const plain = inkFit("scale", ref, size);
+    for (const aspect of [undefined, null, NaN, Infinity, -Infinity, 0, -2]) {
+      expect(inkFit("scale", ref, size, aspect)).toEqual(plain);
+    }
+  });
+
+  it("misure senza senso non danno mai NaN, anche con aspect", () => {
+    for (const value of [NaN, Infinity, -1]) {
+      expect(inkFit("scale", { width: 200, height: 100 }, { width: value, height: 100 }, 0.75)).toEqual({ s: 0, x: 0, y: 0 });
+      expect(inkFit("scale", { width: value, height: 100 }, { width: 200, height: 100 }, 0.75)).toEqual({ s: 0, x: 0, y: 0 });
+    }
+  });
+
+  it("il riquadro del contenuto è il più grande che entra, al centro", () => {
+    expect(contentBox({ width: 600, height: 400 }, 0.75)).toEqual({ x: 150, y: 0, width: 300, height: 400 });
+    expect(contentBox({ width: 300, height: 300 }, 2)).toEqual({ x: 0, y: 75, width: 300, height: 150 });
+    expect(contentBox({ width: 300, height: 300 }, 0)).toBeNull();
+    expect(contentBox({ width: NaN, height: 300 }, 1)).toBeNull();
+  });
+
+  it("ridimensionare la scheda a un'altra proporzione e tornare dà lo stesso inchiostro", () => {
+    const ref = { width: 600, height: 400 };
+    const before = inkFit("scale", ref, { width: 300, height: 200 }, 0.75);
+    inkFit("scale", ref, { width: 900, height: 120 }, 0.75);
+    expect(inkFit("scale", ref, { width: 300, height: 200 }, 0.75)).toEqual(before);
   });
 });
 

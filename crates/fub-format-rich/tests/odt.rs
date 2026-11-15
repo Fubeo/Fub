@@ -1518,3 +1518,41 @@ fn un_oggetto_nuovo_che_odf_non_sa_scrivere_è_rifiutato() {
         assert!(matches!(result, Err(RichError::Malformed(_))), "{result:?}");
     }
 }
+
+/// Un `content.xml` con `levels` sezioni una dentro l'altra.
+fn nested_sections(levels: usize) -> Vec<u8> {
+    let body = format!(
+        "{}<text:p>dentro</text:p>{}",
+        "<text:section text:name=\"S\">".repeat(levels),
+        "</text:section>".repeat(levels)
+    );
+    odt(&body)
+}
+
+#[test]
+fn un_annidamento_oltre_il_tetto_non_fa_cadere_il_processo() {
+    // Senza tetto la lettura di Fub ricorre una volta per livello e la pila
+    // del thread finisce: il processo cade. Con il tetto il codec di Fub
+    // rifiuta il file (un errore del codec), e il documento si apre come gli
+    // altri che il codec non sa riscrivere: letto dall'importatore, in sola
+    // lettura.
+    let bytes = nested_sections(200_000);
+    let opened = open(Codec::Odt, &bytes).unwrap();
+    assert_eq!(opened.readonly, Some(ReadOnly::Import));
+}
+
+#[test]
+fn un_annidamento_appena_sotto_il_tetto_si_apre_con_una_pila_piccola() {
+    // Le tre radici di `content.xml` più 250 sezioni e il paragrafo stanno
+    // sotto il tetto: la lettura ricorre fino in fondo anche su un thread con
+    // 2 MiB di pila, quella di un thread di lavoro.
+    let bytes = nested_sections(250);
+    let opened = std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(move || open(Codec::Odt, &bytes).map(|opened| opened.projection))
+        .unwrap()
+        .join()
+        .expect("la lettura non cade");
+    let projection = Projection::from_json(&opened.unwrap()).unwrap();
+    assert!(projection.to_json().unwrap().contains("dentro"));
+}

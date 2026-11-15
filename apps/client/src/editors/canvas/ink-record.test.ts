@@ -10,6 +10,7 @@ import {
   inkLook,
   inkOpacity,
   inkWidthOf,
+  pageFit,
   type InkPenChoice,
   foreignInkLayer,
   inkLayerStates,
@@ -331,9 +332,145 @@ describe("i livelli da disegnare", () => {
     expect(decodeStroke({ ...stroke, anchor: { kind: "card", width: 0, height: 1 } })).toBeNull();
   });
 
+  it("decodeStroke porta la pagina e la sua misura per un'ancora di pagina, e scarta quella che non vale", () => {
+    const stroke = record();
+    const page = decodeStroke({ ...stroke, anchor: { kind: "page", page: 3, width: 595.276, height: 842, box: "crop" } })!;
+    expect(page.page).toBe(3);
+    expect(page.ref).toEqual({ width: 595.276, height: 842 });
+    expect(decodeStroke(stroke)!.page).toBeNull();
+    expect(decodeStroke({ ...stroke, anchor: { kind: "free" } })!.page).toBeNull();
+    for (const anchor of [
+      { kind: "page", page: 0, width: 595, height: 842 },
+      { kind: "page", page: 2.5, width: 595, height: 842 },
+      { kind: "page", page: "3", width: 595, height: 842 },
+      { kind: "page", width: 595, height: 842 },
+      { kind: "page", page: 3, width: 0, height: 842 },
+      { kind: "page", page: 3, width: 595 },
+    ]) {
+      expect(decodeStroke({ ...stroke, anchor }), JSON.stringify(anchor)).toBeNull();
+    }
+  });
+
   function record(): InkStrokeRecord {
     return written(strokeRecord(penStroke(10, 10), card(0, 0), defaultInkLook(1, true), NOW));
   }
+});
+
+describe("l'inchiostro sulla pagina di un PDF (T19)", () => {
+  /// Una scheda PDF 300 × 460 che mostra la pagina 2 (A4, 595 × 842 punti)
+  /// larga quanto la scheda, sotto una testata alta 36.
+  const pdf: CanvasNode = { id: "p", type: "file", file: "carta.pdf", x: 100, y: 50, width: 300, height: 460 };
+  const box = { page: 2, size: { width: 595, height: 842 }, rect: { x: 0, y: 36, width: 300, height: (300 * 842) / 595 } };
+  const k = 595 / 300;
+
+  it("scrive l'ancora di pagina, coi punti e lo spessore in punti PDF dall'angolo della pagina", () => {
+    const stroke = penStroke(160, 120);
+    const record = written(strokeRecord(stroke, pdf, defaultInkLook(1, true), NOW, box));
+    expect(record.anchor).toEqual({ kind: "page", page: 2, width: 595, height: 842 });
+    expect(Object.keys(record.anchor)).toEqual(["kind", "page", "width", "height"]);
+    expect(parseInkBrush(record.brush).size).toBeCloseTo(4 * k, 9);
+    const drawable = reread(record, pdf);
+    expect(drawable.page).toBe(2);
+    expect(drawable.ref).toEqual({ width: 595, height: 842 });
+    const points = drawable.ink.samples.map((s) => [s.x / drawable.ink.scale, s.y / drawable.ink.scale]);
+    stroke.samples.forEach((sample, i) => {
+      expect(points[i]![0]).toBeCloseTo((sample.x - pdf.x - box.rect.x) * k, 1);
+      expect(points[i]![1]).toBeCloseTo((sample.y - pdf.y - box.rect.y) * k, 1);
+    });
+    const dry = toDry(record)!;
+    expect(dry.page).toBe(2);
+    expect(dry.ref).toEqual({ width: 595, height: 842 });
+  });
+
+  it("una pagina senza misura, o senza la scheda, è un errore di chi chiama", () => {
+    const look = defaultInkLook(1, true);
+    expect(() => strokeRecord(penStroke(160, 120), pdf, look, NOW, { ...box, rect: { ...box.rect, width: 0 } })).toThrow(RangeError);
+    expect(() => strokeRecord(penStroke(160, 120), pdf, look, NOW, { ...box, page: 0 })).toThrow(RangeError);
+    expect(() => strokeRecord(penStroke(160, 120), null, look, NOW, box)).toThrow(RangeError);
+  });
+
+  it("pageFit porta la pagina scritta sul rettangolo, senza deformarla, dall'angolo in alto a sinistra", () => {
+    expect(pageFit({ width: 595, height: 842 }, box.rect)).toEqual({ s: 300 / 595, x: 0, y: 36 });
+    // Il PDF sostituito con una pagina orizzontale: vale il lato più stretto.
+    expect(pageFit({ width: 595, height: 842 }, { x: 0, y: 36, width: 300, height: 212 })).toEqual({ s: 212 / 842, x: 0, y: 36 });
+    expect(pageFit({ width: 595, height: 842 }, { x: 0, y: 0, width: 0, height: 10 }).s).toBe(0);
+    expect(pageFit({ width: 595, height: 842 }, { x: Number.NaN, y: 0, width: 10, height: 10 }).s).toBe(0);
+  });
+});
+
+describe("l'inchiostro attaccato alla cella di un foglio (T37)", () => {
+  /// Una scheda di foglio 480 × 320 che mostra il foglio al 50%: B3 sta a
+  /// (60, 70), larga 40 e alta 12 unità della lavagna (80 × 24 pixel del
+  /// foglio al 100%).
+  const sheet: CanvasNode = { id: "f", type: "file", file: "conti.xlsx", x: 100, y: 50, width: 480, height: 320 };
+  const box = { sheet: "Conti 'Q1' \"bis\"", cell: "B3", rect: { x: 60, y: 70, width: 40, height: 12 }, zoom: 0.5 };
+
+  it("scrive l'ancora di cella, coi punti e lo spessore in pixel del foglio al 100% dall'angolo della cella", () => {
+    const stroke = penStroke(165, 125);
+    const record = written(strokeRecord(stroke, sheet, defaultInkLook(1, true), NOW, box));
+    expect(record.anchor).toEqual({ kind: "cell", sheet: "Conti 'Q1' \"bis\"", cell: "B3" });
+    expect(Object.keys(record.anchor)).toEqual(["kind", "sheet", "cell"]);
+    expect(parseInkBrush(record.brush).size).toBeCloseTo(4 / box.zoom, 9);
+    const drawable = reread(record, sheet);
+    expect(drawable.cell).toEqual({ sheet: "Conti 'Q1' \"bis\"", cell: "B3" });
+    expect(drawable.ref).toBeNull();
+    expect(drawable.page).toBeNull();
+    const points = drawable.ink.samples.map((s) => [s.x / drawable.ink.scale, s.y / drawable.ink.scale]);
+    stroke.samples.forEach((sample, i) => {
+      expect(points[i]![0]).toBeCloseTo((sample.x - sheet.x - box.rect.x) / box.zoom, 1);
+      expect(points[i]![1]).toBeCloseTo((sample.y - sheet.y - box.rect.y) / box.zoom, 1);
+    });
+  });
+
+  it("decodeStroke porta la cella, conserva i campi sconosciuti e scarta l'ancora che non vale", () => {
+    const stroke = written(strokeRecord(penStroke(10, 10), card(0, 0), defaultInkLook(1, true), NOW));
+    const anchor = { kind: "cell", merge: "XFD1048576:XFD1048576", sheet: " ", cell: "XFD1048576" };
+    const decoded = decodeStroke({ ...stroke, anchor })!;
+    expect(decoded.cell).toEqual({ sheet: " ", cell: "XFD1048576" });
+    expect(decoded.record.anchor).toBe(anchor);
+    expect(decodeStroke(stroke)!.cell).toBeNull();
+    for (const bad of [
+      { kind: "cell", sheet: "Foglio1", cell: "A0" },
+      { kind: "cell", sheet: "Foglio1", cell: "B" },
+      { kind: "cell", sheet: "Foglio1", cell: "b3" },
+      { kind: "cell", sheet: "Foglio1", cell: "$B$3" },
+      { kind: "cell", sheet: "Foglio1", cell: "B03" },
+      { kind: "cell", sheet: "Foglio1", cell: "XFE1" },
+      { kind: "cell", sheet: "Foglio1", cell: "A1048577" },
+      { kind: "cell", sheet: "Foglio1", cell: 23 },
+      { kind: "cell", sheet: "Foglio1" },
+      { kind: "cell", sheet: "", cell: "B3" },
+      { kind: "cell", sheet: 1, cell: "B3" },
+      { kind: "cell", cell: "B3" },
+    ]) {
+      expect(decodeStroke({ ...stroke, anchor: bad }), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it("il tratto di cella asciutto porta la sua cella: dove sta lo dice la scheda quando si disegna (T38)", () => {
+    const record = written(strokeRecord(penStroke(165, 125), sheet, defaultInkLook(1, true), NOW, box));
+    const dry = toDry(record)!;
+    expect(dry.cell).toEqual({ sheet: "Conti 'Q1' \"bis\"", cell: "B3" });
+    expect(dry.ref).toBeNull();
+    expect(dry.page).toBeUndefined();
+    expect(dry.path).not.toBe("");
+    // Gli altri tratti non portano una cella.
+    expect(toDry(written(strokeRecord(penStroke(10, 10), card(0, 0), defaultInkLook(1, true), NOW)))!.cell).toBeUndefined();
+  });
+
+  it("una cella che non vale, o senza la scheda, è un errore di chi chiama", () => {
+    const look = defaultInkLook(1, true);
+    for (const bad of [
+      { ...box, sheet: "" },
+      { ...box, cell: "B0" },
+      { ...box, zoom: 0 },
+      { ...box, zoom: Number.POSITIVE_INFINITY },
+      { ...box, rect: { ...box.rect, x: Number.NaN } },
+    ]) {
+      expect(() => strokeRecord(penStroke(165, 125), sheet, look, NOW, bad), JSON.stringify(bad)).toThrow(RangeError);
+    }
+    expect(() => strokeRecord(penStroke(165, 125), null, look, NOW, box)).toThrow(RangeError);
+  });
 });
 
 describe("la penna scelta nel menu", () => {

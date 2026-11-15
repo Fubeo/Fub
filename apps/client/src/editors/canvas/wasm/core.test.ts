@@ -8,6 +8,7 @@ import type { CanvasPatch } from "../operation";
 import {
   CanvasCoreError,
   canvasCoreMemoryBytes,
+  changedModel,
   createCanvasCoreRuntime,
   openCore,
   unpairedSurrogateAt,
@@ -207,6 +208,54 @@ describe("il nucleo della lavagna in WebAssembly", () => {
     expect(core.inkLayers()).toEqual([{ layer: "board", state: "foreign", strokes: [] }]);
     expect(calls).toBe(4);
     core.close();
+  });
+
+  it("il changed di un commit di soli tratti, sul modello di prima, dà quello di model() (T20e)", async () => {
+    const source = JSON.stringify({
+      nodes: [
+        { id: "a", type: "text", x: 0, y: 0, width: 10, height: 10, text: "😀", "fub:ink": { v: 1, strokes: [inkStroke("a-0")] } },
+        { id: "b", type: "text", x: 0, y: 0, width: 10, height: 10, text: "b" },
+      ],
+      edges: [],
+      "fub:ink": { strokes: [inkStroke("f-0")], v: 1 },
+      "x-dopo": 1,
+    });
+    const core = await openCore(source);
+    let doc = core.model();
+    const steps: CanvasPatch[][] = [
+      [{ kind: "ink", layer: { node: "a" }, at: 1, before: null, after: inkStroke("a-1") }],
+      [{ kind: "ink", layer: "board", at: 0, before: null, after: inkStroke("f-1") }],
+      // Il primo tratto di «b»: il livello nasce, la scheda arriva intera.
+      [{ kind: "ink", layer: { node: "b" }, at: 0, before: null, after: inkStroke("b-0") }],
+      [
+        { kind: "ink", layer: { node: "a" }, at: 0, before: inkStroke("a-0"), after: null },
+        { kind: "ink", layer: "board", at: 1, before: inkStroke("f-0"), after: null },
+      ],
+    ];
+    const inverses: CanvasPatch[][] = [];
+    const step = (patches: readonly CanvasPatch[]): void => {
+      const committed = core.commit(patches);
+      inverses.unshift(committed.inverse);
+      expect(committed.changed).toBeDefined();
+      const next = changedModel(doc, committed.changed!);
+      expect(JSON.stringify(next)).toBe(JSON.stringify(core.model()));
+      doc = next!;
+    };
+    for (const patches of steps) step(patches);
+    // Poi l'annulla di ogni passo, dall'ultimo.
+    for (const patches of inverses.splice(0)) step(patches);
+    expect(doc).toEqual(JSON.parse(source));
+    // Un commit che non è di tratti non ha changed.
+    const moved = core.commit([{ kind: "upsert-node", before: doc.nodes[1]!, after: { ...doc.nodes[1]!, x: 5 } }]);
+    expect(moved.changed).toBeUndefined();
+    core.close();
+    // Un modello che non è quello del nucleo: si rilegge intero.
+    const change = { nodes: [{ at: 0, id: "a", strokes: { start: 1, remove: 0, insert: [{}] } }], root: {} };
+    expect(changedModel({ nodes: [{ id: "x", type: "text", x: 0, y: 0, width: 1, height: 1 }], edges: [] }, change)).toBeNull();
+    expect(changedModel({ nodes: [{ id: "a", type: "text", x: 0, y: 0, width: 1, height: 1 }], edges: [] }, change)).toBeNull();
+    expect(changedModel({ nodes: [{ id: "a", type: "text", x: 0, y: 0, width: 1, height: 1, "fub:ink": { strokes: [] } }], edges: [] }, change)).toBeNull();
+    expect(changedModel({ nodes: [], edges: [] }, { nodes: [], root: { "fub:ink": {} } })).toBeNull();
+    expect(changedModel({ nodes: [], edges: [] }, { nodes: [], root: {}, board: { start: 0, remove: 0, insert: [] } })).toBeNull();
   });
 
   it("una trappola dentro inkLayers uccide l'istanza; la lavagna riaperta rilegge i livelli", async () => {

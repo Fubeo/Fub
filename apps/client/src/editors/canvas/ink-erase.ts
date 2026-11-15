@@ -25,8 +25,9 @@ import { dequantizeSample, quantizeInk, type QuantizedInk } from "../../ink/samp
 import { cutBrush, splitInk } from "../../ink/tools/split";
 import type { EraseSource, Erasable, Spot } from "../../ink/tools/sweep";
 import { encodeInk, inkFromQuantized } from "../spatial/ink/codec";
+import type { CardCellBox, CardPageBox } from "./cards";
 import { fitPoint, inkFit, inkFitMode, type InkFit } from "./ink-fit";
-import type { DrawableStroke, InkLayerRef, InkLayerState } from "./ink-record";
+import { pageFit, type DrawableStroke, type InkLayerRef, type InkLayerState } from "./ink-record";
 import type { CanvasDocument } from "./model";
 import { addStrokePatch, eraseStrokePatch, eraseStrokePatches, newNodeId, type InkPatch, type StoredInkStroke } from "./operation";
 import type { CanvasInkLayer } from "./wasm/core";
@@ -68,8 +69,19 @@ export function inkKey(layer: InkLayerRef, id: string): string {
 const IDENTITY: InkFit = { s: 1, x: 0, y: 0 };
 
 /// I tratti disegnati dei livelli `states` (`inkLayerStates`), in coordinate
-/// della lavagna. Un tratto che la resa non mostra (scala zero) non c'è.
-export function erasableInk(states: readonly InkLayerState[]): ErasableInk[] {
+/// della lavagna. Un tratto che la resa non mostra (scala zero) non c'è, e
+/// nemmeno un tratto di pagina (T19) se la sua scheda non mostra quella
+/// pagina: `pages` dà la pagina che una scheda mostra e dove (`pageBox`).
+/// `aspects` dà la proporzione del contenuto di una scheda (`contentAspect`,
+/// T39), che i tratti `scale` seguono come in `paintCard`. Un tratto di cella
+/// (T38) c'è solo se la sua scheda mostra la cella: `cells` dice dove
+/// (`cellRect`).
+export function erasableInk(
+  states: readonly InkLayerState[],
+  pages: (node: string) => CardPageBox | null = () => null,
+  aspects: (node: string) => number | null = () => null,
+  cells: (node: string, sheet: string, cell: string) => CardCellBox | null = () => null,
+): ErasableInk[] {
   const units: ErasableInk[] = [];
   for (const state of states) {
     if (state.state !== "ok") continue;
@@ -77,10 +89,26 @@ export function erasableInk(states: readonly InkLayerState[]): ErasableInk[] {
     const ox = node ? node.x : 0;
     const oy = node ? node.y : 0;
     const mode = node ? inkFitMode(node) : "fixed";
+    let shown: CardPageBox | null | undefined;
+    let aspect: number | null | undefined;
     for (const stroke of state.drawable) {
-      // Senza misura (un tratto libero dato a una scheda) le unità sono i
-      // pixel della scheda, come in `paintCard`.
-      const fit = node && stroke.ref ? inkFit(mode, stroke.ref, { width: node.width, height: node.height }) : IDENTITY;
+      let fit: InkFit;
+      if (stroke.cell !== null) {
+        // Dove la scheda di foglio mostra la cella, come in `paintCard`.
+        const box = node ? cells(node.id, stroke.cell.sheet, stroke.cell.cell) : null;
+        if (!box || !(box.zoom > 0) || !Number.isFinite(box.rect.x) || !Number.isFinite(box.rect.y)) continue;
+        fit = { s: box.zoom, x: box.rect.x, y: box.rect.y };
+      } else if (stroke.page !== null) {
+        // Sulla pagina che la scheda mostra, come in `paintCard`.
+        if (node && shown === undefined) shown = pages(node.id);
+        if (!node || !shown || shown.page !== stroke.page || !stroke.ref) continue;
+        fit = pageFit(stroke.ref, shown.rect);
+      } else {
+        // Senza misura (un tratto libero dato a una scheda) le unità sono i
+        // pixel della scheda, come in `paintCard`.
+        if (node && mode === "scale" && aspect === undefined) aspect = aspects(node.id);
+        fit = node && stroke.ref ? inkFit(mode, stroke.ref, { width: node.width, height: node.height }, aspect) : IDENTITY;
+      }
       if (!(fit.s > 0)) continue;
       const scale = stroke.ink.scale;
       const points: number[] = [];

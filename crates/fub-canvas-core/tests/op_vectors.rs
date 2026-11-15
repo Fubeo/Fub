@@ -206,6 +206,9 @@ fn ci_sono_i_vettori_del_cancello_e_del_passo() {
         "move-card-with-ink.json",
         "resize-card-with-ink.json",
         "remove-card-with-ink.json",
+        "move-strokes-to-card.json",
+        "move-strokes-pdf-to-note.json",
+        "restyle-strokes.json",
     ] {
         assert!(names.iter().any(|seen| seen == name), "manca {name}");
     }
@@ -243,6 +246,8 @@ fn ogni_operazione_ha_un_vettore() {
         "add_strokes",
         "erase_strokes",
         "draw",
+        "move_strokes",
+        "restyle_strokes",
     ] {
         assert!(seen.contains(op), "nessun vettore usa {op:?}");
     }

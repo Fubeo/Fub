@@ -27,6 +27,12 @@
 // (`kit/toolbar-keys.ts`). Il puntatore non toglie il fuoco all'editor: la
 // selezione su cui il pulsante agisce resta dov'era.
 //
+// # Il dito
+//
+// Dove si scrive col dito (`pointer: coarse`) e il cursore sta in una tabella,
+// la barra apre in testa i tasti che sul vetro mancano: Tab, Invio e
+// «+ riga» (`drawTouch`). Tab e Invio arrivano all'editor come i tasti veri.
+//
 // # Aspetto
 //
 // La barra di un riquadro veste la barra in una fila del kit: `kit-bar` sulla
@@ -277,6 +283,15 @@ export interface FormatBarHost {
   runCommand(id: string): void;
   /// Solo questi gruppi, nell'ordine dei comandi. Assente = tutti.
   readonly only?: readonly GroupId[];
+  /// Se si scrive col dito. Assente = il puntatore grossolano del sistema.
+  coarse?(): boolean;
+}
+
+/// L'azione che dice se il cursore sta in una tabella, e che «+ riga» esegue.
+const ROW_AFTER = "markdown.table.row.after";
+
+function coarsePointer(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
 }
 
 export interface FormatBar {
@@ -468,6 +483,52 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     return trigger;
   }
 
+  /// I tasti della tabella per il dito: col cursore in una tabella e senza
+  /// tastiera, Tab e Invio arrivano alla tabella come i tasti veri (la cella
+  /// dopo, la riga sotto, la riga nuova dall'ultima cella), e «+ riga»
+  /// aggiunge una riga sotto. Il gruppo sta in testa alla barra e non scende
+  /// mai nel menu «altri».
+  function drawTouch(): HTMLElement {
+    const box = document.createElement("div");
+    box.className = "format-bar-group format-bar-touch kit-bar-group";
+    box.dataset.group = "touch";
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", t("format_bar.touch.label"));
+    const key = (name: "Tab" | "Enter", label: Key, hint: Key) => {
+      const control = button("format-bar-button format-bar-key", t(hint), null);
+      control.dataset.key = name;
+      control.textContent = t(label);
+      control.addEventListener("click", () => pressKey(name));
+      return control;
+    };
+    const add = button("format-bar-button format-bar-key", t("format_bar.touch.add_row_hint"), null);
+    add.dataset.command = ROW_AFTER;
+    add.textContent = t("format_bar.touch.add_row");
+    add.addEventListener("click", () => {
+      host.focusPane();
+      actions()?.run(ROW_AFTER);
+      refresh();
+    });
+    box.append(key("Tab", "format_bar.touch.tab", "format_bar.touch.tab_hint"), key("Enter", "format_bar.touch.enter", "format_bar.touch.enter_hint"), add);
+    refreshers.push(() => {
+      const surface = actions();
+      box.hidden = !(surface?.editable() && surface.state(ROW_AFTER).enabled);
+    });
+    return box;
+  }
+
+  /// Un tasto della barra del dito, a chi ha il fuoco nell'editor: la cornice
+  /// della tabella o il testo. Il pulsante non prende il fuoco; se ce l'ha
+  /// (la tastiera nella barra) lo ridà prima all'editor.
+  function pressKey(key: "Tab" | "Enter"): void {
+    host.focusPane();
+    if (element.contains(document.activeElement)) host.surface()?.focus?.();
+    const target = document.activeElement;
+    if (!(target instanceof HTMLElement) || element.contains(target)) return;
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, code: key, bubbles: true, cancelable: true }));
+    refresh();
+  }
+
   function drawOverflow(): HTMLButtonElement {
     const more = button("format-bar-menu format-bar-overflow", t("format_bar.overflow"), null);
     more.setAttribute("aria-haspopup", "menu");
@@ -542,6 +603,7 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     groupEls = [];
     element.replaceChildren();
     element.setAttribute("aria-label", t("format_bar.label"));
+    if (!host.only && surface?.has(ROW_AFTER) && groups.length > 0 && (host.coarse ?? coarsePointer)()) element.append(drawTouch());
     for (const group of groups) {
       const box = document.createElement("div");
       box.className = "format-bar-group kit-bar-group";

@@ -1,0 +1,21 @@
+{
+  "name": "write-file-card",
+  "description": "Una scheda di file non ha testo da misurare: rifiutato.",
+  "node": {
+    "id": "t1",
+    "type": "file",
+    "x": 0,
+    "y": 0,
+    "width": 300,
+    "height": 120,
+    "file": "Nota.md"
+  },
+  "style": {
+    "size": "l",
+    "align": "start"
+  },
+  "expect": {
+    "outcome": "refused",
+    "reason": "node"
+  }
+}

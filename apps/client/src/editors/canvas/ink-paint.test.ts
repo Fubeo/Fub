@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { FADED_OPACITY } from "../spatial/painter/svg-dom";
-import { cutInkStroke, fadeInkStroke, INK_FADED_OPACITY, INK_SCALE_ASPECT, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
+import { cutInkStroke, fadeInkStroke, INK_FADED_OPACITY, INK_PAGE_ASPECT, INK_SCALE_ASPECT, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
 
 const A: DryStroke = { id: "s1", path: "M0 0L10 0L10 10Z", fill: "#0072b2", ref: { width: 200, height: 100 } };
 const B: DryStroke = { id: "s2", path: "M5 5L20 5L20 20Z", fill: "#d55e00", ref: { width: 200, height: 100 } };
@@ -46,6 +46,26 @@ describe("l'inchiostro asciutto", () => {
       ["s2", B.path, "#d55e00"],
     ]);
     expect(nested[1]!.querySelector("path")!.getAttribute("fill")).toBe("#000000");
+  });
+
+  it("con scale e la proporzione del contenuto il viewBox è il riquadro del contenuto (T39)", () => {
+    const host = cardElement();
+    // A: 200 × 100 con un contenuto 1:1 → 100 × 100 a x = 50; C: 320 × 240 → 240 × 240 a x = 40.
+    paintCard(host, [A, C], "scale", null, 1);
+    const nested = [...layerOf(host, "canvas-ink-card")!.children];
+    expect(nested.map((each) => each.getAttribute("viewBox"))).toEqual(["50 0 100 100", "40 0 240 240"]);
+    for (const each of nested) expect(each.getAttribute("preserveAspectRatio")).toBe(INK_SCALE_ASPECT);
+    // Con la proporzione della misura scritta il viewBox è la misura intera.
+    paintCard(host, [A], "scale", null, 2);
+    expect(layerOf(host, "canvas-ink-card")!.firstElementChild!.getAttribute("viewBox")).toBe("0 0 200 100");
+    // Senza proporzione, o una che non vale, come N4.
+    for (const aspect of [null, 0, NaN]) {
+      paintCard(host, [A], "scale", null, aspect);
+      expect(layerOf(host, "canvas-ink-card")!.firstElementChild!.getAttribute("viewBox")).toBe("0 0 200 100");
+    }
+    // fixed non guarda la proporzione.
+    paintCard(host, [A], "fixed", null, 1);
+    expect(layerOf(host, "canvas-ink-card")!.firstElementChild!.getAttribute("viewBox")).toBeNull();
   });
 
   it("con fixed ogni misura di riferimento ha il suo SVG largo W e alto H, senza scala", () => {
@@ -229,6 +249,112 @@ describe("l'inchiostro asciutto", () => {
     expect(svg.querySelector("path")).toBe(path);
     paintBoard(stage, []);
     expect(layerOf(stage, "canvas-ink-board")).toBeNull();
+  });
+});
+
+describe("l'inchiostro sulla pagina di un PDF (T19)", () => {
+  const P2: DryStroke = { id: "p2", path: "M0 0L100 0L100 100Z", fill: "#0072b2", ref: { width: 595, height: 842 }, page: 2 };
+  const P3: DryStroke = { id: "p3", path: "M5 5L50 5L50 50Z", fill: "#d55e00", ref: { width: 595, height: 842 }, page: 3 };
+  const box = (page: number) => ({ page, size: { width: 595, height: 842 }, rect: { x: 0, y: 36, width: 300, height: 424.5 } });
+  const ids = (host: Element) => [...host.querySelectorAll("path[data-ink-stroke]")].map((path) => path.getAttribute("data-ink-stroke"));
+
+  it("si disegna solo il tratto della pagina che la scheda mostra; senza pagina nessuno", () => {
+    const host = cardElement();
+    paintCard(host, [A, P2, P3], "scale", box(2));
+    expect(ids(host)).toEqual(["s1", "p2"]);
+    paintCard(host, [A, P2, P3], "scale", box(3));
+    expect(ids(host)).toEqual(["s1", "p3"]);
+    paintCard(host, [A, P2, P3], "scale", null);
+    expect(ids(host)).toEqual(["s1"]);
+    // Solo tratti di pagina, e nessuna pagina in vista: niente strato.
+    paintCard(host, [P2], "scale", null);
+    expect(layerOf(host, "canvas-ink-card")).toBeNull();
+  });
+
+  it("la pagina scritta va sul rettangolo della pagina, dentro un SVG che taglia alla scheda", () => {
+    const host = cardElement();
+    paintCard(host, [P2], "scale", box(2));
+    const outer = layerOf(host, "canvas-ink-card")!.firstElementChild as SVGSVGElement;
+    expect(outer.getAttribute("data-ink-page")).toBe("2");
+    expect([outer.getAttribute("width"), outer.getAttribute("height"), outer.getAttribute("viewBox")]).toEqual(["100%", "100%", null]);
+    expect(outer.style.getPropertyValue("overflow")).toBe("hidden");
+    const inner = outer.firstElementChild!;
+    expect(["x", "y", "width", "height", "viewBox", "preserveAspectRatio", "overflow"].map((name) => inner.getAttribute(name)))
+      .toEqual(["0", "36", "300", "424.5", "0 0 595 842", INK_PAGE_ASPECT, "visible"]);
+    expect(inner.querySelector("path")!.getAttribute("d")).toBe(P2.path);
+    // Lo stesso SVG, ridisegnato come tratto di scheda, non taglia più.
+    paintCard(host, [A], "scale", box(2));
+    const again = layerOf(host, "canvas-ink-card")!.firstElementChild as SVGSVGElement;
+    expect(again.hasAttribute("data-ink-page")).toBe(false);
+    expect(again.style.getPropertyValue("overflow")).toBe("");
+    expect([...again.children].map((child) => child.localName)).toEqual(["path"]);
+  });
+
+  it("la gomma trova il percorso di un tratto di pagina", () => {
+    const host = cardElement();
+    paintCard(host, [P2], "scale", box(2));
+    expect(fadeInkStroke(host, "card", "p2", true)).toBe(true);
+    expect(host.querySelector('path[data-ink-stroke="p2"]')!.getAttribute("opacity")).toBe(INK_FADED_OPACITY);
+  });
+});
+
+describe("l'inchiostro sulle celle di un foglio (T38)", () => {
+  const B3: DryStroke = { id: "b3", path: "M0 0L10 0L10 10Z", fill: "#0072b2", ref: null, cell: { sheet: "Conti", cell: "B3" } };
+  const B3BIS: DryStroke = { id: "b3bis", path: "M1 1L5 1L5 5Z", fill: "#0072b2", ref: null, cell: { sheet: "Conti", cell: "B3" } };
+  const C4: DryStroke = { id: "c4", path: "M5 5L50 5L50 50Z", fill: "#d55e00", ref: null, cell: { sheet: "Conti", cell: "C4" } };
+  const ids = (host: Element) => [...host.querySelectorAll("path[data-ink-stroke]")].map((path) => path.getAttribute("data-ink-stroke"));
+  /// La scheda mostra solo B3, a (172, 84), al 50%.
+  const onlyB3 = (sheet: string, cell: string) =>
+    sheet === "Conti" && cell === "B3" ? { sheet, cell, rect: { x: 172, y: 84, width: 60, height: 14 }, zoom: 0.5 } : null;
+
+  it("si disegna solo il tratto della cella che la scheda mostra, dall'angolo della cella, tagliato alla scheda", () => {
+    const host = cardElement();
+    const asked: string[] = [];
+    paintCard(host, [A, B3, B3BIS, C4], "fixed", null, null, (sheet, cell) => {
+      asked.push(`${sheet}!${cell}`);
+      return onlyB3(sheet, cell);
+    });
+    expect(ids(host)).toEqual(["s1", "b3", "b3bis"]);
+    // Una domanda per cella, anche con due tratti sulla stessa.
+    expect(asked).toEqual(["Conti!B3", "Conti!C4"]);
+    const outer = layerOf(host, "canvas-ink-card")!.children[1] as SVGSVGElement;
+    expect(outer.getAttribute("data-ink-cell")).toBe("Conti!B3");
+    expect(outer.style.getPropertyValue("overflow")).toBe("hidden");
+    const inner = outer.firstElementChild!;
+    expect(["x", "y", "width", "height", "viewBox", "preserveAspectRatio", "overflow"].map((name) => inner.getAttribute(name)))
+      .toEqual(["172", "84", "60", "14", "0 0 120 28", INK_PAGE_ASPECT, "visible"]);
+    expect([...inner.children].map((path) => path.getAttribute("data-ink-stroke"))).toEqual(["b3", "b3bis"]);
+  });
+
+  it("senza chi dice dove sta la cella, o con un rettangolo che non vale, il tratto di cella non c'è", () => {
+    const host = cardElement();
+    paintCard(host, [B3], "scale");
+    expect(layerOf(host, "canvas-ink-card")).toBeNull();
+    for (const bad of [
+      { sheet: "Conti", cell: "B3", rect: { x: Number.NaN, y: 0, width: 10, height: 10 }, zoom: 1 },
+      { sheet: "Conti", cell: "B3", rect: { x: 0, y: 0, width: 0, height: 10 }, zoom: 1 },
+      { sheet: "Conti", cell: "B3", rect: { x: 0, y: 0, width: 10, height: 10 }, zoom: 0 },
+    ]) {
+      paintCard(host, [B3], "scale", null, null, () => bad);
+      expect(layerOf(host, "canvas-ink-card"), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it("la cella che si sposta riusa i percorsi; ridisegnato come tratto di scheda non taglia più", () => {
+    const host = cardElement();
+    paintCard(host, [B3], "fixed", null, null, onlyB3);
+    const path = host.querySelector('path[data-ink-stroke="b3"]');
+    paintCard(host, [B3], "fixed", null, null, (sheet, cell) => {
+      const box = onlyB3(sheet, cell);
+      return box && { ...box, rect: { ...box.rect, y: 28 } };
+    });
+    expect(host.querySelector('path[data-ink-stroke="b3"]')).toBe(path);
+    expect(host.querySelector("svg[data-ink-cell] > svg")!.getAttribute("y")).toBe("28");
+    paintCard(host, [A], "fixed");
+    const again = layerOf(host, "canvas-ink-card")!.firstElementChild as SVGSVGElement;
+    expect(again.hasAttribute("data-ink-cell")).toBe(false);
+    expect(again.style.getPropertyValue("overflow")).toBe("");
+    expect([...again.children].map((child) => child.localName)).toEqual(["path"]);
   });
 });
 

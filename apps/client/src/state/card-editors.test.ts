@@ -1,0 +1,995 @@
+// @vitest-environment happy-dom
+// La porta per scrivere dentro le schede (N6 T40): la sessione vera sull'host
+// finto, il registro vero delle superfici con una superficie finta che tiene
+// il suo annulla come un editor (le battute sì, i cambi arrivati dalla
+// sessione no). Chi lascia le sessioni fuori dal controllore
+// (`shell-layout.ts`, `document-bridge.ts`) le lascia dalla collezione delle
+// schede (T96): qui la loro `documentSessions` è la collezione della prova.
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type * as SessionModule from "./document-session";
+
+import type { CardEditorOptions, CardEditorState } from "../editors/canvas/cards";
+import {
+  DocumentSurfaceRegistry,
+  type EditorSurface,
+  type SurfaceActiveCell,
+  type SurfaceMode,
+  type SurfaceMountContext,
+} from "../editors/core/registry";
+import { operationFromText, type EditorChange } from "../editors/core/text-operation";
+import { createFakeHost, type FakeHost } from "../host/fake";
+import { openLifetime, type Lifetime } from "../ui/lifetime";
+import { createCardEditorPort, headingOffset, type CardEditorHub } from "./card-editors";
+import {
+  DocumentSessionCollection,
+  type DocumentSessionApi,
+  type DocumentSurfaceUpdate,
+} from "./document-session";
+import { defaultLayout, openIn, setLayout } from "./layout";
+import { state as store } from "./store";
+
+/// La collezione della prova, dietro la `documentSessions` della finestra.
+const live = vi.hoisted(() => ({ sessions: null as object | null }));
+
+vi.mock("./document-session", async (importOriginal) => {
+  const real = await importOriginal<typeof SessionModule>();
+  const documentSessions = new Proxy({}, {
+    get: (_target, key) => {
+      const sessions = live.sessions;
+      if (!sessions) throw new Error("nessuna collezione nella prova");
+      const value: unknown = Reflect.get(sessions, key, sessions);
+      return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(sessions) : value;
+    },
+  });
+  return { ...real, documentSessions };
+});
+
+// `applyShellLayout` ridisegna la shell a layout pubblicato: qui non c'è.
+vi.mock("./document-controller", () => ({
+  synchronize: async () => {},
+  publishContext: async () => {},
+}));
+
+const VAULT = "/vault";
+
+const MODES: readonly SurfaceMode[] = [
+  { id: "source", label: () => "Sorgente", presentation: "surface", contextMode: "source", looks: ["tema"] },
+  { id: "live_preview", label: () => "Live", presentation: "surface", contextMode: "live_preview", looks: ["tema"] },
+];
+
+/// Un editor finto: il testo, l'annulla locale e ciò che la porta gli ha fatto.
+class FakeEditor {
+  text = "";
+  readonly undo: string[] = [];
+  readonly syncs: string[] = [];
+  mode: string | null = null;
+  readOnly = false;
+  destroyed = false;
+  focused = 0;
+  /// La cella attiva, come un foglio (T42): `undefined` se la superficie non
+  /// ne ha una.
+  cell: SurfaceActiveCell | null | undefined = undefined;
+  readonly cellListeners = new Set<() => void>();
+  constructor(
+    readonly context: SurfaceMountContext,
+    readonly onChange: (paneId: string, change: EditorChange) => void,
+  ) {
+    context.parent.textContent = "editor";
+  }
+  /// Una battuta dell'utente: entra nell'annulla e va alla sessione.
+  type(next: string): void {
+    const before = this.text;
+    this.undo.push(before);
+    this.text = next;
+    this.onChange(this.context.paneId, { text: next, operation: operationFromText(before, next), origin: "input" });
+  }
+  surface(): EditorSurface {
+    return {
+      family: "text",
+      profile: "markdown",
+      surfaceId: this.context.paneId,
+      modes: MODES,
+      defaultMode: "live_preview",
+      setMode: (mode) => {
+        this.mode = mode;
+      },
+      buffer: {
+        setDoc: (text) => {
+          this.text = text;
+        },
+        syncDoc: (update) => {
+          this.text = typeof update === "string" ? update : update.text;
+          this.syncs.push(this.text);
+        },
+        getDoc: () => this.text,
+      },
+      focus: () => {
+        this.focused++;
+      },
+      setReadOnly: (readOnly) => {
+        this.readOnly = readOnly;
+      },
+      ...(this.cell === undefined ? {} : {
+        activeCell: {
+          read: () => this.cell ?? null,
+          subscribe: (listener: () => void) => {
+            this.cellListeners.add(listener);
+            return () => {
+              this.cellListeners.delete(listener);
+            };
+          },
+        },
+      }),
+      destroy: () => {
+        this.destroyed = true;
+      },
+    };
+  }
+  /// La griglia sceglie un'altra cella, o ne cambia il contenuto, e lo dice.
+  moveTo(cell: SurfaceActiveCell | null): void {
+    this.cell = cell;
+    for (const listener of [...this.cellListeners]) listener();
+  }
+}
+
+/// Un riquadro finto sulla stessa sessione: si attacca e scrive come
+/// `document-controller.ts`, con il suo id.
+class FakePane {
+  text: string;
+  readonly undo: string[] = [];
+  readonly syncs: DocumentSurfaceUpdate[] = [];
+  readonly detach: () => void;
+  constructor(
+    readonly sessions: DocumentSessionCollection,
+    readonly doc: string,
+    readonly id = "pane-1",
+  ) {
+    this.text = sessions.text(doc) ?? "";
+    this.detach = sessions.attachSurface(doc, {
+      id,
+      sync: (update) => {
+        this.text = update.text;
+        this.syncs.push(update);
+      },
+    });
+  }
+  type(next: string): void {
+    const before = this.text;
+    this.undo.push(before);
+    this.text = next;
+    expect(this.sessions.acceptSurfaceChange(this.doc, this.id, { text: next, operation: operationFromText(before, next) }).kind).toBe("accepted");
+  }
+}
+
+describe("la porta per scrivere dentro le schede", () => {
+  let host: FakeHost;
+  let api: DocumentSessionApi;
+  let sessions: DocumentSessionCollection;
+  let registry: DocumentSurfaceRegistry;
+  let hub: CardEditorHub;
+  let editors: FakeEditor[];
+  let held: Set<string>;
+  /// Il perché di `held`, come lo direbbe un riquadro.
+  let why: Map<string, string>;
+  let panes: Set<string>;
+  let life: Lifetime;
+  let error: ReturnType<typeof vi.spyOn>;
+  /// La cella attiva delle superfici che nascono (T42); `undefined`: nessuna.
+  let nextCell: SurfaceActiveCell | null | undefined;
+
+  function setup(files: Record<string, string> = { "Nota.md": "ciao" }): void {
+    host = createFakeHost({ root: VAULT, file: files });
+    api = { ...host.module.api };
+    sessions = new DocumentSessionCollection(api, () => VAULT);
+    registry = new DocumentSurfaceRegistry();
+    editors = [];
+    registry.register({
+      owner: "test.text",
+      family: "text",
+      defaultProfile: "markdown",
+      formats: { markdown: "markdown" },
+      factory: {
+        mount: (_profile, context) => {
+          const editor = new FakeEditor(context, (paneId, change) => {
+            if (!hub.written(paneId, change)) throw new Error(`modifica di un riquadro: ${paneId}`);
+          });
+          editor.cell = nextCell;
+          editors.push(editor);
+          return editor.surface();
+        },
+      },
+    });
+    // Il ripiego del registro per ciò che non sa mostrare.
+    registry.register({
+      owner: "test.error",
+      family: "error",
+      defaultProfile: "error",
+      factory: {
+        mount: (_profile, context) => ({
+          family: "error",
+          profile: "error",
+          surfaceId: context.paneId,
+          modes: [{ id: "error", label: () => "Errore", presentation: "rendered", contextMode: "reading", looks: ["tema"] }],
+          setMode: () => {},
+          destroy: () => {},
+        }),
+      },
+    });
+    held = new Set();
+    why = new Map();
+    panes = new Set();
+    live.sessions = sessions;
+    hub = createCardEditorPort({
+      sessions,
+      surfaces: () => registry,
+      held: (path) => held.has(path),
+      heldWhy: (path) => (held.has(path) ? why.get(path) ?? null : null),
+      shownInPane: (path) => panes.has(path),
+      ...extraDeps,
+    });
+    life = openLifetime();
+  }
+
+  /// Le porte in più della prova che le vuole (gli avvisi, il conflitto).
+  let extraDeps: Partial<Parameters<typeof createCardEditorPort>[0]> = {};
+
+  const options = (overrides: Partial<CardEditorOptions> = {}): CardEditorOptions => ({
+    compact: true,
+    readOnly: false,
+    lifetime: life,
+    ...overrides,
+  });
+
+  /// Le attese della porta (la lettura, il rilascio) arrivate in fondo.
+  const settled = async (): Promise<void> => {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+  };
+
+  /// Le chiavi di apertura date all'host e mai chiuse: una sessione rimasta.
+  const unclosedKeys = (): unknown[] => {
+    const closed = new Set(host.atGate("documentClosed").map((call) => call.args[0]));
+    return host.atGate("openDocument").map((call) => call.args[1]).filter((key) => !closed.has(key));
+  };
+
+  beforeEach(() => {
+    nextCell = undefined;
+    extraDeps = {};
+    error = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    life?.close();
+    error.mockRestore();
+  });
+
+  it("apre l'editor del file sulla sua sessione e, distrutto, non trattiene niente", async () => {
+    setup();
+    const card = document.createElement("div");
+    const editor = await hub.open("Nota.md", card, options());
+
+    expect(editor).not.toBeNull();
+    expect(editors).toHaveLength(1);
+    expect(editors[0]!.text).toBe("ciao");
+    expect(editors[0]!.mode).toBe("live_preview");
+    expect(card.dataset.cardEditor).toBe("compact");
+    expect(hub.holds("Nota.md")).toBe(true);
+    expect(editor!.state()).toBe("salvato");
+    expect(host.atGate("documentClosed")).toHaveLength(0);
+
+    // Una sessione trattenuta non si chiuderebbe: la scheda la tiene.
+    await expect(sessions.release("Nota.md")).resolves.toEqual({ kind: "active" });
+
+    editor!.focus();
+    expect(editors[0]!.focused).toBe(1);
+    editor!.destroy();
+    editor!.destroy();
+    await settled();
+
+    expect(editors[0]!.destroyed).toBe(true);
+    expect(card.childNodes).toHaveLength(0);
+    expect(card.dataset.cardEditor).toBeUndefined();
+    expect(hub.holds("Nota.md")).toBe(false);
+    expect(sessions.get("Nota.md")).toBeUndefined();
+    expect(unclosedKeys()).toEqual([]);
+    expect(editor!.state()).toBe("readonly");
+  });
+
+  it("si smonta da sé quando si chiude la vita della scheda", async () => {
+    setup();
+    const card = document.createElement("div");
+    const editor = await hub.open("Nota.md", card, options());
+    expect(editor).not.toBeNull();
+
+    life.close();
+    await settled();
+
+    expect(editors[0]!.destroyed).toBe(true);
+    expect(sessions.get("Nota.md")).toBeUndefined();
+  });
+
+  it("chiusa la scheda mentre `open` aspetta, non resta niente montato né trattenuto", async () => {
+    setup();
+    const letGo = host.throttle("openDocument");
+    const card = document.createElement("div");
+    const opening = hub.open("Nota.md", card, options());
+
+    life.close();
+    letGo();
+
+    await expect(opening).resolves.toBeNull();
+    await settled();
+    expect(editors).toHaveLength(0);
+    expect(card.childNodes).toHaveLength(0);
+    expect(hub.holds("Nota.md")).toBe(false);
+    expect(sessions.get("Nota.md")).toBeUndefined();
+    expect(unclosedKeys()).toEqual([]);
+  });
+
+  it("lo stesso file in un riquadro e in una scheda: una sessione, due superfici, annulla separati", async () => {
+    setup();
+    await sessions.read("Nota.md");
+    panes.add("Nota.md");
+    const pane = new FakePane(sessions, "Nota.md");
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    const card = editors[0]!;
+
+    // Dal riquadro alla scheda: arriva, e non entra nell'annulla della scheda.
+    pane.type("ciao dal riquadro");
+    expect(card.text).toBe("ciao dal riquadro");
+    expect(card.syncs).toEqual(["ciao dal riquadro"]);
+    expect(card.undo).toEqual([]);
+
+    // Dalla scheda al riquadro: la stessa sessione, l'operazione ai pari.
+    card.type("ciao dal riquadro e dalla scheda");
+    expect(sessions.text("Nota.md")).toBe("ciao dal riquadro e dalla scheda");
+    expect(pane.text).toBe("ciao dal riquadro e dalla scheda");
+    expect(pane.syncs[pane.syncs.length - 1]?.kind).toBe("operation");
+    expect(pane.undo).toEqual(["ciao"]);
+    expect(card.undo).toEqual(["ciao dal riquadro"]);
+    expect(editor!.state()).toBe("non_salvato");
+
+    // La scheda si chiude: la sessione resta del riquadro.
+    editor!.destroy();
+    await settled();
+    expect(sessions.get("Nota.md")).toBeDefined();
+    pane.detach();
+  });
+
+  it("due `open` sullo stesso file: due superfici, una sessione", async () => {
+    setup();
+    const first = await hub.open("Nota.md", document.createElement("div"), options());
+    const second = await hub.open("Nota.md", document.createElement("div"), options());
+    expect(editors).toHaveLength(2);
+
+    editors[0]!.type("una");
+    expect(editors[1]!.text).toBe("una");
+    expect(editors[1]!.undo).toEqual([]);
+
+    first!.destroy();
+    await settled();
+    expect(sessions.get("Nota.md")).toBeDefined();
+    second!.destroy();
+    await settled();
+    expect(sessions.get("Nota.md")).toBeUndefined();
+    expect(host.files()["Nota.md"]).toBe("una");
+  });
+
+  it("una battuta indietro si ribasa sul testo autorevole e resta della scheda", async () => {
+    setup();
+    await sessions.read("Nota.md");
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    const card = editors[0]!;
+    // Un cambio della sessione che la scheda non ha ancora applicato.
+    const pane = new FakePane(sessions, "Nota.md", "pane-x");
+    pane.type("ciao!");
+    card.text = "ciao";
+
+    card.type(">ciao");
+    expect(sessions.text("Nota.md")).toBe(">ciao!");
+    expect(card.text).toBe(">ciao!");
+    expect(card.undo).toEqual(["ciao"]);
+    pane.detach();
+    editor!.destroy();
+  });
+
+  it("un conflitto col disco si dice, e chiudendo la lavagna la bozza resta", async () => {
+    setup();
+    api.writeDocument = vi.fn(async () => {
+      throw { kind: "conflict", message: "revisione superata" };
+    });
+    const saveDraft = vi.spyOn(api, "saveDraft");
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    const states: CardEditorState[] = [];
+    editor!.onState((state) => states.push(state));
+
+    editors[0]!.type("il mio testo");
+    expect(editor!.state()).toBe("non_salvato");
+    await editor!.leave();
+    expect(editor!.state()).toBe("conflitto");
+    expect(states).toEqual(["non_salvato", "in_corso", "conflitto"]);
+
+    editor!.destroy();
+    await settled();
+
+    // Il lavoro non si perde: la bozza è scritta e la sessione resta aperta
+    // con il testo, ma nessuno la trattiene più.
+    expect(saveDraft).toHaveBeenCalledWith("Nota.md", "il mio testo", expect.anything(), VAULT);
+    expect(sessions.inspect("Nota.md")).toMatchObject({ text: "il mio testo", dirty: true, result: "conflitto" });
+    await expect(sessions.release("Nota.md")).resolves.toEqual({ kind: "unsaved" });
+  });
+
+  it("chiusa la scheda con un salvataggio che non riesce, si chiede come per un riquadro (T102)", async () => {
+    const asked: string[] = [];
+    extraDeps = { unsaved: async (path) => void asked.push(path) };
+    setup();
+    api.writeDocument = vi.fn(async () => {
+      throw { kind: "io", message: "disco pieno" };
+    });
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    editors[0]!.type("da non perdere");
+    editor!.destroy();
+    await settled();
+    expect(asked).toEqual(["Nota.md"]);
+    // La sessione resta aperta col testo finché la scelta non arriva.
+    expect(sessions.inspect("Nota.md")).toMatchObject({ text: "da non perdere", dirty: true });
+  });
+
+  it("se intanto un riquadro o un'altra scheda la riprende, non si chiede niente (T102)", async () => {
+    const asked: string[] = [];
+    extraDeps = { unsaved: async (path) => void asked.push(path) };
+    setup();
+    api.writeDocument = vi.fn(async () => {
+      throw { kind: "io", message: "disco pieno" };
+    });
+    const first = await hub.open("Nota.md", document.createElement("div"), options());
+    editors[0]!.type("da non perdere");
+    const second = await hub.open("Nota.md", document.createElement("div"), options());
+    first!.destroy();
+    await settled();
+    expect(asked).toEqual([]);
+    panes.add("Nota.md");
+    second!.destroy();
+    await settled();
+    expect(asked).toEqual([]);
+    expect(sessions.inspect("Nota.md")).toMatchObject({ text: "da non perdere", dirty: true });
+  });
+
+  it("la shell che se ne va non chiede: la bozza resta scritta (T102)", async () => {
+    const asked: string[] = [];
+    extraDeps = { unsaved: async (path) => void asked.push(path) };
+    setup();
+    api.writeDocument = vi.fn(async () => {
+      throw { kind: "io", message: "disco pieno" };
+    });
+    const saveDraft = vi.spyOn(api, "saveDraft");
+    await hub.open("Nota.md", document.createElement("div"), options());
+    editors[0]!.type("da non perdere");
+    hub.destroyAll();
+    await settled();
+    expect(asked).toEqual([]);
+    expect(saveDraft).toHaveBeenCalledWith("Nota.md", "da non perdere", expect.anything(), VAULT);
+  });
+
+  it("chiusa senza conflitti, ciò che si è scritto si salva e la sessione esce", async () => {
+    setup();
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    editors[0]!.type("scritto in una scheda");
+    editor!.destroy();
+    await settled();
+    expect(host.files()["Nota.md"]).toBe("scritto in una scheda");
+    expect(sessions.get("Nota.md")).toBeUndefined();
+  });
+
+  it("un formato senza editor dà `null` e non trattiene la sessione", async () => {
+    setup({ "dati.xyz": "1,2,3" });
+    const card = document.createElement("div");
+    await expect(hub.open("dati.xyz", card, options())).resolves.toBeNull();
+    await settled();
+    expect(editors).toHaveLength(0);
+    expect(card.childNodes).toHaveLength(0);
+    expect(card.dataset.cardEditor).toBeUndefined();
+    expect(sessions.get("dati.xyz")).toBeUndefined();
+  });
+
+  it("una sessione che non si apre dà `null`", async () => {
+    setup();
+    await expect(hub.open("Manca.md", document.createElement("div"), options())).resolves.toBeNull();
+    await settled();
+    expect(editors).toHaveLength(0);
+    expect(sessions.get("Manca.md")).toBeUndefined();
+  });
+
+  it("la sola lettura della policy e quella chiesta dalla scheda", async () => {
+    setup();
+    held.add("Nota.md");
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    const states: CardEditorState[] = [];
+    editor!.onState((state) => states.push(state));
+    expect(editors[0]!.readOnly).toBe(true);
+    expect(editor!.state()).toBe("readonly");
+
+    held.delete("Nota.md");
+    hub.refreshReadOnly();
+    expect(editors[0]!.readOnly).toBe(false);
+    expect(states).toEqual(["salvato"]);
+    editor!.destroy();
+
+    const reading = await hub.open("Nota.md", document.createElement("div"), options({ readOnly: true, compact: false }));
+    expect(editors[1]!.readOnly).toBe(true);
+    expect(reading!.state()).toBe("readonly");
+    reading!.destroy();
+  });
+
+  it("il file tolto mentre si scrive: la scheda resta ferma in sola lettura", async () => {
+    setup();
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    editors[0]!.type("prima di sparire");
+    sessions.handleExternalRemoval("Nota.md");
+    expect(editor!.state()).toBe("readonly");
+    expect(editors[0]!.readOnly).toBe(true);
+    // Una battuta rimasta appesa non finisce da nessuna parte e non lancia.
+    expect(hub.written(editors[0]!.context.paneId, {
+      text: "x",
+      operation: operationFromText("prima di sparire", "x"),
+      origin: "input",
+    })).toBe(true);
+    editor!.destroy();
+  });
+
+  it("il file rinominato: la scheda segue la sessione", async () => {
+    setup();
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    expect(sessions.rename("Nota.md", "Altra.md").kind).toBe("renamed");
+    editors[0]!.type("dopo il nome nuovo");
+    expect(sessions.text("Altra.md")).toBe("dopo il nome nuovo");
+    expect(hub.holds("Altra.md")).toBe(true);
+    editor!.destroy();
+    await settled();
+    expect(sessions.get("Altra.md")).toBeUndefined();
+  });
+
+  it("il modo compatto arriva alla superficie, e una superficie compatta lo sa dal contesto", async () => {
+    setup();
+    const compact = await hub.open("Nota.md", document.createElement("div"), options());
+    expect(editors[0]!.context.compact).toBe(true);
+    compact!.destroy();
+    const full = await hub.open("Nota.md", document.createElement("div"), options({ compact: false }));
+    expect(editors[1]!.context.compact).toBeUndefined();
+    full!.destroy();
+  });
+
+  it("la cella attiva della superficie arriva come contesto, e solo quando cambia davvero (T42)", async () => {
+    setup({ "Conti.md": "x" });
+    nextCell = { name: "B2", formula: "=A1*2" };
+    const editor = await hub.open("Conti.md", document.createElement("div"), options());
+    expect(editor!.context!()).toEqual({ cell: "B2", formula: "=A1*2" });
+
+    const seen: unknown[] = [];
+    const stop = editor!.onContext!((context) => seen.push(context));
+    // Un avviso senza cambi (il catalogo, la vista) non arriva alla tela.
+    editors[0]!.moveTo({ name: "B2", formula: "=A1*2" });
+    editors[0]!.moveTo({ name: "C3", formula: "" });
+    editors[0]!.moveTo({ name: "C3", formula: "12" });
+    editors[0]!.moveTo(null);
+    expect(seen).toEqual([{ cell: "C3", formula: "" }, { cell: "C3", formula: "12" }, null]);
+
+    stop();
+    editors[0]!.moveTo({ name: "D4", formula: "1" });
+    expect(seen).toHaveLength(3);
+
+    // Distrutto l'editor, la superficie non ha più chi ascolta.
+    editor!.onContext!((context) => seen.push(context));
+    expect(editors[0]!.cellListeners.size).toBe(1);
+    editor!.destroy();
+    expect(editors[0]!.cellListeners.size).toBe(0);
+    expect(editor!.context!()).toBeNull();
+    expect(editor!.onContext!(() => seen.push("tardi"))).toBeTypeOf("function");
+    expect(editors[0]!.cellListeners.size).toBe(0);
+  });
+
+  it("una superficie senza cella attiva non ha contesto", async () => {
+    setup();
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    expect(editor!.context!()).toBeNull();
+    const seen: unknown[] = [];
+    editor!.onContext!((context) => seen.push(context));
+    expect(seen).toEqual([]);
+    editor!.destroy();
+  });
+
+  it("rinominata la nota, la prenotazione segue la sessione: un rilascio col nome nuovo non la chiude (T96)", async () => {
+    setup();
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    expect(sessions.rename("Nota.md", "Altra.md").kind).toBe("renamed");
+    hub.renamed();
+
+    // Il riquadro sul nome nuovo si chiude e lascia la sessione: la scheda la tiene.
+    await expect(sessions.release("Altra.md")).resolves.toEqual({ kind: "active" });
+    // Il nome vecchio non è più tenuto: un documento nuovo con quel nome si chiude.
+    await expect(sessions.release("Nota.md")).resolves.toEqual({ kind: "missing" });
+    expect(editor!.state()).toBe("salvato");
+    editors[0]!.type("scritto dopo la rinomina");
+    expect(sessions.text("Altra.md")).toBe("scritto dopo la rinomina");
+
+    editor!.destroy();
+    await settled();
+    expect(host.files()["Altra.md"]).toBe("scritto dopo la rinomina");
+    expect(sessions.get("Altra.md")).toBeUndefined();
+    expect(unclosedKeys()).toEqual([]);
+  });
+
+  it("un layout senza più il riquadro della nota non chiude la sessione di una scheda che scrive (shell-layout, T96)", async () => {
+    setup();
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    // Rinominata da chi tiene il buffer (l'esploratore): la sessione ha il
+    // nome nuovo prima che la shell ne sappia niente.
+    expect(sessions.rename("Nota.md", "Altra.md").kind).toBe("renamed");
+    await sessions.read("Altra.md");
+    const before = defaultLayout();
+    openIn(before.focus, "Altra.md", before);
+    setLayout(before);
+
+    const { applyShellLayout } = await import("./shell-layout");
+    await applyShellLayout(defaultLayout());
+
+    expect(sessions.get("Altra.md")?.snapshot().lifecycle).toBe("open");
+    expect(editor!.state()).toBe("salvato");
+    expect(editors[0]!.readOnly).toBe(false);
+    editors[0]!.type("la scheda scrive ancora");
+    editor!.destroy();
+    await settled();
+    expect(host.files()["Altra.md"]).toBe("la scheda scrive ancora");
+    expect(sessions.get("Altra.md")).toBeUndefined();
+  });
+
+  it("la finestra del documento che se ne va non chiude la sessione di una scheda che scrive (document-bridge, T96)", async () => {
+    setup();
+    store.vaultRoot = VAULT;
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    expect(sessions.rename("Nota.md", "Altra.md").kind).toBe("renamed");
+
+    const { attachRemoteSurface } = await import("./document-bridge");
+    const { handle } = await attachRemoteSurface("Altra.md", VAULT, () => "markdown");
+    await handle.dispose();
+
+    expect(sessions.get("Altra.md")?.snapshot().lifecycle).toBe("open");
+    expect(editor!.state()).toBe("salvato");
+    editors[0]!.type("dopo la finestra");
+    expect(sessions.text("Altra.md")).toBe("dopo la finestra");
+    editor!.destroy();
+    await settled();
+    expect(sessions.get("Altra.md")).toBeUndefined();
+  });
+
+  it("la sola lettura dice perché con le parole di un riquadro, e il file tolto chiude l'editor (T96)", async () => {
+    setup();
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    expect(editor!.readOnlyWhy!()).toBeNull();
+    held.add("Nota.md");
+    why.set("Nota.md", "Aperto in Craft. Fub non lo modifica finché non lo riprendi.");
+    hub.refreshReadOnly();
+    expect(editor!.state()).toBe("readonly");
+    expect(editor!.readOnlyWhy!()).toBe("Aperto in Craft. Fub non lo modifica finché non lo riprendi.");
+    expect(editor!.closed!()).toBe(false);
+    held.delete("Nota.md");
+    hub.refreshReadOnly();
+    expect(editor!.readOnlyWhy!()).toBeNull();
+
+    // La sola lettura chiesta dalla scheda non ha un perché da dire.
+    const reading = await hub.open("Nota.md", document.createElement("div"), options({ readOnly: true }));
+    expect(reading!.readOnlyWhy!()).toBeNull();
+    reading!.destroy();
+
+    sessions.handleExternalRemoval("Nota.md");
+    expect(editor!.state()).toBe("readonly");
+    expect(editor!.closed!()).toBe(true);
+    editor!.destroy();
+  });
+
+  it("gli avvisi di un riquadro stanno in cima alla scheda, sotto il conflitto, e seguono la sessione (T96)", async () => {
+    const drawn: { box: HTMLElement; doc: () => string; drawn: () => void; redraws: number; disposed: boolean }[] = [];
+    extraDeps = {
+      conflict: (box) => {
+        box.hidden = true;
+      },
+      notices: (box, doc, done) => {
+        const entry = { box, doc, drawn: done, redraws: 0, disposed: false };
+        drawn.push(entry);
+        return {
+          redraw: () => {
+            entry.redraws += 1;
+          },
+          dispose: () => {
+            entry.disposed = true;
+          },
+        };
+      },
+    };
+    setup();
+    const card = document.createElement("div");
+    const editor = await hub.open("Nota.md", card, options());
+    expect(drawn).toHaveLength(1);
+    const [entry] = drawn;
+    // Come in un riquadro: il conflitto, gli avvisi, poi il testo.
+    expect(card.children[1]).toBe(entry!.box);
+    expect(entry!.box.className).toBe("sheet-notices");
+    expect(card.lastChild?.textContent).toBe("editor");
+    expect(entry!.doc()).toBe("Nota.md");
+
+    // Un avviso disegnato: il corpo della scheda lo sa.
+    entry!.box.hidden = false;
+    entry!.drawn();
+    expect(card.hasAttribute("data-card-notice")).toBe(true);
+    entry!.box.hidden = true;
+    entry!.drawn();
+    expect(card.hasAttribute("data-card-notice")).toBe(false);
+
+    // Ogni evento della sessione e ogni cambio della sola lettura li ridisegna.
+    const redraws = entry!.redraws;
+    editors[0]!.type("una battuta");
+    expect(entry!.redraws).toBeGreaterThan(redraws);
+    const typed = entry!.redraws;
+    hub.refreshReadOnly();
+    expect(entry!.redraws).toBe(typed + 1);
+
+    // La rinomina: gli avvisi sono del nome nuovo.
+    sessions.rename("Nota.md", "Altra.md");
+    expect(entry!.doc()).toBe("Altra.md");
+
+    editor!.destroy();
+    expect(entry!.disposed).toBe(true);
+  });
+
+  it("le modifiche dei riquadri non sono della porta", () => {
+    setup();
+    expect(hub.written("pane-1", { text: "x", operation: operationFromText("", "x"), origin: "input" })).toBe(false);
+    expect(hub.failed("pane-1", new Error("no"))).toBe(false);
+  });
+});
+
+describe("dove comincia un titolo (T41, `Nota#Titolo`)", () => {
+  it("dà il byte UTF-8 della riga del titolo, senza badare a maiuscole e cancelletti in coda", () => {
+    const text = "# Perché\n\nUn paragrafo con è.\n\n## Più giù ##\nfine\n";
+    expect(headingOffset(text, "Perché")).toBe(0);
+    expect(headingOffset(text, "più giù")).toBe(new TextEncoder().encode("# Perché\n\nUn paragrafo con è.\n\n").length);
+    expect(headingOffset(text, "Assente")).toBeNull();
+    expect(headingOffset(text, "  ")).toBeNull();
+  });
+
+  it("salta i titoli dentro un blocco di codice e regge i fine riga CRLF", () => {
+    const text = "```md\r\n# Finto\r\n```\r\n# Finto\r\n";
+    expect(headingOffset(text, "Finto")).toBe("```md\r\n# Finto\r\n```\r\n".length);
+    expect(headingOffset("~~~\n# Dentro\n", "Dentro")).toBeNull();
+  });
+});
+
+// La scheda di testo in Live (T43): il testo sta nel `.canvas`, non in un
+// file. La porta monta l'editor delle note dal registro della finestra, in
+// Live, senza sessione; le battute vanno a `onText`.
+describe("l'editor delle note sopra il testo di una scheda di testo", () => {
+  /// Un editor delle note finto: tiene il testo come lo terrebbe l'editor vero
+  /// (`normalize` simula un testo che non torna uguale, i terminatori misti).
+  class TextEditor {
+    text = "";
+    mode: string | null = null;
+    readOnly = false;
+    destroyed = false;
+    focused = 0;
+    forms: unknown = null;
+    readonly reveals: number[] = [];
+    /// Il testo che la superficie tiene ancora (una composizione IME a metà):
+    /// arriva a `onChange` solo con `commitPending`.
+    held: string | null = null;
+    constructor(
+      readonly context: SurfaceMountContext,
+      readonly onChange: (paneId: string, change: EditorChange) => void,
+      readonly normalize: (text: string) => string,
+    ) {
+      context.parent.textContent = "editor";
+    }
+    type(next: string): void {
+      const before = this.text;
+      this.text = next;
+      this.onChange(this.context.paneId, { text: next, operation: operationFromText(before, next), origin: "input" });
+    }
+    surface(): EditorSurface {
+      return {
+        family: "text",
+        profile: "markdown",
+        surfaceId: this.context.paneId,
+        modes: MODES,
+        defaultMode: "source",
+        setMode: (mode) => {
+          this.mode = mode;
+        },
+        buffer: {
+          setDoc: (text) => {
+            this.text = this.normalize(text);
+          },
+          syncDoc: () => {
+            throw new Error("nessuna sessione scrive in una scheda di testo");
+          },
+          getDoc: () => this.text,
+          pendingText: () => this.held,
+          commitPending: () => {
+            const held = this.held;
+            if (held === null) return;
+            this.held = null;
+            this.type(held);
+          },
+        },
+        focus: () => {
+          this.focused++;
+        },
+        reveal: ({ span }) => {
+          this.reveals.push(span.start);
+          return true;
+        },
+        setReadOnly: (readOnly) => {
+          this.readOnly = readOnly;
+        },
+        setSyntaxForms: (forms) => {
+          this.forms = forms;
+        },
+        destroy: () => {
+          this.destroyed = true;
+        },
+      };
+    }
+  }
+
+  let made: TextEditor[];
+  let hub: CardEditorHub;
+  let life: Lifetime;
+  let normalize: (text: string) => string;
+
+  beforeEach(() => {
+    made = [];
+    normalize = (text) => text;
+    const registry = new DocumentSurfaceRegistry();
+    registry.register({
+      owner: "test.text",
+      family: "text",
+      defaultProfile: "markdown",
+      formats: { markdown: "markdown" },
+      factory: {
+        mount: (_profile, context) => {
+          const editor = new TextEditor(context, (paneId, change) => {
+            if (!hub.written(paneId, change)) throw new Error(`modifica di un riquadro: ${paneId}`);
+          }, normalize);
+          made.push(editor);
+          return editor.surface();
+        },
+      },
+    });
+    // Il testo non tocca mai le sessioni: una collezione che lancia lo prova.
+    const sessions = new Proxy({}, {
+      get: () => {
+        throw new Error("la scheda di testo non ha una sessione");
+      },
+    }) as Parameters<typeof createCardEditorPort>[0]["sessions"];
+    hub = createCardEditorPort({
+      sessions,
+      surfaces: () => registry,
+      held: () => false,
+      shownInPane: () => false,
+      theme: () => "dark",
+    });
+    life = openLifetime();
+  });
+  afterEach(() => {
+    life.close();
+  });
+
+  const textOptions = (onText: (text: string) => void = () => {}) => ({
+    onText,
+    readOnly: false,
+    lifetime: life,
+    documentId: "cartella/board.canvas",
+    forms: [],
+  });
+
+  it("monta l'editor delle note in Live sul testo, e ogni battuta va a onText", async () => {
+    const host = document.createElement("div");
+    const texts: string[] = [];
+    const editor = await hub.openText(host, "vedi [[Altra]]", textOptions((text) => texts.push(text)));
+    expect(editor).not.toBeNull();
+    expect(made).toHaveLength(1);
+    const surface = made[0]!;
+    expect(surface.mode).toBe("live_preview");
+    expect(surface.text).toBe("vedi [[Altra]]");
+    expect(surface.forms).toEqual([]);
+    // Il nome è nella cartella della lavagna, ma nessuna sessione lo porta.
+    expect(surface.context.documentId).toBe(`cartella/board.canvas#${surface.context.paneId}`);
+    expect(surface.context.compact).toBe(true);
+    expect(host.dataset.cardEditor).toBe("compact");
+
+    surface.type("vedi [[Altra]] e altro");
+    expect(texts).toEqual(["vedi [[Altra]] e altro"]);
+    expect(editor!.text()).toBe("vedi [[Altra]] e altro");
+
+    // Il cursore a `at`, contato in UTF-16, arriva alla superficie in byte.
+    surface.text = "è qui";
+    editor!.focus(1);
+    expect(surface.reveals).toEqual([2]);
+    editor!.focus();
+    expect(surface.reveals).toEqual([2, 6]);
+    expect(surface.focused).toBe(2);
+
+    editor!.destroy();
+    editor!.destroy();
+    expect(surface.destroyed).toBe(true);
+    expect(host.childNodes).toHaveLength(0);
+    expect(host.dataset.cardEditor).toBeUndefined();
+    expect(editor!.text()).toBe("è qui");
+    // Una battuta arrivata dopo lo smontaggio è ancora di una scheda, e non va da nessuna parte.
+    surface.type("tardi");
+    expect(texts).toEqual(["vedi [[Altra]] e altro"]);
+  });
+
+  it("si smonta da sé quando si chiude la vita del campo, e destroyAll lo smonta", async () => {
+    const first = await hub.openText(document.createElement("div"), "uno", textOptions());
+    expect(first).not.toBeNull();
+    life.close();
+    expect(made[0]!.destroyed).toBe(true);
+    life = openLifetime();
+    await hub.openText(document.createElement("div"), "due", textOptions());
+    hub.destroyAll();
+    expect(made[1]!.destroyed).toBe(true);
+  });
+
+  it("smontato a metà di una composizione, il testo tenuto arriva a onText prima che la superficie se ne vada (T102)", async () => {
+    const texts: string[] = [];
+    const editor = await hub.openText(document.createElement("div"), "uno", textOptions((text) => texts.push(text)));
+    const surface = made[0]!;
+    surface.held = "uno と";
+    life.close();
+    expect(texts).toEqual(["uno と"]);
+    expect(surface.destroyed).toBe(true);
+    expect(editor!.text()).toBe("uno と");
+    // `destroy` ripetuto e `destroyAll` non consegnano due volte.
+    editor!.destroy();
+    hub.destroyAll();
+    expect(texts).toEqual(["uno と"]);
+  });
+
+  it("una superficie ferma non consegna più niente, nemmeno smontandosi (T102)", async () => {
+    const texts: string[] = [];
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await hub.openText(document.createElement("div"), "uno", textOptions((text) => texts.push(text)));
+    const surface = made[0]!;
+    hub.failed(surface.context.paneId, new Error("guasto"));
+    surface.held = "uno e poi";
+    life.close();
+    expect(texts).toEqual([]);
+    expect(surface.destroyed).toBe(true);
+    error.mockRestore();
+  });
+
+  it("un testo che l'editor non terrebbe byte per byte resta al campo semplice", async () => {
+    normalize = (text) => text.replace(/\r\n?/g, "\n");
+    const host = document.createElement("div");
+    const editor = await hub.openText(host, "uno\r\ndue\ntre", textOptions());
+    expect(editor).toBeNull();
+    expect(made[0]!.destroyed).toBe(true);
+    expect(host.childNodes).toHaveLength(0);
+    expect(host.dataset.cardEditor).toBeUndefined();
+  });
+
+  it("con la vita già chiusa non monta niente", async () => {
+    life.close();
+    expect(await hub.openText(document.createElement("div"), "uno", textOptions())).toBeNull();
+    expect(made).toHaveLength(0);
+  });
+
+  it("una superficie che cede si ferma in sola lettura, e niente più arriva a onText", async () => {
+    const texts: string[] = [];
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await hub.openText(document.createElement("div"), "uno", textOptions((text) => texts.push(text)));
+    const surface = made[0]!;
+    expect(hub.failed(surface.context.paneId, new Error("guasto"))).toBe(true);
+    expect(surface.readOnly).toBe(true);
+    surface.type("dopo");
+    expect(texts).toEqual([]);
+    error.mockRestore();
+  });
+});

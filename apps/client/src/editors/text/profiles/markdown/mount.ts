@@ -7,7 +7,7 @@ import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifet
 import { mountMermaidBlocks } from "../../../../ui/mermaid";
 import type { DiagramLight } from "../../../../ui/mermaid-styles";
 import { mountMathBlocks } from "./math";
-import { claimQueryBlocks, fillQueryBlock } from "./query-block";
+import { claimQueryBlocks, embedTasksBlocks, fillQueryBlock, markTaskDues } from "./query-block";
 import { craftPlaceholder, showEmbeddedCraft } from "../../../craft/figure";
 import { hydrateVaultMedia, scenePlaceholder, showEmbeddedDrawing, showRemoteImages, vaultImageSource } from "./media";
 import { openLightbox } from "../../../../ui/lightbox";
@@ -68,6 +68,13 @@ export interface MarkdownMountOptions {
     show?(id: string, where: "app" | "explorer"): void;
   };
   readonly imageMenu?: boolean;
+  /**
+   * Alla chiusura la resa resta nel contenitore, ferma: si spengono
+   * ascoltatori, componenti e lavoro in volo, ma i nodi non si tolgono. Serve
+   * a chi mostra l'ultima immagine di una resa che non vive più (la scheda di
+   * nota ferma della lavagna). Senza, la chiusura svuota il contenitore.
+   */
+  readonly keepOnTeardown?: boolean;
 }
 
 const MAX_EMBED_DEPTH = 5;
@@ -309,6 +316,7 @@ function enhanceContent(
     appearance: options.diagramAppearance,
   }));
   life.add(mountMathBlocks(container));
+  markTaskDues(container);
   wireContent(container, options, life);
   wireFootnotePreviews(container, life);
   if (options.imageMenu !== false) wireImageMenu(container, life, options.imageActions);
@@ -545,7 +553,7 @@ export function mountMarkdown(
     life.close();
     if (mounts.get(container) === dispose) {
       mounts.delete(container);
-      container.replaceChildren();
+      if (!options.keepOnTeardown) container.replaceChildren();
     }
   };
   mounts.set(container, dispose);
@@ -591,6 +599,7 @@ export function mountMarkdown(
       }
     }
     const queries = claimQueryBlocks(container);
+    embedTasksBlocks(container, mountedLife);
     enhanceContent(container, parts, options, mountedLife);
     hasEmbeds = !!container.querySelector(".embed[data-embed-page]");
     const hasImages = !!container.querySelector("img[data-vault-src]");

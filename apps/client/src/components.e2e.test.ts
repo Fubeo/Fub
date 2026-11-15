@@ -137,13 +137,16 @@ async function fileOnlyFor(name: string, component: string): Promise<void> {
   expect(switchOn()!.textContent).toBe(`Accendi ${component}`);
 }
 
+// Il `getContext` vero, preso una volta: dal secondo test in poi quello del
+// prototipo è già la spia, e la spia che chiama sé stessa non finisce mai.
+const original = HTMLCanvasElement.prototype.getContext;
+
 beforeEach(() => {
   activeStop?.();
   activeStop = null;
   document.body.innerHTML = "";
   localStorage.clear();
   pdfjs.imports = 0;
-  const original = HTMLCanvasElement.prototype.getContext;
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(function (this: HTMLCanvasElement, ...args: unknown[]) {
     if (this.className === "pdf-canvas") return {} as CanvasRenderingContext2D;
     return (original as (...a: unknown[]) => RenderingContext | null).apply(this, args);

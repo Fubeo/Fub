@@ -219,3 +219,27 @@ fn a_file_beyond_four_gib_reads_at_u64_offsets() {
     assert_eq!(reader.read_at(&lease, size - 4, 64).unwrap(), b"FINE");
     assert_eq!(reader.read_at(&lease, 1 << 32, 4).unwrap(), [0, 0, 0, 0]);
 }
+
+/// Una lease è un valore con i campi pubblici: chi la riceve può cambiarne il
+/// path. La lettura ricompone il path dalla radice del vault e lo recinta di
+/// nuovo, così un `..` o un path assoluto messo dopo l'apertura non legge
+/// niente, nemmeno un file che il vault vede.
+#[test]
+fn a_lease_whose_path_climbs_after_the_opening_is_refused() {
+    let (_dir, root) = vault(&[("a.bin", b"dentro"), ("Foto/b.bin", b"foto")]);
+    let (ws, reader) = reader(&root);
+    let lease = reader.open(&DocId::new("Foto/b.bin")).unwrap();
+    for forged in ["Foto/../a.bin", "../a.bin", "/etc/passwd", ""] {
+        let mut changed = lease.clone();
+        changed.path = forged.to_string();
+        for error in [
+            reader.read_at(&changed, 0, 4).unwrap_err(),
+            ws.read_resource(&changed, 0, 4).unwrap_err(),
+        ] {
+            assert!(
+                matches!(error, KernelError::BadName { .. }),
+                "{forged}: {error:?}"
+            );
+        }
+    }
+}

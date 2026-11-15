@@ -6,9 +6,10 @@
 // estraneo) le dice il nucleo: i costruttori dei tratti le prendono da
 // `CanvasCore.inkLayers()`.
 import type { TextOperation } from "../core/text-operation";
+import { validAspect } from "./ink-fit";
 import { INK_KEY, type InkLayerRef } from "./ink-record";
 import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
-import type { CanvasInkLayer } from "./wasm/core";
+import type { CanvasInkLayer, CanvasIntentOp } from "./wasm/core";
 
 export type CanvasPatch =
   | { readonly kind: "upsert-node"; readonly before: CanvasNode | null; readonly after: CanvasNode; readonly at?: number }
@@ -163,7 +164,8 @@ function inkHolder(doc: CanvasDocument, layer: LayerRef): Record<string, unknown
   return layer === "board" ? doc : nodeById(doc, layer.node);
 }
 
-function sameLayer(a: LayerRef, b: LayerRef): boolean {
+/** Due livelli sono lo stesso: la radice, o la stessa scheda. */
+export function sameLayer(a: LayerRef, b: LayerRef): boolean {
   return a === "board" || b === "board" ? a === b : a.node === b.node;
 }
 
@@ -299,4 +301,57 @@ export function eraseStrokePatches(
     remaining.splice(at, 1);
   }
   return patches;
+}
+
+/**
+ * L'operazione d'intento che sposta i tratti `ids` del livello `layer` di
+ * `dx`, `dy` unità della lavagna (`move_strokes`, T86); con `to` diverso da
+ * `layer` li passa a quel livello, con l'ancora nuova. La compila il nucleo
+ * (`CanvasCore.compile`): i punti si riportano nelle unità della nuova ancora
+ * lì, non qui. `aspect` è la proporzione del contenuto che la scheda di
+ * `layer` mostra (`contentAspect`, T39): il nucleo porta il tratto come la
+ * resa (T98). Va nell'operazione solo se vale; senza, la regola senza
+ * proporzione.
+ */
+export function moveStrokesOp(
+  layer: LayerRef,
+  ids: readonly string[],
+  dx: number,
+  dy: number,
+  to?: LayerRef,
+  aspect?: number | null,
+): CanvasIntentOp {
+  const op: { op: string; layer: LayerRef; ids: string[]; dx: number; dy: number; to?: LayerRef; aspect?: number } = {
+    op: "move_strokes",
+    layer: cloneLayerRef(layer),
+    ids: [...ids],
+    dx,
+    dy,
+  };
+  if (to !== undefined && !sameLayer(layer, to)) op.to = cloneLayerRef(to);
+  if (validAspect(aspect)) op.aspect = aspect;
+  return op;
+}
+
+/**
+ * L'operazione d'intento che cambia colore (`#rrggbb`) e spessore (unità
+ * della lavagna) dei tratti `ids` del livello `layer` (`restyle_strokes`,
+ * T86). Almeno uno dei due. `aspect` come in `moveStrokesOp`: conta per lo
+ * spessore.
+ */
+export function restyleStrokesOp(
+  layer: LayerRef,
+  ids: readonly string[],
+  change: { readonly color?: string; readonly size?: number },
+  aspect?: number | null,
+): CanvasIntentOp {
+  const op: { op: string; layer: LayerRef; ids: string[]; color?: string; size?: number; aspect?: number } = {
+    op: "restyle_strokes",
+    layer: cloneLayerRef(layer),
+    ids: [...ids],
+  };
+  if (change.color !== undefined) op.color = change.color;
+  if (change.size !== undefined) op.size = change.size;
+  if (validAspect(aspect)) op.aspect = aspect;
+  return op;
 }

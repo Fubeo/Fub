@@ -13,7 +13,13 @@
 //!   `metadata` e, tranne nel disegno intero, i `view` delle tavole;
 //! - gli elementi nascosti fuori da `defs`, e dentro `defs` gli elementi che
 //!   nessuno riferisce, quando niente al loro interno è riferito da ciò che
-//!   resta; poi un `defs` rimasto vuoto.
+//!   resta; poi un `defs` rimasto vuoto;
+//! - il contenuto attivo, perché il file esportato si apre fuori da Fub, in un
+//!   browser che lo esegue: gli `script` SVG e XHTML, in un `foreignObject`
+//!   gli elementi XHTML che caricano altri documenti (`iframe`, `frame`,
+//!   `frameset`, `object`, `embed`, `applet`), i gestori `on*` e gli
+//!   attributi che portano a un URL `javascript:` (`href`, `src`, `data`,
+//!   `action`, `formaction`, e i valori di un'animazione di `href`).
 //!
 //! Le entità di un DOCTYPE si espandono prima: senza DOCTYPE un riferimento
 //! a un'entità non si leggerebbe più.
@@ -21,13 +27,14 @@
 use std::collections::{HashMap, HashSet};
 
 use super::{format_number, format_units, read_whole, removal, Edit, Scope, POWERS_OF_TEN};
+use crate::analysis::{is_active_attr, is_script};
 use crate::classify;
 use crate::geometry::Matrix;
 use crate::ink::round_half_up;
-use crate::values::{href_id, is_wsp, scan_number, transform, trim, url_ids};
+use crate::values::{href_id, is_javascript, is_wsp, scan_number, transform, trim, url_ids};
 use crate::xml::{
-    is_space, Document, Element, Kind, NodeId, XmlErrorKind, NS_NONE, NS_SVG, NS_XLINK, NS_XML,
-    NS_XMLNS,
+    is_space, Document, Element, Kind, NodeId, XmlErrorKind, NS_NONE, NS_SVG, NS_XHTML, NS_XLINK,
+    NS_XML, NS_XMLNS,
 };
 use crate::ReadError;
 
@@ -50,6 +57,10 @@ const PREDEFINED: [&str; 5] = ["lt", "gt", "amp", "apos", "quot"];
 /// il loro contenuto si disegna dove lo usa qualcun altro, o in unità del
 /// riquadro di un oggetto. Lì i numeri prendono tutti i decimali.
 const ELSEWHERE: [&str; 6] = ["clipPath", "defs", "marker", "mask", "pattern", "symbol"];
+
+/// Gli elementi XHTML di un `foreignObject` che caricano un altro documento o
+/// un plugin: nell'SVG pulito se ne vanno, come gli `script`.
+const EMBEDDERS: [&str; 6] = ["iframe", "frame", "frameset", "object", "embed", "applet"];
 
 /// L'SVG pulito di `derived`, un testo derivato con l'ambito `scope`. Ripulire
 /// il risultato non lo cambia più. `Err` se `derived` non è un SVG, o se le
@@ -363,6 +374,14 @@ fn clean_document(doc: &Document<'_>, whole: bool) -> String {
         let here = context[parent].enter(element, node == doc.root, &used);
         for attr in &element.attrs {
             match attr.ns {
+                NS_NONE | NS_XLINK if active(element, attr) => {
+                    let (start, end) = attribute_span(source, attr);
+                    edits.push(Edit {
+                        start,
+                        end,
+                        text: String::new(),
+                    });
+                }
                 NS_NONE | NS_XLINK | NS_XML => {}
                 NS_XMLNS => {
                     if attr.name != "xmlns" && attr.value != XLINK_URI {
@@ -405,6 +424,20 @@ fn clean_document(doc: &Document<'_>, whole: bool) -> String {
     super::apply(source, edits)
 }
 
+/// Vero se `attr` è contenuto attivo da togliere: quello di S005, e un URL
+/// `javascript:` negli attributi XHTML che ne caricano uno.
+fn active(element: &Element<'_>, attr: &crate::xml::Attr<'_>) -> bool {
+    is_active_attr(element, attr)
+        || (attr.ns == NS_NONE
+            && matches!(attr.local, "src" | "data" | "action" | "formaction")
+            && is_javascript(&attr.value))
+}
+
+/// Vero se `element` è contenuto attivo che se ne va col suo contenuto.
+fn active_element(element: &Element<'_>) -> bool {
+    is_script(element) || (element.ns == NS_XHTML && EMBEDDERS.contains(&element.local))
+}
+
 /// Lo stato di ogni nodo, prima di contare i riferimenti.
 fn judge(doc: &Document<'_>, whole: bool) -> Vec<State> {
     let boards: HashSet<NodeId> = if whole {
@@ -434,6 +467,7 @@ fn judge(doc: &Document<'_>, whole: bool) -> Vec<State> {
             };
             if (inner.ns != NS_SVG && !foreign)
                 || inner.is_svg("metadata")
+                || active_element(inner)
                 || boards.contains(&child)
             {
                 state[child] = State::Removed;
@@ -456,7 +490,8 @@ fn judge(doc: &Document<'_>, whole: bool) -> Vec<State> {
 }
 
 /// Vero se un elemento nascosto resta nascosto: nessun foglio di stile parla
-/// di `display`, nessuna animazione lo cambia e nessuno script può farlo.
+/// di `display` e nessuna animazione lo cambia. Gli script e i gestori `on*`
+/// non contano: se ne vanno tutti.
 fn hiding_is_final(doc: &Document<'_>) -> bool {
     doc.nodes.iter().all(|node| {
         let Kind::Element(element) = &node.kind else {
@@ -466,7 +501,6 @@ fn hiding_is_final(doc: &Document<'_>) -> bool {
             return true;
         }
         match element.local {
-            "script" => false,
             "set" | "animate" => element.value(NS_NONE, "attributeName") != Some("display"),
             "style" => !element
                 .children
@@ -511,8 +545,8 @@ fn hidden(element: &Element<'_>) -> bool {
 }
 
 /// Quali elementi «se ne va se» restano: quelli dove arriva un riferimento da
-/// ciò che resta, e chi li contiene. Uno `style` e uno `script` restano
-/// sempre, perché valgono anche nascosti.
+/// ciò che resta, e chi li contiene. Uno `style` resta sempre, perché vale
+/// anche nascosto.
 fn sweep(doc: &Document<'_>, state: &[State]) -> Vec<bool> {
     let mut ids: HashMap<&str, Vec<NodeId>> = HashMap::new();
     let mut pinned = Vec::new();
@@ -521,7 +555,7 @@ fn sweep(doc: &Document<'_>, state: &[State]) -> Vec<bool> {
         if let Some(id) = element.value(NS_NONE, "id") {
             ids.entry(id).or_default().push(node);
         }
-        if element.is_svg("style") || element.is_svg("script") {
+        if element.is_svg("style") {
             pinned.push(node);
         }
     });
@@ -969,6 +1003,52 @@ mod tests {
             "ripulire due volte"
         );
         once
+    }
+
+    /// Il file pulito si apre in un browser: niente di ciò che S005 chiama
+    /// contenuto attivo ci arriva, e il resto del disegno resta uguale.
+    #[test]
+    fn active_content_does_not_reach_the_web() {
+        let text = svg(concat!(
+            "<script>alert(1)</script>",
+            "<defs><script href=\"x.js\"/><rect id=\"r\" width=\"1\" height=\"1\"/></defs>",
+            "<rect width=\"1\" height=\"1\" onclick=\"alert(2)\" ONLOAD=\"alert(3)\"/>",
+            "<a href=\" JavaScript:alert(4)\"><use href=\"#r\"/></a>",
+            "<a href=\"https://esempio.org/\"><text>ok</text></a>",
+            "<set attributeName=\"href\" to=\"javascript:alert(5)\"/>",
+            "<animate attributeName=\"xlink:href\" values=\"#a;javascript:alert(6)\"/>",
+            "<foreignObject width=\"1\" height=\"1\"><div xmlns=\"http://www.w3.org/1999/xhtml\">",
+            "<script>alert(7)</script><iframe src=\"https://esempio.org/\"/>",
+            "<form action=\"javascript:alert(8)\"><button>b</button></form>",
+            "</div></foreignObject>",
+        ));
+        let out = cleaned(&text);
+        for active in [
+            "script",
+            "onclick",
+            "ONLOAD",
+            "alert",
+            "iframe",
+            "javascript",
+            "JavaScript",
+        ] {
+            assert!(!out.contains(active), "{active} in {out}");
+        }
+        assert!(out.contains("<use href=\"#r\"/>"), "{out}");
+        assert!(out.contains("<rect id=\"r\""), "{out}");
+        assert!(out.contains("https://esempio.org/\"><text>ok"), "{out}");
+        assert!(out.contains("<button>b</button>"), "{out}");
+    }
+
+    /// Senza script, un elemento nascosto non può tornare visibile: se ne va
+    /// anche quando nel sorgente c'era uno script, e ripulire non cambia più.
+    #[test]
+    fn a_removed_script_does_not_keep_hidden_things() {
+        let text = svg("<script>x()</script><rect width=\"1\" height=\"1\" display=\"none\"/>");
+        assert_eq!(
+            cleaned(&text),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\" width=\"100\" height=\"100\"></svg>\n"
+        );
     }
 
     #[test]

@@ -11,8 +11,10 @@
 //   disegnare decodificati col codec della §5 (`DrawableStroke`). Un tratto
 //   che il codec non sa decodificare non si disegna (`decode`).
 // - **Il record** (`strokeRecord`): il tratto della penna, in coordinate della
-//   lavagna, portato nelle unità della scheda che lo tiene (o lasciato in
-//   quelle della lavagna se è libero), quantizzato con `buildStroke` e scritto
+//   lavagna, portato nelle unità della scheda che lo tiene (in punti PDF
+//   della pagina, se comincia sulla pagina di un PDF; in pixel del foglio
+//   dalla cella, se sta sopra una cella; o lasciato in quelle della lavagna
+//   se è libero), quantizzato con `buildStroke` e scritto
 //   con `encodeInk`, con i campi nell'ordine di scrittura. Un tratto oltre i
 //   limiti di §5 è un rifiuto, non un'eccezione.
 // - **L'asciutto** (`toDry`, `dryStroke`): il `DryStroke` che disegna
@@ -30,6 +32,8 @@ import { INK_MAX_SAMPLES, type InkSample, type QuantizedInk } from "../../ink/sa
 import { buildStroke } from "../../ink/tools/stroke";
 import { closedAtLimit } from "../../ink/tools/tool";
 import { decodeInk, encodeInk, inkFromQuantized, inkToQuantized, INK_MAX_BYTES, unknownChannels } from "../spatial/ink/codec";
+import { isCellAddress } from "./anchor";
+import type { CardPageBox, Rect } from "./cards";
 import type { InkEraserMode } from "./ink-erase";
 import type { InkLook } from "./ink-layer";
 import type { DryStroke, InkPathCache, InkRef } from "./ink-paint";
@@ -58,10 +62,34 @@ export type InkLayerRef = "board" | { readonly node: string };
 /// modello non ha il tratto dove il nucleo l'ha letto).
 export type InkSkipReason = CanvasInkSkipReason | "decode";
 
-/// L'ancora di un tratto come si scrive.
+/// L'ancora di un tratto come si scrive. `page` (T19): punti PDF
+/// dall'angolo in alto a sinistra della pagina `page` (da 1) di una scheda
+/// PDF, come si vede; `width × height` è la misura della pagina in punti.
+/// `cell` (T37): pixel del foglio al 100% dall'angolo in alto a sinistra
+/// della cella `cell` (notazione A1) del foglio `sheet` (il nome com'è nel
+/// file) di una scheda di foglio.
 export type InkAnchorRecord =
   | { readonly kind: "card"; readonly width: number; readonly height: number }
-  | { readonly kind: "free" };
+  | { readonly kind: "free" }
+  | { readonly kind: "page"; readonly page: number; readonly width: number; readonly height: number }
+  | { readonly kind: "cell"; readonly sheet: string; readonly cell: string };
+
+/// La cella di un'ancora `cell`: il foglio com'è nel file e l'indirizzo A1.
+export interface InkCell {
+  readonly sheet: string;
+  readonly cell: string;
+}
+
+/// La cella sotto un tratto che si attacca a lei (T37), come la dà la scheda
+/// di foglio: il foglio e l'indirizzo, il rettangolo della cella in unità
+/// della lavagna dall'angolo in alto a sinistra della scheda, e quante unità
+/// della lavagna fa un pixel del foglio al 100% (`zoom`, 1 se la scheda
+/// mostra il foglio al 100%). È la forma di `CellBounds` di `anchor.ts`, che
+/// la sceglie (`cellAnchorAt`).
+export interface InkCellBox extends InkCell {
+  readonly rect: Rect;
+  readonly zoom: number;
+}
 
 /// Un tratto come sta nel file. I campi sconosciuti si conservano.
 export interface InkStrokeRecord {
@@ -88,8 +116,16 @@ export interface DrawableStroke {
   readonly inkText: string;
   /// I campioni noti, nelle unità dell'ancora moltiplicate per la scala.
   readonly ink: QuantizedInk;
-  /// La misura della scheda quando il tratto si è scritto; `null` se libero.
+  /// La misura della scheda quando il tratto si è scritto (con l'ancora
+  /// `page`, quella della pagina in punti PDF); `null` se libero o
+  /// attaccato a una cella (l'ancora `cell` non scrive una misura).
   readonly ref: InkRef | null;
+  /// La pagina dell'ancora `page` (da 1): il tratto si vede solo quando la
+  /// scheda mostra quella pagina. `null` con le altre ancore.
+  readonly page: number | null;
+  /// La cella dell'ancora `cell` (T37): il tratto sta dove la scheda di
+  /// foglio mostra quella cella. `null` con le altre ancore.
+  readonly cell: InkCell | null;
   /// Il tratto com'è nel file, campi sconosciuti compresi.
   readonly record: Readonly<Record<string, unknown>>;
 }
@@ -126,14 +162,44 @@ function sameLayer(a: InkLayerRef, b: InkLayerRef): boolean {
   return a === "board" || b === "board" ? a === b : a.node === b.node;
 }
 
-/// La misura di riferimento di un'ancora: `null` per un'ancora libera,
-/// `undefined` se non si decodifica.
-function decodeRef(value: unknown): InkRef | null | undefined {
+/// Un numero di pagina: un intero da 1 in su, come lo legge il nucleo.
+function pageNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
+}
+
+/// Ciò che un'ancora decodificata dice alla resa.
+interface DecodedAnchor {
+  readonly ref: InkRef | null;
+  readonly page: number | null;
+  readonly cell: InkCell | null;
+}
+
+/// La misura di riferimento di un'ancora, la sua pagina e la sua cella:
+/// `ref` `null` per un'ancora libera o di cella, `page` `null` se l'ancora
+/// non è di pagina, `cell` `null` se non è di cella; `undefined` se non si
+/// decodifica. Le regole sono quelle del nucleo (`read_anchor`).
+function decodeAnchor(value: unknown): DecodedAnchor | undefined {
   if (!isObject(value)) return undefined;
-  if (value.kind === "card") {
-    return positive(value.width) && positive(value.height) ? { width: value.width, height: value.height } : undefined;
+  const measure = positive(value.width) && positive(value.height) ? { width: value.width, height: value.height } : null;
+  switch (value.kind) {
+    case "card":
+      return measure ? { ref: measure, page: null, cell: null } : undefined;
+    case "page":
+      return measure && pageNumber(value.page) ? { ref: measure, page: value.page, cell: null } : undefined;
+    case "cell":
+      return sheetName(value.sheet) && isCellAddress(value.cell)
+        ? { ref: null, page: null, cell: { sheet: value.sheet, cell: value.cell } }
+        : undefined;
+    case "free":
+      return { ref: null, page: null, cell: null };
+    default:
+      return undefined;
   }
-  return value.kind === "free" ? null : undefined;
+}
+
+/// Il nome di un foglio: un testo non vuoto, com'è, come lo legge il nucleo.
+function sheetName(value: unknown): value is string {
+  return typeof value === "string" && value !== "";
 }
 
 function decodeBrush(value: unknown): InkBrush | null {
@@ -169,8 +235,8 @@ export function decodeStroke(record: Readonly<Record<string, unknown>>): Drawabl
   if (typeof id !== "string" || id === "") return null;
   if (tool !== "pen" && tool !== "highlighter") return null;
   if (typeof color !== "string") return null;
-  const ref = decodeRef(record.anchor);
-  if (ref === undefined) return null;
+  const anchor = decodeAnchor(record.anchor);
+  if (anchor === undefined) return null;
   const brush = decodeBrush(record.brush);
   if (brush === null) return null;
   const ink = decodeInkText(record.ink);
@@ -183,7 +249,9 @@ export function decodeStroke(record: Readonly<Record<string, unknown>>): Drawabl
     brushText: record.brush as string,
     inkText: record.ink as string,
     ink,
-    ref,
+    ref: anchor.ref,
+    page: anchor.page,
+    cell: anchor.cell,
     record,
   };
 }
@@ -336,20 +404,71 @@ function boardToCard(holder: CanvasNode): Affine {
   return [1, 0, 0, 1, -holder.x, -holder.y];
 }
 
+/// Quanti punti PDF fa un'unità della lavagna sulla pagina `box`; `null` se
+/// la pagina non ha una misura che si possa usare.
+function pointsPerUnit(box: CardPageBox): number | null {
+  const k = box.size.width / box.rect.width;
+  const valid = positive(box.size.width) && positive(box.size.height) && positive(box.rect.width) && positive(box.rect.height)
+    && Number.isFinite(box.rect.x) && Number.isFinite(box.rect.y) && pageNumber(box.page);
+  return valid && positive(k) ? k : null;
+}
+
+/// La matrice dalla lavagna alla pagina `box` della scheda `holder`: l'origine
+/// nell'angolo in alto a sinistra della pagina, le unità in punti PDF.
+function boardToPage(holder: CanvasNode, box: CardPageBox, k: number): Affine {
+  return boardToContent(holder, box.rect, k);
+}
+
+/// La matrice dalla lavagna al contenuto che la scheda `holder` mostra in
+/// `rect`: l'origine nel suo angolo in alto a sinistra, `k` unità
+/// dell'ancora per unità della lavagna.
+function boardToContent(holder: CanvasNode, rect: Rect, k: number): Affine {
+  return [k, 0, 0, k, -(holder.x + rect.x) * k, -(holder.y + rect.y) * k];
+}
+
+/// Se la cella `box` si può scrivere: un foglio non vuoto, un indirizzo A1,
+/// un rettangolo finito e uno zoom finito maggiore di zero.
+function validCellBox(box: InkCellBox): boolean {
+  return sheetName(box.sheet) && isCellAddress(box.cell) && positive(box.zoom) && positive(1 / box.zoom)
+    && Number.isFinite(box.rect.x) && Number.isFinite(box.rect.y);
+}
+
+/// Come la pagina `ref` (la misura scritta nell'ancora, in punti) si porta
+/// sul rettangolo `rect` dove la scheda la disegna: lo stesso fattore nei due
+/// sensi, il minore, dall'angolo in alto a sinistra. Con la stessa misura di
+/// quando il tratto si è scritto è la pagina esatta; con un'altra (il PDF
+/// sostituito) il tratto si scala sulla pagina nuova senza deformarsi.
+/// `s` è zero se la misura non si usa: il tratto non si vede.
+export function pageFit(ref: InkRef, rect: Rect): { readonly s: number; readonly x: number; readonly y: number } {
+  const s = Math.min(rect.width / ref.width, rect.height / ref.height);
+  return Number.isFinite(s) && s > 0 && Number.isFinite(rect.x) && Number.isFinite(rect.y)
+    ? { s, x: rect.x, y: rect.y }
+    : { s: 0, x: 0, y: 0 };
+}
+
 /// Il record del tratto `stroke`, scritto con l'aspetto `look`, per la scheda
 /// `holder` (o libero con `null`). `now` è l'ora del muro, in millisecondi
 /// dal 1970, in cui il tratto è finito: `at` è il suo inizio, `now` meno la
 /// durata. Lo spessore di `look.brush` è già in unità della lavagna, che alla
 /// misura di adesso sono quelle della scheda.
 ///
+/// Con `content` il tratto è del contenuto che la scheda mostra. Una pagina
+/// (`CardPageBox`, T19): i punti e lo spessore vanno in punti PDF
+/// dall'angolo della pagina, e l'ancora è `page` con la sua misura. Una
+/// cella (`InkCellBox`, T37): i punti e lo spessore vanno in pixel del
+/// foglio al 100% dall'angolo della cella, e l'ancora è `cell`. Chi chiama
+/// sceglie la pagina (`pageAnchorAt`) o la cella (`cellAnchorAt`).
+///
 /// Un aspetto con uno strumento, un colore o un pennello che il formato non
-/// scrive è un errore di chi chiama, e lancia `RangeError`; un tratto oltre i
-/// limiti, o che non si scrive, è un rifiuto.
+/// scrive è un errore di chi chiama, e lancia `RangeError`, come una pagina
+/// senza una misura usabile, una cella che non vale o un contenuto senza la
+/// scheda; un tratto oltre i limiti, o che non si scrive, è un rifiuto.
 export function strokeRecord(
   stroke: InkStrokeInput,
   holder: CanvasNode | null,
   look: InkLook,
   now: number,
+  content: CardPageBox | InkCellBox | null = null,
 ): StrokeRecordResult {
   const tool = look.tool;
   if (tool !== "pen" && tool !== "highlighter") throw new RangeError(`strumento d'inchiostro sconosciuto: ${tool}`);
@@ -357,11 +476,34 @@ export function strokeRecord(
   if (holder !== null && !(positive(holder.width) && positive(holder.height))) {
     throw new RangeError(`la scheda ${holder.id} non ha una misura valida`);
   }
-  // Il pezzo che continua in un altro non si assottiglia alla fine.
-  const brush = closedAtLimit(brushForInput(look.brush, stroke.pressure), stroke.split);
+  const page = content !== null && "page" in content ? content : null;
+  const cell = content !== null && "sheet" in content ? content : null;
+  // Quante unità dell'ancora fa un'unità della lavagna.
+  let k = 1;
+  if (page !== null) {
+    const perUnit = pointsPerUnit(page);
+    if (holder === null || perUnit === null) throw new RangeError(`la pagina ${page.page} non ha una misura valida`);
+    k = perUnit;
+  }
+  if (cell !== null) {
+    if (holder === null || !validCellBox(cell)) throw new RangeError(`la cella ${cell.cell} del foglio ${cell.sheet} non vale`);
+    k = 1 / cell.zoom;
+  }
+  // Il pezzo che continua in un altro non si assottiglia alla fine. Sulla
+  // pagina e sulla cella lo spessore va nelle unità dell'ancora, come i
+  // campioni.
+  const input = closedAtLimit(brushForInput(look.brush, stroke.pressure), stroke.split);
+  const brush: InkBrush = k === 1 ? input : { ...input, size: input.size * k };
   const brushText = formatInkBrush(brush);
   if (stroke.samples.length > INK_MAX_SAMPLES) return { ok: false, reason: "full" };
-  const local = holder === null ? stroke.samples : stroke.samples.map((sample) => toLocal(sample, boardToCard(holder)));
+  const toAnchor = holder === null
+    ? null
+    : page !== null
+      ? boardToPage(holder, page, k)
+      : cell !== null
+        ? boardToContent(holder, cell.rect, k)
+        : boardToCard(holder);
+  const local = toAnchor === null ? stroke.samples : stroke.samples.map((sample) => toLocal(sample, toAnchor));
   const built = buildStroke(local, brush, []);
   if (!built.ok) return { ok: false, reason: built.reason };
   const ink = encodeInk(inkFromQuantized(built.ink));
@@ -369,7 +511,11 @@ export function strokeRecord(
   if (ink.length > INK_MAX_BYTES) return { ok: false, reason: "full" };
   const anchor: InkAnchorRecord = holder === null
     ? { kind: "free" }
-    : { kind: "card", width: holder.width, height: holder.height };
+    : page !== null
+      ? { kind: "page", page: page.page, width: page.size.width, height: page.size.height }
+      : cell !== null
+        ? { kind: "cell", sheet: cell.sheet, cell: cell.cell }
+        : { kind: "card", width: holder.width, height: holder.height };
   const at = startOf(now, stroke.samples);
   const record: InkStrokeRecord = {
     id: newNodeId("s"),
@@ -393,7 +539,9 @@ function startOf(now: number, samples: readonly InkSample[]): string | null {
 
 /// Il `DryStroke` di un tratto che si disegna; `null` se il contorno non si
 /// calcola. Con `cache` il percorso già calcolato per lo stesso id, inchiostro
-/// e pennello si riusa.
+/// e pennello si riusa. Un tratto attaccato a una cella (T37) porta la sua
+/// cella: dove la cella sta lo dice la scheda di foglio quando si disegna
+/// (`paintCard`, T38).
 export function dryStroke(stroke: DrawableStroke, cache?: InkPathCache): DryStroke | null {
   const compute = (): string => inkPath(stroke.ink, stroke.brush);
   let path: string;
@@ -403,7 +551,15 @@ export function dryStroke(stroke: DrawableStroke, cache?: InkPathCache): DryStro
     return null;
   }
   const opacity = inkOpacity(stroke.brush, stroke.tool);
-  return { id: stroke.id, path, fill: stroke.color, ref: stroke.ref, ...(opacity < 1 ? { opacity } : {}) };
+  return {
+    id: stroke.id,
+    path,
+    fill: stroke.color,
+    ref: stroke.ref,
+    ...(stroke.page === null ? {} : { page: stroke.page }),
+    ...(stroke.cell === null ? {} : { cell: stroke.cell }),
+    ...(opacity < 1 ? { opacity } : {}),
+  };
 }
 
 /// Il `DryStroke` di un record: un tratto appena fatto da `strokeRecord`, o

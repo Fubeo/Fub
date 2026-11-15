@@ -1,0 +1,16 @@
+{
+  "name": "read-align-unknown",
+  "description": "Un allineamento che Fub non conosce (giustificato).",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"t1\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": { \"v\": 1, \"align\": \"justify\" } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "t1",
+        "state": "kept",
+        "reason": "field",
+        "size": "m",
+        "align": "start"
+      }
+    ]
+  }
+}
