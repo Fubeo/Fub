@@ -188,6 +188,8 @@ pub const NM_MAX_BYTES: usize = 2 * 1024 * 1024;
 pub const URI_MAX_BYTES: usize = 2 * 1024 * 1024;
 /// Nonce/envelope.
 pub const NONCE_MAX_CHARS: usize = 256;
+/// Le proprietà di una cattura, in JSON, al più.
+pub const PROPERTIES_MAX_BYTES: usize = 64 * 1024;
 /// Origine attesa dall'estensione.
 pub const CLIPPER_ORIGIN: &str = "clipper-extension";
 /// Nome host NM registrato nei manifest browser.
@@ -397,22 +399,8 @@ pub(crate) fn validate_target_path(
 
 /// Valida la busta: nonce non vuoto, origin attesa, timestamp sensato.
 pub fn validate_envelope(envelope: &CaptureEnvelope) -> Result<(), AutomationError> {
-    if envelope.nonce.trim().is_empty() {
-        return Err(AutomationError::bad_args("`nonce` vuoto"));
-    }
-    if envelope.nonce.chars().count() > NONCE_MAX_CHARS {
-        return Err(AutomationError::bad_args("`nonce` oltre 256 caratteri"));
-    }
-    if has_control(&envelope.nonce) || contains_nul(&envelope.nonce) {
-        return Err(AutomationError::bad_args(
-            "`nonce` con caratteri di controllo",
-        ));
-    }
-    if envelope.origin != CLIPPER_ORIGIN {
-        return Err(AutomationError::bad_args(format!(
-            "`origin` deve essere `{CLIPPER_ORIGIN}`"
-        )));
-    }
+    validate_nonce(&envelope.nonce)?;
+    validate_origin(&envelope.origin)?;
     match envelope.extension_id.as_deref() {
         None => {}
         Some(id) if id.trim().is_empty() => {
@@ -431,6 +419,64 @@ pub fn validate_envelope(envelope: &CaptureEnvelope) -> Result<(), AutomationErr
         if ts == 0 {
             return Err(AutomationError::bad_args("`timestamp_ms` zero"));
         }
+    }
+    Ok(())
+}
+
+/// Il `nonce` di una cattura, nella busta del canale nativo o nell'URI:
+/// non vuoto, al più 256 caratteri, senza controlli.
+fn validate_nonce(nonce: &str) -> Result<(), AutomationError> {
+    if nonce.trim().is_empty() {
+        return Err(AutomationError::bad_args("`nonce` vuoto"));
+    }
+    if nonce.chars().count() > NONCE_MAX_CHARS {
+        return Err(AutomationError::bad_args("`nonce` oltre 256 caratteri"));
+    }
+    if has_control(nonce) || contains_nul(nonce) {
+        return Err(AutomationError::bad_args(
+            "`nonce` con caratteri di controllo",
+        ));
+    }
+    Ok(())
+}
+
+/// L'`origin` dichiarata da una cattura. È un'etichetta, non una prova: sul
+/// canale nativo chi scrive lo decide l'abbinamento, e un `fub://` lo apre
+/// qualunque pagina col valore che vuole. Si accetta soltanto il valore del
+/// clipper, perché un valore diverso è un errore di chi costruisce la cattura.
+fn validate_origin(origin: &str) -> Result<(), AutomationError> {
+    if origin != CLIPPER_ORIGIN {
+        return Err(AutomationError::bad_args(format!(
+            "`origin` deve essere `{CLIPPER_ORIGIN}`"
+        )));
+    }
+    Ok(())
+}
+
+/// Le proprietà di una cattura: chiavi non vuote, al più 128 byte, senza
+/// controlli; tutto insieme al più 64 KiB di JSON.
+fn validate_properties(
+    props: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), AutomationError> {
+    for key in props.keys() {
+        if key.trim().is_empty() {
+            return Err(AutomationError::bad_args("`properties` con chiave vuota"));
+        }
+        if key.len() > 128 {
+            return Err(AutomationError::bad_args(
+                "`properties` con chiave oltre 128 byte",
+            ));
+        }
+        if has_control(key) {
+            return Err(AutomationError::bad_args(
+                "`properties` con chiave di controllo",
+            ));
+        }
+    }
+    let encoded = serde_json::to_string(props)
+        .map_err(|e| AutomationError::bad_args(format!("`properties` non serializzabili: {e}")))?;
+    if encoded.len() > PROPERTIES_MAX_BYTES {
+        return Err(AutomationError::bad_args("`properties` oltre 64KiB"));
     }
     Ok(())
 }
@@ -454,27 +500,7 @@ pub fn validate_capture_v1(payload: &CapturePayloadV1) -> Result<(), AutomationE
         validate_source_url(url)?;
     }
     if let Some(props) = &payload.properties {
-        for key in props.keys() {
-            if key.trim().is_empty() {
-                return Err(AutomationError::bad_args("`properties` con chiave vuota"));
-            }
-            if key.len() > 128 {
-                return Err(AutomationError::bad_args(
-                    "`properties` con chiave oltre 128 byte",
-                ));
-            }
-            if has_control(key) {
-                return Err(AutomationError::bad_args(
-                    "`properties` con chiave di controllo",
-                ));
-            }
-        }
-        let encoded = serde_json::to_string(props).map_err(|e| {
-            AutomationError::bad_args(format!("`properties` non serializzabili: {e}"))
-        })?;
-        if encoded.len() > 65536 {
-            return Err(AutomationError::bad_args("`properties` oltre 64KiB"));
-        }
+        validate_properties(props)?;
     }
     let is_new = matches!(
         payload.target.mode,
@@ -793,6 +819,10 @@ pub enum FubUri {
         tag: Option<String>,
         folder: Option<String>,
     },
+    /// I parametri della busta che il clipper aggiunge (`v`, `nonce`,
+    /// `origin`, `timestamp_ms`, `properties`) si validano con le regole del
+    /// canale nativo. `origin` e `timestamp_ms` non decidono nulla e non
+    /// restano: un `fub://` lo apre qualunque pagina, con i valori che vuole.
     Capture {
         vault: Option<String>,
         folder: Option<String>,
@@ -801,6 +831,11 @@ pub enum FubUri {
         title: Option<String>,
         markdown: Option<String>,
         source_url: Option<String>,
+        /// Il `nonce` della busta: i tentativi di una stessa cattura lo
+        /// ripetono, e la coda dell'app non la scrive due volte. Lega i
+        /// tentativi, non prova chi li manda.
+        nonce: Option<String>,
+        properties: Option<serde_json::Map<String, serde_json::Value>>,
         success_callback: Option<String>,
         error_callback: Option<String>,
     },
@@ -1002,6 +1037,12 @@ pub fn parse_fub_uri(raw: &str) -> Result<FubUri, AutomationError> {
             "source_url",
             "success_callback",
             "error_callback",
+            // La busta del clipper (`apps/clipper/src/capture.js`).
+            "v",
+            "nonce",
+            "origin",
+            "timestamp_ms",
+            "properties",
         ],
         _ => {
             return Err(AutomationError::bad_args(format!(
@@ -1168,6 +1209,39 @@ pub fn parse_fub_uri(raw: &str) -> Result<FubUri, AutomationError> {
                 let is_new = !matches!(mode, Some(CaptureMode::Append | CaptureMode::Prepend));
                 ensure_no_traversal("note", &n, is_new)?;
             }
+            if let Some(v) = lookup(&pairs, "v") {
+                if v != CAPTURE_V1.to_string() {
+                    return Err(AutomationError::bad_args(format!(
+                        "`v` deve essere {CAPTURE_V1}"
+                    )));
+                }
+            }
+            let nonce = lookup(&pairs, "nonce");
+            if let Some(n) = &nonce {
+                validate_nonce(n)?;
+            }
+            if let Some(o) = lookup(&pairs, "origin") {
+                validate_origin(&o)?;
+            }
+            if let Some(ts) = lookup(&pairs, "timestamp_ms") {
+                if !matches!(ts.parse::<u64>(), Ok(ms) if ms > 0) {
+                    return Err(AutomationError::bad_args("`timestamp_ms` non valido"));
+                }
+            }
+            let properties = match lookup(&pairs, "properties") {
+                None => None,
+                Some(text) => {
+                    if text.len() > PROPERTIES_MAX_BYTES {
+                        return Err(AutomationError::bad_args("`properties` oltre 64KiB"));
+                    }
+                    let props: serde_json::Map<String, serde_json::Value> =
+                        serde_json::from_str(&text).map_err(|_| {
+                            AutomationError::bad_args("`properties` non è un oggetto JSON")
+                        })?;
+                    validate_properties(&props)?;
+                    Some(props)
+                }
+            };
             Ok(FubUri::Capture {
                 vault: lookup(&pairs, "vault"),
                 folder: lookup(&pairs, "folder"),
@@ -1176,6 +1250,8 @@ pub fn parse_fub_uri(raw: &str) -> Result<FubUri, AutomationError> {
                 title,
                 markdown,
                 source_url,
+                nonce,
+                properties,
                 success_callback: lookup(&pairs, "success_callback"),
                 error_callback: lookup(&pairs, "error_callback"),
             })

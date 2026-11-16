@@ -17,6 +17,7 @@ import { pickVaultLocation } from "./platform/vault-picker";
 import { api, window as nativeWindow } from "./host/ipc";
 import { resolvedReference, settings } from "./host/query";
 import { forwardNotice, onEvent, startKernelRouter } from "./state/kernel";
+import { settingTouches } from "./state/setting-change";
 import { mountLocale } from "./state/locale";
 import { emit, on, setVaultName, state } from "./state/store";
 import { loadLayout, layout as paneLayout, split as splitPane, closePane } from "./state/layout";
@@ -129,6 +130,7 @@ import { mountWheelTextSize, zoomBy } from "./state/zoom";
 /// chiavi `localStorage` dove stavano prima (si adottano una volta).
 const SIDE_SETTING = { sidebar: "chrome.sidebar.visible", inspector: "chrome.inspector.visible" } as const;
 const LEGACY_SIDE = { sidebar: "fub.layout.sidebar", inspector: "fub.layout.inspector" } as const;
+const SIDE_KEYS: ReadonlySet<string> = new Set(Object.values(SIDE_SETTING));
 /// Quanti avvisi di sessione si tirano al più: la diagnosi del log più quelli
 /// del percorso di disegno sono tre; il resto è margine.
 const SESSION_NOTICE_PULLS = 8;
@@ -193,8 +195,12 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
       if (current === generation && !lifetime.closed) notify(t("shell.chrome_failed", { reason: errorText(error) }), "guasto");
     }
   };
+  // I due pannelli laterali hanno il loro ascoltatore nella shell adattiva:
+  // `apply` non li legge, e rileggere qui a ogni apertura della barra era un
+  // giro sul canale dati in più per ogni gesto.
   lifetime.add(onEvent("setting_changed", ({ key }) => {
-    if (key.startsWith("chrome.") || key === MINIBAR_SETTING || key.startsWith("editor.slash")) void reread();
+    if (settingTouches(key, (changed) => (changed.startsWith("chrome.") && !SIDE_KEYS.has(changed))
+      || changed === MINIBAR_SETTING || changed.startsWith("editor.slash"))) void reread();
   }));
   await reread();
 }
@@ -292,7 +298,7 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
   });
   life.add(() => sideReads.cancel());
   life.add(onEvent("setting_changed", ({ key }) => {
-    if (key === "chrome.schema" || key === SIDE_SETTING.sidebar || key === SIDE_SETTING.inspector) {
+    if (settingTouches(key, (changed) => changed === "chrome.schema" || SIDE_KEYS.has(changed))) {
       void readSidePreferences();
     }
   }));
@@ -310,8 +316,37 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
       panel.querySelector<HTMLElement>("input:not([disabled]), [tabindex='0'], button:not([disabled])")?.focus();
     }
   };
+  /// Il cassetto aperto, se c'è.
+  const openDrawerSide = (): SidePanel | null =>
+    layout.classList.contains("drawer-sidebar-open")
+      ? "sidebar"
+      : layout.classList.contains("drawer-inspector-open") ? "inspector" : null;
+  // Il velo è modale: la tastiera non arriva a ciò che copre. Quando il fuoco
+  // entra in qualcosa sotto il velo — l'editor di un documento appena scelto
+  // nel cassetto, una voce dello schema che porta al suo titolo, il Tab che
+  // esce dal cassetto — il cassetto si chiude, con lo stesso moto di Esc, e il
+  // fuoco resta dove è andato: non torna al lanciatore. Così, finché il
+  // cassetto è aperto, il fuoco sta nel cassetto o sopra il velo (rail,
+  // barra, menu, dialoghi), mai nel foglio coperto.
+  pageWindowLifetime.listen(document, "focusin", (event: FocusEvent) => {
+    const side = openDrawerSide();
+    const target = event.target;
+    if (!side || !(target instanceof Node) || !layout.contains(target)) return;
+    const panel = side === "sidebar" ? sidebar : inspector;
+    const divider = side === "sidebar" ? divSidebar : divInspector;
+    if (panel.contains(target) || divider?.contains(target)) return;
+    closeDrawers(false);
+    applyAdaptive();
+  });
   life.add(setSidePanelController({
     visible: (side) => !(side === "sidebar" ? sidebar : inspector).hidden,
+    dismiss: (side) => {
+      // Chi ha scelto nel cassetto porta il fuoco dove ha scelto: il
+      // lanciatore non lo riprende.
+      if (openDrawerSide() !== side) return;
+      closeDrawers(false);
+      applyAdaptive();
+    },
     reveal: (side) => {
       if (isDrawer(side)) {
         if (!layout.classList.contains(`drawer-${side}-open`)) openDrawer(side);

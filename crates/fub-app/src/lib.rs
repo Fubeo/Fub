@@ -2919,6 +2919,28 @@ fn percorso_di_disegno(
     (modo, diagnosi, scelta)
 }
 
+/// Dice all'host su quale webview gira la shell, dove un default ne dipende
+/// ([`fub_host::settings::motion_default`]).
+///
+/// Su Linux è WebKitGTK, e la versione è quella della libreria **caricata**:
+/// `tauri::webview_version` chiama `webkit_get_{major,minor,micro}_version`
+/// tramite wry. Le altre piattaforme non dichiarano niente e restano come
+/// prima. Una versione illeggibile lascia la webview non dichiarata, cioè i
+/// default di sempre.
+fn declare_the_webview() {
+    #[cfg(target_os = "linux")]
+    match tauri::webview_version() {
+        Ok(version) => match fub_host::settings::Webview::webkitgtk(&version) {
+            Some(webview) => {
+                tracing::info!(target: "fub.app", %version, "webkitgtk");
+                fub_host::settings::declare_webview(webview);
+            }
+            None => tracing::warn!(target: "fub.app", %version, "unreadable webkitgtk version"),
+        },
+        Err(error) => tracing::warn!(target: "fub.app", %error, "webkitgtk version unavailable"),
+    }
+}
+
 pub fn run() {
     // Il bootstrap sceglie la cartella canonica una volta sola. Log, host e
     // store installato ricevono lo stesso valore: nessun proprietario riapre
@@ -2960,6 +2982,9 @@ pub fn run() {
     // `WebviewEvents`).
     let sink = Arc::new(WebviewEvents::default());
     let bridge = sink.clone();
+    // Prima dell'host: il livello macchina riceve lo schema, e con lui il
+    // default delle animazioni, nel costruttore.
+    declare_the_webview();
     let mut host = Host::new();
     if let Some(dir) = config_dir.as_deref() {
         host = host.with_config_dir(dir);

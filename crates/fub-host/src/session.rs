@@ -3202,9 +3202,11 @@ impl Host {
     /// decidere se una domanda si può servire senza vault.
     /// Un `fub://` che il sistema ha consegnato all'app: resta in coda finché
     /// la shell non lo prende con `uri.pending`, anche se arriva prima che
-    /// la shell esista. `false` se la coda è piena e l'URI resta fuori.
+    /// la shell esista. `false` se la coda è piena e l'URI resta fuori. Un
+    /// nuovo tentativo di una cattura già in coda o già scritta (stesso
+    /// `nonce`) non si accoda di nuovo, e non è un rifiuto: dà `true`.
     pub fn receive_uri(&self, raw: &str) -> bool {
-        self.uris.push(raw)
+        self.uris.push(raw) != crate::uri_inbox::Received::Refused
     }
 
     pub fn has_current_vault(&self) -> bool {

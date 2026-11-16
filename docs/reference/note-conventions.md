@@ -75,6 +75,9 @@ non si normalizza.
   `{"comments": true}` ogni discussione diventa un rimando numerato dopo il
   passo e una nota in fondo alla pagina.
 - **Pubblicazione**: il passo resta, i messaggi no.
+- **Editor**: in Scrittura e in Lettura il passo ha il fondo del commento e
+  segni e messaggi non si vedono; in Sorgente si vede tutto, colorato. Come si
+  scrive, si cancella e si copia: [I commenti nel testo](../product/editor-comments.md).
 
 Le modifiche suggerite di CriticMarkup (`{++ ++}`, `{-- --}`, `{~~ ~> ~~}`)
 non sono una convenzione di Fub: restano testo.

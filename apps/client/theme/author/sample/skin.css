@@ -13333,6 +13333,33 @@ input.canvas-toolbar-item {
   color: var(--doc-link);
   text-decoration: underline;
 }
+/* I commenti nel testo (T21): in Scrittura e in Lettura il passo commentato
+   ha un fondo giallo leggero, più pieno col cursore dentro; i segni e i
+   messaggi non si vedono. In Sorgente il commento intero, segni compresi, ha
+   il colore arancione. */
+.cm-editor .cm-content .cm-fub-comment-range,
+.markdown-rendered mark.comment-range {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--doc-highlight) 70%, transparent);
+  box-shadow: 0 2px 0 -1px var(--highlight);
+  color: inherit;
+}
+/* Col cursore dentro, il fondo pieno con un velo in più: più giallo del
+   riposo, senza un colore nuovo. Il velo è al 40% perché il testo resti
+   leggibile al buio: due strati pieni davano 3,85:1 sulla carta scura, così
+   il testo sta sopra 4,9:1 anche sulla riga attiva (5,9:1 in alto
+   contrasto); in luce il testo scuro resta sopra 12:1. */
+.cm-editor .cm-content .cm-fub-comment-range-on {
+  background:
+    linear-gradient(color-mix(in oklab, var(--doc-highlight) 40%, transparent), color-mix(in oklab, var(--doc-highlight) 40%, transparent)),
+    var(--doc-highlight);
+}
+.cm-editor .cm-content .cm-fub-comment-source {
+  border-radius: 3px;
+  background: var(--doc-tint-orange);
+  color: var(--doc-color-orange);
+}
 
 /* ── skin/draw.css ──────────────────────────────────────────────────────── */
 
@@ -19146,53 +19173,54 @@ h6.ui-heading {
 
    La geometria non è qui: sta accanto al modulo. Qui ci sono colori, misure e
    caratteri. La fila dei modi e l'elenco sono primitive del kit e arrivano già
-   vestite; questo pezzo veste ciò che il lanciatore ci mette dentro.
+   vestite; questo pezzo veste ciò che il lanciatore ci mette dentro, e
+   rifà le schede e l'elenco solo qui dentro (le forme sono quelle del
+   prototipo dello spazio comandi, `PLAN-ui/editor.html`).
 */
 .launcher-veil {
   background: var(--scrim);
 }
 
+/* La superficie è un foglio: la carta della pagina, staccata da tutto ciò che
+   copre da un anello sottile e da un'ombra che la solleva. */
 .launcher {
-  border-radius: var(--radius-dialog);
-  background: var(--bg-elev);
-  box-shadow: var(--shadow-5);
+  border-radius: 16px;
+  background: var(--sheet);
+  /* L'ombra di ciò che si apre sopra tutto; un tema che non la dichiara ha
+     un anello e il quarto gradino delle ombre. */
+  box-shadow: var(--shadow-pop, 0 0 0 1px var(--overlay-active), var(--shadow-4));
   color: var(--text);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
 }
 
-/* La testa: l'icona del modo, il campo, l'attesa. Il fuoco sta sempre nel
-   campo finché la superficie è aperta: lo dice il filo sotto la testa, che
-   prende spessore e colore dell'anello, e non una cornice in più. */
+/* La testa: la lente, il campo, l'attesa e il segno che chiude. Niente filo
+   sotto: il campo e la fila dei modi sono una testa sola, e la chiude il filo
+   della fila. Il fuoco sta sempre nel campo finché la superficie è aperta: lo
+   dice il cursore che lampeggia, e una cornice in più non direbbe niente. */
 .launcher-head {
-  gap: var(--space-4);
-  height: 48px;
-  padding: 0 var(--space-6);
-  box-shadow: inset 0 -1px 0 var(--border);
-}
-.launcher-head:focus-within {
-  box-shadow: inset 0 calc(-1 * var(--focus-ring-width)) 0 var(--focus-ring);
+  gap: var(--space-5);
+  height: 54px;
+  padding: 0 var(--space-5) 0 18px;
 }
 .launcher-lens {
   display: inline-flex;
-  color: var(--muted);
+  color: var(--accent-soft);
 }
+/* Il campo tiene il respiro del campo di sistema (1 px sopra e sotto, 2 ai
+   lati), come il prototipo che non lo azzera. */
 .launcher-input {
-  height: 48px;
-  padding: 0;
+  height: 54px;
+  padding: 1px 2px;
   border: none;
   border-radius: 0;
   background: transparent;
   color: var(--text);
-  font: inherit;
-  font-size: var(--text-lg);
-  line-height: var(--leading-normal);
+  font: 17px/1 var(--font-ui);
 }
-/* Il segno del fuoco è del campo, ed è lo stesso filo della testa: i due
-   combaciano, e si legge una riga sola lunga quanto la superficie. */
 .launcher-input:focus-visible {
   outline: none;
-  box-shadow: inset 0 calc(-1 * var(--focus-ring-width)) 0 var(--focus-ring);
+  box-shadow: none;
 }
 .launcher-input::placeholder {
   color: var(--muted);
@@ -19207,40 +19235,117 @@ h6.ui-heading {
   border-top-color: var(--accent);
   border-radius: var(--radius-pill);
 }
-
-/* La fila dei modi, col prefisso che porta in ognuno scritto accanto al nome. */
-.launcher-modes {
-  padding: var(--space-2) var(--space-5) 0;
-}
-.launcher-mode-prefix {
+/* «Esc»: il tasto scritto, che chiude anche col puntatore. */
+.launcher-close {
+  height: 22px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font: var(--weight-medium) 10.5px/1 var(--font-mono);
+  cursor: pointer;
+}
+.launcher-close:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+/* La fila dei modi: il prefisso di ognuno in un quadratino davanti al nome, e
+   il modo scelto lo dice il suo quadratino d'accento. Niente fondo al
+   passaggio: le schede del kit qui hanno un vestito loro, e il segno che
+   scorre lo toglie la geometria del lanciatore. */
+.launcher .launcher-modes {
+  gap: var(--space-1);
+  padding: 0 var(--space-5) 10px;
+  /* Il filo è un bordo, non il filo dipinto delle schede del kit. */
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+}
+.launcher-modes > .launcher-mode {
+  gap: 7px;
+  min-height: 0;
+  height: 32px;
+  padding: 0 10px 0 var(--space-2);
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 12.5px;
   font-weight: var(--weight-regular);
+  line-height: var(--leading-normal);
+}
+.launcher-modes > .launcher-mode:hover,
+.launcher-modes > .launcher-mode:active {
+  background: transparent;
+  color: var(--text);
+}
+.launcher-modes > .launcher-mode[aria-selected="true"],
+.launcher-modes > .launcher-mode[aria-selected="true"]:hover {
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+.launcher-mode-tile {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--sheet-2);
+  color: var(--text);
+  font: var(--weight-bold) 13px/1 var(--font-mono);
+  transition: background var(--duration-fast) var(--ease), box-shadow var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+}
+.launcher-mode-tile > svg {
+  width: 14px;
+  height: 14px;
+}
+.launcher-modes > .launcher-mode:hover .launcher-mode-tile {
+  background: linear-gradient(var(--overlay-hover) 0 0) var(--sheet-2);
+}
+.launcher-modes > .launcher-mode[aria-selected="true"] .launcher-mode-tile {
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 /* Gli esiti. Una riga sta su una riga sola, o su due quando porta con sé una
-   descrizione o un estratto; a destra, in grafite, ciò che la distingue. */
+   descrizione o un estratto: davanti l'icona della specie, a destra, in
+   grafite, ciò che la distingue. */
 .launcher-list {
-  padding: var(--space-3);
+  padding: 0 var(--space-3) var(--space-4);
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
-.launcher-row {
-  min-height: 36px;
-  padding: var(--space-2) var(--space-5);
-  border-radius: var(--radius-control);
+.launcher-list > .launcher-row {
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 10px 0 var(--space-3);
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: var(--leading-normal);
+}
+/* La riga attiva: un fondo appena più scuro sotto l'inchiostro, non il verde
+   dell'accento. L'accento resta all'icona. */
+.launcher-list > .launcher-highlight {
+  border-radius: 9px;
+  background: var(--overlay-hover);
+}
+.launcher-list > .launcher-row[data-active],
+.launcher-list > .launcher-row[data-selected] {
+  color: var(--text);
+  font-weight: var(--weight-regular);
+}
+.launcher-row-icon {
+  width: 26px;
+  height: 26px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+}
+.launcher-row[data-active] .launcher-row-icon {
+  color: var(--accent-soft);
 }
 .launcher-row-title {
-  font-size: var(--text-base);
-}
-/* Il formato di un documento che non è una nota, prima del nome. */
-.launcher-row-format {
-  width: 14px;
-  height: 14px;
-  margin-right: var(--space-3);
-  color: var(--muted);
-  vertical-align: -2px;
+  font-size: 14px;
 }
 /* Le lettere scritte, ritrovate nel nome: inchiostro pieno e grassetto. */
 .launcher-row-title mark {
@@ -19278,29 +19383,41 @@ h6.ui-heading {
   color: var(--danger);
 }
 
-/* L'anteprima della nota attiva, accanto all'elenco: un filo la separa, e
-   dentro c'è la resa della Lettura un gradino più piccola. È uno sguardo
-   sull'inizio: ciò che continua sfuma nel fondo della superficie. */
+/* L'anteprima della nota attiva, accanto all'elenco: un vassoio un gradino
+   sotto la carta, e sopra il foglio della nota, rialzato, con la resa della
+   Lettura in piccolo. È uno sguardo sull'inizio: ciò che continua sfuma nel
+   fondo del foglio. */
 .launcher-preview {
-  padding: var(--space-6) var(--space-7) 0;
-  box-shadow: inset 1px 0 0 var(--border);
+  gap: var(--space-5);
+  padding: 14px;
+  border-left: 1px solid var(--border);
+  background: color-mix(in srgb, var(--sheet-2) 55%, var(--sheet));
 }
-.launcher-preview::after {
+/* Il foglio è appena rialzato: il rialzo più basso, un anello e un'ombra
+   corta. Un tema che non lo dichiara ha il primo gradino delle ombre. */
+.launcher-preview-sheet {
+  max-height: 292px;
+  padding: 14px var(--space-6) 0;
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: var(--shadow-raise, var(--shadow-1));
+}
+.launcher-preview-sheet::after {
   content: "";
   position: absolute;
   right: 0;
   bottom: 0;
-  left: 1px;
-  height: 40px;
-  background: linear-gradient(to bottom, transparent, var(--bg-elev));
+  left: 0;
+  height: 44px;
+  background: linear-gradient(transparent, var(--sheet));
 }
 .launcher-preview .launcher-preview-page {
-  font-size: var(--text-base);
-  line-height: var(--leading-normal);
+  color: var(--text);
+  font: 13.5px/1.5 var(--font-reading);
   transition: opacity var(--duration-fast) var(--ease);
 }
 .launcher-preview .launcher-preview-page > * {
-  margin-bottom: var(--space-5);
+  margin: 0 0 var(--space-4);
 }
 .launcher-preview .launcher-preview-page h1,
 .launcher-preview .launcher-preview-page h2,
@@ -19309,15 +19426,20 @@ h6.ui-heading {
 .launcher-preview .launcher-preview-page h5,
 .launcher-preview .launcher-preview-page h6 {
   padding-top: var(--space-3);
+  color: var(--text);
+  font-family: var(--font-reading);
+  font-weight: var(--weight-bold);
+  line-height: 1.2;
 }
 .launcher-preview .launcher-preview-page h1 {
-  font-size: 1.4em;
+  margin-bottom: var(--space-3);
+  font-size: 18px;
 }
 .launcher-preview .launcher-preview-page h2 {
-  font-size: 1.2em;
+  font-size: 16px;
 }
 .launcher-preview .launcher-preview-page h3 {
-  font-size: 1.06em;
+  font-size: 14.5px;
 }
 .launcher-preview .launcher-preview-page > :first-child {
   padding-top: 0;
@@ -19326,9 +19448,25 @@ h6.ui-heading {
 .launcher-preview[data-waiting] .launcher-preview-page {
   opacity: 0.45;
 }
+/* I dati della nota sotto il foglio, piccoli e in grafite. */
+.launcher-preview-meta {
+  gap: 7px;
+  padding: 0 var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.launcher-preview-fact {
+  gap: var(--space-4);
+}
+.launcher-preview-fact > svg {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
 /* Niente da mostrare, o una resa che non riesce: una frase in grafite. */
 .launcher-preview-note {
   margin: 0;
+  padding: 0 var(--space-1);
   color: var(--muted);
   font-size: var(--text-sm);
 }

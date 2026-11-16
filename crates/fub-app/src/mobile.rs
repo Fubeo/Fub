@@ -517,7 +517,8 @@ pub fn plan_share_file(name: &str, len: u64, mime: &str, folder: &str) -> Planne
 /// mai navigazioni implicite; callback deny-default, mai seguite in silenzio.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OpenedUrlKind {
-    Fub(FubUri),
+    /// In una scatola: un `FubUri` di cattura è molto più grande delle altre voci.
+    Fub(Box<FubUri>),
     MobileSwitcher,
     MobileSearch,
     TreeGrant {
@@ -550,7 +551,7 @@ impl OpenedUrlKind {
         }
         if raw.starts_with("fub://") {
             return match automation::parse_fub_uri(raw) {
-                Ok(uri) => OpenedUrlKind::Fub(uri),
+                Ok(uri) => OpenedUrlKind::Fub(Box::new(uri)),
                 Err(e) => OpenedUrlKind::Rejected(e.message().to_string()),
             };
         }
@@ -1078,7 +1079,7 @@ mod tests {
     #[test]
     fn opened_url_classification_never_executes() {
         match OpenedUrlKind::classify("fub://search?vault=uno&q=ciao") {
-            OpenedUrlKind::Fub(FubUri::Search { .. }) => {}
+            OpenedUrlKind::Fub(uri) if matches!(*uri, FubUri::Search { .. }) => {}
             other => panic!("search attesa, arrivata {other:?}"),
         }
         match OpenedUrlKind::classify("https://example.com/a") {

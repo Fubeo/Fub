@@ -35,17 +35,12 @@
   position: relative;
   z-index: var(--z-modal, 90);
   box-sizing: border-box;
-  width: min(640px, 100%);
+  width: min(740px, 100%);
   max-height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transform-origin: 0 0;
-}
-/* Con l'anteprima la superficie è più larga, e lo è per tutto il modo: la
-   misura la decide chi monta (`previewFits`), non ciò che l'elenco contiene. */
-.launcher[data-preview] {
-  width: min(880px, 100%);
 }
 
 .launcher-content {
@@ -55,17 +50,21 @@
   flex-direction: column;
 }
 
+/* La testa è una fila: lente, campo, attesa, «Esc». Il campo prende il posto
+   che resta e cede; il resto ha la sua misura. */
 .launcher-head {
   flex: none;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
 }
+.launcher-head > * {
+  flex: none;
+}
 
-.launcher-input {
+.launcher-head > .launcher-input {
   box-sizing: border-box;
+  flex: 1 1 auto;
   min-width: 0;
-  width: 100%;
 }
 
 /* L'attesa ha sempre il suo posto: accenderla non sposta niente. */
@@ -84,6 +83,23 @@
 }
 .launcher-modes > .kit-tab {
   flex: none;
+}
+/* Il modo scelto lo dice il suo quadratino d'accento, non il segno che il kit
+   fa scorrere sotto la scheda: qui il segno non c'è. */
+.launcher-modes > .kit-tab-indicator {
+  display: none;
+}
+/* Il quadratino del prefisso, davanti al nome: il segno sta al centro. */
+.launcher-mode-tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+/* Il segno «Esc» della testa non cede mai il posto al campo. */
+.launcher-close {
+  flex: none;
+  white-space: nowrap;
 }
 
 /* Il corpo ha un'altezza sua, non quella di ciò che contiene: fra una domanda
@@ -105,18 +121,58 @@
   display: flex;
   flex-direction: column;
 }
-.launcher[data-preview] .launcher-results {
-  flex: none;
-  width: 400px;
-}
-/* L'anteprima è uno sguardo sull'inizio della nota: ciò che non ci sta resta
-   fuori, senza una barra che nessuno potrebbe scorrere. */
+/* L'anteprima è uno sguardo sull'inizio della nota, larga quanto basta a
+   riconoscerla: a cedere è l'elenco. Ciò che non ci sta resta fuori, senza una
+   barra che nessuno potrebbe scorrere. Se c'è o no lo decide chi monta
+   (`previewFits`) per tutto il modo, non ciò che l'elenco contiene. */
 .launcher-preview {
   position: relative;
   box-sizing: border-box;
-  flex: 1 1 0;
+  flex: none;
+  width: 288px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Il foglio della resa: non più alto di ciò che il riquadro mostra, e cede
+   lui il posto ai dati sotto, che restano sempre interi; vuoto non si vede
+   (la frase del riquadro dice perché). */
+.launcher-preview-sheet {
+  position: relative;
+  flex: 0 1 auto;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.launcher-preview-sheet:has(> .launcher-preview-page:empty) {
+  display: none;
+}
+/* I dati sotto il foglio: uno per riga, l'icona davanti, e un percorso lungo
+   si tronca invece di uscire dal riquadro. */
+.launcher-preview-meta {
+  flex: none;
+  display: grid;
+  min-width: 0;
+}
+.launcher-preview-meta[hidden] {
+  display: none;
+}
+.launcher-preview-fact {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.launcher-preview-fact[hidden] {
+  display: none;
+}
+.launcher-preview-fact > svg {
+  flex: none;
+}
+.launcher-preview-fact > span {
   min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .launcher-preview[hidden] {
   display: none;
@@ -154,6 +210,12 @@
 .launcher-row {
   box-sizing: border-box;
   flex: none;
+}
+/* L'icona della specie, davanti: un posto fisso, col disegno al centro. */
+.launcher-row-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
 }
 
 /* Il rientro di un'intestazione: un passo per livello sotto il primo. */

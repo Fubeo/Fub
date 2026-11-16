@@ -1312,7 +1312,8 @@ export const SCENE = onPage("shell", [
       // sulla nota che si agisce, e aspetta la sua resa.
       await page.waitForFunction(() => {
         const preview = document.querySelector(".launcher-preview");
-        const shown = preview?.querySelector(".launcher-preview-page")?.textContent ?? "";
+        if (!preview || preview.hidden) return true;
+        const shown = preview.querySelector(".launcher-preview-page")?.textContent ?? "";
         return !preview.hasAttribute("data-waiting") && shown.includes("Sintassi di Fub");
       });
     },
@@ -1847,12 +1848,15 @@ async function chooseFromViewMenu(page, label) {
 /// resa parte dopo una sosta (`PREVIEW_DELAY_MS`) e fino ad allora resta quella
 /// di prima, o il vuoto: una foto scattata prima sarebbe di un'altra riga.
 async function previewShowsActiveRow(page) {
+  // In una finestra stretta l'anteprima non c'è (`previewFits`): basta la riga
+  // attiva. Aspettare una resa che non arriverà fermerebbe la scena.
   await page.waitForFunction(() => {
     const input = document.querySelector(".launcher-input");
     const id = input?.getAttribute("aria-activedescendant");
     const title = id ? document.getElementById(id)?.querySelector(".launcher-row-title")?.textContent?.trim() : "";
     const preview = document.querySelector(".launcher-preview");
-    const shown = preview?.querySelector(".launcher-preview-page")?.textContent ?? "";
+    if (!preview || preview.hidden) return Boolean(title);
+    const shown = preview.querySelector(".launcher-preview-page")?.textContent ?? "";
     return Boolean(title) && !preview.hasAttribute("data-waiting") && shown.includes(title);
   });
 }
@@ -2246,12 +2250,15 @@ async function fromTreeDrawer(page, open) {
     await page.waitForSelector("#sidebar-scrim:not([hidden])");
   }
   await open();
-  if (compact && await page.isVisible("#sidebar-scrim")) {
+  if (!compact) return;
+  // Un documento scelto nell'albero chiude il cassetto da sé: il velo che sta
+  // uscendo non si clicca (`closeSidebarDrawer`).
+  if (await sidebarDrawerOpen(page)) {
     // Non sul bordo destro: lì il puntatore fa affacciare l'ispettore.
     const scrim = await page.locator("#sidebar-scrim").boundingBox();
     await page.click("#sidebar-scrim", { position: { x: scrim.width - 80, y: 8 } });
-    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
   }
+  await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
 }
 
 /// Le miniature che l'albero delle scene `albero-*` mostra: il RAW girato, i
@@ -2508,8 +2515,22 @@ async function waitForGraphToSettle(page) {
 /// affaccia (`frame/peek.ts`), e il puntatore che resta fermo su di lei dopo
 /// il clic lo fa comparire sopra la nota, come per chi ci sosta davvero. Il
 /// punto lo sceglie `scrimClickPoint`, lontano da tutti e due.
+///
+/// Un documento scelto nell'albero chiude il cassetto da sé
+/// (`dismissSidePanel`): allora il velo sta già uscendo, non prende più i clic
+/// e non va cliccato. Si aspetta solo che finisca.
 async function closeSidebarDrawer(page) {
-  if (!await page.isVisible("#sidebar-scrim")) return;
+  if (await sidebarDrawerOpen(page)) await clickSidebarScrim(page);
+  await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
+}
+
+/// Il cassetto dell'albero è aperto: lo dice la classe del layout, non il velo,
+/// che resta visibile per tutta la sua uscita.
+function sidebarDrawerOpen(page) {
+  return page.evaluate(() => document.getElementById("layout")?.classList.contains("drawer-sidebar-open") ?? false);
+}
+
+async function clickSidebarScrim(page) {
   const scrim = await page.locator("#sidebar-scrim").boundingBox();
   const avoid = await page.evaluate(() =>
     [document.getElementById("sidebar"), ...document.querySelectorAll(".drawer-edge")]
@@ -2518,7 +2539,6 @@ async function closeSidebarDrawer(page) {
       .map(({ x, y, width, height }) => ({ x, y, width, height })),
   );
   await page.click("#sidebar-scrim", { position: scrimClickPoint(scrim, avoid) });
-  await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
 }
 
 /// Dove cliccare il velo, in coordinate del velo: sulla riga a `top` px

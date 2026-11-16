@@ -261,6 +261,83 @@ pub const FRAME_RATE_CAPS: [u32; 7] = [240, 165, 144, 120, 90, 60, 30];
 pub const APPEARANCE_RENDERING: &str = "appearance.rendering";
 /// I percorsi offerti, il predefinito per primo.
 pub const RENDERING_MODES: [&str; 3] = ["auto", "gpu", "cpu"];
+
+/// La webview su cui gira la shell, per quel tanto che decide un default.
+///
+/// È un fatto della piattaforma, e lo dichiara l'app (`fub_app::run`, con
+/// [`declare_webview`]) leggendo la versione **dalla libreria caricata** —
+/// non dal nome del pacchetto né dal momento della compilazione: chi ha
+/// compilato con la 2.52 può girare con la 2.54, e viceversa.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Webview {
+    /// WebKitGTK, con la versione `major.minor.micro` della libreria caricata.
+    WebKitGtk(u32, u32, u32),
+}
+
+impl Webview {
+    /// La WebKitGTK di una versione scritta `major.minor.micro`, come la dà
+    /// `webkit_get_{major,minor,micro}_version` (via `tauri::webview_version`).
+    /// Una stringa che non è tre numeri non dice niente: `None`.
+    pub fn webkitgtk(version: &str) -> Option<Self> {
+        let mut parts = version.trim().split('.').map(str::parse::<u32>);
+        let (Some(Ok(major)), Some(Ok(minor)), Some(Ok(micro)), None) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        else {
+            return None;
+        };
+        Some(Self::WebKitGtk(major, minor, micro))
+    }
+
+    /// Questa webview ha il difetto che fa sfarfallare le animazioni
+    /// ([`WEBKITGTK_FLICKER_FROM`])?
+    pub fn flickers_after_animations(self) -> bool {
+        match self {
+            Self::WebKitGtk(major, minor, micro) => (major, minor, micro) >= WEBKITGTK_FLICKER_FROM,
+        }
+    }
+}
+
+/// **La prima WebKitGTK che sfarfalla dopo un'animazione**, ed è l'unico posto
+/// in cui l'intervallo difettoso è scritto.
+///
+/// Dalla 2.54.0 il renderer DMA-BUF di WebKitGTK, finita un'animazione,
+/// ripresenta per un istante fotogrammi vecchi; su ogni GPU, non solo NVIDIA
+/// (janhq/jan#9588, cjpais/Handy#2166 e #2360). La 2.52 non lo fa. Con
+/// Impostazioni → Aspetto → Animazioni = «ridotte» lo sfarfallio sparisce
+/// (verificato su Debian 13, WebKitGTK 2.54, 2026-11-16).
+///
+/// L'intervallo è aperto in alto: nessuna versione corretta è ancora
+/// verificata. Il giorno che una lo è, si aggiunge qui un limite superiore
+/// escluso (per esempio `WEBKITGTK_FLICKER_UNTIL = (2, 54, 4)`) e
+/// [`Webview::flickers_after_animations`] lo confronta; i test di questo file
+/// dicono quale versione resta difettosa e quale no.
+pub const WEBKITGTK_FLICKER_FROM: (u32, u32, u32) = (2, 54, 0);
+
+static WEBVIEW: std::sync::OnceLock<Webview> = std::sync::OnceLock::new();
+
+/// Dichiara la webview del processo. La chiama l'app **prima** di costruire
+/// l'[`Host`](crate::Host), perché il livello macchina riceve lo schema (e i
+/// suoi default) nel costruttore. Vale una volta sola, come la libreria che
+/// il processo ha caricato: una seconda dichiarazione è ignorata e la funzione
+/// dice `false`. Chi non dichiara niente — le altre piattaforme, la CLI, i
+/// test — ha i default di sempre.
+pub fn declare_webview(webview: Webview) -> bool {
+    WEBVIEW.set(webview).is_ok()
+}
+
+/// Il default di [`APPEARANCE_MOTION`] su questa webview: `reduced` dove la
+/// webview sfarfalla dopo le animazioni, altrimenti `""` (segue il sistema).
+///
+/// Cambia **solo il default**: un valore che la persona ha scritto — anche
+/// `""` — resta il suo, perché il livello macchina legge il default soltanto
+/// dove non c'è un valore. La shell mostra il perché sotto la riga quando il
+/// default è `reduced` (`decorateMotion` in `apps/client/src/panels/settings.ts`).
+pub fn motion_default(webview: Option<Webview>) -> &'static str {
+    match webview {
+        Some(webview) if webview.flickers_after_animations() => "reduced",
+        _ => fub_kernel::locale::AS_SYSTEM,
+    }
+}
 /// Lo stile dei diagrammi Mermaid: uno degli id di [`DIAGRAM_STYLES`]. Lo
 /// disegna la shell (`apps/client/src/ui/mermaid-styles.ts`); una nota può
 /// sceglierne un altro per un diagramma solo, con `%% stile: <id>`.
@@ -901,6 +978,12 @@ fn editor_settings() -> Vec<SettingSpec> {
 /// un pezzo di 6.2, dove si decide se un componente possa avere in mano
 /// l'aspetto e con che permesso.
 fn appearance_settings() -> Vec<SettingSpec> {
+    appearance_settings_on(WEBVIEW.get().copied())
+}
+
+/// Le chiavi dell'aspetto su una webview data: i test scelgono la webview che
+/// il processo, una volta dichiarata, non può più cambiare.
+fn appearance_settings_on(webview: Option<Webview>) -> Vec<SettingSpec> {
     let choice = |key, label, description, default: &str, options: Vec<UiOption>| {
         SettingSpec::new(
             key,
@@ -1000,7 +1083,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_MOTION,
             C_MOTION,
             C_MOTION_DESC,
-            fub_kernel::locale::AS_SYSTEM,
+            motion_default(webview),
             vec![
                 system(),
                 UiOption::new("calm", Text::key(C_MOTION_CALM)),
@@ -1992,6 +2075,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.uri.no_vault", "Nessun vault aperto: il collegamento non ha dove scrivere.")
         .with("host.uri.reads", "«{action}» non scrive: lo esegue la finestra.")
         .with("host.uri.capture_missing", "La cattura chiede anche «{what}».")
+        .with("host.uri.capture_replayed", "Questa cattura è già stata scritta: un nuovo invio con lo stesso nonce non la scrive di nuovo.")
         .with("host.web.clip.title", "Salva la pagina web come nota")
         .with("host.web.clip.desc", "Scarica di nuovo una pagina di un sito approvato e la scrive come nota Markdown, con la fonte; in prova dice soltanto dove.")
         .with("host.param.url", "Indirizzo")
@@ -2162,7 +2246,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_URI_ALLOWED, "Collegamenti fub:// che scrivono senza chiedere")
         .with(
             C_URI_ALLOWED_DESC,
-            "Le azioni scelte (nota nuova, giornaliera, nota unica, cattura) scrivono appena il collegamento arriva, senza conferma. Aprire un altro vault chiede sempre. Vale su questo computer.",
+            "Le azioni scelte (nota nuova, giornaliera, nota unica) scrivono appena il collegamento arriva, senza conferma. Una cattura e l'apertura di un altro vault chiedono sempre. Vale su questo computer.",
         )
         .with(C_FILES_LINK_STYLE, "Nuovi link")
         .with(
@@ -2639,6 +2723,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.uri.no_vault", "No vault is open: the link has nowhere to write.")
         .with("host.uri.reads", "“{action}” does not write: the window runs it.")
         .with("host.uri.capture_missing", "The capture also needs “{what}”.")
+        .with("host.uri.capture_replayed", "This capture has already been written: sending it again with the same nonce does not write it twice.")
         .with("host.web.clip.title", "Save the web page as a note")
         .with("host.web.clip.desc", "Downloads a page of an approved site again and writes it as a Markdown note, with its source; a dry run only says where.")
         .with("host.param.url", "Address")
@@ -2832,7 +2917,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_URI_ALLOWED, "fub:// links that write without asking")
         .with(
             C_URI_ALLOWED_DESC,
-            "The chosen actions (new note, daily note, unique note, capture) write as soon as the link arrives, without a confirmation. Opening another vault always asks. Applies on this computer.",
+            "The chosen actions (new note, daily note, unique note) write as soon as the link arrives, without a confirmation. A capture and opening another vault always ask. Applies on this computer.",
         )
         .with(C_FILES_LINK_STYLE, "New links")
         .with(
@@ -3764,5 +3849,104 @@ mod tests {
         assert_eq!(caps, FRAME_RATE_CAPS.map(Some).to_vec());
         assert_eq!(frame_rate_cap("59"), None);
         assert_eq!(frame_rate_cap("veloce"), None);
+    }
+
+    fn motion_spec(webview: Option<Webview>) -> SettingSpec {
+        appearance_settings_on(webview)
+            .into_iter()
+            .find(|spec| spec.key == APPEARANCE_MOTION)
+            .expect("l'aspetto dichiara le animazioni")
+    }
+
+    fn motion_spec_default(webview: Option<Webview>) -> String {
+        let SettingKind::Choice { default, options } = motion_spec(webview).kind else {
+            panic!("le animazioni sono una scelta");
+        };
+        assert!(
+            options.iter().any(|option| option.value == default),
+            "il default `{default}` è fra le scelte"
+        );
+        default
+    }
+
+    /// Sulla WebKitGTK che sfarfalla (dalla 2.54.0, senza limite superiore
+    /// finché nessuna versione corretta è verificata) le animazioni partono
+    /// ridotte; sulla 2.52 e su ogni webview non dichiarata seguono il sistema.
+    #[test]
+    fn motion_starts_reduced_only_on_the_flickering_webkitgtk() {
+        for faulty in ["2.54.0", "2.54.3", "2.55.1", "2.56.0", "3.0.0"] {
+            let webview = Webview::webkitgtk(faulty).expect("una versione");
+            assert_eq!(motion_spec_default(Some(webview)), "reduced", "{faulty}");
+        }
+        for sound in ["2.52.3", "2.53.90", "2.50.0", "2.44.1"] {
+            let webview = Webview::webkitgtk(sound).expect("una versione");
+            assert_eq!(motion_spec_default(Some(webview)), "", "{sound}");
+        }
+        // Le altre piattaforme non dichiarano una webview: come prima.
+        assert_eq!(motion_spec_default(None), "");
+        // Il processo dei test non ne dichiara nessuna.
+        assert_eq!(
+            core_machine_settings()
+                .into_iter()
+                .find(|spec| spec.key == APPEARANCE_MOTION)
+                .map(|spec| spec.kind),
+            Some(motion_spec(None).kind)
+        );
+    }
+
+    /// Solo tre numeri sono una versione: altrimenti la webview resta non
+    /// dichiarata e il default non cambia.
+    #[test]
+    fn a_webkitgtk_version_is_three_numbers() {
+        assert_eq!(
+            Webview::webkitgtk("2.54.0"),
+            Some(Webview::WebKitGtk(2, 54, 0))
+        );
+        assert_eq!(
+            Webview::webkitgtk(" 2.52.3\n"),
+            Some(Webview::WebKitGtk(2, 52, 3))
+        );
+        for junk in [
+            "",
+            "2.54",
+            "2.54.0.1",
+            "2.54.x",
+            "webkit 2.54.0",
+            "130.0.2849.80x",
+        ] {
+            assert_eq!(Webview::webkitgtk(junk), None, "{junk:?}");
+        }
+    }
+
+    /// Il default nuovo non scavalca una scelta: un valore scritto — anche
+    /// `""`, «segue il sistema» — si legge com'è, con la provenienza della
+    /// macchina; senza un valore si legge `reduced`, con la provenienza del
+    /// default.
+    #[test]
+    fn a_written_motion_value_beats_the_webkitgtk_default() {
+        use fub_abi::settings::{SettingSource, SettingValue};
+        use fub_kernel::MachineSettings;
+
+        let specs: Vec<SettingSpec> = appearance_settings_on(Webview::webkitgtk("2.54.0"))
+            .into_iter()
+            .filter(|spec| spec.scope == fub_abi::settings::SettingScope::Machine)
+            .collect();
+        let machine = MachineSettings::in_memory();
+        machine.declare(&specs).expect("schema");
+        let read = || machine.effective(APPEARANCE_MOTION).expect("dichiarata");
+        assert_eq!(
+            read(),
+            (SettingValue::Text("reduced".into()), SettingSource::Default)
+        );
+        for written in ["", "calm", "reduced"] {
+            machine
+                .set(APPEARANCE_MOTION, SettingValue::Text(written.into()))
+                .expect("una scelta valida");
+            assert_eq!(
+                read(),
+                (SettingValue::Text(written.into()), SettingSource::Machine),
+                "{written:?}"
+            );
+        }
     }
 }

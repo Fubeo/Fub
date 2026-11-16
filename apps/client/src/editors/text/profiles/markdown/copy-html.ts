@@ -19,8 +19,22 @@ const KEPT: Readonly<Record<string, readonly string[]>> = {
 const OUTSIDE_LINK = /^(?:https?:|mailto:)/iu;
 const OUTSIDE_IMAGE = /^https?:/iu;
 
+/// L'HTML della resa senza il fondo dei commenti: il passo di un commento è
+/// testo come gli altri, e fuori da Fub non porta né il fondo né i messaggi
+/// (che la resa ha già tolto). Si toglie prima di ripulire, finché la classe
+/// del renderer lo distingue da un `<mark>` scritto dall'autore. Il documento
+/// di `DOMParser` è inerte: niente script, niente risorse.
+function withoutComments(html: string): string {
+  if (!html.includes("comment-range")) return html;
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  for (const mark of Array.from(parsed.body.querySelectorAll("mark.comment-range"))) {
+    mark.replaceWith(...Array.from(mark.childNodes));
+  }
+  return parsed.body.innerHTML;
+}
+
 export function clipboardHtml(markdown: string, forms?: readonly SyntaxForm[]): string {
-  const fragment = sanitizeMarkdownHtml(renderMarkdown(markdown, forms).html);
+  const fragment = sanitizeMarkdownHtml(withoutComments(renderMarkdown(markdown, forms).html));
   for (const element of Array.from(fragment.querySelectorAll("*"))) {
     const tag = element.localName;
     // Una casella di un compito diventa il suo segno: un campo non si incolla.
