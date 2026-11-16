@@ -108,10 +108,31 @@ describe("il compositore del menu dell'editor", () => {
       clipboard: { offers: { cut: false, copy: false, paste: true, "paste-plain": true }, run: () => {} },
     }, host);
     expect(first.clipboard).toEqual([]);
-    expect(groupsOf(first.items)).toEqual([["Incolla", "Incolla senza formattazione"], ["Inserisci un blocco…"]]);
+    // «Incolla senza formattazione» non ruba un posto: si trova scrivendo.
+    expect(groupsOf(first.items)).toEqual([["Incolla"], ["Inserisci un blocco…"]]);
+    expect(labels(first.searchable)).toContain("Incolla senza formattazione");
     expect(first.header?.kind).toBe("Paragrafo");
-    // Le icone stanno nella testata e nella riga degli appunti, non sulle voci.
-    expect(first.items.filter((item) => item.icon !== undefined)).toEqual([]);
+    // Come nel prototipo, ogni voce ha la sua figura: anche «Incolla».
+    expect(first.items.find((item) => item.label === "Incolla")?.icon).toBeDefined();
+  });
+
+  it("«Copia come ▸» chiude il primo gruppo del posto, dopo «Collega a una nota…», come nel prototipo", () => {
+    const host = hostFor(surfaceWith({}), []);
+    const menu = composeEditorMenu({
+      target: { kind: "selection", name: "3 parole" },
+      context: [
+        { id: "link", label: "Collega a una nota…", run: () => {} },
+        MENU_RULE,
+        { id: "extract", label: "Estrai in una nota nuova", run: () => {} },
+      ],
+      clipboard: {
+        offers: { cut: true, copy: true, paste: true },
+        copyAs: [{ id: "md", label: "Markdown", run: () => {} }],
+        run: () => {},
+      },
+    }, host);
+    expect(groupsOf(menu.items)).toEqual([["Collega a una nota…", "Copia come"], ["Estrai in una nota nuova"]]);
+    expect(menu.items.find((item) => item.label === "Copia come")?.icon).toBe("copy");
   });
 
   it("la testata prende l'icona che la superficie dà, o quella del tipo", () => {

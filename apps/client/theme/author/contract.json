@@ -1559,9 +1559,12 @@
     "menu-group",
     "menu-group-label",
     "menu-empty",
+    "menu-title",
     "menu-head",
     "menu-head-kind",
     "menu-head-name",
+    "menu-field",
+    "menu-field-input",
     "menu-clipboard",
     "menu-clipboard-glide",
     "menu-quick",
@@ -1576,6 +1579,8 @@
     "menu-foot-caret",
     "menu-finding",
     "menu-path",
+    "menu-foot-keys",
+    "menu-foot-key",
     "context-submenu",
     "menu-more",
     "context-strip",
@@ -3417,9 +3422,12 @@
     "menu-group": "cornice",
     "menu-group-label": "cornice",
     "menu-empty": "cornice",
+    "menu-title": "cornice",
     "menu-head": "cornice",
     "menu-head-kind": "cornice",
     "menu-head-name": "cornice",
+    "menu-field": "cornice",
+    "menu-field-input": "cornice",
     "menu-clipboard": "cornice",
     "menu-clipboard-glide": "cornice",
     "menu-quick": "cornice",
@@ -3434,6 +3442,8 @@
     "menu-foot-caret": "cornice",
     "menu-finding": "cornice",
     "menu-path": "cornice",
+    "menu-foot-keys": "cornice",
+    "menu-foot-key": "cornice",
     "context-submenu": "cornice",
     "menu-more": "cornice",
     "context-strip": "cornice",
@@ -7619,7 +7629,8 @@
         "menu-separator",
         "menu-group",
         "menu-group-label",
-        "menu-empty"
+        "menu-empty",
+        "menu-title"
       ],
       "states": [
         "rest"
@@ -7635,6 +7646,18 @@
       ],
       "states": [
         "rest"
+      ]
+    },
+    {
+      "name": "menu-field",
+      "part": "menus",
+      "hooks": [
+        "menu-field",
+        "menu-field-input"
+      ],
+      "states": [
+        "rest",
+        "focused"
       ]
     },
     {
@@ -7678,7 +7701,9 @@
         "menu-foot-query",
         "menu-foot-caret",
         "menu-finding",
-        "menu-path"
+        "menu-path",
+        "menu-foot-keys",
+        "menu-foot-key"
       ],
       "states": [
         "rest"
@@ -10003,10 +10028,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1856,
+    "hooks": 1861,
     "state_names": 7,
-    "assigned_states": 867,
-    "components": 257,
+    "assigned_states": 869,
+    "components": 258,
     "preference_tokens": 189
   }
 }

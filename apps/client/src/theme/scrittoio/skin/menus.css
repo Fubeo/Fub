@@ -1,7 +1,7 @@
 /* I menu. */
 
-/* Un menu è un rialzo: carta più chiara di tutto ciò che copre, staccata
-   dall'ombra e da nient'altro. Contestuale o a tendina è lo stesso oggetto
+/* Un menu è un rialzo: il foglio del prototipo (`.pop`), staccato da un filo
+   appena accennato e dall'ombra. Contestuale o a tendina è lo stesso oggetto
    (`ui/menu.ts`), con la lingua del «/»: testata, appunti e piede restano
    fermi, l'elenco in mezzo scorre. Cambia solo da dove parte. */
 .context-menu {
@@ -9,16 +9,17 @@
   z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
-  min-width: 200px;
-  max-width: min(400px, 90vw);
+  min-width: 220px;
+  max-width: min(380px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);
   padding: 0;
   border: none;
   border-radius: calc(var(--radius-menu) + var(--space-2));
-  background: var(--bg-elev);
-  box-shadow: var(--shadow-3);
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--text) 8%, transparent), var(--shadow-3);
   color: var(--text);
   font-size: var(--text-base);
+  line-height: 1.4;
   overflow: hidden;
 }
 /* Il menu del posto, aperto col tasto destro o col tasto Menu: largo quanto
@@ -42,11 +43,55 @@
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
+.context-menu .menu-clipboard + .menu-items {
+  padding-top: var(--space-3);
+}
+
+/* **Il campo della ricerca** in cima (il menu della maniglia): la lente in
+   grigio e il campo senza bordo, sopra un filo. Si scrive lì, e il fuoco
+   resta lì: l'anello sarebbe di troppo. */
+.context-menu .menu-field {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.context-menu .menu-field > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.context-menu .menu-field-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.context-menu .menu-field-input:focus-visible {
+  outline: none;
+}
 
 /* Una voce è una riga del kit (`kit/row.ts`, vestita in `skin/kit.css`): una
    linea sola da 34, con il segno, il nome e a destra, in monospazio grigio,
    la scorciatoia o la freccia del sottomenu. Qui sta ciò che è solo del
-   menu. */
+   menu: la figura accesa nell'inchiostro d'accento e la freccia che si
+   sposta appena verso il sottomenu. */
+.context-menu .menu-lit .menu-icon {
+  color: var(--accent-soft);
+}
+.context-menu .menu-more {
+  transition: transform 0.14s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.12s;
+}
+.context-menu .menu-lit .menu-more {
+  transform: translateX(2px);
+}
 /* **La scelta è una sola**, e la dice la pastiglia che scivola da una voce
    all'altra: la voce accesa ha il fuoco, che il puntatore sposta e che resta
    dov'è quando il puntatore esce. L'anello della tastiera sta dentro la voce,
@@ -130,12 +175,12 @@
   clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
 }
 
-/* Un filetto rientrato, con la sua aria sopra e sotto. A metà del
-   contrasto di un bordo: separa i gruppi senza rigare il menu. */
+/* Un filetto rientrato, con la sua aria sopra e sotto, nel colore dei
+   bordi. */
 .context-menu .menu-separator {
   height: 1px;
   margin: 5px var(--space-4);
-  background: color-mix(in oklab, var(--border) 50%, transparent);
+  background: var(--border);
 }
 
 /* **La voce distruttiva** scrive in rosso a riposo. Accesa non prende la
@@ -189,8 +234,10 @@
    d'autore (`menu-label`, `menu-more`, `menu-group-label`) accanto a quelli
    del kit, perché un tema che li vestiva continui a valere. L'aspetto è della
    riga e dell'etichetta del kit; qui solo ciò che è del menu: l'etichetta
-   non si sceglie, il nome e la freccia non si selezionano col trascinamento. */
-.context-menu .menu-group-label {
+   (e il titolo del menu della maniglia, `menu-title`) non si sceglie, il
+   nome e la freccia non si selezionano col trascinamento. */
+.context-menu .menu-group-label,
+.context-menu .menu-title {
   cursor: default;
 }
 .context-menu .menu-label,
@@ -210,20 +257,20 @@
   height: 40px;
   padding: 0 14px;
   border-bottom: 1px solid var(--border);
-  color: var(--muted);
+  color: var(--text);
   font-size: calc(var(--text-sm) + 0.5px);
   white-space: nowrap;
 }
 .context-menu .menu-head > svg {
   flex: none;
-  width: 16px;
-  height: 16px;
-  color: var(--accent);
+  width: 14px;
+  height: 14px;
+  color: var(--accent-soft);
 }
 .context-menu .menu-head-kind {
   flex: none;
   color: var(--text);
-  font-weight: var(--weight-bold);
+  font-weight: 650;
 }
 .context-menu .menu-head-name {
   min-width: 0;
@@ -246,7 +293,7 @@
   margin: var(--space-4) var(--space-4) var(--space-1);
   padding: 3px;
   border-radius: 11px;
-  background: var(--overlay-hover);
+  background: var(--sheet-2);
 }
 .context-menu .menu-clipboard[hidden] {
   display: none;
@@ -258,8 +305,8 @@
   bottom: 3px;
   width: 0;
   border-radius: var(--radius-control);
-  background: var(--bg-elev);
-  box-shadow: 0 0 0 1px var(--border), var(--shadow-1);
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--text) 6%, transparent), var(--shadow-1);
   opacity: 0;
   pointer-events: none;
 }
@@ -289,6 +336,13 @@
 .context-menu .menu-clipboard .menu-quick.menu-pressed {
   color: var(--accent-contrast);
 }
+/* La parte accesa scrive nell'inchiostro pieno, con la figura d'accento. */
+.context-menu .menu-clipboard .menu-quick.menu-lit {
+  color: var(--text);
+}
+.context-menu .menu-clipboard .menu-quick.menu-lit svg {
+  color: var(--accent-soft);
+}
 .context-menu .menu-choice.menu-pressed > svg {
   display: none;
 }
@@ -305,13 +359,12 @@
    coi segni dei formati, stretti in ogni lingua. Il nome del formato compare
    accanto alla voce mentre la riga è accesa. */
 .context-menu .menu-choices {
-  padding: var(--space-2) var(--space-3);
   line-height: inherit;
   cursor: default;
 }
 .context-menu .menu-choice-name {
   margin-left: 0.35em;
-  color: var(--accent);
+  color: var(--accent-soft);
 }
 .context-menu .menu-choice-set {
   display: flex;
@@ -335,9 +388,10 @@
   height: 26px;
   padding: 0;
   border-radius: var(--radius-control);
-  background: var(--bg-elev);
+  background: var(--sheet);
   box-shadow: inset 0 0 0 1px var(--border-strong);
   color: var(--muted);
+  transition: background 0.12s, box-shadow 0.12s, color 0.12s, transform 0.14s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .context-menu .menu-choices .menu-choice > svg {
   width: 15px;
@@ -346,7 +400,14 @@
 .context-menu .menu-choices .menu-choice.menu-lit {
   background: var(--accent-wash);
   box-shadow: inset 0 0 0 1.5px var(--accent);
-  color: var(--accent);
+  color: var(--accent-soft);
+}
+/* Sotto il puntatore il tastino si solleva appena; premuto, si stringe. */
+.context-menu .menu-choices .menu-choice:hover {
+  transform: translateY(-1px);
+}
+.context-menu .menu-choices .menu-choice:active {
+  transform: scale(0.94);
 }
 .context-menu .menu-choices .menu-choice.menu-pressed {
   background: var(--accent);
@@ -407,6 +468,30 @@
   margin-left: 1px;
   vertical-align: -3px;
   background: var(--accent);
+}
+
+/* **Il piede dei tasti** (il menu della maniglia): una riga quieta, senza
+   fondo, coi tasti disegnati come altrove e cosa fanno. */
+.context-menu .menu-foot.menu-foot-keys {
+  display: block;
+  height: auto;
+  padding: 7px 12px;
+  background: none;
+  font-size: calc(var(--text-xs) + 0.5px);
+  line-height: 1.6;
+}
+.context-menu .menu-foot-key {
+  margin-right: 12px;
+  white-space: nowrap;
+}
+.context-menu .menu-foot-key > kbd {
+  padding: 3px 5px 2px;
+  border-radius: 5px;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border-strong), 0 1px 0 var(--border-strong);
+  color: var(--muted);
+  font: var(--weight-medium) 10.5px/1 var(--font-mono);
+  white-space: nowrap;
 }
 
 /* Col dito le voci sono alte quanto un dito. */

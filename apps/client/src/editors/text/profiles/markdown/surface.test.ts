@@ -701,7 +701,14 @@ describe("le azioni dell'editor della superficie", () => {
     expect(menu?.clipboard?.copyAs?.map((item) => item.label)).toEqual([
       t("editor_menu.copy_as.markdown"), t("editor_menu.copy_as.html"), t("editor_menu.copy_as.text"),
     ]);
-    expect(entryOf(menu, t("editor_menu.search_vault"))?.find).toEqual({ where: "vault", query: "due parole" });
+    // Come nel prototipo: «Collega a una nota…», poi «Estrai»; «Cerca nel
+    // vault» si trova scrivendo.
+    expect(contextLabels(menu)).toEqual([t("editor_menu.link.to_note"), "—", t("editor_menu.extract")]);
+    expect(menu?.context?.[0]).toMatchObject({ icon: "fmt-link" });
+    expect(menu?.searchable?.find((item) => "label" in item && item.label === t("editor_menu.search_vault"))).toMatchObject({
+      icon: "search",
+      find: { where: "vault", query: "due parole" },
+    });
     expect(menu?.miniBar).toBe(true);
     ed.destroy();
   });
@@ -710,7 +717,12 @@ describe("le azioni dell'editor della superficie", () => {
     const { ed, view } = editor();
     ed.setMode("source");
     const text = at(ed, view, "Un paragrafo\n", 3);
-    expect(text?.target.kind).toBe("text");
+    // La testata dice il paragrafo con le sue prime parole; poi «Trasforma il
+    // blocco ▸» e «Inserisci un blocco… /», come nel prototipo.
+    expect(text?.target).toMatchObject({ kind: "text", name: "Un paragrafo" });
+    expect(contextLabels(text)[0]).toBe(t("editor_menu.transform_block"));
+    expect(at(ed, view, "Una frase molto lunga che non entra nella testata del menu\n", 3)?.target.name).toBe("Una frase molto lunga che non ent…");
+    expect(at(ed, view, "Uno\n\n\nDue\n", 5)?.target.name).toBe(t("editor_menu.head.empty"));
     expect(entryOf(text, t("editor_menu.transform_block"))?.items?.length).toBeGreaterThan(6);
     expect(text?.clipboard?.offers).toMatchObject({ paste: true, "paste-plain": true });
     ed.setMode("reading");
@@ -738,6 +750,13 @@ describe("le azioni dell'editor della superficie", () => {
       const { ed, view } = editor(() => {}, slash);
       ed.setMode("source");
       const menu = at(ed, view, `Un paragrafo${nl}fine`, 3);
+      // Come nel prototipo: «Trasforma il blocco ▸», poi «Inserisci un
+      // blocco… /», con la sua figura.
+      expect(contextLabels(menu).slice(0, 2)).toEqual([t("editor_menu.transform_block"), t("editor_menu.insert_block")]);
+      expect(entryOf(menu, t("editor_menu.insert_block"))).toMatchObject({ icon: "plus", chord: "/" });
+      // La testata dice come comincia il paragrafo, dalla sua prima riga.
+      expect(menu?.target.name).toBe("Un paragrafo");
+      expect(at(ed, view, `Un paragrafo${nl}fine`, `Un paragrafo${nl}fi`.length)?.target.name).toBe("Un paragrafo");
       entryOf(menu, t("editor_menu.insert_block"))!.run!();
       expect(ed.buffer.getDoc()).toBe(`Un paragrafo${nl}/${nl}fine`);
       expect(view().state.selection.main.head).toBe("Un paragrafo\n/".length);

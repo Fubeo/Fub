@@ -11,8 +11,10 @@ Il tasto destro, il tasto Menu o Maiusc+F10 aprono in ogni editor un menu con
 le stesse parti, nello stesso ordine; una parte vuota non c'è.
 
 1. **La testata**, in una riga: che cosa sta sotto il puntatore, con l'icona
-   d'accento, la specie in grassetto e il nome in grigio, per esempio «Titolo 2
-   Formula» o «Link alla nota Media».
+   d'accento, la specie in grassetto e il nome, per esempio «Titolo 2
+   Formula», «Link alla nota Media» o «Paragrafo La mostra apre il 20 marzo
+   nella…» (le prime parole del paragrafo, al più 34 caratteri; «vuoto» su una
+   riga vuota).
 2. **La barra degli appunti**: Taglia, Copia e Incolla alla pari, su un fondo
    tenue, se almeno due si possono fare; con uno solo, «Incolla» è una voce
    come le altre.
@@ -21,8 +23,12 @@ le stesse parti, nello stesso ordine; una parte vuota non c'è.
 5. «Dai plugin ▸», dopo le voci di Fub.
 6. In fondo, in rosso, ciò che cancella.
 
-Ogni voce sta in una riga sola: l'icona, il nome e a destra, in grigio e in
-monospazio, la scorciatoia o la freccia del sottomenu. Una spiegazione non va
+Ogni voce sta in una riga sola: l'icona da 16 nel suo posto da 24 (d'accento
+quando la voce è accesa), il nome e a destra, in grigio e in monospazio, la
+scorciatoia o la freccia del sottomenu. La scorciatoia si scrive coi tasti
+separati da uno spazio e coi nomi della tastiera italiana: «Ctrl K», «Ctrl
+Maiusc V», «Canc»; a chi ascolta arriva com'è (`aria-keyshortcuts`). Fuori dai
+menu (suggerimenti, spazio comandi) resta la forma «Ctrl+K». Una spiegazione non va
 mai a capo: sta a destra in grigio, tagliata se non ci sta. Una voce che offre
 due o tre gesti col loro segno, come **Copia come**, li tiene nella riga
 invece che in un sottomenu: tre tastini coi segni di Markdown, HTML e testo
@@ -54,9 +60,9 @@ pastiglia da un pezzo all'altro, come il menu, lo dichiara sul contenitore
 (`markGlideHost`), e lì i pezzi non mettono il loro fondo. Il catalogo li
 mostra nella scena `kit-lingua` del banco (`bench/kit.html?lingua`).
 
-Nessun menu scrive i tasti per muoversi dentro di lui (frecce, Invio, Esc):
-li mostra la riga dei suggerimenti. Una scorciatoia con un modificatore, come
-Ctrl+Invio, è un gesto e si scrive.
+Le voci non scrivono i tasti per muoversi nel menu (frecce, Invio, Esc): li
+mostra la riga dei suggerimenti, o il piede dei tasti del menu della maniglia.
+Una scorciatoia con un modificatore, come Ctrl Invio, è un gesto e si scrive.
 
 **La scelta è una sola**, fra la barra e l'elenco: la indica una pastiglia che
 scivola da una voce all'altra, o nella barra una linguetta chiara e rialzata.
@@ -72,8 +78,9 @@ l'elenco tiene prima le voci del menu che corrispondono e poi, sotto «Altri
 comandi», quelle che si trovano solo scrivendo. Backspace torna indietro, Esc
 svuota la ricerca prima di chiudere il menu. Se non trova niente offre «Cerca
 … fra tutti i comandi», con a destra il suo tasto.
-Lì stanno Incolla senza formattazione, i comandi del vault dichiarati per il
-«/», Cerca nel documento, Seleziona tutto e le voci in più dell'editor. «Cerca
+Lì stanno Incolla senza formattazione (che ha anche Ctrl Maiusc V), i comandi
+del vault dichiarati per il «/», Cerca nel documento, Cerca nel vault (sul
+testo scelto), Seleziona tutto e le voci in più dell'editor. «Cerca
 nel documento» c'è dove l'editor ha la sua barra di ricerca: note, documenti
 di Word, codice; non su PDF, immagini, fogli e lavagne.
 
@@ -97,8 +104,8 @@ In una nota Markdown in scrittura le voci del posto sono:
 
 | Sotto il puntatore | Voci |
 |---|---|
-| Testo | Incolla, Trasforma il blocco ▸, Inserisci un blocco…, Copia il link a questo punto |
-| Selezione | la barra degli appunti, Copia come (i tre formati nella riga), Collega a una nota…, Estrai in una nota nuova |
+| Testo | Incolla; Trasforma il blocco ▸, Inserisci un blocco… (`/`); Copia il link a questo punto |
+| Selezione | la barra degli appunti; Collega a una nota… (Ctrl K), Copia come (i tre formati nella riga); Estrai in una nota nuova |
 | Link alla nota | Apri, Apri a lato, Copia il link, Togli il link |
 | Indirizzo web | Apri nel browser, Copia l'indirizzo, Togli il link |
 | Immagine | Apri nel visore, Copia l'immagine, Larghezza ▸, Sostituisci l'immagine…, Mostra nell'esploratore |
@@ -203,10 +210,16 @@ parametri (`markdown.table` con `rows` e `cols`).
 | Audio e video | sul lettore il menu del sistema; attorno, il link `![[ ]]` e apri esterno |
 
 In Scrittura la maniglia di un blocco apre il suo menu col clic e col
-tasto destro, con la testata «Blocco» e l'inizio del testo: Trasforma in ▸,
-Colore ▸ (Testo e Fondo, coi nove colori dei Blocchi), Duplica, Copia il link
-al blocco, Sposta su e giù, Affianca in colonne, e «Elimina il blocco» per
-ultimo. La griglia delle tabelle in Live ha la testata «Tabella», la barra
+tasto destro. In cima, al posto della testata, il campo «Cerca un'azione…»
+col fuoco; sotto, quieto, il nome del blocco («Testo», «Riquadro», «3
+blocchi»); poi Trasforma in ▸, Colore ▸ (Testo e Fondo, coi nove colori dei
+Blocchi), Duplica (Ctrl D), Copia il link al blocco, ed Elimina (Canc) per
+ultimo; in fondo il piede «↵ sceglie · → apre · Esc chiude». Scrivendo nel
+campo l'elenco si filtra e la prima trovata è accesa: Invio la sceglie, ↓ va
+alle voci e ↑ dalla prima torna al campo, Esc svuota il campo prima di
+chiudere. Sposta su e giù (che hanno Ctrl Maiusc ↑ ↓ e il trascinamento) e
+Affianca in colonne (che è anche il trascinamento accanto a un blocco) non
+rubano un posto: si trovano scrivendo, sotto «Altri comandi». La griglia delle tabelle in Live ha la testata «Tabella», la barra
 degli appunti, Inserisci ▸, Sposta ▸, Ordina la colonna ▸, Allinea la colonna
 ▸, Svuota la cella, e in fondo Elimina la riga e Elimina la colonna.
 
