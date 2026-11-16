@@ -21,6 +21,23 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 /// is released only after this result arrives, so a retained workspace guard
 /// deterministically turns into a failed assertion instead of a test hang.
 const WRITER_LIMIT: Duration = Duration::from_secs(2);
+/// Tetto di sicurezza per l'apertura del secondo vault nella prova sul
+/// registro delle sessioni. A differenza di [`WRITER_LIMIT`], chi apre fa un
+/// lavoro vero (percorsi canonici, lease di scrittura, recovery degli snapshot,
+/// la prima indicizzazione) che su una macchina molto carica dura dei secondi.
+/// Il tetto non decide l'esito: il provider si rilascia solo dopo che è
+/// arrivato l'esito dell'apertura, quindi un `query_index` che tiene le
+/// sessioni lascia l'apertura ferma per tutto il tetto, mentre uno corretto la
+/// lascia finire appena ha fatto il suo lavoro. Largo, misura solo quanto ci
+/// mette il caso rotto a dirlo.
+const OPEN_LIMIT: Duration = Duration::from_secs(30);
+/// Quanto il provider sospeso di [`BlockingCustomIndex`] aspetta di essere
+/// rilasciato prima di arrendersi. Deve superare ogni attesa che una prova fa
+/// mentre lo tiene sospeso ([`WRITER_LIMIT`], [`OPEN_LIMIT`]): se si
+/// liberasse da sé prima, libererebbe anche il prestito che un difetto gli
+/// lascia addosso, e la prova vedrebbe passare lo scrittore o l'apertura che
+/// doveva bocciare. Nel caso buono il rilascio arriva subito.
+const RELEASE_LIMIT: Duration = Duration::from_secs(60);
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -113,7 +130,7 @@ impl IndexProvider for BlockingCustomIndex {
         self.release
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .recv_timeout(TIMEOUT)
+            .recv_timeout(RELEASE_LIMIT)
             .map_err(|_| PluginError::Internal("query probe was not released".into()))?;
         Ok(answer(serde_json::json!({ "source": "old" })))
     }
@@ -332,14 +349,14 @@ fn host_query_releases_the_sessions_before_index_provider_query() {
     let opener = std::thread::spawn(move || {
         let _ = opened_tx.send(opening.open(&second_root).map(drop));
     });
-    let opened = opened_rx.recv_timeout(WRITER_LIMIT);
+    let opened = opened_rx.recv_timeout(OPEN_LIMIT);
 
     release_tx.send(()).expect("release query probe");
     let query_result = call.join().expect("query thread does not panic");
     opener.join().expect("opener does not panic");
     assert!(
         opened.is_ok(),
-        "a second vault did not open within {WRITER_LIMIT:?} while \
+        "a second vault did not open within {OPEN_LIMIT:?} while \
          IndexProvider::query was suspended: query_index held the sessions"
     );
     opened
