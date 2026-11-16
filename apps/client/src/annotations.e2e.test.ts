@@ -11,6 +11,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommandSpec } from "./host/contract";
 import type { FakeHost } from "./host/fake";
+import { FIRST_IMPORT_MS, waiter } from "./test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -121,14 +122,7 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 3000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(3000);
 
 async function open(doc: string): Promise<void> {
   const { openDocument } = await import("./panels/document");
@@ -227,7 +221,7 @@ describe("«Annota» dal visore del PDF", () => {
   it("senza la feature `draw` il visore non offre «Annota»", async () => {
     await start(false);
     await open(PDF);
-    await waitFor("il visore si monta", () => focusedPane().querySelector(".media-pdf-toolbar") !== null);
+    await waitFor("il visore si monta", () => focusedPane().querySelector(".media-pdf-toolbar") !== null, FIRST_IMPORT_MS);
     expect(annotateButton()).toBeNull();
   });
 });

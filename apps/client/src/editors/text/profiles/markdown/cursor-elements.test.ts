@@ -41,6 +41,20 @@ describe("gli elementi del cursore", () => {
     expect(names(mainElements(state("a [[Nota]] b", [[5]])))).toEqual(["wikilink"]);
   });
 
+  it("in una nota CRLF la formula sulla seconda riga del paragrafo sta dove sta in LF (#394)", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const doc = `riga uno${nl}riga $x+y$ due`;
+      const at = (pos: number) => EditorState.create({
+        doc,
+        selection: { anchor: pos },
+        extensions: [markdown({ base: markdownGrammar }), cursorElements, ...(nl === "\n" ? [] : [EditorState.lineSeparator.of(nl)])],
+      });
+      const open = "riga uno\nriga $".length;
+      expect(names(mainElements(at(open))), JSON.stringify(nl)).toEqual(["math"]);
+      expect(names(mainElements(at(open + "x+y$".length))), JSON.stringify(nl)).toEqual([]);
+    }
+  });
+
   it("ogni cursore ha il suo stato, e il principale è quello della barra", () => {
     const current = state("**a** e *b*", [[2], [9]]);
     expect(current.field(cursorElements).map(names)).toEqual([["strong"], ["em"]]);

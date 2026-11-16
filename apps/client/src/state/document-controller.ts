@@ -3570,9 +3570,19 @@ function takeGesture(pane: string, doc: string): boolean {
 /// restano lì e non finiscono nel documento. Il fuoco è ancora dell'apertura
 /// se sta dov'era al gesto (`asked`), se non sta da nessuna parte, o se sta in
 /// un riquadro (l'editor di prima, che l'apertura sostituisce).
-function focusStillOpening(asked: Element | null): boolean {
+///
+/// Non lo è più se sta già dentro il documento aperto, nel riquadro col fuoco
+/// (#395): la superficie si monta prima che l'apertura finisca, e chi usa Fub
+/// può esserci entrato (il Tab dalla lavagna vuota al suo primo pulsante, un
+/// clic su una scheda). Riportarlo all'editor glielo toglierebbe di mano.
+/// `editorEl` tiene la superficie del solo documento mostrato: quella di prima
+/// si toglie (`detachSurface`) prima che la nuova si monti.
+function focusStillOpening(asked: Element | null, doc: string): boolean {
   const now = document.activeElement;
-  if (now === null || now === asked || now === document.body || now === document.documentElement) return true;
+  if (now === null || now === document.body || now === document.documentElement) return true;
+  const target = panes.get(layout.focus);
+  if (target?.shown?.k === "doc" && target.shown.doc === doc && target.editorEl.contains(now)) return false;
+  if (now === asked) return true;
   for (const r of panes.values()) if (r.root.contains(now)) return true;
   return false;
 }
@@ -3622,7 +3632,7 @@ export async function openDocument(id: string, options: OpenOptions = {}): Promi
       // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
       // selezione sarebbe quello del documento precedente.
       await publishContext();
-      if (selectedMode(panes.get(layout.focus))?.presentation !== "rendered" && focusStillOpening(asked)) focusEditor();
+      if (selectedMode(panes.get(layout.focus))?.presentation !== "rendered" && focusStillOpening(asked, id)) focusEditor();
     });
   } finally {
     releaseIntent();

@@ -162,6 +162,17 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   // proprietà; la seconda con la pagina a tutta larghezza.
   pagina: inNote("Il **treno**", 6, "---\nicon: 🧳\ncover: ../Risorse/schema.png\ntags: [viaggio]\n---\n" + NOTE),
   "pagina-larga": inNote("Il **treno**", 6, "---\nicon: 🧳\ncssclasses: [wide]\n---\n" + NOTE),
+  // La testata in Scrittura e in Lettura (T6, E3), da guardare con
+  // `?properties=visible`: copertina, icona, titolo, quattro proprietà in
+  // evidenza e «Altre 2»; poi senza frontmatter, illeggibile, con la
+  // copertina che non si trova. Il cursore resta fuori: la testata a riposo.
+  testata: {
+    text: "---\nicon: 🧳\ncover: ../Risorse/schema.png\ntipo: Viaggio\nstato: In corso\npartenza: 2027-03-20\npersone: [Anna, Luca]\nluogo: Lisbona\nbudget:\ntags: [viaggio]\n---\n" + NOTE,
+    cursor: null,
+  },
+  "testata-vuota": { text: NOTE, cursor: null },
+  "testata-illeggibile": { text: "---\nicon: 🧳\nuna riga che non è una chiave\nstato: In corso\n---\n" + NOTE, cursor: null },
+  "testata-senza-immagine": { text: "---\ncover: ../Risorse/non-c-e.png\nstato: In corso\n---\n" + NOTE, cursor: null },
   // I colori del contenuto (K1): i nove del testo e i nove del fondo, uno per
   // riga, col cursore fuori.
   colori: at([

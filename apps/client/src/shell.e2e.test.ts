@@ -37,6 +37,7 @@
 // `happy-dom` non c'è né CSS né misura, quindi si asserisce su *cosa* c'è e
 // mai su *dove*.
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { waiter } from "./test-wait";
 import {
   appendToTextEditor as typeInEditor,
   mountedTextEditors as editorViews,
@@ -230,17 +231,9 @@ async function microtasks(rounds = 8): Promise<void> {
   for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
-/// Aspetta che una condizione diventi vera, o fallisce dicendo cosa aspettava.
-/// Serve ai due pezzi che hanno un timer loro — il debounce della ricerca e
-/// quello del salvataggio — e a nient'altro.
-async function waitFor(thing: string, cond: () => boolean, within = 2000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+/// Aspetta che una condizione diventi vera, contando i giri del ciclo degli
+/// eventi invece dell'orologio (`test-wait.ts`, #396).
+const waitFor = waiter(2000);
 
 /// Le letture di un documento, in ordine: quelle semplici e quelle di una
 /// sessione sotto la sua chiave di apertura. Tutte e due hanno l'id per primo.
@@ -833,6 +826,42 @@ describe("navigazione accessibile dell'esploratore", () => {
     await second;
     await settle();
     expect(textToVideo()).toContain("pane, latte");
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+  });
+
+  it("un'apertura che finisce tardi non toglie il fuoco a chi è già entrato nel documento aperto", async () => {
+    // #395: la superficie si monta prima che l'apertura finisca (il contesto
+    // si pubblica dopo). Chi intanto entra nel documento (il Tab della lavagna
+    // vuota al suo primo pulsante) ci resta: la fine dell'apertura riportava
+    // il fuoco all'editor, e il pulsante lo perdeva.
+    const host = await start(VAULT);
+    const controller = await import("./state/document-controller");
+    (document.querySelector<HTMLElement>("#file-list .tree-row") ?? document.body).focus();
+    const unlock = host.throttle("setActiveContext");
+    const opening = controller.openDocument("note/Spesa.md", { gesture: true });
+    for (let i = 0; i < 40 && !textToVideo().includes("pane, latte"); i++) await settle();
+    expect(textToVideo()).toContain("pane, latte");
+    const surface = document.querySelector<HTMLElement>(".pane.focus .pane-editor > *");
+    expect(surface).not.toBeNull();
+    // Un controllo del documento, come «Scrivi una scheda» della lavagna vuota.
+    const control = document.createElement("button");
+    surface?.append(control);
+    control.focus();
+    unlock();
+    await opening;
+    await settle();
+    expect(document.activeElement).toBe(control);
+    control.remove();
+
+    // Col fuoco ancora dove era al gesto, l'editor lo prende come prima.
+    (document.querySelector<HTMLElement>("#file-list .tree-row") ?? document.body).focus();
+    const again = host.throttle("setActiveContext");
+    const second = controller.openDocument("note/Riunione.md", { gesture: true });
+    await settle();
+    again();
+    await second;
+    await settle();
+    expect(textToVideo()).toContain("riunione");
     expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
   });
 

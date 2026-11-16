@@ -3,6 +3,7 @@
 // callout `[!columns]` con un `[!column]` annidato per colonna, da due a
 // quattro, la stessa forma che la Lettura rende in griglia (`render.ts`).
 import { ChangeSet, type ChangeSpec, type EditorState, type TransactionSpec } from "@codemirror/state";
+import { withLineBreaks } from "../../../line-breaks";
 import { type Block } from "./model";
 import { type BlockRun, siblingsOf } from "./move";
 
@@ -102,9 +103,10 @@ export function dropAsColumn(state: EditorState, blocks: readonly Block[], run: 
   } else if (side === "left") {
     // Dopo la riga `> [!columns]`, prima della prima colonna.
     const head = doc.lineAt(host.from);
-    insert = head.text + nl + added + between(nl) + doc.sliceString(head.to + 1, host.to);
+    insert = head.text + nl + added + between(nl) + state.sliceDoc(head.to + 1, host.to);
   } else {
-    insert = hostText + between(nl) + added;
+    // `hostText` va a capo con "\n" (`sliceString`): prende quelli della nota.
+    insert = withLineBreaks(state, hostText) + between(nl) + added;
   }
   // La tratta se ne va con le righe vuote che la separavano dal vicino sopra,
   // o da quello sotto se è la prima.

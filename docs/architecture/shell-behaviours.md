@@ -98,7 +98,9 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   portato altrove: se sta ancora dov'era al gesto, da nessuna parte o in un
   riquadro. Un documento lento da aprire (un `.docx` da impaginare) non toglie
   il fuoco al lanciatore, a un dialogo o a un campo aperti intanto, e il loro
-  Invio non finisce nel documento.
+  Invio non finisce nel documento. Se il fuoco sta già dentro il documento
+  aperto (la superficie si monta prima che l'apertura finisca, e il Tab della
+  lavagna vuota porta al suo primo pulsante), resta dov'è.
 - **Aperture decise dalla shell.** Le aperture vanno in fila e vince l'ultima
   chiesta. La prima nota di un vault senza schede e la nota d'avvio
   (`files.startup`) la shell le decide da sola, prima di un'attesa

@@ -20,6 +20,7 @@ import type { FakeHost } from "./host/fake";
 import type { SettingEntry } from "./host/contract";
 import type { EditorSurface, SurfaceRegistration } from "./editors/core/registry";
 import { mountedTextEditors, undoDepth } from "./editors/text/test-support";
+import { FIRST_IMPORT_MS, waiter } from "./test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -197,14 +198,7 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 2000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(2000);
 
 async function open(doc: string): Promise<void> {
   const { openDocument } = await import("./panels/document");
@@ -213,7 +207,7 @@ async function open(doc: string): Promise<void> {
   // Il codice di un editor di un componente (la lavagna) arriva con un
   // `import()` la prima volta: si aspetta che il riquadro abbia la sua
   // modalità.
-  await waitFor(`${doc} montato`, () => paneMode() !== undefined);
+  await waitFor(`${doc} montato`, () => paneMode() !== undefined, FIRST_IMPORT_MS);
 }
 
 const MODE_COMMANDS = ["shell.mode.reading", "shell.mode.live", "shell.mode.source"];
