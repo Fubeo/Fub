@@ -400,6 +400,48 @@ describe("la barra di un riquadro", () => {
     editor.remove();
   });
 
+  it("passando a un'altra superficie con la stessa barra, i pulsanti restano e seguono la nuova", async () => {
+    const first = fakeActions(["markdown.bold", "markdown.italic"]);
+    const second = fakeActions(["markdown.bold", "markdown.italic"]);
+    let surface = surfaceWith(first.actions);
+    const bar = createFormatBar({ surface: () => surface, writing: () => true, focusPane: () => {}, runCommand: () => {} });
+    document.body.append(bar.element);
+    bars.push(bar);
+    bar.update(SPECS);
+    const bold = bar.element.querySelector<HTMLButtonElement>('[data-command="markdown.bold"]')!;
+    surface = surfaceWith(second.actions);
+    second.set("markdown.bold", { enabled: true, active: true });
+    bar.update(SPECS);
+    // Lo stesso nodo, non uno rifatto: cambiare scheda non ridisegna la barra.
+    expect(bar.element.querySelector('[data-command="markdown.bold"]')).toBe(bold);
+    expect(bold.getAttribute("aria-pressed")).toBe("true");
+    expect(first.listeners.size).toBe(0);
+    expect(second.listeners.size).toBe(1);
+    second.set("markdown.bold", { enabled: true, active: false });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(bold.getAttribute("aria-pressed")).toBe("false");
+    // Una scorciatoia diversa è un'altra barra: il suggerimento la deve dire.
+    const third = fakeActions(["markdown.bold", "markdown.italic"]);
+    surface = surfaceWith({ ...third.actions, chord: (id) => (id === "markdown.bold" ? "Mod-g" : null) });
+    bar.update(SPECS);
+    const again = bar.element.querySelector<HTMLButtonElement>('[data-command="markdown.bold"]')!;
+    expect(again).not.toBe(bold);
+    expect(again.getAttribute("aria-keyshortcuts")).toBe("Control+G");
+    expect(second.listeners.size).toBe(0);
+  });
+
+  it("misura la riga al fotogramma, non dentro il ridisegno", async () => {
+    const fake = fakeActions(["markdown.bold", "markdown.italic"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    let reads = 0;
+    Object.defineProperty(bar.element, "scrollWidth", { configurable: true, get: () => (reads++, 0) });
+    bar.update(SPECS);
+    bar.update(SPECS);
+    expect(reads).toBe(0);
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(reads).toBe(1);
+  });
+
   it("smontata, non segue più la superficie", () => {
     const fake = fakeActions(["markdown.bold"]);
     const { bar } = mount(surfaceWith(fake.actions));

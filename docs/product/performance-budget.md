@@ -435,13 +435,13 @@ WebView è WebKitGTK 2.54 con la GPU, sullo schermo vero, quattro corse per
 parte. Zero vuol dire nessun compito oltre 50 ms. La pagina com'è sta sotto
 un fotogramma o due, quindi la cifra va a scatti di 16 ms.
 
-Ciò che resta, a pagina quattro volte più lenta, è soprattutto la vista
-dell'editor: ogni cambio di scheda smonta la superficie e ne monta una nuova
-(circa 17 ms), le dà il testo (`setDoc`, circa 11 ms) e la dispone la prima
-volta (circa 17 ms di stile e layout, al fuoco), più la misura di CodeMirror
-nel fotogramma dopo (circa 9 ms). Toglierla vuol dire tenere vive le
-superfici delle schede recenti, o riusare la vista del riquadro: una scelta
-sul ciclo di vita della superficie, non ancora fatta.
+Il costo più grande era la vista dell'editor rifatta a ogni cambio: tornando
+su una scheda di testo già aperta la superficie resta
+[da parte](../architecture/parked-surfaces.md), e la barra di formato non si
+rifà. Nella WebView vera il cambio fra tre schede, con la nota lunga, è
+passato da 100 a 29 ms di thread bloccato (mediana) e da 96 a 28 ms dal tasto
+al fotogramma ([la misura](../misure/2026-11-16-linux-webkitgtk-cambio-scheda.md)):
+ancora sopra un fotogramma. Aprire una nota senza scheda monta da capo.
 
 Il banco non sta nella CI. La guardia in CI è il test del cambio in
 `panels/document.test.ts` (un'apertura dipinge ogni linguetta una volta e
