@@ -155,3 +155,36 @@ describe("la barra di ogni vault (#237 R07)", () => {
     expect(lastShownPanel()).toBe("files");
   });
 });
+
+describe("l'icona della rail fa la strada della scorciatoia (#411 B-05)", () => {
+  let unmount: (() => void) | undefined;
+
+  beforeEach(() => {
+    document.body.innerHTML = PAGE;
+    document.getElementById("search-panel")!.innerHTML = '<input id="search-input" value="banco">';
+    document.getElementById("files-panel")!.innerHTML =
+      '<ul id="file-list" role="tree"><li role="treeitem" tabindex="0">Benvenuto</li></ul>';
+    unmount = mountRail();
+  });
+
+  afterEach(() => unmount?.());
+
+  const railButton = (panel: string) =>
+    document.querySelector<HTMLButtonElement>(`#views-ribbon .rail-btn[data-panel="${panel}"]`)!;
+
+  it("il clic sulla lente porta il fuoco nel campo della ricerca, col testo scelto", () => {
+    showPanel("files");
+    railButton("search").focus();
+    railButton("search").click();
+    const input = document.getElementById("search-input") as HTMLInputElement;
+    expect(document.activeElement).toBe(input);
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, "banco".length]);
+    expect(lastShownPanel()).toBe("search");
+  });
+
+  it("il clic sui file entra nell'albero, come il comando", () => {
+    showPanel("search");
+    railButton("files").click();
+    expect(document.activeElement).toBe(document.querySelector('#file-list li[role="treeitem"]'));
+  });
+});

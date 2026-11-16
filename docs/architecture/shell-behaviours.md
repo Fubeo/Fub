@@ -83,7 +83,11 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   solo ciò che si vede (`panels/explorer-view.ts`, `explorer-motion.ts`).
 - **Binario.** Riordino e nascondimento sono `chrome.rail.order` e
   `chrome.rail.hidden`; la voce «Ripristina ordine e icone predefiniti» li
-  riporta a `[]`.
+  riporta a `[]`. Il clic su Cerca o su Note fa la strada della loro
+  scorciatoia (`enterPanel` in `panels/sidebar.ts`): la barra si apre e il
+  fuoco entra nel campo della ricerca, col testo già scritto selezionato, o
+  nell'albero; un secondo clic sull'icona del pannello davanti chiude la
+  barra.
 - **Grafo.** La tela ha i comandi di zoom e «Inquadra tutto»; la legenda è un
   insieme di interruttori di visibilità per gruppo, che si compone con la
   maschera della linea del tempo.
