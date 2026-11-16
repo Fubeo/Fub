@@ -37,6 +37,20 @@ export const ALLOWED = Object.freeze(["transform", "opacity", "translate", "scal
 /// Quanto può durare un'uscita, ritardo compreso (ms). È la regola 5.
 export const EXIT_LIMIT_MS = 140;
 
+/// Le opzioni di Chromium di questo banco, oltre a quelle di tutti.
+///
+/// `--disable-partial-raster`: le regole 1 e 4 confrontano due scatti al pixel,
+/// arrivati per strade diverse. Col raster parziale Chromium, quando una
+/// tessera cambia solo in parte (l'immagine che esce lascia scoperta la pagina
+/// sotto), rifà solo il rettangolo toccato sopra la tessera di prima, e
+/// l'antialiasing di ciò che quel rettangolo taglia può uscire di qualche
+/// livello diverso da come esce rifatto intero. Le Preferenze fallivano così
+/// la regola 4 circa una volta su quattro per un pixel solo, sempre lo stesso
+/// (l'angolo della prima lettera del titolo della nota, 94 contro 96 su 255),
+/// che nessuna corsa aveva mosso; col raster intero, 0 su 16. La regola resta
+/// al pixel: si toglie la strada dallo scatto, non la tolleranza dal confronto.
+export const BROWSER_ARGS = Object.freeze(["--disable-partial-raster"]);
+
 /// Le corse di un'uscita che durano più di `limit`, ritardo compreso. `runs`
 /// sono `{ target, pseudo, duration, delay }` delle corse partite col gesto
 /// che disfa.

@@ -72,6 +72,7 @@ import { SETTINGS_WITH_THEIR_OWN_GESTURE } from "../ui/shell-ids.generated";
 import { errorText } from "../host/errors";
 import { LANGUAGE_KEY, catalogLanguages, onLanguage, plural, t, type Key } from "../i18n/strings";
 import {
+  MOTION_KEY,
   SERIES_THEME_ID,
   THEME_KEY,
   cancelThemePreview,
@@ -1062,6 +1063,7 @@ async function renderForm(): Promise<HTMLElement[]> {
       }
       const item = renderRow(entry);
       if (entry.spec.key === FRAME_KEY) await decorateFrame(item, entry);
+      if (entry.spec.key === MOTION_KEY) decorateMotion(item, entry);
       parts.body.append(item);
     }
     if (themes.length > 0 && group.rows.some((entry) => entry.spec.key === THEME_KEY)) {
@@ -1109,6 +1111,20 @@ async function decorateFrame(item: HTMLElement, entry: SettingEntry): Promise<vo
     text?.append(row("setting-source", t("settings.frame.reopen")));
   }
   if (control?.getAttribute("role") === "radiogroup") settleRadioGroup(control);
+}
+
+/// Il perché del valore di partenza delle animazioni, quando non è «segue il
+/// sistema». Il default lo decide l'host (`fub_host::settings::motion_default`),
+/// e oggi è «ridotte» per una sola ragione: la WebKitGTK di questo sistema
+/// sfarfalla dopo un'animazione. Un'altra ragione domani vorrà la sua frase.
+function decorateMotion(item: HTMLElement, entry: SettingEntry): void {
+  if (entry.spec.kind.kind !== "choice" || entry.spec.kind.default !== "reduced") return;
+  const note = row("setting-source", t("settings.motion.webkitgtk_default"));
+  note.id = `setting-${entry.spec.key}-default-why`;
+  item.querySelector(".setting-text")?.append(note);
+  const control = item.querySelector<HTMLElement>("select, [role=radiogroup]");
+  const existing = control?.getAttribute("aria-describedby");
+  control?.setAttribute("aria-describedby", [existing, note.id].filter(Boolean).join(" "));
 }
 
 function disableControl(control: HTMLElement | null): void {

@@ -489,3 +489,44 @@ describe("la cornice della finestra", () => {
     expect(document.querySelector('[data-setting-key="chrome.frame"]')!.textContent).toContain("finestra senza cornice nativa");
   });
 });
+
+describe("il perché delle animazioni ridotte di partenza", () => {
+  const motion = (byDefault: string, value: string, source: SettingEntry["source"] = "default") => entry(
+    "appearance.motion",
+    {
+      kind: "choice",
+      default: byDefault,
+      options: [
+        { value: "", label: "Come il sistema" },
+        { value: "calm", label: "Calme" },
+        { value: "reduced", label: "Ridotte" },
+      ],
+    },
+    value,
+    source,
+    "Aspetto",
+  );
+  const rowOf = () => document.querySelector('[data-setting-key="appearance.motion"]')!;
+  const why = "Su questo sistema partono ridotte";
+
+  it("dove l'host parte da «ridotte» la riga dice perché, e il campo lo annuncia", async () => {
+    await openPanel([motion("reduced", "reduced")]);
+    const note = document.getElementById("setting-appearance.motion-default-why")!;
+    expect(note.textContent).toContain(why);
+    expect(note.textContent).toContain("WebKitGTK");
+    expect(rowOf().contains(note)).toBe(true);
+    const control = document.getElementById("setting-appearance.motion")!;
+    expect(control.getAttribute("aria-describedby")!.split(" ")).toContain(note.id);
+  });
+
+  it("la nota resta anche dopo una scelta, perché spiega il valore di partenza", async () => {
+    await openPanel([motion("reduced", "", "machine")]);
+    expect(rowOf().textContent).toContain(why);
+  });
+
+  it("dove si parte dal sistema la nota non c'è", async () => {
+    await openPanel([motion("", "")]);
+    expect(rowOf().textContent).not.toContain(why);
+    expect(document.getElementById("setting-appearance.motion-default-why")).toBeNull();
+  });
+});
