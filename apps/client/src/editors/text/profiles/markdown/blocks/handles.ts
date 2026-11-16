@@ -41,9 +41,16 @@ import {
 } from "./place";
 import { animate, halt, liveState, type Motion, motionLevel, onFrame } from "../../../../../moto";
 import { markPresence } from "../../../../core/presence";
+import { dropOffers, type SurfaceDropDocument, watchDropOffers } from "../../../../core/registry";
+import { type DropTarget, placeTargets, targetAt } from "./drop-targets";
+import { edgeDepth, edgeScroll, type EdgeScroll } from "./autoscroll";
 import type { Teardown } from "../../../../../ui/lifetime";
 
 export interface BlocksOptions {
+  /// La nota e il suo vault: i posti fuori dalla colonna (i titoli della sua
+  /// Struttura) si chiedono per lei. Senza, il blocco staccato dal testo non
+  /// ha bersagli e torna al suo posto.
+  readonly document?: () => SurfaceDropDocument | null;
   /// Il nome della pagina, per il link al blocco: `[[Pagina#^id]]`.
   readonly page?: () => string | null;
   /// Dice all'utente com'è andata un'azione che non si vede nel testo.
@@ -232,7 +239,7 @@ interface Hold {
   readonly held: number;
   readonly grab: number;
   /// Lo scorrimento e la colonna del testo, letti alla presa.
-  readonly scroller: { readonly top: number; readonly left: number };
+  readonly scroller: { readonly top: number; readonly left: number; readonly bottom: number };
   /// Quanto (px) le altezze di CodeMirror sbagliano dove sta davvero il
   /// blocco: un widget di blocco col margine (la testata della pagina) non
   /// entra nella mappa delle altezze. Letto alla presa, vale per ogni misura.
@@ -247,6 +254,28 @@ interface Hold {
   /// movimento del puntatore non la ricalcola.
   partedKey: string;
   readonly column: { readonly left: number; readonly right: number };
+  /// I bordi del testo (la colonna senza il suo rientro), px dello schermo:
+  /// oltre 90 px da lì il blocco si stacca.
+  readonly text: { readonly left: number; readonly right: number };
+  /// Staccato dal testo: è il cartellino sotto il puntatore, nello strato
+  /// sopra la finestra, e il posto è tornato all'origine.
+  free: boolean;
+  /// La scala del cartellino (largo al più 250 px).
+  readonly freeScale: number;
+  /// I bersagli fuori dalla colonna, chiesti alla shell quando il blocco si
+  /// stacca e di nuovo quando la finestra scorre o la shell li ridisegna, e
+  /// quello sotto il puntatore.
+  targets: readonly DropTarget[];
+  hot: DropTarget | null;
+  /// Gli ascolti accesi mentre il blocco è staccato (lo scorrimento della
+  /// finestra, i ridisegni della shell) e la rimisura in attesa.
+  watching: Teardown | null;
+  remeasure: number | null;
+  /// Il cartellino lasciato senza bersaglio torna a casa da questa scala.
+  shrunk: number | null;
+  /// Lo scorrimento al bordo: il suo stato e il ciclo che lo fa.
+  readonly edge: EdgeScroll;
+  scrolling: Teardown | null;
   /// Il titolo della sezione d'origine, e l'ultima cosa annunciata.
   readonly section: string | null;
   said: string;
@@ -298,8 +327,18 @@ function visibleLeft(view: EditorView, block: Block, text: number): number {
   return box.width > 0 ? Math.min(text, box.left) : text;
 }
 
-/// Il margine dove la vista scorre da sola durante un trascinamento.
-const EDGE = 40;
+/// Oltre quanti px dal testo il blocco in mano si stacca (px dello schermo).
+const FREE_PX = 90;
+/// Il cartellino: largo al più 250 px e mai più dell'86% del blocco, col suo
+/// angolo 14 px a destra e 16 px sotto il puntatore.
+const FREE_WIDTH = 250;
+const FREE_SCALE = 0.86;
+const FREE_X = 14;
+const FREE_Y = 16;
+/// Il rimpicciolimento allo stacco, come nel prototipo (`.lift-c`:
+/// `transform .24s cubic-bezier(0.3, 1.45, 0.5, 1)`).
+const FREE_MS = 240;
+const FREE_EASING = "cubic-bezier(0.3, 1.45, 0.5, 1)";
 /// Di quanto il puntatore deve muoversi perché un clic diventi un trascinamento.
 const SLOP = 4;
 /// Al tocco, quanto (ms) va tenuto premuto perché il blocco si prenda.
@@ -329,6 +368,25 @@ function tap(): void {
     navigator.vibrate?.(8);
   } catch {
     // Nessun motore aptico: niente.
+  }
+}
+
+/// Mette `el` nello strato sopra la finestra (`on`) o ve lo toglie. Lì non lo
+/// tagliano né lo scorrimento né il riquadro, e resta dov'è nel DOM: la pelle
+/// e le variabili del documento lo raggiungono come prima. Un motore senza
+/// popover lo lascia nella pagina, fisso (`position: fixed` della forma).
+function topLayer(el: HTMLElement, on: boolean): void {
+  if (typeof el.showPopover !== "function") return;
+  try {
+    if (on) {
+      el.setAttribute("popover", "manual");
+      el.showPopover();
+    } else if (el.hasAttribute("popover")) {
+      if (el.matches(":popover-open")) el.hidePopover();
+      el.removeAttribute("popover");
+    }
+  } catch {
+    // Lo strato non c'è: resta fisso nella pagina.
   }
 }
 
@@ -491,6 +549,15 @@ class HandlesView {
   /// Il blocco sotto il punto `(x, y)` della finestra.
   pointAt(x: number, y: number, target: EventTarget | null): void {
     if (this.drag || (target instanceof Node && this.root.contains(target))) return;
+    // La testata della pagina non è un blocco: sopra di lei (e sul
+    // frontmatter che copre) le maniglie non compaiono.
+    if (target instanceof Element && target.closest(".cm-fub-page")) {
+      if (this.hovered) {
+        this.hovered = null;
+        this.schedule();
+      }
+      return;
+    }
     const pos = this.view.posAtCoords({ x, y }, false);
     const blocks = this.view.state.field(blockModel).blocks;
     const found = innermostAt(blocks, pos);
@@ -833,17 +900,9 @@ class HandlesView {
       key.stopPropagation();
       this.endDrag(false);
     }, { capture: true });
-    // Scorrendo, il blocco in mano resta sotto il puntatore.
+    // Scorrendo, il blocco in mano resta sotto il puntatore. Vicino ai bordi
+    // la vista scorre da sola (`edge`), soltanto quando lo si chiede.
     life.listen(this.view.scrollDOM, "scroll", () => this.track());
-    // Vicino ai bordi la vista scorre (lo scorrimento vero è di T2b).
-    const timer = setInterval(() => {
-      if (!drag.moving) return;
-      const box = this.view.scrollDOM.getBoundingClientRect();
-      const speed = drag.y < box.top + EDGE ? -(box.top + EDGE - drag.y) : drag.y > box.bottom - EDGE ? drag.y - (box.bottom - EDGE) : 0;
-      if (speed === 0) return;
-      this.view.scrollDOM.scrollTop += Math.max(-24, Math.min(24, speed / 2));
-    }, 16);
-    life.add(() => clearInterval(timer));
   }
 
   /// Le misure della presa, nelle coordinate dello scorrimento: dove stanno
@@ -914,8 +973,14 @@ class HandlesView {
     if (rows.length === 0) return;
     const scrollDOM = view.scrollDOM;
     const box = scrollDOM.getBoundingClientRect();
-    const scroller = { top: box.top, left: box.left };
+    const scroller = { top: box.top, left: box.left, bottom: box.bottom };
     const content = view.contentDOM.getBoundingClientRect();
+    // I bordi del testo: la colonna senza il suo rientro.
+    const contentStyle = getComputedStyle(view.contentDOM);
+    const text = {
+      left: content.left + (parseFloat(contentStyle.paddingLeft) || 0) * (view.scaleX || 1),
+      right: content.right - (parseFloat(contentStyle.paddingRight) || 0) * (view.scaleX || 1),
+    };
     // Una vista scalata (una scheda sulla lavagna con lo zoom): i rettangoli
     // sono px dello schermo, le altezze di CodeMirror e gli stili px suoi.
     const sx = view.scaleX || 1;
@@ -1029,7 +1094,9 @@ class HandlesView {
     drag.hold = {
       run, sibs, others, geo, place: geo.origin, lean: "none", beside: null,
       el, card, shade, to, slot, left, held, grab, scroller,
-      column: { left: content.left, right: content.right },
+      column: { left: content.left, right: content.right }, text,
+      free: false, freeScale: Math.min(FREE_SCALE, FREE_WIDTH / (width + 2 * CARD_PAD)), targets: [], hot: null, watching: null, remeasure: null, shrunk: null,
+      edge: edgeScroll(), scrolling: null,
       section: sectionAt(state, blocks, span.from, span), said: "",
       skew: Math.abs(skew) < 0.5 ? 0 : skew,
       sx, sy, otherIndex: new Map(others.map((i, k) => [i, k])), partedKey: "",
@@ -1040,6 +1107,10 @@ class HandlesView {
       hold.frames?.();
       hold.frames = null;
       hold.el.style.willChange = "";
+      this.stopScroll(hold);
+      this.unwatchTargets(hold);
+      hold.hot?.hover(false);
+      hold.hot = null;
     });
     // I vicini sotto un blocco alto salgono scivolando, non a scatto.
     this.layout(drag, true);
@@ -1085,6 +1156,11 @@ class HandlesView {
     const state = view.state;
     const blocks = state.field(blockModel).blocks;
     if (indexOf(blocks, drag.key) < 0) return this.endDrag(false);
+    // Oltre 90 px dal testo il blocco si stacca: è il cartellino, e cerca i
+    // suoi bersagli fuori dalla colonna.
+    if (drag.x < hold.text.left - FREE_PX || drag.x > hold.text.right + FREE_PX) return this.trackFree(drag, hold);
+    if (hold.free) this.unfree(hold, true);
+    this.edgeScroll(drag, hold);
     const scrollDOM = view.scrollDOM;
     const pointerY = (drag.y - hold.scroller.top) / hold.sy + scrollDOM.scrollTop;
     const dx = (drag.x - drag.startX) / hold.sx;
@@ -1122,6 +1198,175 @@ class HandlesView {
     hold.ty = top - geo.top + (hold.beside ? 0 : magnet(slotAt - top));
     this.layout(drag, true);
     this.chase(drag);
+  }
+
+  /// Il blocco staccato dal testo: il cartellino segue il puntatore, il posto
+  /// torna all'origine, e il bersaglio sotto il puntatore si accende.
+  trackFree(drag: Drag, hold: Hold): void {
+    if (!hold.free) this.goFree(drag, hold);
+    this.stopScroll(hold);
+    hold.place = hold.geo.origin;
+    hold.lean = "none";
+    hold.beside = null;
+    this.pointTarget(drag, hold);
+    hold.tx = drag.x + FREE_X;
+    hold.ty = drag.y + FREE_Y;
+    this.layout(drag, true);
+    this.chase(drag);
+  }
+
+  /// Dove sta sullo schermo il blocco in mano a riposo (senza `transform`),
+  /// nello scorrimento.
+  restOnScreen(hold: Hold): { x: number; y: number } {
+    const scrollDOM = this.view.scrollDOM;
+    return {
+      x: hold.scroller.left + (hold.left - scrollDOM.scrollLeft) * hold.sx,
+      y: hold.scroller.top + (hold.geo.top - scrollDOM.scrollTop) * hold.sy,
+    };
+  }
+
+  /// Il blocco in mano si stacca: passa nello strato sopra la finestra (così
+  /// raggiunge la Struttura, fuori dal riquadro), in coordinate dello schermo,
+  /// rimpicciolisce col moto del prototipo (240 ms, la curva che supera
+  /// l'arrivo di un soffio) e chiede alla shell i bersagli.
+  goFree(drag: Drag, hold: Hold): void {
+    const rest = this.restOnScreen(hold);
+    hold.cx = rest.x + hold.cx * hold.sx;
+    hold.cy = rest.y + hold.cy * hold.sy;
+    hold.free = true;
+    const el = hold.el;
+    el.style.setProperty("--fub-block-free-scale", hold.freeScale.toFixed(3));
+    el.style.left = "0px";
+    el.style.top = "0px";
+    el.dataset.free = "true";
+    topLayer(el, true);
+    hold.tx = hold.cx;
+    hold.ty = hold.cy;
+    this.follow(drag, true);
+    // La transizione CSS non c'è (il moto la spegne dentro l'editor): la
+    // carta e l'ombra partono dalla grandezza di presa e calano al riposo
+    // del cartellino. Col moto ridotto ci arrivano subito.
+    if (motionLevel() !== "reduced") {
+      const from = LIFT_SCALE / hold.freeScale;
+      for (const part of [hold.card, hold.shade]) {
+        animate(part, { from: { scale: from }, duration: FREE_MS, easing: FREE_EASING });
+      }
+    }
+    this.measureTargets(drag, hold);
+    this.watchTargets(drag, hold);
+  }
+
+  /// Chiede alla shell i bersagli di adesso, e riaccende quello sotto il
+  /// puntatore: allo stacco, e poi a ogni scorrimento o ridisegno.
+  measureTargets(drag: Drag, hold: Hold): void {
+    const doc = this.view.state.facet(blocksOptions).document?.() ?? null;
+    const state = this.view.state;
+    hold.targets = doc === null ? [] : placeTargets(state, state.field(blockModel).blocks, hold.run, dropOffers(doc));
+    // Il bersaglio di prima appartiene a misure vecchie: si spegne sempre, e
+    // si riaccende quello nuovo sotto il puntatore (anche la stessa riga).
+    hold.hot?.hover(false);
+    hold.hot = null;
+    this.pointTarget(drag, hold);
+  }
+
+  /// Accende il bersaglio sotto il puntatore e spegne quello di prima; se
+  /// cambia, ridice l'etichetta e l'annuncio.
+  pointTarget(drag: Drag, hold: Hold): boolean {
+    const hot = targetAt(hold.targets, drag.x, drag.y);
+    if (hot === hold.hot) return false;
+    hold.hot?.hover(false);
+    hot?.hover(true);
+    hold.hot = hot;
+    return true;
+  }
+
+  /// Mentre il blocco è staccato, i bersagli si rimisurano quando qualcosa
+  /// sotto di lui scorre (la rotella funziona anche col puntatore catturato:
+  /// in cattura sulla finestra, così vale per ogni scorrimento) e quando la
+  /// shell ridisegna i suoi posti. Una rimisura per fotogramma al più, mai
+  /// a ogni movimento del puntatore.
+  watchTargets(drag: Drag, hold: Hold): void {
+    this.unwatchTargets(hold);
+    const win = this.view.dom.ownerDocument.defaultView ?? window;
+    const soon = () => {
+      if (hold.remeasure !== null) return;
+      hold.remeasure = win.requestAnimationFrame(() => {
+        hold.remeasure = null;
+        if (this.drag !== drag || drag.hold !== hold || !hold.free) return;
+        this.measureTargets(drag, hold);
+        this.layout(drag, false);
+      });
+    };
+    win.addEventListener("scroll", soon, { capture: true, passive: true });
+    const stopWatching = watchDropOffers(soon);
+    hold.watching = () => {
+      win.removeEventListener("scroll", soon, { capture: true });
+      stopWatching();
+      if (hold.remeasure !== null) win.cancelAnimationFrame(hold.remeasure);
+      hold.remeasure = null;
+    };
+  }
+
+  unwatchTargets(hold: Hold): void {
+    hold.watching?.();
+    hold.watching = null;
+  }
+
+  /// Il blocco torna nel testo: di nuovo nello scorrimento, da dove si vede
+  /// adesso. `grow`: la carta torna alla sua grandezza col moto della presa.
+  unfree(hold: Hold, grow: boolean): void {
+    if (!hold.free) return;
+    hold.free = false;
+    this.unwatchTargets(hold);
+    hold.hot?.hover(false);
+    hold.hot = null;
+    hold.targets = [];
+    const el = hold.el;
+    topLayer(el, false);
+    delete el.dataset.free;
+    el.style.left = `${hold.left}px`;
+    el.style.top = `${hold.geo.top}px`;
+    const rest = this.restOnScreen(hold);
+    hold.cx = (hold.cx - rest.x) / hold.sx;
+    hold.cy = (hold.cy - rest.y) / hold.sy;
+    hold.tx = hold.cx;
+    hold.ty = hold.cy;
+    const tilt = hold.tilt === 0 ? "" : ` rotate(${hold.tilt.toFixed(3)}deg)`;
+    el.style.transform = `translate(${hold.cx.toFixed(2)}px, ${hold.cy.toFixed(2)}px)${tilt}`;
+    if (grow && motionLevel() !== "reduced") {
+      const from = hold.freeScale / LIFT_SCALE;
+      for (const part of [hold.card, hold.shade]) {
+        animate(part, { from: { scale: from }, duration: LIFT_MS, easing: LIFT_EASING });
+      }
+    }
+  }
+
+  /// Lo scorrimento al bordo: acceso mentre il puntatore sta nella fascia,
+  /// spento fuori, in cima o in fondo alla nota e quando il blocco si stacca.
+  edgeScroll(drag: Drag, hold: Hold): void {
+    if (edgeDepth(drag.y, hold.scroller.top, hold.scroller.bottom) === 0) return this.stopScroll(hold);
+    if (hold.scrolling) return;
+    const scrollDOM = this.view.scrollDOM;
+    hold.scrolling = onFrame((elapsed) => {
+      if (this.drag !== drag || drag.hold !== hold || hold.free) return this.stopScroll(hold);
+      const depth = edgeDepth(drag.y, hold.scroller.top, hold.scroller.bottom);
+      if (depth === 0) return this.stopScroll(hold);
+      const px = hold.edge.step(depth, elapsed);
+      if (px === 0) return;
+      // In cima o in fondo si ferma. Il confronto è coi limiti dello
+      // scorrimento, non con la posizione di prima: con uno zoom frazionario
+      // un passo di un px può arrotondarsi a zero a metà nota.
+      const max = scrollDOM.scrollHeight - scrollDOM.clientHeight;
+      const at = scrollDOM.scrollTop;
+      if (px < 0 ? at <= 0 : at >= max - 0.5) return this.stopScroll(hold);
+      scrollDOM.scrollTop = Math.max(0, Math.min(max, at + px));
+    });
+  }
+
+  stopScroll(hold: Hold): void {
+    hold.scrolling?.();
+    hold.scrolling = null;
+    hold.edge.reset();
   }
 
   /// Il posto, i vicini scostati, l'etichetta e l'annuncio per lo stato di
@@ -1177,9 +1422,11 @@ class HandlesView {
     const span = { from: blocks[hold.run.first]!.from, to: blocks[hold.run.last]!.to };
     const section = sectionAt(state, blocks, pos, span);
     const moved = place !== geo.origin && !hold.beside;
-    const label = moved && section !== hold.section
-      ? (section === null ? liveStrings.t("blocks.drag.top") : liveStrings.t("blocks.drag.in", { name: section }))
-      : "";
+    const label = hold.free
+      ? hold.hot?.label ?? ""
+      : moved && section !== hold.section
+        ? (section === null ? liveStrings.t("blocks.drag.top") : liveStrings.t("blocks.drag.in", { name: section }))
+        : "";
     const appears = hold.to.hidden && label !== "";
     hold.to.hidden = label === "";
     hold.to.textContent = label;
@@ -1193,7 +1440,9 @@ class HandlesView {
     const state = this.view.state;
     const name = (index: number) => gripExcerpt(state, blocks, index) || kindName(blocks[index]!);
     let text: string;
-    if (hold.beside) {
+    if (hold.free) {
+      text = hold.hot?.label ?? liveStrings.t("blocks.drag.free");
+    } else if (hold.beside) {
       text = liveStrings.t("blocks.drag.beside", { name: name(hold.beside.target) });
     } else if (hold.lean === "nest") {
       text = liveStrings.t("blocks.drag.nest", { name: name(hold.others[hold.place - 1]!) });
@@ -1387,6 +1636,19 @@ class HandlesView {
     if (!drag) return false;
     this.drag = null;
     const hold = drag.hold;
+    // Il cartellino: sul bersaglio è il bersaglio a dire dove va il blocco;
+    // altrimenti torna nel testo, piccolo com'è, e da lì vola a casa.
+    const target = commit && !quiet && hold?.free ? hold.hot : null;
+    if (hold?.free) {
+      this.unfree(hold, false);
+      if (!target) {
+        hold.shrunk = hold.freeScale;
+        for (const part of [hold.card, hold.shade]) {
+          part.style.transformOrigin = "0 0";
+          part.style.transform = `scale(${hold.freeScale / LIFT_SCALE})`;
+        }
+      }
+    }
     // Dove si vedeva il blocco in mano rispetto al posto vecchio: da lì
     // parte la posa, o il ritorno se il gesto non sposta niente. Si legge
     // prima che il blocco in mano se ne vada.
@@ -1398,7 +1660,7 @@ class HandlesView {
     drag.life.close();
     let flew = false;
     try {
-      flew = this.release(drag, hold, lift, commit, quiet);
+      flew = this.release(drag, hold, lift, commit, quiet, target);
     } finally {
       if (keep && !flew) {
         hold.flying = false;
@@ -1410,7 +1672,7 @@ class HandlesView {
   }
 
   /// Il rilascio vero e proprio: la transazione della posa, o il ritorno.
-  release(drag: Drag, hold: Hold | null, lift: ReturnType<HandlesView["liftPose"]>, commit: boolean, quiet: boolean): boolean {
+  release(drag: Drag, hold: Hold | null, lift: ReturnType<HandlesView["liftPose"]>, commit: boolean, quiet: boolean, target: DropTarget | null = null): boolean {
     this.drop.hidden = true;
     delete this.drop.dataset.beside;
     this.view.dom.classList.remove("cm-fub-blocks-dragging");
@@ -1436,6 +1698,7 @@ class HandlesView {
     const index = indexOf(blocks, drag.key);
     if (index < 0) return settle();
     const run = runFor(state, blocks, index);
+    if (target) return this.dropOn(target, run);
     if (hold.beside) {
       const spec = dropAsColumn(state, blocks, run, hold.beside.target, hold.beside.side);
       if (!spec) return settle();
@@ -1462,6 +1725,34 @@ class HandlesView {
     return false;
   }
 
+  /// Il rilascio sul bersaglio fuori dalla colonna: il blocco va dove il
+  /// bersaglio dice («In fondo a …»), in un passo d'annullamento, e la vista
+  /// lo porta al centro. Nessun volo: il blocco ricompare al suo posto nuovo.
+  dropOn(target: DropTarget, run: BlockRun): boolean {
+    const view = this.view;
+    const state = view.state;
+    const blocks = state.field(blockModel).blocks;
+    const spec = target.drop(state, blocks, run);
+    if (!spec) {
+      if (state.field(dragPose).lifted) view.dispatch({ effects: setDragPose.of(null), annotations: blockGesture.of({ kind: "drop", say: "" }) });
+      return false;
+    }
+    const { follow, moved, origin, scrollIntoView: _scroll, ...move } = spec;
+    const value = state.field(blockSelection, false);
+    view.dispatch({
+      ...move,
+      userEvent: "move.drop",
+      effects: [
+        setDragPose.of(null),
+        EditorView.scrollIntoView(moved.from, { y: "center" }),
+        ...(value ? [setBlockSelection.of({ anchor: follow(value.anchor) ?? value.anchor, head: follow(value.head) ?? value.head, depth: value.depth })] : []),
+      ],
+      annotations: blockGesture.of({ kind: "drop", origin, lead: moved }),
+    });
+    view.focus();
+    return false;
+  }
+
   /// Il blocco lasciato senza spostarlo (Esc, o rilasciato al suo posto)
   /// torna a casa da dov'è e con la grandezza che ha in quell'istante, anche
   /// a metà presa: la carta vola, l'ombra, il posto e le etichette svaniscono,
@@ -1481,11 +1772,14 @@ class HandlesView {
     el.style.transform = "";
     runs.push(animate(el, { from: { x, y, rotate }, ...timing }));
     // La carta torna alla grandezza vera: la scala del CSS per l'inversa.
+    // Il cartellino parte dalla sua scala, dal suo angolo.
+    const shrunk = hold.shrunk === null ? null : { scale: hold.shrunk / LIFT_SCALE };
     card.style.transform = `scale(${1 / LIFT_SCALE})`;
-    runs.push(animate(card, { to: { scale: 1 / LIFT_SCALE }, ...timing }));
+    runs.push(animate(card, { ...(shrunk ? { from: shrunk } : {}), to: { scale: 1 / LIFT_SCALE }, ...timing }));
     for (const gone of [shade, slot, ...el.querySelectorAll<HTMLElement>(".cm-fub-block-lift-tags, .cm-fub-block-lift-grip")]) {
       gone.style.opacity = "0";
-      runs.push(animate(gone, { to: { opacity: 0 }, ...(gone === shade ? timing : fade) }));
+      if (gone === shade && shrunk) gone.style.transform = "";
+      runs.push(animate(gone, { ...(gone === shade && shrunk ? { from: shrunk } : {}), to: { opacity: 0 }, ...(gone === shade ? timing : fade) }));
     }
     // Un blocco alto torna intero: la sua copia completa ricompare sopra la
     // carta mentre i vicini scendono.
@@ -1647,6 +1941,33 @@ export const blockHandles: Extension = [
     ".cm-fub-block-lift-more, .cm-fub-block-lift-to": { padding: "5px 7px", borderRadius: "6px" },
     ".cm-fub-block-lift-to": { paddingInline: "8px" },
     ".cm-fub-block-lift-to[hidden]": { display: "none" },
+    // Il cartellino, staccato dal testo (il `.lift.free` del prototipo): sta
+    // nello strato sopra la finestra, fisso, in coordinate dello schermo. Il
+    // popover del motore non porta né cornice né fondo né margini.
+    ".cm-fub-block-lift[data-free]": {
+      position: "fixed",
+      inset: "auto",
+      left: "0",
+      top: "0",
+      margin: "0",
+      padding: "0",
+      border: "0",
+      background: "transparent",
+      overflow: "visible",
+    },
+    // Carta e ombra si fanno piccole dal loro angolo: largo al più 250 px.
+    // La scala è una variabile della forma, non un valore della pelle.
+    ".cm-fub-block-lift[data-free] .cm-fub-block-lift-card, .cm-fub-block-lift[data-free] .cm-fub-block-lift-shade": {
+      scale: "var(--fub-block-free-scale, 0.86)",
+      transformOrigin: "0 0",
+    },
+    // Le etichette passano sotto il cartellino, a sinistra.
+    ".cm-fub-block-lift[data-free] .cm-fub-block-lift-tags": {
+      right: "auto",
+      left: "8px",
+      bottom: "auto",
+      top: "calc(var(--fub-block-free-scale, 0.86) * 100% + 6px)",
+    },
     // Il posto dove cadrà, alto quanto il blocco in mano.
     ".cm-fub-block-slot": { position: "absolute", zIndex: "1", borderRadius: "10px", pointerEvents: "none", boxSizing: "border-box" },
     ".cm-fub-block-slot[hidden]": { display: "none" },

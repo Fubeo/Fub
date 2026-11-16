@@ -55,7 +55,7 @@
 | nessuna interfaccia delle app Craft in `fub-app`, librerie doppie sotto il tetto | `docs/reference/budgets.json` | `.github/scripts/check-motori.mjs` | [architecture/motori.md](../architecture/motori.md) |
 | un motore si costruisce alla prima richiesta e una volta sola, senza lucchetto tenuto | `crates/fub-motori/src/pigro.rs` | `crates/fub-motori/tests/pigro.rs` | [architecture/motori.md](../architecture/motori.md) |
 | le cache dei motori stanno sotto un tetto comune, dalla meno usata | `crates/fub-motori/src/memoria.rs` | `crates/fub-motori/tests/memoria.rs` | [architecture/motori.md](../architecture/motori.md) |
-| la copia di un motore è derivata e verificata | `tools/vendor-craft/vendor.mjs` | `vendor.mjs check`, `verify-upstream`, `gate` | [architecture/motori.md](../architecture/motori.md) |
+| la copia di un motore è derivata e verificata | `tools/vendor-craft/vendor.mjs` | `vendor.mjs check`, `verify-upstream` (`motori-provenienza.yml`), `gate` | [architecture/motori.md](../architecture/motori.md) |
 | i componenti WASM rispettano tempi e memoria | `crates/fub-wasm-host/src/limits.rs` | `crates/fub-wasm-host/tests/` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
 | i plugin installati si accendono e spengono per vault | `crates/fub-host/src/session.rs` | `crates/fub-kernel/tests/deactivation.rs` e `crates/fub-host/tests/draw_feature.rs` | [product/plugins-and-extensions.md](../product/plugins-and-extensions.md) |
 | il testo del vault passa dal kernel, mai dal formato sbagliato | `crates/fub-kernel/src/documents.rs` | `crates/fub-kernel/tests/text_fidelity.rs` | [architecture/document-model.md](../architecture/document-model.md) |

@@ -82,9 +82,42 @@ barra verticale sul bordo del vicino: lasciato lì, il blocco gli va
 **accanto**, in colonne (a sinistra non vale per le voci d'elenco, dove quel
 gesto porta fuori). Al rilascio il blocco cade nel posto con un solo
 passo d'annullamento; Esc, una finestra che perde il fuoco o il testo cambiato
-da fuori (che vince) lo riportano dov'era. Vicino ai bordi la nota scorre. Le maniglie
+da fuori (che vince) lo riportano dov'era. Le maniglie
 stanno fuori dal testo ma sono pulsanti veri: il «+» e la maniglia del blocco
 del cursore si raggiungono con Tab, e con Vim acceso restano cliccabili.
+
+**Lo scorrimento al bordo.** Col blocco in mano, a meno di 72 px dal bordo
+alto o basso della nota (al più un terzo della sua altezza) la nota scorre:
+più piano lontano dal bordo, fino a circa 800 px al secondo sul bordo (la
+velocità cresce col quadrato della vicinanza), e parte morbida, raggiungendo
+la velocità piena in mezzo secondo. Si ferma uscendo dalla fascia, alla fine
+della nota, al rilascio e quando il blocco esce dalla colonna. Col moto
+ridotto lo scorrimento resta.
+
+**Fuori dalla colonna.** Portato più di 90 px a sinistra o a destra della
+colonna del testo, il blocco diventa un **cartellino**: rimpicciolito (largo
+al più 250 px), sopra a tutto, segue il puntatore a 14 px di lato e 16 sotto,
+e la maniglia sparisce. Il posto resta aperto, grigio, dove il blocco stava.
+Le righe della Struttura della stessa nota che nominano un titolo diventano
+bersagli: col cartellino sopra una riga, la riga si accende col bordo
+d'accento e l'etichetta sotto il cartellino dice «In fondo a «Cose da fare»».
+Lasciato lì, il blocco (o i blocchi selezionati) va in fondo a quella
+sezione, prima del titolo seguente dello stesso livello o più alto, con un
+solo passo d'annullamento, e la nota scorre per mostrarlo. Lasciato altrove,
+il cartellino torna alla grandezza vera volando al suo posto, e il testo non
+cambia; lo stesso con la Struttura chiusa, con un bersaglio che è proprio il
+titolo in mano, o con blocchi annidati in una lista o in una citazione, che
+non hanno bersagli. Per chi non vede, la regione viva dice «Fuori dal testo:
+lasciato qui torna al suo posto» o il bersaglio. Col moto ridotto il
+cartellino non vola. I bersagli arrivano dal registro degli editor
+(`offerDropTargets` in `editors/core/registry.ts`): la Struttura li offre
+per le righe il cui `action.payload` porta `{doc, start, end}` (byte del
+titolo nella sorgente com'è sul disco, `\r` compresi), soltanto per la nota
+dello stesso vault. Il titolo si riconosce dalla riga dello span; il nome
+della riga (testo puro, senza enfasi, collegamenti né `^id`) serve soltanto
+da ripiego. I posti si misurano all'uscita dalla colonna e di nuovo, al più
+una volta per fotogramma, quando qualcosa scorre o la Struttura si
+ridisegna (`dropOffersChanged`), mai a ogni movimento del puntatore.
 
 ## La selezione di blocchi
 
@@ -206,13 +239,16 @@ sempre.
 
 ## La testata della pagina
 
-In cima ai Blocchi stanno l'icona, la copertina e il titolo della pagina, con
-le proprietà subito sotto. Sono righe del frontmatter, scritte come le altre
+In cima ai Blocchi stanno la copertina, l'icona e il titolo della pagina, con
+le proprietà subito sotto; la Lettura mostra la stessa testata (ordine,
+proprietà e tastiera in [Scrittura](editor-writing.md#la-testata)). Icona,
+copertina e classi sono righe del frontmatter, scritte come le altre
 proprietà, e in Sorgente si vedono così:
 
 ```yaml
 icon: 🧳            # o una figura: icon: fub:book
 cover: ../Risorse/mare.png
+cover-y: 30         # dove sta la copertina, da 0 (in cima) a 100
 cssclasses: [wide, sans]
 ```
 
@@ -220,8 +256,8 @@ cssclasses: [wide, sans]
   (`Viaggio/_index.md`, vedi [Esplora e cartelle](explorer-and-folders.md)) è il
   nome della cartella. Si scrive in riga: Invio o l'uscita dal campo rinominano
   il file, o la cartella, con i collegamenti; Esc torna al nome di prima. Un
-  nome che non si può usare o che c'è già non rinomina niente e lo dice. ↑ sulla
-  prima riga del testo porta al titolo, ↓ e Invio dal titolo al testo.
+  nome che non si può usare o che c'è già non rinomina niente e lo dice. Invio
+  dal titolo porta al testo; ↑ e ↓ passano per le proprietà della testata.
 - **Icona.** Un'emoji, scelta cercandola per nome in italiano o in inglese, o
   una delle figure monocrome dell'esplora, che stanno prima delle emoji e si
   scrivono `icon: fub:book`. Una figura prende il colore del testo; un `fub:`
@@ -233,7 +269,8 @@ cssclasses: [wide, sans]
   icone diverse non la danno a `[[Nome]]`. Un valore che non è un testo breve,
   come il path di un'immagine messo da un'altra app, non si mostra.
 - **Copertina.** Un'immagine del vault, con lo stesso path di un'immagine nel
-  testo, o un indirizzo.
+  testo, un indirizzo, o un colore pieno (`cover: "#a3c4f3"`); per
+  un'immagine «Riposiziona» ne sceglie la parte che si vede.
 - **Nuova sottopagina.** Chiede il nome, dice se la pagina sta per diventare
   quella di una cartella, crea la nota con `note.subpage` e scrive `[[Nome]]`
   in una riga vuota o in un paragrafo dopo il blocco del cursore.
@@ -241,6 +278,8 @@ cssclasses: [wide, sans]
   del tema, con grazie, senza grazie, monospaziato) scrivono `cssclasses`
   (`wide`, `small`, `serif`, `sans`, `mono`) e lasciano le altre classi della
   nota. Il tema le applica al riquadro quando l'indice ha letto la nota salvata.
+  Classi scritte con un commento o in una forma che la riscrittura perderebbe
+  non si toccano: il menu apre lo YAML sulla loro riga.
 
 In sola lettura la testata si guarda soltanto. Ogni modifica è un passo
 d'annullamento suo.
@@ -383,7 +422,9 @@ schede stanno nella cache del bundle, ricostruibile. «Pagina web»
 ## Dove si trova
 
 - `apps/client/src/editors/text/profiles/markdown/blocks/`: modello, maniglie,
-  selezione, spostamenti, trasformazioni, link, movimento (`motion.ts`);
+  selezione, spostamenti, trasformazioni, link, movimento (`motion.ts`),
+  scorrimento al bordo (`autoscroll.ts`) e bersagli fuori dalla colonna
+  (`drop-targets.ts`);
 - `apps/client/src/editors/text/profiles/markdown/block-gesture.ts`: i gesti
   di blocco, annotati anche dalla Live;
 - `apps/client/src/editors/text/profiles/markdown/block-id.ts`: gli id nascosti;

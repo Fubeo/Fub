@@ -1102,6 +1102,25 @@ export const SCENE = onPage("shell", [
     query: "live=pagina",
     prepare: (page) => writingAtRest(page),
   },
+  // La testata in Scrittura e in Lettura (T6, E3, riga «La testata» del
+  // prototipo): copertina, icona, titolo, quattro proprietà in evidenza,
+  // «Altre 2», «Aggiungi una proprietà» e la riga dei dati; la stessa in
+  // Lettura, a 700 px e sul telefono; poi i casi che non vanno lisci.
+  ...[
+    ["testata-01-scrittura", "testata", "La testata in Scrittura: copertina, icona, titolo, proprietà in evidenza", "live_preview"],
+    ["testata-02-lettura", "testata", "La stessa testata in Lettura: senza strumenti né «Aggiungi»", "reading"],
+    ["testata-03-lettura-stretta", "testata", "La testata in Lettura nella finestra minima, 800 px", "reading", { width: 800, height: 800 }],
+    ["testata-04-altre", "testata", "La testata con «Altre 2 proprietà» aperto", "live_preview", null, "more"],
+    ["testata-05-vuota", "testata-vuota", "La testata di una nota senza frontmatter: il titolo e «Aggiungi una proprietà»", "live_preview"],
+    ["testata-06-illeggibile", "testata-illeggibile", "La testata col frontmatter illeggibile: lo dice, e lo YAML resta sotto", "live_preview"],
+    ["testata-07-senza-immagine", "testata-senza-immagine", "La testata con la copertina che non si trova", "reading"],
+  ].map(([id, live, title, mode, viewport, gesture]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: (page) => openHeader(page, mode, gesture),
+  })),
   // Scrittura coi Blocchi: la stessa nota, con la maniglia del blocco sotto il
   // puntatore e quella del blocco del cursore; poi la selezione di blocchi e il
   // menu.
@@ -1520,6 +1539,15 @@ export const SCENE = onPage("shell", [
   // dal basso, la barra di formattazione sta sopra la tastiera. La finestra è
   // quella di un telefono in piedi; l'ultima scena lo sdraia.
   onPage("mobile", [
+    // La testata della pagina (T6) sul telefono: la copertina bassa, le
+    // colonne delle proprietà strette.
+    {
+      id: "mobile-testata",
+      title: "Il telefono: la testata in Scrittura, con la copertina bassa e le colonne strette",
+      query: "live=testata",
+      viewport: PHONE,
+      prepare: (page) => openHeader(page, "live_preview"),
+    },
     {
       id: "mobile-startup",
       title: "Il telefono: il foglio, la barra del titolo ridotta, la barra inferiore",
@@ -1972,6 +2000,34 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
   await settleLive(page, scroll === "bottom");
 }
 
+/// La testata (T6) a riposo, in `mode`: la nota dall'alto, nessun fuoco, il
+/// puntatore fuori. `more` apre prima «Altre N proprietà».
+async function openHeader(page, mode, gesture) {
+  await openLive(page, [], "top");
+  // Sul telefono, chiuso il cassetto dei file, l'ispettore sale dal basso
+  // finché il fuoco non entra nel foglio: la testata a riposo non ha fuoco,
+  // e il cassetto si chiude dal suo velo.
+  if (await page.isVisible("#inspector-scrim")) {
+    const scrim = await page.locator("#inspector-scrim").boundingBox();
+    await page.click("#inspector-scrim", { position: { x: scrim.width - 8, y: 8 } });
+    await page.waitForSelector("#inspector-scrim", { state: "hidden" });
+  }
+  if (mode === "reading") await chooseMode(page, "reading");
+  const pane = mode === "reading" ? '.pane.focus[data-mode="reading"] .markdown-rendered' : ".pane.focus .cm-content";
+  await page.waitForSelector(`${pane} .cm-fub-page .cm-fub-page-title`);
+  if (gesture === "more") {
+    await page.click(`${pane} .cm-fub-page-props-more`);
+    await page.waitForSelector(`${pane} .cm-fub-page-props-more[aria-expanded="true"]`);
+  }
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    for (const scroller of document.querySelectorAll(".pane.focus .cm-scroller, .pane.focus .markdown-rendered")) scroller.scrollTop = 0;
+  });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 /// Scrittura a riposo (T3): apre la nota con la testata, prova che ciò che
 /// compare al passaggio non sposta il testo, poi ferma il foglio (puntatore
 /// fuori, nessun fuoco) e pretende che non si veda niente di ciò che compare
@@ -2029,7 +2085,7 @@ async function writingAtRest(page) {
     // I pulsanti che sono contenuto, a riposo anche nel prototipo: l'icona
     // della pagina, la riga dei dati e la testata di un blocco di codice
     // (lingua, «A capo», «Copia»).
-    const content = ".cm-fub-page-icon, .note-facts *, .cm-fub-code-header button";
+    const content = ".cm-fub-page-icon, .cm-fub-page-props button, .cm-fub-page-props button *, .note-facts *, .cm-fub-code-header button";
     return [
       ...[...sheet.querySelectorAll("[data-presence]")].filter(shown).map((el) => `${name(el)}[${el.dataset.presence}]`),
       ...[...sheet.querySelectorAll("button, [role=button]")].filter((el) => !el.closest("[data-presence]") && !el.matches(content) && shown(el)).map(name),

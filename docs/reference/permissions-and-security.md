@@ -161,7 +161,11 @@ Il runtime:
   contratto, oltre è una trap;
 - non concede filesystem o rete direttamente;
 - serve soltanto le famiglie host disponibili;
-- applica limiti alla memoria lineare e alle tabelle;
+- applica limiti alla memoria lineare e alle tabelle: al più 64 MiB per
+  istanza sommando tutte le sue memorie (oltre, `memory.grow` risponde -1) e
+  1 GiB per tutte le istanze del processo insieme; chi supera il tetto del
+  processo riceve una trap tipizzata (`host.wasm.memory_budget`), e la
+  memoria torna al conto quando l'istanza viene smontata;
 - interrompe chiamate oltre la deadline;
 - converte trap in errori tipizzati;
 - limita la ricorsione delle forme;
@@ -202,7 +206,10 @@ aperti a tutti.
 
 La Content Security Policy impedisce script remoti, iframe e oggetti non
 previsti. Il rendering non deve creare HTML attivo da una stringa del vault o
-del plugin senza sanitizzazione e una decisione esplicita.
+del plugin senza sanitizzazione e una decisione esplicita. Un comando dell'app
+si esegue solo se una permission di `crates/fub-app/permissions/` lo concede a
+una capability della finestra: `crates/fub-app/tests/ipc_permissions.rs` lo
+controlla nei due versi.
 
 La CSP sta in `crates/fub-app/tauri.conf.json` (`app.security.csp`) e vale per
 ogni piattaforma. `script-src` è `'self' 'wasm-unsafe-eval'`, e nient'altro:
@@ -421,25 +428,24 @@ attraverso una shell, e per percorso assoluto, senza cercarlo nel `PATH`
 cartelle che scrive l'amministratore (`/usr/bin`, `/bin`, `/usr/local/bin` e
 quelle di NixOS e Guix; su macOS solo `/usr/bin`), ed è buono se è un file
 regolare, eseguibile e non riscrivibile dal gruppo o dagli altri; su Windows
-viene dalla cartella di sistema (`SystemRoot`). Se non c'è, l'esito è
-«nessun programma» e la shell lo dice. Un file del vault che si eseguirebbe
-aprendolo si mostra e non si apre.
+dalla cartella che dà il sistema (`GetSystemWindowsDirectoryW`), mai da
+`SystemRoot`, che sceglie chi avvia Fub. Se non c'è, l'esito è «nessun
+programma» e la shell lo dice. Un file del vault che si eseguirebbe aprendolo
+si mostra e non si apre.
 
 La regola vale per il **primo** programma, non per quelli che lancia lui.
 `xdg-open` è uno script che cerca `gio`, `kde-open` e i loro pari nel `PATH`
 ereditato, come fa l'`Exec=` dei file `.desktop`; il `PATH` del figlio resta
 quello dell'utente, perché restringerlo romperebbe le app in `~/.local/bin`.
 Chi scrive in una cartella di quel `PATH` sceglie quindi l'app che apre il
-file. Su Windows anche `SystemRoot` viene dall'ambiente di chi avvia Fub: la
-via robusta, `GetSystemWindowsDirectoryW`, vorrebbe una dipendenza nuova di
-`fub-app`, che è una scelta di supply chain del maintainer.
+file.
 
 ## Supply chain
 
 - sorgenti delle dipendenze limitate dalla policy;
 - licenze controllate;
 - advisory e crate yanked bloccano la CI;
-- SBOM generata;
+- SBOM generata a ogni corsa e confrontata con `Cargo.lock` (`sbom.mjs`);
 - lockfile committati;
 - artefatti generati verificati;
 - dipendenze duplicate sensibili controllate.
@@ -505,26 +511,23 @@ lettura, mai una pila o una memoria esaurite.
 - L'append del kernel rifiuta symlink, hardlink e target non regolari, e
   conta i nomi del file sull'handle aperto, non riaprendo il path.
 
+### Testo verso un foglio di calcolo
+
+Un testo che esce verso un altro foglio di calcolo non diventa una formula
+(CSV injection): un campo che comincia con `=`, `+`, `-` o `@`, anche dopo
+spazi, prende un apostrofo davanti. Vale per l'export CSV dei documenti
+(`fub-importers`, `csv.rs`), per il salvataggio CSV/TSV di GridCraft e per
+il testo degli appunti della griglia (`fub.copyHtml`), con la patch
+`0012-formule-come-testo` di `vendor/gridcraft`. La griglia mette
+l'apostrofo anche davanti a una tabulazione o a un ritorno a capo iniziali,
+e lascia com'è un numero con il segno (`-12`, `-1,234.50`, `-12%`), che
+resta un numero; incollato di nuovo nella griglia, il testo torna quello di
+prima. L'HTML degli appunti non cambia.
+
 ## Servizi remoti
 
-- La chiave del vault (VDK, 32 byte casuali) viaggia avvolta da una KEK
-  derivata dalla passphrase del vault con PBKDF2-HMAC-SHA256: le buste e le
-  password degli account nuove usano `ver=2`, 600.000 iterazioni; quelle di
-  `ver=1`, 210.000, si riaprono ancora. Ogni altra coppia di versione e
-  iterazioni si rifiuta dentro la derivazione stessa, per ogni chiamante, e
-  nessuna derivazione supera 1.000.000 di iterazioni
-  (`fub_services::crypto::derive_kek`, `fub_host::remote::derive_vault_kek`).
-- Transizione dei parametri: il server accetta, al caricamento della chiave
-  e all'invito, ogni coppia che conosce (`ver=1`/210.000 e `ver=2`/600.000),
-  così client vecchi e nuovi parlano allo stesso server; una coppia
-  sconosciuta è `400 unsupported wrap version`. Un client che riceve quel
-  rifiuto, o quelli dei server di prima (`stale wrap version`,
-  `bad wrap version`, `bad wrap iterations`), mostra un errore tipizzato
-  (`BadArgs` con `host.sync.kdf_unsupported`) che chiede di aggiornare Fub o
-  il server; non è un'assenza di rete e non si ritenta.
-- Ruoli `Owner > Admin > Writer > Reader`, nel sync e nei siti: chi non è
-  Owner concede, toglie o cambia soltanto ruoli sotto il proprio
-  (`fub_services::acl::may_grant`, `check_revoke`).
+Chiavi del vault, ruoli, login e quote dei servizi di sync e pubblicazione:
+[Sicurezza dei servizi remoti](remote-services-security.md).
 
 ## Segnalazioni
 

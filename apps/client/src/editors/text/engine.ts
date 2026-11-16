@@ -196,7 +196,7 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   cursorBlink: false,
   softCursor: false,
   rtl: false,
-  properties: "source",
+  properties: "visible",
   reveal: "mai",
   guide: true,
 };

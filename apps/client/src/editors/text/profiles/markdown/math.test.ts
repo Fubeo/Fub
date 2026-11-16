@@ -31,6 +31,18 @@ describe("KaTeX Markdown hydration", () => {
     expect(root.querySelector<HTMLElement>(".math-block")?.getAttribute("aria-busy")).toBe("false");
   });
 
+  it("dà alla formula un ruolo che ammette il suo nome, anche mentre carica e dopo un errore", async () => {
+    const root = mount('<span class="math-inline" data-tex="x^2">x^2</span><span class="math-inline" data-tex="\\notARealCommand{x}">y</span>');
+    const [good, bad] = [...root.querySelectorAll<HTMLElement>(".math-inline")];
+    for (const formula of [good!, bad!]) {
+      expect(formula.getAttribute("role")).toBe("math");
+      expect(formula.getAttribute("aria-label")).toBeTruthy();
+    }
+    await vi.waitFor(() => expect(bad!.dataset.state).toBe("error"));
+    await vi.waitFor(() => expect(good!.dataset.state).toBe("ready"));
+    expect([good!, bad!].map((formula) => formula.getAttribute("role"))).toEqual(["math", "math"]);
+  });
+
   it("conserva la sorgente quando KaTeX rifiuta la formula", async () => {
     const root = mount('<span class="math-inline" data-tex="\\notARealCommand{x}">\\notARealCommand{x}</span>');
     const formula = root.querySelector<HTMLElement>(".math-inline")!;

@@ -573,6 +573,10 @@ export function mountMarkdown(
     contentLife?.close();
     const mountedLife = contentLife = openLifetime();
     const mountedRace = contentRace = new Race();
+    // Chi ospita la resa ci mette in cima cose sue (la testata della Lettura,
+    // `data-md-pinned`): una resa rifatta da sé le rimette dov'erano, con i
+    // loro ascoltatori. Non sono della resa, e i passi qui sotto non le vedono.
+    const pinned = [...container.querySelectorAll<HTMLElement>(":scope > [data-md-pinned]")];
     setSanitizedHtml(container, html);
     hydrateAllowedHtml(container);
     if (firstFrom === null) {
@@ -625,6 +629,7 @@ export function mountMarkdown(
         if (!mountedLife.closed) notify(t("preview.embed_failed", { reason: errorText(error) }), "guasto");
       });
     }
+    container.prepend(...pinned);
     container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
   }
 

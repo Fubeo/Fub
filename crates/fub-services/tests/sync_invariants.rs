@@ -1726,6 +1726,34 @@ fn the_vault_quota_counts_history_and_every_replica_queue() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 
+/// Una quota di 0 byte è una quota: il vault non tiene niente, come per i
+/// siti pubblicati. Prima 0 spegneva il controllo del push, della coda e
+/// degli allegati.
+#[test]
+fn a_vault_quota_of_zero_bytes_holds_nothing() {
+    let dir = temp_data_dir("vault-quota-zero");
+    let mut state = open_state(&dir);
+    state.config.quotas.max_vault_bytes = 0;
+    let auth = auth_for(&mut state, "quota-zero-user");
+    let mut a = Replica::new("a");
+    let op = a.op("notes/a.md", OpKind::Update, "x");
+    let id = a.id.clone();
+    let resp = push_raw(&mut state, &auth, &id, &[op]);
+    assert_eq!(resp.status, 413);
+    let sync_dir = vault_sync_dir(&dir);
+    assert_eq!(sync::queue::vault_queue_bytes(&sync_dir), 0);
+
+    let mut folded = sync::versions::SyncState::default();
+    let quotas = &state.config.quotas;
+    assert!(
+        sync::versions::account_attachment(&mut folded, "sha", 1, quotas.max_asset_bytes, 0)
+            .is_err()
+    );
+    assert!(sync::versions::account_attachment(&mut folded, "sha", 1, 0, u64::MAX).is_err());
+    assert!(folded.attachments.is_empty());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 /// STR-03: an accept whose `shares.json` write fails answers 500 and grants
 /// nothing, neither in memory nor after a restart.
 #[cfg(unix)]

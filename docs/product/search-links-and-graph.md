@@ -394,10 +394,10 @@ nell'issue [#6](https://github.com/Fubeo/Fub/issues/6).
 
 ## Proprietà nella nota
 
-L'impostazione di macchina `editor.properties` sceglie come Live mostra il
-frontmatter in cima alla nota: **YAML** (il default) lo lascia testo,
-**Visibili** lo fa una tabella chiave–valore, **Nascoste** una riga sola col
-numero delle proprietà. La tabella è una lettura: una lista diventa `a, b`, un
+L'impostazione di macchina `editor.properties` sceglie come la nota mostra il
+frontmatter, nella [testata](editor-writing.md#la-testata): **YAML** lo
+lascia testo, **Visibili** (il default) ne fa righe chiave–valore, **Nascoste**
+le mette dietro «Altre N proprietà». Le righe sono una lettura: lista `a, b`, un
 testo su più righe una riga; il valore resta quello del file. Un clic su una
 proprietà, o un cursore che entra nel frontmatter, riapre lo YAML su quella
 riga; Sorgente mostra sempre lo YAML. Con il frontmatter chiuso, ciò che si
