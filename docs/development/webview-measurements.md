@@ -385,8 +385,11 @@ variabile tolta) il banco si ferma, come dice la sezione che segue.
 Il referto va in `apps/client/bench/.output/webview/referto.json`. Il comando
 esce con 1 se un valore supera la soglia scelta.
 
-Il job `webview` della CI fa lo stesso con S1–S3, S7, R1, T1, I1, L1 e C1, sotto Xvfb e
-senza scheda grafica, e carica il referto come artifact `webview-<sha>`.
+Il job `webview` della CI fa lo stesso sotto Xvfb e senza scheda grafica, in
+due macchine che compilano l'app ognuna per sé: una fa S1–S3, S7, T1, I1, L1
+e C1 e carica il referto come artifact `webview-scenari-<sha>`, l'altra fa
+soltanto R1, che da sola durava 17 minuti, e lo carica come
+`webview-memoria-<sha>`.
 
 Una macchina con la scheda grafica non vede ciò che costa alla CI dipingere:
 WebKitGTK usa la GPU anche sotto `xvfb-run`, e un'ombra o una sfumatura che

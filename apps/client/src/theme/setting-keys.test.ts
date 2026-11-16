@@ -114,7 +114,9 @@ describe("il tema e `setting_changed`", () => {
       expect(box.listThemes).toHaveBeenCalledTimes(1);
       expect(box.settings).toHaveBeenCalledTimes(1);
       expect(themeSignals()).toBe(1);
-      expect(foglio()).not.toBe(before);
+      // Il fascio non è cambiato (le righe sono le stesse): resta montato
+      // com'era, senza ripassare dal cancello (`rimontaggio.test.ts`).
+      expect(foglio()).toBe(before);
     },
   );
 

@@ -58,13 +58,22 @@ jobs:
       actions: read
     outputs:
       client: ${{ steps.diff.outputs.client }}
+      motori: ${{ steps.diff.outputs.motori }}
       riuso: ${{ steps.riuso.outputs.riuso }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: il client è toccato?
+      # I test dei motori in vendor leggono soltanto `vendor/` (il loro
+      # workspace, il loro lock, i loro asset e le copie di craft-docpath e
+      # craft-vectorcraft-format che VectorCraft prende per percorso), la
+      # toolchain fissata qui e una `.cargo/` o una `rust-toolchain` alla
+      # radice, se nascessero. Una PR che non tocca niente di questo li
+      # rifarebbe sugli stessi byte di `main`, dove girano sempre. I test del
+      # workspace invece non hanno un filtro: leggono anche `apps/client/` e
+      # `docs/` (i mirror TS, le fixture, i contratti).
+      - name: il client o i motori in vendor sono toccati?
         id: diff
         env:
           EVENT: ${{ github.event_name }}
@@ -72,10 +81,19 @@ jobs:
         run: |
           if [ "$EVENT" != "pull_request" ]; then
             echo "client=true" >> "$GITHUB_OUTPUT"
-          elif git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(apps/client/|crates/fub-canvas-(core|wasm)/|\.github/workflows/ci\.yml$)'; then
+            echo "motori=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only "origin/$BASE_REF...HEAD" > "$RUNNER_TEMP/cambiati"
+          if grep -qE '^(apps/client/|crates/fub-canvas-(core|wasm)/|\.github/workflows/ci\.yml$)' "$RUNNER_TEMP/cambiati"; then
             echo "client=true" >> "$GITHUB_OUTPUT"
           else
             echo "client=false" >> "$GITHUB_OUTPUT"
+          fi
+          if grep -qE '^(vendor/|\.cargo/|rust-toolchain|\.github/workflows/ci\.yml$)' "$RUNNER_TEMP/cambiati"; then
+            echo "motori=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "motori=false" >> "$GITHUB_OUTPUT"
           fi
       # Dopo il commit delle baseline fatto da `baseline.yml`, la corsa lanciata
       # a mano rifà soltanto il banco visivo: gli altri job contano come nella
@@ -266,15 +284,26 @@ jobs:
         run: cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc
 
   test:
-    name: build + test (${{ matrix.os }})
+    name: build + test (${{ matrix.os }}${{ matrix.parti > 1 && format(', {0}/{1}', matrix.parte, matrix.parti) || '' }})
     needs: changes
     if: needs.changes.outputs.riuso != 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        # In bozza solo Linux: Windows e macOS girano quando la PR è pronta.
-        os: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.draft) && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest", "macos-latest"]') }}
+        # In bozza solo Linux: Windows gira quando la PR è pronta. macOS è in
+        # pausa (docs/decisions/0245-macos-e-ios-in-pausa.md): lo prova una
+        # volta alla settimana `macos-in-pausa.yml`, non questa matrice.
+        #
+        # Su Windows i test erano il job più lungo della CI: 14 minuti di
+        # compilazione e 23 di esecuzione (corsa 43961623580), contro 8 e 14
+        # su Linux. L'esecuzione si divide in tre macchine con
+        # `--partition hash:<parte>/3`: ognuna compila tutto e fa girare un
+        # terzo dei test, sempre lo stesso terzo finché il test non cambia
+        # nome. Un archivio compilato una volta e passato alle tre costerebbe
+        # di più: i 394 eseguibili di prova da caricare e scaricare, e un
+        # job in fila prima degli altri.
+        include: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.draft) && '[{"os":"ubuntu-latest","parte":1,"parti":1}]' || '[{"os":"ubuntu-latest","parte":1,"parti":1},{"os":"windows-latest","parte":1,"parti":3},{"os":"windows-latest","parte":2,"parti":3},{"os":"windows-latest","parte":3,"parti":3}]') }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
@@ -291,10 +320,11 @@ jobs:
       # Il budget delle cache è di 10 GB per tutto il repository, e quando si
       # sfora se ne va la più vecchia: i job che compilano un sottoinsieme di
       # questo leggono la cache dei test di Linux (`shared-key: test`) invece
-      # di salvarne una loro.
+      # di salvarne una loro. Le tre parti di Windows compilano la stessa
+      # cosa: salva la prima.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.parte == 1 }}
           cache-on-failure: true
           shared-key: test
       - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2
@@ -310,14 +340,25 @@ jobs:
         run: |
           rustup target add wasm32-wasip2
           cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
+      - name: la scena e l'inchiostro compilano per i componenti
+        if: matrix.parte == 1
+        run: |
           cargo check -p fub-scene --target wasm32-wasip2 --all-targets --locked
           cargo check -p fub-ink --target wasm32-wasip2 --all-targets --locked
       # Gli stessi test di `cargo test --workspace`, ma in parallelo anche fra
       # un eseguibile e l'altro. Il profilo `ci` di `.config/nextest.toml`
       # stampa l'uscita di ogni test rosso e, alla fine, quelli lenti.
       - name: i test del workspace
-        run: cargo nextest run --workspace --no-fail-fast --profile ci
+        shell: bash
+        env:
+          PARTE: ${{ matrix.parte }}
+          PARTI: ${{ matrix.parti }}
+        run: |
+          parte=()
+          if [ "$PARTI" -gt 1 ]; then parte=(--partition "hash:$PARTE/$PARTI"); fi
+          cargo nextest run --workspace --no-fail-fast --profile ci "${parte[@]}"
       - name: gli esempi della documentazione
+        if: matrix.parte == 1
         run: cargo test --workspace --doc --no-fail-fast
       # Ogni processo di prova copia il componente che usa: le copie non
       # servono alla corsa dopo, e non entrano nella cache.
@@ -328,9 +369,8 @@ jobs:
 
   variants:
     # Le varianti di feature non dipendono dal sistema: girano qui, accanto ai
-    # tre job dei test, invece di allungarli. Lo stesso per i workspace dei
-    # motori, che hanno il loro lock.
-    name: varianti di feature e motori in vendor
+    # job dei test, invece di allungarli.
+    name: varianti di feature
     needs: changes
     if: needs.changes.outputs.riuso != 'true'
     runs-on: ubuntu-latest
@@ -358,6 +398,21 @@ jobs:
         run: cargo nextest run -p fub-host --no-default-features --features draw --test componenti --test drawing --no-fail-fast --profile ci
       - name: l'oracolo a pixel, con la feature `pixel` del banco (FUORI_DAL_DEFAULT)
         run: cargo nextest run -p fub-testkit --features pixel --no-fail-fast --profile ci
+
+  motori:
+    # I workspace dei motori, con il loro lock, in un job loro: insieme alle
+    # varianti facevano 32 minuti, e VectorCraft da solo 17 (14 di
+    # compilazione con il profilo ottimizzato del suo manifest). Su una PR
+    # girano solo se `cosa cambia` dice che i loro ingressi sono toccati; su
+    # `main`, sul cron e a mano sempre. Niente cache: il budget di 10 GB è
+    # già pieno, e questo job non è il più lungo della corsa.
+    name: motori in vendor (WordCraft, GridCraft, VectorCraft)
+    needs: changes
+    if: needs.changes.outputs.riuso != 'true' && (github.event_name != 'pull_request' || needs.changes.outputs.motori == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
       - name: i test dei motori di WordCraft, nel workspace loro e con il loro lock
         env:
           CARGO_TARGET_DIR: target/wordcraft
@@ -548,6 +603,20 @@ jobs:
       - name: niente lampo all'avvio
         run: npm run bench:lampo
         working-directory: apps/client
+      # Gli stili calcolati dei pezzi portati da un prototipo, contro quelli
+      # estratti dal prototipo (`bench/conformita/`). Sta qui perché usa lo
+      # stesso palco, lo stesso Chromium e le stesse scene del banco visivo.
+      - name: la grafica segue il prototipo
+        id: bench_conformita
+        run: npm run bench:conformita
+        working-directory: apps/client
+      - name: referto della conformità al prototipo
+        if: ${{ failure() && steps.bench_conformita.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: conformita-${{ github.sha }}
+          path: apps/client/bench/.output/conformita/
+          include-hidden-files: true
 
   a11y:
     # Le due luci sono due corse separate dello stesso banco: in fila
@@ -739,10 +808,27 @@ jobs:
     # N0: le misure nella WebView vera e non nel Chromium dei banchi. Su un
     # runner senza scheda grafica i numeri non sono assoluti: la sezione `ci`
     # di `bench/webview/budgets.json` è una soglia di peggioramento.
-    name: la WebView vera (WebKitGTK, S1–S3)
+    #
+    # Due macchine: R1 da sola durava 17 minuti dei 27 del banco (trenta giri
+    # di apertura e chiusura, ognuno con dieci secondi di quiete), e gli
+    # altri scenari insieme dieci. Ognuna compila l'app per conto suo: un
+    # artefatto passato da un job all'altro metterebbe la compilazione in
+    # fila davanti a entrambe. Una macchina sola per R1 è anche una misura
+    # della memoria senza altri scenari prima.
+    name: la WebView vera (WebKitGTK, ${{ matrix.gruppo }})
     needs: changes
     if: needs.changes.outputs.riuso != 'true'
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - gruppo: S1–S3
+            scenari: S1,S2,S3,S7,T1,I1,L1,C1
+            artefatto: scenari
+          - gruppo: R1
+            scenari: R1
+            artefatto: memoria
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
@@ -752,7 +838,8 @@ jobs:
         with:
           cache-on-failure: true
           key: webview
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Le due macchine compilano la stessa app: salva la prima.
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.artefatto == 'scenari' }}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22.12.0
@@ -771,22 +858,27 @@ jobs:
         run: cargo build --release --locked -p fub-app --features tauri/custom-protocol
       - name: tauri-driver, alla versione fissata
         run: cargo install tauri-driver --version "=2.1.0" --locked
-      - name: S1–S3, S7, la memoria (R1), le tessere (T1), l'indicizzazione (I1), il nucleo della lavagna (L1) e i chunk dei profili (C1) nella WebKitGTK
+      # Il gruppo S1–S3 fa S1–S3, S7, le tessere (T1), l'indicizzazione (I1),
+      # il nucleo della lavagna (L1) e i chunk dei profili (C1); il gruppo R1
+      # la memoria.
+      - name: gli scenari ${{ matrix.scenari }} nella WebKitGTK
         # `-noreset`: senza, Xvfb si rigenera quando l'app di uno scenario si
         # chiude, e l'app dopo a volte non apre il display (GTK non parte, #287).
-        run: xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048 -noreset" npm run bench:webview -- --only=S1,S2,S3,S7,R1,T1,I1,L1,C1 --native-driver=/usr/bin/WebKitWebDriver
+        env:
+          SCENARI: ${{ matrix.scenari }}
+        run: xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048 -noreset" npm run bench:webview -- "--only=$SCENARI" --native-driver=/usr/bin/WebKitWebDriver
         working-directory: apps/client
       - name: il referto delle misure
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: webview-${{ github.sha }}
+          name: webview-${{ matrix.artefatto }}-${{ github.sha }}
           path: apps/client/bench/.output/webview
           include-hidden-files: true
 
   librerie-runtime:
     # K0, livello 3 del piano dei componenti: due componenti Rust in librerie
-    # dinamiche e una libreria comune caricate a runtime, sui tre sistemi. Il
+    # dinamiche e una libreria comune caricate a runtime, su Linux e Windows. Il
     # referto dice se il caricamento, la rimozione di un file e le firme
     # tengono, e quanto pesa la consegna contro l'ospite statico.
     name: le librerie a runtime (${{ matrix.os }})
@@ -795,8 +887,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Una PR bozza la prova solo su Linux, come i test.
-        os: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.draft) && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+        # Una PR bozza la prova solo su Linux, come i test; macOS è in pausa,
+        # come nel job `test`.
+        os: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.draft) && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

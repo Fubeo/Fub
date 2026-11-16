@@ -18,16 +18,22 @@ export function findTextEditorOrThrow(parent: HTMLElement): EditorView {
   return view;
 }
 
-/// Restituisce le viste testuali presenti nella shell, nell'ordine del DOM.
+/// Le viste testuali che si vedono nella shell, nell'ordine del DOM: quelle
+/// delle schede messe da parte (`.pane-editor-riposo`, vedi `ParkedSurface` in
+/// `state/document-controller.ts`) sono montate ma nascoste, e non contano.
 export function mountedTextEditors(): EditorView[] {
-  return [...document.querySelectorAll<HTMLElement>(".cm-editor")]
+  return shownEditorShells()
     .map((shell) => (shell.parentElement ? findTextEditor(shell.parentElement) : null))
     .filter((view): view is EditorView => view !== null);
 }
 
-/// Appende testo alla prima superficie testuale montata.
+function shownEditorShells(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>(".cm-editor")].filter((shell) => !shell.closest(".pane-editor-riposo"));
+}
+
+/// Appende testo alla prima superficie testuale che si vede.
 export function appendToTextEditor(text: string): void {
-  const shell = document.querySelector<HTMLElement>(".cm-editor");
+  const shell = shownEditorShells()[0];
   const view = shell?.parentElement ? findTextEditor(shell.parentElement) : null;
   if (!view) throw new Error("l'editor non è montato");
   view.dispatch({ changes: { from: view.state.doc.length, insert: text } });
@@ -50,3 +56,8 @@ export const editorKeymap: readonly KeyBinding[] = [
 /// Espone ai test della shell la profondità della cronologia senza far
 /// attraversare il confine CodeMirror al codice della shell.
 export { undoDepth };
+
+/// La luce che la vista ha ricevuto per ultima: `true` se scura.
+export function isDarkTheme(view: EditorView): boolean {
+  return view.state.facet(EditorView.darkTheme);
+}

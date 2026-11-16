@@ -43,6 +43,9 @@ merge under the rule in `CLAUDE.md`.
    and a prompt built from [brief.md](brief.md). Put in it only that task's
    section, the base commit (the plan branch's current HEAD) and the decisions
    that apply. Set the task's `Stato` to `[~] in corso · coder · base <sha>`.
+   A graphic task also adds its pieces to the prototype map in
+   `apps/client/bench/conformita/` and passes `npm run bench:conformita`
+   (through the heavy-check queue); say so in its brief.
 3. **While they work** don't poll. Integrate whoever finished, answer questions,
    handle CI results as they arrive.
 4. **A report arrives:**

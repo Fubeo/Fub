@@ -36,6 +36,10 @@ file in `src/` knows the bench exists, so keep it that way.
   not strings: a string predicate runs through `eval` and is refused. Add
   probe CSS with a constructed sheet (`document.adoptedStyleSheets`), not
   `addStyleTag`.
+- A UI ported from a plan prototype is also checked by numbers:
+  `npm run bench:conformita` compares computed styles with the prototype's,
+  piece by piece, through the map in `bench/conformita/` (how to add pieces and
+  regenerate the expected values: `docs/development/visual-bench.md`).
 
 Probes:
 

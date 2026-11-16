@@ -19,6 +19,9 @@
 //   posizione, e una lista che si riordina si porta dietro focus e selezione
 //   sbagliati;
 // - un nodo che cambia **specie** si ricostruisce (non c'è niente da salvare);
+// - un sottoalbero **uguale** a quello disegnato non si tocca (`unchanged`):
+//   in WebKit anche un elemento rifatto identico invalida e ridisegna, e le
+//   view si ridisegnano a ogni salvataggio;
 // - un campo che ha il **focus** non si sovrascrive col valore del provider: chi
 //   sta scrivendo ha ragione, e il provider vedrà il valore quando l'azione
 //   scatta.
@@ -58,16 +61,16 @@ import type { ActionRef, FieldValue, UiKind, UiNode, UiOption, UiValue } from ".
 import { customRenderer, NO_RENDER_CONTEXT, type CustomRenderContext } from "./custom";
 import { setSanitizedHtml } from "./sanitize";
 import { activatable, identifier, notActivatable } from "./a11y";
-import { t } from "../i18n/strings";
+import { resolvedLanguage, t } from "../i18n/strings";
 import { errorText } from "../host/errors";
 import { notify } from "./notify";
 import { setTooltip } from "./tooltip";
 import { tabIndexForKey } from "./tab-keys";
-import { iconEl } from "./icons";
+import { iconEl, iconsRevision } from "./icons";
 import { offerNote } from "./drag-types";
 import { drawPageMark } from "./page-mark";
 import { FORMAT_ICON, formatKindOf } from "./format-kind";
-import { pageIcon } from "../state/page-icons";
+import { pageIcon, pageIconsRevision } from "../state/page-icons";
 import type { Lifetime, Teardown } from "./lifetime";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
@@ -94,10 +97,12 @@ declare const PORT: unique symbol;
 export type Port = ActionHandler & { readonly [PORT]: true };
 
 /// Ciò che la shell ricorda di un elemento che ha disegnato: il nodo da cui
-/// viene (per il confronto al giro dopo) e, se è un campo, come si legge il suo
+/// viene (per il confronto al giro dopo), con quali ingressi della shell è
+/// stato disegnato (`drawInputs`) e, se è un campo, come si legge il suo
 /// valore adesso.
 interface Rendered {
   node: UiNode;
+  inputs?: string;
   read?: () => UiValue;
 }
 
@@ -116,6 +121,19 @@ interface Mount {
 }
 
 const mounted = new WeakMap<HTMLElement, Mount>();
+
+/// Ciò che il disegno di un nodo legge **fuori** dal nodo: le icone delle
+/// pagine, il set delle figure (registrazioni e tema) e la lingua delle poche
+/// parole della shell. Un sottoalbero uguale al nodo di prima si salta solo se
+/// anche questi sono quelli con cui era stato disegnato: altrimenti si rifà,
+/// come prima del salto, e l'icona nuova di una pagina arriva al primo giro.
+function drawInputs(): string {
+  return `${pageIconsRevision()}|${iconsRevision()}|${resolvedLanguage()}`;
+}
+
+/// Gli ingressi del giro in corso: li legge una volta `mountTree` o
+/// `patchTree`, e valgono per tutto il loro giro, che è sincrono.
+let passInputs = "";
 /// Il montaggio di una porta: il disegno riceve soltanto la porta, e da lì
 /// risale al contesto senza che ogni funzione lo porti con sé.
 const mountOfPort = new WeakMap<Port, Mount>();
@@ -235,6 +253,7 @@ export function mountTree(
 ): void {
   const mount = route(container, onAction);
   mount.context = context;
+  passInputs = drawInputs();
   const previous = mount.root;
   if (previous && previous.parentElement === container) {
     mount.root = reconcile(previous, node, mount.port);
@@ -256,6 +275,7 @@ export function patchTree(container: HTMLElement, key: string, node: UiNode): bo
   if (!mount?.root) return false;
   const target = findByKey(mount.root, key);
   if (!target) return false;
+  passInputs = drawInputs();
   // La porta del contenitore, non un handler ripescato dal sottoalbero: un
   // patch arriva senza il contesto del render, e ciò che risale dall'elemento è
   // **il primo** montaggio, non l'ultimo. Riconciliare con quello riscriverebbe
@@ -313,7 +333,17 @@ function findByKey(root: HTMLElement, key: string): HTMLElement | null {
 /// Aggiorna `el` perché mostri `next`, o lo sostituisce se non è possibile.
 /// Restituisce l'elemento che ora rappresenta il nodo (lo stesso, o il nuovo).
 function reconcile(el: HTMLElement, next: UiNode, onAction: Port): HTMLElement {
-  const prev = rendered.get(el)?.node;
+  const drawn = rendered.get(el);
+  const prev = drawn?.node;
+  // Un sottoalbero uguale a quello disegnato non si tocca: né foglie rifatte
+  // né attributi riscritti. In WebKit ogni elemento sostituito invalida stile
+  // e layout, e una view lunga (i collegamenti in uscita di una nota da 5.000
+  // righe sono 33.000 elementi) ridisegnata uguale a ogni salvataggio teneva
+  // fermo il thread della finestra per 130 ms.
+  if (drawn && prev && drawn.inputs === passInputs && unchanged(prev, next)) {
+    rendered.set(el, { ...drawn, node: next });
+    return el;
+  }
   if (!prev || prev.node !== next.node) {
     const newItem = renderUiNode(next, onAction);
     unmount(el);
@@ -321,7 +351,7 @@ function reconcile(el: HTMLElement, next: UiNode, onAction: Port): HTMLElement {
     return newItem;
   }
   if (update(el, prev, next, onAction)) {
-    rendered.set(el, { ...rendered.get(el)!, node: next });
+    rendered.set(el, { ...rendered.get(el)!, node: next, inputs: passInputs });
     key(el, next);
     dragSource(el, next);
     return el;
@@ -332,13 +362,52 @@ function reconcile(el: HTMLElement, next: UiNode, onAction: Port): HTMLElement {
   return newItem;
 }
 
+/// Le specie che il confronto di `unchanged` non dà mai per uguali: un campo ha
+/// uno stato dell'utente che `applyField` rimette in riga col nodo anche quando
+/// il nodo non cambia (il valore del provider torna in un campo che ha perso
+/// il fuoco), e un nodo custom ha il suo confronto, che guarda anche dove è
+/// disegnato.
+const NEVER_UNCHANGED: ReadonlySet<string> = new Set([
+  "text_input",
+  "text_area",
+  "date_picker",
+  "number",
+  "slider",
+  "checkbox",
+  "select",
+  "radio",
+  "custom",
+]);
+
+/// Vero se `next` è lo stesso dato di `prev`, campo per campo, e nel
+/// sottoalbero non c'è una specie di `NEVER_UNCHANGED`. I nodi arrivano da un
+/// JSON: oggetti, liste e valori semplici, senza `undefined` né cicli. Il
+/// confronto costa una visita dell'albero, molto meno di un elemento rifatto.
+function unchanged(prev: unknown, next: unknown): boolean {
+  if (prev === null || next === null || typeof prev !== "object" || typeof next !== "object") return prev === next;
+  if (Array.isArray(prev) || Array.isArray(next)) {
+    if (!Array.isArray(prev) || !Array.isArray(next) || prev.length !== next.length) return false;
+    for (let i = 0; i < next.length; i++) if (!unchanged(prev[i], next[i])) return false;
+    return true;
+  }
+  const before = prev as Record<string, unknown>;
+  const after = next as Record<string, unknown>;
+  if (typeof after.node === "string" && NEVER_UNCHANGED.has(after.node)) return false;
+  const keys = Object.keys(after);
+  if (keys.length !== Object.keys(before).length) return false;
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(before, key) || !unchanged(before[key], after[key])) return false;
+  }
+  return true;
+}
+
 /// Prova ad aggiornare `el` in posto. `false` = ricostruiscilo.
 ///
 /// La divisione non è per comodità: **i campi si aggiornano** perché hanno uno
 /// stato dell'utente da non buttare via (focus, cursore, ciò che si sta
 /// scrivendo), i **contenitori** si aggiornano perché contengono campi, e le
-/// **foglie** si ricostruiscono perché non hanno niente da conservare e il
-/// confronto costerebbe più del disegno.
+/// **foglie** cambiate si ricostruiscono perché non hanno niente da
+/// conservare. Una foglia uguale non arriva qui: la salta `reconcile`.
 function update(
   el: HTMLElement,
   prev: UiNode,
@@ -656,7 +725,7 @@ function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
 
 function renderUiNode(node: UiNode, onAction: Port): HTMLElement {
   const el = draw(node, onAction);
-  rendered.set(el, { ...(rendered.get(el) ?? {}), node });
+  rendered.set(el, { ...(rendered.get(el) ?? {}), node, inputs: passInputs });
   key(el, node);
   dragSource(el, node);
   return el;

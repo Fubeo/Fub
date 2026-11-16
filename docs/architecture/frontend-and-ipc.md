@@ -203,7 +203,10 @@ Un evento senza chiave vale «tutto» (`state/setting-change.ts`). Il tema
 raccoglie una raffica in al più due riletture, e l'ultima parte dopo l'ultimo
 evento. Così aprire la barra laterale dal comando scrive
 `chrome.sidebar.visible` e la rilegge una volta, invece di cinque riletture e
-un rimontaggio del tema.
+un rimontaggio del tema. Anche per una sua chiave il tema rimonta il bundle
+solo se il contenuto è cambiato (`mountThemeBundle`): una preferenza come
+`appearance.accent` riscrive soltanto il canale delle preferenze, senza
+ripassare foglio e pelle dal sanitizer.
 
 Le linguette sono pulsanti nativi, posseduti dal `tablist` tramite `aria-owns`;
 il pulsante di chiusura è un controllo fratello, non un elemento interattivo
@@ -300,8 +303,9 @@ pannelli) lo Scrittoio compone:
   `appearance.motion` lo decide l'host (`fub_host::settings::motion_default`):
   `""` (segue il sistema), tranne su Linux con WebKitGTK dalla 2.54.0, che
   dopo un'animazione ripresenta fotogrammi vecchi; lì parte da `reduced`.
-  La versione è quella della libreria caricata, che l'app dichiara prima di
-  costruire l'host (`declare_the_webview` in `crates/fub-app/src/lib.rs`);
+  La versione è quella della libreria caricata, che l'app dichiara per prima
+  cosa, prima del percorso di disegno e dell'host (`declare_the_webview` in
+  `crates/fub-app/src/lib.rs`);
   l'intervallo difettoso è la costante `WEBKITGTK_FLICKER_FROM`, aperta in
   alto finché una versione corretta non è verificata. Un valore scritto,
   anche `""`, vale sempre; sotto la riga Animazioni le Impostazioni dicono

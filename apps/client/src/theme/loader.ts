@@ -310,7 +310,7 @@ function mountedSheets(): { layers: Map<Layer, CSSStyleSheet>; others: CSSStyleS
  * e se uno non si costruisce il documento resta com'era. I canali del tema
  * escono nell'ordine dichiarato, davanti agli altri fogli costruiti.
  */
-function commit(changes: ReadonlyMap<Layer, string | null>): void {
+function commit(changes: ReadonlyMap<Layer, string | null>): readonly CSSStyleSheet[] {
   const { layers, others } = mountedSheets();
   const built = new Map<Layer, CSSStyleSheet | null>();
   for (const [layer, text] of changes) {
@@ -327,6 +327,7 @@ function commit(changes: ReadonlyMap<Layer, string | null>): void {
   const mounted = [...ORDER.flatMap((layer) => layers.get(layer) ?? []), ...others];
   document.adoptedStyleSheets = mounted;
   syncFontFaces(mounted);
+  return [...built.values()].filter((sheet) => sheet !== null);
 }
 
 /** Sostituisce uno strato, al suo posto nella cascata. */
@@ -346,8 +347,8 @@ function replaceTheme(
   sheet: string,
   skin: string | undefined,
   inherited: string | undefined,
-): void {
-  commit(new Map<Layer, string | null>([
+): readonly CSSStyleSheet[] {
+  return commit(new Map<Layer, string | null>([
     ["caratteri-tema", fonts ?? null],
     ["foglio", sheet],
     ["pelle", inherited ?? skin ?? null],
@@ -768,12 +769,83 @@ function rejectTheme(
   report(trouble);
   return { mounted: false, trouble };
 }
-/** Valida l'intero fascio e solo allora sostituisce gli strati del tema. */
+/**
+ * L'ultimo fascio montato, **per contenuto**: il profilo con cui è passato dal
+ * cancello, la luce, il manifest serializzato, i testi, una copia dei byte di
+ * ogni asset, e i fogli costruiti che ha adottato.
+ *
+ * Una preferenza (accento, densità, corpo, misura…) non cambia il fascio: va
+ * nel canale chiuso delle preferenze. Prima ogni sua scrittura rivalidava e
+ * rimaterializzava il fascio intero, decine di millisecondi di thread
+ * principale per passo del cursore. Il confronto è sul contenuto e mai sul
+ * nome, così un tema con lo stesso id e un file diverso ripassa dal cancello;
+ * e vale solo finché i suoi fogli sono ancora adottati, così chi ha
+ * sostituito uno strato del tema (un `mount` su quello strato) lo fa
+ * rimontare.
+ */
+interface MountedBundle {
+  readonly profile: ThemeProfile;
+  readonly light: ThemeLight;
+  readonly manifest: string;
+  readonly sheet: string;
+  readonly skin: string | undefined;
+  readonly inherited: string | undefined;
+  readonly assets: ReadonlyMap<string, readonly number[] | null>;
+  readonly sheets: readonly CSSStyleSheet[];
+}
+let mountedBundle: MountedBundle | null = null;
+
+function assetSnapshot(assets: Readonly<Record<string, unknown>>): Map<string, readonly number[] | null> {
+  const copy = new Map<string, readonly number[] | null>();
+  for (const [asset, value] of Object.entries(assets)) {
+    const bytes = bytesOf(value);
+    copy.set(asset, bytes === null ? null : [...bytes]);
+  }
+  return copy;
+}
+
+function sameAssets(
+  kept: ReadonlyMap<string, readonly number[] | null>,
+  assets: Readonly<Record<string, unknown>>,
+): boolean {
+  const entries = Object.entries(assets);
+  if (entries.length !== kept.size) return false;
+  for (const [asset, value] of entries) {
+    if (!kept.has(asset)) return false;
+    const before = kept.get(asset)!;
+    const now = bytesOf(value);
+    if (before === null || now === null) {
+      if (before !== now) return false;
+      continue;
+    }
+    if (before.length !== now.length) return false;
+    for (let i = 0; i < now.length; i++) if (before[i] !== now[i]) return false;
+  }
+  return true;
+}
+
+function alreadyMounted(bundle: ThemeBundle, light: ThemeLight): boolean {
+  const kept = mountedBundle;
+  if (kept === null || kept.profile !== profile || kept.light !== light) return false;
+  const adopted = document.adoptedStyleSheets;
+  if (!kept.sheets.every((sheet) => adopted.includes(sheet))) return false;
+  if (kept.sheet !== bundle.sheet || kept.skin !== bundle.skin || kept.inherited !== bundle.inherited?.skin) return false;
+  if (kept.manifest !== JSON.stringify(bundle.manifest)) return false;
+  const assets = bundle.assets && typeof bundle.assets === "object" ? bundle.assets : null;
+  return assets !== null && sameAssets(kept.assets, assets);
+}
+
+/**
+ * Valida l'intero fascio e solo allora sostituisce gli strati del tema. Un
+ * fascio uguale, byte per byte, a quello già montato e ancora al suo posto non
+ * si rivalida né si rimonta (`MountedBundle`).
+ */
 export function mountThemeBundle(
   bundle: ThemeBundle,
   light: ThemeLight,
   report: ThemeTroubleReporter = reportThemeTrouble,
 ): ThemeMountResult {
+  if (alreadyMounted(bundle, light)) return { mounted: true };
   const reasons = validateThemeBundle(bundle, light);
   if (reasons.length > 0) return rejectTheme(bundle.manifest.name, reasons, report);
   // Le icone cambiano nello stesso giro dei canali: un tema senza set torna
@@ -785,14 +857,25 @@ export function mountThemeBundle(
       ? undefined
       : materializeAssets(bundle.skin, bundle.assets, bundle.manifest.asset_namespace);
     replaceThemeIcons(themeIconSet(bundle.manifest, bundle.assets));
-    replaceTheme(
+    const sheets = replaceTheme(
       themeFontFaces(bundle.manifest, bundle.assets),
       materializeAssets(bundle.sheet, bundle.assets, bundle.manifest.asset_namespace),
       skin,
       bundle.inherited?.skin,
     );
+    mountedBundle = {
+      profile,
+      light,
+      manifest: JSON.stringify(bundle.manifest),
+      sheet: bundle.sheet,
+      skin: bundle.skin,
+      inherited: bundle.inherited?.skin,
+      assets: assetSnapshot(bundle.assets),
+      sheets,
+    };
     return { mounted: true };
   } catch (error) {
+    mountedBundle = null;
     replaceThemeIcons(previousIcons);
     const detail = error instanceof Error ? error.message : String(error);
     return rejectTheme(bundle.manifest.name, [`montaggio atomico fallito: ${detail}`], report);

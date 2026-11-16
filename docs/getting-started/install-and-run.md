@@ -31,10 +31,17 @@ sudo apt-get install \
   patchelf
 ```
 
-### macOS e Windows
+### Windows
 
-Installa gli strumenti di compilazione richiesti da Rust e Tauri v2. Su Windows
-serve il toolchain MSVC; su macOS servono gli Xcode Command Line Tools.
+Installa gli strumenti di compilazione richiesti da Rust e Tauri v2: su Windows
+serve il toolchain MSVC.
+
+### macOS
+
+macOS è in pausa ([ADR 0245](../decisions/0245-macos-e-ios-in-pausa.md)): la CI
+delle PR non lo prova e le release non hanno un `.dmg`. Il codice resta e un
+controllo settimanale lo compila e lo prova; per costruire Fub da sé servono
+gli Xcode Command Line Tools.
 
 ## Installazione
 

@@ -61,6 +61,7 @@ npm run build
 npm run bench:a11y
 npm run bench:verify
 npm run bench:motion
+npm run bench:conformita
 npm run bench:fidelity
 npm run bench:grid
 npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3

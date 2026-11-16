@@ -40,6 +40,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { waiter } from "./test-wait";
 import {
   appendToTextEditor as typeInEditor,
+  findTextEditor,
+  isDarkTheme,
   mountedTextEditors as editorViews,
   undoDepth,
 } from "./editors/text/test-support";
@@ -165,7 +167,7 @@ async function mount(
   settings: SettingEntry[] = [],
   root: string | null | undefined = undefined,
   throttles: string[] = [],
-  notice: KernelNotice | null = null,
+  notice: KernelNotice | readonly KernelNotice[] | null = null,
   commands: CommandSpec[] = [],
   prepare: (host: FakeHost) => void = () => {},
 ): Promise<{ host: FakeHost; startup: Promise<() => void>; unlock: Map<string, () => void> }> {
@@ -207,7 +209,7 @@ async function start(
   file: Record<string, string>,
   settings: SettingEntry[] = [],
   root: string | null | undefined = undefined,
-  notice: KernelNotice | null = null,
+  notice: KernelNotice | readonly KernelNotice[] | null = null,
   commands: CommandSpec[] = [],
 ): Promise<FakeHost> {
   const { host, startup } = await mount(file, settings, root, [], notice, commands);
@@ -317,7 +319,7 @@ async function shortcutField(label: string): Promise<HTMLInputElement> {
 
 /// Il testo dell'editor, letto dal DOM di CodeMirror come lo legge chi guarda.
 function textToVideo(): string {
-  const rows = [...document.querySelectorAll(".cm-content .cm-line")];
+  const rows = [...document.querySelectorAll(".pane-editor .cm-content .cm-line")];
   return rows.map((r) => r.textContent).join("\n");
 }
 
@@ -329,8 +331,9 @@ const VAULT = {
 
 function editorTexts(): string[] {
   // `.cm-scroller > `: il livello dei fantasmi dei Blocchi (`blocks/motion.ts`)
-  // porta la classe del contenuto, ma non è un editor.
-  return [...document.querySelectorAll(".cm-scroller > .cm-content")].map((content) =>
+  // porta la classe del contenuto, ma non è un editor; `.pane-editor`: quelli
+  // delle schede messe da parte sono nascosti, in `.pane-editor-riposo`.
+  return [...document.querySelectorAll(".pane-editor .cm-scroller > .cm-content")].map((content) =>
     [...content.querySelectorAll(".cm-line")].map((line) => line.textContent ?? "").join("\n"),
   );
 }
@@ -2072,6 +2075,242 @@ describe("una sessione e le sue superfici", () => {
     expect(texts[0]).toContain(" [dopo il rimonto]");
   });
 
+  // C5: tornare a una scheda aperta non rimonta l'editor. La sua superficie
+  // resta da parte, nascosta, col cursore, lo scorrimento e la cronologia
+  // locale; il testo cambiato altrove intanto arriva come da fuori.
+  describe("tornare a una scheda già aperta", () => {
+    const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+    const tabOf = (pane: HTMLElement, name: string) =>
+      [...pane.querySelectorAll<HTMLElement>(".tab")].find((tab) => tab.textContent?.includes(name))!;
+    const viewIn = (pane: HTMLElement) => {
+      const host = pane.querySelector<HTMLElement>(".pane-editor");
+      return host ? findTextEditor(host) : null;
+    };
+    type TextView = NonNullable<ReturnType<typeof findTextEditor>>;
+    /// Una superficie liberata ha distrutto il suo editor, e con lui gli
+    /// ascoltatori e i plugin: il campo è privato in CodeMirror, ma è il segno.
+    const destroyed = (view: TextView) => (view as unknown as { destroyed: boolean }).destroyed;
+    /// Apre Spesa nel primo riquadro, torna su Benvenuto e dà l'editor di Spesa,
+    /// rimasto da parte.
+    const parkSpesa = async (): Promise<TextView> => {
+      const { openDocument } = await import("./panels/document");
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const spesa = viewIn(panes()[0]!)!;
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Spesa va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
+      return spesa;
+    };
+
+    it("ritrova la stessa superficie, col cursore e la cronologia locale", async () => {
+      const host = await start({ ...VAULT });
+      const { openDocument } = await import("./panels/document");
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const spesa = viewIn(panes()[0]!)!;
+      spesa.dispatch({ changes: { from: 4, insert: " fresco" }, selection: { anchor: 11 }, userEvent: "input.type" });
+      const depth = undoDepth(spesa.state);
+      expect(depth).toBeGreaterThan(0);
+
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Benvenuto torna davanti", () => viewIn(panes()[0]!)?.state.doc.toString().includes("Il primo documento") === true);
+      expect(editorViews()).toHaveLength(1);
+      expect(panes()[0]!.querySelectorAll(".pane-editor")).toHaveLength(1);
+      expect(panes()[0]!.querySelector<HTMLElement>(".pane-editor-riposo")?.hidden).toBe(true);
+
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti", () => viewIn(panes()[0]!) === spesa);
+      expect(spesa.state.doc.toString()).toContain("pane fresco, latte");
+      expect(spesa.state.selection.main.head).toBe(11);
+      expect(undoDepth(spesa.state)).toBe(depth);
+      expect(spesa.state.readOnly).toBe(false);
+      // La superficie che torna scrive ancora nella sessione.
+      spesa.dispatch({ changes: { from: 0, insert: "X" }, userEvent: "input.type" });
+      await settle();
+      const { documentSessions } = await import("./state/document-session");
+      expect(documentSessions.text("note/Spesa.md")).toContain("Xpane fresco");
+      // Il salvataggio arriva al disco qui, non nella prova dopo.
+      await waitFor("il salvataggio arriva al disco", () =>
+        host.atGate("writeDocument").some((call) => String(call.args[1]).includes("Xpane fresco")) &&
+        (host.files()["note/Spesa.md"] ?? "").includes("Xpane fresco"));
+    });
+
+    it("il testo cambiato in un altro riquadro intanto arriva, fuori dalla cronologia locale", async () => {
+      await start({ ...VAULT });
+      await splitRight();
+      await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+      await settle();
+      const { openDocument } = await import("./panels/document");
+      panes()[0]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await openDocument("note/Spesa.md");
+      await settle();
+      await waitFor("Spesa si apre a sinistra", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const parked = viewIn(panes()[0]!)!;
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Benvenuto torna davanti", () => viewIn(panes()[0]!) !== parked);
+
+      panes()[1]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre a destra", () => viewIn(panes()[1]!)?.state.doc.toString().includes("pane, latte") === true);
+      const right = viewIn(panes()[1]!)!;
+      right.dispatch({ changes: { from: 0, insert: "Lista: " }, userEvent: "input.type" });
+      await settle();
+
+      panes()[0]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti a sinistra", () => viewIn(panes()[0]!) === parked);
+      expect(parked.state.doc.toString()).toContain("Lista: pane, latte");
+      expect(undoDepth(parked.state)).toBe(0);
+    });
+
+    it("chiudere una scheda messa da parte smonta la sua superficie", async () => {
+      await start({ ...VAULT });
+      const { openDocument } = await import("./panels/document");
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const parked = viewIn(panes()[0]!)!;
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Spesa va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
+      const close = tabOf(panes()[0]!, "Spesa").parentElement!.querySelector<HTMLElement>(".tab-close");
+      expect(close).not.toBeNull();
+      close!.click();
+      await waitFor("la superficie da parte se ne va", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
+      expect(document.querySelectorAll(".cm-editor")).toHaveLength(1);
+      expect(destroyed(parked)).toBe(true);
+    });
+
+    it("il testo cambiato sul disco mentre è da parte arriva al ritorno", async () => {
+      const host = await start({ ...VAULT });
+      const parked = await parkSpesa();
+      host.writeFromOutside("note/Spesa.md", "cambiato da un'altra app\n");
+      const { documentSessions } = await import("./state/document-session");
+      await waitFor("la sessione rilegge il disco", () => documentSessions.text("note/Spesa.md") === "cambiato da un'altra app\n");
+      // Da parte non si ridisegna: è staccata dalla sessione.
+      expect(parked.state.doc.toString()).toContain("pane, latte");
+
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti", () => viewIn(panes()[0]!) === parked);
+      expect(parked.state.doc.toString()).toBe("cambiato da un'altra app\n");
+      expect(undoDepth(parked.state)).toBe(0);
+    });
+
+    it("una rinomina o uno spostamento smontano la superficie da parte, e la scheda rimonta col testo", async () => {
+      const host = await start({ ...VAULT });
+      const parked = await parkSpesa();
+      host.renameFromOutside("note/Spesa.md", "note/Lista.md");
+      await waitFor("la scheda segue la rinomina", () => !!tabOf(panes()[0]!, "Lista"));
+      await waitFor("la superficie da parte se ne va", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
+      expect(destroyed(parked)).toBe(true);
+
+      tabOf(panes()[0]!, "Lista").click();
+      await waitFor("Lista si monta", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const lista = viewIn(panes()[0]!)!;
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Lista va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
+
+      host.renameFromOutside("note/Lista.md", "Archivio/Lista.md");
+      await waitFor("la superficie da parte se ne va dopo lo spostamento", () =>
+        panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
+      expect(destroyed(lista)).toBe(true);
+      tabOf(panes()[0]!, "Lista").click();
+      await waitFor("Lista si monta dalla cartella nuova", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      expect(editorViews()).toHaveLength(1);
+    });
+
+    it("un salvataggio in volo quando la scheda va da parte arriva al disco, e la superficie torna intatta", async () => {
+      const host = await start({ ...VAULT });
+      const { openDocument } = await import("./panels/document");
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const spesa = viewIn(panes()[0]!)!;
+      const release = host.throttle("writeDocument");
+      spesa.dispatch({ changes: { from: 0, insert: "A " }, userEvent: "input.type" });
+      await waitFor("il primo salvataggio è in volo", () =>
+        host.atGate("writeDocument").some((call) => String(call.args[1]).startsWith("A pane")));
+      // Il secondo resta nel debounce della superficie: andare da parte lo registra.
+      spesa.dispatch({ changes: { from: 2, insert: "B " }, userEvent: "input.type" });
+      const depth = undoDepth(spesa.state);
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Spesa va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
+      const { documentSessions } = await import("./state/document-session");
+      expect(documentSessions.text("note/Spesa.md")).toBe("A B pane, latte, arance\n");
+
+      release();
+      await waitFor("tutto arriva al disco", () => host.files()["note/Spesa.md"] === "A B pane, latte, arance\n");
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti", () => viewIn(panes()[0]!) === spesa);
+      expect(spesa.state.doc.toString()).toBe("A B pane, latte, arance\n");
+      expect(undoDepth(spesa.state)).toBe(depth);
+      expect(document.querySelector('.sheet-notice[data-notice]')).toBeNull();
+    });
+
+    it("la luce cambiata mentre è da parte arriva al ritorno", async () => {
+      await start({ ...VAULT });
+      const { setEditorTheme } = await import("./panels/document");
+      setEditorTheme("light");
+      const parked = await parkSpesa();
+      expect(isDarkTheme(parked)).toBe(false);
+
+      setEditorTheme("dark");
+      expect(isDarkTheme(viewIn(panes()[0]!)!)).toBe(true);
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti", () => viewIn(panes()[0]!) === parked);
+      expect(isDarkTheme(parked)).toBe(true);
+    });
+
+    it("dividere non copia le superfici da parte, e chiudere il riquadro le smonta", async () => {
+      await start({ ...VAULT });
+      const left = await parkSpesa();
+      await splitRight();
+      await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+      await settle();
+      expect(panes()[1]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(0);
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(1);
+
+      const { openDocument } = await import("./panels/document");
+      panes()[1]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await openDocument("note/Riunione.md");
+      await waitFor("Riunione si apre a destra", () => viewIn(panes()[1]!)?.state.doc.toString().includes("Appunti") === true);
+      const right = viewIn(panes()[1]!)!;
+      tabOf(panes()[1]!, "Benvenuto").click();
+      await waitFor("Riunione va da parte a destra", () => panes()[1]!.querySelectorAll(".pane-editor-riposo").length === 1);
+
+      const registry = await import("./ui/commands");
+      await registry.allCommands().find((entry) => entry.id === "shell.pane.close")?.run?.();
+      await waitFor("il riquadro si chiude", () => panes().length === 1);
+      expect(destroyed(right)).toBe(true);
+      expect(destroyed(left)).toBe(false);
+      expect(document.querySelectorAll(".pane-editor-riposo")).toHaveLength(1);
+    });
+
+    it("tiene da parte al più quattro superfici per riquadro: la quinta libera la meno recente", async () => {
+      const notes: Record<string, string> = {};
+      for (let i = 1; i <= 5; i += 1) notes[`n/Nota ${i}.md`] = `testo della nota ${i}\n`;
+      await start({ ...VAULT, ...notes });
+      const { openDocument } = await import("./panels/document");
+      const views: TextView[] = [viewIn(panes()[0]!)!];
+      for (let i = 1; i <= 5; i += 1) {
+        await openDocument(`n/Nota ${i}.md`);
+        await waitFor(`Nota ${i} si apre`, () => viewIn(panes()[0]!)?.state.doc.toString() === `testo della nota ${i}\n`);
+        views.push(viewIn(panes()[0]!)!);
+      }
+      // Da parte: Benvenuto, Nota 1…4; la quinta superficie da parte ha liberato Benvenuto.
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(4);
+      expect(destroyed(views[0]!)).toBe(true);
+      expect(views.slice(1).map(destroyed)).toEqual([false, false, false, false, false]);
+      expect(document.querySelectorAll(".cm-editor")).toHaveLength(5);
+
+      // Benvenuto torna montato da capo; Nota 1, ora la meno recente, se ne va.
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Benvenuto si rimonta", () => viewIn(panes()[0]!)?.state.doc.toString().includes("Il primo documento") === true);
+      expect(viewIn(panes()[0]!)).not.toBe(views[0]);
+      expect(destroyed(views[1]!)).toBe(true);
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(4);
+      tabOf(panes()[0]!, "Nota 3").click();
+      await waitFor("Nota 3 torna com'era", () => viewIn(panes()[0]!) === views[3]);
+    });
+  });
+
   it("«Apri a lato» dal menu della riga apre la nota in un secondo riquadro", async () => {
     await start(VAULT);
     await contextMenu(row("Benvenuto"), "Apri a lato");
@@ -2392,7 +2631,7 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     Object.defineProperty(drop, "dataTransfer", {
       value: { types: ["application/x-fub-entries"], files: [], getData: (kind: string) => (kind === "application/x-fub-entries" ? entries : "") },
     });
-    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    document.querySelector(".pane-editor .cm-content")!.dispatchEvent(drop);
     expect(drop.defaultPrevented).toBe(true);
     await waitFor("il rimando è nel testo", () => editorTexts().some((text) => text.includes("img/foto.png")));
     expect(editorTexts().join("\n")).not.toContain("/vault/");
@@ -2426,7 +2665,7 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     Object.defineProperty(drop, "dataTransfer", {
       value: { types: ["application/x-fub-entries"], files: [], getData: (kind: string) => (kind === "application/x-fub-entries" ? entries : "") },
     });
-    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    document.querySelector(".pane-editor .cm-content")!.dispatchEvent(drop);
     await waitFor("il link è nel testo", () => editorTexts().some((text) => text.includes("[Spesa](note/Spesa.md)")));
     expect(editorTexts().join("\n")).not.toContain("[[");
   });
@@ -2440,7 +2679,7 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     const files = [shortcut, new File([new Uint8Array([1, 2, 3])], "foto.png")];
     const drop = new Event("drop", { bubbles: true, cancelable: true });
     Object.defineProperty(drop, "dataTransfer", { value: { types: ["Files"], files, getData: () => "" } });
-    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    document.querySelector(".pane-editor .cm-content")!.dispatchEvent(drop);
     expect(drop.defaultPrevented).toBe(true);
     await waitFor("il link è nel testo", () => editorTexts().some((text) => text.includes("[Pagina utile](https://example.org/pagina)")));
     await waitFor("l'immagine è depositata", () => host.atGate("resourceWrite").length === 1);
@@ -3533,7 +3772,8 @@ describe("la finestra senza vault", () => {
     };
     const host = await start({}, [], null, notice);
 
-    expect(host.atGate("sessionNotice").length).toBe(1);
+    // Un tiraggio per l'avviso, uno che risponde vuoto e ferma il ciclo.
+    expect(host.atGate("sessionNotice").length).toBe(2);
     const { recentNotices } = await import("./ui/notify");
     expect(recentNotices().some((a) => a.text.includes("non si può scrivere"))).toBe(true);
 
@@ -3545,6 +3785,37 @@ describe("la finestra senza vault", () => {
     const { recentNotices: healthyRecent } = await import("./ui/notify");
     expect(healthy.atGate("sessionNotice").length).toBe(1);
     expect(healthyRecent().some((a) => a.text.includes("non si può scrivere"))).toBe(false);
+  });
+
+  it("dopo la diagnosi tira gli avvisi del percorso di disegno e li mostra", async () => {
+    // Il driver disallineato nasce in `fub_app::run` prima di GTK, e arriva
+    // in coda all'avviso di sessione come `custom` col topic `rendering`:
+    // senza il ciclo dei tiraggi si vedrebbe solo il primo.
+    const trouble: KernelNotice = {
+      event: {
+        type: "trouble",
+        severity: "warning",
+        subject: null,
+        error: { kind: "io", message: "`/config` non si può scrivere" },
+        gate: null,
+      },
+      origin: { actor: { kind: "kernel" }, batch: null },
+    };
+    const rendering: KernelNotice = {
+      event: {
+        type: "custom",
+        topic: "rendering",
+        payload: { kind: "driver_mismatch", kernel: "550.163.01", library: "595.112.07" },
+      },
+      origin: { actor: { kind: "kernel" }, batch: null },
+    };
+    const host = await start({}, [], null, [trouble, rendering]);
+
+    expect(host.atGate("sessionNotice").length).toBe(3);
+    const { recentNotices } = await import("./ui/notify");
+    const texts = recentNotices().map((a) => a.text);
+    expect(texts.some((text) => text.includes("non si può scrivere"))).toBe(true);
+    expect(texts.some((text) => text.includes("riavvia il computer") && text.includes("550.163.01"))).toBe(true);
   });
 });
 
@@ -3897,7 +4168,7 @@ describe("i riquadri dopo un'attesa", () => {
     await openDocument("note/Spesa.md");
     await settle();
 
-    expect(panes()[1]!.querySelector(".cm-content")?.textContent).toContain("pane, latte");
+    expect(panes()[1]!.querySelector(".pane-editor .cm-content")?.textContent).toContain("pane, latte");
     expect(state.currentDoc).toBe("note/Spesa.md");
     expect(panes()[0]!.querySelector(".document-surface-error")).not.toBeNull();
   });

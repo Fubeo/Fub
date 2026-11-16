@@ -323,7 +323,8 @@ describe("la tabella Markdown e la Base danno lo stesso numero", () => {
       // con le frecce sceglie le celle.
       input.value = "9999";
       expect(key(input, "Escape").defaultPrevented).toBe(true);
-      expect(input.value).toBe("1800");
+      // Lasciato il campo, il numero torna a leggersi nel formato della lingua.
+      expect(input.value).toBe("1.800");
       expect(document.activeElement).toBe(viewport);
       expect(host.querySelector('tr[data-index="0"] > td[data-cell="1"]')!.hasAttribute("data-picked")).toBe(true);
       for (let step = 0; step < 3; step++) key(viewport, "ArrowDown", true);
