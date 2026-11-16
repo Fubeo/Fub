@@ -302,7 +302,20 @@ appena qualcuno inserisce un item nel mezzo.
   rosso si corregge con una PR normale.
 - I test del workspace girano con `cargo nextest run --workspace --profile ci`
   più `cargo test --workspace --doc`; i fuzzer del Markdown girano a 2000 casi
-  (20000 nella corsa settimanale e con `fuzz_completo`).
+  (20000 nella corsa settimanale e con `fuzz_completo`). Su Windows si
+  dividono in tre job, `build + test (windows-latest, 1/3)` e seguenti: ognuno
+  compila tutto e fa girare un terzo dei test (`--partition hash:<parte>/3`),
+  e i doctest girano nella prima parte. Il numero delle parti sta in
+  `PARTI_WINDOWS` di
+  [`baseline-dal-runner.mjs`](../../.github/scripts/baseline-dal-runner.mjs),
+  che la sua autoprova confronta con la matrice.
+- I test dei workspace in `vendor/` (WordCraft, GridCraft, VectorCraft) sono
+  un job loro, `motori in vendor`: su una PR girano solo se tocca `vendor/`,
+  `.cargo/`, una `rust-toolchain` o `ci.yml`, perché leggono soltanto quelli;
+  su `main` sempre. I test del workspace non hanno un filtro così: leggono
+  anche `apps/client/` e `docs/`.
+- La WebView vera gira in due job: R1 (la memoria) da sola, e gli altri
+  scenari insieme.
 - La cache Rust salva solo da `main` (budget di 10 GB); i job che possono
   riutilizzarla leggono la test cache di Linux con `shared-key: test` e non la
   risalvano.

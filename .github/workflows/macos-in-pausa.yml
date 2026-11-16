@@ -13,9 +13,9 @@ name: macOS e iOS in pausa
 # (per esempio dopo un cambio a codice `cfg` del Mac). Quando macOS torna:
 # `macos-latest` si rimette nelle matrici di `ci.yml` (job `test` e
 # `librerie-runtime`) e in quella di `release.yml`, il job `ios` torna in
-# `mobile.yml`, `build + test (macos-latest)` torna fra i job richiesti di
-# `.github/scripts/check-release-gate.mjs` e in `TEST` di
-# `baseline-dal-runner.mjs`, e questo file si cancella. Lo stato di prima è nel
+# `mobile.yml`, `build + test (macos-latest)` torna in `TEST` di
+# `baseline-dal-runner.mjs` (che è anche fra i job richiesti di
+# `.github/scripts/check-release-gate.mjs`), e questo file si cancella. Lo stato di prima è nel
 # commit che lo ha creato (`git log --diff-filter=A -- .github/workflows/macos-in-pausa.yml`).
 
 on:
