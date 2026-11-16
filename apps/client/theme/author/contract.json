@@ -1266,6 +1266,10 @@
     "canvas-ruler-bar",
     "canvas-ruler-grip",
     "canvas-ruler-angle",
+    "cm-fub-comment-range",
+    "cm-fub-comment-range-on",
+    "comment-range",
+    "cm-fub-comment-source",
     "draw-export",
     "draw-export-text",
     "draw-rail",
@@ -3131,6 +3135,10 @@
     "canvas-ruler-bar": "cornice",
     "canvas-ruler-grip": "cornice",
     "canvas-ruler-angle": "cornice",
+    "cm-fub-comment-range": "segno",
+    "cm-fub-comment-range-on": "segno",
+    "comment-range": "segno",
+    "cm-fub-comment-source": "segno",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-rail": "cornice",
@@ -6926,6 +6934,21 @@
       ]
     },
     {
+      "name": "note-comments",
+      "part": "editors",
+      "hooks": [
+        "cm-fub-comment-range",
+        "cm-fub-comment-range-on",
+        "comment-range",
+        "cm-fub-comment-source",
+        "markdown-rendered"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
       "name": "draw-editor",
       "part": "draw",
       "hooks": [
@@ -10049,10 +10072,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1863,
+    "hooks": 1867,
     "state_names": 7,
-    "assigned_states": 879,
-    "components": 258,
+    "assigned_states": 881,
+    "components": 259,
     "preference_tokens": 191
   }
 }

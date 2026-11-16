@@ -16,6 +16,10 @@ export interface SidePanelController {
   reveal(side: SidePanel): void;
   /// Mostra o nasconde il pannello.
   toggle(side: SidePanel): void;
+  /// Chi ha scelto nel pannello qualcosa che si mostra fuori (un documento
+  /// dall'albero) lo dice: un cassetto sovrapposto si chiude e lascia il
+  /// fuoco a chi lo prende, un pannello affiancato resta com'è.
+  dismiss(side: SidePanel): void;
 }
 
 let controller: SidePanelController | null = null;
@@ -38,4 +42,8 @@ export function revealSidePanel(side: SidePanel): void {
 
 export function toggleSidePanel(side: SidePanel): void {
   controller?.toggle(side);
+}
+
+export function dismissSidePanel(side: SidePanel): void {
+  controller?.dismiss(side);
 }

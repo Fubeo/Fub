@@ -155,7 +155,8 @@
     };
   }
 
-  // ctx: { fetchFn?, apiKey?, grants?, signal? }. apiKey lives in memory for
+  // ctx: { fetchFn?, apiKey?, grants?, signal? }. apiKey (read by the popup
+  // from keystore.js just before the call) lives in memory for
   // this call only. grants = sanitizeGrants(...) output; remote fetches and
   // non-loopback targets require a grant. signal = caller-owned
   // AbortController signal (timeout/cancel); when absent and AbortController

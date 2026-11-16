@@ -185,3 +185,54 @@ fn a_text_file_without_a_format_is_still_counted() {
         vec!["Parole: 2 · Caratteri: 8".to_string()]
     );
 }
+
+/// Un commento CriticMarkup non cambia le parole di una nota: il pannello
+/// conta il passo, non i segni né la discussione. È il numero della banda
+/// («N parole») e di `fub-cli wordcount`.
+#[test]
+fn a_comment_does_not_change_the_counts() {
+    let vault = Vault::new();
+    std::fs::write(
+        vault.root.join("Commentata.md"),
+        "Un {==testo==}{>>@Anna 2026-11-08 17:40: tre parole qui<<} finale.\n",
+    )
+    .unwrap();
+    std::fs::write(vault.root.join("Senza.md"), "Un testo finale.\n").unwrap();
+    let ws = vault.open();
+    let with = texts(&render_open(&ws, "Commentata.md"));
+    assert_eq!(with, texts(&render_open(&ws, "Senza.md")));
+    assert_eq!(with, vec!["Parole: 3 · Caratteri: 17".to_string()]);
+}
+
+/// Anche la riga «Selezione» conta il testo che si legge: una selezione che
+/// prende un commento non conta i suoi segni né i messaggi, che il buffer sia
+/// pulito (coordinate vere) o sporco (solo il testo).
+#[test]
+fn a_selected_comment_counts_only_its_passage() {
+    let vault = Vault::new();
+    let source = "Un {==testo==}{>>@Anna 2026-11-08 17:40: tre parole qui<<} finale.\n";
+    std::fs::write(vault.root.join("Commentata.md"), source).unwrap();
+    let ws = vault.open();
+    let doc = DocId::new("Commentata.md");
+    let end = source.find(" finale").unwrap();
+    let selected = &source[..end];
+    let expected = vec![
+        "Parole: 3 · Caratteri: 17".to_string(),
+        "Selezione — parole: 2 · caratteri: 8".to_string(),
+    ];
+    for selections in [
+        SelectionSet::anchored(fub_abi::model::Span::new(0, end), selected),
+        SelectionSet::floating(selected),
+    ] {
+        ws.set_active_context(Some(
+            ViewContext::new(MAIN_PANE)
+                .with_doc(Some(doc.clone()))
+                .with_selections(Some(selections)),
+        ));
+        assert_eq!(
+            texts(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
+            expected,
+            "«Un testo» e basta: la discussione non è testo selezionato"
+        );
+    }
+}

@@ -19,6 +19,8 @@
 // - `S9/Fogli vivi.canvas` e `S9/Conti-01.xlsx` … `S9/Conti-20.xlsx`: le
 //   trecento schede di S3, negli stessi posti, e in più venti fogli `.xlsx`
 //   in un blocco di 5 × 4 a sinistra della prima riga (S9);
+// - `F3/Cartella/`: trenta note e una sottocartella di dieci, la cartella che
+//   F3 apre e chiude;
 // - `config/settings.json`: le impostazioni di macchina con la sonda accesa.
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -40,6 +42,9 @@ export const LONG_LINES = 5_000;
 export const BLOCK_LINES = 2_000;
 export const CARDS = 300;
 export const LIVE_CARDS = 20;
+
+/// La cartella che F3 apre e chiude: trenta note e una sottocartella.
+export const GESTURE_FOLDER = "F3/Cartella";
 
 /// Il nome della nota `i` di S2, da 1 a `NOTES`.
 export const noteName = (i) => `Nota ${String(i).padStart(5, "0")}`;
@@ -295,6 +300,9 @@ export function writeFixtures(root) {
   for (let i = 1; i <= SHEET_CARDS; i++) writeFileSync(join(vault, sheetName(i)), workbook());
   writeFileSync(join(vault, "T1", "Tessere.png"), storedPng(FRAME.width, FRAME.height));
   for (const [name, from] of Object.entries(MODE_FILES)) copyFileSync(join(repo, from), join(vault, "R1", name));
+  mkdirSync(join(vault, GESTURE_FOLDER, "Dentro"), { recursive: true });
+  for (let i = 1; i <= 30; i++) writeFileSync(join(vault, GESTURE_FOLDER, `Voce ${String(i).padStart(2, "0")}.md`), `# Voce ${i}\n\nUna nota della cartella di F3.\n`);
+  for (let i = 1; i <= 10; i++) writeFileSync(join(vault, GESTURE_FOLDER, "Dentro", `Sotto ${i}.md`), `# Sotto ${i}\n`);
   // Il formato del livello macchina (`fub_kernel::settings`, schema 2).
   writeFileSync(join(config, "settings.json"), JSON.stringify({ version: 2, values: { "perf.probe": true } }, null, 2) + "\n");
   return { vault, config };

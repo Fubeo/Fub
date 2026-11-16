@@ -228,6 +228,15 @@ let tab: SettingsTab = "settings";
 /// ridisegno della stessa lo conserva.
 let renderedTab: SettingsTab | null = null;
 
+/// La sezione scelta con un clic nell'indice. Resta la voce attiva finché chi
+/// legge non scorre di suo: lo scorrimento che il clic avvia non può portare
+/// in cima le sezioni dell'ultimo schermo, e l'osservatore ne sceglierebbe
+/// un'altra.
+let chosenSection: string | null = null;
+
+/// I tasti con cui si scorre il corpo da tastiera.
+const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
+
 const settingsTabsId = "settings-body";
 
 function tabButtons(): HTMLButtonElement[] {
@@ -472,6 +481,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     lifetime.listen(field, "input", () => {
       if (!isFilterable(tab)) return;
       pinnedRow = null;
+      chosenSection = null;
       filters[tab].query = field.value;
       scrollEl.scrollTop = 0;
       applyFilter();
@@ -481,6 +491,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     lifetime.listen(modifiedEl, "click", () => {
       if (!isFilterable(tab)) return;
       pinnedRow = null;
+      chosenSection = null;
       filters[tab].modified = !filters[tab].modified;
       scrollEl.scrollTop = 0;
       syncToolbar();
@@ -488,6 +499,25 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     });
   }
   lifetime.listen(scrollEl, "scroll", () => updateTocCurrent());
+  // Chi scorre di suo (rotella, dito, barra, tasti) riprende la voce attiva
+  // dalla posizione, anche se in fondo lo scorrimento non si muove più.
+  const ownScroll = (): void => {
+    if (chosenSection === null) return;
+    chosenSection = null;
+    updateTocCurrent();
+  };
+  lifetime.listen(scrollEl, "wheel", ownScroll, { passive: true });
+  lifetime.listen(scrollEl, "touchmove", ownScroll, { passive: true });
+  lifetime.listen(scrollEl, "pointerdown", (event) => {
+    if (event.target === scrollEl) ownScroll();
+  });
+  lifetime.listen(scrollEl, "keydown", (event) => {
+    if (!SCROLL_KEYS.has(event.key)) return;
+    // I tasti di un controllo sono del controllo, non dello scorrimento.
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("input, textarea, select, button, [contenteditable]") || target?.matches("[role]")) return;
+    ownScroll();
+  });
   if (tocListEl) {
     lifetime.listen(tocListEl, "click", (event) => {
       const target = (event.target as Element | null)?.closest<HTMLButtonElement>("button[data-target]");
@@ -723,6 +753,7 @@ async function render(): Promise<void> {
     replacingBody = false;
   }
   if (renderedTab === tab) restoreDrafts(drafts);
+  else chosenSection = null;
   rememberSavedValues();
   if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
   scrollEl.scrollTop = renderedTab === tab ? scrollTop : 0;
@@ -904,7 +935,8 @@ function syncTocEntries(): void {
   updateTocCurrent();
 }
 
-/// La sezione in lettura: l'ultima il cui titolo è salito oltre il bordo alto
+/// La sezione in lettura: quella scelta nell'indice, finché chi legge non
+/// scorre di suo; sennò l'ultima il cui titolo è salito oltre il bordo alto
 /// del corpo. In fondo allo scroll è l'ultima, anche se è corta e il suo titolo
 /// non può salire fin lassù.
 function updateTocCurrent(): void {
@@ -913,8 +945,11 @@ function updateTocCurrent(): void {
   if (visible.length === 0) return;
   const top = scrollEl.getBoundingClientRect().top;
   let current = visible[0]!;
+  const chosen = chosenSection === null ? undefined : visible.find((section) => section.id === chosenSection);
+  if (chosenSection !== null && !chosen) chosenSection = null;
   const atEnd = scrollEl.scrollTop > 0 && scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 2;
-  if (atEnd) current = visible[visible.length - 1]!;
+  if (chosen) current = chosen;
+  else if (atEnd) current = visible[visible.length - 1]!;
   else {
     for (const section of visible) {
       if (section.getBoundingClientRect().top - top <= 32) current = section;
@@ -932,6 +967,7 @@ function updateTocCurrent(): void {
 function jumpTo(id: string): void {
   const section = document.getElementById(id);
   if (!section || !bodyEl.contains(section)) return;
+  chosenSection = id;
   section.scrollIntoView?.({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" });
   section.querySelector<HTMLElement>(".settings-section-title")?.focus({ preventScroll: true });
   for (const link of tocListEl?.querySelectorAll<HTMLButtonElement>("button[data-target]") ?? []) {
