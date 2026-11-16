@@ -210,6 +210,9 @@ describe("sul telefono la barra è un foglio, e il fuoco resta alla maniglia (#4
       toggle: () => {
         sidebar.hidden = !sidebar.hidden;
       },
+      dismiss: () => {
+        sidebar.hidden = true;
+      },
     });
     unmount = mountRail();
   });
