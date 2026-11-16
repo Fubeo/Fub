@@ -121,8 +121,10 @@ export function resolveHints(
   return out;
 }
 
-/// Disegna le voci: un `kbd` per tasto, la frase, un punto fra una voce e
-/// l'altra.
+/// Disegna le voci come una riga di testo, quella del prototipo: un `kbd` per
+/// tasto (attaccati, «↑↓»), uno spazio e la frase, « · » fra una voce e
+/// l'altra. Gli spazi sono caratteri veri, non margini: la riga si legge e si
+/// misura come il testo che è.
 function drawParts(element: HTMLElement, parts: readonly HintPart[]): void {
   const children: Node[] = [];
   parts.forEach((part, index) => {
@@ -137,11 +139,11 @@ function drawParts(element: HTMLElement, parts: readonly HintPart[]): void {
     const say = document.createElement("span");
     say.className = "status-hints-say";
     say.textContent = part.say;
-    item.append(say);
+    item.append(" ", say);
     if (index > 0) {
       const dot = document.createElement("span");
       dot.className = "status-hints-dot";
-      dot.textContent = "·";
+      dot.textContent = " · ";
       children.push(dot);
     }
     children.push(item);

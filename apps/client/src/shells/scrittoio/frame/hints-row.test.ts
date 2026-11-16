@@ -180,7 +180,7 @@ describe("la riga nella banda", () => {
     // Ferme le dita, la riga si riscrive entro due pause, leggendo una volta.
     vi.advanceTimersByTime(HINTS_PAUSE_MS * 2);
     expect(reads).toBe(1);
-    expect(text()).toBe("/inserisce un blocco");
+    expect(text()).toBe("/ inserisce un blocco");
     expect(row().dataset.context).toBe("text");
   });
 
@@ -205,14 +205,14 @@ describe("la riga nella banda", () => {
     // Ferme le dita: la riga si riscrive e smette di essere in attesa nello
     // stesso giro, mai l'una senza l'altra.
     vi.advanceTimersByTime(HINTS_PAUSE_MS * 2);
-    expect(text()).toBe("/inserisce un blocco");
+    expect(text()).toBe("/ inserisce un blocco");
     expect(pending()).toBe(false);
     // Un avviso che non cambia niente arma comunque la pausa, e la chiude.
     hints.changed();
     expect(pending()).toBe(true);
     vi.advanceTimersByTime(HINTS_PAUSE_MS);
     expect(pending()).toBe(false);
-    expect(text()).toBe("/inserisce un blocco");
+    expect(text()).toBe("/ inserisce un blocco");
   });
 
   it("l'impostazione riletta la tiene in attesa fino alla risposta", async () => {
@@ -292,7 +292,7 @@ describe("la riga nella banda", () => {
     for (const listener of world.settingListeners) listener({ key: "editor.hints" });
     await settle();
     expect(row().hidden).toBe(false);
-    expect(text()).toBe("/inserisce un blocco");
+    expect(text()).toBe("/ inserisce un blocco");
   });
 
   it("segue una scorciatoia cambiata nelle Preferenze", async () => {
@@ -307,12 +307,12 @@ describe("la riga nella banda", () => {
     context = { id: "text", items: [{ command: "demo.find", say: "cerca o esegue" }] };
     hints.changed(true);
     vi.advanceTimersByTime(HINTS_PAUSE_MS);
-    expect(text()).toBe("Ctrl+Ocerca o esegue");
+    expect(text()).toBe("Ctrl+O cerca o esegue");
     world.settings = [setting("keys.demo.find", "Mod-p")];
     for (const listener of world.settingListeners) listener({ key: "keys.demo.find" });
     await settle();
     vi.advanceTimersByTime(HINTS_PAUSE_MS);
-    expect(text()).toBe("Ctrl+Pcerca o esegue");
+    expect(text()).toBe("Ctrl+P cerca o esegue");
     // Tolta: la voce non c'è più.
     world.settings = [setting("keys.demo.find", "")];
     for (const listener of world.settingListeners) listener({ key: "keys.demo.find" });
@@ -328,11 +328,11 @@ describe("la riga nella banda", () => {
     const hints = openHintSource(() => ({ id: "x", items: [{ keys: ["ArrowUp"], say }] }));
     hints.changed(true);
     vi.advanceTimersByTime(HINTS_PAUSE_MS);
-    expect(text()).toBe("↑scegli");
+    expect(text()).toBe("↑ scegli");
     say = "choose";
     for (const listener of world.languageListeners) listener();
     vi.advanceTimersByTime(HINTS_PAUSE_MS);
-    expect(text()).toBe("↑choose");
+    expect(text()).toBe("↑ choose");
   });
 
   it("chiusa la banda, la riga se ne va e le fonti non costano niente", async () => {

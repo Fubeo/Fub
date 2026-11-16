@@ -822,7 +822,7 @@ describe("la riga dei suggerimenti (T14)", () => {
     // Con la somma: una voce intera, senza il punto rimasto in fondo.
     expect(row.querySelectorAll(".status-hints-item")).toHaveLength(1);
     expect(row.querySelector(".status-hints-dot")).toBeNull();
-    expect(row.textContent).toBe("Entermodifica");
+    expect(row.textContent).toBe("Enter modifica");
   });
 });
 
