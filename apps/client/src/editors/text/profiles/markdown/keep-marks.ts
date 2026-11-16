@@ -12,6 +12,7 @@
 // cursore solo, che prendono anche del testo: chi toglie soltanto segni (la
 // guida, le due fermate al bordo) sa già che cosa fa.
 import { EditorSelection, EditorState, type Extension, Transaction, type TransactionSpec } from "@codemirror/state";
+import { withLineBreaks } from "../../line-breaks";
 import type { ElementMarks } from "./cursor-elements";
 import { openedPair } from "./empty-pair";
 import { brokenTwins, elementsTouching, type FormatElement } from "./format-toggle";
@@ -109,7 +110,9 @@ export function keptMarks(state: EditorState, cuts: readonly Cut[]): {
     do at++; while (at < hi && removed(at) && !writes.has(at));
     changes.push({ from: start, to: at });
   }
-  for (const cut of cuts) if (cut.insert) changes.push({ from: cut.from, to: cut.from, insert: cut.insert });
+  // Il testo scritto va a capo con "\n" (`Text.toString`), e le sue lunghezze
+  // sono posizioni; nella nota entra con i suoi a capo.
+  for (const cut of cuts) if (cut.insert) changes.push({ from: cut.from, to: cut.from, insert: withLineBreaks(state, cut.insert) });
   const set = state.changes(changes);
   const last = cuts[cuts.length - 1]!;
   const cursor = last.insert ? set.mapPos(last.from, -1) + last.insert.length : set.mapPos(last.to, -1);

@@ -1,6 +1,7 @@
 import { EditorSelection, type StateCommand } from "@codemirror/state";
 import { moveLineDown, moveLineUp } from "@codemirror/commands";
 import type { KeyBinding } from "@codemirror/view";
+import { withLineBreaks } from "./line-breaks";
 
 /// Duplica sotto la riga corrente (o il blocco di righe della selezione). Il
 /// cursore scende sulla copia, così ripetere il comando accumula copie invece
@@ -15,7 +16,8 @@ export const duplicateLines: StateCommand = ({ state, dispatch }) => {
         let toLine = nextLine?.number ?? first.number;
         if (!range.empty && nextLine && range.to === nextLine.from) toLine -= 1;
         const last = state.doc.line(toLine);
-        const copy = `${state.lineBreak}${state.sliceDoc(first.from, last.to)}`;
+        // La copia si conta con "\n": la sua lunghezza è in posizioni.
+        const copy = `\n${state.doc.sliceString(first.from, last.to)}`;
         const key = `${first.number}:${last.number}`;
         if (seen.has(key)) {
           return {
@@ -24,7 +26,7 @@ export const duplicateLines: StateCommand = ({ state, dispatch }) => {
         }
         seen.add(key);
         return {
-          changes: { from: last.to, insert: copy },
+          changes: { from: last.to, insert: withLineBreaks(state, copy) },
           range: EditorSelection.range(range.anchor + copy.length, range.head + copy.length),
         };
       }),
