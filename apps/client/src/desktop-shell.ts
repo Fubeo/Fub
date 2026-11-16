@@ -27,6 +27,7 @@ import { mountLinkPreview } from "./ui/link-preview";
 import { FORMATBAR_EVENT } from "./panels/selection-bubble";
 import { MINIBAR_SETTING, miniBarModeOf } from "./panels/mini-bar";
 import { listenForFailures, mountNotifications, notify, setWatcherOff } from "./ui/notify";
+import { listenForRenderingNotices } from "./ui/rendering-notice";
 import { writeClipboardText } from "./platform/clipboard";
 import { closeCommandPalette, openCommandPalette, startCommand } from "./ui/palette";
 import {
@@ -128,6 +129,9 @@ import { mountWheelTextSize, zoomBy } from "./state/zoom";
 /// chiavi `localStorage` dove stavano prima (si adottano una volta).
 const SIDE_SETTING = { sidebar: "chrome.sidebar.visible", inspector: "chrome.inspector.visible" } as const;
 const LEGACY_SIDE = { sidebar: "fub.layout.sidebar", inspector: "fub.layout.inspector" } as const;
+/// Quanti avvisi di sessione si tirano al più: la diagnosi del log più quelli
+/// del percorso di disegno sono tre; il resto è margine.
+const SESSION_NOTICE_PULLS = 8;
 
 /** Apply machine chrome at boot and after external profile/setting changes.
  * A frame change is intentionally NOT live: native decorations are chosen
@@ -1144,6 +1148,7 @@ async function init(): Promise<Teardown> {
   );
 
   listenForFailures(pageWindowLifetime);
+  listenForRenderingNotices(pageWindowLifetime);
   // Un rifiuto che nessuno ha raccolto è un guasto che nessuno vedrebbe: la
   // console della webview in un'app impacchettata non si apre.
   pageWindowLifetime.listen(window, "unhandledrejection", (event: PromiseRejectionEvent) => {
@@ -1163,9 +1168,17 @@ async function init(): Promise<Teardown> {
   // router in piedi, e si consegna come un evento qualunque: l'ordine dell'IPC
   // garantisce che `listenForFailures` — iscritta prima del router — sia già
   // lì a riceverlo.
-  const notice = await api.sessionNotice();
-  if (!alive()) return teardown;
-  if (notice) forwardNotice(notice);
+  //
+  // Dopo la diagnosi vengono gli altri avvisi nati prima della shell (il
+  // percorso di disegno, `ui/rendering-notice.ts`), uno per tiraggio: si tira
+  // finché la risposta è vuota, con un tetto per non girare all'infinito su
+  // un host che sbaglia.
+  for (let pulls = 0; pulls < SESSION_NOTICE_PULLS; pulls += 1) {
+    const notice = await api.sessionNotice();
+    if (!alive()) return teardown;
+    if (!notice) break;
+    forwardNotice(notice);
+  }
 
   // Il locale del sistema (§12.3), **prima** di aprire il vault: da qui in poi
   // ogni `render_view` lo trova già pubblicato, invece di disegnare il primo

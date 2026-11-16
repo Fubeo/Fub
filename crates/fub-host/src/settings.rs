@@ -252,6 +252,15 @@ pub const APPEARANCE_MOTION: &str = "appearance.motion";
 pub const APPEARANCE_FRAME_RATE: &str = "appearance.frame-rate";
 /// I tetti offerti dal pannello, dal più alto.
 pub const FRAME_RATE_CAPS: [u32; 7] = [240, 165, 144, 120, 90, 60, 30];
+/// Chi disegna le pagine della webview su Linux (WebKitGTK): `auto` lascia
+/// il percorso di WebKit e avvisa dei problemi noti, `gpu` lo stesso senza
+/// proposte, `cpu` chiede il disegno col processore
+/// (`WEBKIT_SKIA_ENABLE_CPU_RENDERING`). Si legge una volta, prima che parta
+/// GTK (`fub_app::disegno`): cambiarla vale dal prossimo avvio. Dichiarata
+/// solo su Linux.
+pub const APPEARANCE_RENDERING: &str = "appearance.rendering";
+/// I percorsi offerti, il predefinito per primo.
+pub const RENDERING_MODES: [&str; 3] = ["auto", "gpu", "cpu"];
 /// Lo stile dei diagrammi Mermaid: uno degli id di [`DIAGRAM_STYLES`]. Lo
 /// disegna la shell (`apps/client/src/ui/mermaid-styles.ts`); una nota può
 /// sceglierne un altro per un diagramma solo, con `%% stile: <id>`.
@@ -926,7 +935,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
         .for_machine()
     };
 
-    vec![
+    let mut settings = vec![
         choice(
             APPEARANCE_THEME,
             C_THEME,
@@ -1098,7 +1107,30 @@ fn appearance_settings() -> Vec<SettingSpec> {
         .describing(Text::key(C_CSS_SNIPPETS_DESC))
         .grouped(Text::key(C_GROUP_APPEARANCE))
         .for_machine(),
-    ]
+    ];
+    // Solo dove c'è WebKitGTK: su Windows e macOS la scelta non avrebbe
+    // niente da cambiare, e una riga che non fa niente è una riga che mente.
+    if cfg!(target_os = "linux") {
+        let at = settings
+            .iter()
+            .position(|spec| spec.key == APPEARANCE_FRAME_RATE)
+            .map_or(settings.len(), |index| index + 1);
+        settings.insert(
+            at,
+            choice(
+                APPEARANCE_RENDERING,
+                C_RENDERING,
+                C_RENDERING_DESC,
+                RENDERING_MODES[0],
+                vec![
+                    UiOption::new(RENDERING_MODES[0], Text::key(C_RENDERING_AUTO)),
+                    UiOption::new(RENDERING_MODES[1], Text::key(C_RENDERING_GPU)),
+                    UiOption::new(RENDERING_MODES[2], Text::key(C_RENDERING_CPU)),
+                ],
+            ),
+        );
+    }
+    settings
 }
 
 fn chrome_settings() -> Vec<SettingSpec> {
@@ -1206,6 +1238,36 @@ pub fn frame_rate_cap(value: &str) -> Option<u32> {
         .parse()
         .ok()
         .filter(|cap| FRAME_RATE_CAPS.contains(cap))
+}
+
+/// I valori di testo di macchina che servono **prima che parta GTK**, letti dal
+/// file di macchina senza montare l'host: oggi `appearance.rendering` e
+/// `appearance.motion`, per il percorso di disegno di `fub_app::run`.
+///
+/// Si legge come lo legge l'host: schema del core, profilo attivo, un valore
+/// sconosciuto che vale il predefinito, un file assente o illeggibile che vale
+/// i predefiniti. Il file non si scrive. Senza cartella di configurazione
+/// valgono i predefiniti. Una chiave non dichiarata (`appearance.rendering`
+/// fuori da Linux) non compare.
+pub fn startup_machine_texts(
+    config_dir: Option<&camino::Utf8Path>,
+    keys: &[&str],
+) -> BTreeMap<String, String> {
+    let machine = match config_dir {
+        Some(dir) => {
+            fub_kernel::MachineSettings::open(&crate::config::machine_settings_path(dir)).0
+        }
+        None => fub_kernel::MachineSettings::in_memory(),
+    };
+    if machine.declare(&core_machine_settings()).is_err() {
+        return BTreeMap::new();
+    }
+    keys.iter()
+        .filter_map(|key| {
+            let (value, _) = machine.effective(key).ok()?;
+            Some(((*key).to_owned(), value.as_text()?.to_owned()))
+        })
+        .collect()
 }
 
 pub fn setting_requires_reopen(key: &str) -> bool {
@@ -1655,6 +1717,11 @@ const C_FRAME_RATE: &str = "core.frame_rate";
 const C_FRAME_RATE_DESC: &str = "core.frame_rate.desc";
 const C_FRAME_RATE_DISPLAY: &str = "core.frame_rate.display";
 const C_FRAME_RATE_CAP: &str = "core.frame_rate.cap";
+const C_RENDERING: &str = "core.rendering";
+const C_RENDERING_DESC: &str = "core.rendering.desc";
+const C_RENDERING_AUTO: &str = "core.rendering.auto";
+const C_RENDERING_GPU: &str = "core.rendering.gpu";
+const C_RENDERING_CPU: &str = "core.rendering.cpu";
 const C_DIAGRAM_STYLE: &str = "core.diagram_style";
 const C_DIAGRAM_STYLE_DESC: &str = "core.diagram_style.desc";
 const C_DIAGRAM_STYLE_ARMONIA: &str = "core.diagram_style.armonia";
@@ -2334,6 +2401,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FRAME_RATE_DESC, "Tetto delle animazioni disegnate dall'interfaccia. Il massimo segue il refresh dello schermo, qualunque sia.")
         .with(C_FRAME_RATE_DISPLAY, "Massimo dello schermo")
         .with(C_FRAME_RATE_CAP, "{fps} fps")
+        .with(C_RENDERING, "Disegno delle pagine")
+        .with(
+            C_RENDERING_DESC,
+            "Chi disegna le finestre di Fub. Automatico lascia la scelta a WebKit e ti avvisa dei problemi noti; Processore aiuta con alcuni driver che sfarfallano. Vale dal prossimo avvio.",
+        )
+        .with(C_RENDERING_AUTO, "Automatico")
+        .with(C_RENDERING_GPU, "Scheda grafica")
+        .with(C_RENDERING_CPU, "Processore")
         .with(C_DIAGRAM_STYLE, "Stile dei diagrammi")
         .with(
             C_DIAGRAM_STYLE_DESC,
@@ -2964,6 +3039,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FRAME_RATE_DESC, "Cap for animations drawn by the interface. The maximum follows the display refresh rate, whatever it is.")
         .with(C_FRAME_RATE_DISPLAY, "Display maximum")
         .with(C_FRAME_RATE_CAP, "{fps} fps")
+        .with(C_RENDERING, "Page rendering")
+        .with(
+            C_RENDERING_DESC,
+            "What draws Fub's windows. Automatic leaves the choice to WebKit and warns you about known problems; Processor helps with some drivers that flicker. Applies from the next start.",
+        )
+        .with(C_RENDERING_AUTO, "Automatic")
+        .with(C_RENDERING_GPU, "Graphics card")
+        .with(C_RENDERING_CPU, "Processor")
         .with(C_DIAGRAM_STYLE, "Diagram style")
         .with(
             C_DIAGRAM_STYLE_DESC,
@@ -3590,6 +3673,73 @@ mod tests {
             )
         );
         assert_eq!(std::fs::read(&path).expect("il file"), unknown);
+    }
+
+    /// Il percorso di disegno si legge prima di GTK, senza host: senza file,
+    /// senza cartella o con un valore sconosciuto vale `auto`; una scelta
+    /// scritta si legge com'è; il file non cambia di un byte. Solo Linux
+    /// dichiara la chiave.
+    #[test]
+    fn rendering_is_read_before_the_host_and_unknown_values_are_auto() {
+        use fub_abi::settings::SettingValue;
+        use fub_kernel::MachineSettings;
+
+        let keys = [APPEARANCE_RENDERING, APPEARANCE_MOTION];
+        let dir = tempfile::tempdir().expect("cartella temporanea");
+        let config =
+            camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("percorso UTF-8");
+        let rendering = |config: Option<&camino::Utf8Path>| {
+            startup_machine_texts(config, &keys)
+                .get(APPEARANCE_RENDERING)
+                .cloned()
+        };
+        if !cfg!(target_os = "linux") {
+            assert_eq!(rendering(Some(&config)), None);
+            assert!(!core_machine_settings()
+                .iter()
+                .any(|spec| spec.key == APPEARANCE_RENDERING));
+            return;
+        }
+        // Un file di prima, che la chiave non la conosce.
+        assert_eq!(rendering(None).as_deref(), Some("auto"));
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        let path = crate::config::machine_settings_path(&config);
+        {
+            let (machine, _) = MachineSettings::open(&path);
+            machine.declare(&core_machine_settings()).expect("schema");
+            machine
+                .set(APPEARANCE_MOTION, SettingValue::Text("calm".into()))
+                .expect("motion");
+        }
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        assert_eq!(
+            startup_machine_texts(Some(&config), &keys)
+                .get(APPEARANCE_MOTION)
+                .map(String::as_str),
+            Some("calm")
+        );
+        {
+            let (machine, _) = MachineSettings::open(&path);
+            machine.declare(&core_machine_settings()).expect("schema");
+            machine
+                .set(APPEARANCE_RENDERING, SettingValue::Text("cpu".into()))
+                .expect("`cpu` è una scelta valida");
+            assert!(machine
+                .set(APPEARANCE_RENDERING, SettingValue::Text("never".into()))
+                .is_err());
+        }
+        let before = std::fs::read(&path).expect("il file della macchina");
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("cpu"));
+        assert_eq!(std::fs::read(&path).expect("il file"), before);
+
+        let unknown = String::from_utf8(before)
+            .expect("JSON")
+            .replace("\"cpu\"", "\"never\"");
+        std::fs::write(&path, &unknown).expect("valore sconosciuto");
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        std::fs::write(&path, b"{ rotto").expect("file rotto");
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        assert_eq!(std::fs::read(&path).expect("il file"), b"{ rotto");
     }
 
     /// Il default è il massimo dello schermo, e ogni tetto offerto dal pannello

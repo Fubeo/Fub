@@ -227,6 +227,12 @@ Gli eventi IPC sono fatti già accaduti. Contengono almeno:
 Una coda può compattare progresso o notifiche ripetute. Il risultato autorevole
 di un'operazione resta nella sua risposta.
 
+Gli avvisi nati prima della shell non si spingono, si tirano con
+`session_notice`: prima la diagnosi del log, poi gli altri avvisi d'avvio
+(come il percorso di disegno, `Event::Custom` col topic `rendering`, vedi
+[la webview del desktop](../architecture/desktop-webview.md#gli-avvisi)), uno
+per chiamata. La shell tira finché la risposta è `null`.
+
 ## View
 
 Il protocollo di view usa:

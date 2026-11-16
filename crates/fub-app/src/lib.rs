@@ -62,6 +62,8 @@ pub use fub_host::{
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
 mod avvio;
+#[cfg(target_os = "linux")]
+mod disegno;
 mod document_windows;
 mod domande;
 mod frame_rate;
@@ -2888,11 +2890,46 @@ fn forward_mobile_opened(app: &AppHandle, raw: &str) {
     }
 }
 
+/// Legge `appearance.rendering` e la macchina, sceglie e scrive le variabili.
+/// Va chiamata quando il processo ha ancora un thread solo
+/// ([`disegno::applica`]). Il log non c'è ancora: chi chiama lo scrive dopo.
+#[cfg(target_os = "linux")]
+fn percorso_di_disegno(
+    config_dir: Option<&Utf8Path>,
+) -> (disegno::Modo, disegno::Diagnosi, disegno::Scelta) {
+    use fub_host::settings::{APPEARANCE_MOTION, APPEARANCE_RENDERING};
+    let valori = fub_host::settings::startup_machine_texts(
+        config_dir,
+        &[APPEARANCE_RENDERING, APPEARANCE_MOTION],
+    );
+    let modo = disegno::Modo::da(valori.get(APPEARANCE_RENDERING).map_or("", String::as_str));
+    let movimento_calmo = matches!(
+        valori.get(APPEARANCE_MOTION).map(String::as_str),
+        Some("calm" | "reduced")
+    );
+    let ambiente = |nome: &str| std::env::var_os(nome).map(|v| v.to_string_lossy().into_owned());
+    let diagnosi = disegno::leggi(std::path::Path::new("/"), &ambiente);
+    let scelta = disegno::scegli(
+        modo,
+        &diagnosi,
+        &|nome| std::env::var_os(nome).is_some(),
+        movimento_calmo,
+    );
+    disegno::applica(&scelta);
+    (modo, diagnosi, scelta)
+}
+
 pub fn run() {
     // Il bootstrap sceglie la cartella canonica una volta sola. Log, host e
     // store installato ricevono lo stesso valore: nessun proprietario riapre
     // l'ambiente o deduce una seconda posizione.
     let config_dir = fub_host::config_dir();
+    // Il percorso di disegno della webview **prima di ogni thread**: le
+    // variabili di WebKitGTK contano solo se scritte prima che parta GTK, e
+    // `set_var` è sicura solo finché il processo ha un thread solo — qui, e
+    // non dopo `install_logging` (vedi `disegno::applica`).
+    #[cfg(target_os = "linux")]
+    let percorso = percorso_di_disegno(config_dir.as_deref());
     let (levels, warning) = fub_host::install_logging(config_dir.as_deref());
     let installed_availability = match config_dir.as_deref() {
         Some(dir) => {
@@ -2931,6 +2968,33 @@ pub fn run() {
         .with_session_notice(warning)
         .with_levels(levels)
         .with_sink(sink);
+    #[cfg(target_os = "linux")]
+    {
+        let (modo, diagnosi, scelta) = percorso;
+        tracing::info!(
+            target: "fub.app",
+            ?modo,
+            ?diagnosi,
+            software = diagnosi.disegno_software(),
+            variabili = ?scelta.variabili,
+            avvisi = ?scelta.avvisi,
+            "rendering path chosen before GTK"
+        );
+        for avviso in scelta.avvisi {
+            match serde_json::to_value(&avviso) {
+                Ok(payload) => {
+                    host = host.with_startup_notice(Notice::new(
+                        fub_abi::Event::Custom {
+                            topic: disegno::TOPIC.into(),
+                            payload,
+                        },
+                        fub_abi::event::Origin::by(fub_abi::event::Actor::Kernel),
+                    ));
+                }
+                Err(error) => tracing::warn!(target: "fub.app", %error, "rendering notice lost"),
+            }
+        }
+    }
     // Keep the manager alive in `InstalledPlugins`; the startup source is the
     // sole host integration point and its snapshot also carries formats.
     if let InstalledAvailability::Ready(manager) = &installed_availability {
