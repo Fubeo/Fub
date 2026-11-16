@@ -2641,6 +2641,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "views.surface_missing":
   "La vista «{view}» chiede la superficie «{surface}», che questa finestra non ospita: {reason}.",
 "views.open_unavailable": "La vista «{view}» non si apre in un riquadro",
+"views.list_more": "Mostra altre {count} · {total} in tutto",
 "views.action_failed":
   "L'azione «{action}» non è andata a buon fine ({reason}): quello che vedi è di prima.",
 "commands.list_failed":
@@ -6458,6 +6459,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "views.surface_missing":
   "The view «{view}» asks for the «{surface}» surface, which this shell does not host: {reason}.",
 "views.open_unavailable": "The view «{view}» does not open in a pane",
+"views.list_more": "Show {count} more · {total} in all",
 "views.action_failed":
   "The «{action}» action did not go through ({reason}): what you see is from before.",
 "commands.list_failed":

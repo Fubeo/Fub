@@ -15938,6 +15938,11 @@ h6.ui-heading {
   color: var(--muted);
   font-size: var(--text-sm);
 }
+/* La riga in coda a un elenco lungo: le voci oltre la soglia si chiedono da
+   qui (`ui/node.ts`, `LIST_PAGE`). Sta sul passo delle voci. */
+.ui-list-more {
+  padding: var(--space-2) var(--space-4);
+}
 
 .ui-tree-label {
   gap: var(--space-3);
