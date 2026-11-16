@@ -490,11 +490,11 @@ describe("rinominare", () => {
 
 describe("il primo H1 ripiegato nel titolo (T7)", () => {
   /// Una superficie Markdown del riquadro, come la registra `surface.ts`.
-  function keeper(bar: HTMLElement): { calls: [string, string][]; stop: () => void } {
+  function keeper(bar: HTMLElement, doc = "Guida/Nota.md"): { calls: [string, string][]; stop: () => void } {
     const root = document.createElement("div");
     bar.closest("[data-pane]")!.append(root);
     const calls: [string, string][] = [];
-    const stop = keepTitle({ root, retitle: (before, after) => void calls.push([before, after]) });
+    const stop = keepTitle({ root, documentId: () => doc, retitle: (before, after) => void calls.push([before, after]) });
     return { calls, stop };
   }
 
@@ -514,6 +514,31 @@ describe("il primo H1 ripiegato nel titolo (T7)", () => {
     expect(beside.calls).toEqual([]);
     mine.stop();
     beside.stop();
+  });
+
+  it("un titolo con «/» sposta il file: l'H1 prende il nome della pagina, non il percorso", async () => {
+    const bar = pane("main", "Guida/Nota.md");
+    const mine = keeper(bar);
+    mountTitleRename(lifetime);
+    dblclick(crumbOf(bar));
+    type(inputOf(bar)!, "Archivio/Nuova");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    expect(renames).toEqual([{ from: "Guida/Nota.md", to: "Guida/Archivio/Nuova.md" }]);
+    expect(mine.calls).toEqual([["Nota", "Nuova"]]);
+    mine.stop();
+  });
+
+  it("una superficie di un altro documento nello stesso riquadro non riscrive niente", async () => {
+    const bar = pane("main", "Guida/Nota.md");
+    const card = keeper(bar, "Guida/Riunioni.md");
+    mountTitleRename(lifetime);
+    dblclick(crumbOf(bar));
+    type(inputOf(bar)!, "Appunti");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    expect(card.calls).toEqual([]);
+    card.stop();
   });
 
   it("una rinomina che non riesce non tocca l'H1", async () => {

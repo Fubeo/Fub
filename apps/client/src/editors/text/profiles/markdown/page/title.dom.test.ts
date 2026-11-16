@@ -14,6 +14,7 @@ import { blocksMode, plainMode } from "../blocks/index";
 import { retitleView } from "../blocks/page";
 import { mountReadingHeader } from "./header";
 import { firstHeading } from "./title";
+import { renamedPageName } from "../../../../../state/page-rename";
 import corpus from "../../../../../__fixtures__/corpus-syntax.json";
 
 // Il titolo e il primo H1 (T7): il titolo è il nome del file, e un primo H1
@@ -35,9 +36,10 @@ interface Page {
   answer: string | null;
 }
 
-function mount(doc: string, page: Page, options: { readOnly?: boolean; plain?: boolean } = {}): EditorView {
+function mount(doc: string, page: Page, options: { readOnly?: boolean; plain?: boolean; renamedPage?: (name: string) => string } = {}): EditorView {
   const pageOptions = {
     page: () => page.name,
+    ...(options.renamedPage ? { renamedPage: options.renamedPage } : {}),
     rename: async (name: string) => {
       page.renames.push(name);
       if (page.answer === null) page.name = name;
@@ -170,6 +172,19 @@ describe("il titolo e la rinomina", () => {
     expect(shown(view)).not.toContain("Mostra d'estate");
     expect(undo(view)).toBe(true);
     expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it("un titolo con «/» sposta il file: l'H1 prende il nome della pagina, non il percorso", async () => {
+    const doc = "# Mostra\n\nTesto";
+    const note = page("Mostra");
+    const view = mount(doc, note, { renamedPage: (name) => renamedPageName("Mostra.md", name) });
+    const title = titleOf(view);
+    title.focus();
+    title.value = "Archivio/Nuova";
+    press(title, "Enter");
+    await settled();
+    expect(note.renames).toEqual(["Archivio/Nuova"]);
+    expect(view.state.doc.toString()).toBe("# Nuova\n\nTesto");
   });
 
   it("l'uscita dal campo rinomina; senza H1 ripiegato il testo non cambia", async () => {

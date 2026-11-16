@@ -13,6 +13,7 @@ import { currentTheme as getCurrentTheme, type Theme } from "../../../../theme/t
 import type { SyntaxForm } from "../../../../host/contract";
 import { byteToNormalizedCharIndices, normalizeLineBreaks } from "../../../../rules/offsets";
 import { isFolderPage, pageName, taskChecked } from "../../../../rules/mirrored";
+import { renamedPageName, renamedPagePath } from "../../../../state/page-rename";
 import { onLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
@@ -20,7 +21,7 @@ import { blocksMode, pageArrives, plainMode, type BlocksOptions } from "./blocks
 import { refreshPageHeader, retitleView } from "./blocks/page";
 import { NO_TYPES, parsePropertyTypes, sameTypes, type PropertyTypes } from "./page/properties/kind";
 import { api } from "../../../../host/ipc";
-import { keepTitle } from "./page/title";
+import { keepTitle, retitleIn, retitleWaiting } from "./page/title";
 import { selectBlockThenAll, selectBody } from "./blocks/keys";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { mountReadingHeader, type PageOptions } from "./page/header";
@@ -575,8 +576,20 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     page: () => pageName(resources?.documentId ?? documentId),
     notify: (message, tone) => notify(message, tone),
     folderPage: () => isFolderPage(resources?.documentId ?? documentId),
+    renamedPage: (name) => renamedPageName(resources?.documentId ?? documentId, name),
+    // La rinomina riuscita riscrive l'H1 ripiegato (T7) sulla vista viva
+    // della superficie: rinominare può rifare la vista, e quella che ha
+    // aperto il campo del titolo non è più nella pagina.
     rename: opts.onRenamePage
-      ? (name) => opts.onRenamePage!(resources?.documentId ?? documentId, name)
+      ? async (name) => {
+        const from = resources?.documentId ?? documentId;
+        const to = renamedPagePath(from, name);
+        const problem = await opts.onRenamePage!(from, name);
+        // La superficie che mostra la pagina adesso, in questo riquadro: se
+        // la rinomina ha rifatto la superficie è un'altra, nello stesso posto.
+        if (problem === null) retitleIn(parent.closest("[data-pane]") ?? parent, { from, to }, pageName(from), pageName(to));
+        return problem;
+      }
       : undefined,
     // L'immagine della Live ha il menu della superficie, con la
     // larghezza e «Sostituisci»: la resa non apre il suo.
@@ -645,13 +658,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // La rinomina dal titolo del foglio porta con sé l'H1 ripiegato nel titolo
   // (T7): in ogni modalità, perché l'H1 resti uguale al nome anche quando si
   // torna in Scrittura.
-  life.add(keepTitle({
+  const titleKeeper = {
     root: parent,
-    retitle: (before, after) => {
+    documentId: () => resources?.documentId ?? documentId,
+    retitle: (before: string, after: string) => {
       if (life.closed) return;
       engine.runViewCommand((view) => retitleView(view, before, after));
     },
-  }));
+  };
+  life.add(keepTitle(titleKeeper));
   if (opts.pageIcons) {
     life.add(opts.pageIcons.watch(() => {
       engine.runViewCommand((view) => {
@@ -1787,6 +1802,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         closeSlashPalette(parent);
         engine.setDoc(text);
         syncReading();
+        // Il testo di un documento appena rinominato dal titolo: l'H1
+        // ripiegato prende il nome nuovo (T7). Dopo questo giro, fuori da
+        // chi sta montando la superficie.
+        queueMicrotask(() => retitleWaiting(titleKeeper));
       },
       syncDoc: (update) => {
         closeSlashPalette(parent);

@@ -1,6 +1,6 @@
 import { Text } from "@codemirror/state";
 import { describe, expect, it, vi } from "vitest";
-import { firstHeading, foldedHeading, headingText, keepTitle, retitled, retitleIn, sameTitle, titleKey } from "./title";
+import { firstHeading, foldedHeading, headingText, keepTitle, retitled, retitleIn, retitleWaiting, sameTitle, titleKey } from "./title";
 
 const doc = (text: string) => Text.of(text.split("\n"));
 /// Dove comincia il testo: dopo il frontmatter, se c'è (come `bodyStart`).
@@ -34,6 +34,18 @@ describe("il confronto fra il primo H1 e il nome", () => {
     expect(sameTitle("Perché", "Perche")).toBe(false);
     // Un'emoji si vede, e conta.
     expect(sameTitle("🌱 Mostra", "Mostra")).toBe(false);
+  });
+
+  it("commenti in riga e id di blocco non contano; i simboli matematici sì (revisione #421)", () => {
+    expect(sameTitle("Mostra ^titolo", "Mostra")).toBe(true);
+    expect(sameTitle("Mostra %%bozza%%", "Mostra")).toBe(true);
+    expect(sameTitle("Mostra <!-- bozza -->", "Mostra")).toBe(true);
+    expect(sameTitle("~~Vecchia~~ Mostra", "Vecchia Mostra")).toBe(true);
+    expect(sameTitle("==Mostra==", "Mostra")).toBe(true);
+    expect(sameTitle("C++", "C")).toBe(false);
+    expect(sameTitle("C++", "C++")).toBe(true);
+    expect(sameTitle("a = b", "ab")).toBe(false);
+    expect(sameTitle("2^10", "210")).toBe(true);
   });
 
   it("un nome di sola punteggiatura non è uguale a niente", () => {
@@ -122,21 +134,56 @@ describe("la rinomina riscrive l'H1 ripiegato", () => {
 });
 
 describe("chi tiene l'H1 allineato al titolo", () => {
-  it("riscrive solo le superfici del riquadro, e lo smontaggio lo toglie", () => {
+  it("riscrive solo la superficie del riquadro che mostra la nota rinominata, e lo smontaggio la toglie", () => {
     // Il riquadro contiene soltanto la sua superficie.
     const inside = {} as Element;
     const outside = {} as Element;
     const pane = { contains: (node: unknown) => node === inside } as unknown as Element;
     const mine = vi.fn();
     const other = vi.fn();
-    const stopMine = keepTitle({ root: inside, retitle: mine });
-    const stopOther = keepTitle({ root: outside, retitle: other });
-    retitleIn(pane, "Prima", "Dopo");
+    const stopMine = keepTitle({ root: inside, documentId: () => "Prima.md", retitle: mine });
+    const stopOther = keepTitle({ root: outside, documentId: () => "Prima.md", retitle: other });
+    retitleIn(pane, { from: "Prima.md", to: "Dopo.md" }, "Prima", "Dopo");
     expect(mine).toHaveBeenCalledWith("Prima", "Dopo");
     expect(other).not.toHaveBeenCalled();
     stopMine();
-    retitleIn(pane, "Dopo", "Ancora");
+    retitleIn(pane, { from: "Dopo.md", to: "Ancora.md" }, "Dopo", "Ancora");
     expect(mine).toHaveBeenCalledTimes(1);
     stopOther();
+  });
+
+  it("la superficie rifatta dalla rinomina non c'è ancora: la riscrittura la aspetta, nel riquadro e per poco (revisione #421)", () => {
+    vi.useFakeTimers();
+    try {
+      const inside = {} as Element;
+      const elsewhere = {} as Element;
+      const pane = { contains: (node: unknown) => node === inside, isConnected: true } as unknown as Element;
+      retitleIn(pane, { from: "Bozza.md", to: "Piano.md" }, "Bozza", "Piano");
+      // Un'altra superficie dello stesso documento, fuori dal riquadro: non è lei.
+      const other = vi.fn();
+      const away = { root: elsewhere, documentId: () => "Piano.md", retitle: other };
+      retitleWaiting(away);
+      expect(other).not.toHaveBeenCalled();
+      const mine = vi.fn();
+      const fresh = { root: inside, documentId: () => "Piano.md", retitle: mine };
+      retitleWaiting(fresh);
+      expect(mine).toHaveBeenCalledWith("Bozza", "Piano");
+      // Una volta sola.
+      retitleWaiting(fresh);
+      expect(mine).toHaveBeenCalledTimes(1);
+      // Scaduta, non riscrive più.
+      retitleIn(pane, { from: "Piano.md", to: "Tardi.md" }, "Piano", "Tardi");
+      vi.advanceTimersByTime(6_000);
+      const late = vi.fn();
+      retitleWaiting({ root: inside, documentId: () => "Tardi.md", retitle: late });
+      expect(late).not.toHaveBeenCalled();
+      // Un file che non è una nota non aspetta niente.
+      retitleIn(pane, { from: "Lavagna.canvas", to: "Tela.canvas" }, "Lavagna", "Tela");
+      const canvas = vi.fn();
+      retitleWaiting({ root: inside, documentId: () => "Tela.canvas", retitle: canvas });
+      expect(canvas).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

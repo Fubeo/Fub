@@ -47,7 +47,7 @@ import { openPopover, textButton, textField, type PopoverHandle } from "../../..
 import { nameFault, pageName } from "../../../rules/mirrored";
 import { searchedName } from "../../../rules/searched-name";
 import { flushPendingSave, renameKeepingBuffer } from "../../../state/document-session";
-import { NAME_FAULT, pageRenameTarget } from "../../../state/page-rename";
+import { NAME_FAULT, pageRenameTarget, renamedPagePath } from "../../../state/page-rename";
 import { renameFolder } from "../../../state/vault";
 import { activeDoc } from "../../../state/layout";
 import { identifier } from "../../../ui/a11y";
@@ -279,7 +279,10 @@ export function mountTitleRename(lifetime: Lifetime): void {
   /// nome nuovo, nelle superfici del riquadro in cui si è rinominato.
   const retitle = (mine: Edit, from: string, name: string): void => {
     const pane = mine.bar.closest("[data-pane]");
-    if (pane && !lifetime.closed) retitleIn(pane, pageName(from), name);
+    if (!pane || lifetime.closed) return;
+    // La pagina rinominata ha un id nuovo; per una cartella è la sua pagina.
+    const to = renamedPagePath(from, name);
+    retitleIn(pane, { from, to }, pageName(from), pageName(to));
   };
 
   const open = (bar: HTMLElement): void => {

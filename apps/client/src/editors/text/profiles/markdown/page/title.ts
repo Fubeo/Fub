@@ -46,11 +46,20 @@ const ATX_H1 = /^ {0,3}#(?=[ \t]|$)[ \t]*(.*?)(?:[ \t]+#+)?[ \t]*$/;
 
 /// La chiave del confronto: il testo che si legge, senza maiuscole, spazi e
 /// punteggiatura. Prima si toglie la formattazione Markdown che non si legge
-/// (`**`, `` ` ``, i link col loro testo, i tag HTML), poi ogni segno che non
-/// è una lettera, una cifra o un simbolo che si vede (un'emoji conta).
+/// (`**`, `` ` ``, i link col loro testo, i tag HTML, i commenti, l'id di
+/// blocco), poi la punteggiatura e gli spazi. Lettere, cifre e simboli che si
+/// vedono contano (un'emoji, `+`).
 export function titleKey(text: string): string {
   return text
     .normalize("NFC")
+    // I commenti in riga (`%%…%%`, `<!-- … -->`) e l'id di blocco in coda
+    // (`^blocco`) non si leggono.
+    .replace(/%%.*?%%/g, "")
+    .replace(/<!--.*?-->/g, "")
+    .replace(/(?:^|[ \t]+)\^[A-Za-z0-9-]+[ \t]*$/, "")
+    // `~~barrato~~` e `==evidenziato==`: conta il testo.
+    .replace(/~~(.+?)~~/g, "$1")
+    .replace(/==(.+?)==/g, "$1")
     // `![testo](dove)` e `[testo](dove)`: conta il testo.
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
     // `[[nota|testo]]` e `[[nota]]`: conta ciò che si legge.
@@ -58,9 +67,9 @@ export function titleKey(text: string): string {
     .replace(/\[\[([^\]]*)\]\]/g, "$1")
     // I tag HTML in riga (`<kbd>`, `<br>`).
     .replace(/<\/?[A-Za-z][^>]*>/g, "")
-    // Punteggiatura, spazi e i segni della formattazione (`` ` ``, `~`, `=`,
-    // `^`, `+`, `|`, `<`, `>`).
-    .replace(/[\p{P}\p{Z}\p{Sk}\p{Sm}\s]/gu, "")
+    // Punteggiatura, spazi e i segni modificatori (`` ` ``, `^`). I simboli
+    // matematici restano: `C++` non è `C`, `a = b` non è `ab`.
+    .replace(/[\p{P}\p{Z}\p{Sk}\s]/gu, "")
     .toLowerCase();
 }
 
@@ -153,9 +162,12 @@ export function retitled(
 }
 
 /// Chi tiene allineato l'H1 al titolo in un posto della finestra: una
-/// superficie Markdown, col suo elemento.
+/// superficie Markdown, col suo elemento e il documento che mostra.
 export interface TitleKeeper {
   readonly root: Element;
+  /// Il documento della superficie adesso: dopo una rinomina che tiene il
+  /// buffer può già essere quello nuovo.
+  documentId(): string;
   /// Il nome della pagina è passato da `before` ad `after` con un gesto del
   /// titolo: riscrive l'H1 ripiegato, se c'è, con un passo d'annullamento.
   retitle(before: string, after: string): void;
@@ -171,11 +183,57 @@ export function keepTitle(keeper: TitleKeeper): () => void {
   };
 }
 
-/// Una rinomina dal titolo del foglio: le superfici dentro `container` (il
-/// riquadro) riscrivono l'H1 ripiegato col nome nuovo. Solo dopo una rinomina
-/// riuscita: se è fallita l'H1 non cambia.
-export function retitleIn(container: Element, before: string, after: string): void {
+/// Il documento rinominato: com'era e com'è.
+export interface RenamedDocument {
+  readonly from: string;
+  readonly to: string;
+}
+
+/// Una rinomina dal titolo del foglio: la superficie dentro `container` (il
+/// riquadro) che mostra proprio la nota rinominata riscrive l'H1 ripiegato
+/// col nome nuovo. Le altre (le schede di una lavagna, un altro documento
+/// nello stesso riquadro) non si toccano, e nemmeno un file che non è una
+/// nota Markdown. Solo dopo una rinomina riuscita: se è fallita l'H1 non
+/// cambia.
+export function retitleIn(container: Element, renamed: RenamedDocument, before: string, after: string): void {
+  if (!/\.md$/i.test(renamed.to)) return;
+  let found = false;
   for (const keeper of [...keepers]) {
-    if (container.contains(keeper.root)) keeper.retitle(before, after);
+    if (!container.contains(keeper.root)) continue;
+    const id = keeper.documentId();
+    if (id !== renamed.from && id !== renamed.to) continue;
+    keeper.retitle(before, after);
+    found = true;
   }
+  // La rinomina rifà la superficie del documento (la sessione resta, le
+  // viste no): quella nuova non c'è ancora. La riscrittura la aspetta, e la
+  // fa quando la superficie prende il suo testo (`retitleWaiting`).
+  if (!found) waiting.set(renamed.to, { container, before, after, until: Date.now() + RETITLE_WAIT_MS });
+}
+
+/// Quanto una riscrittura dell'H1 aspetta la superficie nuova del documento
+/// rinominato: la superficie si rimonta subito, nello stesso giro di eventi
+/// o quasi; più tardi un testo arrivato non è più quello della rinomina.
+const RETITLE_WAIT_MS = 5_000;
+
+interface WaitingRetitle {
+  readonly container: Element;
+  readonly before: string;
+  readonly after: string;
+  readonly until: number;
+}
+
+/// Le riscritture in attesa, per documento (l'id nuovo).
+const waiting = new Map<string, WaitingRetitle>();
+
+/// Una superficie ha appena preso il testo del suo documento: se una rinomina
+/// dal titolo lo aspettava, nello stesso riquadro e da poco, riscrive l'H1.
+/// Una volta sola: l'attesa si consuma anche se scaduta.
+export function retitleWaiting(keeper: TitleKeeper): void {
+  const id = keeper.documentId();
+  const pending = waiting.get(id);
+  if (!pending) return;
+  if (!pending.container.contains(keeper.root) && pending.container.isConnected) return;
+  waiting.delete(id);
+  if (Date.now() <= pending.until) keeper.retitle(pending.before, pending.after);
 }

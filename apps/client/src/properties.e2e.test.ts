@@ -82,6 +82,10 @@ async function open(doc: string): Promise<void> {
 const value = (key: string) => document.querySelector<HTMLElement>(`.cm-fub-page-prop[data-key="${key}"] .cm-fub-page-prop-value`)!;
 
 beforeEach(() => {
+  // Il fuoco e la selezione della prova di prima non restano su nodi tolti:
+  // happy-dom li annuncerebbe alle viste nuove a metà di un loro update.
+  (document.activeElement as HTMLElement | null)?.blur();
+  document.getSelection()?.removeAllRanges();
   activeStop?.();
   activeStop = null;
   document.body.innerHTML = "";
@@ -109,5 +113,24 @@ describe("le proprietà della testata", () => {
     await open("Mostra.md");
     expect(value("pagine").textContent).toBe("40");
     expect(value("scadenza").textContent).toContain("12 marzo 2026");
+  });
+});
+
+describe("la rinomina dal titolo, fino al file (revisione #421)", () => {
+  it("rinominata la nota dalla testata, l'H1 riscritto arriva al file col nome nuovo, e il vecchio non c'è più", async () => {
+    const host = await start({ "Mostra.md": "# Mostra\n\nIl testo della nota.\n" });
+    const { openDocument } = await import("./panels/document");
+    await openDocument("Mostra.md");
+    await waitFor("il titolo si disegna", () => document.querySelector("input.cm-fub-page-title") !== null);
+    const title = document.querySelector<HTMLInputElement>("input.cm-fub-page-title")!;
+    title.focus();
+    title.value = "Mostra d'estate";
+    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+
+    await waitFor("il file nuovo ha l'H1 nuovo", () => host.files()["Mostra d'estate.md"] === "# Mostra d'estate\n\nIl testo della nota.\n");
+    expect(Object.keys(host.files())).not.toContain("Mostra.md");
+    await settle();
+    expect(host.files()["Mostra d'estate.md"]).toBe("# Mostra d'estate\n\nIl testo della nota.\n");
+    expect(Object.keys(host.files())).not.toContain("Mostra.md");
   });
 });
