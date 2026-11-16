@@ -3762,7 +3762,9 @@ mod tests {
         assert!(matches!(&name.kind, SettingKind::Text { default } if default.is_empty()));
         assert_eq!(name.group, Text::key(C_GROUP_PROFILE));
         assert!(!name.program_writable);
-        assert!(core_machine_settings().iter().any(|spec| spec.key == PROFILE_NAME));
+        assert!(core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == PROFILE_NAME));
 
         let author = spec(COMMENTS_AUTHOR);
         assert_eq!(author.scope, fub_abi::settings::SettingScope::Vault);
@@ -3774,7 +3776,9 @@ mod tests {
         assert_eq!(values, COMMENTS_AUTHOR_CHOICES);
         assert_eq!(author.group, Text::key(C_GROUP_PROFILE));
         assert!(!author.program_writable);
-        assert!(!core_machine_settings().iter().any(|spec| spec.key == COMMENTS_AUTHOR));
+        assert!(!core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == COMMENTS_AUTHOR));
 
         for catalog in core_catalog() {
             for key in [
@@ -3787,7 +3791,11 @@ mod tests {
                 C_COMMENTS_AUTHOR_INITIALS,
                 C_COMMENTS_AUTHOR_NONE,
             ] {
-                assert!(catalog.entries.contains_key(key), "{key} in {}", catalog.locale);
+                assert!(
+                    catalog.entries.contains_key(key),
+                    "{key} in {}",
+                    catalog.locale
+                );
             }
         }
     }
