@@ -34,10 +34,10 @@
    riga è dopo quella delle lettere e la prima colonna dopo quella dei
    numeri. */
 .cm-editor .cm-content .tb-grid .tb-rowhead + .tb-cell {
-  border-left: 1px solid var(--border-strong);
+  border-left: 1px solid var(--doc-rule);
 }
 .cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-cell {
-  border-top: 1px solid var(--border-strong);
+  border-top: 1px solid var(--doc-rule);
 }
 .cm-editor .cm-content .tb-grid .tb-rowhead + .tb-head {
   border-left-color: transparent;
@@ -218,7 +218,7 @@
   background: transparent;
 }
 .cm-editor .cm-content .tb-grid:focus-within .tb-head.is-selected {
-  background: var(--sheet-2);
+  background: var(--doc-fill-soft);
 }
 .cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-active {
   box-shadow: none;
@@ -323,7 +323,7 @@
   padding: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--muted);
+  color: var(--doc-gutter-fg);
   pointer-events: auto;
 }
 .cm-editor .cm-content .tb-add[data-add="row"] {

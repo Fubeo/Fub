@@ -7830,6 +7830,10 @@ button.cm-fub-page-icon:focus-visible {
    le maniglie intorno: le celle prendono queste regole in tutte e due, e la
    cornice della Live sta in `skin/tabella.css`, dove la prima riga e la
    prima colonna della tabella non sono le prime del `<table>`.
+   Dentro la pagina i colori sono quelli del documento, come il resto del
+   contenuto: i fili `--doc-rule-soft` (il `--line` del prototipo), la
+   cornice `--doc-rule` (il `--line-2`), la testata `--doc-fill-soft` (il
+   `--tray`).
    Il corpo è tre quarti del testo (13,5 px sul testo di serie, e cresce con
    lui). La tabella riempie la colonna del testo e le celle non vanno a capo:
    quando il contenuto è più largo, scorre l'involucro che la Lettura le mette
@@ -7867,8 +7871,8 @@ button.cm-fub-page-icon:focus-visible {
   min-width: 4ch;
   padding: 0 var(--space-5);
   border: 0;
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--doc-rule-soft);
+  border-bottom: 1px solid var(--doc-rule-soft);
   /* Una cella non va a capo, come nel prototipo (`.gr td`): se la tabella
      non ci sta, scorre. */
   white-space: nowrap;
@@ -7876,21 +7880,21 @@ button.cm-fub-page-icon:focus-visible {
   vertical-align: middle;
 }
 .markdown-rendered th {
-  background: var(--sheet-2);
+  background: var(--doc-fill-soft);
   color: var(--doc-heading);
   font-weight: var(--weight-bold);
 }
 .markdown-rendered tr > :first-child {
-  border-left: 1px solid var(--border-strong);
+  border-left: 1px solid var(--doc-rule);
 }
 .markdown-rendered tr > :last-child {
-  border-right: 1px solid var(--border-strong);
+  border-right: 1px solid var(--doc-rule);
 }
 .markdown-rendered table > :first-child > tr:first-child > * {
-  border-top: 1px solid var(--border-strong);
+  border-top: 1px solid var(--doc-rule);
 }
 .markdown-rendered table > :last-child > tr:last-child > * {
-  border-bottom: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--doc-rule);
 }
 .markdown-rendered tr > th:first-child {
   border-left-color: transparent;
@@ -8539,10 +8543,10 @@ button.cm-fub-page-icon:focus-visible {
    riga è dopo quella delle lettere e la prima colonna dopo quella dei
    numeri. */
 .cm-editor .cm-content .tb-grid .tb-rowhead + .tb-cell {
-  border-left: 1px solid var(--border-strong);
+  border-left: 1px solid var(--doc-rule);
 }
 .cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-cell {
-  border-top: 1px solid var(--border-strong);
+  border-top: 1px solid var(--doc-rule);
 }
 .cm-editor .cm-content .tb-grid .tb-rowhead + .tb-head {
   border-left-color: transparent;
@@ -8723,7 +8727,7 @@ button.cm-fub-page-icon:focus-visible {
   background: transparent;
 }
 .cm-editor .cm-content .tb-grid:focus-within .tb-head.is-selected {
-  background: var(--sheet-2);
+  background: var(--doc-fill-soft);
 }
 .cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-active {
   box-shadow: none;
@@ -8828,7 +8832,7 @@ button.cm-fub-page-icon:focus-visible {
   padding: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--muted);
+  color: var(--doc-gutter-fg);
   pointer-events: auto;
 }
 .cm-editor .cm-content .tb-add[data-add="row"] {
