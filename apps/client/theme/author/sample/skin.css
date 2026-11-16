@@ -9796,39 +9796,44 @@ button.cm-fub-page-icon:focus-visible {
   font-size: var(--text-base);
 }
 /* I comandi: una riga quieta sotto la testata, come nelle altre superfici.
-   Sono tanti e scorrono di lato; a voce bassa finché non servono. */
+   Ciò che non ci sta va in «…» (la fila del kit); a voce bassa finché non
+   servono. I comandi finiti in «…» hanno lo stesso aspetto nel popover:
+   le regole stanno su `.canvas-toolbar-item`, non sulla riga. */
 .canvas-toolbar {
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-3) var(--space-5);
   border-bottom: 1px solid var(--border);
 }
-.canvas-toolbar > button {
+.canvas-toolbar > .kit-options-row {
+  gap: var(--space-1);
+}
+button.canvas-toolbar-item {
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-chip);
   color: var(--muted);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
 }
-.canvas-toolbar > button:hover,
-.canvas-toolbar > button:focus-visible {
+button.canvas-toolbar-item:hover,
+button.canvas-toolbar-item:focus-visible {
   background: var(--overlay-hover);
   color: var(--text);
 }
-.canvas-toolbar > button:active {
+button.canvas-toolbar-item:active {
   background: var(--overlay-active);
   color: var(--text);
 }
-.canvas-toolbar > button:disabled,
-.canvas-toolbar > button:disabled:hover {
+button.canvas-toolbar-item:disabled,
+button.canvas-toolbar-item:disabled:hover {
   background: transparent;
   color: var(--muted);
 }
 /* L'interruttore «Scrivi col mouse» acceso: il fondo tenue dell'accento e
    la scritta nell'accento, come i pulsanti premuti dei disegni. Due segni,
    non uno solo. */
-.canvas-toolbar > button[aria-pressed="true"],
-.canvas-toolbar > button[aria-pressed="true"]:hover {
+button.canvas-toolbar-item[aria-pressed="true"],
+button.canvas-toolbar-item[aria-pressed="true"]:hover {
   background: var(--accent-wash);
   color: var(--accent);
 }
@@ -10538,15 +10543,15 @@ button.cm-fub-page-icon:focus-visible {
   font-size: var(--text-xs);
   text-align: center;
 }
-.canvas-toolbar > select,
-.canvas-toolbar > input {
+select.canvas-toolbar-item,
+input.canvas-toolbar-item {
   flex: none;
   height: 26px;
   margin-inline: var(--space-1);
   border-radius: var(--radius-chip);
   font-size: var(--text-sm);
 }
-.canvas-toolbar > input {
+input.canvas-toolbar-item {
   width: 9rem;
 }
 .canvas-intake-error {
@@ -11116,11 +11121,13 @@ button.cm-fub-page-icon:focus-visible {
   }
 }
 /* L'ombra che dice «continua»: il testo della nota sfuma nella carta della
-   scheda, di qualunque colore sia, negli ultimi 40 px. Dentro la scheda
-   attiva il testo scorre, e l'ombra non c'è. */
+   scheda, di qualunque colore sia, negli ultimi 24 px. La nota finisce sotto
+   l'ultima riga intera (#411): l'ombra si ferma a un terzo, così quella riga
+   si legge ancora. Dentro la scheda attiva il testo scorre, e l'ombra non
+   c'è. */
 .canvas-node:not([data-card-active]) > .canvas-card-body > .canvas-card-note {
-  mask-image: linear-gradient(to bottom, var(--text) calc(100% - 40px), transparent);
-  -webkit-mask-image: linear-gradient(to bottom, var(--text) calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to bottom, var(--text) calc(100% - 24px), color-mix(in srgb, var(--text) 30%, transparent));
+  -webkit-mask-image: linear-gradient(to bottom, var(--text) calc(100% - 24px), color-mix(in srgb, var(--text) 30%, transparent));
 }
 /* Il PDF: la pagina bianca sulla carta della scheda. Il numero della pagina
    c'è sempre, in basso; le frecce compaiono sulla scheda viva al passaggio o

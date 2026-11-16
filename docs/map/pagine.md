@@ -59,6 +59,7 @@
 
 - Qual è il workflow per preparare una modifica al codice o alla documentazione? → [development/workflow.md](../development/workflow.md)
 - Quale banco dimostra una proprietà e quali guard impediscono la deriva? → [development/testing-and-quality.md](../development/testing-and-quality.md)
+- Come si fotografano le scene, con quali soglie e che cosa tiene ferma la pagina? → [development/visual-bench.md](../development/visual-bench.md)
 - Come si prova a mano penna, evidenziatore e gomma? → [development/ink-input-smoke-test.md](../development/ink-input-smoke-test.md)
 - Come si prova a mano il moto dello Scrittoio nella finestra? → [development/motion-smoke-test.md](../development/motion-smoke-test.md)
 - Come si creano i plugin (provider nativi o componenti WASM)? → [development/plugin-authoring.md](../development/plugin-authoring.md)

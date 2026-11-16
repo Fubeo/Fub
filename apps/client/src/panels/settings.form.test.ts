@@ -378,6 +378,37 @@ describe("ricerca, filtro e indice", () => {
     expect(links[0]!.hasAttribute("aria-current")).toBe(false);
   });
 
+  it("la voce scelta nell'indice resta attiva finché non si scorre di suo; in fondo vince l'ultima (B-01)", async () => {
+    await openFullPanel(rows());
+    const links = [...document.querySelectorAll<HTMLButtonElement>("#settings-toc-list button[data-target]")];
+    const scroll = document.getElementById("settings-scroll")!;
+    const current = () => links.find((link) => link.getAttribute("aria-current") === "true")?.querySelector(".settings-toc-name")?.textContent;
+    // La geometria che happy-dom non calcola: un corpo di 1000 px in una
+    // finestra di 600, con le due ultime sezioni nell'ultimo schermo.
+    let top = 0;
+    Object.defineProperty(scroll, "scrollTop", { configurable: true, get: () => top, set: (v: number) => { top = v; } });
+    Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 600 });
+    Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 1000 });
+    const offsets = new Map([["Editor", 0], ["Privacy", 700], ["Profili", 850]]);
+    for (const section of document.querySelectorAll<HTMLElement>("#settings-body .settings-section")) {
+      const name = section.querySelector(".settings-section-title")?.textContent ?? "";
+      section.getBoundingClientRect = () => ({ top: (offsets.get(name) ?? 0) - top } as DOMRect);
+    }
+    // Il clic porta in fondo (Privacy non può salire in cima): resta Privacy.
+    links[1]!.click();
+    top = 400;
+    scroll.dispatchEvent(new Event("scroll"));
+    expect(current()).toBe("Privacy");
+    // Chi scorre di suo riprende la voce dalla posizione: in fondo, l'ultima.
+    scroll.dispatchEvent(new WheelEvent("wheel", { deltaY: 100 }));
+    expect(current()).toBe("Profili");
+    scroll.dispatchEvent(new Event("scroll"));
+    expect(current()).toBe("Profili");
+    top = 100;
+    scroll.dispatchEvent(new Event("scroll"));
+    expect(current()).toBe("Editor");
+  });
+
   it("Mod+F dentro il pannello porta alla ricerca, senza lasciar passare il tasto", async () => {
     await openFullPanel(rows());
     const key = new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true, cancelable: true });
