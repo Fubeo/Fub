@@ -4,20 +4,29 @@
 import type { Lifetime } from "../../../../../../ui/lifetime";
 import type { PropertyEntry } from "../../properties";
 import { liveStrings } from "../../strings";
-import { emptyValue, KIND_ICONS, linkName, rowKind, type RowKind } from "./kind";
+import { emptyValue, KIND_ICONS, linkName, optionOf, rowKind, type PropertyTypes, type RowKind } from "./kind";
 import { openEditor, toggleCheckbox } from "./editors";
 import { openPropertyMenu } from "./menu";
-import { chipElement, figure, longDate, personElement, typeName, type PropertyRowHost } from "./values";
+import { chipElement, figure, longDate, optionElement, personElement, typeName, type PropertyRowHost } from "./values";
 
 export type { PropertyRowHost, WriteOutcome } from "./values";
 export { entryStamp } from "./values";
 
 /// Ciò che il valore mostra, secondo il tipo.
-function fillValue(value: HTMLElement, entry: PropertyEntry, kind: RowKind): string {
+function fillValue(value: HTMLElement, entry: PropertyEntry, kind: RowKind, types: PropertyTypes): string {
   if (emptyValue(entry) && kind.kind !== "checkbox") {
     value.dataset.empty = "true";
     value.textContent = liveStrings.t("page.properties.empty");
     return value.textContent;
+  }
+  // Selezione e Stato: un'opzione del registro è la sua pastiglia, col suo
+  // colore (e il pallino, per lo Stato). Fuori dalle opzioni resta testo.
+  if ((kind.declared === "select" || kind.declared === "status") && !kind.mismatch && !entry.items) {
+    const option = optionOf(types, entry.key, entry.value);
+    if (option) {
+      value.replaceChildren(optionElement(option.name, option.color, kind.declared === "status"));
+      return option.name;
+    }
   }
   switch (kind.kind) {
     case "checkbox": {
@@ -73,7 +82,7 @@ export function propertyRow(entry: PropertyEntry, host: PropertyRowHost, life: L
   key.replaceChildren(...[figure(KIND_ICONS[kind.kind])].filter((node): node is SVGElement => node !== null), name);
   const value = document.createElement(host.editable ? "button" : "span");
   value.className = "cm-fub-page-prop-value";
-  const shown = fillValue(value, entry, kind);
+  const shown = fillValue(value, entry, kind, host.types);
   if (kind.mismatch) {
     row.dataset.mismatch = kind.mismatch;
     const mark = document.createElement("span");

@@ -5,7 +5,7 @@ import { resolvedLanguage } from "../../../../../../i18n/strings";
 import { iconEl } from "../../../../../../ui/icons";
 import type { PropertyEntry, PropertyWrite } from "../../properties";
 import { liveStrings } from "../../strings";
-import { avatarTone, initials, linkName, type PropertyKind, type PropertyTypes } from "./kind";
+import { avatarTone, initials, linkName, type OptionColor, type PropertyKind, type PropertyTypes } from "./kind";
 
 /// Com'è andata una scrittura: scritta; rifiutata perché il valore è cambiato
 /// da quando l'editor si è aperto (`conflict`); non scritta per un'altra
@@ -80,6 +80,17 @@ export function chipElement(text: string, kind: "list" | "tags"): HTMLElement {
   chip.className = kind === "tags" ? "cm-fub-prop-chip cm-fub-prop-tag" : "cm-fub-prop-chip";
   chip.textContent = kind === "tags" ? `#${text.replace(/^#/, "")}` : text;
   return chip;
+}
+
+/// Un'opzione di Selezione o di Stato: la pastiglia del suo colore; lo Stato
+/// ha davanti il pallino.
+export function optionElement(name: string, color: OptionColor, status: boolean): HTMLElement {
+  const pill = document.createElement("span");
+  pill.className = "cm-fub-prop-opt";
+  pill.dataset.color = color;
+  if (status) pill.dataset.status = "";
+  pill.textContent = name;
+  return pill;
 }
 
 /// Una persona: il tondo con le iniziali e il nome.

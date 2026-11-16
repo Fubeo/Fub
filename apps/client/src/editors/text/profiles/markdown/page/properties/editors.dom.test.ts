@@ -464,6 +464,49 @@ describe("data e ora tengono secondi e fuso (revisione #421)", () => {
   });
 });
 
+describe("Selezione e Stato: le opzioni come pastiglie (prototipo, `.opt`)", () => {
+  const registry = () => parsePropertyTypes(JSON.stringify({
+    version: 1,
+    types: { stato: "status", sala: "select", fase: "status" },
+    options: {
+      stato: [{ name: "Da iniziare" }, { name: "In corso", color: "orange", group: "doing" }],
+      sala: [{ name: "Grande", color: "blue" }, { name: "Piccola", color: "viola" }],
+    },
+  }));
+
+  it("un'opzione del registro è la pastiglia del suo colore; lo Stato ha il pallino", () => {
+    const { view } = mount("---\nstato: In corso\nsala: Grande\n---\nTesto", { propertyTypes: registry });
+    const status = valueOf(view, "stato").querySelector<HTMLElement>(".cm-fub-prop-opt")!;
+    expect(status.textContent).toBe("In corso");
+    expect(status.dataset.color).toBe("orange");
+    expect(status.hasAttribute("data-status")).toBe(true);
+    const select = valueOf(view, "sala").querySelector<HTMLElement>(".cm-fub-prop-opt")!;
+    expect(select.dataset.color).toBe("blue");
+    expect(select.hasAttribute("data-status")).toBe(false);
+    expect(valueOf(view, "sala").getAttribute("aria-label")).toContain("Grande");
+  });
+
+  it("un colore che manca o che non si conosce è grigio, come nel core", () => {
+    const { view } = mount("---\nstato: Da iniziare\nsala: Piccola\n---\n", { propertyTypes: registry });
+    expect(valueOf(view, "stato").querySelector<HTMLElement>(".cm-fub-prop-opt")!.dataset.color).toBe("gray");
+    expect(valueOf(view, "sala").querySelector<HTMLElement>(".cm-fub-prop-opt")!.dataset.color).toBe("gray");
+  });
+
+  it("un valore fuori dalle opzioni, o senza opzioni, resta testo; il clic lo scrive come prima", () => {
+    const { view } = mount("---\nstato: Boh\nfase: Prima\n---\n", { propertyTypes: registry });
+    expect(valueOf(view, "stato").querySelector(".cm-fub-prop-opt")).toBeNull();
+    expect(valueOf(view, "stato").textContent).toBe("Boh");
+    expect(valueOf(view, "fase").querySelector(".cm-fub-prop-opt")).toBeNull();
+    valueOf(view, "stato").click();
+    expect(row(view, "stato").querySelector("input")!.value).toBe("Boh");
+  });
+
+  it("in sola lettura (e in Lettura) la pastiglia resta", () => {
+    const { view } = mount("---\nstato: In corso\n---\n", { propertyTypes: registry, readOnly: true });
+    expect(row(view, "stato").querySelector(".cm-fub-page-prop-value .cm-fub-prop-opt")!.textContent).toBe("In corso");
+  });
+});
+
 describe("i bordi", () => {
   it("il valore cambia mentre l'editor è aperto: non si scrive, ciò che si scriveva resta e lo si dice; la seconda conferma scrive", () => {
     const { view, notices } = mount("---\nluogo: Torino\n---\nTesto");

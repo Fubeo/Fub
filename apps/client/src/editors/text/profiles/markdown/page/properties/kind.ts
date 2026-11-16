@@ -11,11 +11,50 @@ import type { PropertyEntry } from "../../properties";
 /// note (le persone): il registro non ha un tipo suo, lo legge dal valore.
 export type PropertyKind = "text" | "number" | "checkbox" | "date" | "date_time" | "list" | "tags" | "people" | "url";
 
+/// I nove colori di un'opzione (`PropertyColor` nel core): i nomi dei colori
+/// del contenuto, che il tema disegna con `--doc-color-*` e `--doc-tint-*`.
+export type OptionColor = "gray" | "brown" | "orange" | "yellow" | "green" | "blue" | "purple" | "pink" | "red";
+
+/// Il gruppo di un'opzione di Stato (`StatusGroup` nel core).
+export type OptionGroup = "todo" | "doing" | "done";
+
+/// Un'opzione di Selezione o di Stato com'è nel registro, coi valori che il
+/// core dà a un colore o a un gruppo che mancano o che non conosce: grigio e
+/// Da fare (`PropertyOption::color`, `PropertyOption::group`).
+export interface PropertyOption {
+  readonly name: string;
+  readonly color: OptionColor;
+  readonly group: OptionGroup;
+}
+
 /// Il registro dei tipi del vault: chiave → tipo, dichiarato a mano o dal
-/// menu «Tipo». Le chiavi si confrontano esatte, come nel core.
-export type PropertyTypes = ReadonlyMap<string, PropertyType>;
+/// menu «Tipo». Le chiavi si confrontano esatte, come nel core. `options`
+/// porta, per chiave, le opzioni di Selezione e Stato nel loro ordine.
+export interface PropertyTypes extends ReadonlyMap<string, PropertyType> {
+  readonly options?: ReadonlyMap<string, readonly PropertyOption[]>;
+}
 
 export const NO_TYPES: PropertyTypes = new Map();
+
+const COLORS: ReadonlySet<string> = new Set<OptionColor>(["gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"]);
+const GROUPS: ReadonlySet<string> = new Set<OptionGroup>(["todo", "doing", "done"]);
+
+/// Le opzioni scritte per una chiave: si tengono quelle che hanno un nome.
+function readOptions(raw: unknown): PropertyOption[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PropertyOption[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const { name, color, group } = item as { name?: unknown; color?: unknown; group?: unknown };
+    if (typeof name !== "string") continue;
+    out.push({
+      name,
+      color: typeof color === "string" && COLORS.has(color) ? color as OptionColor : "gray",
+      group: typeof group === "string" && GROUPS.has(group) ? group as OptionGroup : "todo",
+    });
+  }
+  return out;
+}
 
 const KNOWN: ReadonlySet<string> = new Set<PropertyType>(["text", "list", "number", "checkbox", "date", "date_time", "tags", "select", "status", "url"]);
 
@@ -32,13 +71,40 @@ export function parsePropertyTypes(raw: unknown): PropertyTypes {
     return NO_TYPES;
   }
   if (!value || typeof value !== "object") return NO_TYPES;
-  const { version, types } = value as { version?: unknown; types?: unknown };
+  const { version, types, options } = value as { version?: unknown; types?: unknown; options?: unknown };
   if (version !== 1 || !types || typeof types !== "object") return NO_TYPES;
   const out = new Map<string, PropertyType>();
   for (const [key, type] of Object.entries(types as Record<string, unknown>)) {
     if (typeof type === "string" && KNOWN.has(type)) out.set(key, type as PropertyType);
   }
-  return out.size === 0 ? NO_TYPES : out;
+  const choices = new Map<string, readonly PropertyOption[]>();
+  if (options && typeof options === "object") {
+    for (const [key, list] of Object.entries(options as Record<string, unknown>)) {
+      const read = readOptions(list);
+      if (read.length > 0) choices.set(key, read);
+    }
+  }
+  if (out.size === 0 && choices.size === 0) return NO_TYPES;
+  return choices.size === 0 ? out : Object.assign(out, { options: choices as ReadonlyMap<string, readonly PropertyOption[]> });
+}
+
+/// L'opzione di `key` che si chiama `value`, carattere per carattere (la
+/// prima, se due hanno lo stesso nome), come `PropertyTypes::option` del
+/// core. `null` se il valore è fuori dalle opzioni: resta testo.
+export function optionOf(types: PropertyTypes, key: string, value: string): PropertyOption | null {
+  return types.options?.get(key)?.find((option) => option.name === value) ?? null;
+}
+
+function sameOptions(a: PropertyTypes, b: PropertyTypes): boolean {
+  const left = a.options ?? new Map<string, readonly PropertyOption[]>();
+  const right = b.options ?? new Map<string, readonly PropertyOption[]>();
+  if (left.size !== right.size) return false;
+  for (const [key, list] of left) {
+    const other = right.get(key);
+    if (!other || other.length !== list.length) return false;
+    if (list.some((option, i) => option.name !== other[i]!.name || option.color !== other[i]!.color || option.group !== other[i]!.group)) return false;
+  }
+  return true;
 }
 
 /// Due registri che dicono la stessa cosa.
@@ -46,7 +112,7 @@ export function sameTypes(a: PropertyTypes, b: PropertyTypes): boolean {
   if (a === b) return true;
   if (a.size !== b.size) return false;
   for (const [key, type] of a) if (b.get(key) !== type) return false;
-  return true;
+  return sameOptions(a, b);
 }
 
 /// Il tipo dichiarato di `key`: il registro, poi le chiavi convenzionali

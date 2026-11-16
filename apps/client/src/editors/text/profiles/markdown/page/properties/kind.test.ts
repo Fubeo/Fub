@@ -1,7 +1,7 @@
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { propertyBlock, type PropertyEntry } from "../../properties";
-import { initials, linkName, parseNumber, parsePropertyTypes, rowKind, validDate, type PropertyTypes } from "./kind";
+import { initials, linkName, optionOf, parseNumber, parsePropertyTypes, rowKind, sameTypes, validDate, type PropertyTypes } from "./kind";
 
 // Il tipo di una riga della testata (T8): il registro vince, se no il valore.
 
@@ -30,6 +30,32 @@ describe("il tipo letto dal valore", () => {
   it("le chiavi convenzionali hanno il loro tipo anche senza registro", () => {
     expect(kind("tags: [a, b]").kind).toBe("tags");
     expect(kind("aliases: [Altro]").kind).toBe("list");
+  });
+});
+
+describe("le opzioni del registro", () => {
+  it("si leggono per chiave, nel loro ordine; colore e gruppo mancanti o sconosciuti valgono grigio e Da fare", () => {
+    const types = parsePropertyTypes(JSON.stringify({
+      version: 1,
+      types: { stato: "status" },
+      options: { stato: [{ name: "Fatto", color: "green", group: "done" }, { name: "Nuovo", color: "viola", group: "dopo" }, { color: "red" }, "x"] },
+    }));
+    expect(types.options?.get("stato")).toEqual([
+      { name: "Fatto", color: "green", group: "done" },
+      { name: "Nuovo", color: "gray", group: "todo" },
+    ]);
+    expect(optionOf(types, "stato", "Fatto")?.color).toBe("green");
+    expect(optionOf(types, "stato", "fatto")).toBeNull();
+    expect(optionOf(types, "altro", "Fatto")).toBeNull();
+  });
+
+  it("due registri con le stesse dichiarazioni ma opzioni diverse non sono uguali", () => {
+    const a = parsePropertyTypes(JSON.stringify({ version: 1, types: { stato: "status" }, options: { stato: [{ name: "Fatto", color: "green" }] } }));
+    const b = parsePropertyTypes(JSON.stringify({ version: 1, types: { stato: "status" }, options: { stato: [{ name: "Fatto", color: "red" }] } }));
+    const c = parsePropertyTypes(JSON.stringify({ version: 1, types: { stato: "status" }, options: { stato: [{ name: "Fatto", color: "green" }] } }));
+    expect(sameTypes(a, b)).toBe(false);
+    expect(sameTypes(a, c)).toBe(true);
+    expect(sameTypes(a, parsePropertyTypes(JSON.stringify({ version: 1, types: { stato: "status" } })))).toBe(false);
   });
 });
 

@@ -1036,6 +1036,63 @@ button.cm-fub-page-icon:focus-visible {
   color: var(--accent-soft);
   line-height: 1.5;
 }
+/* Selezione e Stato: l'opzione del registro come pastiglia del suo colore
+   (`.opt` del prototipo, `--c-<colore>` → `--doc-color-*` e
+   `--doc-tint-*`); lo Stato ha il pallino (`.opt.st`). */
+.cm-fub-prop-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--doc-tint-gray);
+  color: var(--doc-color-gray);
+  font-size: 12.5px;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+}
+.cm-fub-prop-opt[data-status]::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.85;
+}
+.cm-fub-prop-opt[data-color="brown"] {
+  background: var(--doc-tint-brown);
+  color: var(--doc-color-brown);
+}
+.cm-fub-prop-opt[data-color="orange"] {
+  background: var(--doc-tint-orange);
+  color: var(--doc-color-orange);
+}
+.cm-fub-prop-opt[data-color="yellow"] {
+  background: var(--doc-tint-yellow);
+  color: var(--doc-color-yellow);
+}
+.cm-fub-prop-opt[data-color="green"] {
+  background: var(--doc-tint-green);
+  color: var(--doc-color-green);
+}
+.cm-fub-prop-opt[data-color="blue"] {
+  background: var(--doc-tint-blue);
+  color: var(--doc-color-blue);
+}
+.cm-fub-prop-opt[data-color="purple"] {
+  background: var(--doc-tint-purple);
+  color: var(--doc-color-purple);
+}
+.cm-fub-prop-opt[data-color="pink"] {
+  background: var(--doc-tint-pink);
+  color: var(--doc-color-pink);
+}
+.cm-fub-prop-opt[data-color="red"] {
+  background: var(--doc-tint-red);
+  color: var(--doc-color-red);
+}
 .cm-fub-prop-person {
   display: inline-flex;
   align-items: center;
