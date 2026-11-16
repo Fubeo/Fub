@@ -303,8 +303,9 @@ pannelli) lo Scrittoio compone:
   `appearance.motion` lo decide l'host (`fub_host::settings::motion_default`):
   `""` (segue il sistema), tranne su Linux con WebKitGTK dalla 2.54.0, che
   dopo un'animazione ripresenta fotogrammi vecchi; lì parte da `reduced`.
-  La versione è quella della libreria caricata, che l'app dichiara prima di
-  costruire l'host (`declare_the_webview` in `crates/fub-app/src/lib.rs`);
+  La versione è quella della libreria caricata, che l'app dichiara per prima
+  cosa, prima del percorso di disegno e dell'host (`declare_the_webview` in
+  `crates/fub-app/src/lib.rs`);
   l'intervallo difettoso è la costante `WEBKITGTK_FLICKER_FROM`, aperta in
   alto finché una versione corretta non è verificata. Un valore scritto,
   anche `""`, vale sempre; sotto la riga Animazioni le Impostazioni dicono

@@ -48,6 +48,7 @@
 - Come la lavagna prende la penna, disegna il tratto nelle schede e ne fa un passo di annulla? → [architecture/ink-on-canvas.md](../architecture/ink-on-canvas.md)
 - Come Fub costruisce e inserisce i motori copiati (GridCraft e gli altri Craft)? → [architecture/motori.md](../architecture/motori.md)
 - Dove sta la cornice dello Scrittoio su un telefono, quando parte e che cosa cambia? → [architecture/phone-frame.md](../architecture/phone-frame.md)
+- Come sceglie Fub il percorso di disegno di WebKitGTK, quando avvisa del driver e come supera i 60 Hz? → [architecture/desktop-webview.md](../architecture/desktop-webview.md)
 - Come usa Fub gli stessi contratti per provider nativi e componenti WASM con un solo Guard? → [architecture/plugin-runtime.md](../architecture/plugin-runtime.md)
 - Come un componente WASM implementa i trait e come l'host lo confina? → [architecture/wasm-providers.md](../architecture/wasm-providers.md)
 - Che cosa può fare un componente di terzi e come viene confinato? → [architecture/plugin-security.md](../architecture/plugin-security.md)
