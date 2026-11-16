@@ -203,7 +203,10 @@ Un evento senza chiave vale «tutto» (`state/setting-change.ts`). Il tema
 raccoglie una raffica in al più due riletture, e l'ultima parte dopo l'ultimo
 evento. Così aprire la barra laterale dal comando scrive
 `chrome.sidebar.visible` e la rilegge una volta, invece di cinque riletture e
-un rimontaggio del tema.
+un rimontaggio del tema. Anche per una sua chiave il tema rimonta il bundle
+solo se il contenuto è cambiato (`mountThemeBundle`): una preferenza come
+`appearance.accent` riscrive soltanto il canale delle preferenze, senza
+ripassare foglio e pelle dal sanitizer.
 
 Le linguette sono pulsanti nativi, posseduti dal `tablist` tramite `aria-owns`;
 il pulsante di chiusura è un controllo fratello, non un elemento interattivo
