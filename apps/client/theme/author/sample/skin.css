@@ -19182,6 +19182,7 @@ h6.ui-heading {
 }
 .launcher-input:focus-visible {
   outline: none;
+  box-shadow: none;
 }
 .launcher-input::placeholder {
   color: var(--muted);
