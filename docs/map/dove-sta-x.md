@@ -91,7 +91,7 @@
 | il corpus dei documenti ricchi | `cargo run -p fub-format-rich --example genera_corpus` |
 | le baseline visuali | solo dal runner Linux: `npm run bench:update` |
 | `vendor/<motore>/` | `node tools/vendor-craft/vendor.mjs <motore> update --rev <sha>` |
-| `vendor/whatwg-entities/entities.json` | riscaricato a mano, con i passi del suo `UPSTREAM.md` |
+| `vendor/whatwg-entities/entities.json` | riscaricato a mano, con i passi del suo `UPSTREAM.md`; lo sha256 atteso sta in `tools/vendor-craft/dati.mjs` |
 
 La regola vale per tutti: mai a mano. Il primo commento di ogni file generato
 nomina il comando esatto.

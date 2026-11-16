@@ -6,7 +6,8 @@
 //
 // Da `apps/client`: `npm run entities:generate` e `npm run entities:verify`.
 // Prima di generare controlla che `entities.json` abbia ancora lo sha256
-// scritto in `UPSTREAM.md`: la copia non si ritocca a mano, si riscarica.
+// dichiarato in `tools/vendor-craft/dati.mjs`: la copia non si ritocca a mano,
+// si riscarica.
 //
 // Tiene soltanto i nomi con il `;` finale: in CommonMark un riferimento
 // nominato è valido solo così, e le forme storiche senza `;` (`&amp`, `&copy`)
@@ -17,8 +18,9 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { DATI } from "../../../tools/vendor-craft/dati.mjs";
+
 const SOURCE = new URL("../../../vendor/whatwg-entities/entities.json", import.meta.url);
-const UPSTREAM = new URL("../../../vendor/whatwg-entities/UPSTREAM.md", import.meta.url);
 const TARGET = new URL("../src/editors/text/profiles/markdown/html-entities.generated.ts", import.meta.url);
 
 /// Il modulo TypeScript della tabella, dal testo di `entities.json`. Puro:
@@ -67,20 +69,16 @@ function escape(text) {
   return out;
 }
 
-/// Lo sha256 dichiarato in `UPSTREAM.md`, alla riga `- sha256: <hex>`.
-export function declaredSha256(upstreamText) {
-  const match = /^(?:- )?sha256:\s*`?([0-9a-f]{64})`?\s*$/m.exec(upstreamText);
-  if (!match) throw new Error("UPSTREAM.md non dichiara lo sha256 di entities.json");
-  return match[1];
-}
+/// Lo sha256 atteso di `entities.json`, dall'elenco dei dati vendorizzati.
+export const DECLARED_SHA256 = DATI["whatwg-entities"].sha256;
 
 async function main() {
   const verify = process.argv.includes("--verify");
   const bytes = await readFile(SOURCE);
   const actual = createHash("sha256").update(bytes).digest("hex");
-  const expected = declaredSha256(await readFile(UPSTREAM, "utf8"));
+  const expected = DECLARED_SHA256;
   if (actual !== expected) {
-    console.error(`entities.json ha sha256 ${actual}, UPSTREAM.md dichiara ${expected}: la copia non si modifica a mano`);
+    console.error(`entities.json ha sha256 ${actual}, tools/vendor-craft/dati.mjs dichiara ${expected}: la copia non si modifica a mano`);
     process.exitCode = 1;
     return;
   }

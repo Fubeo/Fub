@@ -378,9 +378,20 @@ appena qualcuno inserisce un item nel mezzo.
   risalvano.
 - Il job supply chain scrive la SBOM Rust con `.github/scripts/sbom.mjs`, da
   `cargo metadata`, e fallisce se non corrisponde a `Cargo.lock`.
-- `motori-provenienza.yml` riscarica dall'upstream ogni motore di `vendor/`
-  (`verify-upstream`) ogni settimana e sulle PR che toccano `vendor/` o
-  `tools/vendor-craft/`, con lo strumento e l'upstream della base.
+- `motori-provenienza.yml` riscarica dall'upstream ogni copia di `vendor/`
+  ogni settimana e sulle PR che toccano `vendor/` o `tools/vendor-craft/`, con
+  lo strumento e l'upstream della base. Le copie sono di due specie, e ogni
+  cartella di `vendor/` dev'essere l'una o l'altra (`provenienza.mjs elenco`):
+  i motori di `tools/vendor-craft/motori.mjs`, verificati con
+  `vendor.mjs <motore> verify-upstream` contro la revisione del lock, e i dati
+  di `tools/vendor-craft/dati.mjs` (un file singolo da un URL fisso, con lo
+  sha256 atteso), verificati con `provenienza.mjs <dato> verify-upstream`, che
+  riscarica l'URL e confronta lo sha256 con il file del checkout. Sul cron un
+  dato diverso vuol dire che l'upstream è cambiato: si aggiorna con i passi del
+  suo `UPSTREAM.md`. Una PR che cambia repository, mirror o URL di una copia
+  fallisce; una copia nuova si verifica con lo strumento della PR, con un
+  avviso. In `ci.yml`, senza rete, `provenienza.mjs check` confronta ogni dato
+  con il suo sha256.
 - Il gate di release è `.github/scripts/check-release-gate.mjs`: aggiungere o
   rinominare un job richiede di aggiornarlo.
 - Un push fa girare la CI solo su `main`; una PR la fa girare a ogni push, e un

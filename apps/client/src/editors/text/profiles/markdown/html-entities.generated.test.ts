@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { declaredSha256, renderEntitiesModule } from "../../../../../scripts/html-entities.mjs";
+import { DECLARED_SHA256, renderEntitiesModule } from "../../../../../scripts/html-entities.mjs";
 import written from "./html-entities.generated.ts?raw";
 import { HTML_NAMED_ENTITIES } from "./html-entities.generated";
-import upstream from "../../../../../../../vendor/whatwg-entities/UPSTREAM.md?raw";
 import source from "../../../../../../../vendor/whatwg-entities/entities.json?raw";
 
 /// Lo sha256 di un testo, come lo calcola lo script sui byte del file.
@@ -14,8 +13,8 @@ async function sha256(text: string): Promise<string> {
 // La stessa promessa di `npm run entities:verify`, dentro `npm test`: la copia
 // della specifica è quella dichiarata, e la tabella è quella che produce.
 describe("la tabella delle entità generata", () => {
-  it("la copia in vendor ha lo sha256 scritto in UPSTREAM.md", async () => {
-    expect(await sha256(source)).toBe(declaredSha256(upstream));
+  it("la copia in vendor ha lo sha256 di tools/vendor-craft/dati.mjs", async () => {
+    expect(await sha256(source)).toBe(DECLARED_SHA256);
   });
 
   it("rigenerata dà gli stessi byte del file scritto", () => {
