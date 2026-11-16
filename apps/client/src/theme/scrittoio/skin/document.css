@@ -701,9 +701,32 @@
   height: 112px;
   margin: calc(-1 * var(--space-9)) -96px 0 -104px;
   overflow: hidden;
-  background: var(--doc-fill-soft);
+  background: linear-gradient(
+    118deg,
+    var(--doc-tint-green) 0%,
+    color-mix(in oklab, var(--doc-tint-green), var(--doc-tint-yellow)) 46%,
+    var(--doc-tint-yellow) 100%
+  );
+}
+/* Sotto l'immagine (che si carica, o che manca) il frontespizio del
+   prototipo: un alone d'accento in basso a destra e le righe verticali ogni
+   64 px. Una tinta scelta dall'utente resta piena. */
+.cm-fub-page-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 120% at 82% 120%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    repeating-linear-gradient(90deg, transparent 0 63px, color-mix(in srgb, var(--doc-fg) 4%, transparent) 63px 64px);
+}
+.cm-fub-page-cover[data-color] {
+  background-image: none;
+}
+.cm-fub-page-cover[data-color]::before {
+  content: none;
 }
 .cm-fub-page-cover p {
+  position: relative;
   height: 100%;
   margin: 0;
 }
@@ -807,7 +830,7 @@ button.cm-fub-page-icon {
   flex-wrap: nowrap;
   gap: 2px;
   height: 28px;
-  margin: var(--space-2) 0 2px calc(-1 * var(--space-3));
+  margin: var(--space-2) 0 2px calc(-1 * var(--space-4));
   opacity: 0;
 }
 .cm-fub-page:hover .cm-fub-page-tools,
@@ -962,7 +985,7 @@ button.cm-fub-page-prop-value {
   border: 0;
   border-radius: 7px;
   background: none;
-  color: var(--doc-ghost);
+  color: var(--doc-gutter-fg);
   font: inherit;
   cursor: pointer;
 }
@@ -979,10 +1002,6 @@ button.cm-fub-page-prop-value:hover,
 .cm-fub-page-props-more:hover,
 .cm-fub-page-props-add:hover {
   background: var(--doc-block-hover);
-}
-.cm-fub-page-props-more:hover,
-.cm-fub-page-props-add:hover {
-  color: var(--doc-gutter-fg);
 }
 button.cm-fub-page-prop-key:focus-visible,
 button.cm-fub-page-prop-value:focus-visible,
@@ -1012,8 +1031,10 @@ button.cm-fub-page-icon:focus-visible {
   white-space: nowrap;
 }
 .cm-fub-prop-tag {
-  background: var(--accent-wash);
-  color: var(--accent);
+  padding: 1px 7px;
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+  line-height: 1.5;
 }
 .cm-fub-prop-person {
   display: inline-flex;
@@ -1402,9 +1423,18 @@ button.cm-fub-page-icon:focus-visible {
    Interlinea intera e dispari: le icone di 15 px e le etichette cadono su
    pixel interi, e il testo sotto la testata non parte da mezzo pixel. */
 .cm-fub-page > .note-facts {
-  line-height: 19px;
-  margin-bottom: var(--space-8);
+  gap: var(--space-2) var(--space-6);
+  padding-bottom: 18px;
+  margin-bottom: 22px;
   border-bottom: 1px solid var(--doc-rule-soft);
+  font-size: 12.5px;
+  line-height: 19px;
+}
+.cm-fub-page > .note-facts .note-tag {
+  padding: 1px 7px;
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+  font-size: 12.5px;
 }
 /* La finestra e il foglio stretti: la colonna dei nomi cede (124 px, al
    telefono 108), la copertina segue i margini più corti e al telefono si
