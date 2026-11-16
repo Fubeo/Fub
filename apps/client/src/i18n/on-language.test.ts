@@ -29,10 +29,11 @@ vi.mock("../host/query", () => ({
 /// I due agganci di `mountStrings`. Li si cattura invece di simularli: chiamare
 /// quello vero è il solo modo di far girare `reread` per la strada per cui
 /// gira in produzione.
-let onSetting: (() => void) | null = null;
+type SettingHandler = (event: { key?: string }) => void;
+let onSetting: SettingHandler | null = null;
 let onVault: (() => void) | null = null;
 vi.mock("../state/kernel", () => ({
-  onEvent: (_type: string, h: () => void) => {
+  onEvent: (_type: string, h: SettingHandler) => {
     onSetting = h;
     return () => {
       if (onSetting === h) onSetting = null;
@@ -70,7 +71,8 @@ describe("onLanguage", () => {
   /// Fa cambiare lingua per la via vera, e aspetta che `reread` abbia finito.
   async function changeLanguageIn(next: string, source: "setting" | "vault" = "setting"): Promise<void> {
     language = next;
-    (source === "setting" ? onSetting : onVault)!();
+    if (source === "setting") onSetting!({ key: "locale.language" });
+    else onVault!();
     // Non un'attesa a tempo: `reread` è una catena di promesse già risolte, e
     // due giri di microtask la esauriscono.
     await Promise.resolve();
@@ -155,8 +157,8 @@ describe("onLanguage", () => {
     const seen: string[] = [];
     onLanguage(() => seen.push(document.documentElement.lang));
     deferredSettings = true;
-    onSetting!();
-    onSetting!();
+    onSetting!({ key: "locale.language" });
+    onSetting!({ key: "locale.language" });
     expect(pendingSettings).toHaveLength(2);
 
     pendingSettings[1]!([{ spec: { key: "locale.language" }, value: "en" }]);
@@ -170,9 +172,21 @@ describe("onLanguage", () => {
     expect(seen).toEqual(["en"]);
   });
 
+  it("rilegge solo per la chiave della lingua, o per un evento senza chiave", () => {
+    deferredSettings = true;
+    onSetting!({ key: "chrome.sidebar.visible" });
+    onSetting!({ key: "appearance.theme" });
+    expect(pendingSettings).toHaveLength(0);
+    onSetting!({ key: "locale.language" });
+    expect(pendingSettings).toHaveLength(1);
+    onSetting!({});
+    onSetting!({ key: "" });
+    expect(pendingSettings).toHaveLength(3);
+  });
+
   it("ignora una risposta arrivata dopo lo smontaggio", async () => {
     deferredSettings = true;
-    onSetting!();
+    onSetting!({ key: "locale.language" });
     const resolve = pendingSettings[0]!;
     mounted?.();
     mounted = undefined;

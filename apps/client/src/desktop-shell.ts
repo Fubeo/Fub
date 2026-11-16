@@ -17,6 +17,7 @@ import { pickVaultLocation } from "./platform/vault-picker";
 import { api, window as nativeWindow } from "./host/ipc";
 import { resolvedReference, settings } from "./host/query";
 import { forwardNotice, onEvent, startKernelRouter } from "./state/kernel";
+import { settingTouches } from "./state/setting-change";
 import { mountLocale } from "./state/locale";
 import { emit, on, setVaultName, state } from "./state/store";
 import { loadLayout, layout as paneLayout, split as splitPane, closePane } from "./state/layout";
@@ -128,6 +129,7 @@ import { mountWheelTextSize, zoomBy } from "./state/zoom";
 /// chiavi `localStorage` dove stavano prima (si adottano una volta).
 const SIDE_SETTING = { sidebar: "chrome.sidebar.visible", inspector: "chrome.inspector.visible" } as const;
 const LEGACY_SIDE = { sidebar: "fub.layout.sidebar", inspector: "fub.layout.inspector" } as const;
+const SIDE_KEYS: ReadonlySet<string> = new Set(Object.values(SIDE_SETTING));
 
 /** Apply machine chrome at boot and after external profile/setting changes.
  * A frame change is intentionally NOT live: native decorations are chosen
@@ -189,8 +191,12 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
       if (current === generation && !lifetime.closed) notify(t("shell.chrome_failed", { reason: errorText(error) }), "guasto");
     }
   };
+  // I due pannelli laterali hanno il loro ascoltatore nella shell adattiva:
+  // `apply` non li legge, e rileggere qui a ogni apertura della barra era un
+  // giro sul canale dati in più per ogni gesto.
   lifetime.add(onEvent("setting_changed", ({ key }) => {
-    if (key.startsWith("chrome.") || key === MINIBAR_SETTING || key.startsWith("editor.slash")) void reread();
+    if (settingTouches(key, (changed) => (changed.startsWith("chrome.") && !SIDE_KEYS.has(changed))
+      || changed === MINIBAR_SETTING || changed.startsWith("editor.slash"))) void reread();
   }));
   await reread();
 }
@@ -288,7 +294,7 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
   });
   life.add(() => sideReads.cancel());
   life.add(onEvent("setting_changed", ({ key }) => {
-    if (key === "chrome.schema" || key === SIDE_SETTING.sidebar || key === SIDE_SETTING.inspector) {
+    if (settingTouches(key, (changed) => changed === "chrome.schema" || SIDE_KEYS.has(changed))) {
       void readSidePreferences();
     }
   }));

@@ -25,7 +25,7 @@ import {
   mountedTextEditors as editorViews,
 } from "../editors/text/test-support";
 import type { FakeHost } from "../host/fake";
-import type { DraftInfo, ViewSpec } from "../host/contract";
+import type { DraftInfo, SettingEntry, ViewSpec } from "../host/contract";
 import { waiter } from "../test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
@@ -47,6 +47,8 @@ const box = vi.hoisted(() => {
     draftsFail: false,
     /// L'aggancio alla chiusura della finestra fallisce.
     closeHookFails: false,
+    /// Le impostazioni che l'host dichiara: di solito nessuna.
+    settings: [] as SettingEntry[],
     /// Porte e segnali, nell'ordine in cui la shell li ha toccati.
     trace: [] as string[],
     /// Ciò che una prova vuole guardare **nell'istante** di un passo.
@@ -174,7 +176,7 @@ async function mount(
   view: ViewSpec[] = [testViewSpec(TRASH_VIEW, "left_sidebar")],
 ): Promise<Mounted> {
   vi.resetModules();
-  const host = createFakeHost({ file, view });
+  const host = createFakeHost({ file, view, settings: box.settings });
   box.host = host;
   box.trace = [];
   const store = await import("./store");
@@ -313,6 +315,7 @@ beforeEach(() => {
   box.drafts = [];
   box.draftsFail = false;
   box.closeHookFails = false;
+  box.settings = [];
   box.probes.clear();
 });
 
@@ -952,5 +955,38 @@ describe("rilasciare una linguetta", () => {
       () => shell.sessions.get("Benvenuto.md") === undefined,
     );
     expect(shell.host.files()["Benvenuto.md"]).toContain("battuta in due riquadri");
+  });
+});
+
+describe("ricordare un pannello laterale", () => {
+  const machine = (key: string, kind: SettingEntry["spec"]["kind"], value: SettingEntry["value"]): SettingEntry => ({
+    spec: { key, label: key, description: "", group: "Cornice", scope: "machine", kind, program_writable: false },
+    value,
+    source: "default",
+  });
+
+  /// Aprire e chiudere la barra dal comando scrive `chrome.sidebar.visible`, e
+  /// l'host risponde con un `setting_changed`. Prima ogni ascoltatore rileggeva
+  /// tutte le impostazioni (tema, lingua, cronologia, cornice: cinque letture a
+  /// gesto, e il tema rimontato); adesso le rilegge solo chi possiede la chiave.
+  it("la barra dal comando rilegge le impostazioni una volta sola, dalla shell che la possiede", async () => {
+    box.settings = [
+      machine("chrome.schema", { kind: "number", default: 1, min: 0, max: 9 }, 1),
+      machine("chrome.sidebar.visible", { kind: "toggle", default: true }, true),
+      machine("chrome.inspector.visible", { kind: "toggle", default: true }, true),
+    ];
+    await start(VAULT);
+    const { toggleSidePanel } = await import("../ui/side-panels");
+    const sidebar = document.getElementById("sidebar")!;
+    expect(sidebar.hidden).toBe(false);
+    for (const hidden of [true, false]) {
+      box.trace = [];
+      toggleSidePanel("sidebar");
+      await settle();
+      await settle();
+      expect(sidebar.hidden).toBe(hidden);
+      expect(box.trace.filter((step) => step === "setSetting")).toHaveLength(1);
+      expect(box.trace.filter((step) => step === "queryIndex:settings")).toHaveLength(1);
+    }
   });
 });
