@@ -206,7 +206,10 @@ aperti a tutti.
 
 La Content Security Policy impedisce script remoti, iframe e oggetti non
 previsti. Il rendering non deve creare HTML attivo da una stringa del vault o
-del plugin senza sanitizzazione e una decisione esplicita.
+del plugin senza sanitizzazione e una decisione esplicita. Un comando dell'app
+si esegue solo se una permission di `crates/fub-app/permissions/` lo concede a
+una capability della finestra: `crates/fub-app/tests/ipc_permissions.rs` lo
+controlla nei due versi.
 
 La CSP sta in `crates/fub-app/tauri.conf.json` (`app.security.csp`) e vale per
 ogni piattaforma. `script-src` è `'self' 'wasm-unsafe-eval'`, e nient'altro:
@@ -425,25 +428,24 @@ attraverso una shell, e per percorso assoluto, senza cercarlo nel `PATH`
 cartelle che scrive l'amministratore (`/usr/bin`, `/bin`, `/usr/local/bin` e
 quelle di NixOS e Guix; su macOS solo `/usr/bin`), ed è buono se è un file
 regolare, eseguibile e non riscrivibile dal gruppo o dagli altri; su Windows
-viene dalla cartella di sistema (`SystemRoot`). Se non c'è, l'esito è
-«nessun programma» e la shell lo dice. Un file del vault che si eseguirebbe
-aprendolo si mostra e non si apre.
+dalla cartella che dà il sistema (`GetSystemWindowsDirectoryW`), mai da
+`SystemRoot`, che sceglie chi avvia Fub. Se non c'è, l'esito è «nessun
+programma» e la shell lo dice. Un file del vault che si eseguirebbe aprendolo
+si mostra e non si apre.
 
 La regola vale per il **primo** programma, non per quelli che lancia lui.
 `xdg-open` è uno script che cerca `gio`, `kde-open` e i loro pari nel `PATH`
 ereditato, come fa l'`Exec=` dei file `.desktop`; il `PATH` del figlio resta
 quello dell'utente, perché restringerlo romperebbe le app in `~/.local/bin`.
 Chi scrive in una cartella di quel `PATH` sceglie quindi l'app che apre il
-file. Su Windows anche `SystemRoot` viene dall'ambiente di chi avvia Fub: la
-via robusta, `GetSystemWindowsDirectoryW`, vorrebbe una dipendenza nuova di
-`fub-app`, che è una scelta di supply chain del maintainer.
+file.
 
 ## Supply chain
 
 - sorgenti delle dipendenze limitate dalla policy;
 - licenze controllate;
 - advisory e crate yanked bloccano la CI;
-- SBOM generata;
+- SBOM generata a ogni corsa e confrontata con `Cargo.lock` (`sbom.mjs`);
 - lockfile committati;
 - artefatti generati verificati;
 - dipendenze duplicate sensibili controllate.
