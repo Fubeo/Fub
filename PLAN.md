@@ -1316,7 +1316,7 @@ piena; un test della scheda della nota; `check-listeners` verde; le foto
 del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/note-peek.test.ts src/editors/text/profiles/markdown/link-card.dom.test.ts
-Stato: [~] PR #385 (feat/sbirciata @ 29f253239, con main dopo #380: conflitto risolto sulla porta pigra delle schede, `document-bridge` 400 kB); aspetta CI e baseline
+Stato: [x] PR #385 unita in main il 2026-11-16 (5a2c4f1c3), CI completa verde; baseline launcher-actions e menu-link dal runner guardate prima del merge
 
 ## T21a · I commenti nel formato: CriticMarkup nel provider Markdown
 
