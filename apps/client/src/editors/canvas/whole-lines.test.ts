@@ -27,6 +27,14 @@ describe("wholeLinesCut", () => {
     const lines = [{ top: 0, bottom: 20 }, { top: 0, bottom: 20 }, { top: 20, bottom: 20 }, { top: 20, bottom: 40 }];
     expect(wholeLinesCut(lines, 30)).toBe(20);
   });
+
+  it("non taglia dentro un riquadro più alto della sua riga: il pulsante sta intero o non si vede", () => {
+    // Una riga fino a 30, poi un pulsante da 34 a 58 con il testo da 38 a 54.
+    const lines = [{ top: 8, bottom: 30 }, { top: 34, bottom: 58 }, { top: 38, bottom: 54 }];
+    expect(wholeLinesCut(lines, 56)).toBe(30);
+    expect(wholeLinesCut(lines, 58)).toBeNull();
+    expect(wholeLinesCut([...lines, { top: 60, bottom: 80 }], 70)).toBe(58);
+  });
 });
 
 /// Un contenitore alto `height` (con 8 px sopra e 16 sotto di riempimento) a
@@ -57,19 +65,68 @@ function card(height: number, zoom: number) {
 }
 
 describe("fitWholeLines", () => {
-  it("scrive l'altezza fino alla fine dell'ultima riga intera, col riempimento sotto, a ogni zoom", () => {
+  it("taglia il bordo del riempimento sotto la fine dell'ultima riga intera, a ogni zoom", () => {
     for (const zoom of [0.6, 1]) {
-      // 92 px: lo spazio del testo finisce a 76, la terza riga a 74.
+      // 92 px: il riempimento sotto si vedrebbe fino a 92, la terza riga
+      // finisce a 74 e la quarta (fino a 96) no.
       const clip = card(92, zoom);
       fitWholeLines(clip);
-      expect(clip.style.getPropertyValue(CUT_PROPERTY)).toBe(`${74 + 16}px`);
+      expect(clip.style.getPropertyValue(CUT_PROPERTY)).toBe("74px");
       clip.remove();
-      // 80 px: lo spazio finisce a 64, la terza riga (fino a 74) non entra.
-      const small = card(80, zoom);
+      // 70 px: la terza riga (fino a 74) non entra.
+      const small = card(70, zoom);
       fitWholeLines(small);
-      expect(small.style.getPropertyValue(CUT_PROPERTY)).toBe(`${52 + 16}px`);
+      expect(small.style.getPropertyValue(CUT_PROPERTY)).toBe("52px");
       small.remove();
     }
+  });
+
+  it("un controllo tutto sotto il taglio è inert finché resta fuori, e il fuoco torna quando ci sta", () => {
+    const clip = card(70, 1);
+    const button = document.createElement("button");
+    button.textContent = "Estrai in una nota…";
+    clip.append(button);
+    // Sotto la quarta riga: da 100 a 124.
+    let buttonTop = 100;
+    button.getBoundingClientRect = () => new DOMRect(0, 100 + buttonTop, 100, 24);
+    const inertByOthers = document.createElement("button");
+    inertByOthers.inert = true;
+    inertByOthers.getBoundingClientRect = () => new DOMRect(0, 100 + 8, 100, 20);
+    clip.append(inertByOthers);
+    // happy-dom non applica la pelle: la regola del taglio la mette qui.
+    const maxHeight = () => clip.style.getPropertyValue(CUT_PROPERTY) || "none";
+    const real = window.getComputedStyle;
+    vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudo) => {
+      const style = real(element, pseudo);
+      if (element !== clip) return style;
+      return new Proxy(style, { get: (target, key) => (key === "maxHeight" ? maxHeight() : Reflect.get(target, key)) });
+    });
+    fitWholeLines(clip);
+    expect(clip.style.getPropertyValue(CUT_PROPERTY)).toBe("52px");
+    expect(button.inert).toBe(true);
+    expect(inertByOthers.inert).toBe(true);
+    // Il contenitore cresce: il pulsante (da 8 a 32, sopra tutto) torna.
+    Object.defineProperty(clip, "offsetHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(clip, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(clip, "scrollHeight", { configurable: true, get: () => 200 });
+    clip.getBoundingClientRect = () => new DOMRect(0, 100, 200, 200);
+    buttonTop = 8;
+    fitWholeLines(clip);
+    expect(clip.style.getPropertyValue(CUT_PROPERTY)).toBe("");
+    expect(button.inert).toBe(false);
+    expect(button.hasAttribute("data-canvas-cut-inert")).toBe(false);
+    // Quello inert per altri resta com'era.
+    expect(inertByOthers.inert).toBe(true);
+  });
+
+  it("dove il taglio non vale (la nota attiva scorre) nessun controllo diventa inert", () => {
+    const clip = card(70, 1);
+    const button = document.createElement("button");
+    clip.append(button);
+    button.getBoundingClientRect = () => new DOMRect(0, 200, 100, 24);
+    fitWholeLines(clip);
+    expect(clip.style.getPropertyValue(CUT_PROPERTY)).toBe("52px");
+    expect(button.inert).toBe(false);
   });
 
   it("senza troppo testo, o senza layout, non taglia e toglie il taglio di prima", () => {
@@ -83,19 +140,19 @@ describe("fitWholeLines", () => {
   });
 
   it("watchWholeLines taglia prima del disegno, rifà con `refit` e smette con la sua vita", async () => {
-    const clip = card(80, 1);
+    const clip = card(70, 1);
     const life = openLifetime();
     const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
     const lines = watchWholeLines(clip, life);
     expect(clip.style.getPropertyValue(CUT_PROPERTY)).toBe("");
     await frame();
-    expect(clip.style.getPropertyValue(CUT_PROPERTY)).toBe("68px");
+    expect(clip.style.getPropertyValue(CUT_PROPERTY)).toBe("52px");
     Object.defineProperty(clip, "offsetHeight", { configurable: true, get: () => 92 });
     Object.defineProperty(clip, "clientHeight", { configurable: true, get: () => 92 });
     clip.getBoundingClientRect = () => new DOMRect(0, 100, 200, 92);
     lines.refit();
     await frame();
-    expect(clip.style.getPropertyValue(CUT_PROPERTY)).toBe("90px");
+    expect(clip.style.getPropertyValue(CUT_PROPERTY)).toBe("74px");
     life.close();
     clip.style.removeProperty(CUT_PROPERTY);
     lines.refit();

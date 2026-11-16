@@ -9,8 +9,14 @@
 //   scheda attiva il testo scorre e la variabile non conta.
 // - **Le righe.** I riquadri delle righe di ogni nodo di testo
 //   (`Range.getClientRects`) e quelli degli elementi senza testo che occupano
-//   righe (immagini, disegni, formule). La regola pura è `wholeLinesCut`, che
-//   i test provano senza layout.
+//   righe (immagini, disegni, formule) o un blocco intero (i controlli, come
+//   «Estrai in una nota…»): il taglio non cade mai dentro un riquadro. La
+//   regola pura è `wholeLinesCut`, che i test provano senza layout.
+// - **Il bordo.** Il contenitore taglia al bordo del suo riempimento: il
+//   riempimento sotto si perde, se no la riga dopo si vedrebbe a metà lì.
+// - **Il fuoco.** Un controllo che il taglio lascia tutto fuori diventa
+//   `inert` (niente Tab, fuori dall'albero dell'accessibilità) finché resta
+//   fuori; l'azione resta nel menu della scheda.
 // - **La misura.** Si toglie la variabile, si misura lo spazio vero, si
 //   rimette. Le coordinate dello schermo si riportano a quelle della scheda
 //   (lo zoom della lavagna è una trasformazione e non cambia il layout).
@@ -25,29 +31,38 @@ import type { Lifetime } from "../../ui/lifetime";
 /// La variabile che la pelle legge.
 export const CUT_PROPERTY = "--canvas-card-cut";
 
-/// Gli elementi senza testo che occupano una riga.
-const BOXES = "img, svg, canvas, video, picture, math, hr";
+/// Gli elementi che si vedono interi o niente: quelli senza testo che
+/// occupano una riga e i controlli.
+const BOXES = "img, svg, canvas, video, picture, math, hr, button, input, select, textarea";
+
+/// I controlli che il taglio può lasciare fuori.
+const FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"]), [contenteditable]:not([contenteditable="false"])';
+
+/// Il segno sui controlli resi `inert` da questo modulo: si tolgono solo quelli.
+const INERT_MARK = "canvasCutInert";
 
 export interface LineBox {
   readonly top: number;
   readonly bottom: number;
 }
 
-/// Dove tagliare perché nessuna riga resti a metà: la fine dell'ultima riga
-/// che sta tutta sopra `limit`. `null` se tutto ci sta (nessun taglio) o se
-/// non ci sta neanche la prima riga (meglio mezza riga che una scheda vuota).
-/// Le misure sono dal bordo alto del contenitore.
+/// Dove tagliare perché nessuna riga resti a metà: la fine più bassa, sopra
+/// `limit`, di una riga o di un riquadro che non cade dentro un altro
+/// riquadro (un pulsante più alto della sua riga di testo si vede intero o
+/// niente). `null` se tutto ci sta (nessun taglio) o se non ci sta neanche la
+/// prima riga (meglio mezza riga che una scheda vuota). Le misure sono dal
+/// bordo alto del contenitore.
 export function wholeLinesCut(lines: readonly LineBox[], limit: number): number | null {
   const EPSILON = 0.5;
-  let cut = -Infinity;
-  let overflow = false;
-  for (const line of lines) {
-    if (line.bottom - line.top <= 0) continue;
-    if (line.bottom <= limit + EPSILON) cut = Math.max(cut, line.bottom);
-    else overflow = true;
+  const real = lines.filter((line) => line.bottom - line.top > 0);
+  if (!real.some((line) => line.bottom > limit + EPSILON)) return null;
+  const inside = (cut: number): boolean => real.some((line) => line.top < cut - EPSILON && line.bottom > cut + EPSILON);
+  let best: number | null = null;
+  for (const line of real) {
+    if (line.bottom > limit + EPSILON || (best !== null && line.bottom <= best)) continue;
+    if (!inside(line.bottom)) best = line.bottom;
   }
-  if (!overflow || cut === -Infinity) return null;
-  return cut;
+  return best;
 }
 
 /// Le righe di `clip`, in px della scheda dal suo bordo alto. Si ferma alla
@@ -79,9 +94,15 @@ function lineBoxes(clip: HTMLElement, scale: number, origin: number, stop: numbe
   return out;
 }
 
-/// Il taglio di `clip` misurato senza taglio, come valore della variabile;
-/// `null` se non serve.
-function measureCut(clip: HTMLElement): string | null {
+interface Cut {
+  /// Il valore della variabile.
+  readonly value: string;
+  /// I controlli tutti sotto il taglio.
+  readonly hidden: readonly HTMLElement[];
+}
+
+/// Il taglio di `clip` misurato senza taglio; `null` se non serve.
+function measureCut(clip: HTMLElement): Cut | null {
   const height = clip.offsetHeight;
   // Nascosto (da lontano la scheda non ha corpo) o senza layout: niente.
   if (height <= 0 || clip.scrollHeight <= clip.clientHeight + 1) return null;
@@ -92,25 +113,58 @@ function measureCut(clip: HTMLElement): string | null {
   const paddingTop = parseFloat(style.paddingTop) || 0;
   const paddingBottom = parseFloat(style.paddingBottom) || 0;
   const borderBottom = parseFloat(style.borderBottomWidth) || 0;
-  const limit = borderTop + clip.clientHeight - paddingBottom;
+  // Si taglia al bordo del riempimento, quindi tutto lo spazio dentro il
+  // bordo conta: il testo che scende nel riempimento sotto si vedrebbe.
+  const limit = borderTop + clip.clientHeight;
   const cut = wholeLinesCut(lineBoxes(clip, scale, rect.top, limit), limit);
   if (cut === null) return null;
-  // `max-height` conta come `box-sizing`: il bordo e il riempimento sotto
-  // restano fuori dal testo.
-  const value = style.boxSizing === "border-box" ? cut + paddingBottom + borderBottom : cut - borderTop - paddingTop;
+  // `max-height` conta come `box-sizing`; il bordo del riempimento cade sul
+  // taglio.
+  const value = style.boxSizing === "border-box" ? cut + borderBottom : cut - borderTop - paddingTop - paddingBottom;
+  const hidden: HTMLElement[] = [];
+  for (const control of clip.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+    if (control.inert && !control.dataset[INERT_MARK]) continue;
+    const top = (control.getBoundingClientRect().top - rect.top) / scale;
+    if (top >= cut - 0.5) hidden.push(control);
+  }
   // Al centesimo: lo zoom lascia resti di virgola mobile (73,99999…).
-  return `${Math.max(0, Math.round(value * 100) / 100)}px`;
+  return { value: `${Math.max(0, Math.round(value * 100) / 100)}px`, hidden };
+}
+
+/// Ridà il fuoco ai controlli che il taglio aveva tolto.
+function release(clip: HTMLElement): void {
+  for (const control of clip.querySelectorAll<HTMLElement>("[data-canvas-cut-inert]")) {
+    control.inert = false;
+    delete control.dataset[INERT_MARK];
+  }
 }
 
 /// Rifà il taglio dei contenitori `clips` adesso, tutti insieme: prima si
 /// tolgono tutti i tagli, poi si misura, poi si scrive, così il layout si fa
 /// una volta e non una per scheda.
 export function fitWholeLines(...clips: HTMLElement[]): void {
-  for (const clip of clips) clip.style.removeProperty(CUT_PROPERTY);
+  for (const clip of clips) {
+    clip.style.removeProperty(CUT_PROPERTY);
+    release(clip);
+  }
   const cuts = clips.map(measureCut);
   clips.forEach((clip, index) => {
     const cut = cuts[index];
-    if (cut) clip.style.setProperty(CUT_PROPERTY, cut);
+    if (cut) clip.style.setProperty(CUT_PROPERTY, cut.value);
+  });
+  // Solo dove il taglio vale davvero (la nota attiva scorre e lo ignora):
+  // una lettura per tutte le schede, dopo le scritture.
+  const applied = clips.map((clip, index) => {
+    if (cuts[index] === null) return false;
+    const max = getComputedStyle(clip).maxHeight;
+    return max !== "" && max !== "none";
+  });
+  cuts.forEach((cut, index) => {
+    if (!cut || !applied[index]) return;
+    for (const control of cut.hidden) {
+      control.inert = true;
+      control.dataset[INERT_MARK] = "1";
+    }
   });
 }
 
@@ -140,7 +194,10 @@ export function watchWholeLines(clip: HTMLElement, lifetime: Lifetime): WholeLin
     queued = true;
     queueMicrotask(flush);
   };
-  lifetime.add(() => queue.delete(clip));
+  lifetime.add(() => {
+    queue.delete(clip);
+    release(clip);
+  });
   if (typeof ResizeObserver !== "undefined") {
     // Il taglio cambia la misura del contenitore: il conto che segue dà lo
     // stesso taglio e lo `ResizeObserver` si ferma lì. La prima osservazione

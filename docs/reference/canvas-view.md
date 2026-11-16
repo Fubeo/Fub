@@ -221,11 +221,16 @@ intera, mai a metà di una riga (`whole-lines.ts`). La tela misura le righe
 una trasformazione) e scrive l'altezza in `--canvas-card-cut`, che la pelle
 usa come `max-height`; la misura si rifà quando la scheda cambia misura,
 quando il contenuto cambia, quando arrivano immagini o caratteri, tutte le
-schede insieme in un microtask. Una scheda di testo non scorre: «Estrai in una
-nota…» è una riga come le altre e resta fuori se non entra (il gesto c'è anche
-nel menu). La nota tiene l'ombra che dice «continua», che si ferma a un terzo
-sull'ultima riga intera. Se non entra neanche la prima riga, nessun taglio.
-Dentro la scheda attiva il testo scorre e il taglio non conta.
+schede insieme in un microtask. Il taglio cade sul bordo del riempimento (il
+riempimento sotto si perde, se no la riga dopo spunterebbe lì) e mai dentro un
+pulsante, un campo o un'immagine: o si vedono interi o non si vedono. Una
+scheda di testo non scorre: «Estrai in una nota…» resta fuori se non entra (il
+gesto c'è anche nel menu della scheda). Un controllo tutto sotto il taglio è
+`inert`, quindi niente Tab e fuori dall'albero dell'accessibilità, finché non
+torna a starci. La nota tiene l'ombra che dice «continua», che si ferma a un
+terzo sull'ultima riga intera. Se non entra neanche la prima riga, nessun
+taglio. Dentro la scheda attiva il testo scorre, il taglio non conta e nessun
+controllo diventa `inert`.
 
 ## Da lontano
 
