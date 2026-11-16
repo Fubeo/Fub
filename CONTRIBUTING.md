@@ -40,9 +40,11 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --no-fail-fast
 cargo deny check
+node .github/scripts/sbom.mjs --out fub-sbom.spdx.json
 ```
 
-La CI fa girare gli stessi test con `cargo nextest run --profile ci`, che li distribuisce
+L'ultimo scrive la SBOM Rust in SPDX 2.3 e fallisce se non corrisponde a
+`Cargo.lock`. La CI fa girare gli stessi test con `cargo nextest run --profile ci`, che li distribuisce
 anche fra un eseguibile e l'altro, più gli esempi della documentazione con
 `cargo test --doc`. I fuzzer del Markdown girano a 2000 casi; per la prova a
 fondo si passano `FUB_FUZZ_CASI=20000` e `FUB_FUZZ_TRASFERIMENTO=20000`, che la
@@ -108,6 +110,7 @@ node .github/scripts/check-prose.mjs
 node .github/scripts/check-tables.mjs
 node .github/scripts/check-locale-loop.mjs
 node .github/scripts/baseline-dal-runner.mjs --self-test
+node .github/scripts/sbom.mjs --self-test
 ```
 <!-- ci-required:end -->
 

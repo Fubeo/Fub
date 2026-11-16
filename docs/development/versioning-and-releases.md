@@ -119,7 +119,7 @@ flowchart LR
 3. verifica WIT e schemi;
 4. aggiorna versione del prodotto e lockfile;
 5. sposta le voci da `Non rilasciato` alla versione;
-6. genera SBOM;
+6. genera la SBOM: `node .github/scripts/sbom.mjs --out fub-sbom.spdx.json`;
 7. spingi il tag `vX.Y.Z`: il workflow costruisce gli artefatti;
 8. completa le note della release bozza;
 9. verifica installazione e avvio dagli artefatti, poi pubblica la bozza;

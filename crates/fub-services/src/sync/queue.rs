@@ -353,8 +353,9 @@ pub fn enforce_cap(
         );
     }
     // Su 32 bit un tetto oltre `usize::MAX` resta il massimo, non si tronca.
+    // Una quota di 0 byte non tiene niente: 0 non spegne il tetto.
     let cap = usize::try_from(quotas.max_vault_bytes).unwrap_or(usize::MAX);
-    if cap > 0 && bytes > cap {
+    if bytes > cap {
         return Err(QueueError::QueueFull { pending: ops.len() });
     }
     Ok((0, false))

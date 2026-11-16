@@ -18,7 +18,11 @@
 //!    un livello: è *dove sta* quello della macchina — un terzo strato di merge
 //!    avrebbe voluto dire un terzo posto in cui la stessa chiave vale un'altra
 //!    cosa, senza che nessuno dei tre sappia dire chi ha vinto.
-//! 3. Il profilo dell'utente, con la convenzione del sistema.
+//! 3. Il profilo dell'utente, con la convenzione del sistema. Sul telefono il
+//!    «profilo» è la cartella privata dell'app: su iOS
+//!    `HOME/Library/Application Support`, su Android `Context.getFilesDir()`,
+//!    che il guscio Kotlin passa con [`ANDROID_FILES_DIR_VAR`] perché fuori da
+//!    Java nessuna API del sistema la dice.
 //!
 //! # Perché non una dipendenza
 //!
@@ -227,26 +231,87 @@ fn portable_dir() -> Option<Utf8PathBuf> {
         .then(|| dir.join(PORTABLE_DIR))
 }
 
+/// La variabile con cui il guscio Android dà al processo la sua cartella
+/// privata, `Context.getFilesDir()`. La esporta `FubApplication.kt` in
+/// `Application.onCreate`, che Android chiama prima di creare qualunque
+/// activity: quindi prima che la libreria Rust parta e arrivi a
+/// [`config_dir`]. È un fatto del sistema, non una scelta: la scelta resta
+/// qui, e `FUB_CONFIG_DIR` continua a vincere su tutto.
+pub const ANDROID_FILES_DIR_VAR: &str = "FUB_ANDROID_FILES_DIR";
+
+/// Il sistema per cui si applica la convenzione. È un ingresso esplicito, non
+/// un `cfg` dentro la regola, così ogni ramo si prova da qualunque macchina:
+/// quello di Android soprattutto, che sul desktop non gira mai.
+///
+/// Fuori dai test ogni target costruisce solo la sua variante.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(test), allow(dead_code))]
+enum System {
+    Windows,
+    /// macOS e iOS: tutti e due danno `HOME` e vogliono la configurazione in
+    /// `Library/Application Support`. Su iOS `HOME` è la radice del contenitore
+    /// dell'app, dove si scrive solo dentro `Documents`, `Library` e `tmp`.
+    Apple,
+    /// Su Android non ci sono né `HOME` né `XDG_CONFIG_HOME`: la cartella
+    /// privata dell'app la conosce solo il lato Java, che la passa con
+    /// [`ANDROID_FILES_DIR_VAR`].
+    Android,
+    /// Linux e gli altri Unix: XDG.
+    Xdg,
+}
+
+impl System {
+    #[cfg(target_os = "windows")]
+    const CURRENT: Self = Self::Windows;
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    const CURRENT: Self = Self::Apple;
+    #[cfg(target_os = "android")]
+    const CURRENT: Self = Self::Android;
+    #[cfg(not(any(
+        target_os = "windows",
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "android"
+    )))]
+    const CURRENT: Self = Self::Xdg;
+}
+
 /// La convenzione del sistema, senza dipendenze.
-#[cfg(target_os = "windows")]
 fn user_config_dir() -> Option<Utf8PathBuf> {
-    env_path("APPDATA")
+    system_config_dir(System::CURRENT, env_path)
 }
 
-#[cfg(target_os = "macos")]
-fn user_config_dir() -> Option<Utf8PathBuf> {
-    env_path("HOME").map(|home| home.join("Library").join("Application Support"))
+/// La cartella che contiene quella di Fub secondo la convenzione di `system`,
+/// leggendo l'ambiente solo attraverso `env`: i test le danno un ambiente
+/// finto invece di toccare quello del processo.
+fn system_config_dir(
+    system: System,
+    env: impl Fn(&str) -> Option<Utf8PathBuf>,
+) -> Option<Utf8PathBuf> {
+    match system {
+        System::Windows => env("APPDATA"),
+        System::Apple => env("HOME").map(|home| home.join("Library").join("Application Support")),
+        // Solo un percorso assoluto: uno relativo vorrebbe dire scrivere
+        // rispetto alla directory di lavoro, che su Android è `/`.
+        System::Android => env(ANDROID_FILES_DIR_VAR).filter(|p| unix_absolute(p)),
+        // XDG: la variabile se c'è, il fallback che la specifica stessa
+        // dichiara se non c'è. Un `XDG_CONFIG_HOME` **relativo** va ignorato
+        // per specifica, e ignorarlo qui vuol dire non scrivere in una
+        // cartella a caso relativa alla directory di lavoro di chi ha lanciato
+        // l'app.
+        System::Xdg => env("XDG_CONFIG_HOME")
+            .filter(|p| unix_absolute(p))
+            .or_else(|| env("HOME").map(|home| home.join(".config"))),
+    }
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn user_config_dir() -> Option<Utf8PathBuf> {
-    // XDG: la variabile se c'è, il fallback che la specifica stessa dichiara se
-    // non c'è. Un `XDG_CONFIG_HOME` **relativo** va ignorato per specifica, e
-    // ignorarlo qui vuol dire non scrivere in una cartella a caso relativa alla
-    // directory di lavoro di chi ha lanciato l'app.
-    env_path("XDG_CONFIG_HOME")
-        .filter(|p| p.is_absolute())
-        .or_else(|| env_path("HOME").map(|home| home.join(".config")))
+/// «Assoluto» secondo il sistema della convenzione, non secondo quello che
+/// compila: Android e gli Unix XDG vogliono un percorso che comincia da `/`.
+/// `Utf8Path::is_absolute` risponde per la macchina che esegue, e su Windows
+/// direbbe relativo `/data/user/0/...` (manca l'unità), così i test dei rami
+/// Unix cadrebbero lì pur essendo giusti.
+fn unix_absolute(path: &Utf8Path) -> bool {
+    path.as_str().starts_with('/')
 }
 
 #[cfg(test)]
@@ -357,6 +422,73 @@ mod tests {
         assert!(
             notice.contains("will not be saved anywhere"),
             "notice does not say the data will be lost: {notice}"
+        );
+    }
+
+    /// Un ambiente finto fatto di coppie, per [`system_config_dir`].
+    fn fake_env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<Utf8PathBuf> {
+        let pairs: Vec<(String, String)> = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        move |key| {
+            pairs
+                .iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| Utf8PathBuf::from(v))
+        }
+    }
+
+    /// **Su Android la cartella c'è anche senza `HOME`** (issue #409): è quella
+    /// privata dell'app che il guscio Kotlin esporta. Prima su Android si
+    /// cadeva nel ramo XDG, che senza `HOME` e `XDG_CONFIG_HOME` dava `None`:
+    /// Fub lavorava in memoria e non ricordava niente da un avvio all'altro.
+    #[test]
+    fn android_uses_the_app_private_folder_without_home() {
+        let env = fake_env(&[(ANDROID_FILES_DIR_VAR, "/data/user/0/dev.fub.app/files")]);
+        assert_eq!(
+            system_config_dir(System::Android, env),
+            Some(Utf8PathBuf::from("/data/user/0/dev.fub.app/files"))
+        );
+        // Lo stesso ambiente, letto con la convenzione XDG di prima, non
+        // trovava niente: è il guasto che il ramo Android ripara.
+        let env = fake_env(&[(ANDROID_FILES_DIR_VAR, "/data/user/0/dev.fub.app/files")]);
+        assert_eq!(system_config_dir(System::Xdg, env), None);
+    }
+
+    /// Senza la variabile (un guscio senza `FubApplication`) o con un percorso
+    /// relativo, Android non indovina un posto: `None`, e l'avviso all'avvio
+    /// lo dice. `HOME`, se ci fosse, non conta: non è la convenzione di
+    /// Android.
+    #[test]
+    fn android_without_the_shell_does_not_guess() {
+        assert_eq!(system_config_dir(System::Android, fake_env(&[])), None);
+        let env = fake_env(&[(ANDROID_FILES_DIR_VAR, "files"), ("HOME", "/home/x")]);
+        assert_eq!(system_config_dir(System::Android, env), None);
+    }
+
+    /// Le convenzioni del desktop restano quelle di prima, e iOS segue macOS.
+    #[test]
+    fn desktop_and_ios_conventions() {
+        let env = fake_env(&[("APPDATA", "C:\\Users\\x\\AppData\\Roaming")]);
+        assert_eq!(
+            system_config_dir(System::Windows, env),
+            Some(Utf8PathBuf::from("C:\\Users\\x\\AppData\\Roaming"))
+        );
+        let env = fake_env(&[("HOME", "/Users/x")]);
+        assert_eq!(
+            system_config_dir(System::Apple, env),
+            Some(Utf8PathBuf::from("/Users/x/Library/Application Support"))
+        );
+        let env = fake_env(&[("XDG_CONFIG_HOME", "relativa"), ("HOME", "/home/x")]);
+        assert_eq!(
+            system_config_dir(System::Xdg, env),
+            Some(Utf8PathBuf::from("/home/x/.config"))
+        );
+        let env = fake_env(&[("XDG_CONFIG_HOME", "/xdg"), ("HOME", "/home/x")]);
+        assert_eq!(
+            system_config_dir(System::Xdg, env),
+            Some(Utf8PathBuf::from("/xdg"))
         );
     }
 
