@@ -75,6 +75,7 @@ import { liveGuide, liveReveal, revealPolicyOf, type RevealPolicy } from "./live
 import { pasteHtml } from "./paste-html";
 import { indentGuides } from "./indent-guides";
 import { softCursor } from "./soft-cursor";
+import { pageNonce } from "../../ui/stylesheets";
 import {
   operationFromText,
   tryApplyOperation,
@@ -982,6 +983,9 @@ export class TextEngine {
         dir: "auto",
       })),
       EditorView.perLineTextDirection.of(true),
+      // I fogli di CodeMirror vanno in un `<style>`: senza il nonce della
+      // pagina la CSP li rifiuterebbe (`ui/stylesheets.ts`).
+      EditorView.cspNonce.of(pageNonce() ?? ""),
       EditorView.domEventHandlers({
         compositionend: () => {
           if (!this.pendingInput) return;
