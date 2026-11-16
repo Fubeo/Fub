@@ -415,6 +415,7 @@ descrizione e riepilogo, con `truncated: true` (§11).
 |---|---|---|
 | Dimensione del file per la modifica | 20 MiB | sola lettura |
 | Elementi per la modifica | 50 000 | sola lettura |
+| Nodi XML per l'export (`MAX_EXPORT_NODES`) | 1 000 000 | l'export rifiuta con `too-many-nodes`, mai con un disegno troncato |
 | Dimensione indicizzata | 20 MiB | il provider indicizza titolo, descrizione e riepilogo, con `truncated: true` |
 | Immagine incorporata | 5 MiB | l'editor propone di ridurla |
 | Campioni per tratto | 10 000 | il tratto si divide |

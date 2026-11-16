@@ -21,7 +21,7 @@ La cartella viene scelta in ordine:
 
 1. `FUB_CONFIG_DIR`;
 2. `fub-config/` accanto all'eseguibile se esiste `fub.portable`;
-3. cartella di configurazione dell'utente per il sistema operativo.
+3. cartella dell'utente per il sistema (sul telefono, [quella privata dell'app](../architecture/phone-frame.md#il-lato-rust)).
 
 | Percorso relativo | Classe | Schema | Contenuto |
 |---|---|---:|---|

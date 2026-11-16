@@ -1031,10 +1031,9 @@ fn run_request(
     payload: Option<&[u8]>,
 ) -> Result<(u16, Vec<u8>), String> {
     let base = validate_base_url(base)?;
-    // Il path non deve portare query con segreti al server sync... la query è
-    // ammessa solo per chiavi non sensibili (`replica_id`, `site_id`,
-    // `doc_id`); `?password=` qui è rifiutato fail-closed.
-    if path.contains("password=") {
+    // Il path non porta segreti al server: la query ammette solo le chiavi di
+    // `QUERY_KEYS`, e ogni altra (anche `?Password=`) è rifiutata fail-closed.
+    if !request_path_is_clean(path) {
         return Err(format!(
             "{method} {}: secrets never in query",
             log_path(path)
@@ -1069,6 +1068,27 @@ fn run_request(
 }
 
 /// Path base per log/errori (mai la query).
+/// Le sole chiavi che una richiesta ai servizi può portare nella query: nomi
+/// di cose, mai credenziali. Le credenziali viaggiano nell'header o nel corpo.
+const QUERY_KEYS: [&str; 4] = ["doc_id", "replica_id", "site_id", "vault_id"];
+
+/// Vero se `path` si può mandare ai servizi: niente frammento, niente a capo,
+/// nessun `password=` in qualunque maiuscola e, se c'è una query, solo chiavi
+/// di [`QUERY_KEYS`]. È la regola unica dei due client, quello dell'host e
+/// quello del bundle sync.
+pub(crate) fn request_path_is_clean(path: &str) -> bool {
+    if path.contains(['#', '\r', '\n']) || path.to_ascii_lowercase().contains("password=") {
+        return false;
+    }
+    let Some((_, query)) = path.split_once('?') else {
+        return true;
+    };
+    query.split('&').all(|pair| {
+        let key = pair.split_once('=').map_or(pair, |(key, _)| key);
+        QUERY_KEYS.contains(&key)
+    })
+}
+
 fn log_path(path: &str) -> &str {
     match path.find('?') {
         Some(i) => &path[..i],
@@ -1339,5 +1359,38 @@ mod machine_state_tests {
         );
         assert!(a.starts_with("/config/sync/vaults"), "{a}");
         assert_eq!(a.file_name().map(str::len), Some(32), "{a}");
+    }
+}
+
+#[cfg(test)]
+mod request_path_tests {
+    use super::{get, request_path_is_clean};
+
+    #[test]
+    fn la_query_porta_solo_chiavi_che_non_sono_segreti() {
+        assert!(request_path_is_clean("/v1/hello"));
+        assert!(request_path_is_clean(
+            "/v1/sync/versions?vault_id=v&doc_id=a%3Db.md"
+        ));
+        assert!(request_path_is_clean("/v1/publish/status?site_id=s"));
+        for path in [
+            "/v1/hello?password=x",
+            "/v1/hello?Password=x",
+            "/v1/hello?PASSWORD=x",
+            "/v1/hello?vault_id=v&token=t",
+            "/v1/hello?vault_id=v&passphrase",
+            "/v1/hello?vault_id=v#frammento",
+            "/v1/hello\r\nx: y",
+            "/v1/a/password=x",
+        ] {
+            assert!(!request_path_is_clean(path), "{path}");
+        }
+    }
+
+    #[test]
+    fn una_query_con_un_segreto_non_parte_neppure() {
+        let error = get("https://example.invalid", "/v1/hello?Password=x", None).unwrap_err();
+        assert!(error.contains("secrets never in query"), "{error}");
+        assert!(!error.contains("Password=x"), "{error}");
     }
 }
