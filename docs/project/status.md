@@ -114,7 +114,8 @@ WASM-003) sono in [sicurezza dei plugin](../architecture/plugin-security.md).
 
 ## Il rilascio
 
-Un tag `vX.Y.Z` costruisce gli installer desktop sulle tre piattaforme e li
+Un tag `vX.Y.Z` costruisce gli installer desktop per Linux e Windows (macOS è
+in pausa, [ADR 0245](../decisions/0245-macos-e-ios-in-pausa.md)) e li
 carica in una release **bozza**: la pubblica una persona, dopo averli
 provati (`.github/workflows/release.yml`). Requisiti da verificare sul
 candidato: versione, changelog e compatibilità degli schemi coerenti; WIT

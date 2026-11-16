@@ -43,6 +43,13 @@ quando giravano sul thread principale; due corsie non si aspettano, così il
 controllo lungo del correttore non ferma la ricerca. Due domande mandate nello
 stesso istante possono entrare in un ordine qualsiasi.
 
+Anche `render_view` gira fuori dal thread principale, nella corsia delle viste,
+che c'è sempre e non conta fra le 16. Un salvataggio invecchia una ventina di
+view e la shell le ridisegna nello stesso giro: ognuna costa pochi
+millisecondi, ma in fila sul thread principale fermavano la finestra per un
+centinaio di millisecondi. I disegni restano in fila fra loro; la shell tiene
+comunque l'ultima risposta di ogni pannello (`Race`), non la prima arrivata.
+
 ## La griglia
 
 I fogli di calcolo usano la famiglia Grid, con porte strettamente tipate:
@@ -226,6 +233,12 @@ Gli eventi IPC sono fatti già accaduti. Contengono almeno:
 
 Una coda può compattare progresso o notifiche ripetute. Il risultato autorevole
 di un'operazione resta nella sua risposta.
+
+Gli avvisi nati prima della shell non si spingono, si tirano con
+`session_notice`: prima la diagnosi del log, poi gli altri avvisi d'avvio
+(come il percorso di disegno, `Event::Custom` col topic `rendering`, vedi
+[la webview del desktop](../architecture/desktop-webview.md#gli-avvisi)), uno
+per chiamata. La shell tira finché la risposta è `null`.
 
 ## View
 

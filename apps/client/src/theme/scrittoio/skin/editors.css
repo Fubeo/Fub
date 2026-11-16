@@ -4663,3 +4663,30 @@ input.canvas-toolbar-item {
   color: var(--doc-link);
   text-decoration: underline;
 }
+/* I commenti nel testo (T21): in Scrittura e in Lettura il passo commentato
+   ha un fondo giallo leggero, più pieno col cursore dentro; i segni e i
+   messaggi non si vedono. In Sorgente il commento intero, segni compresi, ha
+   il colore arancione. */
+.cm-editor .cm-content .cm-fub-comment-range,
+.markdown-rendered mark.comment-range {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--doc-highlight) 70%, transparent);
+  box-shadow: 0 2px 0 -1px var(--highlight);
+  color: inherit;
+}
+/* Col cursore dentro, il fondo pieno con un velo in più: più giallo del
+   riposo, senza un colore nuovo. Il velo è al 40% perché il testo resti
+   leggibile al buio: due strati pieni davano 3,85:1 sulla carta scura, così
+   il testo sta sopra 4,9:1 anche sulla riga attiva (5,9:1 in alto
+   contrasto); in luce il testo scuro resta sopra 12:1. */
+.cm-editor .cm-content .cm-fub-comment-range-on {
+  background:
+    linear-gradient(color-mix(in oklab, var(--doc-highlight) 40%, transparent), color-mix(in oklab, var(--doc-highlight) 40%, transparent)),
+    var(--doc-highlight);
+}
+.cm-editor .cm-content .cm-fub-comment-source {
+  border-radius: 3px;
+  background: var(--doc-tint-orange);
+  color: var(--doc-color-orange);
+}

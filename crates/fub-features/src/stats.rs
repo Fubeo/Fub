@@ -18,6 +18,7 @@
 use fub_abi::command::{ParamKind, ParamSpec};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
+use fub_abi::model::{custom_kind, Block, DocumentModel, Inline, Span};
 use fub_abi::rules::{media, text_policy};
 use fub_abi::session::{ContextMask, PaneMode, SelectionSet};
 use fub_abi::text::{Arg, StringCatalog, Text};
@@ -238,7 +239,7 @@ impl ViewProvider for StatsView {
             // Una nota che non c'è è uno stato da dire, non un errore: la view
             // si apre anche su un id scritto a mano.
             return match counted_text(host, &DocId::new(doc)) {
-                Ok(Some(text)) => Ok(build_document_counts(count(&text))),
+                Ok(Some(counted)) => Ok(build_document_counts(count(&counted.text))),
                 Ok(None) => Ok(not_text()),
                 Err(PluginError::NotFound(_)) => Ok(row(Text::key(NO_DOC)).with_key(NO_DOC)),
                 Err(error) => Err(error),
@@ -267,12 +268,12 @@ impl ViewProvider for StatsView {
         // Un PDF, un'immagine: un file che non è testo non ha parole, e lo si
         // dice. Restituire l'errore della lettura farebbe fallire il pannello a
         // ogni ridisegno, cioè un avviso a ogni movimento del cursore.
-        let Some(text) = counted_text(host, doc)? else {
+        let Some(counted) = counted_text(host, doc)? else {
             return Ok(not_text());
         };
         Ok(build_stats_view(
-            count(&text),
-            selection_stats(&context.selections),
+            count(&counted.text),
+            selection_stats(&context.selections, &counted.comments),
             context.mode,
         ))
     }
@@ -306,16 +307,27 @@ impl ViewProvider for StatsView {
 /// Le parole si contano selezione per selezione e poi si sommano: concatenare i
 /// testi e contare dopo attaccherebbe l'ultima parola di una alla prima
 /// dell'altra.
-fn selection_stats(selections: &Option<SelectionSet>) -> Option<(usize, TextStats)> {
+///
+/// Come il documento, una selezione si conta senza i segni e i messaggi dei
+/// commenti che prende ([`Comments::visible`]): il testo che arriva dalla
+/// shell è quello scritto nel sorgente, perché è su quello che agiscono i
+/// comandi.
+fn selection_stats(
+    selections: &Option<SelectionSet>,
+    comments: &Comments,
+) -> Option<(usize, TextStats)> {
     let set = selections.as_ref()?;
-    fn sum<'a>(texts: impl Iterator<Item = &'a str>) -> Option<(usize, TextStats)> {
+    fn sum<'a>(
+        comments: &Comments,
+        texts: impl Iterator<Item = (Option<Span>, &'a str)>,
+    ) -> Option<(usize, TextStats)> {
         let mut pieces = 0;
         let mut total = TextStats::default();
-        for text in texts {
+        for (span, text) in texts {
             if text.is_empty() {
                 continue;
             }
-            let part = count(text);
+            let part = count(&comments.visible(span, text));
             pieces += 1;
             total.words += part.words;
             total.chars += part.chars;
@@ -323,10 +335,18 @@ fn selection_stats(selections: &Option<SelectionSet>) -> Option<(usize, TextStat
         (pieces > 0).then_some((pieces, total))
     }
     match set {
-        SelectionSet::Anchored(s) => sum(std::iter::once(s.primary.text.as_str())
-            .chain(s.secondary.iter().map(|part| part.text.as_str()))),
-        SelectionSet::Floating(s) => sum(std::iter::once(s.primary.text.as_str())
-            .chain(s.secondary.iter().map(|part| part.text.as_str()))),
+        SelectionSet::Anchored(s) => sum(
+            comments,
+            std::iter::once(&s.primary)
+                .chain(&s.secondary)
+                .map(|part| (Some(part.span), part.text.as_str())),
+        ),
+        SelectionSet::Floating(s) => sum(
+            comments,
+            std::iter::once(&s.primary)
+                .chain(&s.secondary)
+                .map(|part| (None, part.text.as_str())),
+        ),
     }
 }
 
@@ -348,22 +368,213 @@ fn selection_stats(selections: &Option<SelectionSet>) -> Option<(usize, TextStat
 ///    [`text_policy::decode`] — non con `read_document`, il cui rifiuto arriva
 ///    come un [`PluginError::Io`] in prosa, indistinguibile da un disco che
 ///    non risponde se non confrontando stringhe.
-fn counted_text(host: &dyn ReadApi, doc: &DocId) -> Result<Option<String>, PluginError> {
+fn counted_text(host: &dyn ReadApi, doc: &DocId) -> Result<Option<Counted>, PluginError> {
     match host.format_of(doc) {
         Some(format)
             if !format
                 .capabilities
                 .supports(fub_abi::options::source::PROSE) =>
         {
-            Ok(Some(host.read_model(doc)?.text))
+            Ok(Some(Counted::plain(host.read_model(doc)?.text)))
         }
-        Some(_) => host.read_document(doc).map(Some),
+        Some(_) => {
+            let source = host.read_document(doc)?;
+            // Un commento ha sempre un messaggio: senza `{>>` il sorgente si
+            // conta com'è, senza chiedere il modello.
+            if !source.contains("{>>") {
+                return Ok(Some(Counted::plain(source)));
+            }
+            let model = host.read_model(doc)?;
+            let cuts = comment_cuts(&source, &model);
+            Ok(Some(Counted {
+                text: without_cuts(&source, &cuts),
+                comments: Comments { source, cuts },
+            }))
+        }
         None if media::mime_of(doc).is_some_and(is_binary_mime) => Ok(None),
         None => {
             let bytes = host.read_document_bytes(doc)?;
-            Ok(text_policy::decode(&bytes).ok().map(str::to_owned))
+            Ok(text_policy::decode(&bytes)
+                .ok()
+                .map(|text| Counted::plain(text.to_owned())))
         }
     }
+}
+
+/// Il testo che si conta di un documento, e i commenti del suo sorgente per
+/// contare allo stesso modo le selezioni.
+struct Counted {
+    text: String,
+    comments: Comments,
+}
+
+impl Counted {
+    /// Un testo senza commenti, che si conta com'è.
+    fn plain(text: String) -> Self {
+        Counted {
+            text,
+            comments: Comments::default(),
+        }
+    }
+}
+
+/// I tratti dei commenti che del sorgente non sono testo, in byte di `source`,
+/// in ordine e senza sovrapporsi (lo garantisce [`comment_cuts`]). Vuoto per un
+/// documento senza commenti.
+#[derive(Default)]
+struct Comments {
+    source: String,
+    cuts: Vec<Span>,
+}
+
+impl Comments {
+    /// Il testo di una selezione senza i segni e i messaggi dei commenti.
+    ///
+    /// A buffer pulito (`span` c'è, e il sorgente fra i suoi offset è proprio
+    /// `text`) si tolgono i tratti che cadono nella selezione, anche a metà:
+    /// la regola esatta del documento. A buffer sporco le coordinate non
+    /// valgono: si tolgono dal testo i tratti interi del sorgente salvato
+    /// (`{==`, `==}`, ogni messaggio coi suoi segni) che vi compaiono. Un
+    /// commento scritto e non ancora salvato si conta fino al salvataggio.
+    fn visible<'a>(&self, span: Option<Span>, text: &'a str) -> std::borrow::Cow<'a, str> {
+        use std::borrow::Cow;
+        if self.cuts.is_empty() {
+            return Cow::Borrowed(text);
+        }
+        let anchored = span.filter(|span| {
+            span.start <= span.end && self.source.get(span.start..span.end) == Some(text)
+        });
+        if let Some(span) = anchored {
+            let mut out = String::with_capacity(text.len());
+            let mut at = span.start;
+            for cut in &self.cuts {
+                let from = cut.start.max(at);
+                let to = cut.end.min(span.end);
+                // I bordi sono di tratti validi o della selezione, che è una
+                // fetta del sorgente: tutti confini di carattere.
+                if from >= to {
+                    continue;
+                }
+                out.push_str(&self.source[at..from]);
+                at = to;
+            }
+            out.push_str(&self.source[at..span.end]);
+            return Cow::Owned(out);
+        }
+        if !(text.contains("{==") || text.contains("==}") || text.contains("{>>")) {
+            return Cow::Borrowed(text);
+        }
+        let mut pieces: Vec<&str> = self
+            .cuts
+            .iter()
+            .map(|cut| &self.source[cut.start..cut.end])
+            .collect();
+        // Prima i più lunghi: un messaggio intero prima dei segni che contiene.
+        pieces.sort_by_key(|piece| std::cmp::Reverse(piece.len()));
+        pieces.dedup();
+        let mut out = text.to_string();
+        for piece in pieces {
+            if out.contains(piece) {
+                out = out.replace(piece, "");
+            }
+        }
+        Cow::Owned(out)
+    }
+}
+
+/// Ciò che nel sorgente di una nota in prosa dei commenti non è testo, in
+/// ordine: i due segni del passo (`custom_kind::COMMENT_RANGE`, `{==` e `==}`)
+/// e ogni messaggio coi suoi segni (`custom_kind::COMMENT_MESSAGE`). Il passo
+/// resta, perché è testo della nota: tolti questi tratti,
+/// `Un {==testo==}{>>@Anna: tre parole<<} finale.` si conta come
+/// `Un testo finale.`.
+///
+/// Gli span vengono dal modello dello stesso sorgente, in byte. La visita è
+/// quella di `search::schema::comment_texts`, che trova i messaggi: i blocchi
+/// col loro testo in riga, le enfasi e le etichette dei link, dove un commento
+/// può stare. Uno span che non cade su confini di carattere del sorgente (un
+/// modello letto da un'altra versione del file) si lascia stare: si conta
+/// qualche parola in più, mai un sorgente tagliato a metà.
+fn comment_cuts(source: &str, model: &DocumentModel) -> Vec<Span> {
+    fn inlines(nodes: &[Inline], out: &mut Vec<Span>) {
+        for node in nodes {
+            match node {
+                Inline::Custom {
+                    custom_kind, span, ..
+                } if custom_kind == custom_kind::COMMENT_RANGE
+                    || custom_kind == custom_kind::COMMENT_MESSAGE =>
+                {
+                    out.push(*span);
+                }
+                Inline::Emph(children)
+                | Inline::Strong(children)
+                | Inline::Superscript(children)
+                | Inline::Subscript(children)
+                | Inline::Strikethrough(children) => inlines(children, out),
+                Inline::Link {
+                    label: Some(label), ..
+                } => inlines(label, out),
+                _ => {}
+            }
+        }
+    }
+    fn blocks(nodes: &[Block], out: &mut Vec<Span>) {
+        for block in nodes {
+            match block {
+                Block::Heading { inlines: i, .. } | Block::Paragraph { inlines: i, .. } => {
+                    inlines(i, out);
+                }
+                Block::List { items, .. } => {
+                    for item in items {
+                        blocks(&item.blocks, out);
+                    }
+                }
+                Block::Quote { blocks: b, .. } | Block::Custom { blocks: b, .. } => blocks(b, out),
+                Block::Table { head, rows, .. } => {
+                    for row in head.iter().chain(rows) {
+                        for cell in &row.cells {
+                            inlines(&cell.inlines, out);
+                        }
+                    }
+                }
+                Block::CodeBlock { .. }
+                | Block::ThematicBreak { .. }
+                | Block::ReferenceDefinition { .. } => {}
+            }
+        }
+    }
+    let mut found = Vec::new();
+    blocks(&model.body, &mut found);
+    found.sort_by_key(|span| span.start);
+    let mut cuts: Vec<Span> = Vec::with_capacity(found.len());
+    let mut at = 0;
+    for span in found {
+        let fits = at <= span.start
+            && span.start <= span.end
+            && span.end <= source.len()
+            && source.is_char_boundary(span.start)
+            && source.is_char_boundary(span.end);
+        if fits {
+            cuts.push(span);
+            at = span.end;
+        }
+    }
+    cuts
+}
+
+/// `source` senza i tratti `cuts` di [`comment_cuts`].
+fn without_cuts(source: &str, cuts: &[Span]) -> String {
+    if cuts.is_empty() {
+        return source.to_string();
+    }
+    let mut out = String::with_capacity(source.len());
+    let mut at = 0;
+    for span in cuts {
+        out.push_str(&source[at..span.start]);
+        at = span.end;
+    }
+    out.push_str(&source[at..]);
+    out
 }
 
 /// Un MIME che di sicuro non è testo da contare. Ciò che resta fuori (i
@@ -598,6 +809,105 @@ mod tests {
                 other => panic!("unexpected node: {other:?}"),
             })
             .collect()
+    }
+
+    /// Un commento non cambia il conteggio: i segni del passo e il messaggio
+    /// non sono testo della nota, il passo sì. Anche dentro un'enfasi.
+    #[test]
+    fn a_comment_counts_like_the_text_without_it() {
+        fn piece(kind: &str, from: usize, to: usize) -> Inline {
+            Inline::Custom {
+                custom_kind: kind.to_string(),
+                attrs: serde_json::Value::Null,
+                span: Span::new(from, to),
+            }
+        }
+        let source =
+            "Un {==testo==}{>>@Anna 2026-11-08 17:40: tre parole qui<<} *fi{==n==}{>>x<<}ale*.";
+        let open = source.find("{==").unwrap();
+        let close = source.find("==}").unwrap();
+        let message = source.find("{>>").unwrap();
+        let message_end = source.find("<<}").unwrap() + 3;
+        let inner_open = source.rfind("{==").unwrap();
+        let inner_close = source.rfind("==}").unwrap();
+        let inner_message = source.rfind("{>>").unwrap();
+        let inner_end = source.rfind("<<}").unwrap() + 3;
+        let mut model = DocumentModel::empty(DocId::new("nota.md"));
+        model.body = vec![Block::Paragraph {
+            inlines: vec![
+                Inline::Text("Un ".into()),
+                piece(custom_kind::COMMENT_RANGE, open, open + 3),
+                Inline::Text("testo".into()),
+                piece(custom_kind::COMMENT_RANGE, close, close + 3),
+                piece(custom_kind::COMMENT_MESSAGE, message, message_end),
+                Inline::Text(" ".into()),
+                Inline::Emph(vec![
+                    Inline::Text("fi".into()),
+                    piece(custom_kind::COMMENT_RANGE, inner_open, inner_open + 3),
+                    Inline::Text("n".into()),
+                    piece(custom_kind::COMMENT_RANGE, inner_close, inner_close + 3),
+                    piece(custom_kind::COMMENT_MESSAGE, inner_message, inner_end),
+                    Inline::Text("ale".into()),
+                ]),
+            ],
+            anchor: None,
+            span: Span::new(0, source.len()),
+        }];
+        let counted = without_comments(source, &model);
+        assert_eq!(counted, "Un testo *finale*.");
+        assert_eq!(count(&counted), count("Un testo *finale*."));
+        // Senza commenti nel modello il sorgente resta com'è.
+        let plain = DocumentModel::empty(DocId::new("nota.md"));
+        assert_eq!(without_comments(source, &plain), source);
+        // Uno span fuori dal sorgente non lo taglia.
+        let mut stale = DocumentModel::empty(DocId::new("nota.md"));
+        stale.body = vec![Block::Paragraph {
+            inlines: vec![piece(custom_kind::COMMENT_MESSAGE, 4, source.len() + 10)],
+            anchor: None,
+            span: Span::new(0, 1),
+        }];
+        assert_eq!(without_comments(source, &stale), source);
+
+        // Una selezione si conta come il documento: senza i segni e i
+        // messaggi che prende, anche a metà, a buffer pulito e sporco.
+        let comments = Comments {
+            source: source.to_string(),
+            cuts: comment_cuts(source, &model),
+        };
+        let anchored = |from: usize, to: usize| {
+            comments
+                .visible(Some(Span::new(from, to)), &source[from..to])
+                .into_owned()
+        };
+        // Tutto il commento, e il passo con la sua chiusura e il messaggio.
+        assert_eq!(anchored(0, message_end), "Un testo");
+        assert_eq!(anchored(open + 3, message_end + 1), "testo ");
+        // Da dentro il messaggio in poi: il resto del messaggio non conta.
+        assert_eq!(anchored(message + 5, message_end + 3), " *f");
+        // A buffer sporco i tratti interi del sorgente salvato si tolgono dal
+        // testo; ciò che non è un commento salvato resta com'è.
+        let floating = comments.visible(None, &source[open..message_end]);
+        assert_eq!(floating, "testo");
+        assert_eq!(
+            comments.visible(None, "nuovo {==passo==} scritto"),
+            "nuovo passo scritto"
+        );
+        assert_eq!(comments.visible(None, "senza commenti"), "senza commenti");
+        // Uno span che non è più quello del testo vale come a buffer sporco.
+        assert_eq!(
+            comments.visible(Some(Span::new(0, 3)), &source[open..message_end]),
+            "testo"
+        );
+        // Un documento senza commenti non tocca niente.
+        assert_eq!(
+            Comments::default().visible(None, &source[..message_end]),
+            &source[..message_end]
+        );
+    }
+
+    /// Il conteggio di prima, dai tratti del modello.
+    fn without_comments(source: &str, model: &DocumentModel) -> String {
+        without_cuts(source, &comment_cuts(source, model))
     }
 
     #[test]

@@ -8,7 +8,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "check": "node --check src/capture.js && node --check src/convert.js && node --check src/templates.js && node --check src/matcher.js && node --check src/i18n.js && node --check src/images.js && node --check src/interpreter.js && node --check src/channel.js && node --check src/extract.js && node --check src/selectors.js && node --check src/background.js && node --check src/popup.js && node --check src/options.js && node --check tests/security-limits.test.mjs && node --check smoke-headless.mjs",
+    "check": "node --check src/capture.js && node --check src/convert.js && node --check src/templates.js && node --check src/matcher.js && node --check src/i18n.js && node --check src/images.js && node --check src/interpreter.js && node --check src/keystore.js && node --check src/channel.js && node --check src/extract.js && node --check src/selectors.js && node --check src/background.js && node --check src/popup.js && node --check src/options.js && node --check tests/security-limits.test.mjs && node --check smoke-headless.mjs",
     "test": "node --test",
     "smoke": "node --test && node smoke-headless.mjs",
     "proof:browser": "node browser-proof.mjs --browser all",

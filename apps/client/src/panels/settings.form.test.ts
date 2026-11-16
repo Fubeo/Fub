@@ -393,6 +393,37 @@ describe("ricerca, filtro e indice", () => {
     expect(links[0]!.hasAttribute("aria-current")).toBe(false);
   });
 
+  it("la voce scelta nell'indice resta attiva finché non si scorre di suo; in fondo vince l'ultima (B-01)", async () => {
+    await openFullPanel(rows());
+    const links = [...document.querySelectorAll<HTMLButtonElement>("#settings-toc-list button[data-target]")];
+    const scroll = document.getElementById("settings-scroll")!;
+    const current = () => links.find((link) => link.getAttribute("aria-current") === "true")?.querySelector(".settings-toc-name")?.textContent;
+    // La geometria che happy-dom non calcola: un corpo di 1000 px in una
+    // finestra di 600, con le due ultime sezioni nell'ultimo schermo.
+    let top = 0;
+    Object.defineProperty(scroll, "scrollTop", { configurable: true, get: () => top, set: (v: number) => { top = v; } });
+    Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 600 });
+    Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 1000 });
+    const offsets = new Map([["Editor", 0], ["Privacy", 700], ["Profili", 850]]);
+    for (const section of document.querySelectorAll<HTMLElement>("#settings-body .settings-section")) {
+      const name = section.querySelector(".settings-section-title")?.textContent ?? "";
+      section.getBoundingClientRect = () => ({ top: (offsets.get(name) ?? 0) - top } as DOMRect);
+    }
+    // Il clic porta in fondo (Privacy non può salire in cima): resta Privacy.
+    links[1]!.click();
+    top = 400;
+    scroll.dispatchEvent(new Event("scroll"));
+    expect(current()).toBe("Privacy");
+    // Chi scorre di suo riprende la voce dalla posizione: in fondo, l'ultima.
+    scroll.dispatchEvent(new WheelEvent("wheel", { deltaY: 100 }));
+    expect(current()).toBe("Profili");
+    scroll.dispatchEvent(new Event("scroll"));
+    expect(current()).toBe("Profili");
+    top = 100;
+    scroll.dispatchEvent(new Event("scroll"));
+    expect(current()).toBe("Editor");
+  });
+
   it("Mod+F dentro il pannello porta alla ricerca, senza lasciar passare il tasto", async () => {
     await openFullPanel(rows());
     const key = new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true, cancelable: true });
@@ -766,5 +797,64 @@ describe("una riga in volo resta usabile, e l'ultima scrittura vince (A03)", () 
     await vi.waitFor(() => expect(rowOf(SIZE).getAttribute("aria-busy")).toBeNull());
     expect(rowOf(SIZE).querySelector(".setting-error")).toBeNull();
     expect(field().value).toBe("22");
+  });
+});
+
+describe("il perché delle animazioni ridotte di partenza", () => {
+  const motion = (byDefault: string, value: string, source: SettingEntry["source"] = "default") => entry(
+    "appearance.motion",
+    {
+      kind: "choice",
+      default: byDefault,
+      options: [
+        { value: "", label: "Come il sistema" },
+        { value: "calm", label: "Calme" },
+        { value: "reduced", label: "Ridotte" },
+      ],
+    },
+    value,
+    source,
+    "Aspetto",
+  );
+  const rowOf = () => document.querySelector('[data-setting-key="appearance.motion"]')!;
+  const why = "Su questo sistema partono ridotte";
+
+  it("dove l'host parte da «ridotte» la riga dice perché, e il campo lo annuncia", async () => {
+    await openPanel([motion("reduced", "reduced")]);
+    const note = document.getElementById("setting-appearance.motion-default-why")!;
+    expect(note.textContent).toContain(why);
+    expect(note.textContent).toContain("WebKitGTK");
+    expect(rowOf().contains(note)).toBe(true);
+    const control = document.getElementById("setting-appearance.motion")!;
+    expect(control.getAttribute("aria-describedby")!.split(" ")).toContain(note.id);
+  });
+
+  it("la nota resta anche dopo una scelta, perché spiega il valore di partenza", async () => {
+    await openPanel([motion("reduced", "", "machine")]);
+    expect(rowOf().textContent).toContain(why);
+  });
+
+  it("la nota resta quando la riga si aggiorna sul posto a un setting_changed", async () => {
+    await openFullPanel([motion("reduced", "reduced"), toggle("editor.vim", false, "default", "Editor")]);
+    const before = rowOf();
+    const control = document.getElementById("setting-appearance.motion");
+    const stored = fake.entries.find((candidate) => candidate.spec.key === "appearance.motion")!;
+    stored.value = "calm";
+    stored.source = "machine";
+    settingChanged("appearance.motion");
+    await vi.waitFor(() => expect(document.getElementById("setting-appearance.motion")).not.toBe(control));
+    // La via per riga, non il ridisegno intero: la riga è lo stesso nodo.
+    expect(rowOf()).toBe(before);
+    const note = document.getElementById("setting-appearance.motion-default-why")!;
+    expect(note.textContent).toContain(why);
+    expect(rowOf().contains(note)).toBe(true);
+    const fresh = document.getElementById("setting-appearance.motion")!;
+    expect(fresh.getAttribute("aria-describedby")!.split(" ")).toContain(note.id);
+  });
+
+  it("dove si parte dal sistema la nota non c'è", async () => {
+    await openPanel([motion("", "")]);
+    expect(rowOf().textContent).not.toContain(why);
+    expect(document.getElementById("setting-appearance.motion-default-why")).toBeNull();
   });
 });

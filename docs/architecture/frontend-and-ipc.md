@@ -326,7 +326,17 @@ pannelli) lo Scrittoio compone:
   critica più rigida che non dura più di quella piena. Menu, modali,
   pannelli, centri e avvisi entrano ed escono da `ui/motion.ts`, sopra
   `moto`: la pelle non ha fotogrammi chiave d'entrata o d'uscita, e
-  un'uscita è un'immagine che se ne va in 140 ms al più;
+  un'uscita è un'immagine che se ne va in 140 ms al più. Il default di
+  `appearance.motion` lo decide l'host (`fub_host::settings::motion_default`):
+  `""` (segue il sistema), tranne su Linux con WebKitGTK dalla 2.54.0, che
+  dopo un'animazione ripresenta fotogrammi vecchi; lì parte da `reduced`.
+  La versione è quella della libreria caricata, che l'app dichiara per prima
+  cosa, prima del percorso di disegno e dell'host (`declare_the_webview` in
+  `crates/fub-app/src/lib.rs`);
+  l'intervallo difettoso è la costante `WEBKITGTK_FLICKER_FROM`, aperta in
+  alto finché una versione corretta non è verificata. Un valore scritto,
+  anche `""`, vale sempre; sotto la riga Animazioni le Impostazioni dicono
+  perché il valore di partenza è «ridotte»;
 - `theme/scrittoio/`: la serie di serie (motore `theme-2`), con ricetta dei
   colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
   del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.

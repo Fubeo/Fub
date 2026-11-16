@@ -203,6 +203,13 @@ Il solo parser precompilato di Mermaid ha un limite di 700.000 byte e non
 può appartenere alle dipendenze statiche degli ingressi applicativi.
 Il controllo misura il codice finale, dopo la riscrittura degli import di
 Vite, e interrompe la build in caso di superamento.
+La pelle composta dello Scrittoio entra come testo (`?raw`, chunk
+`theme-skin`), che Vite non minimizza: nella build
+[`build/skin-minify.mjs`](../../apps/client/build/skin-minify.mjs) le toglie
+commenti, rientri e spazi che non contano, lasciando intatte stringhe, escape
+e `url(…)`. Il suo test confronta, sulla pelle vera, l'albero di postcss prima
+e dopo regola per regola e la fa passare dal cancello del tema; in sviluppo e
+al banco la pelle resta quella scritta.
 
 Il [guard delle copie npm](../../.github/scripts/check-npm-copies.mjs)
 mantiene uniche le dipendenze che condividono identità applicativa.
@@ -285,8 +292,14 @@ appena qualcuno inserisce un item nel mezzo.
 ## La CI in breve
 
 - Una PR **bozza** riceve la CI corta: solo Linux, senza banchi. Pronta per
-  la revisione gira la CI completa, Windows e macOS compresi; su `main` gira
-  sempre tutto.
+  la revisione gira la CI completa, Windows compreso; su `main` gira sempre
+  tutto.
+- macOS e iOS sono in pausa
+  ([ADR 0245](../decisions/0245-macos-e-ios-in-pausa.md)): nessuna PR li
+  aspetta. [`macos-in-pausa.yml`](../../.github/workflows/macos-in-pausa.yml)
+  prova ogni domenica (e a mano) i test del workspace su macOS e la
+  compilazione di `fub-app` per iOS; non è un controllo richiesto, e un job
+  rosso si corregge con una PR normale.
 - I test del workspace girano con `cargo nextest run --workspace --profile ci`
   più `cargo test --workspace --doc`; i fuzzer del Markdown girano a 2000 casi
   (20000 nella corsa settimanale e con `fuzz_completo`).
@@ -295,9 +308,11 @@ appena qualcuno inserisce un item nel mezzo.
   risalvano.
 - Il job supply chain scrive la SBOM Rust con `.github/scripts/sbom.mjs`, da
   `cargo metadata`, e fallisce se non corrisponde a `Cargo.lock`.
-- `motori-provenienza.yml` riscarica dall'upstream ogni motore di `vendor/`
-  (`verify-upstream`) ogni settimana e sulle PR che toccano `vendor/` o
-  `tools/vendor-craft/`, con lo strumento e l'upstream della base.
+- `motori-provenienza.yml` riscarica ogni copia di `vendor/` ogni settimana e
+  sulle PR che toccano `vendor/` o `tools/vendor-craft/`, con strumento e
+  upstream della base: i motori di `motori.mjs` (`vendor.mjs verify-upstream`)
+  e i dati di `dati.mjs` (`provenienza.mjs verify-upstream`, sha256 dell'URL
+  contro il checkout); una cartella non dichiarata è rossa.
 - Il gate di release è `.github/scripts/check-release-gate.mjs`: aggiungere o
   rinominare un job richiede di aggiornarlo.
 - Un push fa girare la CI solo su `main`; una PR la fa girare a ogni push, e un
@@ -324,7 +339,7 @@ scrivere un file. Le regole e le loro prove stanno in
 Nella corsa rilanciata il job `cosa cambia` decide il **riuso**: se il commit
 ha per unico genitore la testa della corsa `riuso_di`, cambia solo
 `apps/client/bench/baseline/*.png` e in quella corsa ogni job tranne il banco
-visivo era verde o saltato, con i test sui tre sistemi, gli altri job si
+visivo era verde o saltato, con i test su Linux e Windows, gli altri job si
 saltano e contano come in quella corsa; gira soltanto il banco visivo. Il
 riepilogo della corsa dice quali job riusa, o perché gira tutto. Il riuso non
 vale per il cancello del rilascio, che vuole ogni job verde.

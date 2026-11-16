@@ -604,8 +604,10 @@ pub fn uri(
             title,
             markdown,
             source_url,
+            properties,
             success_callback,
             error_callback,
+            ..
         } => {
             let payload = fub_host::automation::CapturePayloadV1 {
                 v: 1,
@@ -613,7 +615,7 @@ pub fn uri(
                 markdown: markdown
                     .ok_or_else(|| Failure::bad_args("uri capture richiede markdown"))?,
                 source_url,
-                properties: None,
+                properties,
                 target: fub_host::automation::CaptureTarget {
                     vault,
                     folder,
