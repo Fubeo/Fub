@@ -22,6 +22,7 @@ import { markdownGrammar } from "./grammar";
 import { frontmatterRange } from "./render";
 import { blockIdMarks } from "./block-id";
 import { transformKeymap } from "./blocks/transform";
+import { commentSource } from "./comments/source";
 import type { NoteFactsExtensions } from "./note-facts";
 
 const typography = Prec.high(EditorView.theme({
@@ -191,7 +192,7 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
         markdown({ base: markdownGrammar, codeLanguages: languages }),
         cursorElements,
         // «Trasforma in» da tastiera (Mod-Alt-0…8) vale in Scrittura.
-        previewOn ? [livePreview(options.callbacks, syntaxForms), linkDialog(options.completions.searchNotes), blockIdMarks, Prec.high(keymap.of(transformKeymap))] : [],
+        previewOn ? [livePreview(options.callbacks, syntaxForms), linkDialog(options.completions.searchNotes), blockIdMarks, Prec.high(keymap.of(transformKeymap))] : commentSource(syntaxForms),
         // I Blocchi stanno dentro Scrittura, sopra la resa viva; la
         // rivelazione dei segni resta quella di `editor.live-reveal`.
         previewOn && blocks !== null ? blocks : [],

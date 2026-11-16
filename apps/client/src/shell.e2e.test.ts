@@ -947,6 +947,70 @@ describe("navigazione accessibile dell'esploratore", () => {
   });
 });
 
+describe("il cassetto sopra i fogli (A-02)", () => {
+  // A 700 px albero e ispettore sono cassetti col velo: la tastiera non deve
+  // arrivare al foglio coperto. Scegliere un documento chiude il cassetto e dà
+  // il fuoco al documento; qualunque fuoco che entra sotto il velo lo chiude.
+  const narrow = async (body: () => Promise<void>): Promise<void> => {
+    const saved = Object.getOwnPropertyDescriptor(window, "innerWidth");
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 700 });
+    try {
+      await body();
+    } finally {
+      if (saved) Object.defineProperty(window, "innerWidth", saved);
+      else delete (window as { innerWidth?: number }).innerWidth;
+    }
+  };
+  const run = async (id: string) => {
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === id)!.run!();
+    await settle();
+  };
+  const layout = () => document.getElementById("layout")!;
+  const inSheet = () => !!document.activeElement?.closest(".pane");
+
+  it("scegliere una nota dall'albero chiude il cassetto e porta il fuoco nella nota", async () => {
+    await narrow(async () => {
+      await start(VAULT);
+      await run("shell.sidebar.toggle");
+      expect(layout().classList.contains("drawer-sidebar-open")).toBe(true);
+      const chevron = document.querySelector<HTMLButtonElement>('#file-list li[data-path="note"] > .tree-row > .chevron')!;
+      chevron.click();
+      await waitFor("la cartella si apre", () => !!document.querySelector('#file-list li[data-path="note/Spesa.md"]'));
+      // Aprire la cartella non è scegliere un documento: il cassetto resta.
+      expect(layout().classList.contains("drawer-sidebar-open")).toBe(true);
+      const row = document.querySelector<HTMLElement>('#file-list li[data-path="note/Spesa.md"]')!;
+      row.focus();
+      row.querySelector<HTMLElement>(":scope > .tree-row")!.click();
+      await waitFor("la nota si apre", () => textToVideo().includes("pane, latte"));
+      await settle();
+      expect(layout().classList.contains("drawer-sidebar-open")).toBe(false);
+      expect(document.getElementById("sidebar-scrim")!.hidden).toBe(true);
+      expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+    });
+  });
+
+  it("finché il cassetto è aperto il fuoco non resta nel foglio coperto, anche nell'ispettore", async () => {
+    await narrow(async () => {
+      await start(VAULT);
+      const controller = await import("./state/document-controller");
+      for (const side of ["sidebar", "inspector"] as const) {
+        await run(side === "sidebar" ? "shell.sidebar.toggle" : "shell.inspector.toggle");
+        expect(layout().classList.contains(`drawer-${side}-open`)).toBe(true);
+        // La rail sta sopra il velo: il fuoco lì non chiude niente.
+        document.querySelector<HTMLElement>("#rail button")!.focus();
+        expect(layout().classList.contains(`drawer-${side}-open`)).toBe(true);
+        // Una voce dello schema, un collegamento: chi porta il fuoco all'editor
+        // sotto il velo chiude il cassetto prima che arrivi una battuta.
+        controller.focusEditor();
+        expect(inSheet()).toBe(true);
+        expect(layout().classList.contains(`drawer-${side}-open`)).toBe(false);
+        expect(document.getElementById(side === "sidebar" ? "sidebar-scrim" : "inspector-scrim")!.hidden).toBe(true);
+      }
+    });
+  });
+});
+
 describe("il formato si vede", () => {
   it("un Word ha la sua icona nell'albero e nella linguetta; la testata ha solo briciole, «Salvato» e «…»", async () => {
     const rich = JSON.stringify({ format: "fub-rich", version: 1, blocks: [{ t: "para", role: { kind: "body" }, c: [{ t: "text", x: "ciao" }] }] });
@@ -1110,7 +1174,7 @@ describe("i menu dell'albero e della scheda", () => {
     await start({ ...VAULT, "foto.png": "png" });
     const { setSidePanelController } = await import("./ui/side-panels");
     const revealed: string[] = [];
-    const restore = setSidePanelController({ visible: () => false, reveal: (side) => void revealed.push(side), toggle: () => {} });
+    const restore = setSidePanelController({ visible: () => false, reveal: (side) => void revealed.push(side), toggle: () => {}, dismiss: () => {} });
     await contextMenu(tree("foto.png"), "Mostra le note che lo usano");
     await waitFor("il file si apre", () => [...document.querySelectorAll(".pane .tab")].some((tab) => tab.textContent?.includes("foto")));
     expect(revealed).toEqual(["inspector"]);
@@ -1216,6 +1280,44 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     const field = noteItem("note/Riunione.md")?.querySelector<HTMLInputElement>("input");
     expect(field?.value).toBe("Riunione");
     expect(document.activeElement).toBe(field);
+  });
+
+  it("dopo la rinomina il fuoco resta sulla riga rinominata, o va dove si è cliccato (B-02)", async () => {
+    await start(VAULT);
+    noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la cartella si apre", () => !!noteItem("note/Spesa.md"));
+    const rename = (from: string, name: string, commit: (field: HTMLInputElement) => void): void => {
+      noteItem(from)!.focus();
+      noteItem(from)!.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+      const field = noteItem(from)!.querySelector<HTMLInputElement>("input")!;
+      expect(document.activeElement).toBe(field);
+      field.value = name;
+      commit(field);
+    };
+
+    // Invio: il fuoco segue la voce al nome nuovo, non cade su `body`.
+    rename("note/Spesa.md", "Lista", (field) =>
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    await waitFor("la voce rinominata", () => !!noteItem("note/Lista.md"));
+    await settle();
+    expect(document.activeElement).toBe(noteItem("note/Lista.md"));
+
+    // Un clic fuori su niente di focalizzabile: il fuoco torna alla riga.
+    rename("note/Lista.md", "Elenco", (field) =>
+      field.dispatchEvent(new FocusEvent("blur", { relatedTarget: null })));
+    await waitFor("la voce rinominata ancora", () => !!noteItem("note/Elenco.md"));
+    await settle();
+    expect(document.activeElement).toBe(noteItem("note/Elenco.md"));
+
+    // Un clic su un controllo: il fuoco resta lì.
+    const elsewhere = document.getElementById("new-note")!;
+    rename("note/Elenco.md", "Compere", (field) => {
+      field.dispatchEvent(new FocusEvent("blur", { relatedTarget: elsewhere }));
+      elsewhere.focus();
+    });
+    await waitFor("la terza rinomina", () => !!noteItem("note/Compere.md"));
+    await settle();
+    expect(document.activeElement).toBe(elsewhere);
   });
 
   it("un nome rifiutato riapre il campo col testo digitato e la frase accanto", async () => {

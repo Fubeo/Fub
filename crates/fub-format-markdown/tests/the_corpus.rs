@@ -1436,6 +1436,45 @@ fn model_styles(model: &DocumentModel) -> Vec<Value> {
     out
 }
 
+/// I pezzi dei commenti CriticMarkup del modello, in ordine di sorgente:
+/// `start` (`{==`), `end` (`==}`) e `message` (un messaggio coi suoi segni), in
+/// unità UTF-16. La shell li deve tagliare negli stessi punti
+/// (`apps/client/src/editors/text/profiles/markdown/corpus.test.ts`).
+fn model_comments(model: &DocumentModel, text: &str) -> Vec<Value> {
+    fn inline(nodes: &[Inline], text: &str, out: &mut Vec<Value>) {
+        for n in nodes {
+            match n {
+                Inline::Custom {
+                    custom_kind: kind,
+                    attrs,
+                    span,
+                } if kind == custom_kind::COMMENT_RANGE || kind == custom_kind::COMMENT_MESSAGE => {
+                    let (from, to) = span_in_code_unit(text, span);
+                    let piece = if kind == custom_kind::COMMENT_MESSAGE {
+                        "message"
+                    } else {
+                        attrs["edge"].as_str().unwrap_or_default()
+                    };
+                    out.push(json!({"kind": piece, "from": from, "to": to}));
+                }
+                Inline::Emph(kids)
+                | Inline::Strong(kids)
+                | Inline::Strikethrough(kids)
+                | Inline::Superscript(kids)
+                | Inline::Subscript(kids) => inline(kids, text, out),
+                Inline::Link {
+                    label: Some(kids), ..
+                } => inline(kids, text, out),
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk_inlines(&model.body, &mut |nodes| inline(nodes, text, &mut out));
+    out.sort_by_key(|piece| piece["from"].as_u64());
+    out
+}
+
 fn corpus_for_the_shell() -> Value {
     let mut cases = Vec::new();
     for case in corpus() {
@@ -1459,6 +1498,7 @@ fn corpus_for_the_shell() -> Value {
             "due": model_dues(&model),
             "math": model_math(&model, case.source),
             "style": model_styles(&model),
+            "comment": model_comments(&model, case.source),
         }));
     }
     Value::Array(cases)

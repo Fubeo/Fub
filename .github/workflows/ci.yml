@@ -162,6 +162,8 @@ jobs:
         run: node tools/vendor-craft/vendor.mjs craft-docpath check && node tools/vendor-craft/vendor.mjs craft-vectorcraft-format check
       - name: le patch dei motori si portano a tre vie (upstream finto, senza rete)
         run: node tools/vendor-craft/vendor.mjs self-test
+      - name: i dati di vendor hanno lo sha256 di tools/vendor-craft/dati.mjs, e ogni cartella di vendor è dichiarata
+        run: node tools/vendor-craft/provenienza.mjs self-test && node tools/vendor-craft/provenienza.mjs check && node tools/vendor-craft/provenienza.mjs elenco
       - name: gli errori letterali non crescono
         run: node .github/scripts/check-error-literals.mjs
       - name: il lettore dei commenti di Rust distingue la prosa da stringhe e caratteri
@@ -770,7 +772,9 @@ jobs:
       - name: tauri-driver, alla versione fissata
         run: cargo install tauri-driver --version "=2.1.0" --locked
       - name: S1–S3, S7, la memoria (R1), le tessere (T1), l'indicizzazione (I1), il nucleo della lavagna (L1) e i chunk dei profili (C1) nella WebKitGTK
-        run: xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048" npm run bench:webview -- --only=S1,S2,S3,S7,R1,T1,I1,L1,C1 --native-driver=/usr/bin/WebKitWebDriver
+        # `-noreset`: senza, Xvfb si rigenera quando l'app di uno scenario si
+        # chiude, e l'app dopo a volte non apre il display (GTK non parte, #287).
+        run: xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048 -noreset" npm run bench:webview -- --only=S1,S2,S3,S7,R1,T1,I1,L1,C1 --native-driver=/usr/bin/WebKitWebDriver
         working-directory: apps/client
       - name: il referto delle misure
         if: always()

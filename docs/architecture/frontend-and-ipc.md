@@ -193,6 +193,18 @@ selezione effimera senza IPC di scrittura: `cancelThemePreview`, la chiusura
 delle Impostazioni o un'applicazione esplicita terminano la preview. Solo
 `selectTheme` persiste la scelta.
 
+`setting_changed` porta la chiave cambiata, e il backend ne manda uno per
+chiave (anche un cambio di profilo). Ogni ascoltatore della shell rilegge le
+impostazioni solo per le chiavi che legge: il tema per quelle di `reread`
+(`THEME_READS` in `theme/theme.ts`) e per le scelte dei temi (`<id>:<nome>`), le
+stringhe per `locale.language`, la cronologia per `history.enabled`, la cornice
+per `chrome.*` tranne i due pannelli laterali, che hanno l'ascoltatore loro.
+Un evento senza chiave vale «tutto» (`state/setting-change.ts`). Il tema
+raccoglie una raffica in al più due riletture, e l'ultima parte dopo l'ultimo
+evento. Così aprire la barra laterale dal comando scrive
+`chrome.sidebar.visible` e la rilegge una volta, invece di cinque riletture e
+un rimontaggio del tema.
+
 Le linguette sono pulsanti nativi, posseduti dal `tablist` tramite `aria-owns`;
 il pulsante di chiusura è un controllo fratello, non un elemento interattivo
 annidato. Frecce, Home ed End spostano il focus, Invio e Spazio attivano la
@@ -264,7 +276,9 @@ pannelli) lo Scrittoio compone:
   quell'editor. La fila non ha un costruttore: chi costruisce la barra mette sul suo DOM
   `kit-bar` (il vassoio), `kit-bar-group` (un foglietto), `kit-bar-button`
   e `kit-bar-field`, e per ciò che non ci sta usa `kit/options-bar.ts`
-  (`kit-options`, «…»). Le frecce della fila sono `kit/toolbar-keys.ts`
+  (`kit-options`, «…»: un popover con gli stessi controlli, Su e Giù fra
+  loro, Esc che riporta il fuoco su «…»; `onFit` dopo ogni conto, per chi
+  rimette il punto di tabulazione). Le frecce della fila sono `kit/toolbar-keys.ts`
   (`rovingToolbar`): un solo punto di tabulazione, destra e sinistra che
   girano ai capi, Home ed End, soltanto fra i controlli visibili e accesi;
   in un campo di testo le frecce passano oltre solo ai capi del testo, ed
@@ -282,7 +296,16 @@ pannelli) lo Scrittoio compone:
   critica più rigida che non dura più di quella piena. Menu, modali,
   pannelli, centri e avvisi entrano ed escono da `ui/motion.ts`, sopra
   `moto`: la pelle non ha fotogrammi chiave d'entrata o d'uscita, e
-  un'uscita è un'immagine che se ne va in 140 ms al più;
+  un'uscita è un'immagine che se ne va in 140 ms al più. Il default di
+  `appearance.motion` lo decide l'host (`fub_host::settings::motion_default`):
+  `""` (segue il sistema), tranne su Linux con WebKitGTK dalla 2.54.0, che
+  dopo un'animazione ripresenta fotogrammi vecchi; lì parte da `reduced`.
+  La versione è quella della libreria caricata, che l'app dichiara prima di
+  costruire l'host (`declare_the_webview` in `crates/fub-app/src/lib.rs`);
+  l'intervallo difettoso è la costante `WEBKITGTK_FLICKER_FROM`, aperta in
+  alto finché una versione corretta non è verificata. Un valore scritto,
+  anche `""`, vale sempre; sotto la riga Animazioni le Impostazioni dicono
+  perché il valore di partenza è «ridotte»;
 - `theme/scrittoio/`: la serie di serie (motore `theme-2`), con ricetta dei
   colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
   del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.
