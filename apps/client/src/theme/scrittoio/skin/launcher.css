@@ -920,19 +920,14 @@
   border-left: 1px solid var(--border);
   background: color-mix(in srgb, var(--sheet-2) 55%, var(--sheet));
 }
-/* Il foglio è appena rialzato: un anello e un'ombra corta. La scala delle
-   ombre non ha un gradino così basso (`--shadow-1` è già un'ombra da carta,
-   con un alone di 20 px), quindi i due valori sono quelli del prototipo, uno
-   per luce. */
+/* Il foglio è appena rialzato: il rialzo più basso, un anello e un'ombra
+   corta. Un tema che non lo dichiara ha il primo gradino delle ombre. */
 .launcher-preview-sheet {
   max-height: 292px;
   padding: 14px var(--space-6) 0;
   border-radius: 10px;
   background: var(--sheet);
-  box-shadow: 0 0 0 1px rgb(20 44 30 / 6%), 0 1px 3px rgb(20 44 30 / 10%);
-}
-:root[data-theme="dark"] .launcher-preview-sheet {
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 6%), 0 1px 3px rgb(0 0 0 / 50%);
+  box-shadow: var(--shadow-raise, var(--shadow-1));
 }
 .launcher-preview-sheet::after {
   content: "";
