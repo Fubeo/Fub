@@ -1134,6 +1134,24 @@ export const SCENE = onPage("shell", [
       },
     } : {}),
   })),
+  // I commenti (T22): il segno nel margine con le iniziali e il numero dei
+  // messaggi, la discussione aperta, il primo messaggio che chiede il nome, il
+  // segno nel testo a 700 px, la Lettura e il pannello «Commenti».
+  ...[
+    ["commenti-01-margine", "commenti", "I commenti in Scrittura: il segno nel margine, l'archivio in fondo non si vede", "live_preview"],
+    ["commenti-02-discussione", "commenti", "La discussione aperta dal segno: citazione, messaggi, risposta, Risolvi, Elimina", "live_preview", null, "open"],
+    ["commenti-03-primo", "commenti-scelta", "Il primo messaggio: la citazione, il nome che si chiede e l'avviso che finisce nel file", "live_preview", null, "compose"],
+    ["commenti-04-700", "commenti", "A 700 px il margine non ha posto: il segno sta nel testo", "live_preview", { width: 700, height: 800 }],
+    ["commenti-05-700-discussione", "commenti", "A 700 px la discussione aperta dal segno nel testo", "live_preview", { width: 700, height: 800 }, "open"],
+    ["commenti-06-lettura", "commenti", "I commenti in Lettura: il segno nel margine, l'archivio non occupa posto", "reading"],
+    ["commenti-07-pannello", "commenti", "Il pannello «Commenti»: gli aperti, poi i risolti con «Svuota i risolti»", "live_preview", null, "panel"],
+  ].map(([id, live, title, mode, viewport, gesture]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: (page) => openComments(page, mode, gesture),
+  })),
   // Il menu «/» (N12) su una riga vuota della Live, coi comandi veri di
   // `fub.formatting`: aperto, filtrato, un comando rapido, niente trovato, i
   // passi di tabella, colore e data, poi la finestra stretta e il foglio.
@@ -1507,6 +1525,22 @@ export const SCENE = onPage("shell", [
       query: "live=testata",
       viewport: PHONE,
       prepare: (page) => openHeader(page, "live_preview"),
+    },
+    // I commenti (T22) sul telefono: il segno sta nel testo, e la discussione
+    // si apre larga quanto la vista.
+    {
+      id: "mobile-commenti",
+      title: "Il telefono: i commenti con il segno nel testo",
+      query: "live=commenti",
+      viewport: PHONE,
+      prepare: (page) => openComments(page, "live_preview"),
+    },
+    {
+      id: "mobile-commenti-discussione",
+      title: "Il telefono: la discussione di un commento",
+      query: "live=commenti",
+      viewport: PHONE,
+      prepare: (page) => openComments(page, "live_preview", "open"),
     },
     {
       id: "mobile-startup",
@@ -1961,6 +1995,39 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
     else await page.keyboard.type(key);
   }
   await settleLive(page, scroll === "bottom");
+}
+
+/// La nota dei commenti (T22) in `mode`, poi il gesto: `open` apre la
+/// discussione del primo segno, `compose` il primo messaggio sulla selezione
+/// del caso (Ctrl Alt M), `panel` il pannello «Commenti» dell'ispettore.
+async function openComments(page, mode, gesture) {
+  const compose = gesture === "compose";
+  await openLive(page, [], "top", mode === "reading" ? "live_preview" : mode);
+  if (mode === "reading") await chooseMode(page, "reading");
+  const where = mode === "reading" ? '.pane.focus[data-mode="reading"] .markdown-rendered' : ".pane.focus .cm-editor";
+  if (!compose) {
+    await page.waitForSelector(`${where} :is(.cm-fub-comment-bubble, .cm-fub-comment-sign)`);
+    await page.waitForFunction(() => document.getAnimations().length === 0);
+  }
+  if (gesture === "open") {
+    await page.click(`${where} :is(.cm-fub-comment-bubble, .cm-fub-comment-sign) >> nth=0`);
+    await page.waitForSelector(".cm-fub-comment-popover .cm-fub-comment-message");
+  } else if (compose) {
+    await page.keyboard.press("Control+Alt+m");
+    await page.waitForSelector(".cm-fub-comment-popover .cm-fub-comment-composer");
+  } else if (gesture === "panel") {
+    const panel = '.surface-panel[data-view-id="markdown.comments"]';
+    await page.waitForSelector(panel, { state: "attached" });
+    if (!(await page.isVisible(panel))) {
+      await page.evaluate(async () => {
+        const { selectInspectorTab } = await import("/src/ui/views.ts");
+        selectInspectorTab("markdown.comments");
+      });
+    }
+    await page.waitForSelector(`${panel} .cm-fub-comments-card`);
+  }
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
 /// La testata (T6) a riposo, in `mode`: la nota dall'alto, nessun fuoco, il
