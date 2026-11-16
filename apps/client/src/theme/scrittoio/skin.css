@@ -8583,6 +8583,9 @@ button.cm-fub-page-icon:focus-visible {
 .cm-editor .cm-content .tb-grid .tb-letter {
   height: 15px;
   padding-bottom: 2px;
+  /* La riga del testo è la striscia intera (il prototipo, `.tg .gr-let span`:
+     13 px d'altezza e d'interlinea): 15 px meno i 2 px d'aria sotto. */
+  line-height: 13px;
 }
 .cm-editor .cm-content .tb-grid .tb-corner,
 .cm-editor .cm-content .tb-grid .tb-rowhead {
