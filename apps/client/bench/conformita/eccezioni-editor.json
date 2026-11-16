@@ -1,8 +1,1 @@
-[
-  {
-    "pezzo": "lanciatore.superficie",
-    "proprieta": "box-shadow",
-    "motivo": "L'ombra del prototipo (--sh-pop) ha un anello sottile che nessun token d'ombra di Fub ha: l'app scrive un anello di 1 px in --overlay-active più --shadow-4, la più vicina della scala.",
-    "riferimento": "PR #429, «Ancora diverso, con il motivo» e tabella (.k → .launcher); PLAN.md «Dal prototipo»: le ombre → --shadow-*"
-  }
-]
+[]
