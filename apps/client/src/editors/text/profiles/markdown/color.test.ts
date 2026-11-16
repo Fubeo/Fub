@@ -67,6 +67,16 @@ describe("dare un colore", () => {
     expect(color(at("niente", 0, 6), "text", null).ran).toBe(false);
   });
 
+  it("in una nota CRLF il tag andato a capo si toglie intero, come in LF (#394)", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const doc = `a <span${nl}class="fub-color-red">due</span> b`;
+      const state = EditorState.create({ doc, extensions: nl === "\n" ? [] : [EditorState.lineSeparator.of(nl)] });
+      // Posizioni del documento: l'a capo vale una posizione.
+      const inside = doc.replace(/\r\n/g, "\n").indexOf("due");
+      expect(color(state, "text", null, { from: inside, to: inside + 3 }).doc, JSON.stringify(nl)).toBe("a due b");
+    }
+  });
+
   it("in una riga vuota scrive la coppia vuota col cursore dentro", () => {
     const result = color(at("", 0), "text", "purple");
     expect(result.doc).toBe('<span class="fub-color-purple"></span>');

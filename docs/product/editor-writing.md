@@ -96,6 +96,79 @@ foglio non deve restare visibile nessun elemento con `data-presence` e nessun
 pulsante, salvo quelli che sono contenuto (l'icona della pagina, la riga dei
 dati, la testata di un blocco di codice).
 
+## La testata
+
+In cima alla nota, in Scrittura e in Lettura, sta la stessa testata, in
+quest'ordine: la copertina, l'icona, il titolo (il nome del file), le
+proprietà in evidenza, «Altre N proprietà», «Aggiungi una proprietà» e la
+[riga dei dati](editor-note-facts.md). Un filo la stacca dal testo. Che cosa
+sono icona, copertina, titolo e menu «⋯» lo dice la
+[pagina dei blocchi](editor-blocks.md#la-testata-della-pagina).
+
+- **Le proprietà.** Senza un tipo, sono in evidenza le prime quattro voci del
+  frontmatter, nell'ordine del file; le altre stanno dietro «Altre N
+  proprietà», che si apre e si richiude e resta com'era finché l'editor è
+  aperto. Le voci che la testata mostra a modo suo (`icon`, `cover`,
+  `cover-y`, `cssclasses`) non sono righe, e nemmeno le etichette quando la
+  riga dei dati le mostra; finché l'indice non risponde, `tags` è una riga
+  come le altre. Una chiave scritta due volte è una riga sola, col valore
+  dell'ultima, come la legge YAML. Il nome lungo si taglia e si legge intero
+  al passaggio; il valore va a capo, senza il commento in coda. Un valore
+  vuoto si legge «Vuoto».
+- **`editor.properties`** decide quanto se ne vede: `visible` (il default) le
+  mostra come sopra, `hidden` le mette tutte dietro «Altre N», `source` lascia
+  lo YAML sotto il titolo, senza righe. In Lettura vale lo stesso,
+  all'apertura.
+- **Scrivere.** In Scrittura il clic su un valore apre lo YAML sulla sua riga,
+  col cursore in fondo: la testata cede il posto alle righe del frontmatter
+  finché il cursore ci sta. «Aggiungi una proprietà» apre una riga vuota prima
+  della chiusura (o crea il frontmatter); «Aggiungi una descrizione», fra gli
+  strumenti al passaggio, scrive `description: ` e ci porta il cursore. Gli
+  strumenti stanno in una riga sola, alta 28 px: quelli che non ci stanno si
+  nascondono dalla fine e il menu «⋯», sempre l'ultimo, li offre in cima. Gli
+  editor dei valori per tipo arriveranno; in Lettura le righe si leggono e
+  basta, «Altre N» compreso, senza strumenti né «Aggiungi».
+- **La copertina** è un'immagine del vault, un indirizzo o un colore
+  (`cover: "#a3c4f3"`); è alta 112 px (110 al telefono) ed esce dalla colonna
+  fino ai bordi della pagina. Al passaggio offre «Cambia copertina» e, per
+  un'immagine, «Riposiziona»: l'immagine si trascina in su e in giù, o si
+  sposta con ↑ ↓ (Shift per un passo fine, Home e Fine ai bordi); Invio o
+  «Salva la posizione» scrivono `cover-y:` (da 0 a 100, 50 il centro), Esc o
+  «Annulla» tornano dov'era, e il fuoco torna a «Riposiziona». Un'immagine che
+  non si trova lascia il segnaposto col suo path.
+- **La misura.** Il titolo è di 40 px su 46 in «Comoda» e 34 su 40 in
+  «Compatta» (31 su 37 al telefono); la colonna dei nomi è larga 150 px (124
+  con la finestra sotto i 940 px, 108 al telefono). La pagina ha 104 px di
+  margine a sinistra, dove stanno «+» e la maniglia del blocco, e 96 a destra;
+  con la finestra sotto i 940 px 64 e 48, sotto i 620 40 e 20; un foglio sotto
+  i 560 px (due affiancati) ha 40 e 20 anche in una finestra larga, al
+  telefono 18. I margini sono gli stessi in ogni modalità, così cambiarla non
+  sposta il testo.
+- **La tastiera.** ↓ dal titolo passa per i valori, «Altre N» e «Aggiungi una
+  proprietà», e dall'ultimo arriva alla prima riga del testo; ↑ sulla prima
+  riga del testo torna all'ultima voce della testata, e da lì su fino al
+  titolo.
+- **Un frontmatter che non si legge** (una riga di primo livello che non è una
+  chiave, un valore che YAML non accetta, un blocco che non è una mappa) non
+  diventa righe a metà: la testata lo dice, anche con `source`, e lo YAML
+  resta sotto il titolo com'è scritto, in Scrittura e in Lettura. Icona,
+  copertina, strumenti e «Aggiungi» tacciono: il modello lo conserva come
+  testo, e la testata non ci scrive. Quando non si legge lo decidono le
+  stesse regole nel client e nel modello, provate sugli stessi casi
+  (`apps/client/src/__fixtures__/frontmatter-readability.json`).
+
+La testata non scrive niente da sé: il file cambia solo per un gesto, con un
+passo d'annullamento suo, e le righe `---` del frontmatter restano protette
+dalle battute (anche l'a capo prima della chiusura). Un valore uguale a quello
+scritto non si riscrive; una voce con un commento, un'ancora, un alias o un
+testo a blocco non si riscrive, e il gesto apre lo YAML su di lei. Quando il
+frontmatter cambia da un altro riquadro la testata si rifà sul posto: il
+titolo che si sta scrivendo resta, e un riquadro aperto (l'icona, la
+copertina) resta aperto finché non si chiude. In Lettura la testata resta in
+cima anche quando la resa si rifà da sé (un embed arrivato). In sola lettura
+si guarda soltanto. La densità «Compatta» la stringe con il resto del foglio.
+Le scene `testata-*` e `mobile-testata` del banco la fotografano.
+
 ## Tre porte per ogni funzione
 
 Chi scrive non deve ricordarsi dove sta una funzione: ognuna si raggiunge dal

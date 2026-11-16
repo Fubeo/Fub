@@ -98,7 +98,9 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   portato altrove: se sta ancora dov'era al gesto, da nessuna parte o in un
   riquadro. Un documento lento da aprire (un `.docx` da impaginare) non toglie
   il fuoco al lanciatore, a un dialogo o a un campo aperti intanto, e il loro
-  Invio non finisce nel documento.
+  Invio non finisce nel documento. Se il fuoco sta già dentro il documento
+  aperto (la superficie si monta prima che l'apertura finisca, e il Tab della
+  lavagna vuota porta al suo primo pulsante), resta dov'è.
 - **Cassetti sopra i fogli.** Sotto i 960 px l'albero, e sotto i 1200
   l'ispettore, sono cassetti col velo (`desktop-shell.ts`), e il velo è
   modale: la tastiera non arriva a ciò che copre. Scegliere un documento

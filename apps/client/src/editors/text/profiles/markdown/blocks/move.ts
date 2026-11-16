@@ -6,6 +6,7 @@
 // rinumerazione (D4), che ascolta lo spostamento.
 import { EditorSelection, type EditorState, type SelectionRange, type StateCommand, type TransactionSpec } from "@codemirror/state";
 import { blockGesture } from "../block-gesture";
+import { withLineBreaks } from "../../../line-breaks";
 import { type Block, type BlockKind } from "./model";
 import { modelOf, touchedBlocks } from "./transform";
 
@@ -66,6 +67,9 @@ export function moveSiblings(
   if (a < 0 || b < a || p < 0 || (p >= a && p <= b + 1)) return null;
   // Il frontmatter non si muove, e niente gli passa davanti: `p === 0` è il posto prima di lui.
   if (pinnedFirst(blocks, sibs) && (a === 0 || p === 0)) return null;
+  // Il testo nuovo si compone con "\n" (come `sliceString`): le sue
+  // lunghezze sono posizioni del documento; gli a capo della nota li mette
+  // `withLineBreaks` alla fine.
   const doc = state.doc;
   const chunk = (k: number) => doc.sliceString(blocks[sibs[k]!]!.from, blocks[sibs[k]!]!.to);
   const gapAfter = (k: number) => (k + 1 < sibs.length ? doc.sliceString(blocks[sibs[k]!]!.to, blocks[sibs[k + 1]!]!.from) : null);
@@ -113,7 +117,7 @@ export function moveSiblings(
     const head = follow(range.head);
     return anchor !== null && head !== null ? EditorSelection.range(anchor, head) : null;
   });
-  const changes = { from, to, insert: text };
+  const changes = { from, to, insert: withLineBreaks(state, text) };
   const selection = ranges.every((range) => range !== null)
     ? EditorSelection.create(ranges as SelectionRange[], state.selection.mainIndex)
     : undefined;
@@ -199,16 +203,17 @@ function removalOf(blocks: readonly Block[], run: BlockRun): { from: number; to:
   return { from: blocks[run.first]!.from, to: Math.max(next, blocks[run.last]!.to) };
 }
 
-/// Una modifica sola che toglie `gone` e mette `insert` in `at`, fuori da
-/// `gone`; con dove comincia, nel documento nuovo, il testo messo.
+/// Una modifica sola che toglie `gone` e mette `insert` (righe divise da
+/// "\n") in `at`, fuori da `gone`; con dove comincia, nel documento nuovo, il
+/// testo messo.
 function relocate(state: EditorState, gone: { from: number; to: number }, at: number, insert: string): { changes: { from: number; to: number; insert: string }; placed: number } | null {
   const doc = state.doc;
   if (at > gone.from && at < gone.to) return null;
   if (at <= gone.from) {
-    return { changes: { from: at, to: gone.to, insert: insert + doc.sliceString(at, gone.from) }, placed: at };
+    return { changes: { from: at, to: gone.to, insert: withLineBreaks(state, insert + doc.sliceString(at, gone.from)) }, placed: at };
   }
   const between = doc.sliceString(gone.to, at);
-  return { changes: { from: gone.from, to: at, insert: between + insert }, placed: gone.from + between.length };
+  return { changes: { from: gone.from, to: at, insert: withLineBreaks(state, between + insert) }, placed: gone.from + between.length };
 }
 
 /// Le righe della tratta sono tutte voci (i figli possono essere altro).
@@ -244,12 +249,11 @@ export function outdentRun(state: EditorState, blocks: readonly Block[], run: Bl
 }
 
 function relocated(state: EditorState, blocks: readonly Block[], run: BlockRun, at: number, text: string): MoveSpec | null {
-  const nl = state.lineBreak;
-  const body = text.split(/\r?\n/).join(nl);
-  const done = relocate(state, removalOf(blocks, run), at, nl + body);
+  const done = relocate(state, removalOf(blocks, run), at, "\n" + text);
   if (!done) return null;
-  const movedFrom = done.placed + nl.length;
-  const moved = { from: movedFrom, to: movedFrom + body.length };
+  // Un a capo è una posizione, qualunque sia il separatore della nota.
+  const movedFrom = done.placed + 1;
+  const moved = { from: movedFrom, to: movedFrom + text.length };
   const start = blocks[run.first]!.from;
   const end = blocks[run.last]!.to;
   // Il cursore dentro la tratta va all'inizio della tratta nel posto nuovo.

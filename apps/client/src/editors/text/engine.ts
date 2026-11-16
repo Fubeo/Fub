@@ -196,7 +196,7 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   cursorBlink: false,
   softCursor: false,
   rtl: false,
-  properties: "source",
+  properties: "visible",
   reveal: "mai",
   guide: true,
 };
@@ -973,7 +973,13 @@ export class TextEngine {
 
   private extensions(convertLineBreaks: string | null = null): Extension {
     return [
-      ...(convertLineBreaks === null ? [] : [EditorState.lineSeparator.of(convertLineBreaks)]),
+      ...(convertLineBreaks === null ? [] : [
+        EditorState.lineSeparator.of(convertLineBreaks),
+        // CodeMirror divide il testo incollato o lasciato cadere solo sul
+        // separatore: gli a capo degli appunti diventano quelli della nota,
+        // così un "\n" nudo non resta dentro la riga (#394).
+        EditorView.clipboardInputFilter.of((text) => text.replace(/\r\n?|\n/g, convertLineBreaks)),
+      ]),
       this.profile.of(this.profileExtensions()),
       this.phrasesCompartment.of(editorPhrases()),
       this.vimCompartment.of(this.vimEnabled ? vim() : []),
