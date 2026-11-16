@@ -19159,7 +19159,9 @@ h6.ui-heading {
 .launcher {
   border-radius: 16px;
   background: var(--sheet);
-  box-shadow: 0 0 0 1px var(--overlay-active), var(--shadow-4);
+  /* L'ombra di ciò che si apre sopra tutto; un tema che non la dichiara ha
+     un anello e il quarto gradino delle ombre. */
+  box-shadow: var(--shadow-pop, 0 0 0 1px var(--overlay-active), var(--shadow-4));
   color: var(--text);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
