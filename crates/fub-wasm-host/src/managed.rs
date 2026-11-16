@@ -1269,6 +1269,7 @@ fn load_error(error: LoadError) -> PluginError {
         }
         LoadError::NotAPlugin(message) => PluginError::BadArgs(message.into()),
         LoadError::Instantiation(message) => PluginError::BadArgs(message.into()),
+        LoadError::MemoryBudget(budget) => crate::component::memory_budget(&budget),
     }
 }
 

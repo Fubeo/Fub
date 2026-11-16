@@ -157,7 +157,9 @@ pub fn value_text_as(wb: &Workbook, v: &Value, code: &str) -> String {
     }
 }
 
-/// Tab-separated text of a range, as the system clipboard gets it.
+/// Tab-separated text of a range, as the system clipboard gets it. A text that looks like a
+/// formula gets a leading apostrophe ([`gridcraft_xlsx::defuse_formula`]): another spreadsheet
+/// types the pasted text in, and would run it; pasted back here it is the same text.
 pub fn range_text(wb: &Workbook, sheet: usize, r: RangeRef) -> String {
     let Some(sh) = wb.sheet(sheet) else { return String::new() };
     let mut out = String::new();
@@ -172,7 +174,8 @@ pub fn range_text(wb: &Workbook, sheet: usize, r: RangeRef) -> String {
                 out.push('\t');
             }
             first = false;
-            let t = cell_text(wb, sh, CellRef::new(row, col));
+            let shown = cell_text(wb, sh, CellRef::new(row, col));
+            let t = gridcraft_xlsx::defuse_formula(&shown);
             if t.contains(['\t', '\n', '"']) {
                 out.push('"');
                 out.push_str(&t.replace('"', "\"\""));

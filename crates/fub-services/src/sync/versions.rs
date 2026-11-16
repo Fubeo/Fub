@@ -306,7 +306,8 @@ pub fn prune_retention(
 }
 
 /// Attachment accounting: record `sha -> bytes`, enforcing
-/// `max_asset_bytes` per asset and `max_vault_bytes` in total.
+/// `max_asset_bytes` per asset and `max_vault_bytes` in total. A quota of 0
+/// holds nothing: 0 never switches a quota off.
 pub fn account_attachment(
     state: &mut SyncState,
     sha: &str,
@@ -314,13 +315,16 @@ pub fn account_attachment(
     max_asset_bytes: u64,
     max_vault_bytes: u64,
 ) -> Result<(), String> {
-    if max_asset_bytes > 0 && bytes > max_asset_bytes {
+    if bytes > max_asset_bytes {
         return Err("attachment too large".to_string());
     }
-    let mut total: u64 = state.attachments.values().sum();
+    let mut total = state
+        .attachments
+        .values()
+        .fold(0u64, |sum, size| sum.saturating_add(*size));
     let prev = state.attachments.get(sha).copied().unwrap_or(0);
     total = total.saturating_sub(prev).saturating_add(bytes);
-    if max_vault_bytes > 0 && total > max_vault_bytes {
+    if total > max_vault_bytes {
         return Err("vault quota exceeded".to_string());
     }
     state.attachments.insert(sha.to_string(), bytes);
