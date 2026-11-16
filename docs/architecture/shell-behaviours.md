@@ -107,6 +107,9 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   sull'host: passano a `openDocument` il segno `openingsSoFar()` preso alla
   decisione (`unlessOpenedSince`), e se intanto è stata chiesta un'altra
   apertura non partono e non toccano schede, riquadro, contesto né fuoco.
+  Mentre l'editor di un'apertura si carica, linguetta e percorso in testa
+  sono già del documento chiesto (`show` ridisegna la testata appena cambia
+  scheda).
 - **Menu contestuale estendibile.** Le view sulla superficie `context_menu`
   (`ui/context-views.ts`) si aggiungono in coda al menu di una nota, di una
   cartella o di un file dell'albero. Il bersaglio del clic non è nel contesto

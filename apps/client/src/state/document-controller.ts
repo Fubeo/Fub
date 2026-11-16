@@ -2657,6 +2657,10 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   }
   r.shown = tab;
   view.drawViewSurface(r, tab?.k === "view");
+  // La linguetta è già della scheda nuova (`render` l'ha disegnata prima di
+  // chiamare qui): la testata la segue subito, senza aspettare che l'editor
+  // si carichi. Il ridisegno dopo `show` aggiunge ciò che dipende da lui.
+  if (changed) view.drawToolbar(r);
 
   if (tab?.k === "view") {
     await mountViewInPane(tab.view, r.id, r.viewEl, tab.params ?? null);

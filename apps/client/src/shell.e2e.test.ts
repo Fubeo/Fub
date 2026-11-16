@@ -758,6 +758,24 @@ describe("aperture in gara: vince l'ultima chiesta", () => {
     expect(tabNames().some((name) => name.includes("Riunione"))).toBe(false);
   });
 
+  it("durante un'apertura lenta il percorso in testa è già del documento chiesto", async () => {
+    const host = await start(VAULT);
+    await waitFor("Benvenuto è a schermo", () => textToVideo().includes("primo documento"));
+    const controller = await import("./state/document-controller");
+    const unlock = host.throttle("openDocument");
+    const opening = controller.openDocument("note/Spesa.md", { gesture: true });
+    await waitFor("la lettura di Spesa è partita", () => host.atGate("openDocument").some((c) => c.args[0] === "note/Spesa.md"));
+    await settle();
+    // La scheda è già di Spesa: il percorso dice lo stesso, non Benvenuto.
+    expect(document.querySelector('.pane.focus .tab[aria-selected="true"]')?.textContent).toContain("Spesa");
+    expect(document.querySelector(".pane.focus .muted")?.textContent).toContain("Spesa");
+    expect(document.querySelector(".pane.focus .muted")?.textContent).not.toContain("Benvenuto");
+    unlock();
+    await opening;
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+  });
+
   it("due aperture rapide: resta l'ultima, e la prima resta una scheda", async () => {
     const host = await start(VAULT);
     const controller = await import("./state/document-controller");
