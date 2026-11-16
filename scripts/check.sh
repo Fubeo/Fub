@@ -149,6 +149,7 @@ rust_guards() {
   run "cargo feature compilate" node .github/scripts/check-cargo-feature-default.mjs
   run "forme di libreria consumate" node .github/scripts/check-crate-type.mjs
   run "profilo dev deciso" node .github/scripts/check-dev-profile.mjs
+  run "SBOM = Cargo.lock" bash -c "node .github/scripts/sbom.mjs --self-test && node .github/scripts/sbom.mjs --out '$LOG_DIR/fub-sbom.spdx.json'"
 }
 
 doc_guards() {
@@ -255,6 +256,7 @@ if [ "$MODE" = rapido ]; then
   if [ "$(val github)" = 1 ]; then
     run "action pin a commit" node .github/scripts/check-actions-pinned.mjs
     run "baseline dal runner (autoprova)" node .github/scripts/baseline-dal-runner.mjs --self-test
+    run "SBOM = Cargo.lock (autoprova)" node .github/scripts/sbom.mjs --self-test
     [ "$(val docs)" = 1 ] || run "ciclo locale = CI" bash -c 'node .github/scripts/check-locale-loop.mjs --self-test && node .github/scripts/check-locale-loop.mjs'
   fi
   if [ "$(val vendor)" = 1 ]; then vendor_guards; fi

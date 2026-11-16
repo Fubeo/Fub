@@ -639,6 +639,18 @@
   color: var(--doc-bg);
   background: var(--accent);
 }
+/* Il cartellino (E2, «Fuori dalla colonna»): staccato dal testo il blocco in
+   mano si fa piccolo, appena trasparente, senza la maniglia. Il
+   rimpicciolimento lo anima `handles.ts` (`goFree`): dentro l'editor il moto
+   spegne le transizioni CSS. Il titolo della Struttura sotto il puntatore lo
+   accende `nodes.css`. */
+.cm-editor .cm-fub-block-lift[data-free] .cm-fub-block-lift-card,
+.cm-editor .cm-fub-block-lift[data-free] .cm-fub-block-lift-shade {
+  opacity: 0.97;
+}
+.cm-editor .cm-fub-block-lift[data-free] .cm-fub-block-lift-grip {
+  opacity: 0;
+}
 /* Il posto dove cadrà: fondo d'accento e un filo; sull'origine, grigio. */
 .cm-editor .cm-fub-block-slot {
   background: var(--accent-veil);

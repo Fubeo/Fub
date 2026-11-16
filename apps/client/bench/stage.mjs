@@ -122,6 +122,16 @@ export async function openStage({
       ...(port === undefined ? {} : { server: { port, strictPort } }),
     });
     await server.listen();
+    // Il riscaldamento della config (`server.warmup`, #395) parte con
+    // `listen()` e, lasciato correre, si contende la CPU con la prima scena:
+    // su un runner carico la sua `page.goto` passava i 30 s. Il palco si apre
+    // a riscaldamento finito (le richieste in corso si riusano, non si rifanno).
+    const warm = server.config?.server?.warmup?.clientFiles ?? [];
+    if (typeof server.warmupRequest === "function") {
+      await Promise.all(warm.map((file) => server.warmupRequest(file.replace(/^\.\//, "/"))));
+      // Anche i loro import statici, che Vite prepara da sé senza aspettarli.
+      await server.waitForRequestsIdle?.();
+    }
     const base = `http://localhost:${server.config.server.port}`;
     browser = await chromiumImpl.launch({
       args: [

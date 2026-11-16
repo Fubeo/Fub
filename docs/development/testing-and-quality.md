@@ -363,7 +363,7 @@ I guard documentali controllano:
 - raggiungibilità delle pagine;
 - dimensioni;
 - struttura Markdown;
-- blocchi Mermaid;
+- blocchi Mermaid, resi in Chromium con la sandbox accesa;
 - tabelle;
 - riferimenti legacy e cronaca vietata;
 - allineamento del ciclo locale.
@@ -386,6 +386,11 @@ appena qualcuno inserisce un item nel mezzo.
 - La cache Rust salva solo da `main` (budget di 10 GB); i job che possono
   riutilizzarla leggono la test cache di Linux con `shared-key: test` e non la
   risalvano.
+- Il job supply chain scrive la SBOM Rust con `.github/scripts/sbom.mjs`, da
+  `cargo metadata`, e fallisce se non corrisponde a `Cargo.lock`.
+- `motori-provenienza.yml` riscarica dall'upstream ogni motore di `vendor/`
+  (`verify-upstream`) ogni settimana e sulle PR che toccano `vendor/` o
+  `tools/vendor-craft/`, con lo strumento e l'upstream della base.
 - Il gate di release è `.github/scripts/check-release-gate.mjs`: aggiungere o
   rinominare un job richiede di aggiornarlo.
 - Un push fa girare la CI solo su `main`; una PR la fa girare a ogni push, e un
