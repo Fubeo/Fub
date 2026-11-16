@@ -32,6 +32,11 @@ export const DOCUMENT: PartAnatomy = {
     { name: "document-page-properties", states: [S("rest"), S("hover"), S("focused")], hooks: ["cm-fub-page-props", "cm-fub-page-prop", "cm-fub-page-prop-key", "cm-fub-page-prop-value", "cm-fub-page-props-more", "cm-fub-page-props-add", "cm-fub-page-unreadable"] },
     // La riga dei dati sotto il titolo: modificata, collegamenti, etichette.
     { name: "document-facts", states: [S("rest"), S("hover"), S("focused")], hooks: ["note-facts", "note-fact", "note-fact-tags", "note-tag"] },
+    // I commenti (T22): il segno nel margine o nel testo, la discussione nel
+    // popover, il pannello «Commenti» dell'ispettore.
+    { name: "document-comment-margin", layer: "segno", states: [S("rest"), S("hover"), S("selected"), S("focused")], hooks: ["cm-fub-comment-margin", "cm-fub-comment-bubble", "cm-fub-comment-sign", "cm-fub-comment-avatar"] },
+    { name: "document-comment-discussion", layer: "cornice", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["kit-popover", "cm-fub-comment-popover", "cm-fub-comment-discussion", "cm-fub-comment-quote", "cm-fub-comment-note", "cm-fub-comment-name", "cm-fub-comment-name-hint", "cm-fub-comment-message", "cm-fub-comment-write", "cm-fub-comment-input", "cm-fub-comment-send", "cm-fub-comment-actions", "cm-fub-comment-actions-end", "cm-fub-comment-action", "cm-fub-comment-foot"] },
+    { name: "document-comments-panel", layer: "cornice", states: [S("rest"), S("hover"), S("selected"), S("focused")], hooks: ["cm-fub-comments-panel", "cm-fub-comments-head", "cm-fub-comments-card", "cm-fub-comments-quote", "cm-fub-comments-who", "cm-fub-comments-replies", "cm-fub-comments-archived", "cm-fub-comments-note", "cm-fub-comments-empty", "cm-fub-comments-clear"] },
     { name: "document-properties", states: REST, hooks: ["cm-fub-frontmatter", "block-frontmatter-unparsed", "block-footnote-definition"] },
     { name: "declarative-slot", layer: "cornice", states: REST, hooks: ["ui-slot"] },
     { name: "declarative-node-content", layer: "cornice", states: REST, hooks: ["ui-heading", "empty-note"] },

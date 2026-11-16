@@ -8447,6 +8447,371 @@ button.cm-fub-page-icon:focus-visible {
   border-radius: var(--radius-chip);
 }
 
+/* I commenti: il margine, la discussione, il pannello (T22, prototipo
+   `.bub`, `.th`, `.ith`, `.icard`). Il segno sta nel margine destro della
+   pagina, all'altezza del passo; quando il margine non ha posto (la finestra
+   stretta, il telefono) sta nel testo, subito dopo il commento. I colori delle
+   persone sono quelli del prototipo, uguali nelle due luci: il pallino è
+   pieno e il testo bianco. */
+.cm-fub-comment-avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #3f7d63;
+  color: #ffffff;
+  font: var(--weight-bold) 9.5px/1 var(--font-ui);
+}
+.cm-fub-comment-avatar[data-slot="0"] {
+  background: var(--border-strong);
+  color: var(--text);
+}
+.cm-fub-comment-avatar[data-slot="2"] {
+  background: #7a5bb0;
+}
+.cm-fub-comment-avatar[data-slot="3"] {
+  background: #b9662e;
+}
+.cm-fub-comment-avatar[data-slot="4"] {
+  background: #2f6aa8;
+}
+.cm-fub-comment-margin {
+  position: absolute;
+  top: 0;
+  height: 0;
+  z-index: 2;
+}
+.pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+  position: relative;
+}
+.cm-fub-comment-bubble,
+.cm-fub-comment-sign {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px 0 3px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--sheet);
+  box-shadow: var(--shadow-raise, var(--shadow-1));
+  color: var(--muted);
+  font: var(--weight-bold) 11.5px/1 var(--font-ui);
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease), box-shadow var(--duration-fast) var(--ease);
+}
+.cm-fub-comment-bubble {
+  position: absolute;
+}
+.cm-fub-comment-bubble:hover,
+.cm-fub-comment-sign:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-pop, var(--shadow-3));
+  color: var(--text);
+}
+.cm-fub-comment-bubble[data-active],
+.cm-fub-comment-sign[data-active] {
+  box-shadow: 0 0 0 2px var(--accent), var(--shadow-raise, var(--shadow-1));
+}
+.cm-fub-comment-bubble:focus-visible,
+.cm-fub-comment-sign:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Nel testo il segno è più basso della riga: non la allarga. */
+.cm-fub-comment-sign {
+  height: 20px;
+  margin-inline: 3px 1px;
+  padding: 0 6px 0 2px;
+  vertical-align: -3px;
+  font-size: 11px;
+}
+.cm-fub-comment-sign .cm-fub-comment-avatar {
+  width: 16px;
+  height: 16px;
+  font-size: 8px;
+}
+/* Sul telefono i bottoni sono alti 44 px: il segno nel testo resta della sua
+   misura, e il tocco lo dà un `::after` trasparente, che non disegna niente
+   e non sposta la riga. */
+:root[data-client-shell="mobile"] .cm-fub-comment-sign {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+:root[data-client-shell="mobile"] .cm-fub-comment-sign::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 44px;
+  transform: translateY(-50%);
+}
+
+/* La discussione, nel popover. */
+.kit-popover.cm-fub-comment-popover {
+  padding: 0;
+  overflow: hidden auto;
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  box-shadow: var(--shadow-pop, var(--shadow-3));
+  font: var(--text-sm) / 1.4 var(--font-ui);
+}
+.cm-fub-comment-discussion {
+  width: min(340px, calc(100vw - 16px));
+}
+.cm-fub-comment-quote {
+  margin: 12px 14px 4px;
+  padding-left: 10px;
+  border-left: 3px solid var(--highlight);
+  color: var(--muted);
+  font: italic 14px/1.45 var(--font-reading);
+  overflow-wrap: anywhere;
+}
+.cm-fub-comment-quote[data-point] {
+  font-style: normal;
+}
+.cm-fub-comment-note,
+.cm-fub-comment-name-hint {
+  margin: 4px 14px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.cm-fub-comment-name {
+  margin: 10px 14px 0;
+}
+.cm-fub-comment-message {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 2px 9px;
+  padding: 10px 14px 0;
+}
+.cm-fub-comment-message .cm-fub-comment-avatar {
+  grid-row: span 2;
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+.cm-fub-comment-message b {
+  font-weight: var(--weight-bold);
+}
+.cm-fub-comment-message time {
+  margin-left: 6px;
+  color: var(--doc-gutter-fg);
+  font-size: 12px;
+  font-weight: var(--weight-regular);
+}
+.cm-fub-comment-message p {
+  margin: 0;
+  color: var(--doc-fg);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.cm-fub-comment-write {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 12px 14px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.cm-fub-comment-write:focus-within {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
+}
+.cm-fub-comment-write > .cm-fub-comment-avatar {
+  align-self: center;
+}
+.cm-fub-comment-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 20px;
+  max-height: 120px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+}
+.cm-fub-comment-send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  cursor: pointer;
+}
+.cm-fub-comment-send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.cm-fub-comment-send:focus-visible,
+.cm-fub-comment-action:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.cm-fub-comment-send svg,
+.cm-fub-comment-action svg {
+  width: 16px;
+  height: 16px;
+}
+.cm-fub-comment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+.cm-fub-comment-actions-end {
+  display: flex;
+  gap: 2px;
+}
+.cm-fub-comment-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.cm-fub-comment-action:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-fub-comment-foot code {
+  font: 11px var(--font-mono);
+}
+.cm-fub-comment-foot kbd,
+.cm-fub-comments-empty kbd {
+  padding: 3px 5px 2px;
+  border-radius: 5px;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border-strong), 0 1px 0 var(--border-strong);
+  color: var(--muted);
+  font: var(--weight-medium) 10.5px/1 var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Il pannello «Commenti» dell'ispettore. */
+.cm-fub-comments-panel {
+  font-size: var(--text-sm);
+}
+.cm-fub-comments-head {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  padding: 14px 4px 4px;
+  color: var(--doc-gutter-fg);
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cm-fub-comments-card {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: var(--shadow-raise, var(--shadow-1));
+  transition: box-shadow var(--duration-fast) var(--ease);
+}
+.cm-fub-comments-card[data-anchor] {
+  cursor: pointer;
+}
+.cm-fub-comments-card[data-anchor]:hover {
+  box-shadow: var(--shadow-pop, var(--shadow-3));
+}
+.cm-fub-comments-card[data-active] {
+  box-shadow: 0 0 0 2px var(--accent), var(--shadow-raise, var(--shadow-1));
+}
+.cm-fub-comments-card:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.cm-fub-comments-quote {
+  display: block;
+  margin-bottom: 6px;
+  padding-left: 8px;
+  border-left: 2.5px solid var(--highlight);
+  color: var(--muted);
+  font: italic 13px/1.4 var(--font-reading);
+  overflow-wrap: anywhere;
+}
+.cm-fub-comments-quote[data-point] {
+  font-style: normal;
+}
+.cm-fub-comments-who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: var(--weight-bold);
+}
+.cm-fub-comments-who time {
+  color: var(--doc-gutter-fg);
+  font-size: 12px;
+  font-weight: var(--weight-regular);
+}
+.cm-fub-comments-card p {
+  margin: 4px 0 0;
+  color: var(--doc-fg);
+  overflow-wrap: anywhere;
+}
+.cm-fub-comments-replies,
+.cm-fub-comments-card .cm-fub-comments-archived {
+  color: var(--doc-gutter-fg);
+  font-size: 12px;
+}
+.cm-fub-comments-card .cm-fub-comments-archived {
+  margin: 0;
+}
+.cm-fub-comments-note {
+  margin: 0;
+  padding: 4px;
+  color: var(--doc-gutter-fg);
+  font-size: 12px;
+}
+.cm-fub-comments-empty {
+  margin: 0;
+  padding: 14px 12px;
+  color: var(--muted);
+}
+.cm-fub-comments-clear {
+  height: 26px;
+  margin: 0 0 8px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cm-fub-comments-clear:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-fub-comments-clear:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 /* ── skin/tabella.css ───────────────────────────────────────────────────── */
 
 /* ── La Tabella ──────────────────────────────────────────────────────────
