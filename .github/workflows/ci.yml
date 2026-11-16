@@ -273,8 +273,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # In bozza solo Linux: Windows e macOS girano quando la PR è pronta.
-        os: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.draft) && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest", "macos-latest"]') }}
+        # In bozza solo Linux: Windows gira quando la PR è pronta. macOS è in
+        # pausa (docs/decisions/0245-macos-e-ios-in-pausa.md): lo prova una
+        # volta alla settimana `macos-in-pausa.yml`, non questa matrice.
+        os: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.draft) && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
@@ -328,7 +330,7 @@ jobs:
 
   variants:
     # Le varianti di feature non dipendono dal sistema: girano qui, accanto ai
-    # tre job dei test, invece di allungarli. Lo stesso per i workspace dei
+    # job dei test, invece di allungarli. Lo stesso per i workspace dei
     # motori, che hanno il loro lock.
     name: varianti di feature e motori in vendor
     needs: changes
@@ -782,7 +784,7 @@ jobs:
 
   librerie-runtime:
     # K0, livello 3 del piano dei componenti: due componenti Rust in librerie
-    # dinamiche e una libreria comune caricate a runtime, sui tre sistemi. Il
+    # dinamiche e una libreria comune caricate a runtime, su Linux e Windows. Il
     # referto dice se il caricamento, la rimozione di un file e le firme
     # tengono, e quanto pesa la consegna contro l'ospite statico.
     name: le librerie a runtime (${{ matrix.os }})
@@ -791,8 +793,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Una PR bozza la prova solo su Linux, come i test.
-        os: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.draft) && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+        # Una PR bozza la prova solo su Linux, come i test; macOS è in pausa,
+        # come nel job `test`.
+        os: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.draft) && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
