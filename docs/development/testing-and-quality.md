@@ -295,9 +295,11 @@ appena qualcuno inserisce un item nel mezzo.
   risalvano.
 - Il job supply chain scrive la SBOM Rust con `.github/scripts/sbom.mjs`, da
   `cargo metadata`, e fallisce se non corrisponde a `Cargo.lock`.
-- `motori-provenienza.yml` riscarica dall'upstream ogni motore di `vendor/`
-  (`verify-upstream`) ogni settimana e sulle PR che toccano `vendor/` o
-  `tools/vendor-craft/`, con lo strumento e l'upstream della base.
+- `motori-provenienza.yml` riscarica ogni copia di `vendor/` ogni settimana e
+  sulle PR che toccano `vendor/` o `tools/vendor-craft/`, con strumento e
+  upstream della base: i motori di `motori.mjs` (`vendor.mjs verify-upstream`)
+  e i dati di `dati.mjs` (`provenienza.mjs verify-upstream`, sha256 dell'URL
+  contro il checkout); una cartella non dichiarata è rossa.
 - Il gate di release è `.github/scripts/check-release-gate.mjs`: aggiungere o
   rinominare un job richiede di aggiornarlo.
 - Un push fa girare la CI solo su `main`; una PR la fa girare a ogni push, e un

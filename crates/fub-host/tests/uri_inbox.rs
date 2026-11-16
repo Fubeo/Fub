@@ -96,3 +96,120 @@ fn a_writing_link_plans_first_and_writes_only_when_applied() {
         Err(PluginError::NotFound(_))
     ));
 }
+
+/// L'URI che il clipper apre davvero (`apps/clipper/tests/fixtures/`, scritto
+/// dal suo test `capture-uri-contract`).
+fn clipper_uri() -> String {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../apps/clipper/tests/fixtures/capture-uri.txt"
+    );
+    std::fs::read_to_string(path).unwrap().trim().to_string()
+}
+
+fn vault(name: &str) -> (tempfile::TempDir, Utf8PathBuf, Host) {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().join(name)).unwrap();
+    std::fs::create_dir(&root).unwrap();
+    let host = Host::without_watcher();
+    host.open(&root).unwrap();
+    host.wait_indexed(None).unwrap();
+    (dir, root, host)
+}
+
+#[test]
+fn the_clipper_uri_is_accepted_and_written_once() {
+    let (_dir, root, host) = vault("Ritagli");
+    let raw = clipper_uri();
+    assert!(host.receive_uri(&raw));
+    let taken = pending(&host);
+    let action = &taken["actions"][0];
+    assert!(
+        action["error"].is_null(),
+        "il clipper parla la lingua dell'app: {taken}"
+    );
+    assert_eq!(action["action"], "capture");
+    assert_eq!(
+        action["title"], "Ritaglio di prova",
+        "lo spazio è %20, non +"
+    );
+    assert_eq!(action["folder"], "Clips");
+
+    let done = apply(&host, &raw, InvokeMode::Apply).unwrap();
+    let CommandEffect::Navigate { doc } = &done.effect else {
+        panic!("{done:?}");
+    };
+    let text = std::fs::read_to_string(root.join(doc.as_str())).unwrap();
+    assert!(text.contains("Una riga dal web, con & e ?."), "{text}");
+    assert!(
+        text.contains("autore: Ada"),
+        "le proprietà arrivano: {text}"
+    );
+
+    // Lo stesso nonce: un nuovo tentativo non si accoda e non si riscrive,
+    // nemmeno se qualcuno lo conferma.
+    assert!(host.receive_uri(&raw));
+    assert_eq!(pending(&host)["actions"], json!([]));
+    assert!(matches!(
+        apply(&host, &raw, InvokeMode::DryRun),
+        Err(PluginError::Conflict(_))
+    ));
+    assert!(matches!(
+        apply(&host, &raw, InvokeMode::Apply),
+        Err(PluginError::Conflict(_))
+    ));
+    let notes: Vec<String> = std::fs::read_dir(root.join("Clips"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(".md"))
+        .collect();
+    assert_eq!(notes.len(), 1, "una nota sola: {notes:?}");
+}
+
+#[test]
+fn a_failed_write_does_not_burn_the_nonce() {
+    let (_dir, root, host) = vault("Diario");
+    let raw = "fub://capture?title=Uno&markdown=x&mode=append&note=manca.md&nonce=n-fallita";
+    assert!(
+        apply(&host, raw, InvokeMode::Apply).is_err(),
+        "la nota non c'è"
+    );
+    std::fs::write(root.join("manca.md"), "prima\n").unwrap();
+    host.wait_indexed(None).unwrap();
+    apply(&host, raw, InvokeMode::Apply).expect("riprovata, scrive");
+    assert!(std::fs::read_to_string(root.join("manca.md"))
+        .unwrap()
+        .contains('x'));
+}
+
+#[test]
+fn too_many_captures_at_once_are_refused_and_counted() {
+    let host = Host::without_watcher();
+    let cap = fub_host::uri_inbox::CAPTURE_CAPACITY;
+    for n in 0..cap {
+        assert!(host.receive_uri(&format!("fub://capture?title=T{n}&markdown=x")));
+    }
+    assert!(!host.receive_uri("fub://capture?title=Oltre&markdown=x"));
+    assert!(host.receive_uri("fub://open?note=a.md"), "il resto passa");
+    let taken = pending(&host);
+    assert_eq!(taken["actions"].as_array().unwrap().len(), cap + 1);
+    assert_eq!(taken["refused"], 1);
+}
+
+#[test]
+fn the_envelope_fields_are_checked_not_trusted() {
+    let host = Host::without_watcher();
+    for bad in [
+        "fub://capture?title=T&markdown=x&v=2",
+        "fub://capture?title=T&markdown=x&origin=banca-sicura",
+        "fub://capture?title=T&markdown=x&timestamp_ms=0",
+        "fub://capture?title=T&markdown=x&properties=%5B1%5D",
+        "fub://capture?title=T&markdown=x&nonce=%20",
+    ] {
+        host.receive_uri(bad);
+    }
+    let taken = pending(&host);
+    for action in taken["actions"].as_array().unwrap() {
+        assert!(action["error"].is_string(), "{taken}");
+    }
+}

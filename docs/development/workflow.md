@@ -146,6 +146,9 @@ Vale per WordCraft e progetti simili.
   stabili gli id pubblici.
 - Il codice di terzi sta in `vendor/<progetto>/` con un `UPSTREAM.md` (repo,
   SHA del commit, licenza, ogni patch locale); `cargo deny check` deve passare.
+  Ogni cartella di `vendor/` è dichiarata: un motore in
+  `tools/vendor-craft/motori.mjs`, o un dato a file singolo da un URL fisso in
+  `tools/vendor-craft/dati.mjs`; altrimenti `motori-provenienza.yml` è rosso.
   Licenza e politica della supply chain non si cambiano senza chiedere.
 - Prova il riuso davvero: funzione accesa e spenta (`--no-default-features`),
   un formato spento mentre la funzione condivisa continua a funzionare, e il

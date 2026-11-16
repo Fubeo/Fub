@@ -162,6 +162,8 @@ jobs:
         run: node tools/vendor-craft/vendor.mjs craft-docpath check && node tools/vendor-craft/vendor.mjs craft-vectorcraft-format check
       - name: le patch dei motori si portano a tre vie (upstream finto, senza rete)
         run: node tools/vendor-craft/vendor.mjs self-test
+      - name: i dati di vendor hanno lo sha256 di tools/vendor-craft/dati.mjs, e ogni cartella di vendor è dichiarata
+        run: node tools/vendor-craft/provenienza.mjs self-test && node tools/vendor-craft/provenienza.mjs check && node tools/vendor-craft/provenienza.mjs elenco
       - name: gli errori letterali non crescono
         run: node .github/scripts/check-error-literals.mjs
       - name: il lettore dei commenti di Rust distingue la prosa da stringhe e caratteri

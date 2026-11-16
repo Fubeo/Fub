@@ -67,6 +67,7 @@ const UNDER_THE_RENDER: ReadonlySet<string> = new Set([
   "strings",
   "menu",
   "markdown-render",
+  "html-entities",
   "ui-views",
 ]);
 
@@ -417,6 +418,11 @@ export default defineConfig({
           ) {
             return "text-engine";
           }
+          // La tabella delle entità nominate di HTML, che `link-syntax` usa
+          // per sciogliere `&nome;` senza DOM: dati generati da una copia
+          // della specifica, che cambiano soltanto quando la si riscarica.
+          // Da sola resta in cache quando cambia la resa.
+          if (/\/src\/editors\/text\/profiles\/markdown\/html-entities\.generated\.ts$/.test(id)) return "html-entities";
           // La resa della Lettura: dal Markdown all'HTML dei blocchi e delle
           // righe, con la grammatica che legge (note a piè di pagina, link,
           // ripiegabili, indice, testate dei callout, commenti CriticMarkup),
