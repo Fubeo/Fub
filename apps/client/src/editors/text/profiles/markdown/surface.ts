@@ -579,7 +579,6 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   let propertyTypesRaw: unknown = undefined;
   const pageOptions: PageOptions = {
     page: () => pageName(resources?.documentId ?? documentId),
-    document: () => ({ documentId: resources?.documentId ?? documentId, vault }),
     notify: (message, tone) => notify(message, tone),
     folderPage: () => isFolderPage(resources?.documentId ?? documentId),
     renamedPage: (name) => renamedPageName(resources?.documentId ?? documentId, name),
@@ -623,6 +622,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   };
   const blocksOptions: BlocksOptions = {
     ...pageOptions,
+    // La nota e il suo vault: i bersagli fuori dalla colonna (T2b). Solo dei
+    // Blocchi, la testata non li usa.
+    document: () => ({ documentId: resources?.documentId ?? documentId, vault }),
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,
   };

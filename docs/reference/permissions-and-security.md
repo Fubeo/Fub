@@ -175,8 +175,7 @@ Il componente condivide un'istanza fra i propri provider e non è rientrante.
 
 ## UI non fidata
 
-`UiNode` può rappresentare forme fidate e non fidate. Un componente di terzi
-non può ottenere:
+`UiNode` ha forme fidate e non fidate. Un componente di terzi non ottiene:
 
 - HTML arbitrario;
 - webview;
