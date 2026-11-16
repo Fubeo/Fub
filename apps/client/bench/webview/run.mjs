@@ -1,13 +1,15 @@
 // Gli scenari di N0, S7 di N13, S8 di N4 (la penna sulla lavagna), S9 di N6
 // (la lavagna coi fogli vivi), la
 // memoria (R1), le tessere (T1) e l'indicizzazione (I1) di K0, il nucleo
-// della lavagna (L1) di N3 e i chunk di ciascun profilo dei componenti (C1)
-// di K2, nella WebView vera, guidati da WebDriver.
+// della lavagna (L1) di N3, i chunk di ciascun profilo dei componenti (C1)
+// di K2 e i fotogrammi rispetto allo schermo (F1 rAF a vuoto, F2 quiete, F3
+// thread principale per gesto), nella WebView vera, guidati da WebDriver.
 //
 //   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3,C1]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
 //        [--budgets=ci|targets] [--out=bench/.output/webview] [--dist=dist]
 //        [--x11 | --wayland]  (con WAYLAND_DISPLAY: --x11 sotto Xvfb, --wayland sullo schermo)
+//        [--hz=N]  (la frequenza dello schermo, se il banco non la legge: `refresh.mjs`)
 //
 // Avvia `tauri-driver` con un vault e una configurazione scritti in una
 // cartella temporanea (`fixtures.mjs`): la sonda è accesa dalle impostazioni
@@ -23,12 +25,14 @@
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { cpus, hostname, release, tmpdir, totalmem, type as osType } from "node:os";
+import { cpus, hostname, loadavg, release, tmpdir, totalmem, type as osType } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
-import { INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteName, writeFixtures } from "./fixtures.mjs";
-import { descendants, pendenza, settled } from "./memory.mjs";
+import { GESTURE_FOLDER, INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteName, writeFixtures } from "./fixtures.mjs";
+import { cpuPercent, cpuTicks, descendants, pendenza, settled } from "./memory.mjs";
+import { displayRate, engineCap, hasPeriodLimits, resolveLimit } from "./refresh.mjs";
+import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
 import { CANVAS_SCRIPT, COMMITS, L1_ROUNDS, OPENS, SIZES, builtModule, l1Values } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
@@ -40,12 +44,14 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,S8,S9,R1,T1,I1,L1,C1").split(","));
+const only = new Set((args.only ?? "F1,F2,F3,S1,S2,S3,S4,S5,S6,S7,S8,S9,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 /// `--x11`: l'app va in X11 anche su una sessione Wayland (vedi `main`).
 const x11 = "x11" in args;
 const port = Number(args.port ?? 4444);
+/// WebKitWebDriver sulla porta dopo: due banchi con `--port` diversi non si pestano.
+const nativePort = port + 1;
 const base = `http://127.0.0.1:${port}`;
 
 const CTRL = "";
@@ -54,6 +60,8 @@ const END = "";
 const SHIFT = "";
 const ALT = "";
 const ESCAPE = "";
+
+const PAGE_DOWN = "\uE00F";
 
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
@@ -68,6 +76,20 @@ let driverEnv = null;
 /// Il vault del banco, nella cartella temporanea: S8 legge dal disco i byte
 /// del foglio prima e dopo la penna.
 let benchVault = null;
+/// Lo schermo (`displayRate`) e il tetto del motore (`engineCap`, da F1): le
+/// soglie in periodi si risolvono con `cap.effectiveMs`.
+let display = null;
+let cap = null;
+/// `webkit://gpu` letta prima degli scenari, con l'ambiente dell'app (`webkitGpu`).
+let gpuInfo = null;
+
+/// F1: quanto dura il rAF a vuoto. F2: quanto dura la quiete.
+const IDLE_RAF_MS = 5_000;
+const QUIET_MS = 20_000;
+/// F3: i gesti, quante volte ciascuno (un numero pari: lo stato torna quello
+/// di partenza) e quanto si aspetta dopo ognuno.
+const GESTURE_REPS = { barra: 6, scheda: 8, cartella: 8 };
+const GESTURE_WAIT_MS = 700;
 
 /// Quanto si aspetta prima di leggere la memoria: che l'app abbia finito di
 /// disegnare e di indicizzare ciò che ha appena aperto.
@@ -635,7 +657,103 @@ const PHASES_SCRIPT = `
 `;
 const PHASES_READ = "return window.__fubS8Phases?.() ?? null;";
 
+/// La riga di una cartella nell'albero dei file.
+const treeRow = (path) => `li[role="treeitem"][data-path="${path}"] > .tree-row`;
+
+/// F3: un gesto ripetuto `reps` volte col registratore acceso: il thread
+/// principale bloccato per ripetizione, i fotogrammi e la CPU dei processi.
+async function gesture(session, reps, act) {
+  await session.execute("window.__fubRec.start(); return true;");
+  const before = cpuTicks(driverPid);
+  const since = performance.now();
+  for (let i = 0; i < reps; i++) {
+    await session.execute("window.__fubRec.mark(); return true;");
+    await act();
+    await pause(GESTURE_WAIT_MS);
+  }
+  const cpu = cpuPercent(before, cpuTicks(driverPid), performance.now() - since);
+  const recorded = await session.execute("return window.__fubRec.stop();");
+  return {
+    mainBlocked: blockedPerRepetition(recorded),
+    frames: frameStats(recorded.frames, cap?.effectiveMs ?? display.periodMs),
+    cpu,
+    longtasks: recorded.longtasks ? recorded.tasks.map(([, duration]) => Math.round(duration)) : "non supportati",
+  };
+}
+
 const SCENARIOS = {
+  /// Il rAF a vuoto: 5 s su una pagina ferma, la mediana confrontata col
+  /// periodo dello schermo. Decide il tetto del motore per gli scenari dopo.
+  async F1(session) {
+    await pause(1_500);
+    const deltas = await session.executeAsync(IDLE_RAF_SCRIPT, [IDLE_RAF_MS]);
+    const frames = frameStats(deltas, display.periodMs);
+    cap = engineCap(frames?.median ?? null, display.periodMs);
+    const webview = (descendants(driverPid) ?? []).filter((proc) => proc.group === "webview" || proc.group === "gpu");
+    const gl = await session.execute(RENDERER_SCRIPT);
+    const render = renderPath({ gpu: gpuInfo, webgl: gl?.renderer ?? null, libraries: glLibraries(webview) });
+    return {
+      report: { frames, display, cap, render, vendor: gl?.vendor ?? null },
+      values: { "F1.raf.mediana": frames?.median ?? null },
+      samples: deltas.length,
+      notes: [
+        `schermo ${display.hz} Hz, P ${display.periodMs} ms (${display.source}); rAF a vuoto ${frames?.hz ?? "—"} Hz`,
+        cap.label,
+        `disegno: ${render.path}${render.renderer ? ` (${render.renderer}, da ${render.source})` : ""}${render.vblank ? `; vblank di WebKit ${render.vblank}` : ""}`,
+      ],
+    };
+  },
+  /// La quiete: 20 s senza gesti, le richieste di fotogramma della pagina e la
+  /// CPU dei processi. L'obiettivo è zero e zero.
+  async F2(session) {
+    await pause(3_000);
+    await session.execute(RAF_COUNTER_SCRIPT);
+    const before = cpuTicks(driverPid);
+    const since = performance.now();
+    await pause(QUIET_MS);
+    const cpu = cpuPercent(before, cpuTicks(driverPid), performance.now() - since);
+    const counted = await session.execute("return window.__fubRafCount.read();");
+    const values = { "F2.raf": counted.requests };
+    // La CPU si legge da `/proc`: fuori da Linux non c'è, e non è una misura che manca.
+    if (cpu) values["F2.cpu.webview"] = cpu.webview ?? 0;
+    return {
+      report: { rafRequests: counted.requests, animations: counted.animations, cpu, ms: QUIET_MS },
+      values,
+      samples: 1,
+      notes: [`CPU in quiete, % di un core: ${JSON.stringify(cpu)}`, ...(counted.animations.length ? [`animazioni che girano: ${counted.animations.join("; ")}`] : [])],
+    };
+  },
+  /// Il thread principale bloccato per gesto: la barra laterale dal comando,
+  /// il cambio scheda fra la nota lunga e una corta, una cartella aperta e
+  /// chiusa nell'albero.
+  async F3(session) {
+    await openByName(session, "Lunga", "Una nota lunga");
+    await openByName(session, noteName(1), noteName(1));
+    if (!(await session.execute("return !!document.querySelector(arguments[0]);", [treeRow(GESTURE_FOLDER)]))) {
+      await session.click(treeRow(GESTURE_FOLDER.split("/")[0]));
+      await session.waitFor("return !!document.querySelector(arguments[0]);", [treeRow(GESTURE_FOLDER)], 15_000);
+    }
+    await session.execute(RECORDER_SCRIPT);
+    const acts = {
+      barra: () => chord2(session, CTRL, ALT, "b"),
+      scheda: () => chord(session, CTRL, PAGE_DOWN),
+      cartella: () => session.click(treeRow(GESTURE_FOLDER)),
+    };
+    const gestures = {};
+    const values = {};
+    for (const [name, act] of Object.entries(acts)) {
+      // Una volta avanti e una indietro fuori dalla misura: il primo gesto
+      // carica il codice e gli stili che servono.
+      await act();
+      await pause(GESTURE_WAIT_MS);
+      await act();
+      await pause(GESTURE_WAIT_MS);
+      gestures[name] = await gesture(session, GESTURE_REPS[name], act);
+      values[`F3.${name}.mainBlocked`] = gestures[name].mainBlocked.median;
+    }
+    const rows = Object.entries(gestures).map(([name, g]) => `${name}: bloccato ${g.mainBlocked.perRep.join("/")} ms, fotogrammi ${g.frames?.median ?? "—"}/${g.frames?.p90 ?? "—"} ms, persi ${g.frames?.lost ?? "—"}, CPU web ${g.cpu?.webview ?? "—"} %, long task ${Array.isArray(g.longtasks) ? g.longtasks.length : g.longtasks}`);
+    return { report: { gestures, timerGapMs: TIMER_GAP_MS }, values, samples: Object.values(GESTURE_REPS).reduce((a, b) => a + b, 0), notes: rows };
+  },
   /// Scrivere 200 caratteri in una nota di 5.000 righe.
   async S1(session) {
     await openByName(session, "Lunga", "Una nota lunga");
@@ -1322,7 +1440,7 @@ async function stopDriver(driver) {
 /// non parte va a `launch` (`openWithGtkRetry`).
 async function startDriver() {
   driver = spawn(args.driver ?? "tauri-driver", [
-    "--port", String(port),
+    "--port", String(port), "--native-port", String(nativePort),
     ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
   ], {
     env: driverEnv,
@@ -1411,6 +1529,21 @@ async function main() {
     delete driverEnv.WAYLAND_DISPLAY;
     driverEnv.GDK_BACKEND = "x11";
   }
+  // Lo schermo dove si aprirà la finestra, con l'ambiente che avrà l'app.
+  display = displayRate({ args, env: driverEnv });
+  cap = engineCap(null, display.periodMs);
+  // Il percorso di disegno e il vblank di WebKitGTK, da una WebView a parte
+  // con lo stesso ambiente: senza PyGObject o WebKit2 resta `null`.
+  gpuInfo = webkitGpu(driverEnv);
+  if (gpuInfo) console.log(`· webkit://gpu: ${gpuInfo.renderer ?? "?"}; vblank ${gpuInfo.vblank ?? "?"}, ${gpuInfo.vblankRate ?? "?"}`);
+  console.log(`· schermo: ${display.hz} Hz, P ${display.periodMs} ms (${display.source})`);
+  for (const note of display.notes) console.log(`· schermo: ${note}`);
+  // Le soglie in periodi chiedono il tetto del motore, cioè F1, prima degli
+  // scenari che misurano.
+  if (hasPeriodLimits(limits) && !only.has("F1")) {
+    only.add("F1");
+    console.log("· F1 aggiunto: le soglie in periodi chiedono il rAF a vuoto");
+  }
   // Un Xvfb che si rigenera fra un'app e l'altra fa cadere ogni tanto l'avvio
   // dello scenario dopo (#287): si dice subito, prima delle misure.
   const reset = xvfbResetProblem(driverEnv, commandLines());
@@ -1438,8 +1571,11 @@ async function main() {
     // riscaldamento, non le schede degli altri scenari. I1 subito dopo, con
     // poche schede da riaprire. S6 dopo S1: l'avvio da misurare riapre la
     // nota che S1 ha lasciato. L1 dopo: non apre niente nel vault. C1 in
-    // fondo: cambia il profilo del vault, e lo lascia a «Tutto».
-    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S9", "S4", "S5", "S7", "S8", "T1", "L1", "C1"].filter((id) => only.has(id));
+    // fondo: cambia il profilo del vault, e lo lascia a «Tutto». F1 prima di
+    // ogni scenario con una soglia in periodi: decide il tetto del motore. F2
+    // subito dopo, con poche schede riaperte; F3 dopo S8, perché apre due
+    // note che gli avvii dopo riaprono.
+    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S4", "S5", "S7", "S8", "F3", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
       // Un'app che non parte è un risultato dello scenario, non la fine del
       // banco: gli altri scenari e il referto vanno avanti.
@@ -1458,7 +1594,10 @@ async function main() {
         if (id !== "S6") await ready(session);
         // I1 misura proprio l'indicizzazione dell'avvio: non la aspetta.
         if (id !== "S6" && id !== "I1") await indexed(session);
+        const loadBefore = loadavg()[0];
         const result = await SCENARIOS[id](session);
+        // Il carico della macchina: un numero alto dice che la misura è rumorosa.
+        result.load = { before: Math.round(loadBefore * 10) / 10, after: Math.round(loadavg()[0] * 10) / 10 };
         // Zero campioni non è un tempo di zero: se la sonda non ha visto niente
         // (un fotogramma che non arriva, un tasto perso) il referto non scrive
         // un numero, e la soglia lo conta come misura che manca.
@@ -1472,11 +1611,15 @@ async function main() {
           continue;
         }
         for (const [key, value] of Object.entries(result.values)) {
-          const limit = limits[key];
+          // Una soglia in periodi vale col periodo efficace: quello dello
+          // schermo, o 60 Hz finché c'è il tetto del motore (`refresh.mjs`).
+          const entry = limits[key];
+          const limit = resolveLimit(entry, cap.effectiveMs);
           const over = limit !== undefined && (value === null || value > limit);
           if (over) failed++;
-          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") || key.endsWith(".spegnibili") ? "chunk" : key.includes(".dryPaths") ? "path" : key.endsWith(".liveCards") ? "schede" : "ms";
-          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${unit}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
+          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") || key.endsWith(".spegnibili") ? "chunk" : key.includes(".dryPaths") ? "path" : key.endsWith(".liveCards") ? "schede" : key === "F2.raf" ? "rAF" : key.includes(".cpu.") ? "% di un core" : "ms";
+          const periods = typeof entry === "object" ? ` = ${entry.periodi} × ${cap.effectiveMs} ms${cap.capped ? ", tetto del motore" : ""}` : "";
+          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${unit}${limit !== undefined ? ` (soglia ${limit}${periods})` : ""} · ${result.samples} campioni`);
         }
         for (const note of result.notes ?? []) console.log(`· ${id}: ${note}`);
         for (const [nome, seen] of Object.entries(result.profiles ?? {})) {
@@ -1512,6 +1655,12 @@ async function main() {
     system: { os: osType(), release: release(), session: x11 ? "x11" : process.env.XDG_SESSION_TYPE ?? (process.env.WAYLAND_DISPLAY ? "wayland" : process.env.DISPLAY ? "x11" : null) },
     webview: Object.values(results).find((r) => r.report?.userAgent)?.report.userAgent ?? null,
     budgets: budgetsKind,
+    // Lo schermo, il tetto del motore e il percorso di disegno: le soglie in
+    // periodi del referto valgono con `cap.effectiveMs`.
+    display,
+    cap,
+    render: results.F1?.report?.render ?? null,
+    load: loadavg().map((x) => Math.round(x * 10) / 10),
     results,
   };
   writeFileSync(join(out, "referto.json"), JSON.stringify(report, null, 2) + "\n");
