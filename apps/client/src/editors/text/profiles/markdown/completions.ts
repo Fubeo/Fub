@@ -34,6 +34,7 @@ import { Prec, type EditorState, type Extension } from "@codemirror/state";
 import { keymap, type EditorView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { isTaskLine, mentionDates } from "./dates";
+import { withLineBreaks } from "../../line-breaks";
 import { isStrictlyInsideCode } from "./parser";
 import { liveStrings } from "./strings";
 import { catalogLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
@@ -519,8 +520,8 @@ export function diagramFenceContext(state: EditorState, pos: number): DiagramFen
   if (!typed || state.sliceDoc(pos, line.to).trim() !== "") return null;
   const bodyEnd = closing ? closing.from - 1 : node.to;
   const others = [
-    line.from > opening.to + 1 ? state.sliceDoc(opening.to + 1, line.from - 1) : "",
-    line.to < bodyEnd ? state.sliceDoc(line.to + 1, bodyEnd) : "",
+    line.from > opening.to + 1 ? state.doc.sliceString(opening.to + 1, line.from - 1) : "",
+    line.to < bodyEnd ? state.doc.sliceString(line.to + 1, bodyEnd) : "",
   ].join("\n");
   const empty = others.split("\n").every((row) => {
     const content = row.replace(/^[\s>]*/, "");
@@ -567,7 +568,9 @@ export function diagramTemplateSource(today: () => Date = () => new Date()): Com
         info: t(template.description),
         type: "text",
         section,
-        apply: templateText(template, language, match.indent, day) + match.close,
+        // Il completamento divide il testo sugli a capo della nota, e conta
+        // la lunghezza in posizioni (`insertCompletionText`).
+        apply: withLineBreaks(ctx.state, templateText(template, language, match.indent, day) + match.close),
       }));
       if (options.length === 0) return null;
       return { from: match.from, to: match.to, options, filter: false };

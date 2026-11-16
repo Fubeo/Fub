@@ -466,7 +466,8 @@ function onNewLineBelow(command: StateCommand): StateCommand {
     const tail = /\s*$/.exec(line.text)![0].length;
     const split = state.update({
       changes: { from: line.to - tail, to: line.to, insert: state.lineBreak },
-      selection: EditorSelection.cursor(line.to - tail + state.lineBreak.length),
+      // Un a capo vale una posizione, qualunque sia il separatore.
+      selection: EditorSelection.cursor(line.to - tail + 1),
     });
     let next: Transaction | null = null;
     if (!command({ state: split.state, dispatch: (tr) => { next = tr; } }) || !next) return false;

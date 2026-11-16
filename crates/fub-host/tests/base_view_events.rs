@@ -10,7 +10,8 @@
 //! volo è l'eco di quel salvataggio. Un evento con un'altra origine farebbe
 //! dire «è cambiato su disco» a ogni gesto.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 use camino::Utf8PathBuf;
 use fub_abi::command::InvokeMode;
@@ -23,24 +24,77 @@ use serde_json::json;
 const BASE_FILE: &str = "Opere.base";
 const BEFORE: &str = "views:\n  - name: Tabella   # la vista dei gesti\n    type: table\n    order: [file.name, stato]\n";
 
+/// Tetto di sicurezza dell'attesa di un avviso. Non decide l'esito: il ponte
+/// degli eventi consegna da un thread suo (`bridge.rs`), e l'attesa finisce
+/// appena arriva ciò che si aspetta — di solito in pochi millisecondi. Il tetto
+/// serve solo a non restare appesi se un difetto toglie l'avviso, ed è largo
+/// perché su una macchina molto carica quel thread può restare fermo dei
+/// secondi.
+const SAFETY_CAP: Duration = Duration::from_secs(60);
+
 #[derive(Default)]
-struct Recorder(Mutex<Vec<Notice>>);
+struct Recorder {
+    notices: Mutex<Vec<Notice>>,
+    arrived: Condvar,
+}
 
 impl EventSink for Recorder {
     fn emit(&self, notice: &Notice) -> Delivery {
-        self.0.lock().unwrap().push(notice.clone());
+        self.notices.lock().unwrap().push(notice.clone());
+        self.arrived.notify_all();
         Delivery::Done
     }
 }
 
+fn is_base_change(notice: &Notice) -> bool {
+    matches!(&notice.event, Event::DocumentChanged { id, .. } if id.as_str() == BASE_FILE)
+}
+
 impl Recorder {
-    /// Gli avvisi di un cambio del `.base` arrivati finora, e la lista si vuota.
-    fn base_changes(&self) -> Vec<Notice> {
-        std::mem::take(&mut *self.0.lock().unwrap())
-            .into_iter()
-            .filter(|notice| matches!(&notice.event, Event::DocumentChanged { id, .. } if id.as_str() == BASE_FILE))
-            .collect()
+    /// Dimentica gli avvisi arrivati finora.
+    fn forget(&self) {
+        self.notices.lock().unwrap().clear();
     }
+
+    /// Gli avvisi di un cambio del `.base` che un gesto ha prodotto, presi
+    /// **quando il ponte li ha consegnati tutti**.
+    ///
+    /// La consegna è asincrona: quando il comando torna, l'avviso è accodato sul
+    /// bus ma il ponte può non averlo ancora passato al sink. Si aspetta quindi
+    /// il primo cambio del `.base` e, se sta in un lotto, il `BatchEnded` di quel
+    /// lotto: il bus consegna in ordine, quindi a quel punto ogni cambio del
+    /// lotto è già arrivato e il conteggio è definitivo. Un cambio fuori lotto
+    /// si rende subito, e l'asserzione lo boccia.
+    fn base_changes_of_the_gesture(&self, step: &str) -> Vec<Notice> {
+        let deadline = Instant::now() + SAFETY_CAP;
+        let mut notices = self.notices.lock().unwrap();
+        loop {
+            if let Some(end) = gesture_end(&notices) {
+                return notices.drain(..=end).filter(is_base_change).collect();
+            }
+            let left = deadline.saturating_duration_since(Instant::now());
+            assert!(
+                !left.is_zero(),
+                "{step}: in {SAFETY_CAP:?} il ponte non ha consegnato il cambio \
+                 del `.base` e la fine del suo lotto: {notices:?}"
+            );
+            notices = self.arrived.wait_timeout(notices, left).unwrap().0;
+        }
+    }
+}
+
+/// Dove finisce, fra gli avvisi consegnati, ciò che il gesto ha prodotto: il
+/// primo cambio del `.base` se è fuori lotto, il `BatchEnded` del suo lotto se
+/// ci sta dentro. `None` finché non è arrivato.
+fn gesture_end(notices: &[Notice]) -> Option<usize> {
+    let first = notices.iter().position(is_base_change)?;
+    let Some(batch) = notices[first].origin.batch else {
+        return Some(first);
+    };
+    notices[first..]
+        .iter()
+        .position(|notice| matches!(&notice.event, Event::BatchEnded { batch: ended, .. } if *ended == batch))
+        .map(|offset| first + offset)
 }
 
 fn vault() -> (tempfile::TempDir, Utf8PathBuf) {
@@ -72,7 +126,7 @@ fn il_gesto_e_il_suo_annulla_si_dicono_come_cambi_dell_utente_in_un_lotto() {
     host.wait_indexed(None).unwrap();
     let doc = DocId::new(BASE_FILE);
     let (_, revision) = host.read_document(None, &doc).unwrap();
-    sink.base_changes();
+    sink.forget();
 
     let outcome = host
         .invoke_user_command(
@@ -85,11 +139,11 @@ fn il_gesto_e_il_suo_annulla_si_dicono_come_cambi_dell_utente_in_un_lotto() {
     assert!(outcome.undo.is_some(), "il gesto si annulla");
     let (written, _) = host.read_document(None, &doc).unwrap();
     assert_ne!(written, BEFORE, "il gesto ha scritto");
-    one_user_change_in_a_batch(&sink.base_changes(), "gesto");
+    one_user_change_in_a_batch(&sink.base_changes_of_the_gesture("gesto"), "gesto");
 
     host.invoke_user_command(None, "vault.undo", json!({}), InvokeMode::Apply)
         .expect("l'annulla riesce");
     let (undone, _) = host.read_document(None, &doc).unwrap();
     assert_eq!(undone, BEFORE, "l'annulla riporta i byte di prima");
-    one_user_change_in_a_batch(&sink.base_changes(), "annulla");
+    one_user_change_in_a_batch(&sink.base_changes_of_the_gesture("annulla"), "annulla");
 }

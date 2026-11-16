@@ -235,7 +235,7 @@ describe("text input settings", () => {
     host.remove();
   });
 
-  it("editor.properties sceglie come Live mostra il frontmatter, e un valore ignoto resta YAML", async () => {
+  it("editor.properties sceglie come Live mostra il frontmatter, e un valore ignoto vale il default, le righe", async () => {
     const read = vi.mocked(settings);
     read.mockReset();
     read.mockResolvedValue([]);
@@ -244,7 +244,7 @@ describe("text input settings", () => {
     const engine = createTextEngine(host, { onChange: () => {}, onSelectionChange: () => {} });
     const view = EditorView.findFromDOM(host)!;
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
-    expect(view.state.facet(propertiesDisplay)).toBe("source");
+    expect(view.state.facet(propertiesDisplay)).toBe("visible");
     const change = (value: string) => {
       read.mockResolvedValue([{ ...entry(EDITOR_PROPERTIES_KEY, false), value }]);
       forwardNotice({
@@ -252,10 +252,10 @@ describe("text input settings", () => {
         origin: { actor: { kind: "user" }, batch: null },
       });
     };
-    change("visible");
-    await vi.waitFor(() => expect(view.state.facet(propertiesDisplay)).toBe("visible"));
-    change("tabella");
+    change("source");
     await vi.waitFor(() => expect(view.state.facet(propertiesDisplay)).toBe("source"));
+    change("tabella");
+    await vi.waitFor(() => expect(view.state.facet(propertiesDisplay)).toBe("visible"));
     engine.destroy();
     host.remove();
   });

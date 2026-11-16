@@ -287,6 +287,9 @@ fn relocate(error: ReadError, pieces: &[Piece]) -> ReadError {
         ReadError::NotSvg { offset } => ReadError::NotSvg {
             offset: back(offset),
         },
+        ReadError::TooManyNodes { offset } => ReadError::TooManyNodes {
+            offset: back(offset),
+        },
     }
 }
 

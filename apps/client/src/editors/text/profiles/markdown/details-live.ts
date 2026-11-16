@@ -55,6 +55,9 @@ interface HtmlTops {
   details: ReturnType<typeof pairDetails> | null;
 }
 
+// Il testo dei blocchi HTML si legge con `doc.sliceString`, con "\n" fra le
+// righe: le posizioni che `detailsHead` ne ricava (il sommario sulla riga dopo
+// `<details>`) sono posizioni del documento anche in una nota CRLF (#394).
 /// Tutti i nodi di primo livello dell'albero: alla nascita, quando l'albero
 /// cresce senza modifiche e quando la modifica non si lascia seguire.
 function scanHtmlTops(state: EditorState): HtmlTops {
@@ -65,7 +68,7 @@ function scanHtmlTops(state: EditorState): HtmlTops {
   if (cursor.firstChild()) {
     do {
       visited++;
-      if (cursor.name === "HTMLBlock") tops.push({ from: cursor.from, to: cursor.to, html: state.sliceDoc(cursor.from, cursor.to) });
+      if (cursor.name === "HTMLBlock") tops.push({ from: cursor.from, to: cursor.to, html: state.doc.sliceString(cursor.from, cursor.to) });
     } while (cursor.nextSibling());
   }
   return { tree, tops, visited, details: null };
@@ -92,7 +95,7 @@ function patchHtmlTops(value: HtmlTops, tr: Transaction): HtmlTops | null {
   const { start, nodes, resync, delta } = changed;
   const tops = value.tops.slice(0, firstFrom(value.tops, start)).filter((top) => top.to <= start);
   for (const node of nodes) {
-    if (node.name === "HTMLBlock") tops.push({ from: node.from, to: node.to, html: tr.state.sliceDoc(node.from, node.to) });
+    if (node.name === "HTMLBlock") tops.push({ from: node.from, to: node.to, html: tr.state.doc.sliceString(node.from, node.to) });
   }
   if (resync !== null) {
     for (const top of value.tops.slice(firstFrom(value.tops, resync))) tops.push({ from: top.from + delta, to: top.to + delta, html: top.html });
@@ -266,7 +269,7 @@ const decorations = StateField.define<DecorationSet>({
 export function setDetailsDefault(state: EditorState, at: number, open: boolean) {
   const pair = detailsOf(state).pairs.find((each) => each.open.from === at);
   if (!pair || pair.head.open === open) return null;
-  const tag = /^[ \t]*<details[^>]*>/i.exec(state.sliceDoc(pair.open.from, pair.open.to));
+  const tag = /^[ \t]*<details[^>]*>/i.exec(state.doc.sliceString(pair.open.from, pair.open.to));
   if (!tag) return null;
   const from = pair.open.from + tag[0].indexOf("<");
   return {

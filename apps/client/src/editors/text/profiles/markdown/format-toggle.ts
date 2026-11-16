@@ -16,6 +16,10 @@
 //   di quel formato, come in Word.
 // - I segni che non reggono (`^a b^`, `~~~x~~~`) lasciano il posto al tag
 //   HTML gemello (`<sup>a b</sup>`), che la Live e la Lettura mostrano uguale.
+//
+// Il testo si legge con `doc.sliceString`, che va a capo con "\n" anche in
+// una nota CRLF: le sue lunghezze e i suoi indici sono posizioni del
+// documento (#394).
 import {
   ChangeSet, EditorSelection, EditorState, type Extension, type SelectionRange, type StateCommand, Text, Transaction,
 } from "@codemirror/state";
@@ -193,7 +197,7 @@ function sound(
 ): boolean {
   const start = state.doc.lineAt(Math.min(...edits.map((edit) => edit.from))).from;
   const end = state.doc.lineAt(Math.max(...edits.map((edit) => edit.to ?? edit.from))).to;
-  const before = state.sliceDoc(start, end);
+  const before = state.doc.sliceString(start, end);
   const local = ChangeSet.of(specs(edits, start), before.length);
   const after = local.apply(Text.of(before.split("\n"))).toString();
   const old = readSigns(before);
@@ -294,7 +298,7 @@ function blocksHold(state: EditorState, edits: readonly Edit[]): boolean {
   const start = state.doc.lineAt(Math.min(...edits.map((edit) => edit.from)));
   const from = start.number > 1 ? state.doc.line(start.number - 1).from : start.from;
   const end = state.doc.lineAt(Math.max(...edits.map((edit) => edit.to ?? edit.from))).to;
-  const before = state.sliceDoc(from, end);
+  const before = state.doc.sliceString(from, end);
   const after = ChangeSet.of(specs(edits, from), before.length).apply(Text.of(before.split("\n"))).toString();
   const shape = (text: string) => {
     const names: string[] = [];
@@ -320,7 +324,7 @@ function heldTwins(state: EditorState, probe: readonly Edit[]): Edit[] {
   if (!pairs.length) return [];
   const start = state.doc.lineAt(Math.min(...probe.map((edit) => edit.from))).from;
   const end = state.doc.lineAt(Math.max(...probe.map((edit) => edit.to ?? edit.from))).to;
-  const before = state.sliceDoc(start, end);
+  const before = state.doc.sliceString(start, end);
   const local = ChangeSet.of(specs(probe, start), before.length);
   const now = readSigns(local.apply(Text.of(before.split("\n"))).toString()).elements;
   // Lo strato si legge come sé stesso, non coi segni di un altro
@@ -338,7 +342,7 @@ function heldTwins(state: EditorState, probe: readonly Edit[]): Edit[] {
     if (probe.some((edit) => edit.to !== undefined && edit.from < pair.from + pair.open + pair.close && pair.from < edit.to)) continue;
     for (const { element, marks } of layersOf(state, pair) ?? []) {
       const tag = HTML_TWIN[element];
-      if (!tag || !WRITTEN_CHARS.has(state.sliceDoc(marks.from, marks.from + 1))) continue;
+      if (!tag || !WRITTEN_CHARS.has(state.doc.sliceString(marks.from, marks.from + 1))) continue;
       if (reads(element, marks)) continue;
       out.push({ from: marks.from, to: marks.openTo, insert: `<${tag}>`, side: 1 }, { from: marks.closeFrom, to: marks.to, insert: `</${tag}>`, side: 1 });
     }
@@ -395,7 +399,7 @@ function wrapping(
     const to = pre.mapPos(span.to, 1);
     return doc.sliceString(Math.max(0, from - 1), from) === signs.open[0] || doc.sliceString(to, to + 1) === signs.close[signs.close.length - 1];
   }))
-    || (element in OTHER_LEAF && spans.some((span) => /[*_~^=<>`[\]$]/.test(state.sliceDoc(span.from, span.to))));
+    || (element in OTHER_LEAF && spans.some((span) => /[*_~^=<>`[\]$]/.test(state.doc.sliceString(span.from, span.to))));
   const fits = !crowded && sound(state, build(signs, true), node ?? "", (changes) => spans.map((span) => {
     if (span.from !== span.to) return { from: changes.mapPos(span.from, 1), to: changes.mapPos(span.to, -1) };
     const at = changes.mapPos(span.from, -1) + signs.open.length;
@@ -423,7 +427,7 @@ function run(state: EditorState, pos: number, dir: -1 | 1, char: string): number
   let n = 0;
   for (;;) {
     const at = dir === -1 ? pos - n - 1 : pos + n;
-    if (at < 0 || at >= state.doc.length || state.sliceDoc(at, at + 1) !== char) return n;
+    if (at < 0 || at >= state.doc.length || state.doc.sliceString(at, at + 1) !== char) return n;
     n += 1;
   }
 }
@@ -442,8 +446,8 @@ function emptyPairAt(state: EditorState, pos: number, element: FormatElement): {
   const signs = SIGNS[element];
   const forms = [signs, twin(element)].filter((form): form is Form => form !== null);
   for (const form of forms) {
-    if (state.sliceDoc(pos - form.open.length, pos) !== form.open) continue;
-    if (state.sliceDoc(pos, pos + form.close.length) !== form.close) continue;
+    if (state.doc.sliceString(pos - form.open.length, pos) !== form.open) continue;
+    if (state.doc.sliceString(pos, pos + form.close.length) !== form.close) continue;
     const char = form.open[0]!;
     if (form === signs && SIGN_CHARS.has(char)) {
       const left = run(state, pos, -1, char);
@@ -462,7 +466,7 @@ function emptyPairAt(state: EditorState, pos: number, element: FormatElement): {
 function leafAt(state: EditorState, range: { from: number; to: number; empty: boolean }): ElementMarks | null {
   for (const leaf of ["sup", "sub"] as const) {
     const marks = elementMarksAt(state, range, leaf);
-    if (marks && state.sliceDoc(marks.from, marks.openTo) === SIGNS[leaf].open) return marks;
+    if (marks && state.doc.sliceString(marks.from, marks.openTo) === SIGNS[leaf].open) return marks;
   }
   return null;
 }
@@ -606,7 +610,7 @@ function pieces(
     if (cuts.has(at)) { at++; continue; }
     let end = at;
     while (end < to && !cuts.has(end)) end++;
-    const text = state.sliceDoc(at, end);
+    const text = state.doc.sliceString(at, end);
     const lead = text.length - text.trimStart().length;
     if (lead < text.length) {
       const span = { from: at + lead, to: end - (text.length - text.trimEnd().length) };
@@ -652,7 +656,7 @@ function reform(
       }
     }
   }
-  const written = { open: state.sliceDoc(marks.from, marks.openTo), close: state.sliceDoc(marks.closeFrom, marks.to) };
+  const written = { open: state.doc.sliceString(marks.from, marks.openTo), close: state.doc.sliceString(marks.closeFrom, marks.to) };
   const pieces = [
     ...(marks.openTo < start ? [{ from: marks.openTo, to: start }] : []),
     ...(end < marks.closeFrom ? [{ from: end, to: marks.closeFrom }] : []),
@@ -670,7 +674,7 @@ function reform(
     for (const pair of emptyPairsOf(state)) {
       for (const { element, marks } of layersOf(state, pair) ?? []) {
         const tag = HTML_TWIN[element];
-        if (!tag || !WRITTEN_CHARS.has(state.sliceDoc(marks.from, marks.from + 1)) || edits.some((edit) => edit.from === marks.from)) continue;
+        if (!tag || !WRITTEN_CHARS.has(state.doc.sliceString(marks.from, marks.from + 1)) || edits.some((edit) => edit.from === marks.from)) continue;
         edits.push({ from: marks.from, to: marks.openTo, insert: `<${tag}>`, side: 1 }, { from: marks.closeFrom, to: marks.to, insert: `</${tag}>`, side: 1 });
       }
     }
@@ -686,8 +690,8 @@ function layersOf(state: EditorState, pair: EmptyPair): { element: FormatElement
   const out: { element: FormatElement; marks: ElementMarks }[] = [];
   for (const element of (pair.elements ?? []) as FormatElement[]) {
     const form = [SIGNS[element], twin(element)].find((candidate): candidate is Form => candidate !== null
-      && state.sliceDoc(from, from + candidate.open.length) === candidate.open
-      && state.sliceDoc(to - candidate.close.length, to) === candidate.close);
+      && state.doc.sliceString(from, from + candidate.open.length) === candidate.open
+      && state.doc.sliceString(to - candidate.close.length, to) === candidate.close);
     if (!form) return null;
     out.push({ element, marks: { from, openTo: from + form.open.length, closeFrom: to - form.close.length, to } });
     from += form.open.length;
@@ -721,8 +725,8 @@ function peel(state: EditorState, pos: number, element: FormatElement): Outcome 
   const blocks = blocksHold(state, changes);
   for (const { element: kind, marks } of rest) {
     const tag = twin(kind);
-    if (blocks && (state.sliceDoc(marks.from, marks.openTo).startsWith("<") || reads(kind, marks))) continue;
-    if (tag && !state.sliceDoc(marks.from, marks.openTo).startsWith("<")) {
+    if (blocks && (state.doc.sliceString(marks.from, marks.openTo).startsWith("<") || reads(kind, marks))) continue;
+    if (tag && !state.doc.sliceString(marks.from, marks.openTo).startsWith("<")) {
       changes = [...changes, { from: marks.from, to: marks.openTo, insert: tag.open }, { from: marks.closeFrom, to: marks.to, insert: tag.close }];
     }
   }
@@ -861,7 +865,7 @@ function toggleRange(state: EditorState, range: SelectionRange, element: FormatE
   // Gli spazi ai bordi della selezione restano fuori dai segni: `**parola **`
   // non è grassetto, e `* parola*` a inizio riga è una voce. Una selezione di
   // soli spazi non ha niente da formattare: vale il cursore alla sua fine.
-  const text = state.sliceDoc(range.from, range.to);
+  const text = state.doc.sliceString(range.from, range.to);
   const lead = text.length - text.trimStart().length;
   if (lead === text.length || onlyMarks(state, range.from, range.to)) return atCursor(state, range.to, element);
   const trail = text.length - text.trimEnd().length;
@@ -904,7 +908,7 @@ const firstLetter = EditorState.transactionFilter.of((tr) => {
   if (cuts.length !== 1 || !typed || typed.from !== pos || typed.to !== pos || !typed.text || typed.text.includes("\n")) return tr;
   const layers = layersOf(state, pair);
   const tagged = ({ element, marks }: { element: FormatElement; marks: ElementMarks }) =>
-    !SIGNS[element].open.startsWith("<") && state.sliceDoc(marks.from, marks.openTo) === twin(element)?.open;
+    !SIGNS[element].open.startsWith("<") && state.doc.sliceString(marks.from, marks.openTo) === twin(element)?.open;
   if (!layers?.some(tagged)) return tr;
   const edits: Edit[] = [{ from: pos, insert: typed.text }];
   for (const { element, marks } of layers) {
@@ -913,7 +917,7 @@ const firstLetter = EditorState.transactionFilter.of((tr) => {
     // Il testo di un apice coi segni è letterale, e senza spazi.
     if (element in OTHER_LEAF && /[\s*_~^=<>`[\]$]/.test(typed.text)) return tr;
     // `~` e `^` contro altri uguali fanno corse che si leggono in più modi.
-    if (/[~^=]/.test(signs.open[0]!) && (state.sliceDoc(marks.from - 1, marks.from) === signs.open[0] || state.sliceDoc(marks.to, marks.to + 1) === signs.close[signs.close.length - 1])) return tr;
+    if (/[~^=]/.test(signs.open[0]!) && (state.doc.sliceString(marks.from - 1, marks.from) === signs.open[0] || state.doc.sliceString(marks.to, marks.to + 1) === signs.close[signs.close.length - 1])) return tr;
     edits.push({ from: marks.from, to: marks.openTo, insert: signs.open, side: 1 }, { from: marks.closeFrom, to: marks.to, insert: signs.close, side: 1 });
   }
   if (!blocksHold(state, edits) || !sound(state, edits, "", () => [])) return tr;

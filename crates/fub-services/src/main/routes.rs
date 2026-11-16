@@ -318,22 +318,25 @@ fn handle_login(state: &Arc<Mutex<ServiceState>>, caller: &KdfCaller, body: &[u8
         return HttpResponse::err(401, "bad credentials");
     }
     let now = fub_services::schema::now_ms();
-    // Il limite per nome lo sceglie chi chiama: davanti c'è quello per origine
-    // e globale, che nessun nome nuovo azzera, e il semaforo delle KDF.
+    // Il nome lo sceglie chi chiama: davanti c'è il limite per origine e
+    // globale, che nessun nome nuovo azzera, e il semaforo delle KDF. Il
+    // blocco dei fallimenti guarda (nome, origine), l'origine e il nome
+    // (`LoginLimits`): un'altra origine non chiude fuori il titolare.
     let _permit = match caller.enter() {
         Err(r) => return r,
         Ok(permit) => permit,
     };
+    let origin = caller.origin.as_str();
     let snapshot = {
         let mut state = state.lock();
-        if state.logins.blocked(&key, now) {
+        if state.logins.blocked(&key, origin, now) {
             return HttpResponse::err(429, "rate limited");
         }
         // Il tentativo conta **prima** della verifica, che gira fuori dal
         // lock: login paralleli sullo stesso nome non passano tutti il
         // controllo prima che il primo fallisca. Una password giusta lo
         // restituisce.
-        state.logins.note_fail(&key, now);
+        state.logins.note_fail(&key, origin, now);
         state.accounts.password_hash_of(&login.name)
     };
     let (account_id, pw) = match snapshot {
@@ -350,7 +353,7 @@ fn handle_login(state: &Arc<Mutex<ServiceState>>, caller: &KdfCaller, body: &[u8
     if !ok {
         return HttpResponse::err(401, "bad credentials");
     }
-    state.logins.forgive(&key);
+    state.logins.forgive(&key, origin);
     // Step-up TOTP: record clonato, `check_totp` su borrow locali (HMAC veloce
     // sotto lock breve, mai KDF). Il contatore usato si scrive prima di
     // emettere il token: se non si riesce a scriverlo, il codice resterebbe
@@ -376,7 +379,7 @@ fn handle_login(state: &Arc<Mutex<ServiceState>>, caller: &KdfCaller, body: &[u8
             Err(e) => return HttpResponse::err(429, &e),
         }
     }
-    state.logins.note_success(&key);
+    state.logins.note_success(&key, origin, now);
     match state.accounts.issue_session_token(&account_id) {
         Err(e) => HttpResponse::err(500, &e),
         Ok(token) => HttpResponse::json(

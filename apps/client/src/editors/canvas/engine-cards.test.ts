@@ -2573,7 +2573,11 @@ describe("i livelli di dettaglio (T54)", () => {
     }
   });
 
-  it("2000 schede al 5%: un solo cambio di attributo per scheda, a fine gesto", async () => {
+  // 2000 schede in happy-dom sono lavoro di CPU, non un'attesa: niente orologio
+  // (i timer sono finti), nessun evento da aspettare. Da sola gira sotto il
+  // secondo; su una macchina molto carica i 5 s di default li superava. Il tetto
+  // largo non decide l'esito: la prova conta le scritture, non i millisecondi.
+  it("2000 schede al 5%: un solo cambio di attributo per scheda, a fine gesto", { timeout: 60_000 }, async () => {
     vi.useFakeTimers();
     try {
       const { renderer } = modeRenderer();
@@ -2852,7 +2856,11 @@ describe("la testata: «↩ N» e le gemelle (T22)", () => {
     engine.destroy();
   });
 
-  it("2000 schede: si chiedono solo i conti della zona, anche dopo un cambio dell'indice; la zona che si sposta chiede i suoi", async () => {
+  // 2000 schede in happy-dom sono lavoro di CPU, non un'attesa: niente orologio
+  // (i timer sono finti), nessun evento da aspettare. Da sola gira sotto il
+  // secondo; su una macchina molto carica i 5 s di default li superava. Il tetto
+  // largo non decide l'esito: la prova conta le scritture, non i millisecondi.
+  it("2000 schede: si chiedono solo i conti della zona, anche dopo un cambio dell'indice; la zona che si sposta chiede i suoi", { timeout: 60_000 }, async () => {
     vi.useFakeTimers();
     try {
       // Una griglia di 50 × 40 schede, ognuna col suo file, a passi di 300 × 200.

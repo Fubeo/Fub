@@ -522,6 +522,9 @@ describe("le azioni dell'editor della superficie", () => {
     const { ed, view } = editor();
     const text = "---\ntitolo: Uno\ntag: [a]\n---\n\n# Testo\n";
     ed.buffer.setDoc(text);
+    // In Scrittura le proprietà stanno nella testata (`editor.properties` di
+    // serie `visible`): il frontmatter da piegare si vede in Sorgente.
+    ed.setMode("source");
     const placeholders = () => view().dom.querySelectorAll(".cm-foldPlaceholder").length;
     expect(ed.editorActions.run("text.fold.properties")).toBe(true);
     expect(placeholders()).toBe(1);
@@ -715,6 +718,31 @@ describe("le azioni dell'editor della superficie", () => {
     expect(reading?.target).toMatchObject({ kind: "page", label: t("editor_menu.head.reading") });
     expect(contextLabels(reading)[0]).toBe(t("editor_menu.edit_here"));
     ed.destroy();
+  });
+
+  it("«Inserisci un blocco…» in una nota CRLF apre il «/» su una riga vera, come in LF (#394)", () => {
+    const slash = {
+      currentDoc: () => "notes/current.md",
+      onEffect: vi.fn(),
+      notify: vi.fn(),
+      flushPendingSave: vi.fn(async () => []),
+      publishContext: vi.fn(async () => {}),
+      menu: {
+        enabled: () => true,
+        panel: () => ({ dom: document.createElement("div"), listId: "lista", update() {}, key: () => false, placed() {}, close() {} }),
+        chosen: vi.fn(),
+        palette: vi.fn(),
+      },
+    } satisfies EditorSlashHost;
+    for (const nl of ["\n", "\r\n"]) {
+      const { ed, view } = editor(() => {}, slash);
+      ed.setMode("source");
+      const menu = at(ed, view, `Un paragrafo${nl}fine`, 3);
+      entryOf(menu, t("editor_menu.insert_block"))!.run!();
+      expect(ed.buffer.getDoc()).toBe(`Un paragrafo${nl}/${nl}fine`);
+      expect(view().state.selection.main.head).toBe("Un paragrafo\n/".length);
+      ed.destroy();
+    }
   });
 
   it("il tasto destro su un richiamo offre di eliminare la nota, e porta lì il cursore", () => {

@@ -502,7 +502,7 @@ function formulaKeyBindings(options: FormulaProfileOptions): readonly KeyBinding
       key: "Alt-Enter",
       run: (view) => {
         if (singleLine) return true;
-        view.dispatch(view.state.replaceSelection("\n"), { scrollIntoView: true, userEvent: "input" });
+        view.dispatch(view.state.replaceSelection(view.state.lineBreak), { scrollIntoView: true, userEvent: "input" });
         return true;
       },
     },

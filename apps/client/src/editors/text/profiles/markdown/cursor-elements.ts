@@ -87,7 +87,9 @@ export function insideInlineMathAt(state: EditorState, range: Span): boolean {
   let container: SyntaxNode | null = syntaxTree(state).resolveInner(from, 1);
   while (container && !isMathContainer(container.name)) container = container.parent;
   if (!container) return false;
-  return containerMath(state.sliceDoc(container.from, container.to), container).formulas.some((math) =>
+  // Con "\n" fra le righe, come la Live: gli indici del testo sono posizioni
+  // anche in una nota CRLF (#394).
+  return containerMath(state.doc.sliceString(container.from, container.to), container).formulas.some((math) =>
     !math.display && (from === to ? math.from < from && from < math.to : math.from <= from && to <= math.to)
   );
 }

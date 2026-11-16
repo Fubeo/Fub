@@ -161,7 +161,11 @@ Il runtime:
   contratto, oltre è una trap;
 - non concede filesystem o rete direttamente;
 - serve soltanto le famiglie host disponibili;
-- applica limiti alla memoria lineare e alle tabelle;
+- applica limiti alla memoria lineare e alle tabelle: al più 64 MiB per
+  istanza sommando tutte le sue memorie (oltre, `memory.grow` risponde -1) e
+  1 GiB per tutte le istanze del processo insieme; chi supera il tetto del
+  processo riceve una trap tipizzata (`host.wasm.memory_budget`), e la
+  memoria torna al conto quando l'istanza viene smontata;
 - interrompe chiamate oltre la deadline;
 - converte trap in errori tipizzati;
 - limita la ricorsione delle forme;
@@ -504,26 +508,23 @@ lettura, mai una pila o una memoria esaurite.
 - L'append del kernel rifiuta symlink, hardlink e target non regolari, e
   conta i nomi del file sull'handle aperto, non riaprendo il path.
 
+### Testo verso un foglio di calcolo
+
+Un testo che esce verso un altro foglio di calcolo non diventa una formula
+(CSV injection): un campo che comincia con `=`, `+`, `-` o `@`, anche dopo
+spazi, prende un apostrofo davanti. Vale per l'export CSV dei documenti
+(`fub-importers`, `csv.rs`), per il salvataggio CSV/TSV di GridCraft e per
+il testo degli appunti della griglia (`fub.copyHtml`), con la patch
+`0012-formule-come-testo` di `vendor/gridcraft`. La griglia mette
+l'apostrofo anche davanti a una tabulazione o a un ritorno a capo iniziali,
+e lascia com'è un numero con il segno (`-12`, `-1,234.50`, `-12%`), che
+resta un numero; incollato di nuovo nella griglia, il testo torna quello di
+prima. L'HTML degli appunti non cambia.
+
 ## Servizi remoti
 
-- La chiave del vault (VDK, 32 byte casuali) viaggia avvolta da una KEK
-  derivata dalla passphrase del vault con PBKDF2-HMAC-SHA256: le buste e le
-  password degli account nuove usano `ver=2`, 600.000 iterazioni; quelle di
-  `ver=1`, 210.000, si riaprono ancora. Ogni altra coppia di versione e
-  iterazioni si rifiuta dentro la derivazione stessa, per ogni chiamante, e
-  nessuna derivazione supera 1.000.000 di iterazioni
-  (`fub_services::crypto::derive_kek`, `fub_host::remote::derive_vault_kek`).
-- Transizione dei parametri: il server accetta, al caricamento della chiave
-  e all'invito, ogni coppia che conosce (`ver=1`/210.000 e `ver=2`/600.000),
-  così client vecchi e nuovi parlano allo stesso server; una coppia
-  sconosciuta è `400 unsupported wrap version`. Un client che riceve quel
-  rifiuto, o quelli dei server di prima (`stale wrap version`,
-  `bad wrap version`, `bad wrap iterations`), mostra un errore tipizzato
-  (`BadArgs` con `host.sync.kdf_unsupported`) che chiede di aggiornare Fub o
-  il server; non è un'assenza di rete e non si ritenta.
-- Ruoli `Owner > Admin > Writer > Reader`, nel sync e nei siti: chi non è
-  Owner concede, toglie o cambia soltanto ruoli sotto il proprio
-  (`fub_services::acl::may_grant`, `check_revoke`).
+Chiavi del vault, ruoli, login e quote dei servizi di sync e pubblicazione:
+[Sicurezza dei servizi remoti](remote-services-security.md).
 
 ## Segnalazioni
 
