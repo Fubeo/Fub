@@ -222,6 +222,21 @@ describe("la cornice della Tabella", () => {
     expect(rows).toHaveLength(4);
   });
 
+  it("i «+» sono pulsanti a icona col nome, fuori dal Tab", () => {
+    const { frame } = mount(ROWS);
+    const row = frame.element.querySelector<HTMLButtonElement>('.tb-add[data-add="row"]')!;
+    const column = frame.element.querySelector<HTMLButtonElement>('.tb-add[data-add="column"]')!;
+    expect(row.getAttribute("aria-label")).toBe("Aggiungi una riga");
+    expect(column.getAttribute("aria-label")).toBe("Aggiungi una colonna");
+    for (const button of [row, column]) {
+      expect(button.type).toBe("button");
+      expect(button.tabIndex).toBe(-1);
+      // Il segno, non le parole: l'icona «plus» della shell o, qui dove la
+      // shell non l'ha registrata, il «+» scritto.
+      expect(button.querySelector('svg[data-icon="plus"]') !== null || button.textContent === "+").toBe(true);
+    }
+  });
+
   it("smontata non lascia ascoltatori vivi", () => {
     const { frame, edits } = mount(ROWS);
     frame.focus({ row: 1, column: 0 });

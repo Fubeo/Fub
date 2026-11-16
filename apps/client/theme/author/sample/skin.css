@@ -7805,34 +7805,83 @@ button.cm-fub-page-icon:focus-visible {
 
 /* ── Tabelle ─────────────────────────────────────────────────────────────── */
 
-/* Una tabella è un dato: carattere dell'interfaccia, cifre incolonnate, solo
-   fili orizzontali. La griglia della Live è la stessa tabella con le maniglie
-   intorno: le celle prendono queste regole in tutte e due. */
+/* Una tabella è un dato: carattere dell'interfaccia, cifre incolonnate, una
+   griglia di fili sottili dentro una cornice arrotondata (il prototipo,
+   `.gridw`, `.gr`, `.gr-box`). La griglia della Live è la stessa tabella con
+   le maniglie intorno: le celle prendono queste regole in tutte e due, e la
+   cornice della Live sta in `skin/tabella.css`, dove la prima riga e la
+   prima colonna della tabella non sono le prime del `<table>`.
+   Il corpo è tre quarti del testo (13,5 px sul testo di serie, e cresce con
+   lui); la tabella è larga quanto il suo contenuto e scorre se non ci sta.
+   I bordi sono separati, non uniti (`structure.css`, perché una pelle non
+   scrive `border-spacing`): solo così gli angoli si arrotondano. Ogni
+   cella ha il filo a destra e sotto; l'ultima colonna e l'ultima riga hanno
+   al loro posto la cornice. La testata ha il suo fondo fino al bordo: la
+   cornice lì è trasparente, come nel prototipo dove il fondo la copre. */
 .markdown-rendered table {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   overflow-x: auto;
-  border-collapse: collapse;
   font-family: var(--font-ui);
-  font-size: 0.9em;
+  font-size: 0.75em;
   font-variant-numeric: tabular-nums;
-  line-height: var(--leading-normal);
+  line-height: 1.4;
 }
 .markdown-rendered th,
 .markdown-rendered td {
+  height: 34px;
   min-width: 4ch;
-  padding: var(--space-4) var(--space-5);
+  padding: 0 var(--space-5);
   border: 0;
-  border-bottom: 1px solid var(--doc-rule-soft);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   /* Una cella non spezza le parole (né i numeri) a metà: se la tabella non ci
      sta, scorre. */
   overflow-wrap: normal;
   text-align: start;
-  vertical-align: top;
+  vertical-align: middle;
 }
 .markdown-rendered th {
   background: var(--sheet-2);
   color: var(--doc-heading);
   font-weight: var(--weight-bold);
+}
+.markdown-rendered tr > :first-child {
+  border-left: 1px solid var(--border-strong);
+}
+.markdown-rendered tr > :last-child {
+  border-right: 1px solid var(--border-strong);
+}
+.markdown-rendered table > :first-child > tr:first-child > * {
+  border-top: 1px solid var(--border-strong);
+}
+.markdown-rendered table > :last-child > tr:last-child > * {
+  border-bottom: 1px solid var(--border-strong);
+}
+.markdown-rendered tr > th:first-child {
+  border-left-color: transparent;
+}
+.markdown-rendered tr > th:last-child {
+  border-right-color: transparent;
+}
+.markdown-rendered table > :first-child > tr:first-child > th {
+  border-top-color: transparent;
+}
+.markdown-rendered table > :last-child > tr:last-child > th {
+  border-bottom-color: transparent;
+}
+.markdown-rendered table > :first-child > tr:first-child > :first-child {
+  border-top-left-radius: var(--radius-md);
+}
+.markdown-rendered table > :first-child > tr:first-child > :last-child {
+  border-top-right-radius: var(--radius-md);
+}
+.markdown-rendered table > :last-child > tr:last-child > :first-child {
+  border-bottom-left-radius: var(--radius-md);
+}
+.markdown-rendered table > :last-child > tr:last-child > :last-child {
+  border-bottom-right-radius: var(--radius-md);
 }
 .markdown-rendered table:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
@@ -8432,40 +8481,82 @@ button.cm-fub-page-icon:focus-visible {
    colonna resta a filo del testo, come in Lettura, e le maniglie compaiono
    accanto senza spostarla. Anche le lettere delle colonne stanno fuori:
    la riga che le porta sale nello spazio sopra la tabella, così la prima
-   riga resta dove la mette la Lettura. Sotto i «+» c'è almeno mezza riga
-   d'aria prima del testo che segue. */
+   riga resta dove la mette la Lettura. La cornice è larga quanto la
+   tabella (senza la colonna dei numeri): i «+» del prototipo (`.tg-add`)
+   stanno sul suo bordo destro e sotto, e sotto la barra della riga resta
+   mezza riga d'aria prima del testo che segue. */
 .cm-editor .cm-content .tb-frame {
-  padding: 0 0 calc(var(--text-reading) * var(--leading-relaxed) / 2);
+  width: fit-content;
+  max-width: 100%;
+  padding: 0 0 calc(19px + var(--text-reading) * var(--leading-relaxed) / 2);
 }
 .cm-editor .cm-content .tb-grid {
-  margin-top: calc(-1 * var(--text-xs) * var(--leading-relaxed));
+  margin-top: -15px;
   margin-left: calc(-1 * var(--space-7));
   padding: 0;
 }
 .cm-editor .cm-content .tb-grid table {
   display: table;
+  max-width: none;
   margin: 0;
   overflow: visible;
 }
+/* La cornice della tabella attorno alle celle soltanto: nella Live la prima
+   riga è dopo quella delle lettere e la prima colonna dopo quella dei
+   numeri. */
+.cm-editor .cm-content .tb-grid .tb-rowhead + .tb-cell {
+  border-left: 1px solid var(--border-strong);
+}
+.cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-cell {
+  border-top: 1px solid var(--border-strong);
+}
+.cm-editor .cm-content .tb-grid .tb-rowhead + .tb-head {
+  border-left-color: transparent;
+}
+.cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-head {
+  border-top-color: transparent;
+}
+.cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-rowhead + .tb-cell {
+  border-top-left-radius: var(--radius-md);
+}
+.cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-cell:last-child {
+  border-top-right-radius: var(--radius-md);
+}
+.cm-editor .cm-content .tb-grid tbody > tr:last-child > .tb-rowhead + .tb-cell {
+  border-bottom-left-radius: var(--radius-md);
+}
+/* Le lettere e i numeri del prototipo (`.gr-let`, `.gr-num`): 10,5 px in
+   peso pieno, a voce bassa. La lettera sta in una striscia di 13 px, 2 px
+   sopra la tabella; il numero in una colonna di 16 px, 4 px prima della
+   tabella. */
 .cm-editor .cm-content .tb-grid .tb-corner,
 .cm-editor .cm-content .tb-grid .tb-letter,
 .cm-editor .cm-content .tb-grid .tb-rowhead {
+  box-sizing: border-box;
   min-width: 0;
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--doc-gutter-fg);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  line-height: var(--leading-relaxed);
-  height: calc(var(--text-xs) * var(--leading-relaxed));
+  font-size: 10.5px;
+  font-weight: var(--weight-bold);
+  line-height: 1;
   text-align: center;
   vertical-align: middle;
+}
+.cm-editor .cm-content .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-grid .tb-letter {
+  height: 15px;
+  padding-bottom: 2px;
 }
 .cm-editor .cm-content .tb-grid .tb-corner,
 .cm-editor .cm-content .tb-grid .tb-rowhead {
   width: var(--space-7);
   min-width: var(--space-7);
+}
+.cm-editor .cm-content .tb-grid .tb-rowhead {
+  padding-right: var(--space-2);
 }
 /* Le intestazioni si cliccano: la lettera sceglie la colonna, il numero la
    riga. Il puntatore sopra e la scelta danno un fondo arrotondato, disegnato
@@ -8481,9 +8572,14 @@ button.cm-fub-page-icon:focus-visible {
 .cm-editor .cm-content .tb-grid .tb-rowhead::before {
   content: "";
   position: absolute;
-  inset: 1px;
   z-index: -1;
   border-radius: var(--radius-xs);
+}
+.cm-editor .cm-content .tb-grid .tb-letter::before {
+  inset: 0 0 2px;
+}
+.cm-editor .cm-content .tb-grid .tb-rowhead::before {
+  inset: 0 var(--space-2) 0 0;
 }
 .cm-editor .cm-content .tb-grid .tb-letter:hover,
 .cm-editor .cm-content .tb-grid .tb-rowhead:hover {
@@ -8495,8 +8591,7 @@ button.cm-fub-page-icon:focus-visible {
 }
 .cm-editor .cm-content .tb-grid .tb-letter.is-selected,
 .cm-editor .cm-content .tb-grid .tb-rowhead.is-selected {
-  color: var(--accent);
-  font-weight: var(--weight-bold);
+  color: var(--accent-soft);
 }
 .cm-editor .cm-content .tb-grid .tb-letter.is-selected::before,
 .cm-editor .cm-content .tb-grid .tb-rowhead.is-selected::before {
@@ -8590,10 +8685,18 @@ button.cm-fub-page-icon:focus-visible {
   visibility: hidden;
 }
 /* Il segno del taglio: le celle tagliate restano tratteggiate finché non si
-   incolla, anche quando la tabella perde il fuoco. */
+   incolla, anche quando la tabella perde il fuoco. Il tratteggio è quello
+   del prototipo (`.tg-cut`): quattro bordi di 1,5 px, 4 px pieni e 4 vuoti.
+   Sta fermo: nella pagina un moto senza fine è ammesso solo per un lavoro in
+   corso (`skin/motion.css`, `theme/motion.test.ts`). */
 .cm-editor .cm-content .tb-grid .tb-cut {
-  border: 1.5px dashed var(--accent);
+  border: 0;
   border-radius: 0;
+  background:
+    linear-gradient(90deg, var(--accent) 50%, transparent 0) 0 0 / 8px 1.5px repeat-x,
+    linear-gradient(90deg, var(--accent) 50%, transparent 0) 0 100% / 8px 1.5px repeat-x,
+    linear-gradient(0deg, var(--accent) 50%, transparent 0) 0 0 / 1.5px 8px repeat-y,
+    linear-gradient(0deg, var(--accent) 50%, transparent 0) 100% 0 / 1.5px 8px repeat-y;
 }
 /* Le maniglie del tocco agli angoli della selezione: si tirano per
    allargarla. Soltanto dove il puntatore è un dito. */
@@ -8615,36 +8718,75 @@ button.cm-fub-page-icon:focus-visible {
     background: var(--accent);
   }
 }
-.cm-editor .cm-content .tb-add {
-  padding: var(--space-1) var(--space-4);
-  border-radius: var(--radius-chip);
-  color: var(--muted);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
+/* «Aggiungi una riga» e «Aggiungi una colonna» (il prototipo, `.tg-add`):
+   due barre di 15 px con un «+», 4 px sotto la tabella e 4 px alla sua
+   destra, che compaiono col puntatore sopra la tabella o col fuoco dentro.
+   Il riquadro che le porta copre le celle (la cornice meno i 19 px della
+   barra e la mezza riga d'aria sotto), e non prende il puntatore: lo
+   prendono soltanto le barre. */
+.cm-editor .cm-content .tb-adders {
+  position: absolute;
+  inset: 0 0 calc(19px + var(--text-reading) * var(--leading-relaxed) / 2);
+  display: block;
+  min-height: 0;
+  padding: 0;
+  pointer-events: none;
 }
-.cm-editor .cm-content .tb-add:hover {
-  background: var(--sheet-2);
+.cm-editor .cm-content .tb-add {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  pointer-events: auto;
+}
+.cm-editor .cm-content .tb-add[data-add="row"] {
+  left: 0;
+  right: 0;
+  bottom: -19px;
+  height: 15px;
+}
+.cm-editor .cm-content .tb-add[data-add="column"] {
+  top: 0;
+  bottom: 0;
+  right: -19px;
+  width: 15px;
+}
+.cm-editor .cm-content .tb-add svg {
+  width: 14px;
+  height: 14px;
+}
+.cm-editor .cm-content .tb-add:hover,
+.cm-editor .cm-content .tb-add:active {
+  background: var(--bg-hover);
   color: var(--text);
 }
-.cm-editor .cm-content .tb-add:active {
-  background: var(--accent-wash);
-  color: var(--accent);
+/* Al telefono la barra della colonna uscirebbe dal margine: resta la riga,
+   e la colonna si aggiunge dal menu. */
+@media (max-width: 620px) {
+  .cm-editor .cm-content .tb-add[data-add="column"] {
+    display: none;
+  }
 }
-.cm-editor .cm-content .tb-adders {
-  gap: var(--space-2);
-  min-height: calc(var(--text-reading) * var(--leading-relaxed));
-  padding-left: var(--space-7);
-  align-items: center;
-}
-/* La maniglia di riempimento all'angolo della selezione, e le celle che il
-   riempimento raggiungerà mentre la si tira. */
+/* La maniglia di riempimento all'angolo della selezione (il prototipo,
+   `.tg-fill`: 9 px, raggio 2, un anello del colore del foglio), e le celle
+   che il riempimento raggiungerà mentre la si tira. */
 .cm-editor .cm-content .tb-grid .tb-fill {
   z-index: 3;
   left: 0;
   top: 0;
-  border-color: var(--doc-bg);
-  border-radius: 1px;
+  width: 9px;
+  height: 9px;
+  margin: -4px 0 0 -4px;
+  border: 0;
+  border-radius: 2px;
   background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--doc-bg);
 }
 .cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-fill {
   box-shadow: inset 0 0 0 1px var(--accent);

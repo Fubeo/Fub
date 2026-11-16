@@ -4793,6 +4793,15 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   border-collapse: collapse;
 }
 
+/* Le tabelle Markdown, in Lettura e nella griglia della Live, hanno i bordi
+   separati e accostati: è il modello in cui la loro cornice
+   (`skin/document.css`, `skin/tabella.css`) arrotonda gli angoli, e una
+   pelle non può scrivere `border-spacing`. */
+.markdown-rendered table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
 /* L'intestazione resta in vista mentre la tabella scorre. */
 .base-table th {
   position: sticky;

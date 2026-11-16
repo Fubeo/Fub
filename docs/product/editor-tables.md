@@ -14,8 +14,9 @@ docx) il cursore resta nel testo della cella.
 
 In Live ogni tabella è una griglia da foglio di calcolo, anche col cursore
 dentro; la sorgente con le pipe resta della modalità Sorgente, e Lettura la
-mostra resa. Sulla griglia compaiono le lettere delle colonne e i numeri
-delle righe; la prima riga è l'intestazione della tabella. La griglia non è una
+mostra resa. Quando la griglia ha il fuoco compaiono le lettere delle colonne
+e i numeri delle righe; la prima riga è l'intestazione della tabella. In tutte
+e due la tabella sta in una cornice arrotondata, con un filo fra le celle. La griglia non è una
 fermata del Tab: ci si entra dal testo con le frecce, come in una riga. Sulle
 celle il puntatore resta la freccia.
 
@@ -105,8 +106,12 @@ celle il puntatore resta la freccia.
   tocco lungo) inserisce, sposta ed elimina righe e colonne, ordina secondo la
   colonna attiva (i numeri, letti come nella somma, prima del testo; le celle
   vuote in fondo), allinea a sinistra, al centro o a destra, copia, taglia e
-  svuota. I pulsanti «+ Riga» e «+ Colonna» sotto la tabella aggiungono in
-  fondo. Al tocco due maniglie agli angoli della selezione la allargano.
+  svuota. Col puntatore sopra la tabella o il fuoco dentro compaiono due
+  barre col «+», una sotto la tabella («Aggiungi una riga») e una alla sua
+  destra («Aggiungi una colonna»), che aggiungono in fondo; non sono fermate
+  del Tab (la tastiera ha Tab dall'ultima cella e Mod+«+»), e al telefono resta
+  soltanto quella della riga. Al tocco due maniglie agli angoli della
+  selezione la allargano.
 - Dove si scrive col dito, col cursore in una tabella la barra di
   formattazione apre in testa Tab, Invio e «+ riga»: i primi due arrivano
   alla tabella come i tasti veri, il terzo aggiunge una riga sotto.
