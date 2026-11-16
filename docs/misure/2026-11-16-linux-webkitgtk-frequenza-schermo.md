@@ -6,7 +6,7 @@ sullo schermo vero di `pc-debian-di-fub`.
 
 > **Per chi:** chi tara gli obiettivi della WebView e chi lavora sulla
 > fluidità su Linux.
-> **Risultato:** sapere che cosa dicono F1–F3 oggi, col tetto del motore e
+> **Risultato:** sapere che cosa dicono F1–F3 su questa macchina, col tetto del motore e
 > il disegno in software.
 
 ## Macchina e sistema
