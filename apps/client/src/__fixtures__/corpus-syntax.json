@@ -7,7 +7,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "heading setext",
@@ -17,7 +18,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "heading di ogni livello",
@@ -27,7 +29,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "due heading omonimi",
@@ -37,7 +40,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "heading con ancora esplicita",
@@ -47,7 +51,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "paragrafo",
@@ -57,7 +62,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "lista non ordinata",
@@ -67,7 +73,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "lista ordinata",
@@ -77,7 +84,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "lista annidata",
@@ -87,7 +95,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "code block recintato",
@@ -97,7 +106,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "code block con linguaggio",
@@ -107,7 +117,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "code block indentato",
@@ -117,7 +128,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "code block non chiuso",
@@ -127,7 +139,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "code block con dentro ciò che fuori sarebbe sintassi",
@@ -137,7 +150,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "codice inline con dentro ciò che fuori sarebbe sintassi",
@@ -149,7 +163,8 @@
     "math": [],
     "style": [
       "code"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "citazione",
@@ -159,7 +174,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "citazione annidata",
@@ -169,7 +185,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "riga orizzontale",
@@ -179,7 +196,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "tabella con sola intestazione",
@@ -189,7 +207,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "tabella con allineamenti",
@@ -199,7 +218,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "tabella con inline nelle celle",
@@ -218,7 +238,8 @@
     "math": [],
     "style": [
       "code"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "task vuota",
@@ -234,7 +255,8 @@
     ],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "task fatta",
@@ -250,7 +272,8 @@
     ],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "task a stato personalizzato",
@@ -266,7 +289,8 @@
     ],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "task con scadenze",
@@ -377,7 +401,8 @@
     "math": [],
     "style": [
       "code"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "enfasi",
@@ -389,7 +414,8 @@
     "math": [],
     "style": [
       "em"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "forte",
@@ -401,7 +427,8 @@
     "math": [],
     "style": [
       "strong"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "codice inline",
@@ -413,7 +440,8 @@
     "math": [],
     "style": [
       "code"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "enfasi dentro forte",
@@ -426,7 +454,8 @@
     "style": [
       "strong",
       "em"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "link markdown a un path",
@@ -436,7 +465,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "link markdown a un url",
@@ -446,7 +476,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "wikilink",
@@ -463,7 +494,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "wikilink completo",
@@ -480,7 +512,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "wikilink al solo heading",
@@ -497,7 +530,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "wikilink al solo blocco",
@@ -514,7 +548,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "wikilink a un heading e basta",
@@ -531,7 +566,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "embed di wikilink",
@@ -548,7 +584,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "embed di un blocco",
@@ -565,7 +602,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "link con del testo attorno fuori da un paragrafo",
@@ -588,7 +626,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "embed di immagine",
@@ -598,7 +637,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "tag",
@@ -614,7 +654,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "tag annidato",
@@ -630,7 +671,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "tag ai confini della regola",
@@ -663,7 +705,8 @@
     "math": [],
     "style": [
       "code"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "softbreak",
@@ -673,7 +716,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "linebreak",
@@ -683,7 +727,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "barrato",
@@ -695,7 +740,8 @@
     "math": [],
     "style": [
       "strike"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "apice",
@@ -707,7 +753,8 @@
     "math": [],
     "style": [
       "sup"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "pedice",
@@ -720,7 +767,8 @@
     "style": [
       "sub",
       "strike"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "link di riferimento",
@@ -730,7 +778,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "reference definition isolata",
@@ -740,7 +789,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "reference definition con titolo",
@@ -750,7 +800,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "reference definition e paragrafo misto",
@@ -760,7 +811,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "reference definition dentro una citazione",
@@ -770,7 +822,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "reference definition adiacenti",
@@ -780,7 +833,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "callout senza titolo",
@@ -790,7 +844,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "callout con titolo",
@@ -800,7 +855,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "callout di ogni tipo",
@@ -810,7 +866,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "footnote",
@@ -820,7 +877,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "definizioni di nota di una parola sola",
@@ -856,7 +914,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "definizioni di nota con la regola di comrak",
@@ -877,7 +936,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "sintassi dentro una formula",
@@ -919,7 +979,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "definition list",
@@ -929,7 +990,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "definition list stretta",
@@ -939,7 +1001,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "html a blocco",
@@ -949,7 +1012,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "html inline",
@@ -959,7 +1023,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "commento html",
@@ -969,7 +1034,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "formula in riga",
@@ -992,7 +1058,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "formula a display",
@@ -1009,7 +1076,8 @@
         "block": true
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "dollari che non sono formule",
@@ -1021,7 +1089,8 @@
     "math": [],
     "style": [
       "code"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "formula che scavalcherebbe il codice",
@@ -1039,7 +1108,8 @@
     "math": [],
     "style": [
       "code"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "una cifra dopo il dollaro non lo chiude",
@@ -1056,7 +1126,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "formula a capo nel paragrafo",
@@ -1073,7 +1144,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "formula a capo in una citazione e in una voce",
@@ -1096,7 +1168,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "doppi dollari in mezzo al testo",
@@ -1125,7 +1198,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "formula a display che segue il testo",
@@ -1142,7 +1216,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "dollari ai bordi",
@@ -1159,7 +1234,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "backslash prima dei dollari",
@@ -1182,7 +1258,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "il codice prima della formula e la formula prima del codice",
@@ -1202,7 +1279,8 @@
     "style": [
       "code",
       "code"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "formule in un titolo e in una cella",
@@ -1233,7 +1311,8 @@
     ],
     "style": [
       "code"
-    ]
+    ],
+    "comment": []
   },
   {
     "name": "uno spazio non ascii non ferma i dollari",
@@ -1256,7 +1335,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "formula che attraversa un'enfasi",
@@ -1279,7 +1359,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "formula a display in una citazione",
@@ -1296,7 +1377,8 @@
         "block": true
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "formula a display in una voce con casella",
@@ -1319,7 +1401,8 @@
         "block": true
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "una casella che non apre la voce è testo",
@@ -1336,7 +1419,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "formula a display con un id di blocco",
@@ -1353,7 +1437,8 @@
         "block": true
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "un cancelletto dentro una formula non è un tag",
@@ -1388,7 +1473,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "un wikilink aperto prima vince sulla formula",
@@ -1411,7 +1497,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "il dollaro di un wikilink non apre una formula",
@@ -1459,7 +1546,8 @@
         "block": false
       }
     ],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "commenti ed evidenziati attorno a tag e wikilink",
@@ -1493,7 +1581,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "discussione, commento su un passo con più messaggi",
@@ -1518,6 +1607,28 @@
     "math": [],
     "style": [
       "strong"
+    ],
+    "comment": [
+      {
+        "kind": "start",
+        "from": 3,
+        "to": 6
+      },
+      {
+        "kind": "end",
+        "from": 41,
+        "to": 44
+      },
+      {
+        "kind": "message",
+        "from": 44,
+        "to": 94
+      },
+      {
+        "kind": "message",
+        "from": 94,
+        "to": 139
+      }
     ]
   },
   {
@@ -1528,7 +1639,14 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": [
+      {
+        "kind": "message",
+        "from": 4,
+        "to": 45
+      }
+    ]
   },
   {
     "name": "discussione, commento in un titolo, in una voce, in un riquadro e in una cella",
@@ -1538,7 +1656,69 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": [
+      {
+        "kind": "start",
+        "from": 9,
+        "to": 12
+      },
+      {
+        "kind": "end",
+        "from": 13,
+        "to": 16
+      },
+      {
+        "kind": "message",
+        "from": 16,
+        "to": 50
+      },
+      {
+        "kind": "start",
+        "from": 59,
+        "to": 62
+      },
+      {
+        "kind": "end",
+        "from": 63,
+        "to": 66
+      },
+      {
+        "kind": "message",
+        "from": 66,
+        "to": 89
+      },
+      {
+        "kind": "start",
+        "from": 112,
+        "to": 115
+      },
+      {
+        "kind": "end",
+        "from": 116,
+        "to": 119
+      },
+      {
+        "kind": "message",
+        "from": 119,
+        "to": 144
+      },
+      {
+        "kind": "start",
+        "from": 172,
+        "to": 175
+      },
+      {
+        "kind": "end",
+        "from": 176,
+        "to": 179
+      },
+      {
+        "kind": "message",
+        "from": 179,
+        "to": 202
+      }
+    ]
   },
   {
     "name": "discussione, commento con i segni di chiusura nel messaggio",
@@ -1548,7 +1728,24 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": [
+      {
+        "kind": "start",
+        "from": 0,
+        "to": 3
+      },
+      {
+        "kind": "end",
+        "from": 4,
+        "to": 7
+      },
+      {
+        "kind": "message",
+        "from": 7,
+        "to": 31
+      }
+    ]
   },
   {
     "name": "discussione, commento scritto a mano da una app che non conosce la convenzione",
@@ -1558,7 +1755,75 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": [
+      {
+        "kind": "start",
+        "from": 3,
+        "to": 6
+      },
+      {
+        "kind": "end",
+        "from": 11,
+        "to": 14
+      },
+      {
+        "kind": "message",
+        "from": 14,
+        "to": 54
+      }
+    ]
+  },
+  {
+    "name": "commento col messaggio che porta link, tag e stili",
+    "source": "Il {==passo con [[Nota]]==}{>>@Anna: vedi [[Altra]] e #etichetta e **forte**<<} e *{==dentro==}{>>@Bruno: qui<<}* fine.\n",
+    "tag": [],
+    "wikilink": [
+      {
+        "page": "Nota",
+        "embed": false,
+        "from": 16,
+        "to": 24
+      }
+    ],
+    "task": [],
+    "due": [],
+    "math": [],
+    "style": [
+      "em"
+    ],
+    "comment": [
+      {
+        "kind": "start",
+        "from": 3,
+        "to": 6
+      },
+      {
+        "kind": "end",
+        "from": 24,
+        "to": 27
+      },
+      {
+        "kind": "message",
+        "from": 27,
+        "to": 79
+      },
+      {
+        "kind": "start",
+        "from": 83,
+        "to": 86
+      },
+      {
+        "kind": "end",
+        "from": 92,
+        "to": 95
+      },
+      {
+        "kind": "message",
+        "from": 95,
+        "to": 112
+      }
+    ]
   },
   {
     "name": "segni di commento che restano testo",
@@ -1577,6 +1842,13 @@
     ],
     "style": [
       "code"
+    ],
+    "comment": [
+      {
+        "kind": "message",
+        "from": 16,
+        "to": 26
+      }
     ]
   },
   {
@@ -1587,7 +1859,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "frontmatter con ogni specie di proprietà",
@@ -1597,7 +1870,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "frontmatter illeggibile",
@@ -1607,7 +1881,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "ancora di paragrafo",
@@ -1617,7 +1892,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "ancora su riga propria",
@@ -1627,7 +1903,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "ancora che non è un'ancora",
@@ -1637,7 +1914,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "crlf",
@@ -1654,7 +1932,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "cr solo",
@@ -1664,7 +1943,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "cr solo su più blocchi",
@@ -1693,7 +1973,8 @@
     ],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "un cr nudo in mezzo a un file a lf",
@@ -1710,7 +1991,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "terminatori misti",
@@ -1727,7 +2009,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "bom",
@@ -1737,7 +2020,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "bom e frontmatter",
@@ -1747,7 +2031,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "senza newline finale",
@@ -1757,7 +2042,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "solo un bom",
@@ -1767,7 +2053,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "vuoto",
@@ -1777,7 +2064,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "solo spazi",
@@ -1787,7 +2075,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "fuori dal bmp",
@@ -1810,7 +2099,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "nfd nel contenuto",
@@ -1827,7 +2117,8 @@
     "task": [],
     "due": [],
     "math": [],
-    "style": []
+    "style": [],
+    "comment": []
   },
   {
     "name": "un documento intero",
@@ -1900,6 +2191,7 @@
       "em",
       "strong",
       "code"
-    ]
+    ],
+    "comment": []
   }
 ]

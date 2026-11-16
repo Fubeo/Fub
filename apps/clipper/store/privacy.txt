@@ -13,9 +13,11 @@ you granted in Options > Origins (plus an explicit browser permission), capped
 at 25 MiB of really received bytes. The optional assistant is OFF by default:
 page context is sent to your configured provider only after you preview the
 exact request and press Ask; local providers stay on loopback, remote providers
-require https, a grant and a key. The remote key lives in extension storage
-only, is held in memory for one call, and is never placed in pages, URIs,
-logs or error text. Highlight marks are ephemeral until you opt in for the
+require https, a grant and a key. By default the remote key is kept only in
+the browser's session memory and is gone when the browser closes; it is
+written to the extension storage on disk only if you turn on "Remember the
+key on this device". It is read for one call and never placed in pages,
+URIs, logs or error text. Highlight marks are ephemeral until you opt in for the
 current page in the popup; then their text and page URL are stored locally in
 extension storage, reapplied when you reopen the clipper, and can be exported
 or cleared by you. Checked images can alternatively be attached to your paired
@@ -37,8 +39,10 @@ solo dalle origini consentite in Opzioni > Origini (più permesso browser
 esplicito), con tetto di 25 MiB sui byte realmente ricevuti. L'assistente
 opzionale è DISATTIVATO in partenza: il contesto lascia il dispositivo solo
 dopo anteprima esatta e pressione di Chiedi; i provider locali restano su
-loopback, i remoti richiedono https, consenso e chiave. La chiave remota vive
-solo nello storage dell'estensione, resta in memoria per una chiamata e non
+loopback, i remoti richiedono https, consenso e chiave. Di serie la chiave
+remota resta solo nella memoria di sessione del browser e sparisce alla sua
+chiusura; finisce nello storage su disco dell'estensione solo se accendi
+«Ricorda la chiave su questo dispositivo». Si legge per una chiamata e non
 finisce mai in pagine, URI, log o testi d'errore. Le evidenziazioni sono
 temporanee finché non attivi il salvataggio per quella pagina nel popup: solo
 allora testo e URL vengono conservati nello storage locale dell'estensione,
@@ -50,5 +54,7 @@ byte ricevuti prima di scriverli. Gli URL da soli non scaricano allegati.
 Data controller: local build (no public contact filed).
 Data retention: captures live in your vault only; the extension stores
 templates, selectors, settings, origin grants, opt-in saved highlights and
-(optionally) the remote key in extension storage; you can clear/export saved
-highlights in the popup and forget the key in Options > Forget.
+(optionally) the remote key: in session memory by default, in extension
+storage on disk only with "Remember the key on this device"; you can
+clear/export saved highlights in the popup and remove the key from both in
+Options > Forget the key.

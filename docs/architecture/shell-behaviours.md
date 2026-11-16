@@ -120,6 +120,17 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   Invio non finisce nel documento. Se il fuoco sta già dentro il documento
   aperto (la superficie si monta prima che l'apertura finisca, e il Tab della
   lavagna vuota porta al suo primo pulsante), resta dov'è.
+- **Cassetti sopra i fogli.** Sotto i 960 px l'albero, e sotto i 1200
+  l'ispettore, sono cassetti col velo (`desktop-shell.ts`), e il velo è
+  modale: la tastiera non arriva a ciò che copre. Scegliere un documento
+  dall'albero (clic, Invio, «Apri») chiude il cassetto subito, con lo stesso
+  moto di Esc e del clic sul velo, e il fuoco va al documento aperto invece di
+  tornare al bottone che aveva aperto il cassetto (`dismissSidePanel` in
+  `ui/side-panels.ts`). Qualunque fuoco che entra sotto il velo (l'editor
+  raggiunto da una voce dello schema o da un collegamento dell'ispettore, il
+  Tab che esce dal cassetto) chiude il cassetto prima che arrivi una battuta,
+  e resta dove è andato. Il fuoco sulla rail, sulla barra, in un menu o in un
+  dialogo, che stanno sopra il velo, lo lascia aperto.
 - **Aperture decise dalla shell.** Le aperture vanno in fila e vince l'ultima
   chiesta. La prima nota di un vault senza schede e la nota d'avvio
   (`files.startup`) la shell le decide da sola, prima di un'attesa
@@ -149,7 +160,17 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   finire il trascinamento lo azzera.
 - **Rinomina nell'albero.** Un nome rifiutato (non valido, già in uso, errore
   del kernel) riapre il campo con ciò che è stato scritto e la frase accanto,
-  `role="alert"`, che sparisce alla prima battuta; il toast non serve.
+  `role="alert"`, che sparisce alla prima battuta; il toast non serve. Dopo
+  Invio, Esc o un clic su qualcosa che non prende il fuoco, il fuoco resta
+  sulla voce e la segue al nome nuovo quando l'albero la ridisegna; un clic su
+  un controllo lo lascia a quel controllo.
+- **Indice delle impostazioni.** «In questa pagina» (`panels/settings.ts`)
+  segna la sezione in lettura. Una voce scelta col clic resta la voce attiva
+  anche quando la sua sezione sta nell'ultimo schermo e lo scorrimento non può
+  portarla in cima, finché chi legge non scorre di suo (rotella, dito, barra,
+  tasti di scorrimento) o non cambia filtro o scheda. Scorrendo a mano è
+  attiva l'ultima sezione il cui titolo è salito in cima, e in fondo l'ultima
+  visibile.
 - **Avvisi dentro il foglio.** Sotto il banner del conflitto (`drawNotices` in
   `panels/document.ts`) il foglio tiene una riga per avviso: errore di
   salvataggio con «Riprova» (`shell.doc.save`), sola lettura mentre una

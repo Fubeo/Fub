@@ -2,33 +2,11 @@ import { searchForWorkspaceRoot, type Rollup } from "vite";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 import { canvasWasm } from "./build/canvas-wasm.mjs";
+import { minifySkin } from "./build/skin-minify.mjs";
 
 const CHUNK_BUDGET = 500_000;
 // Il parser upstream arriva già precompilato: resta separato e solo lazy.
 const MERMAID_PARSER_BUDGET = 700_000;
-
-/// Il CSS senza i commenti; un `/*` dentro una stringa resta. Le regole sono
-/// le stesse: il sanitizer e il browser i commenti li saltano comunque.
-function withoutComments(css: string): string {
-  let out = "";
-  let i = 0;
-  while (i < css.length) {
-    const c = css[i]!;
-    if (c === '"' || c === "'") {
-      let j = i + 1;
-      while (j < css.length && css[j] !== c) j += css[j] === "\\" ? 2 : 1;
-      out += css.slice(i, j + 1);
-      i = j + 1;
-    } else if (c === "/" && css[i + 1] === "*") {
-      const end = css.indexOf("*/", i + 2);
-      i = end === -1 ? css.length : end + 2;
-    } else {
-      out += c;
-      i++;
-    }
-  }
-  return out.replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n");
-}
 
 /// Il file del build con i chunk che ogni pagina carica all'avvio: sta in
 /// `dist/`, accanto a ciò che descrive, e non nel repository.
@@ -67,6 +45,7 @@ const UNDER_THE_RENDER: ReadonlySet<string> = new Set([
   "strings",
   "menu",
   "markdown-render",
+  "html-entities",
   "ui-views",
 ]);
 
@@ -152,16 +131,17 @@ export default defineConfig({
     canvasWasm(),
     {
     // La pelle composta arriva come testo (`?raw`), e Vite non minimizza il
-    // testo: un terzo erano commenti, che documentano i pezzi ma nel bundle
-    // pesano come regole. Nella build si tolgono; in sviluppo e al banco la
-    // pelle resta quella scritta.
-    name: "skin-without-comments",
+    // testo: commenti e rientri, che documentano i pezzi, nel bundle pesavano
+    // come regole. Nella build si tolgono con gli spazi che non contano
+    // (`build/skin-minify.mjs`, con le regole identiche provate dal suo test);
+    // in sviluppo e al banco la pelle resta quella scritta.
+    name: "skin-minify",
     apply: "build",
     transform(code, id) {
       if (!/\/src\/theme\/scrittoio\/skin\.css\?raw$/.test(id)) return null;
       const match = /^export default (".*");?\s*$/s.exec(code);
       if (!match) this.error(`${id}: il testo della pelle non ha più la forma di \`?raw\``);
-      return { code: `export default ${JSON.stringify(withoutComments(JSON.parse(match[1]!) as string))};`, map: null };
+      return { code: `export default ${JSON.stringify(minifySkin(JSON.parse(match[1]!) as string))};`, map: null };
     },
   }, {
     name: "bundle-size-budgets",
@@ -417,9 +397,15 @@ export default defineConfig({
           ) {
             return "text-engine";
           }
+          // La tabella delle entità nominate di HTML, che `link-syntax` usa
+          // per sciogliere `&nome;` senza DOM: dati generati da una copia
+          // della specifica, che cambiano soltanto quando la si riscarica.
+          // Da sola resta in cache quando cambia la resa.
+          if (/\/src\/editors\/text\/profiles\/markdown\/html-entities\.generated\.ts$/.test(id)) return "html-entities";
           // La resa della Lettura: dal Markdown all'HTML dei blocchi e delle
           // righe, con la grammatica che legge (note a piè di pagina, link,
-          // ripiegabili, indice, testate dei callout), la sintassi del vault,
+          // ripiegabili, indice, testate dei callout, commenti CriticMarkup),
+          // la sintassi del vault,
           // il sanificatore dell'HTML e le stringhe del profilo. La usano la
           // Live, la stampa, la copia in HTML e le anteprime; cambia con la
           // resa, non con i gesti dell'editor, e da sola non pesa sul chunk
@@ -430,7 +416,7 @@ export default defineConfig({
           // o farebbe un ciclo fra questo chunk e il ponte: il plugin
           // `bundle-size-budgets` ferma la build in tutti e due i casi
           // (`UNDER_THE_RENDER`).
-          if (/\/src\/editors\/text\/profiles\/markdown\/(render|render-inline|strings|grammar|link-syntax|details|toc|callout-head)\.ts$|\/src\/rules\/syntax(\.generated)?\.ts$|\/src\/ui\/sanitize\.ts$/.test(id)) {
+          if (/\/src\/editors\/text\/profiles\/markdown\/(render|render-inline|strings|grammar|link-syntax|details|toc|callout-head|comments\/syntax)\.ts$|\/src\/rules\/syntax(\.generated)?\.ts$|\/src\/ui\/sanitize\.ts$/.test(id)) {
             return "markdown-render";
           }
           // Il renderer delle viste dichiarative (`UiNode`) con il suo
