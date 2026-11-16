@@ -53,6 +53,15 @@ function say(note: HTMLElement, text: string | null): void {
   note.textContent = text ?? "";
 }
 
+/// Il conflitto in un riquadro (elenco, persone): la frase, e il pulsante che
+/// scrive ciò che si era scelto sul valore di adesso. Il gesto non si perde.
+function sayConflict(note: HTMLElement, text: string, own: Lifetime, confirm: () => void): void {
+  say(note, text);
+  const again = button("cm-fub-prop-note-action", liveStrings.t("page.properties.conflict.confirm"));
+  own.listen(again, "click", confirm);
+  note.append(" ", again);
+}
+
 /// Apre l'editor del tipo della riga sul valore `value`.
 export function openEditor(entry: PropertyEntry, kind: RowKind, value: HTMLButtonElement, host: PropertyRowHost, life: Lifetime): void {
   switch (kind.kind) {
@@ -118,10 +127,14 @@ export function openInlineEditor(entry: PropertyEntry, kind: "text" | "number" |
     own.close();
   });
   /// `true`: l'editor si chiude; `false`: resta aperto (un conflitto).
+  const initial = input.value;
   const confirm = (): boolean => {
-    const text = input.value.trim();
+    // Un'uscita senza modifiche non scrive niente: il valore resta scritto
+    // com'era (`007`, `1.10`, `'testo'`, gli spazi fra virgolette).
+    if (input.value === initial && !box.hasAttribute("data-conflict")) return true;
+    const text = input.value;
     let next: PropertyWrite = text;
-    if (kind === "number" && text !== "") {
+    if (kind === "number" && text.trim() !== "") {
       const number = parseNumber(text);
       if (number === null) {
         host.notify?.(liveStrings.t("page.properties.not_number"), "info");
@@ -252,7 +265,12 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
   const today = isoOf(new Date());
   let selected = validDate(raw.slice(0, 10)) ? raw.slice(0, 10) : null;
   let withTime = kind === "date_time";
-  let time = /^\d{4}-\d{2}-\d{2}[T ](\d{2}:\d{2})/.exec(raw)?.[1] ?? "";
+  // L'ora com'era scritta: il separatore, e ciò che segue `HH:MM` (secondi,
+  // fuso) resta finché l'ora non cambia.
+  const stamp = /^\d{4}-\d{2}-\d{2}([T ])(\d{2}:\d{2})(.*)$/.exec(raw);
+  const separator = stamp?.[1] ?? "T";
+  let time = stamp?.[2] ?? "";
+  const written = time;
   let cursor = selected ?? today;
 
   const body = document.createElement("div");
@@ -357,8 +375,9 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
   /// Scrive la data (con l'ora, se c'è), o la toglie con `""`.
   const write = (date: string, at: string | null = null): void => {
     const hour = at ?? (timeInput.value || time);
-    const value = date === "" ? "" : withTime ? `${date}T${hour || "09:00"}` : date;
-    const outcome = commit(state, value);
+    const clock = hour || "09:00";
+    const value = date === "" ? "" : withTime ? `${date}${separator}${clock}${clock === written ? stamp?.[3] ?? "" : ""}` : date;
+    const outcome = commit(state, value === "" ? "" : { date: value });
     if (outcome === "conflict") {
       say(note, conflictText(state));
       selected = date || null;
@@ -491,15 +510,23 @@ export function openListEditor(entry: PropertyEntry, kind: "list" | "tags", anch
     }));
     chips.hidden = items.length === 0;
   };
+  /// Ciò che si era scelto quando il valore è cambiato sotto: resta
+  /// mostrato, e Invio (o «Scrivi la mia») lo scrive.
+  let pending: string[] | null = null;
   /// `true` se è scritto.
   const apply = (next: string[]): boolean => {
     const outcome = commit(state, next);
     if (outcome === "conflict") {
-      items = read(host.current(entry.key));
-      say(note, conflictText(state));
+      pending = next;
+      items = next;
+      sayConflict(note, conflictText(state), own, () => {
+        if (pending) apply(pending);
+        input.focus();
+      });
       draw();
       return false;
     }
+    pending = null;
     if (outcome === "written") {
       items = next;
       say(note, null);
@@ -513,10 +540,16 @@ export function openListEditor(entry: PropertyEntry, kind: "list" | "tags", anch
       event.preventDefault();
       const added = typedItems(input.value, kind === "tags").filter((item) => !items.includes(item));
       if (input.value.trim() === "") {
-        popover.close();
+        // Un conflitto aperto: Invio conferma ciò che si era scelto.
+        if (pending) apply(pending);
+        else popover.close();
         return;
       }
-      if (added.length === 0 || apply([...items, ...added])) input.value = "";
+      // Scritta o no (un conflitto la tiene fra le voci, da confermare), la
+      // voce lascia il campo.
+      if (added.length > 0) apply([...items, ...added]);
+      else if (pending) apply(pending);
+      input.value = "";
     } else if (event.key === "Backspace" && input.value === "" && items.length > 0) {
       event.preventDefault();
       apply(items.slice(0, -1));
@@ -607,22 +640,26 @@ export function openPeopleEditor(entry: PropertyEntry, anchor: HTMLButtonElement
     },
     selected: (option) => option.chosen,
     onActivate: (option) => {
-      const next = option.chosen ? chosen.filter((link) => link !== option.link) : [...chosen, option.link];
-      const outcome = commit(state, next);
-      if (outcome === "conflict") {
-        chosen = read(host.current(entry.key));
-        say(note, conflictText(state));
-      } else if (outcome === "written") {
-        chosen = next;
-        say(note, null);
-      }
-      refresh();
-      input.focus();
+      write(option.chosen ? chosen.filter((link) => link !== option.link) : [...chosen, option.link]);
     },
     owner: input,
     focus: "activedescendant",
     lifetime: own,
   });
+  /// Scrive le persone scelte. Se il valore è cambiato sotto, la scelta resta
+  /// (le spunte la mostrano), lo si dice, e «Scrivi la mia» la scrive.
+  function write(next: string[]): void {
+    const outcome = commit(state, next);
+    if (outcome === "conflict") {
+      chosen = next;
+      sayConflict(note, conflictText(state), own, () => write(chosen));
+    } else if (outcome === "written") {
+      chosen = next;
+      say(note, null);
+    }
+    refresh();
+    input.focus();
+  }
   /// `first`: una ricerca nuova attiva la prima proposta, che Invio sceglie.
   const refresh = (first = false) => {
     const items = options();

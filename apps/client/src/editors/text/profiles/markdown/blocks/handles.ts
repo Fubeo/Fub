@@ -56,6 +56,10 @@ export interface BlocksOptions {
   /// Rinomina la pagina col titolo scritto nella testata: `null` se è andata,
   /// altrimenti la frase che dice perché no. Senza, il titolo non si modifica.
   readonly rename?: (name: string) => Promise<string | null>;
+  /// Il nome che la pagina prende rinominata col titolo `name`
+  /// (`Archivio/Nuova` → `Nuova`): l'H1 ripiegato lo segue. Senza, il titolo
+  /// scritto.
+  readonly renamedPage?: (name: string) => string;
   /// Monta un'immagine (l'HTML della resa) nella copertina, e ne dà lo
   /// smontaggio: la stessa resa delle immagini della Live.
   readonly mountImage?: (root: HTMLElement, html: string) => () => void;

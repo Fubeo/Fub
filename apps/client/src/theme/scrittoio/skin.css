@@ -7346,6 +7346,22 @@ button.cm-fub-page-icon:focus-visible {
 .cm-fub-prop-note[hidden] {
   display: none;
 }
+.cm-fub-prop-note-action {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.cm-fub-prop-note-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 /* Il menu della proprietà: in cima il nome e il tipo (`.m-h`), il tipo di
    adesso accanto a «Tipo». */
 .cm-fub-prop-menu .cm-fub-prop-menu-head {

@@ -123,6 +123,16 @@ describe("il menu della proprietà", () => {
     expect(text(view)).toBe("---\nstato: aperto\nluogo: Torino\nfatto: true\nfonte: archivio\nanno: 2026\n---\nTesto");
   });
 
+  it("con ancore e alias nel frontmatter non sposta righe: apre lo YAML sulla voce (revisione #421)", () => {
+    const doc = "---\nbase: &b x\nb: 2\nc: 3\nd: 4\naltro: *b\n---\nTesto";
+    const { view } = mount(doc);
+    view.dom.querySelector<HTMLElement>(".cm-fub-page-props-more")!.click();
+    keyButton(view, "altro").click();
+    item("Metti in evidenza").click();
+    expect(text(view)).toBe(doc);
+    expect(view.state.doc.lineAt(view.state.selection.main.head).text).toBe("altro: *b");
+  });
+
   it("con quattro voci o meno sono tutte in evidenza: il menu non offre lo spostamento", () => {
     const { view } = mount("---\na: 1\nb: 2\n---\n");
     keyButton(view, "a").click();

@@ -320,6 +320,150 @@ describe("le persone", () => {
   });
 });
 
+describe("aprire e uscire senza cambiare niente non riscrive il file (revisione #421)", () => {
+  // Ciò che la testata mostra non è il testo scritto: un'uscita senza
+  // modifiche non deve diventare una scrittura che lo «normalizza».
+  for (const line of [
+    'a: "  spazi"',
+    'a: "riga\\tdue"',
+    'a: "caff\\u00e8"',
+    "a: 007",
+    "a: 1.10",
+    "a: 1e3",
+    "a: 'single'",
+    "a: 'l''altro'",
+    "a: testo  ",
+  ]) {
+    it(`in riga: ${line}`, () => {
+      const doc = `---\n${line}\n---\nTesto`;
+      const { view } = mount(doc);
+      valueOf(view, "a").click();
+      const input = row(view, "a").querySelector<HTMLInputElement>("input")!;
+      input.dispatchEvent(new FocusEvent("blur"));
+      expect(text(view)).toBe(doc);
+      byKeyboard(view, "a");
+      key(row(view, "a").querySelector<HTMLInputElement>("input")!, "Enter");
+      expect(text(view)).toBe(doc);
+    });
+  }
+
+  it("gli escape fra virgolette doppie si leggono davvero, e una modifica li riscrive fedeli", () => {
+    const { view } = mount('---\na: "riga\\tdue"\n---\n');
+    expect(valueOf(view, "a").textContent).toBe("riga\tdue");
+    valueOf(view, "a").click();
+    const input = row(view, "a").querySelector<HTMLInputElement>("input")!;
+    expect(input.value).toBe("riga\tdue");
+    input.value = "riga\tdue!";
+    key(input, "Enter");
+    expect(text(view)).toBe('---\na: "riga\\tdue!"\n---\n');
+  });
+
+  it("uno escape che YAML non conosce non si riscrive: si apre lo YAML", () => {
+    const doc = '---\na: "strano \\q"\n---\nTesto';
+    const { view } = mount(doc);
+    valueOf(view, "a").click();
+    expect(row(view, "a")?.querySelector("input") ?? null).toBeNull();
+    expect(text(view)).toBe(doc);
+    expect(view.state.doc.lineAt(view.state.selection.main.head).text).toBe('a: "strano \\q"');
+  });
+
+  it("il testo scritto con spazi ai bordi resta com'è, fra virgolette", () => {
+    const { view } = mount("---\na: x\n---\n");
+    valueOf(view, "a").click();
+    const input = row(view, "a").querySelector<HTMLInputElement>("input")!;
+    input.value = "  y ";
+    key(input, "Enter");
+    expect(text(view)).toBe('---\na: "  y "\n---\n');
+  });
+
+  it("data, data e ora, elenco, persone: aperti e chiusi con Esc", () => {
+    const doc = '---\nd: 2026-03-02\nt: 2026-03-20T10:30:45+01:00\nl: [ uno,  "due" ]\np: ["[[Anna]]"]\n---\n';
+    const { view } = mount(doc, { searchPeople: async () => [] });
+    for (const name of ["d", "t", "l", "p"]) {
+      valueOf(view, name).click();
+      expect(document.querySelector(".cm-fub-prop-popover"), name).not.toBeNull();
+      key(document.activeElement ?? popover(), "Escape");
+      expect(document.querySelector(".cm-fub-prop-popover"), name).toBeNull();
+      expect(text(view), name).toBe(doc);
+    }
+  });
+
+  it("la data: scegliere lo stesso giorno non riscrive niente", () => {
+    const doc = "---\nd: 2026-03-02\n---\n";
+    const { view } = mount(doc);
+    valueOf(view, "d").click();
+    popover().querySelector<HTMLElement>("[data-day='2026-03-02']")!.click();
+    expect(text(view)).toBe(doc);
+  });
+
+  it("la casella: il fuoco che entra ed esce non scrive", () => {
+    const doc = "---\nc: TRUE\n---\n";
+    const { view } = mount(doc);
+    const value = valueOf(view, "c");
+    value.focus();
+    value.blur();
+    expect(text(view)).toBe(doc);
+  });
+});
+
+describe("dentro una scheda della lavagna (revisione #421)", () => {
+  // La scheda esce con Esc ascoltandolo sul suo elemento, in bolla (come
+  // `engine.ts`): Esc in un editor della testata chiude l'editor, non la scheda.
+  function cardAround(view: EditorView): string[] {
+    const left: string[] = [];
+    const card = document.createElement("div");
+    view.dom.replaceWith(card);
+    card.append(view.dom);
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !event.defaultPrevented) left.push("esce");
+    });
+    return left;
+  }
+
+  it("Esc nel riquadro di data, elenco e persone chiude il riquadro, e la scheda resta", () => {
+    const { view } = mount('---\nd: 2026-03-02\nl: [uno]\np: ["[[Anna]]"]\n---\n', { searchPeople: async () => [] });
+    const left = cardAround(view);
+    for (const name of ["d", "l", "p"]) {
+      valueOf(view, name).click();
+      const focused = document.activeElement!;
+      expect(popover().contains(focused), name).toBe(true);
+      key(focused, "Escape");
+      expect(document.querySelector(".cm-fub-prop-popover"), name).toBeNull();
+    }
+    expect(left).toEqual([]);
+  });
+
+  it("Esc nel campo in riga annulla il campo, e la scheda resta", () => {
+    const { view } = mount("---\na: uno\n---\n");
+    const left = cardAround(view);
+    valueOf(view, "a").click();
+    key(row(view, "a").querySelector("input")!, "Escape");
+    expect(row(view, "a").querySelector("input")).toBeNull();
+    expect(left).toEqual([]);
+  });
+});
+
+describe("data e ora tengono secondi e fuso (revisione #421)", () => {
+  it("cambiato il giorno, l'ora com'era scritta resta tutta; cambiata l'ora, la coda va", () => {
+    const { view } = mount("---\nt: 2026-03-20T10:30:45+01:00\n---\n");
+    valueOf(view, "t").click();
+    popover().querySelector<HTMLElement>("[data-day='2026-03-21']")!.click();
+    expect(text(view)).toBe("---\nt: 2026-03-21T10:30:45+01:00\n---\n");
+    valueOf(view, "t").click();
+    const time = popover().querySelector<HTMLInputElement>("input[type=time]")!;
+    time.value = "11:00";
+    key(time, "Enter");
+    expect(text(view)).toBe("---\nt: 2026-03-21T11:00\n---\n");
+  });
+
+  it("il separatore spazio resta", () => {
+    const { view } = mount("---\nt: 2026-03-20 10:30\n---\n");
+    valueOf(view, "t").click();
+    popover().querySelector<HTMLElement>("[data-day='2026-03-22']")!.click();
+    expect(text(view)).toBe("---\nt: 2026-03-22 10:30\n---\n");
+  });
+});
+
 describe("i bordi", () => {
   it("il valore cambia mentre l'editor è aperto: non si scrive, ciò che si scriveva resta e lo si dice; la seconda conferma scrive", () => {
     const { view, notices } = mount("---\nluogo: Torino\n---\nTesto");
@@ -347,6 +491,35 @@ describe("i bordi", () => {
     expect(popover().querySelector(".cm-fub-prop-note")!.textContent).toContain("ora vale «2026-03-09»");
     popover().querySelector<HTMLElement>("[data-day='2026-03-12']")!.click();
     expect(text(view)).toContain("scadenza: 2026-03-12");
+  });
+
+  it("nell'elenco il conflitto non perde il gesto: la voce scelta resta, lo si dice, e Invio la scrive", () => {
+    const { view } = mount("---\nl: [uno]\n---\n");
+    valueOf(view, "l").click();
+    view.dispatch({ changes: { from: 8, to: 11, insert: "tre" } });
+    const input = popover().querySelector<HTMLInputElement>(".cm-fub-prop-list-input")!;
+    input.value = "due";
+    key(input, "Enter");
+    expect(text(view)).toBe("---\nl: [tre]\n---\n");
+    expect([...popover().querySelectorAll(".cm-fub-prop-chip")].map((chip) => chip.firstChild!.textContent)).toEqual(["uno", "due"]);
+    expect(popover().querySelector(".cm-fub-prop-note")!.textContent).toContain("ora vale «tre»");
+    key(input, "Enter");
+    expect(text(view)).toBe("---\nl: [uno, due]\n---\n");
+    expect(popover().querySelector<HTMLElement>(".cm-fub-prop-note")!.hidden).toBe(true);
+  });
+
+  it("nelle persone il conflitto non perde il gesto: la spunta resta, e «Scrivi la mia» la scrive", async () => {
+    const { view } = mount('---\np: ["[[Anna]]"]\n---\n', { searchPeople: async () => ["Anna", "Bruno"] });
+    valueOf(view, "p").click();
+    await Promise.resolve();
+    await Promise.resolve();
+    view.dispatch({ changes: { from: 11, to: 15, insert: "Carla" } });
+    [...popover().querySelectorAll<HTMLElement>("[role=option]")].find((option) => option.textContent?.includes("Bruno"))!.click();
+    expect(text(view)).toBe('---\np: ["[[Carla]]"]\n---\n');
+    const bruno = [...popover().querySelectorAll<HTMLElement>("[role=option]")].find((option) => option.textContent?.includes("Bruno"))!;
+    expect(bruno.getAttribute("aria-selected")).toBe("true");
+    popover().querySelector<HTMLElement>(".cm-fub-prop-note-action")!.click();
+    expect(text(view)).toBe('---\np: ["[[Anna]]", "[[Bruno]]"]\n---\n');
   });
 
   it("in sola lettura i valori si guardano e basta", () => {

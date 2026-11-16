@@ -48,6 +48,9 @@ export interface PageOptions {
   readonly folderPage?: () => boolean;
   /// Rinomina la pagina: `null` se è andata, altrimenti il perché no.
   readonly rename?: (name: string) => Promise<string | null>;
+  /// Il nome che la pagina prende rinominata col titolo `name`
+  /// (`Archivio/Nuova` → `Nuova`).
+  readonly renamedPage?: (name: string) => string;
   /// Monta un'immagine (l'HTML della resa) e ne dà lo smontaggio.
   readonly mountImage?: (root: HTMLElement, html: string) => () => void;
   /// «Nuova sottopagina»: `null` se è andata, altrimenti il perché no.

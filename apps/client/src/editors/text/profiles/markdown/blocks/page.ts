@@ -17,6 +17,7 @@ import {
   openPropertyAt,
   propertyBlock,
   propertyList,
+  hasAnchors,
   moveEntryBefore,
   renamePropertyKey,
   setProperty,
@@ -83,7 +84,8 @@ function writeProperty(view: EditorView, key: string, value: PropertyWrite | nul
   if (block?.unreadable) return;
   const entry = block ? lastEntry(block.entries, key) : undefined;
   if (entry) {
-    const same = value !== null && entry.value === (typeof value === "object" ? value.join(", ") : String(value));
+    const shown = value === null ? null : Array.isArray(value) ? value.join(", ") : typeof value === "object" ? (value as { date: string }).date : String(value);
+    const same = shown !== null && entry.value === shown;
     if (same) return;
     if (!entry.simple) {
       openPropertyAt(view, entry.from);
@@ -140,6 +142,11 @@ function featurePropertyInNote(view: EditorView, key: string, on: boolean): void
   if (featured === on) return;
   const target = on ? split.featured[FEATURED_LIMIT - 1]?.key ?? null : null;
   if (on && target === null) return;
+  const entry = lastEntry(block.entries, key);
+  if (entry && hasAnchors(state, block)) {
+    openPropertyAt(view, entry.from);
+    return;
+  }
   const changes = moveEntryBefore(state, key, target);
   if (changes) view.dispatch({ changes, annotations: isolateHistory.of("full"), userEvent: "input" });
 }
@@ -229,7 +236,10 @@ function hostFor(view: EditorView, root: HTMLElement): PageHost {
     rename: options.rename ? async (name) => {
       const before = options.page?.() ?? "";
       const problem = await options.rename!(name);
-      if (problem === null && before !== "") retitleView(view, before, name.trim());
+      // Il nome che la pagina prende davvero: `Archivio/Nuova` sposta il file
+      // e la pagina si chiama `Nuova`.
+      const after = options.renamedPage?.(name.trim()) ?? name.trim();
+      if (problem === null && before !== "") retitleView(view, before, after);
       return problem;
     } : undefined,
     notify: options.notify,

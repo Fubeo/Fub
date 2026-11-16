@@ -147,7 +147,9 @@ function readValue(head: string, rest: readonly string[]): ValueReading {
     const joined = [value, ...lines].join("\n");
     const end = quotedEnd(joined);
     if (end < 0 || !onlyComments(joined.slice(end))) return { unreadable: true, simple: false };
-    return { unreadable: false, simple: !props && end === value.length && lines.every((line) => line === "") };
+    // Una sequenza che la lettura non sa rendere non si riscrive.
+    const faithful = !value.startsWith("\"") || decodeDouble(value.slice(1, end - 1)) !== null;
+    return { unreadable: false, simple: !props && faithful && end === value.length && lines.every((line) => line === "") };
   }
   if (value.startsWith("[") || value.startsWith("{")) {
     const joined = [value, ...lines].join("\n");
@@ -164,9 +166,50 @@ function readValue(head: string, rest: readonly string[]): ValueReading {
   return { unreadable: false, simple: !props && !comments && lines.every((line) => line === "") && withoutComment(value) === value };
 }
 
+/// Le sequenze di YAML fra virgolette doppie che si leggono in un carattere.
+const ESCAPES: Readonly<Record<string, string>> = {
+  "0": "\0", a: "\u0007", b: "\b", t: "\t", "\t": "\t", n: "\n", v: "\v", f: "\f", r: "\r", e: "\u001b",
+  " ": " ", "\"": "\"", "/": "/", "\\": "\\", N: "\u0085", _: " ", L: " ", P: " ",
+};
+
+/// Il testo di uno scalare fra virgolette doppie, senza le virgolette, come
+/// lo legge YAML: `\t` è una tabulazione, `è` una «è». `null` se una
+/// sequenza non è di YAML (la lettura non sarebbe fedele: chi la cambia
+/// apre lo YAML).
+function decodeDouble(inner: string): string | null {
+  let out = "";
+  for (let i = 0; i < inner.length; i++) {
+    const char = inner[i]!;
+    if (char !== "\\") {
+      out += char;
+      continue;
+    }
+    const next = inner[i + 1];
+    if (next === undefined) return null;
+    const width = next === "x" ? 2 : next === "u" ? 4 : next === "U" ? 8 : 0;
+    if (width > 0) {
+      const hex = inner.slice(i + 2, i + 2 + width);
+      if (!new RegExp(`^[0-9a-fA-F]{${width}}$`).test(hex)) return null;
+      const code = parseInt(hex, 16);
+      if (code > 0x10ffff) return null;
+      out += String.fromCodePoint(code);
+      i += 1 + width;
+      continue;
+    }
+    const decoded = ESCAPES[next];
+    if (decoded === undefined) return null;
+    out += decoded;
+    i += 1;
+  }
+  return out;
+}
+
 function unquote(text: string): string {
   const value = text.trim();
-  if (value.length >= 2 && value.startsWith("\"") && value.endsWith("\"")) return value.slice(1, -1).replace(/\\"/g, "\"");
+  if (value.length >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+    const inner = value.slice(1, -1);
+    return decodeDouble(inner) ?? inner;
+  }
   if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1).replace(/''/g, "'");
   return value;
 }
@@ -558,12 +601,18 @@ function scalar(value: string, inList = false): string {
     && !(inList && /[,[\]{}]/.test(value))
     && !/: |\s#|:$/.test(value)
     && !CONTROL.test(value)
-    && !/^(?:true|false|yes|no|on|off|null|~|[-+]?\d[\d._]*)$/i.test(value);
+    && !RESOLVES_ELSEWHERE.test(value)
+    && !ISO_STAMP.test(value);
   if (plain) return value;
   const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")
     .replace(CONTROLS, (char) => CONTROL_ESCAPES[char] ?? `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
   return `"${escaped}"`;
 }
+
+/// I testi che YAML (1.1 o 1.2, in ogni maiuscola) leggerebbe nudi come un
+/// altro tipo: sì/no, nullo, numeri interi, decimali, esponenziali,
+/// esadecimali, ottali, binari, infinito e non-numero.
+const RESOLVES_ELSEWHERE = /^(?:true|false|yes|no|y|n|on|off|null|~|[-+]?(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:e[-+]?\d+)?|[-+]?\d[\d_]*(?::[0-5]?\d)+(?:\.[\d_]*)?|0x[\da-f_]+|0o?[0-7_]+|0b[01_]+|[-+]?\.(?:inf|nan))$/i;
 
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f]/;
@@ -573,7 +622,13 @@ const CONTROL_ESCAPES: Readonly<Record<string, string>> = { "\n": "\\n", "\t": "
 
 /// Un valore che `setProperty` sa scrivere: un testo (vuoto, la chiave sola),
 /// un numero o un sì/no YAML nudi, un elenco.
-export type PropertyWrite = string | number | boolean | readonly string[];
+///
+/// `{ date }` è una data (`aaaa-mm-gg`) o una data e ora ISO, scritta nuda
+/// perché YAML la legga come data; ogni altro testo che YAML leggerebbe come
+/// un altro tipo (un numero, un sì/no, `null`, una data) va fra virgolette.
+export type PropertyWrite = string | number | boolean | readonly string[] | { readonly date: string };
+
+const ISO_STAMP = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?$/;
 
 /// La chiave come YAML la scrive: nuda se si legge uguale, se no fra
 /// virgolette doppie.
@@ -597,6 +652,7 @@ export function setProperty(state: EditorState, key: string, value: PropertyWrit
     : typeof value === "number" ? `${name}: ${Number.isFinite(value) ? value : 0}`
     : typeof value === "boolean" ? `${name}: ${value}`
     : typeof value === "string" ? (value === "" ? `${name}:` : `${name}: ${scalar(value)}`)
+    : "date" in value ? (value.date === "" ? `${name}:` : `${name}: ${ISO_STAMP.test(value.date) ? value.date : scalar(value.date)}`)
     : entry?.blockIndent != null && value.length > 0
       ? `${name}:${value.map((item) => `\n${entry.blockIndent}- ${scalar(item, true)}`).join("")}`
       : `${name}: [${value.map((item) => scalar(item, true)).join(", ")}]`;
@@ -650,6 +706,14 @@ export function renamePropertyKey(state: EditorState, key: string, name: string)
 /// Sposta la voce `key`, con tutte le sue righe, prima della voce `before`;
 /// con `null` in fondo, prima della chiusura. La modifica, o `null` se non
 /// cambia niente.
+/// Il frontmatter ha ancore (`&nome`) o alias (`*nome`): un alias vale solo
+/// dopo la sua ancora, e spostare righe può renderlo illeggibile. Chi sposta
+/// voci apre lo YAML, invece.
+export function hasAnchors(state: EditorState, block: PropertyBlock): boolean {
+  const lines = state.doc.sliceString(block.from, block.to).split("\n").slice(1, -1);
+  return lines.some((line) => /(?:^[^#]*?:\s+|^\s*-\s+|[[{,]\s*)(?:!\S*\s+)?[&*][^\s,[\]{}]/.test(line));
+}
+
 export function moveEntryBefore(state: EditorState, key: string, before: string | null): { from: number; to: number; insert: string }[] | null {
   const block = propertyBlock(state);
   if (!block) return null;
