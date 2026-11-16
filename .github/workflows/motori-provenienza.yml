@@ -1,0 +1,138 @@
+name: Motori provenienza
+
+# La provenienza dei motori copiati in `vendor/`. `vendor.mjs check` in
+# `ci.yml` confronta la copia soltanto con il suo `upstream.lock`, nello stesso
+# checkout: una PR che riscrive insieme i file e il lock passa di lì. Qui
+# `verify-upstream` riscarica dall'upstream la revisione del lock e ne
+# confronta le impronte, prima e dopo le patch (audit del 2026-10-30, M17).
+#
+# Sulle PR lo strumento (`tools/vendor-craft/`, con i percorsi gestiti di
+# `motori.mjs`), il repository dell'upstream e il mirror vengono dalla
+# **base**, non dalla PR: una PR che riscrive insieme copia, lock e strumento
+# non si verifica da sola. Una PR che cambia repository o mirror di un motore
+# fallisce qui, perché cambiare da dove viene un motore è una decisione da
+# guardare a parte. Un motore nuovo, che nella base non c'è, si verifica con lo
+# strumento e il lock della PR, e lo dice con un avviso.
+#
+# Solo lettura, nessun segreto e nessuna credenziale nel checkout.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 2"
+  pull_request:
+    paths:
+      - "vendor/**"
+      - "tools/vendor-craft/**"
+      - ".github/workflows/motori-provenienza.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: motori-provenienza-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  motori:
+    name: i motori di vendor
+    runs-on: ubuntu-latest
+    outputs:
+      elenco: ${{ steps.elenco.outputs.elenco }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+      # L'elenco viene da `motori.mjs`, lo stesso di `vendor.mjs check`: un
+      # motore nuovo entra qui senza toccare questo file. Su una PR è l'unione
+      # con quello della base, così togliere un motore dall'elenco non lo
+      # toglie dalla verifica; e ogni cartella di `vendor/` deve starci.
+      - name: elenco da motori.mjs
+        id: elenco
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          chiavi() { node --input-type=module -e "import { MOTORI } from '$1'; console.log(Object.keys(MOTORI).join('\n'))"; }
+          chiavi "$PWD/tools/vendor-craft/motori.mjs" > "$RUNNER_TEMP/motori.txt"
+          if [ "$EVENTO" = pull_request ]; then
+            git fetch --quiet --no-tags --depth=1 origin "$BASE"
+            if git show "$BASE:tools/vendor-craft/motori.mjs" > "$RUNNER_TEMP/motori-base.mjs" 2>/dev/null; then
+              chiavi "$RUNNER_TEMP/motori-base.mjs" >> "$RUNNER_TEMP/motori.txt"
+            fi
+          fi
+          sort -u -o "$RUNNER_TEMP/motori.txt" "$RUNNER_TEMP/motori.txt"
+          for dir in vendor/*/; do
+            nome=$(basename "$dir")
+            if ! grep -qx "$nome" "$RUNNER_TEMP/motori.txt"; then
+              echo "::error::vendor/$nome non è in tools/vendor-craft/motori.mjs: la sua provenienza non si verifica"
+              exit 1
+            fi
+          done
+          elenco=$(node -e 'const fs = require("node:fs"); console.log(JSON.stringify(fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)))' "$RUNNER_TEMP/motori.txt")
+          echo "elenco=$elenco" >> "$GITHUB_OUTPUT"
+          echo "motori: $elenco"
+
+  verifica:
+    name: provenienza di ${{ matrix.motore }}
+    needs: motori
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        motore: ${{ fromJSON(needs.motori.outputs.elenco) }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+      - name: verify-upstream
+        env:
+          MOTORE: ${{ matrix.motore }}
+          EVENTO: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          lock="vendor/$MOTORE/upstream.lock"
+          campo() { sed -n "s/^$1 = \"\(.*\)\"$/\1/p"; }
+          # Un errore di rete non è una provenienza sbagliata: un secondo
+          # tentativo, poi rosso. Un'impronta diversa fallisce tutte e due.
+          verifica() {
+            node tools/vendor-craft/vendor.mjs "$MOTORE" verify-upstream "$@" && return 0
+            echo "::warning::verify-upstream di $MOTORE non è riuscito, un secondo tentativo fra 30 s"
+            sleep 30
+            node tools/vendor-craft/vendor.mjs "$MOTORE" verify-upstream "$@"
+          }
+          if [ "$EVENTO" != pull_request ]; then
+            verifica
+            exit 0
+          fi
+          if [ ! -f "$lock" ]; then
+            echo "$MOTORE non c'è più nella PR: niente da verificare"
+            exit 0
+          fi
+          git fetch --quiet --no-tags --depth=1 origin "$BASE"
+          if ! base=$(git show "$BASE:$lock" 2>/dev/null); then
+            echo "::warning::$MOTORE non c'è nella base: si verifica con lo strumento e il lock della PR"
+            verifica
+            exit 0
+          fi
+          # Lo strumento e i percorsi gestiti della base, sulla copia e sul lock
+          # della PR.
+          rm -rf tools/vendor-craft
+          git checkout "$BASE" -- tools/vendor-craft
+          repo=$(printf '%s\n' "$base" | campo repository)
+          mirror=$(printf '%s\n' "$base" | campo mirror)
+          if [ "$(campo repository < "$lock")" != "$repo" ] || [ "$(campo mirror < "$lock")" != "$mirror" ]; then
+            echo "::error file=$lock::la PR cambia repository o mirror di $MOTORE: la provenienza si verifica contro la base ($repo, $mirror)"
+            exit 1
+          fi
+          verifica --source "$repo"
+          if [ -n "$mirror" ]; then verifica --source "$mirror"; fi

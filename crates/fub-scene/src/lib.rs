@@ -91,6 +91,13 @@ pub const SUPPORTED_VERSION: u32 = 1;
 /// La dimensione oltre la quale un file si apre in sola lettura e si
 /// indicizzano solo titolo e riepilogo (§11).
 pub const MAX_EDIT_BYTES: usize = 20 * 1024 * 1024;
+/// Quanti nodi XML (elementi, testi, commenti, istruzioni) può avere un
+/// disegno che si esporta. L'export legge il documento intero, anche oltre
+/// [`MAX_EDIT_BYTES`], e ogni nodo costa memoria oltre ai suoi byte: un file
+/// di elementi vuoti ne chiederebbe molta più di quanto pesa. Venti volte
+/// [`MAX_ELEMENTS`]; oltre, l'export rifiuta con
+/// [`ReadError::TooManyNodes`], mai con un disegno troncato.
+pub const MAX_EXPORT_NODES: usize = 1_000_000;
 /// Quanti elementi può avere un documento modificabile (§11).
 pub const MAX_ELEMENTS: usize = 50_000;
 /// Quanti contenitori modificabili si annidano al massimo sotto la radice: un
@@ -178,6 +185,9 @@ pub enum ReadError {
     /// È XML, ma la radice non è `<svg>` nel namespace SVG: nessun browser lo
     /// disegna come immagine.
     NotSvg { offset: usize },
+    /// Il documento ha più di [`MAX_EXPORT_NODES`] nodi, e l'export non lo
+    /// legge: `offset` è il byte dove comincia il primo di troppo.
+    TooManyNodes { offset: usize },
 }
 
 impl fmt::Display for ReadError {
@@ -189,6 +199,10 @@ impl fmt::Display for ReadError {
             ReadError::NotSvg { offset } => {
                 write!(f, "la radice al byte {offset} non è un elemento svg di SVG")
             }
+            ReadError::TooManyNodes { offset } => write!(
+                f,
+                "il disegno ha più di {MAX_EXPORT_NODES} nodi XML (il primo di troppo al byte {offset})"
+            ),
         }
     }
 }
