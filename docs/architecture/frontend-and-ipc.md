@@ -193,6 +193,18 @@ selezione effimera senza IPC di scrittura: `cancelThemePreview`, la chiusura
 delle Impostazioni o un'applicazione esplicita terminano la preview. Solo
 `selectTheme` persiste la scelta.
 
+`setting_changed` porta la chiave cambiata, e il backend ne manda uno per
+chiave (anche un cambio di profilo). Ogni ascoltatore della shell rilegge le
+impostazioni solo per le chiavi che legge: il tema per quelle di `reread`
+(`THEME_READS` in `theme/theme.ts`) e per le scelte dei temi (`<id>:<nome>`), le
+stringhe per `locale.language`, la cronologia per `history.enabled`, la cornice
+per `chrome.*` tranne i due pannelli laterali, che hanno l'ascoltatore loro.
+Un evento senza chiave vale «tutto» (`state/setting-change.ts`). Il tema
+raccoglie una raffica in al più due riletture, e l'ultima parte dopo l'ultimo
+evento. Così aprire la barra laterale dal comando scrive
+`chrome.sidebar.visible` e la rilegge una volta, invece di cinque riletture e
+un rimontaggio del tema.
+
 Le linguette sono pulsanti nativi, posseduti dal `tablist` tramite `aria-owns`;
 il pulsante di chiusura è un controllo fratello, non un elemento interattivo
 annidato. Frecce, Home ed End spostano il focus, Invio e Spazio attivano la
