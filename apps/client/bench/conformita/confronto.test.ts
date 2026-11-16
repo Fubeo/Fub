@@ -303,8 +303,12 @@ describe("i token del prototipo", () => {
 describe("la mappa dell'editor", () => {
   it("nomina viste, stati e scene che esistono, e ha dei pezzi", () => {
     expect(PEZZI.length).toBeGreaterThan(0);
-    for (const vista of Object.values(VISTE)) {
-      expect(SCENE.some((s: { id: string }) => s.id === vista.app.scena)).toBe(true);
+    for (const [id, vista] of Object.entries(VISTE)) {
+      // La scena di una vista coi soli pezzi che attendono può nascere con
+      // quel lavoro: la verifica non la apre.
+      const letta = PEZZI.some((p) => p.vista === id && !p.attende);
+      if (letta) expect(SCENE.some((s: { id: string }) => s.id === vista.app.scena), `vista «${id}»`).toBe(true);
+      expect(PEZZI.some((p) => p.vista === id), `vista «${id}» senza pezzi`).toBe(true);
       for (const stato of vista.stati) expect(STATI).toHaveProperty(stato);
     }
     for (const p of PEZZI) {
@@ -312,6 +316,12 @@ describe("la mappa dell'editor", () => {
       expect(new Set(PEZZI.map((q) => q.id)).size).toBe(PEZZI.length);
     }
     expect(BASE).toContain("box-shadow");
+  });
+
+  it("dice per ogni pezzo che attende quale lavoro lo porta", () => {
+    for (const p of PEZZI.filter((q) => "attende" in q)) {
+      expect(p.attende, p.id).toMatch(/^(#\d+|[a-z]+\/[a-z0-9-]+)$/);
+    }
   });
 
   it("ha i valori estratti di ogni pezzo in ogni stato, con le sue proprietà", () => {

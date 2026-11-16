@@ -23,6 +23,11 @@
 //   `gesto` (facoltativo) porta puntatore o fuoco su un elemento dai due lati
 //   prima di leggere: `{ tipo: "hover" | "focus" | "click", prototipo, app }`,
 //   coi selettori dei due lati. `stati` (facoltativo) restringe gli stati della vista.
+//   `attende` (facoltativo) nomina la PR o il ramo che porta il pezzo
+//   nell'app: i suoi valori attesi si estraggono, ma la verifica non lo legge
+//   finché c'è (con `--attese` sì, per misurare quel lavoro su un ramo locale
+//   che lo contiene). Chi unisce il lavoro toglie `attende` dai suoi pezzi:
+//   da lì le differenze sono rosse come le altre.
 // - `DA_COPRIRE`: ciò che ha ancora differenze e che correggono altri lavori,
 //   in due forme. Un pezzo intero (`{ id, prototipo, app, perche }`, con un
 //   id che non è in `PEZZI`) non si confronta affatto: sta qui perché si veda
@@ -101,7 +106,101 @@ export const VISTE = {
     },
     app: { scena: "launcher-files" },
   },
+
+  /// Il menu della maniglia: il prototipo lo apre al passo «Al passaggio»
+  /// (maniglie sul blocco «punto») col clic sulla presa; l'app dalla scena
+  /// dei Blocchi col menu aperto su un titolo.
+  "menu-blocco": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Al passaggio");
+        await page.waitForSelector("#win #gutter.on");
+        await page.click("#win #g-grip");
+        await page.waitForSelector("#win .pop .m-s");
+      },
+    },
+    app: { scena: "blocchi-03-menu" },
+  },
+  /// Il tasto destro su una selezione: testata, barra degli appunti, voci e
+  /// piede che invita a scrivere. Il prototipo sceglie due parole al passo
+  /// «Il tasto destro» e apre il menu da sé; l'app dalla scena del banco.
+  "menu-selezione": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il tasto destro");
+        await page.waitForSelector("#win .pop.cx .m-tiles");
+      },
+    },
+    app: { scena: "menu-selezione" },
+  },
+  /// Le maniglie accanto a un blocco: «+» e la presa con gli occhi, col
+  /// puntatore sul blocco e non sulle maniglie.
+  maniglie: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Al passaggio");
+        await page.waitForSelector("#win #gutter.on");
+      },
+    },
+    app: { scena: "blocchi-01-passaggio" },
+  },
+  /// La tabella Markdown col fuoco e una cella scelta (non la tabella della
+  /// Base, `.btab`): il prototipo al passo «La tabella, coi gesti del
+  /// foglio» (A2:A4 scelte), l'app col cursore in una cella.
+  tabella: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La tabella, coi gesti del foglio");
+        await page.waitForSelector("#win #tb-grid .tg-sel .tg-fill");
+      },
+    },
+    app: { scena: "live-14-tabella-attiva" },
+  },
+  /// La somma nella banda, con più celle numeriche scelte: il prototipo al
+  /// passo «La somma nella banda», l'app allarga di una cella in giù la
+  /// scelta nella colonna dei numeri.
+  somma: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La somma nella banda");
+        await page.waitForSelector("#win #band-words b");
+      },
+    },
+    app: {
+      scena: "live-14-tabella-attiva",
+      prepara: async (page) => {
+        await page.keyboard.press("Shift+ArrowDown");
+        await page.waitForSelector(".status-sum-part[data-lead] > .status-sum-value");
+      },
+    },
+  },
+  /// La testata della nota a riposo, in Scrittura: copertina, strumenti
+  /// (nascosti finché il puntatore non ci passa), titolo e riga dei dati. Il
+  /// prototipo al primo passo, «A riposo».
+  testata: {
+    stati: TUTTI,
+    prototipo: { prepara: (page) => passo(page, "A riposo") },
+    app: { scena: "testata-01-scrittura" },
+  },
+  /// Le proprietà della nota, una riga per proprietà, a riposo.
+  proprieta: {
+    stati: TUTTI,
+    prototipo: { prepara: (page) => passo(page, "A riposo") },
+    app: { scena: "proprieta-01-righe" },
+  },
 };
+
+/// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
+/// della guida (ognuno ha il titolo «n. Nome del passo»): per nome, non per
+/// numero, così un passo aggiunto in mezzo non sposta la vista.
+async function passo(page, titolo) {
+  await page.click(`#tour-steps [data-step][title$=". ${titolo}"]`);
+}
 
 const DIMENSIONI = ["width", "height"];
 const ALLINEAMENTO = ["display", "align-items", "justify-content"];
@@ -247,6 +346,435 @@ export const PEZZI = [
     app: ".launcher-preview-page p",
     proprieta: ["font", "color"],
   },
+
+  // ── i menu dell'editor (T81) e le maniglie dei blocchi (T2a): #431 ───────
+  // Il tasto destro su una selezione.
+  {
+    id: "menu.superficie",
+    vista: "menu-selezione",
+    attende: "#431",
+    prototipo: ".pop.cx",
+    app: ".context-menu",
+    proprieta: [...BASE, "width", "min-width"],
+  },
+  {
+    id: "menu.testa",
+    vista: "menu-selezione",
+    attende: "#431",
+    prototipo: ".m-head",
+    app: ".context-menu .menu-head",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "menu.testa-icona",
+    vista: "menu-selezione",
+    attende: "#431",
+    prototipo: ".m-head .ic svg",
+    app: ".context-menu .menu-head > svg",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "menu.testa-tipo",
+    vista: "menu-selezione",
+    attende: "#431",
+    prototipo: ".m-head b",
+    app: ".context-menu .menu-head-kind",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "menu.testa-nome",
+    vista: "menu-selezione",
+    attende: "#431",
+    prototipo: ".m-head .x",
+    app: ".context-menu .menu-head-name",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "menu.appunti",
+    vista: "menu-selezione",
+    attende: "#431",
+    prototipo: ".m-tiles",
+    app: ".context-menu .menu-clipboard",
+    proprieta: BASE,
+  },
+  {
+    id: "menu.appunto",
+    vista: "menu-selezione",
+    attende: "#431",
+    prototipo: ".m-t",
+    app: ".context-menu .menu-quick",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "menu.appunto-icona",
+    vista: "menu-selezione",
+    attende: "#431",
+    prototipo: ".m-t .ti svg",
+    app: ".context-menu .menu-quick .kit-tile-icon svg",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "menu.voce",
+    vista: "menu-selezione",
+    attende: "#431",
+    prototipo: ".m-l > button.m-i:not(.act)",
+    app: ".context-menu .menu-items > button.kit-row:not(.menu-lit)",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "menu.voce-icona",
+    vista: "menu-selezione",
+    attende: "#431",
+    prototipo: ".m-l > button.m-i:not(.act) .ic",
+    app: ".context-menu .menu-items > button.kit-row:not(.menu-lit) .menu-icon",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "menu.voce-tasti",
+    vista: "menu-selezione",
+    attende: "#431",
+    prototipo: ".m-l > button.m-i:not(.act) kbd",
+    app: ".context-menu .menu-items > button.kit-row:not(.menu-lit) .kit-row-keys",
+    proprieta: ["font", "color", "padding", "background", "box-shadow", "border-radius"],
+  },
+  {
+    id: "menu.piede",
+    vista: "menu-selezione",
+    attende: "#431",
+    prototipo: ".m-find",
+    app: ".context-menu .menu-foot",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  // Il menu della maniglia.
+  {
+    id: "menu.superficie-blocco",
+    vista: "menu-blocco",
+    attende: "#431",
+    prototipo: ".pop",
+    app: ".context-menu",
+    proprieta: [...BASE, "min-width"],
+  },
+  {
+    id: "menu.campo",
+    vista: "menu-blocco",
+    attende: "#431",
+    prototipo: ".m-s",
+    app: ".context-menu .menu-field",
+    proprieta: [...BASE, ...ALLINEAMENTO],
+  },
+  {
+    id: "menu.campo-lente",
+    vista: "menu-blocco",
+    attende: "#431",
+    prototipo: ".m-s > svg",
+    app: ".context-menu .menu-field > svg",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "menu.campo-testo",
+    vista: "menu-blocco",
+    attende: "#431",
+    prototipo: ".m-s input",
+    app: ".context-menu .menu-field-input",
+    proprieta: ["font", "color", "padding", "border", "background"],
+  },
+  {
+    id: "menu.titolo",
+    vista: "menu-blocco",
+    attende: "#431",
+    prototipo: ".m-h",
+    app: ".context-menu .menu-title",
+    proprieta: ["font", "color", "padding", "margin", "text-transform"],
+  },
+  {
+    id: "menu.voce-accesa",
+    vista: "menu-blocco",
+    attende: "#431",
+    prototipo: ".m-i.act",
+    app: ".context-menu .kit-row.menu-lit",
+    proprieta: ["color", "background", "font"],
+  },
+  {
+    id: "menu.voce-accesa-icona",
+    vista: "menu-blocco",
+    attende: "#431",
+    prototipo: ".m-i.act .ic",
+    app: ".context-menu .kit-row.menu-lit .menu-icon",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "menu.scia",
+    vista: "menu-blocco",
+    attende: "#431",
+    prototipo: ".m-hl",
+    app: ".context-menu .menu-glide",
+    proprieta: ["background", "border-radius", "opacity"],
+  },
+  {
+    id: "menu.separatore",
+    vista: "menu-blocco",
+    attende: "#431",
+    prototipo: ".m-sep",
+    app: ".context-menu .menu-separator",
+    proprieta: ["height", "margin", "background", "border"],
+  },
+  {
+    id: "menu.voce-pericolo",
+    vista: "menu-blocco",
+    attende: "#431",
+    prototipo: ".m-i.danger",
+    app: ".context-menu .kit-row.danger",
+    proprieta: ["color", "background"],
+  },
+  {
+    id: "menu.piede-tasti",
+    vista: "menu-blocco",
+    attende: "#431",
+    prototipo: ".m-foot",
+    app: ".context-menu .menu-foot-keys",
+    proprieta: BASE,
+  },
+  {
+    id: "menu.piede-tasto",
+    vista: "menu-blocco",
+    attende: "#431",
+    prototipo: ".m-foot kbd",
+    app: ".context-menu .menu-foot-keys kbd",
+    proprieta: BASE,
+  },
+  // Le maniglie: «+» e la presa a due occhi.
+  {
+    id: "maniglie.aggiungi",
+    vista: "maniglie",
+    attende: "#431",
+    prototipo: "#g-add",
+    app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-add',
+    proprieta: [...DIMENSIONI, "border-radius", "color", "background", "opacity"],
+  },
+  {
+    id: "maniglie.aggiungi-icona",
+    vista: "maniglie",
+    attende: "#431",
+    prototipo: "#g-add svg",
+    app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-add svg',
+    proprieta: DIMENSIONI,
+  },
+  {
+    id: "maniglie.presa",
+    vista: "maniglie",
+    attende: "#431",
+    prototipo: "#g-grip",
+    app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-grip',
+    proprieta: [...DIMENSIONI, "border-radius", "color", "background", "opacity"],
+  },
+  {
+    id: "maniglie.occhi",
+    vista: "maniglie",
+    attende: "#431",
+    prototipo: "#g-grip svg.ea",
+    app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-grip-eyes svg',
+    proprieta: DIMENSIONI,
+  },
+
+  // ── la tabella Markdown (T50) e la somma nella banda (T55): #432 ─────────
+  // Le celle si scelgono lontano dal bordo esterno, che nel prototipo è un
+  // anello della scatola (`.gr-box`) e nell'app il bordo delle celle di
+  // fuori: i fili di dentro si confrontano sul lato basso.
+  {
+    id: "tabella.intestazione",
+    vista: "tabella",
+    attende: "#432",
+    prototipo: ".gr tr:first-child td:nth-child(2)",
+    app: '.tb-grid .tb-cell.tb-head[data-col="0"]',
+    proprieta: ["padding", "font", "color", "background", "height", "white-space", "border-bottom-width", "border-bottom-style", "border-bottom-color"],
+  },
+  {
+    id: "tabella.cella",
+    vista: "tabella",
+    attende: "#432",
+    prototipo: ".gr tr:nth-child(2) td:nth-child(2)",
+    app: '.tb-grid .tb-cell[data-row="1"][data-col="1"]',
+    proprieta: ["padding", "font", "color", "background", "height", "white-space", "border-bottom-width", "border-bottom-style", "border-bottom-color"],
+  },
+  {
+    id: "tabella.lettera",
+    vista: "tabella",
+    attende: "#432",
+    prototipo: ".gr-let span:not(.on)",
+    app: ".tb-grid .tb-letter:not(.is-selected)",
+    proprieta: ["font", "color", "background"],
+  },
+  {
+    id: "tabella.lettera-scelta",
+    vista: "tabella",
+    attende: "#432",
+    prototipo: ".gr-let span.on",
+    app: ".tb-grid .tb-letter.is-selected",
+    proprieta: ["font", "color"],
+  },
+  // Nell'app il fondo della scelta è un `::before` sotto la lettera.
+  {
+    id: "tabella.lettera-scelta-fondo",
+    vista: "tabella",
+    attende: "#432",
+    prototipo: ".gr-let span.on",
+    app: ".tb-grid .tb-letter.is-selected::before",
+    proprieta: ["background"],
+  },
+  {
+    id: "tabella.numero",
+    vista: "tabella",
+    attende: "#432",
+    prototipo: ".gr-num span:not(.on)",
+    app: ".tb-grid .tb-rowhead:not(.is-selected)",
+    proprieta: ["font", "color", "background"],
+  },
+  {
+    id: "tabella.numero-scelto",
+    vista: "tabella",
+    attende: "#432",
+    prototipo: ".gr-num span.on",
+    app: ".tb-grid .tb-rowhead.is-selected",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "tabella.numero-scelto-fondo",
+    vista: "tabella",
+    attende: "#432",
+    prototipo: ".gr-num span.on",
+    app: ".tb-grid .tb-rowhead.is-selected::before",
+    proprieta: ["background"],
+  },
+  {
+    id: "tabella.riempi",
+    vista: "tabella",
+    attende: "#432",
+    prototipo: ".tg-fill",
+    app: ".tb-grid .tb-fill",
+    proprieta: [...DIMENSIONI, "border-radius", "background", "box-shadow"],
+  },
+  {
+    id: "tabella.aggiungi-riga",
+    vista: "tabella",
+    attende: "#432",
+    prototipo: ".tg-add.row",
+    app: '.tb-add[data-add="row"]',
+    proprieta: ["height", "bottom", "border-radius", "color", "background", "opacity"],
+  },
+  {
+    id: "tabella.aggiungi-colonna",
+    vista: "tabella",
+    attende: "#432",
+    prototipo: ".tg-add.col",
+    app: '.tb-add[data-add="column"]',
+    proprieta: ["width", "right", "border-radius", "color", "background", "opacity"],
+  },
+  {
+    id: "somma.valore",
+    vista: "somma",
+    attende: "#432",
+    prototipo: "#band-words b",
+    app: ".status-sum-part[data-lead] > .status-sum-value",
+    proprieta: ["font", "color"],
+  },
+
+  // ── la testata (T7) e le proprietà (T8): #421 ────────────────────────────
+  {
+    id: "testata.copertina",
+    vista: "testata",
+    attende: "#421",
+    prototipo: ".cover",
+    app: ".cm-fub-page-cover",
+    proprieta: ["height", "border-radius"],
+  },
+  {
+    id: "testata.strumenti",
+    vista: "testata",
+    attende: "#421",
+    prototipo: ".ptools",
+    app: ".cm-fub-page-tools",
+    proprieta: ["display", "gap", "height", "margin", "opacity"],
+  },
+  {
+    id: "testata.strumento",
+    vista: "testata",
+    attende: "#421",
+    prototipo: ".ptools button",
+    app: ".cm-fub-page-tool",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "testata.titolo",
+    vista: "testata",
+    attende: "#421",
+    prototipo: ".ptitle",
+    app: ".cm-fub-page-title",
+    proprieta: ["font", "color", "margin", "padding"],
+  },
+  {
+    id: "testata.dati",
+    vista: "testata",
+    attende: "#421",
+    prototipo: ".facts",
+    app: ".note-facts",
+    proprieta: [...BASE, ...ALLINEAMENTO],
+  },
+  {
+    id: "testata.dato",
+    vista: "testata",
+    attende: "#421",
+    prototipo: ".facts button:not(.tag)",
+    app: ".note-fact:not(.note-fact-tags)",
+    proprieta: ["padding", "margin", "gap", "border-radius", "font", "color"],
+  },
+  {
+    id: "testata.etichetta",
+    vista: "testata",
+    attende: "#421",
+    prototipo: ".facts .tag",
+    app: ".note-tag",
+    proprieta: BASE,
+  },
+  {
+    id: "proprieta.elenco",
+    vista: "proprieta",
+    attende: "#421",
+    prototipo: ".props",
+    app: ".cm-fub-page-props",
+    proprieta: ["display", "row-gap", "margin", "font"],
+  },
+  {
+    id: "proprieta.chiave",
+    vista: "proprieta",
+    attende: "#421",
+    prototipo: ".pk",
+    app: ".cm-fub-page-prop-key",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "proprieta.valore",
+    vista: "proprieta",
+    attende: "#421",
+    prototipo: ".pv",
+    app: ".cm-fub-page-prop-value",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "proprieta.persona",
+    vista: "proprieta",
+    attende: "#421",
+    prototipo: ".person",
+    app: ".cm-fub-prop-person",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "proprieta.altre",
+    vista: "proprieta",
+    attende: "#421",
+    prototipo: ".props .more",
+    app: ".cm-fub-page-props-more",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
 ];
 
 /// I pezzi che hanno ancora differenze, e chi li corregge. Non si
@@ -306,42 +834,36 @@ export const DA_COPRIRE = [
       "il foglio del prototipo ha --sh-raise (anello e un'ombra corta, riga 1256); l'app un anello --overlay-hover e --shadow-1, a tre parti: #429 non lo motiva",
   },
 
-  // ── pezzi su cui lavorano altri coder: la mappa li nomina, il selettore
-  //    dell'app lo sceglie il lavoro che li porta dal prototipo ────────────
+  // ── pezzi che la mappa nomina ma non può ancora leggere ──────────────────
   {
-    id: "blocchi.maniglia",
-    prototipo: ".gutter",
-    app: null,
-    perche: "maniglie dei blocchi: in lavorazione (confronto col prototipo del 2026-11-16)",
+    id: "compiti.ispettore",
+    prototipo: ".trow",
+    app: '.declared-view[data-view-id="tasks"] .ui-list-item',
+    perche:
+      "i Compiti nell'ispettore (#432, `.ith`/`.trow`): il banco non ha una scena con la vista dei compiti, e l'ispettore del banco non ne ha la scheda",
   },
   {
-    id: "blocchi.menu",
-    prototipo: ".pop .m",
-    app: null,
-    perche: "menu del blocco: in lavorazione (confronto col prototipo del 2026-11-16)",
-  },
-  {
-    id: "tabella.markdown",
-    prototipo: ".gr",
-    app: null,
-    perche: "tabella Markdown (non la tabella della Base, `.btab`): in lavorazione",
-  },
-  {
-    id: "compiti",
+    id: "compiti.nota",
     prototipo: ".chk",
     app: null,
-    perche: "compiti nella nota: in lavorazione",
+    perche: "la casella dei compiti nel testo della nota: nessun lavoro l'ha ancora portata dal prototipo",
   },
   {
-    id: "testata",
-    prototipo: ".cover",
-    app: null,
-    perche: "testata della nota (icona, titolo, copertina): in lavorazione",
+    id: "tabella.taglio",
+    prototipo: ".tg-cut",
+    app: ".tb-grid .tb-cut",
+    perche: "il tratteggio del taglio (#432) si vede solo dopo Ctrl X: nessuna vista lo apre ancora dai due lati",
   },
   {
-    id: "proprieta",
-    prototipo: ".props",
+    id: "proprieta.opzione",
+    prototipo: ".opt",
     app: null,
-    perche: "proprietà della nota: in lavorazione",
+    perche: "la pastiglia di una scelta (lo Stato): fino a T9 Selezione e Stato si scrivono come testo (#421)",
+  },
+  {
+    id: "proprieta.editor",
+    prototipo: ".pop .dp, .pop .m",
+    app: null,
+    perche: "gli editor dei tipi aperti (#421, scene proprieta-02…09): la mappa non ha ancora le loro viste",
   },
 ];

@@ -5,6 +5,14 @@
 //     npm run bench:conformita -- --light=dark          # una luce
 //     npm run bench:conformita -- --only=lanciatore     # i pezzi il cui id comincia così
 //     npm run bench:conformita -- --prototipo=editor    # una mappa
+//     npm run bench:conformita -- --attese              # anche i pezzi che attendono
+//
+// Un pezzo con `attende` (la PR o il ramo che lo porta dal prototipo) ha i
+// suoi valori attesi già estratti, ma nell'app non si legge: il suo
+// selettore, e a volte la sua scena, nascono con quel lavoro. La riga di
+// riepilogo li conta. Con `--attese` si leggono lo stesso: serve a misurare
+// quei lavori prima di unirli, su un ramo locale che li contiene. Chi unisce
+// il lavoro toglie `attende` dai suoi pezzi.
 //
 // Per ogni mappa `mappa-<prototipo>.mjs` legge i valori attesi da
 // `<prototipo>.json` (generato da `estrai.mjs`) e le eccezioni da
@@ -51,6 +59,7 @@ const opzione = (nome) =>
 const luce = opzione("light");
 const solo = opzione("only");
 const soloPrototipo = opzione("prototipo");
+const ancheAttese = process.argv.includes("--attese");
 if (luce && luce !== "dark" && luce !== "light") {
   console.error(`--light vuole dark o light, non «${luce}»`);
   process.exit(2);
@@ -119,13 +128,17 @@ try {
     const copertura = coperture(DA_COPRIRE, PEZZI);
     errori.push(...copertura.errori.map((e) => `DA_COPRIRE: ${e}`));
 
-    const scelti = PEZZI.filter((p) => !solo || p.id.startsWith(solo));
+    const scelti = PEZZI.filter((p) => (ancheAttese || !p.attende) && (!solo || p.id.startsWith(solo)));
+    const attese = ancheAttese ? [] : PEZZI.filter((p) => p.attende);
     const statiFatti = new Set();
     const differenze = [];
     const mancanti = [];
     let confronti = 0;
 
     for (const [idVista, vista] of Object.entries(VISTE)) {
+      // Una vista coi soli pezzi che attendono non apre la scena: può non
+      // esserci ancora.
+      if (!scelti.some((p) => p.vista === idVista)) continue;
       const scena = SCENE.find((s) => s.id === vista.app.scena);
       if (!scena) {
         errori.push(`vista «${idVista}»: la scena «${vista.app.scena}» non è in bench/scene.mjs`);
@@ -192,6 +205,13 @@ try {
         `${pezziGuardati} pezzi, ${statiFatti.size} letture, ${confronti} proprietà; ` +
         `${volute.length} differenze con eccezione, ${daCoprire.length} da coprire, ${pezziInteri} pezzi interi da coprire`,
     );
+    if (attese.length) {
+      const perLavoro = Map.groupBy(attese, (p) => p.attende);
+      console.log(
+        `  attendono (non letti, --attese per leggerli): ` +
+          [...perLavoro].map(([lavoro, pezzi]) => `${lavoro} ${pezzi.length}`).join(", "),
+      );
+    }
     console.log(
       `  tolleranze: ${TOLLERANZA.lunghezza} px, ±${TOLLERANZA.canale} per canale, ±${TOLLERANZA.alfa} di alfa`,
     );

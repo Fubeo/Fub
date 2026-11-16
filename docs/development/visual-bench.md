@@ -114,6 +114,13 @@ coperto si confronta, e diventa rossa quando coincide, perché la si tolga. Un
 task grafico aggiunge i suoi pezzi alla mappa, rigenera l'estrazione e passa il
 controllo; il referto intero va in `bench/.output/conformita/`.
 
+Un pezzo con `attende: "#<PR>"` ha i valori attesi già estratti, ma la verifica
+non lo legge finché quella PR non è in `main`: il suo selettore, e a volte la
+sua scena, nascono lì. La riga di riepilogo conta i pezzi che attendono, per
+lavoro. Per misurare la PR prima di unirla, su un ramo locale che la contiene:
+`npm run bench:conformita -- --attese`. Chi la unisce toglie `attende` dai suoi
+pezzi, e da quel momento ogni differenza è rossa come le altre.
+
 L'accessibilità verifica la pagina resa, non soltanto una tabella teorica di
 colori. La carta dei fogli è uno pseudo-elemento, che axe non sa leggere dietro
 il testo: per la sola misura, a scena ferma, il banco la porta sui fratelli che

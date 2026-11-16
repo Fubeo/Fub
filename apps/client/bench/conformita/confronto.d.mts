@@ -17,6 +17,9 @@ export interface Pezzo {
   app: string;
   proprieta: readonly string[];
   stati?: readonly string[];
+  /// Il lavoro (una PR, un ramo) che porta il pezzo nell'app: finché c'è, la
+  /// verifica non lo legge (`verifica.mjs`, `--attese`).
+  attende?: string;
 }
 
 export interface Eccezione {
