@@ -88,11 +88,10 @@ del cursore si raggiungono con Tab, e con Vim acceso restano cliccabili.
 
 **Lo scorrimento al bordo.** Col blocco in mano, a meno di 72 px dal bordo
 alto o basso della nota (al più un terzo della sua altezza) la nota scorre:
-più piano lontano dal bordo, fino a circa 800 px al secondo sul bordo (la
-velocità cresce col quadrato della vicinanza), e parte morbida, raggiungendo
-la velocità piena in mezzo secondo. Si ferma uscendo dalla fascia, alla fine
-della nota, al rilascio e quando il blocco esce dalla colonna. Col moto
-ridotto lo scorrimento resta.
+più piano lontano dal bordo, fino a circa 800 px al secondo sul bordo (col
+quadrato della vicinanza), con una partenza morbida di mezzo secondo. Si
+ferma fuori dalla fascia, a fine nota, al rilascio e quando il blocco esce
+dalla colonna; col moto ridotto resta.
 
 **Fuori dalla colonna.** Portato più di 90 px a sinistra o a destra della
 colonna del testo, il blocco diventa un **cartellino**: rimpicciolito (largo
@@ -112,12 +111,11 @@ lasciato qui torna al suo posto» o il bersaglio. Col moto ridotto il
 cartellino non vola. I bersagli arrivano dal registro degli editor
 (`offerDropTargets` in `editors/core/registry.ts`): la Struttura li offre
 per le righe il cui `action.payload` porta `{doc, start, end}` (byte del
-titolo nella sorgente com'è sul disco, `\r` compresi), soltanto per la nota
-dello stesso vault. Il titolo si riconosce dalla riga dello span; il nome
-della riga (testo puro, senza enfasi, collegamenti né `^id`) serve soltanto
-da ripiego. I posti si misurano all'uscita dalla colonna e di nuovo, al più
-una volta per fotogramma, quando qualcosa scorre o la Struttura si
-ridisegna (`dropOffersChanged`), mai a ogni movimento del puntatore.
+titolo sul disco, `\r` compresi), soltanto per la nota dello stesso vault;
+il nome della riga (testo puro) serve da ripiego. I posti si misurano
+all'uscita dalla colonna e poi al più una volta per fotogramma, quando
+qualcosa scorre o la Struttura si ridisegna (`dropOffersChanged`), mai a
+ogni movimento del puntatore.
 
 ## La selezione di blocchi
 
@@ -423,8 +421,7 @@ schede stanno nella cache del bundle, ricostruibile. «Pagina web»
 
 - `apps/client/src/editors/text/profiles/markdown/blocks/`: modello, maniglie,
   selezione, spostamenti, trasformazioni, link, movimento (`motion.ts`),
-  scorrimento al bordo (`autoscroll.ts`) e bersagli fuori dalla colonna
-  (`drop-targets.ts`);
+  scorrimento al bordo (`autoscroll.ts`), bersagli fuori (`drop-targets.ts`);
 - `apps/client/src/editors/text/profiles/markdown/block-gesture.ts`: i gesti
   di blocco, annotati anche dalla Live;
 - `apps/client/src/editors/text/profiles/markdown/block-id.ts`: gli id nascosti;

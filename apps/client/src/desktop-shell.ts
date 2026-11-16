@@ -75,7 +75,7 @@ import { mountSettings, openSettingsAt } from "./panels/settings";
 import { currentTheme, mountTheme } from "./theme/theme";
 import { fallito, fase, pronta } from "./avvio/consegna";
 import { onContentLookChange } from "./theme/content-look";
-import { focusedContextMode } from "./state/document-controller";
+import { focusedContextMode, openingsSoFar } from "./state/document-controller";
 import { reducedMotion } from "./theme/reduced-motion";
 import {
   mountDocument,
@@ -1305,6 +1305,9 @@ async function openInitialVault(path: string, alive: () => boolean): Promise<voi
 /// Apre ciò che `files.startup` chiede, se il comando è nel registro: senza la
 /// feature dei modelli la nota del giorno non c'è, e resta la sessione.
 async function openAtStartup(alive: () => boolean): Promise<void> {
+  // Un documento aperto mentre si legge la scelta è più nuovo di lei: la nota
+  // d'avvio non lo scavalca.
+  const decided = openingsSoFar();
   const entries = await settings();
   if (!alive()) return;
   const choice = entries.find((entry) => entry.spec.key === FILES_STARTUP)?.value;
@@ -1315,7 +1318,7 @@ async function openAtStartup(alive: () => boolean): Promise<void> {
     try {
       await api.readDocument(note);
       if (!alive()) return;
-      await openDocument(note);
+      await openDocument(note, { unlessOpenedSince: decided });
     } catch (error) {
       if (alive()) notify(t("app.startup_note_failed", { path: note, reason: errorText(error) }), "guasto");
     }
