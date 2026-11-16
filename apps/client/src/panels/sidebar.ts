@@ -165,9 +165,15 @@ export function mountSidebarCommands(): void {
 /// menu e dell'icona della rail: chi arriva col mouse non deve poi cliccare il
 /// campo che la tastiera gli avrebbe dato. Una view dichiarata si mostra e
 /// basta: il suo interno non è della shell.
+///
+/// Su un telefono la barra è un foglio che sale dal basso, e all'apertura il
+/// fuoco va alla sua maniglia (`shells/scrittoio/mobile/bottom-sheets.ts`): un
+/// campo col fuoco alzerebbe la tastiera sopra il foglio. Lì il fuoco resta
+/// alla maniglia.
 export function enterPanel(panel: SidebarPanel): void {
   revealSidePanel("sidebar");
   showPanel(panel);
+  if (document.activeElement?.matches("#sidebar > .sheet-grip")) return;
   if (panel === "search") {
     const input = document.getElementById("search-input");
     if (input instanceof HTMLInputElement) {

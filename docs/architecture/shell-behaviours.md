@@ -87,7 +87,8 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   scorciatoia (`enterPanel` in `panels/sidebar.ts`): la barra si apre e il
   fuoco entra nel campo della ricerca, col testo già scritto selezionato, o
   nell'albero; un secondo clic sull'icona del pannello davanti chiude la
-  barra.
+  barra. Sul telefono la barra è un foglio dal basso e il fuoco resta alla
+  sua maniglia, perché un campo col fuoco alzerebbe la tastiera.
 - **Grafo.** La tela ha i comandi di zoom e «Inquadra tutto»; la legenda è un
   insieme di interruttori di visibilità per gruppo, che si compone con la
   maschera della linea del tempo.
@@ -109,6 +110,8 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   posto di prima a quello nuovo in un passo solo: la misura è già quella
   finale dal primo fotogramma e si muove solo una trasformazione; col moto
   ridotto il passo è uno scatto unico (`shells/scrittoio/sheets/tab-strip.ts`).
+  Le prime schede di un foglio nuovo arrivano col foglio, e lì non scorre
+  niente.
 - **Fuoco dopo un'apertura.** Quando `openDocument` finisce, il fuoco va
   all'editor del documento aperto, ma solo se nel frattempo nessuno l'ha
   portato altrove: se sta ancora dov'era al gesto, da nessuna parte o in un

@@ -331,6 +331,45 @@ describe("una linguetta che si chiude (#411 B-04)", () => {
     await settled();
     expect(driver.plays).toHaveLength(0);
   });
+
+  it("finita la corsa, sulle linguette e sul «+» non resta niente: né trasformazioni in linea, né corse", async () => {
+    const { strip, menu } = pane("p1", ["a", "b", "c"], 0);
+    mountTabStrips(lifetime);
+    const plus = strip.querySelector<HTMLElement>(".tab-new")!;
+    placeAfterTabs(strip, plus);
+    strip.replaceChildren(strip.firstElementChild!, entry("a", 0, true), entry("c", 1, false), menu);
+    await settled();
+    // Il «+» c'era e scorre con le altre: la prova non è vuota.
+    expect(driver.plays.some((play) => play.el === plus)).toBe(true);
+    driver.advance(5000);
+    expect(activeMotions()).toBe(0);
+    for (const each of [...strip.querySelectorAll<HTMLElement>(".tab-entry"), plus]) {
+      expect(each.style.transform).toBe("");
+      expect(each.style.translate).toBe("");
+    }
+  });
+});
+
+/// Il «+» sta dopo l'ultima linguetta, come lo mette il motore.
+function placeAfterTabs(strip: HTMLElement, plus: HTMLElement): void {
+  Object.defineProperty(plus, "offsetLeft", { get: () => strip.querySelectorAll(".tab-entry").length * WIDTH });
+}
+
+describe("un foglio nuovo (#423 stage-split)", () => {
+  it("le prime schede arrivano col foglio: il «+» non scorre dal posto vuoto in testa", async () => {
+    // Il foglio nasce con la striscia vuota, e la vista ci scrive la scheda subito dopo.
+    const { strip, menu } = pane("p2", [], -1);
+    mountTabStrips(lifetime);
+    const plus = strip.querySelector<HTMLElement>(".tab-new")!;
+    placeAfterTabs(strip, plus);
+    strip.replaceChildren(strip.firstElementChild!, entry("a", 0, true), menu);
+    await settled();
+    expect(strip.querySelector(".tab-new")).toBe(plus);
+    // Una corsa del «+» dentro l'entrata del foglio salterebbe quando il
+    // foglio si richiude a metà: è il salto che il banco del movimento vede.
+    expect(driver.plays.some((play) => play.el === plus)).toBe(false);
+    expect(activeMotions()).toBe(0);
+  });
 });
 
 describe("la striscia che scorre", () => {

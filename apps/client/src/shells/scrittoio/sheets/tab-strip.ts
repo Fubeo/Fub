@@ -253,6 +253,9 @@ export function mountTabStrips(lifetime: Lifetime): void {
     return { at, order: [...at.keys()].join("\n"), scroll: strip.scrollLeft };
   };
 
+  /// Nella striscia c'era almeno una scheda, non solo il «+».
+  const hasTabs = (known: Places): boolean => [...known.at.keys()].some((identity) => identity !== PLUS);
+
   /// Una linguetta chiusa, aperta o spostata: chi resta parte da dove lo si
   /// vedeva e scorre al posto nuovo, in un passo solo. Ciò che è comparso non
   /// ha un «da dove» e sta fermo. Solo trasformazioni: la misura della
@@ -286,7 +289,10 @@ export function mountTabStrips(lifetime: Lifetime): void {
     const nowAt = placesOf(strip);
     places.set(strip, nowAt);
     // La striscia nasce o cambia insieme: si muove solo ciò che c'era e c'è.
-    const carried = wereAt && wereAt.order !== nowAt.order ? shift(wereAt, nowAt) : new Map<HTMLElement, number>();
+    // Una striscia che aveva solo il «+» nasce adesso (un foglio nuovo): le
+    // prime schede arrivano col foglio, e il «+» non scorre dal posto vuoto
+    // in testa — sarebbe una corsa sua dentro l'entrata del foglio.
+    const carried = wereAt && wereAt.order !== nowAt.order && hasTabs(wereAt) ? shift(wereAt, nowAt) : new Map<HTMLElement, number>();
     const tab = strip.hidden ? null : strip.querySelector<HTMLElement>('.tab[aria-selected="true"]');
     const entry = tab?.closest<HTMLElement>(".tab-entry") ?? null;
     if (!tab || !entry) {
