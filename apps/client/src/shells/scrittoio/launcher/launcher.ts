@@ -44,7 +44,7 @@ import {
   type OpenWay,
   type Reading,
 } from "./model";
-import { createPreview } from "./preview";
+import { createPreview, folderOf } from "./preview";
 import { answersAtOnce, listing, prefetchFiles, rereadFiles, selectable, type ActionId, type Listing, type Row } from "./sources";
 
 /// Quanto si aspetta dopo l'ultima battuta prima di chiedere a una sorgente
@@ -191,11 +191,6 @@ function hint(keys: string, label: string): HTMLElement {
   const item = el("span", "launcher-hint");
   item.append(keyOf(keys), label);
   return item;
-}
-
-/// La cartella di un documento, letta come una strada.
-function folderOf(doc: string): string {
-  return doc.split("/").filter(Boolean).slice(0, -1).join(" › ");
 }
 
 /// Monta il lanciatore e dichiara i comandi che lo aprono. Chiudere `lifetime`

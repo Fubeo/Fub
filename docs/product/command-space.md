@@ -138,9 +138,13 @@ niente: serve a leggere.
 
 In Tutto, quando la finestra è larga abbastanza (almeno 960 × 560 px), a destra
 dell'elenco c'è l'anteprima della nota della riga attiva, su un foglio rialzato
-in una colonna di 288 px. Segue le frecce, ma aspetta una pausa
+in una colonna di 288 px; sotto il foglio c'è la cartella della nota (niente
+per una nota in cima al vault) e «modificata …», l'ora dell'ultima modifica
+detta come altrove. Segue le frecce, ma aspetta una pausa
 breve (90 ms) prima di chiedere la nota: chi scorre in fretta non fa partire una
-resa per ogni riga. Mentre la resa nuova arriva resta quella di prima; se tarda,
+resa per ogni riga. La data si chiede insieme alla resa, all'elenco della
+cartella della nota, una volta per nota finché il lanciatore resta aperto; se
+non arriva resta la sola cartella. Mentre la resa nuova arriva resta quella di prima; se tarda,
 si attenua. Una nota che non si riesce a rendere lo dice nel riquadro. Un file
 che non è un documento (un PDF, un'immagine) non ha una resa: il riquadro lo
 dice senza chiederla.

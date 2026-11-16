@@ -122,8 +122,9 @@ describe("i ruoli facoltativi: i segni sulle due carte", () => {
   it("non sono fra i ruoli obbligatori, e i ruoli obbligatori restano 154", () => {
     // 26 segni e carte, più i sei colori degli autori su ognuna delle due, la
     // scrivania del disegno, i sei segni della Live e dei Blocchi e i nove
-    // colori del contenuto col loro fondo.
-    expect(OPTIONAL_ROLES.length).toBe(39 + 6 + 18 + 3);
+    // colori del contenuto col loro fondo; poi il vassoio della barra e le
+    // tre ombre facoltative (il foglio, il foglio col fuoco, il rialzo).
+    expect(OPTIONAL_ROLES.length).toBe(39 + 6 + 18 + 4);
     expect(roles().filter((role) => OPTIONAL_ROLES.includes(role))).toEqual([]);
     expect(roles()).toHaveLength(154);
   });

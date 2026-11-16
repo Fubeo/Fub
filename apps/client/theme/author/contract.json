@@ -976,6 +976,7 @@
     "base-map-marker",
     "canvas-surface",
     "canvas-toolbar",
+    "canvas-toolbar-item",
     "canvas-intake-error",
     "canvas-viewport",
     "canvas-large-fallback",
@@ -1715,6 +1716,8 @@
     "launcher-preview",
     "launcher-preview-sheet",
     "launcher-preview-page",
+    "launcher-preview-meta",
+    "launcher-preview-fact",
     "launcher-preview-note",
     "launcher-foot",
     "launcher-status",
@@ -2838,6 +2841,7 @@
     "base-map-marker": "contenuto",
     "canvas-surface": "cornice",
     "canvas-toolbar": "cornice",
+    "canvas-toolbar-item": "cornice",
     "canvas-intake-error": "cornice",
     "canvas-viewport": "contenuto",
     "canvas-large-fallback": "cornice",
@@ -3577,6 +3581,8 @@
     "launcher-preview": "cornice",
     "launcher-preview-sheet": "cornice",
     "launcher-preview-page": "cornice",
+    "launcher-preview-meta": "cornice",
+    "launcher-preview-fact": "cornice",
     "launcher-preview-note": "cornice",
     "launcher-foot": "cornice",
     "launcher-status": "cornice",
@@ -6282,6 +6288,8 @@
       "hooks": [
         "canvas-surface",
         "canvas-toolbar",
+        "canvas-toolbar-item",
+        "kit-options-row",
         "canvas-intake-error",
         "canvas-viewport",
         "canvas-large-fallback",
@@ -8075,6 +8083,8 @@
         "launcher-preview",
         "launcher-preview-sheet",
         "launcher-preview-page",
+        "launcher-preview-meta",
+        "launcher-preview-fact",
         "launcher-preview-note"
       ],
       "states": [
@@ -9382,6 +9392,7 @@
   "optional_roles": [
     "shadow-sheet",
     "shadow-sheet-focus",
+    "shadow-raise",
     "draw-desk",
     "bar-tray",
     "doc-ins",
@@ -9868,6 +9879,7 @@
     "shadow-4",
     "shadow-sheet",
     "shadow-sheet-focus",
+    "shadow-raise",
     "shadow-5",
     "shadow-6",
     "shadow-7",
@@ -10034,11 +10046,11 @@
   },
   "counts": {
     "required_roles": 154,
-    "optional_roles": 66,
-    "hooks": 1860,
+    "optional_roles": 67,
+    "hooks": 1863,
     "state_names": 7,
     "assigned_states": 879,
     "components": 258,
-    "preference_tokens": 189
+    "preference_tokens": 190
   }
 }

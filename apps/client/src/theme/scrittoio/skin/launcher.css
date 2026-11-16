@@ -734,9 +734,11 @@
   display: inline-flex;
   color: var(--accent-soft);
 }
+/* Il campo tiene il respiro del campo di sistema (1 px sopra e sotto, 2 ai
+   lati), come il prototipo che non lo azzera. */
 .launcher-input {
   height: 54px;
-  padding: 0;
+  padding: 1px 2px;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -784,7 +786,9 @@
 .launcher .launcher-modes {
   gap: var(--space-1);
   padding: 0 var(--space-5) 10px;
-  box-shadow: inset 0 -1px 0 var(--border);
+  /* Il filo è un bordo, non il filo dipinto delle schede del kit. */
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
 }
 .launcher-modes > .launcher-mode {
   gap: 7px;
@@ -795,6 +799,7 @@
   color: var(--muted);
   font-size: 12.5px;
   font-weight: var(--weight-regular);
+  line-height: var(--leading-normal);
 }
 .launcher-modes > .launcher-mode:hover,
 .launcher-modes > .launcher-mode:active {
@@ -843,6 +848,7 @@
   border-radius: 9px;
   color: var(--text);
   font-size: 14px;
+  line-height: var(--leading-normal);
 }
 /* La riga attiva: un fondo appena più scuro sotto l'inchiostro, non il verde
    dell'accento. L'accento resta all'icona. */
@@ -911,14 +917,17 @@
 .launcher-preview {
   gap: var(--space-5);
   padding: 14px;
+  border-left: 1px solid var(--border);
   background: color-mix(in srgb, var(--sheet-2) 55%, var(--sheet));
 }
+/* Il foglio è appena rialzato: il rialzo più basso, un anello e un'ombra
+   corta. Un tema che non lo dichiara ha il primo gradino delle ombre. */
 .launcher-preview-sheet {
   max-height: 292px;
   padding: 14px var(--space-6) 0;
   border-radius: 10px;
   background: var(--sheet);
-  box-shadow: 0 0 0 1px var(--overlay-hover), var(--shadow-1);
+  box-shadow: var(--shadow-raise, var(--shadow-1));
 }
 .launcher-preview-sheet::after {
   content: "";
@@ -965,6 +974,21 @@
 /* Una resa che tarda: quella di prima resta, attenuata, finché arriva. */
 .launcher-preview[data-waiting] .launcher-preview-page {
   opacity: 0.45;
+}
+/* I dati della nota sotto il foglio, piccoli e in grafite. */
+.launcher-preview-meta {
+  gap: 7px;
+  padding: 0 var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.launcher-preview-fact {
+  gap: var(--space-4);
+}
+.launcher-preview-fact > svg {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
 }
 /* Niente da mostrare, o una resa che non riesce: una frase in grafite. */
 .launcher-preview-note {
