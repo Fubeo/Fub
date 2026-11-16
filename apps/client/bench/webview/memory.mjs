@@ -16,8 +16,8 @@ function stat(pid) {
     // Il nome sta fra parentesi e può contenerne: si taglia sull'ultima.
     const close = raw.lastIndexOf(")");
     const comm = raw.slice(raw.indexOf("(") + 1, close);
-    const ppid = Number(raw.slice(close + 2).split(" ")[1]);
-    return { pid, comm, ppid };
+    const [state, ppid] = raw.slice(close + 2).split(" ");
+    return { pid, comm, state, ppid: Number(ppid) };
   } catch {
     return null;
   }
@@ -43,8 +43,11 @@ function group(comm) {
   return "altro";
 }
 
-/// Una lettura: i discendenti di `root`, uno per uno e raggruppati, in MiB.
-export function sample(root) {
+/// I discendenti vivi di `root` che non sono un driver: l'app e i processi
+/// della sua WebView, `{ pid, comm, state, ppid }`. Un processo zombie (già
+/// uscito, non ancora raccolto dal padre) non conta. Soltanto Linux; altrove
+/// `null`.
+export function descendants(root) {
   if (process.platform !== "linux") return null;
   const all = readdirSync("/proc").filter((name) => /^\d+$/.test(name)).map(Number).map(stat).filter(Boolean);
   const children = new Map();
@@ -52,12 +55,23 @@ export function sample(root) {
     if (!children.has(proc.ppid)) children.set(proc.ppid, []);
     children.get(proc.ppid).push(proc);
   }
-  const seen = [];
+  const found = [];
   const queue = [...(children.get(root) ?? [])];
   while (queue.length) {
     const proc = queue.shift();
     queue.push(...(children.get(proc.pid) ?? []));
-    if (DRIVERS.has(proc.comm)) continue;
+    if (DRIVERS.has(proc.comm) || proc.state === "Z" || proc.state === "X") continue;
+    found.push(proc);
+  }
+  return found;
+}
+
+/// Una lettura: i discendenti di `root`, uno per uno e raggruppati, in MiB.
+export function sample(root) {
+  const procs = descendants(root);
+  if (!procs) return null;
+  const seen = [];
+  for (const proc of procs) {
     const mem = rollup(proc.pid);
     if (mem) seen.push({ ...proc, ...mem });
   }
