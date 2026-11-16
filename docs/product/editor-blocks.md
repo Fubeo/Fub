@@ -42,23 +42,19 @@ Al passaggio del puntatore a sinistra del blocco compaiono, in grigio, il
 voce), e la **maniglia**: i due occhi del marchio. A riposo non si vedono;
 sugli schermi senza passaggio restano sul blocco del cursore. Stanno sempre a
 sinistra di ciò che si vede: una scheda o una tabella più larga della colonna
-li sposta. Il «+» e gli occhi sono figure da 16 px. La maniglia sotto il
-puntatore prende l'accento e gli occhi crescono appena; il suggerimento dice «Trascina per spostare, clic per il
-menu». La maniglia ha il nome del blocco («Blocco: Titolo 2, Elenco di
-attività») e apre un menu col clic o col tasto destro.
-Il menu si apre col fuoco nel campo «Cerca un'azione…» in cima, col nome del
-blocco sotto («Testo», «Riquadro», «3 blocchi») e il piede «↵ sceglie · →
-apre · Esc chiude». La prima voce è accesa e Invio la sceglie; scrivendo il
-campo filtra le voci, ↓ e ↑ si muovono fra loro. Il menu ha:
+li sposta (figure da 16 px). La maniglia sotto il puntatore prende l'accento
+e gli occhi crescono appena; il suggerimento dice «Trascina per spostare,
+clic per il menu». La maniglia ha il nome del blocco («Blocco: Titolo 2») e
+apre col clic o col tasto destro un menu col campo «Cerca un'azione…», il
+nome del blocco e il piede dei tasti ([Tasto destro](editor-menus.md)). Ha:
 
 - **Trasforma in…**: paragrafo, titoli, elenchi, elenco di attività, citazione,
   riquadro, blocco di codice, ripiegabile. Il testo resta, cambiano soltanto i segni; un titolo che
   prende più righe le unisce con uno spazio, e le sottovoci restano blocchi
   sotto. Una tabella non si trasforma;
 - **Colore ▸**, il testo e il fondo coi nove colori dei Blocchi;
-- **Duplica** (Ctrl D) e, per ultimo, **Elimina** (Canc). **Sposta su** e
-  **Sposta giù** (Ctrl Maiusc ↑ ↓) e **Affianca in colonne** si trovano
-  scrivendo nel campo;
+- **Duplica** e, per ultimo, **Elimina**; **Sposta su**, **Sposta giù** e
+  **Affianca in colonne** si trovano scrivendo;
 - **Copia il link al blocco**: scrive negli appunti `[[Nota#Titolo]]` per un
   titolo e `[[Nota#^id]]` per il resto. Se il blocco non ha un id, ne riceve uno
   di sei caratteri: in coda all'ultima riga per paragrafi, titoli e voci, su una

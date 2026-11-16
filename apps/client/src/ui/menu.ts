@@ -221,12 +221,28 @@ const SEARCH_LIMIT = 9;
 /// Il confronto della ricerca: minuscole e senza accenti.
 const fold = (text: string): string => text.toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-/// I nomi dei tasti come li scrive un menu: in italiano, come sono stampati
-/// sulla tastiera italiana, e Invio col suo segno.
-const MENU_KEY_NAMES: Readonly<Record<string, string>> = { Shift: "Maiusc", Del: "Canc", Delete: "Canc", Enter: "↵", Space: "Spazio" };
+/// I nomi dei tasti come li scrive un menu, nella lingua dell'interfaccia: in
+/// italiano come sono stampati sulla tastiera italiana («Maiusc», «Canc»), e
+/// Invio col suo segno, che non ha lingua.
+const menuKeyName = (part: string): string => {
+  switch (part) {
+    case "Shift":
+    case "Maiusc":
+      return t("context.key.shift");
+    case "Del":
+    case "Delete":
+      return t("context.key.delete");
+    case "Space":
+      return t("context.key.space");
+    case "Enter":
+      return "↵";
+    default:
+      return part;
+  }
+};
 
 /// La scorciatoia di una voce come la scrive il menu: i tasti di un accordo
-/// separati da uno spazio, coi nomi italiani («Ctrl Maiusc ↑», «Canc») invece
+/// separati da uno spazio, coi nomi della lingua («Ctrl Maiusc ↑», «Canc») invece
 /// della forma col «+» di `displayBinding` («Ctrl+Shift+↑», «Del»). Vale solo
 /// nei menu, come nel prototipo dell'editor: altrove (suggerimenti, palette,
 /// impostazioni) la scorciatoia resta col «+». Ciò che non è un accordo
@@ -237,7 +253,7 @@ export function menuKeys(hint: string): string {
     .map((token) => {
       const chord = /^((?:(?:Ctrl|Alt|Shift|Maiusc)\+)+)(.+)$/.exec(token);
       const parts = chord ? [...chord[1]!.split("+").filter(Boolean), chord[2]!] : [token];
-      return parts.map((part) => MENU_KEY_NAMES[part] ?? part).join(" ");
+      return parts.map(menuKeyName).join(" ");
     })
     .join(" ");
 }

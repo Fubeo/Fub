@@ -705,7 +705,7 @@ describe("le azioni dell'editor della superficie", () => {
     // vault» si trova scrivendo.
     expect(contextLabels(menu)).toEqual([t("editor_menu.link.to_note"), "—", t("editor_menu.extract")]);
     expect(menu?.context?.[0]).toMatchObject({ icon: "fmt-link" });
-    expect(menu?.searchable?.find((item) => "label" in item && item.label === t("editor_menu.search_vault"))).toMatchObject({
+    expect(menu?.searchable?.find((item) => typeof item === "object" && "label" in item && item.label === t("editor_menu.search_vault"))).toMatchObject({
       icon: "search",
       find: { where: "vault", query: "due parole" },
     });
