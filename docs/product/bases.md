@@ -251,10 +251,19 @@ quello atteso, con la sola modifica chiesta.
 
 ## La barra della Base
 
+La Base è una scatola dal bordo sottile e dagli angoli tondi: in alto, dentro,
+la barra; sotto, la vista, con la tabella fino ai bordi. È alta quanto il suo
+contenuto, fino al riquadro; dentro una nota sta in colonna col testo.
+
 Sopra la Base c'è una barra. A sinistra le viste del file come linguette, con
 la figura del loro tipo: un clic sceglie la vista. Quando manca spazio (sotto i
-700 px della pagina) le viste non scelte restano solo la figura; più strette
-ancora, anche quella scelta. A destra gli attrezzi:
+700 px della pagina, o quando le viste sono tante da non stare nella barra) le
+viste non scelte restano solo la figura, col nome nel titolo, e quella scelta
+resta in vista; sotto i 420 px anche quella scelta. Se nemmeno così stanno,
+le ultime passano in «Altre N viste», l'ultima delle linguette (una freccia e
+il numero), che le elenca in un menu; la vista scelta resta sempre nella
+barra. Subito dopo le linguette, «+» aggiunge una vista nuova (vedi sotto). A
+destra gli attrezzi:
 
 | Attrezzo | Che cosa fa | Che cosa scrive |
 |---|---|---|
@@ -329,9 +338,101 @@ Il gesto non scrive, e la barra lo dice sotto le etichette, quando:
   colonne si cambiano.
 
 Il piano della vista (`op: "plan"` della query `fub.base`) porta per questo,
-oltre alle colonne, il filtro (`filters`), l'ordinamento (`sort`) e le colonne
-scritte (`order`) come il modello li legge; l'elenco delle viste (`op:
-"parse"`) porta il tipo di ognuna (`types`).
+oltre alle colonne, il filtro (`filters`), l'ordinamento (`sort`), le colonne
+scritte (`order`) e i riepiloghi (`summaries`, ognuno con `key`, `aggregate`,
+`expression`, `name` e la `label` con cui `derive` ne dà il valore) come il
+modello li legge; l'elenco delle viste (`op: "parse"`) porta il tipo di ognuna
+(`types`).
+
+### Una vista nuova
+
+«+» apre il menu «Nuova vista»: Tabella, Schede, Elenco, Bacheca, Mappa. La
+vista nuova prende il primo nome libero del tipo («Tabella», «Tabella 2»…) e
+**eredita il filtro e le colonne** della vista aperta; una bacheca prende come
+corsie il raggruppamento della vista aperta o la sua prima colonna che è una
+proprietà, una mappa le coordinate della vista aperta o le proprietà `lat` e
+`lon` (`latitude`/`longitude`) delle righe. Senza corsie o senza coordinate la
+voce è spenta e dice perché. Sono più scritture, una chiave per volta come ogni
+gesto: `base.view.add` aggiunge la vista in fondo al file, poi `base.view.set`
+scrive `filters`, `order` e, se servono, `group` o `map`, ognuna con la
+revisione. Un filtro che la Base non sa ridire (un valore lista, per esempio)
+si copia com'è scritto. Alla fine la vista si apre, e l'avviso ha «Annulla»,
+che toglie la vista con tutte le sue chiavi (`base.view.remove`). Se un passo è
+rifiutato la vista c'è ma non ha tutto: la vista aperta non cambia, il motivo
+resta sotto la barra e l'avviso lo dice, sempre con «Annulla». «+» è spento in
+sola lettura, in una Base dentro una nota e mentre un gesto sta scrivendo il
+file. Cambiare vista chiude i menu aperti su quella di prima; una scelta
+arrivata da un menu di un piano che non c'è più non scrive niente.
+
+Una vista tolta da un'altra finestra mentre è aperta lascia il posto alla
+vista ricordata o alla prima del file.
+
+### Il menu della colonna
+
+Un clic sull'intestazione di una colonna (o il tasto destro, con le stesse
+voci) apre il suo menu:
+
+| Voce | Che cosa fa | Che cosa scrive |
+|---|---|---|
+| Ordina crescente / decrescente | mette la colonna in testa all'ordinamento; le altre chiavi restano dopo | `sort` |
+| Raggruppa | raggruppa la tabella, le schede o l'elenco per la colonna; di nuovo, toglie il gruppo. Toglie anche il raggruppamento scelto in questa finestra con Ordina (che torna se il file rifiuta la scrittura); togliere un gruppo scelto solo in questa finestra toglie la scelta e non scrive il file | `group` |
+| Riepilogo › | il riepilogo della colonna nel piede: Conteggio, Vuote, Piene; per i numeri anche Somma, Media, Minimo, Massimo; per le date La prima e L'ultima | `summaries` |
+| Rinomina la proprietà… | cambia il nome della proprietà in tutte le note (`property.key.rename`, che si annulla dalla tavolozza), poi nelle viste di questo file che la nominano | le note, poi `filters`, `sort`, `order`, `group`, `map`, `date`, `start`, `end`, `summaries` |
+| Tipo › | il tipo della proprietà nel registro del vault (`property.type.set`) | il registro dei tipi |
+| Copia la colonna | i valori della colonna, uno per riga | niente |
+| Nascondi | toglie la colonna da quelle mostrate; l'ultima non si nasconde | `order` |
+
+La specie di una colonna (numeri, date o testo) si legge dai valori delle
+righe: una colonna di testo ha solo Conteggio, Vuote e Piene. Il riepilogo
+scelto dal menu è uno per colonna, senza nome e senza formula: quelli scritti
+a mano con un `name` o un'`expression` restano come sono. La colonna della nota
+ha solo Ordina e Copia; le colonne `file.*` e le formule non si rinominano e
+non hanno un tipo. In sola lettura e in una Base dentro una nota le voci che
+scrivono il `.base` sono spente col perché. In una Base dentro una nota sono
+spenti anche Rinomina e Tipo: rinominare in tutto il vault lascerebbe il
+blocco della nota sulla chiave vecchia, e la voce dice di farlo dal file
+`.base`.
+
+Rinominare tocca solo questo file `.base`, le chiavi della mappa e delle date
+comprese: **le formule e le altre Basi del vault che nominano la proprietà non
+cambiano**, e la nota del campo lo dice. Le viste del file si riscrivono una
+chiave per volta, senza un «Annulla» unico: annullare la rinomina delle note
+non rimette i nomi vecchi nelle viste. Se una vista non si riesce a
+riscrivere, le note hanno il nome nuovo e quella vista no: sotto la barra
+resta quali viste hanno ancora il nome vecchio e perché, e l'avviso lo dice.
+
+### La tabella
+
+La prima colonna è la nota: il suo titolo in grassetto (il nome del file senza
+cartella e senza `.md`, col percorso intero nel suggerimento), che la apre. La
+colonna `file.name` del file è questa stessa colonna, che prende anche la sua
+etichetta; le altre colonne seguono nell'ordine della vista. Ogni intestazione
+ha davanti la figura della specie dei suoi valori (testo, numero, data,
+casella, lista, collegamento), letta dalle righe come per i riepiloghi, e un
+filo divide le colonne. Le date si leggono come giorno e mese («2 mar», con
+l'anno se non è questo) e i numeri col separatore delle migliaia («2.600»):
+è solo da guardare, perché il campo di una cella col fuoco torna al valore
+com'è, e la ricerca, il CSV e le copie usano il valore. In fondo alle righe
+«Nuova nota» fa quello che fa «Nuova» nella barra; in sola lettura non c'è.
+
+Ogni valore sta su una riga sola e le colonne prendono la misura del loro
+contenuto: la tabella è larga quanto la scatola e mai meno di 560 px; quando
+non ci sta, scorre di lato dentro la scatola.
+
+### Il piede
+
+Sotto la tabella il piede dice quante note mostra la vista e, sotto ogni
+colonna, il suo riepilogo: il nome («Somma», o il `name` scritto nel file) e il
+valore, coi numeri e le date nel formato della lingua (`12.345,68` in italiano,
+`12,345.68` in inglese; «2 apr»). Un riepilogo di una colonna non mostrata, o
+con una formula, sta accanto al conteggio col nome della colonna. Il piede
+resta in fondo alla finestra mentre la tabella scorre. Le schede, l'elenco, la
+bacheca e la mappa hanno lo stesso piede in fila sotto la vista. I valori li
+calcola il core (`op: "derive"`): il piede non ricalcola niente, e un
+riepilogo in errore dice «errore» col perché nel titolo. Con la ricerca della
+barra il conteggio dice quante delle note della vista si vedono («3 di 50
+note»), e i riepiloghi, che restano su tutte le note della vista, si vedono più
+tenui e lo dicono («su tutte le 50 note della vista»).
 
 ## Dove si vede una Base
 

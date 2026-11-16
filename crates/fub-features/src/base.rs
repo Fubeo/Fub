@@ -19,7 +19,9 @@ use fub_abi::{DocId, DocumentModel};
 use fub_format_base::formula::{BaseValue, EvalBudget, Formula, FormulaErrorCode, RowContext};
 use fub_format_base::model::{BaseError, FilterOp, BASE_FORMAT_ID};
 use fub_format_base::patch::{self, BaseChange, PatchError, Place, ViewKey};
-use fub_format_base::{AggregateKind, BaseDefinition, BaseViewDef, FilterDef, ViewType};
+use fub_format_base::{
+    AggregateKind, BaseDefinition, BaseViewDef, FilterDef, SummaryDef, ViewType,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -865,6 +867,34 @@ fn row_time(plan: &Planned<'_>, props: &BTreeMap<String, PropertyValue>) -> Opti
         _ => None,
     }
 }
+/// Il nome con cui un riepilogo esce da `derive`: il suo `name`, o la chiave
+/// col tipo di aggregato (`score:sum`, `stato:countfilled`). Il piano lo dice
+/// accanto a ogni riepilogo, perché la superficie metta il valore sotto la
+/// sua colonna senza rifare la regola.
+fn summary_label(summary: &SummaryDef) -> String {
+    summary
+        .name
+        .clone()
+        .unwrap_or_else(|| format!("{}:{:?}", summary.key, summary.aggregate).to_lowercase())
+}
+
+/// I riepiloghi scritti nella vista, come il modello li legge, ognuno col
+/// nome con cui `derive` ne dà il valore (`label`).
+fn summary_plan(view: &BaseViewDef) -> Vec<Value> {
+    view.summaries
+        .iter()
+        .map(|summary| {
+            json!({
+                "key": summary.key,
+                "aggregate": summary.aggregate,
+                "expression": summary.expression,
+                "name": summary.name,
+                "label": summary_label(summary),
+            })
+        })
+        .collect()
+}
+
 fn aggregate(kind: AggregateKind, values: &[BaseValue]) -> BaseValue {
     let filled: Vec<&BaseValue> = values.iter().filter(|value| !value.is_empty()).collect();
     match kind {
@@ -1028,10 +1058,7 @@ fn derive(
             .as_ref()
             .map(|source| Formula::parse(source));
         if let Some(Err(error)) = &expression {
-            let label = summary.name.clone().unwrap_or_else(|| {
-                format!("{}:{:?}", summary.key, summary.aggregate).to_lowercase()
-            });
-            summaries.insert(label, BaseValue::Error(error.code()));
+            summaries.insert(summary_label(summary), BaseValue::Error(error.code()));
             continue;
         }
         let values = result
@@ -1043,12 +1070,8 @@ fn derive(
             })
             .collect::<Vec<_>>();
         let error = values.iter().find(|v| matches!(v, BaseValue::Error(_)));
-        let label = summary
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("{}:{:?}", summary.key, summary.aggregate).to_lowercase());
         summaries.insert(
-            label,
+            summary_label(summary),
             error
                 .cloned()
                 .unwrap_or_else(|| aggregate(summary.aggregate, &values)),
@@ -1154,12 +1177,13 @@ fn respond(query: Value) -> Result<Value, PluginError> {
                         .map(|name| (&property.key, name))
                 })
                 .collect();
-            // Il filtro, l'ordinamento e le colonne scritte della vista, come
-            // il modello li legge: la superficie li mostra a vista e li
-            // riscrive con `base.view.set`, senza leggere il YAML da sé.
-            // `order` è vuoto quando le colonne le deduce `columns`.
+            // Il filtro, l'ordinamento, le colonne scritte e i riepiloghi
+            // della vista, come il modello li legge: la superficie li mostra
+            // a vista e li riscrive con `base.view.set`, senza leggere il
+            // YAML da sé. `order` è vuoto quando le colonne le deduce
+            // `columns`.
             Ok(
-                json!({"view":plan.view.name,"view_type":view_type,"columns":columns(&plan),"filters":plan.view.filters,"sort":plan.view.sort,"order":plan.view.order,"column_labels":labels,"required_props":required_props,"all_properties":plan.view.search.as_deref().is_some_and(|s| !s.is_empty()),"group":plan.view.group.as_ref().map(|g| &g.key),"limit":plan.view.limit,"map":plan.view.map,"date_key":date_key,"start_key":start_key,"end_key":end_key,"create_defaults":create_defaults(&plan.definition.filters, &plan.view.filters)}),
+                json!({"view":plan.view.name,"view_type":view_type,"columns":columns(&plan),"filters":plan.view.filters,"sort":plan.view.sort,"order":plan.view.order,"summaries":summary_plan(plan.view),"column_labels":labels,"required_props":required_props,"all_properties":plan.view.search.as_deref().is_some_and(|s| !s.is_empty()),"group":plan.view.group.as_ref().map(|g| &g.key),"limit":plan.view.limit,"map":plan.view.map,"date_key":date_key,"start_key":start_key,"end_key":end_key,"create_defaults":create_defaults(&plan.definition.filters, &plan.view.filters)}),
             )
         }
         "derive" => derive(
@@ -1942,6 +1966,36 @@ mod tests {
             respond(json!({"version":1,"op":"plan","source":SOURCE,"view":"Board"})).unwrap();
         assert_eq!(plan["view_type"], "kanban");
         assert_eq!(plan["required_props"], json!(["score", "status"]));
+    }
+
+    #[test]
+    fn plan_says_each_summary_with_the_name_derive_gives_it() {
+        let source = "views:\n  - name: T\n    type: table\n    summaries:\n      - {key: score, aggregate: sum}\n      - {key: stato, aggregate: count_filled}\n      - {name: Totale, key: score, aggregate: average, expression: 'prop.score * 2'}\n";
+        let plan = respond(json!({"version":1,"op":"plan","source":source,"view":"T"})).unwrap();
+        assert_eq!(
+            plan["summaries"],
+            json!([
+                {"key":"score","aggregate":"sum","expression":null,"name":null,"label":"score:sum"},
+                {"key":"stato","aggregate":"count_filled","expression":null,"name":null,"label":"stato:countfilled"},
+                {"key":"score","aggregate":"average","expression":"prop.score * 2","name":"Totale","label":"Totale"}
+            ])
+        );
+        let derived = respond(json!({"version":1,"op":"derive","source":source,"view":"T","now_ms":0,"rows":[
+            {"doc":"a.md","props":{"score":{"kind":"number","value":2},"stato":{"kind":"text","value":"x"}}}
+        ]}))
+        .unwrap();
+        for summary in plan["summaries"].as_array().unwrap() {
+            let label = summary["label"].as_str().unwrap();
+            assert!(
+                derived["summaries"].get(label).is_some(),
+                "{label} manca in derive"
+            );
+        }
+        let bare = respond(
+            json!({"version":1,"op":"plan","source":"views:\n  - name: N\n    type: table\n"}),
+        )
+        .unwrap();
+        assert_eq!(bare["summaries"], json!([]));
     }
 
     #[test]
