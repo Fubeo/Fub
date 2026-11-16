@@ -73,6 +73,73 @@ contro i budget del [budget prestazionale](../product/performance-budget.md#il-b
 Nessuno dei due vede la webview del sistema: per quella c'è la [prova manuale
 del moto](motion-smoke-test.md).
 
+La conformità al prototipo (`npm run bench:conformita`, `-- --light=dark|light`,
+`-- --only=<inizio dell'id>`) confronta gli stili calcolati dell'app con quelli
+del prototipo di un piano, proprietà per proprietà: la base grafica del
+prototipo è obbligatoria, e se ne devia solo con un motivo scritto. Vive in
+[`bench/conformita/`](../../apps/client/bench/conformita/), in due tempi.
+
+- **L'estrazione**, a mano e fuori dalla CI, perché il prototipo sta sul ramo
+  del piano e non in `main`: `node bench/conformita/estrai.mjs editor` (dopo
+  `git fetch`) prende `PLAN-ui/editor.html` dal ramo che la mappa nomina, lo
+  porta in ogni stato (Giorno/Notte, Piena/700, moto ridotto, i gesti della
+  vista), legge `getComputedStyle` di ogni pezzo e scrive `editor.json`, un
+  file generato con commit e sorgente nell'intestazione.
+- **La verifica**, in CI nel job del banco visivo dopo la guardia del lampo:
+  apre la scena del banco che la mappa nomina, alla finestra dello stato,
+  legge gli stessi stili sugli elementi corrispondenti e confronta.
+
+La mappa `mappa-<prototipo>.mjs`, scritta a mano, dice per ogni pezzo la vista
+(come ci si arriva nel prototipo e quale scena del banco), gli stati, il
+selettore del prototipo dentro `#win`, quello dell'app e le proprietà: di base
+padding, margin, gap, bordi, raggi, ombre, carattere, colore, fondo e opacità,
+più dimensioni e allineamenti dove sono fissi. Gli elementi si identificano per
+classi e struttura, mai a occhio. Le tolleranze sono mezzo pixel per le
+lunghezze, due punti per canale (0–255) e un centesimo d'alfa per i colori, le
+ombre e i gradienti parte per parte, i caratteri per famiglia principale (il
+taglio «Variable» è lo stesso carattere); il perché sta in `confronto.mjs`.
+
+Le due tavolozze non coincidono, e il piano dice con quale token di Fub si
+scrive ogni token del prototipo (`TRADUZIONE` nella mappa). L'estrazione legge
+ogni pezzo una seconda volta con quei token sostituiti da colori sentinella, e
+così sa di quale token, o di quale `color-mix` di due token, è fatto ogni
+colore; la verifica risolve la stessa espressione coi token di Fub sotto
+l'elemento dell'app. Un colore scritto a mano nel prototipo si confronta crudo.
+Oltre alla tabella del piano, la traduzione dice che il velo di passaggio
+`--hover` è `--overlay-hover` della pelle e che `--danger` è il `--danger` del
+tema, generato dalla ricetta col contrasto garantito. Un'ombra del prototipo
+scritta tutta in un token (`--sh-pop`) non passa dalle sentinelle: si confronta
+per valore, parte per parte.
+
+La traduzione dipende dal contesto del pezzo (`TRADUZIONI` nella mappa). Un
+pezzo dell'interfaccia (menu, lanciatore, banda) usa `TRADUZIONE`. Un pezzo
+dentro la pagina del documento (`contesto: "documento"`: tabella Markdown,
+testata, proprietà, riga dei dati, maniglie) usa `TRADUZIONE_DOCUMENTO`, perché
+la pagina ha una tavolozza sua, che si personalizza a parte: `--ink` diventa
+`--doc-fg`, `--muted` e `--faint` diventano `--doc-gutter-fg`, `--line`
+diventa `--doc-rule-soft`, `--hover` diventa `--doc-block-hover` e `--danger`
+`--doc-danger`, e così via. Le traduzioni nominano gli stessi token
+del prototipo, così le sentinelle sono le stesse; un colore che resta diverso
+dopo la traduzione del suo contesto è una differenza vera.
+
+È rosso, con pezzo, stato, i due selettori, proprietà, atteso e trovato, se una
+proprietà differisce senza eccezione, se un selettore dell'app non trova un
+elemento visibile, se `editor.json` non è quello della mappa, o se
+un'eccezione non copre più niente. Le eccezioni (`eccezioni-<prototipo>.json`)
+hanno pezzo, proprietà, motivo e il riferimento alla voce di DECISIONS o del
+piano che le giustifica. `DA_COPRIRE` nella mappa elenca invece ciò che va
+ancora corretto: un pezzo intero non si confronta; una proprietà di un pezzo
+coperto si confronta, e diventa rossa quando coincide, perché la si tolga. Un
+task grafico aggiunge i suoi pezzi alla mappa, rigenera l'estrazione e passa il
+controllo; il referto intero va in `bench/.output/conformita/`.
+
+Un pezzo con `attende: "#<PR>"` ha i valori attesi già estratti, ma la verifica
+non lo legge finché quella PR non è in `main`: il suo selettore, e a volte la
+sua scena, nascono lì. La riga di riepilogo conta i pezzi che attendono, per
+lavoro. Per misurare la PR prima di unirla, su un ramo locale che la contiene:
+`npm run bench:conformita -- --attese`. Chi la unisce toglie `attende` dai suoi
+pezzi, e da quel momento ogni differenza è rossa come le altre.
+
 L'accessibilità verifica la pagina resa, non soltanto una tabella teorica di
 colori. La carta dei fogli è uno pseudo-elemento, che axe non sa leggere dietro
 il testo: per la sola misura, a scena ferma, il banco la porta sui fratelli che
