@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::WriteBase;
-use fub_abi::event::EventKind;
+use fub_abi::event::{Event, EventKind};
 use fub_abi::model::DocId;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{
@@ -312,33 +312,18 @@ fn the_first_write_photographs_the_original() {
         v.put(&format!("Nota{n:02}.md"), &format!("# Nota {n}\n"));
     }
 
-    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::new(Collected::default());
     let host = Host::new()
         .with_watcher(Box::new(NoWatcher))
-        .with_sink(Arc::new(Collected(seen.clone())));
+        .with_sink(sink.clone());
     host.open(&v.root).expect("the vault opens");
 
     // Il ponte ha un freno (§10.2): la consegna si aspetta, e se non arriva il
-    // test fallisce sul tempo massimo invece che sul primo giro.
-    let expired = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while std::time::Instant::now() < expired {
-        let arrived = seen
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|n: &Notice| n.event.kind() == EventKind::JobProgress);
-        if arrived {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    assert!(
-        seen.lock()
-            .unwrap()
-            .iter()
-            .any(|n| n.event.kind() == EventKind::JobProgress),
-        "the first slice never announced itself"
-    );
+    // test fallisce sul tetto di sicurezza invece che sul primo giro.
+    sink.wait_until("the first slice announces itself", |seen| {
+        seen.iter()
+            .any(|n| n.event.kind() == EventKind::JobProgress)
+    });
 
     for n in 0..50 {
         let id = DocId::new(format!("Nota{n:02}.md"));
@@ -378,13 +363,43 @@ fn the_first_write_photographs_the_original() {
     );
 }
 
-/// Un sink che accumula: il posto dell'`AppHandle` di Tauri, senza Tauri.
+/// Un sink che accumula: il posto dell'`AppHandle` di Tauri, senza Tauri. Il
+/// ponte consegna da un thread suo, dopo che la chiamata dell'host è tornata:
+/// chi aspetta un evento lo aspetta con [`Collected::wait_until`].
 #[derive(Default)]
-struct Collected(Arc<Mutex<Vec<Notice>>>);
+struct Collected {
+    notices: Mutex<Vec<Notice>>,
+    arrived: Condvar,
+}
+
+impl Collected {
+    /// Aspetta che gli avvisi consegnati finora soddisfino `done`, e li rende.
+    /// Si sveglia a ogni consegna; il tetto è solo di sicurezza
+    /// ([`SAFETY_CAP`]).
+    fn wait_until(&self, what: &str, done: impl Fn(&[Notice]) -> bool) -> Vec<Notice> {
+        let deadline = Instant::now() + SAFETY_CAP;
+        let mut notices = self.notices.lock().unwrap();
+        while !done(&notices) {
+            let left = deadline.saturating_duration_since(Instant::now());
+            assert!(
+                !left.is_zero(),
+                "{what}: in {SAFETY_CAP:?} the bridge did not deliver it: {notices:?}"
+            );
+            notices = self.arrived.wait_timeout(notices, left).unwrap().0;
+        }
+        notices.clone()
+    }
+
+    /// Quanti avvisi il ponte ha consegnato finora.
+    fn len(&self) -> usize {
+        self.notices.lock().unwrap().len()
+    }
+}
 
 impl EventSink for Collected {
     fn emit(&self, notice: &Notice) -> Delivery {
-        self.0.lock().unwrap().push(notice.clone());
+        self.notices.lock().unwrap().push(notice.clone());
+        self.arrived.notify_all();
         Delivery::Done
     }
 }
@@ -394,10 +409,10 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     let v = Vault::new();
     v.put("Nota.md", "# Nota\n");
 
-    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::new(Collected::default());
     let host = Host::new()
         .with_watcher(Box::new(NoWatcher))
-        .with_sink(Arc::new(Collected(seen.clone())));
+        .with_sink(sink.clone());
     host.open(&v.root).expect("the vault opens");
     host.wait_indexed(None).expect("waits for indexing");
 
@@ -407,24 +422,14 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     // parte di ciò che si sta provando — che quegli eventi *arrivano* — e non
     // un'attesa arbitraria: se non arrivano, il test fallisce sul tempo massimo
     // invece che sul primo giro.
-    let expired = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while std::time::Instant::now() < expired {
-        let arrived = seen
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|n: &Notice| n.event.kind() == EventKind::JobDone);
-        if arrived {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    let seen = sink.wait_until("the opening job's outcome", |seen| {
+        seen.iter().any(|n| n.event.kind() == EventKind::JobDone)
+    });
 
     // **Nessun evento per documento**, che è ciò che questo presidio ha sempre
     // difeso: la scansione popola il vault, non lo cambia, e una shell che
     // ricevesse un `DocumentChanged` per nota leggerebbe l'apertura come un
     // temporale di modifiche.
-    let seen = seen.lock().unwrap().clone();
     assert!(
         !seen
             .iter()
@@ -461,6 +466,7 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
         "and an outcome comes back: whoever watches knows when it is done"
     );
 
+    let before = sink.len();
     {
         let ws = host.debug_workspace(None).unwrap();
         let mut ws = ws.write().unwrap();
@@ -468,12 +474,13 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
             .expect("writes");
     }
 
-    // Il ponte è un thread: si aspetta il primo evento, non si dorme e basta.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while seen.is_empty() && std::time::Instant::now() < deadline {
-        std::thread::yield_now();
-    }
-    assert!(!seen.is_empty(), "no event reached the sink after a write");
+    // Il ponte è un thread: si aspetta che consegni il cambio della nota,
+    // guardando il sink e non la fotografia presa prima della scrittura.
+    sink.wait_until("the write's change reaches the sink", |seen| {
+        seen[before..].iter().any(
+            |n| matches!(&n.event, Event::DocumentChanged { id, .. } if id.as_str() == "Nota.md"),
+        )
+    });
 }
 
 /// Due vault stanno aperti insieme, e il "corrente" è solo chi risponde a chi
