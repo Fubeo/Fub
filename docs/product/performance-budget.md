@@ -340,7 +340,7 @@ in riga (al più otto righe lette, contro tutto il tratto visibile),
 `details-live.test.ts` e `note-facts.test.ts` per i ripiegabili e la riga dei
 fatti (al più sei nodi, contro 1.200 e 600), e `blocks/model.test.ts` per il
 modello dei Blocchi. Dopo ogni modifica a caso il risultato è quello di una
-lettura da capo dello stesso albero.
+lettura da capo dello stesso albero. Il disegno nell'app vera: [WebView](performance-webview.md).
 
 ### L'apertura di una nota grande
 

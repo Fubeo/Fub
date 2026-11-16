@@ -4987,11 +4987,39 @@ kbd,
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -3px;
 }
+/* Il nome è una fila: la figura, poi il testo. Stretto, il testo si taglia
+   alla fine; se due nomi della striscia cominciano uguali (le note del
+   diario) la vista lo divide in testa e coda (`panels/tab-names.ts`), e a
+   cedere è solo la testa: la coda, la parte che distingue, resta a vista
+   finché c'è posto anche per l'ellissi. */
 .tab-name {
-  display: block;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+.tab-name > svg,
+.tab-name > .tab-page-icon {
+  flex: none;
+}
+.tab-name-head,
+.tab-name-tail {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab-name-head {
+  flex: 0 1 auto;
+}
+.tab-name:has(> .tab-name-tail) > .tab-name-head {
+  min-width: 1.5em;
+}
+/* La coda non cede finché la testa ha da cedere; una coda lunga si ferma
+   dove resta il posto della testa più corta, e lì si taglia lei. */
+.tab-name-tail {
+  flex: none;
+  max-width: calc(100% - 1.5em);
 }
 /* Ogni linguetta porta la figura del suo formato, anche la nota: tenue a
    riposo, piena sull'attiva. */
@@ -22233,7 +22261,10 @@ h6.ui-heading {
 }
 
 /* La diagnosi di una scorciatoia c'è solo quando qualcosa non torna (non
- * valida, in conflitto, coperta): la riga intera prende il fondo del pericolo. */
+ * valida, in conflitto, coperta): la riga intera prende il fondo del pericolo.
+ * La riga lo dice con `data-issue`, non con `:has(.setting-diagnostic:not(:empty))`:
+ * in WebKit un `:empty` dentro un `:has()` seguito da `+ *` faceva ricontrollare
+ * tutta la finestra a ogni testo cambiato, 15–25 ms con una view lunga aperta. */
 .setting-diagnostic {
   color: var(--danger);
   font-weight: var(--weight-medium);
@@ -22243,7 +22274,7 @@ h6.ui-heading {
   display: none;
 }
 
-.settings-card > .setting-row:has(.setting-diagnostic:not(:empty)) {
+.settings-card > .setting-row[data-issue] {
   margin: 0 calc(-1 * var(--space-5));
   padding-left: var(--space-5);
   padding-right: var(--space-5);
@@ -22252,13 +22283,13 @@ h6.ui-heading {
   background: var(--danger-wash);
 }
 
-.settings-card > .setting-row:has(.setting-diagnostic:not(:empty)) + * {
+.settings-card > .setting-row[data-issue] + * {
   border-top-color: transparent;
 }
 
 /* Sul fondo del pericolo il rosso non regge 4,5:1 al buio: lì parla
  * l'inchiostro, e il rosso lo dice il fondo. */
-.settings-card > .setting-row:has(.setting-diagnostic:not(:empty)) .setting-diagnostic {
+.settings-card > .setting-row[data-issue] .setting-diagnostic {
   color: var(--text);
 }
 
@@ -22671,7 +22702,7 @@ h6.ui-heading {
     background: Highlight;
   }
 
-  .settings-card > .setting-row:has(.setting-diagnostic:not(:empty)) {
+  .settings-card > .setting-row[data-issue] {
     outline: 1px solid CanvasText;
   }
 

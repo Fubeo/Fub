@@ -292,8 +292,14 @@ appena qualcuno inserisce un item nel mezzo.
 ## La CI in breve
 
 - Una PR **bozza** riceve la CI corta: solo Linux, senza banchi. Pronta per
-  la revisione gira la CI completa, Windows e macOS compresi; su `main` gira
-  sempre tutto.
+  la revisione gira la CI completa, Windows compreso; su `main` gira sempre
+  tutto.
+- macOS e iOS sono in pausa
+  ([ADR 0245](../decisions/0245-macos-e-ios-in-pausa.md)): nessuna PR li
+  aspetta. [`macos-in-pausa.yml`](../../.github/workflows/macos-in-pausa.yml)
+  prova ogni domenica (e a mano) i test del workspace su macOS e la
+  compilazione di `fub-app` per iOS; non è un controllo richiesto, e un job
+  rosso si corregge con una PR normale.
 - I test del workspace girano con `cargo nextest run --workspace --profile ci`
   più `cargo test --workspace --doc`; i fuzzer del Markdown girano a 2000 casi
   (20000 nella corsa settimanale e con `fuzz_completo`).
@@ -333,7 +339,7 @@ scrivere un file. Le regole e le loro prove stanno in
 Nella corsa rilanciata il job `cosa cambia` decide il **riuso**: se il commit
 ha per unico genitore la testa della corsa `riuso_di`, cambia solo
 `apps/client/bench/baseline/*.png` e in quella corsa ogni job tranne il banco
-visivo era verde o saltato, con i test sui tre sistemi, gli altri job si
+visivo era verde o saltato, con i test su Linux e Windows, gli altri job si
 saltano e contano come in quella corsa; gira soltanto il banco visivo. Il
 riepilogo della corsa dice quali job riusa, o perché gira tutto. Il riuso non
 vale per il cancello del rilascio, che vuole ogni job verde.

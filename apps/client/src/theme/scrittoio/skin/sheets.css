@@ -153,11 +153,39 @@
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -3px;
 }
+/* Il nome è una fila: la figura, poi il testo. Stretto, il testo si taglia
+   alla fine; se due nomi della striscia cominciano uguali (le note del
+   diario) la vista lo divide in testa e coda (`panels/tab-names.ts`), e a
+   cedere è solo la testa: la coda, la parte che distingue, resta a vista
+   finché c'è posto anche per l'ellissi. */
 .tab-name {
-  display: block;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+.tab-name > svg,
+.tab-name > .tab-page-icon {
+  flex: none;
+}
+.tab-name-head,
+.tab-name-tail {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab-name-head {
+  flex: 0 1 auto;
+}
+.tab-name:has(> .tab-name-tail) > .tab-name-head {
+  min-width: 1.5em;
+}
+/* La coda non cede finché la testa ha da cedere; una coda lunga si ferma
+   dove resta il posto della testa più corta, e lì si taglia lei. */
+.tab-name-tail {
+  flex: none;
+  max-width: calc(100% - 1.5em);
 }
 /* Ogni linguetta porta la figura del suo formato, anche la nota: tenue a
    riposo, piena sull'attiva. */

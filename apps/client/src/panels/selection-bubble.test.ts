@@ -116,6 +116,27 @@ describe("la bolla di selezione", () => {
     expect(bubble.element.hidden).toBe(false);
   });
 
+  it("a selezione ferma, un altro avviso non riscrive nulla: in WebKit ogni attributo riscritto ridipinge", async () => {
+    const f = fixture();
+    make(f);
+    await frames();
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver((list) => records.push(...list));
+    observer.observe(bubble.element, { attributes: true });
+    for (let step = 0; step < 3; step++) {
+      f.select({ left: 400, top: 300, right: 500, bottom: 320 });
+      await frames();
+    }
+    records.push(...observer.takeRecords());
+    expect(records.map((record) => record.attributeName)).toEqual([]);
+    f.select({ left: 10, top: 100, right: 60, bottom: 120 });
+    await frames();
+    records.push(...observer.takeRecords());
+    observer.disconnect();
+    // Si sposta: `left` e `top`, nient'altro.
+    expect([...new Set(records.map((record) => record.attributeName))]).toEqual(["style"]);
+  });
+
   it("un clic esegue l'azione sulla superficie", async () => {
     const f = fixture();
     make(f);

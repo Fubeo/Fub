@@ -36,7 +36,9 @@ import { fileURLToPath } from "node:url";
 /** Il job del banco visivo e quello dei test, come li chiama `ci.yml`. */
 export const VISIVO = "banco visivo (scene uguali alle baseline)";
 export const CAMBIA = "cosa cambia";
-export const TEST = ["ubuntu-latest", "windows-latest", "macos-latest"].map((os) => `build + test (${os})`);
+// macOS è in pausa (docs/decisions/0245-macos-e-ios-in-pausa.md): non è nella
+// matrice di `ci.yml`, e quindi nemmeno qui.
+export const TEST = ["ubuntu-latest", "windows-latest"].map((os) => `build + test (${os})`);
 
 /** Il nome di una foto, come lo compone `photoFilename` del banco. */
 export const NOME_FOTO = /^[a-z0-9][a-z0-9-]*\.png$/;
@@ -602,7 +604,7 @@ function selfTest() {
     });
     prova("riuso: un altro job rosso", () => !riuso({ job: job.map((j) => (j.name === TEST[1] ? { ...j, conclusion: "failure" } : j)) }).riuso);
     prova("riuso: un job annullato", () => !riuso({ job: job.map((j) => (j.name === CAMBIA ? { ...j, conclusion: "cancelled" } : j)) }).riuso);
-    prova("riuso: test soltanto su Linux (bozza)", () => !riuso({ job: job.filter((j) => j.name !== TEST[1] && j.name !== TEST[2]) }).riuso);
+    prova("riuso: test soltanto su Linux (bozza)", () => !riuso({ job: job.filter((j) => j.name !== TEST[1]) }).riuso);
     prova("riuso: un job saltato va bene", () => riuso({ job: [...job, { name: "altro", status: "completed", conclusion: "skipped" }] }).riuso);
     prova("riuso: banco visivo verde (non c'era niente da rifare)", () => !riuso({ job: job.map((j) => (j.name === VISIVO ? { ...j, conclusion: "success" } : j)) }).riuso);
     prova("riuso: il diff tocca un file che non è una baseline", () => !riuso({ diff: `${base.diff}:100644 100644 ${"1".repeat(40)} ${"2".repeat(40)} M\tapps/client/src/main.ts\n` }).riuso);
@@ -630,7 +632,7 @@ function selfTest() {
       ci.includes(`name: ${VISIVO}\n`) &&
       ci.includes(`name: ${CAMBIA}\n`) &&
       ci.includes("name: build + test (${{ matrix.os }})") &&
-      ci.includes('["ubuntu-latest", "windows-latest", "macos-latest"]'),
+      ci.includes('["ubuntu-latest", "windows-latest"]'),
     );
     prova("ci.yml: il banco visivo non si salta mai col riuso", () => {
       const blocco = ci.split(/\n  visual:\n/)[1]?.split(/\n  [a-z][a-z0-9-]*:\n/)[0] ?? "";
