@@ -144,7 +144,9 @@ sono icona, copertina, titolo e menu «⋯» lo dice la
   elenco, persone (un elenco di soli `[[link]]`), testo. Un valore che non
   torna col tipo dichiarato resta testo, sottolineato, e dice «Non è numero:
   resta testo»; non si riscrive niente per farlo tornare. Selezione e Stato si
-  scrivono intanto come testo. La data si legge per esteso nella lingua
+  scrivono intanto come testo; un valore che è un'opzione del registro
+  (`options`) si legge come la pastiglia del suo colore, col pallino per lo
+  Stato, e uno fuori dalle opzioni resta testo. La data si legge per esteso nella lingua
   dell'interfaccia; le persone hanno il tondo delle iniziali, le voci di un
   elenco e le etichette sono pastiglie.
 - **`editor.properties`** decide quanto se ne vede: `visible` (il default) le
