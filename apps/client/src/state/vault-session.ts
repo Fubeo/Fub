@@ -17,7 +17,7 @@ import { vaultStatus } from "../host/query";
 import { plural, t } from "../i18n/strings";
 import { allCommands, conflictMessage, keybindingKey, loadKeyOverrides } from "../ui/commands";
 import type { NoticeAction, Tone } from "../ui/notify";
-import { openDocument, recoverDrafts, resetDocumentsForVault, synchronize } from "./document-controller";
+import { openDocument, openingsSoFar, recoverDrafts, resetDocumentsForVault, synchronize } from "./document-controller";
 import { flushPendingSave } from "./document-session";
 import { drainDocumentWindows } from "./document-windows";
 import { activeTab, loadLayout } from "./layout";
@@ -245,11 +245,15 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     // qualunque le tab che l'utente aveva lasciato aperte. Una linguetta di
     // view (il grafo) è una tab da ripristinare come un documento: chiedere
     // «c'è un documento attivo?» la scavalcava con la prima nota (#237 R08).
+    //
+    // La decisione si prende adesso e la risposta arriva dopo: se intanto si è
+    // aperto qualcosa, la prima nota non scavalca ciò che è stato chiesto dopo.
     if (!activeTab()) {
+      const decided = openingsSoFar();
       const before = await beforeNote();
       if (!alive()) return;
-      if (before) {
-        await openDocument(before);
+      if (before && !activeTab()) {
+        await openDocument(before, { unlessOpenedSince: decided });
         if (!alive()) return;
       }
     }

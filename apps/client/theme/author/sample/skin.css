@@ -6667,6 +6667,18 @@ kbd,
   color: var(--doc-bg);
   background: var(--accent);
 }
+/* Il cartellino (E2, «Fuori dalla colonna»): staccato dal testo il blocco in
+   mano si fa piccolo, appena trasparente, senza la maniglia. Il
+   rimpicciolimento lo anima `handles.ts` (`goFree`): dentro l'editor il moto
+   spegne le transizioni CSS. Il titolo della Struttura sotto il puntatore lo
+   accende `nodes.css`. */
+.cm-editor .cm-fub-block-lift[data-free] .cm-fub-block-lift-card,
+.cm-editor .cm-fub-block-lift[data-free] .cm-fub-block-lift-shade {
+  opacity: 0.97;
+}
+.cm-editor .cm-fub-block-lift[data-free] .cm-fub-block-lift-grip {
+  opacity: 0;
+}
 /* Il posto dove cadrà: fondo d'accento e un filo; sull'origine, grigio. */
 .cm-editor .cm-fub-block-slot {
   background: var(--accent-veil);
@@ -15970,6 +15982,15 @@ h6.ui-heading {
 :where(.ui-list) .ui-list-item[aria-current="true"].clickable:hover {
   position: relative;
   background: transparent;
+}
+/* **Il bersaglio di un blocco in mano** (E2, «Fuori dalla colonna»): la riga
+   che nomina un posto della nota, col cartellino dei Blocchi sopra, si accende
+   col filo e il velo d'accento; vince sul passaggio e sulla voce corrente. */
+.ui-tree-label[data-drop-hot],
+.ui-tree-label.clickable[data-drop-hot]:hover,
+.ui-tree-item[aria-selected="true"] > .ui-tree-label[data-drop-hot] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--accent-veil);
 }
 :where(.ui-tree) .ui-tree-item[aria-selected="true"] > .ui-tree-label::after,
 :where(.ui-list) .ui-list-item[aria-current="true"]::after {
