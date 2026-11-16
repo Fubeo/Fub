@@ -81,13 +81,18 @@ async function open(doc: string): Promise<void> {
 
 const value = (key: string) => document.querySelector<HTMLElement>(`.cm-fub-page-prop[data-key="${key}"] .cm-fub-page-prop-value`)!;
 
-beforeEach(() => {
-  // Il fuoco e la selezione della prova di prima non restano su nodi tolti:
-  // happy-dom li annuncerebbe alle viste nuove a metà di un loro update.
+/// Ferma la shell. Prima il fuoco e la selezione lasciano i nodi che si
+/// tolgono: happy-dom annuncerebbe la selezione alle viste nuove a metà di un
+/// loro update.
+function stopShell(): void {
   (document.activeElement as HTMLElement | null)?.blur();
   document.getSelection()?.removeAllRanges();
   activeStop?.();
   activeStop = null;
+}
+
+beforeEach(() => {
+  stopShell();
   document.body.innerHTML = "";
   localStorage.clear();
 });
@@ -107,8 +112,7 @@ describe("le proprietà della testata", () => {
     await waitFor("il salvataggio arriva al disco", () => host.files()["Mostra.md"] === "---\npagine: 40\nscadenza: 2026-03-12\n---\nIl testo della nota.\n");
 
     // Una shell nuova, sullo stesso disco: la nota riletta dice i valori nuovi.
-    activeStop?.();
-    activeStop = null;
+    stopShell();
     await start(host.files());
     await open("Mostra.md");
     expect(value("pagine").textContent).toBe("40");

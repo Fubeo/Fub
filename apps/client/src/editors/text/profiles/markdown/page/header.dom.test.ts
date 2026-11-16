@@ -400,6 +400,8 @@ describe("la testata in Lettura", () => {
 describe("sul corpus", () => {
   const cases = (corpus as { name: string; source: string }[]);
 
+  // Tutto il corpus, in tre modi e in due viste: sotto il carico della CI va
+  // oltre i 5 s di default.
   it("la testata non cambia un byte del file, in Scrittura e in Lettura", () => {
     for (const { name, source } of cases) {
       for (const display of ["visible", "hidden", "source"] as const) {
@@ -417,7 +419,7 @@ describe("sul corpus", () => {
         element.remove();
       }
     }
-  });
+  }, 30_000);
 });
 
 describe("la testata misurata da CodeMirror", () => {
