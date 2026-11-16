@@ -1423,6 +1423,39 @@ describe("il menu col campo, il titolo e il piede dei tasti", () => {
     expect(labels()).toContain("Elimina");
   });
 
+  it("il campo non sta dentro il menu: un dialogo modale tiene il campo e il menu delle voci, col suo nome", () => {
+    const input = open();
+    const surface = document.getElementById("context-menu")!;
+    expect(surface.getAttribute("role")).toBe("dialog");
+    expect(surface.getAttribute("aria-modal")).toBe("true");
+    expect(surface.hasAttribute("aria-orientation")).toBe(false);
+    const list = surface.querySelector<HTMLElement>(".menu-items")!;
+    expect(list.getAttribute("role")).toBe("menu");
+    expect(list.getAttribute("aria-orientation")).toBe("vertical");
+    expect(list.getAttribute("aria-labelledby")).toBe("context-menu");
+    expect(input.closest('[role="menu"]'), "nessun menu attorno al campo").toBeNull();
+    expect(rows().every((row) => row.closest('[role="menu"]') === list)).toBe(true);
+  });
+
+  it("aperto dal puntatore il campo ha il fuoco senza anello; il Tab o il fuoco che torna dalla tastiera lo accendono", () => {
+    let input = open();
+    expect(input.classList.contains("menu-field-pointer")).toBe(true);
+    key(input, "Tab");
+    expect(input.classList.contains("menu-field-pointer"), "il Tab chiede dove si è").toBe(false);
+    closeContextMenu();
+    input = open();
+    key(input, "ArrowDown");
+    key(document.activeElement!, "ArrowUp");
+    key(document.activeElement!, "ArrowUp");
+    expect(document.activeElement).toBe(input);
+    expect(input.classList.contains("menu-field-pointer"), "tornato dalla voce").toBe(false);
+    closeContextMenu();
+    showContextMenu(document.body, [{ label: "Duplica", run: () => {} }], { pointer: false, field: "Cerca un'azione…" });
+    input = document.querySelector<HTMLInputElement>("#context-menu .menu-field-input")!;
+    expect(document.activeElement).toBe(input);
+    expect(input.classList.contains("menu-field-pointer"), "aperto da tastiera").toBe(false);
+  });
+
   it("Esc prima svuota il campo, poi chiude", () => {
     const input = open();
     write(input, "dup");

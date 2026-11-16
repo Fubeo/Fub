@@ -7,7 +7,7 @@ export const MENUS: PartAnatomy = {
   components: [
     { name: "context-menu", states: [S("rest")], hooks: ["context-menu", "menu-at-point", "menu-items", "menu-glide", "menu-lit", "menu-separator", "menu-group", "menu-group-label", "menu-empty", "menu-title"] },
     { name: "menu-head", states: [S("rest")], hooks: ["menu-head", "menu-head-kind", "menu-head-name"] },
-    { name: "menu-field", states: [S("rest"), S("focused")], hooks: ["menu-field", "menu-field-input"] },
+    { name: "menu-field", states: [S("rest"), S("focused")], hooks: ["menu-field", "menu-field-input", "menu-field-pointer"] },
     { name: "menu-clipboard", states: [S("rest"), S("hover"), S("focused"), S("pressed")], hooks: ["menu-clipboard", "menu-clipboard-glide", "menu-quick", "menu-pressed"] },
     { name: "menu-choices", states: [S("rest"), S("hover"), S("focused"), S("pressed")], hooks: ["menu-choices", "menu-choice", "menu-choice-set", "menu-choice-name"] },
     { name: "menu-foot", states: [S("rest")], hooks: ["menu-foot", "menu-foot-text", "menu-foot-query", "menu-foot-caret", "menu-finding", "menu-path", "menu-foot-keys", "menu-foot-key"] },

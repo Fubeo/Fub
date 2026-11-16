@@ -458,6 +458,9 @@ export function showContextMenu(
   if (options.label) menu.setAttribute("aria-label", options.label);
   else if (options.labelledBy) menu.setAttribute("aria-labelledby", options.labelledBy);
   else if (options.title && !options.header) menu.setAttribute("aria-label", options.title);
+  // Col campo la superficie è un dialogo, e il suo nome è anche quello del
+  // menu delle voci che tiene.
+  if (root.field !== null) menu.querySelector(".menu-items")?.setAttribute("aria-labelledby", menu.id);
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
   const workspace = document.getElementById("workspace");
@@ -486,8 +489,10 @@ export function showContextMenu(
   // del menu, però, è una sola voce, secondo la regola del roving tabindex.
   // Aperto dal puntatore, il fuoco sta nel menu finché una freccia non sceglie.
   // Col campo della ricerca, il fuoco sta nel campo: si scrive subito.
-  if (root.field !== null) root.field.focus({ preventScroll: true });
-  else if (pointer) root.menu.focus({ preventScroll: true });
+  if (root.field !== null) {
+    if (pointer) root.field.classList.add("menu-field-pointer");
+    root.field.focus({ preventScroll: true });
+  } else if (pointer) root.menu.focus({ preventScroll: true });
   else root.focusActive();
   // Un click nella barra o in un menu, invece, è un gesto dentro la superficie:
   // la barra lavora coi suoi controlli, una voce chiude da sé quando agisce, e
@@ -746,6 +751,25 @@ function renderMenu(
     field.spellcheck = false;
     fieldRow.append(field);
     menu.append(fieldRow);
+    // Un menu ha soltanto voci, e un campo dentro di lui non ci può stare. Col
+    // campo la superficie è un piccolo dialogo modale (la trappola del fuoco
+    // la fa già tale) che tiene il campo e, sotto, il menu delle voci: è il
+    // modello dei menu con la ricerca, in cui ↓ dal campo porta il fuoco sulle
+    // voci e ↑ dalla prima lo riporta qui.
+    menu.setAttribute("role", "dialog");
+    menu.setAttribute("aria-modal", "true");
+    menu.removeAttribute("aria-orientation");
+    list.setAttribute("role", "menu");
+    list.setAttribute("aria-orientation", "vertical");
+    // Aperto dal puntatore, il campo prende il fuoco senza anello, come nel
+    // prototipo: dove si è lo dicono il cursore che lampeggia e la voce
+    // accesa (`menu-field-pointer`, messo da `showContextMenu`). Appena il
+    // fuoco ci torna dalla tastiera, o il Tab chiede dove si è, l'anello.
+    const quiet = field;
+    lifetime.listen(quiet, "blur", () => quiet.classList.remove("menu-field-pointer"));
+    lifetime.listen(quiet, "keydown", (e) => {
+      if (e.key === "Tab") quiet.classList.remove("menu-field-pointer");
+    });
   }
   // Il titolo quieto in cima alle voci: un'etichetta del kit, come quelle dei
   // gruppi; sta nell'elenco, e scrivendo sparisce. Il nome del menu lo dice

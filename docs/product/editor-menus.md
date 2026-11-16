@@ -217,7 +217,12 @@ Blocchi), Duplica (Ctrl D), Copia il link al blocco, ed Elimina (Canc) per
 ultimo; in fondo il piede «↵ sceglie · → apre · Esc chiude». La prima voce è
 accesa, e scrivendo nel campo l'elenco si filtra e si accende la prima
 trovata: Invio sceglie l'accesa, ↓ va alla voce dopo, ↑ dalla prima torna al
-campo, Esc svuota il campo prima di chiudere. Sposta su e giù (che hanno Ctrl Maiusc ↑ ↓ e il trascinamento) e
+campo, Esc svuota il campo prima di chiudere. Aperto col puntatore, il campo
+ha il fuoco senza anello, come nel prototipo (lo dicono il cursore e la voce
+accesa); il fuoco che ci torna dalla tastiera, o il Tab, gli dà l'anello di
+casa. Per chi ascolta la superficie è un piccolo dialogo modale col nome del
+blocco, che tiene il campo e, sotto, il menu delle voci: un menu ha soltanto
+voci, e il campo non ci può stare dentro. Sposta su e giù (che hanno Ctrl Maiusc ↑ ↓ e il trascinamento) e
 Affianca in colonne (che è anche il trascinamento accanto a un blocco) non
 rubano un posto: si trovano scrivendo, sotto «Altri comandi». La griglia delle tabelle in Live ha la testata «Tabella», la barra
 degli appunti, Inserisci ▸, Sposta ▸, Ordina la colonna ▸, Allinea la colonna

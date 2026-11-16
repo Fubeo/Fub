@@ -1591,6 +1591,7 @@
     "menu-head-name",
     "menu-field",
     "menu-field-input",
+    "menu-field-pointer",
     "menu-clipboard",
     "menu-clipboard-glide",
     "menu-quick",
@@ -3486,6 +3487,7 @@
     "menu-head-name": "cornice",
     "menu-field": "cornice",
     "menu-field-input": "cornice",
+    "menu-field-pointer": "cornice",
     "menu-clipboard": "cornice",
     "menu-clipboard-glide": "cornice",
     "menu-quick": "cornice",
@@ -7755,7 +7757,8 @@
       "part": "menus",
       "hooks": [
         "menu-field",
-        "menu-field-input"
+        "menu-field-input",
+        "menu-field-pointer"
       ],
       "states": [
         "rest",
@@ -10160,7 +10163,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1893,
+    "hooks": 1894,
     "state_names": 7,
     "assigned_states": 883,
     "components": 260,
