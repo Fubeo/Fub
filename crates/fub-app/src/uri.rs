@@ -152,6 +152,7 @@ pub fn handle_fub_uri_with_policy(
             source_url,
             success_callback,
             error_callback,
+            ..
         } => UriOutcome::CapturePending {
             vault,
             folder,

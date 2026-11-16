@@ -1,5 +1,5 @@
-//! Le domande al canale dati (`query_index`) fuori dal thread principale,
-//! **in fila**.
+//! Le domande al canale dati (`query_index`) e i disegni delle view
+//! (`render_view`) fuori dal thread principale, **in fila**.
 //!
 //! Un comando sincrono di Tauri gira sul thread principale, lo stesso che
 //! presenta i fotogrammi della finestra: una domanda lunga — il correttore che
@@ -22,6 +22,14 @@
 //! che non è fidata, e un nome nuovo oltre il tetto va nella corsia comune
 //! delle altre (`CORSIA_ALTRE`). Una domanda che va in panico risponde
 //! `Internal` e la corsia continua.
+//!
+//! I disegni delle view hanno una corsia loro (`CORSIA_VISTE`), che c'è
+//! sempre. Arrivano a raffica: un salvataggio invecchia una ventina di view
+//! (struttura, collegamenti, statistiche, cronologia…) e la shell le ridisegna
+//! tutte nello stesso giro. Ognuna costa pochi millisecondi, ma in fila sul
+//! thread principale erano 100 ms in cui la finestra non presentava
+//! fotogrammi. In corsia i disegni restano in fila fra loro e non aspettano le
+//! domande dell'indice né il correttore.
 
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -31,10 +39,14 @@ use std::sync::Mutex;
 use fub_abi::traits::IndexQuery;
 use fub_abi::PluginError;
 
-/// Quante corsie al più: l'indice, la comune delle altre e i plugin.
+/// Quante corsie al più per le domande: l'indice, la comune delle altre e i
+/// plugin. Quella delle viste sta fuori dal conto.
 pub(crate) const MAX_CORSIE: usize = 16;
 const CORSIA_INDICE: &str = "indice";
 const CORSIA_ALTRE: &str = "altre";
+/// La corsia dei disegni delle view. Nessuna domanda ci finisce per errore:
+/// quelle dei plugin si chiamano `custom:…`.
+pub(crate) const CORSIA_VISTE: &str = "viste";
 
 type Lavoro = Box<dyn FnOnce() + Send + 'static>;
 
@@ -54,7 +66,13 @@ pub(crate) fn corsia(query: &IndexQuery) -> String {
 
 impl Corsie {
     /// Mette `lavoro` in fondo alla corsia `nome` e ne aspetta la risposta.
-    pub(crate) async fn chiedi<T, F>(&self, nome: String, lavoro: F) -> Result<T, PluginError>
+    /// `cosa` nomina il lavoro negli errori.
+    pub(crate) async fn chiedi<T, F>(
+        &self,
+        cosa: &'static str,
+        nome: String,
+        lavoro: F,
+    ) -> Result<T, PluginError>
     where
         T: Send + 'static,
         F: FnOnce() -> Result<T, PluginError> + Send + 'static,
@@ -62,27 +80,31 @@ impl Corsie {
         let (risposta, attesa) = tokio::sync::oneshot::channel();
         let compito: Lavoro = Box::new(move || {
             let esito = catch_unwind(AssertUnwindSafe(lavoro))
-                .unwrap_or_else(|_| Err(crate::unfinished("index query", "it panicked")));
+                .unwrap_or_else(|_| Err(crate::unfinished(cosa, "it panicked")));
             // Chi aspetta può essersene andato: la risposta non serve più.
             let _ = risposta.send(esito);
         });
-        self.accoda(nome, compito)?;
+        self.accoda(cosa, nome, compito)?;
         attesa
             .await
-            .map_err(|_| crate::unfinished("index query", "its lane closed"))?
+            .map_err(|_| crate::unfinished(cosa, "its lane closed"))?
     }
 
-    fn accoda(&self, nome: String, compito: Lavoro) -> Result<(), PluginError> {
+    fn accoda(&self, cosa: &'static str, nome: String, compito: Lavoro) -> Result<(), PluginError> {
         let mut file = self
             .file
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let nome =
-            if file.contains_key(&nome) || file.len() < MAX_CORSIE - 1 || nome == CORSIA_ALTRE {
-                nome
-            } else {
-                CORSIA_ALTRE.to_string()
-            };
+        let domande = file.len() - usize::from(file.contains_key(CORSIA_VISTE));
+        let nome = if file.contains_key(&nome)
+            || domande < MAX_CORSIE - 1
+            || nome == CORSIA_ALTRE
+            || nome == CORSIA_VISTE
+        {
+            nome
+        } else {
+            CORSIA_ALTRE.to_string()
+        };
         let compito = match file.get(&nome) {
             Some(fila) => match fila.send(compito) {
                 Ok(()) => return Ok(()),
@@ -91,8 +113,8 @@ impl Corsie {
             },
             None => compito,
         };
-        let fila = apri_corsia(&nome)
-            .map_err(|_| crate::unfinished("index query", "its lane did not start"))?;
+        let fila =
+            apri_corsia(&nome).map_err(|_| crate::unfinished(cosa, "its lane did not start"))?;
         // Il thread appena aperto riceve: l'invio non fallisce.
         let _ = fila.send(compito);
         file.insert(nome, fila);
@@ -150,7 +172,7 @@ mod tests {
         runtime().block_on(async {
             let lenta = {
                 let ordine = Arc::clone(&ordine);
-                corsie.chiedi("indice".into(), move || {
+                corsie.chiedi("index query", "indice".into(), move || {
                     std::thread::sleep(Duration::from_millis(150));
                     ordine.lock().unwrap().push("ab");
                     Ok("ab")
@@ -158,7 +180,7 @@ mod tests {
             };
             let svelta = {
                 let ordine = Arc::clone(&ordine);
-                corsie.chiedi("indice".into(), move || {
+                corsie.chiedi("index query", "indice".into(), move || {
                     ordine.lock().unwrap().push("abc");
                     Ok("abc")
                 })
@@ -174,12 +196,14 @@ mod tests {
         let corsie = Corsie::default();
         runtime().block_on(async {
             let partenza = Instant::now();
-            let lenta = corsie.chiedi("custom:fub.proof".into(), || {
+            let lenta = corsie.chiedi("index query", "custom:fub.proof".into(), || {
                 std::thread::sleep(Duration::from_millis(400));
                 Ok(())
             });
             let svelta = async {
-                let esito = corsie.chiedi("indice".into(), || Ok(())).await;
+                let esito = corsie
+                    .chiedi("index query", "indice".into(), || Ok(()))
+                    .await;
                 (esito, partenza.elapsed())
             };
             let (_, (esito, dopo)) = tokio::join!(lenta, svelta);
@@ -195,9 +219,17 @@ mod tests {
     fn una_domanda_in_panico_risponde_internal_e_la_corsia_continua() {
         let corsie = Corsie::default();
         runtime().block_on(async {
-            let caduta: Result<(), _> = corsie.chiedi("indice".into(), || panic!("prova")).await;
+            let caduta: Result<(), _> = corsie
+                .chiedi("index query", "indice".into(), || panic!("prova"))
+                .await;
             assert!(matches!(caduta, Err(PluginError::Internal(_))));
-            assert_eq!(corsie.chiedi("indice".into(), || Ok(7)).await.unwrap(), 7);
+            assert_eq!(
+                corsie
+                    .chiedi("index query", "indice".into(), || Ok(7))
+                    .await
+                    .unwrap(),
+                7
+            );
         });
     }
 
@@ -207,7 +239,7 @@ mod tests {
         runtime().block_on(async {
             for i in 0..MAX_CORSIE * 4 {
                 corsie
-                    .chiedi(format!("custom:ns{i}"), || Ok(()))
+                    .chiedi("index query", format!("custom:ns{i}"), || Ok(()))
                     .await
                     .unwrap();
             }
@@ -218,10 +250,62 @@ mod tests {
     }
 
     #[test]
+    fn la_corsia_delle_viste_c_e_anche_a_tetto_pieno_e_non_toglie_posti() {
+        let corsie = Corsie::default();
+        runtime().block_on(async {
+            corsie
+                .chiedi("view render", CORSIA_VISTE.into(), || Ok(()))
+                .await
+                .unwrap();
+            for i in 0..MAX_CORSIE * 4 {
+                corsie
+                    .chiedi("index query", format!("custom:ns{i}"), || Ok(()))
+                    .await
+                    .unwrap();
+            }
+            assert_eq!(
+                corsie
+                    .chiedi("view render", CORSIA_VISTE.into(), || Ok(3))
+                    .await
+                    .unwrap(),
+                3
+            );
+        });
+        let file = corsie.file.lock().unwrap();
+        assert_eq!(file.len(), MAX_CORSIE + 1);
+        assert!(file.contains_key(CORSIA_VISTE));
+        assert!(file.contains_key(CORSIA_ALTRE));
+    }
+
+    #[test]
+    fn un_disegno_lento_non_fa_aspettare_l_indice() {
+        let corsie = Corsie::default();
+        runtime().block_on(async {
+            let partenza = Instant::now();
+            let lenta = corsie.chiedi("view render", CORSIA_VISTE.into(), || {
+                std::thread::sleep(Duration::from_millis(400));
+                Ok(())
+            });
+            let svelta = async {
+                let esito = corsie
+                    .chiedi("index query", "indice".into(), || Ok(()))
+                    .await;
+                (esito, partenza.elapsed())
+            };
+            let (_, (esito, dopo)) = tokio::join!(lenta, svelta);
+            esito.unwrap();
+            assert!(
+                dopo < Duration::from_millis(300),
+                "l'indice ha aspettato le viste: {dopo:?}"
+            );
+        });
+    }
+
+    #[test]
     fn uno_spazio_dei_nomi_qualsiasi_apre_la_sua_corsia() {
         let corsie = Corsie::default();
         let strano = format!("custom:a\0b{}", "x".repeat(500));
-        let esito = runtime().block_on(corsie.chiedi(strano, || Ok(1)));
+        let esito = runtime().block_on(corsie.chiedi("index query", strano, || Ok(1)));
         assert_eq!(esito.unwrap(), 1);
         assert_eq!(nome_thread("custom:a\0b/c"), "fub-domande-custom:a_b_c");
     }

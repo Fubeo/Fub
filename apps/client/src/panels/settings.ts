@@ -72,6 +72,7 @@ import { SETTINGS_WITH_THEIR_OWN_GESTURE } from "../ui/shell-ids.generated";
 import { errorText } from "../host/errors";
 import { LANGUAGE_KEY, catalogLanguages, onLanguage, plural, t, type Key } from "../i18n/strings";
 import {
+  MOTION_KEY,
   SERIES_THEME_ID,
   THEME_KEY,
   cancelThemePreview,
@@ -227,6 +228,15 @@ let tab: SettingsTab = "settings";
 /// La scheda dell'ultimo disegno: cambiarla riporta lo scroll in cima, un
 /// ridisegno della stessa lo conserva.
 let renderedTab: SettingsTab | null = null;
+
+/// La sezione scelta con un clic nell'indice. Resta la voce attiva finché chi
+/// legge non scorre di suo: lo scorrimento che il clic avvia non può portare
+/// in cima le sezioni dell'ultimo schermo, e l'osservatore ne sceglierebbe
+/// un'altra.
+let chosenSection: string | null = null;
+
+/// I tasti con cui si scorre il corpo da tastiera.
+const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
 
 const settingsTabsId = "settings-body";
 
@@ -472,6 +482,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     lifetime.listen(field, "input", () => {
       if (!isFilterable(tab)) return;
       pinnedRow = null;
+      chosenSection = null;
       filters[tab].query = field.value;
       scrollEl.scrollTop = 0;
       applyFilter();
@@ -481,6 +492,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     lifetime.listen(modifiedEl, "click", () => {
       if (!isFilterable(tab)) return;
       pinnedRow = null;
+      chosenSection = null;
       filters[tab].modified = !filters[tab].modified;
       scrollEl.scrollTop = 0;
       syncToolbar();
@@ -488,6 +500,25 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     });
   }
   lifetime.listen(scrollEl, "scroll", () => updateTocCurrent());
+  // Chi scorre di suo (rotella, dito, barra, tasti) riprende la voce attiva
+  // dalla posizione, anche se in fondo lo scorrimento non si muove più.
+  const ownScroll = (): void => {
+    if (chosenSection === null) return;
+    chosenSection = null;
+    updateTocCurrent();
+  };
+  lifetime.listen(scrollEl, "wheel", ownScroll, { passive: true });
+  lifetime.listen(scrollEl, "touchmove", ownScroll, { passive: true });
+  lifetime.listen(scrollEl, "pointerdown", (event) => {
+    if (event.target === scrollEl) ownScroll();
+  });
+  lifetime.listen(scrollEl, "keydown", (event) => {
+    if (!SCROLL_KEYS.has(event.key)) return;
+    // I tasti di un controllo sono del controllo, non dello scorrimento.
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("input, textarea, select, button, [contenteditable]") || target?.matches("[role]")) return;
+    ownScroll();
+  });
   if (tocListEl) {
     lifetime.listen(tocListEl, "click", (event) => {
       const target = (event.target as Element | null)?.closest<HTMLButtonElement>("button[data-target]");
@@ -723,6 +754,7 @@ async function render(): Promise<void> {
     replacingBody = false;
   }
   if (renderedTab === tab) restoreDrafts(drafts);
+  else chosenSection = null;
   rememberSavedValues();
   if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
   scrollEl.scrollTop = renderedTab === tab ? scrollTop : 0;
@@ -904,7 +936,8 @@ function syncTocEntries(): void {
   updateTocCurrent();
 }
 
-/// La sezione in lettura: l'ultima il cui titolo è salito oltre il bordo alto
+/// La sezione in lettura: quella scelta nell'indice, finché chi legge non
+/// scorre di suo; sennò l'ultima il cui titolo è salito oltre il bordo alto
 /// del corpo. In fondo allo scroll è l'ultima, anche se è corta e il suo titolo
 /// non può salire fin lassù.
 function updateTocCurrent(): void {
@@ -913,8 +946,11 @@ function updateTocCurrent(): void {
   if (visible.length === 0) return;
   const top = scrollEl.getBoundingClientRect().top;
   let current = visible[0]!;
+  const chosen = chosenSection === null ? undefined : visible.find((section) => section.id === chosenSection);
+  if (chosenSection !== null && !chosen) chosenSection = null;
   const atEnd = scrollEl.scrollTop > 0 && scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 2;
-  if (atEnd) current = visible[visible.length - 1]!;
+  if (chosen) current = chosen;
+  else if (atEnd) current = visible[visible.length - 1]!;
   else {
     for (const section of visible) {
       if (section.getBoundingClientRect().top - top <= 32) current = section;
@@ -932,6 +968,7 @@ function updateTocCurrent(): void {
 function jumpTo(id: string): void {
   const section = document.getElementById(id);
   if (!section || !bodyEl.contains(section)) return;
+  chosenSection = id;
   section.scrollIntoView?.({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" });
   section.querySelector<HTMLElement>(".settings-section-title")?.focus({ preventScroll: true });
   for (const link of tocListEl?.querySelectorAll<HTMLButtonElement>("button[data-target]") ?? []) {
@@ -1026,6 +1063,7 @@ async function renderForm(): Promise<HTMLElement[]> {
       }
       const item = renderRow(entry);
       if (entry.spec.key === FRAME_KEY) await decorateFrame(item, entry);
+      if (entry.spec.key === MOTION_KEY) decorateMotion(item, entry);
       parts.body.append(item);
     }
     if (themes.length > 0 && group.rows.some((entry) => entry.spec.key === THEME_KEY)) {
@@ -1073,6 +1111,20 @@ async function decorateFrame(item: HTMLElement, entry: SettingEntry): Promise<vo
     text?.append(row("setting-source", t("settings.frame.reopen")));
   }
   if (control?.getAttribute("role") === "radiogroup") settleRadioGroup(control);
+}
+
+/// Il perché del valore di partenza delle animazioni, quando non è «segue il
+/// sistema». Il default lo decide l'host (`fub_host::settings::motion_default`),
+/// e oggi è «ridotte» per una sola ragione: la WebKitGTK di questo sistema
+/// sfarfalla dopo un'animazione. Un'altra ragione domani vorrà la sua frase.
+function decorateMotion(item: HTMLElement, entry: SettingEntry): void {
+  if (entry.spec.kind.kind !== "choice" || entry.spec.kind.default !== "reduced") return;
+  const note = row("setting-source", t("settings.motion.webkitgtk_default"));
+  note.id = `setting-${entry.spec.key}-default-why`;
+  item.querySelector(".setting-text")?.append(note);
+  const control = item.querySelector<HTMLElement>("select, [role=radiogroup]");
+  const existing = control?.getAttribute("aria-describedby");
+  control?.setAttribute("aria-describedby", [existing, note.id].filter(Boolean).join(" "));
 }
 
 function disableControl(control: HTMLElement | null): void {
@@ -2516,7 +2568,12 @@ async function renderShortcuts(): Promise<HTMLElement[]> {
       diagnostic.id = `shortcut-issue-${command.id.replace(/[^a-z0-9_-]/gi, "-")}`;
       input.setAttribute("aria-describedby", diagnostic.id);
       const update = () => {
-        diagnostic.textContent = shortcutDiagnostic(command, input.value, commands);
+        const issue = shortcutDiagnostic(command, input.value, commands);
+        diagnostic.textContent = issue;
+        // La riga dice da sé che c'è un problema: la pelle la veste con
+        // `[data-issue]`. Un `:has(… :not(:empty)) + *` costava in WebKit
+        // ogni testo cambiato in tutta la finestra (vedi `performance-webview.md`).
+        element.toggleAttribute("data-issue", issue !== "");
         if (validateKeybinding(input.value).valid) input.removeAttribute("aria-invalid");
         else input.setAttribute("aria-invalid", "true");
       };

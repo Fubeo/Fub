@@ -1,8 +1,9 @@
-import type { SyntaxNode } from "@lezer/common";
-import { inlineDelimiters, scanTags, textSpans, wikilink, type FoundWikilink } from "../../../../rules/syntax";
+import type { SyntaxNode, Tree } from "@lezer/common";
+import { inlineDelimiters, scanTags, textSpans, wikilink, type FoundWikilink, type SyntaxForm } from "../../../../rules/syntax";
 import { markdownGrammar } from "./grammar";
 import { decodeDestination, decodeEntities, normalizeLabel } from "./link-syntax";
 import type { MarkdownRenderContext } from "./render-types";
+import { COMMENTS_SYNTAX, containerThreads, mayHaveComments, threadCuts, type CommentThread } from "./comments/syntax";
 import { CONTENT_COLORS } from "../../../../ui/sanitize";
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -478,6 +479,119 @@ export function scanInlineFootnotes(value: string): InlineFootnote[] {
   return found;
 }
 
+// ── I commenti CriticMarkup di un contenitore ───────────────────────────────
+
+/// I commenti si leggono con la sintassi `fub:comments` accesa, come nel
+/// provider: la stessa dei commenti `%%…%%`.
+export function commentsDeclared(forms?: readonly SyntaxForm[]): boolean {
+  return inlineDelimiters(forms).some((delimiter) => delimiter.name === COMMENTS_SYNTAX);
+}
+
+/// Un link che lo è anche per il provider, senza le definizioni dei
+/// riferimenti: un rimando a una nota, o un link con la destinazione scritta.
+/// È la regola della Live, per chi legge un buffer.
+export function writtenLink(text: (from: number, to: number) => string, link: SyntaxNode): NativeInline | null {
+  if (link.name === "Link" && FOOTNOTE_REFERENCE.test(text(link.from, link.to))) return { from: link.from, to: link.to };
+  const marks = link.getChildren("LinkMark");
+  const closer = marks.find((mark) => text(mark.from, mark.from + 1) === "]");
+  if (!marks.length || !closer || !link.getChild("URL")) return null;
+  if (link.name === "Image") return { from: link.from, to: link.to };
+  return { from: link.from, to: link.to, content: { from: marks[0]!.to, to: closer.from } };
+}
+
+/// I commenti del contenitore `container`, il cui testo è `text`, coi suoi
+/// inline nativi e le sue formule. Per comrak un segno sta in un nodo di
+/// testo: fuori dagli inline nativi, dalle formule, dai wikilink, dalle note
+/// in riga e dai segni di blocco (`>` di una citazione, `#` di un titolo, la
+/// casella di un compito).
+export function containerComments(
+  text: string,
+  container: SyntaxNode,
+  natives: readonly NativeInline[],
+  formulas: readonly Range[],
+): CommentThread[] {
+  if (!mayHaveComments(text)) return [];
+  const base = container.from;
+  const atoms: Range[] = [...formulas];
+  for (let child = container.firstChild; child; child = child.nextSibling) {
+    if (child.name === "HeaderMark" || blockMark(child, container)) atoms.push({ from: child.from, to: child.to });
+  }
+  const solid = natives.filter((native) => !native.content);
+  for (const link of wikilink(text)) {
+    const from = base + link.from, to = base + link.to;
+    if (solid.some((native) => native.from < to && from < native.to)) continue;
+    if (formulas.some((formula) => formula.from <= from && from < formula.to)) continue;
+    atoms.push({ from, to });
+  }
+  for (const note of scanInlineFootnotes(text)) {
+    const range = { from: base + note.from, to: base + note.to };
+    if (footnoteStands(range, natives)) atoms.push(range);
+  }
+  return containerThreads(text, base, natives, atoms);
+}
+
+/// I segni e i messaggi dei commenti di un testo letto da solo col suo albero,
+/// coi suoi inline nativi. Per chi cerca gli elementi in riga fuori dalla resa
+/// (`format-toggle.ts`): `{==passo==}` non è un evidenziato, e un messaggio non
+/// porta elementi della nota.
+export function commentCutsOf(text: string, tree: Tree, natives: readonly NativeInline[]): Range[] {
+  if (!mayHaveComments(text)) return [];
+  const cuts: Range[] = [];
+  tree.iterate({
+    enter(node) {
+      if (!isMathContainer(node.name)) return;
+      const own = text.slice(node.from, node.to);
+      if (mayHaveComments(own)) {
+        const inside = natives.filter((native) => node.from <= native.from && native.to <= node.to);
+        for (const thread of containerComments(own, node.node, inside, containerMath(own, node.node).formulas)) cuts.push(...threadCuts(thread));
+      }
+      return false;
+    },
+  });
+  return cuts;
+}
+
+const commentCache = new WeakMap<MarkdownRenderContext, Map<string, readonly CommentThread[]>>();
+
+/// I commenti di un contenitore per la resa, letti una volta.
+function commentsOf(context: MarkdownRenderContext, container: SyntaxNode): readonly CommentThread[] {
+  let byContainer = commentCache.get(context);
+  if (!byContainer) commentCache.set(context, byContainer = new Map());
+  const key = `${container.name}:${container.from}:${container.to}`;
+  let found = byContainer.get(key);
+  if (!found) {
+    const text = context.source.slice(container.from, container.to);
+    if (!mayHaveComments(text)) found = [];
+    else {
+      const formulas = mathOf(context, container).formulas;
+      const natives = nativeInlines(container, container.from, container.to, (link) => linkNative(context, link), formulas);
+      found = containerComments(text, container, natives, formulas);
+    }
+    byContainer.set(key, found);
+  }
+  return found;
+}
+
+/// I commenti che stanno in `[from, to)` sotto `node`: quelli del contenitore
+/// che lo racchiude, o dei contenitori che contiene.
+function commentsAround(context: MarkdownRenderContext, node: SyntaxNode, from: number, to: number): CommentThread[] {
+  if (!commentsDeclared(context.forms) || !mayHaveComments(context.source.slice(from, to))) return [];
+  const inside = (thread: CommentThread) => from <= thread.from && thread.to <= to;
+  for (let up: SyntaxNode | null = node; up; up = up.parent) {
+    if (MATH_CONTAINERS[up.name]) return commentsOf(context, up).filter(inside);
+  }
+  const found: CommentThread[] = [];
+  const down = (current: SyntaxNode) => {
+    for (let child = current.firstChild; child; child = child.nextSibling) {
+      if (child.to <= from || child.from >= to) continue;
+      if (MATH_CONTAINERS[child.name]) found.push(...commentsOf(context, child).filter(inside));
+      else down(child);
+    }
+  };
+  down(node);
+  return found;
+}
+
 /// I nodi inline che non si vedono: marcatori, destinazioni e HTML.
 const HIDDEN_INLINE: Record<string, true> = {
   HeaderMark: true, EmphasisMark: true, CodeMark: true, LinkMark: true, URL: true, LinkTitle: true,
@@ -493,8 +607,14 @@ const HIDDEN_INLINE: Record<string, true> = {
 /// `#guida` trovava (D03), e l'`alt` di un'immagine, che teneva `**` (D17).
 export function visibleText(text: string | { sliceString(from: number, to: number): string }, container: SyntaxNode): string {
   const slice = (from: number, to: number) => (typeof text === "string" ? text.slice(from, to) : text.sliceString(from, to));
+  // I segni e i messaggi dei commenti non sono testo: ci stanno come un link
+  // senza parole, e un wikilink dentro un messaggio non c'è.
+  const cuts = visibleCommentCuts(slice, container);
   const links = wikilink(slice(container.from, container.to))
-    .map((found) => ({ from: container.from + found.from, to: container.from + found.to, text: found.alias ?? found.target }));
+    .map((found) => ({ from: container.from + found.from, to: container.from + found.to, text: found.alias ?? found.target }))
+    .filter((found) => cuts.every((cut) => found.to <= cut.from || cut.to <= found.from))
+    .concat(cuts.map((cut) => ({ ...cut, text: "" })))
+    .sort((a, b) => a.from - b.from);
   const pieces: { at: number; text: string }[] = links.map((found) => ({ at: found.from, text: found.text }));
   const inLink = (at: number) => links.some((found) => found.from <= at && at < found.to);
   const plain = (from: number, to: number) => {
@@ -531,6 +651,27 @@ export function visibleText(text: string | { sliceString(from: number, to: numbe
   };
   walk(container);
   return pieces.sort((a, b) => a.at - b.at).map((piece) => piece.text).join("").trim();
+}
+
+/// I segni e i messaggi dei commenti sotto `container`, per `visibleText`: un
+/// titolo o un testo alternativo non li dicono, come nel modello.
+function visibleCommentCuts(slice: (from: number, to: number) => string, container: SyntaxNode): Range[] {
+  if (!mayHaveComments(slice(container.from, container.to))) return [];
+  const cuts: Range[] = [];
+  const visit = (node: SyntaxNode) => {
+    if (MATH_CONTAINERS[node.name]) {
+      const text = slice(node.from, node.to);
+      const formulas = containerMath(text, node).formulas;
+      const natives = nativeInlines(node, node.from, node.to, (link) => writtenLink(slice, link), formulas);
+      for (const thread of containerComments(text, node, natives, formulas)) cuts.push(...threadCuts(thread));
+      return;
+    }
+    for (let child = node.firstChild; child; child = child.nextSibling) visit(child);
+  };
+  let up: SyntaxNode | null = container;
+  while (up && !MATH_CONTAINERS[up.name]) up = up.parent;
+  visit(up ?? container);
+  return cuts.filter((cut) => container.from <= cut.from && cut.to <= container.to);
 }
 
 /// Dove porta un link o un'immagine: la destinazione scritta o quella della
@@ -687,6 +828,22 @@ export function renderInline(context: MarkdownRenderContext, from: number, to: n
   // di loro.
   const natives = plain ? [] : [...nativeInlines(root, from, to, (link) => linkNative(context, link), formulas), ...formulas];
   const cuts = nativeCuts(natives);
+  // I commenti (`comments/syntax.ts`): il passo si legge col fondo del
+  // commento, i segni e i messaggi non ci sono. Sono tagli per le regole che
+  // vengono dopo, e dentro un messaggio nessun wikilink o tag.
+  for (const thread of plain ? [] : commentsAround(context, root, from, to)) {
+    cuts.push(...threadCuts(thread));
+    protectedRanges.push(...thread.messages);
+    const passage = thread.passage;
+    pieces.push({
+      from: thread.from,
+      to: thread.to,
+      priority: 5,
+      html: () => passage
+        ? `<mark class="comment-range"${sourceAttributes(passage.contentFrom, passage.contentTo)}>${renderInline(context, passage.contentFrom, passage.contentTo, root)}</mark>`
+        : "",
+    });
+  }
   // Il contenuto di un evidenziato (`plain`) è per il provider il testo di un
   // nodo suo, dove nessun'altra regola entra.
   // Una nota in riga si cerca nel contenitore intero, non riga per riga: può

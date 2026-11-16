@@ -28,6 +28,14 @@ let byDoc = new Map<string, string>();
 /// diverse, perché un `[[Nome]]` ambiguo non sa di quale si parla.
 let byName = new Map<string, string | null>();
 const race = new Race();
+/// Quante volte le mappe sono cambiate: la legge chi riusa righe già
+/// disegnate (`ui/node.ts`) per sapere se le loro icone valgono ancora.
+let revision = 0;
+
+/// La revisione delle icone delle pagine: cambia con le mappe.
+export function pageIconsRevision(): number {
+  return revision;
+}
 
 /// L'icona di un documento, se il suo frontmatter ne ha una.
 export function pageIcon(doc: string): string | null {
@@ -92,6 +100,7 @@ async function refresh(): Promise<void> {
     if (same(byDoc, next.byDoc)) return;
     byDoc = next.byDoc;
     byName = next.byName;
+    revision += 1;
     emit("page-icons");
   });
 }
@@ -101,6 +110,7 @@ function clear(): void {
   if (byDoc.size === 0) return;
   byDoc = new Map();
   byName = new Map();
+  revision += 1;
   emit("page-icons");
 }
 

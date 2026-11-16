@@ -56,7 +56,7 @@ function paste(
   Object.defineProperty(event, "clipboardData", {
     value: {
       getData(type: string) {
-        return type === "text/html" ? html : type === "text/markdown" ? markdown : plain;
+        return type === "text/html" ? html : type === "text/markdown" ? markdown : type === "text/plain" ? plain : "";
       },
     },
   });

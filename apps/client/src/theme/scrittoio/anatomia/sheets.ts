@@ -6,7 +6,7 @@ export const SHEETS: PartAnatomy = {
   layer: "cornice",
   components: [
     { name: "sheet", states: [S("rest"), S("focused")], hooks: ["pane", "focus", "pane-editor", "pane-split", "row", "col", "pane-divider"] },
-    { name: "tabs", states: SELECTABLE, hooks: ["tab-drop-preview", "pane-tabs", "tab-entry", "tab", "tab-name", "tab-pin", "tab-format", "tab-page-icon", "tab-pinned", "dirty", "tab-close", "tab-new"] },
+    { name: "tabs", states: SELECTABLE, hooks: ["tab-drop-preview", "pane-tabs", "tab-entry", "tab", "tab-name", "tab-name-head", "tab-name-tail", "tab-pin", "tab-format", "tab-page-icon", "tab-pinned", "dirty", "tab-close", "tab-new"] },
     { name: "sheet-header", states: REST, hooks: ["pane-toolbar", "muted", "pane-mode-current"] },
     { name: "sheet-title", states: INTERACTIVE, hooks: ["sheet-title", "crumb-sep", "crumb-name", "sheet-title-edit", "sheet-title-error", "sheet-title-proposal", "kit-field-box"] },
     // Il chip dello stato del documento e il suo riquadro.

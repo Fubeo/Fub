@@ -460,6 +460,8 @@
     "tab-entry",
     "tab",
     "tab-name",
+    "tab-name-head",
+    "tab-name-tail",
     "tab-pin",
     "tab-format",
     "tab-page-icon",
@@ -1266,6 +1268,10 @@
     "canvas-ruler-bar",
     "canvas-ruler-grip",
     "canvas-ruler-angle",
+    "cm-fub-comment-range",
+    "cm-fub-comment-range-on",
+    "comment-range",
+    "cm-fub-comment-source",
     "draw-export",
     "draw-export-text",
     "draw-rail",
@@ -2325,6 +2331,8 @@
     "tab-entry": "cornice",
     "tab": "cornice",
     "tab-name": "cornice",
+    "tab-name-head": "cornice",
+    "tab-name-tail": "cornice",
     "tab-pin": "cornice",
     "tab-format": "cornice",
     "tab-page-icon": "cornice",
@@ -3131,6 +3139,10 @@
     "canvas-ruler-bar": "cornice",
     "canvas-ruler-grip": "cornice",
     "canvas-ruler-angle": "cornice",
+    "cm-fub-comment-range": "segno",
+    "cm-fub-comment-range-on": "segno",
+    "comment-range": "segno",
+    "cm-fub-comment-source": "segno",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-rail": "cornice",
@@ -5038,6 +5050,8 @@
         "tab-entry",
         "tab",
         "tab-name",
+        "tab-name-head",
+        "tab-name-tail",
         "tab-pin",
         "tab-format",
         "tab-page-icon",
@@ -6919,6 +6933,21 @@
         "canvas-ruler-bar",
         "canvas-ruler-grip",
         "canvas-ruler-angle"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "note-comments",
+      "part": "editors",
+      "hooks": [
+        "cm-fub-comment-range",
+        "cm-fub-comment-range-on",
+        "comment-range",
+        "cm-fub-comment-source",
+        "markdown-rendered"
       ],
       "states": [
         "rest",
@@ -10049,10 +10078,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1863,
+    "hooks": 1869,
     "state_names": 7,
-    "assigned_states": 879,
-    "components": 258,
+    "assigned_states": 881,
+    "components": 259,
     "preference_tokens": 191
   }
 }

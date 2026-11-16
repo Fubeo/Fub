@@ -149,7 +149,9 @@ The checks live in `.github/workflows/ci.yml` (and `npm-supply-chain.yml`;
 `baseline.yml` commits visual baselines).
 
 - A **draft** PR gets the short CI (Linux only, no benches); ready for review
-  runs the full CI, Windows and macOS included. `main` always runs everything.
+  runs the full CI, Windows included. `main` always runs everything. macOS
+  and iOS are paused (ADR 0245): no PR waits for them; `macos-in-pausa.yml`
+  checks them weekly (Sunday, or by hand) and is not a required check.
 - `gh pr edit` fails on this repository: update a PR body with
   `gh api -X PATCH repos/Fubeo/Fub/pulls/<n> -F body=@file`.
 - Ask for the deeper fuzz run (`fuzz_completo`) after larger changes to the

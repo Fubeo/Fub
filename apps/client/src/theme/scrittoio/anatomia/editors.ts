@@ -135,5 +135,9 @@ export const EDITORS: PartAnatomy = {
     // Il righello (T87): la riga velata con le tacche e l'angolo, sopra la
     // lavagna; il suo corpo si sposta e prende il fuoco.
     { name: "canvas-ruler", states: [S("rest"), S("focused")], hooks: ["canvas-ruler-bar", "canvas-ruler-grip", "canvas-ruler-angle"] },
+    // I commenti nel testo (EC T21): il fondo del passo commentato in
+    // Scrittura e in Lettura, più pieno col cursore dentro, e il commento
+    // intero colorato in Sorgente. Segni di Fub sulla carta, non il testo.
+    { name: "note-comments", layer: "segno", layers: { "markdown-rendered": "contenuto" }, states: [S("rest"), S("focused")], hooks: ["cm-fub-comment-range", "cm-fub-comment-range-on", "comment-range", "cm-fub-comment-source", "markdown-rendered"] },
   ],
 };
