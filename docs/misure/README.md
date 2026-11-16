@@ -31,6 +31,7 @@ resta **non provato**.
 |---|---|---|---|
 | 2026-10-30 | Linux 7.0 (Azure), X11 sotto Xvfb | WebKitGTK, Safari 605.1.15 | [Runner della CI](2026-10-30-linux-webkitgtk-runner.md) |
 | 2026-10-31 | Linux 7.0 (Azure), X11 sotto Xvfb | WebKitGTK, Safari 605.1.15 | [Runner della CI: la memoria e le tessere](2026-10-31-linux-webkitgtk-runner-k0.md) |
+| 2026-11-16 | Debian 13, niri su Wayland, schermo a 180 Hz | WebKitGTK 2.54, Safari 605.1.15 | [Le soglie in periodi sullo schermo a 180 Hz](2026-11-16-linux-webkitgtk-frequenza-schermo.md) |
 
 ## I motori
 

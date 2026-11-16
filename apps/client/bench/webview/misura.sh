@@ -31,7 +31,7 @@ if [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
     echo "  sudo apt-get install xvfb" >&2
     exit 2
   fi
-  wrap=(xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048")
+  wrap=(xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048 -noreset")
 fi
 
 echo "== il client"
@@ -49,7 +49,7 @@ echo "== le misure"
 cd "$client"
 status=0
 "${wrap[@]}" node bench/webview/run.mjs \
-  --only=S1,S2,S3,S4,S5,S6,S7,R1,T1,I1 --budgets=targets \
+  --only=F1,F2,F3,S1,S2,S3,S4,S5,S6,S7,R1,T1,I1 --budgets=targets \
   --driver="$driver_root/bin/tauri-driver" --native-driver="$native_driver" \
   "$@" || status=$?
 

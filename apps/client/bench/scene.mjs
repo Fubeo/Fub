@@ -1312,7 +1312,8 @@ export const SCENE = onPage("shell", [
       // sulla nota che si agisce, e aspetta la sua resa.
       await page.waitForFunction(() => {
         const preview = document.querySelector(".launcher-preview");
-        const shown = preview?.querySelector(".launcher-preview-page")?.textContent ?? "";
+        if (!preview || preview.hidden) return true;
+        const shown = preview.querySelector(".launcher-preview-page")?.textContent ?? "";
         return !preview.hasAttribute("data-waiting") && shown.includes("Sintassi di Fub");
       });
     },
@@ -1847,12 +1848,15 @@ async function chooseFromViewMenu(page, label) {
 /// resa parte dopo una sosta (`PREVIEW_DELAY_MS`) e fino ad allora resta quella
 /// di prima, o il vuoto: una foto scattata prima sarebbe di un'altra riga.
 async function previewShowsActiveRow(page) {
+  // In una finestra stretta l'anteprima non c'è (`previewFits`): basta la riga
+  // attiva. Aspettare una resa che non arriverà fermerebbe la scena.
   await page.waitForFunction(() => {
     const input = document.querySelector(".launcher-input");
     const id = input?.getAttribute("aria-activedescendant");
     const title = id ? document.getElementById(id)?.querySelector(".launcher-row-title")?.textContent?.trim() : "";
     const preview = document.querySelector(".launcher-preview");
-    const shown = preview?.querySelector(".launcher-preview-page")?.textContent ?? "";
+    if (!preview || preview.hidden) return Boolean(title);
+    const shown = preview.querySelector(".launcher-preview-page")?.textContent ?? "";
     return Boolean(title) && !preview.hasAttribute("data-waiting") && shown.includes(title);
   });
 }

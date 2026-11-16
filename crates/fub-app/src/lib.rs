@@ -62,6 +62,8 @@ pub use fub_host::{
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
 mod avvio;
+#[cfg(target_os = "linux")]
+mod disegno;
 mod document_windows;
 mod domande;
 mod frame_rate;
@@ -1087,15 +1089,27 @@ fn list_views(host: State<Host>, vault: Option<String>) -> Result<Vec<ViewSpec>,
 /// monta da sé — una sola, senza parametri — è
 /// [`ViewInstance::only`](fub_abi::traits::ViewInstance::only), e questo
 /// comando accetta i due campi assenti proprio per non obbligarla a costruirla.
+///
+/// Gira fuori dal thread principale, nella corsia delle viste (`domande`): un
+/// salvataggio invecchia una ventina di view e la shell le ridisegna tutte
+/// insieme. Sul thread principale erano 100 ms di finestra ferma a ogni
+/// salvataggio di una nota lunga; in corsia i disegni restano in fila fra loro
+/// e la finestra continua a presentare fotogrammi.
 #[tauri::command]
-fn render_view(
-    host: State<Host>,
+async fn render_view(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     view: String,
     instance: Option<String>,
     params: Option<serde_json::Value>,
     vault: Option<String>,
 ) -> Result<UiNode, PluginError> {
-    host.render_view(vault.as_deref(), &view_instance(view, instance, params))
+    corsie
+        .chiedi("view render", domande::CORSIA_VISTE.into(), move || {
+            app.state::<Host>()
+                .render_view(vault.as_deref(), &view_instance(view, instance, params))
+        })
+        .await
 }
 
 /// Consegna un'azione della UI al provider della view e restituisce il suo
@@ -1225,7 +1239,7 @@ async fn query_index(
 ) -> Result<IndexResult, PluginError> {
     let corsia = domande::corsia(&query);
     corsie
-        .chiedi(corsia, move || {
+        .chiedi("index query", corsia, move || {
             app.state::<Host>().query_index(vault.as_deref(), query)
         })
         .await
@@ -2888,12 +2902,89 @@ fn forward_mobile_opened(app: &AppHandle, raw: &str) {
     }
 }
 
+/// Legge `appearance.rendering` e la macchina, sceglie e scrive le variabili.
+/// Va chiamata quando il processo ha ancora un thread solo
+/// ([`disegno::applica`]). Il log non c'è ancora: chi chiama lo scrive dopo.
+#[cfg(target_os = "linux")]
+fn percorso_di_disegno(
+    config_dir: Option<&Utf8Path>,
+) -> (disegno::Modo, disegno::Diagnosi, disegno::Scelta) {
+    use fub_host::settings::{APPEARANCE_MOTION, APPEARANCE_RENDERING};
+    let valori = fub_host::settings::startup_machine_texts(
+        config_dir,
+        &[APPEARANCE_RENDERING, APPEARANCE_MOTION],
+    );
+    let modo = disegno::Modo::da(valori.get(APPEARANCE_RENDERING).map_or("", String::as_str));
+    let movimento_calmo = matches!(
+        valori.get(APPEARANCE_MOTION).map(String::as_str),
+        Some("calm" | "reduced")
+    );
+    let ambiente = |nome: &str| std::env::var_os(nome).map(|v| v.to_string_lossy().into_owned());
+    let diagnosi = disegno::leggi(std::path::Path::new("/"), &ambiente);
+    let scelta = disegno::scegli(
+        modo,
+        &diagnosi,
+        &|nome| std::env::var_os(nome).is_some(),
+        movimento_calmo,
+    );
+    disegno::applica(&scelta);
+    (modo, diagnosi, scelta)
+}
+
+/// Dice all'host su quale webview gira la shell, dove un default ne dipende
+/// ([`fub_host::settings::motion_default`]).
+///
+/// Su Linux è WebKitGTK, e la versione è quella della libreria **caricata**:
+/// `tauri::webview_version` chiama `webkit_get_{major,minor,micro}_version`
+/// tramite wry. Le altre piattaforme non dichiarano niente e restano come
+/// prima. Una versione illeggibile lascia la webview non dichiarata, cioè i
+/// default di sempre.
+///
+/// Va chiamata prima di [`percorso_di_disegno`], che legge il valore effettivo
+/// di `appearance.motion` e quindi il suo default, e prima che esista il log:
+/// restituisce la versione letta, o il problema, e chi chiama lo scrive dopo
+/// ([`log_the_webview`]).
+fn declare_the_webview() -> Option<Result<String, String>> {
+    #[cfg(target_os = "linux")]
+    return Some(match tauri::webview_version() {
+        Ok(version) => match fub_host::settings::Webview::webkitgtk(&version) {
+            Some(webview) => {
+                fub_host::settings::declare_webview(webview);
+                Ok(version)
+            }
+            None => Err(format!("unreadable webkitgtk version {version}")),
+        },
+        Err(error) => Err(format!("webkitgtk version unavailable: {error}")),
+    });
+    #[cfg(not(target_os = "linux"))]
+    None
+}
+
+/// Scrive nel log quello che [`declare_the_webview`] ha trovato.
+fn log_the_webview(declared: Option<Result<String, String>>) {
+    match declared {
+        Some(Ok(version)) => tracing::info!(target: "fub.app", %version, "webkitgtk"),
+        Some(Err(problem)) => tracing::warn!(target: "fub.app", %problem, "webkitgtk version"),
+        None => {}
+    }
+}
+
 pub fn run() {
     // Il bootstrap sceglie la cartella canonica una volta sola. Log, host e
     // store installato ricevono lo stesso valore: nessun proprietario riapre
     // l'ambiente o deduce una seconda posizione.
     let config_dir = fub_host::config_dir();
+    // Il percorso di disegno della webview **prima di ogni thread**: le
+    // variabili di WebKitGTK contano solo se scritte prima che parta GTK, e
+    // `set_var` è sicura solo finché il processo ha un thread solo — qui, e
+    // non dopo `install_logging` (vedi `disegno::applica`). Prima ancora la
+    // webview: il livello macchina riceve lo schema, e con lui il default delle
+    // animazioni che il percorso di disegno legge, quando lo si apre.
+    let webview = declare_the_webview();
+    #[cfg(target_os = "linux")]
+    let percorso = percorso_di_disegno(config_dir.as_deref());
     let (levels, warning) = fub_host::install_logging(config_dir.as_deref());
+    log_the_webview(webview);
     let installed_availability = match config_dir.as_deref() {
         Some(dir) => {
             tracing::info!(
@@ -2923,6 +3014,8 @@ pub fn run() {
     // `WebviewEvents`).
     let sink = Arc::new(WebviewEvents::default());
     let bridge = sink.clone();
+    // La webview è già dichiarata (in cima): il livello macchina dell'host
+    // riceve lo schema, e con lui il default delle animazioni, nel costruttore.
     let mut host = Host::new();
     if let Some(dir) = config_dir.as_deref() {
         host = host.with_config_dir(dir);
@@ -2931,6 +3024,33 @@ pub fn run() {
         .with_session_notice(warning)
         .with_levels(levels)
         .with_sink(sink);
+    #[cfg(target_os = "linux")]
+    {
+        let (modo, diagnosi, scelta) = percorso;
+        tracing::info!(
+            target: "fub.app",
+            ?modo,
+            ?diagnosi,
+            software = diagnosi.disegno_software(),
+            variabili = ?scelta.variabili,
+            avvisi = ?scelta.avvisi,
+            "rendering path chosen before GTK"
+        );
+        for avviso in scelta.avvisi {
+            match serde_json::to_value(&avviso) {
+                Ok(payload) => {
+                    host = host.with_startup_notice(Notice::new(
+                        fub_abi::Event::Custom {
+                            topic: disegno::TOPIC.into(),
+                            payload,
+                        },
+                        fub_abi::event::Origin::by(fub_abi::event::Actor::Kernel),
+                    ));
+                }
+                Err(error) => tracing::warn!(target: "fub.app", %error, "rendering notice lost"),
+            }
+        }
+    }
     // Keep the manager alive in `InstalledPlugins`; the startup source is the
     // sole host integration point and its snapshot also carries formats.
     if let InstalledAvailability::Ready(manager) = &installed_availability {

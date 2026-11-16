@@ -220,9 +220,13 @@ di CI non costruisce:
   più in primo piano o se logcat ha un crash. Carica l'artefatto
   `android-emulatore-<sha>` con la foto dello schermo (`scrivania.png`),
   logcat e il log dell'emulatore. Un runner senza `/dev/kvm` fa fallire il
-  job, che lo dice. Nessuna action di terzi;
-- **iOS:** compila soltanto il Rust per il dispositivo
-  (`cargo check --target aarch64-apple-ios`); nessun `.ipa` esce da qui.
+  job, che lo dice. Nessuna action di terzi.
+
+iOS è in pausa, come macOS
+([ADR 0245](../decisions/0245-macos-e-ios-in-pausa.md)): il codice resta, e
+`.github/workflows/macos-in-pausa.yml` ne compila soltanto il Rust per il
+dispositivo (`cargo check --target aarch64-apple-ios`) una volta alla
+settimana; nessun `.ipa` esce da lì.
 
 Il workflow non è un controllo richiesto. Gira su `main`, a richiesta e
 sulle PR che toccano `Cargo.lock` (un aggiornamento delle dipendenze può
@@ -266,8 +270,8 @@ questa pagina nella stessa PR.
   questa pagina è il punto da cui quel piano parte.
 - Il tablet non ha una cornice sua: da 600 px il telefono usa la
   disposizione stretta del desktop.
-- Non c'è un'app iOS costruita: il progetto Xcode chiede a mano i target
-  Share e Widget e una firma.
+- Non c'è un'app iOS costruita: iOS è in pausa, e il progetto Xcode chiede a
+  mano i target Share e Widget e una firma.
 - Non c'è un APK firmato né un rilascio per il telefono.
 - Il banco non prova il ponte nativo: sospensione, ripresa, cartelle
   condivise e link del sistema si vedono solo su un dispositivo.

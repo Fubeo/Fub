@@ -167,7 +167,7 @@ async function mount(
   settings: SettingEntry[] = [],
   root: string | null | undefined = undefined,
   throttles: string[] = [],
-  notice: KernelNotice | null = null,
+  notice: KernelNotice | readonly KernelNotice[] | null = null,
   commands: CommandSpec[] = [],
   prepare: (host: FakeHost) => void = () => {},
 ): Promise<{ host: FakeHost; startup: Promise<() => void>; unlock: Map<string, () => void> }> {
@@ -209,7 +209,7 @@ async function start(
   file: Record<string, string>,
   settings: SettingEntry[] = [],
   root: string | null | undefined = undefined,
-  notice: KernelNotice | null = null,
+  notice: KernelNotice | readonly KernelNotice[] | null = null,
   commands: CommandSpec[] = [],
 ): Promise<FakeHost> {
   const { host, startup } = await mount(file, settings, root, [], notice, commands);
@@ -3772,7 +3772,8 @@ describe("la finestra senza vault", () => {
     };
     const host = await start({}, [], null, notice);
 
-    expect(host.atGate("sessionNotice").length).toBe(1);
+    // Un tiraggio per l'avviso, uno che risponde vuoto e ferma il ciclo.
+    expect(host.atGate("sessionNotice").length).toBe(2);
     const { recentNotices } = await import("./ui/notify");
     expect(recentNotices().some((a) => a.text.includes("non si può scrivere"))).toBe(true);
 
@@ -3784,6 +3785,37 @@ describe("la finestra senza vault", () => {
     const { recentNotices: healthyRecent } = await import("./ui/notify");
     expect(healthy.atGate("sessionNotice").length).toBe(1);
     expect(healthyRecent().some((a) => a.text.includes("non si può scrivere"))).toBe(false);
+  });
+
+  it("dopo la diagnosi tira gli avvisi del percorso di disegno e li mostra", async () => {
+    // Il driver disallineato nasce in `fub_app::run` prima di GTK, e arriva
+    // in coda all'avviso di sessione come `custom` col topic `rendering`:
+    // senza il ciclo dei tiraggi si vedrebbe solo il primo.
+    const trouble: KernelNotice = {
+      event: {
+        type: "trouble",
+        severity: "warning",
+        subject: null,
+        error: { kind: "io", message: "`/config` non si può scrivere" },
+        gate: null,
+      },
+      origin: { actor: { kind: "kernel" }, batch: null },
+    };
+    const rendering: KernelNotice = {
+      event: {
+        type: "custom",
+        topic: "rendering",
+        payload: { kind: "driver_mismatch", kernel: "550.163.01", library: "595.112.07" },
+      },
+      origin: { actor: { kind: "kernel" }, batch: null },
+    };
+    const host = await start({}, [], null, [trouble, rendering]);
+
+    expect(host.atGate("sessionNotice").length).toBe(3);
+    const { recentNotices } = await import("./ui/notify");
+    const texts = recentNotices().map((a) => a.text);
+    expect(texts.some((text) => text.includes("non si può scrivere"))).toBe(true);
+    expect(texts.some((text) => text.includes("riavvia il computer") && text.includes("550.163.01"))).toBe(true);
   });
 });
 

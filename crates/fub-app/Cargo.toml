@@ -78,6 +78,13 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 
+# Il limite a 60 Hz di WebKitGTK si spegne da `frame_rate.rs` sulle
+# `WebKitSettings` della webview: è la stessa versione che wry già porta (il
+# tipo di `PlatformWebview::inner`), quindi il lock non cresce. Le funzioni
+# delle feature (2.42) non sono nel crate e si cercano a runtime.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "=2.0.2"
+
 # La cartella di Windows chiesta al sistema (`GetSystemWindowsDirectoryW`,
 # `print.rs`) invece che a `SystemRoot`, che viene dall'ambiente di chi avvia
 # l'app: lì `explorer.exe` si cerca per percorso assoluto. È la versione del

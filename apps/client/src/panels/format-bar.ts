@@ -294,6 +294,20 @@ function coarsePointer(): boolean {
   return typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
 }
 
+/// La barra si rinfresca a ogni battuta e a ogni movimento del cursore, e lo
+/// stato dei pulsanti quasi sempre resta quello di prima. In WebKitGTK anche
+/// un attributo riscritto uguale invalida lo stile, e la finestra intera si
+/// ridipinge a ogni tasto (C6): si scrive soltanto ciò che cambia.
+function setAttr(element: Element, name: string, value: string | null): void {
+  if (element.getAttribute(name) === value) return;
+  if (value === null) element.removeAttribute(name);
+  else element.setAttribute(name, value);
+}
+
+function setDisabled(control: HTMLButtonElement, disabled: boolean): void {
+  if (control.disabled !== disabled) control.disabled = disabled;
+}
+
 export interface FormatBar {
   readonly element: HTMLElement;
   /// Ridisegna la barra: comandi, superficie o modalità cambiati.
@@ -430,9 +444,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     control.addEventListener("click", () => run(entry));
     refreshers.push(() => {
       const state = stateOf(entry);
-      control.disabled = !state.enabled;
-      if (state.active === null) control.removeAttribute("aria-pressed");
-      else control.setAttribute("aria-pressed", String(state.active));
+      setDisabled(control, !state.enabled);
+      setAttr(control, "aria-pressed", state.active === null ? null : String(state.active));
     });
     return control;
   }
@@ -477,11 +490,12 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     trigger.addEventListener("click", () => openMenu(trigger, menuItems(group.menu)));
     refreshers.push(() => {
       const states = group.menu.map(stateOf);
-      trigger.disabled = !states.some((state) => state.enabled);
+      setDisabled(trigger, !states.some((state) => state.enabled));
       if (!style) return;
       const active = group.menu[states.findIndex((state) => state.active === true)];
-      text.textContent = active?.spec.title ?? label;
-      trigger.setAttribute("aria-label", active ? `${label}: ${active.spec.title}` : label);
+      const shown = active?.spec.title ?? label;
+      if (text.textContent !== shown) text.textContent = shown;
+      setAttr(trigger, "aria-label", active ? `${label}: ${active.spec.title}` : label);
     });
     return trigger;
   }
@@ -515,7 +529,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     box.append(key("Tab", "format_bar.touch.tab", "format_bar.touch.tab_hint"), key("Enter", "format_bar.touch.enter", "format_bar.touch.enter_hint"), add);
     refreshers.push(() => {
       const surface = actions();
-      box.hidden = !(surface?.editable() && surface.state(ROW_AFTER).enabled);
+      const hidden = !(surface?.editable() && surface.state(ROW_AFTER).enabled);
+      if (box.hidden !== hidden) box.hidden = hidden;
     });
     return box;
   }
@@ -673,7 +688,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
       const shape = t("format_bar.label") + (touch ? "#touch#" : "#") + next.map((group) =>
         `${group.id}:${group.inline.map(entry).join(",")}|${group.menu.map(entry).join(",")}`
       ).join(";");
-      element.hidden = next.length === 0;
+      const empty = next.length === 0;
+      if (element.hidden !== empty) element.hidden = empty;
       if (shape !== signature) {
         signature = shape;
         rebuild(next, surface, touch);

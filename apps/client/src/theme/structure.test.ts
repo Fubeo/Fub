@@ -402,3 +402,65 @@ describe("la carta ha uno strato suo", () => {
     }
   });
 });
+
+describe("lo scorrimento del foglio è una radice di layout", () => {
+  const SCROLLER = ".pane-editor[data-markdown-mode] > .cm-editor > .cm-scroller";
+  function blocksOf(css: string, selector: string): string[] {
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    return [...withoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter((b) => b[1]!.split(",").some((s) => s.trim() === selector))
+      .map((b) => b[2]!);
+  }
+
+  it("la struttura contiene misura e layout dello scorrimento, senza `paint`", () => {
+    // WebKit ferma il layout di una battuta solo a una radice: un elemento
+    // con contenimento di misura e di layout, o con larghezza e altezza
+    // fisse. Nella catena flessibile del foglio non c'era, e ogni tasto
+    // ridisponeva e ridipingeva la finestra intera (C6, profilo della WebView
+    // vera: radice del layout da 1049×1177 a 733×989, cioè il solo
+    // scorrimento). `paint` taglierebbe ciò che esce dallo scorrimento senza
+    // guadagnare nulla.
+    const rules = blocksOf(structure, SCROLLER);
+    expect(rules.some((b) => /(^|;)\s*contain:\s*size layout\s*;/.test(b)), `${SCROLLER} deve dichiarare \`contain: size layout\``).toBe(true);
+    expect(rules.some((b) => /contain:[^;]*\b(paint|strict|content)\b/.test(b))).toBe(false);
+  });
+
+  it("la pelle non toglie il contenimento", () => {
+    const undone = blocksOf(skin, SCROLLER).concat(blocksOf(skin, ".cm-scroller")).filter((b) => /(^|;)\s*contain\s*:/.test(b));
+    expect(undone).toEqual([]);
+  });
+});
+
+describe("nessun `:empty` dentro un `:has()`", () => {
+  // In WebKit un testo che cambia in un punto qualunque della finestra
+  // (un `textContent`, la parola «Salvato») rimette in discussione `:empty`, e
+  // con un `:empty` dentro un `:has()` seguito da `+ *` ricontrollava tutta
+  // la finestra: 15–25 ms per testo con la view dei collegamenti di una nota
+  // lunga, ogni salvataggio (`docs/product/performance-webview.md`). Uno stato
+  // che serve a un `:has()` lo scrive il codice come attributo.
+  const sheets = import.meta.glob<string>("../**/*.css", { query: "?raw", import: "default", eager: true });
+
+  /// Gli argomenti di ogni `:has(` del testo, con le parentesi bilanciate.
+  function hasArguments(css: string): string[] {
+    const text = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const found: string[] = [];
+    for (let at = text.indexOf(":has("); at >= 0; at = text.indexOf(":has(", at + 5)) {
+      let depth = 0;
+      let end = at + 4;
+      for (; end < text.length; end++) {
+        if (text[end] === "(") depth++;
+        else if (text[end] === ")" && --depth === 0) break;
+      }
+      found.push(text.slice(at + 5, end));
+    }
+    return found;
+  }
+
+  it("in nessun foglio del client", () => {
+    expect(Object.keys(sheets).length).toBeGreaterThan(4);
+    const offending = Object.entries(sheets).flatMap(([file, css]) =>
+      hasArguments(css).filter((arg) => arg.includes(":empty")).map((arg) => `${file}: :has(${arg})`),
+    );
+    expect(offending).toEqual([]);
+  });
+});

@@ -12,6 +12,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
+import { modalComboboxGap } from "./a11y-rules.mjs";
 import { SCENE, LIGHTS, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, OUTPUT, WINDOW } from "./stage.mjs";
 /// Debito storico dichiarato. Non è un'esenzione dalle altre regole:
@@ -485,7 +486,19 @@ async function inspectKeyboard(page) {
     let previousDescendant = null;
     // L'applicazione che contiene il fuoco di prima (lei stessa o un figlio).
     let previousApp = null;
-    const readActual = () => page.evaluate(() => {
+    // Il combobox di una finestra modale mostra il fuoco col cursore e la
+    // riga attiva, non con un anello: i fatti si raccolgono qui nella
+    // pagina, il giudizio (stretto, con i suoi casi) sta in
+    // `a11y-rules.mjs`, `modalComboboxGap`.
+    const readActual = async () => {
+      const actual = await readFocused();
+      if (actual?.combobox) {
+        if (!actual.indicator && modalComboboxGap(actual.combobox) === null) actual.indicator = true;
+        delete actual.combobox;
+      }
+      return actual;
+    };
+    const readFocused = () => page.evaluate(() => {
         const el = document.activeElement;
         if (!(el instanceof HTMLElement)) return null;
         const hasIndicator = (style, pseudo, after) =>
@@ -541,7 +554,73 @@ async function inspectKeyboard(page) {
         const indicator =
           (el.matches(":focus-visible") && (hasIndicator(style, pseudo, after) || rowIndicator || boxIndicator || descendantIndicator)) ||
           (el.tagName === "IFRAME" && shellIndicator);
+        // I fatti del combobox, per l'eccezione della finestra modale: solo
+        // per un campo combobox senza un indicatore suo.
+        const lookOf = (node) => {
+          const s = getComputedStyle(node);
+          const sides = ["Top", "Right", "Bottom", "Left"];
+          const drawn = sides.filter((side) => s[`border${side}Style`] !== "none" && parseFloat(s[`border${side}Width`]) > 0);
+          return {
+            background: s.backgroundColor,
+            backgroundImage: s.backgroundImage,
+            border: drawn.length === 0 ? "none" : sides.map((side) => `${s[`border${side}Width`]} ${s[`border${side}Style`]} ${s[`border${side}Color`]}`).join(", "),
+            outline: s.outlineStyle === "none" ? "none" : `${s.outlineWidth} ${s.outlineStyle} ${s.outlineColor}`,
+            boxShadow: s.boxShadow,
+          };
+        };
+        let combobox = null;
+        if (!indicator && el.tagName === "INPUT" && el.getAttribute("role") === "combobox") {
+          const controlsId = el.getAttribute("aria-controls");
+          const list = controlsId ? document.getElementById(controlsId) : null;
+          const dialog = el.closest('[role="dialog"]');
+          const rect = el.getBoundingClientRect();
+          let activeFacts = null;
+          if (descendantId) {
+            if (descendant === null) activeFacts = { exists: false };
+            else {
+              const owner = descendant.closest('[role="listbox"]');
+              const other = owner
+                ? [...owner.querySelectorAll('[role="option"]')].find((one) => one !== descendant && !one.matches(":hover")) ??
+                  [...owner.querySelectorAll('[role="option"]')].find((one) => one !== descendant) ??
+                  null
+                : null;
+              const highlight = owner?.querySelector(":scope > .kit-list-highlight") ?? null;
+              activeFacts = {
+                exists: true,
+                look: lookOf(descendant),
+                otherLook: other ? lookOf(other) : null,
+                highlight: highlight
+                  ? {
+                      hidden: highlight.hidden || getComputedStyle(highlight).display === "none" || getComputedStyle(highlight).visibility !== "visible",
+                      look: lookOf(highlight),
+                      sameSize:
+                        Math.abs(highlight.offsetWidth - descendant.offsetWidth) <= 1 &&
+                        Math.abs(highlight.offsetHeight - descendant.offsetHeight) <= 1 &&
+                        descendant.offsetWidth > 0 &&
+                        descendant.offsetHeight > 0,
+                    }
+                  : null,
+              };
+            }
+          }
+          combobox = {
+            tag: el.tagName,
+            role: el.getAttribute("role"),
+            focusVisible: el.matches(":focus-visible"),
+            readOnly: el.readOnly,
+            disabled: el.disabled,
+            caretColor: style.caretColor,
+            color: style.color,
+            width: rect.width,
+            height: rect.height,
+            visibility: style.visibility,
+            controls: list?.getAttribute("role") ?? null,
+            dialog: dialog ? { modal: dialog.getAttribute("aria-modal") } : null,
+            descendant: activeFacts,
+          };
+        }
         return {
+          combobox,
           probe: el.dataset.a11yProbe ?? null,
           indicator,
           descendant: descendant
