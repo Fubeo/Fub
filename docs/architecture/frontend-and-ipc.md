@@ -304,7 +304,7 @@ dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 preferenze, frammenti) come fogli costruiti in `document.adoptedStyleSheets`,
 non come elementi `<style>`: la CSP non ammette stili in linea, e un foglio
 costruito non è in linea
-([Permessi e sicurezza](../reference/permissions-and-security.md#gli-stili)).
+([Gli stili e la CSP](../reference/styles-and-csp.md)).
 Un canale ha al più un foglio; il caricatore li tiene nell'ordine dichiarato
 (`ORDER`), davanti agli altri fogli costruiti della pagina, e sostituisce
 quelli di un tema con una sola assegnazione, cioè tutti insieme o nessuno.
