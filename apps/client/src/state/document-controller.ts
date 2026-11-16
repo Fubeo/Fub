@@ -2657,6 +2657,10 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   }
   r.shown = tab;
   view.drawViewSurface(r, tab?.k === "view");
+  // La linguetta è già della scheda nuova (`render` l'ha disegnata prima di
+  // chiamare qui): la testata la segue subito, senza aspettare che l'editor
+  // si carichi. Il ridisegno dopo `show` aggiunge ciò che dipende da lui.
+  if (changed) view.drawToolbar(r);
 
   if (tab?.k === "view") {
     await mountViewInPane(tab.view, r.id, r.viewEl, tab.params ?? null);
@@ -3518,6 +3522,21 @@ export interface OpenOptions {
   /// prende la superficie che l'apertura monta (`SurfaceMountContext.page`)
   /// o, se il documento è già la scheda attiva, `EditorSurface.showPage`.
   readonly page?: number;
+  /// Un'apertura che la shell decide da sola, senza un gesto (la prima nota
+  /// di un vault senza schede, la nota d'avvio): il valore di
+  /// [`openingsSoFar`] quando l'ha decisa. Se intanto è stata chiesta
+  /// un'altra apertura, la decisione è vecchia: questa non parte, e non tocca
+  /// schede, riquadro, contesto né fuoco.
+  readonly unlessOpenedSince?: number;
+}
+
+/// Quante aperture sono state chieste finora, in tutto.
+let openingsAsked = 0;
+
+/// Il segno da passare come `unlessOpenedSince`: si prende quando si decide
+/// di aprire, prima delle attese che precedono la chiamata.
+export function openingsSoFar(): number {
+  return openingsAsked;
 }
 
 /// La pagina chiesta dall'apertura in corso per il documento del riquadro:
@@ -3573,6 +3592,11 @@ function focusStillOpening(asked: Element | null, doc: string): boolean {
 }
 
 export async function openDocument(id: string, options: OpenOptions = {}): Promise<void> {
+  // Un'apertura decisa prima di un'altra chiesta intanto è superata: quella
+  // più nuova vince anche se arriva in fila prima (la regola delle gare in
+  // `docs/architecture/runtime-events-and-jobs.md`).
+  if (options.unlessOpenedSince !== undefined && options.unlessOpenedSince !== openingsAsked) return;
+  openingsAsked++;
   // Dove sta il fuoco al gesto: alla fine si guarda se è ancora lì.
   const asked = document.activeElement;
   // Reserve the target before entering the shared flush queue. Otherwise the

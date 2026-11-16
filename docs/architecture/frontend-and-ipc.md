@@ -264,7 +264,9 @@ pannelli) lo Scrittoio compone:
   quell'editor. La fila non ha un costruttore: chi costruisce la barra mette sul suo DOM
   `kit-bar` (il vassoio), `kit-bar-group` (un foglietto), `kit-bar-button`
   e `kit-bar-field`, e per ciò che non ci sta usa `kit/options-bar.ts`
-  (`kit-options`, «…»). Le frecce della fila sono `kit/toolbar-keys.ts`
+  (`kit-options`, «…»: un popover con gli stessi controlli, Su e Giù fra
+  loro, Esc che riporta il fuoco su «…»; `onFit` dopo ogni conto, per chi
+  rimette il punto di tabulazione). Le frecce della fila sono `kit/toolbar-keys.ts`
   (`rovingToolbar`): un solo punto di tabulazione, destra e sinistra che
   girano ai capi, Home ed End, soltanto fra i controlli visibili e accesi;
   in un campo di testo le frecce passano oltre solo ai capi del testo, ed

@@ -13,7 +13,10 @@
 //   pezzo dentro un involucro già nascosto, che il `ResizeObserver` vede
 //   largo zero.
 // - **La tastiera.** È una `toolbar` orizzontale: Tab entra e esce, i
-//   controlli tengono i loro tasti.
+//   controlli tengono i loro tasti; chi vuole le frecce nella riga ci mette
+//   `toolbar-keys.ts` e rimette il punto di tabulazione in `onFit`. Nel
+//   popover Su e Giù passano da un controllo all'altro, Esc lo chiude e
+//   riporta il fuoco su «…».
 //
 // Il kit non ha testo suo: il nome della barra e quello di «…» arrivano da
 // chi la crea.
@@ -35,7 +38,13 @@ export interface OptionsBarOptions {
   moreLabel: string;
   items?: readonly OptionItem[];
   lifetime: Lifetime;
+  /// Dopo ogni conto: chi tiene il punto di tabulazione della barra lo rimette
+  /// su un controllo che si vede.
+  onFit?: () => void;
 }
+
+/// I controlli che il Tab e le frecce raggiungono.
+const CONTROLS = "button, input, select, textarea";
 
 export interface OptionsBar {
   readonly element: HTMLElement;
@@ -96,17 +105,27 @@ export function createOptionsBar(options: OptionsBarOptions): OptionsBar {
 
   const close = (): void => popover?.close();
 
-  /// Rimette ogni controllo nella riga, al suo posto. Se ci sono già non li
-  /// tocca: staccarli e riattaccarli farebbe cadere il fuoco del controllo
-  /// appena premuto, e il conto si rifà anche mentre lo si usa.
+  /// Rimette ogni controllo nella riga, al suo posto. Quelli già al loro
+  /// posto non li tocca: staccarli e riattaccarli farebbe cadere il fuoco del
+  /// controllo appena premuto, e il conto si rifà anche mentre lo si usa
+  /// (anche quando chi crea la barra cambia gli altri controlli e tiene quello
+  /// col fuoco, come la barra dei comandi della lavagna).
   const restore = (): void => {
-    const placed = row.children.length === items.length && items.every((item, index) => row.children[index] === item.element);
-    if (!placed) row.replaceChildren(...items.map((item) => item.element));
+    const wanted = new Set<Element>(items.map((item) => item.element));
+    for (const child of [...row.children]) if (!wanted.has(child)) child.remove();
+    items.forEach((item, index) => {
+      const at = row.children[index] ?? null;
+      if (at !== item.element) row.insertBefore(item.element, at);
+    });
     for (const item of items) item.element.hidden = false;
   };
 
   const fit = (): void => {
     if (popover) return;
+    // Il conto nasconde «…» per misurare la riga, e un elemento nascosto
+    // perde il fuoco: «…» lo ritrova alla fine (nella lavagna, Esc nel
+    // popover lasciava il fuoco al `body`).
+    const focused = document.activeElement;
     restore();
     more.hidden = true;
     const widths = items.map((item) => item.element.getBoundingClientRect().width);
@@ -115,10 +134,14 @@ export function createOptionsBar(options: OptionsBarOptions): OptionsBar {
     more.hidden = false;
     const moreWidth = more.getBoundingClientRect().width + gap;
     more.hidden = true;
+    // La riga sta dentro il riempimento della barra: conta solo lo spazio
+    // fra i due bordi interni.
+    const style = getComputedStyle(element);
+    const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
     hidden = overflowing(
       spaced,
       items.map((item) => item.priority ?? 0),
-      element.clientWidth,
+      element.clientWidth - padding,
       moreWidth,
     );
     items.forEach((item, index) => (item.element.hidden = hidden.has(index)));
@@ -126,6 +149,12 @@ export function createOptionsBar(options: OptionsBarOptions): OptionsBar {
     // Il fuoco non resta su un controllo che non si vede.
     const focus = document.activeElement;
     if (focus instanceof HTMLElement && focus.closest("[hidden]") && row.contains(focus)) more.focus();
+    else if (focused === more && (focus !== more || more.hidden)) {
+      // Tutto sta nella riga e «…» non c'è più: il fuoco va all'ultimo controllo.
+      const last = more.hidden ? [...row.querySelectorAll<HTMLElement>(CONTROLS)].filter((control) => !control.closest("[hidden]")).pop() : more;
+      last?.focus({ preventScroll: true });
+    }
+    options.onFit?.();
   };
 
   const schedule = (): void => {
@@ -145,6 +174,11 @@ export function createOptionsBar(options: OptionsBarOptions): OptionsBar {
     const moved = items.filter((_, index) => hidden.has(index));
     for (const item of moved) item.element.hidden = false;
     box.replaceChildren(...moved.map((item) => item.element));
+    // Una barra con le frecce (`toolbar-keys.ts`) lascia -1 ai controlli che
+    // non hanno il punto di tabulazione: nel popover il Tab e il primo fuoco
+    // devono raggiungerli tutti. Alla chiusura tornano come erano.
+    const lifted = [...box.querySelectorAll<HTMLElement>(CONTROLS)].filter((control) => control.tabIndex === -1);
+    for (const control of lifted) control.tabIndex = 0;
     more.setAttribute("aria-expanded", "true");
     popover = openPopover({
       anchor: more,
@@ -155,12 +189,27 @@ export function createOptionsBar(options: OptionsBarOptions): OptionsBar {
       className: "kit-options-popover",
       lifetime,
       onClose: () => {
+        for (const control of lifted) control.tabIndex = -1;
         more.setAttribute("aria-expanded", "false");
         popover = null;
         fit();
       },
     });
   };
+  // Nel popover i controlli stanno in colonna: Su e Giù passano dall'uno
+  // all'altro e girano ai capi. Un elenco o un campo di testo tiene le sue
+  // frecce.
+  lifetime.listen(box, "keydown", (event) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    const controls = [...box.querySelectorAll<HTMLElement>(CONTROLS)].filter((control) => !control.closest("[hidden]") && !(control as HTMLButtonElement).disabled);
+    const at = controls.findIndex((control) => control === event.target || control.contains(event.target as Node));
+    if (at < 0) return;
+    event.preventDefault();
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    controls[(at + step + controls.length) % controls.length]!.focus();
+  });
   lifetime.listen(more, "click", () => (popover ? close() : open()));
 
   // La barra e ogni controllo: un controllo che il suo owner nasconde o
