@@ -166,7 +166,10 @@ export function commentMargin(host: MarginHost): { extension: Extension; refresh
         this.marks = this.collect();
         this.decorations = this.signs();
       }
-      if (again || update.geometryChanged || update.heightChanged) this.view.requestMeasure(this.measure);
+      // Senza segni né bolle non c'è niente da misurare: la battuta in una
+      // nota senza commenti non paga la misura.
+      const something = this.marks.length > 0 || this.buttons.size > 0;
+      if (something && (again || update.geometryChanged || update.heightChanged)) this.view.requestMeasure(this.measure);
     }
 
     read(): Measured {

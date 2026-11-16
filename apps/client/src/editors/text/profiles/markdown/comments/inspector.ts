@@ -155,7 +155,27 @@ export function commentsPanel(source: CommentsPanelSource, reveal: (anchor: numb
         event.preventDefault();
         go(event.target);
       });
-      life.add(source.watch(draw));
+      // La scheda resta montata anche quando l'ispettore ne mostra un'altra:
+      // nascosta non rilegge la nota a ogni pausa nello scrivere, e si rifà
+      // quando torna a vista.
+      let shown = true;
+      let stale = false;
+      const redraw = () => {
+        if (shown) draw();
+        else stale = true;
+      };
+      if (typeof IntersectionObserver === "function") {
+        const seen = new IntersectionObserver((entries) => {
+          shown = entries.some((entry) => entry.isIntersecting);
+          if (shown && stale) {
+            stale = false;
+            draw();
+          }
+        });
+        seen.observe(root);
+        life.add(() => seen.disconnect());
+      }
+      life.add(source.watch(redraw));
       draw();
       return () => {
         life.close();

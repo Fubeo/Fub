@@ -1136,13 +1136,13 @@ export const SCENE = onPage("shell", [
   })),
   // I commenti (T22): il segno nel margine con le iniziali e il numero dei
   // messaggi, la discussione aperta, il primo messaggio che chiede il nome, il
-  // segno nel testo a 700 px, la Lettura e il pannello «Commenti».
+  // segno nel testo nella finestra minima, la Lettura e il pannello «Commenti».
   ...[
     ["commenti-01-margine", "commenti", "I commenti in Scrittura: il segno nel margine, l'archivio in fondo non si vede", "live_preview"],
     ["commenti-02-discussione", "commenti", "La discussione aperta dal segno: citazione, messaggi, risposta, Risolvi, Elimina", "live_preview", null, "open"],
     ["commenti-03-primo", "commenti-scelta", "Il primo messaggio: la citazione, il nome che si chiede e l'avviso che finisce nel file", "live_preview", null, "compose"],
-    ["commenti-04-700", "commenti", "A 700 px il margine non ha posto: il segno sta nel testo", "live_preview", { width: 700, height: 800 }],
-    ["commenti-05-700-discussione", "commenti", "A 700 px la discussione aperta dal segno nel testo", "live_preview", { width: 700, height: 800 }, "open"],
+    ["commenti-04-stretta", "commenti", "Nella finestra minima, 800 px (il foglio di 700 del prototipo): il segno sta nel testo", "live_preview", NOTE_NARROW],
+    ["commenti-05-stretta-discussione", "commenti", "Nella finestra minima la discussione aperta dal segno nel testo", "live_preview", NOTE_NARROW, "open"],
     ["commenti-06-lettura", "commenti", "I commenti in Lettura: il segno nel margine, l'archivio non occupa posto", "reading"],
     ["commenti-07-pannello", "commenti", "Il pannello «Commenti»: gli aperti, poi i risolti con «Svuota i risolti»", "live_preview", null, "panel"],
   ].map(([id, live, title, mode, viewport, gesture]) => ({

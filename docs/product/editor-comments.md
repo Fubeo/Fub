@@ -38,8 +38,8 @@ leggono con la sintassi `fub:comments` accesa, la stessa dei commenti
   sta nel testo, subito dopo il passo, più piccolo della riga. Lo stesso in
   Lettura. Un commento su un punto non ha segno: sta nel pannello.
 - Un clic sul segno (o Invio quando ha il fuoco) apre la discussione: la
-  citazione del passo, i messaggi con chi e quando («oggi 17:40», «ieri»,
-  «8 nov»), il campo per rispondere (Ctrl Invio, ⌘ Invio su macOS, invia),
+  citazione del passo, i messaggi con chi e quando («ieri 17:40», il giorno del mese,
+  l'anno se è un altro), il campo per rispondere (Ctrl Invio, ⌘ Invio su macOS, invia),
   poi «Risolvi» ed «Elimina». Un messaggio senza autore si legge «Senza
   nome», col pallino grigio. Esc chiude, e il fuoco torna dove stava.
 - Se la nota cambia mentre la discussione è aperta, la discussione segue il
