@@ -2927,17 +2927,33 @@ fn percorso_di_disegno(
 /// tramite wry. Le altre piattaforme non dichiarano niente e restano come
 /// prima. Una versione illeggibile lascia la webview non dichiarata, cioè i
 /// default di sempre.
-fn declare_the_webview() {
+///
+/// Va chiamata prima di [`percorso_di_disegno`], che legge il valore effettivo
+/// di `appearance.motion` e quindi il suo default, e prima che esista il log:
+/// restituisce la versione letta, o il problema, e chi chiama lo scrive dopo
+/// ([`log_the_webview`]).
+fn declare_the_webview() -> Option<Result<String, String>> {
     #[cfg(target_os = "linux")]
-    match tauri::webview_version() {
+    return Some(match tauri::webview_version() {
         Ok(version) => match fub_host::settings::Webview::webkitgtk(&version) {
             Some(webview) => {
-                tracing::info!(target: "fub.app", %version, "webkitgtk");
                 fub_host::settings::declare_webview(webview);
+                Ok(version)
             }
-            None => tracing::warn!(target: "fub.app", %version, "unreadable webkitgtk version"),
+            None => Err(format!("unreadable webkitgtk version {version}")),
         },
-        Err(error) => tracing::warn!(target: "fub.app", %error, "webkitgtk version unavailable"),
+        Err(error) => Err(format!("webkitgtk version unavailable: {error}")),
+    });
+    #[cfg(not(target_os = "linux"))]
+    None
+}
+
+/// Scrive nel log quello che [`declare_the_webview`] ha trovato.
+fn log_the_webview(declared: Option<Result<String, String>>) {
+    match declared {
+        Some(Ok(version)) => tracing::info!(target: "fub.app", %version, "webkitgtk"),
+        Some(Err(problem)) => tracing::warn!(target: "fub.app", %problem, "webkitgtk version"),
+        None => {}
     }
 }
 
@@ -2949,10 +2965,14 @@ pub fn run() {
     // Il percorso di disegno della webview **prima di ogni thread**: le
     // variabili di WebKitGTK contano solo se scritte prima che parta GTK, e
     // `set_var` è sicura solo finché il processo ha un thread solo — qui, e
-    // non dopo `install_logging` (vedi `disegno::applica`).
+    // non dopo `install_logging` (vedi `disegno::applica`). Prima ancora la
+    // webview: il livello macchina riceve lo schema, e con lui il default delle
+    // animazioni che il percorso di disegno legge, quando lo si apre.
+    let webview = declare_the_webview();
     #[cfg(target_os = "linux")]
     let percorso = percorso_di_disegno(config_dir.as_deref());
     let (levels, warning) = fub_host::install_logging(config_dir.as_deref());
+    log_the_webview(webview);
     let installed_availability = match config_dir.as_deref() {
         Some(dir) => {
             tracing::info!(
@@ -2982,9 +3002,8 @@ pub fn run() {
     // `WebviewEvents`).
     let sink = Arc::new(WebviewEvents::default());
     let bridge = sink.clone();
-    // Prima dell'host: il livello macchina riceve lo schema, e con lui il
-    // default delle animazioni, nel costruttore.
-    declare_the_webview();
+    // La webview è già dichiarata (in cima): il livello macchina dell'host
+    // riceve lo schema, e con lui il default delle animazioni, nel costruttore.
     let mut host = Host::new();
     if let Some(dir) = config_dir.as_deref() {
         host = host.with_config_dir(dir);

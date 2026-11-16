@@ -92,7 +92,7 @@ payload tipizzato:
 | `kind` | campi | la shell |
 |---|---|---|
 | `driver_mismatch` | `kernel`, `library` | notifica «Il driver della scheda grafica è stato aggiornato: riavvia il computer», tono guasto |
-| `nvidia_flicker` | `driver`, `offer_motion` | notifica con i gesti «Disegna col processore» (`appearance.rendering` = `cpu`), «Movimento calmo» (`appearance.motion` = `calm`, solo se non lo è già) e «Lascia così» (`gpu`) |
+| `nvidia_flicker` | `driver`, `offer_motion` | notifica con i gesti «Disegna col processore» (`appearance.rendering` = `cpu`), «Movimento calmo» (`appearance.motion` = `calm`, solo se il valore effettivo, default compreso, non è già `calm` o `reduced`) e «Lascia così» (`gpu`) |
 
 La proposta torna a ogni avvio finché l'utente non sceglie: `cpu` o `gpu` la
 spengono, perché valgono solo in `auto`. I testi stanno nel catalogo della
