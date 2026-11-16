@@ -10010,7 +10010,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1857,
+    "hooks": 1858,
     "state_names": 7,
     "assigned_states": 867,
     "components": 257,
