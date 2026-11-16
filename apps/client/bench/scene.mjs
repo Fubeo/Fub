@@ -561,6 +561,47 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector(".pane.focus .base-note:not([hidden])");
     },
   },
+  // **Viste, colonne e riepiloghi** (T16), sulla stessa Base: «+», il menu
+  // della colonna, il piede coi riepiloghi del core e venti viste.
+  {
+    id: "base-nuova-vista",
+    title: "Base: «+» aperto, i tipi di vista da aggiungere al file",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click(".pane.focus .base-tool-new-view");
+      await page.waitForSelector("#context-menu .menu-head");
+    },
+  },
+  {
+    id: "base-colonna",
+    title: "Base: il menu della colonna «valore», con Ordina, Raggruppa, Riepilogo, Rinomina, Tipo e Nascondi",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click('.pane.focus th[data-column="valore"] .base-head');
+      await page.waitForSelector("#context-menu .menu-head");
+    },
+  },
+  {
+    id: "base-piede",
+    title: "Base: il piede con la somma dei valori e l'ultima consegna, scelte dal menu della colonna",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await chooseBaseSummary(page, "valore", "Somma");
+      await chooseBaseSummary(page, "consegna", "L'ultima");
+    },
+  },
+  {
+    id: "base-venti",
+    title: "Base: venti viste, le linguette che non stanno restano figure",
+    query: "base=venti",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.waitForSelector(".pane.focus .base-tabs.compact");
+    },
+  },
   {
     id: "grid-workbook",
     title: "Grid v2: una cartella di Excel sui suoi byte",
@@ -2315,6 +2356,20 @@ async function openBase(page) {
       && pane?.querySelector(".base-tab[aria-pressed='true']") !== null
       && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
   });
+}
+
+/// Sceglie dal menu della colonna `column` il riepilogo `label` e aspetta che
+/// il piede lo mostri.
+async function chooseBaseSummary(page, column, label) {
+  await page.click(`.pane.focus th[data-column="${column}"] .base-head`);
+  await page.waitForSelector("#context-menu .menu-head");
+  await page.hover('#context-menu button:has(.menu-label:text-is("Riepilogo"))');
+  await page.click(`.context-submenu button:has(.menu-label:text-is("${label}"))`);
+  await page.waitForFunction((column) => {
+    const pane = document.querySelector(".pane.focus");
+    return pane?.querySelector(`tfoot td[data-column="${column}"] .base-foot-value`) !== null
+      && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
+  }, column);
 }
 
 /// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la
