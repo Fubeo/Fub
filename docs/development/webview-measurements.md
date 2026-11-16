@@ -282,11 +282,17 @@ referto lo scrive in `cap`, e il banco stampa «tetto del motore: le soglie
 in periodi valgono a 60 Hz finché il tetto c'è». Una mediana lontana sia
 da P sia da 60 Hz non è il tetto: P efficace resta P, e F1 è rosso.
 
-**Il percorso di disegno e il carico.** F1 scrive nel referto il renderer
-di WebGL (`render.renderer`, per esempio «llvmpipe» quando disegna la CPU)
-e le librerie GL che i processi della WebView hanno caricato
-(`render.libraries`). Ogni scenario ha nel referto il carico della macchina
-prima e dopo (`load`): con un carico alto la misura è rumorosa.
+**Il percorso di disegno e il carico.** Prima degli scenari il banco apre
+per qualche secondo una WebView WebKitGTK a parte, con l'ambiente dell'app,
+e legge `webkit://gpu` (`webkitGpu` in `bench/webview/frames.mjs`, con
+PyGObject e WebKit2 4.1): il renderer GL e il vblank di WebKit («Timer,
+60Hz» vuol dire il tetto). Sulla shell WebGL non basta, perché WebKitGTK gli
+nasconde il renderer («Apple GPU»). F1 scrive nel referto il percorso
+(`render.path`: `cpu` per llvmpipe e simili, `gpu`, o `sconosciuto` senza
+PyGObject), il renderer con la sua fonte, il vblank e le librerie GL che i
+processi della WebView hanno caricato (`render.libraries`). Ogni scenario ha
+nel referto il carico della macchina prima e dopo (`load`): con un carico
+alto la misura è rumorosa.
 
 **F3 e il thread principale.** WebKit non ha i long task. F3 tiene acceso
 un anello di `setTimeout(0)`: un buco fra due giri oltre 5 ms (il timer

@@ -32,7 +32,7 @@ import { openSession, waitForDriver } from "./driver.mjs";
 import { GESTURE_FOLDER, INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteName, writeFixtures } from "./fixtures.mjs";
 import { cpuPercent, cpuTicks, descendants, pendenza, settled } from "./memory.mjs";
 import { displayRate, engineCap, hasPeriodLimits, resolveLimit } from "./refresh.mjs";
-import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, frameStats, glLibraries, renderPath } from "./frames.mjs";
+import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
 import { CANVAS_SCRIPT, COMMITS, L1_ROUNDS, OPENS, SIZES, builtModule, l1Values } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
@@ -74,6 +74,8 @@ let benchVault = null;
 /// soglie in periodi si risolvono con `cap.effectiveMs`.
 let display = null;
 let cap = null;
+/// `webkit://gpu` letta prima degli scenari, con l'ambiente dell'app (`webkitGpu`).
+let gpuInfo = null;
 
 /// F1: quanto dura il rAF a vuoto. F2: quanto dura la quiete.
 const IDLE_RAF_MS = 5_000;
@@ -685,7 +687,7 @@ const SCENARIOS = {
     cap = engineCap(frames?.median ?? null, display.periodMs);
     const webview = (descendants(driverPid) ?? []).filter((proc) => proc.group === "webview" || proc.group === "gpu");
     const gl = await session.execute(RENDERER_SCRIPT);
-    const render = renderPath(gl?.renderer ?? null, glLibraries(webview));
+    const render = renderPath({ gpu: gpuInfo, webgl: gl?.renderer ?? null, libraries: glLibraries(webview) });
     return {
       report: { frames, display, cap, render, vendor: gl?.vendor ?? null },
       values: { "F1.raf.mediana": frames?.median ?? null },
@@ -693,7 +695,7 @@ const SCENARIOS = {
       notes: [
         `schermo ${display.hz} Hz, P ${display.periodMs} ms (${display.source}); rAF a vuoto ${frames?.hz ?? "—"} Hz`,
         cap.label,
-        `disegno: ${render.path}${render.renderer ? ` (${render.renderer})` : ""}`,
+        `disegno: ${render.path}${render.renderer ? ` (${render.renderer}, da ${render.source})` : ""}${render.vblank ? `; vblank di WebKit ${render.vblank}` : ""}`,
       ],
     };
   },
@@ -1455,6 +1457,10 @@ async function main() {
   // Lo schermo dove si aprirà la finestra, con l'ambiente che avrà l'app.
   display = displayRate({ args, env: driverEnv });
   cap = engineCap(null, display.periodMs);
+  // Il percorso di disegno e il vblank di WebKitGTK, da una WebView a parte
+  // con lo stesso ambiente: senza PyGObject o WebKit2 resta `null`.
+  gpuInfo = webkitGpu(driverEnv);
+  if (gpuInfo) console.log(`· webkit://gpu: ${gpuInfo.renderer ?? "?"}; vblank ${gpuInfo.vblank ?? "?"}, ${gpuInfo.vblankRate ?? "?"}`);
   console.log(`· schermo: ${display.hz} Hz, P ${display.periodMs} ms (${display.source})`);
   for (const note of display.notes) console.log(`· schermo: ${note}`);
   // Le soglie in periodi chiedono il tetto del motore, cioè F1, prima degli

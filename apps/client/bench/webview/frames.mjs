@@ -1,6 +1,7 @@
 // Fotogrammi, quiete e thread principale per gli scenari F1–F3: gli script
 // che girano nella pagina, la statistica dei fotogrammi rispetto al periodo
 // dello schermo e il percorso di disegno della WebView.
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 /// F1: `ms` di rAF su una pagina ferma; torna i delta fra un fotogramma e
@@ -93,12 +94,63 @@ try {
 const SOFTWARE = /llvmpipe|softpipe|swrast|swiftshader|software/i;
 const GL_LIBS = /gallium|llvmpipe|swrast|nvidia-eglcore|nvidia-glcore|libEGL_nvidia|libEGL_mesa|_dri\.so|radeonsi|iris/;
 
-/// Il percorso di disegno: «cpu» (llvmpipe e simili), «gpu» o «sconosciuto»,
-/// dal renderer di WebGL; le librerie GL mappate dai processi della WebView
-/// sono la prova accanto.
-export function renderPath(renderer, libraries = []) {
+/// WebKitGTK nasconde il renderer vero a WebGL e risponde così.
+const MASKED = /^Apple GPU$/;
+
+/// La pagina `webkit://gpu` di una WebView WebKitGTK aperta con l'ambiente
+/// dell'app (PyGObject e WebKit2 4.1): il suo testo, su stdout.
+export const WEBKIT_GPU_SCRIPT = [
+  "import gi",
+  "gi.require_version('Gtk', '3.0'); gi.require_version('WebKit2', '4.1')",
+  "from gi.repository import Gtk, WebKit2, GLib",
+  "w = Gtk.Window(); w.set_default_size(600, 400); v = WebKit2.WebView(); w.add(v); w.show_all()",
+  "def done(obj, res):",
+  "    print(obj.evaluate_javascript_finish(res).to_string()); Gtk.main_quit()",
+  "def loaded(view, ev):",
+  "    if ev == WebKit2.LoadEvent.FINISHED:",
+  "        GLib.timeout_add(1000, lambda: view.evaluate_javascript('document.body.innerText', -1, None, None, None, done) and False)",
+  "v.connect('load-changed', loaded); v.load_uri('webkit://gpu')",
+  "GLib.timeout_add(15000, Gtk.main_quit); Gtk.main()",
+].join("\n");
+
+/// Le voci di `webkit://gpu` che servono: un'etichetta su una riga, il
+/// valore sulla riga dopo.
+export function parseWebkitGpu(text) {
+  const lines = text.split("\n").map((line) => line.trim());
+  const value = (label) => {
+    const at = lines.indexOf(label);
+    return at >= 0 && lines[at + 1] ? lines[at + 1] : null;
+  };
+  const read = {
+    renderer: value("GL_RENDERER"),
+    vblank: value("VBlank type"),
+    vblankRate: value("VBlank refresh rate"),
+    buffers: value("Renderer"),
+    threaded: value("Threaded rendering"),
+  };
+  return Object.values(read).some((v) => v !== null) ? read : null;
+}
+
+/// `webkit://gpu` letta da una WebView a parte con l'ambiente `env`, o
+/// `null` se non si può (niente PyGObject, niente display, non Linux).
+export function webkitGpu(env, run = (command, argv) => execFileSync(command, argv, { env, encoding: "utf8", timeout: 25_000, stdio: ["ignore", "pipe", "ignore"] })) {
+  if (process.platform !== "linux") return null;
+  try {
+    return parseWebkitGpu(run("python3", ["-c", WEBKIT_GPU_SCRIPT]));
+  } catch {
+    return null;
+  }
+}
+
+/// Il percorso di disegno: «cpu» (llvmpipe e simili), «gpu» o «sconosciuto».
+/// Il renderer viene da `webkit://gpu` (`gpu`, la fonte migliore) o da
+/// WebGL, se WebKit non lo nasconde; le librerie GL mappate dai processi
+/// della WebView sono la prova accanto.
+export function renderPath({ gpu = null, webgl = null, libraries = [] } = {}) {
+  const fromWebgl = webgl && !MASKED.test(webgl) ? webgl : null;
+  const renderer = gpu?.renderer ?? fromWebgl;
   const path = !renderer ? "sconosciuto" : SOFTWARE.test(renderer) ? "cpu" : "gpu";
-  return { path, renderer: renderer ?? null, libraries };
+  return { path, renderer, source: gpu?.renderer ? "webkit://gpu" : fromWebgl ? "webgl" : null, webgl, vblank: gpu ? `${gpu.vblank ?? "?"}, ${gpu.vblankRate ?? "?"}` : null, gpu, libraries };
 }
 
 /// Le librerie GL mappate da ogni processo in `pids` (Linux; altrove vuoto).

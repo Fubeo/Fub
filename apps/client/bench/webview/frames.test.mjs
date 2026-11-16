@@ -2,7 +2,7 @@
 // (`cpuPercent` in `memory.mjs`).
 import { describe, expect, it } from "vitest";
 
-import { blockedPerRepetition, frameStats, renderPath } from "./frames.mjs";
+import { blockedPerRepetition, frameStats, parseWebkitGpu, renderPath } from "./frames.mjs";
 import { cpuPercent } from "./memory.mjs";
 
 describe("i fotogrammi rispetto al periodo", () => {
@@ -42,11 +42,22 @@ describe("il thread principale bloccato per ripetizione", () => {
   });
 });
 
+/// Un pezzo di `webkit://gpu` su `pc-debian-di-fub` col driver disallineato.
+const GPU_PAGE = ["VBlank type", "Timer", "VBlank refresh rate", "60Hz", "Renderer", "DMABuf (Supported buffers: Shared Memory)", "Threaded rendering", "GPU (2 threads)", "GL_RENDERER", "llvmpipe (LLVM 19.1.7, 256 bits)", "GL_VENDOR", "Mesa"].join("\n");
+
 describe("il percorso di disegno", () => {
   it("llvmpipe è la CPU, un renderer vero è la GPU", () => {
-    expect(renderPath("llvmpipe (LLVM 19.1.7, 256 bits)").path).toBe("cpu");
-    expect(renderPath("NVIDIA GeForce RTX 4070/PCIe/SSE2").path).toBe("gpu");
-    expect(renderPath(null).path).toBe("sconosciuto");
+    expect(renderPath({ webgl: "llvmpipe (LLVM 19.1.7, 256 bits)" }).path).toBe("cpu");
+    expect(renderPath({ webgl: "NVIDIA GeForce RTX 4070/PCIe/SSE2" }).path).toBe("gpu");
+    expect(renderPath({}).path).toBe("sconosciuto");
+  });
+
+  it("WebKitGTK nasconde il renderer a WebGL: vale webkit://gpu", () => {
+    expect(renderPath({ webgl: "Apple GPU" })).toMatchObject({ path: "sconosciuto", renderer: null });
+    const gpu = parseWebkitGpu(GPU_PAGE);
+    expect(gpu).toEqual({ renderer: "llvmpipe (LLVM 19.1.7, 256 bits)", vblank: "Timer", vblankRate: "60Hz", buffers: "DMABuf (Supported buffers: Shared Memory)", threaded: "GPU (2 threads)" });
+    expect(renderPath({ gpu, webgl: "Apple GPU" })).toMatchObject({ path: "cpu", source: "webkit://gpu", vblank: "Timer, 60Hz" });
+    expect(parseWebkitGpu("niente\n")).toBeNull();
   });
 });
 
