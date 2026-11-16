@@ -50,17 +50,21 @@
   flex-direction: column;
 }
 
+/* La testa è una fila: lente, campo, attesa, «Esc». Il campo prende il posto
+   che resta e cede; il resto ha la sua misura. */
 .launcher-head {
   flex: none;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  display: flex;
   align-items: center;
 }
+.launcher-head > * {
+  flex: none;
+}
 
-.launcher-input {
+.launcher-head > .launcher-input {
   box-sizing: border-box;
+  flex: 1 1 auto;
   min-width: 0;
-  width: 100%;
 }
 
 /* L'attesa ha sempre il suo posto: accenderla non sposta niente. */

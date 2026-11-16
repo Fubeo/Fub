@@ -19178,9 +19178,11 @@ h6.ui-heading {
   display: inline-flex;
   color: var(--accent-soft);
 }
+/* Il campo tiene il respiro del campo di sistema (1 px sopra e sotto, 2 ai
+   lati), come il prototipo che non lo azzera. */
 .launcher-input {
   height: 54px;
-  padding: 0;
+  padding: 1px 2px;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -19228,7 +19230,9 @@ h6.ui-heading {
 .launcher .launcher-modes {
   gap: var(--space-1);
   padding: 0 var(--space-5) 10px;
-  box-shadow: inset 0 -1px 0 var(--border);
+  /* Il filo è un bordo, non il filo dipinto delle schede del kit. */
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
 }
 .launcher-modes > .launcher-mode {
   gap: 7px;
@@ -19239,6 +19243,7 @@ h6.ui-heading {
   color: var(--muted);
   font-size: 12.5px;
   font-weight: var(--weight-regular);
+  line-height: var(--leading-normal);
 }
 .launcher-modes > .launcher-mode:hover,
 .launcher-modes > .launcher-mode:active {
@@ -19287,6 +19292,7 @@ h6.ui-heading {
   border-radius: 9px;
   color: var(--text);
   font-size: 14px;
+  line-height: var(--leading-normal);
 }
 /* La riga attiva: un fondo appena più scuro sotto l'inchiostro, non il verde
    dell'accento. L'accento resta all'icona. */
@@ -19355,14 +19361,22 @@ h6.ui-heading {
 .launcher-preview {
   gap: var(--space-5);
   padding: 14px;
+  border-left: 1px solid var(--border);
   background: color-mix(in srgb, var(--sheet-2) 55%, var(--sheet));
 }
+/* Il foglio è appena rialzato: un anello e un'ombra corta. La scala delle
+   ombre non ha un gradino così basso (`--shadow-1` è già un'ombra da carta,
+   con un alone di 20 px), quindi i due valori sono quelli del prototipo, uno
+   per luce. */
 .launcher-preview-sheet {
   max-height: 292px;
   padding: 14px var(--space-6) 0;
   border-radius: 10px;
   background: var(--sheet);
-  box-shadow: 0 0 0 1px var(--overlay-hover), var(--shadow-1);
+  box-shadow: 0 0 0 1px rgb(20 44 30 / 6%), 0 1px 3px rgb(20 44 30 / 10%);
+}
+:root[data-theme="dark"] .launcher-preview-sheet {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 6%), 0 1px 3px rgb(0 0 0 / 50%);
 }
 .launcher-preview-sheet::after {
   content: "";
