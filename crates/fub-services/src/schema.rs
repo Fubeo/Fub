@@ -27,9 +27,13 @@ pub const SYNC_EXCLUDE: &[&str] = &[
 ];
 
 /// Quote e conservazione applicate dal server (P16.3, P17.1).
+///
+/// Ogni quota è un tetto vero: 0 vuol dire «niente» (nessun byte, nessun
+/// sito, nessun account), mai «senza limite».
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ServiceQuotas {
-    /// Byte totali per vault remoto (default 256 MiB).
+    /// Byte totali per vault remoto (default 256 MiB); è anche il tetto di un
+    /// sito pubblicato.
     pub max_vault_bytes: u64,
     /// Byte per singolo asset (default 64 MiB).
     pub max_asset_bytes: u64,

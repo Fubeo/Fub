@@ -103,13 +103,15 @@ function doorGaps(group: readonly string[], doors: Readonly<Record<Door, Readonl
 
 /// I pulsanti che si vedono sul foglio fermo: non al passaggio né a
 /// richiesta (`data-presence`, che la pelle nasconde a riposo) e non
-/// contenuto. Il contenuto è l'icona della pagina e la riga dei dati, come
+/// contenuto. Il contenuto è l'icona della pagina, i pulsanti delle proprietà
+/// della testata («Aggiungi una proprietà» si vede sempre in Scrittura, come
+/// nel prototipo, scelta dell'utente del 2026-11-15) e la riga dei dati, come
 /// nella scena «a riposo» del banco (`writingAtRest` in `bench/scene.mjs`), e
 /// il triangolo della sezione a scomparsa, che è il blocco stesso come la
 /// casella di un compito. In più «+ riga»/«+ colonna» della tabella, che il
 /// tema della tabella nasconde finché il puntatore non ci passa
 /// (`.tb-frame:hover`) senza ancora il segno della presenza.
-const CONTENT = ".cm-fub-page-icon, .note-facts *, .cm-fub-details-arrow, .tb-add";
+const CONTENT = ".cm-fub-page-icon, .cm-fub-page-props button, .note-facts *, .cm-fub-details-arrow, .tb-add";
 function buttonsAtRest(sheet: Element): Element[] {
   return [...sheet.querySelectorAll("button, [role=button]")]
     .filter((el) => !el.closest("[data-presence]") && !el.matches(CONTENT) && !el.closest("[hidden]"));

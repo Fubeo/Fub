@@ -139,7 +139,9 @@ Cambia il testo del documento in tre punti, e lascia uguale ogni altro byte.
   allarga.
 - **Gli esiti:** il testo derivato, o un errore: `unknown-board` e
   `unknown-object` con l'id, `empty-selection`, `bad-box`, `malformed` e
-  `not-svg`, gli stessi nei due linguaggi.
+  `not-svg`, gli stessi nei due linguaggi. Solo l'export di Rust ha in più
+  `too-many-nodes`: un disegno di oltre `MAX_EXPORT_NODES` nodi XML
+  ([limiti](scene-format.md#11-limiti)) non si legge per esportarlo.
 
 ## 3. L'SVG pulito
 

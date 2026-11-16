@@ -523,6 +523,9 @@ describe("le azioni dell'editor della superficie", () => {
     const { ed, view } = editor();
     const text = "---\ntitolo: Uno\ntag: [a]\n---\n\n# Testo\n";
     ed.buffer.setDoc(text);
+    // In Scrittura le proprietà stanno nella testata (`editor.properties` di
+    // serie `visible`): il frontmatter da piegare si vede in Sorgente.
+    ed.setMode("source");
     const placeholders = () => view().dom.querySelectorAll(".cm-foldPlaceholder").length;
     expect(ed.editorActions.run("text.fold.properties")).toBe(true);
     expect(placeholders()).toBe(1);

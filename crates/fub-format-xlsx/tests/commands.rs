@@ -1046,6 +1046,30 @@ fn incollare_da_un_intervallo_della_cartella_porta_formule_e_si_rifa() {
     assert_eq!(input(&shown, "s1", "A2"), "");
 }
 
+/// Un testo che sembra una formula esce negli appunti con l'apostrofo davanti
+/// (patch `0012-formule-come-testo` di GridCraft): un altro foglio di
+/// calcolo che lo incolla lo scrive come testo e non lo esegue. Un numero
+/// negativo resta un numero.
+#[test]
+fn negli_appunti_un_testo_che_sembra_una_formula_resta_testo() {
+    let body = r#"<dimension ref="A1:C1"/><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>=HYPERLINK("http://x","y")</t></is></c><c r="B1" t="inlineStr"><is><t>@SUM(1)</t></is></c><c r="C1"><v>-5</v></c></row></sheetData>"#;
+    let bytes = one_sheet(body);
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let copied = give(
+        &mut provider,
+        &session.instance,
+        &session.revision,
+        command("fub.copyHtml", r#"{"range":"A1:C1"}"#, "A1"),
+    )
+    .unwrap();
+    let result: serde_json::Value =
+        serde_json::from_str(copied.result.as_deref().unwrap()).unwrap();
+    assert_eq!(
+        result["text"],
+        "\"'=HYPERLINK(\"\"http://x\"\",\"\"y\"\")\"\t'@SUM(1)\t-5\n"
+    );
+}
+
 #[test]
 fn copiare_in_html_legge_soltanto_e_i_parametri_sbagliati_si_rifiutano() {
     let bytes = one_sheet(BODY);

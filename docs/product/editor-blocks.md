@@ -206,13 +206,16 @@ sempre.
 
 ## La testata della pagina
 
-In cima ai Blocchi stanno l'icona, la copertina e il titolo della pagina, con
-le proprietà subito sotto. Sono righe del frontmatter, scritte come le altre
+In cima ai Blocchi stanno la copertina, l'icona e il titolo della pagina, con
+le proprietà subito sotto; la Lettura mostra la stessa testata (ordine,
+proprietà e tastiera in [Scrittura](editor-writing.md#la-testata)). Icona,
+copertina e classi sono righe del frontmatter, scritte come le altre
 proprietà, e in Sorgente si vedono così:
 
 ```yaml
 icon: 🧳            # o una figura: icon: fub:book
 cover: ../Risorse/mare.png
+cover-y: 30         # dove sta la copertina, da 0 (in cima) a 100
 cssclasses: [wide, sans]
 ```
 
@@ -220,8 +223,8 @@ cssclasses: [wide, sans]
   (`Viaggio/_index.md`, vedi [Esplora e cartelle](explorer-and-folders.md)) è il
   nome della cartella. Si scrive in riga: Invio o l'uscita dal campo rinominano
   il file, o la cartella, con i collegamenti; Esc torna al nome di prima. Un
-  nome che non si può usare o che c'è già non rinomina niente e lo dice. ↑ sulla
-  prima riga del testo porta al titolo, ↓ e Invio dal titolo al testo.
+  nome che non si può usare o che c'è già non rinomina niente e lo dice. Invio
+  dal titolo porta al testo; ↑ e ↓ passano per le proprietà della testata.
 - **Icona.** Un'emoji, scelta cercandola per nome in italiano o in inglese, o
   una delle figure monocrome dell'esplora, che stanno prima delle emoji e si
   scrivono `icon: fub:book`. Una figura prende il colore del testo; un `fub:`
@@ -233,7 +236,8 @@ cssclasses: [wide, sans]
   icone diverse non la danno a `[[Nome]]`. Un valore che non è un testo breve,
   come il path di un'immagine messo da un'altra app, non si mostra.
 - **Copertina.** Un'immagine del vault, con lo stesso path di un'immagine nel
-  testo, o un indirizzo.
+  testo, un indirizzo, o un colore pieno (`cover: "#a3c4f3"`); per
+  un'immagine «Riposiziona» ne sceglie la parte che si vede.
 - **Nuova sottopagina.** Chiede il nome, dice se la pagina sta per diventare
   quella di una cartella, crea la nota con `note.subpage` e scrive `[[Nome]]`
   in una riga vuota o in un paragrafo dopo il blocco del cursore.
@@ -241,6 +245,8 @@ cssclasses: [wide, sans]
   del tema, con grazie, senza grazie, monospaziato) scrivono `cssclasses`
   (`wide`, `small`, `serif`, `sans`, `mono`) e lasciano le altre classi della
   nota. Il tema le applica al riquadro quando l'indice ha letto la nota salvata.
+  Classi scritte con un commento o in una forma che la riscrittura perderebbe
+  non si toccano: il menu apre lo YAML sulla loro riga.
 
 In sola lettura la testata si guarda soltanto. Ogni modifica è un passo
 d'annullamento suo.

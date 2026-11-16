@@ -1,0 +1,33 @@
+{
+  "about": "Quando un frontmatter si legge. Lo stesso elenco lo verificano il modello (crates/fub-format-markdown/tests/frontmatter_readability.rs, con serde_yaml_ng) e la testata della pagina (apps/client/src/editors/text/profiles/markdown/properties.test.ts): se uno dei due cambia idea, la sua prova diventa rossa. Si scrive a mano.",
+  "cases": [
+    { "name": "semplice", "source": "---\nstato: aperto\n---\nTesto\n", "readable": true },
+    { "name": "vuoto", "source": "---\n---\nTesto\n", "readable": true },
+    { "name": "commenti e righe vuote", "source": "---\n# un commento\n\nstato: aperto\n---\nTesto\n", "readable": true },
+    { "name": "elenco rientrato", "source": "---\ntags:\n  - a\n  - b\n---\nTesto\n", "readable": true },
+    { "name": "elenco allo stesso rientro della chiave", "source": "---\ntags:\n- a\n- b\n---\nTesto\n", "readable": true },
+    { "name": "testo a blocco con una riga vuota", "source": "---\nnote: |\n  uno\n\n  due\nstato: x\n---\nTesto\n", "readable": true },
+    { "name": "elenco in riga chiuso", "source": "---\ntags: [a, b]\n---\nTesto\n", "readable": true },
+    { "name": "mappa in riga chiusa", "source": "---\nposto: {citta: Lisbona, anno: 2027}\n---\nTesto\n", "readable": true },
+    { "name": "due punti senza spazio nel valore", "source": "---\ntitolo: a:b\n---\nTesto\n", "readable": true },
+    { "name": "indirizzo", "source": "---\nurl: https://example.com/a?b=c\n---\nTesto\n", "readable": true },
+    { "name": "due punti fra apici", "source": "---\ntitolo: 'a: b'\naltro: \"c: d\"\n---\nTesto\n", "readable": true },
+    { "name": "ancora e alias", "source": "---\ncover: &img a.png\nog: *img\n---\nTesto\n", "readable": true },
+    { "name": "commento in coda", "source": "---\ncover: foto.jpg # dalla gita\n---\nTesto\n", "readable": true },
+    { "name": "commento in coda con due punti", "source": "---\nstato: a # nota: b\n---\nTesto\n", "readable": true },
+    { "name": "chiave senza valore", "source": "---\nbudget:\n---\nTesto\n", "readable": true },
+    { "name": "testo semplice su più righe", "source": "---\ndescrizione: una riga\n  che continua\n---\nTesto\n", "readable": true },
+    { "name": "chiave fra virgolette", "source": "---\n\"una chiave\": sì\n---\nTesto\n", "readable": true },
+    { "name": "chiavi doppie", "source": "---\nstato: a\nstato: b\n---\nTesto\n", "readable": true },
+    { "name": "virgola: elenco in riga aperto", "source": "---\ntags: [a, b\n---\n\nCorpo della nota.\n", "readable": false },
+    { "name": "mappa in riga aperta", "source": "---\nposto: {citta: Lisbona\n---\nTesto\n", "readable": false },
+    { "name": "elenco in riga con qualcosa dopo", "source": "---\ntags: [a, b] c\n---\nTesto\n", "readable": false },
+    { "name": "due punti: un valore che è una mappa", "source": "---\ntitolo: a: b\n---\n\nCorpo della nota.\n", "readable": false },
+    { "name": "virgolette aperte", "source": "---\ntitolo: \"abc\n---\nTesto\n", "readable": false },
+    { "name": "apici aperti", "source": "---\ntitolo: 'abc\n---\nTesto\n", "readable": false },
+    { "name": "tabulazione nel rientro", "source": "---\ntags:\n\t- a\n---\n\nCorpo della nota.\n", "readable": false },
+    { "name": "non è una mappa", "source": "---\nsolo del testo\n---\n\nCorpo della nota.\n", "readable": false },
+    { "name": "è un elenco", "source": "---\n- a\n- b\n---\n\nCorpo della nota.\n", "readable": false },
+    { "name": "una riga che non è una chiave", "source": "---\ntitolo senza due punti\nstato: aperto\n---\nTesto\n", "readable": false }
+  ]
+}

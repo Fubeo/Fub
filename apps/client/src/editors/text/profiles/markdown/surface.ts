@@ -19,6 +19,8 @@ import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts
 import { blocksMode, pageArrives, plainMode, type BlocksOptions } from "./blocks";
 import { selectBlockThenAll, selectBody } from "./blocks/keys";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
+import { mountReadingHeader, type PageOptions } from "./page/header";
+import { propertiesDisplay } from "../../properties-display";
 import { liveStrings } from "./strings";
 import { pageIconsChanged } from "./livepreview";
 import { linkCardsChanged, type LinkCardSource } from "./link-card";
@@ -574,8 +576,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // preferenza (`editor.blocks`): spenti, Scrittura è un editor di testo con
   // la stessa testata. Si parte dall'ultimo valore letto; la lettura di
   // questa superficie, e ogni cambio, li accendono o spengono senza riaprire
-  // la nota.
-  const blocksOptions: BlocksOptions = {
+  // la nota. La testata della pagina è la stessa in Scrittura e in Lettura
+  // (`page/header.ts`): le stesse opzioni per tutte e due.
+  const pageOptions: PageOptions = {
     page: () => pageName(resources?.documentId ?? documentId),
     notify: (message, tone) => notify(message, tone),
     folderPage: () => isFolderPage(resources?.documentId ?? documentId),
@@ -588,12 +591,21 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     subpage: opts.onNewSubpage
       ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
       : undefined,
+  };
+  const blocksOptions: BlocksOptions = {
+    ...pageOptions,
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,
   };
   const blocksExtension: Extension = blocksMode(blocksOptions);
   const plainExtension: Extension = plainMode(blocksOptions);
   let blocksOn = blocksPreferred();
+  /// «Altre N proprietà» nella testata della Lettura, fra una resa e l'altra.
+  let readingMoreOpen = false;
+  const readingMore = {
+    get open() { return readingMoreOpen; },
+    set: (open: boolean) => { readingMoreOpen = open; },
+  };
   presentation(mode);
 
   const engine = createTextEngine(parent, {
@@ -639,15 +651,37 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// La riga dei dati in Lettura: dopo il primo `h1` della resa (fuori dagli
   /// embed), e senza titolo in cima. Si rimette a ogni resa e a ogni dato.
   let readingFactsLife: Lifetime | null = null;
+  /// La testata della Lettura: resta in cima quando la resa si rifà da sé, e
+  /// si rimonta quando la riga dei dati comincia (o smette) di mostrare le
+  /// etichette, che allora escono (o tornano) fra le proprietà.
+  let unmountReadingPage: (() => void) | null = null;
+  let readingPageTags = false;
+  function readingFactTags(): boolean {
+    return opts.noteFacts !== undefined && (noteFactsLabels(facts)?.tags.length ?? 0) > 0;
+  }
+  function mountReadingPage(): void {
+    unmountReadingPage?.();
+    readingPageTags = readingFactTags();
+    unmountReadingPage = engine.readState((state) => mountReadingHeader(reading, state, pageOptions, state.facet(propertiesDisplay), readingMore, readingPageTags));
+  }
+
   function placeReadingFacts(): void {
     readingFactsLife?.close();
     readingFactsLife = null;
     for (const old of reading.querySelectorAll(":scope .note-facts")) old.remove();
-    if (mode !== "reading" || !opts.noteFacts) return;
+    if (mode !== "reading") return;
+    if (unmountReadingPage && readingFactTags() !== readingPageTags) mountReadingPage();
+    if (!opts.noteFacts) return;
     const labels = noteFactsLabels(facts);
     if (!labels) return;
     readingFactsLife = openLifetime();
     const row = renderNoteFacts(labels, factsActions, readingFactsLife);
+    // In fondo alla testata della pagina, come in Scrittura.
+    const header = reading.querySelector(":scope > .cm-fub-page");
+    if (header) {
+      header.append(row);
+      return;
+    }
     const title = [...reading.querySelectorAll("h1")].find((h1) => !h1.closest(".embed-loaded, [data-ui-slot]"));
     if (title) title.after(row);
     else reading.prepend(row);
@@ -898,11 +932,17 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     unmountReading?.();
     // In sola lettura vera le caselle risultano disabilitate, così la
     // superficie non sembra interattiva mentre la cancellazione è sospesa.
-    unmountReading = mountMarkdown(
+    const unmountBody = mountMarkdown(
       reading,
       renderMarkdown(text, forms).html,
       renderedOptions(readOnly ? undefined : toggleTaskAt),
     );
+    mountReadingPage();
+    unmountReading = () => {
+      unmountReadingPage?.();
+      unmountReadingPage = null;
+      unmountBody();
+    };
     placeReadingFacts();
     if (anchor) scrollReadingTo(anchor.from, anchor.top);
   }
@@ -1417,7 +1457,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       element = document.elementFromPoint(at.x, at.y);
       if (!element || !parent.contains(element) || !element.closest(".cm-editor")) return null;
       // Le proprietà rese hanno i loro gesti, e soltanto quelli.
-      if (element.closest(".cm-fub-properties")) return propertiesMenu();
+      if (element.closest(".cm-fub-properties, .cm-fub-page-props")) return propertiesMenu();
       const picture = element.closest<HTMLElement>(".cm-fub-image[data-fub-image]");
       if (picture) {
         const menu = imageMenu(picture);
@@ -1774,8 +1814,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       // copia. Negli altri modi si rende il buffer corrente.
       if (mode === "reading") {
         host.replaceChildren(...Array.from(reading.childNodes, (node) => node.cloneNode(true)));
-        // La riga dei dati non è della nota: la copia non la porta.
-        for (const row of host.querySelectorAll(".note-facts")) row.remove();
+        // La testata e la riga dei dati non sono della nota: la copia non le
+        // porta, e il frontmatter torna com'è nella resa (lo nascondeva un
+        // attributo della Lettura, che la copia non ha).
+        for (const row of host.querySelectorAll(".note-facts, .cm-fub-page")) row.remove();
         return () => host.replaceChildren();
       }
       return mountMarkdown(host, renderMarkdown(normalizeLineBreaks(engine.getDoc()), forms).html, renderedOptions());

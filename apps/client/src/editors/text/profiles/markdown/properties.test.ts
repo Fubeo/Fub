@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { EditorSelection, EditorState, type Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { propertiesDisplay, propertiesDisplayOf, type PropertiesDisplay } from "../../properties-display";
-import { addProperty, clearProperties, moveProperty, propertiesExtension, propertyBlock } from "./properties";
+import readability from "../../../../__fixtures__/frontmatter-readability.json";
+import { addProperty, clearProperties, moveProperty, propertiesExtension, propertyBlock, propertyValue, setProperty } from "./properties";
 
 // `|` è il cursore, come in `actions.test.ts`.
 function mk(spec: string, display: PropertiesDisplay = "source", readOnly = false): EditorState {
@@ -61,15 +62,53 @@ describe("le voci del frontmatter", () => {
     expect(block?.entries[0]?.value).toBe("uno, due");
   });
 
+  // La stessa fixture la legge `frontmatter_readability.rs` col modello: la
+  // testata e il modello dicono «non si legge» negli stessi casi.
+  it.each(readability.cases)("si legge come nel modello: $name", ({ source, readable }) => {
+    const block = propertyBlock(mk(source));
+    expect(block).not.toBeNull();
+    expect(block!.unreadable).toBe(!readable);
+  });
+
+  it("una riga vuota dentro un testo a blocco non chiude la voce", () => {
+    const block = propertyBlock(mk("---\nnote: |\n  uno\n\n  due\nstato: x\n---\n"));
+    expect(block?.entries.map((entry) => [entry.key, entry.value])).toEqual([["note", "uno due"], ["stato", "x"]]);
+    expect(block?.unreadable).toBe(false);
+  });
+
+  it("con due voci uguali vale l'ultima, come nel modello", () => {
+    const state = mk("---\nstato: a\nstato: b\n---\n");
+    expect(propertyValue(state, "stato")).toBe("b");
+    const change = setProperty(state, "stato", "c")!;
+    expect(state.update({ changes: change }).state.doc.toString()).toBe("---\nstato: a\nstato: c\n---\n");
+  });
+
+  it("un commento in coda non è parte del valore, e la voce non è semplice", () => {
+    const block = propertyBlock(mk("---\ncover: foto.jpg # dalla gita\nicona: '⭐'\nog: &img a.png\nfoto: *img\nsolo: b\n---\n"));
+    expect(block?.entries.map((entry) => [entry.key, entry.value, entry.simple])).toEqual([
+      ["cover", "foto.jpg", false],
+      ["icona", "⭐", true],
+      ["og", "a.png", false],
+      ["foto", "*img", false],
+      ["solo", "b", true],
+    ]);
+  });
+
+  it("un valore con un a capo si scrive fra virgolette, con le sequenze di YAML", () => {
+    const change = setProperty(mk("---\n---\n"), "titolo", "uno\ndue\tfine")!;
+    expect(change.insert).toBe("titolo: \"uno\\ndue\\tfine\"\n");
+  });
+
   it("senza frontmatter non c'è niente", () => {
     expect(propertyBlock(mk("# Titolo\n\n---\n"))).toBeNull();
   });
 
-  it("l'impostazione accetta solo i tre modi, e il default resta lo YAML", () => {
+  it("l'impostazione accetta solo i tre modi, e il default è quello dell'host, le righe", () => {
     expect(propertiesDisplayOf("visible")).toBe("visible");
     expect(propertiesDisplayOf("hidden")).toBe("hidden");
-    expect(propertiesDisplayOf("tabella")).toBe("source");
-    expect(propertiesDisplayOf(undefined)).toBe("source");
+    expect(propertiesDisplayOf("source")).toBe("source");
+    expect(propertiesDisplayOf("tabella")).toBe("visible");
+    expect(propertiesDisplayOf(undefined)).toBe("visible");
   });
 });
 
@@ -162,6 +201,20 @@ describe("il frontmatter in Live", () => {
     row.querySelector("dd")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
     expect(view.state.doc.lineAt(view.state.selection.main.head).text).toBe("tags: [a, b]");
     expect(view.dom.querySelector(".cm-fub-properties")).toBeNull();
+    view.destroy();
+  });
+
+  it("la chiusura non si attacca alla voce: l'a capo prima di `---` resta", () => {
+    const view = mount("visible", doc.length);
+    const closing = doc.indexOf("---", 4);
+    // Canc in fondo alla voce, o un incolla che finisce sulla chiusura da metà riga.
+    view.dispatch({ changes: { from: closing - 1, to: closing }, userEvent: "delete.forward" });
+    view.dispatch({ changes: { from: closing - 3, to: closing, insert: "c]" }, userEvent: "input.paste" });
+    expect(view.state.doc.toString()).toBe(doc);
+    // Da un inizio di riga fino alla chiusura sì: la riga se ne va intera.
+    const line = doc.indexOf("tags:");
+    view.dispatch({ changes: { from: line, to: closing, insert: "tags: [c]\n" }, userEvent: "input.paste" });
+    expect(view.state.doc.toString()).toBe("---\ntitle: Nota\ntags: [c]\n---\nTesto");
     view.destroy();
   });
 

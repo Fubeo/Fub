@@ -50,6 +50,16 @@ pub use component::{
     WasmViewProvider,
 };
 pub use discovery::{discover, DiscoveredPlugin};
+pub use limits::MemoryBudgetExceeded;
+
+/// I byte di memoria lineare che tutte le istanze WASM del processo tengono
+/// adesso, e il loro tetto comune.
+pub fn wasm_memory_in_use() -> (usize, usize) {
+    (
+        crate::limits::PROCESS_POOL.used(),
+        crate::limits::PROCESS_MEMORY_CEILING,
+    )
+}
 
 /// Nome del backend WASM configurato, senza creare l'engine: `native` o
 /// `pulley`. È ciò che la UI mostra come `configured:` quando l'engine non è
