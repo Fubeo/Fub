@@ -1971,9 +1971,11 @@ async function writingAtRest(page) {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     document.querySelector(".pane.focus .cm-scroller").scrollTop = 0;
   });
-  // Una funzione sola, che il browser esegue per aspettare e poi per dire
-  // che cosa resta: Playwright ne manda il testo.
-  const seen = function visibleAtRest() {
+  // Una funzione sola, che il browser esegue per aspettare (`empty`) e poi per
+  // dire che cosa resta. Si passa come funzione, non come testo: un predicato
+  // scritto come stringa Playwright lo valuta con `eval`, e la CSP del banco
+  // (quella dell'app, senza `'unsafe-eval'`) lo rifiuta.
+  const seen = function visibleAtRest(empty) {
     const shown = (el) => {
       for (let node = el; node && node !== document.body; node = node.parentElement) {
         if (node.hidden) return false;
@@ -1989,15 +1991,16 @@ async function writingAtRest(page) {
     // della pagina, la riga dei dati e la testata di un blocco di codice
     // (lingua, «A capo», «Copia»).
     const content = ".cm-fub-page-icon, .note-facts *, .cm-fub-code-header button";
-    return [
+    const left = [
       ...[...sheet.querySelectorAll("[data-presence]")].filter(shown).map((el) => `${name(el)}[${el.dataset.presence}]`),
       ...[...sheet.querySelectorAll("button, [role=button]")].filter((el) => !el.closest("[data-presence]") && !el.matches(content) && shown(el)).map(name),
     ];
+    return empty ? left.length === 0 : left;
   };
   try {
-    await page.waitForFunction(`(${seen})().length === 0`, null, { timeout: 5_000 });
+    await page.waitForFunction(seen, true, { timeout: 5_000 });
   } catch {
-    const left = await page.evaluate(seen);
+    const left = await page.evaluate(seen, false);
     throw new Error(`a riposo si vede ancora: ${left.join(", ")}`);
   }
   await frames();

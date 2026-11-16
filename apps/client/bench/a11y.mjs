@@ -124,7 +124,9 @@ async function aScene(page, scene, light, base, axeSource) {
   // Lo script resta nella pagina fra una scena e l'altra, ma non si usa mai
   // una configurazione precedente: ogni passata parte dal documento corrente.
   const hasAxe = await page.evaluate(() => Boolean(window.axe));
-  if (!hasAxe) await page.addScriptTag({ content: axeSource });
+  // Valutato come espressione e non con `addScriptTag`: un `<script>` in linea
+  // la CSP del banco (quella dell'app) lo rifiuta.
+  if (!hasAxe) await page.evaluate(axeSource);
 
   await paperUnderText(page);
   // Nessuna selezione manuale: una nuova regola axe applicabile deve diventare

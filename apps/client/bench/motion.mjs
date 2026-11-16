@@ -77,7 +77,7 @@ import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
 import { createServer } from "vite";
 import { SCENE, sceneUrl } from "./scene.mjs";
-import { openStage, prepareScene, stillShot, MOMENT, OUTPUT, WINDOW } from "./stage.mjs";
+import { openStage, prepareScene, stillShot, watchCsp, MOMENT, OUTPUT, WINDOW } from "./stage.mjs";
 import {
   CHOREOGRAPHIES,
   UNCOVERED,
@@ -449,6 +449,7 @@ async function openPage(browser, scene, reducedMotion) {
   });
   await context.addInitScript(CALENDAR, MOMENT.getTime());
   await context.addInitScript(RECORDER);
+  await watchCsp(context);
   const page = await context.newPage();
   return { context, page };
 }

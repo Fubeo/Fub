@@ -24,6 +24,8 @@
 // dovunque stia, finisce sul file della cucitura?», che è la domanda vera e non
 // ha una profondità.
 import { defineConfig, searchForWorkspaceRoot, type Plugin } from "vite";
+import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { canvasWasm } from "./build/canvas-wasm.mjs";
 
@@ -95,11 +97,70 @@ function seamForBench(): Plugin {
   };
 }
 
+/// Il nonce delle pagine del banco: uno per server, come Tauri ne scrive uno
+/// per ogni `<style>` della pagina che serve.
+const NONCE = randomBytes(18).toString("base64");
+
+/// La CSP dell'app vera, letta da `crates/fub-app/tauri.conf.json` e non
+/// ricopiata: una copia divergerebbe, e il banco proverebbe un'altra politica.
+function appCsp(): string {
+  const config = JSON.parse(readFileSync(here("../../crates/fub-app/tauri.conf.json"), "utf8"));
+  const csp: unknown = config?.app?.security?.csp;
+  if (typeof csp !== "string" || csp.trim() === "") {
+    throw new Error("tauri.conf.json non dichiara app.security.csp");
+  }
+  return csp;
+}
+
+/// Aggiunge una sorgente a una direttiva, come fa Tauri con i suoi nonce: se
+/// la direttiva non c'è, nasce con `'self'`.
+function withSource(csp: string, directive: string, source: string): string {
+  const parts = csp.split(";").map((part) => part.trim()).filter(Boolean);
+  const index = parts.findIndex((part) => part.split(/\s+/)[0] === directive);
+  if (index < 0) return [...parts, `${directive} 'self' ${source}`].join("; ");
+  parts[index] = `${parts[index]} ${source}`;
+  return parts.join("; ");
+}
+
+/// **La CSP vera, applicata al banco.**
+///
+/// Tauri manda la politica di `tauri.conf.json` come header di ogni pagina
+/// HTML, e mette un nonce a ogni `<style>` della pagina aggiungendolo a
+/// `style-src` (`set_csp` in `tauri::manager`). Qui succede lo stesso, con una
+/// differenza dichiarata: anche gli `<script>` in linea e gli stili che Vite
+/// inietta in sviluppo portano il nonce (`html.cspNonce`), perché nell'app
+/// vera sono file del bundle (`'self'`) o script di Tauri ammessi per hash. Il
+/// codice dell'app non vede la differenza: un `<style>` creato senza il nonce
+/// della pagina, o un attributo `style` scritto come markup, è rifiutato qui
+/// come là, e `bench/stage.mjs` fa fallire la scena alla prima violazione.
+///
+/// L'header va solo sulle pagine: Tauri non lo manda con gli script, e un
+/// worker prende la politica dalla risposta del suo script.
+function appPolicy(): Plugin {
+  const nonce = `'nonce-${NONCE}'`;
+  const policy = withSource(withSource(appCsp(), "script-src", nonce), "style-src", nonce);
+  return {
+    name: "bench:csp",
+    configureServer(server) {
+      server.middlewares.use((_request, response, next) => {
+        const writeHead = response.writeHead;
+        response.writeHead = function (this: typeof response, ...args: unknown[]) {
+          const type = String(response.getHeader("Content-Type") ?? "");
+          if (type.startsWith("text/html")) response.setHeader("Content-Security-Policy", policy);
+          return (writeHead as (...rest: unknown[]) => typeof response).apply(this, args);
+        } as typeof response.writeHead;
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
   clearScreen: false,
   // Il nucleo della lavagna come nella config di sempre: la shell del banco
   // è la shell vera.
-  plugins: [seamForBench(), canvasWasm()],
+  plugins: [seamForBench(), appPolicy(), canvasWasm()],
+  html: { cspNonce: NONCE },
   server: {
     // Non 1420: quella è la porta di Tauri, e un banco che gira mentre l'app è
     // aperta non deve doverne chiudere una per fotografare l'altra.
