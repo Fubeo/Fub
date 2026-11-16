@@ -11931,6 +11931,8 @@ input.canvas-toolbar-item {
    alto e la tabella fino ai bordi (prototipo `div.base`). Alta quanto il suo
    contenuto, fino al riquadro. */
 .base-surface {
+  position: relative;
+  isolation: isolate;
   width: auto;
   height: auto;
   max-height: calc(100% - 2 * var(--space-6));
@@ -11938,7 +11940,19 @@ input.canvas-toolbar-item {
   border-radius: 12px;
   overflow: hidden;
   background: var(--sheet);
+}
+/* Il bordo sta sopra il contenuto, non sotto: le celle col fondo pieno —
+   l'intestazione e il piede, fermi mentre si scorre — arrivano ai bordi
+   della scatola e un'ombra della scatola stessa la coprirebbero. Il piede
+   è l'ultima cosa della Base quando «Nel file .base» non c'è. */
+.base-surface::after {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: 12px;
   box-shadow: inset 0 0 0 1px var(--border);
+  content: "";
+  pointer-events: none;
 }
 /* Dentro una nota la scatola sta in colonna col testo, senza rientro, e
    non ha il tetto del riquadro. */
