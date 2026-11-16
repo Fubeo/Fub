@@ -103,6 +103,16 @@ così sa di quale token, o di quale `color-mix` di due token, è fatto ogni
 colore; la verifica risolve la stessa espressione coi token di Fub sotto
 l'elemento dell'app. Un colore scritto a mano nel prototipo si confronta crudo.
 
+La traduzione dipende dal contesto del pezzo (`TRADUZIONI` nella mappa). Un
+pezzo dell'interfaccia (menu, lanciatore, banda) usa `TRADUZIONE`. Un pezzo
+dentro la pagina del documento (`contesto: "documento"`: tabella Markdown,
+testata, proprietà, riga dei dati, maniglie) usa `TRADUZIONE_DOCUMENTO`, perché
+la pagina ha una tavolozza sua, che si personalizza a parte: `--ink` diventa
+`--doc-fg`, `--muted` e `--faint` diventano `--doc-gutter-fg`, `--line`
+diventa `--doc-rule-soft`, e così via. Le traduzioni nominano gli stessi token
+del prototipo, così le sentinelle sono le stesse; un colore che resta diverso
+dopo la traduzione del suo contesto è una differenza vera.
+
 È rosso, con pezzo, stato, i due selettori, proprietà, atteso e trovato, se una
 proprietà differisce senza eccezione, se un selettore dell'app non trova un
 elemento visibile, se `editor.json` non è quello della mappa, o se

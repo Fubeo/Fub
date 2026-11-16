@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium } from "playwright";
-import { espandi, espressioniFub, sentinelle } from "./confronto.mjs";
+import { CONTESTO_DI_BASE, espandi, espressioniFub, sentinelle, traduzioneDi, validaTraduzioni } from "./confronto.mjs";
 import { gesto, leggi, riposo } from "./leggi.mjs";
 
 const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
@@ -38,7 +38,12 @@ if (!nome || nome.startsWith("--")) {
   process.exit(2);
 }
 const mappa = await import(pathToFileURL(here(`./mappa-${nome}.mjs`)).href);
-const { PROTOTIPO, STATI, VISTE, PEZZI, TRADUZIONE } = mappa;
+const { PROTOTIPO, STATI, VISTE, PEZZI, TRADUZIONI } = mappa;
+const erroriTraduzioni = validaTraduzioni(TRADUZIONI, PEZZI);
+if (erroriTraduzioni.length) {
+  for (const e of erroriTraduzioni) console.error(`TRADUZIONI: ${e}`);
+  process.exit(2);
+}
 const rev = opzioni.find((o) => o.startsWith("--rev="))?.slice("--rev=".length) ?? `origin/${PROTOTIPO.ramo}`;
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8", cwd: here(".") }).trim();
@@ -108,23 +113,29 @@ try {
         };
         // Prima la tavolozza vera, poi le sentinelle al posto dei token della
         // traduzione (`confronto.mjs` spiega perché): la seconda lettura dice
-        // di quali token è fatto ogni colore.
+        // di quali token è fatto ogni colore. Le sentinelle sono le stesse per
+        // ogni contesto; ogni pezzo le legge con la traduzione del suo.
         const crudi = [];
         for (const pezzo of pezzi) crudi.push(await leggiPezzo(pezzo));
         await page.evaluate((sent) => {
           const win = document.querySelector("#win");
           for (const [t, [r, g, b]] of Object.entries(sent)) win.style.setProperty(t, `rgb(${r}, ${g}, ${b})`);
-        }, sentinelle(TRADUZIONE));
+        }, sentinelle(TRADUZIONI[CONTESTO_DI_BASE]));
         await fermo(page);
         for (const [i, pezzo] of pezzi.entries()) {
           const finti = await leggiPezzo(pezzo);
           const fub = {};
           for (const [p, v] of Object.entries(crudi[i])) {
-            const espr = espressioniFub(v, finti[p], TRADUZIONE);
+            const espr = espressioniFub(v, finti[p], traduzioneDi(pezzo, TRADUZIONI));
             if (espr) fub[p] = espr;
           }
           valori[pezzo.id] ??= {};
-          valori[pezzo.id][idStato] = { prototipo: pezzo.prototipo, proprieta: crudi[i], fub };
+          valori[pezzo.id][idStato] = {
+            prototipo: pezzo.prototipo,
+            contesto: pezzo.contesto ?? CONTESTO_DI_BASE,
+            proprieta: crudi[i],
+            fub,
+          };
         }
         await context.close();
       }
@@ -143,7 +154,7 @@ try {
     commit,
     file: PROTOTIPO.file,
     sha256,
-    traduzione: TRADUZIONE,
+    traduzioni: TRADUZIONI,
     valori,
   };
   const destinazione = here(`./${nome}.json`);

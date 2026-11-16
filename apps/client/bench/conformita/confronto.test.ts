@@ -26,12 +26,14 @@ import {
   scriviDifferenza,
   scriviMancante,
   sentinelle,
+  traduzioneDi,
   validaEccezioni,
+  validaTraduzioni,
   type Differenza,
   type Eccezione,
   type Pezzo,
 } from "./confronto.mjs";
-import { DA_COPRIRE, PEZZI, STATI, TRADUZIONE, VISTE } from "./mappa-editor.mjs";
+import { DA_COPRIRE, PEZZI, STATI, TRADUZIONE, TRADUZIONI, VISTE } from "./mappa-editor.mjs";
 import estratti from "./editor.json";
 import eccezioniEditor from "./eccezioni-editor.json";
 
@@ -298,6 +300,21 @@ describe("i token del prototipo", () => {
     expect(espressioniFub("rgb(1, 2, 3)", "rgb(1, 2, 3)", traduzione)).toBeNull();
     expect(espressioniFub("none", "none", traduzione)).toBeNull();
   });
+
+  it("si traducono col contesto del pezzo: la stessa sentinella, un token di Fub diverso", () => {
+    const traduzioni = { interfaccia: traduzione, documento: { ...traduzione, "--line": ["--doc-rule-soft"] } };
+    const documento = traduzioneDi({ contesto: "documento" }, traduzioni)!;
+    expect(traduzioneDi({}, traduzioni)).toBe(traduzione);
+    expect(espressioniFub("rgb(223, 231, 225)", rgb(sent["--line"]), documento)).toEqual(["var(--doc-rule-soft)"]);
+    expect(validaTraduzioni(traduzioni, [{ ...pezzo, contesto: "documento" }])).toEqual([]);
+  });
+
+  it("vogliono gli stessi token in ogni contesto, e un contesto che esiste", () => {
+    const { "--line": _tolto, ...senzaFilo } = traduzione;
+    expect(validaTraduzioni({ interfaccia: traduzione, documento: senzaFilo }, [])).toHaveLength(1);
+    expect(validaTraduzioni({ documento: traduzione }, [])).toHaveLength(1);
+    expect(validaTraduzioni({ interfaccia: traduzione }, [{ ...pezzo, contesto: "stampa" }])).toHaveLength(1);
+  });
 });
 
 describe("la mappa dell'editor", () => {
@@ -325,14 +342,20 @@ describe("la mappa dell'editor", () => {
   });
 
   it("ha i valori estratti di ogni pezzo in ogni stato, con le sue proprietà", () => {
-    expect(estratti.traduzione).toEqual(TRADUZIONE);
-    const valori = estratti.valori as Record<string, Record<string, { prototipo: string; proprieta: Record<string, string> }>>;
+    expect(estratti.traduzioni).toEqual(TRADUZIONI);
+    expect(validaTraduzioni(TRADUZIONI, PEZZI)).toEqual([]);
+    expect(TRADUZIONI.interfaccia).toBe(TRADUZIONE);
+    const valori = estratti.valori as unknown as Record<
+      string,
+      Record<string, { prototipo: string; contesto: string; proprieta: Record<string, string> }>
+    >;
     for (const p of PEZZI) {
       const vista = VISTE[p.vista as keyof typeof VISTE];
       for (const stato of p.stati ?? vista.stati) {
         const v = valori[p.id]?.[stato];
         expect(v, `${p.id} [${stato}]: rigenera con estrai.mjs`).toBeDefined();
         expect(v.prototipo).toBe(p.prototipo);
+        expect(v.contesto, `${p.id} [${stato}]`).toBe(p.contesto ?? "interfaccia");
         expect(Object.keys(v.proprieta).sort()).toEqual(espandi(p.proprieta).sort());
       }
     }

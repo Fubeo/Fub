@@ -1,56 +1,102 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit fd2e941cac7d068eb0d4baa2cf4e0c5537db7d50.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit 0132c8b13909940fe6371a3caecae1c0472e55e6.",
   "prototipo": "editor",
   "ramo": "piano/editor-completo",
-  "commit": "fd2e941cac7d068eb0d4baa2cf4e0c5537db7d50",
+  "commit": "0132c8b13909940fe6371a3caecae1c0472e55e6",
   "file": "PLAN-ui/editor.html",
   "sha256": "36be544b4bd1827e97eaeb3fbf606f6ff2ea697dafc409e1e9b6b60ee40ea188",
-  "traduzione": {
-    "--sheet": [
-      "--sheet"
-    ],
-    "--tray": [
-      "--sheet-2"
-    ],
-    "--line": [
-      "--border"
-    ],
-    "--line-2": [
-      "--border-strong"
-    ],
-    "--ink": [
-      "--text"
-    ],
-    "--ink-2": [
-      "--text"
-    ],
-    "--muted": [
-      "--muted"
-    ],
-    "--faint": [
-      "--muted"
-    ],
-    "--acc": [
-      "--accent"
-    ],
-    "--acc-ink": [
-      "--accent-soft"
-    ],
-    "--acc-soft": [
-      "--accent-soft",
-      "--accent-veil"
-    ],
-    "--acc-wash": [
-      "--accent-wash"
-    ],
-    "--mark": [
-      "--highlight"
-    ]
+  "traduzioni": {
+    "interfaccia": {
+      "--sheet": [
+        "--sheet"
+      ],
+      "--tray": [
+        "--sheet-2"
+      ],
+      "--line": [
+        "--border"
+      ],
+      "--line-2": [
+        "--border-strong"
+      ],
+      "--ink": [
+        "--text"
+      ],
+      "--ink-2": [
+        "--text"
+      ],
+      "--muted": [
+        "--muted"
+      ],
+      "--faint": [
+        "--muted"
+      ],
+      "--acc": [
+        "--accent"
+      ],
+      "--acc-ink": [
+        "--accent-soft"
+      ],
+      "--acc-soft": [
+        "--accent-soft",
+        "--accent-veil"
+      ],
+      "--acc-wash": [
+        "--accent-wash"
+      ],
+      "--mark": [
+        "--highlight"
+      ]
+    },
+    "documento": {
+      "--sheet": [
+        "--doc-bg"
+      ],
+      "--tray": [
+        "--doc-fill-soft",
+        "--doc-fill"
+      ],
+      "--line": [
+        "--doc-rule-soft"
+      ],
+      "--line-2": [
+        "--doc-rule"
+      ],
+      "--ink": [
+        "--doc-fg"
+      ],
+      "--ink-2": [
+        "--doc-fg"
+      ],
+      "--muted": [
+        "--doc-gutter-fg"
+      ],
+      "--faint": [
+        "--doc-gutter-fg"
+      ],
+      "--acc": [
+        "--accent"
+      ],
+      "--acc-ink": [
+        "--accent-soft"
+      ],
+      "--acc-soft": [
+        "--accent-soft",
+        "--accent-veil"
+      ],
+      "--acc-wash": [
+        "--accent-wash"
+      ],
+      "--mark": [
+        "--doc-highlight"
+      ]
+    }
   },
   "valori": {
     "lanciatore.superficie": {
       "chiaro-1280": {
         "prototipo": ".k",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -101,6 +147,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -151,6 +198,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -201,6 +249,7 @@
       },
       "scuro-700": {
         "prototipo": ".k",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -253,6 +302,7 @@
     "lanciatore.testa": {
       "chiaro-1280": {
         "prototipo": ".k-in",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -303,6 +353,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-in",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -353,6 +404,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-in",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -403,6 +455,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-in",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -455,6 +508,7 @@
     "lanciatore.lente": {
       "chiaro-1280": {
         "prototipo": ".k-in > .i",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(0, 87, 58)",
           "width": "16px",
@@ -468,6 +522,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-in > .i",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(127, 216, 173)",
           "width": "16px",
@@ -481,6 +536,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-in > .i",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(0, 87, 58)",
           "width": "16px",
@@ -494,6 +550,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-in > .i",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(127, 216, 173)",
           "width": "16px",
@@ -509,6 +566,7 @@
     "lanciatore.campo": {
       "chiaro-1280": {
         "prototipo": ".k-in input",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "1px",
           "padding-right": "2px",
@@ -543,6 +601,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-in input",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "1px",
           "padding-right": "2px",
@@ -577,6 +636,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-in input",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "1px",
           "padding-right": "2px",
@@ -611,6 +671,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-in input",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "1px",
           "padding-right": "2px",
@@ -647,6 +708,7 @@
     "lanciatore.esc": {
       "chiaro-1280": {
         "prototipo": ".k-x",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "6px",
@@ -697,6 +759,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-x",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "6px",
@@ -747,6 +810,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-x",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "6px",
@@ -797,6 +861,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-x",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "6px",
@@ -849,6 +914,7 @@
     "lanciatore.modi": {
       "chiaro-1280": {
         "prototipo": ".k-sc",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -899,6 +965,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-sc",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -949,6 +1016,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-sc",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -999,6 +1067,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-sc",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -1051,6 +1120,7 @@
     "lanciatore.modo-scelto": {
       "chiaro-1280": {
         "prototipo": ".k-sc button[aria-selected=\"true\"]",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -1101,6 +1171,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-sc button[aria-selected=\"true\"]",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -1151,6 +1222,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-sc button[aria-selected=\"true\"]",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -1201,6 +1273,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-sc button[aria-selected=\"true\"]",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -1253,6 +1326,7 @@
     "lanciatore.modo": {
       "chiaro-1280": {
         "prototipo": ".k-sc button[aria-selected=\"false\"]",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -1303,6 +1377,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-sc button[aria-selected=\"false\"]",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -1353,6 +1428,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-sc button[aria-selected=\"false\"]",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -1403,6 +1479,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-sc button[aria-selected=\"false\"]",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -1455,6 +1532,7 @@
     "lanciatore.quadratino-scelto": {
       "chiaro-1280": {
         "prototipo": ".k-sc button[aria-selected=\"true\"] .ti",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -1509,6 +1587,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-sc button[aria-selected=\"true\"] .ti",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -1563,6 +1642,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-sc button[aria-selected=\"true\"] .ti",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -1617,6 +1697,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-sc button[aria-selected=\"true\"] .ti",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -1673,6 +1754,7 @@
     "lanciatore.quadratino": {
       "chiaro-1280": {
         "prototipo": ".k-sc button[aria-selected=\"false\"] .ti",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -1724,6 +1806,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-sc button[aria-selected=\"false\"] .ti",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -1775,6 +1858,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-sc button[aria-selected=\"false\"] .ti",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -1826,6 +1910,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-sc button[aria-selected=\"false\"] .ti",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -1879,6 +1964,7 @@
     "lanciatore.riga": {
       "chiaro-1280": {
         "prototipo": ".k-i:not(.act)",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -1929,6 +2015,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-i:not(.act)",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -1979,6 +2066,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-i:not(.act)",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -2029,6 +2117,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-i:not(.act)",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -2081,6 +2170,7 @@
     "lanciatore.riga-attiva": {
       "chiaro-1280": {
         "prototipo": ".k-i.act",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -2111,6 +2201,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-i.act",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -2141,6 +2232,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-i.act",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -2171,6 +2263,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-i.act",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "10px",
@@ -2203,6 +2296,7 @@
     "lanciatore.riga-attiva-fondo": {
       "chiaro-1280": {
         "prototipo": ".k-i.act",
+        "contesto": "interfaccia",
         "proprieta": {
           "background-color": "rgba(24, 52, 36, 0.055)",
           "border-top-left-radius": "9px",
@@ -2214,6 +2308,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-i.act",
+        "contesto": "interfaccia",
         "proprieta": {
           "background-color": "rgba(255, 255, 255, 0.05)",
           "border-top-left-radius": "9px",
@@ -2225,6 +2320,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-i.act",
+        "contesto": "interfaccia",
         "proprieta": {
           "background-color": "rgba(24, 52, 36, 0.055)",
           "border-top-left-radius": "9px",
@@ -2236,6 +2332,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-i.act",
+        "contesto": "interfaccia",
         "proprieta": {
           "background-color": "rgba(255, 255, 255, 0.05)",
           "border-top-left-radius": "9px",
@@ -2249,6 +2346,7 @@
     "lanciatore.icona": {
       "chiaro-1280": {
         "prototipo": ".k-i:not(.act) .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(93, 105, 98)",
           "font-size": "15px",
@@ -2263,6 +2361,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-i:not(.act) .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(160, 170, 164)",
           "font-size": "15px",
@@ -2277,6 +2376,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-i:not(.act) .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(93, 105, 98)",
           "font-size": "15px",
@@ -2291,6 +2391,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-i:not(.act) .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(160, 170, 164)",
           "font-size": "15px",
@@ -2307,6 +2408,7 @@
     "lanciatore.icona-attiva": {
       "chiaro-1280": {
         "prototipo": ".k-i.act .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(0, 87, 58)"
         },
@@ -2318,6 +2420,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-i.act .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(127, 216, 173)"
         },
@@ -2329,6 +2432,7 @@
       },
       "chiaro-700": {
         "prototipo": ".k-i.act .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(0, 87, 58)"
         },
@@ -2340,6 +2444,7 @@
       },
       "scuro-700": {
         "prototipo": ".k-i.act .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(127, 216, 173)"
         },
@@ -2353,6 +2458,7 @@
     "lanciatore.anteprima": {
       "chiaro-1280": {
         "prototipo": ".k-prev",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "14px",
           "padding-right": "14px",
@@ -2407,6 +2513,7 @@
       },
       "scuro-1280": {
         "prototipo": ".k-prev",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "14px",
           "padding-right": "14px",
@@ -2463,6 +2570,7 @@
     "lanciatore.anteprima-foglio": {
       "chiaro-1280": {
         "prototipo": ".kp-sheet",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "14px",
           "padding-right": "16px",
@@ -2512,6 +2620,7 @@
       },
       "scuro-1280": {
         "prototipo": ".kp-sheet",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "14px",
           "padding-right": "16px",
@@ -2563,6 +2672,7 @@
     "lanciatore.anteprima-sfumatura": {
       "chiaro-1280": {
         "prototipo": ".kp-sheet::after",
+        "contesto": "interfaccia",
         "proprieta": {
           "height": "44px",
           "background-image": "linear-gradient(rgba(0, 0, 0, 0), rgb(252, 254, 253))"
@@ -2575,6 +2685,7 @@
       },
       "scuro-1280": {
         "prototipo": ".kp-sheet::after",
+        "contesto": "interfaccia",
         "proprieta": {
           "height": "44px",
           "background-image": "linear-gradient(rgba(0, 0, 0, 0), rgb(19, 28, 22))"
@@ -2589,6 +2700,7 @@
     "lanciatore.anteprima-testo": {
       "chiaro-1280": {
         "prototipo": ".kp-sheet p",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
           "font-size": "13.5px",
@@ -2605,6 +2717,7 @@
       },
       "scuro-1280": {
         "prototipo": ".kp-sheet p",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
           "font-size": "13.5px",
@@ -2623,6 +2736,7 @@
     "menu.superficie-blocco": {
       "chiaro-1280": {
         "prototipo": ".pop",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -2673,6 +2787,7 @@
       },
       "scuro-1280": {
         "prototipo": ".pop",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -2723,6 +2838,7 @@
       },
       "chiaro-700": {
         "prototipo": ".pop",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -2773,6 +2889,7 @@
       },
       "scuro-700": {
         "prototipo": ".pop",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -2825,6 +2942,7 @@
     "menu.campo": {
       "chiaro-1280": {
         "prototipo": ".m-s",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "9px",
           "padding-right": "12px",
@@ -2877,6 +2995,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-s",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "9px",
           "padding-right": "12px",
@@ -2929,6 +3048,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-s",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "9px",
           "padding-right": "12px",
@@ -2981,6 +3101,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-s",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "9px",
           "padding-right": "12px",
@@ -3035,6 +3156,7 @@
     "menu.campo-lente": {
       "chiaro-1280": {
         "prototipo": ".m-s > svg",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(139, 150, 143)",
           "width": "14px",
@@ -3048,6 +3170,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-s > svg",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(111, 122, 116)",
           "width": "14px",
@@ -3061,6 +3184,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-s > svg",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(139, 150, 143)",
           "width": "14px",
@@ -3074,6 +3198,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-s > svg",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(111, 122, 116)",
           "width": "14px",
@@ -3089,6 +3214,7 @@
     "menu.campo-testo": {
       "chiaro-1280": {
         "prototipo": ".m-s input",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "13px",
@@ -3123,6 +3249,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-s input",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "13px",
@@ -3157,6 +3284,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-s input",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "13px",
@@ -3191,6 +3319,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-s input",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "13px",
@@ -3227,6 +3356,7 @@
     "menu.titolo": {
       "chiaro-1280": {
         "prototipo": ".m-h",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "11.5px",
@@ -3252,6 +3382,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-h",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "11.5px",
@@ -3277,6 +3408,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-h",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "11.5px",
@@ -3302,6 +3434,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-h",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "11.5px",
@@ -3329,6 +3462,7 @@
     "menu.voce-accesa": {
       "chiaro-1280": {
         "prototipo": ".m-i.act",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(24, 35, 28)",
           "background-color": "rgba(0, 0, 0, 0)",
@@ -3347,6 +3481,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-i.act",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(228, 234, 230)",
           "background-color": "rgba(0, 0, 0, 0)",
@@ -3365,6 +3500,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-i.act",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(24, 35, 28)",
           "background-color": "rgba(0, 0, 0, 0)",
@@ -3383,6 +3519,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-i.act",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(228, 234, 230)",
           "background-color": "rgba(0, 0, 0, 0)",
@@ -3403,6 +3540,7 @@
     "menu.voce-accesa-icona": {
       "chiaro-1280": {
         "prototipo": ".m-i.act .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(0, 87, 58)",
           "width": "24px",
@@ -3416,6 +3554,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-i.act .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(127, 216, 173)",
           "width": "24px",
@@ -3429,6 +3568,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-i.act .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(0, 87, 58)",
           "width": "24px",
@@ -3442,6 +3582,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-i.act .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(127, 216, 173)",
           "width": "24px",
@@ -3457,6 +3598,7 @@
     "menu.scia": {
       "chiaro-1280": {
         "prototipo": ".m-hl",
+        "contesto": "interfaccia",
         "proprieta": {
           "background-color": "rgba(24, 52, 36, 0.055)",
           "background-image": "none",
@@ -3470,6 +3612,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-hl",
+        "contesto": "interfaccia",
         "proprieta": {
           "background-color": "rgba(255, 255, 255, 0.05)",
           "background-image": "none",
@@ -3483,6 +3626,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-hl",
+        "contesto": "interfaccia",
         "proprieta": {
           "background-color": "rgba(24, 52, 36, 0.055)",
           "background-image": "none",
@@ -3496,6 +3640,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-hl",
+        "contesto": "interfaccia",
         "proprieta": {
           "background-color": "rgba(255, 255, 255, 0.05)",
           "background-image": "none",
@@ -3511,6 +3656,7 @@
     "menu.separatore": {
       "chiaro-1280": {
         "prototipo": ".m-sep",
+        "contesto": "interfaccia",
         "proprieta": {
           "height": "1px",
           "margin-top": "5px",
@@ -3540,6 +3686,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-sep",
+        "contesto": "interfaccia",
         "proprieta": {
           "height": "1px",
           "margin-top": "5px",
@@ -3569,6 +3716,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-sep",
+        "contesto": "interfaccia",
         "proprieta": {
           "height": "1px",
           "margin-top": "5px",
@@ -3598,6 +3746,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-sep",
+        "contesto": "interfaccia",
         "proprieta": {
           "height": "1px",
           "margin-top": "5px",
@@ -3629,6 +3778,7 @@
     "menu.voce-pericolo": {
       "chiaro-1280": {
         "prototipo": ".m-i.danger",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(179, 38, 30)",
           "background-color": "rgba(0, 0, 0, 0)",
@@ -3638,6 +3788,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-i.danger",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(242, 148, 138)",
           "background-color": "rgba(0, 0, 0, 0)",
@@ -3647,6 +3798,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-i.danger",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(179, 38, 30)",
           "background-color": "rgba(0, 0, 0, 0)",
@@ -3656,6 +3808,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-i.danger",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(242, 148, 138)",
           "background-color": "rgba(0, 0, 0, 0)",
@@ -3667,6 +3820,7 @@
     "menu.piede-tasti": {
       "chiaro-1280": {
         "prototipo": ".m-foot",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "7px",
           "padding-right": "12px",
@@ -3716,6 +3870,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-foot",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "7px",
           "padding-right": "12px",
@@ -3765,6 +3920,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-foot",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "7px",
           "padding-right": "12px",
@@ -3814,6 +3970,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-foot",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "7px",
           "padding-right": "12px",
@@ -3865,6 +4022,7 @@
     "menu.piede-tasto": {
       "chiaro-1280": {
         "prototipo": ".m-foot kbd",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "3px",
           "padding-right": "5px",
@@ -3917,6 +4075,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-foot kbd",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "3px",
           "padding-right": "5px",
@@ -3969,6 +4128,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-foot kbd",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "3px",
           "padding-right": "5px",
@@ -4021,6 +4181,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-foot kbd",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "3px",
           "padding-right": "5px",
@@ -4075,6 +4236,7 @@
     "menu.superficie": {
       "chiaro-1280": {
         "prototipo": ".pop.cx",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -4126,6 +4288,7 @@
       },
       "scuro-1280": {
         "prototipo": ".pop.cx",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -4177,6 +4340,7 @@
       },
       "chiaro-700": {
         "prototipo": ".pop.cx",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -4228,6 +4392,7 @@
       },
       "scuro-700": {
         "prototipo": ".pop.cx",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -4281,6 +4446,7 @@
     "menu.testa": {
       "chiaro-1280": {
         "prototipo": ".m-head",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "14px",
@@ -4334,6 +4500,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-head",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "14px",
@@ -4387,6 +4554,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-head",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "14px",
@@ -4440,6 +4608,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-head",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "14px",
@@ -4495,6 +4664,7 @@
     "menu.testa-icona": {
       "chiaro-1280": {
         "prototipo": ".m-head .ic svg",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(0, 87, 58)",
           "width": "14px",
@@ -4508,6 +4678,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-head .ic svg",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(127, 216, 173)",
           "width": "14px",
@@ -4521,6 +4692,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-head .ic svg",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(0, 87, 58)",
           "width": "14px",
@@ -4534,6 +4706,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-head .ic svg",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(127, 216, 173)",
           "width": "14px",
@@ -4549,6 +4722,7 @@
     "menu.testa-tipo": {
       "chiaro-1280": {
         "prototipo": ".m-head b",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "12.5px",
@@ -4565,6 +4739,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-head b",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "12.5px",
@@ -4581,6 +4756,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-head b",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "12.5px",
@@ -4597,6 +4773,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-head b",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "12.5px",
@@ -4615,6 +4792,7 @@
     "menu.testa-nome": {
       "chiaro-1280": {
         "prototipo": ".m-head .x",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "12.5px",
@@ -4631,6 +4809,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-head .x",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "12.5px",
@@ -4647,6 +4826,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-head .x",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "12.5px",
@@ -4663,6 +4843,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-head .x",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "12.5px",
@@ -4681,6 +4862,7 @@
     "menu.appunti": {
       "chiaro-1280": {
         "prototipo": ".m-tiles",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "3px",
           "padding-right": "3px",
@@ -4730,6 +4912,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-tiles",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "3px",
           "padding-right": "3px",
@@ -4779,6 +4962,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-tiles",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "3px",
           "padding-right": "3px",
@@ -4828,6 +5012,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-tiles",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "3px",
           "padding-right": "3px",
@@ -4879,6 +5064,7 @@
     "menu.appunto": {
       "chiaro-1280": {
         "prototipo": ".m-t",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -4929,6 +5115,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-t",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -4979,6 +5166,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-t",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -5029,6 +5217,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-t",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "0px",
@@ -5081,6 +5270,7 @@
     "menu.appunto-icona": {
       "chiaro-1280": {
         "prototipo": ".m-t .ti svg",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(93, 105, 98)",
           "width": "15px",
@@ -5094,6 +5284,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-t .ti svg",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(160, 170, 164)",
           "width": "15px",
@@ -5107,6 +5298,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-t .ti svg",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(93, 105, 98)",
           "width": "15px",
@@ -5120,6 +5312,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-t .ti svg",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(160, 170, 164)",
           "width": "15px",
@@ -5135,6 +5328,7 @@
     "menu.voce": {
       "chiaro-1280": {
         "prototipo": ".m-l > button.m-i:not(.act)",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "4px",
           "padding-right": "10px",
@@ -5185,6 +5379,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-l > button.m-i:not(.act)",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "4px",
           "padding-right": "10px",
@@ -5235,6 +5430,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-l > button.m-i:not(.act)",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "4px",
           "padding-right": "10px",
@@ -5285,6 +5481,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-l > button.m-i:not(.act)",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "4px",
           "padding-right": "10px",
@@ -5337,6 +5534,7 @@
     "menu.voce-icona": {
       "chiaro-1280": {
         "prototipo": ".m-l > button.m-i:not(.act) .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(93, 105, 98)",
           "width": "24px",
@@ -5350,6 +5548,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-l > button.m-i:not(.act) .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(160, 170, 164)",
           "width": "24px",
@@ -5363,6 +5562,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-l > button.m-i:not(.act) .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(93, 105, 98)",
           "width": "24px",
@@ -5376,6 +5576,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-l > button.m-i:not(.act) .ic",
+        "contesto": "interfaccia",
         "proprieta": {
           "color": "rgb(160, 170, 164)",
           "width": "24px",
@@ -5391,6 +5592,7 @@
     "menu.voce-tasti": {
       "chiaro-1280": {
         "prototipo": ".m-l > button.m-i:not(.act) kbd",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
           "font-size": "11.5px",
@@ -5418,6 +5620,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-l > button.m-i:not(.act) kbd",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
           "font-size": "11.5px",
@@ -5445,6 +5648,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-l > button.m-i:not(.act) kbd",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
           "font-size": "11.5px",
@@ -5472,6 +5676,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-l > button.m-i:not(.act) kbd",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
           "font-size": "11.5px",
@@ -5501,6 +5706,7 @@
     "menu.piede": {
       "chiaro-1280": {
         "prototipo": ".m-find",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "14px",
@@ -5557,6 +5763,7 @@
       },
       "scuro-1280": {
         "prototipo": ".m-find",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "14px",
@@ -5613,6 +5820,7 @@
       },
       "chiaro-700": {
         "prototipo": ".m-find",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "14px",
@@ -5669,6 +5877,7 @@
       },
       "scuro-700": {
         "prototipo": ".m-find",
+        "contesto": "interfaccia",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "14px",
@@ -5727,6 +5936,7 @@
     "maniglie.aggiungi": {
       "chiaro-1280": {
         "prototipo": "#g-add",
+        "contesto": "documento",
         "proprieta": {
           "width": "24px",
           "height": "24px",
@@ -5741,12 +5951,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": "#g-add",
+        "contesto": "documento",
         "proprieta": {
           "width": "24px",
           "height": "24px",
@@ -5761,12 +5972,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": "#g-add",
+        "contesto": "documento",
         "proprieta": {
           "width": "24px",
           "height": "24px",
@@ -5781,12 +5993,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": "#g-add",
+        "contesto": "documento",
         "proprieta": {
           "width": "24px",
           "height": "24px",
@@ -5801,7 +6014,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       }
@@ -5809,6 +6022,7 @@
     "maniglie.aggiungi-icona": {
       "chiaro-1280": {
         "prototipo": "#g-add svg",
+        "contesto": "documento",
         "proprieta": {
           "width": "16px",
           "height": "16px"
@@ -5817,6 +6031,7 @@
       },
       "scuro-1280": {
         "prototipo": "#g-add svg",
+        "contesto": "documento",
         "proprieta": {
           "width": "16px",
           "height": "16px"
@@ -5825,6 +6040,7 @@
       },
       "chiaro-700": {
         "prototipo": "#g-add svg",
+        "contesto": "documento",
         "proprieta": {
           "width": "16px",
           "height": "16px"
@@ -5833,6 +6049,7 @@
       },
       "scuro-700": {
         "prototipo": "#g-add svg",
+        "contesto": "documento",
         "proprieta": {
           "width": "16px",
           "height": "16px"
@@ -5843,6 +6060,7 @@
     "maniglie.presa": {
       "chiaro-1280": {
         "prototipo": "#g-grip",
+        "contesto": "documento",
         "proprieta": {
           "width": "24px",
           "height": "24px",
@@ -5857,12 +6075,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": "#g-grip",
+        "contesto": "documento",
         "proprieta": {
           "width": "24px",
           "height": "24px",
@@ -5877,12 +6096,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": "#g-grip",
+        "contesto": "documento",
         "proprieta": {
           "width": "24px",
           "height": "24px",
@@ -5897,12 +6117,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": "#g-grip",
+        "contesto": "documento",
         "proprieta": {
           "width": "24px",
           "height": "24px",
@@ -5917,7 +6138,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       }
@@ -5925,6 +6146,7 @@
     "maniglie.occhi": {
       "chiaro-1280": {
         "prototipo": "#g-grip svg.ea",
+        "contesto": "documento",
         "proprieta": {
           "width": "16px",
           "height": "16px"
@@ -5933,6 +6155,7 @@
       },
       "scuro-1280": {
         "prototipo": "#g-grip svg.ea",
+        "contesto": "documento",
         "proprieta": {
           "width": "16px",
           "height": "16px"
@@ -5941,6 +6164,7 @@
       },
       "chiaro-700": {
         "prototipo": "#g-grip svg.ea",
+        "contesto": "documento",
         "proprieta": {
           "width": "16px",
           "height": "16px"
@@ -5949,6 +6173,7 @@
       },
       "scuro-700": {
         "prototipo": "#g-grip svg.ea",
+        "contesto": "documento",
         "proprieta": {
           "width": "16px",
           "height": "16px"
@@ -5959,6 +6184,7 @@
     "tabella.intestazione": {
       "chiaro-1280": {
         "prototipo": ".gr tr:first-child td:nth-child(2)",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -5980,18 +6206,20 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ],
           "background-color": [
-            "var(--sheet-2)"
+            "var(--doc-fill-soft)",
+            "var(--doc-fill)"
           ],
           "border-bottom-color": [
-            "var(--border)"
+            "var(--doc-rule-soft)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".gr tr:first-child td:nth-child(2)",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -6013,18 +6241,20 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ],
           "background-color": [
-            "var(--sheet-2)"
+            "var(--doc-fill-soft)",
+            "var(--doc-fill)"
           ],
           "border-bottom-color": [
-            "var(--border)"
+            "var(--doc-rule-soft)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".gr tr:first-child td:nth-child(2)",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -6046,18 +6276,20 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ],
           "background-color": [
-            "var(--sheet-2)"
+            "var(--doc-fill-soft)",
+            "var(--doc-fill)"
           ],
           "border-bottom-color": [
-            "var(--border)"
+            "var(--doc-rule-soft)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".gr tr:first-child td:nth-child(2)",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -6079,13 +6311,14 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ],
           "background-color": [
-            "var(--sheet-2)"
+            "var(--doc-fill-soft)",
+            "var(--doc-fill)"
           ],
           "border-bottom-color": [
-            "var(--border)"
+            "var(--doc-rule-soft)"
           ]
         }
       }
@@ -6093,6 +6326,7 @@
     "tabella.cella": {
       "chiaro-1280": {
         "prototipo": ".gr tr:nth-child(2) td:nth-child(2)",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -6114,15 +6348,16 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ],
           "border-bottom-color": [
-            "var(--border)"
+            "var(--doc-rule-soft)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".gr tr:nth-child(2) td:nth-child(2)",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -6144,15 +6379,16 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ],
           "border-bottom-color": [
-            "var(--border)"
+            "var(--doc-rule-soft)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".gr tr:nth-child(2) td:nth-child(2)",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -6174,15 +6410,16 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ],
           "border-bottom-color": [
-            "var(--border)"
+            "var(--doc-rule-soft)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".gr tr:nth-child(2) td:nth-child(2)",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "12px",
@@ -6204,10 +6441,10 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ],
           "border-bottom-color": [
-            "var(--border)"
+            "var(--doc-rule-soft)"
           ]
         }
       }
@@ -6215,6 +6452,7 @@
     "tabella.lettera": {
       "chiaro-1280": {
         "prototipo": ".gr-let span:not(.on)",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6227,12 +6465,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".gr-let span:not(.on)",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6245,12 +6484,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".gr-let span:not(.on)",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6263,12 +6503,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".gr-let span:not(.on)",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6281,7 +6522,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       }
@@ -6289,6 +6530,7 @@
     "tabella.lettera-scelta": {
       "chiaro-1280": {
         "prototipo": ".gr-let span.on",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6305,6 +6547,7 @@
       },
       "scuro-1280": {
         "prototipo": ".gr-let span.on",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6321,6 +6564,7 @@
       },
       "chiaro-700": {
         "prototipo": ".gr-let span.on",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6337,6 +6581,7 @@
       },
       "scuro-700": {
         "prototipo": ".gr-let span.on",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6355,6 +6600,7 @@
     "tabella.lettera-scelta-fondo": {
       "chiaro-1280": {
         "prototipo": ".gr-let span.on",
+        "contesto": "documento",
         "proprieta": {
           "background-color": "rgb(216, 240, 227)",
           "background-image": "none"
@@ -6367,6 +6613,7 @@
       },
       "scuro-1280": {
         "prototipo": ".gr-let span.on",
+        "contesto": "documento",
         "proprieta": {
           "background-color": "rgb(13, 58, 38)",
           "background-image": "none"
@@ -6379,6 +6626,7 @@
       },
       "chiaro-700": {
         "prototipo": ".gr-let span.on",
+        "contesto": "documento",
         "proprieta": {
           "background-color": "rgb(216, 240, 227)",
           "background-image": "none"
@@ -6391,6 +6639,7 @@
       },
       "scuro-700": {
         "prototipo": ".gr-let span.on",
+        "contesto": "documento",
         "proprieta": {
           "background-color": "rgb(13, 58, 38)",
           "background-image": "none"
@@ -6405,6 +6654,7 @@
     "tabella.numero": {
       "chiaro-1280": {
         "prototipo": ".gr-num span:not(.on)",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6417,12 +6667,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".gr-num span:not(.on)",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6435,12 +6686,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".gr-num span:not(.on)",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6453,12 +6705,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".gr-num span:not(.on)",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6471,7 +6724,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       }
@@ -6479,6 +6732,7 @@
     "tabella.numero-scelto": {
       "chiaro-1280": {
         "prototipo": ".gr-num span.on",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6495,6 +6749,7 @@
       },
       "scuro-1280": {
         "prototipo": ".gr-num span.on",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6511,6 +6766,7 @@
       },
       "chiaro-700": {
         "prototipo": ".gr-num span.on",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6527,6 +6783,7 @@
       },
       "scuro-700": {
         "prototipo": ".gr-num span.on",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "10.5px",
@@ -6545,6 +6802,7 @@
     "tabella.numero-scelto-fondo": {
       "chiaro-1280": {
         "prototipo": ".gr-num span.on",
+        "contesto": "documento",
         "proprieta": {
           "background-color": "rgb(216, 240, 227)",
           "background-image": "none"
@@ -6557,6 +6815,7 @@
       },
       "scuro-1280": {
         "prototipo": ".gr-num span.on",
+        "contesto": "documento",
         "proprieta": {
           "background-color": "rgb(13, 58, 38)",
           "background-image": "none"
@@ -6569,6 +6828,7 @@
       },
       "chiaro-700": {
         "prototipo": ".gr-num span.on",
+        "contesto": "documento",
         "proprieta": {
           "background-color": "rgb(216, 240, 227)",
           "background-image": "none"
@@ -6581,6 +6841,7 @@
       },
       "scuro-700": {
         "prototipo": ".gr-num span.on",
+        "contesto": "documento",
         "proprieta": {
           "background-color": "rgb(13, 58, 38)",
           "background-image": "none"
@@ -6595,6 +6856,7 @@
     "tabella.riempi": {
       "chiaro-1280": {
         "prototipo": ".tg-fill",
+        "contesto": "documento",
         "proprieta": {
           "width": "9px",
           "height": "9px",
@@ -6611,12 +6873,13 @@
             "var(--accent)"
           ],
           "box-shadow": [
-            "var(--sheet) 0px 0px 0px 1.5px"
+            "var(--doc-bg) 0px 0px 0px 1.5px"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".tg-fill",
+        "contesto": "documento",
         "proprieta": {
           "width": "9px",
           "height": "9px",
@@ -6633,12 +6896,13 @@
             "var(--accent)"
           ],
           "box-shadow": [
-            "var(--sheet) 0px 0px 0px 1.5px"
+            "var(--doc-bg) 0px 0px 0px 1.5px"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".tg-fill",
+        "contesto": "documento",
         "proprieta": {
           "width": "9px",
           "height": "9px",
@@ -6655,12 +6919,13 @@
             "var(--accent)"
           ],
           "box-shadow": [
-            "var(--sheet) 0px 0px 0px 1.5px"
+            "var(--doc-bg) 0px 0px 0px 1.5px"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".tg-fill",
+        "contesto": "documento",
         "proprieta": {
           "width": "9px",
           "height": "9px",
@@ -6677,7 +6942,7 @@
             "var(--accent)"
           ],
           "box-shadow": [
-            "var(--sheet) 0px 0px 0px 1.5px"
+            "var(--doc-bg) 0px 0px 0px 1.5px"
           ]
         }
       }
@@ -6685,6 +6950,7 @@
     "tabella.aggiungi-riga": {
       "chiaro-1280": {
         "prototipo": ".tg-add.row",
+        "contesto": "documento",
         "proprieta": {
           "height": "15px",
           "bottom": "-19px",
@@ -6699,12 +6965,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".tg-add.row",
+        "contesto": "documento",
         "proprieta": {
           "height": "15px",
           "bottom": "-19px",
@@ -6719,12 +6986,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".tg-add.row",
+        "contesto": "documento",
         "proprieta": {
           "height": "15px",
           "bottom": "-19px",
@@ -6739,12 +7007,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".tg-add.row",
+        "contesto": "documento",
         "proprieta": {
           "height": "15px",
           "bottom": "-19px",
@@ -6759,7 +7028,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       }
@@ -6767,6 +7036,7 @@
     "tabella.aggiungi-colonna": {
       "chiaro-1280": {
         "prototipo": ".tg-add.col",
+        "contesto": "documento",
         "proprieta": {
           "width": "15px",
           "right": "-19px",
@@ -6781,12 +7051,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".tg-add.col",
+        "contesto": "documento",
         "proprieta": {
           "width": "15px",
           "right": "-19px",
@@ -6801,12 +7072,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".tg-add.col",
+        "contesto": "documento",
         "proprieta": {
           "width": "15px",
           "right": "-19px",
@@ -6821,12 +7093,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".tg-add.col",
+        "contesto": "documento",
         "proprieta": {
           "width": "15px",
           "right": "-19px",
@@ -6841,7 +7114,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       }
@@ -6849,6 +7122,7 @@
     "somma.valore": {
       "chiaro-1280": {
         "prototipo": "#band-words b",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "12px",
@@ -6865,6 +7139,7 @@
       },
       "scuro-1280": {
         "prototipo": "#band-words b",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "12px",
@@ -6881,6 +7156,7 @@
       },
       "chiaro-700": {
         "prototipo": "#band-words b",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "12px",
@@ -6897,6 +7173,7 @@
       },
       "scuro-700": {
         "prototipo": "#band-words b",
+        "contesto": "interfaccia",
         "proprieta": {
           "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
           "font-size": "12px",
@@ -6915,6 +7192,7 @@
     "testata.copertina": {
       "chiaro-1280": {
         "prototipo": ".cover",
+        "contesto": "documento",
         "proprieta": {
           "height": "112px",
           "border-top-left-radius": "0px",
@@ -6926,6 +7204,7 @@
       },
       "scuro-1280": {
         "prototipo": ".cover",
+        "contesto": "documento",
         "proprieta": {
           "height": "112px",
           "border-top-left-radius": "0px",
@@ -6937,6 +7216,7 @@
       },
       "chiaro-700": {
         "prototipo": ".cover",
+        "contesto": "documento",
         "proprieta": {
           "height": "112px",
           "border-top-left-radius": "0px",
@@ -6948,6 +7228,7 @@
       },
       "scuro-700": {
         "prototipo": ".cover",
+        "contesto": "documento",
         "proprieta": {
           "height": "112px",
           "border-top-left-radius": "0px",
@@ -6961,6 +7242,7 @@
     "testata.strumenti": {
       "chiaro-1280": {
         "prototipo": ".ptools",
+        "contesto": "documento",
         "proprieta": {
           "display": "flex",
           "row-gap": "2px",
@@ -6976,6 +7258,7 @@
       },
       "scuro-1280": {
         "prototipo": ".ptools",
+        "contesto": "documento",
         "proprieta": {
           "display": "flex",
           "row-gap": "2px",
@@ -6991,6 +7274,7 @@
       },
       "chiaro-700": {
         "prototipo": ".ptools",
+        "contesto": "documento",
         "proprieta": {
           "display": "flex",
           "row-gap": "2px",
@@ -7006,6 +7290,7 @@
       },
       "scuro-700": {
         "prototipo": ".ptools",
+        "contesto": "documento",
         "proprieta": {
           "display": "flex",
           "row-gap": "2px",
@@ -7023,6 +7308,7 @@
     "testata.strumento": {
       "chiaro-1280": {
         "prototipo": ".ptools button",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -7067,12 +7353,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".ptools button",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -7117,12 +7404,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".ptools button",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -7167,12 +7455,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".ptools button",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -7217,7 +7506,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       }
@@ -7225,6 +7514,7 @@
     "testata.titolo": {
       "chiaro-1280": {
         "prototipo": ".ptitle",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
           "font-size": "40px",
@@ -7243,12 +7533,13 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".ptitle",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
           "font-size": "40px",
@@ -7267,12 +7558,13 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".ptitle",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
           "font-size": "40px",
@@ -7291,12 +7583,13 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".ptitle",
+        "contesto": "documento",
         "proprieta": {
           "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
           "font-size": "40px",
@@ -7315,7 +7608,7 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ]
         }
       }
@@ -7323,6 +7616,7 @@
     "testata.dati": {
       "chiaro-1280": {
         "prototipo": ".facts",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "8px",
           "padding-right": "0px",
@@ -7366,15 +7660,16 @@
         },
         "fub": {
           "border-bottom-color": [
-            "var(--border)"
+            "var(--doc-rule-soft)"
           ],
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".facts",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "8px",
           "padding-right": "0px",
@@ -7418,15 +7713,16 @@
         },
         "fub": {
           "border-bottom-color": [
-            "var(--border)"
+            "var(--doc-rule-soft)"
           ],
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".facts",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "8px",
           "padding-right": "0px",
@@ -7470,15 +7766,16 @@
         },
         "fub": {
           "border-bottom-color": [
-            "var(--border)"
+            "var(--doc-rule-soft)"
           ],
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".facts",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "8px",
           "padding-right": "0px",
@@ -7522,10 +7819,10 @@
         },
         "fub": {
           "border-bottom-color": [
-            "var(--border)"
+            "var(--doc-rule-soft)"
           ],
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       }
@@ -7533,6 +7830,7 @@
     "testata.dato": {
       "chiaro-1280": {
         "prototipo": ".facts button:not(.tag)",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "2px",
           "padding-right": "4px",
@@ -7557,12 +7855,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".facts button:not(.tag)",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "2px",
           "padding-right": "4px",
@@ -7587,12 +7886,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".facts button:not(.tag)",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "2px",
           "padding-right": "4px",
@@ -7617,12 +7917,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".facts button:not(.tag)",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "2px",
           "padding-right": "4px",
@@ -7647,7 +7948,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       }
@@ -7655,6 +7956,7 @@
     "testata.etichetta": {
       "chiaro-1280": {
         "prototipo": ".facts .tag",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "2px",
           "padding-right": "4px",
@@ -7695,7 +7997,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ],
           "background-color": [
             "var(--accent-soft)",
@@ -7705,6 +8007,7 @@
       },
       "scuro-1280": {
         "prototipo": ".facts .tag",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "2px",
           "padding-right": "4px",
@@ -7745,7 +8048,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ],
           "background-color": [
             "var(--accent-soft)",
@@ -7755,6 +8058,7 @@
       },
       "chiaro-700": {
         "prototipo": ".facts .tag",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "2px",
           "padding-right": "4px",
@@ -7795,7 +8099,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ],
           "background-color": [
             "var(--accent-soft)",
@@ -7805,6 +8109,7 @@
       },
       "scuro-700": {
         "prototipo": ".facts .tag",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "2px",
           "padding-right": "4px",
@@ -7845,7 +8150,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ],
           "background-color": [
             "var(--accent-soft)",
@@ -7857,6 +8162,7 @@
     "proprieta.elenco": {
       "chiaro-1280": {
         "prototipo": ".props",
+        "contesto": "documento",
         "proprieta": {
           "display": "grid",
           "row-gap": "1px",
@@ -7874,6 +8180,7 @@
       },
       "scuro-1280": {
         "prototipo": ".props",
+        "contesto": "documento",
         "proprieta": {
           "display": "grid",
           "row-gap": "1px",
@@ -7891,6 +8198,7 @@
       },
       "chiaro-700": {
         "prototipo": ".props",
+        "contesto": "documento",
         "proprieta": {
           "display": "grid",
           "row-gap": "1px",
@@ -7908,6 +8216,7 @@
       },
       "scuro-700": {
         "prototipo": ".props",
+        "contesto": "documento",
         "proprieta": {
           "display": "grid",
           "row-gap": "1px",
@@ -7927,6 +8236,7 @@
     "proprieta.chiave": {
       "chiaro-1280": {
         "prototipo": ".pk",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -7971,12 +8281,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".pk",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -8021,12 +8332,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".pk",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -8071,12 +8383,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".pk",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -8121,7 +8434,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       }
@@ -8129,6 +8442,7 @@
     "proprieta.valore": {
       "chiaro-1280": {
         "prototipo": ".pv",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "3px",
           "padding-right": "8px",
@@ -8173,12 +8487,13 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".pv",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "3px",
           "padding-right": "8px",
@@ -8223,12 +8538,13 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".pv",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "3px",
           "padding-right": "8px",
@@ -8273,12 +8589,13 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".pv",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "3px",
           "padding-right": "8px",
@@ -8323,7 +8640,7 @@
         },
         "fub": {
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ]
         }
       }
@@ -8331,6 +8648,7 @@
     "proprieta.persona": {
       "chiaro-1280": {
         "prototipo": ".person",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -8372,18 +8690,20 @@
         },
         "fub": {
           "box-shadow": [
-            "var(--border) 0px 0px 0px 1px inset"
+            "var(--doc-rule-soft) 0px 0px 0px 1px inset"
           ],
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ],
           "background-color": [
-            "var(--sheet-2)"
+            "var(--doc-fill-soft)",
+            "var(--doc-fill)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".person",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -8425,18 +8745,20 @@
         },
         "fub": {
           "box-shadow": [
-            "var(--border) 0px 0px 0px 1px inset"
+            "var(--doc-rule-soft) 0px 0px 0px 1px inset"
           ],
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ],
           "background-color": [
-            "var(--sheet-2)"
+            "var(--doc-fill-soft)",
+            "var(--doc-fill)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".person",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -8478,18 +8800,20 @@
         },
         "fub": {
           "box-shadow": [
-            "var(--border) 0px 0px 0px 1px inset"
+            "var(--doc-rule-soft) 0px 0px 0px 1px inset"
           ],
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ],
           "background-color": [
-            "var(--sheet-2)"
+            "var(--doc-fill-soft)",
+            "var(--doc-fill)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".person",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -8531,13 +8855,14 @@
         },
         "fub": {
           "box-shadow": [
-            "var(--border) 0px 0px 0px 1px inset"
+            "var(--doc-rule-soft) 0px 0px 0px 1px inset"
           ],
           "color": [
-            "var(--text)"
+            "var(--doc-fg)"
           ],
           "background-color": [
-            "var(--sheet-2)"
+            "var(--doc-fill-soft)",
+            "var(--doc-fill)"
           ]
         }
       }
@@ -8545,6 +8870,7 @@
     "proprieta.altre": {
       "chiaro-1280": {
         "prototipo": ".props .more",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -8589,12 +8915,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-1280": {
         "prototipo": ".props .more",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -8639,12 +8966,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "chiaro-700": {
         "prototipo": ".props .more",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -8689,12 +9017,13 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       },
       "scuro-700": {
         "prototipo": ".props .more",
+        "contesto": "documento",
         "proprieta": {
           "padding-top": "0px",
           "padding-right": "8px",
@@ -8739,7 +9068,7 @@
         },
         "fub": {
           "color": [
-            "var(--muted)"
+            "var(--doc-gutter-fg)"
           ]
         }
       }

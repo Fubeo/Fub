@@ -40,6 +40,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { SCENE, sceneUrl } from "../scene.mjs";
 import { OUTPUT, openPage, openStage, prepareScene } from "../stage.mjs";
 import {
+  CONTESTO_DI_BASE,
   TOLLERANZA,
   applicaEccezioni,
   confrontaPezzo,
@@ -48,6 +49,7 @@ import {
   scriviDifferenza,
   scriviMancante,
   validaEccezioni,
+  validaTraduzioni,
 } from "./confronto.mjs";
 import { gesto, leggi, riposo, risolvi } from "./leggi.mjs";
 
@@ -95,6 +97,9 @@ function controllaAttesi(nome, attesi, pezzi, viste) {
       if (v.prototipo !== pezzo.prototipo) {
         errori.push(`${pezzo.id} [${stato}]: estratto da «${v.prototipo}», la mappa dice «${pezzo.prototipo}»: ${rigenera}`);
       }
+      if (v.contesto !== (pezzo.contesto ?? CONTESTO_DI_BASE)) {
+        errori.push(`${pezzo.id} [${stato}]: estratto nel contesto «${v.contesto}», la mappa dice «${pezzo.contesto ?? CONTESTO_DI_BASE}»: ${rigenera}`);
+      }
       const voluti = espandi(pezzo.proprieta);
       const letti = Object.keys(v.proprieta);
       if (voluti.length !== letti.length || voluti.some((p) => !letti.includes(p))) {
@@ -114,7 +119,7 @@ const stage = await openStage();
 let rosso = false;
 try {
   for (const nome of prototipi) {
-    const { STATI, VISTE, PEZZI, TRADUZIONE, DA_COPRIRE = [] } = await import(pathToFileURL(here(`./mappa-${nome}.mjs`)).href);
+    const { STATI, VISTE, PEZZI, TRADUZIONI, DA_COPRIRE = [] } = await import(pathToFileURL(here(`./mappa-${nome}.mjs`)).href);
     const attesi = JSON.parse(await readFile(here(`./${nome}.json`), "utf8"));
     const eccezioni = JSON.parse(await readFile(here(`./eccezioni-${nome}.json`), "utf8"));
 
@@ -122,8 +127,9 @@ try {
       ...controllaAttesi(nome, attesi, PEZZI, VISTE),
       ...validaEccezioni(eccezioni, PEZZI).map((e) => `eccezioni-${nome}.json: ${e}`),
     ];
-    if (JSON.stringify(attesi.traduzione) !== JSON.stringify(TRADUZIONE)) {
-      errori.push(`la TRADUZIONE dei token non è quella dell'estrazione: rigenera con \`node bench/conformita/estrai.mjs ${nome}\``);
+    errori.push(...validaTraduzioni(TRADUZIONI, PEZZI).map((e) => `TRADUZIONI: ${e}`));
+    if (JSON.stringify(attesi.traduzioni) !== JSON.stringify(TRADUZIONI)) {
+      errori.push(`le TRADUZIONI dei token non sono quelle dell'estrazione: rigenera con \`node bench/conformita/estrai.mjs ${nome}\``);
     }
     const copertura = coperture(DA_COPRIRE, PEZZI);
     errori.push(...copertura.errori.map((e) => `DA_COPRIRE: ${e}`));

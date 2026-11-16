@@ -571,6 +571,39 @@ export function sentinelle(traduzione) {
   return Object.fromEntries(Object.keys(traduzione).map((t, i) => [t, sentinella(i)]));
 }
 
+/// I contesti di un pezzo. La pagina del documento ha una tavolozza sua
+/// (`--doc-fg`, `--doc-rule-soft`…), che si cambia a parte da quella
+/// dell'interfaccia: un pezzo con `contesto: "documento"` traduce i token del
+/// prototipo con quella. Gli altri sono dell'interfaccia.
+export const CONTESTO_DI_BASE = "interfaccia";
+
+/// La traduzione del contesto di un pezzo; `undefined` se il contesto non
+/// c'è fra le traduzioni della mappa.
+export function traduzioneDi(pezzo, traduzioni) {
+  return traduzioni[pezzo.contesto ?? CONTESTO_DI_BASE];
+}
+
+/// Controlla le traduzioni di una mappa contro i suoi pezzi. Tutte nominano
+/// gli stessi token del prototipo nello stesso ordine: l'estrazione mette una
+/// sentinella sola per token, e ogni contesto la legge con la sua traduzione.
+export function validaTraduzioni(traduzioni, pezzi) {
+  const errori = [];
+  const base = traduzioni[CONTESTO_DI_BASE];
+  if (!base) errori.push(`manca la traduzione «${CONTESTO_DI_BASE}»`);
+  for (const [nome, t] of Object.entries(traduzioni)) {
+    if (base && JSON.stringify(Object.keys(t)) !== JSON.stringify(Object.keys(base))) {
+      errori.push(`la traduzione «${nome}» non nomina gli stessi token di «${CONTESTO_DI_BASE}», nello stesso ordine`);
+    }
+    for (const [token, fub] of Object.entries(t)) {
+      if (!Array.isArray(fub) || fub.length === 0) errori.push(`la traduzione «${nome}» non dice come si scrive ${token}`);
+    }
+  }
+  for (const p of pezzi) {
+    if (!traduzioneDi(p, traduzioni)) errori.push(`${p.id}: il contesto «${p.contesto}» non ha una traduzione`);
+  }
+  return errori;
+}
+
 /// Uguaglianza stretta fra due colori dello stesso browser.
 function identici(a, b) {
   return Math.abs(a[3] - b[3]) <= 0.004 && [0, 1, 2].every((i) => Math.abs(a[i] - b[i]) <= 0.75);

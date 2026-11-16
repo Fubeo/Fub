@@ -20,6 +20,9 @@ export interface Pezzo {
   /// Il lavoro (una PR, un ramo) che porta il pezzo nell'app: finché c'è, la
   /// verifica non lo legge (`verifica.mjs`, `--attese`).
   attende?: string;
+  /// Con quale traduzione dei token si legge (`TRADUZIONI` della mappa); di
+  /// base `interfaccia`.
+  contesto?: string;
 }
 
 export interface Eccezione {
@@ -93,6 +96,15 @@ export function confrontaPezzo(
 ): { mancanti: Mancante[]; differenze: Differenza[] };
 export function sentinella(i: number): Colore;
 export function sentinelle(traduzione: Record<string, readonly string[]>): Record<string, Colore>;
+export const CONTESTO_DI_BASE: "interfaccia";
+export function traduzioneDi(
+  pezzo: Pick<Pezzo, "contesto">,
+  traduzioni: Record<string, Record<string, readonly string[]>>,
+): Record<string, readonly string[]> | undefined;
+export function validaTraduzioni(
+  traduzioni: Record<string, Record<string, readonly string[]>>,
+  pezzi: readonly Pezzo[],
+): string[];
 export function mescola(a: Colore, p: number, b: Colore): Colore;
 export function decodifica(c: Colore, sent: Record<string, Colore>): string[];
 export function espressioniFub(

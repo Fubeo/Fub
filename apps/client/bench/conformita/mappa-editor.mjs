@@ -28,6 +28,8 @@
 //   finché c'è (con `--attese` sì, per misurare quel lavoro su un ramo locale
 //   che lo contiene). Chi unisce il lavoro toglie `attende` dai suoi pezzi:
 //   da lì le differenze sono rosse come le altre.
+//   `contesto` (facoltativo, di base `interfaccia`) sceglie fra `TRADUZIONI`
+//   quella dei token: `documento` per ciò che sta dentro la pagina.
 // - `DA_COPRIRE`: ciò che ha ancora differenze e che correggono altri lavori,
 //   in due forme. Un pezzo intero (`{ id, prototipo, app, perche }`, con un
 //   id che non è in `PEZZI`) non si confronta affatto: sta qui perché si veda
@@ -74,6 +76,37 @@ export const TRADUZIONE = {
   "--acc-soft": ["--accent-soft", "--accent-veil"],
   "--acc-wash": ["--accent-wash"],
   "--mark": ["--highlight"],
+};
+
+/// La traduzione dei pezzi dentro la pagina del documento (`contesto:
+/// "documento"`: tabella Markdown, testata, proprietà, riga dei dati,
+/// maniglie dei blocchi). La pagina ha la sua tavolozza, che si cambia a parte
+/// da quella dell'interfaccia (`--doc-*`, `structure.css` e `skin/document.css`):
+/// il foglio è `--doc-bg`, l'inchiostro `--doc-fg`, il grigio `--doc-gutter-fg`,
+/// i fili `--doc-rule-soft` e `--doc-rule`, i fondi tenui `--doc-fill-soft` e
+/// `--doc-fill`, l'evidenziatore `--doc-highlight`. L'accento non ha una
+/// voce del documento, e resta quello dell'interfaccia. Gli stessi token di
+/// `TRADUZIONE`, nello stesso ordine: le sentinelle sono le stesse.
+export const TRADUZIONE_DOCUMENTO = {
+  "--sheet": ["--doc-bg"],
+  "--tray": ["--doc-fill-soft", "--doc-fill"],
+  "--line": ["--doc-rule-soft"],
+  "--line-2": ["--doc-rule"],
+  "--ink": ["--doc-fg"],
+  "--ink-2": ["--doc-fg"],
+  "--muted": ["--doc-gutter-fg"],
+  "--faint": ["--doc-gutter-fg"],
+  "--acc": ["--accent"],
+  "--acc-ink": ["--accent-soft"],
+  "--acc-soft": ["--accent-soft", "--accent-veil"],
+  "--acc-wash": ["--accent-wash"],
+  "--mark": ["--doc-highlight"],
+};
+
+/// Le traduzioni per contesto: ogni pezzo usa quella del suo `contesto`.
+export const TRADUZIONI = {
+  interfaccia: TRADUZIONE,
+  documento: TRADUZIONE_DOCUMENTO,
 };
 
 /// Gli stati.`larghezza` è quella del prototipo (`piena`, `700`,
@@ -547,6 +580,7 @@ export const PEZZI = [
     id: "maniglie.aggiungi",
     vista: "maniglie",
     attende: "#431",
+    contesto: "documento",
     prototipo: "#g-add",
     app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-add',
     proprieta: [...DIMENSIONI, "border-radius", "color", "background", "opacity"],
@@ -555,6 +589,7 @@ export const PEZZI = [
     id: "maniglie.aggiungi-icona",
     vista: "maniglie",
     attende: "#431",
+    contesto: "documento",
     prototipo: "#g-add svg",
     app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-add svg',
     proprieta: DIMENSIONI,
@@ -563,6 +598,7 @@ export const PEZZI = [
     id: "maniglie.presa",
     vista: "maniglie",
     attende: "#431",
+    contesto: "documento",
     prototipo: "#g-grip",
     app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-grip',
     proprieta: [...DIMENSIONI, "border-radius", "color", "background", "opacity"],
@@ -571,6 +607,7 @@ export const PEZZI = [
     id: "maniglie.occhi",
     vista: "maniglie",
     attende: "#431",
+    contesto: "documento",
     prototipo: "#g-grip svg.ea",
     app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-grip-eyes svg',
     proprieta: DIMENSIONI,
@@ -584,6 +621,7 @@ export const PEZZI = [
     id: "tabella.intestazione",
     vista: "tabella",
     attende: "#432",
+    contesto: "documento",
     prototipo: ".gr tr:first-child td:nth-child(2)",
     app: '.tb-grid .tb-cell.tb-head[data-col="0"]',
     proprieta: ["padding", "font", "color", "background", "height", "white-space", "border-bottom-width", "border-bottom-style", "border-bottom-color"],
@@ -592,6 +630,7 @@ export const PEZZI = [
     id: "tabella.cella",
     vista: "tabella",
     attende: "#432",
+    contesto: "documento",
     prototipo: ".gr tr:nth-child(2) td:nth-child(2)",
     app: '.tb-grid .tb-cell[data-row="1"][data-col="1"]',
     proprieta: ["padding", "font", "color", "background", "height", "white-space", "border-bottom-width", "border-bottom-style", "border-bottom-color"],
@@ -600,6 +639,7 @@ export const PEZZI = [
     id: "tabella.lettera",
     vista: "tabella",
     attende: "#432",
+    contesto: "documento",
     prototipo: ".gr-let span:not(.on)",
     app: ".tb-grid .tb-letter:not(.is-selected)",
     proprieta: ["font", "color", "background"],
@@ -608,6 +648,7 @@ export const PEZZI = [
     id: "tabella.lettera-scelta",
     vista: "tabella",
     attende: "#432",
+    contesto: "documento",
     prototipo: ".gr-let span.on",
     app: ".tb-grid .tb-letter.is-selected",
     proprieta: ["font", "color"],
@@ -617,6 +658,7 @@ export const PEZZI = [
     id: "tabella.lettera-scelta-fondo",
     vista: "tabella",
     attende: "#432",
+    contesto: "documento",
     prototipo: ".gr-let span.on",
     app: ".tb-grid .tb-letter.is-selected::before",
     proprieta: ["background"],
@@ -625,6 +667,7 @@ export const PEZZI = [
     id: "tabella.numero",
     vista: "tabella",
     attende: "#432",
+    contesto: "documento",
     prototipo: ".gr-num span:not(.on)",
     app: ".tb-grid .tb-rowhead:not(.is-selected)",
     proprieta: ["font", "color", "background"],
@@ -633,6 +676,7 @@ export const PEZZI = [
     id: "tabella.numero-scelto",
     vista: "tabella",
     attende: "#432",
+    contesto: "documento",
     prototipo: ".gr-num span.on",
     app: ".tb-grid .tb-rowhead.is-selected",
     proprieta: ["font", "color"],
@@ -641,6 +685,7 @@ export const PEZZI = [
     id: "tabella.numero-scelto-fondo",
     vista: "tabella",
     attende: "#432",
+    contesto: "documento",
     prototipo: ".gr-num span.on",
     app: ".tb-grid .tb-rowhead.is-selected::before",
     proprieta: ["background"],
@@ -649,6 +694,7 @@ export const PEZZI = [
     id: "tabella.riempi",
     vista: "tabella",
     attende: "#432",
+    contesto: "documento",
     prototipo: ".tg-fill",
     app: ".tb-grid .tb-fill",
     proprieta: [...DIMENSIONI, "border-radius", "background", "box-shadow"],
@@ -657,6 +703,7 @@ export const PEZZI = [
     id: "tabella.aggiungi-riga",
     vista: "tabella",
     attende: "#432",
+    contesto: "documento",
     prototipo: ".tg-add.row",
     app: '.tb-add[data-add="row"]',
     proprieta: ["height", "bottom", "border-radius", "color", "background", "opacity"],
@@ -665,6 +712,7 @@ export const PEZZI = [
     id: "tabella.aggiungi-colonna",
     vista: "tabella",
     attende: "#432",
+    contesto: "documento",
     prototipo: ".tg-add.col",
     app: '.tb-add[data-add="column"]',
     proprieta: ["width", "right", "border-radius", "color", "background", "opacity"],
@@ -683,6 +731,7 @@ export const PEZZI = [
     id: "testata.copertina",
     vista: "testata",
     attende: "#421",
+    contesto: "documento",
     prototipo: ".cover",
     app: ".cm-fub-page-cover",
     proprieta: ["height", "border-radius"],
@@ -691,6 +740,7 @@ export const PEZZI = [
     id: "testata.strumenti",
     vista: "testata",
     attende: "#421",
+    contesto: "documento",
     prototipo: ".ptools",
     app: ".cm-fub-page-tools",
     proprieta: ["display", "gap", "height", "margin", "opacity"],
@@ -699,6 +749,7 @@ export const PEZZI = [
     id: "testata.strumento",
     vista: "testata",
     attende: "#421",
+    contesto: "documento",
     prototipo: ".ptools button",
     app: ".cm-fub-page-tool",
     proprieta: [...BASE, "height", ...ALLINEAMENTO],
@@ -707,6 +758,7 @@ export const PEZZI = [
     id: "testata.titolo",
     vista: "testata",
     attende: "#421",
+    contesto: "documento",
     prototipo: ".ptitle",
     app: ".cm-fub-page-title",
     proprieta: ["font", "color", "margin", "padding"],
@@ -715,6 +767,7 @@ export const PEZZI = [
     id: "testata.dati",
     vista: "testata",
     attende: "#421",
+    contesto: "documento",
     prototipo: ".facts",
     app: ".note-facts",
     proprieta: [...BASE, ...ALLINEAMENTO],
@@ -723,6 +776,7 @@ export const PEZZI = [
     id: "testata.dato",
     vista: "testata",
     attende: "#421",
+    contesto: "documento",
     prototipo: ".facts button:not(.tag)",
     app: ".note-fact:not(.note-fact-tags)",
     proprieta: ["padding", "margin", "gap", "border-radius", "font", "color"],
@@ -731,6 +785,7 @@ export const PEZZI = [
     id: "testata.etichetta",
     vista: "testata",
     attende: "#421",
+    contesto: "documento",
     prototipo: ".facts .tag",
     app: ".note-tag",
     proprieta: BASE,
@@ -739,6 +794,7 @@ export const PEZZI = [
     id: "proprieta.elenco",
     vista: "proprieta",
     attende: "#421",
+    contesto: "documento",
     prototipo: ".props",
     app: ".cm-fub-page-props",
     proprieta: ["display", "row-gap", "margin", "font"],
@@ -747,6 +803,7 @@ export const PEZZI = [
     id: "proprieta.chiave",
     vista: "proprieta",
     attende: "#421",
+    contesto: "documento",
     prototipo: ".pk",
     app: ".cm-fub-page-prop-key",
     proprieta: [...BASE, "height", ...ALLINEAMENTO],
@@ -755,6 +812,7 @@ export const PEZZI = [
     id: "proprieta.valore",
     vista: "proprieta",
     attende: "#421",
+    contesto: "documento",
     prototipo: ".pv",
     app: ".cm-fub-page-prop-value",
     proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
@@ -763,6 +821,7 @@ export const PEZZI = [
     id: "proprieta.persona",
     vista: "proprieta",
     attende: "#421",
+    contesto: "documento",
     prototipo: ".person",
     app: ".cm-fub-prop-person",
     proprieta: [...BASE, "height"],
@@ -771,6 +830,7 @@ export const PEZZI = [
     id: "proprieta.altre",
     vista: "proprieta",
     attende: "#421",
+    contesto: "documento",
     prototipo: ".props .more",
     app: ".cm-fub-page-props-more",
     proprieta: [...BASE, "height", ...ALLINEAMENTO],

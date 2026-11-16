@@ -8,6 +8,8 @@ export type Gesto = (page: unknown) => Promise<unknown>;
 
 export const PROTOTIPO: { nome: string; ramo: string; file: string };
 export const TRADUZIONE: Record<string, string[]>;
+export const TRADUZIONE_DOCUMENTO: Record<string, string[]>;
+export const TRADUZIONI: Record<string, Record<string, string[]>>;
 export const STATI: Record<
   string,
   {
