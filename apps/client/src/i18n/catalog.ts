@@ -392,6 +392,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "launcher.command.templates": "Nuova nota da un modello",
 "launcher.command.templates.desc": "Crea una nota a partire da un modello del vault",
 "launcher.actions": "Azioni",
+"launcher.close": "Chiudi",
 "launcher.group.recent": "Recenti",
 "launcher.group.here": "In questa nota",
 "launcher.group.files": "File",
@@ -448,6 +449,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "launcher.preview.failed": "Anteprima non disponibile.",
 "launcher.preview.empty": "Questa nota è vuota.",
 "launcher.preview.file": "Questo file non ha un'anteprima qui: Invio lo apre.",
+"launcher.preview.modified": "modificata {when}",
 
 // --- Scrittoio, le preferenze: spazio dell'interfaccia, accento, voci del tema, anteprima
 "prefs.space.more_frame": "Più interfaccia",
@@ -4304,6 +4306,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "launcher.command.templates": "New note from a template",
 "launcher.command.templates.desc": "Creates a note from a template of the vault",
 "launcher.actions": "Actions",
+"launcher.close": "Close",
 "launcher.group.recent": "Recent",
 "launcher.group.here": "In this note",
 "launcher.group.files": "Files",
@@ -4360,6 +4363,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "launcher.preview.failed": "Preview unavailable.",
 "launcher.preview.empty": "This note is empty.",
 "launcher.preview.file": "This file has no preview here: Enter opens it.",
+"launcher.preview.modified": "modified {when}",
 
 "prefs.space.more_frame": "More interface",
 "prefs.zoom.value": "{percent}%",
