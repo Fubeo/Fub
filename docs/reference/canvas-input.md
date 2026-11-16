@@ -480,9 +480,8 @@ barra di formato della nota (T41) e della formula della cella (T42).
 
 La barra di sotto, quella di N4, tiene ciò che non è ancora passato altrove:
 «Scrivi col mouse», aggiungi, duplica, togli, inquadra la selezione, i fili e
-il colore esatto (`#rrggbb`) delle schede.
-È la fila del kit: ciò che non ci sta va in «…» («Altri comandi»), avvisi per
-ultimi; un punto di Tab, le frecce, Su e Giù nel popover, Esc torna su «…».
+il colore (`#rrggbb`). È la fila del kit: ciò che non ci sta va in «…»
+(«Altri comandi»), gli avvisi per ultimi; un Tab, le frecce, Esc torna su «…».
 
 ## La barra della selezione
 

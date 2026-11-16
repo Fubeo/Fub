@@ -151,7 +151,7 @@ export function createOptionsBar(options: OptionsBarOptions): OptionsBar {
     if (focus instanceof HTMLElement && focus.closest("[hidden]") && row.contains(focus)) more.focus();
     else if (focused === more && (focus !== more || more.hidden)) {
       // Tutto sta nella riga e «…» non c'è più: il fuoco va all'ultimo controllo.
-      const last = more.hidden ? [...row.querySelectorAll<HTMLElement>(CONTROLS)].filter((control) => !control.closest("[hidden]")).at(-1) : more;
+      const last = more.hidden ? [...row.querySelectorAll<HTMLElement>(CONTROLS)].filter((control) => !control.closest("[hidden]")).pop() : more;
       last?.focus({ preventScroll: true });
     }
     options.onFit?.();
