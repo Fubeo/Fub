@@ -419,7 +419,8 @@ export default defineConfig({
           }
           // La resa della Lettura: dal Markdown all'HTML dei blocchi e delle
           // righe, con la grammatica che legge (note a piè di pagina, link,
-          // ripiegabili, indice, testate dei callout), la sintassi del vault,
+          // ripiegabili, indice, testate dei callout, commenti CriticMarkup),
+          // la sintassi del vault,
           // il sanificatore dell'HTML e le stringhe del profilo. La usano la
           // Live, la stampa, la copia in HTML e le anteprime; cambia con la
           // resa, non con i gesti dell'editor, e da sola non pesa sul chunk
@@ -430,7 +431,7 @@ export default defineConfig({
           // o farebbe un ciclo fra questo chunk e il ponte: il plugin
           // `bundle-size-budgets` ferma la build in tutti e due i casi
           // (`UNDER_THE_RENDER`).
-          if (/\/src\/editors\/text\/profiles\/markdown\/(render|render-inline|strings|grammar|link-syntax|details|toc|callout-head)\.ts$|\/src\/rules\/syntax(\.generated)?\.ts$|\/src\/ui\/sanitize\.ts$/.test(id)) {
+          if (/\/src\/editors\/text\/profiles\/markdown\/(render|render-inline|strings|grammar|link-syntax|details|toc|callout-head|comments\/syntax)\.ts$|\/src\/rules\/syntax(\.generated)?\.ts$|\/src\/ui\/sanitize\.ts$/.test(id)) {
             return "markdown-render";
           }
           // Il renderer delle viste dichiarative (`UiNode`) con il suo
