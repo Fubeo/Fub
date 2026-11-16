@@ -1566,6 +1566,22 @@ describe("l'anteprima accanto all'elenco", () => {
     world.answer = () => listed([note("a/Uno.md"), note("Due.md")]);
   });
 
+  it("sotto il foglio la cartella della nota attiva, con l'icona; in cima al vault niente", async () => {
+    world.answer = () => listed([note("Progetti/Mostra/Uno.md"), note("Due.md")]);
+    launcher.open("all");
+    const meta = document.querySelector<HTMLElement>(".launcher-preview > .launcher-preview-meta")!;
+    expect(meta.previousElementSibling?.classList.contains("launcher-preview-note")).toBe(true);
+    expect(meta.hidden).toBe(false);
+    expect(meta.querySelector(".launcher-preview-fact > span")?.textContent).toBe("Progetti › Mostra");
+    expect(meta.querySelector<SVGElement>(".launcher-preview-fact > svg")?.dataset.icon).toBe("folder");
+    press(field(), "ArrowDown");
+    expect(meta.hidden).toBe(true);
+    // Le righe non chiedono niente in più per i dati: solo la resa, dopo la pausa.
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(world.rendered).toEqual(["Due.md"]);
+  });
+
   it("un file che non è un documento non chiede una resa: il riquadro lo dice", async () => {
     world.answer = () => listed([note("R1/Stampa.pdf"), note("Due.md")]);
     launcher.open("all");

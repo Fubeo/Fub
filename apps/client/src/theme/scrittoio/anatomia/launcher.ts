@@ -27,7 +27,7 @@ export const LAUNCHER: PartAnatomy = {
     { name: "unified-close", states: [S("rest"), S("hover")], hooks: ["launcher-close"] },
     { name: "unified-modes", states: SELECTABLE, hooks: ["launcher-modes", "launcher-mode", "launcher-mode-tile"] },
     { name: "unified-rows", states: SELECTABLE, hooks: ["launcher-list", "launcher-highlight", "launcher-row", "launcher-row-icon", "launcher-row-title", "launcher-row-detail", "launcher-row-meta", "launcher-note"] },
-    { name: "unified-preview", states: REST, hooks: ["launcher-preview", "launcher-preview-sheet", "launcher-preview-page", "launcher-preview-note"] },
+    { name: "unified-preview", states: REST, hooks: ["launcher-preview", "launcher-preview-sheet", "launcher-preview-page", "launcher-preview-meta", "launcher-preview-fact", "launcher-preview-note"] },
     { name: "unified-foot", states: REST, hooks: ["launcher-foot", "launcher-status", "launcher-hints", "launcher-hint", "launcher-key"] },
     { name: "unified-panel", states: INTERACTIVE, hooks: ["launcher-panel"] },
   ],

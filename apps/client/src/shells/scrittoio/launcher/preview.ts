@@ -16,6 +16,7 @@ import { mediaKindOfId } from "../../../editors/media/media-types";
 import { renderPreview } from "../../../host/query";
 import { t } from "../../../i18n/strings";
 import { formatKindOf } from "../../../ui/format-kind";
+import { iconEl } from "../../../ui/icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { Race } from "../../../ui/race";
 import { setSanitizedHtml } from "../../../ui/sanitize";
@@ -45,6 +46,12 @@ function mediaFile(doc: string): boolean {
   return formatKindOf(doc) === null && mediaKindOfId(doc) !== "other";
 }
 
+/// La cartella di un documento, letta come una strada: «Progetti › Mostra».
+/// Vuota per un documento in cima al vault.
+export function folderOf(doc: string): string {
+  return doc.split("/").filter(Boolean).slice(0, -1).join(" › ");
+}
+
 /// Ciò che si vede e non è testo: una resa fatta solo di questo non è vuota.
 const NOT_TEXT = "img, svg, video, audio, table, hr, canvas, iframe";
 
@@ -64,7 +71,26 @@ export function createPreview(lifetime: Lifetime): Preview {
   const sheet = document.createElement("div");
   sheet.className = "launcher-preview-sheet";
   sheet.append(page);
-  element.append(sheet, note);
+  // Sotto il foglio, i dati della nota: dove sta. La data dell'ultima modifica
+  // no: il lanciatore non la riceve, e chiederla vorrebbe una domanda in più
+  // per ogni riga attiva.
+  const meta = document.createElement("div");
+  meta.className = "launcher-preview-meta";
+  meta.hidden = true;
+  const place = document.createElement("div");
+  place.className = "launcher-preview-fact";
+  const folderIcon = iconEl("folder");
+  if (folderIcon) place.append(folderIcon);
+  const folder = document.createElement("span");
+  place.append(folder);
+  meta.append(place);
+  element.append(sheet, note, meta);
+  /// I dati del documento mostrato; nessuno senza documento, o in cima al vault.
+  const describe = (doc: string | null): void => {
+    const where = doc === null ? "" : folderOf(doc);
+    folder.textContent = where;
+    meta.hidden = where === "";
+  };
 
   const race = new Race();
   let wanted: string | null = null;
@@ -125,6 +151,7 @@ export function createPreview(lifetime: Lifetime): Preview {
       wanted = doc;
       settle();
       race.cancel();
+      describe(doc);
       if (doc === null || mediaFile(doc)) {
         page.replaceChildren();
         say(doc === null ? null : t("launcher.preview.file"));

@@ -138,7 +138,8 @@ niente: serve a leggere.
 
 In Tutto, quando la finestra è larga abbastanza (almeno 960 × 560 px), a destra
 dell'elenco c'è l'anteprima della nota della riga attiva, su un foglio rialzato
-in una colonna di 288 px. Segue le frecce, ma aspetta una pausa
+in una colonna di 288 px; sotto il foglio c'è la cartella della nota (niente
+per una nota in cima al vault). Segue le frecce, ma aspetta una pausa
 breve (90 ms) prima di chiedere la nota: chi scorre in fretta non fa partire una
 resa per ogni riga. Mentre la resa nuova arriva resta quella di prima; se tarda,
 si attenua. Una nota che non si riesce a rendere lo dice nel riquadro. Un file

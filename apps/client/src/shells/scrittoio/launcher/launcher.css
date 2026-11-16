@@ -130,16 +130,42 @@
   flex-direction: column;
   overflow: hidden;
 }
-/* Il foglio della resa: non più alto di ciò che il riquadro mostra, e
-   vuoto non si vede (la frase del riquadro dice perché). */
+/* Il foglio della resa: non più alto di ciò che il riquadro mostra, e cede
+   lui il posto ai dati sotto, che restano sempre interi; vuoto non si vede
+   (la frase del riquadro dice perché). */
 .launcher-preview-sheet {
   position: relative;
-  flex: none;
+  flex: 0 1 auto;
+  min-height: 0;
   box-sizing: border-box;
   overflow: hidden;
 }
 .launcher-preview-sheet:has(> .launcher-preview-page:empty) {
   display: none;
+}
+/* I dati sotto il foglio: uno per riga, l'icona davanti, e un percorso lungo
+   si tronca invece di uscire dal riquadro. */
+.launcher-preview-meta {
+  flex: none;
+  display: grid;
+  min-width: 0;
+}
+.launcher-preview-meta[hidden] {
+  display: none;
+}
+.launcher-preview-fact {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.launcher-preview-fact > svg {
+  flex: none;
+}
+.launcher-preview-fact > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .launcher-preview[hidden] {
   display: none;

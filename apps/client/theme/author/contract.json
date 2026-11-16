@@ -1715,6 +1715,8 @@
     "launcher-preview",
     "launcher-preview-sheet",
     "launcher-preview-page",
+    "launcher-preview-meta",
+    "launcher-preview-fact",
     "launcher-preview-note",
     "launcher-foot",
     "launcher-status",
@@ -3577,6 +3579,8 @@
     "launcher-preview": "cornice",
     "launcher-preview-sheet": "cornice",
     "launcher-preview-page": "cornice",
+    "launcher-preview-meta": "cornice",
+    "launcher-preview-fact": "cornice",
     "launcher-preview-note": "cornice",
     "launcher-foot": "cornice",
     "launcher-status": "cornice",
@@ -8075,6 +8079,8 @@
         "launcher-preview",
         "launcher-preview-sheet",
         "launcher-preview-page",
+        "launcher-preview-meta",
+        "launcher-preview-fact",
         "launcher-preview-note"
       ],
       "states": [
@@ -10035,7 +10041,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1860,
+    "hooks": 1862,
     "state_names": 7,
     "assigned_states": 879,
     "components": 258,
