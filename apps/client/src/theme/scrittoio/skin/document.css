@@ -1116,8 +1116,8 @@ button.cm-fub-page-icon:focus-visible {
   height: 24px;
   padding: 0 var(--space-4) 0 var(--space-1);
   border-radius: var(--radius-pill);
-  background: var(--sheet-2);
-  box-shadow: inset 0 0 0 1px var(--border);
+  background: var(--doc-fill-soft);
+  box-shadow: inset 0 0 0 1px var(--doc-rule-soft);
   color: var(--doc-fg);
   font-size: 12.5px;
   font-weight: var(--weight-medium);
@@ -1493,15 +1493,17 @@ button.cm-fub-page-icon:focus-visible {
   line-height: var(--leading-normal);
 }
 /* La riga dei dati chiude la testata, con un filo che la stacca dal testo.
-   Interlinea intera e dispari: le icone di 15 px e le etichette cadono su
-   pixel interi, e il testo sotto la testata non parte da mezzo pixel. */
+   Le misure di `.facts` del prototipo (12.5/1.4), nei colori della carta.
+   L'altezza non intera della riga non sposta le maniglie: CodeMirror misura
+   la testata col suo riquadro, e i margini restano dentro (`flow-root`). */
 .cm-fub-page > .note-facts {
   gap: var(--space-2) var(--space-6);
   padding-bottom: 18px;
   margin-bottom: 22px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--doc-rule-soft);
+  color: var(--doc-gutter-fg);
   font-size: 12.5px;
-  line-height: 19px;
+  line-height: 1.4;
 }
 /* Ogni dato ha la misura di `.facts button` del prototipo: il margine
    negativo rende il riquadro più largo del testo senza spostarlo. Il gruppo
