@@ -21,15 +21,18 @@ function declarations(selector: string): Record<string, string> {
 }
 
 describe("la griglia larga scorre sotto i numeri delle righe", () => {
-  it("numeri e angolo stanno fermi a sinistra, sopra le celle, col fondo del foglio", () => {
+  it("numeri e angolo stanno fermi a sinistra, sopra le celle, col fondo del foglio solo a griglia scorsa", () => {
     for (const part of ["tb-rowhead", "tb-corner"]) {
       const rule = declarations(`.cm-editor .cm-content .tb-grid .${part}`);
       expect(rule.position, part).toBe("sticky");
       expect(rule.left, part).toBe("0");
       expect(rule["z-index"], part).toBe("3");
-      expect(rule.background, part).toBe("var(--doc-bg)");
+      // A inizio corsa trasparenti come nel prototipo (`.gr-num`): sotto non
+      // passa niente.
+      expect(rule.background, part).toBe("transparent");
       // Nascosti con l'opacità perderebbero anche il fondo che copre.
       expect(rule.opacity, part).toBe("1");
+      expect(declarations(`.cm-editor .cm-content .tb-grid[data-scrolled] .${part}`).background, part).toBe("var(--doc-bg)");
     }
   });
 

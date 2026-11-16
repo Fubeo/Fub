@@ -628,7 +628,6 @@ export const PEZZI = [
   {
     id: "tabella.intestazione",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr tr:first-child td:nth-child(2)",
     app: '.tb-grid .tb-cell.tb-head[data-col="0"]',
@@ -637,7 +636,6 @@ export const PEZZI = [
   {
     id: "tabella.cella",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr tr:nth-child(2) td:nth-child(2)",
     app: '.tb-grid .tb-cell[data-row="1"][data-col="1"]',
@@ -646,7 +644,6 @@ export const PEZZI = [
   {
     id: "tabella.lettera",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr-let span:not(.on)",
     app: ".tb-grid .tb-letter:not(.is-selected)",
@@ -655,7 +652,6 @@ export const PEZZI = [
   {
     id: "tabella.lettera-scelta",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr-let span.on",
     app: ".tb-grid .tb-letter.is-selected",
@@ -665,7 +661,6 @@ export const PEZZI = [
   {
     id: "tabella.lettera-scelta-fondo",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr-let span.on",
     app: ".tb-grid .tb-letter.is-selected::before",
@@ -674,7 +669,6 @@ export const PEZZI = [
   {
     id: "tabella.numero",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr-num span:not(.on)",
     app: ".tb-grid .tb-rowhead:not(.is-selected)",
@@ -683,7 +677,6 @@ export const PEZZI = [
   {
     id: "tabella.numero-scelto",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr-num span.on",
     app: ".tb-grid .tb-rowhead.is-selected",
@@ -692,7 +685,6 @@ export const PEZZI = [
   {
     id: "tabella.numero-scelto-fondo",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr-num span.on",
     app: ".tb-grid .tb-rowhead.is-selected::before",
@@ -701,7 +693,6 @@ export const PEZZI = [
   {
     id: "tabella.riempi",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".tg-fill",
     app: ".tb-grid .tb-fill",
@@ -710,7 +701,6 @@ export const PEZZI = [
   {
     id: "tabella.aggiungi-riga",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".tg-add.row",
     app: '.tb-add[data-add="row"]',
@@ -719,7 +709,6 @@ export const PEZZI = [
   {
     id: "tabella.aggiungi-colonna",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".tg-add.col",
     app: '.tb-add[data-add="column"]',
@@ -728,7 +717,6 @@ export const PEZZI = [
   {
     id: "somma.valore",
     vista: "somma",
-    attende: "#432",
     prototipo: "#band-words b",
     app: ".status-sum-part[data-lead] > .status-sum-value",
     proprieta: ["font", "color"],

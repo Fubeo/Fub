@@ -132,16 +132,22 @@
 /* Una tabella più larga della colonna scorre di lato dentro la griglia: le
    lettere scorrono con le loro colonne, i numeri delle righe (e l'angolo)
    restano fermi nel margine e coprono le celle che ci passano sotto, che si
-   tagliano lì come in Lettura al bordo dell'involucro. Per coprire serve il
-   fondo del foglio, sempre: a riposo i numeri si nascondono col colore, non
-   con l'opacità della `table-widget.ts` che svuoterebbe anche il fondo. */
+   tagliano lì come in Lettura al bordo dell'involucro. A riposo i numeri si
+   nascondono col colore, non con l'opacità della `table-widget.ts` che
+   svuoterebbe anche il fondo che copre. */
 .cm-editor .cm-content .tb-grid .tb-corner,
 .cm-editor .cm-content .tb-grid .tb-rowhead {
   position: sticky;
   left: 0;
   z-index: 3;
-  background: var(--doc-bg);
   opacity: 1;
+}
+/* Per coprire serve il fondo del foglio, ma solo con la griglia scorsa
+   (`data-scrolled`, dalla cornice): a inizio corsa sotto non passa niente, e
+   i numeri restano trasparenti come nel prototipo. */
+.cm-editor .cm-content .tb-grid[data-scrolled] .tb-corner,
+.cm-editor .cm-content .tb-grid[data-scrolled] .tb-rowhead {
+  background: var(--doc-bg);
 }
 /* Il fondo che copre è squadrato: l'angolo arrotondato che `document.css`
    dà alla prima cella della prima e dell'ultima riga della tabella qui
@@ -151,7 +157,7 @@
   border-radius: 0;
 }
 /* A riposo, senza fuoco nella griglia: il numero e il suo fondo arrotondato
-   non si vedono, ma il fondo del foglio resta a coprire. */
+   non si vedono, ma il fondo del foglio della griglia scorsa resta a coprire. */
 .cm-editor .cm-content .tb-grid:not(:focus-within) .tb-corner,
 .cm-editor .cm-content .tb-grid:not(:focus-within) .tb-rowhead {
   color: transparent;

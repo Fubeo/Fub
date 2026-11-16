@@ -19,7 +19,8 @@ e i numeri delle righe; la prima riga è l'intestazione della tabella. In tutte
 e due la tabella sta in una cornice arrotondata, con un filo fra le celle,
 riempie la colonna del testo e non va a capo nelle celle: quando il contenuto
 non ci sta, scorre in orizzontale (in Live i numeri delle righe restano fermi
-nel margine). La griglia non è una
+nel margine e, solo con la griglia scorsa, prendono il fondo del foglio per
+coprire le celle che passano sotto). La griglia non è una
 fermata del Tab: ci si entra dal testo con le frecce, come in una riga. Sulle
 celle il puntatore resta la freccia.
 

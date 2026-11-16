@@ -140,6 +140,19 @@ describe("la cornice della Tabella", () => {
     expect(cell(1, 1).textContent).toBe("10");
   });
 
+  it("la griglia scorsa di lato lo dice con data-scrolled, e lo toglie tornata a inizio corsa", () => {
+    const { grid } = mount(ROWS);
+    const scroll = (left: number) => {
+      grid.scrollLeft = left;
+      grid.dispatchEvent(new Event("scroll"));
+    };
+    expect(grid.hasAttribute("data-scrolled")).toBe(false);
+    scroll(40);
+    expect(grid.hasAttribute("data-scrolled")).toBe(true);
+    scroll(0);
+    expect(grid.hasAttribute("data-scrolled")).toBe(false);
+  });
+
   it("il menu nasce dalle capacità: senza unire non ci sono le celle unite", () => {
     const { frame } = mount(ROWS);
     const ids = frame.menu().map((entry) => entry.id);

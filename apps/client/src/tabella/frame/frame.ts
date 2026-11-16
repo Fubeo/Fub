@@ -244,6 +244,12 @@ export class TableFrame {
       this.#placeOverlays();
     });
     this.#life.listen(this.#grid, "focusout", () => queueMicrotask(() => this.#placeOverlays()));
+    // La griglia scorsa di lato lo dice con `data-scrolled`: la pelle della
+    // Live dà il fondo del foglio ai numeri delle righe fermi a sinistra solo
+    // allora, quando le celle ci passano sotto. A inizio corsa sotto non c'è
+    // niente da coprire, e i numeri restano trasparenti come nel prototipo.
+    // L'attributo cambia solo quando si passa da zero.
+    this.#life.listen(this.#grid, "scroll", () => this.#grid.toggleAttribute("data-scrolled", this.#grid.scrollLeft !== 0), { passive: true });
     this.#life.listen(this.#grid, "copy", (event) => this.#copy(event, false));
     this.#life.listen(this.#grid, "cut", (event) => this.#copy(event, true));
     this.#life.listen(this.#grid, "paste", (event) => this.#paste(event));
