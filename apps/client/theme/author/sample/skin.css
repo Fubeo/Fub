@@ -8631,6 +8631,36 @@ button.cm-fub-page-icon:focus-visible {
 .cm-editor .cm-content .tb-grid .tb-rowhead.is-selected::before {
   background: var(--accent-wash);
 }
+/* Una tabella più larga della colonna scorre di lato dentro la griglia: le
+   lettere scorrono con le loro colonne, i numeri delle righe (e l'angolo)
+   restano fermi nel margine e coprono le celle che ci passano sotto, che si
+   tagliano lì come in Lettura al bordo dell'involucro. Per coprire serve il
+   fondo del foglio, sempre: a riposo i numeri si nascondono col colore, non
+   con l'opacità della `table-widget.ts` che svuoterebbe anche il fondo. */
+.cm-editor .cm-content .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-grid .tb-rowhead {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--doc-bg);
+  opacity: 1;
+}
+/* Il fondo che copre è squadrato: l'angolo arrotondato che `document.css`
+   dà alla prima cella della prima e dell'ultima riga della tabella qui
+   lascerebbe vedere un filo della cella che passa sotto. */
+.cm-editor .cm-content .tb-frame .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-frame .tb-grid .tb-rowhead {
+  border-radius: 0;
+}
+/* A riposo, senza fuoco nella griglia: il numero e il suo fondo arrotondato
+   non si vedono, ma il fondo del foglio resta a coprire. */
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-corner,
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-rowhead {
+  color: transparent;
+}
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-rowhead::before {
+  visibility: hidden;
+}
 /* Mentre si trascinano le intestazioni scelte il puntatore dice che si
    sposta qualcosa, e una linea d'accento segna dove arriverà. */
 .cm-editor .cm-content .tb-grid.is-moving-lines,
