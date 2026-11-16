@@ -179,7 +179,7 @@ async function openByName(session, name, text, mark = null, timeoutMs = 60_000) 
   // L'elenco deve avere il risultato prima di Invio: si aspetta la prima voce.
   await session.waitFor(`return (document.querySelector(${JSON.stringify(PICKER_FIRST)})?.textContent ?? '').includes(arguments[0])`, [name], timeoutMs);
   if (mark) {
-    await session.execute("window.__fubWait = window.__fubProbe.waitFor(arguments[0], arguments[1], 15000, arguments[2]); return true;", [mark, ".pane.focus .cm-content", text]);
+    await session.execute("window.__fubWait = window.__fubProbe.waitFor(arguments[0], arguments[1], 15000, arguments[2]); return true;", [mark, ".pane.focus .pane-editor .cm-content", text]);
   }
   await session.keys(ENTER);
   if (mark) {
@@ -356,7 +356,7 @@ const count = (session, css) => session.execute("return document.querySelectorAl
 async function clickVisibleLine(session) {
   const at = await session.execute(`
     const top = 160, bottom = innerHeight - 40;
-    const line = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].find((l) => {
+    const line = [...document.querySelectorAll('.pane.focus .pane-editor .cm-content > .cm-line')].find((l) => {
       const r = l.getBoundingClientRect();
       return r.top >= top && r.bottom <= bottom && r.width > 0;
     });
@@ -931,14 +931,14 @@ const SCENARIOS = {
   /// ritorno (N13).
   async S7(session) {
     await openByName(session, "Blocchi", "Una nota a blocchi");
-    await session.click(".pane.focus .cm-content");
+    await session.click(".pane.focus .pane-editor .cm-content");
     await chord2(session, CTRL, SHIFT, "b");
-    await session.waitFor("return !!document.querySelector('.pane.focus .cm-fub-block-handles')", [], 30_000);
+    await session.waitFor("return !!document.querySelector('.pane.focus .pane-editor .cm-fub-block-handles')", [], 30_000);
     // La maniglia compare sul blocco sotto il puntatore: la riga più vicina
     // al centro della finestra fra quelle che si vedono intere. CodeMirror
     // disegna anche righe fuori vista, e un puntatore mandato lì è «move
     // target out of bounds».
-    const line = await session.execute("const mid = innerHeight / 2; const seen = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].filter((l) => l.textContent.startsWith('Blocco')).map((l) => l.getBoundingClientRect()).filter((r) => r.top >= 0 && r.bottom <= innerHeight && r.left + 40 < innerWidth); seen.sort((a, b) => Math.abs(a.top - mid) - Math.abs(b.top - mid)); const r = seen[0]; return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;");
+    const line = await session.execute("const mid = innerHeight / 2; const seen = [...document.querySelectorAll('.pane.focus .pane-editor .cm-content > .cm-line')].filter((l) => l.textContent.startsWith('Blocco')).map((l) => l.getBoundingClientRect()).filter((r) => r.top >= 0 && r.bottom <= innerHeight && r.left + 40 < innerWidth); seen.sort((a, b) => Math.abs(a.top - mid) - Math.abs(b.top - mid)); const r = seen[0]; return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;");
     if (!line) throw new Error("nessuna riga di blocco in vista");
     await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [{ type: "pointerMove", x: line.x, y: line.y, duration: 0, origin: "viewport" }] }]);
     // La maniglia sta sul blocco sotto il puntatore, o su quello del cursore
@@ -946,14 +946,14 @@ const SCENARIOS = {
     // muove (la WebKitGTK del runner sotto Xvfb): va bene tutte e due, perché
     // il trascinamento parte dalla maniglia dove si vede.
     try {
-      await session.waitFor("const h = document.querySelector('.pane.focus .cm-fub-block-handles'); return !!h && !h.hidden;", [], 10_000);
+      await session.waitFor("const h = document.querySelector('.pane.focus .pane-editor .cm-fub-block-handles'); return !!h && !h.hidden;", [], 10_000);
     } catch (error) {
       // Che cosa vedeva la pagina: senza, il referto dice soltanto che
       // l'attesa è scaduta.
-      const seen = await session.execute("const h = document.querySelector('.pane.focus .cm-fub-block-handles'); const a = document.activeElement; return JSON.stringify({ handles: !!h, hidden: h?.hidden ?? null, active: h?.dataset.active ?? null, hover: matchMedia('(hover: hover)').matches, focus: a ? a.className || a.tagName : null });");
+      const seen = await session.execute("const h = document.querySelector('.pane.focus .pane-editor .cm-fub-block-handles'); const a = document.activeElement; return JSON.stringify({ handles: !!h, hidden: h?.hidden ?? null, active: h?.dataset.active ?? null, hover: matchMedia('(hover: hover)').matches, focus: a ? a.className || a.tagName : null });");
       throw new Error(`${error.message} — ${seen}`);
     }
-    const grip = await centerOf(session, ".pane.focus .cm-fub-block-grip");
+    const grip = await centerOf(session, ".pane.focus .pane-editor .cm-fub-block-grip");
     const height = await session.execute("return innerHeight;");
     if (!grip || grip.y < 0 || grip.y > height) throw new Error(`la maniglia è fuori dalla finestra: ${JSON.stringify(grip)}`);
     // Su e giù di 160 px, o meno se la maniglia è vicina a un bordo.
@@ -969,7 +969,7 @@ const SCENARIOS = {
     await session.releaseActions();
     await pause(500);
     // Il cursore su un paragrafo in vista, non su una riga vuota.
-    const text = await session.execute("const l = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].find((l) => { const r = l.getBoundingClientRect(); return / un paragrafo /.test(l.textContent) && r.top > 100 && r.bottom < innerHeight; }); const r = l?.getBoundingClientRect(); return r ? { x: Math.round(Math.min(r.right - 8, innerWidth - 8)), y: Math.round(r.top + r.height / 2) } : null;");
+    const text = await session.execute("const l = [...document.querySelectorAll('.pane.focus .pane-editor .cm-content > .cm-line')].find((l) => { const r = l.getBoundingClientRect(); return / un paragrafo /.test(l.textContent) && r.top > 100 && r.bottom < innerHeight; }); const r = l?.getBoundingClientRect(); return r ? { x: Math.round(Math.min(r.right - 8, innerWidth - 8)), y: Math.round(r.top + r.height / 2) } : null;");
     if (!text) throw new Error("nessun paragrafo in vista");
     await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
       { type: "pointerMove", x: text.x, y: text.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
