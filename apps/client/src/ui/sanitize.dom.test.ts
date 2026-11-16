@@ -139,6 +139,24 @@ describe("le immagini del vault restano inerti", () => {
   });
 });
 
+describe("lo style ammesso sotto la CSP", () => {
+  it("l'allineamento passa da element.style; il resto cade", async () => {
+    const { sanitizeFragment } = await import("./sanitize");
+    // La CSP dell'app (`style-src-attr 'none'`) rifiuta un `style` scritto
+    // come attributo: nella WebView la cella resterebbe a sinistra. Che il
+    // sanitizzatore non scriva l'attributo lo tiene `check-inline-styles.mjs`;
+    // qui si guarda il risultato, che happy-dom scrive come lo serializza il
+    // CSSOM.
+    const fragment = sanitizeFragment(
+      '<table><tr><td style="text-align: right">a</td><th style="text-align:center;">b</th>' +
+        '<td style="position:fixed;top:0">c</td></tr></table>',
+    );
+    const cells = Array.from(fragment.querySelectorAll<HTMLTableCellElement>("td, th"));
+    expect(cells.map((cell) => cell.style.textAlign)).toEqual(["right", "center", ""]);
+    expect(cells[2]!.hasAttribute("style")).toBe(false);
+  });
+});
+
 describe("l'HTML scritto nella nota", () => {
   it("conserva il colore e la sottolineatura, non il resto delle classi né lo stile", async () => {
     const { sanitizeMarkdownHtml } = await import("./sanitize");
@@ -150,7 +168,7 @@ describe("l'HTML scritto nella nota", () => {
     ));
     expect(holder.innerHTML).toBe(
       '<span class="fub-color-red">a</span><span>b</span><mark class="fub-bg-yellow">c</mark>' +
-        '<u>d</u><table><tbody><tr><td style="text-align:center">e</td></tr></tbody></table>',
+        '<u>d</u><table><tbody><tr><td style="text-align: center;">e</td></tr></tbody></table>',
     );
   });
 });
