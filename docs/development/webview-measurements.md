@@ -39,16 +39,19 @@ ascolta niente e non chiede fotogrammi.
 | S5 | tratto di penna di 3 s su un disegno di 2.000 tracciati | massimo fra fotogrammi |
 | S6 | avvio a freddo fino alla prima nota | ms |
 | S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
-| S8 | la penna sulla lavagna: dieci tratti da 300 ms sopra una scheda con una tabella di 100 × 100 celle, su una lavagna con un foglio `.xlsx` di 100 × 100 celle e 2.000 tratti già scritti; poi la scheda della tabella spostata coi suoi tratti per 2 s | massimo fra fotogrammi a penna (obiettivo 33 ms) e allo spostamento; path asciutti; sha256 del `.xlsx` prima e dopo |
+| S8 | la penna sulla lavagna: dieci tratti da 300 ms sopra una scheda con una tabella di 100 × 100 celle, su una lavagna con un foglio `.xlsx` di 100 × 100 celle e 2.000 tratti già scritti; poi la scheda della tabella spostata coi suoi tratti per 2 s | massimo fra fotogrammi a penna (obiettivo 2 periodi, 33 ms a 60 Hz) e allo spostamento; path asciutti; sha256 del `.xlsx` prima e dopo |
 | S9 | la lavagna di S3 con venti fogli `.xlsx` vivi, la vista sul loro blocco a zoom 0,5: spostamento e zoom come S3; poi una nota di quella lavagna in scrittura, 200 caratteri come S1 (`S9.keyToPaint`) | numero dei fogli vivi; p95 e massimo fra fotogrammi; p95 tasto → fotogramma |
 | R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
 | T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
 | I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
 | L1 | il nucleo della lavagna in WebAssembly: il modulo degli asset compilato con la CSP dell'app, poi venti aperture e duecento spostamenti di una scheda su una lavagna di 50 e una di 2.000 schede, cinque giri | istanza, prima apertura e primo commit del primo giro; p95 come mediana dei giri, ms |
 | C1 | i profili dei componenti: «Solo note» e poi «Tutto» applicati con `components_apply`, l'app riavviata sulla nota lunga, poi un'altra nota aperta | avvio a freddo in ms, chunk scaricati all'avvio, chunk dei componenti spegnibili arrivati (zero in tutti e due i profili) |
+| F1 | rAF a vuoto: 5 s di `requestAnimationFrame` sulla shell ferma, a indice pronto | mediana fra fotogrammi confrontata col periodo dello schermo; tetto del motore; percorso di disegno |
+| F2 | quiete: 20 s senza gesti | richieste di fotogramma della pagina; CPU dei processi della WebView, in % di un core |
+| F3 | thread principale per gesto: la barra laterale dal comando (Ctrl+Alt+B, sei volte), il cambio scheda fra la nota lunga e una corta (Ctrl+PagGiù, otto volte), una cartella di trenta note aperta e chiusa nell'albero (otto volte) | per gesto, la mediana delle ripetizioni del tempo di thread principale bloccato; fotogrammi persi e CPU nel referto |
 
 S9 misura anche il tasto fino al fotogramma in una scheda di nota della stessa
-lavagna (`S9.keyToPaint`, obiettivo 16,7 ms): la scheda va a zoom 0,5 al centro
+lavagna (`S9.keyToPaint`, obiettivo 2 periodi dello schermo): la scheda va a zoom 0,5 al centro
 della vista, si sceglie con un clic e si entra con Invio, si scrive un carattere
 che non si misura (il montaggio dell'editor) e poi i 200 caratteri di S1, con la
 sonda accesa. Lo fa in un'app nuova: il pan col pulsante di mezzo dei gesti di S3
@@ -176,7 +179,7 @@ fase «ripetizione di D», e `S8.penFrameGap.*` non lo conta (lo prende dai
 fotogrammi di `phases` senza quelli); il referto lo scrive nelle note. Lo
 spostamento parte dalla testata della scheda del foglio, va avanti e indietro e la
 posa 60 px più in basso. Il referto dà `S8.penFrameGap.max` (l'obiettivo
-di N4, 33 ms, solo fra i `targets`), `S8.keyLatency.p50` (dal tasto D al
+di N4, 2 periodi dello schermo, cioè 33 ms a 60 Hz, solo fra i `targets`), `S8.keyLatency.p50` (dal tasto D al
 secondo fotogramma dopo, come la latenza dei tasti della sonda: almeno un
 fotogramma intero), `S8.moveFrameGap.max` senza tetto, i
 path asciutti prima e dopo (`S8.dryPaths.*`) e lo sha256 di `voti.xlsx`
@@ -230,6 +233,69 @@ lento sposta tutti i giri e la mediana con loro. Il referto tiene i giri in
 gira in Node, senza app:
 `node bench/webview/canvas.mjs` da `apps/client/`, dopo `npm run build`.
 
+## Le soglie in periodi
+
+Il traguardo è la frequenza piena dello schermo, non i 60 Hz. Per questo
+una soglia di `targets` in `budgets.json` (versione 2) può valere
+`{ "periodi": k }`: k volte il periodo P = 1000/Hz dello schermo dove gira
+la finestra. Le regole:
+
+| valore | soglia |
+|---|---|
+| fotogrammi, p95 (`S3`, `S9`) | 1 P |
+| fotogrammi, massimo (`S3`, `S5`, `S7`, `S8`, `S9`) | 2 P |
+| tasto a schermo, p95 (`S1`, `S9`) | 2 P |
+| thread principale bloccato per gesto (`F3`) | 1 P |
+| rAF a vuoto, mediana (`F1`) | 1,1 P |
+
+A 180 Hz il tasto a schermo deve stare in 11,1 ms, a 60 Hz in 33,3. Le
+soglie di `ci` restano in ms: sono la soglia di peggioramento del runner
+senza scheda grafica e non dipendono dallo schermo. Gli altri valori
+(`S2`, `S6`, `I1`, `R1`, `C1`, `F2`) restano in ms o in unità loro.
+
+**Da dove viene P.** Il banco la legge prima di avviare l'app
+(`bench/webview/refresh.mjs`), con l'ambiente che avrà l'app:
+
+1. `--hz=N` sulla riga di comando, se si vuole fissarla;
+2. su una sessione Wayland, l'uscita a fuoco del compositor, dove si apre
+   la finestra nuova: niri (`niri msg --json focused-output`), sway,
+   Hyprland;
+3. GDK, lo stesso `gdk_monitor_get_refresh_rate` dell'host, letto con
+   `python3` e PyGObject: vale con un solo schermo, con tutti gli schermi
+   alla stessa frequenza o col primario. Più schermi a frequenze diverse e
+   nessun primario non danno una scelta, e il banco chiede `--hz`;
+4. altrimenti 60 Hz. Sotto Xvfb GDK dà 0 Hz: P resta 16,67 ms, come nel job
+   `webview` della CI.
+
+L'host non ha una porta generica per dire la frequenza, e una IPC nuova
+solo per il banco non serve: la legge il banco. Il referto la scrive in
+`display`, con la fonte.
+
+**Il tetto del motore.** WebKitGTK 2.54 su Linux disegna al più a 60 Hz
+(62,5, col suo timer di 16 ms) qualunque sia lo schermo, quando il vblank
+DRM non funziona. Lo dice F1, che gira prima di ogni scenario con una
+soglia in periodi (il banco lo aggiunge da sé a `--only`). La regola: se
+P < 16 ms e la mediana del rAF a vuoto sta fra 15 e 18,5 ms, il tetto c'è,
+e le soglie in periodi valgono a 60 Hz (P efficace 16,67 ms) finché il
+tetto c'è. Così uno scenario non diventa rosso per colpa del motore. Il
+referto lo scrive in `cap`, e il banco stampa «tetto del motore: le soglie
+in periodi valgono a 60 Hz finché il tetto c'è». Una mediana lontana sia
+da P sia da 60 Hz non è il tetto: P efficace resta P, e F1 è rosso.
+
+**Il percorso di disegno e il carico.** F1 scrive nel referto il renderer
+di WebGL (`render.renderer`, per esempio «llvmpipe» quando disegna la CPU)
+e le librerie GL che i processi della WebView hanno caricato
+(`render.libraries`). Ogni scenario ha nel referto il carico della macchina
+prima e dopo (`load`): con un carico alto la misura è rumorosa.
+
+**F3 e il thread principale.** WebKit non ha i long task. F3 tiene acceso
+un anello di `setTimeout(0)`: un buco fra due giri oltre 5 ms (il timer
+annidato si ferma a 4 ms) è tempo in cui il thread principale non ha potuto
+eseguire niente. Per ogni ripetizione del gesto vale il buco più lungo, e
+la soglia guarda la mediana delle ripetizioni; il referto tiene ogni
+ripetizione, il massimo e la somma dei buchi oltre 50 ms. Se il motore ha i
+long task, il referto li tiene accanto.
+
 ## Linux, con un comando solo
 
 Dalla radice del repository:
@@ -278,6 +344,9 @@ variabile tolta) il banco si ferma, come dice la sezione che segue.
      `--x11` toglie `WAYLAND_DISPLAY` al driver e mette `GDK_BACKEND=x11`, e il
      referto scrive `x11` come sessione;
    - per misurare sullo schermo vero, su una sessione Wayland, `--wayland`.
+
+   Sullo schermo vero, con le soglie in periodi:
+   `npm run bench:webview -- --budgets=targets --wayland --native-driver=/usr/bin/WebKitWebDriver`.
 
    Il job `webview` della CI non ha `WAYLAND_DISPLAY` e non cambia. La guardia
    è in `bench/webview/display.mjs`, con la sua prova in

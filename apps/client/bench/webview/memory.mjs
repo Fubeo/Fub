@@ -16,8 +16,9 @@ function stat(pid) {
     // Il nome sta fra parentesi e può contenerne: si taglia sull'ultima.
     const close = raw.lastIndexOf(")");
     const comm = raw.slice(raw.indexOf("(") + 1, close);
-    const ppid = Number(raw.slice(close + 2).split(" ")[1]);
-    return { pid, comm, ppid };
+    const fields = raw.slice(close + 2).split(" ");
+    // utime e stime, i campi 14 e 15 di proc(5), in tick di `CLK_TCK`.
+    return { pid, comm, ppid: Number(fields[1]), ticks: Number(fields[11]) + Number(fields[12]) };
   } catch {
     return null;
   }
@@ -43,8 +44,9 @@ function group(comm) {
   return "altro";
 }
 
-/// Una lettura: i discendenti di `root`, uno per uno e raggruppati, in MiB.
-export function sample(root) {
+/// I discendenti di `root`, tolti i driver: `{ pid, comm, ppid, ticks }`.
+/// Soltanto Linux; altrove `null`.
+export function descendants(root) {
   if (process.platform !== "linux") return null;
   const all = readdirSync("/proc").filter((name) => /^\d+$/.test(name)).map(Number).map(stat).filter(Boolean);
   const children = new Map();
@@ -52,14 +54,49 @@ export function sample(root) {
     if (!children.has(proc.ppid)) children.set(proc.ppid, []);
     children.get(proc.ppid).push(proc);
   }
-  const seen = [];
+  const found = [];
   const queue = [...(children.get(root) ?? [])];
   while (queue.length) {
     const proc = queue.shift();
     queue.push(...(children.get(proc.pid) ?? []));
-    if (DRIVERS.has(proc.comm)) continue;
+    if (!DRIVERS.has(proc.comm)) found.push({ ...proc, group: group(proc.comm) });
+  }
+  return found;
+}
+
+/// I tick di CPU (utente più sistema) dei discendenti di `root`, per processo:
+/// due letture danno la CPU con `cpuPercent`. `null` fuori da Linux.
+export function cpuTicks(root) {
+  const found = descendants(root);
+  return found && found.map(({ pid, comm, group, ticks }) => ({ pid, comm, group, ticks }));
+}
+
+/// `CLK_TCK` di Linux: 100 su ogni architettura che Fub costruisce.
+const CLK_TCK = 100;
+
+/// La CPU fra due letture di `cpuTicks` lontane `ms`, per gruppo, in % di un
+/// core (200 vuol dire due core pieni). Un processo nato in mezzo conta da
+/// zero. `null` se manca una lettura.
+export function cpuPercent(before, after, ms) {
+  if (!before || !after || !(ms > 0)) return null;
+  const start = new Map(before.map((proc) => [proc.pid, proc.ticks]));
+  const groups = {};
+  for (const proc of after) {
+    const used = proc.ticks - (start.get(proc.pid) ?? 0);
+    groups[proc.group] = (groups[proc.group] ?? 0) + used;
+  }
+  for (const key of Object.keys(groups)) groups[key] = Math.round(((groups[key] * (1000 / CLK_TCK)) / ms) * 1000) / 10;
+  return groups;
+}
+
+/// Una lettura: i discendenti di `root`, uno per uno e raggruppati, in MiB.
+export function sample(root) {
+  const found = descendants(root);
+  if (!found) return null;
+  const seen = [];
+  for (const proc of found) {
     const mem = rollup(proc.pid);
-    if (mem) seen.push({ ...proc, ...mem });
+    if (mem) seen.push({ pid: proc.pid, comm: proc.comm, ppid: proc.ppid, ...mem });
   }
   const mib = (kib) => Math.round((kib / 1024) * 10) / 10;
   const groups = {};
