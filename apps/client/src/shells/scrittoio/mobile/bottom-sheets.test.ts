@@ -61,6 +61,7 @@ function shell(): () => void {
   return setSidePanelController({
     visible: (side) => !panel(side).hidden,
     reveal: () => {},
+    dismiss: close,
     toggle: (side) => {
       toggles.push(side);
       if (layout().classList.contains(OPEN[side])) {

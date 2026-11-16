@@ -10,7 +10,7 @@ Dichiara anche **66 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla
 
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
-- **cornice** (1452 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
+- **cornice** (1453 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
 - **segno** (135 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
 - **contenuto** (270 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 

@@ -2966,14 +2966,13 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overflow: auto;
 }
 
+/* La barra dei comandi è la fila del kit (`kit/options-bar.ts`): una riga
+   sola, e ciò che non ci sta va in «…» (#411). Non scorre di lato. */
 .canvas-toolbar {
-  display: flex;
   flex: none;
-  overflow-x: auto;
-  white-space: nowrap;
 }
 
-.canvas-toolbar > button {
+.canvas-toolbar-item {
   flex: none;
 }
 
@@ -3733,6 +3732,14 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overflow-wrap: anywhere;
   overscroll-behavior: contain;
 }
+/* Il taglio a riga intera (#411, `whole-lines.ts`): una scheda di testo che
+   non ci sta si ferma sotto l'ultima riga che si legge intera, e non scorre
+   (un clic la apre nel campo). La misura la scrive la tela in
+   `--canvas-card-cut`. */
+.canvas-node-text > .canvas-card-body {
+  max-height: var(--canvas-card-cut, none);
+  overflow: hidden;
+}
 
 /* D-21 (a), il titolo sopra (T39). Le schede di file e di pagina web portano
    il titolo fuori dal bordo, sopra: la scheda è tutta contenuto, e il nodo
@@ -3997,11 +4004,13 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 }
 
 /* L'ombra che dice «continua» (T22): fuori dalla scheda attiva la nota è
-   alta quanto il corpo e lo taglia; la pelle la sfuma sul fondo. Dentro, il
-   corpo scorre e l'ombra non c'è. */
+   alta quanto il corpo e lo taglia sotto l'ultima riga intera (#411,
+   `--canvas-card-cut`); la pelle la sfuma sul fondo. Dentro, il corpo scorre
+   e l'ombra non c'è. */
 .canvas-node:not([data-card-active]) > .canvas-card-body > .canvas-card-note {
   box-sizing: border-box;
   height: 100%;
+  max-height: var(--canvas-card-cut, none);
   overflow: hidden;
 }
 
