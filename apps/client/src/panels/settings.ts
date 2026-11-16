@@ -516,6 +516,18 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     if (!lifetime.closed && !panelEl.hidden) void render();
   });
   if (typeof stopSetting === "function") lifetime.add(stopSetting);
+  // Quali campi ha toccato chi scrive: solo quelli possono avere una bozza da
+  // portare oltre il ridisegno (#401).
+  lifetime.listen(bodyEl, "input", (event) => {
+    if (isDraftControl(event.target)) typedControls.add(event.target);
+  });
+  // Chromium, togliendo dal documento il campo che ha il fuoco, gli manda
+  // `blur` e con esso il `change` di una casella modificata: il ridisegno per
+  // un'altra chiave salvava così da solo il testo a metà. Quello non è un
+  // gesto di chi scrive, e la bozza resta bozza; in cattura, prima del campo.
+  lifetime.listen(bodyEl, "change", (event) => {
+    if (replacingBody) event.stopImmediatePropagation();
+  }, { capture: true });
   // Chiudere il vault mentre il pannello è aperto lascerebbe un form che parla
   // di un vault che non c'è: le impostazioni sono per-vault. Ma una scelta della
   // pagina «Componenti» che accende o spegne un formato (la lavagna) rimonta il
@@ -632,6 +644,7 @@ function close(): void {
   componentsPage?.reset();
   pendingRows.clear();
   rowErrors.clear();
+  writtenRows.clear();
   openDetails.clear();
   release = null;
   renderedTab = null;
@@ -692,11 +705,30 @@ async function render(): Promise<void> {
   // a mano dov'era, e torna in cima solo quando cambia la scheda.
   const scrollTop = scrollEl.scrollTop;
   // Il fuoco dentro il corpo resta dov'era se il suo controllo sopravvive al
-  // ridisegno (la pagina «Componenti» è sempre la stessa).
+  // ridisegno (la pagina «Componenti» è sempre la stessa). Se invece il
+  // controllo è stato ricostruito — ogni riga lo è, a ogni `setting_changed`,
+  // anche per una chiave che non è la sua — il fuoco va sul controllo nuovo
+  // della stessa riga: senza, cadeva su BODY e chi usa la tastiera ripartiva
+  // dall'inizio della pagina (A03). Solo nella stessa scheda: cambiandola, il
+  // controllo di prima non c'è più per nessuno.
   const focused = bodyEl.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
-  bodyEl.replaceChildren(...nodes);
+  const snapshot = focused ? focusSnapshot() : null;
+  // Il testo scritto e non ancora salvato passa sul controllo nuovo prima che
+  // il fuoco ci torni, così anche la selezione ritrova il suo testo (#401).
+  const drafts = takeDrafts();
+  replacingBody = true;
+  try {
+    bodyEl.replaceChildren(...nodes);
+  } finally {
+    replacingBody = false;
+  }
+  if (renderedTab === tab) restoreDrafts(drafts);
+  rememberSavedValues();
   if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
   scrollEl.scrollTop = renderedTab === tab ? scrollTop : 0;
+  if (snapshot && !focused?.isConnected && renderedTab === tab && document.activeElement === document.body) {
+    restoreFocus(snapshot);
+  }
   renderedTab = tab;
   syncToolbar();
   buildToc();
@@ -1102,6 +1134,9 @@ function renderCssSnippets(entry: SettingEntry): HTMLElement {
   blockHead(panel, entry.spec.label, t("settings.css.hint"));
   const source = document.createElement("textarea");
   source.className = "setting-code";
+  // L'id è l'identità del campo fra due ridisegni: con lui tornano il fuoco
+  // e il testo non ancora salvato (#401).
+  source.id = `setting-${CSS_SNIPPETS_KEY}`;
   source.setAttribute("aria-label", entry.spec.label);
   source.rows = 7;
   source.spellcheck = false;
@@ -1223,10 +1258,13 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
     const nameInput = document.createElement("input");
     nameInput.type = "text";
     nameInput.className = "setting-input";
+    // Gli id tengono nome e JSON non ancora usati attraverso un ridisegno (#401).
+    nameInput.id = `settings-profile-${scope}-name`;
     nameInput.placeholder = t("settings.profiles.new_name");
     nameInput.setAttribute("aria-label", t("settings.profiles.new_name"));
     const json = document.createElement("textarea");
     json.className = "setting-code";
+    json.id = `settings-profile-${scope}-json`;
     json.rows = 5;
     json.spellcheck = false;
     json.placeholder = t("settings.profiles.json_placeholder");
@@ -1241,6 +1279,10 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
         if (settingsLifetime?.closed || !box.isConnected) return;
         if (redraw) {
           feedback.textContent = t("settings.profiles.saved");
+          // Il gesto riuscito ha usato nome e JSON: il ridisegno riparte
+          // vuoto, come sempre, e non li riporta come bozza.
+          nameInput.value = "";
+          json.value = "";
           await render();
         }
       } catch (error) {
@@ -2109,6 +2151,10 @@ async function writeRow(
     });
   }
   pendingRows.delete(key);
+  // Il testo di questa riga ha avuto il suo esito: il ridisegno mostra il
+  // valore autorevole e non lo riporta come bozza (l'input provato, se è
+  // andata male, sta già sotto la riga).
+  writtenRows.add(key);
   await render();
   // Ripara solo ciò che il pending ha rotto: se nel frattempo l'utente si è
   // spostato (o il watcher ha ridisegnato per un'altra chiave), il focus
@@ -2168,18 +2214,28 @@ function focusSnapshot(): FocusSnapshot {
       focused instanceof HTMLElement
         ? focused.closest("[data-setting-key]")?.getAttribute("data-setting-key") ?? null
         : null,
-    selectionStart:
-      focused instanceof HTMLInputElement && focused.type === "text" ? focused.selectionStart : null,
-    selectionEnd:
-      focused instanceof HTMLInputElement && focused.type === "text" ? focused.selectionEnd : null,
+    selectionStart: hasTextSelection(focused) ? focused.selectionStart : null,
+    selectionEnd: hasTextSelection(focused) ? focused.selectionEnd : null,
     scrollTop: scrollEl.scrollTop,
   };
+}
+
+/// Un campo di testo o un'area: quelli la cui selezione si ritrova dopo il
+/// ridisegno.
+function hasTextSelection(el: Element | null | undefined): el is HTMLInputElement | HTMLTextAreaElement {
+  return el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && el.type === "text");
 }
 
 /// Rimette il focus sullo stesso controllo della stessa riga dopo il rebuild.
 function restoreFocus(snapshot: FocusSnapshot): void {
   scrollEl.scrollTop = snapshot.scrollTop;
-  if (snapshot.rowKey === null || snapshot.rowKey === "") return;
+  if (snapshot.rowKey === null || snapshot.rowKey === "") {
+    // Fuori da una riga (un bottone di sezione, il catalogo dei temi) vale
+    // soltanto l'id: senza, non c'è un posto sicuro dove rimettere il fuoco.
+    const own = snapshot.controlId ? bodyEl.querySelector<HTMLElement>(`[id="${snapshot.controlId}"]`) : null;
+    if (own && document.activeElement !== own) own.focus({ preventScroll: true });
+    return;
+  }
   const selector = `[data-setting-key="${snapshot.rowKey}"]`;
   const scope = bodyEl.querySelector(selector);
   // Niente `CSS.escape`: gli id contengono punti (`setting-editor.line_numbers`)
@@ -2198,8 +2254,7 @@ function restoreFocus(snapshot: FocusSnapshot): void {
     null;
   if (next && document.activeElement !== next) next.focus({ preventScroll: true });
   if (
-    next instanceof HTMLInputElement &&
-    next.type === "text" &&
+    hasTextSelection(next) &&
     snapshot.selectionStart !== null &&
     snapshot.selectionEnd !== null
   ) {
@@ -2209,6 +2264,131 @@ function restoreFocus(snapshot: FocusSnapshot): void {
       // Un tipo di input che non ammette selezione: il focus basta.
     }
   }
+}
+
+// --- le bozze dei campi (#401) ----------------------------------------------
+//
+// Ogni `setting_changed`, di qualunque chiave, ricostruisce tutte le righe col
+// valore salvato. Un campo in cui si stava scrivendo — il testo non ancora
+// confermato con Invio o uscendo, la cartella da aggiungere, il CSS — perdeva
+// così quello che c'era scritto. Qui il testo non salvato passa dal controllo
+// vecchio a quello nuovo della stessa riga, riconosciuto dal suo `id`.
+//
+// Una bozza resta una bozza: niente la salva da sola. Torna solo nella stessa
+// scheda (cambiandola, o chiudendo il pannello, la pagina di prima non c'è più
+// per nessuno, come il suo fuoco), e cade quando la sua riga ha appena avuto
+// l'esito di una scrittura (`writtenRows`): lì vale il valore autorevole, con
+// l'input provato sotto se è andata male.
+
+/// I controlli in cui si scrive del testo: le caselle, i numeri, le aree.
+function isDraftControl(target: EventTarget | null): target is HTMLInputElement | HTMLTextAreaElement {
+  if (target instanceof HTMLTextAreaElement) return true;
+  return target instanceof HTMLInputElement && DRAFT_INPUT_TYPES.has(target.type);
+}
+
+const DRAFT_INPUT_TYPES = new Set(["text", "number", "search", "url", "email"]);
+
+/// Chi scrive ha toccato questi controlli: un valore messo dal codice non è
+/// una bozza.
+const typedControls = new WeakSet<HTMLInputElement | HTMLTextAreaElement>();
+
+/// Il valore salvato che il controllo mostrava quando è stato disegnato
+/// (`saved`), e quello da cui la bozza è partita (`base`): sono diversi solo
+/// se il salvato della sua chiave è cambiato mentre si scriveva.
+const savedValues = new WeakMap<HTMLInputElement | HTMLTextAreaElement, { saved: string; base: string }>();
+
+/// Le righe la cui scrittura ha appena avuto un esito: il prossimo ridisegno
+/// non porta oltre il loro testo.
+const writtenRows = new Set<string>();
+
+/// Vero mentre il corpo si svuota: un browser che toglie il controllo col
+/// fuoco può dargli un `blur`, e quello non è un'uscita di chi scrive.
+let replacingBody = false;
+
+interface Draft {
+  id: string;
+  value: string;
+  base: string;
+}
+
+/// Il testo non salvato dei controlli di adesso, prima che il corpo cambi.
+function takeDrafts(): Draft[] {
+  const drafts: Draft[] = [];
+  for (const el of bodyEl.querySelectorAll("input, textarea")) {
+    if (!isDraftControl(el) || el.id === "" || !typedControls.has(el)) continue;
+    const state = savedValues.get(el);
+    if (!state || el.value === state.saved) continue;
+    const key = el.closest("[data-setting-key]")?.getAttribute("data-setting-key") ?? null;
+    if (key !== null && writtenRows.has(key)) continue;
+    drafts.push({ id: el.id, value: el.value, base: state.base });
+  }
+  writtenRows.clear();
+  return drafts;
+}
+
+/// Rimette ogni bozza sul controllo nuovo con lo stesso `id`.
+///
+/// Se il salvato nel frattempo è diventato proprio la bozza, non c'è più niente
+/// da portare. Se il salvato della sua chiave è cambiato da fuori mentre si
+/// scriveva, la bozza resta — cancellarla in silenzio era il difetto — e una
+/// riga sotto lo dice: chi conferma sceglie il suo testo sapendolo.
+///
+/// L'`input` sintetico rifà ciò che il controllo ricalcola mentre si scrive: il
+/// cursore accanto al numero, la diagnosi di una scorciatoia.
+function restoreDrafts(drafts: readonly Draft[]): void {
+  for (const draft of drafts) {
+    const el = bodyEl.querySelector(`[id="${draft.id}"]`);
+    if (!isDraftControl(el)) continue;
+    const saved = el.value;
+    if (saved === draft.value) continue;
+    el.value = draft.value;
+    savedValues.set(el, { saved, base: draft.base });
+    typedControls.add(el);
+    if (el instanceof HTMLInputElement) keepConfirmGesture(el);
+    if (saved !== draft.base) showSavedChanged(el);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+}
+
+/// Il valore salvato di ogni controllo appena disegnato che non porta già una
+/// bozza.
+function rememberSavedValues(): void {
+  for (const el of bodyEl.querySelectorAll("input, textarea")) {
+    if (isDraftControl(el) && !savedValues.has(el)) savedValues.set(el, { saved: el.value, base: el.value });
+  }
+}
+
+/// Un campo con la bozza rimessa dal codice si conferma ancora come prima:
+/// uscendo o con Invio. Il browser non lo sa — per lui il valore è cambiato
+/// da programma, e il `change` non partirebbe — e allora lo si manda qui, una
+/// volta sola e solo se il browser non l'ha già fatto.
+function keepConfirmGesture(el: HTMLInputElement): void {
+  let changed = false;
+  el.addEventListener("change", () => { changed = true; });
+  const settle = () => {
+    if (changed || replacingBody || !el.isConnected || el.disabled) return;
+    if (el.value === savedValues.get(el)?.saved) return;
+    changed = true;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  el.addEventListener("blur", settle);
+  // Al rilascio di Invio e non alla pressione: il `change` che il browser
+  // manda su Invio, quando lo manda, è già arrivato.
+  el.addEventListener("keyup", (event) => {
+    if (event.key === "Enter") settle();
+  });
+}
+
+/// La riga che dice che il salvato è cambiato da fuori mentre si scriveva.
+function showSavedChanged(el: HTMLInputElement | HTMLTextAreaElement): void {
+  const note = row("setting-source", t("settings.draft.saved_changed"));
+  note.id = `${el.id}-changed`;
+  note.setAttribute("role", "status");
+  const text = el.closest("[data-setting-key]")?.querySelector(".setting-text");
+  if (text) text.append(note);
+  else el.insertAdjacentElement("afterend", note);
+  const existing = el.getAttribute("aria-describedby");
+  el.setAttribute("aria-describedby", [note.id, ...(existing ? [existing] : [])].join(" "));
 }
 
 // --- la scheda delle scorciatoie (§18.2) ------------------------------------

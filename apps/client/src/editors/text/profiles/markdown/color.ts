@@ -49,7 +49,9 @@ type Wrapper = { open: { from: number; to: number }; close: { from: number; to: 
 const OPEN_BEFORE = /<(span|mark)\s+class\s*=\s*(?:"([^"]*)"|'([^']*)')\s*>$/i;
 
 function wrapperOf(state: EditorState, from: number, to: number): Wrapper | null {
-  const before = state.sliceDoc(Math.max(0, from - 120), from);
+  // Con "\n" fra le righe: la lunghezza del tag andato a capo è in posizioni
+  // anche in una nota CRLF (#394).
+  const before = state.doc.sliceString(Math.max(0, from - 120), from);
   const open = OPEN_BEFORE.exec(before);
   if (!open) return null;
   const classes = colorClasses(open[2] ?? open[3] ?? "");

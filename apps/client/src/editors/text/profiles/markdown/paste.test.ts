@@ -373,6 +373,47 @@ describe("Markdown clipboard paste", () => {
     host.remove();
   });
 
+  it("in una nota CRLF ogni incolla su più righe entra a righe vere, come in LF (#394)", async () => {
+    // HTML convertito, Markdown dichiarato con a capo LF, testo semplice
+    // lasciato a CodeMirror, e Mod-Shift-v: in CRLF lo stesso testo che in
+    // LF, il cursore allo stesso posto, e nessun a capo nudo nel file.
+    const cases: Array<[string, string, string]> = [
+      ["<table><tr><th>a</th><th>b</th></tr><tr><td>1</td><td>2</td></tr></table>", "a\tb\n1\t2", ""],
+      ["<ul><li>uno</li><li>due</li></ul>", "uno\ndue", ""],
+      ["<b>x</b>", "", "# Uno\n\ndue"],
+      ["", "uno\ndue\r\ntre", ""],
+    ];
+    const run = (doc: string, [html, plain, markdown]: [string, string, string]) => {
+      const pasted = paste(html, plain, markdown, undefined, true, doc);
+      const out = { text: pasted.engine.getDoc(), head: pasted.view.state.selection.main.head };
+      pasted.engine.destroy();
+      pasted.host.remove();
+      return out;
+    };
+    for (const each of cases) {
+      const lf = run("prima\nqui\nfine", each);
+      const crlf = run(DOC, each);
+      expect(lf.text.split("\n").length, each[0] || each[1]).toBeGreaterThan(3);
+      expect(crlf.text.replace(/\r\n/g, ""), each[0] || each[1]).not.toMatch(/[\r\n]/);
+      expect(crlf.text).toBe(lf.text.replace(/\n/g, "\r\n"));
+      expect(crlf.head).toBe(lf.head);
+    }
+    const entries = [{ types: ["text/plain"], getType: async () => new Blob(["uno\ndue"]) }];
+    const withdraw = declareClipboard(async () => {}, { write: async () => {}, read: async () => entries, supports: () => true });
+    try {
+      for (const [doc, expected] of [["prima\nqui\nfine", "prima\nuno\ndue\nfine"], [DOC, "prima\r\nuno\r\ndue\r\nfine"]] as const) {
+        const plain = paste("", "", "", undefined, false, doc);
+        expect(pastePlainText(plain.view)).toBe(true);
+        await vi.waitFor(() => expect(plain.engine.getDoc()).toBe(expected));
+        expect(plain.view.state.selection.main.head).toBe("prima\nuno\ndue".length);
+        plain.engine.destroy();
+        plain.host.remove();
+      }
+    } finally {
+      withdraw();
+    }
+  });
+
   it("replaces every selected range in one undoable paste", () => {
     const selection = EditorSelection.create([
       EditorSelection.range(0, 5), EditorSelection.range(6, 9),

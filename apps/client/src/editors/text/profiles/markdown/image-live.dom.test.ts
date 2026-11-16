@@ -66,6 +66,15 @@ describe("le regole", () => {
     expect(state.update(spec).state.doc.toString()).toBe("Prima ![a|50](b.png) dopo");
     expect(rewriteImage(state, from, to, { alt: "a" })).toBeNull();
   });
+
+  it("in una nota CRLF un alt su due righe resta su due righe, e la selezione copre l'immagine (#394)", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const state = EditorState.create({ doc: `x${nl}![a${nl}b](p.png)`, extensions: nl === "\n" ? [] : [EditorState.lineSeparator.of(nl)] });
+      const next = state.update(rewriteImage(state, 2, state.doc.length, { width: 300 })!).state;
+      expect(next.sliceDoc()).toBe(`x${nl}![a${nl}b|300](p.png)`);
+      expect(next.doc.sliceString(next.selection.main.from, next.selection.main.to)).toBe("![a\nb|300](p.png)");
+    }
+  });
 });
 
 describe("con `mai`", () => {

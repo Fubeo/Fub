@@ -47,6 +47,7 @@ import type {
 import { modeById } from "../../../core/surface-modes";
 import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine } from "../../engine";
+import { withLineBreaks } from "../../line-breaks";
 import type { CompletionSources } from "./completions";
 import { cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type SlashMenuSource } from "./slash";
 import { dailyLink } from "./completions";
@@ -1145,7 +1146,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         const blank = line.text.trim() === "";
         const at = blank ? line.from : line.to;
         const insert = blank ? "/" : "\n/";
-        view.dispatch({ changes: { from: at, to: blank ? line.to : at, insert }, selection: { anchor: at + insert.length }, userEvent: "input", scrollIntoView: true });
+        view.dispatch({ changes: { from: at, to: blank ? line.to : at, insert: withLineBreaks(view.state, insert) }, selection: { anchor: at + insert.length }, userEvent: "input", scrollIntoView: true });
         view.focus();
         return openSlashAt(view, at + insert.length - 1);
       }),

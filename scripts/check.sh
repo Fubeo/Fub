@@ -254,6 +254,7 @@ if [ "$MODE" = rapido ]; then
   fi
   if [ "$(val github)" = 1 ]; then
     run "action pin a commit" node .github/scripts/check-actions-pinned.mjs
+    run "baseline dal runner (autoprova)" node .github/scripts/baseline-dal-runner.mjs --self-test
     [ "$(val docs)" = 1 ] || run "ciclo locale = CI" bash -c 'node .github/scripts/check-locale-loop.mjs --self-test && node .github/scripts/check-locale-loop.mjs'
   fi
   if [ "$(val vendor)" = 1 ]; then vendor_guards; fi
@@ -277,6 +278,7 @@ else
   rust_guards
   vendor_guards
   run "cancello del rilascio (autoprova)" node .github/scripts/check-release-gate.mjs --self-test
+  run "baseline dal runner (autoprova)" node .github/scripts/baseline-dal-runner.mjs --self-test
   if has_target wasm32-unknown-unknown; then
     run "il contratto attraversa il confine wasm" cargo build --manifest-path tools/varco-wasm/Cargo.toml --target wasm32-unknown-unknown
   else

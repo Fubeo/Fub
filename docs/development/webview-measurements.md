@@ -44,7 +44,7 @@ ascolta niente e non chiede fotogrammi.
 | R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
 | T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
 | I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
-| L1 | il nucleo della lavagna in WebAssembly: il modulo degli asset compilato con la CSP dell'app, poi venti aperture e duecento spostamenti di una scheda su una lavagna di 50 e una di 2.000 schede | istanza; prima apertura, primo commit e p95, ms |
+| L1 | il nucleo della lavagna in WebAssembly: il modulo degli asset compilato con la CSP dell'app, poi venti aperture e duecento spostamenti di una scheda su una lavagna di 50 e una di 2.000 schede, cinque giri | istanza, prima apertura e primo commit del primo giro; p95 come mediana dei giri, ms |
 | C1 | i profili dei componenti: «Solo note» e poi «Tutto» applicati con `components_apply`, l'app riavviata sulla nota lunga, poi un'altra nota aperta | avvio a freddo in ms, chunk scaricati all'avvio, chunk dei componenti spegnibili arrivati (zero in tutti e due i profili) |
 
 S9 misura anche il tasto fino al fotogramma in una scheda di nota della stessa
@@ -218,7 +218,16 @@ fine il testo deve tornare uguale a quello di partenza. Il nome del modulo,
 con l'hash, viene da `apps/client/dist/assets/`: `dist/` deve essere la build
 che l'app di release ha dentro (`--dist=` ne sceglie un'altra). Una CSP che
 non lascia compilare il modulo fa fallire lo scenario, con l'errore e le
-violazioni che la pagina ha visto. La stessa misura gira in Node, senza app:
+violazioni che la pagina ha visto. Lo scenario fa cinque giri nella stessa
+pagina (`L1_ROUNDS`), ognuno col modulo compilato da capo: istanza, prima
+apertura e primo commit sono del primo giro, il solo a freddo; i p95 di
+`open` e `commit` sono la mediana dei p95 dei giri (`l1Values`). Il p95 di
+venti aperture è la seconda più lenta: due intoppi del runner nello stesso
+giro lo spostano, ma non spostano la mediana dei giri, mentre un nucleo più
+lento sposta tutti i giri e la mediana con loro. Il referto tiene i giri in
+`rounds`. Le soglie della CI vengono da 192 job del runner
+([misura](../misure/2026-11-15-lavagna-wasm-runner.md), #388). La stessa misura
+gira in Node, senza app:
 `node bench/webview/canvas.mjs` da `apps/client/`, dopo `npm run build`.
 
 ## Linux, con un comando solo
