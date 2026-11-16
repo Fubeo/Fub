@@ -51,8 +51,11 @@ describe("il costrutto delle icone", () => {
     // sceglie (libro, calendario, bandiera, idea, in arrivo, archivio,
     // immagine, cuore, lavoro, persone, musica); poi la casella spuntata dei
     // compiti, la figura della vista Compiti; infine i tre segni dei formati
-    // di «Copia come» (Markdown, HTML, testo senza formattazione).
-    expect(names).toHaveLength(67);
+    // di «Copia come» (Markdown, HTML, testo senza formattazione); poi le
+    // dieci figure del tipo di una proprietà della testata (testo, numero,
+    // selezione, stato, data, casella, persone, indirizzo, etichette,
+    // elenco).
+    expect(names).toHaveLength(77);
     expect(new Set(names).size).toBe(names.length);
 
     for (const name of names) {

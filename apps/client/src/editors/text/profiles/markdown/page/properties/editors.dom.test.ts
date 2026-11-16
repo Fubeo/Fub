@@ -501,6 +501,14 @@ describe("Selezione e Stato: le opzioni come pastiglie (prototipo, `.opt`)", () 
     expect(row(view, "stato").querySelector("input")!.value).toBe("Boh");
   });
 
+  it("il nome ha la figura del tipo dichiarato, anche per un valore fuori dalle opzioni", () => {
+    const { view } = mount("---\nstato: Boh\nsala: Grande\nluogo: Torino\n---\n", { propertyTypes: registry });
+    const icon = (key: string) => row(view, key).querySelector(".cm-fub-page-prop-key svg")?.getAttribute("data-icon");
+    expect(icon("stato")).toBe("prop-status");
+    expect(icon("sala")).toBe("prop-select");
+    expect(icon("luogo")).toBe("prop-text");
+  });
+
   it("in sola lettura (e in Lettura) la pastiglia resta", () => {
     const { view } = mount("---\nstato: In corso\n---\n", { propertyTypes: registry, readOnly: true });
     expect(row(view, "stato").querySelector(".cm-fub-page-prop-value .cm-fub-prop-opt")!.textContent).toBe("In corso");

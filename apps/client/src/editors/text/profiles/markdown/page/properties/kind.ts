@@ -186,18 +186,33 @@ export function rowKind(entry: PropertyEntry, types: PropertyTypes): RowKind {
   return { kind: declared, declared, mismatch: null };
 }
 
-/// La figura davanti al nome, per tipo (i nomi del set di icone).
+/// La figura davanti al nome, per tipo (i nomi del set di icone): quelle di
+/// `.pk` nel prototipo.
 export const KIND_ICONS: Readonly<Record<PropertyKind, string>> = {
-  text: "fmt-text",
-  number: "hash",
-  checkbox: "tasks",
-  date: "calendar",
+  text: "prop-text",
+  number: "prop-number",
+  checkbox: "prop-checkbox",
+  date: "prop-date",
   date_time: "clock",
-  list: "fmt-bullets",
-  tags: "tag",
-  people: "fmt-person",
-  url: "fmt-webpage",
+  list: "prop-list",
+  tags: "prop-tags",
+  people: "prop-people",
+  url: "prop-url",
 };
+
+/// La figura di un tipo del registro: Selezione e Stato hanno la loro anche
+/// se il valore si scrive intanto come testo.
+export function typeIcon(type: PropertyType): string {
+  if (type === "select") return "prop-select";
+  if (type === "status") return "prop-status";
+  return KIND_ICONS[type];
+}
+
+/// La figura davanti al nome di una riga: quella del tipo dichiarato, se
+/// c'è (anche quando il valore non torna), se no quella letta dal valore.
+export function rowIcon(kind: RowKind): string {
+  return kind.declared ? typeIcon(kind.declared) : KIND_ICONS[kind.kind];
+}
 
 /// I tipi che il menu «Tipo» offre, nell'ordine del prototipo. Selezione e
 /// Stato arrivano coi loro editor; Persone è un elenco di link.

@@ -9,7 +9,7 @@ import { iconEl } from "../../../../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../../../../ui/lifetime";
 import type { PropertyEntry } from "../../properties";
 import { liveStrings } from "../../strings";
-import { KIND_ICONS, MENU_TYPES, type RowKind } from "./kind";
+import { MENU_TYPES, rowIcon, typeIcon, type RowKind } from "./kind";
 import { entryStamp, typeName, type PropertyRowHost } from "./values";
 
 interface MenuItem {
@@ -36,7 +36,7 @@ export function openPropertyMenu(entry: PropertyEntry, kind: RowKind, anchor: HT
       close();
       openRenameDialog(entry, anchor, host, life);
     } },
-    ...(host.setType ? [{ id: "type", label: liveStrings.t("page.properties.type"), icon: KIND_ICONS[kind.kind], hint: typeName(type), role: "menuitem" as const, run: () => {
+    ...(host.setType ? [{ id: "type", label: liveStrings.t("page.properties.type"), icon: rowIcon(kind), hint: typeName(type), role: "menuitem" as const, run: () => {
       handle.setItems(types());
       handle.setActive(`type-${type}`);
     } }] : []),
@@ -58,7 +58,7 @@ export function openPropertyMenu(entry: PropertyEntry, kind: RowKind, anchor: HT
     ...MENU_TYPES.map((name): MenuItem => ({
       id: `type-${name}`,
       label: typeName(name),
-      icon: KIND_ICONS[name === "select" || name === "status" ? "text" : name as keyof typeof KIND_ICONS],
+      icon: typeIcon(name),
       role: "menuitemradio",
       checked: kind.declared === name,
       run: () => {

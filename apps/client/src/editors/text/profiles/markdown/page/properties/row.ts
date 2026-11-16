@@ -4,7 +4,7 @@
 import type { Lifetime } from "../../../../../../ui/lifetime";
 import type { PropertyEntry } from "../../properties";
 import { liveStrings } from "../../strings";
-import { emptyValue, KIND_ICONS, linkName, optionOf, rowKind, type PropertyTypes, type RowKind } from "./kind";
+import { emptyValue, KIND_ICONS, linkName, optionOf, rowIcon, rowKind, type PropertyTypes, type RowKind } from "./kind";
 import { openEditor, toggleCheckbox } from "./editors";
 import { openPropertyMenu } from "./menu";
 import { chipElement, figure, longDate, optionElement, personElement, typeName, type PropertyRowHost } from "./values";
@@ -79,7 +79,7 @@ export function propertyRow(entry: PropertyEntry, host: PropertyRowHost, life: L
   const name = document.createElement("span");
   name.className = "cm-fub-page-prop-name";
   name.textContent = entry.key;
-  key.replaceChildren(...[figure(KIND_ICONS[kind.kind])].filter((node): node is SVGElement => node !== null), name);
+  key.replaceChildren(...[figure(rowIcon(kind))].filter((node): node is SVGElement => node !== null), name);
   const value = document.createElement(host.editable ? "button" : "span");
   value.className = "cm-fub-page-prop-value";
   const shown = fillValue(value, entry, kind, host.types);
