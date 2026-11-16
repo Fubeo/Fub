@@ -168,19 +168,48 @@ pub(crate) fn system_program(name: &str) -> Option<PathBuf> {
 }
 
 /// Il percorso assoluto di `name` nella cartella di Windows: `explorer.exe`
-/// sta lì. La cartella è quella che il sistema dà in `SystemRoot`, se è un
-/// percorso assoluto, e altrimenti `C:\Windows`. `SystemRoot` viene
-/// dall'ambiente di chi avvia l'app, come il `PATH`: è il rischio residuo
-/// scritto in `docs/reference/permissions-and-security.md`, finché `fub-app`
-/// non ha una dipendenza che chiami `GetSystemWindowsDirectoryW`.
+/// sta lì. La cartella la dà il sistema ([`windows_dir`]), non l'ambiente:
+/// `SystemRoot` lo sceglie chi avvia l'app, come il `PATH`.
 #[cfg(windows)]
 pub(crate) fn system_program(name: &str) -> Option<PathBuf> {
-    let root = std::env::var_os("SystemRoot")
-        .map(PathBuf::from)
-        .filter(|root| root.is_absolute())
-        .unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
-    let path = root.join(name);
+    let path = windows_dir()?.join(name);
     path.is_file().then_some(path)
+}
+
+/// La cartella di Windows del sistema (`C:\Windows` di solito), da
+/// `GetSystemWindowsDirectoryW`: è quella condivisa da tutti gli utenti, anche
+/// sotto Terminal Server, e non legge variabili d'ambiente. Niente se la
+/// chiamata non riesce o non dà un percorso assoluto: meglio «nessun
+/// programma» che indovinare una cartella.
+#[cfg(windows)]
+fn windows_dir() -> Option<PathBuf> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::System::SystemInformation::GetSystemWindowsDirectoryW;
+
+    /// Il percorso più lungo che Windows conosce, in unità UTF-16.
+    const MAX_LEN: usize = 32_768;
+    let mut buffer = vec![0u16; 260];
+    let len = loop {
+        let capacity = u32::try_from(buffer.len()).ok()?;
+        // SAFETY: `buffer` è nostro, scrivibile e lungo `capacity` unità
+        // UTF-16; la funzione non scrive oltre `capacity` e non trattiene il
+        // puntatore dopo il ritorno.
+        let written = unsafe { GetSystemWindowsDirectoryW(buffer.as_mut_ptr(), capacity) };
+        let written = usize::try_from(written).ok()?;
+        match written {
+            // Errore della chiamata.
+            0 => return None,
+            // Ci stava: `written` unità, senza il terminatore.
+            n if n < buffer.len() => break n,
+            // Non ci stava: `written` è la misura che serve, terminatore
+            // compreso. Si riprova una volta più grande, fino al tetto.
+            n if n <= MAX_LEN && n > buffer.len() => buffer.resize(n, 0),
+            _ => return None,
+        }
+    };
+    let dir = PathBuf::from(OsString::from_wide(&buffer[..len]));
+    dir.is_absolute().then_some(dir)
 }
 
 /// Il primo `dir/name` che è un programma di cui fidarsi.
@@ -411,6 +440,23 @@ mod tests {
         let sh = system_program("sh").expect("every Linux has sh in a system folder");
         assert!(sh.is_absolute());
         assert!(sh.starts_with("/usr/bin") || sh.starts_with("/bin") || sh.starts_with("/run"));
+    }
+
+    /// La cartella viene dal sistema e `explorer.exe` è lì: la prova che la
+    /// chiamata a `GetSystemWindowsDirectoryW` legge bene la risposta. Non
+    /// tocca `SystemRoot`: cambiarlo qui cambierebbe anche i figli delle
+    /// altre prove che girano insieme.
+    #[cfg(windows)]
+    #[test]
+    fn explorer_is_found_in_the_windows_folder_the_system_reports() {
+        let dir = windows_dir().expect("Windows reports its folder");
+        assert!(dir.is_absolute(), "{dir:?}");
+        assert!(dir.is_dir(), "{dir:?}");
+        let explorer =
+            system_program("explorer.exe").expect("explorer.exe is in the Windows folder");
+        assert_eq!(explorer, dir.join("explorer.exe"));
+        let command = opener(Path::new(r"C:\nota.pdf")).expect("explorer.exe opens files");
+        assert_eq!(Path::new(command.get_program()), explorer);
     }
 
     #[cfg(unix)]

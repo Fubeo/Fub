@@ -218,11 +218,16 @@ jobs:
         with:
           command: check
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
-      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          tool: cargo-sbom
-      - name: Genera l'SBOM
-        run: cargo sbom --output-format spdx_json_2_3 > fub-sbom.spdx.json
+          node-version: 22.12.0
+      # La SBOM nasce da `cargo metadata --locked` e dai checksum del lock, senza
+      # uno strumento scaricato, e lo script la confronta con `Cargo.lock` nei
+      # due versi prima di scriverla: una SBOM che perde un pacchetto fallisce.
+      - name: Genera l'SBOM e la confronta con Cargo.lock
+        run: |
+          node .github/scripts/sbom.mjs --self-test
+          node .github/scripts/sbom.mjs --out fub-sbom.spdx.json
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: sbom-spdx
@@ -403,6 +408,28 @@ jobs:
         run: node .github/scripts/check-doc-size.mjs
       - name: Il Markdown rispetta lo stile canonico
         run: node .github/scripts/check-markdown-style.mjs
+      # Il render apre i Mermaid della PR in Chromium, e la sandbox resta
+      # accesa (audit del 2026-10-30, B19). Ubuntu 24.04 chiude gli user
+      # namespace ai programmi senza un profilo AppArmor: il Chrome del runner
+      # ha il profilo `chrome` della distribuzione, quindi si usa lui e non si
+      # scarica il Chromium di puppeteer. Se non partisse con la sandbox, gli
+      # si dà un profilo mirato che concede gli user namespace a quel solo
+      # binario; se nemmeno così, il passo è rosso.
+      - name: Chrome del runner, con la sandbox
+        run: |
+          set -euo pipefail
+          chrome=/opt/google/chrome/chrome
+          prova() { timeout 60 "$chrome" --headless --disable-gpu --dump-dom about:blank > /dev/null 2> "$RUNNER_TEMP/chrome.log"; }
+          if ! prova; then
+            echo "Chrome non parte con la sandbox; restrizione AppArmor: $(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || echo assente)"
+            tail -n 5 "$RUNNER_TEMP/chrome.log"
+            printf 'abi <abi/4.0>,\ninclude <tunables/global>\nprofile fub-ci-chrome %s flags=(unconfined) {\n  userns,\n}\n' "$chrome" \
+              | sudo tee /etc/apparmor.d/fub-ci-chrome > /dev/null
+            sudo apparmor_parser -r /etc/apparmor.d/fub-ci-chrome
+            prova || { tail -n 20 "$RUNNER_TEMP/chrome.log"; exit 1; }
+          fi
+          echo "PUPPETEER_EXECUTABLE_PATH=$chrome" >> "$GITHUB_ENV"
+          echo "PUPPETEER_SKIP_DOWNLOAD=true" >> "$GITHUB_ENV"
       - name: Ogni diagramma Mermaid è valido e renderizzabile
         run: node .github/scripts/check-mermaid.mjs --render
       - name: Il lettore dei numeri sa leggere l'italiano
