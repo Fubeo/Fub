@@ -84,6 +84,7 @@ import { mediaKindOfId } from "../../../media/media-types";
 import { TableWidget, tableGrids, tableOfBlock, type TableGridCallbacks } from "./table-widget";
 import { propertiesExtension } from "./properties";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
+import { withLineBreaks } from "../../line-breaks";
 import { pendingGuide } from "./pending";
 import { liveHints } from "./hints";
 import { DiagramLiveWidget, fenceBody } from "./diagram-live";
@@ -2109,7 +2110,8 @@ class MarkdownWidget extends WidgetType {
         const start = opener.to + 1;
         if (edit.from < 0 || edit.to < edit.from || edit.to > body.length
           || doc.sliceString(start, start + body.length) !== body) return;
-        view.dispatch({ changes: { from: start + edit.from, to: start + edit.to, insert: edit.insert }, userEvent: "input" });
+        // `body` e la modifica vanno a capo con "\n": nella nota entrano con i suoi a capo.
+        view.dispatch({ changes: { from: start + edit.from, to: start + edit.to, insert: withLineBreaks(view.state, edit.insert) }, userEvent: "input" });
       },
     };
     const unmount = this.callbacks.mountRendered

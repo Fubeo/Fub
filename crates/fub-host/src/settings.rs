@@ -813,7 +813,7 @@ fn editor_settings() -> Vec<SettingSpec> {
         EDITOR_PROPERTIES,
         C_EDITOR_PROPERTIES,
         C_EDITOR_PROPERTIES_DESC,
-        "source",
+        "visible",
         vec![
             UiOption::new("visible", Text::key(C_EDITOR_PROPERTIES_VISIBLE)),
             UiOption::new("hidden", Text::key(C_EDITOR_PROPERTIES_HIDDEN)),

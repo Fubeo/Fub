@@ -13,6 +13,7 @@ import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { wikilink } from "../../../../rules/syntax";
 import type { CompletionSources } from "./completions";
 import { liveStrings } from "./strings";
+import { withLineBreaks } from "../../line-breaks";
 
 /// Il collegamento che contiene una posizione.
 export interface FoundLink {
@@ -45,7 +46,9 @@ export function linkAt(state: EditorState, range: { from: number; to: number }):
         from: node.from,
         to: node.to,
         kind: "markdown",
-        text: state.sliceDoc(marks[0]!.to, marks[1]!.from),
+        // Con "\n" fra le righe: il testo rimesso al posto del link conta le
+        // posizioni come il documento anche in una nota CRLF (#394).
+        text: state.doc.sliceString(marks[0]!.to, marks[1]!.from),
         target: href.startsWith("<") && href.endsWith(">") ? href.slice(1, -1) : href,
       };
     }
@@ -171,7 +174,7 @@ export function openLinkDialog(view: EditorView, searchNotes: CompletionSources[
     }
     const insert = answer === "remove" ? found!.text : linkSyntax(text, target);
     view.dispatch({
-      changes: { from: replaceFrom, to: replaceTo, insert },
+      changes: { from: replaceFrom, to: replaceTo, insert: withLineBreaks(view.state, insert) },
       selection: EditorSelection.cursor(replaceFrom + insert.length),
       userEvent: "input",
       scrollIntoView: true,

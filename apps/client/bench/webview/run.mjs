@@ -29,7 +29,7 @@ import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
 import { INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteName, writeFixtures } from "./fixtures.mjs";
 import { pendenza, settled } from "./memory.mjs";
-import { CANVAS_SCRIPT, COMMITS, OPENS, SIZES, builtModule } from "./canvas.mjs";
+import { CANVAS_SCRIPT, COMMITS, L1_ROUNDS, OPENS, SIZES, builtModule, l1Values } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
 import { waylandProblem } from "./display.mjs";
@@ -1260,20 +1260,22 @@ const SCENARIOS = {
     // Il nome con l'hash viene da `dist/`: deve essere la build che l'app
     // di release ha dentro.
     const { url } = builtModule(args.dist ? resolve(args.dist) : undefined);
-    const report = await session.executeAsync(CANVAS_SCRIPT, [url, SIZES, OPENS, COMMITS]);
-    const violations = (report.violations ?? []).map((v) => `${v.directive} ${v.blocked}`.trim());
-    if (report.error) {
-      throw new Error(`il nucleo della lavagna non si carica (${report.error})${violations.length > 0 ? `; violazioni della CSP: ${violations.join(", ")}` : ""}`);
+    // `L1_ROUNDS` giri nella stessa pagina, ognuno col modulo compilato da
+    // capo: i p95 sono la mediana dei giri (`l1Values`, #388).
+    const rounds = [];
+    for (let round = 0; round < L1_ROUNDS; round++) {
+      const report = await session.executeAsync(CANVAS_SCRIPT, [url, SIZES, OPENS, COMMITS]);
+      const violations = (report.violations ?? []).map((v) => `${v.directive} ${v.blocked}`.trim());
+      if (report.error) {
+        throw new Error(`il nucleo della lavagna non si carica (${report.error})${violations.length > 0 ? `; violazioni della CSP: ${violations.join(", ")}` : ""}`);
+      }
+      if (violations.length > 0) throw new Error(`violazioni della CSP mentre il nucleo si carica: ${violations.join(", ")}`);
+      rounds.push(report);
     }
-    if (violations.length > 0) throw new Error(`violazioni della CSP mentre il nucleo si carica: ${violations.join(", ")}`);
-    const values = { "L1.istanza": report.instanceMs };
-    for (const board of report.boards) {
-      values[`L1.open.${board.size}.prima`] = board.firstOpenMs;
-      values[`L1.open.${board.size}.p95`] = board.open.p95;
-      values[`L1.commit.${board.size}.primo`] = board.firstCommitMs;
-      values[`L1.commit.${board.size}.p95`] = board.commit.p95;
-    }
-    return { report, values, samples: report.boards.reduce((n, b) => n + b.open.count + b.commit.count, 0) };
+    const values = l1Values(rounds);
+    const samples = rounds.reduce((n, r) => n + r.boards.reduce((m, b) => m + b.open.count + b.commit.count, 0), 0);
+    // `report` resta il primo giro, nella forma di prima; `rounds` li ha tutti.
+    return { report: rounds[0], rounds, values, samples };
   },
   /// Avvio a freddo fino alla prima nota visibile: l'app riapre la nota che
   /// S1 ha lasciato aperta.

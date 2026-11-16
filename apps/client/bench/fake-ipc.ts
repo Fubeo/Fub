@@ -1267,6 +1267,33 @@ const WORKBOOK_CHROME: readonly SettingEntry[] = WORKBOOK_DOC === null ? [] : [
   source: "default",
 }));
 
+/// Come la nota mostra le proprietà (`editor.properties`), come la voce
+/// dell'host: di macchina, di serie `visible`. Le scene della testata (T6)
+/// la cambiano con `?properties=visible|hidden|source`.
+const PROPERTIES_PARAM = params.get("properties");
+const PROPERTIES_CHOSEN = PROPERTIES_PARAM === "visible" || PROPERTIES_PARAM === "hidden" || PROPERTIES_PARAM === "source" ? PROPERTIES_PARAM : null;
+const PROPERTIES_DISPLAY: readonly SettingEntry[] = [{
+  spec: {
+    key: "editor.properties",
+    label: "Proprietà",
+    description: "Come la nota mostra il frontmatter.",
+    group: "Editor",
+    scope: "machine",
+    kind: {
+      kind: "choice",
+      default: "visible",
+      options: [
+        { value: "visible", label: "In evidenza" },
+        { value: "hidden", label: "Nascoste" },
+        { value: "source", label: "Come YAML" },
+      ],
+    },
+    program_writable: true,
+  },
+  value: PROPERTIES_CHOSEN ?? "visible",
+  source: PROPERTIES_CHOSEN ? "machine" : "default",
+}];
+
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
 /// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
@@ -1735,7 +1762,7 @@ const options: Options = {
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
   ],
-  settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME],
+  settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {

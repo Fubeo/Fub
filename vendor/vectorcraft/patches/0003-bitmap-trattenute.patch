@@ -1,0 +1,79 @@
+diff --git a/crates/render/src/tests/placed_document.rs b/crates/render/src/tests/placed_document.rs
+--- a/crates/render/src/tests/placed_document.rs
++++ b/crates/render/src/tests/placed_document.rs
+@@ -9,10 +9,14 @@ use crate::*;
+ 
+ /// Every file reads as a 40×20 artboard filled blue; a file whose bytes start with `loop` also
+ /// places itself (the same key) in its middle, and one whose bytes start with `bad` can't be read.
++/// Patch di Fub: uno i cui byte iniziano con `held` si legge soltanto quando [`Held`] lo lascia.
+ fn blue_page(p: &PlacedDocument, bytes: &[u8]) -> Option<(Document, Node, Rect)> {
+     if bytes.starts_with(b"bad") {
+         return None;
+     }
++    if bytes.starts_with(b"held") {
++        Held::wait();
++    }
+     let mut d = Document::new(40.0, 20.0);
+     d.layers.clear();
+     let blue = Appearance::basic(Paint::solid(Color::rgb(0.0, 0.0, 1.0)), Paint::None, 0.0);
+@@ -58,6 +62,40 @@ fn serial() -> std::sync::MutexGuard<'static, ()> {
+     SERIAL.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+ }
+ 
++/// Patch di Fub (`0003-bitmap-trattenute`): finché è vivo, i file i cui byte iniziano con `held`
++/// non si leggono, così un bitmap chiesto in un disegno non è pronto prima che quel disegno
++/// finisca, per quanto il thread del test resti fermo. Senza, il lavoratore può finire fra
++/// `schedule` e la rilettura della cache in `draw_placed_bitmap`, e il primo disegno mostra già i
++/// bitmap. Lasciato (anche da un test che fallisce), i file si leggono di nuovo. Lo usa soltanto
++/// un test che tiene [`serial`].
++struct Held;
++
++static HELD: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
++static HELD_CHANGED: std::sync::Condvar = std::sync::Condvar::new();
++
++impl Held {
++    fn hold() -> Self {
++        *HELD.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = true;
++        Held
++    }
++
++    /// Aspetta finché i file sono trattenuti (al più 10 s: un test che non li lascia fallisce,
++    /// non resta appeso).
++    fn wait() {
++        let held = HELD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
++        let timeout = std::time::Duration::from_secs(10);
++        let (held, _) = HELD_CHANGED.wait_timeout_while(held, timeout, |held| *held).unwrap_or_else(std::sync::PoisonError::into_inner);
++        assert!(!*held, "held files never let go");
++    }
++}
++
++impl Drop for Held {
++    fn drop(&mut self) {
++        *HELD.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = false;
++        HELD_CHANGED.notify_all();
++    }
++}
++
+ fn doc(key: &str) -> Document {
+     doc_with(key, format!("{{\"doc\": \"{key}\"}}").as_bytes())
+ }
+@@ -234,7 +272,7 @@ fn a_ready_bitmap_draws_again_where_its_file_shows() {
+     vectorcraft_doc::placed_document::set_loader(blue_page);
+     let mut d = Document::new(100.0, 100.0);
+     for key in ["area-a", "area-b"] {
+-        d.images.insert(key.into(), ImageBlob::new("application/json", format!("{{\"doc\": \"{key}\"}}").into_bytes()));
++        d.images.insert(key.into(), ImageBlob::new("application/json", format!("held{{\"doc\": \"{key}\"}}").into_bytes()));
+     }
+     let l = d.layers[0].id;
+     // 20 × 10 point boxes: A loose at (5, 5), with a shadow at (30, 40) and in a group at (5, 80);
+@@ -251,7 +289,10 @@ fn a_ready_bitmap_draws_again_where_its_file_shows() {
+     let opts = RenderOptions { background: Some([255, 255, 255, 255]), progressive_placed: true, ..Default::default() };
+     let mut r = Renderer::new();
+     let generation = placed_document::generation();
++    // Patch di Fub: i bitmap si fanno soltanto a primo disegno finito, che mostra i segnaposto.
++    let held = Held::hold();
+     let before = r.render(&d, 100, 100, Affine::IDENTITY, &opts);
++    drop(held);
+     settle();
+     let made = placed_document::made_between(generation, placed_document::generation()).expect("known");
+     let files = |keys: &[&str]| keys.iter().map(|k| k.to_string()).collect::<std::collections::HashSet<_>>();
