@@ -1807,6 +1807,59 @@ describe("l'anteprima accanto all'elenco", () => {
     expect(paneSays()).toBe("");
   });
 
+  it("il foglio senza niente dentro porta `data-empty`, scritto solo quando cambia", async () => {
+    // Lo legge `launcher.css` per nascondere il foglio, al posto di un
+    // `:has(> .launcher-preview-page:empty)` (`theme/structure.test.ts`).
+    const slow = rendering();
+    const answers: Record<string, string> = { "Tre.md": "", "Quattro.md": "<p></p>" };
+    world.answer = () => listed(["Uno.md", "R1/Stampa.pdf", "Due.md", "Tre.md", "Quattro.md"].map((doc) => note(doc)));
+    world.render = async (doc) => {
+      if (doc === "Uno.md") return slow.promise;
+      if (doc === "Due.md") throw new Error("provider caduto");
+      return { html: answers[doc] ?? "", parts: [] };
+    };
+    launcher.open("all");
+    const sheet = document.querySelector<HTMLElement>(".launcher-preview-sheet")!;
+    const bare = (): boolean => sheet.hasAttribute("data-empty");
+    const writes: string[] = [];
+    const watch = new MutationObserver((records) => writes.push(...records.map(() => (bare() ? "vuoto" : "pieno"))));
+    watch.observe(sheet, { attributes: true, attributeFilter: ["data-empty"] });
+    const next = async (): Promise<void> => {
+      press(field(), "ArrowDown");
+      vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+      await settle();
+    };
+
+    // Prima di ogni resa il foglio è vuoto; lo scheletro lo riempie.
+    expect(bare()).toBe(true);
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS + PREVIEW_SLOW_MS);
+    expect(page().querySelector(".skeleton")).not.toBeNull();
+    expect(bare()).toBe(false);
+    slow.land("<p>Piena</p>");
+    await settle();
+    expect(page().textContent).toBe("Piena");
+    expect(bare()).toBe(false);
+    // Un file che non è un documento svuota la pagina, e così un guasto.
+    await next();
+    expect(paneSays()).toBe("launcher.preview.file");
+    expect(bare()).toBe(true);
+    await next();
+    expect(paneSays()).toBe("launcher.preview.failed");
+    expect(bare()).toBe(true);
+    // Una resa senza nodi è vuota; `<p></p>` no, come per `:empty`, anche se
+    // la frase dice che la nota è vuota.
+    await next();
+    expect(page().childNodes).toHaveLength(0);
+    expect(bare()).toBe(true);
+    await next();
+    expect(paneSays()).toBe("launcher.preview.empty");
+    expect(bare()).toBe(false);
+    // Lo stesso stato di fila non riscrive l'attributo.
+    await settle();
+    watch.disconnect();
+    expect(writes).toEqual(["pieno", "vuoto", "pieno"]);
+  });
+
   it("una nota senza niente dentro lo dice", async () => {
     world.render = async () => ({ html: "<p> </p>", parts: [] });
     launcher.open("all");
