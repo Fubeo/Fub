@@ -321,6 +321,8 @@ dagli elementi realmente visibili e raggiungibili. In ogni scena con la
 modalità nella banda, Invio su `#status-mode` apre il menu (che prende il
 fuoco) ed Esc lo chiude riportando il fuoco sulla banda; la barra di formato e
 quella del PDF sono un solo punto di Tab ciascuna.
+Il combobox modale (il lanciatore) mostra il fuoco col cursore e la riga
+attiva, senza anello: eccezione stretta e casi in `bench/a11y-rules.mjs`.
 
 Regole:
 
