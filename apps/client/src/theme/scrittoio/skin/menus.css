@@ -23,9 +23,10 @@
   overflow: hidden;
 }
 /* Il menu del posto, aperto col tasto destro o col tasto Menu: largo quanto
-   il prototipo, e di più soltanto per un nome che non ci sta. */
+   il prototipo (`.pop.cx`, 316 px fissi); un nome che non ci sta si taglia. */
 .context-menu.menu-at-point {
-  min-width: 316px;
+  width: 316px;
+  min-width: 0;
 }
 /* Aperto col mouse il menu tiene il fuoco su di sé soltanto per le frecce:
    non è una cosa da scegliere, e l'anello va sulle voci. */
@@ -68,7 +69,8 @@
   flex: 1;
   min-width: 0;
   height: auto;
-  padding: 0;
+  /* Quello che il browser dà a un campo, e che il prototipo tiene. */
+  padding: 1px 2px;
   border: 0;
   border-radius: 0;
   background: none;
@@ -91,6 +93,11 @@
    la scorciatoia o la freccia del sottomenu. Qui sta ciò che è solo del
    menu: la figura accesa nell'inchiostro d'accento e la freccia che si
    sposta appena verso il sottomenu. */
+/* L'interlinea del foglio (1,4, `.m-i` del prototipo), non quella stretta
+   della riga del kit. */
+.context-menu .menu-items [role^="menuitem"] {
+  line-height: inherit;
+}
 .context-menu .menu-lit .menu-icon {
   color: var(--accent-soft);
 }
@@ -345,6 +352,12 @@
   color: var(--accent-contrast);
 }
 /* La parte accesa scrive nell'inchiostro pieno, con la figura d'accento. */
+/* Le parti della barra (`.m-t`): senza margine di lato, con l'interlinea del
+   foglio. */
+.context-menu .menu-clipboard .menu-quick {
+  padding-inline: 0;
+  line-height: inherit;
+}
 .context-menu .menu-clipboard .menu-quick.menu-lit {
   color: var(--text);
 }
@@ -446,7 +459,9 @@
   height: 36px;
   padding: 0 14px;
   border-top: 1px solid var(--border);
-  background: color-mix(in oklab, var(--overlay-hover) 55%, var(--bg-elev));
+  /* La fascia del prototipo (`.m-find`): il vassoio mescolato al foglio,
+     piena. */
+  background: color-mix(in srgb, var(--sheet-2) 55%, var(--sheet));
   color: var(--muted);
   font-size: calc(var(--text-sm) + 0.5px);
   white-space: nowrap;
@@ -482,6 +497,7 @@
    fondo, coi tasti disegnati come altrove e cosa fanno. */
 .context-menu .menu-foot.menu-foot-keys {
   display: block;
+  gap: normal;
   height: auto;
   padding: 7px 12px;
   background: none;
@@ -494,6 +510,7 @@
 }
 .context-menu .menu-foot-key > kbd {
   padding: 3px 5px 2px;
+  border: 0;
   border-radius: 5px;
   background: var(--sheet);
   box-shadow: inset 0 0 0 1px var(--border-strong), 0 1px 0 var(--border-strong);
