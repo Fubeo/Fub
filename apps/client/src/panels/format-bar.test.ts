@@ -202,6 +202,33 @@ describe("la barra di un riquadro", () => {
     expect(bold.hasAttribute("aria-pressed")).toBe(false);
   });
 
+  it("un aggiornamento senza cambi non tocca il DOM: in WebKit ogni attributo riscritto ridipinge", async () => {
+    const fake = fakeActions(["markdown.paragraph", "markdown.heading.1", "markdown.heading.2", "markdown.bold", "markdown.italic", "markdown.table.row.after"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    bar.update(SPECS);
+    fake.set("markdown.bold", { enabled: true, active: true });
+    fake.set("markdown.heading.1", { enabled: true, active: true });
+    fake.set("markdown.italic", { enabled: false, active: false });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver((list) => records.push(...list));
+    observer.observe(bar.element, { subtree: true, attributes: true, childList: true, characterData: true });
+    // La superficie avvisa a ogni battuta e a ogni passo del cursore, ma lo
+    // stato dei pulsanti resta quello: niente si riscrive.
+    for (let step = 0; step < 3; step++) {
+      fake.set("markdown.bold", { enabled: true, active: true });
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    }
+    records.push(...observer.takeRecords());
+    expect(records.map((record) => `${record.type} ${record.attributeName ?? ""} ${(record.target as Element).className ?? ""}`)).toEqual([]);
+    // Ciò che cambia, invece, si scrive.
+    fake.set("markdown.bold", { enabled: true, active: false });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    records.push(...observer.takeRecords());
+    observer.disconnect();
+    expect(records.map((record) => record.attributeName)).toEqual(["aria-pressed"]);
+  });
+
   it("un clic esegue l'azione nella superficie, senza passare dal kernel", () => {
     const fake = fakeActions(["markdown.bold"]);
     const commands: string[] = [];

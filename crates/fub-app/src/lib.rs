@@ -1089,15 +1089,27 @@ fn list_views(host: State<Host>, vault: Option<String>) -> Result<Vec<ViewSpec>,
 /// monta da sé — una sola, senza parametri — è
 /// [`ViewInstance::only`](fub_abi::traits::ViewInstance::only), e questo
 /// comando accetta i due campi assenti proprio per non obbligarla a costruirla.
+///
+/// Gira fuori dal thread principale, nella corsia delle viste (`domande`): un
+/// salvataggio invecchia una ventina di view e la shell le ridisegna tutte
+/// insieme. Sul thread principale erano 100 ms di finestra ferma a ogni
+/// salvataggio di una nota lunga; in corsia i disegni restano in fila fra loro
+/// e la finestra continua a presentare fotogrammi.
 #[tauri::command]
-fn render_view(
-    host: State<Host>,
+async fn render_view(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     view: String,
     instance: Option<String>,
     params: Option<serde_json::Value>,
     vault: Option<String>,
 ) -> Result<UiNode, PluginError> {
-    host.render_view(vault.as_deref(), &view_instance(view, instance, params))
+    corsie
+        .chiedi("view render", domande::CORSIA_VISTE.into(), move || {
+            app.state::<Host>()
+                .render_view(vault.as_deref(), &view_instance(view, instance, params))
+        })
+        .await
 }
 
 /// Consegna un'azione della UI al provider della view e restituisce il suo
@@ -1227,7 +1239,7 @@ async fn query_index(
 ) -> Result<IndexResult, PluginError> {
     let corsia = domande::corsia(&query);
     corsie
-        .chiedi(corsia, move || {
+        .chiedi("index query", corsia, move || {
             app.state::<Host>().query_index(vault.as_deref(), query)
         })
         .await

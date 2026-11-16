@@ -22061,7 +22061,10 @@ h6.ui-heading {
 }
 
 /* La diagnosi di una scorciatoia c'è solo quando qualcosa non torna (non
- * valida, in conflitto, coperta): la riga intera prende il fondo del pericolo. */
+ * valida, in conflitto, coperta): la riga intera prende il fondo del pericolo.
+ * La riga lo dice con `data-issue`, non con `:has(.setting-diagnostic:not(:empty))`:
+ * in WebKit un `:empty` dentro un `:has()` seguito da `+ *` faceva ricontrollare
+ * tutta la finestra a ogni testo cambiato, 15–25 ms con una view lunga aperta. */
 .setting-diagnostic {
   color: var(--danger);
   font-weight: var(--weight-medium);
@@ -22071,7 +22074,7 @@ h6.ui-heading {
   display: none;
 }
 
-.settings-card > .setting-row:has(.setting-diagnostic:not(:empty)) {
+.settings-card > .setting-row[data-issue] {
   margin: 0 calc(-1 * var(--space-5));
   padding-left: var(--space-5);
   padding-right: var(--space-5);
@@ -22080,13 +22083,13 @@ h6.ui-heading {
   background: var(--danger-wash);
 }
 
-.settings-card > .setting-row:has(.setting-diagnostic:not(:empty)) + * {
+.settings-card > .setting-row[data-issue] + * {
   border-top-color: transparent;
 }
 
 /* Sul fondo del pericolo il rosso non regge 4,5:1 al buio: lì parla
  * l'inchiostro, e il rosso lo dice il fondo. */
-.settings-card > .setting-row:has(.setting-diagnostic:not(:empty)) .setting-diagnostic {
+.settings-card > .setting-row[data-issue] .setting-diagnostic {
   color: var(--text);
 }
 
@@ -22499,7 +22502,7 @@ h6.ui-heading {
     background: Highlight;
   }
 
-  .settings-card > .setting-row:has(.setting-diagnostic:not(:empty)) {
+  .settings-card > .setting-row[data-issue] {
     outline: 1px solid CanvasText;
   }
 

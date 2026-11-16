@@ -89,6 +89,7 @@
 - Come si creano un documento Word o una cartella Excel dal vault? → [product/new-documents.md](../product/new-documents.md)
 - Come cresce Fub senza modificare il kernel (plugin ed estensioni)? → [product/plugins-and-extensions.md](../product/plugins-and-extensions.md)
 - Quali sono i numeri e i gate prestazionali della CI? → [product/performance-budget.md](../product/performance-budget.md)
+- Quanto costa a WebKit disegnare una battuta? → [product/performance-webview.md](../product/performance-webview.md)
 - Quando una modifica alla Graph View è accettabile? → [product/acceptance.md](../product/acceptance.md)
 
 ### Famiglia Disegni (34 pagine `drawing-*` + l'indice)

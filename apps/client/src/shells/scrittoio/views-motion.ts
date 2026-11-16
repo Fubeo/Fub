@@ -28,8 +28,9 @@
 // - «ridotto»: resta la sola dissolvenza di chi entra. «Calmo»: le stesse
 //   corse senza rimbalzo, e lo fa `moto`.
 //
-// Il FLIP è fatto a mano e non con `flip` di `moto`: una foglia che resta è un
-// elemento nuovo (il riconciliatore la ricostruisce), le misure si annidano, e
+// Il FLIP è fatto a mano e non con `flip` di `moto`: una foglia che resta può
+// essere un elemento nuovo (il riconciliatore ricostruisce quelle cambiate;
+// una uguale la lascia com'è, con la sua corsa), le misure si annidano, e
 // «prima» e «dopo» stanno ai due capi di un giro che non è nostro.
 import {
   DURATION,
