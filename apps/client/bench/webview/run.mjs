@@ -28,11 +28,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
 import { INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteName, writeFixtures } from "./fixtures.mjs";
-import { pendenza, settled } from "./memory.mjs";
+import { descendants, pendenza, settled } from "./memory.mjs";
 import { CANVAS_SCRIPT, COMMITS, L1_ROUNDS, OPENS, SIZES, builtModule, l1Values } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
-import { waylandProblem } from "./display.mjs";
+import { commandLines, gtkWatcher, openWithGtkRetry, waylandProblem, xvfbResetProblem } from "./display.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
@@ -59,6 +59,12 @@ const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
 /// Il processo del driver: la memoria di R1 si legge sui suoi discendenti.
 let driverPid = null;
+/// Il driver in corso (`startDriver`) e chi aspetta le righe di GTK che non
+/// parte dal suo stderr.
+let driver = null;
+const gtkListeners = new Set();
+/// L'ambiente del driver: il vault e la configurazione del banco.
+let driverEnv = null;
 /// Il vault del banco, nella cartella temporanea: S8 legge dal disco i byte
 /// del foglio prima e dopo la penna.
 let benchVault = null;
@@ -433,16 +439,14 @@ async function placeCard(session, css) {
 /// con il pulsante di mezzo premuto (il suo rilascio non arriva), e dopo non
 /// arrivano alla lavagna né i clic né i tasti (misurato in T46: il clic arriva
 /// come `click` con `buttons` a 4, senza `pointerdown`). L'app di S9 si chiude
-/// prima, e la nuova aspetta un attimo: Fub ha un'istanza sola (plugin
-/// single-instance), e una seconda che parte mentre la prima è viva può cederle.
+/// prima, e `launch` aspetta che sia uscita.
 async function noteTyping(notes) {
   const card = `.pane.focus .canvas-node[data-node="${SHEET_NOTE_CARD}"]`;
   const invalid = (why) => {
     notes.push(`S9.keyToPaint non misurato: ${why}`);
     return { p95: null, count: 0, typed: false };
   };
-  await pause(3_000);
-  const session = await openSession(base, app);
+  const session = await launch("S9");
   try {
     await ready(session);
     await indexed(session);
@@ -1230,7 +1234,7 @@ const SCENARIOS = {
         await openByName(current, "Lunga", "Una nota lunga");
         await current.close();
         current = null;
-        current = await openSession(base, app);
+        current = await launch("C1");
         await current.waitFor("return !!window.__fubProbe && window.__fubProbe.stop().coldStart !== null", [], 120_000);
         const report = await stop(current);
         const startup = await current.execute(CHUNKS_SCRIPT);
@@ -1313,6 +1317,77 @@ async function stopDriver(driver) {
   await Promise.race([exited, new Promise((done) => setTimeout(done, 10_000).unref())]);
 }
 
+/// Avvia `tauri-driver` e aspetta che risponda. Il suo stderr, che l'app e
+/// WebKitWebDriver ereditano, si ricopia com'è e si legge: la riga di GTK che
+/// non parte va a `launch` (`openWithGtkRetry`).
+async function startDriver() {
+  driver = spawn(args.driver ?? "tauri-driver", [
+    "--port", String(port),
+    ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
+  ], {
+    env: driverEnv,
+    stdio: ["ignore", "inherit", "pipe"],
+    // Un gruppo di processi suo: alla fine si ferma il driver con l'app e
+    // WebKitWebDriver che ha avviato, non soltanto `tauri-driver`.
+    detached: process.platform !== "win32",
+  });
+  driverPid = driver.pid;
+  const watch = gtkWatcher((line) => {
+    for (const listener of gtkListeners) listener(line);
+  });
+  driver.stderr.on("data", (chunk) => {
+    process.stderr.write(chunk);
+    watch(chunk.toString("utf8"));
+  });
+  await waitForDriver(base);
+}
+
+/// Quanto si aspetta al più che l'app della sessione chiusa esca.
+const APP_EXIT_MS = 30_000;
+
+/// Aspetta che l'app della sessione appena chiusa e i processi della sua
+/// WebView siano usciti, guardando i discendenti del driver per PID. Fub ha
+/// un'istanza sola (plugin single-instance): un'app che parte mentre la
+/// vecchia è ancora viva le cede, e il driver aspetta una finestra che non
+/// arriva (S9 dopo S3 in T46, «UND_ERR_HEADERS_TIMEOUT»). Se dopo
+/// `APP_EXIT_MS` resta qualcosa lo dice, e si va avanti. Fuori da Linux i
+/// processi non si leggono: resta la pausa di prima.
+async function appGone(label) {
+  if (descendants(driverPid) === null) {
+    await pause(3_000);
+    return;
+  }
+  const deadline = performance.now() + APP_EXIT_MS;
+  for (;;) {
+    const left = descendants(driverPid);
+    if (left.length === 0) return;
+    if (performance.now() > deadline) {
+      console.log(`⚠ ${label}: dopo ${APP_EXIT_MS / 1000} s restano processi dell'app di prima (${left.map((p) => `${p.comm} ${p.pid}`).join(", ")}): parte lo stesso`);
+      return;
+    }
+    await pause(50);
+  }
+}
+
+/// L'app di una sessione nuova, avviata soltanto quando quella di prima è
+/// uscita (`appGone`). Se muore perché GTK non parte, un solo nuovo tentativo
+/// col driver riavviato, e lo dice (`openWithGtkRetry`, #287).
+async function launch(label) {
+  await appGone(label);
+  return openWithGtkRetry(label, {
+    open: (signal) => openSession(base, app, { signal }),
+    watch: (listener) => {
+      gtkListeners.add(listener);
+      return () => gtkListeners.delete(listener);
+    },
+    restart: async () => {
+      await stopDriver(driver);
+      await startDriver();
+    },
+    log: (text) => console.log(text),
+  });
+}
+
 function git(...command) {
   try {
     return execFileSync("git", command, { encoding: "utf8" }).trim();
@@ -1331,31 +1406,24 @@ async function main() {
   benchVault = vault;
   // `--x11` toglie `WAYLAND_DISPLAY` al driver e chiede X11: la guardia in
   // fondo al file ha già detto che cosa scegliere (`display.mjs`).
-  const driverEnv = { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config };
+  driverEnv = { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config };
   if (x11) {
     delete driverEnv.WAYLAND_DISPLAY;
     driverEnv.GDK_BACKEND = "x11";
   }
-  const driver = spawn(args.driver ?? "tauri-driver", [
-    "--port", String(port),
-    ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
-  ], {
-    env: driverEnv,
-    stdio: ["ignore", "inherit", "inherit"],
-    // Un gruppo di processi suo: alla fine si ferma il driver con l'app e
-    // WebKitWebDriver che ha avviato, non soltanto `tauri-driver`.
-    detached: process.platform !== "win32",
-  });
-  driverPid = driver.pid;
+  // Un Xvfb che si rigenera fra un'app e l'altra fa cadere ogni tanto l'avvio
+  // dello scenario dopo (#287): si dice subito, prima delle misure.
+  const reset = xvfbResetProblem(driverEnv, commandLines());
+  if (reset) console.log(`⚠ ${reset}`);
   const results = {};
   let failed = 0;
   try {
-    await waitForDriver(base);
+    await startDriver();
     // Il primo avvio sul vault nuovo legge dal disco diecimila note: lo fa una
     // sessione che non misura, e aspetta che la ricerca per nome risponda. Gli
     // avvii dopo indicizzano di nuovo da capo, e ogni scenario aspetta che
     // l'indice sia pronto (`indexed`).
-    const warm = await openSession(base, app);
+    const warm = await launch("riscaldamento");
     try {
       await ready(warm);
       await openByName(warm, "Lunga", "Una nota lunga", null, 300_000);
@@ -1377,7 +1445,7 @@ async function main() {
       // banco: gli altri scenari e il referto vanno avanti.
       let session;
       try {
-        session = await openSession(base, app);
+        session = await launch(id);
       } catch (error) {
         failed++;
         // `fetch` dice «fetch failed» e la causa (la porta, il timeout) è in `cause`.
@@ -1423,14 +1491,8 @@ async function main() {
         console.log(`✗ ${id}: ${results[id].error}`);
       } finally {
         // C1 chiude da sé le sessioni che apre, anche la prima.
-        if (id !== "C1") {
-          await session.close();
-          // Fub ha un'istanza sola: l'app di questo scenario deve finire prima
-          // che parta la successiva. Ipotesi per S9 dopo S3 (T46), che ha dato
-          // «UND_ERR_HEADERS_TIMEOUT» due volte su sei: la nuova cede alla
-          // vecchia e il driver aspetta una finestra che non arriva.
-          await pause(3_000);
-        }
+        // L'app dopo parte quando questa è uscita (`launch`).
+        if (id !== "C1") await session.close();
       }
     }
   } finally {
