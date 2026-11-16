@@ -26,6 +26,7 @@
 import { defineConfig, searchForWorkspaceRoot, type Plugin } from "vite";
 import { fileURLToPath } from "node:url";
 import { canvasWasm } from "./build/canvas-wasm.mjs";
+import { lazyEditorModules } from "./bench/warmup.mjs";
 
 const here = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
 
@@ -109,6 +110,10 @@ export default defineConfig({
     // l'un l'altro per sbaglio.
     port: Number(process.env.FUB_BENCH_PORT) || 1431,
     strictPort: true,
+    // Gli editor che arrivano con un `import()` alla prima apertura si
+    // trasformano all'accensione del server, non dentro l'attesa della prima
+    // scena del loro formato (#395): l'elenco e il perché in `bench/warmup.mjs`.
+    warmup: { clientFiles: lazyEditorModules(here(".")) },
     // Come la config di sempre: oltre al client, i modelli di «Nuovo disegno»
     // nel crate che li distribuisce.
     fs: {

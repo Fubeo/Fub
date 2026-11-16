@@ -29,6 +29,7 @@ import { followPath, followWikilink, type PeekLink, type WikilinkFollow, type Wi
 import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
 import { settings } from "../../../../host/query";
 import { onEvent } from "../../../../state/kernel";
+import { openVaultRoot } from "../../../../state/store";
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { notify } from "../../../../ui/notify";
 import { errorText } from "../../../../host/errors";
@@ -321,6 +322,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const parent = context.parent;
   const documentId = context.documentId;
   const resources = acquireMarkdownResources(documentId);
+  /// Il vault in cui la nota si è aperta (FUB-001): i posti fuori dalla
+  /// colonna si chiedono per la nota di questo vault, non per lo stesso
+  /// percorso in un altro.
+  const vault = openVaultRoot();
   /// Il documento di questa superficie, letto a ogni gesto: una rinomina lo
   /// cambia mentre la superficie è montata. I link si risolvono da qui, non
   /// dal riquadro col fuoco (una sbirciata, una scheda della lavagna).
@@ -594,6 +599,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   };
   const blocksOptions: BlocksOptions = {
     ...pageOptions,
+    // La nota e il suo vault: i bersagli fuori dalla colonna (T2b). Solo dei
+    // Blocchi, la testata non li usa.
+    document: () => ({ documentId: resources?.documentId ?? documentId, vault }),
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,
   };
