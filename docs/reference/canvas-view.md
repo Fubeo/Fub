@@ -212,6 +212,21 @@ sulla superficie come `data-workspace`:
 
 L'ispettore è della shell: la lavagna non lo apre mai da sé, in nessuno spazio.
 
+## Il testo che non ci sta
+
+Fuori dalla scheda attiva, una scheda di testo e la resa di una nota
+(viva o ferma) che non ci stanno si fermano sotto l'ultima riga che si legge
+intera, mai a metà di una riga (`whole-lines.ts`). La tela misura le righe
+(`Range.getClientRects`, riportate alla scala della scheda, perché lo zoom è
+una trasformazione) e scrive l'altezza in `--canvas-card-cut`, che la pelle
+usa come `max-height`; la misura si rifà quando la scheda cambia misura,
+quando il contenuto cambia, quando arrivano immagini o caratteri, tutte le
+schede insieme in un microtask. Una scheda di testo non scorre: «Estrai in una
+nota…» è una riga come le altre e resta fuori se non entra (il gesto c'è anche
+nel menu). La nota tiene l'ombra che dice «continua», che si ferma a un terzo
+sull'ultima riga intera. Se non entra neanche la prima riga, nessun taglio.
+Dentro la scheda attiva il testo scorre e il taglio non conta.
+
 ## Da lontano
 
 Da lontano la lavagna si legge ancora (`lod.ts`, N6 T54). `detailLevel(zoom)`
