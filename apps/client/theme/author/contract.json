@@ -1700,16 +1700,20 @@
     "launcher-lens",
     "launcher-input",
     "launcher-wait",
+    "launcher-close",
     "launcher-modes",
-    "launcher-mode-prefix",
+    "launcher-mode",
+    "launcher-mode-tile",
     "launcher-list",
+    "launcher-highlight",
     "launcher-row",
+    "launcher-row-icon",
     "launcher-row-title",
-    "launcher-row-format",
     "launcher-row-detail",
     "launcher-row-meta",
     "launcher-note",
     "launcher-preview",
+    "launcher-preview-sheet",
     "launcher-preview-page",
     "launcher-preview-note",
     "launcher-foot",
@@ -3558,16 +3562,20 @@
     "launcher-lens": "cornice",
     "launcher-input": "cornice",
     "launcher-wait": "cornice",
+    "launcher-close": "cornice",
     "launcher-modes": "cornice",
-    "launcher-mode-prefix": "cornice",
+    "launcher-mode": "cornice",
+    "launcher-mode-tile": "cornice",
     "launcher-list": "cornice",
+    "launcher-highlight": "cornice",
     "launcher-row": "cornice",
+    "launcher-row-icon": "cornice",
     "launcher-row-title": "cornice",
-    "launcher-row-format": "cornice",
     "launcher-row-detail": "cornice",
     "launcher-row-meta": "cornice",
     "launcher-note": "cornice",
     "launcher-preview": "cornice",
+    "launcher-preview-sheet": "cornice",
     "launcher-preview-page": "cornice",
     "launcher-preview-note": "cornice",
     "launcher-foot": "cornice",
@@ -8011,14 +8019,31 @@
       ]
     },
     {
+      "name": "unified-close",
+      "part": "launcher",
+      "hooks": [
+        "launcher-close"
+      ],
+      "states": [
+        "rest",
+        "hover"
+      ]
+    },
+    {
       "name": "unified-modes",
       "part": "launcher",
       "hooks": [
         "launcher-modes",
-        "launcher-mode-prefix"
+        "launcher-mode",
+        "launcher-mode-tile"
       ],
       "states": [
-        "rest"
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
       ]
     },
     {
@@ -8026,15 +8051,21 @@
       "part": "launcher",
       "hooks": [
         "launcher-list",
+        "launcher-highlight",
         "launcher-row",
+        "launcher-row-icon",
         "launcher-row-title",
-        "launcher-row-format",
         "launcher-row-detail",
         "launcher-row-meta",
         "launcher-note"
       ],
       "states": [
-        "rest"
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
       ]
     },
     {
@@ -8042,6 +8073,7 @@
       "part": "launcher",
       "hooks": [
         "launcher-preview",
+        "launcher-preview-sheet",
         "launcher-preview-page",
         "launcher-preview-note"
       ],
@@ -10003,10 +10035,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1856,
+    "hooks": 1860,
     "state_names": 7,
-    "assigned_states": 867,
-    "components": 257,
+    "assigned_states": 879,
+    "components": 258,
     "preference_tokens": 189
   }
 }

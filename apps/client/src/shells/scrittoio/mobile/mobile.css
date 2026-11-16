@@ -243,16 +243,16 @@
 
   /* I sette modi non stanno in una riga, e una fila che scorre qui non ha
      niente che prenda il fuoco (nessuna linguetta è una fermata del Tab): axe
-     la rifiuta (`scrollable-region-focusable`). Vanno a capo. Il segno scorre
-     lungo una riga sola; su due non saprebbe dove stare, e il modo scelto
-     resta detto dal suo colore. */
+     la rifiuta (`scrollable-region-focusable`). Vanno a capo; il modo scelto
+     lo dice il suo quadratino d'accento, su qualunque riga stia. Ogni modo
+     stringe il margine dopo il nome, come nel prototipo al telefono. */
   :root[data-client-shell="mobile"] .launcher-modes {
     flex-wrap: wrap;
     overflow-x: visible;
   }
 
-  :root[data-client-shell="mobile"] .launcher-modes > .kit-tab-indicator {
-    display: none;
+  :root[data-client-shell="mobile"] .launcher-modes > .kit-tab {
+    padding-right: 6px;
   }
 
   /* Niente tasti sul telefono: i bottoni del piede («Azioni», «Crea la nota»,

@@ -486,11 +486,29 @@ describe("i modi", () => {
     expect(document.activeElement).toBe(field());
   });
 
+  it("il prefisso sta in un quadratino davanti al nome; «Tutto» porta la lente", () => {
+    launcher.open("all");
+    const tabs = [...document.querySelectorAll<HTMLElement>('.launcher-modes [role="tab"]')];
+    for (const tab of tabs) {
+      const tile = tab.firstElementChild as HTMLElement;
+      expect(tile.classList.contains("launcher-mode-tile")).toBe(true);
+      expect(tile.getAttribute("aria-hidden")).toBe("true");
+    }
+    expect(tabs[0]!.querySelector<SVGElement>(".launcher-mode-tile svg")?.dataset.icon).toBe("search");
+    expect(tabs.slice(1).every((tab) => tab.querySelector(".launcher-mode-tile svg") === null)).toBe(true);
+    // La lente del campo è una sola: non cambia col modo.
+    const lens = (): string | undefined => document.querySelector<SVGElement>(".launcher-lens svg")?.dataset.icon;
+    expect(lens()).toBe("search");
+    launcher.open("commands");
+    expect(lens()).toBe("search");
+    expect(document.querySelectorAll(".launcher-lens svg")).toHaveLength(1);
+  });
+
   it("la fila è cliccabile, e porta scritto il prefisso di ogni modo", () => {
     launcher.open("all");
     const tabs = [...document.querySelectorAll<HTMLElement>('.launcher-modes [role="tab"]')];
     expect(tabs).toHaveLength(7);
-    expect(tabs.map((tab) => tab.querySelector(".launcher-mode-prefix")?.textContent ?? "")).toEqual(["", ">", "#", "@", "/", "?", ":"]);
+    expect(tabs.map((tab) => tab.querySelector(".launcher-mode-tile")?.textContent ?? "")).toEqual(["", ">", "#", "@", "/", "?", ":"]);
     tabs[2]!.click();
     expect(selectedMode()).toContain("launcher.mode.tags");
     expect(world.asked[world.asked.length - 1]![0]).toBe("tags");
@@ -582,9 +600,9 @@ describe("scegliere una riga", () => {
     world.answer = () => listed([note("R1/Stampa.pdf"), note("R1/Immagine.png"), note("Relazione.docx"), note("Due.md")]);
     launcher.open("all");
     const icons = [...document.querySelectorAll<HTMLElement>(".launcher-row")].map(
-      (row) => row.querySelector<SVGElement>(".launcher-row-format")?.dataset.icon ?? null,
+      (row) => row.querySelector<SVGElement>(".launcher-row-icon svg")?.dataset.icon ?? null,
     );
-    expect(icons).toEqual(["book", "image", "format-word", null]);
+    expect(icons).toEqual(["book", "image", "format-word", "notes"]);
     expect(document.querySelector(".launcher-row-title")?.textContent).toBe("Stampa");
     press(field(), "Enter");
     await settle();
@@ -772,6 +790,29 @@ describe("scegliere una riga", () => {
     press(field(), "ArrowDown");
     press(field(), "Enter");
     expect(world.log).toEqual(["start note.rename"]);
+  });
+
+  it("ogni riga porta davanti l'icona della sua specie, fuori dal titolo", () => {
+    world.answer = () =>
+      listed([
+        note("Uno.md"),
+        { kind: "person", key: "p:Ada", doc: "Persone/Ada.md" },
+        { kind: "command", key: "c:x", entry: command("x", null) },
+        { kind: "heading", key: "h:3", doc: "Uno.md", level: 2, text: "Capitolo", at: 3 },
+        { kind: "tag", key: "t:tema", name: "tema", count: 2 },
+      ]);
+    launcher.open("all");
+    const rows = [...document.querySelectorAll<HTMLElement>(".launcher-row")];
+    for (const row of rows) {
+      expect(row.firstElementChild?.classList.contains("launcher-row-icon")).toBe(true);
+      expect(row.querySelector(".launcher-row-title svg")).toBeNull();
+    }
+    const marks = rows.map((row) => {
+      const mark = row.querySelector<HTMLElement>(".launcher-row-icon")!;
+      return mark.querySelector<SVGElement>("svg")?.dataset.icon ?? mark.textContent;
+    });
+    expect(marks).toEqual(["notes", "people", "palette", "#", "#"]);
+    expect(titles()).toEqual(["Uno", "Ada", "Titolo x", "Capitolo", "#tema"]);
   });
 
   it("un'etichetta porta alle sue note in Tutto, con la ricerca sul tag: si resta aperti", () => {
@@ -978,6 +1019,19 @@ describe("chiudere", () => {
     expect(document.querySelector(".launcher-layer")).toBeNull();
     expect(document.activeElement).toBe(elsewhere);
     expect(launcher.isOpen).toBe(false);
+  });
+
+  it("il segno «Esc» in fondo al campo chiude col puntatore, e non è una fermata del Tab", () => {
+    const elsewhere = document.getElementById("altrove")!;
+    elsewhere.focus();
+    launcher.open("all");
+    const chip = document.querySelector<HTMLButtonElement>(".launcher-head > .launcher-close")!;
+    expect(chip.textContent).toBe("Esc");
+    expect(chip.getAttribute("aria-label")).toBe("launcher.close");
+    expect(chip.tabIndex).toBe(-1);
+    chip.click();
+    expect(surface()).toBeNull();
+    expect(document.activeElement).toBe(elsewhere);
   });
 
   it("senza nessuno a cui tornare il fuoco va all'editor", () => {

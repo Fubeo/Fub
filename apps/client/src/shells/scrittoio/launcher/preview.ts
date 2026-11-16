@@ -59,7 +59,12 @@ export function createPreview(lifetime: Lifetime): Preview {
   const note = document.createElement("p");
   note.className = "launcher-preview-note";
   note.hidden = true;
-  element.append(page, note);
+  // La resa sta su un foglio rialzato dentro il riquadro: è una pagina vista
+  // da lontano, non testo steso sul fondo. La frase sta fuori dal foglio.
+  const sheet = document.createElement("div");
+  sheet.className = "launcher-preview-sheet";
+  sheet.append(page);
+  element.append(sheet, note);
 
   const race = new Race();
   let wanted: string | null = null;
