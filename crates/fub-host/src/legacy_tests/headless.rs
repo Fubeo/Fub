@@ -13,7 +13,8 @@
 //! dice più niente su ciò che doveva provare.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::WriteBase;
@@ -595,8 +596,8 @@ fn close_a_vault_and_latest_round_in_which_and_again_open() {
     let v = Vault::new();
     v.put("Nota.md", "# Nota\n\nqualcosa da cercare\n");
 
-    let events = Arc::new(Mutex::new(Vec::new()));
-    let host = headless().with_sink(Arc::new(Recorder(events.clone())));
+    let events = Arc::new(Recorder::default());
+    let host = headless().with_sink(events.clone());
     host.open(&v.root).expect("the vault opens");
 
     // Una scrittura **senza watcher**, cioè senza nessuno che chiami
@@ -618,11 +619,11 @@ fn close_a_vault_and_latest_round_in_which_and_again_open() {
     let errors = host.close_vault(&v.root).expect("closes");
     assert!(errors.is_empty(), "nothing went wrong: {errors:?}");
 
-    let seen = events.lock().unwrap().clone();
-    assert!(
-        seen.iter().any(|and| and == "vault_closed"),
-        "the twin of `vault_opened` passed through the bridge: {seen:?}"
-    );
+    // Il gemello di `vault_opened` passa dal ponte. Il ponte consegna dal suo
+    // thread, e `close_vault` non lo aspetta: quando
+    // torna, `VaultClosed` è stato emesso sul bus ma può non essere ancora nel
+    // sink. Si aspetta la consegna, non un tempo (#396).
+    events.wait_for("vault_closed");
     assert!(
         manifest_of_the_index(&v.root).contains("Nuova.md"),
         "closing makes durable what the index had accepted: this is the point \
@@ -651,8 +652,35 @@ fn manifest_of_the_index(root: &Utf8Path) -> String {
 }
 
 /// Il ponte eventi ridotto a ciò che serve a un test: il nome degli eventi
-/// passati.
-struct Recorder(Arc<Mutex<Vec<String>>>);
+/// passati, e un campanello per chi ne aspetta uno.
+#[derive(Default)]
+struct Recorder {
+    names: Mutex<Vec<String>>,
+    arrived: Condvar,
+}
+
+/// Tetto di sicurezza di [`Recorder::wait_for`]. Non decide l'esito: l'attesa
+/// finisce appena l'evento arriva, di solito in pochi millisecondi. Il tetto
+/// serve solo a non restare appesi se un difetto toglie l'evento, ed è largo
+/// perché su una macchina molto carica il thread del ponte può restare fermo
+/// dei secondi.
+const SAFETY_CAP: Duration = Duration::from_secs(60);
+
+impl Recorder {
+    /// Aspetta che il ponte consegni un evento con questo nome.
+    fn wait_for(&self, name: &str) {
+        let deadline = Instant::now() + SAFETY_CAP;
+        let mut names = self.names.lock().unwrap();
+        while !names.iter().any(|seen| seen == name) {
+            let left = deadline.saturating_duration_since(Instant::now());
+            assert!(
+                !left.is_zero(),
+                "in {SAFETY_CAP:?} il ponte non ha consegnato `{name}`: {names:?}"
+            );
+            names = self.arrived.wait_timeout(names, left).unwrap().0;
+        }
+    }
+}
 
 impl EventSink for Recorder {
     fn emit(&self, notice: &Notice) -> Delivery {
@@ -660,7 +688,8 @@ impl EventSink for Recorder {
             .ok()
             .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(String::from))
             .unwrap_or_default();
-        self.0.lock().unwrap().push(name);
+        self.names.lock().unwrap().push(name);
+        self.arrived.notify_all();
         Delivery::Done
     }
 }
