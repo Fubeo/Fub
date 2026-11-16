@@ -115,7 +115,9 @@ import {
 } from "./chrome/selection-bar";
 import { Lasso, LASSO_MIN_STEP, extendLasso, lassoPath, type LassoPoint } from "./lasso";
 import { cardsTouched, edgesBetween, marqueeBox, marqueeMoved, sameIds, unionIds } from "./marquee";
-import type { OptionItem } from "../../kit/options-bar";
+import { createOptionsBar, type OptionItem, type OptionsBar } from "../../kit/options-bar";
+import { rovingToolbar, type RovingToolbar } from "../../kit/toolbar-keys";
+import { watchWholeLines } from "./whole-lines";
 import {
   canvasStatusItems,
   dropFolderOf,
@@ -1570,6 +1572,9 @@ export function erasePathPieces(path: readonly Spot[], segments: number): Spot[]
 export class CanvasEngine {
   readonly #root: HTMLElement;
   readonly #toolbar: HTMLElement;
+  /** La barra dei comandi sulla barra delle opzioni del kit: ciò che non ci sta va in «…» (#411). */
+  readonly #toolbarBar: OptionsBar;
+  readonly #toolbarKeys: RovingToolbar;
   readonly #viewport: HTMLElement;
   readonly #stage: HTMLElement;
   /** I fili, primo figlio dello stage (T91, rotta 4): un gruppo gli sta sotto, le schede sopra. */
@@ -2126,10 +2131,23 @@ export class CanvasEngine {
     }, () => undefined);
     this.#root = document.createElement("div");
     this.#root.className = "canvas-surface";
-    this.#toolbar = document.createElement("div");
-    this.#toolbar.className = "canvas-toolbar";
-    this.#toolbar.setAttribute("role", "toolbar");
-    this.#toolbar.setAttribute("aria-label", t("canvas.surface"));
+    // La barra dei comandi è la barra delle opzioni del kit, come la riga
+    // sopra: una riga sola, e ciò che non ci sta va in «…» invece di scorrere
+    // di lato senza segno (#411). Le frecce passano fra i controlli che si
+    // vedono, «…» compreso.
+    this.#toolbarBar = createOptionsBar({
+      label: t("canvas.surface"),
+      moreLabel: t("canvas.toolbar.more"),
+      lifetime: this.#life,
+      onFit: () => this.#toolbarKeys?.refresh(),
+    });
+    this.#toolbar = this.#toolbarBar.element;
+    this.#toolbar.classList.add("canvas-toolbar");
+    const toolbarRow = this.#toolbar.querySelector<HTMLElement>(".kit-options-row")!;
+    const toolbarMore = this.#toolbar.querySelector<HTMLElement>(".kit-options-more")!;
+    this.#toolbarKeys = rovingToolbar(this.#toolbar, {
+      controls: () => [...toolbarRow.querySelectorAll<HTMLElement>("button, select, input"), toolbarMore],
+    }, this.#life);
     this.#viewport = document.createElement("div");
     this.#viewport.className = "canvas-viewport";
     this.#viewport.tabIndex = 0;
@@ -2345,6 +2363,7 @@ export class CanvasEngine {
       this.#scheduleLabels();
       this.#viewport.setAttribute("aria-label", t("canvas.surface"));
       this.#toolbar.setAttribute("aria-label", t("canvas.surface"));
+      this.#toolbar.querySelector(".kit-options-more")?.setAttribute("aria-label", t("canvas.toolbar.more"));
       this.#drawToolbar();
       this.#rail.relabel();
       this.#empty.relabel();
@@ -5913,16 +5932,16 @@ export class CanvasEngine {
   // --- toolbar ----------------------------------------------------------------
 
   #drawToolbar(): void {
-    const bar = this.#toolbar;
     // La barra di N4 si rifà da capo, salvo l'interruttore «Scrivi col
     // mouse», che resta lo stesso elemento in testa: il fuoco non si perde.
     // Ciò che è passato nella riga delle opzioni (T50: il menu della penna,
     // davanti e dietro, allinea e distribuisci, la Vista) non c'è più; il
     // resto aspetta i suoi task (la barra della selezione T51, i fili e il
-    // colore esatto T47 e T59, la lavagna vuota T62).
+    // colore esatto T47 e T59, la lavagna vuota T62). I controlli nascono in
+    // `bar`, staccata, e passano alla barra del kit (`#toolbarBar`), che
+    // lascia al suo posto chi c'è già e manda in «…» ciò che non ci sta.
+    const bar = document.createElement("div");
     const inkMouse = this.#inkMouseButton;
-    for (const child of [...bar.children]) if (child !== inkMouse) child.remove();
-    if (bar.firstElementChild !== inkMouse) bar.prepend(inkMouse);
     this.#penMenu.sync();
     // La colonna e la riga delle opzioni: lo strumento, la scelta e la sola
     // lettura di adesso.
@@ -5987,7 +6006,10 @@ export class CanvasEngine {
         this.#selection = [];
         this.#options.onSelectionChange();
         this.#displaySelection();
-        this.#toolbar.querySelector<HTMLInputElement>('[data-canvas-field="edge-label"]')?.focus();
+        // Il campo del nome, se si vede; se è finito in «…», il fuoco va lì.
+        const label = this.#toolbar.querySelector<HTMLInputElement>('[data-canvas-field="edge-label"]');
+        if (label && !label.closest("[hidden]")) label.focus();
+        else this.#toolbar.querySelector<HTMLElement>(".kit-options-more:not([hidden])")?.focus();
       });
       bar.append(picker);
     }
@@ -5997,6 +6019,7 @@ export class CanvasEngine {
     // Un avviso solo, nel suo posto all'inizio della barra, dove si legge
     // senza scorrere: quello dell'ultimo gesto, o la sola lettura della tela.
     // Una scena oltre il limite ha già il suo, nella tela.
+    const head: HTMLElement[] = [];
     const notice = this.#intakeError
       || (this.#unwritable && !this.#isSceneOversized() ? t("canvas.unwritable") : "");
     if (notice) {
@@ -6004,18 +6027,19 @@ export class CanvasEngine {
       error.setAttribute("role", "alert");
       error.className = "canvas-intake-error";
       error.textContent = notice;
-      bar.prepend(error);
+      head.push(error);
     }
-    // L'avviso di «Togli dalla lavagna» (T17), dopo quello dell'ultimo gesto:
-    // una notizia e non un guasto, con «Annulla» accanto.
+    // L'avviso di «Togli dalla lavagna» (T17), dopo quello dell'ultimo gesto
+    // e dopo «Scrivi col mouse»: una notizia e non un guasto, con «Annulla»
+    // accanto.
+    const told: HTMLElement[] = [];
     const removal = this.#removal;
     if (removal) {
       const said = document.createElement("output");
       said.setAttribute("role", "status");
       said.className = "canvas-removal";
       said.textContent = removal.text;
-      const place = bar.querySelector(".canvas-intake-error")?.nextSibling ?? inkMouse.nextSibling;
-      bar.insertBefore(said, place);
+      told.push(said);
       if (removal.undo && removal.step !== undefined) {
         const undo = document.createElement("button");
         undo.type = "button";
@@ -6024,7 +6048,7 @@ export class CanvasEngine {
         undo.title = t(removal.free ? "canvas.ink.moved_undo" : "canvas.card.removed_undo");
         // Il pulsante si rifà con la barra: l'ascolto se ne va con lui.
         undo.addEventListener("click", () => this.#undoRemoval());
-        bar.insertBefore(undo, said.nextSibling);
+        told.push(undo);
         // I tratti passati a una scheda col Lazo (T86): «Rendilo libero».
         if (removal.free) {
           const free = document.createElement("button");
@@ -6033,10 +6057,23 @@ export class CanvasEngine {
           free.textContent = t("canvas.ink.make_free");
           free.title = t("canvas.ink.make_free_hint");
           free.addEventListener("click", () => this.#freeMovedInk());
-          bar.insertBefore(free, undo.nextSibling);
+          told.push(free);
         }
       }
     }
+    // Gli avvisi e i loro pulsanti restano nella riga più a lungo dei comandi
+    // (priorità 1): si leggono senza aprire «…».
+    const notices = new Set<HTMLElement>([...head, ...told]);
+    const controls: HTMLElement[] = [...head, inkMouse, ...told, ...(bar.children as HTMLCollectionOf<HTMLElement>)];
+    this.#toolbarBar.setItems(controls.map((element, index) => {
+      element.classList.add("canvas-toolbar-item");
+      return {
+        id: element.dataset.canvasAction ?? element.dataset.canvasField ?? `${element.className}-${index}`,
+        element,
+        priority: notices.has(element) ? 1 : 0,
+      };
+    }));
+    this.#toolbarKeys.refresh();
   }
 
   #showIntakeError(error: unknown): void {
@@ -12874,6 +12911,15 @@ export class CanvasEngine {
           });
           body.append(convert);
         }
+        // Un testo che non ci sta si ferma sotto l'ultima riga intera (#411),
+        // «Estrai in una nota…» compreso: mai una riga tagliata a metà.
+        const lines = openLifetime();
+        watchWholeLines(body, lines);
+        const unmount = entry.teardown;
+        entry.teardown = () => {
+          lines.close();
+          unmount?.();
+        };
         break;
       }
       case "file": {

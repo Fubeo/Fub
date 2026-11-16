@@ -39,7 +39,7 @@ export const EDITORS: PartAnatomy = {
     { name: "base-kanban", layer: "contenuto", states: DRAGGABLE, hooks: ["base-kanban", "base-kanban-column", "base-kanban-card"] },
     { name: "base-map", layer: "contenuto", layers: { "base-map-attribution": "cornice" }, states: [S("rest"), S("focused")], hooks: ["base-map-atlas", "base-map-attribution", "base-map-marker"] },
     // La griglia e le guide (T71) sono segni di Fub sulla vista, non contenuto.
-    { name: "canvas-surface", layers: { "canvas-viewport": "contenuto", "canvas-source": "contenuto", "canvas-grid": "segno", "canvas-guide": "segno" }, states: INTERACTIVE, hooks: ["canvas-surface", "canvas-toolbar", "canvas-intake-error", "canvas-viewport", "canvas-large-fallback", "canvas-source", "canvas-grid", "canvas-guide"] },
+    { name: "canvas-surface", layers: { "canvas-viewport": "contenuto", "canvas-source": "contenuto", "canvas-grid": "segno", "canvas-guide": "segno" }, states: INTERACTIVE, hooks: ["canvas-surface", "canvas-toolbar", "canvas-toolbar-item", "kit-options-row", "canvas-intake-error", "canvas-viewport", "canvas-large-fallback", "canvas-source", "canvas-grid", "canvas-guide"] },
     // La colonna degli strumenti della lavagna (T49): quella del kit, con le
     // caselle `canvas-tool`; uno strumento spento in sola lettura si vede.
     { name: "canvas-rail", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["canvas-rail", "canvas-tool"] },
