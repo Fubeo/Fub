@@ -1073,6 +1073,28 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     expect(word.getAttribute("aria-label")).toBe(`Lettera · ${t("format.kind.word")}`);
   });
 
+  it("due note che cominciano uguali tengono a vista la parte che le distingue, e il nome intero resta (#411 B-03)", async () => {
+    await start("off", null, { "Diario/2026-08-18.md": "# 18\n", "Diario/2026-08-19.md": "# 19\n" });
+    await open("Diario/2026-08-18.md");
+    await open("Diario/2026-08-19.md");
+    await open(NOTA);
+    const tabOf = (doc: string) => [...document.querySelectorAll<HTMLElement>(".pane .tab")].find((tab) => tab.dataset.key?.includes(doc))!;
+    const parts = (tab: HTMLElement) =>
+      [...tab.querySelectorAll<HTMLElement>(".tab-name-head, .tab-name-tail")].map((part) => [part.className, part.textContent]);
+    const diary = tabOf("2026-08-19");
+    // La testa cede con l'ellissi, la coda resta: mese e giorno, non l'anno.
+    expect(parts(diary)).toEqual([["tab-name-head", "2026-"], ["tab-name-tail", "08-19"]]);
+    expect(parts(tabOf("2026-08-18"))).toEqual([["tab-name-head", "2026-"], ["tab-name-tail", "08-18"]]);
+    // Il nome intero, per chi ascolta e per chi passa col puntatore.
+    expect(diary.querySelector(".tab-name")!.textContent).toBe("2026-08-19");
+    expect(diary.getAttribute("aria-label")).toBe("2026-08-19");
+    // Una nota senza gemelle si taglia alla fine come sempre: niente coda.
+    expect(parts(tabOf(NOTA))).toEqual([["tab-name-head", "Diario"]]);
+    // Chiusa una delle due, l'altra torna a un nome solo.
+    document.querySelector<HTMLElement>(`#${CSS.escape(tabOf("2026-08-18").id)} + .tab-close`)!.click();
+    await vi.waitFor(() => expect(parts(tabOf("2026-08-19"))).toEqual([["tab-name-head", "2026-08-19"]]));
+  });
+
   it("il menu «…» di una nota ha le voci di oggi", async () => {
     await start("off", null, { [NOTA]: "# Diario\n" });
     await open(NOTA);

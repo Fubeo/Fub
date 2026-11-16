@@ -97,6 +97,14 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   una linguetta di nota diventa finestra, solo con
   `platformSupports("multipleWindows")` e dove il motore consegna `dragend`
   fuori finestra. Ogni gesto ha il suo comando nel menu della linguetta.
+  Una linguetta non scende sotto `--tab-min` (132 px, una decina di lettere
+  oltre figura e chiusura): quelle che non ci stanno scorrono, e l'elenco in
+  fondo alla striscia le nomina tutte. Un nome troppo lungo si taglia alla
+  fine; se due nomi della striscia cominciano uguali (le note del diario,
+  due omonime con la cartella in coda) la vista lo divide in testa e coda
+  (`panels/tab-names.ts`) e a cedere con l'ellissi è la testa, così resta a
+  vista la parte che li distingue. Il nome intero resta nel nome accessibile
+  e nel suggerimento.
   Chiusa, aperta o spostata una linguetta, le altre (e il «+») scorrono dal
   posto di prima a quello nuovo in un passo solo: la misura è già quella
   finale dal primo fotogramma e si muove solo una trasformazione; col moto

@@ -54,7 +54,11 @@
   /* Il foglio di testo che resta solo in concentrazione. */
   --focus-sheet-width: 56rem;
   --tab-h: 34px;
-  --tab-min: 96px;
+  /* La linguetta più stretta tiene a vista una decina di lettere oltre la
+     figura e la chiusura («2026-08-19» intero): sotto, i nomi diventavano
+     due lettere e un'ellissi. Le linguette che non ci stanno scorrono, e
+     l'elenco in fondo le nomina tutte. */
+  --tab-min: 132px;
   --tab-max: 220px;
   --sheet-head-h: 40px;
   --format-bar-h: 36px;
