@@ -130,7 +130,10 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   finire il trascinamento lo azzera.
 - **Rinomina nell'albero.** Un nome rifiutato (non valido, già in uso, errore
   del kernel) riapre il campo con ciò che è stato scritto e la frase accanto,
-  `role="alert"`, che sparisce alla prima battuta; il toast non serve.
+  `role="alert"`, che sparisce alla prima battuta; il toast non serve. Dopo
+  Invio, Esc o un clic su qualcosa che non prende il fuoco, il fuoco resta
+  sulla voce e la segue al nome nuovo quando l'albero la ridisegna; un clic su
+  un controllo lo lascia a quel controllo.
 - **Avvisi dentro il foglio.** Sotto il banner del conflitto (`drawNotices` in
   `panels/document.ts`) il foglio tiene una riga per avviso: errore di
   salvataggio con «Riprova» (`shell.doc.save`), sola lettura mentre una

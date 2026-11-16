@@ -566,6 +566,10 @@ function children(path: string): FolderContent | null {
   return content ? sortContent(content, state.meta, state.explorerSort) : null;
 }
 
+/// La voce che aveva il fuoco quando una rinomina in posto è stata confermata,
+/// e il path che avrà: `renderFileList` porta il fuoco sulla riga nuova.
+let renameFocus: { from: string; to: string } | null = null;
+
 /// Ridisegna l'albero. Con `only`, la cartella aperta o chiusa da
 /// `toggleFolder` quando fuori da lei non è cambiato niente: si rifà soltanto
 /// il suo sottoalbero, e le altre righe restano gli stessi nodi.
@@ -588,10 +592,21 @@ function renderFileList(only: string | null = null): void {
   const active = document.activeElement;
   const focused =
     active instanceof HTMLElement && fileListEl.contains(active) ? active : null;
-  const toRestore = focused?.closest<HTMLElement>('li[role="treeitem"]')?.dataset.path;
+  let toRestore = focused?.closest<HTMLElement>('li[role="treeitem"]')?.dataset.path;
   const onChevron = focused?.matches("button.chevron");
 
   if (only === null || !patchFolder(only)) rebuildTree();
+
+  // Una voce appena rinominata col fuoco addosso: il fuoco la segue al path
+  // nuovo appena l'albero lo disegna. Un ridisegno che arriva prima disegna
+  // ancora la voce vecchia, e il fuoco resta lì; se intanto il fuoco è andato
+  // altrove, la voce non lo riprende.
+  const renamed = renameFocus;
+  if (renamed !== null && toRestore !== renamed.from) renameFocus = null;
+  else if (renamed !== null && entry(renamed.to)) {
+    toRestore = renamed.to;
+    renameFocus = null;
+  }
 
   roving(toRestore);
   selection?.repaint();
@@ -2161,19 +2176,30 @@ function startRename(row: HTMLElement, id: string, preset?: string, problem?: st
     renderFileList();
     entry(id)?.focus();
   };
-  const confirm = async () => {
+  /// `next`: dove va il fuoco quando la conferma viene da un clic altrove
+  /// (`relatedTarget` del `blur`); `null` se il clic non era su niente di
+  /// focalizzabile.
+  const confirm = async (next?: EventTarget | null) => {
     if (closed || busy) return;
     const newItem = input.value.trim();
     if (!newItem || newItem === current) {
       closed = true;
       renderFileList();
-      entry(id)?.focus();
+      if (!(next instanceof HTMLElement)) entry(id)?.focus();
       return;
     }
     // Conferma ottimista chiusa subito: il campo sparisce, la riga mostra il
     // progresso (U11) e un altro giro non può partire dallo stesso campo.
     busy = true;
     closed = true;
+    // Il fuoco resta sulla voce, come con Esc: un campo disabilitato lo
+    // perderebbe, e chi ha premuto Invio si ritroverebbe su `body`. Un clic su
+    // qualcosa di focalizzabile lo porta lì, e lì resta.
+    const item = row.closest<HTMLElement>('li[role="treeitem"]');
+    if (item && fileListEl.contains(item) && !(next instanceof HTMLElement)) {
+      renameFocus = { from: id, to: renamedPath(id, newItem, folder) };
+      item.focus({ preventScroll: true });
+    }
     input.disabled = true;
     row.setAttribute("aria-busy", "true");
     if (folder) await renameFolderTo(id, newItem, input.value);
@@ -2186,7 +2212,7 @@ function startRename(row: HTMLElement, id: string, preset?: string, problem?: st
   });
   // Cliccare altrove conferma il nome scritto, come nei file manager: solo
   // Esc annulla.
-  input.addEventListener("blur", () => void confirm());
+  input.addEventListener("blur", (e) => void confirm(e.relatedTarget));
 }
 
 /// Una collisione riapre il campo col nome digitato e la frase accanto: il nome
@@ -2204,12 +2230,23 @@ function reportRenameCollision(outcome: RenameResult, typed: string): boolean {
   );
   return true;
 }
-async function renameDoc(from: string, newPageName: string, typed?: string): Promise<void> {
+/// Il path che una rinomina in posto dà alla voce: per una nota cambia il
+/// nome pagina e restano cartella ed estensione, per una cartella l'ultimo
+/// segmento.
+function renamedPath(from: string, newName: string, folder = false): string {
+  if (folder) {
+    const parent = parentOf(from);
+    return normalizedName(parent ? `${parent}/${newName}` : newName);
+  }
   const slash = from.lastIndexOf("/");
   const dir = slash === -1 ? "" : from.slice(0, slash + 1);
   const dot = from.lastIndexOf(".");
   const ext = dot > slash ? from.slice(dot) : "";
-  const to = normalizedName(`${dir}${newPageName}${ext}`);
+  return normalizedName(`${dir}${newName}${ext}`);
+}
+
+async function renameDoc(from: string, newPageName: string, typed?: string): Promise<void> {
+  const to = renamedPath(from, newPageName);
 
   // Il no arriva **prima** del giro IPC (§15.5), e con la stessa regola che il
   // kernel applicherebbe (`rules/mirrored.ts`, legata alla gemella Rust dalla
@@ -2256,6 +2293,7 @@ async function renameDoc(from: string, newPageName: string, typed?: string): Pro
 /// Riapre il campo di rinomina sullo stesso `treeitem` col testo digitato:
 /// su errore il nome precedente resta nel vault e l'input non si perde.
 function reopenRename(id: string, typed: string, problem?: string, folder = false): void {
+  renameFocus = null;
   renderFileList();
   const row = folder ? folderRowOf(id) : entry(id);
   if (!row) return;
@@ -2274,8 +2312,7 @@ function renameFolderRow(path: string): boolean {
 /// Rinomina in posto di una cartella: cambia l'ultimo segmento, la madre resta.
 /// Il nome passa dalla stessa regola di un nome che nasce, prima del giro IPC.
 async function renameFolderTo(from: string, newName: string, typed: string): Promise<void> {
-  const parent = parentOf(from);
-  const to = normalizedName(parent ? `${parent}/${newName}` : newName);
+  const to = renamedPath(from, newName, true);
   const failure = nameFault(to, "new");
   if (failure !== null) {
     reopenRename(from, typed, t("explorer.bad_name", { name: newName, reason: nameFaultText(failure) }), true);

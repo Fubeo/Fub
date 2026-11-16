@@ -1136,6 +1136,44 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     expect(document.activeElement).toBe(field);
   });
 
+  it("dopo la rinomina il fuoco resta sulla riga rinominata, o va dove si è cliccato (B-02)", async () => {
+    await start(VAULT);
+    noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la cartella si apre", () => !!noteItem("note/Spesa.md"));
+    const rename = (from: string, name: string, commit: (field: HTMLInputElement) => void): void => {
+      noteItem(from)!.focus();
+      noteItem(from)!.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+      const field = noteItem(from)!.querySelector<HTMLInputElement>("input")!;
+      expect(document.activeElement).toBe(field);
+      field.value = name;
+      commit(field);
+    };
+
+    // Invio: il fuoco segue la voce al nome nuovo, non cade su `body`.
+    rename("note/Spesa.md", "Lista", (field) =>
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    await waitFor("la voce rinominata", () => !!noteItem("note/Lista.md"));
+    await settle();
+    expect(document.activeElement).toBe(noteItem("note/Lista.md"));
+
+    // Un clic fuori su niente di focalizzabile: il fuoco torna alla riga.
+    rename("note/Lista.md", "Elenco", (field) =>
+      field.dispatchEvent(new FocusEvent("blur", { relatedTarget: null })));
+    await waitFor("la voce rinominata ancora", () => !!noteItem("note/Elenco.md"));
+    await settle();
+    expect(document.activeElement).toBe(noteItem("note/Elenco.md"));
+
+    // Un clic su un controllo: il fuoco resta lì.
+    const elsewhere = document.getElementById("new-note")!;
+    rename("note/Elenco.md", "Compere", (field) => {
+      field.dispatchEvent(new FocusEvent("blur", { relatedTarget: elsewhere }));
+      elsewhere.focus();
+    });
+    await waitFor("la terza rinomina", () => !!noteItem("note/Compere.md"));
+    await settle();
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
   it("un nome rifiutato riapre il campo col testo digitato e la frase accanto", async () => {
     const host = await start(VAULT);
     noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
