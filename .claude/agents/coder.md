@@ -52,7 +52,13 @@ expected.
   redesign it. Then look at the result in the bench, following
   `.claude/skills/banco/SKILL.md`: both lights and 700 px wide, compared with
   the prototype. Save the screenshots outside the repo and give their paths in
-  the report.
+  the report. Add the pieces you ported to the map in
+  `apps/client/bench/conformita/` (prototype selector, app selector, states,
+  properties), regenerate the expected values with
+  `node bench/conformita/estrai.mjs <prototipo>` and make
+  `npm run bench:conformita` green; a deliberate difference needs an entry in
+  `eccezioni-<prototipo>.json` with its reason and its DECISIONS or plan
+  reference (`docs/development/visual-bench.md`).
 - **Look critically before the report.** Open the screenshots and judge them as
   the person using Fub would, not only against the prototype:
   - is every word in the UI language, with no raw host text, id or key?

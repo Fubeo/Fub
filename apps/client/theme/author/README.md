@@ -2,17 +2,17 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **1861 hook**, **7 stati** (867 assegnazioni su 257 componenti) e lascia ridichiarare alla persona **189 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **1893 hook**, **7 stati** (881 assegnazioni su 259 componenti) e lascia ridichiarare alla persona **191 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
-Dichiara anche **66 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
+Dichiara anche **68 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
 ## Strati
 
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
-- **cornice** (1457 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
-- **segno** (135 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
-- **contenuto** (269 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
+- **cornice** (1472 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
+- **segno** (139 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
+- **contenuto** (282 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
 Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.
 
@@ -63,16 +63,17 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 492 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 497 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup base-board base-cards base-chevron-down
-base-filter base-grip base-list base-map base-plus base-sliders base-sort base-table base-timeline
-bell blocks book briefcase bulb calendar canvas-connect canvas-find-next canvas-find-previous
-canvas-finger canvas-lasso canvas-ruler canvas-text caret-down check chevron chevron-up clock close
-cloud code collection command component compose copy copy-html copy-markdown copy-text cut dashboard
-draw-access draw-access-info draw-access-warning draw-align draw-align-bottom draw-align-center
-draw-align-left draw-align-middle draw-align-right draw-align-top draw-anchor-end draw-anchor-middle
+base-eye-off base-filter base-grip base-group base-list base-map base-plus base-sigma base-sliders
+base-sort base-sort-asc base-sort-desc base-table base-timeline bell blocks book briefcase bulb
+calendar canvas-connect canvas-find-next canvas-find-previous canvas-finger canvas-lasso
+canvas-ruler canvas-text caret-down check chevron chevron-up clock close cloud code collection
+command component compose copy copy-html copy-markdown copy-text cut dashboard draw-access
+draw-access-info draw-access-warning draw-align draw-align-bottom draw-align-center draw-align-left
+draw-align-middle draw-align-right draw-align-top draw-anchor-end draw-anchor-middle
 draw-anchor-start draw-arrow draw-back draw-color-more draw-commands draw-cover draw-design
 draw-distribute-x draw-distribute-y draw-duplicate draw-ellipse draw-eraser draw-export draw-fit
 draw-flip-h draw-flip-v draw-group draw-hand draw-here draw-hidden draw-hide-ui draw-highlighter

@@ -12,9 +12,12 @@ cercare nel testo, lanciare un comando e inserire un blocco. Si apre con
 con il comando «Cerca nel vault dal lanciatore» e con il menu «Cerca fra tutti
 i comandi» di un menu contestuale.
 
-Il campo tiene sempre il fuoco. Sotto il campo c'è la fila dei modi, e sotto
-ancora l'elenco. Il modo si sceglie in tre modi: scrivendo il prefisso in testa
-al campo, cliccando la linguetta, oppure con il comando che apre quel modo.
+Il campo tiene sempre il fuoco; in fondo al campo il segno **Esc** chiude col
+puntatore, come il tasto. Sotto il campo c'è la fila dei modi: ogni modo porta
+il suo prefisso in un quadratino davanti al nome («Tutto» porta la lente), e il
+modo scelto ha il quadratino d'accento. Sotto ancora c'è l'elenco. Il modo si
+sceglie in tre modi: scrivendo il prefisso in testa al campo, cliccando la
+linguetta, oppure con il comando che apre quel modo.
 
 ## I modi
 
@@ -55,7 +58,9 @@ Con un testo Tutto mostra tre gruppi, nell'ordine:
   file che si chiama proprio come si è scritto sale subito dopo i documenti che
   si chiamano così. Un documento che non è una nota porta l'icona del suo
   formato, un file quella della sua specie (un libro per un PDF, un'immagine,
-  una nota musicale, uno schermo per un video); una nota non porta icona;
+  una nota musicale, uno schermo per un video); una nota porta l'icona delle
+  note. Ogni riga, non solo quelle dei file, ha davanti l'icona della sua specie
+  (persona, comando, blocco, tasto; `#` per titoli ed etichette);
 - **Nel testo**: le note in cui il testo compare nel contenuto, con l'estratto e
   il punto del primo riscontro (le note già elencate non si ripetono);
 - **Titoli**: i titoli della nota aperta che contengono il testo.
@@ -131,10 +136,15 @@ niente: serve a leggere.
 
 ## L'anteprima
 
-In Tutto, quando la finestra è larga abbastanza, a destra dell'elenco c'è
-l'anteprima della nota della riga attiva. Segue le frecce, ma aspetta una pausa
+In Tutto, quando la finestra è larga abbastanza (almeno 960 × 560 px), a destra
+dell'elenco c'è l'anteprima della nota della riga attiva, su un foglio rialzato
+in una colonna di 288 px; sotto il foglio c'è la cartella della nota (niente
+per una nota in cima al vault) e «modificata …», l'ora dell'ultima modifica
+detta come altrove. Segue le frecce, ma aspetta una pausa
 breve (90 ms) prima di chiedere la nota: chi scorre in fretta non fa partire una
-resa per ogni riga. Mentre la resa nuova arriva resta quella di prima; se tarda,
+resa per ogni riga. La data si chiede insieme alla resa, all'elenco della
+cartella della nota, una volta per nota finché il lanciatore resta aperto; se
+non arriva resta la sola cartella. Mentre la resa nuova arriva resta quella di prima; se tarda,
 si attenua. Una nota che non si riesce a rendere lo dice nel riquadro. Un file
 che non è un documento (un PDF, un'immagine) non ha una resa: il riquadro lo
 dice senza chiederla.

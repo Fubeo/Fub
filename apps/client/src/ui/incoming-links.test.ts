@@ -21,6 +21,7 @@ vi.mock("../host/ipc", () => ({
   },
 }));
 
+import { t } from "../i18n/strings";
 import { mountIncomingLinks, searchQuery } from "./incoming-links";
 import { openLifetime } from "./lifetime";
 
@@ -129,6 +130,53 @@ describe("collegamenti fub:// in arrivo", () => {
     expect(fake.invoke).not.toHaveBeenCalledWith("uri.apply", { uri: note.raw }, "dry_run");
     expect(p.confirm).toHaveBeenCalledTimes(1);
     expect(fake.invoke).not.toHaveBeenCalledWith("uri.apply", { uri: capture.raw }, "apply");
+  });
+
+  it("una cattura chiede sempre, anche se `uri.allowed` la nomina, e dice che la provenienza non è verificata", async () => {
+    const capture: IncomingLink = {
+      raw: "fub://capture?title=Ciao&markdown=testo",
+      action: "capture",
+      writes: true,
+      vault: here,
+      title: "Ciao",
+      markdown: "testo del ritaglio",
+      source_url: "https://example.com/a",
+    };
+    pendingSequence(queue([capture]));
+    const no = ports(false, ["capture", "new"]);
+    mountIncomingLinks(openLifetime(), no);
+    await settle();
+    expect(fake.invoke).toHaveBeenCalledWith("uri.apply", { uri: capture.raw }, "dry_run");
+    expect(fake.invoke).not.toHaveBeenCalledWith("uri.apply", { uri: capture.raw }, "apply");
+    const [message] = no.confirm.mock.calls[0]!;
+    expect(message).toContain("testo del ritaglio");
+    expect(message).toContain("https://example.com/a");
+    expect(message).toContain(t("incoming.capture.unverified"));
+
+    pendingSequence(queue([capture]));
+    const yes = ports(true, ["capture"]);
+    mountIncomingLinks(openLifetime(), yes);
+    await settle();
+    expect(yes.confirm).toHaveBeenCalledTimes(1);
+    expect(fake.invoke).toHaveBeenCalledWith("uri.apply", { uri: capture.raw }, "apply");
+  });
+
+  it("le catture si confermano una alla volta: la seconda aspetta la risposta alla prima", async () => {
+    const first: IncomingLink = { raw: "fub://capture?title=A&markdown=a", action: "capture", writes: true, vault: here, title: "A", markdown: "a" };
+    const second: IncomingLink = { raw: "fub://capture?title=B&markdown=b", action: "capture", writes: true, vault: here, title: "B", markdown: "b" };
+    pendingSequence(queue([first, second]));
+    let answer!: (yes: boolean) => void;
+    const p = ports();
+    p.confirm.mockImplementationOnce(() => new Promise<boolean>((resolve) => { answer = resolve; }));
+    mountIncomingLinks(openLifetime(), p);
+    await settle();
+    expect(p.confirm).toHaveBeenCalledTimes(1);
+    answer(false);
+    await settle();
+    await settle();
+    expect(p.confirm).toHaveBeenCalledTimes(2);
+    expect(fake.invoke).not.toHaveBeenCalledWith("uri.apply", { uri: first.raw }, "apply");
+    expect(fake.invoke).toHaveBeenCalledWith("uri.apply", { uri: second.raw }, "apply");
   });
 
   it("un altro vault si apre dopo il sì; uno sconosciuto o rifiutato ferma il collegamento", async () => {

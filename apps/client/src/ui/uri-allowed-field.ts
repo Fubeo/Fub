@@ -4,17 +4,18 @@
 // quando la riga c'è.
 import type { SettingEntry } from "../host/contract";
 import { t, type Key } from "../i18n/strings";
-import { WRITING_ACTIONS, type WritingAction } from "./incoming-links";
+import { ALWAYS_ASK, WRITING_ACTIONS, type WritingAction } from "./incoming-links";
 
 const LABELS: Readonly<Record<WritingAction, Key>> = {
   new: "incoming.allow.new",
   daily: "incoming.allow.daily",
   unique: "incoming.allow.unique",
-  capture: "incoming.allow.capture",
 };
 
 /// Una casella per azione, nel loro ordine; i nomi che questa shell non
-/// conosce, di una versione più nuova, restano in coda com'erano.
+/// conosce, di una versione più nuova, restano in coda com'erano. Un'azione
+/// che chiede sempre (`capture`, scritta da una versione vecchia) non ha
+/// casella e al primo cambio esce dal valore.
 export function uriAllowedField(
   entry: SettingEntry,
   id: string,
@@ -22,7 +23,7 @@ export function uriAllowedField(
 ): HTMLElement {
   const value = Array.isArray(entry.value) ? entry.value : [];
   const chosen = new Set(value);
-  const unknown = value.filter((name) => !(WRITING_ACTIONS as readonly string[]).includes(name));
+  const unknown = value.filter((name) => !(WRITING_ACTIONS as readonly string[]).includes(name) && !ALWAYS_ASK.includes(name));
   const root = document.createElement("div");
   root.className = "setting-features";
   root.id = id;
@@ -49,6 +50,7 @@ export function uriAllowedField(
 /// Le azioni di `value` come le dice il campo.
 export function describeUriAllowed(value: readonly string[]): string {
   return value
+    .filter((name) => !ALWAYS_ASK.includes(name))
     .map((name) => ((WRITING_ACTIONS as readonly string[]).includes(name) ? t(LABELS[name as WritingAction]) : name))
     .join(", ");
 }

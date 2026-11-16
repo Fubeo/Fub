@@ -27,6 +27,15 @@ fn sampled() -> usize {
     SAMPLED.with(std::cell::Cell::get)
 }
 
+/// Patch di Fub (`0005-test-paralleli`, issue #407): the halftone arts are kept in one cache for
+/// the whole process, of [`super::KEPT`] arts, and every test here makes arts (one alone makes
+/// nine). Run beside another, a test could see its art pushed out of the cache by the other's
+/// and sampled again. The tests that make arts hold this, one at a time.
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    SERIAL.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// The square's pixels (from (x, 10), `side` wide), drawn on white.
 fn square_pixels(d: &Document, x: f64, side: f64) -> Vec<[u8; 4]> {
     let r = Renderer::new().render(d, 200, 200, Affine::IDENTITY, &RenderOptions { background: Some([255; 4]), ..Default::default() });
@@ -36,6 +45,7 @@ fn square_pixels(d: &Document, x: f64, side: f64) -> Vec<[u8; 4]> {
 
 #[test]
 fn the_effect_draws_the_grey_as_black_dots_on_white() {
+    let _serial = serial();
     // 6 lpi: 12 pt cells, each half black for the mid-grey.
     let (d, _) = doc(10.0, 60.0, json!({"frequency": 6}));
     let px = square_pixels(&d, 10.0, 60.0);
@@ -51,6 +61,7 @@ fn the_effect_draws_the_grey_as_black_dots_on_white() {
 
 #[test]
 fn the_settings_change_the_dots() {
+    let _serial = serial();
     let look = |params: Value| square_pixels(&doc(20.0, 60.0, params).0, 20.0, 60.0);
     let base = look(json!({"frequency": 18}));
     for other in [
@@ -72,6 +83,7 @@ fn the_settings_change_the_dots() {
 
 #[test]
 fn unchanged_art_is_not_sampled_again() {
+    let _serial = serial();
     let (d, n) = doc(30.0, 50.0, json!({"frequency": 12}));
     let before = sampled();
     let first = art(&d, &n).unwrap();
@@ -93,6 +105,7 @@ fn unchanged_art_is_not_sampled_again() {
 
 #[test]
 fn too_many_cells_draw_the_object_as_it_is() {
+    let _serial = serial();
     let (d, n) = doc(40.0, 10_000.0, json!({"frequency": 300}));
     assert!(art(&d, &n).is_none());
     // Drawn without dots, and without a panic.
@@ -103,6 +116,7 @@ fn too_many_cells_draw_the_object_as_it_is() {
 
 #[test]
 fn unclipped_dots_reach_past_the_object() {
+    let _serial = serial();
     let (d, n) = doc(50.0, 40.0, json!({"frequency": 9, "invert": true, "clip": false}));
     let b = crate::effect_bounds(&d.symbol_boxes(), &n).unwrap();
     let dots = art(&d, &n).unwrap().visual_bounds().unwrap();

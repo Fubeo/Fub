@@ -145,9 +145,9 @@ workflow di rilascio con il tag che lo ha avviato.
    i segreti di firma;
 2. controlla le versioni e crea la release **bozza**, se non esiste; si ferma
    se la release è già pubblicata;
-3. su Linux (Ubuntu 22.04), Windows e macOS esegue `npm ci` e
+3. su Linux (Ubuntu 22.04) e Windows esegue `npm ci` e
    `cargo tauri build --config crates/fub-app/tauri.conf.json`;
-4. raccoglie `.deb`, `.rpm`, `.AppImage`, `.dmg`, `.msi` e `-setup.exe`,
+4. raccoglie `.deb`, `.rpm`, `.AppImage`, `.msi` e `-setup.exe`,
    e a parte costruisce il Flatpak (sezione [Flatpak](#flatpak)), ciascuno
    con un file `.sha256` accanto, e ne attesta la provenienza (Sigstore,
    legata a commit e workflow);
@@ -169,17 +169,22 @@ che non pubblica niente: su Android genera il progetto
 `crates/fub-app/mobile/install-mobile.sh` e ne verifica la fusione con
 `--check`, poi costruisce un APK di debug per aarch64, caricato come artefatto
 della corsa; sulle PR pronte e su `main` un APK per x86_64 si apre anche in un
-emulatore del runner, che dice se Fub parte e ne fotografa lo schermo. Su iOS compila soltanto `fub-app` per il dispositivo: il progetto
-Xcode chiede i target Share e Widget creati a mano e una firma. Non è un
-controllo richiesto.
+emulatore del runner, che dice se Fub parte e ne fotografa lo schermo. Non è
+un controllo richiesto.
+
+macOS e iOS sono in pausa
+([ADR 0245](../decisions/0245-macos-e-ios-in-pausa.md)): nessun `.dmg`, nessuna
+firma Apple e nessun build iOS nelle release. Il codice per macOS e iOS resta
+nei crate, e [`macos-in-pausa.yml`](../../.github/workflows/macos-in-pausa.yml)
+lo prova una volta alla settimana: i test del workspace su macOS e
+`cargo check -p fub-app --target aarch64-apple-ios` (il progetto Xcode chiede i
+target Share e Widget creati a mano e una firma, quindi nessun `.ipa`).
 
 La firma dipende dal canale:
 
-- un tag stabile (`vX.Y.Z`) richiede i segreti `APPLE_CERTIFICATE`,
-  `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
-  `APPLE_PASSWORD` e `APPLE_TEAM_ID` (firma e notarizzazione del `.dmg`) e
-  `WINDOWS_CERTIFICATE` (PFX in base64) con `WINDOWS_CERTIFICATE_PASSWORD`
-  (Authenticode di `.msi` e `-setup.exe`); senza, il cancello ferma la corsa;
+- un tag stabile (`vX.Y.Z`) richiede i segreti `WINDOWS_CERTIFICATE` (PFX in
+  base64) e `WINDOWS_CERTIFICATE_PASSWORD` (Authenticode di `.msi` e
+  `-setup.exe`); senza, il cancello ferma la corsa;
 - una prerelease (`vX.Y.Z-rc.1`) firma con i segreti che trova e può uscire
   senza.
 

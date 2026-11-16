@@ -84,6 +84,7 @@ import {
   family,
   foreignProperties,
   EXIT_LIMIT_MS,
+  BROWSER_ARGS,
   jumps,
   longExits,
   midpoint,
@@ -854,6 +855,7 @@ await mkdir(REPORT, { recursive: true });
 // sotto la misura. Il server non guarda il disco e non manda aggiornamenti.
 const stage = await openStage({
   createServer: (options) => createServer({ ...options, server: { hmr: false, watch: null } }),
+  browserArgs: BROWSER_ARGS,
 });
 const report = [];
 try {

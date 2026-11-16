@@ -1,6 +1,6 @@
 name: Rilascio
 
-# Un tag `vX.Y.Z` costruisce gli installer desktop sulle tre piattaforme e li
+# Un tag `vX.Y.Z` costruisce gli installer desktop per Linux e Windows e li
 # carica, con il loro SHA-256 e un'attestazione di provenienza, in una release
 # **bozza**: la pubblica una persona, dopo averli provati
 # (docs/development/versioning-and-releases.md). `workflow_dispatch`
@@ -8,13 +8,19 @@ name: Rilascio
 #
 # Il cancello (`check-release-gate.mjs`) viene prima di ogni build: il commit
 # deve avere una corsa di CI verde e completa, e un tag del canale stabile
-# (`vX.Y.Z` senza suffisso) deve avere i segreti di firma Apple e Windows.
+# (`vX.Y.Z` senza suffisso) deve avere i segreti di firma di Windows.
 # Una prerelease (`vX.Y.Z-rc.1`) può uscire senza firme, e le note lo dicono.
 # Linux ha anche il `.flatpak` (packaging/flatpak/): il codice dei terzi
 # (contenitore e generatori) gira solo nei job a sola lettura, e la release la
 # tocca un job a parte con le sole azioni ufficiali.
 # Ogni installer, su ogni piattaforma, ha un'attestazione Sigstore legata a
 # commit e workflow, che `gh attestation verify` controlla.
+#
+# macOS è in pausa (docs/decisions/0245-macos-e-ios-in-pausa.md): niente `.dmg`
+# e niente firma Apple. Il job per macOS (la riga `macos-latest` della matrice,
+# il passo «la firma Apple, soltanto se i segreti ci sono», i `.dmg` raccolti e
+# attestati, i segreti `APPLE_*` del cancello) è nel commit che ha messo in
+# pausa macOS: `git log -S macos-latest -- .github/workflows/release.yml`.
 
 on:
   push:
@@ -54,12 +60,6 @@ jobs:
       - name: il canale stabile ha le firme che promette
         if: github.ref_type == 'tag'
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: node .github/scripts/check-release-gate.mjs signing "$GITHUB_REF_NAME"
@@ -92,7 +92,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-latest]
+        os: [ubuntu-22.04, windows-latest]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
@@ -117,23 +117,6 @@ jobs:
       # il suo schema, e dalla 2.12 chiede Rust 1.90, oltre il toolchain fissato.
       - name: Tauri CLI 2.11.5
         run: cargo install tauri-cli --version "=2.11.5" --locked
-      - name: la firma Apple, soltanto se i segreti ci sono
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        # Una variabile vuota non è «niente firma»: Tauri proverebbe a importare
-        # un certificato vuoto e fallirebbe. Si esporta soltanto ciò che c'è.
-        run: |
-          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
-                      APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
-            if [ -n "${!name}" ]; then echo "$name=${!name}" >> "$GITHUB_ENV"; fi
-          done
       # Authenticode: il certificato (PFX in base64) entra nell'archivio
       # dell'utente del runner e Tauri firma con la sua impronta. Senza segreto
       # non si firma; il cancello ha già fermato un tag stabile.
@@ -171,7 +154,7 @@ jobs:
         run: |
           mkdir -p dist-release
           find target/release/bundle -maxdepth 2 -type f \
-            \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o -name '*.dmg' \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \
                -o -name '*.msi' -o -name '*-setup.exe' \) -exec cp {} dist-release/ \;
           cd dist-release
           ls
@@ -189,7 +172,6 @@ jobs:
             dist-release/*.deb
             dist-release/*.rpm
             dist-release/*.AppImage
-            dist-release/*.dmg
             dist-release/*.msi
             dist-release/*-setup.exe
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

@@ -71,6 +71,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Entità nominate di HTML
+
+La tabella delle entità nominate con cui il client scioglie `&nome;` nel
+Markdown (`apps/client/src/editors/text/profiles/markdown/html-entities.generated.ts`)
+deriva da `entities.json` dell'HTML Living Standard, sezione «Named character
+references», © WHATWG (Apple, Google, Mozilla, Microsoft),
+<https://html.spec.whatwg.org/>, sotto licenza Creative Commons Attribution
+4.0 International (<https://creativecommons.org/licenses/by/4.0/>). La copia
+intatta, con URL, data e sha256, è in `vendor/whatwg-entities/`; la tabella
+derivata tiene soltanto i nomi con il `;` finale e i loro caratteri.
+
 ## Avvisi richiesti dalle dipendenze
 
 Le dipendenze dichiarate nei manifest non stanno in questo file, salvo quelle

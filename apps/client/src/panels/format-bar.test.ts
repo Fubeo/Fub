@@ -202,6 +202,33 @@ describe("la barra di un riquadro", () => {
     expect(bold.hasAttribute("aria-pressed")).toBe(false);
   });
 
+  it("un aggiornamento senza cambi non tocca il DOM: in WebKit ogni attributo riscritto ridipinge", async () => {
+    const fake = fakeActions(["markdown.paragraph", "markdown.heading.1", "markdown.heading.2", "markdown.bold", "markdown.italic", "markdown.table.row.after"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    bar.update(SPECS);
+    fake.set("markdown.bold", { enabled: true, active: true });
+    fake.set("markdown.heading.1", { enabled: true, active: true });
+    fake.set("markdown.italic", { enabled: false, active: false });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver((list) => records.push(...list));
+    observer.observe(bar.element, { subtree: true, attributes: true, childList: true, characterData: true });
+    // La superficie avvisa a ogni battuta e a ogni passo del cursore, ma lo
+    // stato dei pulsanti resta quello: niente si riscrive.
+    for (let step = 0; step < 3; step++) {
+      fake.set("markdown.bold", { enabled: true, active: true });
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    }
+    records.push(...observer.takeRecords());
+    expect(records.map((record) => `${record.type} ${record.attributeName ?? ""} ${(record.target as Element).className ?? ""}`)).toEqual([]);
+    // Ciò che cambia, invece, si scrive.
+    fake.set("markdown.bold", { enabled: true, active: false });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    records.push(...observer.takeRecords());
+    observer.disconnect();
+    expect(records.map((record) => record.attributeName)).toEqual(["aria-pressed"]);
+  });
+
   it("un clic esegue l'azione nella superficie, senza passare dal kernel", () => {
     const fake = fakeActions(["markdown.bold"]);
     const commands: string[] = [];
@@ -398,6 +425,48 @@ describe("la barra di un riquadro", () => {
     desk.update(SPECS);
     expect(desk.element.querySelector(".format-bar-touch")).toBeNull();
     editor.remove();
+  });
+
+  it("passando a un'altra superficie con la stessa barra, i pulsanti restano e seguono la nuova", async () => {
+    const first = fakeActions(["markdown.bold", "markdown.italic"]);
+    const second = fakeActions(["markdown.bold", "markdown.italic"]);
+    let surface = surfaceWith(first.actions);
+    const bar = createFormatBar({ surface: () => surface, writing: () => true, focusPane: () => {}, runCommand: () => {} });
+    document.body.append(bar.element);
+    bars.push(bar);
+    bar.update(SPECS);
+    const bold = bar.element.querySelector<HTMLButtonElement>('[data-command="markdown.bold"]')!;
+    surface = surfaceWith(second.actions);
+    second.set("markdown.bold", { enabled: true, active: true });
+    bar.update(SPECS);
+    // Lo stesso nodo, non uno rifatto: cambiare scheda non ridisegna la barra.
+    expect(bar.element.querySelector('[data-command="markdown.bold"]')).toBe(bold);
+    expect(bold.getAttribute("aria-pressed")).toBe("true");
+    expect(first.listeners.size).toBe(0);
+    expect(second.listeners.size).toBe(1);
+    second.set("markdown.bold", { enabled: true, active: false });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(bold.getAttribute("aria-pressed")).toBe("false");
+    // Una scorciatoia diversa è un'altra barra: il suggerimento la deve dire.
+    const third = fakeActions(["markdown.bold", "markdown.italic"]);
+    surface = surfaceWith({ ...third.actions, chord: (id) => (id === "markdown.bold" ? "Mod-g" : null) });
+    bar.update(SPECS);
+    const again = bar.element.querySelector<HTMLButtonElement>('[data-command="markdown.bold"]')!;
+    expect(again).not.toBe(bold);
+    expect(again.getAttribute("aria-keyshortcuts")).toBe("Control+G");
+    expect(second.listeners.size).toBe(0);
+  });
+
+  it("misura la riga al fotogramma, non dentro il ridisegno", async () => {
+    const fake = fakeActions(["markdown.bold", "markdown.italic"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    let reads = 0;
+    Object.defineProperty(bar.element, "scrollWidth", { configurable: true, get: () => (reads++, 0) });
+    bar.update(SPECS);
+    bar.update(SPECS);
+    expect(reads).toBe(0);
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(reads).toBe(1);
   });
 
   it("smontata, non segue più la superficie", () => {

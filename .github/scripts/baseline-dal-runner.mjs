@@ -36,7 +36,14 @@ import { fileURLToPath } from "node:url";
 /** Il job del banco visivo e quello dei test, come li chiama `ci.yml`. */
 export const VISIVO = "banco visivo (scene uguali alle baseline)";
 export const CAMBIA = "cosa cambia";
-export const TEST = ["ubuntu-latest", "windows-latest", "macos-latest"].map((os) => `build + test (${os})`);
+// macOS è in pausa (docs/decisions/0245-macos-e-ios-in-pausa.md): non è nella
+// matrice di `ci.yml`, e quindi nemmeno qui. I test di Windows girano in
+// `PARTI_WINDOWS` macchine, e ognuna è un job col suo nome: «<parte>/<parti>».
+export const PARTI_WINDOWS = 3;
+export const TEST = [
+  "build + test (ubuntu-latest)",
+  ...Array.from({ length: PARTI_WINDOWS }, (_, i) => `build + test (windows-latest, ${i + 1}/${PARTI_WINDOWS})`),
+];
 
 /** Il nome di una foto, come lo compone `photoFilename` del banco. */
 export const NOME_FOTO = /^[a-z0-9][a-z0-9-]*\.png$/;
@@ -602,7 +609,8 @@ function selfTest() {
     });
     prova("riuso: un altro job rosso", () => !riuso({ job: job.map((j) => (j.name === TEST[1] ? { ...j, conclusion: "failure" } : j)) }).riuso);
     prova("riuso: un job annullato", () => !riuso({ job: job.map((j) => (j.name === CAMBIA ? { ...j, conclusion: "cancelled" } : j)) }).riuso);
-    prova("riuso: test soltanto su Linux (bozza)", () => !riuso({ job: job.filter((j) => j.name !== TEST[1] && j.name !== TEST[2]) }).riuso);
+    prova("riuso: test soltanto su Linux (bozza)", () => !riuso({ job: job.filter((j) => !j.name.includes("windows")) }).riuso);
+    prova("riuso: una parte di Windows che manca", () => !riuso({ job: job.filter((j) => j.name !== TEST.at(-1)) }).riuso);
     prova("riuso: un job saltato va bene", () => riuso({ job: [...job, { name: "altro", status: "completed", conclusion: "skipped" }] }).riuso);
     prova("riuso: banco visivo verde (non c'era niente da rifare)", () => !riuso({ job: job.map((j) => (j.name === VISIVO ? { ...j, conclusion: "success" } : j)) }).riuso);
     prova("riuso: il diff tocca un file che non è una baseline", () => !riuso({ diff: `${base.diff}:100644 100644 ${"1".repeat(40)} ${"2".repeat(40)} M\tapps/client/src/main.ts\n` }).riuso);
@@ -626,11 +634,15 @@ function selfTest() {
     // I nomi qui sopra devono essere quelli di `ci.yml`: un job rinominato
     // spegnerebbe il riuso, o peggio lo accenderebbe a vuoto.
     const ci = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "workflows", "ci.yml"), "utf8");
+    // La matrice di `test` per una PR pronta, quella che dà i nomi di `TEST`.
+    const matrice = ci.match(/\|\| '(\[\{"os":"ubuntu-latest"[^']*\])'\) \}\}/)?.[1];
+    const nomeDi = ({ os, parte, parti }) => `build + test (${os}${parti > 1 ? `, ${parte}/${parti}` : ""})`;
     prova("ci.yml: i nomi dei job sono questi", () =>
       ci.includes(`name: ${VISIVO}\n`) &&
       ci.includes(`name: ${CAMBIA}\n`) &&
-      ci.includes("name: build + test (${{ matrix.os }})") &&
-      ci.includes('["ubuntu-latest", "windows-latest", "macos-latest"]'),
+      ci.includes("name: build + test (${{ matrix.os }}${{ matrix.parti > 1 && format(', {0}/{1}', matrix.parte, matrix.parti) || '' }})\n") &&
+      matrice !== undefined &&
+      JSON.stringify(JSON.parse(matrice).map(nomeDi)) === JSON.stringify(TEST),
     );
     prova("ci.yml: il banco visivo non si salta mai col riuso", () => {
       const blocco = ci.split(/\n  visual:\n/)[1]?.split(/\n  [a-z][a-z0-9-]*:\n/)[0] ?? "";

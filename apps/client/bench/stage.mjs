@@ -106,10 +106,15 @@ export const OUTPUT = here("./.output");
 ///
 /// `port` sposta il server per una corsa sola (`--port` di chi lo chiama), come
 /// `FUB_BENCH_PORT` per tutte: senza, vale la porta della config.
+///
+/// `browserArgs` aggiunge opzioni di Chromium a quelle di tutti i banchi, per
+/// il banco che ne ha bisogno e per lui solo (il moto: `BROWSER_ARGS` di
+/// `motion-rules.mjs`).
 export async function openStage({
   quiet = true,
   port,
   strictPort = true,
+  browserArgs = [],
   createServer: createServerImpl = createServer,
   chromium: chromiumImpl = chromium,
 } = {}) {
@@ -139,6 +144,7 @@ export async function openStage({
         "--disable-lcd-text",
         "--force-color-profile=srgb",
         "--disable-dev-shm-usage",
+        ...browserArgs,
       ],
     });
     let closePromise;

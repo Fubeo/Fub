@@ -294,6 +294,20 @@ function coarsePointer(): boolean {
   return typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
 }
 
+/// La barra si rinfresca a ogni battuta e a ogni movimento del cursore, e lo
+/// stato dei pulsanti quasi sempre resta quello di prima. In WebKitGTK anche
+/// un attributo riscritto uguale invalida lo stile, e la finestra intera si
+/// ridipinge a ogni tasto (C6): si scrive soltanto ciò che cambia.
+function setAttr(element: Element, name: string, value: string | null): void {
+  if (element.getAttribute(name) === value) return;
+  if (value === null) element.removeAttribute(name);
+  else element.setAttribute(name, value);
+}
+
+function setDisabled(control: HTMLButtonElement, disabled: boolean): void {
+  if (control.disabled !== disabled) control.disabled = disabled;
+}
+
 export interface FormatBar {
   readonly element: HTMLElement;
   /// Ridisegna la barra: comandi, superficie o modalità cambiati.
@@ -366,6 +380,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   /// Ciò che il disegno corrente possiede: suggerimenti, iscrizione alla
   /// superficie. Si scioglie a ogni ridisegno della struttura.
   let drawn = openLifetime();
+  /// L'iscrizione alla superficie seguita: cambia con lei, senza ridisegnare.
+  let following = openLifetime();
   let signature = "";
   let groups: Group[] = [];
   let observed: SurfaceEditorActions | null = null;
@@ -374,6 +390,7 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   let groupEls: HTMLElement[] = [];
   let overflowButton: HTMLButtonElement | null = null;
   let frame: number | null = null;
+  let fitFrame: number | null = null;
 
   const actions = (): SurfaceEditorActions | undefined => host.surface()?.editorActions;
   const stateOf = (entry: Entry): EditorActionState => {
@@ -427,9 +444,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     control.addEventListener("click", () => run(entry));
     refreshers.push(() => {
       const state = stateOf(entry);
-      control.disabled = !state.enabled;
-      if (state.active === null) control.removeAttribute("aria-pressed");
-      else control.setAttribute("aria-pressed", String(state.active));
+      setDisabled(control, !state.enabled);
+      setAttr(control, "aria-pressed", state.active === null ? null : String(state.active));
     });
     return control;
   }
@@ -474,11 +490,12 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     trigger.addEventListener("click", () => openMenu(trigger, menuItems(group.menu)));
     refreshers.push(() => {
       const states = group.menu.map(stateOf);
-      trigger.disabled = !states.some((state) => state.enabled);
+      setDisabled(trigger, !states.some((state) => state.enabled));
       if (!style) return;
       const active = group.menu[states.findIndex((state) => state.active === true)];
-      text.textContent = active?.spec.title ?? label;
-      trigger.setAttribute("aria-label", active ? `${label}: ${active.spec.title}` : label);
+      const shown = active?.spec.title ?? label;
+      if (text.textContent !== shown) text.textContent = shown;
+      setAttr(trigger, "aria-label", active ? `${label}: ${active.spec.title}` : label);
     });
     return trigger;
   }
@@ -512,7 +529,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     box.append(key("Tab", "format_bar.touch.tab", "format_bar.touch.tab_hint"), key("Enter", "format_bar.touch.enter", "format_bar.touch.enter_hint"), add);
     refreshers.push(() => {
       const surface = actions();
-      box.hidden = !(surface?.editable() && surface.state(ROW_AFTER).enabled);
+      const hidden = !(surface?.editable() && surface.state(ROW_AFTER).enabled);
+      if (box.hidden !== hidden) box.hidden = hidden;
     });
     return box;
   }
@@ -569,6 +587,22 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   observer?.observe(element);
   life.add(() => observer?.disconnect());
 
+  /// La misura della riga si prende al fotogramma, non subito: chiedere
+  /// `scrollWidth` a metà di un cambio di scheda obbliga il motore a impaginare
+  /// la finestra intera prima del tempo, e poi di nuovo per disegnarla. Dentro
+  /// `requestAnimationFrame` l'impaginazione è quella che il fotogramma fa
+  /// comunque, e la barra ristretta compare già nel primo disegno.
+  function scheduleFit(): void {
+    if (fitFrame !== null || life.closed) return;
+    fitFrame = requestAnimationFrame(() => {
+      fitFrame = null;
+      fit();
+    });
+  }
+  life.add(() => {
+    if (fitFrame !== null) cancelAnimationFrame(fitFrame);
+  });
+
   function refresh(): void {
     if (frame !== null) {
       cancelAnimationFrame(frame);
@@ -595,7 +629,20 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     if (frame !== null) cancelAnimationFrame(frame);
   });
 
-  function rebuild(next: Group[], surface: SurfaceEditorActions | undefined): void {
+  /// Segue un'altra superficie con la stessa barra: cambia l'iscrizione, i
+  /// pulsanti restano. Una barra vuota non ha stato da seguire: niente
+  /// iscrizione, niente lavoro a ogni movimento del cursore.
+  function follow(surface: SurfaceEditorActions | undefined): void {
+    following.close();
+    following = openLifetime();
+    observed = surface ?? null;
+    if (surface && groups.length > 0) {
+      const stopActions = surface.subscribe(scheduleRefresh);
+      following.add(stopActions);
+    }
+  }
+
+  function rebuild(next: Group[], surface: SurfaceEditorActions | undefined, touch: boolean): void {
     drawn.close();
     drawn = openLifetime();
     groups = next;
@@ -603,7 +650,7 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     groupEls = [];
     element.replaceChildren();
     element.setAttribute("aria-label", t("format_bar.label"));
-    if (!host.only && surface?.has(ROW_AFTER) && groups.length > 0 && (host.coarse ?? coarsePointer)()) element.append(drawTouch());
+    if (touch) element.append(drawTouch());
     for (const group of groups) {
       const box = document.createElement("div");
       box.className = "format-bar-group kit-bar-group";
@@ -617,15 +664,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     }
     overflowButton = drawOverflow();
     element.append(overflowButton);
-    observed = surface ?? null;
-    // Una barra vuota non ha stato da seguire: niente iscrizione, niente
-    // lavoro a ogni movimento del cursore.
-    if (surface && groups.length > 0) {
-      const stopActions = surface.subscribe(scheduleRefresh);
-      drawn.add(stopActions);
-    }
+    follow(surface);
     refresh();
-    fit();
   }
 
   return {
@@ -640,20 +680,27 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
       const all = host.writing() && !own ? toolbarGroups(specs, surface) : [];
       const next = only ? all.filter((group) => only.includes(group.id)) : all;
       // La lingua fa parte della forma: gruppi ed etichette sono della shell.
-      const shape = t("format_bar.label") + "#" + next.map((group) =>
-        `${group.id}:${group.inline.map((e) => `${e.spec.id}=${e.spec.title}`).join(",")}` +
-        `|${group.menu.map((e) => `${e.spec.id}=${e.spec.title}`).join(",")}`
+      // Anche le scorciatoie scritte nei suggerimenti e i tasti del dito: le
+      // dice la superficie. Il resto della superficie no, e tornare a una
+      // scheda dello stesso tipo non ridisegna i pulsanti, cambia chi seguono.
+      const entry = (e: Entry) => `${e.spec.id}=${e.spec.title}=${hintOf(surface, e) ?? ""}`;
+      const touch = !only && surface?.has(ROW_AFTER) === true && next.length > 0 && (host.coarse ?? coarsePointer)();
+      const shape = t("format_bar.label") + (touch ? "#touch#" : "#") + next.map((group) =>
+        `${group.id}:${group.inline.map(entry).join(",")}|${group.menu.map(entry).join(",")}`
       ).join(";");
-      element.hidden = next.length === 0;
-      if (shape === signature && surface === (observed ?? undefined)) {
+      const empty = next.length === 0;
+      if (element.hidden !== empty) element.hidden = empty;
+      if (shape !== signature) {
+        signature = shape;
+        rebuild(next, surface, touch);
+      } else {
+        if (surface !== (observed ?? undefined)) follow(surface);
         refresh();
-        fit();
-        return;
       }
-      signature = shape;
-      rebuild(next, surface);
+      scheduleFit();
     },
     destroy() {
+      following.close();
       drawn.close();
       life.close();
       element.remove();

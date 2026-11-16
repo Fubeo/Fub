@@ -75,3 +75,4 @@ Nuove decisioni usano il [template](template.md).
 | [0242 — Gli estratti sono finestre: un campo `fub:parts` accanto al `subpath`](0242-gli-estratti-sono-finestre.md) | proposta | contratto | — |
 | [0243 — Le ancore di contenuto](0243-le-ancore-di-contenuto.md) | proposta | contratto | — |
 | [0244 — La lavagna si scrive in operazioni con la forma breve](0244-la-lavagna-si-scrive-in-operazioni.md) | accolta | contratto | — |
+| [0245 — macOS e iOS sono in pausa](0245-macos-e-ios-in-pausa.md) | accolta | host | — |

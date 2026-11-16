@@ -77,6 +77,7 @@ export interface Jump {
 
 export declare const ALLOWED: readonly string[];
 export declare const EXIT_LIMIT_MS: number;
+export declare const BROWSER_ARGS: readonly string[];
 export declare function longExits(
   runs: readonly { target: string; pseudo?: string; duration: number; delay: number }[],
   limit?: number,

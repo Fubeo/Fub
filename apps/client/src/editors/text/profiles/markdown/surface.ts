@@ -75,6 +75,7 @@ import { markdownReference } from "./references";
 import { declaredLanguage, frontmatterRange, renderMarkdown } from "./render";
 import { addProperty, clearProperties } from "./properties";
 import { clipboardHtml } from "./copy-html";
+import { commentCut, copiedSelection, FUB_MARKDOWN_TYPE, rememberCut, type CarriedCut } from "./comments/copy";
 import type { ProofPorts } from "../../../core/proof-ports";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../../../core/editor-menu";
 import { forEachDiagnostic, type Diagnostic } from "@codemirror/lint";
@@ -482,23 +483,39 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // formattazione fuori da Fub. Il testo si legge prima di CodeMirror, perché
   // un taglio lo toglie dal documento; l'HTML si aggiunge dopo, perché
   // CodeMirror svuota gli appunti prima di scriverci il testo semplice.
+  // Il testo che va negli appunti: in Sorgente quello scritto; in Scrittura e
+  // in Lettura un commento tagliato dalla selezione non vi porta i segni
+  // nascosti (`comments/copy.ts`).
+  const selectionSource = (state: EditorState): string | null => {
+    if (mode !== "source") return copiedSelection(state, forms);
+    const parts = state.selection.ranges.filter((range) => !range.empty).map((range) => state.sliceDoc(range.from, range.to));
+    return parts.length > 0 ? parts.join(state.lineBreak) : null;
+  };
+  // Il commento che un taglio porta con sé, soltanto in Scrittura: è lì che
+  // tagliare il testo di un passo toglie anche il commento (`comments/mask.ts`).
+  const carriedCut = (state: EditorState): CarriedCut | null => (mode === "live_preview" ? commentCut(state, forms) : null);
   let copied: string | null = null;
+  let carried: CarriedCut | null = null;
   const beforeCopy = (event: ClipboardEvent) => {
     copied = null;
+    carried = null;
     if (mode === "reading" || !(event.target instanceof Element) || !event.target.closest(".cm-content")) return;
     // La griglia di una tabella copia le sue celle da sé.
     if (event.target.closest(".tb-frame")) return;
-    copied = engine.readState((state) => {
-      const parts = state.selection.ranges.filter((range) => !range.empty)
-        .map((range) => state.sliceDoc(range.from, range.to));
-      return parts.length > 0 ? parts.join(state.lineBreak) : null;
-    });
+    copied = engine.readState(selectionSource);
+    // Tagliare tutto il testo di un passo porta il commento negli appunti di
+    // Fub (`comments/copy.ts`); qualunque altra copia lo dimentica.
+    carried = event.type === "cut" ? engine.readState(carriedCut) : null;
+    rememberCut(carried);
   };
   const afterCopy = (event: ClipboardEvent) => {
     const text = copied;
+    const cut = carried;
     copied = null;
+    carried = null;
     if (text === null || !event.defaultPrevented || !event.clipboardData) return;
     event.clipboardData.setData("text/html", clipboardHtml(text, forms));
+    if (cut) event.clipboardData.setData(FUB_MARKDOWN_TYPE, cut.markdown);
   };
   life.listen(parent, "copy", beforeCopy, { capture: true });
   life.listen(parent, "cut", beforeCopy, { capture: true });
@@ -1104,10 +1121,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     });
   };
 
-  const selectedSource = (): string =>
-    engine.readState((state) =>
-      state.selection.ranges.filter((range) => !range.empty).map((range) => state.sliceDoc(range.from, range.to)).join(state.lineBreak),
-    );
+  /// Il Markdown della selezione da copiare: in Sorgente quello scritto; in
+  /// Scrittura e in Lettura senza i segni nascosti dei commenti che la
+  /// selezione taglia (`comments/copy.ts`), come Mod-c.
+  const selectedSource = (): string => engine.readState(selectionSource) ?? "";
 
   /// Il testo di una resa senza i segni del Markdown, per «Copia come testo».
   const plainText = (markdown: string): string => {
@@ -1148,8 +1165,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       else if (op === "paste" || op === "paste-plain") pasteFromClipboard(op === "paste-plain");
       else {
         const text = selectedSource();
+        // Tagliare tutto il testo di un passo porta il commento: si legge prima
+        // della scrittura negli appunti, sulla stessa selezione del testo.
+        const carry = op === "cut" ? engine.readState(carriedCut) : null;
         void copyRich(text).then(
           () => {
+            rememberCut(carry);
             if (op === "cut" && !life.closed) engine.deleteSelection();
           },
           () => notify(t("editor_menu.copy_failed"), "guasto"),
