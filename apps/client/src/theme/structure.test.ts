@@ -402,3 +402,31 @@ describe("la carta ha uno strato suo", () => {
     }
   });
 });
+
+describe("lo scorrimento del foglio è una radice di layout", () => {
+  const SCROLLER = ".pane-editor[data-markdown-mode] > .cm-editor > .cm-scroller";
+  function blocksOf(css: string, selector: string): string[] {
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    return [...withoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter((b) => b[1]!.split(",").some((s) => s.trim() === selector))
+      .map((b) => b[2]!);
+  }
+
+  it("la struttura contiene misura e layout dello scorrimento, senza `paint`", () => {
+    // WebKit ferma il layout di una battuta solo a una radice: un elemento
+    // con contenimento di misura e di layout, o con larghezza e altezza
+    // fisse. Nella catena flessibile del foglio non c'era, e ogni tasto
+    // ridisponeva e ridipingeva la finestra intera (C6, profilo della WebView
+    // vera: radice del layout da 1049×1177 a 733×989, cioè il solo
+    // scorrimento). `paint` taglierebbe ciò che esce dallo scorrimento senza
+    // guadagnare nulla.
+    const rules = blocksOf(structure, SCROLLER);
+    expect(rules.some((b) => /(^|;)\s*contain:\s*size layout\s*;/.test(b)), `${SCROLLER} deve dichiarare \`contain: size layout\``).toBe(true);
+    expect(rules.some((b) => /contain:[^;]*\b(paint|strict|content)\b/.test(b))).toBe(false);
+  });
+
+  it("la pelle non toglie il contenimento", () => {
+    const undone = blocksOf(skin, SCROLLER).concat(blocksOf(skin, ".cm-scroller")).filter((b) => /(^|;)\s*contain\s*:/.test(b));
+    expect(undone).toEqual([]);
+  });
+});

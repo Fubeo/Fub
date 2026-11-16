@@ -1125,6 +1125,21 @@ body {
   min-width: 0;
 }
 
+/* Lo scorrimento del foglio è una radice di layout. La sua misura la decide
+   la catena flessibile qui sopra, mai il testo che contiene: con il
+   contenimento di misura e di layout una battuta ridispone soltanto il testo
+   dello scorrimento. Senza, WebKit risale fino alla finestra (nessun antenato
+   ha larghezza e altezza fisse) e a ogni tasto ridispone e ridipinge la
+   finestra intera sotto la barra del titolo.
+   Niente `paint`: non taglia nulla in più di quanto già tagli lo scorrimento.
+   I suggerimenti di CodeMirror (completamento, menu «/», anteprime) stanno
+   fuori dallo scorrimento, in `.cm-editor`, e restano fissi rispetto alla
+   finestra; le maniglie dei blocchi vi stanno già in assoluto, e il blocco in
+   mano sale nello strato sopra la finestra, che il contenimento non tocca. */
+.pane-editor[data-markdown-mode] > .cm-editor > .cm-scroller {
+  contain: size layout;
+}
+
 .pane-editor[data-markdown-mode="live_preview"] .cm-gutters,
 .pane-editor[data-markdown-mode="blocks"] .cm-gutters {
   display: none !important;
