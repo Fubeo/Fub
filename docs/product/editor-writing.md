@@ -112,15 +112,19 @@ sono icona, copertina, titolo e menu «⋯» lo dice la
   sola lettura non si modifica.
 - **Il primo H1.** Se la prima riga che si legge dopo il frontmatter (righe
   vuote e commenti `%%` o `<!-- -->` a parte) è un H1 che, a parte maiuscole,
-  spazi, punteggiatura e formattazione, dice il nome, si ripiega nel titolo:
+  spazi, punteggiatura e formattazione, dice il nome (l'id di blocco `^x` e i
+  commenti in riga non contano, i simboli come `+` sì: `# C++` non è la nota
+  `C`), si ripiega nel titolo:
   in Scrittura e in Lettura non si vede, in Sorgente sì, e il file non cambia.
   Un H1 diverso, o non in cima, resta un titolo del testo. Una selezione che
   ci entra (una ricerca) lo rivede; ciò che si scrive prima di lui scende
   sotto, dove comincia il testo, e Backspace all'inizio del testo non lo
   unisce al titolo. Rinominare dal titolo, quello della testata o quello del
   foglio, riscrive anche l'H1 ripiegato col nome nuovo, nello stesso gesto e
-  con un passo d'annullamento della nota; se la rinomina non riesce l'H1 non
-  cambia. Una rinomina che arriva da fuori non lo tocca: se l'H1 non dice più
+  con un passo d'annullamento della nota, e solo nella nota rinominata (non
+  nelle schede di una lavagna nello stesso riquadro); con un titolo che sposta
+  il file (`Archivio/Nuova`) l'H1 prende il nome, `Nuova`. Se la rinomina non
+  riesce l'H1 non cambia. Una rinomina che arriva da fuori non lo tocca: se l'H1 non dice più
   il nome torna un titolo del testo.
 - **Le proprietà.** Senza un tipo, sono in evidenza le prime quattro voci del
   frontmatter, nell'ordine del file; le altre stanno dietro «Altre N
@@ -161,10 +165,14 @@ sono icona, copertina, titolo e menu «⋯» lo dice la
   Invio mette o toglie, un nome che non si trova si aggiunge come link. Ogni
   modifica è una scrittura sola nel frontmatter della nota, con un passo
   d'annullamento suo; la voce tiene la sua chiave, la sua forma (in riga o una
-  voce per riga) e le virgolette dove YAML le vuole. Se il valore cambia
-  mentre l'editor è aperto (un altro riquadro, il file da fuori) non si
-  scrive: l'editor resta con ciò che si scriveva e lo dice, e una seconda
-  conferma scrive. Una voce che un editor non saprebbe riscrivere senza
+  voce per riga) e le virgolette dove YAML le vuole (un testo come `1e3`,
+  `yes` o `2026-03-20` resta un testo; la data del calendario resta una data,
+  con l'ora, i secondi e il fuso che aveva). Aprire un editor e uscire senza
+  cambiare niente non scrive. Se il valore cambia mentre l'editor è aperto (un
+  altro riquadro, il file da fuori) non si scrive: l'editor resta con ciò che
+  si scriveva e lo dice, e una seconda conferma (in Elenco e Persone anche
+  «Scrivi la mia») scrive. Con ancore o alias nel frontmatter «Metti in
+  evidenza» apre lo YAML invece di spostare righe. Una voce che un editor non saprebbe riscrivere senza
   perdere niente (un commento, una mappa, un testo su più righe) apre lo YAML
   sulla sua riga, come prima: la testata cede il posto alle righe del
   frontmatter finché il cursore ci sta.
