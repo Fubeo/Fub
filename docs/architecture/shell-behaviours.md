@@ -134,6 +134,13 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   Invio, Esc o un clic su qualcosa che non prende il fuoco, il fuoco resta
   sulla voce e la segue al nome nuovo quando l'albero la ridisegna; un clic su
   un controllo lo lascia a quel controllo.
+- **Indice delle impostazioni.** «In questa pagina» (`panels/settings.ts`)
+  segna la sezione in lettura. Una voce scelta col clic resta la voce attiva
+  anche quando la sua sezione sta nell'ultimo schermo e lo scorrimento non può
+  portarla in cima, finché chi legge non scorre di suo (rotella, dito, barra,
+  tasti di scorrimento) o non cambia filtro o scheda. Scorrendo a mano è
+  attiva l'ultima sezione il cui titolo è salito in cima, e in fondo l'ultima
+  visibile.
 - **Avvisi dentro il foglio.** Sotto il banner del conflitto (`drawNotices` in
   `panels/document.ts`) il foglio tiene una riga per avviso: errore di
   salvataggio con «Riprova» (`shell.doc.save`), sola lettura mentre una
