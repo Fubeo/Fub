@@ -158,6 +158,9 @@
   align-items: center;
   min-width: 0;
 }
+.launcher-preview-fact[hidden] {
+  display: none;
+}
 .launcher-preview-fact > svg {
   flex: none;
 }

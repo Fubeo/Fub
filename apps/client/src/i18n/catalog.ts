@@ -448,6 +448,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "launcher.preview.failed": "Anteprima non disponibile.",
 "launcher.preview.empty": "Questa nota è vuota.",
 "launcher.preview.file": "Questo file non ha un'anteprima qui: Invio lo apre.",
+"launcher.preview.modified": "modificata {when}",
 
 // --- Scrittoio, le preferenze: spazio dell'interfaccia, accento, voci del tema, anteprima
 "prefs.space.more_frame": "Più interfaccia",
@@ -4358,6 +4359,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "launcher.preview.failed": "Preview unavailable.",
 "launcher.preview.empty": "This note is empty.",
 "launcher.preview.file": "This file has no preview here: Enter opens it.",
+"launcher.preview.modified": "modified {when}",
 
 "prefs.space.more_frame": "More interface",
 "prefs.zoom.value": "{percent}%",

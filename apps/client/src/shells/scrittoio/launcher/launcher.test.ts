@@ -32,6 +32,10 @@ const world = vi.hoisted(() => ({
   languageListeners: new Set<() => void>(),
   render: null as unknown as (doc: string) => Promise<{ html: string; parts: [] }>,
   rendered: [] as string[],
+  /// L'ultima modifica di una nota, come la dà l'anagrafe.
+  modified: null as unknown as (doc: string) => Promise<number | null>,
+  /// Le note di cui si è chiesta la data, in ordine.
+  dated: [] as string[],
   /// Quante volte il lanciatore ha dimenticato i file letti (e li rilegge).
   forgot: 0,
   /// Quante volte li ha riletti tenendo quelli di prima.
@@ -78,6 +82,16 @@ vi.mock("../../../host/query", () => ({
     return world.render(doc);
   },
   notesByName: async () => world.named,
+}));
+// La data dell'anteprima: anche questa la decide il test.
+vi.mock("../../../state/note-facts", () => ({
+  modifiedFromEntries: (doc: string) => {
+    world.dated.push(doc);
+    return world.modified(doc);
+  },
+}));
+vi.mock("../../../ui/when", () => ({
+  relativeTime: (when: number) => `alle ${when}`,
 }));
 vi.mock("../../../host/ipc", () => ({
   api: {
@@ -264,6 +278,8 @@ beforeEach(() => {
   world.openFails = false;
   world.answer = () => nothing("niente");
   world.rendered.length = 0;
+  world.dated.length = 0;
+  world.modified = async () => null;
   world.render = async (doc) => ({ html: `<p>Resa di ${doc}</p>`, parts: [] });
   world.forgot = 0;
   world.reread = 0;
@@ -1576,10 +1592,96 @@ describe("l'anteprima accanto all'elenco", () => {
     expect(meta.querySelector<SVGElement>(".launcher-preview-fact > svg")?.dataset.icon).toBe("folder");
     press(field(), "ArrowDown");
     expect(meta.hidden).toBe(true);
-    // Le righe non chiedono niente in più per i dati: solo la resa, dopo la pausa.
+    // Una riga passata senza fermarsi non chiede niente: né resa né data.
     vi.advanceTimersByTime(PREVIEW_DELAY_MS);
     await settle();
     expect(world.rendered).toEqual(["Due.md"]);
+    expect(world.dated).toEqual(["Due.md"]);
+  });
+
+  const facts = (): HTMLElement[] =>
+    [...document.querySelectorAll<HTMLElement>(".launcher-preview-meta > .launcher-preview-fact")];
+  const shownFacts = (): string[] =>
+    facts().filter((row) => !row.hidden).map((row) => `${row.querySelector<SVGElement>("svg")?.dataset.icon} ${row.textContent}`);
+
+  it("sotto la cartella la data dell'ultima modifica, chiesta con la resa e una volta per nota", async () => {
+    world.answer = () => listed([note("Progetti/Mostra/Uno.md"), note("Due.md")]);
+    world.modified = async (doc) => (doc === "Due.md" ? 2000 : 1000);
+    launcher.open("all");
+    expect(shownFacts()).toEqual(["folder Progetti › Mostra"]);
+    expect(world.dated).toEqual([]);
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    // La data parte insieme alla resa, non dopo.
+    expect(world.dated).toEqual(["Progetti/Mostra/Uno.md"]);
+    expect(world.rendered).toEqual(["Progetti/Mostra/Uno.md"]);
+    await settle();
+    expect(shownFacts()).toEqual([
+      "folder Progetti › Mostra",
+      'clock launcher.preview.modified {"when":"alle 1000"}',
+    ]);
+    // In cima al vault c'è soltanto la data.
+    press(field(), "ArrowDown");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(shownFacts()).toEqual(['clock launcher.preview.modified {"when":"alle 2000"}']);
+    // Tornando su una nota già vista, la data c'è subito e non si richiede.
+    press(field(), "ArrowUp");
+    expect(shownFacts()).toEqual([
+      "folder Progetti › Mostra",
+      'clock launcher.preview.modified {"when":"alle 1000"}',
+    ]);
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(world.dated).toEqual(["Progetti/Mostra/Uno.md", "Due.md"]);
+    expect(world.rendered).toEqual(["Progetti/Mostra/Uno.md", "Due.md", "Progetti/Mostra/Uno.md"]);
+  });
+
+  it("una data che non arriva lascia la sola cartella, e si richiede la volta dopo", async () => {
+    world.answer = () => listed([note("Progetti/Uno.md"), note("Due.md")]);
+    world.modified = () => Promise.reject(new Error("anagrafe caduta"));
+    launcher.open("all");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(shownFacts()).toEqual(["folder Progetti"]);
+    expect(page().textContent).toBe("Resa di Progetti/Uno.md");
+    expect(world.notices).toEqual([]);
+    // Una nota che l'anagrafe non conosce non ha data, come un guasto.
+    world.modified = async () => null;
+    press(field(), "ArrowDown");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(document.querySelector<HTMLElement>(".launcher-preview-meta")?.hidden).toBe(true);
+    // Il guasto non è stato ricordato: tornando su, si richiede.
+    world.modified = async () => 5000;
+    press(field(), "ArrowUp");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(world.dated).toEqual(["Progetti/Uno.md", "Due.md", "Progetti/Uno.md"]);
+    expect(shownFacts()).toEqual(["folder Progetti", 'clock launcher.preview.modified {"when":"alle 5000"}']);
+  });
+
+  it("una data superata da una riga più nuova non si scrive", async () => {
+    let landFirst: (value: number) => void = () => {};
+    let landSecond: (value: number) => void = () => {};
+    world.answer = () => listed([note("a/Uno.md"), note("b/Due.md")]);
+    world.modified = (doc) => new Promise((resolve) => {
+      if (doc === "a/Uno.md") landFirst = resolve;
+      else landSecond = resolve;
+    });
+    launcher.open("all");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    press(field(), "ArrowDown");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    expect(world.dated).toEqual(["a/Uno.md", "b/Due.md"]);
+    landSecond(2000);
+    await settle();
+    expect(shownFacts()).toEqual(["folder b", 'clock launcher.preview.modified {"when":"alle 2000"}']);
+    landFirst(1000);
+    await settle();
+    expect(shownFacts()).toEqual(["folder b", 'clock launcher.preview.modified {"when":"alle 2000"}']);
+    // Nemmeno se la riga vecchia arriva mentre si aspetta quella nuova.
+    press(field(), "ArrowUp");
+    expect(shownFacts()).toEqual(["folder a"]);
   });
 
   it("un file che non è un documento non chiede una resa: il riquadro lo dice", async () => {
