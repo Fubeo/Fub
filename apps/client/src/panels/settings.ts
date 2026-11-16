@@ -414,6 +414,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
 
   tab = "settings";
   renderedTab = null;
+  renderedForm = null;
   resetFilters();
   settingsHooks = nextHooks;
   panelEl = $("#settings-panel");
@@ -511,9 +512,15 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
   // L'errore per-campo della chiave che è cambiata decade con esso: il valore
   // autorevole è appena stato riletto, e un esito vecchio contraddirrebbe la
   // riga. Gli errori delle altre chiavi restano, perché il loro valore no.
+  //
+  // Una chiave che ha una scrittura in volo da una riga di qui la ridisegna
+  // quella scrittura, al suo esito: l'evento che la scrittura stessa provoca
+  // sarebbe un secondo aggiornamento uguale.
   const stopSetting = onEvent("setting_changed", (event) => {
     rowErrors.delete(event.key);
-    if (!lifetime.closed && !panelEl.hidden) void render();
+    if (lifetime.closed || panelEl.hidden) return;
+    if (typeof event.key === "string" && pendingRows.has(event.key)) return;
+    void refresh(event.key);
   });
   if (typeof stopSetting === "function") lifetime.add(stopSetting);
   // Quali campi ha toccato chi scrive: solo quelli possono avere una bozza da
@@ -643,11 +650,14 @@ function close(): void {
   componentsGeneration++;
   componentsPage?.reset();
   pendingRows.clear();
+  blockedRows.clear();
+  nextWrites.clear();
   rowErrors.clear();
   writtenRows.clear();
   openDetails.clear();
   release = null;
   renderedTab = null;
+  renderedForm = null;
   resetFilters();
   if (searchEl) searchEl.value = "";
   exitSurface(panelEl, () => {
@@ -658,16 +668,25 @@ function close(): void {
 /// Quale disegno è l'ultimo chiesto.
 ///
 /// Serve perché `disegna` è **ri-entrante**, e non per un caso di laboratorio:
-/// ogni scrittura ne fa partire due — quella di `scrivi`, e quella che il
-/// `setting-changed` del kernel fa scattare — e due schede cliccate di fila ne
-/// fanno partire altre due. Svuotare *prima* dell'`await` e appendere *dopo*
-/// darebbe «svuota, svuota, appendi N, appendi N», cioè il contenuto doppio o
-/// due schede mescolate. Qui si costruisce prima e si sostituisce dopo, in un
+/// un evento che arriva mentre un disegno legge ne fa partire un altro, e due
+/// schede cliccate di fila ne fanno partire due. Svuotare *prima*
+/// dell'`await` e appendere *dopo* darebbe «svuota, svuota, appendi N,
+/// appendi N», cioè il contenuto doppio o due schede mescolate. Qui si costruisce prima e si sostituisce dopo, in un
 /// colpo solo, e il disegno che arriva in ritardo si accorge di non essere più
 /// l'ultimo e si ritira.
 const race = new Race();
 
 async function render(): Promise<void> {
+  renderStarts++;
+  rendersInFlight++;
+  try {
+    await renderWhole();
+  } finally {
+    rendersInFlight--;
+  }
+}
+
+async function renderWhole(): Promise<void> {
   const owner = settingsLifetime;
   if (!owner || owner.closed || owner !== settingsLifetime) return;
   const buttons = tabButtons();
@@ -715,15 +734,22 @@ async function render(): Promise<void> {
   const snapshot = focused ? focusSnapshot() : null;
   // Il testo scritto e non ancora salvato passa sul controllo nuovo prima che
   // il fuoco ci torni, così anche la selezione ritrova il suo testo (#401).
-  const drafts = takeDrafts();
+  const drafts = takeDrafts(bodyEl);
+  writtenRows.clear();
+  // Una riga in volo passa com'è nel disegno nuovo: mostra la scelta che la
+  // persona sta facendo, non il salvato di prima, e la sua scrittura la
+  // ridisegnerà all'esito.
+  const carried = renderedTab === tab ? carryPendingRows(nodes) : [];
   replacingBody = true;
   try {
     bodyEl.replaceChildren(...nodes);
   } finally {
     replacingBody = false;
   }
-  if (renderedTab === tab) restoreDrafts(drafts);
-  rememberSavedValues();
+  renderedForm = tab === "settings" ? formSnapshots.get(nodes) ?? null : null;
+  for (const key of carried) renderedForm?.rows.set(key, "");
+  if (renderedTab === tab) restoreDrafts(drafts, bodyEl);
+  rememberSavedValues(bodyEl);
   if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
   scrollEl.scrollTop = renderedTab === tab ? scrollTop : 0;
   if (snapshot && !focused?.isConnected && renderedTab === tab && document.activeElement === document.body) {
@@ -735,12 +761,241 @@ async function render(): Promise<void> {
   applyFilter();
 }
 
+/// Mette nel disegno nuovo, al posto della loro riga nuova, le righe in volo del
+/// corpo di adesso; torna le loro chiavi.
+function carryPendingRows(nodes: readonly HTMLElement[]): string[] {
+  const carried: string[] = [];
+  for (const key of pendingRows) {
+    const selector = `.setting-row[data-setting-key="${CSS.escape(key)}"]`;
+    const old = bodyEl.querySelector<HTMLElement>(selector);
+    const fresh = nodes.map((node) => node.matches(selector) ? node : node.querySelector<HTMLElement>(selector)).find(Boolean);
+    if (!old || !fresh) continue;
+    old.hidden = false;
+    fresh.replaceWith(old);
+    carried.push(key);
+  }
+  return carried;
+}
+
 function tabContent(): Promise<HTMLElement[]> {
   if (tab === "settings") return renderForm();
   if (tab === "components") return renderComponents();
   if (tab === "shortcuts") return renderShortcuts();
   if (tab === "about") return renderAbout();
   return renderVault();
+}
+
+// --- l'aggiornamento per riga ------------------------------------------------
+//
+// Un `setting_changed` col pannello aperto cambiava di solito una riga sola, e
+// ricostruiva tutto il corpo: centinaia di nodi rifatti, lo stile ricalcolato
+// per tutti e una lettura dello scroll che lo forzava subito, a ogni passo del
+// cursore dell'accento. Qui la scheda della configurazione rilegge le
+// impostazioni, confronta ciò che ogni riga mostra con ciò che dovrebbe
+// mostrare, e sostituisce solo le righe diverse, con il conto della loro
+// sezione, il suo «Ripristina gruppo» e il numero nell'indice.
+//
+// Ricade sul ridisegno intero ciò che una riga sola non sa dire: un evento
+// senza chiave («può essere cambiato tutto»), uno schema diverso (righe
+// comparse, sparite o ridichiarate), le chiavi che cambiano più di una riga
+// (`WHOLE_FORM_KEYS`) e ogni altra scheda.
+
+/// Ciò che la scheda della configurazione disegnata mostra: lo schema delle sue
+/// righe e, per ogni riga, ciò da cui dipende il suo disegno.
+interface FormSnapshot {
+  schema: string;
+  rows: Map<string, string>;
+}
+
+/// Il disegno della scheda della configurazione nel corpo adesso, o `null` se il
+/// corpo mostra altro (un'altra scheda, un errore di lettura).
+let renderedForm: FormSnapshot | null = null;
+/// Lo stato di ogni disegno costruito, che diventa `renderedForm` solo quando
+/// quel disegno entra davvero nel corpo.
+const formSnapshots = new WeakMap<HTMLElement[], FormSnapshot>();
+/// Quanti ridisegni interi sono partiti e quanti sono in volo: un
+/// aggiornamento per riga che ne incrocia uno si ritira e lascia fare a lui.
+let renderStarts = 0;
+let rendersInFlight = 0;
+/// L'ultimo aggiornamento per riga chiesto: uno più vecchio si ritira, perché
+/// quello nuovo rilegge e confronta tutte le righe comunque.
+let rowsGeneration = 0;
+
+/// Le righe della scheda della configurazione, fra tutte le impostazioni.
+function formRows(all: readonly SettingEntry[]): SettingEntry[] {
+  const shortcuts = new Set(allCommands().map((command) => keybindingKey(command.id)));
+  return all.filter(
+    (e) => !shortcuts.has(e.spec.key) && !isPermissionKey(e.spec.key) && !MANAGED_ELSEWHERE.has(e.spec.key),
+  );
+}
+
+function schemaOf(entries: readonly SettingEntry[]): string {
+  return JSON.stringify(entries.map((entry) => entry.spec));
+}
+
+/// Ciò da cui dipende il disegno di una riga oltre il suo schema.
+function rowSignature(entry: SettingEntry): string {
+  const key = entry.spec.key;
+  return JSON.stringify([entry.value, entry.source, pendingRows.has(key), rowErrors.get(key) ?? null]);
+}
+
+/// I nodi che la vista mette nel controllo di una riga (il campo, l'esito):
+/// tutto il resto che ci si trova l'ha messo qualcun altro — la veste di una
+/// shell — e l'aggiornamento della riga lo lascia dov'è.
+const viewParts = new WeakSet<Element>();
+
+/// Aggiorna `old` **sul posto** con il disegno di `next`: gli attributi della
+/// riga, il testo e i nodi della vista nel controllo. La riga resta lo stesso
+/// nodo, e i nodi di altri nel controllo — una veste col fuoco — non si
+/// staccano mai: staccarli toglieva il fuoco a chi stava trascinando il
+/// cursore. `hidden` è del filtro, e resta. Una riga che non ha la forma
+/// attesa si sostituisce intera.
+function patchRow(old: HTMLElement, next: HTMLElement): HTMLElement {
+  const oldText = old.querySelector(":scope > .setting-text");
+  const newText = next.querySelector(":scope > .setting-text");
+  const oldControl = old.querySelector(":scope > .setting-control");
+  const newControl = next.querySelector(":scope > .setting-control");
+  if (!oldText || !newText || !oldControl || !newControl) {
+    old.replaceWith(next);
+    return next;
+  }
+  for (const name of old.getAttributeNames()) {
+    if (name !== "hidden" && !next.hasAttribute(name)) old.removeAttribute(name);
+  }
+  for (const name of next.getAttributeNames()) {
+    const value = next.getAttribute(name)!;
+    if (name !== "hidden" && old.getAttribute(name) !== value) old.setAttribute(name, value);
+  }
+  oldText.replaceWith(newText);
+  for (const child of [...oldControl.children]) if (viewParts.has(child)) child.remove();
+  // I nodi della vista vanno prima: una veste sta subito dopo il campo che
+  // pilota, e così lo ritrova al suo posto.
+  oldControl.prepend(...newControl.children);
+  return old;
+}
+
+/// Il corpo dopo un cambio di `key`: le righe sole quando si può, tutto se no.
+function refresh(key: string | null | undefined): Promise<void> {
+  const rowsWillDo =
+    typeof key === "string" && key !== "" && !WHOLE_FORM_KEYS.has(key) &&
+    tab === "settings" && renderedTab === "settings" && renderedForm !== null && rendersInFlight === 0;
+  return rowsWillDo ? refreshRows() : render();
+}
+
+async function refreshRows(): Promise<void> {
+  const owner = settingsLifetime;
+  if (!owner || owner.closed) return;
+  const generation = ++rowsGeneration;
+  const starts = renderStarts;
+  let entries: SettingEntry[];
+  try {
+    entries = formRows(await settings());
+    await loadOwnListFields(entries);
+  } catch {
+    // Chi non riesce a rileggere lo dice col disegno intero, che ha già il
+    // suo avviso.
+    if (generation === rowsGeneration && starts === renderStarts) await render();
+    return;
+  }
+  if (owner.closed || owner !== settingsLifetime || generation !== rowsGeneration || starts !== renderStarts) return;
+  const form = renderedForm;
+  if (!form || tab !== "settings" || renderedTab !== "settings" || schemaOf(entries) !== form.schema) {
+    await render();
+    return;
+  }
+  const dirty = entries.filter((entry) => form.rows.get(entry.spec.key) !== rowSignature(entry));
+  if (dirty.length === 0) return;
+  if (dirty.some((entry) => WHOLE_FORM_KEYS.has(entry.spec.key))) {
+    await render();
+    return;
+  }
+  const touched = new Set<HTMLElement>();
+  for (const entry of dirty) {
+    const key = entry.spec.key;
+    // Una riga in volo la ridisegna la sua scrittura, quando la fila è vuota:
+    // qui mostrerebbe un salvato che la persona sta già cambiando.
+    if (pendingRows.has(key)) continue;
+    const old = bodyEl.querySelector<HTMLElement>(`.setting-row[data-setting-key="${CSS.escape(key)}"]`);
+    if (!old) {
+      await render();
+      return;
+    }
+    const focused = old.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+    const drafts = takeDrafts(old);
+    if (focused && drafts.length > 0) {
+      // La riga in cui si sta scrivendo resta quella che è: il testo, il
+      // cursore e la selezione non si toccano. Il valore salvato nuovo lo
+      // dice la riga sotto il campo, e la riga si ridisegna al suo esito.
+      noteSavedValues(old, renderRow(entry), drafts);
+      continue;
+    }
+    const snapshot = focused ? focusSnapshot(false) : null;
+    let next: HTMLElement;
+    replacingBody = true;
+    try {
+      next = patchRow(old, renderRow(entry));
+    } finally {
+      replacingBody = false;
+    }
+    writtenRows.delete(key);
+    restoreDrafts(drafts, next);
+    rememberSavedValues(next);
+    if (snapshot && (!focused?.isConnected || document.activeElement !== focused)) restoreFocus(snapshot);
+    form.rows.set(key, rowSignature(entry));
+    const section = next.closest<HTMLElement>(".settings-section");
+    if (section) touched.add(section);
+  }
+  if (touched.size > 0) {
+    const groups = groupEntries(entries);
+    for (const [index, group] of groups.entries()) {
+      const section = document.getElementById(sectionAnchor(group.title, index));
+      if (section && touched.has(section)) refreshSectionHead(section, group);
+    }
+  }
+  const { query, modified } = filters.settings;
+  if (modified || searchTerms(query).length > 0) applyFilter();
+}
+
+/// Il conto delle modificate e «Ripristina gruppo» di una sezione, rifatti
+/// sulle sue righe di adesso, e il numero della sua voce nell'indice.
+function refreshSectionHead(section: HTMLElement, group: Group): void {
+  const head = section.querySelector<HTMLElement>(":scope > .settings-section-head");
+  if (!head) return;
+  head.querySelector(".settings-section-meta")?.remove();
+  const oldReset = head.querySelector<HTMLButtonElement>(".settings-section-reset");
+  const resetHadFocus = oldReset !== null && oldReset === document.activeElement;
+  oldReset?.remove();
+  delete section.dataset.modifiedCount;
+  const changed = group.rows.filter(isModified);
+  markModified({ section, head, body: head }, changed.length);
+  const reset = groupReset(group, changed);
+  if (reset) {
+    head.append(reset);
+    if (resetHadFocus) reset.focus({ preventScroll: true });
+  }
+  const link = tocListEl?.querySelector<HTMLButtonElement>(`button[data-target="${CSS.escape(section.id)}"]`);
+  const item = link?.closest("li");
+  if (!link || !item) return;
+  const next = tocItem(section);
+  next.hidden = item.hidden;
+  const nextLink = next.querySelector<HTMLButtonElement>("button")!;
+  if (link.hasAttribute("aria-current")) nextLink.setAttribute("aria-current", "true");
+  const linkHadFocus = document.activeElement === link;
+  item.replaceWith(next);
+  if (linkHadFocus) nextLink.focus({ preventScroll: true });
+}
+
+/// La riga tenuta perché ci si sta scrivendo: il valore salvato che la sua
+/// bozza ora contraddice si ricorda, e se è cambiato da fuori una riga lo dice,
+/// come dopo un ridisegno intero.
+function noteSavedValues(row: HTMLElement, fresh: HTMLElement, drafts: readonly Draft[]): void {
+  for (const draft of drafts) {
+    const el = row.querySelector(`[id="${draft.id}"]`);
+    const now = fresh.querySelector(`[id="${draft.id}"]`);
+    if (!isDraftControl(el) || !isDraftControl(now)) continue;
+    savedValues.set(el, { saved: now.value, base: draft.base });
+    if (now.value !== draft.base && !document.getElementById(`${el.id}-changed`)) showSavedChanged(el);
+  }
 }
 
 // --- ricerca e filtro -------------------------------------------------------
@@ -863,29 +1118,31 @@ function sections(): HTMLElement[] {
 function buildToc(): void {
   if (!tocEl || !tocListEl) return;
   const all = sections();
-  tocListEl.replaceChildren(...all.map((section) => {
-    const item = document.createElement("li");
-    const link = document.createElement("button");
-    link.type = "button";
-    link.className = "settings-toc-link";
-    link.dataset.target = section.id;
-    const name = document.createElement("span");
-    name.className = "settings-toc-name";
-    name.textContent = section.querySelector(".settings-section-title")?.textContent ?? "";
-    link.append(name);
-    const count = Number(section.dataset.modifiedCount ?? "0");
-    if (count > 0) {
-      const badge = document.createElement("span");
-      badge.className = "settings-toc-badge";
-      badge.textContent = String(count);
-      badge.setAttribute("aria-hidden", "true");
-      link.append(badge);
-      setTooltip(link, plural(count, "settings.group.modified.one", "settings.group.modified"));
-    }
-    item.append(link);
-    return item;
-  }));
+  tocListEl.replaceChildren(...all.map(tocItem));
   tocEl.hidden = all.length < 2;
+}
+
+function tocItem(section: HTMLElement): HTMLLIElement {
+  const item = document.createElement("li");
+  const link = document.createElement("button");
+  link.type = "button";
+  link.className = "settings-toc-link";
+  link.dataset.target = section.id;
+  const name = document.createElement("span");
+  name.className = "settings-toc-name";
+  name.textContent = section.querySelector(".settings-section-title")?.textContent ?? "";
+  link.append(name);
+  const count = Number(section.dataset.modifiedCount ?? "0");
+  if (count > 0) {
+    const badge = document.createElement("span");
+    badge.className = "settings-toc-badge";
+    badge.textContent = String(count);
+    badge.setAttribute("aria-hidden", "true");
+    link.append(badge);
+    setTooltip(link, plural(count, "settings.group.modified.one", "settings.group.modified"));
+  }
+  item.append(link);
+  return item;
 }
 
 /// Le voci seguono il filtro: una sezione nascosta non ha voce.
@@ -992,7 +1249,6 @@ function markModified(parts: SectionParts, count: number): void {
 /// il confine: rifà il conto invece di leggere una convenzione.
 /// **Tutti i comandi**, e non più i soli comandi del kernel: da quando anche
 async function renderForm(): Promise<HTMLElement[]> {
-  const shortcuts = new Set(allCommands().map((command) => keybindingKey(command.id)));
   // Le scorciatoie **non stanno qui**: sono impostazioni come le altre, e
   // proprio per questo sarebbero venti righe senza gruppo in fondo alla scheda
   // della configurazione. Hanno una scheda loro, ed è la stessa forma — un
@@ -1002,14 +1258,15 @@ async function renderForm(): Promise<HTMLElement[]> {
   // come settanta righe senza gruppo la cui etichetta è una chiave nuda. Le
   // disegna la scheda dei componenti, accanto a chi le ha chieste, che è
   // l'unico posto in cui significano qualcosa.
-  const entries = (await settings()).filter(
-    (e) => !shortcuts.has(e.spec.key) && !isPermissionKey(e.spec.key) && !MANAGED_ELSEWHERE.has(e.spec.key),
-  );
+  const entries = formRows(await settings());
   const nodes: HTMLElement[] = [];
   if (entries.length === 0) nodes.push(row("muted settings-note", t("settings.none")));
   const themes = await themeCatalog().catch(() => []);
   await loadOwnListFields(entries);
   const groups = groupEntries(entries);
+  // Ciò che ogni riga mostra si annota quando la riga si disegna: fra una riga
+  // e l'altra può finire una scrittura in volo.
+  const snapshot: FormSnapshot = { schema: schemaOf(entries), rows: new Map() };
   for (const [index, group] of groups.entries()) {
     const parts = sectionBlock(group.title, index);
     const changed = group.rows.filter(isModified);
@@ -1017,6 +1274,7 @@ async function renderForm(): Promise<HTMLElement[]> {
     const reset = groupReset(group, changed);
     if (reset) parts.head.append(reset);
     for (const entry of group.rows) {
+      snapshot.rows.set(entry.spec.key, rowSignature(entry));
       // I frammenti CSS e il catalogo dei temi sono blocchi, non righe, e
       // stanno **nel loro gruppo**: in fondo al form finivano sotto
       // «Diagnostica», lontani dall'aspetto che cambiano.
@@ -1034,6 +1292,7 @@ async function renderForm(): Promise<HTMLElement[]> {
     nodes.push(parts.section);
   }
   nodes.push(await renderProfiles(groups.length));
+  formSnapshots.set(nodes, snapshot);
   return nodes;
 }
 
@@ -1047,6 +1306,12 @@ const MANAGED_ELSEWHERE = new Set(SETTINGS_WITH_THEIR_OWN_GESTURE);
 /// offre, e cambiarla può chiedere di riaprire la finestra.
 const FRAME_KEY = "chrome.frame";
 
+/// Le chiavi il cui valore cambia più della loro riga: il tema (il catalogo
+/// accanto), i frammenti CSS (un blocco, non una riga), la cornice (le scelte
+/// dipendono dal sistema e dall'avviso di riapertura) e la lingua (tutte le
+/// parole).
+const WHOLE_FORM_KEYS = new Set([THEME_KEY, CSS_SNIPPETS_KEY, FRAME_KEY, LANGUAGE_KEY]);
+
 async function decorateFrame(item: HTMLElement, entry: SettingEntry): Promise<void> {
   const [capabilities, reopen] = await Promise.allSettled([
     Promise.resolve().then(() => api.frameCapabilities()),
@@ -1059,8 +1324,8 @@ async function decorateFrame(item: HTMLElement, entry: SettingEntry): Promise<vo
     choice instanceof HTMLOptionElement ? choice.value : choice.dataset.choice ?? "";
   if (capabilities.status === "fulfilled") {
     for (const choice of choices) {
-      // Solo spegnere: una riga in volo ha già i suoi controlli disabilitati,
-      // e riaccenderli qui aprirebbe una seconda scrittura della stessa chiave.
+      // Solo spegnere: una scelta che il sistema non offre non si sceglie; le
+      // altre restano come le ha disegnate la riga.
       if (valueOf(choice) === "system" && !capabilities.value.system) choice.disabled = true;
       if (valueOf(choice) === "custom" && !capabilities.value.custom) choice.disabled = true;
     }
@@ -1497,6 +1762,7 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
   const control = document.createElement("div");
   control.className = "setting-control";
   control.append(field(entry));
+  for (const part of control.children) viewParts.add(part);
   // Chi arriva al campo col lettore di schermo sente anche cosa fa e dove
   // vale, non solo l'etichetta: la prosa sotto la riga era solo per gli occhi.
   for (const focusable of control.querySelectorAll<HTMLElement>("input, select, textarea, [role=radiogroup], [role=group]")) {
@@ -1511,9 +1777,9 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
   if (pending) text.append(rowPending());
   else if (failure) text.append(rowErrorNode(failure));
 
-  // Disabilitare solo la riga in volo, «azzera» compreso: le altre righe
-  // restano scrivibili.
-  if (pending) {
+  // Spegnere solo la riga in volo che scrive un cambio (`block`), «azzera»
+  // compreso; le altre righe in volo restano usabili (A03).
+  if (blockedRows.has(entry.spec.key)) {
     for (const node of el.querySelectorAll("input, select, button")) {
       (node as HTMLInputElement | HTMLSelectElement | HTMLButtonElement).disabled = true;
     }
@@ -1720,7 +1986,7 @@ function listField(entry: SettingEntry, id: string): HTMLElement {
             entry.spec.key,
             values.filter((_, candidate) => candidate !== index),
           ),
-        );
+        { block: true });
       });
       item.append(remove);
       list.append(item);
@@ -1761,7 +2027,7 @@ function listField(entry: SettingEntry, id: string): HTMLElement {
     input.removeAttribute("aria-invalid");
     void writeRow(entry.spec.key, checked.value, async () => {
       await api.setSetting(entry.spec.key, [...values, checked.value]);
-    });
+    }, { block: true });
   });
   editor.append(form);
   return editor;
@@ -1795,7 +2061,7 @@ function field(entry: SettingEntry): HTMLElement {
       const own = ownListFields.get(entry.spec.key);
       if (own !== undefined) {
         return own.field(entry, id, (value, part, checked) => {
-          void writeRow(entry.spec.key, `${part}: ${show(checked)}`, () => api.setSetting(entry.spec.key, value));
+          void writeRow(entry.spec.key, `${part}: ${show(checked)}`, () => api.setSetting(entry.spec.key, value), { block: true });
         });
       }
       return editableListKeys.has(entry.spec.key)
@@ -2089,11 +2355,11 @@ const rowErrors = new Map<string, RowError>();
 /// L'esito di una scrittura in volo, vicino al controllo che l'ha chiesta.
 ///
 /// Il testo riusa una chiave esistente via `t()` (nessuna attesa P8): la riga
-/// è marcata `aria-busy` e i suoi controlli sono disabilitati, quindi un
-/// secondo invio dalla stessa riga non parte con valori catturati vecchi.
-/// Le altre righe restano abilitate (blocco minimo).
+/// è marcata `aria-busy`, e un secondo invio dalla stessa riga si mette in fila
+/// dietro quello in volo (`writeRow`).
 function rowPending(): HTMLElement {
   const el = row("setting-pending", t("save.saving"));
+  viewParts.add(el);
   el.setAttribute("role", "status");
   return el;
 }
@@ -2105,6 +2371,7 @@ function rowPending(): HTMLElement {
 /// `role="alert"` lo annuncia a chi non guarda lo schermo.
 function rowErrorNode(err: RowError): HTMLElement {
   const box = document.createElement("div");
+  viewParts.add(box);
   box.className = "setting-error";
   box.setAttribute("role", "alert");
   box.append(row("setting-error-message", err.message));
@@ -2112,65 +2379,111 @@ function rowErrorNode(err: RowError): HTMLElement {
   return box;
 }
 
-/// Scrive una riga, e ridisegna: la sourceLabel cambia insieme al valore, e
-/// un form che non si ridisegnasse mostrerebbe «valore predefinito» sotto un
-/// valore appena scelto.
+/// Come si scrive una riga, oltre al suo valore.
+interface RowWriteOptions {
+  /// La frase da dire se non è andata: un permesso non cambiato e
+  /// un'impostazione non cambiata sono due cose diverse per chi legge, e dirle
+  /// uguali manderebbe a cercare il difetto nella scheda sbagliata.
+  failure?: Key;
+  /// La scrittura è un **cambio rispetto al valore disegnato** (una voce
+  /// aggiunta o tolta da una lista), non un valore intero: una seconda
+  /// scrittura partita dallo stesso disegno perderebbe la prima. La riga in
+  /// volo allora si spegne finché l'esito non la ridisegna.
+  block?: boolean;
+}
+
+/// Una scrittura chiesta da una riga.
+interface RowWrite {
+  attempted: string | null;
+  action: () => Promise<void>;
+  failure: Key;
+}
+
+/// La scrittura che aspetta quella in volo della stessa chiave: una sola, la
+/// più recente. Le richieste di mezzo non partono mai.
+const nextWrites = new Map<string, RowWrite>();
+
+/// Le righe in volo spente (`block`): le sole i cui controlli si disabilitano.
+const blockedRows = new Set<string>();
+
+/// Scrive una riga, e la ridisegna (con `refresh`, la riga sola quando si
+/// può): la sourceLabel cambia insieme al valore, e un form che non si
+/// ridisegnasse mostrerebbe «valore predefinito» sotto un valore appena scelto.
+///
+/// La riga in volo **resta usabile** e il fuoco resta dov'è (A03): dice
+/// l'attesa con `aria-busy` e la riga «Salvataggio…», e chi continua a
+/// scegliere — un cursore tenuto premuto, due clic di fila — non perde il gesto.
+/// Le scritture della stessa chiave sono in fila: una sola in volo, e dietro
+/// solo l'ultima chiesta, che prende il posto di quella che aspettava. Così
+/// all'host arrivano in ordine, l'ultima vince e una vecchia non la può
+/// sovrascrivere. Il ridisegno arriva una volta, quando la fila è vuota.
 ///
 /// `attempted` è l'input che l'utente aveva provato, come lo scriverebbe un
-/// umano (`null` dove non c'è un input: azzera): su errore resta sotto la riga
-/// mentre il controllo torna al valore autorevole. `failure` è la frase da
-/// dire se non è andata: un permesso non cambiato e un'impostazione non
-/// cambiata sono due cose diverse per chi legge, e dirle uguali manderebbe a
-/// cercare il difetto nella scheda sbagliata.
+/// umano (`null` dove non c'è un input: azzera): se l'ultima scrittura della
+/// fila non va, resta sotto la riga mentre il controllo torna al valore
+/// autorevole. L'esito di una scrittura superata da una più nuova non conta:
+/// vale quello della volontà più recente.
 async function writeRow(
   key: string,
   attempted: string | null,
   action: () => Promise<void>,
-  failure: Key = "settings.not_changed",
+  options: RowWriteOptions = {},
 ): Promise<void> {
-  // Dove stava guardando l'utente **prima** di disabilitare la riga: il giro
-  // di pending toglie il focus dal controllo disabilitato, e senza questa
-  // istantanea il giro finale — fotografato a focus già caduto su BODY —
-  // non saprebbe dove rimetterlo (A03).
-  const snapshot = focusSnapshot();
+  const request: RowWrite = { attempted, action, failure: options.failure ?? "settings.not_changed" };
   pinnedRow = key;
+  if (pendingRows.has(key)) {
+    nextWrites.set(key, request);
+    return;
+  }
+  // Dove stava guardando l'utente: se il ridisegno dell'esito toglie il
+  // controllo che aveva il fuoco (lo ricostruisce), il fuoco torna sul
+  // controllo nuovo della stessa riga invece di cadere su BODY (A03). Senza lo
+  // scroll: lo rimette già il ridisegno intero, e la riga sola non lo cambia.
+  const snapshot = focusSnapshot(false);
   pendingRows.add(key);
+  if (options.block) blockedRows.add(key);
   rowErrors.delete(key);
   // Dopo il gesto che l'ha chiesta, non dentro: un radiogroup attiva e poi
-  // sposta il fuoco nello stesso giro, e un bottone disabilitato lì in mezzo
-  // perderebbe il fuoco prima di averlo.
+  // sposta il fuoco nello stesso giro.
   await Promise.resolve();
-  if (pendingRows.has(key)) markPending(key);
-  try {
-    await action();
-    rowErrors.delete(key);
-  } catch (e) {
-    rowErrors.set(key, {
-      message: t(failure, { reason: errorText(e) }),
-      input: attempted ?? "",
-    });
+  if (pendingRows.has(key)) markPending(key, options.block === true);
+  let failed: RowError | null = null;
+  for (let current: RowWrite | undefined = request; current; current = nextWrites.get(key)) {
+    nextWrites.delete(key);
+    try {
+      await current.action();
+      failed = null;
+    } catch (e) {
+      failed = { message: t(current.failure, { reason: errorText(e) }), input: current.attempted ?? "" };
+    }
   }
+  if (failed) rowErrors.set(key, failed);
+  else rowErrors.delete(key);
   pendingRows.delete(key);
+  blockedRows.delete(key);
   // Il testo di questa riga ha avuto il suo esito: il ridisegno mostra il
   // valore autorevole e non lo riporta come bozza (l'input provato, se è
   // andata male, sta già sotto la riga).
   writtenRows.add(key);
-  await render();
-  // Ripara solo ciò che il pending ha rotto: se nel frattempo l'utente si è
-  // spostato (o il watcher ha ridisegnato per un'altra chiave), il focus
-  // attuale non si tocca.
+  await refresh(key);
+  // Ripara solo ciò che il ridisegno ha rotto: se nel frattempo l'utente si è
+  // spostato, il focus attuale non si tocca.
   if (document.activeElement === document.body) restoreFocus(snapshot);
 }
 
-/// Il giro di pending **sulla riga sola**: ridisegnare l'intero pannello per
-/// disabilitare un controllo faceva lampeggiare tutto e perdere lo scroll. Il
-/// ridisegno completo resta uno, dopo l'esito, perché cambia la provenienza.
-function markPending(key: string): void {
+/// Il giro di pending **sulla riga sola**: la riga dice l'attesa, e solo una
+/// riga `block` spegne i suoi controlli. Il ridisegno resta uno, dopo l'esito,
+/// perché cambia la provenienza.
+function markPending(key: string, block: boolean): void {
   const el = bodyEl.querySelector<HTMLElement>(`[data-setting-key="${key}"]`);
   if (!el) return;
+  // La riga ora mostra l'attesa, che nessuno stato salvato dice: il prossimo
+  // aggiornamento la ridisegna comunque.
+  renderedForm?.rows.set(key, "");
   el.setAttribute("aria-busy", "true");
   el.querySelector(".setting-error")?.remove();
   el.querySelector(".setting-text")?.append(rowPending());
+  if (!block) return;
   for (const node of el.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>("input, select, button")) {
     node.disabled = true;
   }
@@ -2202,10 +2515,12 @@ interface FocusSnapshot {
   rowKey: string | null;
   selectionStart: number | null;
   selectionEnd: number | null;
-  scrollTop: number;
+  /// `null` quando lo scroll non va rimesso: un aggiornamento per riga non
+  /// cambia l'altezza di ciò che sta sopra, e leggerlo forzerebbe il layout.
+  scrollTop: number | null;
 }
 
-function focusSnapshot(): FocusSnapshot {
+function focusSnapshot(withScroll = true): FocusSnapshot {
   const focused = document.activeElement;
   return {
     controlId: focused instanceof HTMLElement ? focused.id : "",
@@ -2216,7 +2531,7 @@ function focusSnapshot(): FocusSnapshot {
         : null,
     selectionStart: hasTextSelection(focused) ? focused.selectionStart : null,
     selectionEnd: hasTextSelection(focused) ? focused.selectionEnd : null,
-    scrollTop: scrollEl.scrollTop,
+    scrollTop: withScroll ? scrollEl.scrollTop : null,
   };
 }
 
@@ -2228,7 +2543,7 @@ function hasTextSelection(el: Element | null | undefined): el is HTMLInputElemen
 
 /// Rimette il focus sullo stesso controllo della stessa riga dopo il rebuild.
 function restoreFocus(snapshot: FocusSnapshot): void {
-  scrollEl.scrollTop = snapshot.scrollTop;
+  if (snapshot.scrollTop !== null) scrollEl.scrollTop = snapshot.scrollTop;
   if (snapshot.rowKey === null || snapshot.rowKey === "") {
     // Fuori da una riga (un bottone di sezione, il catalogo dei temi) vale
     // soltanto l'id: senza, non c'è un posto sicuro dove rimettere il fuoco.
@@ -2268,11 +2583,13 @@ function restoreFocus(snapshot: FocusSnapshot): void {
 
 // --- le bozze dei campi (#401) ----------------------------------------------
 //
-// Ogni `setting_changed`, di qualunque chiave, ricostruisce tutte le righe col
-// valore salvato. Un campo in cui si stava scrivendo — il testo non ancora
-// confermato con Invio o uscendo, la cartella da aggiungere, il CSS — perdeva
-// così quello che c'era scritto. Qui il testo non salvato passa dal controllo
-// vecchio a quello nuovo della stessa riga, riconosciuto dal suo `id`.
+// Un ridisegno intero ricostruisce tutte le righe col valore salvato, e un
+// aggiornamento per riga quelle cambiate. Un campo in cui si stava scrivendo —
+// il testo non ancora confermato con Invio o uscendo, la cartella da
+// aggiungere, il CSS — perdeva così quello che c'era scritto. Qui il testo non
+// salvato passa dal controllo vecchio a quello nuovo della stessa riga,
+// riconosciuto dal suo `id`; la riga col fuoco e una bozza, nell'aggiornamento
+// per riga, non si sostituisce affatto.
 //
 // Una bozza resta una bozza: niente la salva da sola. Torna solo nella stessa
 // scheda (cambiandola, o chiudendo il pannello, la pagina di prima non c'è più
@@ -2311,10 +2628,10 @@ interface Draft {
   base: string;
 }
 
-/// Il testo non salvato dei controlli di adesso, prima che il corpo cambi.
-function takeDrafts(): Draft[] {
+/// Il testo non salvato dei controlli di adesso sotto `root`, prima che cambi.
+function takeDrafts(root: HTMLElement): Draft[] {
   const drafts: Draft[] = [];
-  for (const el of bodyEl.querySelectorAll("input, textarea")) {
+  for (const el of root.querySelectorAll("input, textarea")) {
     if (!isDraftControl(el) || el.id === "" || !typedControls.has(el)) continue;
     const state = savedValues.get(el);
     if (!state || el.value === state.saved) continue;
@@ -2322,7 +2639,6 @@ function takeDrafts(): Draft[] {
     if (key !== null && writtenRows.has(key)) continue;
     drafts.push({ id: el.id, value: el.value, base: state.base });
   }
-  writtenRows.clear();
   return drafts;
 }
 
@@ -2335,9 +2651,9 @@ function takeDrafts(): Draft[] {
 ///
 /// L'`input` sintetico rifà ciò che il controllo ricalcola mentre si scrive: il
 /// cursore accanto al numero, la diagnosi di una scorciatoia.
-function restoreDrafts(drafts: readonly Draft[]): void {
+function restoreDrafts(drafts: readonly Draft[], root: HTMLElement): void {
   for (const draft of drafts) {
-    const el = bodyEl.querySelector(`[id="${draft.id}"]`);
+    const el = root.querySelector(`[id="${draft.id}"]`);
     if (!isDraftControl(el)) continue;
     const saved = el.value;
     if (saved === draft.value) continue;
@@ -2350,10 +2666,10 @@ function restoreDrafts(drafts: readonly Draft[]): void {
   }
 }
 
-/// Il valore salvato di ogni controllo appena disegnato che non porta già una
-/// bozza.
-function rememberSavedValues(): void {
-  for (const el of bodyEl.querySelectorAll("input, textarea")) {
+/// Il valore salvato di ogni controllo appena disegnato sotto `root` che non
+/// porta già una bozza.
+function rememberSavedValues(root: HTMLElement): void {
+  for (const el of root.querySelectorAll("input, textarea")) {
     if (isDraftControl(el) && !savedValues.has(el)) savedValues.set(el, { saved: el.value, base: el.value });
   }
 }
@@ -2382,6 +2698,7 @@ function keepConfirmGesture(el: HTMLInputElement): void {
 /// La riga che dice che il salvato è cambiato da fuori mentre si scriveva.
 function showSavedChanged(el: HTMLInputElement | HTMLTextAreaElement): void {
   const note = row("setting-source", t("settings.draft.saved_changed"));
+  viewParts.add(note);
   note.id = `${el.id}-changed`;
   note.setAttribute("role", "status");
   const text = el.closest("[data-setting-key]")?.querySelector(".setting-text");
@@ -3139,7 +3456,7 @@ function renderPermission(p: PermissionRow, entry: SettingEntry | undefined): HT
   const input = switchInput(`permission-${p.key}`, granted);
   input.setAttribute("aria-label", t("settings.permission.grant", { cosa: p.message }));
   input.addEventListener("change", () => {
-    void writeRow(p.key, show(input.checked), () => api.setSetting(p.key, input.checked), "settings.permission_not_changed");
+    void writeRow(p.key, show(input.checked), () => api.setSetting(p.key, input.checked), { failure: "settings.permission_not_changed" });
   });
   const control = document.createElement("div");
   control.className = "setting-control";
@@ -3147,7 +3464,7 @@ function renderPermission(p: PermissionRow, entry: SettingEntry | undefined): HT
   el.append(control);
   if (pending) {
     text.append(rowPending());
-    input.disabled = true;
+    if (blockedRows.has(p.key)) input.disabled = true;
   } else if (failure) text.append(rowErrorNode(failure));
   if (!granted) text.append(row("setting-source", t("settings.permission.denied")));
   return el;
