@@ -203,6 +203,13 @@ Il solo parser precompilato di Mermaid ha un limite di 700.000 byte e non
 può appartenere alle dipendenze statiche degli ingressi applicativi.
 Il controllo misura il codice finale, dopo la riscrittura degli import di
 Vite, e interrompe la build in caso di superamento.
+La pelle composta dello Scrittoio entra come testo (`?raw`, chunk
+`theme-skin`), che Vite non minimizza: nella build
+[`build/skin-minify.mjs`](../../apps/client/build/skin-minify.mjs) le toglie
+commenti, rientri e spazi che non contano, lasciando intatte stringhe, escape
+e `url(…)`. Il suo test confronta, sulla pelle vera, l'albero di postcss prima
+e dopo regola per regola e la fa passare dal cancello del tema; in sviluppo e
+al banco la pelle resta quella scritta.
 
 Il [guard delle copie npm](../../.github/scripts/check-npm-copies.mjs)
 mantiene uniche le dipendenze che condividono identità applicativa.
