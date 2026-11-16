@@ -863,6 +863,7 @@ button.cm-fub-page-icon {
   color: var(--doc-gutter-fg);
   font-family: var(--font-ui);
   font-size: 12.5px;
+  line-height: var(--leading-normal);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -944,7 +945,6 @@ button.cm-fub-page-icon:hover {
   background: none;
   color: var(--doc-gutter-fg);
   font: inherit;
-  line-height: var(--control-h);
   text-align: start;
   white-space: nowrap;
 }
@@ -1116,8 +1116,8 @@ button.cm-fub-page-icon:focus-visible {
   height: 24px;
   padding: 0 var(--space-4) 0 var(--space-1);
   border-radius: var(--radius-pill);
-  background: var(--doc-fill-soft);
-  box-shadow: inset 0 0 0 1px var(--doc-rule-soft);
+  background: var(--sheet-2);
+  box-shadow: inset 0 0 0 1px var(--border);
   color: var(--doc-fg);
   font-size: 12.5px;
   font-weight: var(--weight-medium);
@@ -1499,15 +1499,34 @@ button.cm-fub-page-icon:focus-visible {
   gap: var(--space-2) var(--space-6);
   padding-bottom: 18px;
   margin-bottom: 22px;
-  border-bottom: 1px solid var(--doc-rule-soft);
+  border-bottom: 1px solid var(--border);
   font-size: 12.5px;
   line-height: 19px;
 }
+/* Ogni dato ha la misura di `.facts button` del prototipo: il margine
+   negativo rende il riquadro più largo del testo senza spostarlo. Il gruppo
+   delle etichette si scioglie, così ogni etichetta è un dato come gli altri
+   (16 px fra l'una e l'altra), e prende di `.tag` soltanto il velo, il peso e
+   l'interlinea: `.facts button` vince su `.tag`, quindi il testo è grigio. */
+.cm-fub-page > .note-facts > .note-fact,
 .cm-fub-page > .note-facts .note-tag {
-  padding: 1px 7px;
+  gap: 5px;
+  margin: -2px -4px;
+  padding: 2px 4px;
+  border-radius: var(--radius-chip);
+}
+.cm-fub-page > .note-facts > .note-fact > svg {
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-page > .note-facts > .note-fact-tags {
+  display: contents;
+}
+.cm-fub-page > .note-facts .note-tag {
   background: var(--accent-veil);
-  color: var(--accent-soft);
+  color: inherit;
   font-size: 12.5px;
+  line-height: 1.5;
 }
 /* La finestra e il foglio stretti: la colonna dei nomi cede (124 px, al
    telefono 108), la copertina segue i margini più corti e al telefono si
