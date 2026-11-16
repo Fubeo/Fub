@@ -305,14 +305,15 @@ describe("il menu della maniglia", () => {
     expect(own).not.toContain("Sposta su");
   });
 
-  it("aperto da Invio ha il fuoco nel campo, e ↓ porta alla prima voce", () => {
+  it("aperto da Invio ha il fuoco nel campo e la prima voce accesa; ↓ porta alla seconda", () => {
     const { view } = open("Uno\n\nDue");
     view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 }));
     const field = document.querySelector<HTMLInputElement>("#context-menu .menu-field-input")!;
     expect(document.activeElement).toBe(field);
+    expect(document.querySelector("#context-menu .menu-items .menu-lit .menu-label")?.textContent).toBe("Trasforma in");
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
     expect(document.activeElement?.getAttribute("role")).toBe("menuitem");
-    expect(document.activeElement?.querySelector(".menu-label")?.textContent).toBe("Trasforma in");
+    expect(document.activeElement?.querySelector(".menu-label")?.textContent).toBe("Colore");
   });
 
   it("«Trasforma in ▸» dice Riquadro, Elenco di attività e Blocco di codice, e Duplica dice Mod-d", () => {

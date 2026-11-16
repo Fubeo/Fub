@@ -67,15 +67,23 @@
 .context-menu .menu-field-input {
   flex: 1;
   min-width: 0;
+  height: auto;
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: none;
+  box-shadow: none;
   color: var(--text);
   font: inherit;
   outline: none;
 }
+.context-menu .menu-field-input:hover,
 .context-menu .menu-field-input:focus-visible {
+  box-shadow: none;
   outline: none;
+}
+.context-menu .menu-field-input::placeholder {
+  color: var(--muted);
 }
 
 /* Una voce è una riga del kit (`kit/row.ts`, vestita in `skin/kit.css`): una

@@ -48,7 +48,8 @@ menu». La maniglia ha il nome del blocco («Blocco: Titolo 2, Elenco di
 attività») e apre un menu col clic o col tasto destro.
 Il menu si apre col fuoco nel campo «Cerca un'azione…» in cima, col nome del
 blocco sotto («Testo», «Riquadro», «3 blocchi») e il piede «↵ sceglie · →
-apre · Esc chiude»; scrivendo filtra le voci, ↓ va alla prima. Il menu ha:
+apre · Esc chiude». La prima voce è accesa e Invio la sceglie; scrivendo il
+campo filtra le voci, ↓ e ↑ si muovono fra loro. Il menu ha:
 
 - **Trasforma in…**: paragrafo, titoli, elenchi, elenco di attività, citazione,
   riquadro, blocco di codice, ripiegabile. Il testo resta, cambiano soltanto i segni; un titolo che

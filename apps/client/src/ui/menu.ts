@@ -1155,7 +1155,9 @@ function renderMenu(
     if (on) flip([mark], move, { duration: mark === tab ? TAB_GLIDE_MS : GLIDE_MS, easing: ENTER_EASING, scale: false });
     else move();
   };
-  lifetime.listen(menu, "focusin", (e) => paint(e.target));
+  // Col fuoco nel campo resta accesa la voce che Invio sceglie, come nel
+  // prototipo: all'apertura la prima.
+  lifetime.listen(menu, "focusin", (e) => paint(field !== null && e.target === field ? (buttons[active] ?? null) : e.target));
 
   const onKey = (e: KeyboardEvent): void => {
     // Il tasto arriva anche dai sottomenu, che stanno fuori del menu nel DOM ma
@@ -1168,15 +1170,18 @@ function renderMenu(
       return;
     }
     // Nel campo si scrive: le lettere, lo spazio e Backspace sono sue. ↓ e ↑
-    // vanno alle voci, Invio sceglie la trovata accesa.
+    // vanno alla voce dopo o prima di quella accesa (dalla prima, ↑ fa il giro
+    // in fondo), Invio sceglie quella accesa.
     if (field !== null && e.target === field) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         if (buttons.length === 0) return;
-        focusItem(e.key === "ArrowDown" ? (query === "" ? lead() : active) : buttons.length - 1);
+        const from = Math.max(0, Math.min(active, buttons.length - 1));
+        if (e.key === "ArrowDown") focusItem(Math.min(from + 1, buttons.length - 1));
+        else focusItem(from > lead() ? from - 1 : buttons.length - 1);
       } else if (e.key === "Enter") {
         e.preventDefault();
-        const button = query === "" ? undefined : buttons[active];
+        const button = buttons[active];
         if (button !== undefined && !usable[active]?.disabled) button.click();
       }
       return;
@@ -1306,10 +1311,10 @@ function renderMenu(
       fill(items.map((item) => ({ item })));
       drawFoot(0);
       if (field !== null && (typing || document.activeElement === field)) {
-        // Il campo vuoto: il menu com'era, e niente acceso.
+        // Il campo vuoto: il menu com'era, con la prima voce accesa.
         active = lead();
         if (buttons[active]) buttons[active].tabIndex = 0;
-        paint(null);
+        paint(buttons[active] ?? null);
       } else {
         focusItem(quick.length);
       }

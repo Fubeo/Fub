@@ -1387,12 +1387,12 @@ describe("il menu col campo, il titolo e il piede dei tasti", () => {
     expect(foot.getAttribute("aria-hidden")).toBe("true");
     expect([...foot.querySelectorAll(".menu-foot-key")].map((part) => part.textContent)).toEqual(["↵ sceglie", "→ apre", "Esc chiude"]);
     expect([...foot.querySelectorAll("kbd")].map((k) => k.textContent)).toEqual(["↵", "→", "Esc"]);
-    // Le voci che si trovano solo scrivendo non si vedono, e niente è acceso.
+    // Le voci che si trovano solo scrivendo non si vedono; la prima è accesa,
+    // come nel prototipo, e Invio la sceglie.
     expect(labels()).toEqual(["Duplica", "Copia il link al blocco", "Elimina"]);
-    expect(menu.querySelector(".menu-lit")).toBeNull();
-    // Invio a campo vuoto non sceglie niente.
+    expect([...menu.querySelectorAll(".menu-items .menu-lit")]).toEqual([rows()[0]]);
     key(input, "Enter");
-    expect(runs).toEqual([]);
+    expect(runs).toEqual(["Duplica"]);
   });
 
   it("scrivendo filtra, anche fra le voci nascoste, accende la prima e Invio la sceglie", () => {
@@ -1406,13 +1406,17 @@ describe("il menu col campo, il titolo e il piede dei tasti", () => {
     expect(runs).toEqual(["Sposta su"]);
   });
 
-  it("↓ dal campo va alle voci, ↑ dalla prima torna al campo; le lettere su una voce vanno nel campo", () => {
+  it("↓ dal campo va alla voce dopo l'accesa, ↑ dalla prima torna al campo; le lettere su una voce vanno nel campo", () => {
     const input = open();
     key(input, "ArrowDown");
+    expect(document.activeElement).toBe(rows()[1]);
+    key(rows()[1]!, "ArrowUp");
     expect(document.activeElement).toBe(rows()[0]);
     key(rows()[0]!, "ArrowUp");
     expect(document.activeElement).toBe(input);
-    key(input, "ArrowDown");
+    expect(rows()[0]!.classList.contains("menu-lit"), "torna accesa la voce di prima").toBe(true);
+    key(input, "ArrowUp");
+    expect(document.activeElement, "↑ dal campo fa il giro in fondo").toBe(rows()[2]);
     key(document.activeElement!, "e");
     expect(document.activeElement).toBe(input);
     expect(input.value).toBe("e");

@@ -214,10 +214,10 @@ tasto destro. In cima, al posto della testata, il campo «Cerca un'azione…»
 col fuoco; sotto, quieto, il nome del blocco («Testo», «Riquadro», «3
 blocchi»); poi Trasforma in ▸, Colore ▸ (Testo e Fondo, coi nove colori dei
 Blocchi), Duplica (Ctrl D), Copia il link al blocco, ed Elimina (Canc) per
-ultimo; in fondo il piede «↵ sceglie · → apre · Esc chiude». Scrivendo nel
-campo l'elenco si filtra e la prima trovata è accesa: Invio la sceglie, ↓ va
-alle voci e ↑ dalla prima torna al campo, Esc svuota il campo prima di
-chiudere. Sposta su e giù (che hanno Ctrl Maiusc ↑ ↓ e il trascinamento) e
+ultimo; in fondo il piede «↵ sceglie · → apre · Esc chiude». La prima voce è
+accesa, e scrivendo nel campo l'elenco si filtra e si accende la prima
+trovata: Invio sceglie l'accesa, ↓ va alla voce dopo, ↑ dalla prima torna al
+campo, Esc svuota il campo prima di chiudere. Sposta su e giù (che hanno Ctrl Maiusc ↑ ↓ e il trascinamento) e
 Affianca in colonne (che è anche il trascinamento accanto a un blocco) non
 rubano un posto: si trovano scrivendo, sotto «Altri comandi». La griglia delle tabelle in Live ha la testata «Tabella», la barra
 degli appunti, Inserisci ▸, Sposta ▸, Ordina la colonna ▸, Allinea la colonna
