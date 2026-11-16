@@ -13,6 +13,7 @@ import {
 } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import { t } from "../../../../i18n/strings";
+import { withLineBreaks } from "../../line-breaks";
 import { propertiesDisplay } from "../../properties-display";
 import { frontmatterRange } from "./render";
 
@@ -203,9 +204,10 @@ const guardOpening = EditorState.transactionFilter.of((transaction) => {
   if (inserted === "") return {};
   const doc = transaction.startState.doc;
   const at = block.to < doc.length ? block.to + 1 : block.to;
+  // `inserted` va a capo con "\n" (`Text.toString`): la lunghezza è in posizioni.
   const insert = block.to < doc.length ? inserted : `\n${inserted}`;
   return {
-    changes: { from: at, insert },
+    changes: { from: at, insert: withLineBreaks(transaction.startState, insert) },
     selection: { anchor: at + insert.length },
     scrollIntoView: true,
     userEvent: transaction.annotation(Transaction.userEvent) ?? "input",
@@ -243,7 +245,7 @@ export const addProperty: StateCommand = ({ state, dispatch }) => {
   const block = propertyBlock(state);
   if (!block) {
     const at = state.doc.sliceString(0, 1) === "﻿" ? 1 : 0;
-    const insert = "---\n\n---\n";
+    const insert = withLineBreaks(state, "---\n\n---\n");
     dispatch(state.update({ changes: { from: at, insert }, selection: { anchor: at + 4 }, scrollIntoView: true, userEvent: "input" }));
     return true;
   }
@@ -254,7 +256,7 @@ export const addProperty: StateCommand = ({ state, dispatch }) => {
     return true;
   }
   dispatch(state.update({
-    changes: { from: closing.from, insert: "\n" },
+    changes: { from: closing.from, insert: state.lineBreak },
     selection: { anchor: closing.from },
     scrollIntoView: true,
     userEvent: "input",
@@ -301,7 +303,7 @@ export function setProperty(state: EditorState, key: string, value: string | rea
   if (!block) {
     if (text === null) return null;
     const at = state.doc.sliceString(0, 1) === "\ufeff" ? 1 : 0;
-    return { from: at, to: at, insert: `---\n${text}\n---\n` };
+    return { from: at, to: at, insert: withLineBreaks(state, `---\n${text}\n---\n`) };
   }
   const entry = block.entries.find((item) => item.key === key);
   if (entry) {
@@ -313,7 +315,7 @@ export function setProperty(state: EditorState, key: string, value: string | rea
   }
   if (text === null) return null;
   const closing = state.doc.line(block.closing);
-  return { from: closing.from, to: closing.from, insert: `${text}\n` };
+  return { from: closing.from, to: closing.from, insert: `${text}${state.lineBreak}` };
 }
 
 /// Le voci di una proprietà a elenco (`[a, b]` o una per riga), una per una.
@@ -353,11 +355,12 @@ export function moveProperty(direction: -1 | 1): StateCommand {
     const entry = block.entries[index]!;
     const [first, second] = direction === -1 ? [other, entry] : [entry, other];
     const offset = state.selection.main.head - entry.from;
+    // Il testo con "\n": `start` e `offset` sono posizioni del documento.
     const insert = swapEntries(state.doc, first, second);
     // Il testo nuovo è «seconda, ciò che stava in mezzo, prima».
     const start = direction === -1 ? first.from : first.from + (second.to - second.from) + (second.from - first.to);
     dispatch(state.update({
-      changes: { from: first.from, to: second.to, insert },
+      changes: { from: first.from, to: second.to, insert: withLineBreaks(state, insert) },
       selection: { anchor: start + offset },
       scrollIntoView: true,
       userEvent: "move.line",

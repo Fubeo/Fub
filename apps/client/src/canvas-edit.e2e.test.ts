@@ -13,6 +13,7 @@
 // riquadro** (T96): la sola lettura è della nota, non della lavagna, e la
 // bozza ritrovata si annuncia nella scheda con l'avviso del riquadro.
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { waiter } from "./test-wait";
 import type { DraftInfo } from "./host/contract";
 import type { FakeHost, GridBytesFake } from "./host/fake";
 import { findTextEditorOrThrow, mountedTextEditors, undoDepth } from "./editors/text/test-support";
@@ -108,14 +109,9 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 5000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+/// Aspetta che una condizione diventi vera, contando i giri del ciclo degli
+/// eventi invece dell'orologio (`test-wait.ts`, #396).
+const waitFor = waiter(5000);
 
 afterEach(() => {
   activeStop?.();

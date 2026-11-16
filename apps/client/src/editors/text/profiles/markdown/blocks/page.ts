@@ -17,6 +17,7 @@ import { propertyBlock, propertyList, propertyValue, setProperty } from "../prop
 import { imageHtml } from "../render-inline";
 import { liveStrings } from "../strings";
 import { blocksOptions, type BlocksOptions } from "./handles";
+import { withLineBreaks } from "../../../line-breaks";
 import { noteFactsElement, noteFactsOf, sameLabels, type NoteFactsLabels } from "../note-facts";
 import { markPresence } from "../../../../core/presence";
 
@@ -457,7 +458,7 @@ export function subpageLink(state: EditorState, name: string): { from: number; i
   let end = line;
   while (end.number < state.doc.lines && state.doc.line(end.number + 1).text.trim() !== "") end = state.doc.line(end.number + 1);
   const insert = `\n\n${link}`;
-  return { from: end.to, insert, cursor: end.to + insert.length };
+  return { from: end.to, insert: withLineBreaks(state, insert), cursor: end.to + insert.length };
 }
 
 /// «Nuova sottopagina»: il nome, e che cosa succederà alla pagina. Se la

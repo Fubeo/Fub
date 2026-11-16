@@ -25,6 +25,9 @@ const ALLOWED_TIMER_FILES = new Set([
   // `settle` aspetta un giro di macrotask perché le promesse in volo finiscano,
   // e il timer muore con la promessa che risolve.
   "apps/client/src/editors/grid/test-support.ts",
+  // Le attese dei banchi, che soltanto i test importano: ogni giro di
+  // `waiter` aspetta un timer che muore con la promessa che risolve.
+  "apps/client/src/test-wait.ts",
 ]);
 
 function quoted(value) {

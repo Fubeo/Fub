@@ -1,5 +1,6 @@
 import { isStrictlyInsideCode } from "./parser";
 import { pasteHtml } from "../../paste-html";
+import { textLines } from "../../line-breaks";
 import { Prec, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, keymap, type Command } from "@codemirror/view";
 import type TurndownService from "turndown";
@@ -426,8 +427,10 @@ const pasteHandler = EditorView.domEventHandlers({
     if (!view.state.facet(pasteHtml) || isStrictlyInsideCode(view.state, view.state.selection.main.from)) return false;
     const rich = richPaste(event.clipboardData);
     if (rich === null) return false;
+    // Il Markdown convertito va a capo con "\n", quello dichiarato come
+    // capita: entra a righe vere, anche in una nota CRLF (#394).
     const insert = (markdown: string) =>
-      view.dispatch(view.state.replaceSelection(markdown), { userEvent: "input.paste" });
+      view.dispatch(view.state.replaceSelection(textLines(markdown)), { userEvent: "input.paste" });
     if ("markdown" in rich) {
       event.preventDefault();
       insert(rich.markdown);
@@ -480,7 +483,7 @@ export const pastePlainText: Command = (view) => {
   void plainClipboardText().then((text) => {
     // Un editor smontato o diventato di sola lettura nel frattempo non riceve niente.
     if (!text || !view.dom.isConnected || view.state.readOnly) return;
-    view.dispatch(view.state.replaceSelection(text), { userEvent: "input.paste", scrollIntoView: true });
+    view.dispatch(view.state.replaceSelection(textLines(text)), { userEvent: "input.paste", scrollIntoView: true });
   });
   return true;
 };

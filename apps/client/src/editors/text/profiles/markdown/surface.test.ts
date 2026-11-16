@@ -718,6 +718,31 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
+  it("«Inserisci un blocco…» in una nota CRLF apre il «/» su una riga vera, come in LF (#394)", () => {
+    const slash = {
+      currentDoc: () => "notes/current.md",
+      onEffect: vi.fn(),
+      notify: vi.fn(),
+      flushPendingSave: vi.fn(async () => []),
+      publishContext: vi.fn(async () => {}),
+      menu: {
+        enabled: () => true,
+        panel: () => ({ dom: document.createElement("div"), listId: "lista", update() {}, key: () => false, placed() {}, close() {} }),
+        chosen: vi.fn(),
+        palette: vi.fn(),
+      },
+    } satisfies EditorSlashHost;
+    for (const nl of ["\n", "\r\n"]) {
+      const { ed, view } = editor(() => {}, slash);
+      ed.setMode("source");
+      const menu = at(ed, view, `Un paragrafo${nl}fine`, 3);
+      entryOf(menu, t("editor_menu.insert_block"))!.run!();
+      expect(ed.buffer.getDoc()).toBe(`Un paragrafo${nl}/${nl}fine`);
+      expect(view().state.selection.main.head).toBe("Un paragrafo\n/".length);
+      ed.destroy();
+    }
+  });
+
   it("il tasto destro su un richiamo offre di eliminare la nota, e porta lì il cursore", () => {
     const { ed, view } = editor();
     ed.buffer.setDoc("Uno[^1] due\n\n[^1]: prima\n");

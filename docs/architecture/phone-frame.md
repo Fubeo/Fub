@@ -198,6 +198,16 @@ di CI non costruisce:
   progetto con `cargo tauri android init --ci`, fonde e verifica i template
   nativi di `crates/fub-app/mobile/install-mobile.sh`, costruisce un APK di
   debug per `aarch64` e lo carica come artefatto `fub-android-debug`;
+- **Android nell'emulatore** (job `android-emulatore`, solo sulle PR pronte
+  e su `main`): costruisce lo stesso APK di debug per `x86_64`, accende KVM
+  sul runner, crea con l'SDK del runner un AVD (API 34, `google_apis`,
+  x86_64) e lo avvia senza finestra, fino a 5 minuti. Installa l'APK, apre
+  `dev.fub.app/.MainActivity`, aspetta che la finestra di Fub sia in primo
+  piano, poi 20 s: il job fallisce se il processo non c'è più, se Fub non è
+  più in primo piano o se logcat ha un crash. Carica l'artefatto
+  `android-emulatore-<sha>` con la foto dello schermo (`scrivania.png`),
+  logcat e il log dell'emulatore. Un runner senza `/dev/kvm` fa fallire il
+  job, che lo dice. Nessuna action di terzi;
 - **iOS:** compila soltanto il Rust per il dispositivo
   (`cargo check --target aarch64-apple-ios`); nessun `.ipa` esce da qui.
 
