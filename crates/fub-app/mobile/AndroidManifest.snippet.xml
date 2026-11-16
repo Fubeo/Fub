@@ -4,7 +4,10 @@
      permesso pericoloso nuovo (niente READ_EXTERNAL_STORAGE: si passa per
      Storage Access Framework + intent, quindi niente permessi da revocare). -->
 <manifest>
-  <application>
+  <!-- FubApplication.kt passa a Rust la cartella privata dell'app
+       (Context.getFilesDir) prima di ogni activity: senza, sul telefono Fub
+       non ha una cartella di configurazione (issue #409). -->
+  <application android:name=".FubApplication">
     <activity>
       <!-- Ricevere testo/appunti/URL da altre app: ACTION_SEND testuale. -->
       <intent-filter>

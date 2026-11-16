@@ -185,6 +185,19 @@ che esiste da una parte sola:
 - il plugin a istanza singola si collega solo fuori da Android e iOS
   (`Cargo.toml`).
 
+La cartella di configurazione la sceglie il bootstrap di `run()` una volta
+sola, come sul desktop (`fub_host::config_dir`, vedi
+[Layout su disco](../reference/on-disk-layout.md#configurazione-della-macchina)).
+Su iOS è `HOME/Library/Application Support/fub`, dentro il contenitore
+dell'app. Su Android il processo non ha né `HOME` né `XDG_CONFIG_HOME`, e la
+cartella privata dell'app la dice solo il lato Java: `FubApplication.kt`
+(template di `crates/fub-app/mobile/`, dichiarato sull'`<application>` del
+manifest da `install-mobile.sh`) esporta `Context.getFilesDir()` nella
+variabile `FUB_ANDROID_FILES_DIR` in `Application.onCreate`, prima di ogni
+activity e quindi prima che la libreria Rust parta. La cartella di Fub è
+`<filesDir>/fub`. Senza quella variabile Fub lavora in memoria e lo dice
+all'avvio.
+
 Il ponte fra le due parti, i comandi e lo storage del telefono sono descritti
 in [Frontend e IPC](frontend-and-ipc.md).
 
