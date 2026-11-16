@@ -117,18 +117,26 @@ const PRUNE_FLOOR: usize = 1024;
 /// memoria resta limitata qualunque sia la pioggia di nomi.
 pub const MAX_KEYS: usize = 65_536;
 
-/// Rate limiting login: 5 fallimenti / 5 minuti per chiave (il nome
-/// dell'account, o la chiave di un passo MFA).
+/// Un limite di fallimenti per chiave: 5 (o `max_fails`) in 5 minuti. Le
+/// chiavi sono quelle di [`LoginLimits`] o l'account di un passo MFA.
 ///
 /// Il nome lo sceglie chi chiama, anche quando nessun account lo porta: le
 /// finestre scadute si potano, o una pioggia di nomi sempre nuovi farebbe
 /// crescere la mappa senza fine. La potatura scatta quando la mappa raddoppia,
 /// quindi costa O(1) ammortizzato per fallimento.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct LoginRateLimit {
     fails: BTreeMap<String, (u32, u64)>,
     /// La dimensione della mappa a cui scatta la prossima potatura.
     prune_at: usize,
+    /// I fallimenti nella finestra che bloccano la chiave.
+    max_fails: u32,
+}
+
+impl Default for LoginRateLimit {
+    fn default() -> Self {
+        Self::with_max_fails(MAX_FAILS)
+    }
 }
 
 impl LoginRateLimit {
@@ -136,9 +144,18 @@ impl LoginRateLimit {
         Self::default()
     }
 
+    /// Un limite che blocca la chiave dopo `max_fails` fallimenti in 5 minuti.
+    pub fn with_max_fails(max_fails: u32) -> Self {
+        Self {
+            fails: BTreeMap::new(),
+            prune_at: 0,
+            max_fails,
+        }
+    }
+
     /// `true` se la chiave è attualmente bloccata.
     pub fn blocked(&self, key: &str, at_ms: u64) -> bool {
-        matches!(self.fails.get(key), Some((n, first)) if *n >= MAX_FAILS && at_ms.saturating_sub(*first) < WINDOW_MS)
+        matches!(self.fails.get(key), Some((n, first)) if *n >= self.max_fails && at_ms.saturating_sub(*first) < WINDOW_MS)
     }
 
     /// Registra un fallimento; la finestra riparte dopo la scadenza.
@@ -205,6 +222,111 @@ impl LoginRateLimit {
     }
 }
 
+/// Fallimenti di un nome, da tutte le origini insieme, che bloccano il nome
+/// per le origini dove l'account non è mai entrato. Con 5 per coppia servono
+/// almeno 10 origini diverse per arrivarci.
+pub const NAME_MAX_FAILS: u32 = 50;
+/// Fallimenti di un'origine, su qualunque nome, che bloccano l'origine.
+pub const ORIGIN_MAX_FAILS: u32 = 20;
+/// Per quanto un'origine dove l'account è entrato resta «conosciuta».
+pub const KNOWN_ORIGIN_MS: u64 = 30 * 24 * 60 * 60 * 1000;
+
+/// Il limite dei login con password (B21 dell'audit del 2026-10-30).
+///
+/// Chiavato sul solo nome, chiunque bloccava un account altrui con cinque
+/// password sbagliate. Ora i limiti sono tre, e ogni tentativo conta in
+/// tutti:
+///
+/// - (nome, origine): 5 fallimenti in 5 minuti bloccano quel nome da
+///   quell'origine, non altrove;
+/// - origine: [`ORIGIN_MAX_FAILS`] fallimenti su nomi qualunque bloccano
+///   l'origine, così un'origine sola non prova molti nomi;
+/// - nome: [`NAME_MAX_FAILS`] fallimenti da tutte le origini insieme bloccano
+///   il nome, così molte origini insieme non provano molte password su un
+///   account. Un'origine dove l'account è entrato negli ultimi
+///   [`KNOWN_ORIGIN_MS`] non subisce questo blocco: chi lo provoca da altrove
+///   non chiude fuori il titolare dal suo solito posto.
+///
+/// L'origine è quella del limite per origine di [`crate::abuse`]: il peer TCP,
+/// o il client dichiarato da un proxy fidato.
+#[derive(Clone, Debug)]
+pub struct LoginLimits {
+    pairs: LoginRateLimit,
+    names: LoginRateLimit,
+    origins: LoginRateLimit,
+    /// Coppia → ultimo login riuscito.
+    known: BTreeMap<String, u64>,
+}
+
+impl Default for LoginLimits {
+    fn default() -> Self {
+        Self {
+            pairs: LoginRateLimit::with_max_fails(MAX_FAILS),
+            names: LoginRateLimit::with_max_fails(NAME_MAX_FAILS),
+            origins: LoginRateLimit::with_max_fails(ORIGIN_MAX_FAILS),
+            known: BTreeMap::new(),
+        }
+    }
+}
+
+/// La chiave di una coppia: la lunghezza dell'origine la separa dal nome,
+/// che può contenere qualunque carattere.
+fn pair_key(name: &str, origin: &str) -> String {
+    format!("{}:{origin}{name}", origin.len())
+}
+
+impl LoginLimits {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// `true` se il login di `name` da `origin` è bloccato adesso.
+    pub fn blocked(&self, name: &str, origin: &str, at_ms: u64) -> bool {
+        let pair = pair_key(name, origin);
+        let known = self
+            .known
+            .get(&pair)
+            .is_some_and(|last| at_ms.saturating_sub(*last) < KNOWN_ORIGIN_MS);
+        self.pairs.blocked(&pair, at_ms)
+            || self.origins.blocked(origin, at_ms)
+            || (!known && self.names.blocked(name, at_ms))
+    }
+
+    /// Conta un tentativo come fallito, in tutti e tre i limiti.
+    pub fn note_fail(&mut self, name: &str, origin: &str, at_ms: u64) {
+        self.pairs.note_fail(&pair_key(name, origin), at_ms);
+        self.names.note_fail(name, at_ms);
+        self.origins.note_fail(origin, at_ms);
+    }
+
+    /// Restituisce un tentativo contato in anticipo che non è fallito.
+    pub fn forgive(&mut self, name: &str, origin: &str) {
+        self.pairs.forgive(&pair_key(name, origin));
+        self.names.forgive(name);
+        self.origins.forgive(origin);
+    }
+
+    /// Dopo un login riuscito: la coppia riparte da zero e l'origine diventa
+    /// conosciuta per l'account. I fallimenti del nome e dell'origine
+    /// restano: li ha fatti qualcun altro, o un altro nome.
+    pub fn note_success(&mut self, name: &str, origin: &str, at_ms: u64) {
+        let pair = pair_key(name, origin);
+        self.pairs.note_success(&pair);
+        if !self.known.contains_key(&pair) && self.known.len() >= MAX_KEYS {
+            self.known
+                .retain(|_, last| at_ms.saturating_sub(*last) < KNOWN_ORIGIN_MS);
+        }
+        if self.known.contains_key(&pair) || self.known.len() < MAX_KEYS {
+            self.known.insert(pair, at_ms);
+        }
+    }
+
+    /// Quante chiavi di fallimento tiene: la memoria che il limite occupa.
+    pub fn tracked(&self) -> usize {
+        self.pairs.tracked() + self.names.tracked() + self.origins.tracked()
+    }
+}
+
 /// Firma `verify_totp` attesa dai discendenti (stateless: rate limit a parte).
 pub fn verify_totp(record: &mut TotpRecord, code: &str, at_ms: u64) -> Result<bool, String> {
     verify(record, code, at_ms)
@@ -255,5 +377,53 @@ mod tests {
             limit.note_fail("nome", 0);
         }
         assert!(limit.blocked("nome", 0));
+    }
+
+    #[test]
+    fn a_pair_blocks_only_its_own_origin() {
+        let mut limits = LoginLimits::new();
+        for _ in 0..MAX_FAILS {
+            limits.note_fail("titolare", "10.0.0.66", 0);
+        }
+        assert!(limits.blocked("titolare", "10.0.0.66", 1));
+        assert!(!limits.blocked("titolare", "10.0.0.1", 1));
+        assert!(!limits.blocked("altro", "10.0.0.66", 1));
+        // La finestra scade.
+        assert!(!limits.blocked("titolare", "10.0.0.66", WINDOW_MS));
+    }
+
+    #[test]
+    fn many_origins_block_the_name_except_where_the_account_logged_in() {
+        let mut limits = LoginLimits::new();
+        limits.note_success("titolare", "casa", 0);
+        let at = KNOWN_ORIGIN_MS - 10;
+        let origins = NAME_MAX_FAILS.div_ceil(MAX_FAILS);
+        for n in 0..origins {
+            for _ in 0..MAX_FAILS {
+                limits.note_fail("titolare", &format!("10.0.1.{n}"), at);
+            }
+        }
+        // Nessuna origine da sola ha superato il suo tetto, ma il nome sì.
+        assert!(limits.blocked("titolare", "nuova", at + 1));
+        assert!(!limits.blocked("titolare", "casa", at + 1));
+        assert!(!limits.blocked("altro", "nuova", at + 1));
+        // Un'origine conosciuta da troppo tempo non lo è più.
+        assert!(limits.blocked("titolare", "casa", KNOWN_ORIGIN_MS + 1));
+    }
+
+    #[test]
+    fn one_origin_trying_many_names_is_blocked_on_all() {
+        let mut limits = LoginLimits::new();
+        limits.note_success("titolare", "ufficio", 0);
+        for n in 0..ORIGIN_MAX_FAILS {
+            limits.note_fail(&format!("nome-{n}"), "ufficio", 1);
+        }
+        assert!(limits.blocked("titolare", "ufficio", 2));
+        assert!(!limits.blocked("titolare", "casa", 2));
+    }
+
+    #[test]
+    fn pair_keys_do_not_collide() {
+        assert_ne!(pair_key("b:c", "a"), pair_key("c", "a:b"));
     }
 }

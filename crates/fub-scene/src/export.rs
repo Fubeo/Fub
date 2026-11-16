@@ -28,7 +28,7 @@ use crate::classify;
 use crate::ink::round_half_up;
 use crate::values;
 use crate::xml::{self, Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG};
-use crate::ReadError;
+use crate::{ReadError, MAX_EXPORT_NODES};
 
 mod clean;
 mod measure;
@@ -107,6 +107,7 @@ impl DeriveError {
             DeriveError::BadBox => "bad-box",
             DeriveError::Read(ReadError::Malformed { .. }) => "malformed",
             DeriveError::Read(ReadError::NotSvg { .. }) => "not-svg",
+            DeriveError::Read(ReadError::TooManyNodes { .. }) => "too-many-nodes",
         }
     }
 }
@@ -256,7 +257,8 @@ pub(crate) fn format_units(units: f64, decimals: usize) -> String {
 }
 
 /// Il disegno letto per l'export: il documento intero, anche oltre la misura
-/// fino a cui l'editor lo modifica, perché l'export lo scrive tutto.
+/// fino a cui l'editor lo modifica, perché l'export lo scrive tutto. Il solo
+/// tetto è [`MAX_EXPORT_NODES`]: oltre, la lettura rifiuta.
 pub struct Source<'a> {
     doc: Document<'a>,
 }
@@ -510,11 +512,14 @@ pub fn derive(source: &str, scope: &Scope, background: Background) -> Result<Str
     Source::read(source)?.derive(scope, background)
 }
 
-/// Il documento intero, se è un SVG.
+/// Il documento intero, se è un SVG di al più [`MAX_EXPORT_NODES`] nodi.
 fn read_whole(text: &str) -> Result<Document<'_>, ReadError> {
-    let doc = xml::parse(text, false).map_err(|e| ReadError::Malformed {
-        offset: e.offset,
-        kind: e.kind,
+    let doc = xml::parse_capped(text, MAX_EXPORT_NODES).map_err(|stop| match stop {
+        xml::Stop::Xml(e) => ReadError::Malformed {
+            offset: e.offset,
+            kind: e.kind,
+        },
+        xml::Stop::Nodes { offset } => ReadError::TooManyNodes { offset },
     })?;
     let root = doc.element(doc.root).expect("la radice è un elemento");
     if !root.is_svg("svg") {

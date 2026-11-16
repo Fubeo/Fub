@@ -817,7 +817,7 @@ fn editor_settings() -> Vec<SettingSpec> {
         EDITOR_PROPERTIES,
         C_EDITOR_PROPERTIES,
         C_EDITOR_PROPERTIES_DESC,
-        "source",
+        "visible",
         vec![
             UiOption::new("visible", Text::key(C_EDITOR_PROPERTIES_VISIBLE)),
             UiOption::new("hidden", Text::key(C_EDITOR_PROPERTIES_HIDDEN)),
@@ -1877,6 +1877,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.grid.source_revision", "La sorgente della griglia non ha la revisione con cui è arrivata.")
         .with("host.wasm.reentrant", "Il componente è stato richiamato mentre era già al lavoro.")
         .with("host.wasm.missing_export", "Il componente non esporta «{interface}».")
+        .with("host.wasm.memory_budget", "I componenti hanno finito la memoria: ne tengono già {used} MiB su {ceiling}. Chiudi o disattiva un plugin e riprova.")
         .with("host.turn.cycle", "Il vault sta salvando una nota che aspetta questo componente, e questo componente aspetta il vault: il lavoro si ferma per lasciar finire il salvataggio. Riprova.")
         .with("host.instance.cycle", "Questo componente aspetta un altro componente che a sua volta aspetta questo: il lavoro si ferma per non bloccarli entrambi. Riprova.")
         .with("host.capture.source", "Fonte: {url}")
@@ -2517,6 +2518,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.grid.source_revision", "The grid source does not have the revision it arrived with.")
         .with("host.wasm.reentrant", "The component was called again while it was already working.")
         .with("host.wasm.missing_export", "The component does not export “{interface}”.")
+        .with("host.wasm.memory_budget", "Components have run out of memory: they already hold {used} MiB of {ceiling}. Close or turn off a plugin and try again.")
         .with("host.turn.cycle", "The vault is saving a note that waits for this component, and this component waits for the vault: the work stops so the save can finish. Try again.")
         .with("host.instance.cycle", "This component waits for another one that in turn waits for this one: the work stops so neither blocks. Try again.")
         .with("host.capture.source", "Source: {url}")

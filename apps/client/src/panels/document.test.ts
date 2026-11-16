@@ -6,6 +6,7 @@ import type { CraftPreview, CraftPreviewSize, CraftRenderConsent } from "../host
 import type { FakeHost } from "../host/fake";
 import { rejoinDrafts, type DraftBufferStore } from "../state/drafts";
 import { appendToTextEditor, mountedTextEditors } from "../editors/text/test-support";
+import { waiter } from "../test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -309,14 +310,7 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 3000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(3000);
 
 /// La shell vera col PDF e un Word nel vault, il consenso `consent`, e
 /// `craft_render` che risponde «in coda» come il backend.

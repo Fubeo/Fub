@@ -2007,11 +2007,12 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-host/src/remote/bundle.rs::http_request",
+            "crates/fub-host/src/remote/mod.rs::request_path_is_clean",
             (
                 Family::AsciiCase,
-                "abbassa il path per rifiutare quelli che contengono `password=`: il nome del \
-                 parametro è ASCII e il travestimento di maiuscole non deve passare. Diverge da \
+                "abbassa il path per rifiutare quelli che contengono `password=`, per i due client \
+                 dei servizi (host e bundle sync): il nome del parametro è ASCII e il \
+                 travestimento di maiuscole non deve passare. Diverge da \
                  `is_safe_href` perché qui la perdita è una credenziale nel log di sincronizzazione, \
                  là un link pericoloso pubblicato.",
             ),

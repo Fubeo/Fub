@@ -603,6 +603,10 @@ pub(super) fn unreadable(error: &ReadError) -> String {
         ReadError::NotSvg { offset } => format!(
             "not a readable SVG drawing: the root at byte {offset} is not an SVG svg element"
         ),
+        ReadError::TooManyNodes { offset } => format!(
+            "the drawing is too large to export: more than {} XML nodes (the first one over is at byte {offset})",
+            fub_scene::MAX_EXPORT_NODES
+        ),
     }
 }
 
