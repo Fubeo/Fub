@@ -6222,6 +6222,7 @@ kbd,
 .markdown-rendered blockquote,
 .markdown-rendered pre,
 .markdown-rendered table,
+.markdown-rendered .markdown-table-scroll,
 .markdown-rendered hr,
 .markdown-rendered h1,
 .markdown-rendered h2,
@@ -7830,7 +7831,11 @@ button.cm-fub-page-icon:focus-visible {
    cornice della Live sta in `skin/tabella.css`, dove la prima riga e la
    prima colonna della tabella non sono le prime del `<table>`.
    Il corpo è tre quarti del testo (13,5 px sul testo di serie, e cresce con
-   lui); la tabella è larga quanto il suo contenuto e scorre se non ci sta.
+   lui). La tabella riempie la colonna del testo e le celle non vanno a capo:
+   quando il contenuto è più largo, scorre l'involucro che la Lettura le mette
+   attorno (`markdown-table-scroll`, da `markdown/mount.ts`). Dove una resa
+   non lo mette (l'anteprima del lanciatore, le schede dei link) la tabella
+   resta larga quanto il contenuto e scorre da sé.
    I bordi sono separati, non uniti (`structure.css`, perché una pelle non
    scrive `border-spacing`): solo così gli angoli si arrotondano. Ogni
    cella ha il filo a destra e sotto; l'ultima colonna e l'ultima riga hanno
@@ -7846,6 +7851,16 @@ button.cm-fub-page-icon:focus-visible {
   font-variant-numeric: tabular-nums;
   line-height: 1.4;
 }
+.markdown-rendered .markdown-table-scroll {
+  overflow-x: auto;
+}
+.markdown-rendered .markdown-table-scroll > table {
+  display: table;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow: visible;
+}
 .markdown-rendered th,
 .markdown-rendered td {
   height: 34px;
@@ -7854,9 +7869,9 @@ button.cm-fub-page-icon:focus-visible {
   border: 0;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  /* Una cella non spezza le parole (né i numeri) a metà: se la tabella non ci
-     sta, scorre. */
-  overflow-wrap: normal;
+  /* Una cella non va a capo, come nel prototipo (`.gr td`): se la tabella
+     non ci sta, scorre. */
+  white-space: nowrap;
   text-align: start;
   vertical-align: middle;
 }
@@ -8499,13 +8514,13 @@ button.cm-fub-page-icon:focus-visible {
    colonna resta a filo del testo, come in Lettura, e le maniglie compaiono
    accanto senza spostarla. Anche le lettere delle colonne stanno fuori:
    la riga che le porta sale nello spazio sopra la tabella, così la prima
-   riga resta dove la mette la Lettura. La cornice è larga quanto la
-   tabella (senza la colonna dei numeri): i «+» del prototipo (`.tg-add`)
-   stanno sul suo bordo destro e sotto, e sotto la barra della riga resta
-   mezza riga d'aria prima del testo che segue. */
+   riga resta dove la mette la Lettura. Come in Lettura la tabella riempie
+   la colonna del testo (il prototipo, `.gr{width:100%}`): le celle sono
+   larghe quanto la cornice, la colonna dei numeri sta nel margine, e la
+   griglia scorre quando il contenuto non ci sta. I «+» del prototipo
+   (`.tg-add`) stanno sul bordo destro della cornice e sotto, e sotto la
+   barra della riga resta mezza riga d'aria prima del testo che segue. */
 .cm-editor .cm-content .tb-frame {
-  width: fit-content;
-  max-width: 100%;
   padding: 0 0 calc(19px + var(--text-reading) * var(--leading-relaxed) / 2);
 }
 .cm-editor .cm-content .tb-grid {
@@ -8515,6 +8530,7 @@ button.cm-fub-page-icon:focus-visible {
 }
 .cm-editor .cm-content .tb-grid table {
   display: table;
+  width: 100%;
   max-width: none;
   margin: 0;
   overflow: visible;
@@ -8704,9 +8720,14 @@ button.cm-fub-page-icon:focus-visible {
 }
 /* Il segno del taglio: le celle tagliate restano tratteggiate finché non si
    incolla, anche quando la tabella perde il fuoco. Il tratteggio è quello
-   del prototipo (`.tg-cut`): quattro bordi di 1,5 px, 4 px pieni e 4 vuoti.
-   Sta fermo: nella pagina un moto senza fine è ammesso solo per un lavoro in
-   corso (`skin/motion.css`, `theme/motion.test.ts`). */
+   del prototipo (`.tg-cut`): quattro bordi di 1,5 px, 4 px pieni e 4 vuoti,
+   che girano attorno alle celle come formiche in fila (`tg-ants`).
+   È l'unica eccezione al foglio fermo (`skin/motion.css` spegne ogni moto
+   dentro l'editor): il giro dice che il taglio aspetta ancora di essere
+   incollato, e finisce con lui — col taglio chiuso il riquadro è `hidden`.
+   Per questo la regola scrive `!important` con più peso di quella di
+   `motion.css`, e `theme/motion.test.ts` la nomina come sola eccezione.
+   Col moto ridotto, del sistema o di Fub, il tratteggio sta fermo. */
 .cm-editor .cm-content .tb-grid .tb-cut {
   border: 0;
   border-radius: 0;
@@ -8715,6 +8736,20 @@ button.cm-fub-page-icon:focus-visible {
     linear-gradient(90deg, var(--accent) 50%, transparent 0) 0 100% / 8px 1.5px repeat-x,
     linear-gradient(0deg, var(--accent) 50%, transparent 0) 0 0 / 1.5px 8px repeat-y,
     linear-gradient(0deg, var(--accent) 50%, transparent 0) 100% 0 / 1.5px 8px repeat-y;
+  animation: tb-ants 0.6s linear infinite !important;
+}
+@keyframes tb-ants {
+  to {
+    background-position: 8px 0, -8px 100%, 0 -8px, 100% 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cm-editor .cm-content .tb-grid .tb-cut {
+    animation: none !important;
+  }
+}
+:root[data-motion="reduced"] .cm-editor .cm-content .tb-grid .tb-cut {
+  animation: none !important;
 }
 /* Le maniglie del tocco agli angoli della selezione: si tirano per
    allargarla. Soltanto dove il puntatore è un dito. */

@@ -204,6 +204,7 @@
 .markdown-rendered blockquote,
 .markdown-rendered pre,
 .markdown-rendered table,
+.markdown-rendered .markdown-table-scroll,
 .markdown-rendered hr,
 .markdown-rendered h1,
 .markdown-rendered h2,
@@ -1812,7 +1813,11 @@ button.cm-fub-page-icon:focus-visible {
    cornice della Live sta in `skin/tabella.css`, dove la prima riga e la
    prima colonna della tabella non sono le prime del `<table>`.
    Il corpo è tre quarti del testo (13,5 px sul testo di serie, e cresce con
-   lui); la tabella è larga quanto il suo contenuto e scorre se non ci sta.
+   lui). La tabella riempie la colonna del testo e le celle non vanno a capo:
+   quando il contenuto è più largo, scorre l'involucro che la Lettura le mette
+   attorno (`markdown-table-scroll`, da `markdown/mount.ts`). Dove una resa
+   non lo mette (l'anteprima del lanciatore, le schede dei link) la tabella
+   resta larga quanto il contenuto e scorre da sé.
    I bordi sono separati, non uniti (`structure.css`, perché una pelle non
    scrive `border-spacing`): solo così gli angoli si arrotondano. Ogni
    cella ha il filo a destra e sotto; l'ultima colonna e l'ultima riga hanno
@@ -1828,6 +1833,16 @@ button.cm-fub-page-icon:focus-visible {
   font-variant-numeric: tabular-nums;
   line-height: 1.4;
 }
+.markdown-rendered .markdown-table-scroll {
+  overflow-x: auto;
+}
+.markdown-rendered .markdown-table-scroll > table {
+  display: table;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow: visible;
+}
 .markdown-rendered th,
 .markdown-rendered td {
   height: 34px;
@@ -1836,9 +1851,9 @@ button.cm-fub-page-icon:focus-visible {
   border: 0;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  /* Una cella non spezza le parole (né i numeri) a metà: se la tabella non ci
-     sta, scorre. */
-  overflow-wrap: normal;
+  /* Una cella non va a capo, come nel prototipo (`.gr td`): se la tabella
+     non ci sta, scorre. */
+  white-space: nowrap;
   text-align: start;
   vertical-align: middle;
 }

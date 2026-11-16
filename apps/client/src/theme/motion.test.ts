@@ -177,10 +177,17 @@ describe("niente moto infinito, salvo il lavoro in corso", () => {
     // Si cerca fuori dai commenti: un commento che dica «niente infinite» non
     // deve far rosso il banco. Ogni regola che gira all'infinito deve dire nel
     // selettore che c'è un lavoro che non sa quando finisce.
+    //
+    // Una sola eccezione, nominata per intero: il taglio della tabella in Live
+    // (`skin/tabella.css`, il prototipo `.tg-cut`). Il tratteggio che gira dice
+    // che il taglio aspetta di essere incollato, come in ogni foglio di
+    // calcolo, e smette con lui: a taglio chiuso il riquadro è `hidden`, e col
+    // moto ridotto sta fermo. Nessun altro selettore entra da questa porta.
+    const exceptions = new Set([".cm-editor .cm-content .tb-grid .tb-cut"]);
     const looping = [...SKIN.matchAll(/([^{}]+)\{[^{}]*\binfinite\b[^{}]*\}/g)].map((m) => m[1]!.trim());
     expect(looping.length, "il presidio legge davvero le regole").toBeGreaterThan(0);
     expect(
-      looping.filter((selector) => !/\[aria-busy="true"\]|:indeterminate/.test(selector)),
+      looping.filter((selector) => !/\[aria-busy="true"\]|:indeterminate/.test(selector) && !exceptions.has(selector)),
       "un loop infinito è decorazione, non moto: è ammesso solo dove un lavoro " +
         "è in corso (`[aria-busy=\"true\"]`, `:indeterminate`)",
     ).toEqual([]);

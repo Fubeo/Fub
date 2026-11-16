@@ -16,7 +16,9 @@ In Live ogni tabella è una griglia da foglio di calcolo, anche col cursore
 dentro; la sorgente con le pipe resta della modalità Sorgente, e Lettura la
 mostra resa. Quando la griglia ha il fuoco compaiono le lettere delle colonne
 e i numeri delle righe; la prima riga è l'intestazione della tabella. In tutte
-e due la tabella sta in una cornice arrotondata, con un filo fra le celle. La griglia non è una
+e due la tabella sta in una cornice arrotondata, con un filo fra le celle,
+riempie la colonna del testo e non va a capo nelle celle: quando il contenuto
+non ci sta, scorre in orizzontale. La griglia non è una
 fermata del Tab: ci si entra dal testo con le frecce, come in una riga. Sulle
 celle il puntatore resta la freccia.
 
@@ -48,7 +50,8 @@ celle il puntatore resta la freccia.
 - Mod+C, Mod+X e Mod+V usano il TSV dei fogli di calcolo (e una tabella HTML),
   dove una cella su più righe resta una cella; incollare oltre il bordo allarga
   la tabella, e un valore incollato riempie le celle scelte. Taglia non svuota:
-  le celle tagliate restano tratteggiate finché non si incolla, e l'incolla le
+  le celle tagliate restano in un tratteggio che gira (fermo col moto ridotto)
+  finché non si incolla, e l'incolla le
   sposta in un passo solo; Escape rinuncia, e ogni altra modifica della
   tabella toglie il segno. Il segno vale dentro la sua tabella: incollato in
   un'altra tabella o nel testo, il taglio è un incolla qualunque e le celle
