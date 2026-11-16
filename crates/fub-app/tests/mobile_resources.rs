@@ -50,6 +50,35 @@ fn names_after<'a>(text: &'a str, prefix: &'a str) -> impl Iterator<Item = &'a s
         })
 }
 
+/// **Il guscio Android passa a Rust la cartella privata con il nome che Rust
+/// legge** (issue #409). Kotlin e Rust non si vedono a compilazione: un nome
+/// cambiato da una parte sola compilava, e sul telefono Fub tornava senza
+/// cartella di configurazione. Il manifest deve dichiarare la classe e lo
+/// script deve copiarla, o `Application.onCreate` non gira mai.
+#[test]
+fn android_shell_exports_the_private_folder_rust_reads() {
+    let application = read("FubApplication.kt");
+    let exported = format!(
+        "Os.setenv(\"{}\", filesDir.absolutePath",
+        fub_host::config::ANDROID_FILES_DIR_VAR
+    );
+    assert!(
+        application.contains(&exported),
+        "FubApplication.kt non esporta {}",
+        fub_host::config::ANDROID_FILES_DIR_VAR
+    );
+    assert!(
+        read("AndroidManifest.snippet.xml")
+            .contains("<application android:name=\".FubApplication\">"),
+        "lo snippet del manifest non dichiara FubApplication"
+    );
+    assert!(
+        read("install-mobile.sh")
+            .contains("('FubApplication.kt', 'java/dev/fub/app/FubApplication.kt')"),
+        "lo script non copia FubApplication.kt"
+    );
+}
+
 #[test]
 fn every_resource_a_template_names_exists() {
     let destinations = destinations();
