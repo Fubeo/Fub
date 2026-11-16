@@ -118,3 +118,73 @@ fn rect_survives_visually_with_stroke() {
     let back = import(&export(&d, &ExportOptions::default())).unwrap();
     assert_similar(&render_artboard(&d), &render_artboard(&back), 4.0, 0.001);
 }
+
+/// Patch di Fub (`0004`, issue #407): il caso minimo che `plain_art_survives_visually` ha trovato
+/// in CI. Un'ellisse stretta di quattro ancore `Smooth`, nera, con un'opacità quasi piena.
+#[test]
+fn narrow_ellipse_with_almost_full_opacity_survives_visually() {
+    use vectorcraft_geom::{Anchor, AnchorKind, Point, SubPath};
+    let a = |p: (f64, f64), i: (f64, f64), o: (f64, f64)| Anchor {
+        p: Point::new(p.0, p.1),
+        h_in: Point::new(i.0, i.1),
+        h_out: Point::new(o.0, o.1),
+        kind: AnchorKind::Smooth,
+    };
+    let anchors = vec![
+        a((103.89344726137028, 38.45078087901094), (103.89344726137028, 59.68656077757416), (103.89344726137028, 17.215000980447723)),
+        a((108.1798637814197, 0.0), (105.81254130597362, 0.0), (110.54718625686577, 0.0)),
+        a((112.46628030146911, 38.45078087901094), (112.46628030146911, 17.215000980447723), (112.46628030146911, 59.68656077757416)),
+        a((108.1798637814197, 76.90156175802188), (110.54718625686577, 76.90156175802188), (105.81254130597362, 76.90156175802188)),
+    ];
+    let mut b = DocBuilder::new(200.0, 200.0);
+    b.path(PathData::single(SubPath::new(anchors, true)), Appearance::basic(Paint::solid(Color::BLACK), Paint::None, 0.0), |n| n.opacity = 0.9908846);
+    let d = b.build();
+    let svg = export(&d, &ExportOptions::default());
+    let back = import(&svg).unwrap();
+    assert_similar(&render_artboard(&d), &render_artboard(&back), 6.0, 0.002);
+}
+
+/// Patch di Fub (`0004`, issue #407): `<circle>` and `<ellipse>`, rotated too, come back as the
+/// standard ellipse (four smooth anchors, handles [`shapes::KAPPA`] of the radii long) starting at
+/// 3 o'clock, where SVG starts them; a closed path of four cubics that isn't one keeps its anchors.
+#[test]
+fn imported_circles_and_ellipses_are_the_standard_ellipse() {
+    use vectorcraft_geom::{Affine, AnchorKind, Point};
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
+        <ellipse cx="108.18" cy="38.451" rx="4.286" ry="38.451"/>
+        <circle cx="50" cy="150" r="40"/>
+        <ellipse cx="1000.5" cy="20" rx="900.25" ry="3.5"/>
+        <ellipse cx="100" cy="100" rx="90" ry="3" transform="rotate(30 100 100)"/>
+        <path d="M 30 0 C 30 30 30 30 0 30 C -30 30 -30 30 -30 0 C -30 -30 -30 -30 0 -30 C 30 -30 30 -30 30 0 Z"/>
+    </svg>"#;
+    let back = import(svg).unwrap();
+    let paths: Vec<&PathData> = art_nodes(&back).into_iter().filter_map(|n| n.path_data()).collect();
+    assert_eq!(paths.len(), 5);
+    let rotate = Affine::rotate_about(30f64.to_radians(), Point::new(100.0, 100.0));
+    for (i, (cx, cy, rx, ry, m)) in [
+        (108.18, 38.451, 4.286, 38.451, Affine::IDENTITY),
+        (50.0, 150.0, 40.0, 40.0, Affine::IDENTITY),
+        (1000.5, 20.0, 900.25, 3.5, Affine::IDENTITY),
+        (100.0, 100.0, 90.0, 3.0, rotate),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut want = shapes::ellipse(Rect::new(cx - rx, cy - ry, cx + rx, cy + ry));
+        want.subpaths[0].anchors.rotate_left(2);
+        let (got, want) = (&paths[i].subpaths, &want.subpaths[0].anchors);
+        assert_eq!(got.len(), 1, "ellipse {i}");
+        assert!(got[0].closed, "ellipse {i}");
+        assert_eq!(got[0].anchors.len(), 4, "ellipse {i}: {:?}", got[0].anchors);
+        for (g, w) in got[0].anchors.iter().zip(want) {
+            assert_eq!(g.kind, AnchorKind::Smooth, "ellipse {i}");
+            for (g, w) in [(g.p, w.p), (g.h_in, w.h_in), (g.h_out, w.h_out)] {
+                assert!(g.distance(m * w) < 1e-3, "ellipse {i}: {g:?} != {:?}", m * w);
+            }
+        }
+    }
+    // A rounded square drawn with four cubics: its handles aren't an ellipse's.
+    let square = &paths[4].subpaths[0].anchors;
+    assert_eq!(square.len(), 4);
+    assert_eq!(square[0].h_out, Point::new(30.0, 30.0));
+}
