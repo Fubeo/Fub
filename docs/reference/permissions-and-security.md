@@ -134,11 +134,10 @@ documento come `data-opt-<nome>` e, per i numeri, `--opt-<nome>`. La pubblicazio
 sovrascrive un id esistente. I limiti correnti sono 64 KiB per il manifest,
 4 MiB per ciascun foglio/skin, 1.024 asset, 64 MiB per asset e 256 MiB totali.
 
-Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount, ma
-non un bundle uguale per contenuto (mai per id) a quello ancora montato
-(`MountedBundle` in `theme/loader.ts`). Una preview dalle Impostazioni non cambia la scelta persistente: annullamento o
-chiusura rimontano il tema autorevole precedente; un bundle non leggibile o
-rifiutato non ottiene un mount parziale.
+Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount (non
+un bundle uguale per contenuto, mai per id, a quello montato: `MountedBundle`).
+Una preview non cambia la scelta persistente: annullarla o chiuderla rimonta il
+tema autorevole; un bundle illeggibile o rifiutato non si monta a metà.
 
 Un tema veste la cornice e i segni di Fub, e il contenuto soltanto dove la
 modalità della superficie ne dà l'autorità al tema: una regola sul contenuto si
