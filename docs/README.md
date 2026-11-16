@@ -86,7 +86,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 
 ## Sviluppare
 
-- [Workflow](development/workflow.md) e [test e qualità](development/testing-and-quality.md)
+- [Workflow](development/workflow.md), [test e qualità](development/testing-and-quality.md) e [il banco visivo](development/visual-bench.md)
 - Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md), [il moto](development/motion-smoke-test.md) e [la lavagna](development/canvas-smoke-test.md)
 - [Le misure nella WebView](development/webview-measurements.md) e [le misure prese](misure/README.md)
 - [Creare un plugin](development/plugin-authoring.md)
