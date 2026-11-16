@@ -1,7 +1,7 @@
 # VectorCraft vendorizzato
 
 Questa cartella contiene il motore di
-[VectorCraft](https://github.com/storytold/vectorcraft), copiato con le due
+[VectorCraft](https://github.com/storytold/vectorcraft), copiato con le tre
 patch elencate qui sotto. Fub non dipende da VectorCraft via Git: `deny.toml`
 ammette soltanto crates.io, e i crate non sono pubblicati là.
 
@@ -33,7 +33,7 @@ sono copiati: l'interfaccia (`ui-egui`), il server MCP (`mcp`), le app
 |---|---|---|
 | `crates/geom/`, `color/`, `doc/`, `pathops/`, `brush/`, `trace/`, `text/`, `plugins/`, `three-d/`, `svg/`, `format/`, `cad/`, `metafile/`, `affinity/`, `scriptcheck/`, `tools/`, `testkit/` | gli stessi | nessuna |
 | `crates/effects/` | `crates/effects/` | `0001` (`Cargo.toml`, `src/catalog.rs`, `src/geometry.rs`, `src/params.rs`) |
-| `crates/render/` | `crates/render/` | `0001` (`Cargo.toml`, una dipendenza dei test) |
+| `crates/render/` | `crates/render/` | `0001` (`Cargo.toml`, una dipendenza dei test); `0003` (`src/tests/placed_document.rs`) |
 | `crates/engine/` | `crates/engine/` | `0001` (22 file: `Cargo.toml`, 12 di `src/`, 9 di test); `0002` (85 file: `Cargo.toml`, 23 di `src/`, 61 di test) |
 | `xtask/src/sha256.rs`, `xtask/affinity-corpus.sha256` | gli stessi | nessuna |
 | `assets/fonts/` | `assets/fonts/` | nessuna |
@@ -79,14 +79,16 @@ l'upstream, non una copia.
 
 ### Le patch
 
-Le due patch spengono parti del motore che il disegno di Fub non usa, perché
-non entrino nella build né nel lock. Entrambe sono **UPSTREAM-API**: una
-feature in più, che l'upstream terrebbe accesa di serie.
+Le prime due patch spengono parti del motore che il disegno di Fub non usa,
+perché non entrino nella build né nel lock. Entrambe sono **UPSTREAM-API**:
+una feature in più, che l'upstream terrebbe accesa di serie. La terza
+corregge un test instabile dell'upstream (**UPSTREAM-BUGFIX**).
 
 | Patch | Tipo | File | Cosa fa | Upstream | Quando cade |
 |---|---|---|---|---|---|
 | `0001-importatori-opzionali` | UPSTREAM-API | 27 (`effects` 4, `engine` 22, `render` 1), +170 −13 | in `engine` le feature `metafile` (EMF, WMF), `affinity` (Affinity Designer) e `plugins` (i plug-in WebAssembly, con `effects/plugins`), spente; i crate diventano dipendenze opzionali, il codice che li chiama sta dietro `#[cfg]` | da proporre a monte: gli importatori e i plug-in dietro feature | quando l'upstream ha feature equivalenti |
 | `0002-pdf-opzionale` | UPSTREAM-API | 85, tutti in `engine`, +540 −17 | toglie `vectorcraft-pdf` e `vectorcraft-eps` dalle dipendenze di `engine`; il codice del PDF, dell'EPS e dell'Illustrator (`.ai`), con i comandi che li leggono e li scrivono (`document.exportPdf`, la stampa, i predefiniti PDF e di stampa, `clipboard.importPdf`, …), sta dietro `#[cfg(feature = "pdf")]` | da proporre a monte: il PDF dietro una feature (`pdf = ["dep:vectorcraft-pdf", "dep:vectorcraft-eps"]`, accesa di serie) | quando l'upstream ha la feature |
+| `0003-bitmap-trattenute` | UPSTREAM-BUGFIX | 1, in `render` (`src/tests/placed_document.rs`), +42 −1 | il test `a_ready_bitmap_draws_again_where_its_file_shows` cadeva a caso sui runner carichi (issue #382): il lavoratore in background poteva finire i bitmap fra `schedule` e la rilettura della cache in `draw_placed_bitmap`, e il primo disegno, che deve mostrare i segnaposto, li mostrava già. Il caricatore finto del test trattiene i file `held…` finché il primo disegno non è finito; l'asserzione resta la stessa | da proporre a monte | quando l'upstream rende il test deterministico |
 
 La feature `pdf` non è dichiarata nel `Cargo.toml` di `engine`: dichiararla
 vorrebbe le dipendenze `vectorcraft-pdf` ed `vectorcraft-eps`, che il lock
@@ -146,7 +148,7 @@ Misurati sulla copia di questo commit (2026-11-09, 16 thread, Rust 1.95,
 
 - sorgenti: 27 MB in 1.268 file, di cui 23 MB nei crate (485.000 righe di
   Rust, 206.000 nei test; `engine` da solo 11 MB) e 3,3 MB di caratteri in
-  `assets/fonts/`; le patch 174 kB; `upstream.lock` 184 kB;
+  `assets/fonts/`; le patch 174 kB (prima della `0003`); `upstream.lock` 184 kB;
 - compilazione da zero dei test del workspace (`cargo test --workspace
   --locked --no-run` in una cartella `target` vuota): 407 s (6 min 47 s);
   la sola libreria di `vectorcraft-engine`, ricompilata dopo senza i test,

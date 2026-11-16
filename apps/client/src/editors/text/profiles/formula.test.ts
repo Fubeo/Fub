@@ -218,6 +218,21 @@ describe("FormulaProfile", () => {
     engine.destroy();
   });
 
+  it("Alt+Invio va a capo con gli a capo della cella, anche CRLF (#394)", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const profile = createFormulaProfile({ singleLine: false, onCommit: vi.fn() });
+      const { engine, view } = mounted(profile);
+      const editor = view();
+      engine.setDoc(`uno${nl}due`);
+      editor.dispatch({ selection: EditorSelection.cursor(editor.state.doc.length) });
+      editor.focus();
+      keydown(editor, "Enter", { altKey: true });
+      expect(engine.getDoc()).toBe(`uno${nl}due${nl}`);
+      expect(editor.state.selection.main.head).toBe(editor.state.doc.length);
+      engine.destroy();
+    }
+  });
+
   it("usa Enter per accettare un completamento dal popup prima del commit", async () => {
     vi.useFakeTimers();
     const commit = vi.fn();

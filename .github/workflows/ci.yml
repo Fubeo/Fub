@@ -10,6 +10,13 @@ on:
         description: "i fuzzer del Markdown a 20 000 casi invece di 2000"
         type: boolean
         default: false
+      # Lo passa `.github/workflows/baseline.yml` dopo il commit delle
+      # baseline: il job `changes` decide se gli altri job possono contare
+      # come in quella corsa (vedi il passo «si riusa una corsa precedente?»).
+      riuso_di:
+        description: "id della corsa di una PR di cui riusare l'esito, se il commit cambia soltanto baseline del banco visivo"
+        type: string
+        default: ""
   push:
     branches: [main]
   # `ready_for_review`: segnare pronta una PR in bozza fa partire la CI
@@ -39,16 +46,24 @@ jobs:
   # Una PR in bozza è lavoro in corso: riceve la CI corta (Linux, niente
   # banchi). Segnata pronta riceve tutto, e i banchi solo se tocca il client.
   # Su `main`, sul cron e a mano gira sempre tutto. Questo job dice ai banchi
-  # se il client è toccato.
+  # se il client è toccato, e a tutti i job tranne il banco visivo se la corsa
+  # riusa l'esito di una precedente (`riuso`): allora si saltano.
   changes:
     name: cosa cambia
     runs-on: ubuntu-latest
+    # `actions: read` soltanto qui: il passo del riuso legge la corsa e i job
+    # di `riuso_di` con l'API.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       client: ${{ steps.diff.outputs.client }}
+      riuso: ${{ steps.riuso.outputs.riuso }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: il client è toccato?
         id: diff
         env:
@@ -62,10 +77,56 @@ jobs:
           else
             echo "client=false" >> "$GITHUB_OUTPUT"
           fi
+      # Dopo il commit delle baseline fatto da `baseline.yml`, la corsa lanciata
+      # a mano rifà soltanto il banco visivo: gli altri job contano come nella
+      # corsa `riuso_di` sul commit padre. Le condizioni sono in
+      # `.github/scripts/baseline-dal-runner.mjs` (`valutaRiuso`); se una
+      # manca, o se l'API non risponde, la corsa è completa.
+      - name: si riusa una corsa precedente?
+        id: riuso
+        env:
+          EVENT: ${{ github.event_name }}
+          RIUSO_DI: ${{ inputs.riuso_di }}
+          REPO: ${{ github.repository }}
+          RAMO: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          PREDEFINITO: ${{ github.event.repository.default_branch }}
+          RUN_ID: ${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$EVENT" != "workflow_dispatch" ]; then
+            echo "riuso=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$RIUSO_DI" ]; then
+            echo "riuso=false" >> "$GITHUB_OUTPUT"
+            echo "Nessun riuso chiesto: gira la CI completa." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          d="$RUNNER_TEMP/riuso"
+          mkdir -p "$d"
+          raccogli() {
+            [[ "$RIUSO_DI" =~ ^[0-9]+$ ]] && [ "$REF_TYPE" = branch ] &&
+              gh api "repos/$REPO/actions/runs/$RIUSO_DI" > "$d/corsa.json" &&
+              gh api "repos/$REPO/actions/runs/$RUN_ID" --jq .workflow_id > "$d/workflow" &&
+              gh api --paginate "repos/$REPO/actions/runs/$RIUSO_DI/jobs?filter=latest&per_page=100" \
+                --jq '.jobs[] | {name, status, conclusion}' > "$d/job.ndjson" &&
+              git rev-list --parents -n 1 HEAD > "$d/genitori" &&
+              git diff --raw --no-renames --no-abbrev HEAD^ HEAD > "$d/diff"
+          }
+          if raccogli && node .github/scripts/baseline-dal-runner.mjs riuso \
+              --corsa "$d/corsa.json" --job "$d/job.ndjson" --genitori "$d/genitori" \
+              --diff "$d/diff" --repo "$REPO" --workflow-id "$(cat "$d/workflow")" \
+              --ramo "$RAMO" --predefinito "$PREDEFINITO"; then
+            exit 0
+          fi
+          echo "riuso=false" >> "$GITHUB_OUTPUT"
+          echo "Nessun riuso della corsa $RIUSO_DI: non ho potuto leggerla, o il ref non è un ramo. Gira la CI completa." >> "$GITHUB_STEP_SUMMARY"
 
   invariants:
     name: invarianti (abi↔WIT, additività, dipendenze)
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: needs.changes.outputs.riuso != 'true' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -107,6 +168,8 @@ jobs:
         run: node .github/scripts/check-rust-comments.mjs --self-test
       - name: il cancello del rilascio rifiuta CI incomplete e canali stabili senza firme
         run: node .github/scripts/check-release-gate.mjs --self-test
+      - name: le baseline dal runner e il riuso rifiutano artefatti e corse fuori regola
+        run: node .github/scripts/baseline-dal-runner.mjs --self-test
       - name: i commenti di Rust restano attaccati a ciò che descrivono
         run: node .github/scripts/check-rust-comments.mjs
       - name: aggiungi il bersaglio del confine
@@ -146,6 +209,8 @@ jobs:
 
   supply-chain:
     name: supply chain (licenze, advisory, SBOM)
+    needs: changes
+    if: needs.changes.outputs.riuso != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -165,7 +230,8 @@ jobs:
 
   fmt:
     name: fmt + clippy
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: needs.changes.outputs.riuso != 'true' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -194,6 +260,8 @@ jobs:
 
   test:
     name: build + test (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.riuso != 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -256,6 +324,8 @@ jobs:
     # tre job dei test, invece di allungarli. Lo stesso per i workspace dei
     # motori, che hanno il loro lock.
     name: varianti di feature e motori in vendor
+    needs: changes
+    if: needs.changes.outputs.riuso != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -296,7 +366,8 @@ jobs:
 
   libreoffice:
     name: i docx innestati, riletti da LibreOffice
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: needs.changes.outputs.riuso != 'true' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -316,7 +387,8 @@ jobs:
 
   docs:
     name: documentazione canonica
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: needs.changes.outputs.riuso != 'true' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -348,6 +420,8 @@ jobs:
 
   client:
     name: client (type-check + test + build)
+    needs: changes
+    if: needs.changes.outputs.riuso != 'true'
     # Fissato: le baseline del banco visivo sono di questa immagine, e
     # `ubuntu-latest` cambia sotto i piedi. Si passa alla prossima di
     # proposito, rigenerando le baseline sulla CI.
@@ -401,6 +475,8 @@ jobs:
 
   # I banchi girano in job loro accanto a quello dei test, invece che in fila
   # dietro di lui. Tutti sull'immagine delle baseline.
+  # Il banco visivo non guarda `riuso`: dopo un commit di baseline è proprio
+  # lui la prova che resta da fare.
   visual:
     name: banco visivo (scene uguali alle baseline)
     needs: changes
@@ -445,7 +521,7 @@ jobs:
     # costavano quasi quattordici minuti.
     name: contrasto e tastiera (${{ matrix.light }})
     needs: changes
-    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true')
+    if: needs.changes.outputs.riuso != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true'))
     strategy:
       fail-fast: false
       matrix:
@@ -475,7 +551,7 @@ jobs:
   graph:
     name: banchi del grafo (scala e heap)
     needs: changes
-    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true')
+    if: needs.changes.outputs.riuso != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true'))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -554,7 +630,7 @@ jobs:
   benches:
     name: banchi del movimento, dei disegni e della griglia
     needs: changes
-    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true')
+    if: needs.changes.outputs.riuso != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true'))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -631,6 +707,8 @@ jobs:
     # runner senza scheda grafica i numeri non sono assoluti: la sezione `ci`
     # di `bench/webview/budgets.json` è una soglia di peggioramento.
     name: la WebView vera (WebKitGTK, S1–S3)
+    needs: changes
+    if: needs.changes.outputs.riuso != 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -677,7 +755,8 @@ jobs:
     # referto dice se il caricamento, la rimozione di un file e le firme
     # tengono, e quanto pesa la consegna contro l'ospite statico.
     name: le librerie a runtime (${{ matrix.os }})
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: needs.changes.outputs.riuso != 'true' && github.event_name != 'schedule'
     strategy:
       fail-fast: false
       matrix:

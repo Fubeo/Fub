@@ -16,6 +16,7 @@ import { taskChecked } from "../../../../rules/mirrored";
 import { nextMarker, listItem, type ListEntry } from "../../../../rules/syntax";
 import { isStrictlyInsideCode } from "./parser";
 import { textKeymap } from "../../commands";
+import { withLineBreaks } from "../../line-breaks";
 import { smartLists } from "../../smart-lists";
 import { addProperty, moveProperty } from "./properties";
 import { frontmatterRange } from "./render";
@@ -91,7 +92,8 @@ function toggleWrap(open: string, close: string = open): StateCommand {
             // `**parola **` non è grassetto, e `* parola*` a inizio riga è una
             // voce di lista. Una selezione di soli spazi non ha niente da
             // formattare e riceve la coppia vuota alla fine.
-            const text = state.sliceDoc(from, to);
+            // Il testo con "\n": le sue lunghezze sono posizioni del documento.
+            const text = state.doc.sliceString(from, to);
             const lead = text.length - text.trimStart().length;
             const trail = text.length - text.trimEnd().length;
             if (lead === text.length) {
@@ -303,7 +305,7 @@ export const closeFenceEnter: StateCommand = ({ state, dispatch }) => {
   const indent = found[1]!;
   const fence = found[2]![0]!.repeat(found[2]!.length);
   dispatch(state.update({
-    changes: { from: line.to, insert: `\n${indent}\n${indent}${fence}` },
+    changes: { from: line.to, insert: withLineBreaks(state, `\n${indent}\n${indent}${fence}`) },
     selection: { anchor: line.to + 1 + indent.length },
     scrollIntoView: true,
     userEvent: "input",

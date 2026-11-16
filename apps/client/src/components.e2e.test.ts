@@ -10,6 +10,7 @@
 // note» dello scenario registrato dall'host vero.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeHost } from "./host/fake";
+import { waiter } from "./test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -107,14 +108,7 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 15_000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(15_000);
 
 async function open(doc: string): Promise<void> {
   const { openDocument } = await import("./panels/document");

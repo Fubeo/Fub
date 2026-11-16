@@ -168,7 +168,8 @@ che non pubblica niente: su Android genera il progetto
 (`cargo tauri android init --ci`), fonde i template nativi con
 `crates/fub-app/mobile/install-mobile.sh` e ne verifica la fusione con
 `--check`, poi costruisce un APK di debug per aarch64, caricato come artefatto
-della corsa. Su iOS compila soltanto `fub-app` per il dispositivo: il progetto
+della corsa; sulle PR pronte e su `main` un APK per x86_64 si apre anche in un
+emulatore del runner, che dice se Fub parte e ne fotografa lo schermo. Su iOS compila soltanto `fub-app` per il dispositivo: il progetto
 Xcode chiede i target Share e Widget creati a mano e una firma. Non è un
 controllo richiesto.
 

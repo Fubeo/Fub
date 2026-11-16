@@ -23,6 +23,7 @@ import type { CardRegistry, CardRenderer, CardView } from "./editors/canvas/card
 import type { SettingEntry } from "./host/contract";
 import type { FakeHost, FakeResource } from "./host/fake";
 import { t } from "./i18n/strings";
+import { waiter } from "./test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -164,14 +165,7 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 5000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(5000);
 
 const card = (id: string) => document.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`);
 
