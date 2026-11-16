@@ -20,7 +20,14 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 /// Watchdog for the writer in the detached-callback regression. The callback
 /// is released only after this result arrives, so a retained workspace guard
 /// deterministically turns into a failed assertion instead of a test hang.
-const WRITER_LIMIT: Duration = Duration::from_secs(2);
+///
+/// Tetto di sicurezza, non misura: lo scrittore corretto finisce appena ha
+/// preso il lucchetto, e la prova va avanti subito. Con due secondi, su una
+/// macchina molto carica, lo scrittore non faceva in tempo a partire e la
+/// prova accusava un guard che nessuno teneva (#396). Un guard trattenuto
+/// davvero non si libera mai prima di [`RELEASE_LIMIT`], quindi il tetto
+/// largo boccia il difetto lo stesso: ci mette solo di più a dirlo.
+const WRITER_LIMIT: Duration = Duration::from_secs(30);
 /// Tetto di sicurezza per l'apertura del secondo vault nella prova sul
 /// registro delle sessioni. A differenza di [`WRITER_LIMIT`], chi apre fa un
 /// lavoro vero (percorsi canonici, lease di scrittura, recovery degli snapshot,
@@ -156,7 +163,7 @@ impl IndexProvider for BlockingSettingsIndex {
         self.release
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .recv_timeout(TIMEOUT)
+            .recv_timeout(RELEASE_LIMIT)
             .map_err(|_| PluginError::Internal("settings probe was not released".into()))?;
         Ok(IndexResult::Settings(Vec::new()))
     }

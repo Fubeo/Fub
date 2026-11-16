@@ -24,6 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeHost, FakeResource } from "./host/fake";
 import { findTextEditorOrThrow } from "./editors/text/test-support";
 import { t } from "./i18n/strings";
+import { FIRST_IMPORT_MS, waiter } from "./test-wait";
 
 vi.setConfig({ testTimeout: 60_000 });
 
@@ -171,14 +172,7 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 10_000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(10_000);
 
 // --- La lavagna sullo schermo -----------------------------------------------
 
@@ -191,7 +185,7 @@ const notice = () => document.querySelector<HTMLElement>(".canvas-removal")?.tex
 async function openBoard(ready: string[] = []): Promise<void> {
   const { openDocument } = await import("./panels/document");
   await openDocument(BOARD);
-  await waitFor("la lavagna si monta", () => document.querySelector(".canvas-stage") !== null, 15_000);
+  await waitFor("la lavagna si monta", () => document.querySelector(".canvas-stage") !== null, FIRST_IMPORT_MS);
   await waitFor("le schede ci sono", () => ready.every((id) => card(id) !== null), 15_000);
   await fit();
 }

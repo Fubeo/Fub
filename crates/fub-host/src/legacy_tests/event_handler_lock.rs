@@ -53,7 +53,16 @@ const SETTING: &str = "fub.audit-event-setting.enabled";
 const VIEW_EVENT: &str = "fub:audit-event-view-delivered";
 const COMMAND_EVENT: &str = "fub:audit-event-command-delivered";
 const SERVICE_EVENT: &str = "fub:audit-event-service-delivered";
-const TIMEOUT: Duration = Duration::from_secs(10);
+/// Tetto di sicurezza di ogni attesa qui sotto: apertura e prima
+/// indicizzazione, l'arrivo delle osservazioni, la fine dell'ingresso
+/// dell'host, il lucchetto che torna libero. Nessuna lo usa per decidere:
+/// ognuna finisce appena arriva il suo segnale, e il caso buono non lo tocca
+/// mai. Un guard trattenuto non si libera da sé — l'osservazione col `read`
+/// a falso arriva da [`super::read_comes_free`], la scrittura bloccante non
+/// arriva mai — quindi un tetto largo boccia il difetto lo stesso, solo più
+/// tardi. Con dieci secondi, su una macchina molto carica, apertura e
+/// indicizzazione del vault potevano superarlo (#396).
+const TIMEOUT: Duration = Duration::from_secs(60);
 
 struct Vault {
     _dir: tempfile::TempDir,

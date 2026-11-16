@@ -44,7 +44,8 @@ Una riga per cartella di primo livello. La mappa completa con aree e prove è in
 ## File in radice
 
 `main.ts` (entry Vite), `desktop-shell.ts` (montaggio della shell),
-`test-setup.ts`, `redraw.test.ts` (il banco del ridisegno), i test e2e
+`test-setup.ts`, `test-wait.ts` (le attese a giri dei banchi, solo per i
+test), `redraw.test.ts` (il banco del ridisegno), i test e2e
 `*.e2e.test.ts`.
 
 ## Le coppie che confondono

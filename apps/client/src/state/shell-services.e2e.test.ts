@@ -26,6 +26,7 @@ import {
 } from "../editors/text/test-support";
 import type { FakeHost } from "../host/fake";
 import type { DraftInfo, ViewSpec } from "../host/contract";
+import { waiter } from "../test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -233,14 +234,7 @@ async function settle(rounds = 6): Promise<void> {
 }
 
 /// Aspetta che una condizione diventi vera, o fallisce dicendo cosa aspettava.
-async function waitFor(thing: string, cond: () => boolean, within = 2000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(2000);
 
 /// Il testo dell'editor, letto dal DOM di CodeMirror come lo legge chi guarda.
 function textToVideo(): string {
