@@ -346,7 +346,7 @@ variabile tolta) il banco si ferma, come dice la sezione che segue.
    bounds». Il banco si ferma e dice che cosa usare:
 
    - sotto Xvfb su una sessione Wayland, `--x11`, con la variabile tolta al
-     comando: `xvfb-run -a env -u WAYLAND_DISPLAY npm run bench:webview -- … --x11`.
+     comando: `xvfb-run -a -s "-screen 0 1280x800x24 -noreset" env -u WAYLAND_DISPLAY npm run bench:webview -- … --x11`.
      `--x11` toglie `WAYLAND_DISPLAY` al driver e mette `GDK_BACKEND=x11`, e il
      referto scrive `x11` come sessione;
    - per misurare sullo schermo vero, su una sessione Wayland, `--wayland`.
@@ -358,6 +358,29 @@ variabile tolta) il banco si ferma, come dice la sezione che segue.
    è in `bench/webview/display.mjs`, con la sua prova in
    `bench/webview/display.test.mjs`: `npx vitest run bench/webview/display.test.mjs`
    (in `.mjs` perché usa Node, e il `tsc` del client non ha i suoi tipi).
+
+   Sotto Xvfb serve `-noreset` fra gli argomenti del server
+   (`xvfb-run -s "… -noreset"`). Senza, Xvfb si rigenera ogni volta che esce
+   il suo ultimo client, cioè l'app dello scenario appena chiuso, e l'app dopo
+   a volte non apre il display: GTK non parte e l'app muore con «Failed to
+   initialize gtk backend!» (#287; 21 aperture fallite su 10.000 di
+   `xdpyinfo` senza `-noreset`, nessuna con). Il banco lo dice all'inizio, con
+   un avviso `⚠`, se trova l'Xvfb di `DISPLAY` senza `-noreset`.
+
+   Fra un'app e la successiva il banco aspetta che l'app di prima e i
+   processi della sua WebView siano usciti, guardando per PID i discendenti
+   di `tauri-driver`, al più 30 s (fuori da Linux una pausa di 3 s): Fub ha
+   un'istanza sola, e un'app che parte mentre la vecchia è viva le cede. Se
+   l'app nuova muore lo stesso con «Failed to initialize gtk backend!», il
+   banco non aspetta i cinque minuti di WebKitWebDriver: riavvia il driver e
+   riprova una volta sola, con un avviso nel log che comincia con `⚠`, il
+   nome dello scenario e «l'app non ha inizializzato GTK»; al secondo
+   fallimento lo scenario è rosso.
+
+   L'istanza sola passa dal bus D-Bus di sessione, non dalla cartella di
+   configurazione: su un desktop dove gira un altro Fub (l'app installata, il
+   banco di un'altra sessione) l'app del banco gli cederebbe. Lì il banco va
+   lanciato con un bus suo, `dbus-run-session -- xvfb-run …`.
 
 Il referto va in `apps/client/bench/.output/webview/referto.json`. Il comando
 esce con 1 se un valore supera la soglia scelta.
@@ -373,7 +396,7 @@ WebView va obbligata a Mesa in software:
 ```bash
 __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json \
 LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe \
-xvfb-run -a npm run bench:webview -- --only=S1 --native-driver=/usr/bin/WebKitWebDriver
+xvfb-run -a -s "-screen 0 1280x800x24 -noreset" npm run bench:webview -- --only=S1 --native-driver=/usr/bin/WebKitWebDriver
 ```
 
 Così S1 scende a una ventina di campioni, come in CI: la sonda misura un

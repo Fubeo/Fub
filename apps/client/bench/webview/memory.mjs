@@ -18,7 +18,7 @@ function stat(pid) {
     const comm = raw.slice(raw.indexOf("(") + 1, close);
     const fields = raw.slice(close + 2).split(" ");
     // utime e stime, i campi 14 e 15 di proc(5), in tick di `CLK_TCK`.
-    return { pid, comm, ppid: Number(fields[1]), ticks: Number(fields[11]) + Number(fields[12]) };
+    return { pid, comm, state: fields[0], ppid: Number(fields[1]), ticks: Number(fields[11]) + Number(fields[12]) };
   } catch {
     return null;
   }
@@ -44,8 +44,10 @@ function group(comm) {
   return "altro";
 }
 
-/// I discendenti di `root`, tolti i driver: `{ pid, comm, ppid, ticks }`.
-/// Soltanto Linux; altrove `null`.
+/// I discendenti vivi di `root` che non sono un driver: l'app e i processi
+/// della sua WebView, `{ pid, comm, state, ppid, ticks, group }`. Un processo
+/// zombie (già uscito, non ancora raccolto dal padre) non conta. Soltanto
+/// Linux; altrove `null`.
 export function descendants(root) {
   if (process.platform !== "linux") return null;
   const all = readdirSync("/proc").filter((name) => /^\d+$/.test(name)).map(Number).map(stat).filter(Boolean);
@@ -59,7 +61,8 @@ export function descendants(root) {
   while (queue.length) {
     const proc = queue.shift();
     queue.push(...(children.get(proc.pid) ?? []));
-    if (!DRIVERS.has(proc.comm)) found.push({ ...proc, group: group(proc.comm) });
+    if (DRIVERS.has(proc.comm) || proc.state === "Z" || proc.state === "X") continue;
+    found.push({ ...proc, group: group(proc.comm) });
   }
   return found;
 }
