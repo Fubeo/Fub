@@ -37,6 +37,20 @@ export const ALLOWED = Object.freeze(["transform", "opacity", "translate", "scal
 /// Quanto può durare un'uscita, ritardo compreso (ms). È la regola 5.
 export const EXIT_LIMIT_MS = 140;
 
+/// Le opzioni di Chromium di questo banco, oltre a quelle di tutti.
+///
+/// `--disable-partial-raster`: le regole 1 e 4 confrontano due scatti al pixel,
+/// arrivati per strade diverse. Col raster parziale Chromium, quando una
+/// tessera cambia solo in parte (l'immagine che esce lascia scoperta la pagina
+/// sotto), rifà solo il rettangolo toccato sopra la tessera di prima, e
+/// l'antialiasing di ciò che quel rettangolo taglia può uscire di qualche
+/// livello diverso da come esce rifatto intero. Le Preferenze fallivano così
+/// la regola 4 circa una volta su quattro per un pixel solo, sempre lo stesso
+/// (l'angolo della prima lettera del titolo della nota, 94 contro 96 su 255),
+/// che nessuna corsa aveva mosso; col raster intero, 0 su 16. La regola resta
+/// al pixel: si toglie la strada dallo scatto, non la tolleranza dal confronto.
+export const BROWSER_ARGS = Object.freeze(["--disable-partial-raster"]);
+
 /// Le corse di un'uscita che durano più di `limit`, ritardo compreso. `runs`
 /// sono `{ target, pseudo, duration, delay }` delle corse partite col gesto
 /// che disfa.
@@ -279,8 +293,8 @@ const sheets = (count) => (page) =>
 /// coperto dal menu, e la stessa domanda deve dare lo stesso punto prima e dopo.
 const menuEdgePoint = (page) =>
   page.evaluate(() => {
-    const scroller = document.querySelector(".pane.focus .cm-scroller")?.getBoundingClientRect();
-    const lines = [...document.querySelectorAll(".pane.focus .cm-line")].reverse();
+    const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller")?.getBoundingClientRect();
+    const lines = [...document.querySelectorAll(".pane.focus .pane-editor .cm-line")].reverse();
     for (const line of lines) {
       const box = line.getBoundingClientRect();
       const point = { x: Math.round(box.left + 40), y: Math.round(box.top + box.height / 2) };
@@ -368,7 +382,7 @@ const commentShown = (yes) => (page) =>
 /// Nei Blocchi, la riga con `first` viene prima di quella con `second`.
 const blockOrder = (first, second) => (page) =>
   page.evaluate(([a, b]) => {
-    const texts = [...document.querySelectorAll(".pane.focus .cm-content > .cm-line")].map((line) => line.textContent);
+    const texts = [...document.querySelectorAll(".pane.focus .pane-editor .cm-content > .cm-line")].map((line) => line.textContent);
     const at = (text) => texts.findIndex((line) => line.includes(text));
     return at(a) >= 0 && at(b) >= 0 && at(a) < at(b);
   }, [first, second]);
@@ -377,15 +391,15 @@ const blockOrder = (first, second) => (page) =>
 const cursorLine = (text, yes) => (page) =>
   page.evaluate(([want, inside]) => {
     const node = document.getSelection()?.focusNode;
-    const line = (node instanceof Element ? node : node?.parentElement)?.closest(".pane.focus .cm-line");
+    const line = (node instanceof Element ? node : node?.parentElement)?.closest(".pane.focus .pane-editor .cm-line");
     return !!line && line.textContent.includes(want) === inside;
   }, [text, yes]);
 /// Il blocco «Il treno» preso per la maniglia e portato 90 px più giù, col
 /// tasto ancora premuto.
 const liftBlock = async (page) => {
-  await page.hover(".pane.focus .cm-content .cm-line:has-text('Il treno')");
-  await page.waitForSelector('.pane.focus .cm-fub-block-handles[data-active="true"]');
-  const grip = await page.$(".pane.focus .cm-fub-block-grip");
+  await page.hover(".pane.focus .pane-editor .cm-content .cm-line:has-text('Il treno')");
+  await page.waitForSelector('.pane.focus .pane-editor .cm-fub-block-handles[data-active="true"]');
+  const grip = await page.$(".pane.focus .pane-editor .cm-fub-block-grip");
   const box = await grip.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
@@ -552,7 +566,7 @@ export const CHOREOGRAPHIES = [
     title: "Menu del tasto destro: nasce dal punto del clic, le parti entrano una dopo l'altra; esce sfumando, ferma",
     sources: ["src/ui/menu.ts"],
     scene: "startup",
-    act: (page) => page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } }),
+    act: (page) => page.click('.pane.focus .pane-editor .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } }),
     arrived: has("#context-menu .menu-foot"),
     undo: (page) => page.keyboard.press("Escape"),
     returned: lacks("#context-menu"),
@@ -933,9 +947,9 @@ export const CHOREOGRAPHIES = [
     sources: ["src/editors/text/profiles/markdown/blocks/motion.ts"],
     scene: "blocchi-01-passaggio",
     act: (page) => page.keyboard.press("Control+Alt+2"),
-    arrived: (page) => page.evaluate(() => [...document.querySelectorAll(".pane.focus .cm-fub-h2")].some((el) => el.textContent.includes("treno"))),
+    arrived: (page) => page.evaluate(() => [...document.querySelectorAll(".pane.focus .pane-editor .cm-fub-h2")].some((el) => el.textContent.includes("treno"))),
     undo: (page) => page.keyboard.press("Control+Alt+0"),
-    returned: (page) => page.evaluate(() => ![...document.querySelectorAll(".pane.focus .cm-fub-h2")].some((el) => el.textContent.includes("treno"))),
+    returned: (page) => page.evaluate(() => ![...document.querySelectorAll(".pane.focus .pane-editor .cm-fub-h2")].some((el) => el.textContent.includes("treno"))),
   },
   {
     id: "blocchi-nasce",
@@ -960,9 +974,9 @@ export const CHOREOGRAPHIES = [
     sources: ["src/editors/text/profiles/markdown/blocks/motion.ts"],
     scene: "blocchi-01-passaggio",
     act: (page) => page.keyboard.press("Escape"),
-    arrived: has(".pane.focus .cm-fub-block-mark"),
+    arrived: has(".pane.focus .pane-editor .cm-fub-block-mark"),
     undo: (page) => page.keyboard.press("Escape"),
-    returned: lacks(".pane.focus .cm-fub-block-mark"),
+    returned: lacks(".pane.focus .pane-editor .cm-fub-block-mark"),
   },
   {
     id: "blocchi-solleva",
@@ -970,9 +984,9 @@ export const CHOREOGRAPHIES = [
     sources: ["src/editors/text/profiles/markdown/blocks/handles.ts"],
     scene: "blocchi-01-passaggio",
     act: liftBlock,
-    arrived: has(".pane.focus .cm-fub-block-lift"),
+    arrived: has(".pane.focus .pane-editor .cm-fub-block-lift"),
     undo: (page) => page.keyboard.press("Escape"),
-    returned: lacks(".pane.focus .cm-fub-block-lift, .pane.focus .cm-fub-block-lifted"),
+    returned: lacks(".pane.focus .pane-editor .cm-fub-block-lift, .pane.focus .pane-editor .cm-fub-block-lifted"),
     holds: true,
   },
   {

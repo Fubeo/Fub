@@ -31,6 +31,7 @@ resta **non provato**.
 |---|---|---|---|
 | 2026-10-30 | Linux 7.0 (Azure), X11 sotto Xvfb | WebKitGTK, Safari 605.1.15 | [Runner della CI](2026-10-30-linux-webkitgtk-runner.md) |
 | 2026-10-31 | Linux 7.0 (Azure), X11 sotto Xvfb | WebKitGTK, Safari 605.1.15 | [Runner della CI: la memoria e le tessere](2026-10-31-linux-webkitgtk-runner-k0.md) |
+| 2026-11-16 | Debian 13, niri su Wayland, schermo a 180 Hz | WebKitGTK 2.54, Safari 605.1.15 | [Le soglie in periodi sullo schermo a 180 Hz](2026-11-16-linux-webkitgtk-frequenza-schermo.md) |
 
 ## I motori
 
@@ -52,6 +53,7 @@ sul suo cancello.
 |---|---|---|---|
 | 2026-11-02 | K3, lo strato dei motori | `server-di-fub`, AMD Ryzen 7 7730U, WebKitGTK 2.54 sotto Xvfb | [Il cancello di K3](2026-11-02-k3-motori-server-di-fub.md) |
 | 2026-11-12 | K5, il disegno sul motore | `pc-debian-di-fub`, Intel Core i5-13600KF | [Il cancello di K5](2026-11-12-disegno-linux-13600kf.md) |
+| 2026-11-16 | C5, il cambio fra schede aperte | `pc-debian-di-fub`, Intel Core i5-13600KF, WebKitGTK 2.54 con la GPU | [Il cambio scheda](2026-11-16-linux-webkitgtk-cambio-scheda.md) |
 
 ## Gli inventari
 

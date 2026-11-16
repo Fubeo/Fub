@@ -7,8 +7,10 @@
 // - la sagoma della linguetta attiva (`.tab-entry::before`) scorre dal posto
 //   della vecchia attiva a quello della nuova, e il contenuto del foglio arriva
 //   dal verso dello spostamento;
+// - una linguetta chiusa, aperta o spostata: le altre scorrono dal posto
+//   dov'erano a quello nuovo, in un passo solo;
 // - in fondo alla striscia sta il «+», che la vista spazzerebbe a ogni
-//   ridisegno: lo si rimette;
+//   ridisegno: lo si rimette subito, prima che il motore disegni;
 // - una striscia che non sta nel foglio dice da che parte scorre
 //   (`data-scrolled`), e la rotella verticale la muove.
 //
@@ -40,6 +42,22 @@ interface Seen {
   readonly entry: HTMLElement;
 }
 
+/// Un posto ricordato nella striscia (`placesOf`).
+interface Place {
+  readonly left: number;
+  readonly el: HTMLElement;
+}
+
+interface Places {
+  readonly at: ReadonlyMap<string, Place>;
+  /// Le identità in fila: se è la stessa, la striscia non è cambiata.
+  readonly order: string;
+  readonly scroll: number;
+}
+
+/// La chiave del «+» fra i posti: non è una scheda, ma segue l'ultima.
+const PLUS = "\u0000+";
+
 /// L'identità di una scheda: la chiave che la vista le scrive, tolti lo spillo
 /// e la pila, che cambiano senza che cambi il documento.
 function identityOf(key: string | undefined): string {
@@ -65,6 +83,7 @@ export function mountTabStrips(lifetime: Lifetime): void {
   if (!panes || typeof MutationObserver === "undefined") return;
 
   const seen = new WeakMap<HTMLElement, Seen>();
+  const places = new WeakMap<HTMLElement, Places>();
   const watched = new WeakSet<HTMLElement>();
   const plus = new WeakMap<HTMLElement, HTMLButtonElement>();
 
@@ -151,7 +170,14 @@ export function mountTabStrips(lifetime: Lifetime): void {
     "scroll",
     (event) => {
       const strip = stripOf(event.target);
-      if (strip && strip === event.target) markScroll(strip);
+      if (!strip || strip !== event.target) return;
+      markScroll(strip);
+      // Chi scorre a mano sposta il «da dove» di tutte. Uno scorrimento che
+      // arriva con un cambio ancora da guardare (la striscia accorciata, la
+      // scheda portata in vista) è parte del cambio: il «da dove» resta il
+      // vecchio.
+      const known = places.get(strip);
+      if (known && !touched.has(strip)) places.set(strip, { ...known, scroll: strip.scrollLeft });
     },
     { capture: true, passive: true },
   );
@@ -171,12 +197,17 @@ export function mountTabStrips(lifetime: Lifetime): void {
   /// La sagoma scorre dal posto dov'era a quello dov'è. Se la vecchia era
   /// ancora in viaggio, la nuova riparte da dove la si vedeva e con la sua
   /// velocità: due cambi di fila non fanno uno scatto.
-  const slide = (before: Seen, now: Seen): void => {
+  ///
+  /// `carried` è di quanto la linguetta stessa parte spostata (`shift`): la
+  /// sagoma è sua figlia e viaggia con lei, quindi qui si aggiunge solo la
+  /// differenza. Le due corse hanno la stessa molla e partono insieme: la
+  /// somma è il viaggio di prima.
+  const slide = (before: Seen, now: Seen, carried = 0): void => {
     const overhang = overhangOf(now.entry);
     const flying = liveState(before.entry, SHAPE);
     const wasWidth = (before.width + 2 * overhang) * (flying?.pose.scaleX ?? 1);
     const wasLeft = before.left + (flying?.pose.x ?? 0);
-    const x = wasLeft - now.left;
+    const x = wasLeft - now.left - carried;
     const scaleX = wasWidth / Math.max(1, now.width + 2 * overhang);
     if (Math.abs(x) < 0.5 && Math.abs(scaleX - 1) < 0.005) return;
     animate(now.entry, {
@@ -203,9 +234,65 @@ export function mountTabStrips(lifetime: Lifetime): void {
     });
   };
 
+  /// Dove stanno le linguette di una striscia (e il «+»), per identità: posto
+  /// nella striscia, scorrimento escluso, e il nodo, che può essere ancora in
+  /// volo. Lo scorrimento si tiene a parte perché si muove da solo.
+  const placesOf = (strip: HTMLElement): Places => {
+    const at = new Map<string, Place>();
+    const doubled = new Set<string>();
+    for (const each of strip.querySelectorAll<HTMLElement>(":scope > .tab-entry")) {
+      const identity = identityOf(each.querySelector<HTMLElement>(".tab")?.dataset.key);
+      if (!identity) continue;
+      if (at.has(identity)) doubled.add(identity);
+      at.set(identity, { left: each.offsetLeft, el: each });
+    }
+    // Due schede uguali non si sanno distinguere: nessuna delle due si muove.
+    for (const identity of doubled) at.delete(identity);
+    const button = plus.get(strip);
+    if (button?.parentElement === strip) at.set(PLUS, { left: button.offsetLeft, el: button });
+    return { at, order: [...at.keys()].join("\n"), scroll: strip.scrollLeft };
+  };
+
+  /// Nella striscia c'era almeno una scheda, non solo il «+».
+  const hasTabs = (known: Places): boolean => [...known.at.keys()].some((identity) => identity !== PLUS);
+
+  /// Una linguetta chiusa, aperta o spostata: chi resta parte da dove lo si
+  /// vedeva e scorre al posto nuovo, in un passo solo. Ciò che è comparso non
+  /// ha un «da dove» e sta fermo. Solo trasformazioni: la misura della
+  /// striscia è già quella finale dal primo fotogramma. Col moto ridotto
+  /// `animate` non fa niente, e il passo è uno scatto unico.
+  ///
+  /// Restituisce di quanto parte ogni nodo, per chi ci disegna sopra.
+  const shift = (before: Places, now: Places): Map<HTMLElement, number> => {
+    const carried = new Map<HTMLElement, number>();
+    for (const [identity, place] of now.at) {
+      const was = before.at.get(identity);
+      if (!was) continue;
+      const flying = liveState(was.el);
+      const x = was.left + (flying?.pose.x ?? 0) - before.scroll - (place.left - now.scroll);
+      if (Math.abs(x) < 0.5) continue;
+      carried.set(place.el, x);
+      animate(place.el, {
+        from: { x },
+        velocity: flying ? { x: flying.velocity.x } : undefined,
+        spring: "soft",
+        lifetime,
+      });
+    }
+    return carried;
+  };
+
   const settle = (strip: HTMLElement): void => {
     ensurePlus(strip);
     markScroll(strip);
+    const wereAt = places.get(strip);
+    const nowAt = placesOf(strip);
+    places.set(strip, nowAt);
+    // La striscia nasce o cambia insieme: si muove solo ciò che c'era e c'è.
+    // Una striscia che aveva solo il «+» nasce adesso (un foglio nuovo): le
+    // prime schede arrivano col foglio, e il «+» non scorre dal posto vuoto
+    // in testa — sarebbe una corsa sua dentro l'entrata del foglio.
+    const carried = wereAt && wereAt.order !== nowAt.order && hasTabs(wereAt) ? shift(wereAt, nowAt) : new Map<HTMLElement, number>();
     const tab = strip.hidden ? null : strip.querySelector<HTMLElement>('.tab[aria-selected="true"]');
     const entry = tab?.closest<HTMLElement>(".tab-entry") ?? null;
     if (!tab || !entry) {
@@ -226,7 +313,7 @@ export function mountTabStrips(lifetime: Lifetime): void {
     // con la sua linguetta, e a muoversi è la carta (`stage-motion.ts`).
     if (!before) return;
     if (before.identity === now.identity && before.index === now.index) return;
-    slide(before, now);
+    slide(before, now, carried.get(entry) ?? 0);
     if (before.identity !== now.identity && before.index !== now.index) {
       reveal(strip, Math.sign(now.index - before.index));
     }
@@ -253,6 +340,11 @@ export function mountTabStrips(lifetime: Lifetime): void {
       const owner = stripOf(record.target);
       if (owner) touched.add(owner);
     }
+    // Il «+» torna subito, prima che il motore disegni: è solo un nodo da
+    // rimettere, non chiede misure. Al fotogramma dopo sarebbe tardi — per un
+    // fotogramma la striscia resterebbe senza, le linguette si allargherebbero
+    // nel suo posto e poi tornerebbero indietro (#411 B-04).
+    for (const owner of touched) if (owner.isConnected) ensurePlus(owner);
     if (touched.size > 0 && frame === null) frame = requestAnimationFrame(look);
   });
   lifetime.add(() => {
@@ -295,6 +387,7 @@ export function mountTabStrips(lifetime: Lifetime): void {
       if (lifetime.closed) return;
       for (const each of strips()) {
         markScroll(each);
+        if (places.has(each) && !touched.has(each)) places.set(each, placesOf(each));
         const known = seen.get(each);
         if (!known || !known.entry.isConnected) continue;
         seen.set(each, { ...known, left: known.entry.offsetLeft, width: known.entry.offsetWidth });

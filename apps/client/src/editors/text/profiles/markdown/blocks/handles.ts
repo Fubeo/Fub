@@ -626,12 +626,20 @@ class HandlesView {
           return;
         }
         this.shown = place.key;
-        this.root.hidden = false;
-        this.root.dataset.active = String(this.hoverable && this.hovered !== null && place.key.from === this.hovered.from);
-        this.grip.setAttribute("aria-label", place.label);
-        this.root.style.top = `${place.top}px`;
-        this.root.style.left = `${place.left}px`;
-        this.root.style.height = `${place.height}px`;
+        // Le maniglie si rimettono a ogni battuta, e quasi sempre restano dove
+        // erano: si scrive solo ciò che cambia, perché in WebKit anche un
+        // attributo riscritto uguale invalida lo stile e fa ridipingere (C6).
+        if (this.root.hidden) this.root.hidden = false;
+        const active = String(this.hoverable && this.hovered !== null && place.key.from === this.hovered.from);
+        if (this.root.dataset.active !== active) this.root.dataset.active = active;
+        if (this.grip.getAttribute("aria-label") !== place.label) this.grip.setAttribute("aria-label", place.label);
+        const style = this.root.style;
+        const top = `${place.top}px`;
+        const left = `${place.left}px`;
+        const height = `${place.height}px`;
+        if (style.top !== top) style.top = top;
+        if (style.left !== left) style.left = left;
+        if (style.height !== height) style.height = height;
       },
     });
   }

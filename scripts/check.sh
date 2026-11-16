@@ -170,11 +170,12 @@ vendor_guards() {
   run "craft-docpath = upstream" node tools/vendor-craft/vendor.mjs craft-docpath check
   run "craft-vectorcraft-format = upstream" node tools/vendor-craft/vendor.mjs craft-vectorcraft-format check
   run "patch dei motori a tre vie" node tools/vendor-craft/vendor.mjs self-test
+  run "dati di vendor = dati.mjs, cartelle dichiarate" bash -c 'node tools/vendor-craft/provenienza.mjs self-test && node tools/vendor-craft/provenienza.mjs check && node tools/vendor-craft/provenienza.mjs elenco'
 }
 
 benches() {
   client_ready
-  for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:lampo" "bench:fidelity" \
+  for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:lampo" "bench:conformita" "bench:fidelity" \
            "bench:grid" "bench:large" \
            "bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3" \
            "bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8" \

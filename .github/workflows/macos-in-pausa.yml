@@ -1,0 +1,101 @@
+name: macOS e iOS in pausa
+
+# macOS e iOS sono in pausa (docs/decisions/0245-macos-e-ios-in-pausa.md):
+# Fub si sviluppa e si rilascia per Linux, Windows e Android, e nessuna PR
+# aspetta più un runner macOS. Il codice `cfg(target_os = "macos")` e
+# `cfg(target_os = "ios")` resta nei crate; questo workflow gli dà un
+# controllo alla settimana, perché non si perda senza che nessuno se ne
+# accorga. Un job rosso qui è una correzione da fare in una PR normale, non un
+# blocco: non è un controllo richiesto, e il cancello del rilascio non lo
+# legge.
+#
+# Mai su `pull_request` né su `push`: soltanto il cron e chi lo lancia a mano
+# (per esempio dopo un cambio a codice `cfg` del Mac). Quando macOS torna:
+# `macos-latest` si rimette nelle matrici di `ci.yml` (job `test` e
+# `librerie-runtime`) e in quella di `release.yml`, il job `ios` torna in
+# `mobile.yml`, `build + test (macos-latest)` torna in `TEST` di
+# `baseline-dal-runner.mjs` (che è anche fra i job richiesti di
+# `.github/scripts/check-release-gate.mjs`), e questo file si cancella. Lo stato di prima è nel
+# commit che lo ha creato (`git log --diff-filter=A -- .github/workflows/macos-in-pausa.yml`).
+
+on:
+  # Domenica alle 2:30 UTC: un'ora a bassa attività, lontana dal cron di
+  # `ci.yml` (lunedì alle 6).
+  schedule:
+    - cron: "30 2 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-in-pausa-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Come le PR di `ci.yml`: i 20 000 casi dei fuzzer non dipendono dal sistema
+  # e li fa già la corsa settimanale di Linux.
+  FUB_FUZZ_CASI: "2000"
+  FUB_FUZZ_TRASFERIMENTO: "2000"
+
+jobs:
+  # Gli stessi passi del job `test` di `ci.yml`, ristretti a ciò che serve su
+  # macOS.
+  test:
+    name: build + test (macos-latest)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+      # La stessa cache del job `test` di `ci.yml`: la chiave contiene il
+      # sistema, quindi il Mac ha la sua voce, salvata soltanto da `main`.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+          shared-key: test
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2
+        with:
+          tool: cargo-nextest
+      - name: il bersaglio dei componenti, prima dei test che lo pretendono
+        run: |
+          rustup target add wasm32-wasip2
+          cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
+          cargo check -p fub-scene --target wasm32-wasip2 --all-targets --locked
+          cargo check -p fub-ink --target wasm32-wasip2 --all-targets --locked
+      - name: i test del workspace
+        run: cargo nextest run --workspace --no-fail-fast --profile ci
+      - name: gli esempi della documentazione
+        run: cargo test --workspace --doc --no-fail-fast
+      - name: via le copie dei componenti
+        if: always()
+        shell: bash
+        run: rm -f target/tmp/*.wasm
+
+  # Il job `ios` che stava in `mobile.yml`: la sola compilazione Rust del
+  # binario per il dispositivo, perché il progetto Xcode chiede i target Share
+  # e Widget creati a mano (install-mobile.sh lo dice) e una firma; nessun .ipa
+  # esce da qui.
+  ios:
+    name: ios (compilazione Rust)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+        with:
+          targets: aarch64-apple-ios, wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      # `generate_context!` incorpora il frontend già costruito.
+      - name: Frontend costruito
+        working-directory: apps/client
+        run: |
+          npm ci
+          npm run build
+      - name: fub-app per il dispositivo iOS
+        run: cargo check -p fub-app --target aarch64-apple-ios --locked

@@ -17,6 +17,7 @@ import { pickVaultLocation } from "./platform/vault-picker";
 import { api, window as nativeWindow } from "./host/ipc";
 import { resolvedReference, settings } from "./host/query";
 import { forwardNotice, onEvent, startKernelRouter } from "./state/kernel";
+import { settingTouches } from "./state/setting-change";
 import { mountLocale } from "./state/locale";
 import { emit, on, setVaultName, state } from "./state/store";
 import { loadLayout, layout as paneLayout, split as splitPane, closePane } from "./state/layout";
@@ -27,6 +28,7 @@ import { mountLinkPreview } from "./ui/link-preview";
 import { FORMATBAR_EVENT } from "./panels/selection-bubble";
 import { MINIBAR_SETTING, miniBarModeOf } from "./panels/mini-bar";
 import { listenForFailures, mountNotifications, notify, setWatcherOff } from "./ui/notify";
+import { listenForRenderingNotices } from "./ui/rendering-notice";
 import { writeClipboardText } from "./platform/clipboard";
 import { closeCommandPalette, openCommandPalette, startCommand } from "./ui/palette";
 import {
@@ -128,6 +130,10 @@ import { mountWheelTextSize, zoomBy } from "./state/zoom";
 /// chiavi `localStorage` dove stavano prima (si adottano una volta).
 const SIDE_SETTING = { sidebar: "chrome.sidebar.visible", inspector: "chrome.inspector.visible" } as const;
 const LEGACY_SIDE = { sidebar: "fub.layout.sidebar", inspector: "fub.layout.inspector" } as const;
+const SIDE_KEYS: ReadonlySet<string> = new Set(Object.values(SIDE_SETTING));
+/// Quanti avvisi di sessione si tirano al più: la diagnosi del log più quelli
+/// del percorso di disegno sono tre; il resto è margine.
+const SESSION_NOTICE_PULLS = 8;
 
 /** Apply machine chrome at boot and after external profile/setting changes.
  * A frame change is intentionally NOT live: native decorations are chosen
@@ -189,8 +195,12 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
       if (current === generation && !lifetime.closed) notify(t("shell.chrome_failed", { reason: errorText(error) }), "guasto");
     }
   };
+  // I due pannelli laterali hanno il loro ascoltatore nella shell adattiva:
+  // `apply` non li legge, e rileggere qui a ogni apertura della barra era un
+  // giro sul canale dati in più per ogni gesto.
   lifetime.add(onEvent("setting_changed", ({ key }) => {
-    if (key.startsWith("chrome.") || key === MINIBAR_SETTING || key.startsWith("editor.slash")) void reread();
+    if (settingTouches(key, (changed) => (changed.startsWith("chrome.") && !SIDE_KEYS.has(changed))
+      || changed === MINIBAR_SETTING || changed.startsWith("editor.slash"))) void reread();
   }));
   await reread();
 }
@@ -288,7 +298,7 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
   });
   life.add(() => sideReads.cancel());
   life.add(onEvent("setting_changed", ({ key }) => {
-    if (key === "chrome.schema" || key === SIDE_SETTING.sidebar || key === SIDE_SETTING.inspector) {
+    if (settingTouches(key, (changed) => changed === "chrome.schema" || SIDE_KEYS.has(changed))) {
       void readSidePreferences();
     }
   }));
@@ -306,8 +316,37 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
       panel.querySelector<HTMLElement>("input:not([disabled]), [tabindex='0'], button:not([disabled])")?.focus();
     }
   };
+  /// Il cassetto aperto, se c'è.
+  const openDrawerSide = (): SidePanel | null =>
+    layout.classList.contains("drawer-sidebar-open")
+      ? "sidebar"
+      : layout.classList.contains("drawer-inspector-open") ? "inspector" : null;
+  // Il velo è modale: la tastiera non arriva a ciò che copre. Quando il fuoco
+  // entra in qualcosa sotto il velo — l'editor di un documento appena scelto
+  // nel cassetto, una voce dello schema che porta al suo titolo, il Tab che
+  // esce dal cassetto — il cassetto si chiude, con lo stesso moto di Esc, e il
+  // fuoco resta dove è andato: non torna al lanciatore. Così, finché il
+  // cassetto è aperto, il fuoco sta nel cassetto o sopra il velo (rail,
+  // barra, menu, dialoghi), mai nel foglio coperto.
+  pageWindowLifetime.listen(document, "focusin", (event: FocusEvent) => {
+    const side = openDrawerSide();
+    const target = event.target;
+    if (!side || !(target instanceof Node) || !layout.contains(target)) return;
+    const panel = side === "sidebar" ? sidebar : inspector;
+    const divider = side === "sidebar" ? divSidebar : divInspector;
+    if (panel.contains(target) || divider?.contains(target)) return;
+    closeDrawers(false);
+    applyAdaptive();
+  });
   life.add(setSidePanelController({
     visible: (side) => !(side === "sidebar" ? sidebar : inspector).hidden,
+    dismiss: (side) => {
+      // Chi ha scelto nel cassetto porta il fuoco dove ha scelto: il
+      // lanciatore non lo riprende.
+      if (openDrawerSide() !== side) return;
+      closeDrawers(false);
+      applyAdaptive();
+    },
     reveal: (side) => {
       if (isDrawer(side)) {
         if (!layout.classList.contains(`drawer-${side}-open`)) openDrawer(side);
@@ -1144,6 +1183,7 @@ async function init(): Promise<Teardown> {
   );
 
   listenForFailures(pageWindowLifetime);
+  listenForRenderingNotices(pageWindowLifetime);
   // Un rifiuto che nessuno ha raccolto è un guasto che nessuno vedrebbe: la
   // console della webview in un'app impacchettata non si apre.
   pageWindowLifetime.listen(window, "unhandledrejection", (event: PromiseRejectionEvent) => {
@@ -1163,9 +1203,17 @@ async function init(): Promise<Teardown> {
   // router in piedi, e si consegna come un evento qualunque: l'ordine dell'IPC
   // garantisce che `listenForFailures` — iscritta prima del router — sia già
   // lì a riceverlo.
-  const notice = await api.sessionNotice();
-  if (!alive()) return teardown;
-  if (notice) forwardNotice(notice);
+  //
+  // Dopo la diagnosi vengono gli altri avvisi nati prima della shell (il
+  // percorso di disegno, `ui/rendering-notice.ts`), uno per tiraggio: si tira
+  // finché la risposta è vuota, con un tetto per non girare all'infinito su
+  // un host che sbaglia.
+  for (let pulls = 0; pulls < SESSION_NOTICE_PULLS; pulls += 1) {
+    const notice = await api.sessionNotice();
+    if (!alive()) return teardown;
+    if (!notice) break;
+    forwardNotice(notice);
+  }
 
   // Il locale del sistema (§12.3), **prima** di aprire il vault: da qui in poi
   // ogni `render_view` lo trova già pubblicato, invece di disegnare il primo

@@ -9,9 +9,12 @@
 // Nessun collegamento scrive da solo. Aprire una nota e cercare non scrivono, e
 // si eseguono; creare una nota, la giornaliera o una cattura passano da una
 // conferma che dice che cosa nascerà (la prova di `uri.apply`), e scrivono
-// soltanto dopo il sì — o subito, se l'utente ha messo quell'azione fra le
-// consentite (`uri.allowed`, di macchina). Un collegamento che nomina un altro vault chiede prima
-// di aprirlo. Un collegamento non valido, o con una callback, lo dice.
+// soltanto dopo il sì. Una nota nuova, la giornaliera e la nota unica possono
+// scrivere subito, se l'utente le ha messe fra le consentite (`uri.allowed`, di
+// macchina); una cattura chiede sempre, anche se `uri.allowed` la nomina,
+// perché porta testo che qualunque pagina può scegliere e la provenienza che
+// dichiara non è verificata. Un collegamento che nomina un altro vault chiede
+// prima di aprirlo. Un collegamento non valido, o con una callback, lo dice.
 import { api } from "../host/ipc";
 import type { CommandOutcome } from "../host/contract";
 import { errorText, isErrorKind } from "../host/errors";
@@ -22,9 +25,13 @@ import type { Lifetime } from "./lifetime";
 export const URI_APPLY = "uri.apply";
 /// L'impostazione delle azioni che scrivono senza chiedere.
 export const URI_ALLOWED = "uri.allowed";
-/// Le azioni che scrivono, nell'ordine in cui il campo le mostra.
-export const WRITING_ACTIONS = ["new", "daily", "unique", "capture"] as const;
+/// Le azioni che possono scrivere senza chiedere, nell'ordine in cui il campo
+/// le mostra. `capture` non c'è: chiede sempre (audit A3), e un `capture`
+/// scritto in `uri.allowed` da una versione vecchia non vale.
+export const WRITING_ACTIONS = ["new", "daily", "unique"] as const;
 export type WritingAction = (typeof WRITING_ACTIONS)[number];
+/// Le azioni che `uri.allowed` non può più consentire.
+export const ALWAYS_ASK: readonly string[] = ["capture"];
 
 /// Un collegamento come l'host lo descrive.
 export interface IncomingLink {
@@ -46,6 +53,7 @@ export interface IncomingLink {
   name?: string | null;
   date?: string | null;
   markdown?: string | null;
+  source_url?: string | null;
 }
 
 /// Dove si apre una nota di `fub://open`.
@@ -171,14 +179,21 @@ export function mountIncomingLinks(life: Lifetime, ports: IncomingPorts): void {
       return;
     }
     // Chi scrive: prima la prova, che dice quale nota nascerà, poi il sì —
-    // tranne un'azione che l'utente ha consentito una volta per tutte.
-    const trusted = (await ports.allowed()).includes(link.action);
+    // tranne un'azione che l'utente ha consentito una volta per tutte. Una
+    // cattura chiede sempre.
+    const trusted = !ALWAYS_ASK.includes(link.action) && (await ports.allowed()).includes(link.action);
     if (life.closed) return;
     if (!trusted) {
       const plan = await api.invokeCommand(URI_APPLY, { uri: link.raw }, "dry_run");
       const planned = plan.effect.kind === "plan" ? plan.effect.summary : "";
-      const body = link.action === "capture" ? excerpt(link.markdown) : "";
-      const message = [asked(link), planned, body].filter(Boolean).join("\n\n");
+      const capture = link.action === "capture";
+      const message = [
+        asked(link),
+        planned,
+        capture ? excerpt(link.markdown) : "",
+        capture && link.source_url ? t("incoming.capture.source", { url: link.source_url }) : "",
+        capture ? t("incoming.capture.unverified") : "",
+      ].filter(Boolean).join("\n\n");
       const yes = await ports.confirm(message, {
         title: t("incoming.write.title"),
         okLabel: t("incoming.write.ok"),

@@ -1,11 +1,13 @@
 // **La Base delle scene `base-*`** (`?base=1`): un file `Opere.base` con tre
 // viste e le note della cartella `Opere/` che mostra, per fotografare la barra
 // della Base (T15): le linguette, Filtro, Ordina, Proprietà, le etichette del
-// filtro e «Nel file .base».
+// filtro e «Nel file .base»; e (T16) «+», il menu della colonna e il piede coi
+// riepiloghi. `?base=venti` ha venti viste, per le linguette che non stanno.
 //
 // Il finto non ha `fub-format-base`: questa scenografia ne fa le veci per le
-// quattro domande che la superficie fa (`parse`, `plan`, `derive`) e per il
-// comando che i gesti mandano (`base.view.set`). Tiene le viste come dati,
+// quattro domande che la superficie fa (`parse`, `plan`, `derive`) e per i
+// comandi che i gesti mandano (`base.view.set`, `base.view.add`,
+// `base.view.remove`). I riepiloghi li conta qui, come `derive` nel core. Tiene le viste come dati,
 // le riscrive come YAML nella forma che il modello scrive davvero (vedi
 // `crates/fub-features/tests/base_commands_e2e.rs`) e posa il testo nuovo come
 // la scrittura di un comando (un evento dell'utente), così la superficie lo
@@ -53,7 +55,15 @@ function view(entries: readonly (readonly [string, Json])[]): View {
 
 /// Le viste di partenza: la tabella col suo filtro, il suo ordinamento e le
 /// sue colonne; la bacheca per stato; le schede.
-function initialViews(): View[] {
+function initialViews(variant: BaseVariant): View[] {
+  if (variant === "venti") {
+    const types = ["table", "cards", "list", "kanban", "map"];
+    return Array.from({ length: 20 }, (_, index) => view([
+      ["name", index === 0 ? "Tabella" : `Vista ${index + 1}`],
+      ["type", index === 0 ? "table" : types[index % types.length]!],
+      ...(index % types.length === 3 ? [["group_by", "stato"] as const] : []),
+    ]));
+  }
   return [
     view([
       ["name", "Tabella"],
@@ -106,6 +116,55 @@ function serialize(views: readonly View[]): string {
 }
 
 const LABELS: Readonly<Record<string, string>> = { "file.name": "Nome" };
+
+/// Un riepilogo scritto nella vista, col nome con cui `derive` ne dà il
+/// valore (`summary_label` in `crates/fub-features/src/base.rs`).
+interface Summary { readonly key: string; readonly aggregate: string; readonly name: string | null; readonly label: string }
+
+function summariesOf(entries: View): Summary[] {
+  const raw = entries.get("summaries");
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item: Json) => {
+    if (item === null || typeof item !== "object" || Array.isArray(item)) return [];
+    const { key, aggregate, name } = item as Record<string, Json>;
+    if (typeof key !== "string" || typeof aggregate !== "string") return [];
+    const named = typeof name === "string" ? name : null;
+    return [{ key, aggregate, name: named, label: named ?? `${key}:${aggregate.replace(/_/g, "")}` }];
+  });
+}
+
+/// Il valore di un riepilogo sulle note della vista, con le regole del core:
+/// somma, media, minimo e massimo sui numeri, prima e ultima sulle date.
+function aggregate(summary: Summary, works: readonly Work[]): Json {
+  const key = summary.key.replace(/^prop\./, "");
+  const values = works.map((work) => valueOf(work, key));
+  const filled = values.filter((value) => value !== null && value !== "");
+  const numbers = filled.filter((value): value is number => typeof value === "number");
+  const dates = key === "consegna" ? filled.map((value) => Date.parse(`${value}T00:00:00Z`)) : [];
+  const number = (value: number | undefined): Json => (value === undefined || !Number.isFinite(value) ? { kind: "empty" } : { kind: "number", value });
+  const date = (value: number | undefined): Json => (value === undefined ? { kind: "empty" } : { kind: "date", value });
+  switch (summary.aggregate) {
+    case "count": return number(values.length);
+    case "count_filled": return number(filled.length);
+    case "count_empty": return number(values.length - filled.length);
+    case "count_unique": return number(new Set(filled).size);
+    case "sum": return number(numbers.reduce((total, value) => total + value, 0));
+    case "average": return number(numbers.length ? numbers.reduce((total, value) => total + value, 0) / numbers.length : undefined);
+    case "min": return number(numbers.length ? Math.min(...numbers) : undefined);
+    case "max": return number(numbers.length ? Math.max(...numbers) : undefined);
+    case "earliest": return date(dates.length ? Math.min(...dates) : undefined);
+    case "latest": return date(dates.length ? Math.max(...dates) : undefined);
+    default: return { kind: "error", value: `aggregato ${summary.aggregate} non adatto` };
+  }
+}
+
+/// Il raggruppamento della vista: `group` come lo scrive il menu della
+/// colonna, o `group_by` scritto a mano.
+function groupOf(entries: View): Json {
+  const group = entries.get("group");
+  if (group !== null && typeof group === "object" && !Array.isArray(group) && typeof (group as Record<string, Json>).key === "string") return (group as Record<string, Json>).key!;
+  return entries.get("group_by") ?? null;
+}
 
 function columnsOf(entries: View): string[] {
   const order = entries.get("order");
@@ -198,8 +257,11 @@ export interface BaseFixtureHost {
   readonly writeByCommand: (doc: string, text: string) => Promise<void>;
 }
 
-export function baseFixture(host: () => BaseFixtureHost): BaseFixture {
-  const views = initialViews();
+/// Quale Base: le tre viste delle scene (`1`), o venti viste (`venti`).
+export type BaseVariant = "1" | "venti";
+
+export function baseFixture(host: () => BaseFixtureHost, variant: BaseVariant = "1"): BaseFixture {
+  const views = initialViews(variant);
   const files: Record<string, string> = { [BASE_DOC]: serialize(views) };
   for (const work of WORKS) {
     files[docOf(work)] = `---\nstato: ${work.stato}\nmuseo: ${work.museo}\nvalore: ${work.valore}\nconsegna: ${work.consegna}\n---\n# ${work.name}\n`;
@@ -233,8 +295,9 @@ export function baseFixture(host: () => BaseFixtureHost): BaseFixture {
             view: entries.get("name"), view_type: type, columns,
             column_labels: Object.fromEntries(columns.filter((key) => key in LABELS).map((key) => [key, LABELS[key]!])),
             required_props: ["stato", "museo", "valore", "consegna"], all_properties: false,
-            group: type === "kanban" ? entries.get("group_by") ?? null : null, limit: null, map: null, create_defaults: {},
+            group: groupOf(entries), limit: null, map: null, create_defaults: {},
             filters: entries.get("filters") ?? "all", sort: entries.get("sort") ?? [], order: entries.get("order") ?? [],
+            summaries: summariesOf(entries).map((summary) => ({ key: summary.key, aggregate: summary.aggregate, expression: null, name: summary.name, label: summary.label })),
           };
         }
         case "derive": {
@@ -254,7 +317,7 @@ export function baseFixture(host: () => BaseFixtureHost): BaseFixture {
           });
           return {
             rows: chosen.map((work) => ({ doc: docOf(work), values: Object.fromEntries(keys.map((key) => [key, cell(work, key)])) })),
-            summaries: {},
+            summaries: Object.fromEntries(summariesOf(entries).map((summary) => [summary.label, aggregate(summary, chosen)])),
           };
         }
         default:
@@ -262,15 +325,25 @@ export function baseFixture(host: () => BaseFixtureHost): BaseFixture {
       }
     },
     invoke: (id, raw) => {
-      if (id !== "base.view.set") return null;
+      if (id !== "base.view.set" && id !== "base.view.add" && id !== "base.view.remove") return null;
       return (async () => {
-        const args = raw as { doc?: unknown; view?: unknown; key?: unknown; value?: unknown; base?: unknown };
-        const entries = named(args.view);
-        if (args.doc !== BASE_DOC || !entries || typeof args.key !== "string") throw { kind: "bad_args", message: "base finta: gesto sconosciuto" };
+        const args = raw as { doc?: unknown; view?: unknown; key?: unknown; value?: unknown; name?: unknown; type?: unknown; base?: unknown };
+        if (args.doc !== BASE_DOC) throw { kind: "bad_args", message: "base finta: gesto sconosciuto" };
         const now = await host().revision(BASE_DOC);
         if (typeof args.base === "string" && args.base !== now) throw { kind: "conflict", message: `conflict: «${BASE_DOC}» è cambiato sotto` };
-        if (typeof args.value === "string") entries.set(args.key, JSON.parse(args.value) as Json);
-        else entries.delete(args.key);
+        if (id === "base.view.add") {
+          if (typeof args.name !== "string" || typeof args.type !== "string" || views.some((entries) => entries.get("name") === args.name)) throw { kind: "bad_args", message: "base finta: vista già presente" };
+          views.push(view([["name", args.name], ["type", args.type]]));
+        } else if (id === "base.view.remove") {
+          const at = views.findIndex((entries) => entries.get("name") === args.view);
+          if (at < 0) throw { kind: "not_found", message: "base finta: vista assente" };
+          views.splice(at, 1);
+        } else {
+          const entries = named(args.view);
+          if (!entries || typeof args.key !== "string") throw { kind: "bad_args", message: "base finta: gesto sconosciuto" };
+          if (typeof args.value === "string") entries.set(args.key, JSON.parse(args.value) as Json);
+          else entries.delete(args.key);
+        }
         await host().writeByCommand(BASE_DOC, serialize(views));
         return { notify: null, effect: { kind: "custom", ns: "fub.base", payload: { revision: await host().revision(BASE_DOC) } }, undo: null, partial: null };
       })();

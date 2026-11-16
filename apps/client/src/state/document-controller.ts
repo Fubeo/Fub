@@ -334,7 +334,52 @@ export interface Pane {
   /// RAW), e non dal suo testo. Quando l'elenco dei comandi cambia, un
   /// riquadro il cui documento ha cambiato legame coi byte si rimonta.
   bytes: boolean;
+  /// Le superfici delle schede di testo aperte ma non attive, dalla meno
+  /// recente: nascoste, non smontate (`parkSurface`). Tornare su una di quelle
+  /// la rimostra invece di ricostruire l'editor.
+  parked: ParkedSurface[];
 }
+
+/// La superficie di una scheda di testo che il riquadro tiene da parte mentre
+/// ne mostra un'altra.
+///
+/// Ricostruire l'editor a ogni cambio di scheda costava il montaggio di un
+/// `EditorView` nuovo, il testo rimesso da capo e, per una nota lunga, il
+/// parser rifatto per tutto il documento: la parte più grande del cambio
+/// scheda. Una superficie tenuta da parte è **staccata dalla sessione**
+/// (`detachSurface`, che prima registra ciò che teneva in sospeso) e sta
+/// dentro un contenitore suo, nascosto, che non si sposta mai:
+/// nascosto e non tolto dal documento perché è così che il motore del browser
+/// conserva lo scorrimento. Al ritorno si riattacca alla sessione e, se il
+/// testo nel frattempo è cambiato (un altro riquadro, il disco), lo riceve
+/// con `syncDoc`, come ogni aggiornamento venuto da fuori: cursore, scorrimento
+/// e cronologia locale restano quelli della scheda.
+///
+/// Ogni superficie ha il suo contenitore perché la superficie scrive sul suo
+/// genitore (la modalità, le interruzioni di riga) e ci ascolta eventi (copia,
+/// tasti): due superfici nello stesso genitore si pesterebbero. Il contenitore
+/// a riposo non porta la classe `pane-editor`, così chi cerca «la superficie
+/// del riquadro» (i fogli, il CSS, le prove) trova soltanto quella attiva.
+interface ParkedSurface {
+  readonly tab: Extract<Tab, { k: "doc" }>;
+  readonly surface: EditorSurface;
+  readonly host: HTMLElement;
+  readonly sourceView: SourceView | null;
+  /// Il tema che la superficie ha ricevuto per ultimo: al ritorno si rimette
+  /// soltanto se nel frattempo è cambiato.
+  theme: Theme | null;
+  /// Il documento si è salvato mentre era da parte: una lettura resa va
+  /// ridisegnata al ritorno (`redrawReading`).
+  redraw: boolean;
+}
+
+/// Quante superfici di testo un riquadro tiene da parte. Una nota di 5.000
+/// righe con il suo albero sintattico pesa qualche MB: oltre questo numero la
+/// meno recente si smonta, e tornarci la ricostruisce come prima.
+const MAX_PARKED = 4;
+
+/// La classe del contenitore di una superficie a riposo (vedi `ParkedSurface`).
+const PARKED_HOST = "pane-editor-riposo";
 /// Nome breve della tab + stato testuale: non solo colore (U21).
 /// View: titolo dichiarato, mai finto file.
 export function describeTab(tab: Tab): { label: string; dirty: boolean; kind: "doc" | "view" } {
@@ -1512,6 +1557,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
       detachSurface(r);
       destroySurface(r);
+      dropParked(r);
       view.releaseFrame(r);
     }
   });
@@ -2296,6 +2342,7 @@ export function resetDocumentsForVault(): Promise<string[]> {
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, id);
       detachSurface(r);
       destroySurface(r);
+      dropParked(r);
       view.removePane(r);
     }
     panes.clear();
@@ -2316,6 +2363,7 @@ async function render(): Promise<void> {
     const r = panes.get(id);
     const p = paneState(id);
     if (!r || !p) continue;
+    pruneParked(r, p.tabs);
     view.drawTabs(r, p.tabs, p.active);
     view.drawFocus(r, id === layout.focus);
     // Un riquadro che non riesce a mostrare la sua tab non ferma gli altri:
@@ -2363,6 +2411,7 @@ function buildStructure(): void {
       // abbonamento a una sessione che il riquadro non mostra più.
       detachSurface(r);
       destroySurface(r);
+      dropParked(r);
       // La sbirciata sopra questo riquadro se ne va con lui.
       if (notePeek?.isIn(r.root)) notePeek.dismiss();
       view.releaseFrame(r);
@@ -2396,6 +2445,7 @@ export function renderPane(id: string): Pane {
     disposeSurface: null,
     sourceView: null,
     bytes: false,
+    parked: [],
   };
   panes.set(id, r);
   return r;
@@ -2648,10 +2698,14 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   // registrata a ridisegnarsi dentro un elemento che nessuno guarda.
   if (changed && r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
   // Sessione e superficie hanno ownership separate, ma terminano nello stesso
-  // cambio di tab: prima si interrompe il flusso, poi si smonta l'istanza.
-  if (changed) {
+  // cambio di tab: prima si interrompe il flusso, poi si smonta l'istanza. Una
+  // superficie di testo di una scheda che resta aperta va invece da parte
+  // (`parkSurface`), staccata allo stesso modo.
+  if (changed && !parkSurface(r)) {
     detachSurface(r);
     destroySurface(r);
+  }
+  if (changed) {
     r.sourceView = null;
     r.bytes = false;
   }
@@ -2672,6 +2726,12 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   }
   const gesture = takeGesture(r.id, tab.doc);
   const page = takeOpeningPage(r.id, tab.doc);
+  // La scheda era già aperta: la sua superficie torna com'era. Un'apertura con
+  // un gesto o una pagina chiede invece il montaggio che nasce da lei, e la
+  // superficie da parte si smonta.
+  const parked = takeParked(r, tab);
+  if (parked && (gesture || page !== null)) destroyParked(parked);
+  else if (parked && unparkSurface(r, tab, parked)) return;
 
   // Un file di un componente (una lavagna, un PDF, un documento di Word)
   // aspetta di sapere se il componente è acceso, invece di indovinare. Spento,
@@ -2958,6 +3018,9 @@ function editorDoc(r: Pane): string | null {
 /// Gira nella coda dei disegni, e chi la accoda ridisegna dopo.
 async function componentsChanged(next: Components): Promise<void> {
   if (next.root !== openVaultRoot()) return;
+  // Le forme sintattiche di una nota vengono dai componenti montati, e una
+  // superficie le legge al montaggio: quelle da parte si rimontano al ritorno.
+  for (const r of panes.values()) dropParked(r);
   const leaving = [...panes.values()].filter((r) => {
     const doc = editorDoc(r);
     return doc !== null && offFor(doc, next).length > 0;
@@ -3218,6 +3281,16 @@ function detachSurface(r: Pane): void {
 }
 
 function destroySurface(r: Pane): void {
+  releaseSurfaceExtras(r);
+  r.surface?.destroy();
+  r.surface = null;
+  r.editorEl.replaceChildren();
+}
+
+/// Ciò che il riquadro appende alla superficie che mostra — le classi della
+/// nota, il rilascio dei file, il registratore, le slide, la stampa — se ne va
+/// con lei, smontata o messa da parte.
+function releaseSurfaceExtras(r: Pane): void {
   r.noteClassGeneration++;
   applyNoteCssClasses(r.root, null);
   r.disposeAttachments?.();
@@ -3228,9 +3301,121 @@ function destroySurface(r: Pane): void {
   r.disposeSlides = null;
   r.disposePrint?.();
   r.disposePrint = null;
-  r.surface?.destroy();
+}
+
+// --- le superfici da parte (`ParkedSurface`) --------------------------------
+
+/// Mette da parte la superficie del riquadro, se è una superficie di testo
+/// montata di una scheda che resta aperta; `false` altrimenti, e chi chiama la
+/// smonta come prima. Va chiamata con `r.shown` ancora sulla scheda che si
+/// lascia.
+function parkSurface(r: Pane): boolean {
+  const surface = r.surface;
+  const tab = r.shown;
+  if (!surface || tab?.k !== "doc" || !r.disposeSurface || r.bytes) return false;
+  if (surface.family !== "text" || (surface.profile !== "markdown" && surface.profile !== "plain-text")) return false;
+  // Un file di un componente segue l'acceso e lo spento dei componenti, che
+  // smontano e rimontano da sé: resta fuori.
+  if (uisForFile(tab.doc).length > 0) return false;
+  // Una scheda chiusa o portata altrove non torna: la sua superficie si smonta.
+  const stays = paneState(r.id)?.tabs.some((each) => sameParked(each, tab)) ?? false;
+  if (!stays) return false;
+  // Staccata e nascosta: non riceve più il testo né input. La sola lettura
+  // non si cambia qui: commutarla costa un ridisegno dell'editor a ogni
+  // cambio, e al ritorno `attachSurface` la rimette comunque al valore giusto.
+  detachSurface(r);
+  releaseSurfaceExtras(r);
+  const host = r.editorEl;
+  host.classList.replace("pane-editor", PARKED_HOST);
+  host.hidden = true;
+  const next = document.createElement("div");
+  next.className = "pane-editor";
+  r.viewEl.before(next);
+  r.editorEl = next;
   r.surface = null;
-  r.editorEl.replaceChildren();
+  r.parked.push({ tab, surface, host, sourceView: r.sourceView, theme, redraw: false });
+  while (r.parked.length > MAX_PARKED) destroyParked(r.parked.shift()!);
+  return true;
+}
+
+/// Rimostra la superficie messa da parte per `tab` nel riquadro, che in quel
+/// momento non ne mostra nessuna. `false` se non si è potuto: la superficie da
+/// parte è già smontata, e chi chiama monta la scheda da capo.
+function unparkSurface(r: Pane, tab: Extract<Tab, { k: "doc" }>, entry: ParkedSurface): boolean {
+  const { surface } = entry;
+  const buffer = surface.buffer;
+  const text = documentSessions.text(tab.doc);
+  if (!buffer || text === undefined) {
+    destroyParked(entry);
+    return false;
+  }
+  // Il contenitore vuoto lasciato dalla scheda di prima se ne va; quello della
+  // superficie torna visibile dov'era, senza spostarsi.
+  r.editorEl.remove();
+  entry.host.classList.replace(PARKED_HOST, "pane-editor");
+  entry.host.hidden = false;
+  r.editorEl = entry.host;
+  r.surface = surface;
+  r.sourceView = entry.sourceView;
+  try {
+    if (theme && theme !== entry.theme) surface.setTheme?.(theme);
+    const mode = selectedMode(r);
+    if (!mode) throw new Error(`surface ${surface.surfaceId} declares no modes`);
+    surface.setMode(mode.id);
+    markMode(r, mode.id);
+    // Il testo cambiato mentre era da parte arriva come ogni aggiornamento
+    // venuto da fuori: non entra nella cronologia locale.
+    if (buffer.getDoc() !== text || (entry.redraw && mode.presentation === "rendered")) buffer.syncDoc(text);
+  } catch (error) {
+    console.error(error);
+    destroySurface(r);
+    return false;
+  }
+  attachSurface(r, tab.doc);
+  refreshNoteClasses(r, tab.doc);
+  mountDocumentAttachments(r, tab.doc);
+  return true;
+}
+
+/// La stessa scheda di una superficie da parte: lo stesso documento con la
+/// stessa scelta di superficie, come `show` decide se rimontare.
+function sameParked(tab: Tab, parked: Extract<Tab, { k: "doc" }>): boolean {
+  return tab.k === "doc" && tab.doc === parked.doc && sameOverride(tabOverride(tab), tabOverride(parked));
+}
+
+/// Toglie dal riquadro la superficie da parte per `tab`, se c'è, e la dà a chi
+/// chiama.
+function takeParked(r: Pane, tab: Tab): ParkedSurface | null {
+  const at = r.parked.findIndex((entry) => sameParked(tab, entry.tab));
+  return at < 0 ? null : r.parked.splice(at, 1)[0]!;
+}
+
+/// Smonta le superfici da parte di schede che il riquadro non ha più (chiuse,
+/// rinominate, con un'altra superficie scelta).
+function pruneParked(r: Pane, tabs: readonly Tab[]): void {
+  if (r.parked.length === 0) return;
+  const keep: ParkedSurface[] = [];
+  for (const entry of r.parked) {
+    if (tabs.some((tab) => sameParked(tab, entry.tab))) keep.push(entry);
+    else destroyParked(entry);
+  }
+  r.parked = keep;
+}
+
+/// Smonta tutte le superfici da parte del riquadro.
+function dropParked(r: Pane): void {
+  const all = r.parked;
+  r.parked = [];
+  for (const entry of all) destroyParked(entry);
+}
+
+function destroyParked(entry: ParkedSurface): void {
+  try {
+    entry.surface.destroy();
+  } catch (error) {
+    console.error(error);
+  }
+  entry.host.remove();
 }
 
 /// Applica alla superficie di questo riquadro il dato che la sessione ha
@@ -3266,6 +3451,10 @@ async function readBuffer(doc: string): Promise<DocumentSurfaceSource> {
 /// La sessione possiede il testo; questa notifica aggiorna soltanto la resa
 /// delle superfici già aperte, senza ricreare buffer o cronologia.
 function redrawReading(doc: string): void {
+  // Una superficie da parte si ridisegna quando torna, se mostra la lettura.
+  for (const r of panes.values()) {
+    for (const entry of r.parked) if (entry.tab.doc === doc) entry.redraw = true;
+  }
   for (const id of panesWithDoc(doc)) {
     const r = panes.get(id);
     if (!r || selectedMode(r)?.presentation !== "rendered" || activeDoc(id) !== doc) {

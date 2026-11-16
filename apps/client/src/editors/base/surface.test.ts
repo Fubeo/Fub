@@ -60,7 +60,7 @@ describe("Base table windows", () => {
       await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBeGreaterThan(0));
       expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBeLessThan(50);
       const viewport = host.querySelector<HTMLElement>(".base-table-viewport")!;
-      viewport.scrollTop = 10_000 * 36;
+      viewport.scrollTop = 10_000 * 38;
       viewport.dispatchEvent(new Event("scroll"));
       expect(host.querySelector('[data-doc="10000.md"]')).not.toBeNull();
       expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBeLessThan(50);
@@ -287,8 +287,12 @@ describe("il tasto destro nella base", () => {
 
       pointing.mockReturnValue(host.querySelector('th[data-column="status"]'));
       const column = surface.contextMenu!({ x: 1, y: 1 })!;
-      expect(column.target).toEqual({ kind: "column", ref: "status" });
-      expect((column.context as readonly SurfaceMenuItem[]).map((item) => item.id)).toEqual(["base.group.column", "base.column.copy"]);
+      expect(column.target).toEqual({ kind: "column", ref: "status", name: "status" });
+      // Le voci del clic sull'intestazione, negli stessi gruppi.
+      expect(column.context!.map((item) => typeof item === "string" ? item : item.id)).toEqual([
+        "base.column.sort.asc", "base.column.sort.desc", "—", "base.column.group", "base.column.summary",
+        "—", "base.column.rename", "base.column.type", "—", "base.column.copy", "base.column.hide",
+      ]);
 
       surface.setReadOnly!(true);
       pointing.mockReturnValue(host.querySelector('[data-doc="00000.md"] .base-cell'));
@@ -811,7 +815,7 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
     const { host, done } = mount();
     try {
       await ready(host);
-      const tabs = () => [...host.querySelectorAll<HTMLButtonElement>(".base-tab")];
+      const tabs = () => [...host.querySelectorAll<HTMLButtonElement>(".base-tab[data-view]")];
       expect(tabs().map((tab) => [tab.textContent, tab.getAttribute("aria-pressed"), tab.querySelector("svg")?.dataset.icon])).toEqual([
         ["Tabella", "true", "base-table"], ["Bacheca", "false", "base-board"],
       ]);

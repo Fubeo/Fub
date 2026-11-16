@@ -30,16 +30,18 @@ export const EDITORS: PartAnatomy = {
     { name: "grid-dialog", states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")], hooks: ["grid-dialog", "grid-dialog-border-cell", "grid-dialog-border-preview", "grid-dialog-check", "grid-dialog-choice", "grid-dialog-choices", "grid-dialog-color-button", "grid-dialog-color-chip", "grid-dialog-color-chip--auto", "grid-dialog-error", "grid-dialog-field", "grid-dialog-fields", "grid-dialog-form", "grid-dialog-label", "grid-dialog-legend", "grid-dialog-names-head", "grid-dialog-names-row", "grid-dialog-note", "grid-dialog-preview", "grid-preview-stage", "grid-preview-page", "grid-dialog-palette", "grid-dialog-palette-auto", "grid-dialog-palette-grid", "grid-dialog-palette-title", "grid-dialog-preview-text", "grid-dialog-results", "grid-result-key", "grid-result-number", "grid-result-ref", "grid-result-table", "grid-dialog-sample-text", "grid-dialog-section", "grid-dialog-signature", "grid-dialog-swatch", "grid-dialog-toolbar"] },
     { name: "base-surface", states: INTERACTIVE, hooks: ["base-surface", "base-status", "base-body", "base-summaries"] },
     // La barra della Base (T15): le linguette delle viste, gli strumenti,
-    // «Nuova», la riga di «Cerca», le etichette e «Nel file .base».
-    { name: "base-bar", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["base-bar", "base-tabs", "base-tab", "base-tab-label", "base-bar-space", "base-tool", "base-tool-count", "on", "base-new", "base-search-row", "base-search", "base-strip", "base-chips", "base-chip", "base-note", "base-written", "base-written-lines", "base-written-where", "base-written-added", "base-written-removed"] },
-    // I popover della barra: Filtro, Ordina (con «Raggruppa»), Proprietà.
-    { name: "base-popover", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["base-popover", "base-pop-title", "base-pop-note", "base-pop-foot", "base-filter-rows", "base-filter-row", "base-filter-value", "base-filter-search", "base-filter-remove", "base-filter-add", "base-sort-rows", "base-sort-row", "base-sort-name", "base-sort-add", "base-sort-remove", "base-grouping", "base-column-list", "base-column", "base-column-grip", "base-column-hidden", "base-column-label", "dragging"] },
-    { name: "base-table", layer: "contenuto", states: [S("rest"), S("hover"), S("focused")], hooks: ["base-table", "base-cell", "base-cell-error"] },
+    // «+» (una vista nuova), «Nuova», la riga di «Cerca», le etichette e «Nel
+    // file .base».
+    { name: "base-bar", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["base-bar", "base-tabs", "base-tab", "base-tab-label", "base-tab-more", "base-tab-more-count", "base-bar-space", "base-tool", "base-tool-count", "base-tool-new-view", "compact", "on", "base-new", "base-search-row", "base-search", "base-strip", "base-chips", "base-chip", "base-note", "base-written", "base-written-lines", "base-written-where", "base-written-added", "base-written-removed"] },
+    // I popover della barra: Filtro, Ordina (con «Raggruppa»), Proprietà, e
+    // «Rinomina la proprietà» del menu della colonna.
+    { name: "base-popover", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["base-popover", "base-pop-title", "base-pop-note", "base-pop-foot", "base-filter-rows", "base-filter-row", "base-filter-value", "base-filter-search", "base-filter-remove", "base-filter-add", "base-sort-rows", "base-sort-row", "base-sort-name", "base-sort-add", "base-sort-remove", "base-grouping", "base-column-list", "base-column", "base-column-grip", "base-column-hidden", "base-column-label", "dragging", "base-rename", "base-rename-field"] },
+    { name: "base-table", layer: "contenuto", states: [S("rest"), S("hover"), S("focused")], hooks: ["base-table", "base-table-viewport", "base-cell", "base-cell-error", "base-head", "base-head-icon", "base-head-label", "base-head-sort", "base-title", "base-add-row", "base-add-row-button", "base-foot-count", "base-foot-summary", "base-foot-value", "base-foot-error", "base-foot-dimmed"] },
     { name: "base-cards", layer: "contenuto", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["base-cards", "base-list", "base-card", "base-field"] },
     { name: "base-kanban", layer: "contenuto", states: DRAGGABLE, hooks: ["base-kanban", "base-kanban-column", "base-kanban-card"] },
     { name: "base-map", layer: "contenuto", layers: { "base-map-attribution": "cornice" }, states: [S("rest"), S("focused")], hooks: ["base-map-atlas", "base-map-attribution", "base-map-marker"] },
     // La griglia e le guide (T71) sono segni di Fub sulla vista, non contenuto.
-    { name: "canvas-surface", layers: { "canvas-viewport": "contenuto", "canvas-source": "contenuto", "canvas-grid": "segno", "canvas-guide": "segno" }, states: INTERACTIVE, hooks: ["canvas-surface", "canvas-toolbar", "canvas-intake-error", "canvas-viewport", "canvas-large-fallback", "canvas-source", "canvas-grid", "canvas-guide"] },
+    { name: "canvas-surface", layers: { "canvas-viewport": "contenuto", "canvas-source": "contenuto", "canvas-grid": "segno", "canvas-guide": "segno" }, states: INTERACTIVE, hooks: ["canvas-surface", "canvas-toolbar", "canvas-toolbar-item", "kit-options-row", "canvas-intake-error", "canvas-viewport", "canvas-large-fallback", "canvas-source", "canvas-grid", "canvas-guide"] },
     // La colonna degli strumenti della lavagna (T49): quella del kit, con le
     // caselle `canvas-tool`; uno strumento spento in sola lettura si vede.
     { name: "canvas-rail", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["canvas-rail", "canvas-tool"] },
@@ -135,5 +137,9 @@ export const EDITORS: PartAnatomy = {
     // Il righello (T87): la riga velata con le tacche e l'angolo, sopra la
     // lavagna; il suo corpo si sposta e prende il fuoco.
     { name: "canvas-ruler", states: [S("rest"), S("focused")], hooks: ["canvas-ruler-bar", "canvas-ruler-grip", "canvas-ruler-angle"] },
+    // I commenti nel testo (EC T21): il fondo del passo commentato in
+    // Scrittura e in Lettura, più pieno col cursore dentro, e il commento
+    // intero colorato in Sorgente. Segni di Fub sulla carta, non il testo.
+    { name: "note-comments", layer: "segno", layers: { "markdown-rendered": "contenuto" }, states: [S("rest"), S("focused")], hooks: ["cm-fub-comment-range", "cm-fub-comment-range-on", "comment-range", "cm-fub-comment-source", "markdown-rendered"] },
   ],
 };

@@ -86,10 +86,13 @@
 | `apps/client/src/editors/rich/paper.generated.ts` | `UPDATE_MIRROR=1 cargo test -p fub-format-rich --test ts_projection` |
 | le fixture dei mirror (in `src/__fixtures__/`) | lo stesso giro di `UPDATE_MIRROR=1` del test che le cita |
 | la pelle del tema di serie | `npm run theme:generate` da `apps/client/` |
+| `apps/client/src/editors/text/profiles/markdown/html-entities.generated.ts` | `npm run entities:generate` da `apps/client/` (verifica: `npm run entities:verify`, e `npm test`) |
 | il catalogo dei comandi serviti dei fogli | `UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --lib catalogo_servito` |
 | il corpus dei documenti ricchi | `cargo run -p fub-format-rich --example genera_corpus` |
 | le baseline visuali | solo dal runner Linux: `npm run bench:update` |
+| `apps/client/bench/conformita/<prototipo>.json` (gli stili attesi del prototipo) | `git fetch`, poi `node bench/conformita/estrai.mjs <prototipo>` da `apps/client/`; la chiave `_intestazione` nomina ramo, commit e file del prototipo |
 | `vendor/<motore>/` | `node tools/vendor-craft/vendor.mjs <motore> update --rev <sha>` |
+| `vendor/whatwg-entities/entities.json` | riscaricato a mano, con i passi del suo `UPSTREAM.md`; lo sha256 atteso sta in `tools/vendor-craft/dati.mjs` |
 
 La regola vale per tutti: mai a mano. Il primo commento di ogni file generato
 nomina il comando esatto.
@@ -105,6 +108,7 @@ nomina il comando esatto.
 | il banco visivo | `npm run bench:verify` |
 | l'accessibilità | `npm run bench:a11y` |
 | il moto | `npm run bench:motion` |
+| la grafica uguale al prototipo | `npm run bench:conformita` |
 | la battuta | `node bench/interaction.mjs --only=battuta` |
 | la WebView vera | `npm run bench:webview` |
 | un motore di terzi | `node tools/motori-prova/misura.mjs --out DIR` |
