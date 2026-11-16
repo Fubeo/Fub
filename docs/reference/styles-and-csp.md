@@ -26,7 +26,9 @@ Lo stile passa da quattro strade, e nessun'altra:
 - **i fogli costruiti** (`new CSSStyleSheet()` in
   `document.adoptedStyleSheets`), che la CSP non guarda perché non sono markup:
   il tema li usa per ogni suo strato (`theme/loader.ts`, vedi
-  [il frontend](../architecture/frontend-and-ipc.md)), e `ui/stylesheets.ts`
+  [il frontend](../architecture/frontend-and-ipc.md); le sue `@font-face`
+  diventano `FontFace` in `document.fonts`, che la CSP guarda solo con
+  `font-src`), e `ui/stylesheets.ts`
   (`adoptSheet`) per gli altri fogli che l'app scrive da sé, come la stampa e
   la vista dei contorni della lavagna. Il CSS di un tema e dei frammenti passa
   prima dal sanitizer, come sempre;

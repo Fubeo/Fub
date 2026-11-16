@@ -32,7 +32,9 @@
 // `@font-face` (un `src:` scritto a mano potrebbe chiamare la rete): le regole
 // le scrive questo file, coi valori del manifest e l'URL `data:` del file, e la
 // pelle usa la famiglia per nome. Si sostituiscono nello stesso giro del
-// foglio e delle pelli, e un tema che non ne porta svuota il canale.
+// foglio e delle pelli, e un tema che non ne porta svuota il canale. Le
+// `@font-face` dei due canali dei caratteri non restano nel foglio: diventano
+// `FontFace` in `document.fonts` (il perché sta su `liftFontFaces`).
 //
 // **L'ordine è dichiarato, non una conseguenza di quando si monta.** Finché i
 // canali erano due, appendere in coda bastava — l'ordine di montaggio era
@@ -201,7 +203,93 @@ function sheetOf(layer: Layer, text: string): CSSStyleSheet {
   const sheet = new CSSStyleSheet();
   sheet.replaceSync(text);
   owned.set(sheet, { layer, text });
+  if (FONT_LAYERS.has(layer)) liftFontFaces(sheet);
   return sheet;
+}
+
+/**
+ * **Le facce dei caratteri stanno in `document.fonts`, non nei fogli
+ * adottati.** Una regola `@font-face` in un foglio costruito, in Chromium, si
+ * ricrea ogni volta che il documento riceve un altro foglio con un suo
+ * `@font-face` (il `<style>` o il `<link>` di KaTeX, quando la prima formula
+ * lo carica): la faccia nuova riparte da `unloaded` e, per qualche
+ * fotogramma, il testo che la usa si misura col carattere di riserva. Con
+ * `<style>` non succedeva; con i fogli costruiti la Live si spostava di 2 px
+ * sotto la formula (PR #420, scena `live-07-html-attivo`). Una `FontFace`
+ * aggiunta a mano resta la stessa finché qualcuno non la toglie.
+ *
+ * Il foglio del canale resta montato, vuoto delle sue `@font-face`: tiene il
+ * posto nella cascata e il testo nella mappa, così chi legge i canali
+ * (`mountedCss`, lo specchio delle altre finestre) non vede differenze. Dove
+ * l'API non c'è (happy-dom) le regole restano nel foglio, come prima.
+ */
+const FONT_LAYERS: ReadonlySet<Layer> = new Set<Layer>(["caratteri", "caratteri-tema"]);
+const FACES = Symbol.for("fub.theme.faces");
+const faces: Map<CSSStyleSheet, readonly FontFace[]> =
+  ((globalThis as { [FACES]?: Map<CSSStyleSheet, readonly FontFace[]> })[FACES] ??= new Map());
+
+/** I descrittori di `@font-face` che `FontFace` accetta, col loro nome lì. */
+const FACE_DESCRIPTORS: readonly (readonly [string, keyof FontFaceDescriptors])[] = [
+  ["font-style", "style"],
+  ["font-weight", "weight"],
+  ["font-stretch", "stretch"],
+  ["unicode-range", "unicodeRange"],
+  ["font-feature-settings", "featureSettings"],
+  ["font-display", "display"],
+  ["ascent-override", "ascentOverride"],
+  ["descent-override", "descentOverride"],
+  ["line-gap-override", "lineGapOverride"],
+];
+
+function fontFacesAvailable(): boolean {
+  return typeof FontFace === "function" && typeof document.fonts?.add === "function";
+}
+
+/** Il nome della famiglia senza le virgolette CSS: `FontFace` lo vuole nudo. */
+function bareFamily(value: string): string {
+  const quoted = /^\s*(["'])(.*)\1\s*$/s.exec(value);
+  return quoted === null ? value.trim() : quoted[2].replace(/\\(.)/gs, "$1");
+}
+
+/** Toglie dal foglio le sue `@font-face` e ne fa altrettante `FontFace`. */
+function liftFontFaces(sheet: CSSStyleSheet): void {
+  if (!fontFacesAvailable()) return;
+  const lifted: FontFace[] = [];
+  for (let index = sheet.cssRules.length - 1; index >= 0; index -= 1) {
+    const rule = sheet.cssRules[index];
+    if (!(rule instanceof CSSFontFaceRule)) continue;
+    const family = rule.style.getPropertyValue("font-family");
+    const source = rule.style.getPropertyValue("src");
+    const descriptors: FontFaceDescriptors = {};
+    for (const [property, key] of FACE_DESCRIPTORS) {
+      const value = rule.style.getPropertyValue(property);
+      if (value !== "") (descriptors as Record<string, string>)[key] = value;
+    }
+    sheet.deleteRule(index);
+    if (family === "" || source === "") continue;
+    lifted.unshift(new FontFace(bareFamily(family), source, descriptors));
+  }
+  faces.set(sheet, lifted);
+}
+
+/**
+ * Allinea `document.fonts` ai fogli dei caratteri montati: toglie le facce dei
+ * fogli usciti e rimette le altre nell'ordine della cascata (`caratteri-tema`
+ * dopo `caratteri`, perché a parità di descrittori vince l'ultima). Le stesse
+ * `FontFace` tornano dentro già caricate: rimetterle non le ricarica.
+ */
+function syncFontFaces(mounted: readonly CSSStyleSheet[]): void {
+  if (!fontFacesAvailable()) return;
+  for (const [sheet, list] of [...faces]) {
+    if (mounted.includes(sheet)) continue;
+    for (const face of list) document.fonts.delete(face);
+    faces.delete(sheet);
+  }
+  const wanted = mounted.flatMap((sheet) => faces.get(sheet) ?? []);
+  const there = [...document.fonts].filter((face) => wanted.includes(face));
+  if (there.length === wanted.length && there.every((face, index) => face === wanted[index])) return;
+  for (const face of wanted) document.fonts.delete(face);
+  for (const face of wanted) document.fonts.add(face);
 }
 
 /** I fogli del tema montati, uno per canale, e gli altri nel loro ordine. */
@@ -225,12 +313,20 @@ function mountedSheets(): { layers: Map<Layer, CSSStyleSheet>; others: CSSStyleS
 function commit(changes: ReadonlyMap<Layer, string | null>): void {
   const { layers, others } = mountedSheets();
   const built = new Map<Layer, CSSStyleSheet | null>();
-  for (const [layer, text] of changes) built.set(layer, text === null ? null : sheetOf(layer, text));
+  for (const [layer, text] of changes) {
+    // Un canale dei caratteri che riceve lo stesso testo tiene il suo foglio:
+    // un foglio nuovo vorrebbe dire facce nuove, da ricaricare.
+    const current = layers.get(layer);
+    const same = text !== null && FONT_LAYERS.has(layer) && current !== undefined && owned.get(current)?.text === text;
+    built.set(layer, same ? current : text === null ? null : sheetOf(layer, text));
+  }
   for (const [layer, sheet] of built) {
     if (sheet === null) layers.delete(layer);
     else layers.set(layer, sheet);
   }
-  document.adoptedStyleSheets = [...ORDER.flatMap((layer) => layers.get(layer) ?? []), ...others];
+  const mounted = [...ORDER.flatMap((layer) => layers.get(layer) ?? []), ...others];
+  document.adoptedStyleSheets = mounted;
+  syncFontFaces(mounted);
 }
 
 /** Sostituisce uno strato, al suo posto nella cascata. */

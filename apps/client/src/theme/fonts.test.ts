@@ -5,7 +5,7 @@
 // canale `caratteri-tema`, coi valori del manifest e l'URL `data:` del file.
 // Il CSS del tema resta senza `@font-face`: un `src:` scritto a mano potrebbe
 // chiamare la rete. Cambiato tema, il canale si svuota.
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ThemeInfo, ThemePayload } from "../host/contract";
 import { createFakeHost, extendingTheme, fakeWoff2, fontTheme } from "../host/fake";
@@ -269,5 +269,93 @@ describe("la shell monta i caratteri del tema e non lascia resti", () => {
     await selectTheme("acme.caratteri", "light");
     await selectTheme(SERIES_THEME_ID, "light");
     expect(count("caratteri-tema")).toBe(0);
+  });
+});
+
+// **Le facce stanno in `document.fonts`, non nei fogli adottati** (PR #420).
+// In Chromium una `@font-face` dentro un foglio costruito si ricrea, e si
+// ricarica, ogni volta che il documento riceve un altro foglio con una sua
+// `@font-face` (il `<style>` di KaTeX alla prima formula): per un fotogramma il
+// testo si misura col carattere di riserva e la Live si sposta di 2 px. Una
+// `FontFace` aggiunta a mano non si ricrea. happy-dom non ha l'API: qui la
+// danno due finti minimi, e il banco guarda che cosa il loader ci mette.
+describe("le facce dei caratteri vanno in document.fonts", () => {
+  class FakeFace {
+    readonly status = "unloaded";
+    constructor(
+      readonly family: string,
+      readonly source: string,
+      readonly descriptors: FontFaceDescriptors,
+    ) {}
+  }
+  let set: Set<FakeFace>;
+
+  beforeEach(() => {
+    document.head.innerHTML = "";
+    document.adoptedStyleSheets = [];
+    set = new Set();
+    vi.stubGlobal("FontFace", FakeFace);
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: {
+        add: (face: FakeFace) => set.add(face),
+        delete: (face: FakeFace) => set.delete(face),
+        has: (face: FakeFace) => set.has(face),
+        [Symbol.iterator]: () => set.values(),
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete (document as { fonts?: unknown }).fonts;
+  });
+
+  const faces = (): FakeFace[] => [...set];
+  const adoptedFontFaceRules = (): number =>
+    document.adoptedStyleSheets.reduce(
+      (total, sheet) => total + [...sheet.cssRules].filter((rule) => rule instanceof CSSFontFaceRule).length,
+      0,
+    );
+
+  it("nessuna @font-face resta in un foglio adottato: ognuna è una FontFace col suo nome nudo", () => {
+    mount(seriesFonts, "caratteri");
+
+    expect(adoptedFontFaceRules(), "una @font-face adottata si ricarica a ogni foglio nuovo").toBe(0);
+    const rules = seriesFonts.match(/^@font-face \{/gm)!.length;
+    expect(faces()).toHaveLength(rules);
+    const first = faces()[0]!;
+    expect(first.family, "FontFace vuole la famiglia senza virgolette").toBe("Newsreader Variable");
+    expect(first.source).toContain("/fonts/newsreader-latin-opsz-normal.woff2");
+    expect(first.descriptors).toMatchObject({ style: "normal", display: "swap" });
+    expect(first.descriptors.unicodeRange).toBeTruthy();
+    expect(text("caratteri"), "il testo del canale resta quello montato").toBe(seriesFonts);
+    expect(count("caratteri")).toBe(1);
+  });
+
+  it("lo stesso testo tiene le stesse facce; quelle del tema vengono dopo e se ne vanno col tema", () => {
+    mount(seriesFonts, "caratteri");
+    const series = faces();
+    mount(seriesFonts, "caratteri");
+    expect(faces(), "rimontare lo stesso testo non rifà le facce: andrebbero ricaricate").toEqual(series);
+
+    expect(mountThemeBundle(bundle(), "light")).toEqual({ mounted: true });
+    const theme = faces().slice(series.length);
+    expect(faces().slice(0, series.length), "le facce di serie restano le stesse").toEqual(series);
+    expect(theme.map((face) => [face.family, face.descriptors.style])).toEqual([
+      ["Carta Serif", "normal"],
+      ["Carta Serif", "italic"],
+    ]);
+    expect(theme[0]!.source).toMatch(/^url\("data:font\/woff2;base64,/);
+    expect(adoptedFontFaceRules()).toBe(0);
+
+    // Caratteri di serie nuovi: le facce del tema restano dopo, a vincere.
+    mount(seriesFonts.replace("swap", "block"), "caratteri");
+    expect(faces().slice(-2), "a parità di descrittori vince l'ultima: il tema").toEqual(theme);
+    expect(faces().some((face) => series.includes(face)), "le facce di serie vecchie se ne vanno").toBe(false);
+
+    mountThemeBundle({ manifest: SERIES_MANIFEST, sheet: sheetDark, skin: seriesSkin, assets: {} }, "dark");
+    expect(faces().some((face) => theme.includes(face)), "un tema senza caratteri toglie le sue facce").toBe(false);
+    expect(faces()).toHaveLength(series.length);
   });
 });

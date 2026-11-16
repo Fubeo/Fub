@@ -333,6 +333,14 @@ Un canale ha al più un foglio; il caricatore li tiene nell'ordine dichiarato
 quelli di un tema con una sola assegnazione, cioè tutti insieme o nessuno.
 Vengono dopo i file CSS della pagina, quindi vincono su di loro a parità di
 specificità. Il testo montato di un canale lo dice `mountedCss()`.
+Le `@font-face` dei due canali dei caratteri (`caratteri`, `caratteri-tema`)
+non restano nel loro foglio: il caricatore ne fa altrettante `FontFace` in
+`document.fonts`, nell'ordine dei canali, e il foglio resta montato vuoto.
+In Chromium una `@font-face` di un foglio costruito si ricrea e si ricarica
+ogni volta che la pagina riceve un altro foglio con una sua `@font-face` (il
+CSS di KaTeX alla prima formula), e per qualche fotogramma il testo si misura
+col carattere di riserva; una `FontFace` aggiunta a mano resta la stessa.
+Rimontare lo stesso testo dei caratteri tiene le stesse facce.
 
 ### Comportamenti della shell
 
