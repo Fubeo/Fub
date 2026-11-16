@@ -1,7 +1,9 @@
 /* I menu. */
 
-/* Un menu è un rialzo: il foglio del prototipo (`.pop`), staccato da un filo
-   appena accennato e dall'ombra. Contestuale o a tendina è lo stesso oggetto
+/* Un menu è un rialzo: il foglio del prototipo (`.pop`), staccato dall'ombra
+   di ciò che si apre sopra tutto (`--shadow-pop`, il `--sh-pop` del
+   prototipo, la stessa del lanciatore); un tema che non la dichiara ha un filo
+   appena accennato e l'ombra della struttura. Contestuale o a tendina è lo stesso oggetto
    (`ui/menu.ts`), con la lingua del «/»: testata, appunti e piede restano
    fermi, l'elenco in mezzo scorre. Cambia solo da dove parte. */
 .context-menu {
@@ -16,7 +18,7 @@
   border: none;
   border-radius: calc(var(--radius-menu) + var(--space-2));
   background: var(--sheet);
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--text) 8%, transparent), var(--shadow-3);
+  box-shadow: var(--shadow-pop, 0 0 0 1px color-mix(in oklab, var(--text) 8%, transparent), var(--shadow-3));
   color: var(--text);
   font-size: var(--text-base);
   line-height: 1.4;
