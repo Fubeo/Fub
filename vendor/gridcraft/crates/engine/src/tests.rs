@@ -582,6 +582,30 @@ fn copy_paste_shifts_formulas() {
 }
 
 #[test]
+fn text_that_looks_like_a_formula_leaves_as_text_and_numbers_stay_numbers() {
+    let mut s = s();
+    for (cell, input) in [("A1", "'=HYPERLINK(\"http://x\",\"y\")"), ("B1", "'@SUM(1)"), ("C1", "'-2+3"), ("D1", "-5"), ("E1", "'\tx")] {
+        s.execute("cell.set", json!({"cell": cell, "input": input})).unwrap();
+    }
+    assert_eq!(v(&s, "A1"), Value::text("=HYPERLINK(\"http://x\",\"y\")"));
+    // The clipboard text: another spreadsheet types it in, so a formula-looking text gets `'`.
+    let copied = s.execute("edit.copy", json!({"range": "A1:E1"})).unwrap();
+    assert_eq!(copied["text"], "\"'=HYPERLINK(\"\"http://x\"\",\"\"y\"\")\"\t'@SUM(1)\t'-2+3\t-5\t\"'\tx\"\n");
+    // Pasted back from the system clipboard, it is the same text again.
+    s.execute("edit.clearClipboard", json!({})).unwrap();
+    s.execute("edit.paste", json!({"at": "A3", "text": copied["text"]})).unwrap();
+    assert_eq!(v(&s, "A3"), Value::text("=HYPERLINK(\"http://x\",\"y\")"));
+    assert_eq!(v(&s, "C3"), Value::text("-2+3"));
+    assert_eq!(v(&s, "D3"), Value::Number(-5.0));
+    // Save As CSV and TSV: the same rule.
+    let csv = crate::io::save_bytes(&s.doc().unwrap().wb, "out.csv").unwrap();
+    let first = String::from_utf8(csv).unwrap().lines().next().unwrap().to_string();
+    assert_eq!(first, "\"'=HYPERLINK(\"\"http://x\"\",\"\"y\"\")\",'@SUM(1),'-2+3,-5,'\tx");
+    let tsv = crate::io::save_bytes(&s.doc().unwrap().wb, "out.tsv").unwrap();
+    assert!(String::from_utf8(tsv).unwrap().starts_with("\"'=HYPERLINK(\"\"http://x\"\",\"\"y\"\")\"\t'@SUM(1)\t'-2+3\t-5\t\"'\tx\""));
+}
+
+#[test]
 fn rich_clipboard_copies_selected_displayed_cells_and_styles() {
     let mut s = s();
     s.execute("cell.set", json!({"cell": "A1", "input": "outside selection"})).unwrap();

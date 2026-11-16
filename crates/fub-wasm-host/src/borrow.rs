@@ -26,7 +26,7 @@
 
 use fub_abi::traits::{HostApi, ReadApi};
 use fub_abi::PluginError;
-use wasmtime::{Store, StoreLimits};
+use wasmtime::Store;
 
 /// L'host prestato. `'static` per finta: la vita vera è quella della parentesi
 /// di [`with_guest`], e l'invariante che la sostituisce è scritta lì sopra.
@@ -49,7 +49,7 @@ pub(crate) struct State {
     /// ricordarsi di ciò che ha già concesso. Il dato dello store è questo
     /// tipo, quindi il tetto abita qui — accanto al prestito dell'host, con cui
     /// non ha niente da spartire se non l'indirizzo.
-    limits: StoreLimits,
+    limits: crate::limits::Limiter,
     /// I byte di `wasi:random` che la chiamata in corso può ancora chiedere
     /// (`crate::limits::RANDOM_BUDGET`): li rimette [`crate::limits::renew`]
     /// all'inizio di ogni chiamata del contratto.
@@ -68,7 +68,7 @@ impl State {
         }
     }
 
-    pub(crate) fn limits(&mut self) -> &mut StoreLimits {
+    pub(crate) fn limits(&mut self) -> &mut crate::limits::Limiter {
         &mut self.limits
     }
 

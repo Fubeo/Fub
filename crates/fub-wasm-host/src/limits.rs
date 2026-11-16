@@ -48,10 +48,11 @@
 //! riposo al lavoro, dove dà fastidio davvero — in cambio di dieci risvegli al
 //! secondo che una macchina ferma non nota.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder};
+use wasmtime::{Config, Engine, ResourceLimiter, Store};
 
 use crate::borrow::State;
 
@@ -90,7 +91,11 @@ const HEARTBEAT: Duration = Duration::from_millis(100);
 /// accanto; ciò che non deve succedere è che non ci sia nessun numero.
 const TIMEOUT_IN_TICKS: u64 = 50;
 
-/// Quanto può crescere una memoria lineare di un componente: **64 MiB**.
+/// Quanto possono crescere le memorie lineari di un'istanza, **tutte insieme**:
+/// **64 MiB**.
+///
+/// Il tetto conta la somma delle memorie dell'istanza, non ciascuna: un
+/// componente con due memorie lineari non arriva a due volte il tetto.
 ///
 /// Senza tetto il massimo è quello del bersaglio, cioè 4 GiB: un plugin che
 /// alloca in un ciclo non muore lui, fa morire l'app, e la fa morire con un
@@ -106,6 +111,24 @@ const TIMEOUT_IN_TICKS: u64 = 50;
 /// *uno* prima che qualcuno se ne accorga — e 64 MiB è una cifra che un utente
 /// vede nel monitor delle attività senza che l'app sia già in ginocchio.
 const MEMORY_CEILING: usize = 64 * 1024 * 1024;
+
+/// Quanta memoria lineare possono tenere **tutte le istanze del processo**
+/// insieme: **1 GiB**.
+///
+/// Il tetto per istanza ferma il plugin che alloca in un ciclo; non ferma
+/// molte istanze che arrivano ciascuna al proprio tetto. Il fermo delle
+/// istanze vive ([`crate::budgets::MAX_LIVE_INSTANCES`]) non è una quota di
+/// memoria: 64 istanze al tetto sono 4 GiB. Questo numero sì: sedici istanze
+/// al tetto, due ordini di grandezza sopra ciò che i plugin di questo
+/// contratto usano davvero (pochi MiB ciascuno), e sotto il punto in cui un
+/// portatile con 8 GiB comincia a soffrire.
+///
+/// Oltre, la crescita non risponde `-1` come al tetto dell'istanza: la colpa
+/// non è dell'istanza che chiede, ma il posto è finito. Diventa una trap con
+/// [`MemoryBudgetExceeded`], che l'host traduce nell'errore tipizzato
+/// `host.wasm.memory_budget`, e un'istanza che non nasce per questo è un
+/// [`crate::LoadError::MemoryBudget`].
+pub(crate) const PROCESS_MEMORY_CEILING: usize = 1024 * 1024 * 1024;
 
 /// Il tetto degli elementi di **una** tabella: lo stesso ordine di memoria
 /// della memoria lineare.
@@ -283,29 +306,97 @@ fn tick(engine: Engine) {
 // La scadenza e il tetto sull'istanza
 // ---------------------------------------------------------------------------
 
-/// Il tetto di memoria di un'istanza, da tenere dentro lo [`State`].
+/// La memoria lineare che le istanze del processo possono ancora prendersi
+/// ([`PROCESS_MEMORY_CEILING`]): un contatore atomico che ogni [`Limiter`]
+/// carica quando una sua memoria nasce o cresce, e scarica quando lo store
+/// muore. La memoria lineare non si accorcia, quindi «quando lo store muore» è
+/// l'unico momento in cui torna.
+#[derive(Debug)]
+pub(crate) struct MemoryPool {
+    used: AtomicUsize,
+    ceiling: usize,
+}
+
+impl MemoryPool {
+    pub(crate) const fn new(ceiling: usize) -> Self {
+        Self {
+            used: AtomicUsize::new(0),
+            ceiling,
+        }
+    }
+
+    /// Prende `bytes` dal pool, o rifiuta senza toccarlo.
+    fn take(&self, bytes: usize) -> Result<(), MemoryBudgetExceeded> {
+        let mut used = self.used.load(Ordering::Acquire);
+        loop {
+            let next = used.saturating_add(bytes);
+            if next > self.ceiling {
+                return Err(MemoryBudgetExceeded {
+                    asked: bytes,
+                    used,
+                    ceiling: self.ceiling,
+                });
+            }
+            match self
+                .used
+                .compare_exchange_weak(used, next, Ordering::AcqRel, Ordering::Acquire)
+            {
+                Ok(_) => return Ok(()),
+                Err(now) => used = now,
+            }
+        }
+    }
+
+    fn give_back(&self, bytes: usize) {
+        self.used.fetch_sub(bytes, Ordering::AcqRel);
+    }
+
+    /// I byte presi adesso, da tutte le istanze.
+    pub(crate) fn used(&self) -> usize {
+        self.used.load(Ordering::Acquire)
+    }
+}
+
+/// Il pool del processo.
+pub(crate) static PROCESS_POOL: MemoryPool = MemoryPool::new(PROCESS_MEMORY_CEILING);
+
+/// La memoria lineare di tutte le istanze del processo è finita: la crescita
+/// che la chiedeva è una trap, e l'host la traduce in un errore tipizzato.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error(
+    "la memoria dei componenti WASM è finita: {asked} byte chiesti, {used} già presi su {ceiling}"
+)]
+pub struct MemoryBudgetExceeded {
+    /// I byte che la crescita chiedeva.
+    pub asked: usize,
+    /// I byte che tutte le istanze tenevano già.
+    pub used: usize,
+    /// Il tetto del processo ([`PROCESS_MEMORY_CEILING`]).
+    pub ceiling: usize,
+}
+
+/// Il limitatore di un'istanza, da tenere dentro lo [`State`].
 ///
 /// Vive nello `State` e non qui perché `Store::limiter` vuole una chiusura che
 /// peschi il limitatore **dal dato dello store**: è il modo in cui wasmtime
 /// permette a un limitatore di avere memoria di ciò che ha già concesso.
 ///
-/// Le altre manopole di [`StoreLimitsBuilder`] — `instances`, `tables`,
-/// `memories` — restano ai valori di wasmtime, e non per distrazione. Quante
-/// istanze e quante memorie **core** diventi un componente è
-/// un fatto della catena che lo ha compilato, non del plugin: un numero scelto
-/// qui sarebbe una previsione sul compilatore di qualcun altro, e un plugin
-/// onesto rifiutato per averne una di troppo verrebbe rifiutato per la ragione
-/// sbagliata. `memory_size` e `table_elements` sono i tetti il cui significato
-/// non cambia da una catena all'altra — quanta memoria può prendersi il plugin,
-/// nella sua memoria lineare o in quella dell'host a tabelle — e sono quelli
-/// che stiamo mettendo ([`TABLE_CEILING`]).
+/// Conta due tetti. [`MEMORY_CEILING`] vale per la somma delle memorie
+/// lineari dell'istanza, non per ciascuna: con due memorie non si arriva al
+/// doppio. [`PROCESS_MEMORY_CEILING`] vale per tutte le istanze del processo
+/// insieme, attraverso il [`MemoryPool`]: ciò che un'istanza ha preso torna al
+/// pool quando il suo store muore ([`Drop`]).
 ///
-/// Nota che `memory_size` vale **per memoria**: un componente con due memorie
-/// lineari può arrivare a due volte il tetto. È vero, è dichiarato, e non
-/// cambia l'ordine di grandezza — ciò che il tetto impedisce è il ciclo che
-/// alloca finché c'è RAM, e quello lo impedisce comunque.
+/// I conteggi di istanze, tabelle e memorie **core** restano ai valori di
+/// wasmtime, e non per distrazione. Quante istanze e quante memorie core
+/// diventi un componente è un fatto della catena che lo ha compilato, non del
+/// plugin: un numero scelto qui sarebbe una previsione sul compilatore di
+/// qualcun altro, e un plugin onesto rifiutato per averne una di troppo
+/// verrebbe rifiutato per la ragione sbagliata. I byte delle memorie e gli
+/// elementi delle tabelle ([`TABLE_CEILING`]) sono i tetti il cui significato
+/// non cambia da una catena all'altra.
 ///
-/// `trap_on_grow_failure` resta spento. Con lui acceso un `memory.grow` che non
+/// Al tetto dell'istanza `memory.grow` resta spento come trap. Con lui acceso un `memory.grow` che non
 /// riesce diventa subito un trap col messaggio di wasmtime; spento, restituisce
 /// `-1` come dice la specifica, e il plugin ha la sua occasione di rispondere
 /// «non c'è posto» con un `plugin-error`, che è un valore del contratto — la
@@ -313,12 +404,76 @@ fn tick(engine: Engine) {
 /// la sa usare — ed è il caso dell'allocatore di default di Rust, che chiama
 /// `handle_alloc_error` e aborta — trappa da sé una riga dopo, con lo stesso
 /// esito. Accendere l'opzione toglierebbe qualcosa al primo senza dare niente al
-/// secondo.
-pub(crate) fn ceiling() -> StoreLimits {
-    StoreLimitsBuilder::new()
-        .memory_size(MEMORY_CEILING)
-        .table_elements(TABLE_CEILING)
-        .build()
+/// secondo. Il tetto del processo invece è una trap ([`MemoryBudgetExceeded`]):
+/// lì la colpa non è dell'istanza, e l'errore deve dire che cosa è finito.
+#[derive(Debug)]
+pub(crate) struct Limiter {
+    pool: &'static MemoryPool,
+    /// I byte di tutte le memorie lineari di questo store, presi dal pool.
+    held: usize,
+    /// L'ultima crescita concessa: se wasmtime poi non riesce a farla
+    /// (`memory_grow_failed`), torna al pool.
+    pending: usize,
+}
+
+impl Limiter {
+    pub(crate) fn new(pool: &'static MemoryPool) -> Self {
+        Self {
+            pool,
+            held: 0,
+            pending: 0,
+        }
+    }
+}
+
+impl Drop for Limiter {
+    fn drop(&mut self) {
+        self.pool.give_back(self.held);
+    }
+}
+
+impl ResourceLimiter for Limiter {
+    fn memory_growing(
+        &mut self,
+        current: usize,
+        desired: usize,
+        maximum: Option<usize>,
+    ) -> wasmtime::Result<bool> {
+        self.pending = 0;
+        if maximum.is_some_and(|max| desired > max) {
+            return Ok(false);
+        }
+        let grow = desired.saturating_sub(current);
+        let total = self.held.saturating_add(grow);
+        if total > MEMORY_CEILING {
+            return Ok(false);
+        }
+        self.pool.take(grow)?;
+        self.held = total;
+        self.pending = grow;
+        Ok(true)
+    }
+
+    fn memory_grow_failed(&mut self, _error: wasmtime::Error) -> wasmtime::Result<()> {
+        self.held -= self.pending;
+        self.pool.give_back(self.pending);
+        self.pending = 0;
+        Ok(())
+    }
+
+    fn table_growing(
+        &mut self,
+        _current: usize,
+        desired: usize,
+        maximum: Option<usize>,
+    ) -> wasmtime::Result<bool> {
+        Ok(desired <= TABLE_CEILING && maximum.is_none_or(|max| desired <= max))
+    }
+}
+
+/// Il limitatore di una nuova istanza, sul pool del processo.
+pub(crate) fn ceiling() -> Limiter {
+    Limiter::new(&PROCESS_POOL)
 }
 
 /// Mette scadenza e tetto a un'istanza appena creata.
@@ -359,9 +514,12 @@ pub(crate) fn renew(store: &mut Store<State>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{arm, engine, TABLE_CEILING};
+    use super::{
+        arm, engine, Limiter, MemoryBudgetExceeded, MemoryPool, MEMORY_CEILING,
+        PROCESS_MEMORY_CEILING, TABLE_CEILING,
+    };
     use crate::borrow::State;
-    use wasmtime::{Instance, Module, Store};
+    use wasmtime::{Instance, Module, ResourceLimiter, Store};
 
     /// Un modulo con una tabella di funzioni da un elemento e una funzione che
     /// la fa crescere: `(func (export "grow") (param i32) (result i32)
@@ -404,6 +562,122 @@ mod tests {
             grow.call(&mut store, 1).unwrap(),
             10_001,
             "il rifiuto non ha cambiato la tabella"
+        );
+    }
+
+    /// Un modulo con **due** memorie lineari, senza massimo, e una funzione
+    /// che fa crescere ciascuna: `grow0` e `grow1`, `(param i32) (result
+    /// i32)`, `memory.grow 0` e `memory.grow 1`.
+    const TWO_MEMORIES: &[u8] = &[
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // intestazione
+        0x01, 0x06, 0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f, // tipo (i32) -> i32
+        0x03, 0x03, 0x02, 0x00, 0x00, // due funzioni di quel tipo
+        0x05, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00, // due memorie, minimo 0
+        0x07, 0x11, 0x02, // due export
+        0x05, b'g', b'r', b'o', b'w', b'0', 0x00, 0x00, // "grow0" → funzione 0
+        0x05, b'g', b'r', b'o', b'w', b'1', 0x00, 0x01, // "grow1" → funzione 1
+        0x0a, 0x0f, 0x02, // due corpi
+        0x06, 0x00, 0x20, 0x00, 0x40, 0x00, 0x0b, // memory.grow 0 (local.get 0)
+        0x06, 0x00, 0x20, 0x00, 0x40, 0x01, 0x0b, // memory.grow 1 (local.get 0)
+    ];
+
+    /// Pagine di 64 KiB in un tetto di byte.
+    fn pages(bytes: usize) -> i32 {
+        i32::try_from(bytes / 65_536).unwrap()
+    }
+
+    struct Grower {
+        store: Store<Limiter>,
+        grow: [wasmtime::TypedFunc<i32, i32>; 2],
+    }
+
+    impl Grower {
+        fn new(pool: &'static MemoryPool) -> Self {
+            let engine = engine();
+            let module = Module::new(&engine, TWO_MEMORIES).expect("the module compiles");
+            let mut store = Store::new(&engine, Limiter::new(pool));
+            store.limiter(|limiter| limiter as &mut dyn ResourceLimiter);
+            store.set_epoch_deadline(super::TIMEOUT_IN_TICKS);
+            let instance =
+                Instance::new(&mut store, &module, &[]).expect("the module instantiates");
+            let grow = ["grow0", "grow1"].map(|name| {
+                instance
+                    .get_typed_func::<i32, i32>(&mut store, name)
+                    .expect("exported")
+            });
+            Grower { store, grow }
+        }
+
+        fn grow(&mut self, memory: usize, pages: i32) -> wasmtime::Result<i32> {
+            self.grow[memory].call(&mut self.store, pages)
+        }
+    }
+
+    /// **Le memorie di un'istanza stanno sotto un tetto solo.** Prima il tetto
+    /// valeva per memoria, e un componente con due memorie arrivava al doppio.
+    #[test]
+    fn two_memories_share_the_instance_ceiling() {
+        static POOL: MemoryPool = MemoryPool::new(PROCESS_MEMORY_CEILING);
+        let mut grower = Grower::new(&POOL);
+        let half = pages(MEMORY_CEILING) / 2 + 100;
+        assert_eq!(
+            grower.grow(0, half).unwrap(),
+            0,
+            "una memoria sotto il tetto cresce"
+        );
+        assert_eq!(
+            grower.grow(1, half).unwrap(),
+            -1,
+            "la seconda memoria passerebbe il tetto dell'istanza: -1, come per una"
+        );
+        let rest = pages(MEMORY_CEILING) - half;
+        assert_eq!(grower.grow(1, rest).unwrap(), 0, "fino al tetto, sì");
+        assert_eq!(grower.grow(0, 1).unwrap(), -1, "e poi più niente");
+        assert_eq!(POOL.used(), MEMORY_CEILING);
+        drop(grower);
+        assert_eq!(
+            POOL.used(),
+            0,
+            "lo store che muore restituisce la sua memoria"
+        );
+    }
+
+    /// **Tutte le istanze del processo stanno sotto un tetto comune.** Oltre,
+    /// la crescita è una trap con l'errore tipizzato, e la memoria di uno store
+    /// che muore torna disponibile.
+    #[test]
+    fn the_process_pool_refuses_with_a_typed_error_and_takes_memory_back() {
+        const POOL_BYTES: usize = 100 * 65_536;
+        static POOL: MemoryPool = MemoryPool::new(POOL_BYTES);
+        let mut first = Grower::new(&POOL);
+        let mut second = Grower::new(&POOL);
+        assert_eq!(first.grow(0, 60).unwrap(), 0);
+        let error = second.grow(0, 60).expect_err("oltre il pool del processo");
+        let budget = error
+            .downcast_ref::<MemoryBudgetExceeded>()
+            .expect("la trap porta l'errore tipizzato");
+        assert_eq!(
+            *budget,
+            MemoryBudgetExceeded {
+                asked: 60 * 65_536,
+                used: 60 * 65_536,
+                ceiling: POOL_BYTES
+            }
+        );
+        assert!(matches!(
+            crate::component::failure(error),
+            fub_abi::PluginError::Internal(text)
+                if text.as_message().is_some_and(|m| m.key == "host.wasm.memory_budget")
+        ));
+        assert_eq!(POOL.used(), 60 * 65_536, "il rifiuto non ha preso niente");
+        drop(first);
+        drop(second);
+        assert_eq!(POOL.used(), 0);
+        let mut third = Grower::new(&POOL);
+        assert_eq!(
+            third.grow(1, 60).unwrap(),
+            0,
+            "la memoria restituita torna disponibile"
         );
     }
 }
