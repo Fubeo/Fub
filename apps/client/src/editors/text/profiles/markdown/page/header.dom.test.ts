@@ -114,11 +114,12 @@ describe("la testata in Scrittura", () => {
     expect(view.contentDOM.textContent).toContain("tipo: Progetto");
   });
 
-  it("un valore apre lo YAML sulla sua riga, e la testata cede il posto", () => {
-    const view = mount(NOTE);
+  it("un valore che la testata non sa riscrivere apre lo YAML sulla sua riga, e la testata cede il posto", () => {
+    // Un commento in coda: riscriverlo lo perderebbe (T8 scrive solo le voci semplici).
+    const view = mount(NOTE.replace("stato: In corso", "stato: In corso # da rivedere"));
     header(view).querySelector<HTMLElement>("[data-key=stato] .cm-fub-page-prop-value")!.click();
     const line = view.state.doc.lineAt(view.state.selection.main.head);
-    expect(line.text).toBe("stato: In corso");
+    expect(line.text).toBe("stato: In corso # da rivedere");
     expect(view.state.selection.main.head).toBe(line.to);
     expect(header(view).querySelector(".cm-fub-page-props")).toBeNull();
     expect(view.contentDOM.textContent).toContain("stato: In corso");

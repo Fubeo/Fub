@@ -118,6 +118,18 @@ describe("il primo H1 in Scrittura", () => {
     expect(shown(view)).not.toContain("Mostra");
   });
 
+  it("il cursore dell'apertura, prima dell'H1 nascosto, scende sotto con la prima modifica che non si batte", () => {
+    for (const doc of ["# Mostra\n", "# Mostra\n\nTesto"]) {
+      const view = mount(doc, page("Mostra"));
+      expect(view.state.selection.main.head).toBe(0);
+      // Il testo appeso da un altro riquadro: in fondo, nessun gesto qui.
+      view.dispatch({ changes: { from: view.state.doc.length, insert: "\naltro" } });
+      expect(view.state.doc.toString(), doc).toBe(`${doc}\naltro`);
+      expect(view.state.selection.main.head, doc).toBe("# Mostra\n\n".length);
+      expect(shown(view), doc).not.toContain("Mostra");
+    }
+  });
+
   it("una selezione che ci entra lo rivede: niente si scrive al buio", () => {
     const view = mount("# Mostra\n\nTesto", page("Mostra"));
     view.dispatch({ selection: { anchor: 3 } });

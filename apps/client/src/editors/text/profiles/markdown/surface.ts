@@ -17,7 +17,9 @@ import { onLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
 import { blocksMode, pageArrives, plainMode, type BlocksOptions } from "./blocks";
-import { retitleView } from "./blocks/page";
+import { refreshPageHeader, retitleView } from "./blocks/page";
+import { NO_TYPES, parsePropertyTypes, sameTypes, type PropertyTypes } from "./page/properties/kind";
+import { api } from "../../../../host/ipc";
 import { keepTitle } from "./page/title";
 import { selectBlockThenAll, selectBody } from "./blocks/keys";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
@@ -273,6 +275,8 @@ let proofModule: typeof import("./proof") | null = null;
 const FOLLOW_QUIET_MS = 150;
 const STRICT_LINE_BREAKS_KEY = "editor.strict-line-breaks";
 const RTL_KEY = "editor.rtl";
+/// Il registro dei tipi delle proprietà del vault (`fub-kernel`, `TYPES`).
+const PROPERTY_TYPES_KEY = "properties.types";
 
 /// I titoli della pagina, fuori dai blocchi di codice: l'anteprima
 /// dell'Indice nel «/» mostra questi.
@@ -563,6 +567,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // questa superficie, e ogni cambio, li accendono o spengono senza riaprire
   // la nota. La testata della pagina è la stessa in Scrittura e in Lettura
   // (`page/header.ts`): le stesse opzioni per tutte e due.
+  // Il registro dei tipi delle proprietà: lo legge la lettura delle
+  // impostazioni di questa superficie, e ogni suo cambio rifà la testata.
+  let propertyTypes: PropertyTypes = NO_TYPES;
+  let propertyTypesRaw: unknown = undefined;
   const pageOptions: PageOptions = {
     page: () => pageName(resources?.documentId ?? documentId),
     notify: (message, tone) => notify(message, tone),
@@ -576,6 +584,23 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     subpage: opts.onNewSubpage
       ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
       : undefined,
+    propertyTypes: () => propertyTypes,
+    // «Tipo» nel menu di una proprietà: vale per tutto il vault, ed è il
+    // comando del registro (`property.type.set`) a scriverlo.
+    setPropertyType: async (key, type) => {
+      try {
+        await api.invokeCommand("property.type.set", { key, type }, "apply");
+        void readSurfaceSettings();
+        return null;
+      } catch (error) {
+        return errorText(error);
+      }
+    },
+    // Le persone: la cartella delle persone, se c'è; se no le note.
+    searchPeople: (text) => {
+      const people = opts.completions.people;
+      return people && people.folder() !== "" ? people.search(text) : opts.completions.searchNotes(text);
+    },
   };
   const blocksOptions: BlocksOptions = {
     ...pageOptions,
@@ -716,11 +741,20 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     else delete parent.dataset.lineBreaks;
     if (entries.find((entry) => entry.spec.key === RTL_KEY)?.value === true) reading.dir = "rtl";
     else reading.removeAttribute("dir");
+    const types = entries.find((entry) => entry.spec.key === PROPERTY_TYPES_KEY)?.value;
+    if (types !== propertyTypesRaw) {
+      propertyTypesRaw = types;
+      const next = parsePropertyTypes(types);
+      if (!sameTypes(next, propertyTypes)) {
+        propertyTypes = next;
+        engine.runViewCommand((view) => refreshPageHeader(view));
+      }
+    }
     setBlocks(rememberBlocks(entries));
   };
   void readSurfaceSettings();
   life.add(onEvent("setting_changed", (event) => {
-    if (event.key === STRICT_LINE_BREAKS_KEY || event.key === RTL_KEY || event.key === EDITOR_BLOCKS_KEY) void readSurfaceSettings();
+    if (event.key === STRICT_LINE_BREAKS_KEY || event.key === RTL_KEY || event.key === EDITOR_BLOCKS_KEY || event.key === PROPERTY_TYPES_KEY) void readSurfaceSettings();
   }));
 
   // Accendere o spegnere i blocchi riconfigura soltanto Scrittura, sulla

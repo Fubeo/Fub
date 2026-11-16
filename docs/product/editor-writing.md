@@ -132,19 +132,56 @@ sono icona, copertina, titolo e menu «⋯» lo dice la
   dell'ultima, come la legge YAML. Il nome lungo si taglia e si legge intero
   al passaggio; il valore va a capo, senza il commento in coda. Un valore
   vuoto si legge «Vuoto».
+- **Il tipo** di una riga lo dice la figura davanti al nome e decide come si
+  legge e si scrive il valore. Vince il registro dei tipi del vault
+  (`properties.types`, con `tags`, `aliases` e `cssclasses` convenzionali);
+  senza dichiarazione il tipo si legge dal valore: casella (`true`/`false`
+  nudi), numero, data (`aaaa-mm-gg` che esiste), data e ora, indirizzo,
+  elenco, persone (un elenco di soli `[[link]]`), testo. Un valore che non
+  torna col tipo dichiarato resta testo, sottolineato, e dice «Non è numero:
+  resta testo»; non si riscrive niente per farlo tornare. Selezione e Stato si
+  scrivono intanto come testo. La data si legge per esteso nella lingua
+  dell'interfaccia; le persone hanno il tondo delle iniziali, le voci di un
+  elenco e le etichette sono pastiglie.
 - **`editor.properties`** decide quanto se ne vede: `visible` (il default) le
   mostra come sopra, `hidden` le mette tutte dietro «Altre N», `source` lascia
   lo YAML sotto il titolo, senza righe. In Lettura vale lo stesso,
   all'apertura.
-- **Scrivere.** In Scrittura il clic su un valore apre lo YAML sulla sua riga,
-  col cursore in fondo: la testata cede il posto alle righe del frontmatter
-  finché il cursore ci sta. «Aggiungi una proprietà» apre una riga vuota prima
+- **Scrivere.** In Scrittura il clic su un valore (o Invio col fuoco sopra)
+  apre l'editor del suo tipo. Testo, numero e indirizzo si scrivono al posto
+  del valore: Invio o l'uscita dal campo scrivono, Esc torna a prima; un
+  numero si accetta anche all'italiana (`12,5`) e ciò che non è un numero non
+  si scrive. La casella si spunta col clic. La data apre un riquadro con il
+  campo (ISO o `gg/mm/aaaa`, con l'ora), le scelte rapide (il giorno
+  stesso, l'indomani, fra una settimana, il venerdì), il mese da scorrere con le frecce e Pagina su/giù,
+  «Togli la data» e «Aggiungi l'ora». Elenco ed etichette aprono le voci con
+  la «×» e un campo: Invio aggiunge (più voci separate da virgola), Backspace
+  nel campo vuoto toglie l'ultima. Le persone aprono una ricerca fra le note
+  (la cartella delle persone, se c'è): chi è scelto sta in cima, un clic o
+  Invio mette o toglie, un nome che non si trova si aggiunge come link. Ogni
+  modifica è una scrittura sola nel frontmatter della nota, con un passo
+  d'annullamento suo; la voce tiene la sua chiave, la sua forma (in riga o una
+  voce per riga) e le virgolette dove YAML le vuole. Se il valore cambia
+  mentre l'editor è aperto (un altro riquadro, il file da fuori) non si
+  scrive: l'editor resta con ciò che si scriveva e lo dice, e una seconda
+  conferma scrive. Una voce che un editor non saprebbe riscrivere senza
+  perdere niente (un commento, una mappa, un testo su più righe) apre lo YAML
+  sulla sua riga, come prima: la testata cede il posto alle righe del
+  frontmatter finché il cursore ci sta.
+- **Il menu della proprietà** si apre dal nome (o col menu contestuale, o
+  Shift+F10, sul valore) e dice nome e tipo: «Rinomina» cambia la chiave in
+  questa nota (un nome già preso lo dice); «Tipo» dichiara il tipo nel
+  registro del vault, per tutte le note, col comando `property.type.set`;
+  «Metti in evidenza» porta la voce fra le prime quattro, «Togli
+  dall'evidenza» in fondo al frontmatter (con quattro voci o meno sono tutte
+  in evidenza e il menu non lo offre); «Togli dalla nota» toglie la voce con
+  le sue righe. «Aggiungi una proprietà» apre una riga vuota prima
   della chiusura (o crea il frontmatter); «Aggiungi una descrizione», fra gli
   strumenti al passaggio, scrive `description: ` e ci porta il cursore. Gli
   strumenti stanno in una riga sola, alta 28 px: quelli che non ci stanno si
-  nascondono dalla fine e il menu «⋯», sempre l'ultimo, li offre in cima. Gli
-  editor dei valori per tipo arriveranno; in Lettura le righe si leggono e
-  basta, «Altre N» compreso, senza strumenti né «Aggiungi».
+  nascondono dalla fine e il menu «⋯», sempre l'ultimo, li offre in cima. In
+  Lettura e in sola lettura le righe si leggono e basta, «Altre N» compreso,
+  senza editor, menu, strumenti né «Aggiungi».
 - **La copertina** è un'immagine del vault, un indirizzo o un colore
   (`cover: "#a3c4f3"`); è alta 112 px (110 al telefono) ed esce dalla colonna
   fino ai bordi della pagina. Al passaggio offre «Cambia copertina» e, per
@@ -345,4 +382,14 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
   (`retitleView`), `page/header.ts` lo segna in Lettura e
   `skin/document.css` lo nasconde; `shells/scrittoio/sheets/title-rename.ts`
   lo riscrive dopo la rinomina dal titolo del foglio;
-- `apps/client/bench/scene.mjs`: la scena `scrittura-a-riposo`.
+- `apps/client/src/editors/text/profiles/markdown/page/properties/`: le
+  righe delle proprietà (`row.ts`), il tipo di una riga e il registro
+  (`kind.ts`), gli editor dei tipi (`editors.ts`), il menu della proprietà
+  (`menu.ts`) e ciò che li lega alla nota (`values.ts`, `PropertyRowHost`);
+  `markdown/properties.ts` legge e riscrive le voci del frontmatter
+  (`setProperty`, `renamePropertyKey`, `moveEntryBefore`), `blocks/page.ts`
+  le scrive con un passo d'annullamento e controlla l'impronta
+  (`writePropertyChecked`), `surface.ts` legge il registro e cabla «Tipo» e la
+  ricerca delle persone;
+- `apps/client/bench/scene.mjs`: la scena `scrittura-a-riposo` e le scene
+  `proprieta-*` (gli editor dei tipi).

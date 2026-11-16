@@ -42,6 +42,8 @@ import {
 import { animate, halt, liveState, type Motion, motionLevel, onFrame } from "../../../../../moto";
 import { markPresence } from "../../../../core/presence";
 import type { Teardown } from "../../../../../ui/lifetime";
+import type { PropertyType } from "../../../../../host/enums.generated";
+import type { PropertyTypes } from "../page/properties/kind";
 
 export interface BlocksOptions {
   /// Il nome della pagina, per il link al blocco: `[[Pagina#^id]]`.
@@ -61,6 +63,15 @@ export interface BlocksOptions {
   /// lo è già, e lì nasce `name`. `null` se è andata, altrimenti la frase che
   /// dice perché no. Senza, la testata non la offre.
   readonly subpage?: (name: string) => Promise<string | null>;
+  /// Il registro dei tipi delle proprietà del vault, per gli editor della
+  /// testata (`page/properties/`).
+  readonly propertyTypes?: () => PropertyTypes;
+  /// Dichiara il tipo di una proprietà per il vault (`property.type.set`):
+  /// `null` se è andata, altrimenti il perché no. Senza, il menu della
+  /// proprietà non offre «Tipo».
+  readonly setPropertyType?: (key: string, type: PropertyType) => Promise<string | null>;
+  /// Le persone il cui nome combacia col testo, per l'editor delle persone.
+  readonly searchPeople?: (text: string) => Promise<string[]>;
   /// Esc è di chi ospita l'editor, che con lui ne esce (una scheda della
   /// lavagna): sul testo Esc non seleziona il blocco del cursore e passa
   /// all'ospite; una selezione di blocchi già fatta la chiude ancora.
