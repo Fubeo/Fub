@@ -119,8 +119,8 @@ pub struct ServiceState {
     pub data_dir: PathBuf,
     pub config: ServicesConfig,
     pub accounts: AccountStore,
-    /// Rate limiting login (chiave: il nome dato al login).
-    pub logins: crate::mfa::LoginRateLimit,
+    /// Rate limiting login: (nome, origine), origine e nome ([`crate::mfa::LoginLimits`]).
+    pub logins: crate::mfa::LoginLimits,
     /// Rate limiting dei codici TOTP (chiave: l'`account_id`). È un limite a
     /// parte perché la chiave del login la sceglie chi chiama: nella stessa
     /// mappa, login falliti col nome giusto esaurirebbero i tentativi TOTP di
@@ -158,7 +158,7 @@ impl ServiceState {
             data_dir,
             config,
             accounts,
-            logins: crate::mfa::LoginRateLimit::new(),
+            logins: crate::mfa::LoginLimits::new(),
             totp_attempts: crate::mfa::LoginRateLimit::new(),
             acls: BTreeMap::new(),
             abuse: std::sync::Arc::default(),

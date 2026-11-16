@@ -326,3 +326,25 @@ fn parser_stops_collecting_fields_at_max_cols() {
     });
     assert_eq!(lens, vec![MAX_COLS as usize]);
 }
+
+#[test]
+fn a_field_that_looks_like_a_formula_is_written_as_text() {
+    use crate::defuse_formula;
+    for risky in ["=1+1", "=cmd|' /C calc'!A0", "+1+1", "-2+3", "@SUM(A1)", "\tx", "\rx", "  =1+1", "-", "-x", "+", "-1-1", "-1e", "--1", "- 1"] {
+        assert_eq!(defuse_formula(risky), format!("'{risky}"), "{risky:?}");
+    }
+    for plain in ["", "x", "1+1", "'=1", "-5", "+3.5", "-1,234.50", "-12%", "-1.5E+10", "-.5", "1 234", "a=b"] {
+        assert_eq!(defuse_formula(plain), plain, "{plain:?}");
+    }
+    let mut s = Sheet::new("S");
+    s.set_value(CellRef::new(0, 0), Value::text("=HYPERLINK(\"http://x\",\"y\")"));
+    s.set_value(CellRef::new(0, 1), Value::text("@SUM(A1)"));
+    s.set_value(CellRef::new(0, 2), Value::text("-5"));
+    let out = String::from_utf8(write_csv(&s, b',', text_of(&s)).unwrap()).unwrap();
+    assert_eq!(out, "\"'=HYPERLINK(\"\"http://x\"\",\"\"y\"\")\",'@SUM(A1),-5\r\n");
+    // The cap measures the field as written, apostrophe included.
+    let mut one = Sheet::new("O");
+    one.set_value(CellRef::new(0, 0), Value::text("=1"));
+    assert!(write_csv_limited(&one, b',', 4, text_of(&one)).is_err());
+    assert_eq!(write_csv_limited(&one, b',', 5, text_of(&one)).unwrap(), b"'=1\r\n");
+}
