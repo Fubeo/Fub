@@ -976,6 +976,7 @@
     "base-map-marker",
     "canvas-surface",
     "canvas-toolbar",
+    "canvas-toolbar-item",
     "canvas-intake-error",
     "canvas-viewport",
     "canvas-large-fallback",
@@ -2834,6 +2835,7 @@
     "base-map-marker": "contenuto",
     "canvas-surface": "cornice",
     "canvas-toolbar": "cornice",
+    "canvas-toolbar-item": "cornice",
     "canvas-intake-error": "cornice",
     "canvas-viewport": "contenuto",
     "canvas-large-fallback": "cornice",
@@ -6274,6 +6276,8 @@
       "hooks": [
         "canvas-surface",
         "canvas-toolbar",
+        "canvas-toolbar-item",
+        "kit-options-row",
         "canvas-intake-error",
         "canvas-viewport",
         "canvas-large-fallback",
@@ -10003,7 +10007,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1856,
+    "hooks": 1857,
     "state_names": 7,
     "assigned_states": 867,
     "components": 257,

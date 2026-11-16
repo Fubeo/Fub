@@ -2898,6 +2898,7 @@ export const IT = { // --- la scocca -------------------------------------------
   // La riga delle opzioni della lavagna (T50).
   "canvas.options": "Opzioni dello strumento",
   "canvas.options.more": "Altre opzioni",
+  "canvas.toolbar.more": "Altri comandi",
   "canvas.options.off": "{name}. {why}",
   "canvas.options.select_hint": "Scegli una scheda, o trascina nel vuoto per sceglierne più d'una.",
   "canvas.options.select_hint_pan": "Scegli una scheda. Trascina nel vuoto per spostare la vista.",
@@ -6684,6 +6685,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   // The canvas options row (T50).
   "canvas.options": "Tool options",
   "canvas.options.more": "More options",
+  "canvas.toolbar.more": "More commands",
   "canvas.options.off": "{name}. {why}",
   "canvas.options.select_hint": "Select a card, or drag on empty space to select several.",
   "canvas.options.select_hint_pan": "Select a card. Drag on empty space to move the view.",

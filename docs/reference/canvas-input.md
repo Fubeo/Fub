@@ -481,6 +481,14 @@ barra di formato della nota (T41) e della formula della cella (T42).
 La barra di sotto, quella di N4, tiene ciò che non è ancora passato altrove:
 «Scrivi col mouse», aggiungi, duplica, togli, inquadra la selezione, i fili e
 il colore esatto (`#rrggbb`) delle schede.
+È anche lei la fila del kit (`kit/options-bar.ts`): una riga sola che non
+scorre di lato, e quando non c'è posto i comandi più a destra vanno in «…»
+(«Altri comandi»), un popover con gli stessi pulsanti; gli avvisi della barra
+(l'errore dell'ultimo gesto, «Scheda tolta» con «Annulla») escono per ultimi.
+La riga ha un solo punto di tabulazione e le frecce (`kit/toolbar-keys.ts`),
+«…» compreso; nel popover Su e Giù passano da un comando all'altro ed Esc lo
+chiude e riporta il fuoco su «…». La riga si rifà quando la barra cambia
+misura.
 
 ## La barra della selezione
 
