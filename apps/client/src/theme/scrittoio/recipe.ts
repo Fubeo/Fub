@@ -177,6 +177,18 @@ function raiseShadow(light: Light): string {
     : "0 0 0 1px rgb(255 255 255 / 6%), 0 1px 3px rgb(0 0 0 / 50%)";
 }
 
+/// L'ombra di ciò che si apre sopra tutto (`--shadow-pop`): il lanciatore,
+/// poi i menu. Un anello sottile che la tiene staccata anche su un fondo
+/// uguale, e un'ombra lunga che scende sotto il bordo. Sono i valori del
+/// prototipo (`--sh-pop`): di giorno l'inchiostro verde scuro in tre parti, di
+/// notte un filo di luce e un nero profondo. Come le altre ombre, col
+/// contrasto alto gli stessi valori.
+function popShadow(light: Light): string {
+  return light === "light"
+    ? "0 0 0 1px rgb(20 44 30 / 8%), 0 4px 12px rgb(20 44 30 / 8%), 0 18px 44px -10px rgb(20 44 30 / 24%)"
+    : "0 0 0 1px rgb(255 255 255 / 7%), 0 18px 48px -8px rgb(0 0 0 / 70%)";
+}
+
 /// L'ombra del foglio appoggiato sulla scrivania (`--shadow-sheet`, e
 /// `--shadow-sheet-focus` per quello col fuoco, un passo più fondo): un
 /// contatto stretto, una penombra corta e una lunga. I due strati larghi hanno
@@ -498,6 +510,9 @@ export function palette(
     // Il foglio appena rialzato dentro un riquadro: facoltativo anche questo,
     // col ripiego di `shadow-1`.
     "shadow-raise": raiseShadow(light),
+    // Ciò che si apre sopra tutto: facoltativo, col ripiego che la pelle
+    // scrive accanto.
+    "shadow-pop": popShadow(light),
     "shadow-5": levels[4]!,
     "shadow-6": levels[5]!,
     "shadow-7": levels[6]!,
@@ -696,14 +711,14 @@ export const COLOR_TOKENS: readonly string[] = Object.keys(palette("light", "nor
 /**
  * I ruoli che la serie dichiara e che un tema può non dichiarare: i segni
  * sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un
- * file (`--paper-*`), la scrivania del disegno (`--draw-desk`), il vassoio della barra in una fila (`--bar-tray`), l'ombra del foglio (`--shadow-sheet`, `--shadow-sheet-focus`) e il rialzo più basso (`--shadow-raise`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
+ * file (`--paper-*`), la scrivania del disegno (`--draw-desk`), il vassoio della barra in una fila (`--bar-tray`), l'ombra del foglio (`--shadow-sheet`, `--shadow-sheet-focus`), il rialzo più basso (`--shadow-raise`) e ciò che si apre sopra tutto (`--shadow-pop`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
  * rifiutare ogni tema `theme-2` di oggi; chi non li dichiara ha il ripiego di
  * `structure.css`, e le loro coppie si contano solo quando ci sono
  * (`THEME_2_OPTIONAL_PAIRS`).
  */
 export const OPTIONAL_ROLES: readonly string[] = COLOR_TOKENS.filter(
   (name) => name.startsWith("paper-") || name.startsWith("doc-author-") || name.startsWith("doc-color-") || name.startsWith("doc-tint-") ||
-    ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk", "bar-tray", "shadow-sheet", "shadow-sheet-focus", "shadow-raise",
+    ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk", "bar-tray", "shadow-sheet", "shadow-sheet-focus", "shadow-raise", "shadow-pop",
       "doc-syntax-near", "doc-ghost", "doc-wavy", "doc-block-hover", "doc-block-selected", "doc-drop-line"].includes(name),
 );
 
