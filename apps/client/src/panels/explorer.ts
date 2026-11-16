@@ -6,7 +6,7 @@
 // ordine hanno i fratelli) sta in `rules/organizer.ts`, ed è pura e provata; il
 // dato sta nel sidecar (`state/organization.ts`). Qui c'è il DOM.
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE, type DraggedEntry } from "../ui/drag-types";
-import { revealSidePanel } from "../ui/side-panels";
+import { dismissSidePanel, revealSidePanel } from "../ui/side-panels";
 import { pickFromList, promptText } from "../ui/dialogs";
 import { vaultEntries, vaultFolders, folderContent, existingDocuments, settings, WITHOUT_PAGE } from "../host/query";
 import { pageIcon } from "../state/page-icons";
@@ -992,7 +992,7 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   name.textContent = pageName(id);
   row.appendChild(name);
 
-  row.addEventListener("click", () => void openDocument(id, { gesture: true }));
+  row.addEventListener("click", () => openChosen(id));
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     noteMenu(e, row, id);
@@ -1000,6 +1000,14 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   wireWarmup(row, id);
   if (opts.draggable) wireDrag(row, id, "note");
   return row;
+}
+
+/// Apre il documento scelto nell'albero. Se l'albero è un cassetto sopra i
+/// fogli, la scelta lo chiude subito: il documento si apre dove si vede, e il
+/// fuoco va a lui e non al foglio coperto dal velo (`desktop-shell.ts`).
+function openChosen(id: string): void {
+  dismissSidePanel("sidebar");
+  void openDocument(id, { gesture: true });
 }
 
 const FILE_ICONS: Record<ResourceKind, string> = {
@@ -1032,7 +1040,7 @@ function fileRow(id: string): HTMLElement {
   // importandolo: la finestra lo prepara, e niente si scrive prima di
   // «Importa».
   row.addEventListener("click", () => {
-    if (canShowFile(id)) void openDocument(id, { gesture: true });
+    if (canShowFile(id)) openChosen(id);
     else if (!(canImportFile(id) && importDrawing({ kind: "vault", path: id }))) notify(t("explorer.no_viewer", { name: childName(id) }), "info");
   });
   row.addEventListener("contextmenu", (e) => {
@@ -1136,7 +1144,7 @@ function fileMenu(at: MouseEvent, row: HTMLElement, id: string): void {
     ...(canImportFile(id) ? [{ label: t("explorer.import_drawing"), run: () => void importDrawing({ kind: "vault", path: id }) }] : []),
     ...(shown
       ? [
-          { label: t("explorer.open"), run: () => void openDocument(id, { gesture: true }) },
+          { label: t("explorer.open"), run: () => openChosen(id) },
           { label: t("explorer.open_beside"), run: () => void openDocumentBeside(id, "row") },
         ]
       : []),

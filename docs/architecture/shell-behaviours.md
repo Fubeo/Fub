@@ -99,6 +99,17 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   riquadro. Un documento lento da aprire (un `.docx` da impaginare) non toglie
   il fuoco al lanciatore, a un dialogo o a un campo aperti intanto, e il loro
   Invio non finisce nel documento.
+- **Cassetti sopra i fogli.** Sotto i 960 px l'albero, e sotto i 1200
+  l'ispettore, sono cassetti col velo (`desktop-shell.ts`), e il velo è
+  modale: la tastiera non arriva a ciò che copre. Scegliere un documento
+  dall'albero (clic, Invio, «Apri») chiude il cassetto subito, con lo stesso
+  moto di Esc e del clic sul velo, e il fuoco va al documento aperto invece di
+  tornare al bottone che aveva aperto il cassetto (`dismissSidePanel` in
+  `ui/side-panels.ts`). Qualunque fuoco che entra sotto il velo (l'editor
+  raggiunto da una voce dello schema o da un collegamento dell'ispettore, il
+  Tab che esce dal cassetto) chiude il cassetto prima che arrivi una battuta,
+  e resta dove è andato. Il fuoco sulla rail, sulla barra, in un menu o in un
+  dialogo, che stanno sopra il velo, lo lascia aperto.
 - **Menu contestuale estendibile.** Le view sulla superficie `context_menu`
   (`ui/context-views.ts`) si aggiungono in coda al menu di una nota, di una
   cartella o di un file dell'albero. Il bersaglio del clic non è nel contesto

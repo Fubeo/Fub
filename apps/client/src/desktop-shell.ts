@@ -306,8 +306,37 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
       panel.querySelector<HTMLElement>("input:not([disabled]), [tabindex='0'], button:not([disabled])")?.focus();
     }
   };
+  /// Il cassetto aperto, se c'è.
+  const openDrawerSide = (): SidePanel | null =>
+    layout.classList.contains("drawer-sidebar-open")
+      ? "sidebar"
+      : layout.classList.contains("drawer-inspector-open") ? "inspector" : null;
+  // Il velo è modale: la tastiera non arriva a ciò che copre. Quando il fuoco
+  // entra in qualcosa sotto il velo — l'editor di un documento appena scelto
+  // nel cassetto, una voce dello schema che porta al suo titolo, il Tab che
+  // esce dal cassetto — il cassetto si chiude, con lo stesso moto di Esc, e il
+  // fuoco resta dove è andato: non torna al lanciatore. Così, finché il
+  // cassetto è aperto, il fuoco sta nel cassetto o sopra il velo (rail,
+  // barra, menu, dialoghi), mai nel foglio coperto.
+  pageWindowLifetime.listen(document, "focusin", (event: FocusEvent) => {
+    const side = openDrawerSide();
+    const target = event.target;
+    if (!side || !(target instanceof Node) || !layout.contains(target)) return;
+    const panel = side === "sidebar" ? sidebar : inspector;
+    const divider = side === "sidebar" ? divSidebar : divInspector;
+    if (panel.contains(target) || divider?.contains(target)) return;
+    closeDrawers(false);
+    applyAdaptive();
+  });
   life.add(setSidePanelController({
     visible: (side) => !(side === "sidebar" ? sidebar : inspector).hidden,
+    dismiss: (side) => {
+      // Chi ha scelto nel cassetto porta il fuoco dove ha scelto: il
+      // lanciatore non lo riprende.
+      if (openDrawerSide() !== side) return;
+      closeDrawers(false);
+      applyAdaptive();
+    },
     reveal: (side) => {
       if (isDrawer(side)) {
         if (!layout.classList.contains(`drawer-${side}-open`)) openDrawer(side);
