@@ -79,6 +79,16 @@ export function createPreview(lifetime: Lifetime): Preview {
   const sheet = document.createElement("div");
   sheet.className = "launcher-preview-sheet";
   sheet.append(page);
+  /// Un foglio senza niente dentro non si vede (`launcher.css`): lo dice
+  /// `data-empty`, scritto dopo ogni cambio della pagina e solo quando lo stato
+  /// cambia. Non un `:has(> .launcher-preview-page:empty)`, che WebKit
+  /// ricontrollerebbe a ogni testo cambiato nella finestra
+  /// (`docs/product/performance-webview.md`).
+  const mark = (): void => {
+    const bare = page.firstChild === null;
+    if (sheet.hasAttribute("data-empty") !== bare) sheet.toggleAttribute("data-empty", bare);
+  };
+  mark();
   // Sotto il foglio, i dati della nota: dove sta e quando è cambiata l'ultima
   // volta. La cartella si legge dal nome; la data si chiede all'anagrafe
   // della sua cartella (`modifiedFromEntries`, la stessa della riga dei dati
@@ -154,6 +164,7 @@ export function createPreview(lifetime: Lifetime): Preview {
       if (page.childElementCount === 0) {
         say(null);
         page.append(skeleton(SKELETON_LINES));
+        mark();
       }
     }, PREVIEW_SLOW_MS);
     // Una resa superata da una riga più nuova non arriva a disegnarsi; il
@@ -168,10 +179,12 @@ export function createPreview(lifetime: Lifetime): Preview {
       settle();
       if (outcome === null) {
         page.replaceChildren();
+        mark();
         say(t("launcher.preview.failed"));
         return;
       }
       setSanitizedHtml(page, outcome.html);
+      mark();
       const empty = (page.textContent ?? "").trim() === "" && page.querySelector(NOT_TEXT) === null;
       say(empty ? t("launcher.preview.empty") : null);
     });
@@ -195,6 +208,7 @@ export function createPreview(lifetime: Lifetime): Preview {
       showModified(doc === null ? null : modified.get(doc));
       if (doc === null || mediaFile(doc)) {
         page.replaceChildren();
+        mark();
         say(doc === null ? null : t("launcher.preview.file"));
         return;
       }

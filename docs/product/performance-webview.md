@@ -71,9 +71,11 @@ ricostruiva da capo: un blocco del thread da 130 a 210 ms circa 100 ms dopo
   `.setting-row:has(.setting-diagnostic:not(:empty)) + *` delle impostazioni
   faceva ricontrollare tutta la finestra: 10–26 ms per ogni testo dello stato
   di salvataggio, in proporzione ai nodi. Uno stato che serve a un selettore lo
-  scrive il codice come attributo (`data-issue` sulla riga della scorciatoia).
-  Le guardie sono `structure.test.ts`, che rifiuta `:empty` dentro `:has()` in
-  ogni foglio del client, e `settings.shortcuts.test.ts`.
+  scrive il codice come attributo (`data-issue` sulla riga della scorciatoia,
+  `data-empty` sul foglio dell'anteprima del lanciatore quando la pagina non
+  ha nodi). Le guardie sono `structure.test.ts`, che rifiuta `:empty` dentro
+  `:has()` in ogni foglio di `apps/client/src/`, `settings.shortcuts.test.ts`
+  e `launcher.test.ts`.
 
 Misura con una sonda sull'ispettore remoto di WebKit (senza WebDriver) nell'app vera,
 pc-debian-di-fub, 16 novembre 2026, nota lunga (5000 righe con rimandi), 20
