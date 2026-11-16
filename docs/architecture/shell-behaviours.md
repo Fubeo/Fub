@@ -97,6 +97,10 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   una linguetta di nota diventa finestra, solo con
   `platformSupports("multipleWindows")` e dove il motore consegna `dragend`
   fuori finestra. Ogni gesto ha il suo comando nel menu della linguetta.
+  Chiusa, aperta o spostata una linguetta, le altre (e il «+») scorrono dal
+  posto di prima a quello nuovo in un passo solo: la misura è già quella
+  finale dal primo fotogramma e si muove solo una trasformazione; col moto
+  ridotto il passo è uno scatto unico (`shells/scrittoio/sheets/tab-strip.ts`).
 - **Fuoco dopo un'apertura.** Quando `openDocument` finisce, il fuoco va
   all'editor del documento aperto, ma solo se nel frattempo nessuno l'ha
   portato altrove: se sta ancora dov'era al gesto, da nessuna parte o in un
