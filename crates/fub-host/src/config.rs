@@ -293,16 +293,25 @@ fn system_config_dir(
         System::Apple => env("HOME").map(|home| home.join("Library").join("Application Support")),
         // Solo un percorso assoluto: uno relativo vorrebbe dire scrivere
         // rispetto alla directory di lavoro, che su Android è `/`.
-        System::Android => env(ANDROID_FILES_DIR_VAR).filter(|p| p.is_absolute()),
+        System::Android => env(ANDROID_FILES_DIR_VAR).filter(|p| unix_absolute(p)),
         // XDG: la variabile se c'è, il fallback che la specifica stessa
         // dichiara se non c'è. Un `XDG_CONFIG_HOME` **relativo** va ignorato
         // per specifica, e ignorarlo qui vuol dire non scrivere in una
         // cartella a caso relativa alla directory di lavoro di chi ha lanciato
         // l'app.
         System::Xdg => env("XDG_CONFIG_HOME")
-            .filter(|p| p.is_absolute())
+            .filter(|p| unix_absolute(p))
             .or_else(|| env("HOME").map(|home| home.join(".config"))),
     }
+}
+
+/// «Assoluto» secondo il sistema della convenzione, non secondo quello che
+/// compila: Android e gli Unix XDG vogliono un percorso che comincia da `/`.
+/// `Utf8Path::is_absolute` risponde per la macchina che esegue, e su Windows
+/// direbbe relativo `/data/user/0/...` (manca l'unità), così i test dei rami
+/// Unix cadrebbero lì pur essendo giusti.
+fn unix_absolute(path: &Utf8Path) -> bool {
+    path.as_str().starts_with('/')
 }
 
 #[cfg(test)]
