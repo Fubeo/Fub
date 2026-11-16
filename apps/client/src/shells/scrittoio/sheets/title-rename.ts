@@ -30,8 +30,17 @@
 // rinominare: il nome scritto era per quello di prima. Una risposta che arriva
 // quando il campo non c'è più non riapre niente: un rifiuto si dice con un
 // avviso, perché non resti muto.
+//
+// # Il titolo e il primo H1
+//
+// Una nota il cui primo H1 dice il nome si mostra con un titolo solo: l'H1 è
+// ripiegato nel titolo (`page/title.ts`). Rinominare da qui riscrive anche
+// quell'H1 col nome nuovo, nello stesso gesto e con un passo d'annullamento
+// della nota, come dal titolo della testata: lo fanno le superfici del
+// riquadro (`retitleIn`), solo dopo una rinomina riuscita.
 import "./sheets.css";
 
+import { retitleIn } from "../../../editors/text/profiles/markdown/page/title";
 import { errorText } from "../../../host/errors";
 import { onLanguage, t } from "../../../i18n/strings";
 import { openPopover, textButton, textField, type PopoverHandle } from "../../../kit";
@@ -244,6 +253,7 @@ export function mountTitleRename(lifetime: Lifetime): void {
           return;
         }
         mine.busy = false;
+        retitle(mine, from, name);
         if (edit === mine) close(true);
         return;
       }
@@ -261,7 +271,15 @@ export function mountTitleRename(lifetime: Lifetime): void {
       return;
     }
     mine.busy = false;
+    retitle(mine, from, name);
     if (edit === mine) close(true);
+  };
+
+  /// Dopo una rinomina riuscita: l'H1 ripiegato col nome di prima prende il
+  /// nome nuovo, nelle superfici del riquadro in cui si è rinominato.
+  const retitle = (mine: Edit, from: string, name: string): void => {
+    const pane = mine.bar.closest("[data-pane]");
+    if (pane && !lifetime.closed) retitleIn(pane, pageName(from), name);
   };
 
   const open = (bar: HTMLElement): void => {

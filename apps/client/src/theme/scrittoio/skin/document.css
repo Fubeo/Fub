@@ -2230,6 +2230,11 @@ button.cm-fub-page-icon:focus-visible {
 .markdown-rendered[data-page-props="header"] > .block-frontmatter-unparsed {
   display: none;
 }
+/* In Lettura il primo H1 che dice il nome si ripiega nel titolo della
+   testata (`page/title.ts`): la testata lo segna, e l'H1 non si ripete. */
+.markdown-rendered > .cm-fub-page[data-title-fold] ~ h1:first-of-type {
+  display: none;
+}
 .markdown-rendered .block-frontmatter-unparsed pre {
   margin: 0;
   padding: 0;

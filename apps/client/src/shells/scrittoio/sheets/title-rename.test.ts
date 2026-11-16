@@ -41,6 +41,7 @@ vi.mock("../../../ui/tooltip", () => ({
 vi.mock("../../../ui/icons", () => ({ iconEl: () => null }));
 
 import { mountTitleRename, proposedName } from "./title-rename";
+import { keepTitle } from "../../../editors/text/profiles/markdown/page/title";
 
 let driver: ManualDriver;
 let lifetime: Lifetime;
@@ -484,6 +485,56 @@ describe("rinominare", () => {
     expect(renames).toEqual([]);
     expect(note()!.textContent).toBe("document.unsaved_blocks Guida/Nota.md");
     expect(inputOf(bar)!.value).toBe("Appunti");
+  });
+});
+
+describe("il primo H1 ripiegato nel titolo (T7)", () => {
+  /// Una superficie Markdown del riquadro, come la registra `surface.ts`.
+  function keeper(bar: HTMLElement): { calls: [string, string][]; stop: () => void } {
+    const root = document.createElement("div");
+    bar.closest("[data-pane]")!.append(root);
+    const calls: [string, string][] = [];
+    const stop = keepTitle({ root, retitle: (before, after) => void calls.push([before, after]) });
+    return { calls, stop };
+  }
+
+  it("rinominata la nota, le superfici del riquadro riscrivono l'H1 col nome nuovo", async () => {
+    const bar = pane("main", "Guida/Nota.md");
+    const other = pane("side", "Guida/Nota.md");
+    const mine = keeper(bar);
+    const beside = keeper(other);
+    mountTitleRename(lifetime);
+    dblclick(crumbOf(bar));
+    type(inputOf(bar)!, "Appunti");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    expect(renames).toEqual([{ from: "Guida/Nota.md", to: "Guida/Appunti.md" }]);
+    expect(mine.calls).toEqual([["Nota", "Appunti"]]);
+    // Il buffer è uno: l'altro riquadro lo vede arrivare, non lo riscrive.
+    expect(beside.calls).toEqual([]);
+    mine.stop();
+    beside.stop();
+  });
+
+  it("una rinomina che non riesce non tocca l'H1", async () => {
+    const bar = pane("main", "Guida/Nota.md");
+    const mine = keeper(bar);
+    world.rename = (from, to) => Promise.resolve({ kind: "collision", from, to });
+    mountTitleRename(lifetime);
+    dblclick(crumbOf(bar));
+    type(inputOf(bar)!, "Appunti");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    world.rename = () => Promise.reject(new Error("no"));
+    type(inputOf(bar)!, "Altro");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    // Un nome rifiutato dalla regola non parte nemmeno.
+    type(inputOf(bar)!, "a/../b");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    expect(mine.calls).toEqual([]);
+    mine.stop();
   });
 });
 

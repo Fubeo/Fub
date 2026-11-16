@@ -25,6 +25,7 @@ import { matchEmoji } from "../completions";
 import { lastEntry, listItems, propertyBlock, type PropertyBlock } from "../properties";
 import { liveStrings } from "../strings";
 import { coverElement, coverYOf } from "./cover";
+import { foldedHeading } from "./title";
 import { featuredProperties, propertiesElement, samePageProperties, type PageProperties } from "./featured";
 
 export type { PageProperties } from "./featured";
@@ -733,6 +734,10 @@ export function mountReadingHeader(
     more,
   }, life);
   root.dataset.mdPinned = "";
+  // Il primo H1 che dice il nome si ripiega nel titolo (T7): la pelle lo
+  // nasconde nella resa finché la testata lo dice. La testata resta in cima
+  // anche quando la resa si rifà da sé, e il segno con lei.
+  if (foldedHeading(state.doc, block ? Math.min(state.doc.length, block.to + 1) : 0, data.title)) root.dataset.titleFold = "";
   reading.prepend(root);
   if (block && data.properties && !block.unreadable) reading.dataset.pageProps = "header";
   return () => {

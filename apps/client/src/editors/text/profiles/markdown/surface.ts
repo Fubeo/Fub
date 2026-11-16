@@ -17,6 +17,8 @@ import { onLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
 import { blocksMode, pageArrives, plainMode, type BlocksOptions } from "./blocks";
+import { retitleView } from "./blocks/page";
+import { keepTitle } from "./page/title";
 import { selectBlockThenAll, selectBody } from "./blocks/keys";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { mountReadingHeader, type PageOptions } from "./page/header";
@@ -615,6 +617,16 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       });
     }));
   }
+  // La rinomina dal titolo del foglio porta con sé l'H1 ripiegato nel titolo
+  // (T7): in ogni modalità, perché l'H1 resti uguale al nome anche quando si
+  // torna in Scrittura.
+  life.add(keepTitle({
+    root: parent,
+    retitle: (before, after) => {
+      if (life.closed) return;
+      engine.runViewCommand((view) => retitleView(view, before, after));
+    },
+  }));
   if (opts.pageIcons) {
     life.add(opts.pageIcons.watch(() => {
       engine.runViewCommand((view) => {

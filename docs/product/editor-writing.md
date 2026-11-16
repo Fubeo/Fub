@@ -105,6 +105,23 @@ proprietà in evidenza, «Altre N proprietà», «Aggiungi una proprietà» e la
 sono icona, copertina, titolo e menu «⋯» lo dice la
 [pagina dei blocchi](editor-blocks.md#la-testata-della-pagina).
 
+- **Il titolo** è il nome del file (della cartella, per `_index.md`). In
+  Scrittura si scrive in riga: Invio o l'uscita dal campo rinominano il file
+  coi link, Esc torna al nome di prima; una rinomina che non riesce (un nome
+  preso, caratteri che il file system rifiuta) lo dice e il titolo torna. In
+  sola lettura non si modifica.
+- **Il primo H1.** Se la prima riga che si legge dopo il frontmatter (righe
+  vuote e commenti `%%` o `<!-- -->` a parte) è un H1 che, a parte maiuscole,
+  spazi, punteggiatura e formattazione, dice il nome, si ripiega nel titolo:
+  in Scrittura e in Lettura non si vede, in Sorgente sì, e il file non cambia.
+  Un H1 diverso, o non in cima, resta un titolo del testo. Una selezione che
+  ci entra (una ricerca) lo rivede; ciò che si scrive prima di lui scende
+  sotto, dove comincia il testo, e Backspace all'inizio del testo non lo
+  unisce al titolo. Rinominare dal titolo, quello della testata o quello del
+  foglio, riscrive anche l'H1 ripiegato col nome nuovo, nello stesso gesto e
+  con un passo d'annullamento della nota; se la rinomina non riesce l'H1 non
+  cambia. Una rinomina che arriva da fuori non lo tocca: se l'H1 non dice più
+  il nome torna un titolo del testo.
 - **Le proprietà.** Senza un tipo, sono in evidenza le prime quattro voci del
   frontmatter, nell'ordine del file; le altre stanno dietro «Altre N
   proprietà», che si apre e si richiude e resta com'era finché l'editor è
@@ -321,4 +338,11 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
 - `apps/client/src/editors/text/profiles/markdown/link-card.ts`
   (`NoteCardWidget`) e `apps/client/src/state/note-cards.ts`: la scheda della
   nota e le sue proprietà;
+- `apps/client/src/editors/text/profiles/markdown/page/title.ts`: la regola
+  del primo H1 (`sameTitle`, `firstHeading`, `retitled`) e chi tiene l'H1
+  allineato al titolo (`keepTitle`, `retitleIn`); `blocks/page.ts` lo
+  nasconde in Scrittura (`titleFold`) e lo riscrive con la rinomina
+  (`retitleView`), `page/header.ts` lo segna in Lettura e
+  `skin/document.css` lo nasconde; `shells/scrittoio/sheets/title-rename.ts`
+  lo riscrive dopo la rinomina dal titolo del foglio;
 - `apps/client/bench/scene.mjs`: la scena `scrittura-a-riposo`.
