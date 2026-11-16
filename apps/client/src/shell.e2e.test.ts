@@ -166,6 +166,7 @@ async function mount(
   throttles: string[] = [],
   notice: KernelNotice | null = null,
   commands: CommandSpec[] = [],
+  prepare: (host: FakeHost) => void = () => {},
 ): Promise<{ host: FakeHost; startup: Promise<() => void>; unlock: Map<string, () => void> }> {
   vi.resetModules();
   box.confirm = true;
@@ -181,6 +182,7 @@ async function mount(
   box.known = [];
   box.host = host;
   const unlock = new Map(throttles.map((p) => [p, host.throttle(p)]));
+  prepare(host);
   mountShell();
   const main = await import("./main");
   // Quello del montaggio prima, se il suo avvio non è mai arrivato in fondo.
@@ -678,6 +680,103 @@ describe("vita della finestra", () => {
 
     expect(document.querySelector("#views-left")?.childElementCount).toBe(0);
     expect(mounted.host.atGate("renderView")).toHaveLength(0);
+  });
+});
+
+describe("aperture in gara: vince l'ultima chiesta", () => {
+  /// Tiene in volo le sole chiamate di `port` che `match` riconosce, finché
+  /// non si chiama `release`; `reached` si risolve alla prima tenuta. Le altre
+  /// chiamate della stessa porta passano: `throttle` le fermerebbe tutte, e
+  /// l'avvio non arriverebbe mai al punto che si vuole guardare.
+  function hold(host: FakeHost, port: string, match: (...args: unknown[]) => boolean) {
+    const api = host.module.api as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    const original = api[port]!.bind(api);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let reach!: () => void;
+    const reached = new Promise<void>((resolve) => (reach = resolve));
+    api[port] = (...args: unknown[]) => {
+      if (!match(...args)) return original(...args);
+      reach();
+      return gate.then(() => original(...args));
+    };
+    return { reached, release };
+  }
+
+  /// Il riquadro col fuoco dice lo stesso documento dappertutto: la scheda
+  /// scelta, il percorso in testa, il testo dell'editor.
+  function expectShowing(title: string, text: string): void {
+    expect(document.querySelector('.pane.focus .tab[aria-selected="true"]')?.textContent).toContain(title);
+    expect(document.querySelector(".pane.focus .muted")?.textContent).toContain(title);
+    expect(textToVideo()).toContain(text);
+  }
+
+  function tabNames(): string[] {
+    return [...document.querySelectorAll(".pane.focus .tab")].map((tab) => tab.textContent ?? "");
+  }
+
+  it("la prima nota lenta all'avvio non vince sul documento aperto intanto", async () => {
+    const { host, startup, unlock } = await mount(VAULT, [], undefined, ["openDocument"]);
+    await waitFor("l'avvio apre la prima nota", () => host.atGate("openDocument").some((c) => c.args[0] === "Benvenuto.md"));
+    const controller = await import("./state/document-controller");
+    const opening = controller.openDocument("note/Spesa.md", { gesture: true });
+    unlock.get("openDocument")!();
+    await Promise.all([startup, opening]);
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+  });
+
+  it("la prima nota decisa prima di un'apertura chiesta intanto non parte", async () => {
+    // L'ordine inverso: l'avvio ha visto il riquadro vuoto e cerca la prima
+    // nota; intanto si apre un documento. Arrivata la risposta, la decisione
+    // è vecchia e non deve scavalcare il documento aperto.
+    let first!: ReturnType<typeof hold>;
+    const { host, startup } = await mount(VAULT, [], undefined, [], null, [], (fake) => {
+      first = hold(fake, "queryIndex", (q) => {
+        const query = q as { kind?: string; of_kind?: string | null; page?: { limit?: number } };
+        return query.kind === "entries" && query.of_kind === "document" && query.page?.limit === 1;
+      });
+    });
+    await first.reached;
+    const controller = await import("./state/document-controller");
+    await controller.openDocument("note/Spesa.md", { gesture: true });
+    first.release();
+    await startup;
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+    expect(tabNames().some((name) => name.includes("Benvenuto"))).toBe(false);
+    expect(host.atGate("openDocument").some((c) => c.args[0] === "Benvenuto.md")).toBe(false);
+  });
+
+  it("la nota d'avvio non scavalca il documento aperto mentre la si controllava", async () => {
+    const choice = (key: string, value: string) => ({ spec: { key }, value, source: "machine" }) as unknown as SettingEntry;
+    let check!: ReturnType<typeof hold>;
+    const settings = [choice("files.startup", "note"), choice("files.startup-note", "note/Riunione.md")];
+    const { startup } = await mount(VAULT, settings, undefined, [], null, [], (fake) => {
+      check = hold(fake, "readDocument", (id) => id === "note/Riunione.md");
+    });
+    await check.reached;
+    const controller = await import("./state/document-controller");
+    await controller.openDocument("note/Spesa.md", { gesture: true });
+    check.release();
+    await startup;
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+    expect(tabNames().some((name) => name.includes("Riunione"))).toBe(false);
+  });
+
+  it("due aperture rapide: resta l'ultima, e la prima resta una scheda", async () => {
+    const host = await start(VAULT);
+    const controller = await import("./state/document-controller");
+    const unlock = host.throttle("openDocument");
+    const first = controller.openDocument("note/Riunione.md", { gesture: true });
+    const second = controller.openDocument("note/Spesa.md", { gesture: true });
+    await settle();
+    unlock();
+    await Promise.all([first, second]);
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+    expect(tabNames().some((name) => name.includes("Riunione"))).toBe(true);
   });
 });
 
