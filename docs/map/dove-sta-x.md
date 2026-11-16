@@ -89,6 +89,7 @@
 | il catalogo dei comandi serviti dei fogli | `UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --lib catalogo_servito` |
 | il corpus dei documenti ricchi | `cargo run -p fub-format-rich --example genera_corpus` |
 | le baseline visuali | solo dal runner Linux: `npm run bench:update` |
+| `apps/client/bench/conformita/<prototipo>.json` (gli stili attesi del prototipo) | `git fetch`, poi `node bench/conformita/estrai.mjs <prototipo>` da `apps/client/`; la chiave `_intestazione` nomina ramo, commit e file del prototipo |
 | `vendor/<motore>/` | `node tools/vendor-craft/vendor.mjs <motore> update --rev <sha>` |
 
 La regola vale per tutti: mai a mano. Il primo commento di ogni file generato
@@ -105,6 +106,7 @@ nomina il comando esatto.
 | il banco visivo | `npm run bench:verify` |
 | l'accessibilità | `npm run bench:a11y` |
 | il moto | `npm run bench:motion` |
+| la grafica uguale al prototipo | `npm run bench:conformita` |
 | la battuta | `node bench/interaction.mjs --only=battuta` |
 | la WebView vera | `npm run bench:webview` |
 | un motore di terzi | `node tools/motori-prova/misura.mjs --out DIR` |

@@ -542,6 +542,20 @@ jobs:
       - name: niente lampo all'avvio
         run: npm run bench:lampo
         working-directory: apps/client
+      # Gli stili calcolati dei pezzi portati da un prototipo, contro quelli
+      # estratti dal prototipo (`bench/conformita/`). Sta qui perché usa lo
+      # stesso palco, lo stesso Chromium e le stesse scene del banco visivo.
+      - name: la grafica segue il prototipo
+        id: bench_conformita
+        run: npm run bench:conformita
+        working-directory: apps/client
+      - name: referto della conformità al prototipo
+        if: ${{ failure() && steps.bench_conformita.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: conformita-${{ github.sha }}
+          path: apps/client/bench/.output/conformita/
+          include-hidden-files: true
 
   a11y:
     # Le due luci sono due corse separate dello stesso banco: in fila
