@@ -669,10 +669,7 @@ fn http_request(
     method: HttpMethod,
     body: Option<Vec<u8>>,
 ) -> Result<serde_json::Value, PluginError> {
-    if !path.starts_with("/v1/")
-        || path.contains(['#', '\r', '\n'])
-        || path.to_ascii_lowercase().contains("password=")
-    {
+    if !path.starts_with("/v1/") || !super::request_path_is_clean(path) {
         return Err(PluginError::BadArgs("invalid sync request path".into()));
     }
     let mut headers = vec![HttpHeader::new("authorization", auth)];

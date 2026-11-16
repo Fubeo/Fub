@@ -189,14 +189,13 @@ pub(super) fn run_push(scope: &VaultScope, req: PushRequest) -> HttpResponse {
         // The quota measures what the vault holds: the version chain (the
         // fold above already added this batch), every replica queue and the
         // batch about to join one. Old history yields first; what is left
-        // is refused before anything is written.
+        // is refused before anything is written. A quota of 0 holds nothing,
+        // as for published sites: 0 never switches the quota off.
         let budget = scope.quotas.max_vault_bytes;
-        if budget > 0 {
-            let queued = queue::vault_queue_bytes(dir).saturating_add(batch_bytes);
-            let stored = versions::fit_history(&mut folded, budget.saturating_sub(queued));
-            if stored.saturating_add(queued) > budget {
-                return HttpResponse::err(413, "vault quota exceeded");
-            }
+        let queued = queue::vault_queue_bytes(dir).saturating_add(batch_bytes);
+        let stored = versions::fit_history(&mut folded, budget.saturating_sub(queued));
+        if stored.saturating_add(queued) > budget {
+            return HttpResponse::err(413, "vault quota exceeded");
         }
         if let Err(e) = queue::append_lines(dir, &req.replica_id, &lines) {
             match e {

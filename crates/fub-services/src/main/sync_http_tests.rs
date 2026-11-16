@@ -649,17 +649,69 @@ fn login_limit_remembers_only_names_an_account_can_have() {
         "un nome impossibile non pesa"
     );
 
+    // Un fallimento pesa su tre chiavi: (nome, origine), nome e origine.
     assert_eq!(login("limite", "sbagliata-123").0, 401);
-    assert_eq!(state.lock().logins.tracked(), 1);
+    assert_eq!(state.lock().logins.tracked(), 3);
     let (status, body) = login("limite", "correct-horse-99");
     assert_eq!(status, 200, "{body}");
-    assert_eq!(state.lock().logins.tracked(), 0);
+    // La coppia riparte da zero; il fallimento del nome e dell'origine resta.
+    assert_eq!(state.lock().logins.tracked(), 2);
 
     let now = fub_services::schema::now_ms();
     for _ in 0..5 {
-        state.lock().logins.note_fail("limite", now);
+        state.lock().logins.note_fail("limite", "127.0.0.1", now);
     }
     assert_eq!(login("limite", "correct-horse-99").0, 429);
+}
+
+/// Un login da un'origine dichiarata da un proxy fidato (il peer dei test è
+/// `127.0.0.1`, elencato in `trusted_proxies`).
+fn login_from(
+    state: &Arc<Mutex<ServiceState>>,
+    dir: &Path,
+    origin: &str,
+    name: &str,
+    password: &str,
+) -> u16 {
+    let body = serde_json::to_vec(&json!({ "name": name, "password": password })).unwrap();
+    let mut wire = format!(
+        "POST /v1/account/login HTTP/1.1\r\nHost: localhost\r\nX-Forwarded-For: {origin}\r\nContent-Length: {}\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    wire.extend_from_slice(&body);
+    exchange(state, dir, &wire).0
+}
+
+/// B21 dell'audit: il blocco dopo cinque password sbagliate era chiavato sul
+/// solo nome, e chiunque chiudeva fuori un account altrui. Ora blocca il nome
+/// dall'origine che sbaglia.
+#[test]
+fn wrong_passwords_from_elsewhere_do_not_lock_the_owner_out() {
+    let dir = TempDir::new();
+    let mut state = ServiceState::open(Some(dir.0.clone())).unwrap();
+    state.config.trusted_proxies = vec!["127.0.0.1".to_string()];
+    state
+        .accounts
+        .create_account("titolare", "correct-horse-99")
+        .unwrap();
+    let state = Arc::new(Mutex::new(state));
+    let at = |origin: &str, name: &str, password: &str| {
+        login_from(&state, &dir.0, origin, name, password)
+    };
+    let home = "10.0.0.1";
+    assert_eq!(at(home, "titolare", "correct-horse-99"), 200);
+
+    // Cinque password sbagliate da un'altra origine bloccano quella.
+    for _ in 0..5 {
+        assert_eq!(at("10.0.0.66", "titolare", "sbagliata-123"), 401);
+    }
+    assert_eq!(at("10.0.0.66", "titolare", "correct-horse-99"), 429);
+    // Il titolare entra ancora da casa, e anche da un posto nuovo.
+    assert_eq!(at(home, "titolare", "correct-horse-99"), 200);
+    assert_eq!(at("10.0.0.2", "titolare", "correct-horse-99"), 200);
+    // Il tetto per nome e quello per origine li provano i test di
+    // `LoginLimits` in `mfa.rs`: qui ogni login costa una KDF vera.
 }
 
 /// Il secondo fattore è un fatto persistito dell'account: sopravvive al
