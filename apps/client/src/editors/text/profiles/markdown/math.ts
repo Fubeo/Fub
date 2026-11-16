@@ -21,6 +21,9 @@ export function mountMathBlocks(container: HTMLElement): Teardown {
     let phase: "loading" | "ready" | "error" = "loading";
     life.add(attachTooltip(element, ""));
     let reason = "";
+    // Un nome su uno `span` o un `div` senza ruolo non vale (ARIA): il ruolo
+    // `math` lo ammette, e lascia leggibile il MathML che KaTeX mette dentro.
+    element.setAttribute("role", "math");
     const labels = () => {
       element.dataset.state = phase;
       element.setAttribute("aria-busy", String(phase === "loading"));
