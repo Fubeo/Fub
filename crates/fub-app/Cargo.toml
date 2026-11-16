@@ -78,6 +78,14 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 
+# La cartella di Windows chiesta al sistema (`GetSystemWindowsDirectoryW`,
+# `print.rs`) invece che a `SystemRoot`, che viene dall'ambiente di chi avvia
+# l'app: lì `explorer.exe` si cerca per percorso assoluto. È la versione del
+# workspace, già nell'albero con la stessa feature (la accende
+# `winapi-util`): il grafo non cresce, si aggiunge un nome.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_System_SystemInformation"] }
+
 [dev-dependencies]
 # Le prove del registro delle sessioni live, con il tempo in pausa.
 tokio = { workspace = true, features = ["macros", "rt", "sync", "test-util", "time"] }
