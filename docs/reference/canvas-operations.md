@@ -522,10 +522,11 @@ repository) e lo dà come modulo virtuale `virtual:fub-canvas-wasm`
   prova (`build/canvas-wasm.global-setup.mjs`), così una build fredda non
   scade dentro il tempo massimo di una prova; poi i byte si leggono dal file
   che cargo ha fatto.
-- Il banco visivo (`vite.bench.config.ts`) trasforma la superficie della
-  lavagna, con i suoi moduli e il modulo virtuale, all'accensione del server
-  (`server.warmup`): la prima scena `lavagna-*` non paga la trasformazione a
-  freddo dentro la sua attesa (#395).
+- Il banco visivo (`vite.bench.config.ts`) trasforma all'accensione del
+  server (`server.warmup`) ogni editor che arriva con un `import()`, la
+  lavagna col suo modulo virtuale compresa: l'elenco lo legge dal codice
+  `bench/warmup.mjs`, e la prima scena di un formato non paga la
+  trasformazione a freddo dentro la sua attesa (#395).
 
 Non c'è ripiego su un `.wasm` di prima: senza cargo o senza il target la
 build si ferma, e l'errore dice che cosa installare (`rustup target add
