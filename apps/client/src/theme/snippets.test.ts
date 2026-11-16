@@ -2,6 +2,7 @@
 import { expect, it, vi } from "vitest";
 import { Lifetime } from "../ui/lifetime";
 import { mountCssSnippets, previewCssSnippets, cancelCssSnippetsPreview, cssSnippetCatalog } from "./snippets";
+import { mountedCss } from "./loader";
 
 const machine = vi.hoisted(() => ({
   value: '{"version":999,"snippets":[]}',
@@ -20,10 +21,10 @@ it("cancels a CSS preview despite a future persisted document without modifying 
   await Promise.resolve();
   await Promise.resolve();
   previewCssSnippets('{"version":1,"snippets":[{"id":"preview","css":".markdown-preview { color: #eee; }","enabled":true}]}');
-  expect(document.head.querySelector('style[data-fub="snippets"]')?.textContent).toContain("#eee");
+  expect(mountedCss("snippets")).toContain("#eee");
 
   expect(() => cancelCssSnippetsPreview()).not.toThrow();
-  expect(document.head.querySelector('style[data-fub="snippets"]')).toBeNull();
+  expect(mountedCss("snippets")).toBeNull();
   expect(cssSnippetCatalog()).toEqual([expect.objectContaining({
     id: "(stored)", enabled: false, trust: "local-user", error: expect.stringContaining("version"),
   })]);

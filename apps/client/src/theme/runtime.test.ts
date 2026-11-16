@@ -4,6 +4,7 @@ import type { SettingEntry, ThemeInfo, ThemeManifest, ThemePayload } from "../ho
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import sheetLight from "./scrittoio/sheet-light.css?raw";
 import skin from "./scrittoio/skin.css?raw";
+import { mountedCss } from "./loader";
 const thirdPartySheet = sheetLight.replace(
   "  color-scheme: light;",
   "  color-scheme: normal;",
@@ -99,6 +100,7 @@ async function mountFromCache(id: string, light = "light" as const) {
 
 beforeEach(() => {
   document.head.innerHTML = "";
+  document.adoptedStyleSheets = [];
   delete document.documentElement.dataset.theme;
   delete document.documentElement.dataset.contrast;
   localStorage.clear();
@@ -115,7 +117,7 @@ describe("tema runtime installato", () => {
     box.readTheme.mockResolvedValue(payload);
     await mountFromCache(info.manifest.id);
     await vi.waitFor(() =>
-      expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(thirdPartySheet),
+      expect(mountedCss("foglio")).toBe(thirdPartySheet),
     );
     expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!)).toEqual({
       id: "acme.paper",
@@ -134,7 +136,7 @@ describe("tema runtime installato", () => {
     });
     const theme = await mountFromCache(info.manifest.id);
     await vi.waitFor(() =>
-      expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(thirdPartySheet),
+      expect(mountedCss("foglio")).toBe(thirdPartySheet),
     );
     expect((await theme.themeCatalog()).map((entry) => entry.manifest.id)).toEqual([manifest.id]);
   });
@@ -148,7 +150,7 @@ describe("tema runtime installato", () => {
     await vi.waitFor(() =>
       expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!).id).toBe("fub.serie"),
     );
-    expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
+    expect(mountedCss("foglio")).toBe(sheetLight);
     expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!)).toEqual({
       id: "fub.serie",
       light: "light",
@@ -163,7 +165,7 @@ describe("tema runtime installato", () => {
       expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!).id).toBe("fub.serie"),
     );
 
-    expect(document.querySelector('style[data-fub="foglio"]')?.textContent).not.toBe(
+    expect(mountedCss("foglio")).not.toBe(
       "body { display: grid; }",
     );
   });
@@ -178,7 +180,7 @@ describe("tema runtime installato", () => {
     await vi.waitFor(() =>
       expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!).id).toBe("fub.serie"),
     );
-    expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
+    expect(mountedCss("foglio")).toBe(sheetLight);
     const reasons = box.report.mock.calls.flatMap(([trouble]) => (trouble as { reasons: string[] }).reasons);
     expect(reasons.some((reason) => reason.includes("engine") && reason.includes("theme-2"))).toBe(true);
   });
@@ -193,11 +195,11 @@ describe("tema runtime installato", () => {
     box.readTheme.mockResolvedValue({ ...payload, manifest: extending, sheet: null, skin: themeSkin });
     const theme = await mountFromCache(info.manifest.id);
     await vi.waitFor(() =>
-      expect(document.querySelector('style[data-fub="pelle-tema"]')?.textContent).toBe(themeSkin),
+      expect(mountedCss("pelle-tema")).toBe(themeSkin),
     );
     expect(theme.currentThemeId()).toBe(info.manifest.id);
-    expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
-    expect(document.querySelector('style[data-fub="pelle"]')?.textContent).toBe(skin);
+    expect(mountedCss("foglio")).toBe(sheetLight);
+    expect(mountedCss("pelle")).toBe(skin);
     expect(box.report).not.toHaveBeenCalled();
   });
 
@@ -206,7 +208,7 @@ describe("tema runtime installato", () => {
     box.readTheme.mockResolvedValue(payload);
     await mountFromCache(info.manifest.id);
     await vi.waitFor(() =>
-      expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(thirdPartySheet),
+      expect(mountedCss("foglio")).toBe(thirdPartySheet),
     );
 
     box.listThemes.mockResolvedValue([]);

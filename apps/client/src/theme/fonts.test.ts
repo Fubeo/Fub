@@ -15,9 +15,14 @@ import seriesSkin from "./scrittoio/skin.css?raw";
 import seriesFonts from "./scrittoio/fonts.css?raw";
 import {
   count,
+  mount,
+  mountedCss,
+  mountedLayers,
+  mountPreferences,
   mountThemeBundle,
   themeFontFaces,
   validateThemeBundle,
+  type Layer,
   type ThemeBundle,
   type ThemeBundleManifest,
 } from "./loader";
@@ -92,13 +97,11 @@ function system(light: "light" | "dark" = "light"): void {
 }
 
 function text(layer: string): string | null {
-  return document.head.querySelector(`style[data-fub="${layer}"]`)?.textContent ?? null;
+  return mountedCss(layer as Layer);
 }
 
 function layers(): string[] {
-  return [...document.head.querySelectorAll<HTMLStyleElement>("style[data-fub]")].map(
-    (element) => element.dataset.fub ?? "",
-  );
+  return mountedLayers();
 }
 
 const MANIFEST = caratteri.info.manifest as ThemeBundleManifest;
@@ -120,6 +123,7 @@ function bundle(overrides: Partial<ThemeBundle> & { fonts?: unknown } = {}): The
 describe("il loader scrive le regole dei caratteri del tema", () => {
   beforeEach(() => {
     document.head.innerHTML = "";
+    document.adoptedStyleSheets = [];
   });
 
   it("una regola per voce, coi valori del manifest e l'URL data: del file", () => {
@@ -150,11 +154,8 @@ describe("il loader scrive le regole dei caratteri del tema", () => {
   });
 
   it("le regole vanno in caratteri-tema, subito dopo i caratteri di serie e prima del foglio", () => {
-    const series = document.createElement("style");
-    series.dataset.fub = "caratteri";
-    const preferences = document.createElement("style");
-    preferences.dataset.fub = "preferenze";
-    document.head.append(series, preferences);
+    mount("", "caratteri");
+    mountPreferences({});
 
     expect(mountThemeBundle(bundle(), "light")).toEqual({ mounted: true });
 
@@ -230,6 +231,7 @@ describe("la shell monta i caratteri del tema e non lascia resti", () => {
   beforeEach(async () => {
     system("light");
     document.head.innerHTML = "";
+    document.adoptedStyleSheets = [];
     localStorage.clear();
     await cancelThemePreview();
     await selectTheme(SERIES_THEME_ID, "light");

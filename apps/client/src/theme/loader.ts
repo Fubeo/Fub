@@ -4,12 +4,21 @@
 // poi si appende il nuovo. Il vecchio modo — impilare fogli con `disabled` o
 // con un `id` da sovrascrivere in cascata — metteva in gara la specificità di
 // due temi e vinceva l'ultimo per una ragione che nessuno aveva scritto; qui
-// il banco resta com'è: **un elemento montato per canale, mai due**. È la
+// il banco resta com'è: **un foglio montato per canale, mai due**. È la
 // stessa promessa del loader della logica di presentazione (§2.2), fatta per
 // il CSS: ciò che non è montato non vale, quindi non può nemmeno interferire.
 //
-// I tre strati viaggiano su canali separati (`data-fub="caratteri"`,
-// `data-fub="foglio"`, `data-fub="pelle"`), perché crescono separatamente: la
+// Un canale è un **foglio costruito** (`new CSSStyleSheet()`) in
+// `document.adoptedStyleSheets`, non un elemento `<style>`: la CSP dell'app
+// non ammette stili in linea (`style-src 'self'`), e un `<style>` creato qui
+// la WebView lo rifiuterebbe in silenzio, lasciando l'app senza tema. Un
+// foglio costruito non è markup e la CSP non lo guarda (`ui/stylesheets.ts`
+// dice le altre strade). I fogli del tema stanno davanti agli altri fogli
+// costruiti della pagina (la stampa, i caratteri di pdf.js, la vista dei
+// contorni), che restano dove sono e nell'ordine in cui sono.
+//
+// I tre strati viaggiano su canali separati (`caratteri`, `foglio`,
+// `pelle`), perché crescono separatamente: la
 // pelle di un tema di terzi sarà un file suo, il foglio un altro, e i
 // caratteri un terzo ancora (§31.3). La struttura, che non si tematizza, non
 // passa da qui: è importata da `main.ts` e resta sempre montata.
@@ -34,8 +43,8 @@
 // documento — i caratteri per primi, perché non dipendono da nessun altro
 // strato e ogni cosa dopo di loro può ridichiarare `font-family` a parità di
 // specificità; la pelle per ultima, perché veste i componenti sopra ai token
-// che il foglio dichiara — e `monta()` inserisce ogni nuovo elemento al posto
-// giusto anche se i canali si montano in un ordine diverso.
+// che il foglio dichiara — e ogni montaggio rimette i fogli in quell'ordine
+// anche se i canali si montano in un ordine diverso.
 //
 // Il testo arriva come stringa (`?raw`), non come CSS bundlato: il bundle
 // saprebbe solo *aggiungere* fogli al documento, e il punto è sostituirli. I
@@ -171,43 +180,62 @@ const ORDER: readonly Layer[] = [
   "snippets",
 ];
 
-/** Sostituisce uno strato e lo inserisce nel punto dichiarato della cascata. */
-function replace(text: string, layer: Layer): void {
-  const head = document.head;
-  for (const el of head.querySelectorAll<HTMLStyleElement>(
-    `style[data-fub="${layer}"]`,
-  )) {
-    el.remove();
+/**
+ * Il canale e il testo di ogni foglio che questo file ha costruito. Lo stato
+ * montato **è** `document.adoptedStyleSheets`: la mappa dice soltanto quali di
+ * quei fogli sono del tema, di che canale e con che testo (quello scritto,
+ * non la sua rilettura dal CSSOM, che il browser normalizza). Un foglio che
+ * non c'è è di qualcun altro, e resta dov'è.
+ *
+ * La mappa sta sul registro globale (`Symbol.for`), non nel modulo: un modulo
+ * ricaricato (l'HMR di Vite, `vi.resetModules` nei test) deve riconoscere i
+ * fogli montati dal precedente e sostituirli, non lasciarli lì come estranei
+ * e accatastare un secondo tema.
+ */
+const OWNED = Symbol.for("fub.theme.sheets");
+const owned: WeakMap<CSSStyleSheet, { readonly layer: Layer; readonly text: string }> =
+  ((globalThis as { [OWNED]?: WeakMap<CSSStyleSheet, { readonly layer: Layer; readonly text: string }> })[OWNED] ??=
+    new WeakMap());
+
+function sheetOf(layer: Layer, text: string): CSSStyleSheet {
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(text);
+  owned.set(sheet, { layer, text });
+  return sheet;
+}
+
+/** I fogli del tema montati, uno per canale, e gli altri nel loro ordine. */
+function mountedSheets(): { layers: Map<Layer, CSSStyleSheet>; others: CSSStyleSheet[] } {
+  const layers = new Map<Layer, CSSStyleSheet>();
+  const others: CSSStyleSheet[] = [];
+  for (const sheet of document.adoptedStyleSheets) {
+    const entry = owned.get(sheet);
+    if (entry === undefined) others.push(sheet);
+    else if (!layers.has(entry.layer)) layers.set(entry.layer, sheet);
   }
-  const el = document.createElement("style");
-  el.dataset.fub = layer;
-  el.textContent = text;
-
-  const position = ORDER.indexOf(layer);
-  const mounted = head.querySelectorAll<HTMLStyleElement>("style[data-fub]");
-  const next = [...mounted].find(
-    (existing) => ORDER.indexOf(existing.dataset.fub as Layer) > position,
-  );
-  if (next) head.insertBefore(el, next);
-  else head.append(el);
+  return { layers, others };
 }
 
-function style(text: string, layer: (typeof THEME_LAYERS)[number]): HTMLStyleElement {
-  const element = document.createElement("style");
-  element.dataset.fub = layer;
-  element.textContent = text;
-  return element;
+/**
+ * Sostituisce i canali di `changes` (`null` toglie il canale) con **una sola
+ * assegnazione** di `adoptedStyleSheets`: i fogli nuovi si costruiscono prima,
+ * e se uno non si costruisce il documento resta com'era. I canali del tema
+ * escono nell'ordine dichiarato, davanti agli altri fogli costruiti.
+ */
+function commit(changes: ReadonlyMap<Layer, string | null>): void {
+  const { layers, others } = mountedSheets();
+  const built = new Map<Layer, CSSStyleSheet | null>();
+  for (const [layer, text] of changes) built.set(layer, text === null ? null : sheetOf(layer, text));
+  for (const [layer, sheet] of built) {
+    if (sheet === null) layers.delete(layer);
+    else layers.set(layer, sheet);
+  }
+  document.adoptedStyleSheets = [...ORDER.flatMap((layer) => layers.get(layer) ?? []), ...others];
 }
 
-/** I canali che un fascio di tema possiede: si sostituiscono tutti insieme. */
-const THEME_LAYERS = ["caratteri-tema", "foglio", "pelle", "pelle-tema"] as const;
-
-/** Il primo elemento montato che nella cascata viene dopo `layer`, o `null`. */
-function mountedAfter(layer: Layer): HTMLStyleElement | null {
-  const position = ORDER.indexOf(layer);
-  return [...document.head.querySelectorAll<HTMLStyleElement>("style[data-fub]")].find(
-    (existing) => ORDER.indexOf(existing.dataset.fub as Layer) > position,
-  ) ?? null;
+/** Sostituisce uno strato, al suo posto nella cascata. */
+function replace(text: string, layer: Layer): void {
+  commit(new Map([[layer, text]]));
 }
 
 /**
@@ -223,28 +251,12 @@ function replaceTheme(
   skin: string | undefined,
   inherited: string | undefined,
 ): void {
-  const head = document.head;
-  const previous = [...head.querySelectorAll<HTMLStyleElement>(
-    THEME_LAYERS.map((layer) => `style[data-fub="${layer}"]`).join(", "),
-  )];
-  const faces = fonts === undefined ? [] : [style(fonts, "caratteri-tema")];
-  const next = inherited === undefined
-    ? [style(sheet, "foglio"), ...(skin === undefined ? [] : [style(skin, "pelle")])]
-    : [style(sheet, "foglio"), style(inherited, "pelle"), ...(skin === undefined ? [] : [style(skin, "pelle-tema")])];
-  // I caratteri prima del primo canale che viene dopo di loro (di solito il
-  // foglio di prima, che se ne va subito sotto); foglio e pelli prima del primo
-  // canale che viene dopo i canali del tema: di solito le preferenze, ma anche
-  // i frammenti quando le preferenze non ci sono ancora.
-  const facesAnchor = mountedAfter("caratteri-tema");
-  const anchor = mountedAfter("pelle-tema");
-  try {
-    for (const element of faces) head.insertBefore(element, facesAnchor);
-    for (const element of next) head.insertBefore(element, anchor);
-  } catch (error) {
-    for (const element of [...faces, ...next]) element.remove();
-    throw error;
-  }
-  for (const element of previous) element.remove();
+  commit(new Map<Layer, string | null>([
+    ["caratteri-tema", fonts ?? null],
+    ["foglio", sheet],
+    ["pelle", inherited ?? skin ?? null],
+    ["pelle-tema", inherited === undefined ? null : skin ?? null],
+  ]));
 }
 
 /** La firma con cui comincia ogni file WOFF2: un controllo sui byte, locale. */
@@ -719,11 +731,33 @@ export function mountUserSnippets(css: string): void {
   replace(css, "snippets");
 }
 
-/** Quanti elementi di uno strato sono montati. Nel banco dev'essere sempre 1
+/** Toglie uno strato. Le preferenze e il tema hanno i loro montaggi. */
+export function unmount(layer: "snippets"): void {
+  commit(new Map([[layer, null]]));
+}
+
+/** Quanti fogli di uno strato sono montati. Nel banco dev'essere sempre 1
  *  dopo ogni `monta`; 0 significa «nessun tema», 2 significa che qualcuno ha
  *  ripreso ad accatastare. */
 export function count(layer: Layer): number {
-  return document.head.querySelectorAll(`style[data-fub="${layer}"]`).length;
+  return document.adoptedStyleSheets.filter((sheet) => owned.get(sheet)?.layer === layer).length;
+}
+
+/** Il testo montato di uno strato, o `null` se il canale è vuoto. */
+export function mountedCss(layer: Layer): string | null {
+  for (const sheet of document.adoptedStyleSheets) {
+    const entry = owned.get(sheet);
+    if (entry?.layer === layer) return entry.text;
+  }
+  return null;
+}
+
+/** I canali montati, nell'ordine in cui la cascata li legge. */
+export function mountedLayers(): Layer[] {
+  return document.adoptedStyleSheets.flatMap((sheet) => {
+    const entry = owned.get(sheet);
+    return entry === undefined ? [] : [entry.layer];
+  });
 }
 
 /** Il tema come questa finestra lo ha montato, strato per strato: ciò che
@@ -740,9 +774,9 @@ export interface MirroredTheme {
 
 export function mountedTheme(): MirroredTheme {
   const layers: { layer: Layer; text: string }[] = [];
-  for (const el of document.head.querySelectorAll<HTMLStyleElement>("style[data-fub]")) {
-    const layer = el.dataset.fub as Layer;
-    if (ORDER.includes(layer)) layers.push({ layer, text: el.textContent ?? "" });
+  for (const sheet of document.adoptedStyleSheets) {
+    const entry = owned.get(sheet);
+    if (entry !== undefined) layers.push({ layer: entry.layer, text: entry.text });
   }
   const icons = themeIcons();
   return {
@@ -757,16 +791,13 @@ export function mountedTheme(): MirroredTheme {
 /** Rispecchia il tema di un'altra finestra: ogni strato che porta sostituisce
  * il proprio, ogni strato che non porta si toglie. */
 export function mountMirroredTheme(theme: MirroredTheme): void {
-  const carried = new Set<Layer>();
+  // Tutti i canali in una commit: un canale portato sostituisce il proprio,
+  // uno che non arriva si toglie.
+  const changes = new Map<Layer, string | null>(ORDER.map((layer) => [layer, null]));
   for (const { layer, text } of theme.layers) {
-    if (!ORDER.includes(layer)) continue;
-    carried.add(layer);
-    replace(text, layer);
+    if (ORDER.includes(layer)) changes.set(layer, text);
   }
-  for (const layer of ORDER) {
-    if (carried.has(layer)) continue;
-    for (const el of document.head.querySelectorAll<HTMLStyleElement>(`style[data-fub="${layer}"]`)) el.remove();
-  }
+  commit(changes);
   document.documentElement.dataset.theme = theme.light;
   document.documentElement.dataset.contrast = theme.contrast;
   mountMirroredOptions(document.documentElement, theme.options);
