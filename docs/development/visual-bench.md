@@ -102,6 +102,11 @@ ogni pezzo una seconda volta con quei token sostituiti da colori sentinella, e
 così sa di quale token, o di quale `color-mix` di due token, è fatto ogni
 colore; la verifica risolve la stessa espressione coi token di Fub sotto
 l'elemento dell'app. Un colore scritto a mano nel prototipo si confronta crudo.
+Oltre alla tabella del piano, la traduzione dice che il velo di passaggio
+`--hover` è `--overlay-hover` della pelle e che `--danger` è il `--danger` del
+tema, generato dalla ricetta col contrasto garantito. Un'ombra del prototipo
+scritta tutta in un token (`--sh-pop`) non passa dalle sentinelle: si confronta
+per valore, parte per parte.
 
 La traduzione dipende dal contesto del pezzo (`TRADUZIONI` nella mappa). Un
 pezzo dell'interfaccia (menu, lanciatore, banda) usa `TRADUZIONE`. Un pezzo
@@ -109,7 +114,8 @@ dentro la pagina del documento (`contesto: "documento"`: tabella Markdown,
 testata, proprietà, riga dei dati, maniglie) usa `TRADUZIONE_DOCUMENTO`, perché
 la pagina ha una tavolozza sua, che si personalizza a parte: `--ink` diventa
 `--doc-fg`, `--muted` e `--faint` diventano `--doc-gutter-fg`, `--line`
-diventa `--doc-rule-soft`, e così via. Le traduzioni nominano gli stessi token
+diventa `--doc-rule-soft`, `--hover` diventa `--doc-block-hover` e `--danger`
+`--doc-danger`, e così via. Le traduzioni nominano gli stessi token
 del prototipo, così le sentinelle sono le stesse; un colore che resta diverso
 dopo la traduzione del suo contesto è una differenza vera.
 

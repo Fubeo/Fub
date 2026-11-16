@@ -4,11 +4,5 @@
     "proprieta": "box-shadow",
     "motivo": "L'ombra del prototipo (--sh-pop) ha un anello sottile che nessun token d'ombra di Fub ha: l'app scrive un anello di 1 px in --overlay-active più --shadow-4, la più vicina della scala.",
     "riferimento": "PR #429, «Ancora diverso, con il motivo» e tabella (.k → .launcher); PLAN.md «Dal prototipo»: le ombre → --shadow-*"
-  },
-  {
-    "pezzo": "lanciatore.riga-attiva-fondo",
-    "proprieta": "background-color",
-    "motivo": "Il fondo della riga attiva è il --hover del prototipo, che la traduzione dei token del piano non nomina: l'app usa il velo di passaggio della pelle, --overlay-hover, al posto del verde d'accento di prima.",
-    "riferimento": "PR #429, tabella (.k-i → .launcher-row: «riga attiva col velo --overlay-hover come il --hover del prototipo»)"
   }
 ]

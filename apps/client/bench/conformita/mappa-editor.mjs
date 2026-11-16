@@ -59,8 +59,11 @@ export const PROTOTIPO = {
 /// `--acc-soft` del prototipo è un velo, e da fondo diventa `--accent-veil`;
 /// l'inchiostro d'accento `--acc-ink` diventa `--accent-soft`. `--ink-2` (il
 /// secondo inchiostro) diventa `--text`, per la stessa ragione di `--faint`:
-/// Fub ne ha uno solo. Un token che qui non c'è (`--hover`, `--tray-2`,
-/// `--sh-pop`…) non ha un equivalente scritto, e il suo colore si confronta
+/// Fub ne ha uno solo. Il velo di passaggio `--hover` diventa quello della
+/// pelle, `--overlay-hover`; il rosso `--danger` diventa il `--danger` del
+/// tema, che la ricetta genera col contrasto garantito (decisioni
+/// dell'orchestratore del 2026-11-16). Un token che qui non c'è (`--tray-2`,
+/// `--sh-pop`…) non ha un equivalente scritto, e il suo valore si confronta
 /// crudo: se l'app ne usa un altro, è un'eccezione col suo motivo.
 export const TRADUZIONE = {
   "--sheet": ["--sheet"],
@@ -76,6 +79,8 @@ export const TRADUZIONE = {
   "--acc-soft": ["--accent-soft", "--accent-veil"],
   "--acc-wash": ["--accent-wash"],
   "--mark": ["--highlight"],
+  "--hover": ["--overlay-hover"],
+  "--danger": ["--danger"],
 };
 
 /// La traduzione dei pezzi dentro la pagina del documento (`contesto:
@@ -84,7 +89,8 @@ export const TRADUZIONE = {
 /// da quella dell'interfaccia (`--doc-*`, `structure.css` e `skin/document.css`):
 /// il foglio è `--doc-bg`, l'inchiostro `--doc-fg`, il grigio `--doc-gutter-fg`,
 /// i fili `--doc-rule-soft` e `--doc-rule`, i fondi tenui `--doc-fill-soft` e
-/// `--doc-fill`, l'evidenziatore `--doc-highlight`. L'accento non ha una
+/// `--doc-fill`, l'evidenziatore `--doc-highlight`, il passaggio sopra un
+/// blocco `--doc-block-hover`, il rosso `--doc-danger`. L'accento non ha una
 /// voce del documento, e resta quello dell'interfaccia. Gli stessi token di
 /// `TRADUZIONE`, nello stesso ordine: le sentinelle sono le stesse.
 export const TRADUZIONE_DOCUMENTO = {
@@ -101,6 +107,8 @@ export const TRADUZIONE_DOCUMENTO = {
   "--acc-soft": ["--accent-soft", "--accent-veil"],
   "--acc-wash": ["--accent-wash"],
   "--mark": ["--doc-highlight"],
+  "--hover": ["--doc-block-hover"],
+  "--danger": ["--doc-danger"],
 };
 
 /// Le traduzioni per contesto: ogni pezzo usa quella del suo `contesto`.
