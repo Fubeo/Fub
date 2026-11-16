@@ -787,52 +787,6 @@ export const DA_COPRIRE = [
     app: ".launcher-group",
     perche: "lo stile dei titoli dei gruppi («Recenti», «Note») va a T82 (corpo di #429)",
   },
-  {
-    id: "lanciatore.testa",
-    proprieta: ["display"],
-    perche: "il prototipo mette lente, campo ed «Esc» in fila con flex (riga 562), l'app li dispone a griglia",
-  },
-  {
-    id: "lanciatore.campo",
-    proprieta: ["padding"],
-    perche: "il campo del prototipo tiene il padding del browser (1 px 2 px, riga 563 non lo azzera), l'app lo azzera",
-  },
-  {
-    id: "lanciatore.modi",
-    proprieta: ["border", "box-shadow"],
-    perche: "il filo sotto la fila dei modi è un bordo di 1 px --line nel prototipo (riga 1241), un'ombra interna nell'app",
-  },
-  {
-    id: "lanciatore.modo-scelto",
-    proprieta: ["line-height"],
-    perche: "il prototipo eredita 1.45 (18,125 px su 12,5 px), l'app ha 1.3 (16,25 px)",
-  },
-  {
-    id: "lanciatore.modo",
-    proprieta: ["line-height"],
-    perche: "il prototipo eredita 1.45 (18,125 px su 12,5 px), l'app ha 1.3 (16,25 px)",
-  },
-  {
-    id: "lanciatore.riga",
-    proprieta: ["line-height"],
-    perche: "il prototipo eredita 1.45 (20,3 px su 14 px), l'app ha 1.3 (18,2 px)",
-  },
-  {
-    id: "lanciatore.riga-attiva",
-    proprieta: ["line-height"],
-    perche: "il prototipo eredita 1.45 (20,3 px su 14 px), l'app ha 1.3 (18,2 px)",
-  },
-  {
-    id: "lanciatore.anteprima",
-    proprieta: ["border"],
-    perche: "il prototipo separa l'anteprima dall'elenco con un bordo sinistro di 1 px --line (riga 571), l'app no",
-  },
-  {
-    id: "lanciatore.anteprima-foglio",
-    proprieta: ["box-shadow"],
-    perche:
-      "il foglio del prototipo ha --sh-raise (anello e un'ombra corta, riga 1256); l'app un anello --overlay-hover e --shadow-1, a tre parti: #429 non lo motiva",
-  },
 
   // ── pezzi che la mappa nomina ma non può ancora leggere ──────────────────
   {
