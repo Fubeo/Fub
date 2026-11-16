@@ -62,7 +62,7 @@ testo JSON; `template` è facoltativo e vale soltanto per una cattura che crea.
 La validazione è la stessa per ogni trasporto: titolo su una riga, testo non
 vuoto, `source_url` http o https senza credenziali, e `vault`, `folder` e
 `note` dentro il recinto del vault. L'host nativo del clipper si installa come
-in [Permessi e sicurezza](../reference/permissions-and-security.md#host-nativo-del-clipper).
+in [Il clipper del browser](../reference/web-clipper.md#host-nativo-del-clipper).
 
 - `create` crea la nota con `note.create`, o con `note.from_template` se c'è
   un template. Il nome è `note` se c'è; altrimenti il titolo diventa un
@@ -109,8 +109,11 @@ arriva con il motivo e non si esegue.
   dice e non si crea.
 - `search` apre la ricerca con il testo e i filtri `tag:` e `folder:`.
 - `new`, `daily`, `unique` e `capture` scrivono con `uri.apply`, dopo la prova
-  a vuoto (quale nota nascerà, l'inizio di una cattura) e la conferma; le
-  azioni in `uri.allowed` (di macchina, vuota di default) scrivono subito.
+  a vuoto (quale nota nascerà, l'inizio di una cattura) e la conferma.
+  `new`, `daily` e `unique`, se sono in `uri.allowed` (di macchina, vuota di
+  default), scrivono subito; `capture` chiede sempre, con i limiti di coda e
+  di `nonce` di
+  [Il clipper del browser](../reference/web-clipper.md#fubcapture-e-il-file).
 
 Un collegamento per un altro vault noto apre quel vault dopo una conferma, con
 lo stesso flusso del pulsante. Se il vault non si apre, il collegamento si

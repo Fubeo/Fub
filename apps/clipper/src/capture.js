@@ -186,9 +186,18 @@
   //   properties? (JSON string), nonce?, origin?, timestamp_ms?
   // Never carries secrets; never a `file=` pointer. URIs longer than
   // URI_LEN_GUARD throw {code:'too-large-for-uri'}: caller falls back to file.
+  // The app reads fub:// queries with percent-decoding only: `+` stays `+`
+  // (crates/fub-host/src/automation.rs). URLSearchParams would write spaces
+  // as `+`, so the pairs are encoded with encodeURIComponent (space = %20).
+  function QueryPairs() { this.pairs = []; }
+  QueryPairs.prototype.set = function (key, value) {
+    this.pairs.push(encodeURIComponent(key) + "=" + encodeURIComponent(String(value)));
+  };
+  QueryPairs.prototype.toString = function () { return this.pairs.join("&"); };
+
   function encodeCaptureUri(artifact) {
     var p = artifact.payload, e = artifact.envelope || {};
-    var params = new URLSearchParams();
+    var params = new QueryPairs();
     params.set("v", "1");
     params.set("title", p.title);
     params.set("markdown", p.markdown);

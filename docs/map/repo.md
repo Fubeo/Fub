@@ -49,7 +49,7 @@ prova sono nella tabella qui sotto.
 | il client | `apps/client/src/` | shell Scrittoio, editor, stato, tema, inchiostro caldo | `npm run typecheck && npm test` |
 | il seam del client | `apps/client/src/host/` | i tipi del confine, l'unica cucitura Tauri, l'host finto | `npx vitest run src/host` |
 | l'estensione | `apps/clipper/` | il clipper del browser (MV3, Firefox, Safari) | `node apps/clipper/smoke-headless.mjs` |
-| i motori | `vendor/` | WordCraft e GridCraft copiati, patch numerate, `UPSTREAM.md` | `node tools/vendor-craft/vendor.mjs check` |
+| i motori e i dati di terzi | `vendor/` | WordCraft e GridCraft copiati, patch numerate, `UPSTREAM.md`; i dati a file singolo | `node tools/vendor-craft/vendor.mjs check`, `node tools/vendor-craft/provenienza.mjs check` |
 | le prove dei motori | `tools/motori-prova/` | le misure di K0: peso, RAM, tempi, librerie doppie | `node tools/motori-prova/misura.mjs --out DIR` |
 | la prova con Obsidian | `tools/prova-obsidian/` | una lavagna con l'inchiostro e lo script che confronta prima e dopo; i passi nel `README.md` | `node --test tools/prova-obsidian/confronta.test.mjs` |
 | i componenti WASM | `esempi/` | un esempio per cosa da dimostrare, fuori dal workspace | li compila il test di `fub-wasm-host` |
@@ -115,7 +115,12 @@ parse (`crates/fub-kernel/tests/write_atomicity.rs`).
 | PhotoCraft, LightCraft | `tools/motori-prova/foto/`, `luce/` | le prove di K7 e K8 |
 | PdfCraft | `tools/motori-prova/pdf/` | le prove; il client usa pdf.js (`editors/media/pdf-view.ts`) |
 
-Le copie in `vendor/` sono derivati: upstream a un commit preciso più le
+Fuori dai motori, `vendor/whatwg-entities/` tiene la tabella delle entità
+nominate della specifica HTML (CC BY 4.0), da cui il client genera quella che
+scioglie le entità del Markdown. È un **dato**: un file singolo da un URL
+fisso, dichiarato con URL, licenza e sha256 in `tools/vendor-craft/dati.mjs`.
+
+Le copie dei motori in `vendor/` sono derivati: upstream a un commit preciso più le
 patch numerate di `patches/`, con `upstream.lock` che ne conserva le impronte.
 L'interfaccia (`ui-egui`) e il server MCP dei due motori non sono copiati.
 

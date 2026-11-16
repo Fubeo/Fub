@@ -60,6 +60,7 @@ import { t, type Key } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { textButton } from "../kit/button";
 import { setTooltip } from "../ui/tooltip";
+import { distinctiveTails } from "./tab-names";
 import { tabIndexForKey } from "../ui/tab-keys";
 import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
 import { createSelectionBubble, type SelectionBubble } from "./selection-bubble";
@@ -664,7 +665,10 @@ function drawTab(r: PaneFrame, tabs: Tab[], active: number): void {
   // Gli accordi sono gli stessi per ogni linguetta: si leggono una volta per
   // giro, non una per scheda (`allCommands` interroga ogni comando).
   const shortcuts = tabShortcuts();
-  tabs.forEach((tab, index) => paintTab(buttons[index]!, tab, index === active, index === roving, shortcuts));
+  // Dove si taglia ogni nome dipende dagli altri della striscia: due che
+  // cominciano uguali tengono a vista la parte che li distingue.
+  const tails = distinctiveTails(tabs.map(tabText));
+  tabs.forEach((tab, index) => paintTab(buttons[index]!, tab, index === active, index === roving, shortcuts, tails[index] ?? null));
   r.tabsShell.hidden = tabs.length === 0;
   r.contentEl.hidden = tabs.length === 0;
   drawEmptyPane(r, tabs.length === 0);
@@ -1019,21 +1023,41 @@ function wireTabDrag(r: PaneFrame, item: HTMLElement, index: number, target: Tab
   });
 }
 
+/// Il nome che una linguetta mostra: quello della scheda, la pila e la vista
+/// sorgente. La vista sorgente si dice a vista e al lettore di schermo: lo
+/// stesso documento in due riquadri, una volta disegnato e una volta come
+/// testo, darebbe due schede indistinguibili.
+function tabText(target: Tab): string {
+  const source = tabOverride(target) ? t("document.tab.source_view") : null;
+  return nameTab(target) + (target.stack ? ` [${target.stack}]` : "") + (source ? ` · ${source}` : "");
+}
+
 /// Ridipinge etichette e selezione senza ricreare i controlli. Il nome
 /// accessibile porta anche lo stato non salvato, non soltanto il colore.
-function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boolean, shortcuts: string): void {
+///
+/// `tail` è dove comincia la parte del nome che resta a vista quando la
+/// linguetta è stretta (`tab-names.ts`): la testa si accorcia con l'ellissi,
+/// la coda no. Senza, il nome si taglia alla fine.
+function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boolean, shortcuts: string, tail: number | null): void {
   const described = describeTab(target);
   tab.classList.toggle("dirty", described.dirty);
   tab.classList.toggle("tab-view", described.kind === "view");
   tab.classList.toggle("tab-pinned", target.pinned === true);
   tab.setAttribute("aria-selected", String(selected));
   tab.tabIndex = tabStop ? 0 : -1;
-  // La vista sorgente si dice a vista e al lettore di schermo: lo stesso
-  // documento in due riquadri, una volta disegnato e una volta come testo,
-  // darebbe due schede indistinguibili.
   const source = tabOverride(target) ? t("document.tab.source_view") : null;
   const name = tab.querySelector<HTMLElement>(".tab-name")!;
-  name.textContent = described.label + (target.stack ? ` [${target.stack}]` : "") + (source ? ` · ${source}` : "");
+  const text = tabText(target);
+  const head = document.createElement("span");
+  head.className = "tab-name-head";
+  head.textContent = tail === null ? text : text.slice(0, tail);
+  name.replaceChildren(head);
+  if (tail !== null) {
+    const end = document.createElement("span");
+    end.className = "tab-name-tail";
+    end.textContent = text.slice(tail);
+    name.append(end);
+  }
   // Il formato lo dice la linguetta, non la testata: ogni documento porta in
   // testa la figura del suo formato, anche la nota. Una nota con `icon:` nel
   // frontmatter porta invece la sua icona (K9), che dice di più.

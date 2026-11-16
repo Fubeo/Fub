@@ -79,6 +79,23 @@ describe("stage lifecycle", () => {
     expect(configs[1]?.server).toEqual({ port: 1448, strictPort: true });
   });
 
+  it("adds a bench's own browser options after the shared ones", async () => {
+    const launches: Array<{ args?: string[] }> = [];
+    const options = {
+      createServer: async () => ({ config: { server: { port: 1431 } }, listen: async () => {}, close: async () => {} }),
+      chromium: {
+        launch: async (config: { args?: string[] }) => {
+          launches.push(config);
+          return { close: async () => {} };
+        },
+      },
+    };
+    await (await openStage(options)).close();
+    await (await openStage({ ...options, browserArgs: ["--disable-partial-raster"] })).close();
+    expect(launches[0]?.args).not.toContain("--disable-partial-raster");
+    expect(launches[1]?.args).toEqual([...(launches[0]?.args ?? []), "--disable-partial-raster"]);
+  });
+
   it("preserves launch failure while exposing a failed rollback", async () => {
     const rollbackError = new Error("server rollback failed");
     const launchError = new Error("browser launch failed");

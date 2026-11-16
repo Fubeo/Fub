@@ -73,18 +73,22 @@ export function createSelectionBubble(host: BubbleHost): SelectionBubble {
     frame = null;
     const surface = host.surface();
     const box = !host.wanted() || !host.active() ? null : surface?.editorActions?.selectionBox?.() ?? null;
+    // Ciò che resta uguale non si riscrive: il posto si ricalcola a ogni
+    // battuta, e in WebKit un attributo riscritto uguale fa ridipingere (C6).
     if (!box || !host.writing() || bar.element.hidden) {
-      element.hidden = true;
+      if (!element.hidden) element.hidden = true;
       return;
     }
-    element.hidden = false;
+    if (element.hidden) element.hidden = false;
     const at = bubblePlace(
       box,
       { width: element.offsetWidth, height: element.offsetHeight },
       { width: window.innerWidth, height: window.innerHeight },
     );
-    element.style.left = `${at.left}px`;
-    element.style.top = `${at.top}px`;
+    const left = `${at.left}px`;
+    const top = `${at.top}px`;
+    if (element.style.left !== left) element.style.left = left;
+    if (element.style.top !== top) element.style.top = top;
   };
   const schedule = (): void => {
     if (frame !== null || life.closed) return;

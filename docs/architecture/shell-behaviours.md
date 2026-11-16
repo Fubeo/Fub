@@ -83,7 +83,12 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   solo ciò che si vede (`panels/explorer-view.ts`, `explorer-motion.ts`).
 - **Binario.** Riordino e nascondimento sono `chrome.rail.order` e
   `chrome.rail.hidden`; la voce «Ripristina ordine e icone predefiniti» li
-  riporta a `[]`.
+  riporta a `[]`. Il clic su Cerca o su Note fa la strada della loro
+  scorciatoia (`enterPanel` in `panels/sidebar.ts`): la barra si apre e il
+  fuoco entra nel campo della ricerca, col testo già scritto selezionato, o
+  nell'albero; un secondo clic sull'icona del pannello davanti chiude la
+  barra. Sul telefono la barra è un foglio dal basso e il fuoco resta alla
+  sua maniglia, perché un campo col fuoco alzerebbe la tastiera.
 - **Grafo.** La tela ha i comandi di zoom e «Inquadra tutto»; la legenda è un
   insieme di interruttori di visibilità per gruppo, che si compone con la
   maschera della linea del tempo.
@@ -93,6 +98,20 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   una linguetta di nota diventa finestra, solo con
   `platformSupports("multipleWindows")` e dove il motore consegna `dragend`
   fuori finestra. Ogni gesto ha il suo comando nel menu della linguetta.
+  Una linguetta non scende sotto `--tab-min` (132 px, una decina di lettere
+  oltre figura e chiusura): quelle che non ci stanno scorrono, e l'elenco in
+  fondo alla striscia le nomina tutte. Un nome troppo lungo si taglia alla
+  fine; se due nomi della striscia cominciano uguali (le note del diario,
+  due omonime con la cartella in coda) la vista lo divide in testa e coda
+  (`panels/tab-names.ts`) e a cedere con l'ellissi è la testa, così resta a
+  vista la parte che li distingue. Il nome intero resta nel nome accessibile
+  e nel suggerimento.
+  Chiusa, aperta o spostata una linguetta, le altre (e il «+») scorrono dal
+  posto di prima a quello nuovo in un passo solo: la misura è già quella
+  finale dal primo fotogramma e si muove solo una trasformazione; col moto
+  ridotto il passo è uno scatto unico (`shells/scrittoio/sheets/tab-strip.ts`).
+  Le prime schede di un foglio nuovo arrivano col foglio, e lì non scorre
+  niente.
 - **Fuoco dopo un'apertura.** Quando `openDocument` finisce, il fuoco va
   all'editor del documento aperto, ma solo se nel frattempo nessuno l'ha
   portato altrove: se sta ancora dov'era al gesto, da nessuna parte o in un

@@ -18,6 +18,7 @@ import { SCENE as scenes } from "./scene.mjs";
 import {
   ALLOWED,
   CHOREOGRAPHIES as choreographies,
+  BROWSER_ARGS,
   EXIT_LIMIT_MS,
   UNCOVERED as uncovered,
   cssName,
@@ -251,6 +252,15 @@ describe("la metà corsa", () => {
   it("senza corse vale il ripiego, e non scende mai sotto un fotogramma", () => {
     expect(midpoint([], 50)).toBeCloseTo(3 * frame, 9);
     expect(midpoint([4])).toBeCloseTo(frame, 9);
+  });
+});
+
+describe("gli scatti delle regole 1 e 4", () => {
+  // Col raster parziale lo stesso stato, raggiunto per due strade, dava ogni
+  // tanto un pixel diverso di due livelli (le Preferenze, regola 4): il
+  // confronto al pixel regge solo se ogni tessera toccata si rifà intera.
+  it("vengono da un Chromium che rasterizza intera ogni tessera toccata", () => {
+    expect(BROWSER_ARGS).toContain("--disable-partial-raster");
   });
 });
 

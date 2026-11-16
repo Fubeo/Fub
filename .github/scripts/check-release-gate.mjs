@@ -13,14 +13,15 @@
 const CI_WORKFLOW = "ci.yml";
 
 // I job che la CI esegue su ogni push: una corsa che non li ha tutti verdi,
-// anche saltati, non è una prova.
+// anche saltati, non è una prova. macOS è in pausa
+// (docs/decisions/0245-macos-e-ios-in-pausa.md): `build + test (macos-latest)`
+// torna qui quando torna nella matrice di `ci.yml`.
 export const REQUIRED_JOBS = [
   "invarianti",
   "supply chain",
   "fmt + clippy",
   "build + test (ubuntu-latest)",
   "build + test (windows-latest)",
-  "build + test (macos-latest)",
   "documentazione canonica",
   "client",
   "varianti di feature e motori in vendor",
@@ -31,15 +32,10 @@ export const REQUIRED_JOBS = [
   "banchi del movimento",
 ];
 
+// Le firme che il canale stabile promette, per piattaforma. Senza macOS non
+// si promette la firma Apple; quando torna, tornano qui i sei segreti
+// `APPLE_*` (certificato, password, identità, id, password dell'app, team).
 export const SIGNING = {
-  macos: [
-    "APPLE_CERTIFICATE",
-    "APPLE_CERTIFICATE_PASSWORD",
-    "APPLE_SIGNING_IDENTITY",
-    "APPLE_ID",
-    "APPLE_PASSWORD",
-    "APPLE_TEAM_ID",
-  ],
   windows: ["WINDOWS_CERTIFICATE", "WINDOWS_CERTIFICATE_PASSWORD"],
 };
 
@@ -129,9 +125,9 @@ function selfTest() {
     ["una rossa e una verde: basta la verde", ciProblems(sha, [run({ id: 2, conclusion: "failure" }), run({})], () => green).length === 0],
     ["v1.2.3 è stabile", isStable("v1.2.3")],
     ["v1.2.3-rc.1 non è stabile", !isStable("v1.2.3-rc.1")],
-    ["lo stabile senza segreti fallisce", signingProblems("v1.2.3", {}).length === 8],
+    ["lo stabile senza segreti fallisce", signingProblems("v1.2.3", {}).length === 2],
     ["lo stabile con tutti i segreti passa", signingProblems("v1.2.3", Object.fromEntries(Object.values(SIGNING).flat().map((name) => [name, "x"]))).length === 0],
-    ["una variabile vuota è un segreto mancante", signingProblems("v1.2.3", { APPLE_ID: "" }).length === 8],
+    ["una variabile vuota è un segreto mancante", signingProblems("v1.2.3", { WINDOWS_CERTIFICATE: "" }).length === 2],
     ["una prerelease non chiede firme", signingProblems("v1.2.3-rc.1", {}).length === 0],
   ];
   const failed = cases.filter(([, ok]) => !ok);

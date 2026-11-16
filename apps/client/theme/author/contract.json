@@ -460,6 +460,8 @@
     "tab-entry",
     "tab",
     "tab-name",
+    "tab-name-head",
+    "tab-name-tail",
     "tab-pin",
     "tab-format",
     "tab-page-icon",
@@ -1267,6 +1269,10 @@
     "canvas-ruler-bar",
     "canvas-ruler-grip",
     "canvas-ruler-angle",
+    "cm-fub-comment-range",
+    "cm-fub-comment-range-on",
+    "comment-range",
+    "cm-fub-comment-source",
     "draw-export",
     "draw-export-text",
     "draw-rail",
@@ -1702,17 +1708,23 @@
     "launcher-lens",
     "launcher-input",
     "launcher-wait",
+    "launcher-close",
     "launcher-modes",
-    "launcher-mode-prefix",
+    "launcher-mode",
+    "launcher-mode-tile",
     "launcher-list",
+    "launcher-highlight",
     "launcher-row",
+    "launcher-row-icon",
     "launcher-row-title",
-    "launcher-row-format",
     "launcher-row-detail",
     "launcher-row-meta",
     "launcher-note",
     "launcher-preview",
+    "launcher-preview-sheet",
     "launcher-preview-page",
+    "launcher-preview-meta",
+    "launcher-preview-fact",
     "launcher-preview-note",
     "launcher-foot",
     "launcher-status",
@@ -2320,6 +2332,8 @@
     "tab-entry": "cornice",
     "tab": "cornice",
     "tab-name": "cornice",
+    "tab-name-head": "cornice",
+    "tab-name-tail": "cornice",
     "tab-pin": "cornice",
     "tab-format": "cornice",
     "tab-page-icon": "cornice",
@@ -3127,6 +3141,10 @@
     "canvas-ruler-bar": "cornice",
     "canvas-ruler-grip": "cornice",
     "canvas-ruler-angle": "cornice",
+    "cm-fub-comment-range": "segno",
+    "cm-fub-comment-range-on": "segno",
+    "comment-range": "segno",
+    "cm-fub-comment-source": "segno",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-rail": "cornice",
@@ -3562,17 +3580,23 @@
     "launcher-lens": "cornice",
     "launcher-input": "cornice",
     "launcher-wait": "cornice",
+    "launcher-close": "cornice",
     "launcher-modes": "cornice",
-    "launcher-mode-prefix": "cornice",
+    "launcher-mode": "cornice",
+    "launcher-mode-tile": "cornice",
     "launcher-list": "cornice",
+    "launcher-highlight": "cornice",
     "launcher-row": "cornice",
+    "launcher-row-icon": "cornice",
     "launcher-row-title": "cornice",
-    "launcher-row-format": "cornice",
     "launcher-row-detail": "cornice",
     "launcher-row-meta": "cornice",
     "launcher-note": "cornice",
     "launcher-preview": "cornice",
+    "launcher-preview-sheet": "cornice",
     "launcher-preview-page": "cornice",
+    "launcher-preview-meta": "cornice",
+    "launcher-preview-fact": "cornice",
     "launcher-preview-note": "cornice",
     "launcher-foot": "cornice",
     "launcher-status": "cornice",
@@ -5028,6 +5052,8 @@
         "tab-entry",
         "tab",
         "tab-name",
+        "tab-name-head",
+        "tab-name-tail",
         "tab-pin",
         "tab-format",
         "tab-page-icon",
@@ -6917,6 +6943,21 @@
       ]
     },
     {
+      "name": "note-comments",
+      "part": "editors",
+      "hooks": [
+        "cm-fub-comment-range",
+        "cm-fub-comment-range-on",
+        "comment-range",
+        "cm-fub-comment-source",
+        "markdown-rendered"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
       "name": "draw-editor",
       "part": "draw",
       "hooks": [
@@ -8018,14 +8059,31 @@
       ]
     },
     {
+      "name": "unified-close",
+      "part": "launcher",
+      "hooks": [
+        "launcher-close"
+      ],
+      "states": [
+        "rest",
+        "hover"
+      ]
+    },
+    {
       "name": "unified-modes",
       "part": "launcher",
       "hooks": [
         "launcher-modes",
-        "launcher-mode-prefix"
+        "launcher-mode",
+        "launcher-mode-tile"
       ],
       "states": [
-        "rest"
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
       ]
     },
     {
@@ -8033,15 +8091,21 @@
       "part": "launcher",
       "hooks": [
         "launcher-list",
+        "launcher-highlight",
         "launcher-row",
+        "launcher-row-icon",
         "launcher-row-title",
-        "launcher-row-format",
         "launcher-row-detail",
         "launcher-row-meta",
         "launcher-note"
       ],
       "states": [
-        "rest"
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
       ]
     },
     {
@@ -8049,7 +8113,10 @@
       "part": "launcher",
       "hooks": [
         "launcher-preview",
+        "launcher-preview-sheet",
         "launcher-preview-page",
+        "launcher-preview-meta",
+        "launcher-preview-fact",
         "launcher-preview-note"
       ],
       "states": [
@@ -9357,6 +9424,8 @@
   "optional_roles": [
     "shadow-sheet",
     "shadow-sheet-focus",
+    "shadow-raise",
+    "shadow-pop",
     "draw-desk",
     "bar-tray",
     "doc-ins",
@@ -9843,6 +9912,8 @@
     "shadow-4",
     "shadow-sheet",
     "shadow-sheet-focus",
+    "shadow-raise",
+    "shadow-pop",
     "shadow-5",
     "shadow-6",
     "shadow-7",
@@ -10009,11 +10080,11 @@
   },
   "counts": {
     "required_roles": 154,
-    "optional_roles": 66,
-    "hooks": 1858,
+    "optional_roles": 68,
+    "hooks": 1870,
     "state_names": 7,
-    "assigned_states": 867,
-    "components": 257,
-    "preference_tokens": 189
+    "assigned_states": 881,
+    "components": 259,
+    "preference_tokens": 191
   }
 }

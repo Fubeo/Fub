@@ -44,6 +44,7 @@ vi.mock("../host/ipc", () => ({
 }));
 vi.mock("../theme/theme", () => ({
   CONTRAST_KEY: "appearance.contrast",
+  MOTION_KEY: "appearance.motion",
   SERIES_THEME_ID: "fub.serie",
   THEME_KEY: "appearance.theme",
   currentThemeId: () => box.themeId,
