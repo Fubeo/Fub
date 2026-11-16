@@ -2516,7 +2516,12 @@ async function renderShortcuts(): Promise<HTMLElement[]> {
       diagnostic.id = `shortcut-issue-${command.id.replace(/[^a-z0-9_-]/gi, "-")}`;
       input.setAttribute("aria-describedby", diagnostic.id);
       const update = () => {
-        diagnostic.textContent = shortcutDiagnostic(command, input.value, commands);
+        const issue = shortcutDiagnostic(command, input.value, commands);
+        diagnostic.textContent = issue;
+        // La riga dice da sé che c'è un problema: la pelle la veste con
+        // `[data-issue]`. Un `:has(… :not(:empty)) + *` costava in WebKit
+        // ogni testo cambiato in tutta la finestra (vedi `performance-webview.md`).
+        element.toggleAttribute("data-issue", issue !== "");
         if (validateKeybinding(input.value).valid) input.removeAttribute("aria-invalid");
         else input.setAttribute("aria-invalid", "true");
       };

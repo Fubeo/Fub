@@ -147,7 +147,7 @@ describe("chi resta", () => {
     expect(driver.plays).toHaveLength(0);
   });
 
-  it("chi cambia posto scivola da dov'era, ed è l'elemento nuovo a farlo", async () => {
+  it("chi cambia posto scivola da dov'era, ed è la stessa voce a farlo", async () => {
     const host = view(keyed("a", "b", "c"));
     const old = row(host, "c");
     draw(host, keyed("c", "a", "b"));
@@ -156,8 +156,8 @@ describe("chi resta", () => {
     expect(driver.plays).toHaveLength(0);
     await settled();
 
-    // Una voce è una foglia: il riconciliatore l'ha ricostruita.
-    expect(row(host, "c")).not.toBe(old);
+    // Una voce uguale non si ricostruisce: il riconciliatore l'ha solo spostata.
+    expect(row(host, "c")).toBe(old);
     expect(shift(playOn(row(host, "c"))?.keyframes[0])).toEqual([0, 2 * ROW]);
     expect(shift(playOn(row(host, "a"))?.keyframes[0])).toEqual([0, -ROW]);
     expect(shift(playOn(row(host, "b"))?.keyframes[0])).toEqual([0, -ROW]);
@@ -426,7 +426,24 @@ describe("una passata dopo l'altra", () => {
     expect(driver.plays.filter((play) => play.state === "running").length).toBe(3);
   });
 
-  it("un ridisegno uguale a metà corsa non la tronca: prosegue sull'elemento nuovo", async () => {
+  it("un ridisegno uguale a metà corsa non la tronca: la stessa voce prosegue la sua", async () => {
+    const host = view(keyed("a", "b", "c"));
+    draw(host, keyed("c", "a", "b"));
+    await settled();
+    driver.advance(50);
+    const old = row(host, "c");
+    const play = playOn(old);
+    expect(play).toBeDefined();
+
+    draw(host, keyed("c", "a", "b"));
+    await settled();
+    // Un albero uguale non si tocca: né la voce né la sua corsa.
+    expect(row(host, "c")).toBe(old);
+    expect(playOn(old)).toBe(play);
+    expect(running()).toHaveLength(3);
+  });
+
+  it("una voce cambiata a metà corsa non la tronca: prosegue sull'elemento nuovo", async () => {
     const host = view(keyed("a", "b", "c"));
     draw(host, keyed("c", "a", "b"));
     await settled();
@@ -434,8 +451,9 @@ describe("una passata dopo l'altra", () => {
     const live = liveState(row(host, "c"))!;
     const old = row(host, "c");
 
-    draw(host, keyed("c", "a", "b"));
+    draw(host, list([voice("c", false, "c rinominata"), voice("a"), voice("b")]));
     await settled();
+    // Una foglia cambiata si ricostruisce, e la corsa passa a quella nuova.
     expect(row(host, "c")).not.toBe(old);
     expect(shift(playOn(row(host, "c"))?.keyframes[0])[1]).toBeCloseTo(live.pose.y!, 1);
   });
@@ -535,9 +553,25 @@ describe("la sagoma della voce scelta", () => {
     draw(host, choice("c"));
     await settled();
     driver.advance(50);
-    const live = liveState(row(host, "c"), "::after")!;
+    const play = playOn(row(host, "c"), "::after");
+    expect(play).toBeDefined();
     draw(host, choice("c"));
     await settled();
+    // Uguale: la voce resta quella, e la sagoma prosegue la sua corsa.
+    expect(playOn(row(host, "c"), "::after")).toBe(play);
+    expect(running()).toHaveLength(1);
+  });
+
+  it("la voce scelta cambiata a metà scivolata: la sagoma la segue sull'elemento nuovo", async () => {
+    const host = view(choice("a"));
+    draw(host, choice("c"));
+    await settled();
+    driver.advance(50);
+    const old = row(host, "c");
+    const live = liveState(old, "::after")!;
+    draw(host, list(["a", "b", "c"].map((key) => voice(key, key === "c", key === "c" ? "c rinominata" : key))));
+    await settled();
+    expect(row(host, "c")).not.toBe(old);
     expect(shift(playOn(row(host, "c"), "::after")?.keyframes[0])[1]).toBeCloseTo(live.pose.y!, 1);
     expect(running()).toHaveLength(1);
   });

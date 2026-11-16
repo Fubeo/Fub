@@ -430,3 +430,37 @@ describe("lo scorrimento del foglio è una radice di layout", () => {
     expect(undone).toEqual([]);
   });
 });
+
+describe("nessun `:empty` dentro un `:has()`", () => {
+  // In WebKit un testo che cambia in un punto qualunque della finestra
+  // (un `textContent`, la parola «Salvato») rimette in discussione `:empty`, e
+  // con un `:empty` dentro un `:has()` seguito da `+ *` ricontrollava tutta
+  // la finestra: 15–25 ms per testo con la view dei collegamenti di una nota
+  // lunga, ogni salvataggio (`docs/product/performance-webview.md`). Uno stato
+  // che serve a un `:has()` lo scrive il codice come attributo.
+  const sheets = import.meta.glob<string>("../**/*.css", { query: "?raw", import: "default", eager: true });
+
+  /// Gli argomenti di ogni `:has(` del testo, con le parentesi bilanciate.
+  function hasArguments(css: string): string[] {
+    const text = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const found: string[] = [];
+    for (let at = text.indexOf(":has("); at >= 0; at = text.indexOf(":has(", at + 5)) {
+      let depth = 0;
+      let end = at + 4;
+      for (; end < text.length; end++) {
+        if (text[end] === "(") depth++;
+        else if (text[end] === ")" && --depth === 0) break;
+      }
+      found.push(text.slice(at + 5, end));
+    }
+    return found;
+  }
+
+  it("in nessun foglio del client", () => {
+    expect(Object.keys(sheets).length).toBeGreaterThan(4);
+    const offending = Object.entries(sheets).flatMap(([file, css]) =>
+      hasArguments(css).filter((arg) => arg.includes(":empty")).map((arg) => `${file}: :has(${arg})`),
+    );
+    expect(offending).toEqual([]);
+  });
+});

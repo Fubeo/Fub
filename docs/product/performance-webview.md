@@ -46,6 +46,48 @@ alto:
 | lunga | Blocchi | 48 · 80, 34 · 53 (9–12) | 29 · 41, 27 · 41 (7–12) |
 
 WebKitGTK disegna a 60 Hz anche su schermi più veloci, quindi un fotogramma
-dura almeno 16,7 ms. Sulla nota lunga resta, prima e dopo, un blocco da 130 a
-190 ms poco dopo il salvataggio, e la prima marcatura del correttore
-(`proof.ts`) nel tratto appena visibile costa un fotogramma da circa 60 ms.
+dura almeno 16,7 ms. La prima marcatura del correttore (`proof.ts`) nel tratto
+appena visibile costa ancora un fotogramma da circa 60 ms.
+
+## Dopo il salvataggio
+
+Un salvataggio ridisegna le viste che dipendono dalla nota (collegamenti,
+statistiche, struttura), anche quelle nascoste nel cassetto quando la finestra
+è stretta. Sulla nota lunga del banco la view dei collegamenti in uscita ha una
+riga per rimando, circa 4900 righe e 33 000 nodi, e ogni salvataggio la
+ricostruiva da capo: un blocco del thread da 130 a 210 ms circa 100 ms dopo
+`write_document`. Due regole lo tolgono:
+
+- **un sottoalbero uguale non si tocca**: la riconciliazione di `ui/node.ts`
+  lascia com'è un nodo il cui `UiNode` è uguale al precedente (confronto
+  profondo), se non sono cambiati gli ingressi lato client del disegno:
+  le icone registrate, quelle delle pagine e la lingua (`drawInputs`). Un campo
+  (testo, scelta, interruttore…) e un `custom` si aggiornano sempre, perché il
+  loro stato vive anche nel DOM. La guardia è `node.test.ts` («un sottoalbero
+  uguale non si tocca»);
+- **niente `:empty` dentro un `:has()`**: in WebKit un testo cambiato in un
+  punto qualunque della finestra (la parola «Salvato» in `#save-state`)
+  rimette in discussione `:empty`, e la regola
+  `.setting-row:has(.setting-diagnostic:not(:empty)) + *` delle impostazioni
+  faceva ricontrollare tutta la finestra: 10–26 ms per ogni testo dello stato
+  di salvataggio, in proporzione ai nodi. Uno stato che serve a un selettore lo
+  scrive il codice come attributo (`data-issue` sulla riga della scorciatoia).
+  Le guardie sono `structure.test.ts`, che rifiuta `:empty` dentro `:has()` in
+  ogni foglio del client, e `settings.shortcuts.test.ts`.
+
+Misura con una sonda sull'ispettore remoto di WebKit (senza WebDriver) nell'app vera,
+pc-debian-di-fub, 16 novembre 2026, nota lunga (5000 righe con rimandi), 20
+caratteri a 60 ms, poi 3 s dopo il salvataggio automatico; blocco massimo del
+thread e fotogramma più lungo in ms, carico medio a un minuto fra parentesi:
+
+| Modalità | Prima: blocco · fotogramma | Dopo: blocco · fotogramma |
+|---|---:|---:|
+| Sorgente | 150 · 164, 138 · 149 (0,5–0,8) | 0 · 25, 0 · 25 (0,3) |
+| Live | 207 · 218, 151 · 140 (2,5–2,7) | 0 · 24, 0 · 20 (1,1–2,0) |
+| Blocchi | 151 · 162, 141 · 156 (0,3) | 0 · 32, 0 · 32 (0,2) |
+
+«Prima» è `2352d9b61`. Un blocco è un giro di `setTimeout(0)` in ritardo di
+oltre 40 ms; dopo il salvataggio non ne resta nessuno. La view dei
+collegamenti resta grande da disegnare la prima volta (una riga per rimando, in
+`crates/fub-features/src/backlinks.rs`): costa all'apertura, non a ogni
+salvataggio.

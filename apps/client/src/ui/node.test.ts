@@ -12,8 +12,11 @@ vi.mock("./notify", () => ({
   },
 }));
 // Le icone delle pagine si fingono: la cache vera chiede all'indice.
-const pageIcons = vi.hoisted(() => new Map<string, string>());
-vi.mock("../state/page-icons", () => ({ pageIcon: (doc: string) => pageIcons.get(doc) ?? null }));
+const pageIcons = vi.hoisted(() => Object.assign(new Map<string, string>(), { revision: 0 }));
+vi.mock("../state/page-icons", () => ({
+  pageIcon: (doc: string) => pageIcons.get(doc) ?? null,
+  pageIconsRevision: () => pageIcons.revision,
+}));
 import type { ActionRef, FieldValue, UiNode } from "../host/contract";
 import { pair, activeFields, mountTree, patchTree, setNodeMotion, unmountTree, type NodeMotion } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
@@ -1411,6 +1414,125 @@ describe("una voce che nomina una nota ne porta l'icona (S2 T13)", () => {
     expect(own!.draggable).toBe(true);
     unmountTree(host);
     host.remove();
+  });
+});
+
+describe("un sottoalbero uguale non si tocca", () => {
+  const item = (title: string, doc: string): UiNode =>
+    ({
+      node: "list_item",
+      key: doc,
+      title,
+      subtitle: "Riga 1: un contesto",
+      action: { action: "open", payload: { doc } },
+      selected: false,
+      drag: { kind: "document", doc },
+    }) as unknown as UiNode;
+  const view = (titles: string[]): UiNode =>
+    ({
+      node: "stack",
+      dir: "column",
+      gap: 4,
+      children: [
+        { node: "heading", level: 3, content: "In uscita" },
+        { node: "list", items: titles.map((title, i) => item(title, `Nota ${i}.md`)) },
+        { node: "web_view", url: "about:blank", height: 40 },
+      ],
+    }) as unknown as UiNode;
+
+  let host: HTMLElement;
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.appendChild(host);
+  });
+  afterEach(() => {
+    unmountTree(host);
+    host.remove();
+    pageIcons.clear();
+  });
+
+  /// Le mutazioni che un secondo montaggio fa nel DOM, dopo il primo.
+  function mutationsOf(first: UiNode, second: UiNode): MutationRecord[] {
+    mountTree(host, first, async () => {});
+    const observer = new MutationObserver(() => {});
+    observer.observe(host, { subtree: true, childList: true, attributes: true, characterData: true });
+    mountTree(host, second, async () => {});
+    const records = observer.takeRecords();
+    observer.disconnect();
+    return records;
+  }
+
+  it("lo stesso albero rimandato non cambia niente: nessuna mutazione", () => {
+    const titles = ["Uno", "Due", "Tre"];
+    // Una copia, non lo stesso oggetto: dal kernel arriva sempre un JSON nuovo.
+    expect(mutationsOf(view(titles), JSON.parse(JSON.stringify(view(titles))) as UiNode)).toEqual([]);
+  });
+
+  it("il frame di un web_view uguale non si ricarica", () => {
+    mountTree(host, view(["Uno"]), async () => {});
+    const frame = host.querySelector("iframe");
+    mountTree(host, view(["Uno"]), async () => {});
+    expect(host.querySelector("iframe")).toBe(frame);
+  });
+
+  it("si rifà solo la voce cambiata, le sorelle restano loro", () => {
+    mountTree(host, view(["Uno", "Due", "Tre"]), async () => {});
+    const heading = host.querySelector(".ui-heading");
+    const [one, , three] = [...host.querySelectorAll<HTMLElement>(".ui-list-item")];
+    mountTree(host, view(["Uno", "Due bis", "Tre"]), async () => {});
+    const after = [...host.querySelectorAll<HTMLElement>(".ui-list-item")];
+    expect(host.querySelector(".ui-heading")).toBe(heading);
+    expect(after[0]).toBe(one);
+    expect(after[2]).toBe(three);
+    expect(after[1]!.querySelector(".ui-list-item-title")!.textContent).toBe("Due bis");
+  });
+
+  it("l'azione di una voce saltata è quella dell'ultimo montaggio", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    mountTree(host, view(["Uno"]), first);
+    mountTree(host, view(["Uno"]), second);
+    host.querySelector<HTMLElement>(".ui-list-item")!.click();
+    await Promise.resolve();
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  it("un'icona di pagina cambiata rifà la voce anche se il nodo è lo stesso", () => {
+    mountTree(host, view(["Uno"]), async () => {});
+    expect(host.querySelector(".ui-list-item-icon svg")).not.toBeNull();
+    pageIcons.set("Nota 0.md", "🌞");
+    pageIcons.revision += 1;
+    mountTree(host, view(["Uno"]), async () => {});
+    expect(host.querySelector(".ui-list-item-icon")!.textContent).toBe("🌞");
+  });
+
+  it("una figura registrata dopo il disegno compare al giro dopo", () => {
+    const tree = { node: "icon", name: "cometa-di-prova" } as unknown as UiNode;
+    mountTree(host, tree, async () => {});
+    expect(host.querySelector(".ui-icon svg")).toBeNull();
+    const retire = registerIcon("cometa-di-prova", ["M3 3h18v18H3z"]);
+    try {
+      mountTree(host, tree, async () => {});
+      expect(host.querySelector(".ui-icon svg")).not.toBeNull();
+    } finally {
+      retire();
+    }
+  });
+
+  it("un campo uguale riprende il valore del provider, come prima del salto", () => {
+    const field = {
+      node: "stack",
+      dir: "column",
+      gap: 0,
+      children: [{ node: "text_input", field: "q", label: "Cerca", value: "dal provider", placeholder: null, action: null }],
+    } as unknown as UiNode;
+    mountTree(host, field, async () => {});
+    const input = host.querySelector("input")!;
+    input.value = "scritto e lasciato";
+    mountTree(host, JSON.parse(JSON.stringify(field)) as UiNode, async () => {});
+    expect(host.querySelector("input")).toBe(input);
+    expect(input.value).toBe("dal provider");
   });
 });
 
