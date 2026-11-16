@@ -6911,7 +6911,11 @@ button.cm-fub-page-icon:hover {
 .cm-fub-page-prop {
   display: grid;
   grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
-  align-items: baseline;
+  /* Nome e valore partono in cima, alti 32 px tutti e due, come `.pk` e
+     `.pv` nella griglia del prototipo: una pastiglia o una persona, centrate
+     nel valore, non spostano la riga (con la linea di base la alzavano a
+     35 px). */
+  align-items: stretch;
 }
 .cm-fub-page-prop-key {
   display: flex;
