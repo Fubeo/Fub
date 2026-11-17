@@ -46,8 +46,7 @@ flowchart LR
 | [Editor e anteprima](product/editor-and-preview.md) | le superfici di scrittura |
 | [Scrittura](product/editor-writing.md) e [I commenti nel testo](product/editor-comments.md) | le modalità di una nota, i livelli di presenza e l'incolla degli indirizzi; il passo commentato |
 | [Blocchi](product/editor-blocks.md) e [Tabelle](product/editor-tables.md) | i blocchi di Scrittura; i gesti delle tabelle in note, documenti e fogli |
-| [Tasto destro, mini-barra e «/»](product/editor-menus.md) | i menu degli editor |
-| [I diagrammi](product/editor-diagrams.md) | il disegno Mermaid, il suo menu del tasto destro e i tasti del blocco |
+| [Tasto destro, mini-barra e «/»](product/editor-menus.md) e [i diagrammi](product/editor-diagrams.md) | i menu degli editor; il disegno Mermaid, il suo menu e i tasti del blocco |
 | [Basi (file `.base`)](product/bases.md) e [il loro calendario](product/bases-calendar.md) | le viste, i filtri, i limiti e che cosa si scrive sul file; il mese e le note trascinate fra i giorni |
 | [La riga dei dati](product/editor-note-facts.md) | modifica, collegamenti ed etichette sotto il titolo |
 | [Correttore](product/proofing.md) | l'ortografia mentre si scrive |
