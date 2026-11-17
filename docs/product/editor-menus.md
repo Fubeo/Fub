@@ -333,8 +333,8 @@ griglia delle tabelle in Live ha il suo
   non ne ha uno;
 - `apps/client/src/panels/mini-bar.ts`: la mini-barra, e
   `apps/client/src/panels/selection-bubble.ts` che la posa sul testo scelto;
-  `mini-bar.test.ts` confronta ogni pulsante con la sua scorciatoia su una
-  nota vera;
+  `apps/client/src/editors/text/profiles/markdown/mini-bar.dom.test.ts`
+  confronta ogni pulsante con la sua scorciatoia su una nota vera;
 - `apps/client/src/panels/slash/` (voci, classifica, comandi rapidi, passi,
   pannello) e `apps/client/src/editors/text/profiles/markdown/slash.ts`
   (contesto e stato): il «/» nel testo;
