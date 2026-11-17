@@ -1234,7 +1234,15 @@ export class GridEngine {
   /// contiene la cella attiva e la cella attiva, che è l'àncora quando è un
   /// angolo dell'intervallo.
   #adoptSelection(selection: GridCommandSelection): void {
-    const index = this.#workbook?.sheets.findIndex((sheet) => sheet.id === selection.sheet) ?? -1;
+    const indexOf = () => this.#workbook?.sheets.findIndex((sheet) => sheet.id === selection.sheet) ?? -1;
+    let index = indexOf();
+    // Un comando che ha aggiunto il foglio (Inserisci foglio) lo lascia
+    // attivo: la cartella mostrata lo conosce dopo essersi riletta dalla
+    // sessione del provider, che lo ha già.
+    if (index < 0 && this.#shownSession?.sheets.some((sheet) => sheet.id === selection.sheet)) {
+      this.#showView(this.#sheet().id, false);
+      index = indexOf();
+    }
     const active = parseCellA1(selection.active);
     if (index < 0 || !active) return;
     const areas = selection.selection.split(",").map(parseRangeA1).filter((area): area is GridRange => area !== null);
