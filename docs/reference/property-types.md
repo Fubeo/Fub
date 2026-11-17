@@ -1,10 +1,14 @@
 # I tipi delle proprietà
 
 > **Ambito:** il registro `properties.types` del vault, i tipi che dichiara,
-> le opzioni di Selezione e Stato e i comandi che lo scrivono.
+> le opzioni di Selezione e Stato, il bersaglio delle Relazioni, la relazione
+> inversa, il riepilogo di una Relazione nelle Basi e i comandi che scrivono
+> il registro.
 > **Fonti autorevoli:** `crates/fub-abi/src/model/property.rs`,
 > `crates/fub-kernel/src/properties.rs`,
-> `crates/fub-features/src/properties/commands.rs`.
+> `crates/fub-features/src/properties/commands.rs`,
+> `crates/fub-features/src/properties/relation.rs`,
+> `crates/fub-format-base/src/formula.rs`, `crates/fub-features/src/base.rs`.
 
 Il valore di una proprietà resta nel frontmatter della nota. Il registro dei
 tipi dice soltanto come leggerlo: quale editor mostrare, come filtrarlo, come
@@ -33,9 +37,10 @@ programma la può scrivere.
 | `version` | `1`. Un'altra versione non si legge |
 | `types` | per ogni chiave, il suo tipo |
 | `options` | facoltativo: per ogni chiave, le opzioni di Selezione e Stato, nell'ordine in cui si mostrano |
+| `targets` | facoltativo: per ogni chiave, il bersaglio di una Relazione (vedi [Le Relazioni](#le-relazioni)) |
 
-Un registro senza opzioni non scrive il campo `options`: si riscrive byte per
-byte com'era prima che le opzioni esistessero.
+Un registro senza opzioni né bersagli non scrive i campi `options` e
+`targets`: si riscrive byte per byte com'era prima che esistessero.
 
 ## I tipi
 
@@ -51,6 +56,7 @@ byte com'era prima che le opzioni esistessero.
 | `select` | un testo | il testo dell'opzione |
 | `status` | un testo | il testo dell'opzione, col suo gruppo |
 | `url` | un testo | testo, così com'è scritto |
+| `relation` | una lista di `[[link]]`, o un link solo | lista di link a note |
 
 Un valore che non ha la forma del suo tipo resta com'è nel file e si mostra
 come sorgente: niente si converte. Un valore YAML che non è un testo (`3`,
@@ -84,23 +90,99 @@ riscrive. Due opzioni con lo stesso nome, scritte a mano, si leggono: vale la
 prima. Un campo che questo Fub non conosce, invece, rende illeggibile tutto
 il registro.
 
+## Le Relazioni
+
+Una Relazione lega una nota ad altre: il valore è una lista di link,
+`libri: ["[[Dune]]", "[[Fondazione]]"]`, e un link solo (`"[[Dune]]"`) è una
+lista di uno. Una voce che non è un `[[link]]` resta testo (un link rotto a
+parole) e non diventa una data; una voce che non è un testo resta com'è nel
+file.
+
+### Il bersaglio
+
+Il registro può dire fra quali note si sceglie il valore, con una parola per
+chiave in `targets`:
+
+```json
+{
+  "version": 1,
+  "types": { "autori": "relation", "libri": "relation" },
+  "targets": { "autori": "[[Tipi/Persona]]", "libri": "Libri" }
+}
+```
+
+| Parola | Bersaglio |
+|---|---|
+| `[[Tipi/Persona]]` | le note di un tipo: la pagina del tipo è quella del link |
+| `Libri`, `Libri/` | le note della cartella e delle sue sottocartelle |
+
+Senza bersaglio vale ogni nota. Il bersaglio restringe la scelta
+nell'editor, non il valore: un link già scritto a una nota fuori dal
+bersaglio resta un link. Una parola che non si legge (vuota, `[[]]`, una
+cartella con `..`) vale ogni nota e resta nel file com'è; un bersaglio che
+non è una parola (un oggetto) rende illeggibile il registro.
+
+### Collegata da
+
+La relazione inversa di una nota sono le note che la legano con una
+Relazione (`fub_features::properties::linked_from`). Si legge dai link
+delle Relazioni delle altre note, risolti con le regole dei link del vault
+(nome, path, alias), e non scrive niente in nessuna nota. I link nel
+frontmatter non sono archi del grafo dei link, quindi i backlink non
+bastano. Contano solo le chiavi dichiarate `relation`; un link rotto non
+lega; una nota che lega sé stessa compare fra chi la lega.
+
+### Il riepilogo in una Base
+
+Una formula della Base riepiloga una proprietà delle note legate:
+
+```yaml
+formulas:
+  - {name: pagine, expression: 'rollup(prop.libri, "sum", "pagine")'}
+  - {name: quanti, expression: 'rollup(libri, "count")'}
+```
+
+| Argomento | Che cosa vale |
+|---|---|
+| primo | la Relazione, scritta come proprietà (`prop.libri` o `libri`) |
+| secondo | `count`, `sum`, `average`, `min` o `max`, scritto come testo |
+| terzo | la proprietà delle note legate, scritta come testo; non serve per `count` |
+
+`count` conta le note legate trovate: un link rotto e una voce che non è un
+link non contano, due link alla stessa nota sono una nota, una nota che
+lega sé stessa conta come le altre. `sum` e `average` vogliono numeri,
+`min` e `max` numeri o date: un valore pieno di un'altra specie è
+`#VALUE!`. Senza valori pieni il risultato è vuoto, il conteggio zero. Il
+riepilogo legge le proprietà delle note legate come sono scritte, mai le
+loro formule o i loro riepiloghi: un giro di relazioni si ferma al primo
+livello.
+
+Il calcolo è nel core (`fub.base`). Il `plan` dice in `relations` le
+Relazioni da risolvere e in `linked_props` le proprietà delle note legate da
+chiedere; il `derive` riceve le note legate in `linked`, una per pagina di
+link risolta, `{target, doc, props}`. Una pagina che non risolve non si
+manda ed è un link rotto. Una formula che non dice per scritto la Relazione,
+il riepilogo o la proprietà non si legge (`#PARSE!`).
+
 ## Quando il registro non si legge
 
 Un registro di una versione futura, con un campo sconosciuto o rotto non si
 legge: Fub usa le chiavi convenzionali e **non lo riscrive mai**. I comandi
 che scrivono nel registro (`property.type.set`, `property.key.rename`,
-`property.option.set`, `property.types.restore`) si rifiutano e lo lasciano
-com'è. Un Fub più vecchio che trova `options` nel registro fa lo stesso: per
-lui il campo è sconosciuto.
+`property.option.set`, `property.target.set`, `property.types.restore`) si
+rifiutano e lo lasciano com'è. Un Fub più vecchio che trova `options`,
+`targets` o il tipo `relation` nel registro fa lo stesso: per lui il campo o
+il tipo è sconosciuto.
 
 ## I comandi
 
 | Comando | Che cosa fa |
 |---|---|
 | `property.type.set` | dichiara il tipo di una chiave; le opzioni restano |
-| `property.key.rename` | rinomina la chiave nelle note; il tipo e le opzioni passano alla chiave nuova, se non ne ha già |
+| `property.key.rename` | rinomina la chiave nelle note; il tipo, le opzioni e il bersaglio passano alla chiave nuova, se non ne ha già |
 | `property.option.set` | aggiunge, rinomina, colora e raggruppa un'opzione |
-| `property.types.restore` | rimette il registro a un testo di prima: è l'annullo delle opzioni |
+| `property.target.set` | dice o toglie il bersaglio di una Relazione |
+| `property.types.restore` | rimette il registro a un testo di prima: è l'annullo delle opzioni e del bersaglio |
 
 `property.option.set` prende:
 
