@@ -3,6 +3,7 @@ import type { KatexOptions } from "katex";
 import { onLanguage, t } from "../../../../i18n/strings";
 import { openLifetime, type Teardown } from "../../../../ui/lifetime";
 import { attachTooltip, setTooltip } from "../../../../ui/tooltip";
+import { diagnose, explain, problemSentence } from "./math/errors";
 
 const MAX_SOURCE_LENGTH = 20_000;
 let library: Promise<{ default: typeof katex }> | undefined;
@@ -38,10 +39,6 @@ export function loadKatex(): Promise<typeof katex> {
   ]).then(([module]) => module.default);
 }
 
-function reasonText(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error)).slice(0, 1200);
-}
-
 /** Hydrates inert TeX placeholders with KaTeX. The library and its stylesheet
  * are fetched only when a rendered document actually contains a formula. */
 export function mountMathBlocks(container: HTMLElement): Teardown {
@@ -51,22 +48,27 @@ export function mountMathBlocks(container: HTMLElement): Teardown {
     const source = element.dataset.tex ?? element.textContent ?? "";
     let phase: "loading" | "ready" | "error" = "loading";
     life.add(attachTooltip(element, ""));
-    let reason = "";
+    // Il perché dell'errore, detto nella lingua di adesso: `labels` lo rifà al
+    // cambio di lingua. Il messaggio di KaTeX non esce mai: la frase viene da
+    // `math/errors.ts`, la stessa del riquadro della formula.
+    let reason: () => string = () => "";
     // Un nome su uno `span` o un `div` senza ruolo non vale (ARIA): il ruolo
     // `math` lo ammette, e lascia leggibile il MathML che KaTeX mette dentro.
     element.setAttribute("role", "math");
     const labels = () => {
       element.dataset.state = phase;
       element.setAttribute("aria-busy", String(phase === "loading"));
+      // Il nome (per il lettore di schermo) e il suggerimento dicono la stessa frase.
+      const failed = phase === "error" ? t("math.error", { reason: reason() }) : "";
       element.setAttribute("aria-label", phase === "error"
-        ? t("math.error", { reason })
+        ? failed
         : phase === "loading" ? t("math.loading") : t("math.formula"));
-      setTooltip(element, phase === "error" ? t("math.error", { reason }) : "");
+      setTooltip(element, failed);
     };
-    const fail = (error: unknown) => {
+    const fail = (why: () => string) => {
       if (life.closed) return;
       phase = "error";
-      reason = reasonText(error);
+      reason = why;
       element.textContent = source;
       labels();
       container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
@@ -74,7 +76,7 @@ export function mountMathBlocks(container: HTMLElement): Teardown {
     life.add(onLanguage(labels));
     labels();
     if (source.length > MAX_SOURCE_LENGTH) {
-      fail(new Error(t("math.too_large", { limit: MAX_SOURCE_LENGTH })));
+      fail(() => t("math.too_large", { limit: MAX_SOURCE_LENGTH }));
       continue;
     }
     void loadKatex().then((library) => {
@@ -86,7 +88,12 @@ export function mountMathBlocks(container: HTMLElement): Teardown {
       phase = "ready";
       labels();
       container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
-    }).catch(fail);
+    }).catch((error: unknown) => {
+      // `diagnose` legge l'errore una volta sola; `explain` scrive la frase nella
+      // lingua di adesso, ogni volta che `labels` la chiede.
+      const diagnosis = diagnose(error, source);
+      fail(() => problemSentence(explain(diagnosis)));
+    });
   }
   return () => life.close();
 }
