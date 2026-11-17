@@ -15,13 +15,13 @@ giorni mostrati ha al bordo una data con la freccia, che porta i giorni fin
 lì. Le note senza l'inizio non hanno riga: a destra della testata c'è quante
 sono.
 
-Sopra le righe ci sono i giorni mostrati, i due passi, «Oggi» e lo zoom:
-**Settimane** (otto colonne di una settimana, dal giorno della lingua
-dell'interfaccia), **Mesi** (sei) e **Anni** (quattro). Si apre con oggi
-nella seconda colonna. La riga della scala dice le due proprietà
-(«richiesta → consegna») e il nome di ogni colonna; una riga verticale
-dell'accento segna oggi, con la scritta «oggi» al posto del nome della sua
-colonna. Come le altre viste, la linea del tempo mostra 100 note con una
+Sopra le righe ci sono i giorni mostrati, i due passi, il pulsante che torna
+al giorno corrente e lo zoom: **Settimane** (otto colonne di una settimana,
+dal giorno della lingua dell'interfaccia), **Mesi** (sei) e **Anni**
+(quattro). Si apre col giorno corrente nella seconda colonna. La riga della
+scala dice le due proprietà («richiesta → consegna») e il nome di ogni
+colonna; una riga verticale dell'accento segna il giorno corrente, e la sua
+scritta prende il posto del nome della colonna sotto. Come le altre viste, la linea del tempo mostra 100 note con una
 data, poi «Mostra altre».
 
 ## Spostare le date
