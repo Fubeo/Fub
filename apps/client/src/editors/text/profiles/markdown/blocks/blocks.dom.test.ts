@@ -1418,3 +1418,120 @@ describe("i gesti ai bordi (E2): il posto interrotto a metà corsa", () => {
     hand.handles.endDrag(false);
   });
 });
+
+// La regola al tocco (T26a, E18 «Al tocco»): senza un puntatore che passi
+// sopra le cose, il «+» e la maniglia stanno sul blocco del cursore.
+describe("al tocco", () => {
+  /// Un sistema finto: `pointer` dice se c'è un puntatore (`any-hover`), e
+  /// `connect` lo cambia come un mouse collegato o staccato.
+  function screen(pointer: boolean) {
+    const listeners = new Set<() => void>();
+    const query = {
+      get matches() {
+        return pointer;
+      },
+      media: "(any-hover: hover)",
+      addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
+    };
+    const other = (media: string) => ({ matches: false, media, addEventListener() {}, removeEventListener() {} });
+    vi.stubGlobal("matchMedia", (media: string) => (media === "(any-hover: hover)" ? query : other(media)));
+    return {
+      connect(next: boolean) {
+        pointer = next;
+        for (const listener of [...listeners]) listener();
+      },
+      listeners,
+    };
+  }
+  afterEach(() => vi.unstubAllGlobals());
+
+  /// Il testo del blocco che le maniglie servono adesso.
+  const served = (view: EditorView): string | null => {
+    const index = view.plugin(handlesView)!.current();
+    if (index < 0) return null;
+    const block = view.state.field(blockModel).blocks[index]!;
+    return view.state.sliceDoc(block.from, block.to);
+  };
+  const keyOfText = (view: EditorView, text: string) => {
+    const block = view.state.field(blockModel).blocks.find((each) => view.state.sliceDoc(each.from, each.to) === text)!;
+    return { from: block.from, depth: block.depth };
+  };
+
+  it("la maniglia segue il cursore, e il passaggio non la sposta", () => {
+    screen(false);
+    const view = mount("Uno\n\nDue\n\nTre", 1);
+    view.focus();
+    const handles = view.plugin(handlesView)!;
+    expect(view.dom.classList.contains("cm-fub-blocks-touch")).toBe(true);
+    expect(handles.hoverable).toBe(false);
+    expect(served(view)).toBe("Uno");
+    view.dispatch({ selection: { anchor: 6 } });
+    expect(served(view)).toBe("Due");
+    // Dopo un tocco il sistema manda anche gli eventi del mouse: un blocco
+    // «sotto il puntatore» non porta via la maniglia dal cursore.
+    handles.hovered = keyOfText(view, "Tre");
+    expect(served(view)).toBe("Due");
+    // Senza il fuoco (il dito è andato altrove) non c'è.
+    view.contentDOM.blur();
+    expect(served(view)).toBeNull();
+  });
+
+  it("col puntatore vale il puntatore, anche se arriva a nota aperta", () => {
+    const system = screen(false);
+    const view = mount("Uno\n\nDue\n\nTre", 1);
+    view.focus();
+    const handles = view.plugin(handlesView)!;
+    // Un tablet a cui si collega un mouse: la regola cambia subito.
+    system.connect(true);
+    expect(view.dom.classList.contains("cm-fub-blocks-touch")).toBe(false);
+    expect(handles.hoverable).toBe(true);
+    handles.hovered = keyOfText(view, "Tre");
+    expect(served(view)).toBe("Tre");
+    // Staccato, si torna al cursore, e il passaggio di prima non conta più.
+    system.connect(false);
+    expect(view.dom.classList.contains("cm-fub-blocks-touch")).toBe(true);
+    expect(handles.hovered).toBeNull();
+    expect(served(view)).toBe("Uno");
+    // Chiusa la nota, il sistema non ha più nessuno da avvisare.
+    view.destroy();
+    views.splice(views.indexOf(view), 1);
+    expect(system.listeners.size).toBe(0);
+  });
+
+  it("il dito tenuto 300 ms prende il blocco, con un colpetto; un movimento prima scorre", () => {
+    vi.useFakeTimers();
+    try {
+      const vibrate = vi.fn(() => true);
+      vi.stubGlobal("navigator", Object.assign(Object.create(navigator), { vibrate }));
+      screen(false);
+      const view = mount("Uno\n\nDue\n\nTre", 1);
+      rowsOf20(view);
+      const handles = view.plugin(handlesView)!;
+      handles.shown = keyOfText(view, "Uno");
+      const grip = view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!;
+      const finger = (type: string, y: number) =>
+        grip.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId: 7, pointerType: "touch", clientX: 0, clientY: y }));
+      // Il dito si muove prima dei 300 ms: è uno scorrimento, il gesto non parte.
+      finger("pointerdown", 10);
+      vi.advanceTimersByTime(100);
+      finger("pointermove", 30);
+      vi.advanceTimersByTime(400);
+      expect(handles.drag).toBeNull();
+      expect(view.scrollDOM.querySelector(".cm-fub-block-lift")).toBeNull();
+      expect(vibrate).not.toHaveBeenCalled();
+      // Tenuto fermo: a 299 ms ancora niente, a 300 il blocco è in mano.
+      handles.shown = keyOfText(view, "Uno");
+      finger("pointerdown", 10);
+      vi.advanceTimersByTime(299);
+      expect(handles.drag?.moving).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(handles.drag?.moving).toBe(true);
+      expect(view.dom.classList.contains("cm-fub-blocks-dragging")).toBe(true);
+      expect(vibrate).toHaveBeenCalledTimes(1);
+      handles.endDrag(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

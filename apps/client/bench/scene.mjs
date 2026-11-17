@@ -89,7 +89,7 @@ const TRANSCLUSION_HEAD = ".pane.focus .pane-editor .transclusion .transclusion-
 /// Una finestra documento appena aperta.
 const DOCUMENT_WINDOW = { width: 900, height: 700 };
 
-export const SCENE = onPage("shell", [
+export const SCENE = touchLast(onPage("shell", [
   {
     id: "startup",
     title: "Come si apre",
@@ -1757,10 +1757,11 @@ export const SCENE = onPage("shell", [
     title,
     query: "live=riga-vuota&slash=1",
     ...(viewport ? { viewport } : {}),
+    ...(touch ? { touch: true } : {}),
     prepare: async (page) => {
       // Col dito vuol dire `(pointer: coarse)`: Chromium lo dà quando
       // emula il tocco, e il pannello lo legge all'apertura.
-      if (touch) await (await page.context().newCDPSession(page)).send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+      if (touch) await touchOn(page);
       await openLive(page, [], "top");
       // Il «/» si scrive a scena ferma: se un antenato del riquadro si sta
       // ancora muovendo quando il pannello nasce, CodeMirror lo crede in un
@@ -2479,6 +2480,25 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector("#rail", { state: "hidden" });
       },
     },
+    // **La regola al tocco** (T26a, E18 «Al tocco»): dove non c'è il
+    // puntatore il «+» e la maniglia stanno sul blocco del cursore, e la
+    // barra sopra la tastiera porta il gruppo di quel blocco. Il tocco è
+    // quello emulato da Chromium (`(hover: none)`, `(pointer: coarse)`).
+    // A riposo, senza cursore: niente maniglie. Col cursore in un compito,
+    // la tastiera su: maniglia sul compito, «Compito · Scadenza» nella barra.
+    // La presa: il dito tenuto 300 ms sulla maniglia prende il blocco.
+    ...[
+      ["mobile-tocco-01-riposo", "Al tocco, a riposo: la nota senza cursore, nessuna maniglia", "panoramica", "rest"],
+      ["mobile-tocco-02-cursore", "Al tocco, il cursore in un compito: «+» e maniglia sul compito, «Compito» nella barra sopra la tastiera", "compito-attivo", "cursor"],
+      ["mobile-tocco-03-presa", "Al tocco, la presa: il dito tenuto 300 ms sulla maniglia prende il compito", "compito-attivo", "hold"],
+    ].map(([id, title, live, gesture]) => ({
+      id,
+      title,
+      query: `live=${live}`,
+      viewport: PHONE,
+      touch: true,
+      prepare: (page) => touchBlocks(page, gesture),
+    })),
     {
       id: "mobile-welcome",
       title: "Il telefono: il benvenuto, senza un vault",
@@ -2550,7 +2570,15 @@ export const SCENE = onPage("shell", [
       prepare: async () => {},
     },
   ]),
-);
+));
+
+/// Le scene col tocco acceso (`touch: true`) vanno in fondo, nel loro
+/// ordine: il fotografo e il controllo d'accessibilità usano una pagina sola
+/// per luce, e dopo il tocco emulato Chromium non rimette più
+/// `(hover: hover)` (`touchOn`). Chi viene prima vede il puntatore.
+function touchLast(scenes) {
+  return [...scenes.filter((scene) => !scene.touch), ...scenes.filter((scene) => scene.touch)];
+}
 
 /// Le finestre principali che le scene della finestra documento tengono
 /// aperte, una per contesto: la successiva riusa quella che c'è.
@@ -3025,6 +3053,66 @@ async function writingAtRest(page) {
 ///   scorrimento, da capo, sull'impaginazione finale. La nota portata in
 ///   fondo (`bottom`) resta dove l'ha messa l'apertura: lì non c'è un cursore
 ///   da tenere in vista.
+/// Il tocco emulato da Chromium: `(hover: none)`, `(any-hover: none)` e
+/// `(pointer: coarse)`. Non si spegne più: spento, Chromium rimette il
+/// puntatore fine ma lascia `(hover: none)` a ogni documento dello stesso
+/// processo, anche dopo una navigazione. Per questo le scene che lo
+/// accendono hanno `touch: true` e stanno in fondo (`touchLast`).
+async function touchOn(page) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+  return cdp;
+}
+
+/// La tastiera a schermo, finta: un browser senza schermo non l'ha, e ciò
+/// che la shell ne sa è che il viewport visivo si accorcia.
+async function keyboardUp(page) {
+  await page.evaluate(() => {
+    const view = window.visualViewport;
+    Object.defineProperty(view, "height", { configurable: true, get: () => window.innerHeight - 320 });
+    view.dispatchEvent(new Event("resize"));
+  });
+  await page.waitForSelector(':root[data-mobile-keyboard="visible"]');
+}
+
+/// Le scene al tocco (T26a). `rest`: la nota senza cursore. `cursor`: il
+/// cursore nel compito e la tastiera su, la barra col gruppo «Compito».
+/// `hold`: in più, il dito tenuto sulla maniglia finché il blocco è in mano.
+async function touchBlocks(page, gesture) {
+  const cdp = await touchOn(page);
+  if (await page.evaluate(() => matchMedia("(hover: hover)").matches)) throw new Error("il tocco emulato non ha tolto il passaggio");
+  await openLive(page, [], "top");
+  await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles", { state: "attached" });
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  if (gesture === "rest") {
+    await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles", { state: "hidden" });
+    return;
+  }
+  await keyboardUp(page);
+  await settleLive(page, false);
+  // Il compito a metà della parte che la tastiera lascia: la colonna del «+»
+  // e della maniglia sborda sopra e sotto la riga, e si vede intera.
+  await page.evaluate(async () => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+    const caret = view.coordsAtPos(view.state.selection.main.head);
+    const box = view.scrollDOM.getBoundingClientRect();
+    if (caret) view.scrollDOM.scrollTop += (caret.top + caret.bottom) / 2 - (box.top + box.height / 2);
+  });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForSelector('.pane.focus > .format-bar .format-bar-context[data-block="task"]:not([hidden])');
+  await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-grip", { state: "visible" });
+  if (gesture === "hold") {
+    const box = await page.locator(".pane.focus .pane-editor .cm-fub-block-grip").boundingBox();
+    if (!box) throw new Error("la maniglia non si vede");
+    const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    // Il dito resta giù: la foto è del blocco in mano.
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+    await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-lift");
+  }
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 async function settleLive(page, bottom) {
   await page.waitForFunction(() => !["non_salvato", "in_corso"].includes(document.querySelector("#save-state")?.dataset.state ?? ""));
   await page.waitForFunction(() => !document.querySelector('.pane.focus .pane-editor .cm-content [data-state="loading"]'));

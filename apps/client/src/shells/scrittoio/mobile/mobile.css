@@ -200,6 +200,18 @@
 :root[data-client-shell="mobile"] .pane > .format-bar.kit-bar > .kit-bar-group:last-of-type {
   background-image: none;
 }
+/* Il gruppo del blocco del cursore (E18, «Al tocco») tiene il suo velo
+   d'accento anche qui, e non porta il filo: è il velo a staccarlo. Il velo
+   è alto quanto quello del computer; i pulsanti dentro restano alti un dito
+   e ne escono sopra e sotto. */
+:root[data-client-shell="mobile"] .pane > .format-bar.kit-bar > .format-bar-context {
+  align-self: center;
+  height: 32px;
+  margin-right: var(--space-3);
+  padding: 0 0 0 var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--accent-veil);
+}
 
 /* Il segno del livello («H1») vive nel margine sinistro, che al telefono è
    più stretto di lui: si vedrebbe tagliato contro il bordo. Il livello si

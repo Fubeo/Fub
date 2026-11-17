@@ -1109,7 +1109,9 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   }
 
   /// Quanti gruppi entrano in una riga: gli ultimi scendono nel menu «altri»,
-  /// poi il gruppo del blocco.
+  /// poi il gruppo del blocco. Al tocco il gruppo del blocco del cursore è il
+  /// secondo livello di presenza (E18, «Al tocco»): prima di lui scende anche
+  /// il primo gruppo, annulla e ripeti, che restano nel menu.
   function fit(): void {
     if (element.hidden || !overflowButton) return;
     for (const group of groupEls) group.hidden = false;
@@ -1117,11 +1119,20 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     overflowButton.hidden = true;
     if (element.scrollWidth <= element.clientWidth) return;
     overflowButton.hidden = false;
+    const wide = () => element.scrollWidth > element.clientWidth;
     for (let index = groupEls.length - 1; index > 0; index--) {
-      if (element.scrollWidth <= element.clientWidth) break;
+      if (!wide()) break;
       groupEls[index]!.hidden = true;
     }
-    if (contextBox && contextShown && element.scrollWidth > element.clientWidth) contextBox.hidden = true;
+    const first = groupEls[0];
+    if (contextBox && contextShown && wide()) {
+      if (first && follows && (host.coarse ?? coarsePointer)()) first.hidden = true;
+      if (wide()) {
+        contextBox.hidden = true;
+        // Il gruppo del blocco non entra comunque: il primo gruppo torna.
+        if (first) first.hidden = false;
+      }
+    }
     keys.refresh();
   }
 

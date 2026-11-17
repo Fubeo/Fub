@@ -133,6 +133,14 @@ describe("l'elenco delle scene", () => {
       expect(long, s.id).toBeLessThanOrEqual(960);
     }
   });
+
+  it("mette in fondo le scene che accendono il tocco", () => {
+    // Acceso, il tocco emulato lascia `(hover: none)` alla pagina per sempre:
+    // una scena col puntatore dopo di lui vedrebbe un telefono.
+    const first = scene.findIndex((s) => s.touch === true);
+    expect(first).toBeGreaterThan(0);
+    expect(scene.slice(first).every((s) => s.touch === true)).toBe(true);
+  });
 });
 
 describe("le baseline", () => {

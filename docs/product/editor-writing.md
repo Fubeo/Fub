@@ -96,6 +96,13 @@ foglio non deve restare visibile nessun elemento con `data-presence` e nessun
 pulsante, salvo quelli che sono contenuto (l'icona della pagina, la riga dei
 dati, la testata di un blocco di codice).
 
+### Al tocco
+
+Senza puntatore (`(any-hover: hover)` falso) «+» e maniglia stanno sul blocco
+del cursore finché la nota ha il fuoco, con 40 px di margine sul foglio
+stretto; il gruppo del blocco sta nella [barra sopra la tastiera](editor-toolbar.md).
+Regola: `touchMode` in `handles.ts`; scene `mobile-tocco-*`.
+
 ## La testata
 
 In cima alla nota, in Scrittura e in Lettura, sta la testata: copertina, icona,

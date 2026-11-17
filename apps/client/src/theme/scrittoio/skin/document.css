@@ -146,6 +146,13 @@
     padding-right: 18px;
     padding-left: 18px;
   }
+  /* Al tocco, coi Blocchi, il «+» e la maniglia stanno a sinistra del
+     blocco del cursore: il margine resta quello del gradino prima (40 px),
+     sempre, così il testo non si sposta quando compaiono. */
+  .pane-editor[data-markdown-mode="live_preview"] .cm-editor.cm-fub-blocks-touch .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-editor.cm-fub-blocks-touch .cm-content {
+    padding-left: 40px;
+  }
 }
 
 /* ── Il corpo ────────────────────────────────────────────────────────────── */
@@ -566,18 +573,17 @@
    blocchi selezionati. Con un puntatore i pulsanti non si vedono a riposo e
    compaiono, nel grigio pieno della pagina (il --muted del prototipo
    tradotto nella tavolozza del documento), sul blocco sotto il puntatore;
-   senza passaggio restano sul blocco del cursore. La maniglia sotto il
-   puntatore prende l'accento e gli occhi crescono appena. */
+   al tocco (`cm-fub-blocks-touch`, nessun puntatore che passi sopra)
+   restano sul blocco del cursore. La maniglia sotto il puntatore prende
+   l'accento e gli occhi crescono appena. */
 .cm-editor .cm-fub-block-add,
 .cm-editor .cm-fub-block-grip {
   color: var(--doc-gutter-fg);
   transition: opacity 0.12s, background 0.12s, color 0.12s;
 }
-@media (hover: hover) {
-  .cm-editor .cm-fub-block-handles:not([data-active="true"]):not(:focus-within) .cm-fub-block-add,
-  .cm-editor .cm-fub-block-handles:not([data-active="true"]):not(:focus-within) .cm-fub-block-grip {
-    opacity: 0;
-  }
+.cm-editor:not(.cm-fub-blocks-touch) .cm-fub-block-handles:not([data-active="true"]):not(:focus-within) .cm-fub-block-add,
+.cm-editor:not(.cm-fub-blocks-touch) .cm-fub-block-handles:not([data-active="true"]):not(:focus-within) .cm-fub-block-grip {
+  opacity: 0;
 }
 .cm-editor .cm-fub-block-handles[data-active="true"] .cm-fub-block-add,
 .cm-editor .cm-fub-block-handles[data-active="true"] .cm-fub-block-grip,
@@ -1565,6 +1571,11 @@ button.cm-fub-page-icon:focus-visible {
   }
   .cm-fub-page-prop {
     grid-template-columns: minmax(0, 108px) minmax(0, 1fr);
+  }
+  /* Il margine del tocco coi Blocchi (sopra): la copertina resta da bordo a
+     bordo. */
+  .cm-editor.cm-fub-blocks-touch .cm-fub-page-cover {
+    margin-left: -40px;
   }
 }
 /* Il segno della scelta in vigore nel menu «…» della pagina. */

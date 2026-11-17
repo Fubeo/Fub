@@ -893,11 +893,12 @@
   }
 }
 /* Al telefono la barra sta sopra la tastiera (`mobile.css`): i gesti si
-   dicono con la figura, e il gruppo del blocco lascia il posto ai fissi,
-   come nel prototipo. I fili fra i gruppi sono quelli di `mobile.css`, e
-   «+» è un pulsante della fila come gli altri, senza rialzo. */
+   dicono con la figura. Il gruppo del blocco del cursore resta, col suo
+   nome: al tocco è lì che compare il secondo livello (E18, «Al tocco»), e
+   i fissi che non entrano scendono in «…» prima di lui. I fili fra i gruppi
+   sono quelli di `mobile.css`, e «+» è un pulsante della fila come gli
+   altri, senza rialzo. */
 :root[data-client-shell="mobile"] .format-bar-follow .format-bar-labelled:has(svg:not(.format-bar-caret)) > .format-bar-text,
-:root[data-client-shell="mobile"] .format-bar-follow.kit-bar > .format-bar-context,
 :root[data-client-shell="mobile"] .format-bar-follow.kit-bar > .kit-bar-group + .kit-bar-group::before {
   display: none;
 }

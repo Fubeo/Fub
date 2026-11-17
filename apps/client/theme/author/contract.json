@@ -669,6 +669,7 @@
     "embed-too-deep",
     "embed-media",
     "cm-fub-block-handles",
+    "cm-fub-blocks-touch",
     "cm-fub-block-add",
     "cm-fub-block-grip",
     "cm-fub-block-grip-eyes",
@@ -2767,6 +2768,7 @@
     "embed-too-deep": "contenuto",
     "embed-media": "contenuto",
     "cm-fub-block-handles": "contenuto",
+    "cm-fub-blocks-touch": "contenuto",
     "cm-fub-block-add": "contenuto",
     "cm-fub-block-grip": "contenuto",
     "cm-fub-block-grip-eyes": "contenuto",
@@ -6077,6 +6079,7 @@
       "part": "document",
       "hooks": [
         "cm-fub-block-handles",
+        "cm-fub-blocks-touch",
         "cm-fub-block-add",
         "cm-fub-block-grip",
         "cm-fub-block-grip-eyes",
@@ -11057,7 +11060,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 2096,
+    "hooks": 2097,
     "state_names": 7,
     "assigned_states": 959,
     "components": 281,
