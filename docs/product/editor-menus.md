@@ -159,8 +159,8 @@ alla finestra, sopra la tastiera, con righe da 44 px. Vale in ogni modalità di
 scrittura; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
 
 - **In alto, i sei più usati**, come tessere con l'icona e una parola. In un
-  vault nuovo: Attività, Titolo, Riquadro, Tabella, poi Punti e Codice (Base e
-  Scheda le aggiungono i loro lavori). L'uso li riordina: prima i Preferiti,
+  vault nuovo: Attività, Titolo, Riquadro, Tabella, Base (con le Basi accese),
+  poi Punti e Codice (Scheda la aggiunge il suo lavoro). L'uso li riordina: prima i Preferiti,
   poi i blocchi scelti di recente, poi l'ordine scritto; una voce nascosta
   lascia il posto alla seguente, e stili e comandi del vault non diventano
   tessere (`byUse` in `panels/slash/rank.ts`). A menu appena aperto Invio mette
@@ -208,7 +208,11 @@ Le impostazioni, in Editor: «Menu «/» nel testo» (`editor.slash`) lo spegne;
 ordina i gruppi (quelli non detti seguono nel loro ordine). I blocchi sono
 dichiarati da `fub.formatting`: spento il plugin, il «/» offre soltanto i
 comandi del vault, senza tessere. Ogni voce resta un comando del registro, con
-i suoi parametri (`markdown.table` con `rows` e `cols`).
+i suoi parametri (`markdown.table` con `rows` e `cols`). Fa eccezione «Base»
+(`markdown.base`), un'azione dell'editor: chiede il nome e crea il file
+accanto alla nota prima di scrivere l'embed
+([Basi](bases.md#una-base-nuova-dal-)), e c'è soltanto con la componente delle
+Basi accesa.
 
 ## Gli altri editor
 

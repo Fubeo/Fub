@@ -440,6 +440,38 @@ Una Base si mette in una nota con un blocco di codice ```` ```base ```` oppure c
 un collegamento `![[Nome.base#Vista]]`. Con il `#` si vede la vista nominata;
 senza, la prima vista del file.
 
+Dentro la pagina la Base si allarga oltre la colonna del testo, fino al
+margine: 64 dei 96 px di destra. Nella finestra sotto i 940 px, in un foglio
+sotto i 560 px e al telefono resta nella colonna. Un `![[Nome.base#Vista]]` non
+ha il filo a sinistra delle note riportate: è la Base, come un'immagine
+incorporata è l'immagine.
+
+### Una Base nuova dal «/»
+
+«Base» nel menu «/» (scrivendo `/base`, o la tessera dopo «Tabella») crea una
+Base accanto alla nota e la mette al posto della riga. C'è soltanto con la
+componente delle Basi accesa e in una nota che si può scrivere.
+
+1. Chiede il nome. Di serie è il titolo della nota; se nel vault c'è già un
+   file con quel nome propone «Nome 2», «Nome 3» e così via, perché un
+   `![[Nome.base]]` trova il file per nome in tutto il vault. Un nome scritto
+   a mano e già preso fa richiedere, con il prossimo libero. I caratteri che
+   romperebbero il collegamento o il nome del file (`# | ^ [ ] / \ : * ? " < >`)
+   diventano spazi.
+2. Crea `Nome.base` nella cartella della nota, soltanto se non c'è: un file
+   con quel nome non si sovrascrive mai. Il file ha una vista «Tabella» sulle
+   note della cartella della nota e delle sue sottocartelle (un filtro
+   `file.path` `in_folder`); per una nota nella radice, su tutto il vault.
+3. Scrive `![[Nome.base#Tabella]]` al posto del «/base», come un blocco suo:
+   da solo sulla riga, staccato da una riga vuota dal testo intorno. Se il «/»
+   seguiva del testo, la Base va in un paragrafo nuovo sotto.
+
+Se il file non nasce (cartella in sola lettura, disco pieno), la nota non
+cambia: il «/base» resta dov'era e un avviso dice perché. Rinunciare al nome
+lascia la nota com'era. Mentre si sceglie il nome la nota resta scrivibile,
+e l'embed va dove il «/base» è finito. Un Annulla toglie l'embed e rimette il
+«/base»; il file resta, come un allegato.
+
 ## Vedi anche
 
 - [Editor e anteprima](editor-and-preview.md): dove una Base appare nella nota.

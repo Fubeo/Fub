@@ -24,16 +24,24 @@ export const SLASH_RESULTS = 12;
 /// Quante tessere dei più usati, in cima a menu appena aperto.
 export const SLASH_TOP = 6;
 /// Le tessere di un vault nuovo, prima di ogni uso: Attività, Titolo,
-/// Riquadro, Tabella, poi gli altri blocchi che si usano spesso. Base e
-/// Scheda vengono subito dopo Tabella: le aggiungono i task che portano le
-/// loro voci.
+/// Riquadro, Tabella, Base, poi gli altri blocchi che si usano spesso.
+/// Scheda viene subito dopo Base: la aggiunge il task che porta la sua voce.
 export const SLASH_TOP_DEFAULTS: readonly string[] = [
-  "markdown.list.task", "markdown.heading.2", "markdown.callout", "markdown.table",
+  "markdown.list.task", "markdown.heading.2", "markdown.callout", "markdown.table", "markdown.base",
   "markdown.list.bullet", "markdown.codeblock", "markdown.quote", "markdown.image", "markdown.rule",
 ];
 
 /// La voce sola dei colori, che apre la tavolozza.
 export const COLOR_ENTRY = "slash.color";
+
+/// «Base» (E12): crea un file `.base` accanto alla nota e la incorpora al
+/// posto della riga. Non è un comando del registro ma un'azione della
+/// superficie, che la offre (`has`) soltanto dove sa creare il file. Lo
+/// stesso id è `BASE_ACTION` in `editors/text/profiles/markdown/slash.ts`.
+export const BASE_ENTRY = "markdown.base";
+
+/// Un comando che c'è soltanto con la componente delle Basi accesa.
+const BASE_COMMAND = "base.view.add";
 
 /// La scorciatoia Markdown che fa lo stesso: la si impara guardando il menu.
 const MARKDOWN_HINTS: Readonly<Record<string, string>> = {
@@ -63,6 +71,8 @@ const MARKDOWN_HINTS: Readonly<Record<string, string>> = {
   "markdown.mention": "@",
   "markdown.date": "@",
   "markdown.linkcard": "https://",
+  // Non ha una forma Markdown sua: si chiama scrivendo il suo nome.
+  [BASE_ENTRY]: "/base",
 };
 
 /// Altri nomi con cui si cerca la stessa voce, in tutte e due le lingue: chi
@@ -100,6 +110,7 @@ const ALIASES: Readonly<Record<string, string>> = {
   "markdown.date": "data giorno oggi domani scadenza date day today tomorrow due",
   "markdown.linkcard": "pagina web sito segnalibro scheda anteprima bookmark web page site card",
   "markdown.underline": "sottolineato underline",
+  [BASE_ENTRY]: "base database dati data vista view raccolta collection",
   [COLOR_ENTRY]: "colore color colori colors evidenzia fondo testo",
 };
 
@@ -118,6 +129,8 @@ const SLASH_ICONS: Readonly<Record<string, string>> = {
   "markdown.linkcard": "fmt-webpage",
   "markdown.property.add": "fmt-property",
   [COLOR_ENTRY]: "fmt-color",
+  // La figura delle Basi nell'app (la componente `fub.base`).
+  [BASE_ENTRY]: "collection",
 };
 
 /// La scorciatoia Markdown di una voce, se ne ha una; `null` per un accordo.
@@ -146,7 +159,7 @@ export function isColorAction(id: string): boolean {
 function sectionOf(id: string): SlashSection {
   if (id === "markdown.paragraph" || id.startsWith("markdown.heading.") || id === "markdown.quote") return "text";
   if (id.startsWith("markdown.list.")) return "lists";
-  if (["markdown.callout", "markdown.details", "markdown.columns", "markdown.table", "markdown.rule"].includes(id)) return "blocks";
+  if (["markdown.callout", "markdown.details", "markdown.columns", "markdown.table", BASE_ENTRY, "markdown.rule"].includes(id)) return "blocks";
   if (["markdown.codeblock", "markdown.mathblock", "markdown.diagram"].includes(id)) return "code";
   if (["markdown.mention", "markdown.date"].includes(id)) return "people";
   if (id === "markdown.underline" || id === COLOR_ENTRY || isColorAction(id)) return "style";
@@ -225,6 +238,24 @@ export function slashCatalog(specs: readonly CommandSpec[], has: (id: string) =>
       section: action ? sectionOf(spec.id) : "vault",
       action,
     }));
+  }
+  // La Base subito dopo la Tabella, scritta come le altre voci: la trova
+  // anche chi legge il catalogo per i suoi menu. Soltanto se le Basi ci sono
+  // (la componente `fub.base` accesa registra i suoi comandi): altrimenti il
+  // file nascerebbe e nessuno lo saprebbe mostrare.
+  const bases = specs.some((spec) => spec.id === BASE_COMMAND);
+  if (bases && has(BASE_ENTRY) && !hidden.has(BASE_ENTRY) && !listed.some((each) => each.id === BASE_ENTRY)) {
+    const base = entry({
+      id: BASE_ENTRY,
+      label: t("slash.base"),
+      description: t("slash.base.desc"),
+      icon: SLASH_ICONS[BASE_ENTRY]!,
+      hint: MARKDOWN_HINTS[BASE_ENTRY]!,
+      section: sectionOf(BASE_ENTRY),
+      action: true,
+    });
+    const table = listed.findIndex((each) => each.id === "markdown.table");
+    listed.splice(table < 0 ? listed.length : table + 1, 0, base);
   }
   if (colors.length > 0) {
     listed.push(entry({ id: COLOR_ENTRY, label: t("slash.color"), description: t("slash.color.desc"), icon: "fmt-color", hint: null, section: "style", action: true }));

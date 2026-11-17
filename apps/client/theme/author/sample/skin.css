@@ -12745,6 +12745,34 @@ input.canvas-toolbar-item {
   max-height: none;
   margin: var(--space-3) 0;
 }
+/* Dentro la pagina (E12, E19) la Base si allarga oltre la colonna del testo,
+   fino al margine: 64 dei 96 px di destra, come le schede larghe. Nella
+   finestra stretta (sotto i 940 px, dove il margine scende a 48) e in un
+   foglio stretto resta nella colonna. */
+.cm-content .base-surface[data-embedded="true"],
+.markdown-rendered .base-surface[data-embedded="true"] {
+  margin-right: -64px;
+}
+@media (max-width: 940px) {
+  .cm-content .base-surface[data-embedded="true"],
+  .markdown-rendered .base-surface[data-embedded="true"] {
+    margin-right: 0;
+  }
+}
+@container sheet (max-width: 560px) {
+  .cm-content .base-surface[data-embedded="true"],
+  .markdown-rendered .base-surface[data-embedded="true"] {
+    margin-right: 0;
+  }
+}
+/* Un `![[Nome.base#Vista]]` è la Base, non una nota riportata: niente filo
+   a sinistra né rientro, come un'immagine incorporata. L'embed (la pelle del
+   documento) si riconosce dal suo `data-embed-page`. */
+[data-embed-page]:has(> .ui-slot > .ui-custom > .base-surface[data-embedded="true"]) {
+  padding: 0;
+  border-left: 0;
+  font-size: 1em;
+}
 /* La barra (T15): le viste come linguette a sinistra, gli strumenti a destra,
    «Nuova» in accento in fondo. Sotto, la riga di «Cerca» e le etichette del
    filtro e dell'ordinamento; in fondo alla Base, «Nel file .base». Il

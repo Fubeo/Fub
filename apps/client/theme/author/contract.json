@@ -964,6 +964,7 @@
     "base-status",
     "base-body",
     "base-summaries",
+    "ui-custom",
     "base-bar",
     "base-tabs",
     "base-tab",
@@ -1627,7 +1628,6 @@
     "ui-radio-option",
     "ui-form",
     "ui-html",
-    "ui-custom",
     "ui-webview",
     "tab-view",
     "graph-viewport",
@@ -2957,6 +2957,7 @@
     "base-status": "cornice",
     "base-body": "cornice",
     "base-summaries": "cornice",
+    "ui-custom": "cornice",
     "base-bar": "cornice",
     "base-tabs": "cornice",
     "base-tab": "cornice",
@@ -3620,7 +3621,6 @@
     "ui-radio-option": "cornice",
     "ui-form": "cornice",
     "ui-html": "cornice",
-    "ui-custom": "cornice",
     "ui-webview": "cornice",
     "tab-view": "cornice",
     "graph-viewport": "cornice",
@@ -6501,6 +6501,17 @@
         "pressed",
         "focused",
         "disabled"
+      ]
+    },
+    {
+      "name": "base-embed",
+      "part": "editors",
+      "hooks": [
+        "ui-slot",
+        "ui-custom"
+      ],
+      "states": [
+        "rest"
       ]
     },
     {
@@ -10585,8 +10596,8 @@
     "optional_roles": 68,
     "hooks": 1991,
     "state_names": 7,
-    "assigned_states": 918,
-    "components": 269,
+    "assigned_states": 919,
+    "components": 270,
     "preference_tokens": 191
   }
 }

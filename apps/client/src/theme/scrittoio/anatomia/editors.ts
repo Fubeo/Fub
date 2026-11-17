@@ -29,6 +29,9 @@ export const EDITORS: PartAnatomy = {
     // Le finestre che la barra apre (Formato celle, Ordina, Gestione nomi…).
     { name: "grid-dialog", states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")], hooks: ["grid-dialog", "grid-dialog-border-cell", "grid-dialog-border-preview", "grid-dialog-check", "grid-dialog-choice", "grid-dialog-choices", "grid-dialog-color-button", "grid-dialog-color-chip", "grid-dialog-color-chip--auto", "grid-dialog-error", "grid-dialog-field", "grid-dialog-fields", "grid-dialog-form", "grid-dialog-label", "grid-dialog-legend", "grid-dialog-names-head", "grid-dialog-names-row", "grid-dialog-note", "grid-dialog-preview", "grid-preview-stage", "grid-preview-page", "grid-dialog-palette", "grid-dialog-palette-auto", "grid-dialog-palette-grid", "grid-dialog-palette-title", "grid-dialog-preview-text", "grid-dialog-results", "grid-result-key", "grid-result-number", "grid-result-ref", "grid-result-table", "grid-dialog-sample-text", "grid-dialog-section", "grid-dialog-signature", "grid-dialog-swatch", "grid-dialog-toolbar"] },
     { name: "base-surface", states: INTERACTIVE, hooks: ["base-surface", "base-status", "base-body", "base-summaries"] },
+    // La Base incorporata in una nota (T18): l'embed che la porta, senza il
+    // filo delle note riportate, e la larghezza fino al margine.
+    { name: "base-embed", states: REST, hooks: ["ui-slot", "ui-custom"] },
     // La barra della Base (T15): le linguette delle viste, gli strumenti,
     // «+» (una vista nuova), «Nuova», la riga di «Cerca», le etichette e «Nel
     // file .base».
