@@ -76,6 +76,7 @@ import { declaredLanguage, frontmatterRange, renderMarkdown } from "./render";
 import { addProperty, clearProperties } from "./properties";
 import { clipboardHtml } from "./copy-html";
 import { commentCut, copiedSelection, FUB_MARKDOWN_TYPE, rememberCut, type CarriedCut } from "./comments/copy";
+import { COMMENT_ACTION, COMMENT_CHORD, markdownComments } from "./comments/discussions";
 import type { ProofPorts } from "../../../core/proof-ports";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../../../core/editor-menu";
 import { forEachDiagnostic, type Diagnostic } from "@codemirror/lint";
@@ -619,6 +620,27 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   };
   presentation(mode);
 
+  // I commenti (T22): il margine, la discussione, il pannello. Leggono e
+  // scrivono il buffer della vista; la Lettura li rimonta a ogni resa.
+  const comments = markdownComments({
+    forms: () => forms,
+    mode: () => mode,
+    readOnly: () => readOnly,
+    withView: (run) => {
+      let out: ReturnType<typeof run> | null = null;
+      engine.runViewCommand((view) => {
+        out = run(view);
+        return true;
+      });
+      return out;
+    },
+    reading: () => reading,
+    focus: () => {
+      if (mode === "reading") reading.focus();
+      else engine.focus();
+    },
+  });
+
   const engine = createTextEngine(parent, {
     onChange: (change) => {
       closeSlashPalette(parent);
@@ -633,7 +655,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       actionsChanged();
     },
     theme: getCurrentTheme(),
-    extensions: () => profile.extensions(),
+    extensions: () => [profile.extensions(), comments.extension()],
   });
   if (opts.linkCards) {
     life.add(opts.linkCards.watch(() => {
@@ -949,7 +971,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       renderedOptions(readOnly ? undefined : toggleTaskAt),
     );
     mountReadingPage();
+    const unmountComments = comments.readingRendered();
     unmountReading = () => {
+      unmountComments();
       unmountReadingPage?.();
       unmountReadingPage = null;
       unmountBody();
@@ -1043,7 +1067,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   }
   const editable = () => !readOnly && mode !== "reading" && !life.closed;
   const editorActions: SurfaceEditorActions = {
-    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id),
+    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION,
     editable,
     state(id): EditorActionState {
       if (!editable()) return ACTION_UNAVAILABLE;
@@ -1052,6 +1076,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         const depth = engine.historyDepth();
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
       }
+      if (id === COMMENT_ACTION) return { enabled: comments.canComment(), active: null };
       if (tableGrid) return tableGrid.actionState(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return ACTION_UNAVAILABLE;
@@ -1064,6 +1089,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (id === "text.redo") return engine.redo();
       const fold = FOLDS.get(id);
       if (fold) return engine.runViewCommand(fold);
+      if (id === COMMENT_ACTION) return comments.comment();
       if (tableGrid) return tableGrid.runAction(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return false;
@@ -1075,6 +1101,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     chord(id) {
       if (id === "text.undo") return "Mod-z";
       if (id === "text.redo") return "Mod-y";
+      if (id === COMMENT_ACTION) return COMMENT_CHORD;
       return MARKDOWN_ACTIONS.get(id)?.chord ?? null;
     },
     subscribe(listener) {
@@ -1828,6 +1855,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       profile.setSyntaxForms(next);
       engine.reconfigure();
       syncReading();
+      comments.formsChanged();
     },
     undo: () => engine.undo(),
     redo: () => engine.redo(),
@@ -1880,6 +1908,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     },
     setTheme: (theme) => engine.setTheme(theme),
     editorActions,
+    panels: comments.panels,
     contextMenu: (at) => {
       if (life.closed) return null;
       return mode === "reading" ? readingMenu(at) : writingMenu(at);
@@ -1902,6 +1931,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       cellListeners.clear();
       closeSlashPalette(parent);
       cancelReadingSync();
+      comments.destroy();
       life.close();
       unmountReading?.();
       unmountReading = null;
