@@ -99,13 +99,13 @@ enum Leave {
 
 /// Una nota letta per il piano: la revisione su cui si calcola, il testo e il
 /// modello.
-struct Read {
-    revision: Revision,
-    source: String,
-    model: DocumentModel,
+pub(super) struct Read {
+    pub(super) revision: Revision,
+    pub(super) source: String,
+    pub(super) model: DocumentModel,
 }
 
-fn read(host: &dyn HostApi, doc: &DocId) -> Result<Read, PluginError> {
+pub(super) fn read(host: &dyn HostApi, doc: &DocId) -> Result<Read, PluginError> {
     // Prima la revisione, poi il testo: se la nota cambia in mezzo, la
     // modifica ha una base vecchia e la scrittura è un conflitto, non un
     // taglio nei byte sbagliati.
@@ -224,7 +224,7 @@ struct Planned {
 }
 
 /// `at` come intervallo di byte: due numeri interi, inizio e fine.
-fn given_bytes(at: &[f64]) -> Result<(usize, usize), PluginError> {
+pub(super) fn given_bytes(at: &[f64]) -> Result<(usize, usize), PluginError> {
     let bad = || PluginError::BadArgs(Text::key(E_BLOCK_RANGE));
     let [start, end] = at else { return Err(bad()) };
     let whole = |n: f64| (n.is_finite() && n >= 0.0 && n.fract() == 0.0).then_some(n as usize);
@@ -234,7 +234,7 @@ fn given_bytes(at: &[f64]) -> Result<(usize, usize), PluginError> {
 /// L'intervallo `start..end` portato su righe intere: comincia all'inizio di
 /// una riga, finisce alla fine di una (gli a capo in coda restano fuori), sta
 /// su confini di carattere e non è vuoto. `None` se non è così.
-fn line_range(source: &str, start: usize, end: usize) -> Option<(usize, usize)> {
+pub(super) fn line_range(source: &str, start: usize, end: usize) -> Option<(usize, usize)> {
     if start >= end || end > source.len() {
         return None;
     }
@@ -257,7 +257,7 @@ fn line_range(source: &str, start: usize, end: usize) -> Option<(usize, usize)> 
 
 /// Il blocco del cursore: quello di primo livello che lo contiene, o la voce
 /// di elenco di primo livello se è un elenco.
-fn caret_range(
+pub(super) fn caret_range(
     context: Option<&fub_abi::session::ViewContext>,
     doc: &DocId,
     from: &Read,
@@ -305,7 +305,7 @@ fn block_at(body: &[Block], at: usize) -> Option<Span> {
 /// Quanti blocchi di primo livello (o voci di primo livello di un elenco)
 /// l'intervallo tocca, e di che specie è il primo: serve alla trasclusione, che
 /// porta un blocco solo, e a dove scriverne l'id.
-fn blocks_in(body: &[Block], start: usize, end: usize) -> (usize, Option<IdPlace>) {
+pub(super) fn blocks_in(body: &[Block], start: usize, end: usize) -> (usize, Option<IdPlace>) {
     let mut count = 0;
     let mut place = None;
     for block in body {
@@ -341,14 +341,14 @@ fn blocks_in(body: &[Block], start: usize, end: usize) -> (usize, Option<IdPlace
 /// su una riga sua dopo una riga vuota (codice, tabella, citazione…). È la
 /// stessa regola di `blocks/anchor.ts` nel client.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum IdPlace {
+pub(super) enum IdPlace {
     Tail,
     Item,
     OwnLine,
 }
 
 /// Gli a capo di una nota: CRLF se ne ha uno, altrimenti LF.
-fn eol_of(source: &str) -> &'static str {
+pub(super) fn eol_of(source: &str) -> &'static str {
     if source.contains("\r\n") {
         "\r\n"
     } else {
@@ -399,7 +399,7 @@ fn item_prefix(line: &str) -> Option<&str> {
     (gap > 0).then(|| &line[..indent + marker + gap])
 }
 
-fn is_item(line: &str) -> bool {
+pub(super) fn is_item(line: &str) -> bool {
     item_prefix(line).is_some()
 }
 
@@ -412,7 +412,7 @@ fn last_line(text: &str) -> Option<&str> {
 /// la fine) per metterci `body`: una riga vuota prima e dopo, se servono, e gli
 /// a capo della nota. Due voci di elenco una dopo l'altra restano attaccate, così
 /// la voce entra nell'elenco che c'è.
-fn insertion(target: &str, at: usize, body: &str) -> String {
+pub(super) fn insertion(target: &str, at: usize, body: &str) -> String {
     let eol = eol_of(target);
     let before = &target[..at];
     let after = &target[at..];
@@ -537,7 +537,7 @@ fn landing(request: &Request, to: &Read) -> Result<(usize, Option<usize>), Plugi
 
 /// Il nome con cui la nota d'arrivo è nominata dai link: il più corto che il
 /// vault risolve davvero a lei.
-fn reference(host: &dyn HostApi, doc: &DocId) -> Result<String, PluginError> {
+pub(super) fn reference(host: &dyn HostApi, doc: &DocId) -> Result<String, PluginError> {
     crate::formats::link_reference(host, doc)
 }
 
@@ -662,7 +662,7 @@ fn retarget(
 
 /// Un id nuovo per il blocco, che non c'è né nella nota di partenza né in
 /// quella d'arrivo: sei caratteri in base 36, come quelli dell'editor.
-fn fresh_id(host: &dyn HostApi, sources: &[&str]) -> Result<String, PluginError> {
+pub(super) fn fresh_id(host: &dyn HostApi, sources: &[&str]) -> Result<String, PluginError> {
     for _ in 0..ID_TRIES {
         let bytes = host.random_bytes(4)?;
         let n = bytes
@@ -945,7 +945,7 @@ fn plan_within(
     Ok(Planned { plan, done })
 }
 
-fn request_of(revision: Revision, mut edits: Vec<TextEdit>) -> EditRequest {
+pub(super) fn request_of(revision: Revision, mut edits: Vec<TextEdit>) -> EditRequest {
     edits.sort_by_key(|edit| (edit.span.start, edit.span.end));
     EditRequest::new(revision, edits)
 }

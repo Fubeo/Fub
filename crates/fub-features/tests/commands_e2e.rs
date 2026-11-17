@@ -20,9 +20,9 @@ use fub_abi::model::{DocId, Span};
 use fub_abi::session::{AnchoredSelection, AnchoredSelections, SelectionSet, ViewContext};
 use fub_abi::PluginError;
 use fub_features::{
-    CoreCommands, COMMANDS_ID, NOTES_BLOCK_MOVE, NOTES_CREATE, NOTES_DUPLICATE, NOTES_RENAME,
-    NOTES_TRASH, SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET,
-    SETTINGS_SET, TRASH_EMPTY, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
+    CoreCommands, COMMANDS_ID, NOTES_BLOCK_MOVE, NOTES_BLOCK_SYNC, NOTES_CREATE, NOTES_DUPLICATE,
+    NOTES_RENAME, NOTES_TRASH, SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS,
+    SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
@@ -386,7 +386,7 @@ fn the_registry_is_what_a_palette_or_a_cli_reads() {
     let vault = Vault::new();
     let ws = vault.open();
     let specs = ws.commands();
-    assert_eq!(specs.len(), 21, "i ventuno comandi ufficiali");
+    assert_eq!(specs.len(), 22, "i ventidue comandi ufficiali");
     let replace = specs
         .iter()
         .find(|s| s.id == VAULT_REPLACE)
@@ -1693,4 +1693,149 @@ fn a_failed_write_on_the_second_note_puts_the_first_back() {
         "l'arrivo era già scritto, e torna com'era"
     );
     assert_eq!(source(&ws, MOVE_FROM), MOVE_FROM_TEXT);
+}
+
+// ---------------------------------------------------------------------------
+// Il blocco sincronizzato (`note.block.sync`, T30): l'id e la trasclusione,
+// tutte e due o nessuna, e un blocco che si legge uguale dalle due note
+// ---------------------------------------------------------------------------
+
+const SYNC_BLOCK: &str = "Ultimo punto.";
+
+fn sync_args() -> serde_json::Value {
+    let start = MOVE_FROM_TEXT.find(SYNC_BLOCK).expect("il blocco c'è");
+    serde_json::json!({
+        "doc": MOVE_FROM,
+        "at": [start, start + SYNC_BLOCK.len()],
+        "text": SYNC_BLOCK,
+        "to": MOVE_TO,
+        "id": "sinc",
+    })
+}
+
+/// L'HTML della trasclusione del blocco `^sinc`, come la chiede la nota che
+/// la ospita.
+fn synced_html(ws: &Workspace) -> String {
+    let (doc, rendered) = ws
+        .render_embed("Riunione", None, Some("sinc"))
+        .expect("il blocco si trova");
+    assert_eq!(doc.as_str(), MOVE_FROM);
+    rendered.html
+}
+
+fn two_notes() -> (Vault, Workspace) {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    for (id, text) in [(MOVE_FROM, MOVE_FROM_TEXT), (MOVE_TO, MOVE_TO_TEXT)] {
+        ws.write_document(&DocId::new(id), text, WriteBase::Dictated)
+            .expect("scrive");
+    }
+    (vault, ws)
+}
+
+#[test]
+fn a_synced_block_is_written_in_one_note_and_read_in_the_other_and_one_undo_puts_both_back() {
+    let (_vault, mut ws) = two_notes();
+    let outcome = ws
+        .invoke_command(
+            NOTES_BLOCK_SYNC,
+            sync_args(),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("si sincronizza");
+    assert_eq!(
+        source(&ws, MOVE_FROM),
+        "# Riunione\n\nPrimo punto. ^abc123\n\nUltimo punto. ^sinc\n"
+    );
+    assert_eq!(
+        source(&ws, MOVE_TO),
+        "# Progetto\n\nIntro.\n\n![[Riunione#^sinc]]\n"
+    );
+    assert_eq!(
+        outcome.notify.expect("si racconta").to_string(),
+        "Sincronizzato in fondo a «Progetto»: si scrive da tutte e due le parti."
+    );
+    assert!(synced_html(&ws).contains("Ultimo punto."));
+
+    // Si scrive nel blocco (da una nota o dall'altra è la stessa sessione
+    // dell'origine): la nota d'arrivo lo legge cambiato.
+    let synced = source(&ws, MOVE_FROM);
+    ws.write_document(
+        &DocId::new(MOVE_FROM),
+        &synced.replace("Ultimo punto.", "Ultimo punto, cambiato."),
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
+    assert!(synced_html(&ws).contains("Ultimo punto, cambiato."));
+    ws.write_document(&DocId::new(MOVE_FROM), &synced, WriteBase::Dictated)
+        .expect("scrive");
+
+    ws.invoke_command(
+        VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("si annulla");
+    assert_eq!(source(&ws, MOVE_FROM), MOVE_FROM_TEXT, "un annulla solo…");
+    assert_eq!(source(&ws, MOVE_TO), MOVE_TO_TEXT, "…rimette tutte e due");
+}
+
+#[test]
+fn a_target_that_does_not_take_the_embed_leaves_the_block_without_id() {
+    let mut ws = refusing_vault(MOVE_TO);
+    let error = ws
+        .invoke_command(
+            NOTES_BLOCK_SYNC,
+            sync_args(),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("l'arrivo non si scrive");
+    assert!(matches!(error, PluginError::Io(_)), "{error:?}");
+    assert_eq!(source(&ws, MOVE_TO), MOVE_TO_TEXT);
+    assert_eq!(source(&ws, MOVE_FROM), MOVE_FROM_TEXT);
+}
+
+#[test]
+fn a_target_changed_after_the_reading_gets_nothing() {
+    let (_vault, mut ws) = two_notes();
+    // Chi chiama ha letto il blocco; poi la nota del blocco cambia da fuori.
+    let changed = "# Riunione\n\nPrimo punto. ^abc123\n\nScritto da fuori.\n";
+    ws.write_document(&DocId::new(MOVE_FROM), changed, WriteBase::Dictated)
+        .expect("scrive");
+    let error = ws
+        .invoke_command(
+            NOTES_BLOCK_SYNC,
+            sync_args(),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("il blocco non è più lì");
+    assert!(matches!(error, PluginError::Conflict(_)), "{error:?}");
+    assert_eq!(source(&ws, MOVE_FROM), changed);
+    assert_eq!(source(&ws, MOVE_TO), MOVE_TO_TEXT);
+}
+
+#[test]
+fn a_deleted_original_block_is_not_found_by_the_embed() {
+    let (_vault, mut ws) = two_notes();
+    ws.invoke_command(
+        NOTES_BLOCK_SYNC,
+        sync_args(),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("si sincronizza");
+    ws.write_document(
+        &DocId::new(MOVE_FROM),
+        "# Riunione\n\nPrimo punto. ^abc123\n",
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
+    assert!(
+        ws.render_embed("Riunione", None, Some("sinc")).is_err(),
+        "la trasclusione non trova più il blocco: la resa lo dice"
+    );
 }

@@ -2846,6 +2846,7 @@ export const COMMANDS = {
   folderPage: "note.folder_page",
   subpage: "note.subpage",
   moveBlock: "note.block.move",
+  syncBlock: "note.block.sync",
   osTrash: "trash.os",
   undo: "vault.undo",
   replace: "vault.replace",

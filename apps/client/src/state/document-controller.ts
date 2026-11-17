@@ -71,6 +71,7 @@ import { openWebPage } from "../ui/web-viewer";
 import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-caches";
 import { newSubpage, renamePage } from "./page-rename";
 import { moveBlock, moveHeadings, moveNotes } from "./move-block";
+import { syncBlockPort } from "./sync-block";
 import { linkedPageIcon } from "./page-icons";
 import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./people";
 import { dailyDate, dailyPath, firstWeekday } from "./dates";
@@ -1400,6 +1401,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onRenamePage: renamePage,
     onNewSubpage: newSubpage,
     moveBlock: { notes: moveNotes, headings: moveHeadings, move: moveBlock },
+    syncBlock: syncBlockPort,
     pageIcons: {
       icon: linkedPageIcon,
       isPerson: (page) => isPersonTarget(page),

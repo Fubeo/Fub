@@ -45,6 +45,7 @@ import { markPresence } from "../../../../core/presence";
 import { dropOffers, type SurfaceDropDocument, watchDropOffers } from "../../../../core/registry";
 import { type DropTarget, noteTargets, placeTargets, targetAt } from "./drop-targets";
 import { blockBytes, type MoveBlockPort, moveWithQuestions, registerMoveIcon } from "./move-to";
+import type { SyncBlockPort } from "./sync-to";
 import { edgeDepth, edgeScroll, type EdgeScroll } from "./autoscroll";
 import type { Teardown } from "../../../../../ui/lifetime";
 import type { PropertyType } from "../../../../../host/enums.generated";
@@ -102,6 +103,10 @@ export interface BlocksOptions {
   readonly listTypes?: () => Promise<NoteTypeList>;
   readonly openType?: (doc: string) => void;
   readonly featureInType?: (type: NoteType, key: string, on: boolean) => void;
+  /// Il blocco sincronizzato (E14): le note del vault e il comando che dà
+  /// l'id al blocco e scrive la sua trasclusione in un'altra nota. Senza,
+  /// il menu non offre «Sincronizza in un'altra nota».
+  readonly sync?: SyncBlockPort;
   /// Esc è di chi ospita l'editor, che con lui ne esce (una scheda della
   /// lavagna): sul testo Esc non seleziona il blocco del cursore e passa
   /// all'ospite; una selezione di blocchi già fatta la chiude ancora.
@@ -848,6 +853,13 @@ class HandlesView {
       },
       view.state.facet(blocksOptions).move !== undefined && registerMoveIcon() && { label: liveStrings.t("blocks.menu.move"), icon: "move", run: act(() => this.moveTo(key)) },
       run.first === run.last && { label: liveStrings.t("blocks.menu.link"), icon: "fmt-link", run: act(() => this.copyLink(key)) },
+      // Un blocco solo, e non le proprietà: la trasclusione porta un blocco.
+      run.first === run.last && blocks[run.first]?.kind !== "frontmatter" && view.state.facet(blocksOptions).sync !== undefined && {
+        label: liveStrings.t("blocks.menu.sync"),
+        description: liveStrings.t("blocks.menu.sync.desc"),
+        icon: "sync",
+        run: act(() => this.syncTo(key)),
+      },
     ], [
       {
         label: liveStrings.t("blocks.menu.delete"),
@@ -973,6 +985,26 @@ class HandlesView {
       const bytes = blockBytes(state, blocks, run);
       const now = () => (this.view.state.doc === taken ? bytes : null);
       void moveWithQuestions(port, doc, run.first === run.last, now, (message, tone) => options.notify?.(message, tone));
+    });
+  }
+
+  /// «Sincronizza in un'altra nota»: la nota, poi il comando del nucleo. Il
+  /// blocco si legge adesso, col menu; se il testo cambia mentre si sceglie,
+  /// non si scrive niente. Il resto si carica al primo uso.
+  syncTo(key: BlockKey): void {
+    const options = this.view.state.facet(blocksOptions);
+    const port = options.sync;
+    const doc = options.document?.()?.documentId;
+    if (!port || !doc) return;
+    const say = (message: string, tone: "info" | "guasto") => options.notify?.(message, tone);
+    this.withRun(key, (state, blocks, run) => {
+      const taken = state.doc;
+      const bytes = blockBytes(state, blocks, run);
+      const now = () => (this.view.state.doc === taken ? bytes : null);
+      void import("./sync-to").then(
+        (sync) => sync.syncWithQuestions(port, doc, now, say),
+        (error: unknown) => say(liveStrings.t("blocks.sync.failed", { reason: errorText(error) }), "guasto"),
+      );
     });
   }
 

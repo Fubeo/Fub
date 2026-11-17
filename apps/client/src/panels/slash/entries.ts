@@ -40,6 +40,12 @@ export const COLOR_ENTRY = "slash.color";
 /// stesso id è `BASE_ACTION` in `editors/text/profiles/markdown/slash.ts`.
 export const BASE_ENTRY = "markdown.base";
 
+/// «Blocco di un'altra nota» (E14, T30): sceglie un blocco di un'altra nota e
+/// lo mette qui come blocco sincronizzato. Come la Base, un'azione della
+/// superficie che la offre soltanto dove sa farla. Lo stesso id è
+/// `SYNC_BLOCK_ACTION` in `editors/text/profiles/markdown/slash.ts`.
+export const SYNC_BLOCK_ENTRY = "markdown.syncblock";
+
 /// Un comando che c'è soltanto con la componente delle Basi accesa.
 const BASE_COMMAND = "base.view.add";
 
@@ -111,6 +117,7 @@ const ALIASES: Readonly<Record<string, string>> = {
   "markdown.linkcard": "pagina web sito segnalibro scheda anteprima bookmark web page site card",
   "markdown.underline": "sottolineato underline",
   [BASE_ENTRY]: "base database dati data vista view raccolta collection",
+  [SYNC_BLOCK_ENTRY]: "sincronizzato sincronizza synced sync blocco block altra nota other note trasclusione transclusion",
   [COLOR_ENTRY]: "colore color colori colors evidenzia fondo testo",
 };
 
@@ -131,6 +138,7 @@ const SLASH_ICONS: Readonly<Record<string, string>> = {
   [COLOR_ENTRY]: "fmt-color",
   // La figura delle Basi nell'app (la componente `fub.base`).
   [BASE_ENTRY]: "collection",
+  [SYNC_BLOCK_ENTRY]: "search",
 };
 
 /// La scorciatoia Markdown di una voce, se ne ha una; `null` per un accordo.
@@ -256,6 +264,22 @@ export function slashCatalog(specs: readonly CommandSpec[], has: (id: string) =>
     });
     const table = listed.findIndex((each) => each.id === "markdown.table");
     listed.splice(table < 0 ? listed.length : table + 1, 0, base);
+  }
+  // Il blocco di un'altra nota subito dopo la trasclusione, dove la superficie
+  // lo sa fare.
+  if (has(SYNC_BLOCK_ENTRY) && !hidden.has(SYNC_BLOCK_ENTRY) && !listed.some((each) => each.id === SYNC_BLOCK_ENTRY)) {
+    const synced = entry({
+      id: SYNC_BLOCK_ENTRY,
+      label: t("slash.syncblock"),
+      description: t("slash.syncblock.desc"),
+      icon: SLASH_ICONS[SYNC_BLOCK_ENTRY]!,
+      // Nessuna forma Markdown la fa da sola: si sceglie la nota e il blocco.
+      hint: null,
+      section: sectionOf(SYNC_BLOCK_ENTRY),
+      action: true,
+    });
+    const embed = listed.findIndex((each) => each.id === "markdown.embed");
+    listed.splice(embed < 0 ? listed.length : embed + 1, 0, synced);
   }
   if (colors.length > 0) {
     listed.push(entry({ id: COLOR_ENTRY, label: t("slash.color"), description: t("slash.color.desc"), icon: "fmt-color", hint: null, section: "style", action: true }));

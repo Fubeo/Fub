@@ -9045,7 +9045,8 @@ button.cm-fub-page-icon:focus-visible {
   padding-top: 0;
 }
 /* Il motivo lo scrive la shell nella lingua corrente (`data-embed-note`): un
-   ciclo e una catena troppo profonda sono due cose diverse. */
+   ciclo, una catena troppo profonda e un blocco che non c'è più sono cose
+   diverse. */
 .embed-cycle::after,
 .embed-too-deep::after {
   color: var(--muted);
@@ -9056,6 +9057,12 @@ button.cm-fub-page-icon:focus-visible {
 .embed.unresolved {
   border-left-color: var(--doc-rule-soft);
   color: var(--muted);
+}
+/* Il blocco sincronizzato il cui blocco non c'è più: la frase, nella lingua
+   della UI, al posto del link. */
+.embed.embed-missing {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
 }
 /* Un'immagine, un audio o un video incorporati sono il media, non una nota
    riportata: niente filo intorno. */
@@ -16455,6 +16462,65 @@ input.canvas-toolbar-item {
 }
 .transclusion-editor .cm-editor.cm-focused {
   outline: none;
+}
+
+/* ── Il blocco sincronizzato ─────────────────────────────────────────────── */
+
+/* La trasclusione di un blocco (`![[Nota#^id]]`, T30) sta nella nota come un
+   suo blocco: niente vassoio, un filo d'accento discreto a sinistra (lo
+   stesso `inset` della trasclusione, più sottile e più chiaro). La
+   provenienza è una targhetta sopra il blocco, a destra, che si vede al
+   passaggio e col fuoco; si scrive con un clic, senza «Modifica qui». */
+.embed.transclusion-synced {
+  padding: 0 0 0 14px;
+  background: transparent;
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.transclusion-synced[data-transclusion-direct] .transclusion-body {
+  cursor: text;
+}
+.transclusion-synced:hover {
+  background: var(--doc-block-hover);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.transclusion-synced:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.transclusion-synced > .transclusion-head {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: 100%;
+  max-width: calc(100% - var(--space-6));
+  height: 24px;
+  padding: 0 2px 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--doc-bg);
+  box-shadow: var(--shadow-1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.transclusion-synced:hover > .transclusion-head,
+.transclusion-synced:focus-within > .transclusion-head,
+.transclusion-synced:focus-visible > .transclusion-head {
+  opacity: 1;
+  pointer-events: auto;
+}
+.transclusion-synced .transclusion-head button {
+  height: 20px;
+  padding: 0 var(--space-3);
+  opacity: 1;
+}
+/* Mentre si scrive resta un blocco della nota: il filo pieno, nessun foglio. */
+.embed.transclusion-synced.transclusion-editing {
+  background: transparent;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+/* Il testo non si sposta quando l'editor prende il posto della resa. */
+.pane-editor[data-markdown-mode] .transclusion-synced .transclusion-editor .cm-content {
+  padding: 0;
 }
 
 /* ── skin/draw.css ──────────────────────────────────────────────────────── */

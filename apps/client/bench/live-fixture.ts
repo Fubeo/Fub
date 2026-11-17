@@ -50,6 +50,28 @@ const TRANSCLUSION_MEETING = [
   "",
 ].join("\n");
 
+/// Il blocco sincronizzato (T30): la nota riporta un blocco della riunione
+/// col suo id, che si scrive dove sta, e uno il cui blocco non c'è più.
+const SYNCED_NOTE = [
+  "# Mostra di primavera",
+  "",
+  "Chi fa che cosa, come deciso alla riunione:",
+  "",
+  "![[Riunioni/2026-11-04#^didascalie]]",
+  "",
+  "Il resto del lavoro si divide la settimana prossima.",
+  "",
+  "![[Riunioni/2026-11-04#^sparito]]",
+].join("\n");
+const SYNCED_MEETING = [
+  "# Riunione del 4 novembre",
+  "",
+  "Le didascalie le scrive Anna, entro il 20 novembre; i prestiti passano tutti da Luca. ^didascalie",
+  "",
+  "Il 18 novembre la prossima.",
+  "",
+].join("\n");
+
 const FENCE = "```";
 
 /// La nota con tutti i costrutti che la Live rende: è la nota delle foto 01–07,
@@ -452,6 +474,7 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   // Il sorgente aperto (T58): il cursore nel recinto, dopo «Posti liberi?».
   "diagramma-sorgente": { text: DIAGRAM_NOTE, cursor: DIAGRAM_NOTE.indexOf("Posti liberi?") + "Posti liberi?".length },
   trasclusione: { text: TRANSCLUSION_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: TRANSCLUSION_MEETING } },
+  sincronizzato: { text: SYNCED_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: SYNCED_MEETING } },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "lunga-4000": longNote(4000),

@@ -1599,6 +1599,16 @@ function embedSection(text: string, heading: string | null): string {
   return lines.slice(start, end).join("\n").trim();
 }
 
+/// Il blocco col suo `^id` a fine paragrafo (il blocco sincronizzato, T30),
+/// senza l'id, come lo rende il kernel. Un id che non c'è è l'errore del
+/// kernel: la resa scrive «Blocco non trovato».
+function embedBlock(text: string, block: string): string {
+  const mark = new RegExp(`\\s\\^${block.replace(/[^A-Za-z0-9-]/g, "")}\\s*$`);
+  const found = text.split(/\n\s*\n/).find((paragraph) => mark.test(paragraph));
+  if (found === undefined) throw new Error(`Blocco non trovato nel banco: ^${block}`);
+  return found.replace(mark, "").trim();
+}
+
 /// Una resa di Markdown per le note che il banco non ha scritte a mano in
 /// `OUTPUT`: titoli, paragrafi, elenchi (con le caselle dei compiti), blocchi
 /// di codice, collegamenti e grassetto. Non è il renderer vero, e non vuole
@@ -1689,7 +1699,8 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
     const liveFile = LIVE?.files?.[page];
     if (liveFile !== undefined) {
       const text = host.files()[page] ?? liveFile;
-      return { kind: "render_embed", value: { doc_id: page, html: plainHtml(embedSection(text, q.heading ?? null)), parts: [] } };
+      const part = q.block ? embedBlock(text, q.block) : embedSection(text, q.heading ?? null);
+      return { kind: "render_embed", value: { doc_id: page, html: plainHtml(part), parts: [] } };
     }
     const doc = Object.keys(CORPUS).find((id) => id === page || id.endsWith(`/${page}`));
     if (!doc || OUTPUT[doc] === undefined || q.heading || q.block) {

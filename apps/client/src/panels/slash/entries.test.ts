@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BASE_ENTRY, COLOR_ENTRY, SLASH_RESULTS, SLASH_TOP, slashMenuEntries } from "./entries";
+import { BASE_ENTRY, COLOR_ENTRY, SLASH_RESULTS, SLASH_TOP, SYNC_BLOCK_ENTRY, slashMenuEntries } from "./entries";
 import { ALL, SPECS, spec } from "./fixture.test-data";
 
 const OTHERS = [
@@ -133,5 +133,21 @@ describe("la Base dal «/» (T18)", () => {
     expect(slashMenuEntries(LIST, "", ALL).entries.some((entry) => entry.id === BASE_ENTRY)).toBe(false);
     expect(slashMenuEntries(WITH_BASES, "", (id) => id !== BASE_ENTRY && ALL(id)).entries.some((entry) => entry.id === BASE_ENTRY)).toBe(false);
     expect(slashMenuEntries(WITH_BASES, "base", ALL, undefined, { ...use(), hidden: [BASE_ENTRY] }).entries.some((entry) => entry.id === BASE_ENTRY)).toBe(false);
+  });
+});
+
+describe("il blocco di un'altra nota dal «/» (T30)", () => {
+  it("subito dopo la trasclusione, con la lente del prototipo, senza forma da scrivere", () => {
+    const { entries } = slashMenuEntries(LIST, "", ALL);
+    const ids = entries.map((entry) => entry.id);
+    expect(ids[ids.indexOf("markdown.embed") + 1]).toBe(SYNC_BLOCK_ENTRY);
+    expect(entries.find((entry) => entry.id === SYNC_BLOCK_ENTRY)).toMatchObject({
+      label: "Blocco di un'altra nota", section: "media", action: true, picker: null, icon: "search", hint: null,
+    });
+  });
+
+  it("scrivendo «sincronizzato» la si trova per prima; non c'è dove la superficie non la sa fare", () => {
+    expect(slashMenuEntries(LIST, "sincronizzato", ALL).entries[0]!.id).toBe(SYNC_BLOCK_ENTRY);
+    expect(slashMenuEntries(LIST, "", (id) => id !== SYNC_BLOCK_ENTRY && ALL(id)).entries.some((entry) => entry.id === SYNC_BLOCK_ENTRY)).toBe(false);
   });
 });

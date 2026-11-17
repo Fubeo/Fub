@@ -98,6 +98,9 @@ pub const NOTES_TASK_TOGGLE: &str = "note.task.toggle";
 /// «Sposta in…»: un blocco in fondo a un'altra nota o a una sua sezione, con
 /// niente, un link o una trasclusione al suo posto (E13).
 pub const NOTES_BLOCK_MOVE: &str = "note.block.move";
+/// Il blocco sincronizzato: dà l'id al blocco se manca e scrive la sua
+/// trasclusione in fondo a un'altra nota, tutte e due o nessuna (E14).
+pub const NOTES_BLOCK_SYNC: &str = "note.block.sync";
 /// Cambia un'impostazione (§11.1).
 pub const SETTINGS_SET: &str = "settings.set";
 /// Riporta un'impostazione a ciò che valeva prima che qualcuno decidesse.
@@ -320,6 +323,7 @@ mod move_block;
 mod notes;
 mod provider;
 mod rewrite;
+mod sync_block;
 mod tasks;
 
 pub use catalog::catalog;
@@ -331,6 +335,7 @@ use notes::{
 };
 pub use provider::CoreCommands;
 use rewrite::{selection_wikilink, vault_replace};
+use sync_block::notes_block_sync;
 use tasks::notes_task_toggle;
 pub use tasks::occurrences;
 

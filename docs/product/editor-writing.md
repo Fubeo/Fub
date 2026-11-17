@@ -358,7 +358,8 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
 ## La trasclusione viva
 
 Una sezione o un blocco di un'altra nota riportati con `![[Nota#Sezione]]` si
-scrivono dove stanno, con **Modifica qui**: [La trasclusione
+scrivono dove stanno, con **Modifica qui**; lo stesso blocco in più note
+(`![[Nota#^id]]`) è il blocco sincronizzato: [La trasclusione
 viva](editor-transclusion.md).
 
 ## La concentrazione
