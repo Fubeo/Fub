@@ -116,17 +116,38 @@ export class SceneIndexer {
       (node, path, layer, parent, style, clips) => this.unit(node, path, layer, parent, style, clips),
       (node, attrs, matrix, style, outer) => this.clipsOf(node, attrs, matrix, style, outer),
       this.pagesOf(model),
+      (leaf, path, parent, style, clips) => this.foreignBlock(leaf, path, parent, style, clips),
     );
+    const foreign: ForeignBlock[] = [];
     if (scope === null) {
-      this.walk(model, (layer) => !layer.locked && !layer.hidden, layers, (node, path, layer, parent, style, clips) => {
-        if (node.details!.locked === true) return;
-        push(units, this.unit(node, path, layer, parent, style, clips));
-      });
+      this.walk(
+        model,
+        (layer) => !layer.locked && !layer.hidden,
+        layers,
+        (node, path, layer, parent, style, clips) => {
+          if (node.details!.locked === true) return;
+          push(units, this.unit(node, path, layer, parent, style, clips));
+        },
+        (leaf, parent, style, path, clips) => {
+          const block = this.foreignBlock(leaf, [...path], parent, style, clips);
+          if (block !== null) foreign.push(block);
+        },
+      );
     } else {
       this.walk(model, () => false, layers, () => {});
       units.push(...nested.childrenOf(scope));
+      foreign.push(...nested.foreignOf(scope));
     }
-    return new SceneIndex(units, layers, nested);
+    return new SceneIndex(units, layers, nested, foreign);
+  }
+
+  /// Il blocco estraneo `leaf`, con le forme che se ne stimano, figlio di un
+  /// contenitore che `parent` porta nella scena; `null` se non disegna
+  /// niente.
+  private foreignBlock(leaf: LeafNode, path: number[], parent: Matrix, style: Style, clips: readonly Clip[] | null): ForeignBlock | null {
+    const parts: Part[] = [];
+    this.estimate(leaf, parent, IDENTITY, style, fixed(clips), parts);
+    return parts.length === 0 ? null : new ForeignBlock(path, parts, leaf);
   }
 
   /// Il riquadro nella scena di `elem`, la forma che uno strumento scrive al
@@ -266,9 +287,7 @@ export class SceneIndexer {
   foreignBlocks(model: DocumentModel): ForeignBlock[] {
     const out: ForeignBlock[] = [];
     this.walk(model, (layer) => !layer.hidden, [], () => {}, (leaf, parent, style, path, clips) => {
-      const parts: Part[] = [];
-      this.estimate(leaf, parent, IDENTITY, style, fixed(clips), parts);
-      if (parts.length > 0) out.push(new ForeignBlock(path, parts));
+      push(out, this.foreignBlock(leaf, [...path], parent, style, clips));
     });
     return out;
   }
