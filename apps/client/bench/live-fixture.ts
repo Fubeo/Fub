@@ -316,6 +316,12 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     text: "---\nicon: 📚\ntipo: Progetto\nstato: In corso\nscadenza: 2027-03-20\npersone: [\"[[Anna Bianchi]]\", \"[[Luca Ferri]]\"]\nluogo: Biblioteca civica\nbudget: 4800\nfatto: false\nluoghi: [Torino, Lisbona, Porto]\n---\n" + NOTE,
     cursor: null,
   },
+  // Selezione, Stato e Url (T9), col registro dei tipi di `?tipi=1`: uno
+  // Stato, una Selezione, un indirizzo e uno Stato fuori dalle sue opzioni.
+  opzioni: {
+    text: "---\nicon: 📚\ntipo: Progetto\nstato: In viaggio\nsala: Grande\nsito: https://example.org/mostra\nfase: Rivista\n---\n" + NOTE,
+    cursor: null,
+  },
   "testata-illeggibile": { text: "---\nicon: 🧳\nuna riga che non è una chiave\nstato: In corso\n---\n" + NOTE, cursor: null },
   "testata-senza-immagine": { text: "---\ncover: ../Risorse/non-c-e.png\nstato: In corso\n---\n" + NOTE, cursor: null },
   // I colori del contenuto (K1): i nove del testo e i nove del fondo, uno per

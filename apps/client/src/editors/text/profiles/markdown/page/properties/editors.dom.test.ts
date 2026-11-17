@@ -492,13 +492,18 @@ describe("Selezione e Stato: le opzioni come pastiglie (prototipo, `.opt`)", () 
     expect(valueOf(view, "sala").querySelector<HTMLElement>(".cm-fub-prop-opt")!.dataset.color).toBe("gray");
   });
 
-  it("un valore fuori dalle opzioni, o senza opzioni, resta testo; il clic lo scrive come prima", () => {
+  it("un valore fuori dalle opzioni, o senza opzioni, resta testo, segnato; il clic apre le opzioni", () => {
     const { view } = mount("---\nstato: Boh\nfase: Prima\n---\n", { propertyTypes: registry });
     expect(valueOf(view, "stato").querySelector(".cm-fub-prop-opt")).toBeNull();
-    expect(valueOf(view, "stato").textContent).toBe("Boh");
+    expect(valueOf(view, "stato").firstChild!.textContent).toBe("Boh");
+    expect(row(view, "stato").hasAttribute("data-outside")).toBe(true);
+    expect(valueOf(view, "stato").querySelector(".cm-fub-prop-mismatch")!.textContent).toBe("Fuori dalle opzioni: resta testo");
     expect(valueOf(view, "fase").querySelector(".cm-fub-prop-opt")).toBeNull();
+    expect(row(view, "fase").hasAttribute("data-outside")).toBe(true);
     valueOf(view, "stato").click();
-    expect(row(view, "stato").querySelector("input")!.value).toBe("Boh");
+    expect(row(view, "stato").querySelector("input")).toBeNull();
+    expect(popover().querySelector(".cm-fub-prop-choices")).not.toBeNull();
+    expect(text(view)).toBe("---\nstato: Boh\nfase: Prima\n---\n");
   });
 
   it("il nome ha la figura del tipo dichiarato, anche per un valore fuori dalle opzioni", () => {
@@ -512,6 +517,180 @@ describe("Selezione e Stato: le opzioni come pastiglie (prototipo, `.opt`)", () 
   it("in sola lettura (e in Lettura) la pastiglia resta", () => {
     const { view } = mount("---\nstato: In corso\n---\n", { propertyTypes: registry, readOnly: true });
     expect(row(view, "stato").querySelector(".cm-fub-page-prop-value .cm-fub-prop-opt")!.textContent).toBe("In corso");
+  });
+});
+
+describe("Selezione e Stato: l'editor delle opzioni (prototipo, `propEditor`, passo 4)", () => {
+  const registry = () => parsePropertyTypes(JSON.stringify({
+    version: 1,
+    types: { stato: "status", sala: "select" },
+    options: {
+      stato: [
+        { name: "Da iniziare" },
+        { name: "In corso", color: "orange", group: "doing" },
+        { name: "In attesa", color: "yellow", group: "doing" },
+        { name: "Fatto", color: "green", group: "done" },
+        { name: "Annullato", color: "red", group: "done" },
+      ],
+      sala: [{ name: "Grande", color: "blue" }, { name: "Piccola", color: "green" }, { name: "Grande", color: "red" }],
+    },
+  }));
+  const rows = () => [...popover().querySelectorAll<HTMLElement>("[role=option]")];
+  const search = () => popover().querySelector<HTMLInputElement>(".cm-fub-prop-search input")!;
+
+  it("lo Stato raggruppa le opzioni in Da fare, In corso, Fatto, coi colori; il valore è spuntato", () => {
+    const { view } = mount("---\nstato: In corso\n---\nTesto", { propertyTypes: registry });
+    expect(row(view, "stato").dataset.kind).toBe("status");
+    valueOf(view, "stato").click();
+    expect(rows().map((element) => element.textContent)).toEqual([
+      "Da fare", "Da iniziare", "In corso", "✓In corso", "In attesa", "Fatto", "Fatto", "Annullato",
+    ]);
+    const heads = rows().filter((element) => element.classList.contains("cm-fub-prop-group"));
+    expect(heads.map((element) => element.getAttribute("aria-disabled"))).toEqual(["true", "true", "true"]);
+    const pills = [...popover().querySelectorAll<HTMLElement>(".cm-fub-prop-opt")];
+    expect(pills.map((pill) => pill.dataset.color)).toEqual(["gray", "orange", "yellow", "green", "red"]);
+    expect(pills.every((pill) => pill.hasAttribute("data-status"))).toBe(true);
+    expect(rows().find((element) => element.textContent === "✓In corso")!.getAttribute("aria-selected")).toBe("true");
+    expect(popover().querySelector(".cm-fub-prop-foot")!.textContent).toContain("valgono per ogni nota con «stato»");
+  });
+
+  it("da tastiera: la ricerca filtra, ↓ salta le intestazioni, Invio scrive; un annullo lo rimette", () => {
+    const { view } = mount("---\nstato: In corso\n---\nTesto", { propertyTypes: registry });
+    byKeyboard(view, "stato");
+    const input = search();
+    expect(document.activeElement).toBe(input);
+    type(input, "a");
+    // Le opzioni con una «a», nei loro gruppi: la prima è attiva.
+    expect(rows().map((element) => element.textContent)).toEqual(["Da fare", "Da iniziare", "In corso", "In attesa", "Fatto", "Fatto", "Annullato"]);
+    expect(input.getAttribute("aria-activedescendant")).toBe(rows()[1]!.id);
+    key(input, "ArrowDown");
+    expect(input.getAttribute("aria-activedescendant")).toBe(rows().find((element) => element.textContent === "In attesa")!.id);
+    key(input, "Enter");
+    expect(text(view)).toBe("---\nstato: In attesa\n---\nTesto");
+    expect(document.querySelector(".cm-fub-prop-choices")).toBeNull();
+    expect(valueOf(view, "stato").querySelector<HTMLElement>(".cm-fub-prop-opt")!.dataset.color).toBe("yellow");
+    undo(view);
+    expect(text(view)).toBe("---\nstato: In corso\n---\nTesto");
+  });
+
+  it("col puntatore: la Selezione non ha gruppi; due opzioni con lo stesso nome valgono una, la prima", () => {
+    const { view } = mount("---\nsala: Grande\n---\n", { propertyTypes: registry });
+    valueOf(view, "sala").click();
+    expect(rows().map((element) => element.textContent)).toEqual(["✓Grande", "Piccola"]);
+    expect(popover().querySelector<HTMLElement>(".cm-fub-prop-opt")!.dataset.color).toBe("blue");
+    expect(popover().querySelector(".cm-fub-prop-opt[data-status]")).toBeNull();
+    rows()[1]!.click();
+    expect(text(view)).toBe("---\nsala: Piccola\n---\n");
+  });
+
+  it("un nome che non c'è si crea nel registro, in Da fare con un colore libero, e diventa il valore", async () => {
+    const added: unknown[] = [];
+    const addPropertyOption = vi.fn(async (key: string, option: unknown) => { added.push([key, option]); return null; });
+    const { view } = mount("---\nstato: Fatto\n---\n", { propertyTypes: registry, addPropertyOption });
+    valueOf(view, "stato").click();
+    type(search(), "Rivista");
+    const create = rows().find((element) => element.classList.contains("cm-fub-prop-create"))!;
+    expect(create.textContent).toBe("Crea «Rivista»in Da fare, con un colore libero");
+    expect(search().getAttribute("aria-activedescendant")).toBe(create.id);
+    key(search(), "Enter");
+    await vi.waitFor(() => expect(text(view)).toBe("---\nstato: Rivista\n---\n"));
+    // Grigio, arancio, giallo, verde e rosso ci sono: il primo libero è il blu.
+    expect(added).toEqual([["stato", { name: "Rivista", color: "blue", group: "todo" }]]);
+  });
+
+  it("la Selezione crea senza gruppo; un nome che c'è già non si crea; senza registro scrivibile non c'è «Crea»", async () => {
+    const addPropertyOption = vi.fn(async () => null);
+    const { view } = mount("---\nsala: Grande\nstato: Fatto\n---\n", { propertyTypes: registry, addPropertyOption });
+    valueOf(view, "sala").click();
+    type(search(), "Piccola");
+    expect(rows().some((element) => element.classList.contains("cm-fub-prop-create"))).toBe(false);
+    type(search(), "Media");
+    expect(rows().map((element) => element.textContent)).toEqual(["Crea «Media»con un colore libero"]);
+    rows()[0]!.click();
+    await vi.waitFor(() => expect(text(view)).toContain("sala: Media"));
+    expect(addPropertyOption).toHaveBeenCalledWith("sala", { name: "Media", color: "orange", group: null });
+    const plain = mount("---\nstato: Fatto\n---\n", { propertyTypes: registry });
+    valueOf(plain.view, "stato").click();
+    type(search(), "Nuova");
+    expect(rows()).toHaveLength(0);
+    expect(popover().querySelector<HTMLElement>(".cm-fub-prop-empty")!.hidden).toBe(false);
+  });
+
+  it("un registro che non si scrive: l'opzione non si crea, il riquadro lo dice e la nota non cambia", async () => {
+    const addPropertyOption = vi.fn(async () => "il registro dei tipi non si legge, e non si riscrive");
+    const { view } = mount("---\nstato: Fatto\n---\n", { propertyTypes: registry, addPropertyOption });
+    valueOf(view, "stato").click();
+    type(search(), "Rivista");
+    key(search(), "Enter");
+    await vi.waitFor(() => expect(popover().querySelector<HTMLElement>(".cm-fub-prop-note")!.hidden).toBe(false));
+    expect(popover().querySelector(".cm-fub-prop-note")!.textContent).toBe("L'opzione «Rivista» non è stata creata: il registro dei tipi non si legge, e non si riscrive");
+    expect(text(view)).toBe("---\nstato: Fatto\n---\n");
+  });
+
+  it("il valore cambia mentre le opzioni sono aperte: non si scrive, la scelta resta e «Scrivi la mia» la scrive", () => {
+    const { view } = mount("---\nstato: Fatto\n---\n", { propertyTypes: registry });
+    valueOf(view, "stato").click();
+    view.dispatch({ changes: { from: 11, to: 16, insert: "In corso" } });
+    rows().find((element) => element.textContent?.endsWith("Annullato"))!.click();
+    expect(text(view)).toBe("---\nstato: In corso\n---\n");
+    expect(popover().querySelector(".cm-fub-prop-note")!.textContent).toContain("ora vale «In corso»");
+    expect(rows().find((element) => element.textContent === "✓Annullato")!.getAttribute("aria-selected")).toBe("true");
+    popover().querySelector<HTMLElement>(".cm-fub-prop-note-action")!.click();
+    expect(text(view)).toBe("---\nstato: Annullato\n---\n");
+  });
+
+  it("un'opzione che sembra un numero si scrive come testo", () => {
+    const types = parsePropertyTypes(JSON.stringify({ version: 1, types: { voto: "select" }, options: { voto: [{ name: "3" }, { name: "true" }] } }));
+    const { view } = mount("---\nvoto: \"3\"\n---\n", { propertyTypes: () => types });
+    valueOf(view, "voto").click();
+    rows()[1]!.click();
+    expect(text(view)).toBe("---\nvoto: \"true\"\n---\n");
+  });
+
+  it("il menu «Tipo» offre Selezione e Stato dopo il numero", () => {
+    const { view } = mount("---\nluogo: Torino\n---\n", { setPropertyType: async () => null });
+    row(view, "luogo").querySelector<HTMLElement>(".cm-fub-page-prop-key")!.click();
+    [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find((item) => item.textContent?.startsWith("Tipo"))!.click();
+    const names = [...document.querySelectorAll<HTMLElement>("[role=menuitemradio]")].map((item) => item.querySelector(".cm-fub-prop-menu-label")!.textContent);
+    expect(names.slice(0, 4)).toEqual(["Testo", "Numero", "Selezione", "Stato"]);
+  });
+});
+
+describe("l'indirizzo: un link che si apre col clic e si modifica con la matita", () => {
+  it("il clic apre il sito, la matita (o F2) lo modifica in riga", () => {
+    const opened: string[] = [];
+    vi.stubGlobal("open", (url: string) => { opened.push(url); return null; });
+    const { view } = mount("---\nsito: https://example.org/mostra\n---\n");
+    expect(row(view, "sito").dataset.kind).toBe("url");
+    const link = valueOf(view, "sito");
+    expect(link.querySelector(".cm-fub-prop-url")!.textContent).toBe("https://example.org/mostra");
+    expect(link.getAttribute("aria-label")).toBe("sito: https://example.org/mostra. Premi per aprire il sito");
+    link.click();
+    expect(opened).toEqual(["https://example.org/mostra"]);
+    expect(row(view, "sito").querySelector("input")).toBeNull();
+    row(view, "sito").querySelector<HTMLButtonElement>(".cm-fub-prop-url-edit")!.click();
+    let input = row(view, "sito").querySelector<HTMLInputElement>("input.cm-fub-prop-input")!;
+    expect(document.activeElement).toBe(input);
+    input.value = "https://example.org/sale";
+    key(input, "Enter");
+    expect(text(view)).toBe("---\nsito: https://example.org/sale\n---\n");
+    key(valueOf(view, "sito"), "F2");
+    input = row(view, "sito").querySelector<HTMLInputElement>("input.cm-fub-prop-input")!;
+    expect(input.value).toBe("https://example.org/sale");
+    key(input, "Escape");
+    expect(opened).toHaveLength(1);
+  });
+
+  it("un indirizzo che il browser non apre resta un campo; in sola lettura il link è un link", () => {
+    const types = parsePropertyTypes(JSON.stringify({ version: 1, types: { sito: "url" } }));
+    const { view } = mount("---\nsito: www.example.org\n---\n", { propertyTypes: () => types });
+    expect(row(view, "sito").querySelector(".cm-fub-prop-url-edit")).toBeNull();
+    valueOf(view, "sito").click();
+    expect(row(view, "sito").querySelector("input")).not.toBeNull();
+    const read = mount("---\nsito: https://example.org\n---\n", { readOnly: true });
+    const anchor = row(read.view, "sito").querySelector<HTMLAnchorElement>("a.cm-fub-prop-url")!;
+    expect(anchor.getAttribute("href")).toBe("https://example.org");
+    expect(row(read.view, "sito").querySelector("button")).toBeNull();
   });
 });
 

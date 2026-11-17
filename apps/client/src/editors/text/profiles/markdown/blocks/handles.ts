@@ -47,6 +47,7 @@ import { edgeDepth, edgeScroll, type EdgeScroll } from "./autoscroll";
 import type { Teardown } from "../../../../../ui/lifetime";
 import type { PropertyType } from "../../../../../host/enums.generated";
 import type { PropertyTypes } from "../page/properties/kind";
+import type { NewOption } from "../page/properties/values";
 
 export interface BlocksOptions {
   /// La nota e il suo vault: i posti fuori dalla colonna (i titoli della sua
@@ -81,6 +82,10 @@ export interface BlocksOptions {
   /// `null` se è andata, altrimenti il perché no. Senza, il menu della
   /// proprietà non offre «Tipo».
   readonly setPropertyType?: (key: string, type: PropertyType) => Promise<string | null>;
+  /// Aggiunge un'opzione di Selezione o di Stato nel registro del vault
+  /// (`property.option.set`): `null` se è andata, altrimenti il perché no.
+  /// Senza, l'editor delle opzioni non le crea.
+  readonly addPropertyOption?: (key: string, option: NewOption) => Promise<string | null>;
   /// Le persone il cui nome combacia col testo, per l'editor delle persone.
   readonly searchPeople?: (text: string) => Promise<string[]>;
   /// Esc è di chi ospita l'editor, che con lui ne esce (una scheda della

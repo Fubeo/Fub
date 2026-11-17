@@ -83,9 +83,12 @@ export const TRADUZIONE = {
   "--danger": ["--danger"],
   // I colori delle etichette (`.k-green`): `--c-<colore>` → `--doc-color-<colore>`
   // e il suo fondo `--doc-tint-<colore>`, come dice la tabella del piano. Per
-  // ora il verde, l'unico che un pezzo usa (le note del calendario, T17).
+  // ora il verde (le note del calendario, T17) e l'arancio (lo stato «In
+  // corso» della testata, T9), i due che un pezzo usa.
   "--c-green": ["--doc-color-green"],
   "--c-green-b": ["--doc-tint-green"],
+  "--c-orange": ["--doc-color-orange"],
+  "--c-orange-b": ["--doc-tint-orange"],
 };
 
 /// La traduzione dei pezzi dentro la pagina del documento (`contesto:
@@ -116,6 +119,8 @@ export const TRADUZIONE_DOCUMENTO = {
   "--danger": ["--doc-danger"],
   "--c-green": ["--doc-color-green"],
   "--c-green-b": ["--doc-tint-green"],
+  "--c-orange": ["--doc-color-orange"],
+  "--c-orange-b": ["--doc-tint-orange"],
 };
 
 /// Le traduzioni per contesto: ogni pezzo usa quella del suo `contesto`.
@@ -313,6 +318,13 @@ export const VISTE = {
     stati: TUTTI,
     prototipo: { prepara: (page) => passo(page, "A riposo") },
     app: { scena: "proprieta-01-righe" },
+  },
+  /// Selezione e Stato nella testata (T9): le stesse righe, col registro dei
+  /// tipi che fa dello stato una pastiglia.
+  opzioni: {
+    stati: TUTTI,
+    prototipo: { prepara: (page) => passo(page, "A riposo") },
+    app: { scena: "opzioni-01-righe" },
   },
   /// Il calendario della Base: il prototipo al passo «Bacheca e calendario»
   /// con la vista Calendario scelta, l'app dalla scena del calendario.
@@ -1134,6 +1146,14 @@ export const PEZZI = [
     prototipo: ".person",
     app: ".cm-fub-prop-person",
     proprieta: [...BASE, "height"],
+  },
+  {
+    id: "opzioni.stato",
+    vista: "opzioni",
+    contesto: "documento",
+    prototipo: ".props .opt.st",
+    app: '.cm-fub-page-prop[data-key="stato"] .cm-fub-prop-opt',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
   },
   {
     id: "proprieta.altre",

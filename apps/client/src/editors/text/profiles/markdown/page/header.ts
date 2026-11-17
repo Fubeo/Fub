@@ -26,6 +26,7 @@ import { lastEntry, listItems, propertyBlock, type PropertyBlock, type PropertyE
 import type { PropertyType } from "../../../../../host/enums.generated";
 import { NO_TYPES, type PropertyTypes } from "./properties/kind";
 import type { WriteOutcome } from "./properties/row";
+import type { NewOption } from "./properties/values";
 import { liveStrings } from "../strings";
 import { coverElement, coverYOf } from "./cover";
 import { foldedHeading } from "./title";
@@ -60,6 +61,9 @@ export interface PageOptions {
   /// Dichiara il tipo di una proprietà nel registro del vault
   /// (`property.type.set`): `null` se è andata, altrimenti il perché no.
   readonly setPropertyType?: (key: string, type: PropertyType) => Promise<string | null>;
+  /// Aggiunge un'opzione di Selezione o di Stato nel registro del vault
+  /// (`property.option.set`): `null` se è andata, altrimenti il perché no.
+  readonly addPropertyOption?: (key: string, option: NewOption) => Promise<string | null>;
   /// Le persone il cui nome combacia con il testo, per l'editor delle
   /// persone.
   readonly searchPeople?: (text: string) => Promise<string[]>;
@@ -169,6 +173,8 @@ export interface PageHost {
   featureProperty(key: string, on: boolean): void;
   /// Dichiara il tipo nel registro del vault.
   setPropertyType?(key: string, type: PropertyType): Promise<string | null>;
+  /// Aggiunge un'opzione di Selezione o di Stato nel registro del vault.
+  addPropertyOption?(key: string, option: NewOption): Promise<string | null>;
   /// Le persone per l'editor delle persone.
   searchPeople?(text: string): Promise<string[]>;
   /// Le classi della pagina adesso, per il menu «…».
@@ -313,6 +319,7 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
       renameKey: (key, name) => host.renameProperty(key, name),
       feature: (key, on) => host.featureProperty(key, on),
       setType: host.setPropertyType ? (key, type) => host.setPropertyType!(key, type) : undefined,
+      addOption: host.addPropertyOption ? (key, option) => host.addPropertyOption!(key, option) : undefined,
       searchPeople: host.searchPeople ? (text) => host.searchPeople!(text) : undefined,
       notify: host.notify ? (message, tone) => host.notify!(message, tone) : undefined,
       editing: (open) => host.popover?.(open),

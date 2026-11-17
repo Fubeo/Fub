@@ -1,7 +1,7 @@
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { propertyBlock, type PropertyEntry } from "../../properties";
-import { initials, linkName, optionOf, parseNumber, parsePropertyTypes, rowKind, sameTypes, validDate, type PropertyTypes } from "./kind";
+import { freeColor, initials, linkName, optionOf, parseNumber, parsePropertyTypes, rowKind, sameTypes, validDate, type OptionColor, type PropertyTypes } from "./kind";
 
 // Il tipo di una riga della testata (T8): il registro vince, se no il valore.
 
@@ -68,8 +68,10 @@ describe("il registro dei tipi", () => {
     expect(kind("fatto: forse", types).mismatch).toBe("checkbox");
     // Un testo solo è un elenco di una voce.
     expect(kind("luoghi: Torino", types)).toEqual({ kind: "list", declared: "list", mismatch: null });
-    // Selezione e Stato arrivano coi loro editor: intanto testo, non segnato.
-    expect(kind("stato: aperto", types)).toEqual({ kind: "text", declared: "status", mismatch: null });
+    // Selezione e Stato hanno il loro editor: un valore fuori dalle opzioni
+    // torna lo stesso (è testo), e lo segna la riga, non il tipo.
+    expect(kind("stato: aperto", types)).toEqual({ kind: "status", declared: "status", mismatch: null });
+    expect(kind("stato: [a, b]", types)).toEqual({ kind: "text", declared: "status", mismatch: "status" });
     // Vuoto torna sempre.
     expect(kind("anno:", types).mismatch).toBeNull();
   });
@@ -107,5 +109,16 @@ describe("le letture degli editor", () => {
     expect(entry("a:\n  - uno\n  - \"[[Due]]\"").items).toEqual(["uno", "[[Due]]"]);
     expect(entry("a:\n  - uno").blockIndent).toBe("  ");
     expect(entry("a: testo").items).toBeNull();
+  });
+});
+
+describe("il colore libero di un'opzione nuova (T9)", () => {
+  const option = (color: OptionColor) => ({ name: color, color, group: "todo" as const });
+  it("è il primo che le opzioni della chiave non hanno; il grigio resta di chi non ne dice uno", () => {
+    expect(freeColor([])).toBe("blue");
+    expect(freeColor([option("gray"), option("blue")])).toBe("green");
+    const all = (["blue", "green", "orange", "purple", "pink", "yellow", "red", "brown"] as const).map(option);
+    expect(freeColor(all)).toBe("blue");
+    expect(freeColor([...all, option("gray")])).toBe("green");
   });
 });
