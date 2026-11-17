@@ -535,18 +535,22 @@ struct Delivery {
 #[cfg_attr(not(feature = "notify-watcher"), allow(dead_code))]
 impl Delivery {
     /// La cartella è cambiata: si rilegge con le porte e si dice. `touched`
-    /// sono i path toccati, che diventano i file salvati; `failed` dice che
-    /// l'osservatore ha riportato un errore.
+    /// sono i path toccati, che diventano i file salvati; `lost` dice che
+    /// l'osservatore stesso ha smesso: ha riportato un errore, o ha visto
+    /// togliere (o spostare) la cartella guardata.
     ///
     /// Se la cartella non è più quella guardata (tolta, o tolta e rifatta da
-    /// un build) o l'osservatore ha sbagliato, l'osservatore è morto: lo si
+    /// un build) o l'osservatore ha smesso, l'osservatore è morto: lo si
     /// segna, l'evento dice `watched: false`, e il thread del custode lo
-    /// rimonta appena la cartella regge. Un salvataggio a metà (`refused`)
-    /// nella stessa cartella non lo uccide.
-    fn changed(&self, touched: impl IntoIterator<Item = std::path::PathBuf>, failed: bool) {
+    /// rimonta appena la cartella regge. L'identità sul disco da sola non
+    /// basta: una cartella rifatta sul posto può riavere lo stesso inode (ext4
+    /// riusa subito quelli liberati), mentre l'osservatore di quella tolta è
+    /// già morto. Un salvataggio a metà (`refused`) nella stessa cartella non
+    /// lo uccide.
+    fn changed(&self, touched: impl IntoIterator<Item = std::path::PathBuf>, lost: bool) {
         let mut link = theme_link(self.config_dir.as_deref(), &self.folder);
         link.changed = saved_files(&self.folder, touched);
-        let lost = failed || self.root.is_none() || root_id(&self.folder) != self.root;
+        let lost = lost || self.root.is_none() || root_id(&self.folder) != self.root;
         if lost {
             self.alive.store(false, Ordering::Release);
             self.shared.wake_recheck();
@@ -633,11 +637,12 @@ use notify_folder::FolderWatch;
 
 #[cfg(feature = "notify-watcher")]
 mod notify_folder {
+    use std::path::Path;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
 
     use camino::Utf8Path;
-    use notify::event::EventKind;
+    use notify::event::{EventKind, ModifyKind, RenameMode};
     use notify::{RecommendedWatcher, RecursiveMode};
     use notify_debouncer_full::{
         new_debouncer_opt, DebounceEventResult, Debouncer, RecommendedCache,
@@ -657,6 +662,7 @@ mod notify_folder {
         pub(super) fn start(folder: &Utf8Path, deliver: Delivery) -> Result<Self, String> {
             let live = Arc::new(AtomicBool::new(true));
             let open = live.clone();
+            let root = folder.as_std_path().to_path_buf();
             // I link simbolici dentro la cartella non si seguono: le porte li
             // rifiutano, e un osservatore che li seguisse guarderebbe fuori.
             let config = notify::Config::default().with_follow_symlinks(false);
@@ -669,14 +675,15 @@ mod notify_folder {
                     }
                     match result {
                         Ok(events) => {
+                            let gone = events.iter().any(|event| leaves_root(event, &root));
                             // Chi ha solo guardato non ha cambiato niente.
                             let touched: Vec<_> = events
                                 .into_iter()
                                 .filter(|event| !matches!(event.kind, EventKind::Access(_)))
                                 .flat_map(|event| event.event.paths)
                                 .collect();
-                            if !touched.is_empty() {
-                                deliver.changed(touched, false);
+                            if gone || !touched.is_empty() {
+                                deliver.changed(touched, gone);
                             }
                         }
                         // L'osservatore non vede più la cartella (sparita, o il
@@ -702,6 +709,20 @@ mod notify_folder {
                 live,
             })
         }
+    }
+
+    /// L'evento dice che la cartella guardata **stessa** è stata tolta o
+    /// spostata via: l'osservatore di quella cartella non vede più niente
+    /// (su Linux inotify ne toglie l'osservazione), anche se al suo posto c'è
+    /// già una cartella nuova con lo stesso nome. Un file tolto dentro la
+    /// cartella non conta.
+    pub(super) fn leaves_root(event: &notify::Event, root: &Path) -> bool {
+        let leaves = matches!(
+            event.kind,
+            EventKind::Remove(_)
+                | EventKind::Modify(ModifyKind::Name(RenameMode::From | RenameMode::Any))
+        );
+        leaves && event.paths.first().is_some_and(|path| path == root)
     }
 
     impl Drop for FolderWatch {
@@ -842,6 +863,65 @@ mod tests {
         keeper.request(move || (None, Some(first)));
         keeper.settle();
         assert_eq!(keeper.watched(), None);
+    }
+
+    /// La cartella guardata tolta, o spostata via, ferma il suo osservatore;
+    /// un file tolto dentro, o un'altra cartella tolta, no.
+    #[cfg(feature = "notify-watcher")]
+    #[test]
+    fn only_the_root_leaving_stops_the_watch() {
+        use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
+        use notify::{Event, EventKind};
+        let root = std::path::Path::new("/temi/dist");
+        let event = |kind, path: &str| Event::new(kind).add_path(path.into());
+        let removed = EventKind::Remove(RemoveKind::Folder);
+        let moved = EventKind::Modify(ModifyKind::Name(RenameMode::From));
+        assert!(notify_folder::leaves_root(
+            &event(removed, "/temi/dist"),
+            root
+        ));
+        assert!(notify_folder::leaves_root(
+            &event(moved, "/temi/dist"),
+            root
+        ));
+        assert!(!notify_folder::leaves_root(
+            &event(EventKind::Remove(RemoveKind::File), "/temi/dist/skin.css"),
+            root
+        ));
+        assert!(!notify_folder::leaves_root(
+            &event(removed, "/temi/altro"),
+            root
+        ));
+        assert!(!notify_folder::leaves_root(
+            &event(EventKind::Create(CreateKind::Folder), "/temi/dist"),
+            root
+        ));
+    }
+
+    /// Una cartella rifatta sul posto con lo stesso inode (ext4 li riusa):
+    /// l'identità non cambia, ma l'osservatore che ha visto togliere la
+    /// cartella è morto, e il custode deve saperlo per rimontarlo.
+    #[test]
+    fn a_watch_that_saw_its_folder_leave_is_lost_even_with_the_same_identity() {
+        let (_dir, root) = temporary();
+        let folder = root.join("dist");
+        write_theme(&folder, "acme.carta");
+        let shared = Arc::new(Shared::default());
+        let alive = Arc::new(AtomicBool::new(true));
+        let deliver = Delivery {
+            config_dir: None,
+            folder: folder.clone(),
+            root: root_id(&folder),
+            sink: Arc::default(),
+            known: Arc::default(),
+            alive: alive.clone(),
+            shared: shared.clone(),
+        };
+        deliver.changed(Vec::new(), false);
+        assert!(alive.load(Ordering::Acquire), "same folder, same watch");
+        deliver.changed(Vec::new(), true);
+        assert!(!alive.load(Ordering::Acquire));
+        assert!(held(&shared.slot).recheck, "the keeper is told to remount");
     }
 
     /// Un nome con `..`, o un file dietro una cartella che è un link
