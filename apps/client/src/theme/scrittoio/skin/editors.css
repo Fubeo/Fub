@@ -5343,6 +5343,84 @@ input.canvas-toolbar-item {
   color: var(--doc-link);
   text-decoration: underline;
 }
+/* La pagina del giorno (T39, E17): in fondo alla giornaliera, dopo l'ultima
+   riga, resa e non scritta. Un filo la separa dal testo; sotto, i tre gruppi
+   della vista `day_page` coi nodi di ogni vista dichiarata, vestiti della
+   carta: il titolo del gruppo in grafite col carattere dell'interfaccia, una
+   riga per nota col nome nel carattere del testo e, a destra, in piccolo, la
+   proprietà o l'ora. Non è testo: non si seleziona e il cursore non ci entra. */
+.cm-editor .cm-content .cm-day-page {
+  margin: var(--space-9) 0 var(--space-5);
+  padding: var(--space-4) 0 0;
+  border-top: 1px solid var(--doc-rule-soft);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+  white-space: normal;
+  cursor: default;
+  user-select: none;
+}
+.cm-editor .cm-content .cm-day-page[hidden] {
+  display: none;
+}
+.cm-day-page .cm-day-page-note,
+.cm-day-page .ui-text,
+.cm-day-page .ui-empty-title {
+  margin: 0;
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+}
+.cm-day-page .ui-section > summary {
+  padding: 0 var(--space-2);
+  color: var(--doc-gutter-fg);
+  font-size: var(--text-sm);
+}
+.cm-day-page .ui-section > summary:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+.cm-day-page .ui-section > .ui-children {
+  padding: 0 0 var(--space-3) var(--space-6);
+}
+.cm-day-page .ui-section .ui-empty-state,
+.cm-day-page .ui-section > .ui-children > .ui-text {
+  padding: var(--space-2);
+}
+.cm-day-page .ui-list-item {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: var(--space-4);
+  min-height: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-control);
+  color: var(--doc-fg);
+  cursor: pointer;
+}
+.cm-day-page .ui-list-item:hover {
+  background: var(--doc-block-hover);
+}
+/* Il testo di un compito si legge intero: va a capo invece di tagliarsi. */
+.cm-day-page .ui-list-item-title {
+  min-width: 0;
+  overflow: visible;
+  font-family: var(--font-reading);
+  font-size: var(--text-md);
+  line-height: var(--leading-tight);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.cm-day-page .ui-list-item-subtitle {
+  flex: none;
+  max-width: 40%;
+  margin: 0 0 0 auto;
+  text-align: right;
+  color: var(--doc-gutter-fg);
+  font-size: var(--text-xs);
+}
 /* I commenti nel testo (T21): in Scrittura e in Lettura il passo commentato
    ha un fondo giallo leggero, più pieno col cursore dentro; i segni e i
    messaggi non si vedono. In Sorgente il commento intero, segni compresi, ha

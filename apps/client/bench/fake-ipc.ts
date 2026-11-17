@@ -430,6 +430,9 @@ if (TREE_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE 
 /// Il cestino con tre file (`?cestino=3`): la scena del telefono che guarda
 /// i bottoni «Ripristina» di righe vicine. Le altre scene lo hanno vuoto.
 const TRASH_FULL = params.get("cestino") === "3";
+/// La pagina del giorno (T39): `?giorno=1` dichiara la view `day_page` e la
+/// cartella delle giornaliere del componente dei template (`daily.folder`).
+const DAY_PAGE = params.get("giorno") === "1";
 
 /// Il cestino pieno nella forma del provider `trash` (fub-features,
 /// `trash.rs`): una colonna con l'elenco, ogni voce una riga col nome, quando
@@ -624,6 +627,9 @@ const VIEWS: ViewSpec[] = [
   view("tags", "Tag", "left_sidebar", "tag", 0),
   view("graph", "Grafo", "main", "graph", 0),
   view("trash", "Cestino", "left_sidebar", "trash", 1),
+  // La pagina del giorno (T39), con la cartella del diario del componente
+  // dei template: solo nelle sue scene, perché le altre non cambino.
+  ...(DAY_PAGE ? [view("day_page", "La pagina del giorno", "main", "calendar", 1)] : []),
 ];
 
 /// Un `CommandSpec` di lettura, che è la forma della gran parte.
@@ -1285,6 +1291,22 @@ const WORKBOOK_CHROME: readonly SettingEntry[] = WORKBOOK_DOC === null ? [] : [
   source: "default",
 }));
 
+/// La cartella delle giornaliere come la dichiara `fub.template`
+/// (`daily.folder`): il diario del banco sta in `Diario/`.
+const DAY_FOLDER: readonly SettingEntry[] = DAY_PAGE ? [{
+  spec: {
+    key: "daily.folder",
+    label: "Cartella delle note del giorno",
+    description: "Dove nascono le note del giorno.",
+    group: "Note del giorno",
+    scope: "vault",
+    kind: { kind: "text", default: "Daily" },
+    program_writable: true,
+  },
+  value: "Diario",
+  source: "vault",
+}] : [];
+
 /// Come la nota mostra le proprietà (`editor.properties`), come la voce
 /// dell'host: di macchina, di serie `visible`. Le scene della testata (T6)
 /// la cambiano con `?properties=visible|hidden|source`.
@@ -1743,6 +1765,43 @@ const TREES: Record<string, UiNode> = {
     },
     fallback: [{ node: "text", content: "Il grafo, per chi non sa disegnarlo." }],
   },
+  // La pagina del giorno (T39) in fondo a `Diario/2026-08-19.md`: la forma è
+  // quella di `fub_features::template` (`day_page`), i tre gruppi col conto.
+  // Solo nelle scene `?giorno=1`, che dichiarano la view.
+  day_page: {
+    node: "stack",
+    dir: "column",
+    gap: 4,
+    children: [
+      {
+        node: "section", title: "Compiti di oggi · 2", collapsed: false, key: "day-tasks", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Mandare le foto del banco", subtitle: "Il banco che vede", action: { action: "day.open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md#4" },
+            { node: "list_item", title: "Rileggere la sintassi delle date, e dire a Mario cosa cambia nei frammenti di codice", subtitle: "Sintassi di Fub", action: { action: "day.open", payload: { doc: "Guida/Sintassi di Fub.md" } }, selected: false, key: "Guida/Sintassi di Fub.md#9" },
+          ],
+        }],
+      },
+      {
+        node: "section", title: "Stesso giorno · 1", collapsed: false, key: "day-same", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Il banco che vede", subtitle: "scadenza", action: { action: "day.open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md" },
+          ],
+        }],
+      },
+      {
+        node: "section", title: "Create e cambiate · 3", collapsed: false, key: "day-changed", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Il banco che vede", subtitle: "Cambiata alle 18:40", action: { action: "day.open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md" },
+            { node: "list_item", title: "Frammenti di codice", subtitle: "Cambiata alle 11:05", action: { action: "day.open", payload: { doc: "Guida/Frammenti di codice.md" } }, selected: false, key: "Guida/Frammenti di codice.md" },
+            { node: "list_item", title: "Benvenuto", subtitle: "Cambiata alle 09:12", action: { action: "day.open", payload: { doc: "Benvenuto.md" } }, selected: false, key: "Benvenuto.md" },
+          ],
+        }],
+      },
+    ],
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -1780,7 +1839,7 @@ const options: Options = {
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
   ],
-  settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {

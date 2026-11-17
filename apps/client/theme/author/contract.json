@@ -1333,6 +1333,8 @@
     "block-query-note",
     "ui-empty-state",
     "ui-empty-title",
+    "cm-day-page",
+    "cm-day-page-note",
     "canvas-edge",
     "canvas-edge-draft",
     "canvas-edge-hit",
@@ -3310,6 +3312,8 @@
     "block-query-note": "segno",
     "ui-empty-state": "cornice",
     "ui-empty-title": "cornice",
+    "cm-day-page": "segno",
+    "cm-day-page-note": "segno",
     "canvas-edge": "contenuto",
     "canvas-edge-draft": "segno",
     "canvas-edge-hit": "segno",
@@ -7199,6 +7203,29 @@
       ]
     },
     {
+      "name": "day-page",
+      "part": "editors",
+      "hooks": [
+        "cm-editor",
+        "cm-content",
+        "cm-day-page",
+        "cm-day-page-note",
+        "ui-section",
+        "ui-children",
+        "ui-list-item",
+        "ui-list-item-title",
+        "ui-list-item-subtitle",
+        "ui-text",
+        "ui-empty-state",
+        "ui-empty-title"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
       "name": "canvas-edge",
       "part": "editors",
       "hooks": [
@@ -10490,10 +10517,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1975,
+    "hooks": 1977,
     "state_names": 7,
-    "assigned_states": 911,
-    "components": 266,
+    "assigned_states": 914,
+    "components": 267,
     "preference_tokens": 191
   }
 }

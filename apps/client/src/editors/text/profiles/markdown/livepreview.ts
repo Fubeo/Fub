@@ -95,6 +95,7 @@ import { withLineBreaks } from "../../line-breaks";
 import { pendingGuide } from "./pending";
 import { liveHints } from "./hints";
 import { DiagramLiveWidget, diagramBlockKeys, fenceBody } from "./diagram-live";
+import { dayPage, type DayPageSource } from "./day-page";
 import { calloutGestures, CalloutTypeWidget } from "./callout";
 import { detailsLive } from "./details-live";
 import { blockGesture } from "./block-gesture";
@@ -159,6 +160,9 @@ export interface LivePreviewCallbacks {
   /// solo resta un link. Quando cambiano arriva [`linkCardsChanged`]. Con
   /// `note`, anche un wikilink da solo in un paragrafo è una scheda (E11).
   readonly linkCard?: LinkCardSource;
+  /// La giornaliera aperta, per la pagina del giorno dopo l'ultima riga
+  /// (E17, `./day-page`). Assente, o `null`, la pagina non c'è.
+  readonly dayPage?: DayPageSource;
 }
 
 /// Il paragrafo che è soltanto un collegamento, e quindi una scheda: un
@@ -3201,5 +3205,6 @@ export function livePreview(
     callbacks.linkCard?.note ? noteCardGestures(callbacks) : [],
     noteHolds,
     diagramBlockKeys,
+    callbacks.dayPage ? dayPage(callbacks.dayPage) : [],
   ];
 }

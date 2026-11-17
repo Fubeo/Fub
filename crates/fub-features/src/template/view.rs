@@ -1,6 +1,11 @@
-//! `TemplateView`: l'elenco dei template e il calendario delle note del giorno.
+//! `TemplateView`: l'elenco dei template, il calendario delle note del giorno
+//! e la pagina del giorno in fondo alla giornaliera ([`day`]).
 
 use super::*;
+
+pub(super) mod day;
+
+use day::{day_action, day_page, day_spec, DAY_PAGE_VIEW};
 
 pub struct TemplateView;
 
@@ -28,6 +33,7 @@ impl ViewProvider for TemplateView {
             )
             .with_icon("calendar")
             .ordered(7),
+            day_spec(),
         ]
     }
 
@@ -38,6 +44,9 @@ impl ViewProvider for TemplateView {
     ) -> Result<UiNode, PluginError> {
         if instance.view == CALENDAR_VIEW {
             return calendar(host);
+        }
+        if instance.view == DAY_PAGE_VIEW {
+            return day_page(instance, host);
         }
         tree(host)
     }
@@ -50,6 +59,9 @@ impl ViewProvider for TemplateView {
     ) -> Result<ViewUpdate, PluginError> {
         if instance.view == CALENDAR_VIEW {
             return calendar_action(action, host);
+        }
+        if instance.view == DAY_PAGE_VIEW {
+            return Ok(day_action(&action));
         }
         if action.action.0 != USE {
             return Ok(ViewUpdate::None);

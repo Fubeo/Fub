@@ -84,10 +84,96 @@ export function dailyName(pattern: string, iso: string, language: string): strin
   return out;
 }
 
+/// La lingua dei nomi di mesi e giorni: italiano o, per ogni altra, inglese.
+function namesLanguage(): string {
+  return catalogLanguage(resolvedLanguage()) === "it" ? "it" : "en";
+}
+
 /// Il path della giornaliera di `iso`, senza estensione.
 export function dailyPath(iso: string): string {
-  const language = catalogLanguage(resolvedLanguage()) === "it" ? "it" : "en";
-  return `${folder}/${dailyName(format, iso, language)}`;
+  return `${folder}/${dailyName(format, iso, namesLanguage())}`;
+}
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+
+/// Il giorno (`AAAA-MM-GG`) della giornaliera `path`, estensione compresa,
+/// nella cartella `folderName` e col formato `pattern`; `null` se il nome non
+/// è quello che `dailyName` scriverebbe per un giorno. Si legge il nome coi
+/// token del formato e si controlla riscrivendolo: un nome ambiguo o un
+/// giorno che non esiste non è una giornaliera.
+export function dailyDateIn(folderName: string, pattern: string, path: string, language: string): string | null {
+  const slash = path.lastIndexOf("/");
+  const dot = path.lastIndexOf(".");
+  if (dot <= slash) return null;
+  const stem = path.slice(0, dot);
+  const prefix = `${folderName}/`;
+  if (!stem.startsWith(prefix)) return null;
+  const name = stem.slice(prefix.length);
+  const [months, weekdays] = language === "it" ? [MONTHS_IT, WEEKDAYS_IT] : [MONTHS_EN, WEEKDAYS_EN];
+  const short = (names: readonly string[]) => names.map((each) => [...each].slice(0, 3).join(""));
+  const choice = (names: readonly string[]) => `(${names.map(escapeRegExp).join("|")})`;
+  type Role = "year" | "year2" | "month" | "monthName" | "monthShort" | "day" | "skip";
+  const tokens: readonly (readonly [string, string, Role])[] = [
+    ["YYYY", "(\\d{4})", "year"],
+    ["YY", "(\\d{2})", "year2"],
+    ["MMMM", choice(months), "monthName"],
+    ["MMM", choice(short(months)), "monthShort"],
+    ["MM", "(\\d{2})", "month"],
+    ["M", "(\\d{1,2})", "month"],
+    ["DD", "(\\d{2})", "day"],
+    ["D", "(\\d{1,2})", "day"],
+    ["dddd", choice(weekdays), "skip"],
+    ["ddd", choice(short(weekdays)), "skip"],
+  ];
+  let source = "";
+  const roles: Role[] = [];
+  let rest = pattern;
+  while (rest.length > 0) {
+    if (rest.startsWith("[")) {
+      const end = rest.indexOf("]");
+      if (end !== -1) {
+        source += escapeRegExp(rest.slice(1, end));
+        rest = rest.slice(end + 1);
+        continue;
+      }
+    }
+    const token = tokens.find(([written]) => rest.startsWith(written));
+    if (token) {
+      source += token[1];
+      roles.push(token[2]);
+      rest = rest.slice(token[0].length);
+    } else {
+      const char = String.fromCodePoint(rest.codePointAt(0)!);
+      source += escapeRegExp(char);
+      rest = rest.slice(char.length);
+    }
+  }
+  const found = new RegExp(`^${source}$`, "u").exec(name);
+  if (!found) return null;
+  let year: number | null = null;
+  let month: number | null = null;
+  let day: number | null = null;
+  for (const [index, role] of roles.entries()) {
+    const value = found[index + 1]!;
+    if (role === "year") year = Number(value);
+    else if (role === "year2") year ??= 2000 + Number(value);
+    else if (role === "month") month = Number(value);
+    else if (role === "monthName") month = months.indexOf(value) + 1;
+    else if (role === "monthShort") month = short(months).indexOf(value) + 1;
+    else if (role === "day") day = Number(value);
+  }
+  if (year === null || month === null || day === null) return null;
+  const iso = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) return null;
+  return dailyName(pattern, iso, language) === name ? iso : null;
+}
+
+/// Il giorno della giornaliera `path` con cartella e formato di adesso, o
+/// `null` se non lo è. Il componente dei template lo ricontrolla
+/// (`daily_of` in `crates/fub-features/src/template/view/day.rs`).
+export function dailyDate(path: string): string | null {
+  return dailyDateIn(folder, format, path, namesLanguage());
 }
 
 /// Il primo giorno della settimana: 1 = lunedì … 7 = domenica.
