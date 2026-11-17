@@ -3,7 +3,7 @@
 use super::*;
 
 pub(super) fn catalog_it() -> StringCatalog {
-    StringCatalog::new("it")
+    view::day::day_strings_it(StringCatalog::new("it"))
         .with(VIEW_TITLE, "Template")
         .with(EMPTY, "Nessun template in Templates/.")
         .with(CALENDAR_TITLE, "Calendario")
@@ -248,7 +248,7 @@ pub(super) fn catalog_it() -> StringCatalog {
 }
 
 pub(super) fn catalog_en() -> StringCatalog {
-    StringCatalog::new("en")
+    view::day::day_strings_en(StringCatalog::new("en"))
         .with(VIEW_TITLE, "Templates")
         .with(EMPTY, "No templates in Templates/.")
         .with(CALENDAR_TITLE, "Calendar")
