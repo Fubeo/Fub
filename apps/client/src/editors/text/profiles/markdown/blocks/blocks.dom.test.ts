@@ -18,6 +18,7 @@ import { setContentColor } from "../color";
 import { blockModel } from "./model";
 import { dragPose, LIFT_SCALE } from "./motion";
 import { closeContextMenu } from "../../../../../ui/menu";
+import { createManualDriver, liveState, setMotionDriver } from "../../../../../moto";
 import { openSlashMenu, slashMenuExtension, type SlashMenuSource } from "../slash";
 import { propertiesDisplay } from "../../../properties-display";
 import { dropOffersChanged, offerDropTargets } from "../../../../core/registry";
@@ -1320,5 +1321,56 @@ describe("i gesti ai bordi (E2): dentro una scheda di nota della lavagna (A-6, r
     // Fuori dal gesto Esc è di nuovo dell'ospite.
     expect(press(view, "Escape")).toBe(false);
     view.dom.removeEventListener("keydown", host);
+  });
+});
+
+describe("i gesti ai bordi (E2): il posto interrotto a metà corsa", () => {
+  afterEach(() => setMotionDriver(null));
+
+  it("il posto che torna indietro mentre scivola riparte da dove lo si vede, senza salti", () => {
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    // Uno (0–20), Due (40–60), Tre (80–100), Quattro (120–140).
+    const view = mount("Uno\n\nDue\n\nTre\n\nQuattro", 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(14);
+    // Oltre Due e Tre: il posto scivola giù.
+    hand.move(95);
+    const slot = hand.slot()!;
+    expect(slot.dataset.home).toBeUndefined();
+    driver.advance(80);
+    const seen = () => parseFloat(slot.style.top) + (liveState(slot)?.pose.y ?? 0);
+    const before = seen();
+    const top = slot.style.top;
+    // Di nuovo verso l'origine, a metà corsa.
+    hand.move(14);
+    expect(slot.style.top, "il posto è cambiato").not.toBe(top);
+    expect(Math.abs(seen() - before), "il posto prosegue da dov'era").toBeLessThan(0.5);
+    hand.handles.endDrag(false);
+  });
+
+  it("il cartellino che torna nel testo mentre ancora rimpicciolisce riparte dalla grandezza che si vede", () => {
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    const view = mount("Uno\n\nDue\n\nTre", 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(14);
+    const card = view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-lift-card")!;
+    driver.advance(400);
+    // Fuori dal testo: il cartellino cala dalla grandezza di presa alla sua.
+    hand.move(14, 200);
+    const lift = hand.lift()!;
+    expect(lift.dataset.free).toBe("true");
+    const free = Number(lift.style.getPropertyValue("--fub-block-free-scale"));
+    driver.advance(80);
+    const before = free * (liveState(card)?.pose.scaleX ?? 1);
+    // Di nuovo nel testo, a metà corsa.
+    hand.move(14, 0);
+    expect(lift.dataset.free).toBeUndefined();
+    const after = LIFT_SCALE * (liveState(card)?.pose.scaleX ?? 1);
+    expect(Math.abs(after - before), "la carta prosegue dalla grandezza di adesso").toBeLessThan(0.005);
+    hand.handles.endDrag(false);
   });
 });

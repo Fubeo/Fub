@@ -371,6 +371,22 @@ function tap(): void {
   }
 }
 
+/// Carta e ombra cambiano grandezza di riposo (la scala del CSS passa da
+/// quella di presa a quella del cartellino, o al contrario): ognuna parte da
+/// come la si vede, `ratio` volte la scala di prima, per la corsa ancora in
+/// volo se c'è (un cartellino che torna nel testo mentre rimpicciolisce).
+function rescale(parts: readonly HTMLElement[], ratio: number, duration: number, easing: typeof LIFT_EASING): void {
+  for (const part of parts) {
+    const pose = liveState(part)?.pose;
+    halt(part);
+    animate(part, {
+      from: { scaleX: (pose?.scaleX ?? 1) * ratio, scaleY: (pose?.scaleY ?? 1) * ratio },
+      duration,
+      easing,
+    });
+  }
+}
+
 /// Mette `el` nello strato sopra la finestra (`on`) o ve lo toglie. Lì non lo
 /// tagliano né lo scorrimento né il riquadro, e resta dov'è nel DOM: la pelle
 /// e le variabili del documento lo raggiungono come prima. Un motore senza
@@ -1254,12 +1270,7 @@ class HandlesView {
     // La transizione CSS non c'è (il moto la spegne dentro l'editor): la
     // carta e l'ombra partono dalla grandezza di presa e calano al riposo
     // del cartellino. Col moto ridotto ci arrivano subito.
-    if (motionLevel() !== "reduced") {
-      const from = LIFT_SCALE / hold.freeScale;
-      for (const part of [hold.card, hold.shade]) {
-        animate(part, { from: { scale: from }, duration: FREE_MS, easing: FREE_EASING });
-      }
-    }
+    if (motionLevel() !== "reduced") rescale([hold.card, hold.shade], LIFT_SCALE / hold.freeScale, FREE_MS, FREE_EASING);
     this.measureTargets(drag, hold);
     this.watchTargets(drag, hold);
   }
@@ -1341,12 +1352,7 @@ class HandlesView {
     hold.ty = hold.cy;
     const tilt = hold.tilt === 0 ? "" : ` rotate(${hold.tilt.toFixed(3)}deg)`;
     el.style.transform = `translate(${hold.cx.toFixed(2)}px, ${hold.cy.toFixed(2)}px)${tilt}`;
-    if (grow && motionLevel() !== "reduced") {
-      const from = hold.freeScale / LIFT_SCALE;
-      for (const part of [hold.card, hold.shade]) {
-        animate(part, { from: { scale: from }, duration: LIFT_MS, easing: LIFT_EASING });
-      }
-    }
+    if (grow && motionLevel() !== "reduced") rescale([hold.card, hold.shade], hold.freeScale / LIFT_SCALE, LIFT_MS, LIFT_EASING);
   }
 
   /// Lo scorrimento al bordo: acceso mentre il puntatore sta nella fascia,
@@ -1401,7 +1407,20 @@ class HandlesView {
     if (place === geo.origin && hold.lean === "none") slot.dataset.home = "true";
     else delete slot.dataset.home;
     if (slide && Number.isFinite(wasTop) && (wasTop !== nowTop || wasLeft !== indent)) {
-      animate(slot, { from: { x: wasLeft - indent, y: wasTop - nowTop }, duration: PART_MS, easing: PART_EASING });
+      // Come le righe di `part`: un posto ancora in corsa riparte da dove lo
+      // si vede, non dal suo posto di prima; la dissolvenza d'entrata, se è
+      // ancora in corsa, prosegue anche lei.
+      const pose = liveState(slot)?.pose;
+      halt(slot);
+      animate(slot, {
+        from: {
+          x: (pose?.x ?? 0) + wasLeft - indent,
+          y: (pose?.y ?? 0) + wasTop - nowTop,
+          ...(pose?.opacity === undefined ? {} : { opacity: pose.opacity }),
+        },
+        duration: PART_MS,
+        easing: PART_EASING,
+      });
     }
     // «Accanto»: una barra verticale sul bordo del vicino.
     if (hold.beside) {
