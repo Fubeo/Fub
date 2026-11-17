@@ -1398,7 +1398,7 @@ export const SCENE = touchLast(onPage("shell", [
   ...[
     ["formula-01-riga", "formula-toccata", "La formula in riga toccata: il riquadro sotto, la formula grande col cursore nel numeratore", "inline"],
     ["formula-02-blocco", "formula-toccata", "Il blocco $$ toccato: la formula sul posto col bordo d'accento, il cursore dove cade il clic", "block"],
-    ["formula-03-errore", "formula-errore", "Una formula con un errore si apre col suo LaTeX e la nota che lo dice", "error"],
+    ["formula-03-errore", "formula-errore", "Una formula con un errore si apre col suo LaTeX e sotto che cosa non va, con la correzione", "error"],
     // Le proposte dei simboli (T61): `\fr` in fondo alla formula in riga
     // propone le frazioni e le frecce, disegnate e col nome; `\s` nel
     // blocco le radici, la somma e il sigma.
@@ -1421,6 +1421,12 @@ export const SCENE = touchLast(onPage("shell", [
     ["formula-13-latex-discreti", "formula-toccata&mathsource=1&mathhelp=discrete", "Gli aiuti discreti: il completamento resta, la tavolozza a richiesta col pulsante «Simboli»", "source-discrete"],
     ["formula-14-latex-spenti", "formula-toccata&mathsource=1&mathhelp=spente", "Gli aiuti spenti: soltanto il LaTeX e la sua anteprima", "source-off"],
     ["formula-15-latex-blocco", "formula-toccata&mathsource=1", "Il blocco $$ con Mostra il LaTeX: la formula sopra, il campo e la tavolozza sotto", "source-block"],
+    // Gli errori in chiaro (T64): dopo la pausa, sotto il campo, la frase
+    // con la correzione quando è una sola; con più correzioni nessun
+    // pulsante. Il TeX non cambia da solo.
+    ["formula-16-latex-errore", "formula-toccata&mathsource=1", "Un nome che non c'è: «Non conosco \\alfa. Forse volevi \\alpha?» e «Usa \\alpha»", "source-unknown"],
+    ["formula-17-latex-graffa", "formula-toccata&mathsource=1&mathhelp=spente", "Una graffa aperta con gli aiuti spenti: «Manca una } di chiusura» e «Chiudi»", "source-brace"],
+    ["formula-18-latex-piu-correzioni", "formula-toccata&mathsource=1&mathhelp=spente", "Un nome con più simboli vicini: la frase li elenca, senza pulsante", "source-guesses"],
   ].map(([id, live, title, gesture]) => ({
     id,
     title,
@@ -2828,6 +2834,28 @@ async function touchFormula(page, gesture) {
       await page.waitForSelector(".cm-fub-mx-palette-toggle:not([hidden])");
       await page.keyboard.type("+\\al");
       await page.waitForSelector(".cm-fub-mx-symbols:not([hidden]) .cm-fub-mx-symbol-code");
+    } else if (gesture === "source-unknown" || gesture === "source-brace" || gesture === "source-guesses") {
+      // Gli errori in chiaro (T64): il nome che non c'è (Esc chiude le
+      // proposte), la graffa aperta, il nome con più simboli vicini.
+      const typed = { "source-unknown": "+\\alfa", "source-brace": "+x^{2", "source-guesses": "+\\s 1" }[gesture];
+      await page.keyboard.type(typed);
+      if (gesture === "source-unknown") {
+        await page.waitForSelector(".cm-fub-mx-symbols:not([hidden])");
+        await page.keyboard.press("Escape");
+        await page.waitForSelector(".cm-fub-mx-symbols", { state: "hidden" });
+      }
+      const tex = await value();
+      await page.waitForSelector(".cm-fub-mx-error:not([hidden])");
+      if ((await value()) !== tex) throw new Error(`il TeX è cambiato da solo: ${tex} → ${await value()}`);
+      const sentence = await page.locator(".cm-fub-mx-error-text").textContent();
+      const fix = await page.locator(".cm-fub-mx-error-fix").allTextContents();
+      const expected = {
+        "source-unknown": ["Non conosco \\alfa. Forse volevi \\alpha?", ["Usa \\alpha"]],
+        "source-brace": ["Manca una } di chiusura.", ["Chiudi"]],
+        "source-guesses": [/^Non conosco \\s\. Forse volevi .+ o .+\?$/, []],
+      }[gesture];
+      const sentenceOk = typeof expected[0] === "string" ? sentence === expected[0] : expected[0].test(sentence ?? "");
+      if (!sentenceOk || fix.join("|") !== expected[1].join("|")) throw new Error(`la frase dell'errore non è quella attesa: ${sentence} · ${fix.join("|")}`);
     } else {
       await page.keyboard.type("+a/b->c (");
       if (!(await value()).endsWith("+a/b->c (")) throw new Error(`con gli aiuti spenti qualcosa si trasforma: ${await value()}`);
@@ -2912,6 +2940,8 @@ async function touchFormula(page, gesture) {
   } else {
     await openLive(page, ["@ArrowRight"], "top");
     await page.waitForSelector(gesture === "error" ? ".cm-fub-mx[data-mode=\"latex\"] .cm-fub-mx-latex" : `.cm-fub-mx-popover ${ready}`);
+    // Sotto il LaTeX, che cosa non va, con la correzione (T64).
+    if (gesture === "error") await page.waitForSelector(".cm-fub-mx[data-mode=\"latex\"] .cm-fub-mx-error:not([hidden]) .cm-fub-mx-error-fix");
     if (gesture === "inline") {
       // Un pezzo alla volta: v, =, poi dentro la frazione.
       for (let i = 0; i < 6 && (await said()) !== "numeratore"; i++) await page.keyboard.press("ArrowRight");
