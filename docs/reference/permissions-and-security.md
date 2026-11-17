@@ -54,28 +54,20 @@ L'elenco esatto delle funzioni vive nel contratto.
 
 ## Elenco dei comandi
 
-`fub:run-command` consente di invocare i comandi del registro. Il suo
-parametro, facoltativo, è l'elenco degli id che il bundle può invocare:
-
-```json
-{ "fub:run-command": ["note.property.set", "note.rename"] }
-```
-
-Il `Guard` legge il valore una volta, quando monta il bundle, e lo applica a
-ogni invocazione, per i componenti nativi e WASM allo stesso modo. Un job
-che invoca o annulla fuori dal prestito del `Guard` (`JobHost`) applica la
-stessa regola, `authorize_command` e `authorize_undo` del kernel:
+`fub:run-command` accetta un elenco facoltativo degli id che il bundle può
+invocare. Il `Guard` lo legge quando monta il bundle e lo applica a ogni
+invocazione, nativa o WASM; un job che invoca o annulla fuori dal `Guard`
+(`JobHost`) passa dalle stesse `authorize_command` e `authorize_undo`:
 
 | Valore | Comandi consentiti |
 |---|---|
 | assente, `true` o `[]` | tutti |
-| elenco di stringhe | soltanto quelli, a confronto esatto: niente prefissi, niente `*`, niente spazi tolti |
+| elenco di stringhe, come `["note.property.set", "note.rename"]` | soltanto quelli, a confronto esatto: niente prefissi, niente `*`, niente spazi tolti |
 | stringa, numero, oggetto o elenco con una non-stringa | nessuno |
 
-L'ultima riga chiude il recinto su un manifest scritto male: `"note.trash"`
-al posto di `["note.trash"]` non permette niente invece di permettere tutto.
-Un comando fuori dall'elenco dà `permission_denied`; un comando nominato ma
-non registrato dà `unknown_command`, come senza elenco. Con un elenco anche
+Un manifest scritto male chiude il recinto: `"note.trash"` al posto di
+`["note.trash"]` non permette niente. Fuori dall'elenco `permission_denied`,
+nominato ma non registrato `unknown_command`; con un elenco anche
 l'annullamento è rifiutato, perché rigioca comandi che il `Guard` non vede.
 
 ## Path fence
