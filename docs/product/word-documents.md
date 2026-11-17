@@ -93,7 +93,12 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   una battuta sola, che si annulla in una volta. Dopo un gesto della barra,
   o delle schede Commenti e Revisioni del pannello, `Ctrl+Z` e `Ctrl+Y`
   annullano e ripetono nel documento anche col fuoco sul pulsante; dentro
-  una casella (Trova, Sostituisci con, il nome) restano della casella;
+  una casella (Trova, Sostituisci con, il nome) restano della casella. Nella
+  scheda Revisioni il fuoco non esce col pulsante premuto: dopo **Accetta** o
+  **Rifiuta** passa allo stesso pulsante della voce che prende il posto di
+  quella risolta (o di quella prima, se era l'ultima), dopo **Accetta tutte**
+  o **Rifiuta tutte** all'interruttore **Registra le modifiche**, e senza
+  interruttore all'elenco, così `Ctrl+Z` annulla subito da lì;
 - **Conteggio parole** dice parole, caratteri con e senza spazi e paragrafi
   del documento e, se c'è, della selezione: una parola è ciò che sta fra due
   spazi, un oggetto separa senza contare, il testo delle note non conta;

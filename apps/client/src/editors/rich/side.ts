@@ -408,6 +408,8 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
     list.className = "rich-side-list";
     list.setAttribute("role", "list");
     list.setAttribute("aria-label", t("rich.side.revisions"));
+    // Fuori dall'ordine del Tab: tiene il fuoco quando l'ultima voce se ne va.
+    list.tabIndex = -1;
     root.append(head, list);
 
     life.listen(name, "input", () => {
@@ -476,7 +478,37 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       return el;
     }
 
+    const entries = (): HTMLElement[] => [...list.querySelectorAll<HTMLElement>(":scope > .rich-side-change")];
+    const usable = (el: Element | null): el is HTMLElement =>
+      el instanceof HTMLElement && el.isConnected && root.contains(el) && el.closest("[hidden]") === null &&
+      !(el instanceof HTMLButtonElement || el instanceof HTMLInputElement ? el.disabled : false);
+
+    /// Ridisegna tenendo il fuoco nella scheda. Un gesto del pannello, o un
+    /// Ctrl+Z dato da qui, toglie o rimette voci e nasconde «… tutte»: il
+    /// pulsante col fuoco può uscire, o essere spostato nell'elenco, e il fuoco
+    /// cadrebbe su BODY, dove Ctrl+Z non arriva più al documento (IMP-126).
+    /// Resta dov'era se c'è ancora; altrimenti va allo stesso pulsante della
+    /// voce che ora sta al posto di quella uscita, o all'interruttore, o
+    /// all'elenco. Il fuoco fuori dalla scheda non si tocca.
     function draw(): void {
+      const before = document.activeElement;
+      if (!(before instanceof HTMLElement) || !root.contains(before)) return paintList();
+      const item = before.closest<HTMLElement>(".rich-side-change");
+      const index = item ? entries().indexOf(item) : -1;
+      const label = before instanceof HTMLButtonElement ? before.textContent : null;
+      paintList();
+      if (document.activeElement === before && usable(before)) return;
+      if (usable(before)) return before.focus({ preventScroll: true });
+      const left = entries();
+      const near = index >= 0 ? left[Math.min(index, left.length - 1)] : undefined;
+      const same = near && label !== null ? [...near.querySelectorAll("button")].find((b) => b.textContent === label) ?? null : null;
+      if (usable(same)) return same.focus();
+      if (usable(toggle)) return toggle.focus();
+      list.focus();
+    }
+
+    /// L'interruttore, i pulsanti e l'elenco come dice il documento adesso.
+    function paintList(): void {
       const on = engine.tracking();
       const nowWritable = engine.editable();
       toggle.checked = on;
