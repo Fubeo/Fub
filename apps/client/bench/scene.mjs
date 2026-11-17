@@ -478,6 +478,52 @@ export const SCENE = onPage("shell", [
       await page.evaluate(() => document.querySelectorAll(".toast-close").forEach((close) => close.click()));
       await page.waitForSelector("#toasts", { state: "detached", timeout: 15_000 });
     },
+    // Il puntatore lontano dalla barra del titolo, che al passaggio torna
+    // piena: la foto è della cornice attenuata.
+    hover: (page) => page.mouse.move(8, 400),
+  },
+  // **La concentrazione mentre si scrive** (T24): entrata dal menu «…» del
+  // riquadro, il cursore in un paragrafo. Il blocco del cursore resta acceso,
+  // gli altri si attenuano; linguette e barra di formato non ci sono, la
+  // barra del titolo è attenuata, e nella banda c'è «Esci dalla
+  // concentrazione».
+  {
+    id: "concentration-writing",
+    title: "La concentrazione mentre si scrive: acceso il blocco del cursore, «Esci» nella banda",
+    prepare: async (page) => {
+      await openNote(page, "Guida/Sintassi di Fub.md");
+      await page.click(".pane.focus [data-pane-menu]");
+      await page.click('#context-menu [role=menuitem]:has-text("Concentrazione")');
+      await page.waitForSelector("#app[data-focus-mode] #status-focus-exit:not([hidden])");
+      await page.evaluate(() => document.querySelectorAll(".toast-close").forEach((close) => close.click()));
+      await page.waitForSelector("#toasts", { state: "detached", timeout: 15_000 });
+      await page.click(".pane.focus .pane-editor .cm-content > .cm-line:has-text('Prosa normale')");
+      await page.waitForSelector(".pane.focus .pane-editor .cm-editor.cm-focused .cm-activeLine");
+    },
+    hover: (page) => page.mouse.move(8, 400),
+  },
+  // **La macchina da scrivere** (T24): accesa dal menu «…» del riquadro, il
+  // cursore sceso con le frecce resta a metà altezza del foglio.
+  {
+    id: "typewriter",
+    title: "La macchina da scrivere: la riga del cursore a metà del foglio",
+    prepare: async (page) => {
+      await openNote(page, "Guida/Sintassi di Fub.md");
+      await page.click(".pane.focus [data-pane-menu]");
+      await page.click('#context-menu [role=menuitemcheckbox]:has-text("Macchina da scrivere")');
+      await page.waitForSelector(".pane.focus .pane-editor .cm-editor.cm-fub-typewriter");
+      await page.click(".pane.focus .pane-editor .cm-content > .cm-line:has-text('Prosa normale')");
+      for (let step = 0; step < 12; step += 1) await page.keyboard.press("ArrowDown");
+      await settleLive(page, true);
+      await page.waitForFunction(() => {
+        const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+        const line = document.querySelector(".pane.focus .pane-editor .cm-activeLine");
+        if (!scroller || !line) return false;
+        const box = scroller.getBoundingClientRect();
+        const row = line.getBoundingClientRect();
+        return Math.abs((row.top + row.bottom) / 2 - (box.top + box.bottom) / 2) < row.height;
+      });
+    },
   },
   {
     id: "empty",

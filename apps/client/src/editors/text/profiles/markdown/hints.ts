@@ -16,13 +16,14 @@ import { openLifetime } from "../../../../ui/lifetime";
 import { openHintSource, type HintContext, type HintItem, type HintSource } from "../../../core/hints";
 import { lineHeading, MARKDOWN_ACTIONS, markdownActionState } from "./actions";
 import { blockModel } from "./blocks/model";
-import { blockSelection, escapeLeaves } from "./blocks/selection";
+import { blockSelection, escapeLeaves, vimOn } from "./blocks/selection";
 import { mainElements } from "./cursor-elements";
 import { isTaskLine } from "./dates";
 import { frontmatterRange } from "./render";
 import { openSlashMenu } from "./slash";
 import { liveStrings } from "./strings";
 import { markPresence } from "../../../core/presence";
+import { concentrating } from "../../../../state/concentration";
 
 const OPAQUE = new Set(["FencedCode", "CodeBlock", "HTMLBlock", "CommentBlock"]);
 
@@ -123,6 +124,8 @@ export interface HintFocus {
   readonly editor: boolean;
   /// Il titolo della pagina (il campo della testata dei Blocchi) ha il fuoco.
   readonly title: boolean;
+  /// Vim è acceso: Esc è suo, anche in concentrazione (T24).
+  readonly vim?: boolean;
 }
 
 type LiveKey = Parameters<typeof liveStrings.t>[0];
@@ -191,7 +194,10 @@ export function markdownHints(state: EditorState, focus: HintFocus, slash: boole
     ...(slash ? [keys(["/"], "live.keys.insert")] : []),
     keys(["@"], "live.keys.mention"),
     { command: "shell.switcher", say: say("live.keys.launcher") },
-    ...(blocks && !state.facet(escapeLeaves) ? [keys(["Escape"], "live.keys.select_block")] : []),
+    // In concentrazione Esc è della shell, che ne esce (T24).
+    ...(state.facet(escapeLeaves) ? []
+      : concentrating() ? (focus.vim === true ? [] : [keys(["Escape"], "live.keys.leave_focus")])
+      : blocks ? [keys(["Escape"], "live.keys.select_block")] : []),
   ] };
 }
 
@@ -208,7 +214,7 @@ export function liveHints(slash: () => boolean = () => false): Extension {
       readonly hints: HintSource;
       constructor(readonly view: EditorView) {
         this.decorations = decorate(view, slash);
-        this.hints = openHintSource(() => markdownHints(this.view.state, { editor: this.view.hasFocus, title: this.title }, slash()));
+        this.hints = openHintSource(() => markdownHints(this.view.state, { editor: this.view.hasFocus, title: this.title, vim: vimOn(this.view) }, slash()));
         if (view.hasFocus) this.hints.changed(true);
         // Il fuoco del titolo si ascolta su `view.dom` direttamente, non con
         // gli `eventHandlers` del plugin: CodeMirror scarta gli eventi nati in

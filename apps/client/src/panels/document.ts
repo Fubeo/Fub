@@ -67,6 +67,7 @@ import { createSelectionBubble, type SelectionBubble } from "./selection-bubble"
 import { bubbleWanted, miniBarMode, mountMiniBar } from "./mini-bar";
 import { openEditorMenu, type EditorMenuHost } from "./editor-menu";
 import { blocksPreferred, setBlocksPreference } from "../state/editor-blocks";
+import { setTypewriterPreference, typewriterPreferred } from "../state/editor-typewriter";
 import { createStandingChip, type StandingChip } from "./standing";
 import { activeShell, platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
@@ -1402,6 +1403,34 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
   // Le scelte di Scrittura, sulle note: per prima i blocchi (`editor.blocks`),
   // la stessa chiave delle Impostazioni, che cambia senza riaprire la nota.
   const blocksOn = blocksPreferred();
+  // Poi, come nel prototipo, la concentrazione (il comando della shell, lo
+  // stesso del menu Vista e di Ctrl O) e la macchina da scrivere
+  // (`editor.typewriter`), che si spunta.
+  const typewriterOn = typewriterPreferred();
+  const focusCommand = command("shell.focus.toggle");
+  const writingRest: MenuItem[] = [
+    ...(focusCommand ? [{
+      label: t("pane.menu.focus"),
+      description: t("pane.menu.focus.desc"),
+      hint: chord("shell.focus.toggle"),
+      icon: "eye",
+      group: t("pane.menu.writing"),
+      run: () => runCommand("shell.focus.toggle"),
+    }] : []),
+    {
+      label: t("pane.menu.typewriter"),
+      description: t("pane.menu.typewriter.desc"),
+      icon: "keyboard",
+      group: t("pane.menu.writing"),
+      choice: "checkbox",
+      checked: typewriterOn,
+      run: () => {
+        void setTypewriterPreference(!typewriterOn).catch(
+          (error: unknown) => notify(t("pane.menu.typewriter.failed", { reason: errorText(error) }), "guasto"),
+        );
+      },
+    },
+  ];
   const writing: MenuItem[] = doc && surface?.family === "text" && surface.profile === "markdown" ? [{
     label: t("pane.menu.blocks"),
     description: t(blocksOn ? "pane.menu.blocks.on" : "pane.menu.blocks.off", { chord: displayBinding("Mod-a") }),
@@ -1415,7 +1444,7 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
         (error: unknown) => notify(t("pane.menu.blocks.failed", { reason: errorText(error) }), "guasto"),
       );
     },
-  }] : [];
+  }, ...writingRest] : [];
   const items: MenuItem[] = [
     ...writing,
     ...offered("shell.pane.split.right", t("pane.menu.split_right")),

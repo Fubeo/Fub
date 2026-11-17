@@ -24,6 +24,7 @@ import { getCM } from "@replit/codemirror-vim";
 import { liveStrings } from "../strings";
 import { blockGesture } from "../block-gesture";
 import { withLineBreaks } from "../../../line-breaks";
+import { concentrating } from "../../../../../state/concentration";
 import { blockModel, blockStartingAt, innermostAt, type Block } from "./model";
 import { type BlockRun, siblingsOf } from "./move";
 import { modelOf } from "./transform";
@@ -213,8 +214,10 @@ const remove = whenSelected((view, blocks, selected) => {
 /// libero ed esce; una selezione di blocchi già fatta Esc la chiude ancora.
 export const escapeLeaves = Facet.define<boolean, boolean>({ combine: (values) => values.some(Boolean) });
 
+/// In concentrazione Esc sul testo è della shell, che ne esce (T24); una
+/// selezione di blocchi già fatta Esc la chiude prima, come un menu aperto.
 export const blockSelectionKeys: readonly KeyBinding[] = [
-  { key: "Escape", run: (view) => leave(view) || (!view.state.facet(escapeLeaves) && selectCursorBlock(view)) },
+  { key: "Escape", run: (view) => leave(view) || (!view.state.facet(escapeLeaves) && !concentrating() && selectCursorBlock(view)) },
   { key: "Enter", run: leave },
   { key: "ArrowUp", run: step(-1, false) },
   { key: "ArrowDown", run: step(1, false) },

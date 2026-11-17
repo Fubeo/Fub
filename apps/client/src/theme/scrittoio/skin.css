@@ -3224,6 +3224,27 @@ kbd,
   transition: opacity var(--duration-slow) var(--ease);
 }
 
+/* La barra del titolo si attenua e torna al passaggio (la regola sta in
+   `structure.css`): qui la durata, la stessa del velo. */
+.titlebar {
+  transition: opacity var(--duration-slow) var(--ease);
+}
+
+/* «Esci dalla concentrazione», in testa alla parte destra della banda: il
+   gesto che si cerca, nella tinta dell'accento e in grassetto, come nel
+   prototipo. */
+.status-item--button.status-focus-exit {
+  min-height: 24px;
+  padding: 0 9px;
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+  font-weight: var(--weight-bold);
+}
+.status-item--button.status-focus-exit:hover {
+  background: var(--accent-wash);
+  color: var(--text);
+}
+
 /* ── skin/drawers.css ───────────────────────────────────────────────────── */
 
 /* I cassetti: navigazione a sinistra, ispettore a destra. */
@@ -9443,6 +9464,12 @@ button.cm-fub-page-icon:focus-visible {
 [data-markdown-mode="live_preview"] .cm-content .cm-activeLine,
 [data-markdown-mode="blocks"] .cm-content .cm-activeLine {
   background-color: transparent;
+}
+/* In concentrazione i blocchi lontani dal cursore si attenuano e il blocco
+   del cursore resta acceso (la regola sta in `structure.css`): il passaggio
+   è morbido, e il movimento ridotto lo toglie. */
+.pane-editor .cm-content > * {
+  transition: opacity var(--duration-state) var(--ease);
 }
 .pane-editor[data-markdown-mode="source"] .cm-content > .cm-line {
   padding-inline: var(--space-3);

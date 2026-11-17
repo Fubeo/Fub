@@ -75,6 +75,10 @@ import { liveGuide, liveReveal, revealPolicyOf, type RevealPolicy } from "./live
 import { pasteHtml } from "./paste-html";
 import { indentGuides } from "./indent-guides";
 import { softCursor } from "./soft-cursor";
+import { typewriter } from "./typewriter";
+import { cursorBlock, refreshCursorBlock } from "./cursor-block";
+import { concentrating, onConcentration } from "../../state/concentration";
+import { EDITOR_TYPEWRITER_KEY, rememberTypewriter } from "../../state/editor-typewriter";
 import { pageNonce } from "../../ui/stylesheets";
 import {
   operationFromText,
@@ -131,6 +135,7 @@ export const EDITOR_PASTE_HTML_KEY = "editor.paste-html";
 export const EDITOR_INDENT_GUIDES_KEY = "editor.indent-guides";
 export const EDITOR_CURSOR_BLINK_KEY = "editor.cursor-blink";
 export const EDITOR_SOFT_CURSOR_KEY = "editor.soft-cursor";
+export { EDITOR_TYPEWRITER_KEY };
 export const EDITOR_RTL_KEY = "editor.rtl";
 export const EDITOR_PROPERTIES_KEY = "editor.properties";
 export const EDITOR_LIVE_REVEAL_KEY = "editor.live-reveal";
@@ -148,6 +153,7 @@ const INPUT_KEYS = new Set([
   EDITOR_INDENT_GUIDES_KEY,
   EDITOR_CURSOR_BLINK_KEY,
   EDITOR_SOFT_CURSOR_KEY,
+  EDITOR_TYPEWRITER_KEY,
   EDITOR_RTL_KEY,
   EDITOR_PROPERTIES_KEY,
   EDITOR_LIVE_REVEAL_KEY,
@@ -176,6 +182,9 @@ interface LayoutPreferences {
   readonly cursorBlink: boolean;
   /// Nei Blocchi il cursore scivola fra due posizioni (N13). Di serie salta.
   readonly softCursor: boolean;
+  /// La macchina da scrivere: la riga del cursore resta a metà del foglio
+  /// (`typewriter.ts`). Spenta di serie.
+  readonly typewriter: boolean;
   /// Il testo va da destra a sinistra.
   readonly rtl: boolean;
   /// Come Live mostra il frontmatter (`properties-display.ts`).
@@ -196,6 +205,7 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   indentGuides: false,
   cursorBlink: false,
   softCursor: false,
+  typewriter: false,
   rtl: false,
   properties: "visible",
   reveal: "mai",
@@ -212,6 +222,15 @@ function foldMarker(open: boolean): HTMLElement {
   marker.title = t(open ? "editor.cm.fold_line" : "editor.cm.unfold_line");
   marker.textContent = open ? "⌄" : "›";
   return marker;
+}
+
+/// Vim, e il suo Esc. In modo normale, senza niente in sospeso, Vim lascia
+/// passare Esc; in concentrazione la shell ne uscirebbe a ogni Esc dato per
+/// abitudine. Con Vim acceso, Esc nell'editor resta di Vim: lo prende qui
+/// per ultimo, e si esce dalla concentrazione con «Esci» nella banda o col
+/// comando (T24).
+function vimInput(): Extension {
+  return [vim(), Prec.lowest(keymap.of([{ key: "Escape", run: () => concentrating() }]))];
 }
 
 function layoutExtensions(layout: LayoutPreferences): Extension {
@@ -232,6 +251,7 @@ function layoutExtensions(layout: LayoutPreferences): Extension {
     // mai il cursore.
     layout.cursorBlink ? [] : drawSelection({ cursorBlinkRate: 0 }),
     softCursor.of(layout.softCursor),
+    typewriter.of(layout.typewriter),
     // Sopra il `dir: "auto"` di sempre, che altrimenti vince: un documento che
     // comincia in latino (il frontmatter) partirebbe da sinistra.
     layout.rtl ? Prec.highest(EditorView.contentAttributes.of({ dir: "rtl" })) : [],
@@ -261,6 +281,7 @@ export class TextEngine {
   private readonly stopLanguage: Teardown;
   private readonly stopSettings: Teardown;
   private readonly stopGutterMenu: Teardown;
+  private readonly stopConcentration: Teardown;
   private settingsGeneration = 0;
   private vimEnabled = false;
   private spellcheckEnabled = true;
@@ -295,8 +316,13 @@ export class TextEngine {
     this.view.scrollDOM.tabIndex = 0;
     this.view.scrollDOM.setAttribute("role", "document");
     if (options.field === true) {
-      this.stopSettings = this.stopGutterMenu = () => {};
+      this.stopSettings = this.stopGutterMenu = this.stopConcentration = () => {};
     } else {
+      // La concentrazione accende il blocco del cursore (`cursor-block.ts`):
+      // entrando e uscendo lo si dice a questa vista, che lo ridisegna.
+      this.stopConcentration = onConcentration(() => {
+        if (!this.disposed) this.view.dispatch({ effects: refreshCursorBlock.of(null) });
+      });
       // Il margine sta fuori dal contenteditable, dove CodeMirror non ascolta.
       const gutterMenu = (event: MouseEvent) => this.gutterMenu(event);
       this.view.dom.addEventListener("contextmenu", gutterMenu);
@@ -542,6 +568,7 @@ export class TextEngine {
     this.settingsGeneration += 1;
     this.stopSettings();
     this.stopGutterMenu();
+    this.stopConcentration();
     this.stopLanguage();
     this.footprints.reset();
     this.view.destroy();
@@ -582,6 +609,7 @@ export class TextEngine {
       && next.indentGuides === this.layout.indentGuides
       && next.cursorBlink === this.layout.cursorBlink
       && next.softCursor === this.layout.softCursor
+      && next.typewriter === this.layout.typewriter
       && next.rtl === this.layout.rtl
       && next.properties === this.layout.properties
       && next.reveal === this.layout.reveal
@@ -599,7 +627,7 @@ export class TextEngine {
     this.pendingInput = false;
     if (this.appliedVim !== this.vimEnabled) {
       this.appliedVim = this.vimEnabled;
-      this.view.dispatch({ effects: this.vimCompartment.reconfigure(this.vimEnabled ? vim() : []) });
+      this.view.dispatch({ effects: this.vimCompartment.reconfigure(this.vimEnabled ? vimInput() : []) });
     }
     if (this.appliedLayout !== this.layout) {
       this.appliedLayout = this.layout;
@@ -651,6 +679,8 @@ export class TextEngine {
       this.setSpellcheck(value(EDITOR_SPELLCHECK_KEY) !== false);
       this.setVim(value(EDITOR_VIM_KEY) === true);
       const indent = value(EDITOR_INDENT_KEY);
+      const typewriterOn = value(EDITOR_TYPEWRITER_KEY) === true;
+      rememberTypewriter(typewriterOn);
       this.setLayout({
         lineNumbers: value(EDITOR_LINE_NUMBERS_KEY) !== false,
         lineWrap: value(EDITOR_LINE_WRAP_KEY) !== false,
@@ -662,6 +692,7 @@ export class TextEngine {
         indentGuides: value(EDITOR_INDENT_GUIDES_KEY) === true,
         cursorBlink: value(EDITOR_CURSOR_BLINK_KEY) === true,
         softCursor: value(EDITOR_SOFT_CURSOR_KEY) === true,
+        typewriter: typewriterOn,
         rtl: value(EDITOR_RTL_KEY) === true,
         properties: propertiesDisplayOf(value(EDITOR_PROPERTIES_KEY)),
         reveal: revealPolicyOf(value(EDITOR_LIVE_REVEAL_KEY)),
@@ -983,7 +1014,7 @@ export class TextEngine {
       ]),
       this.profile.of(this.profileExtensions()),
       this.phrasesCompartment.of(editorPhrases()),
-      this.vimCompartment.of(this.vimEnabled ? vim() : []),
+      this.vimCompartment.of(this.vimEnabled ? vimInput() : []),
       this.spellcheckCompartment.of(EditorView.contentAttributes.of({
         spellcheck: String(this.spellcheckEnabled),
         dir: "auto",
@@ -1014,6 +1045,8 @@ export class TextEngine {
       rectangularSelection(),
       crosshairCursor(),
       highlightActiveLine(),
+      // In concentrazione, il blocco del cursore; un campo non ne ha.
+      this.options.field === true ? [] : cursorBlock,
       highlightSelectionMatches(),
       // La riga attiva è una `lineDecoration`: sta sopra il layer di
       // selezione in paint order e copre il rettangolo quando la selezione
