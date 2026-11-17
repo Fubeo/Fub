@@ -603,7 +603,7 @@ fn empty(title: &str, detail: Option<Text>) -> UiNode {
 fn pinned(host: &dyn ReadApi) -> Result<Vec<UiNode>, PluginError> {
     let organization = match host.query_index(IndexQuery::Organization)? {
         IndexResult::Organization(organization) => organization,
-        other => return unexpected("organization", other),
+        other => return super::unexpected_result("organization", other),
     };
     if organization.pinned.is_empty() {
         return Ok(vec![empty(
@@ -633,7 +633,7 @@ fn recent(host: &dyn ReadApi) -> Result<Vec<UiNode>, PluginError> {
         page: None,
     })? {
         IndexResult::Entries(entries) => entries,
-        other => return unexpected("entries", other),
+        other => return super::unexpected_result("entries", other),
     };
     if entries.items.is_empty() {
         return Ok(vec![empty(S_RECENT_NONE, None)]);
@@ -793,7 +793,7 @@ fn base(host: &dyn ReadApi) -> Result<Vec<UiNode>, PluginError> {
         page: None,
     })? {
         IndexResult::Entries(entries) => entries,
-        other => return unexpected("entries", other),
+        other => return super::unexpected_result("entries", other),
     };
     let mut bases: Vec<DocId> = entries
         .items
@@ -945,12 +945,6 @@ fn month(host: &dyn ReadApi, today: i64) -> Vec<UiNode> {
 /// un giovedì.
 fn iso_weekday(day: i64) -> i64 {
     (day + 3).rem_euclid(7) + 1
-}
-
-fn unexpected<T>(expected: &str, other: IndexResult) -> Result<T, PluginError> {
-    Err(PluginError::Internal(
-        format!("desk: expected {expected}, got {}", other.kind_name()).into(),
-    ))
 }
 
 // ---------------------------------------------------------------------------
