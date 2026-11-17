@@ -175,8 +175,14 @@ pub fn catalog() -> Vec<StringCatalog> {
                  snapshot di prima restano tutti.",
             )
             .with(SKIPPED_MORE, "… e altri {n}.")
-            .with(E_SKIP_GONE, "«{path}»: il file è sparito durante il backup.")
-            .with(E_SKIP_DENIED, "«{path}»: Fub non ha il permesso di leggerlo.")
+            .with(
+                E_SKIP_GONE,
+                "«{path}»: il file è sparito durante il backup.",
+            )
+            .with(
+                E_SKIP_DENIED,
+                "«{path}»: Fub non ha il permesso di leggerlo.",
+            )
             .with(
                 E_SKIP_IO,
                 "«{path}»: il disco non l'ha restituito. Controlla che il file non \
@@ -258,7 +264,10 @@ pub fn catalog() -> Vec<StringCatalog> {
                  earlier snapshots are kept.",
             )
             .with(SKIPPED_MORE, "…and {n} more.")
-            .with(E_SKIP_GONE, "«{path}»: the file disappeared during the backup.")
+            .with(
+                E_SKIP_GONE,
+                "«{path}»: the file disappeared during the backup.",
+            )
             .with(E_SKIP_DENIED, "«{path}»: Fub is not allowed to read it.")
             .with(
                 E_SKIP_IO,
@@ -357,10 +366,7 @@ fn command_then_tree(
         // La frase dell'errore, non la sua forma da log (`I/O error: …`): i
         // comandi di questo componente la scrivono dal catalogo.
         Err(and) => Some(UiNode::failed(
-            Text::message(
-                FAILED,
-                vec![Arg::text("reason", and.message().to_string())],
-            ),
+            Text::message(FAILED, vec![Arg::text("reason", and.message().to_string())]),
             None,
         )),
     };

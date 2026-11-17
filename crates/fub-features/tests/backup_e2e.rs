@@ -210,8 +210,14 @@ fn a_docx_in_the_vault_is_backed_up_and_restored_byte_for_byte() {
         .find_map(|t| t.split_whitespace().next().map(str::to_string))
         .expect("uno snapshot");
     let copy = vault.root.join(".fub/plugins").join(BACKUP_ID).join(&id);
-    assert_eq!(std::fs::read(copy.join("Documenti/Protetto.docx")).unwrap(), docx);
-    assert_eq!(std::fs::read(copy.join("Note/index.md")).unwrap(), note.as_bytes());
+    assert_eq!(
+        std::fs::read(copy.join("Documenti/Protetto.docx")).unwrap(),
+        docx
+    );
+    assert_eq!(
+        std::fs::read(copy.join("Note/index.md")).unwrap(),
+        note.as_bytes()
+    );
 
     ws.delete_document(&DocId::new("Documenti/Protetto.docx"))
         .expect("cestina");
@@ -249,8 +255,7 @@ fn an_unreadable_file_is_skipped_and_named_not_the_whole_backup() {
     let mut ws = vault.open();
     let locked = vault.root.join("b.md");
     let set = |mode| {
-        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(mode))
-            .expect("permessi")
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(mode)).expect("permessi")
     };
     set(0o000);
     if std::fs::read(&locked).is_ok() {
@@ -277,7 +282,10 @@ fn an_unreadable_file_is_skipped_and_named_not_the_whole_backup() {
     let json = serde_json::to_string(&tree).unwrap();
     assert!(json.contains("b.md"), "il file saltato si nomina: {json}");
     assert!(!json.contains("I/O"), "niente messaggio da log: {json}");
-    assert!(!json.contains("os error"), "niente messaggio da log: {json}");
+    assert!(
+        !json.contains("os error"),
+        "niente messaggio da log: {json}"
+    );
     assert!(
         titles(&tree).iter().any(|t| t.contains("2 note")),
         "lo snapshot c'è, con ciò che si è copiato: {:?}",
