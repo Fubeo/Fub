@@ -2052,7 +2052,7 @@ Fatto quando: test dell'editor da tastiera e col puntatore; un test della
 colonna di riepilogo; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/page src/editors/base
-Stato: [~] in corso (coder feat/relazioni-editor da aa64e11ed, 2026-11-17)
+Stato: [x] fatto (integra/editor-1 587eac35d, 2026-11-17). Limite: «Collegata da» manca (nessuna porta espone linked_from; serve un'issue kernel)
 
 ## T36a · Il permesso delle notifiche e l'indice dei promemoria
 
