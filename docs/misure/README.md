@@ -87,6 +87,7 @@ scenario L1).
 |---|---|---|---|
 | 2026-11-03 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | AMD Ryzen 7 7730U, condivisa | [Il nucleo della lavagna in WebAssembly](2026-11-03-lavagna-wasm.md) |
 | 2026-11-15 | Linux 7.0 (Azure), X11 sotto Xvfb, WebKitGTK | runner della CI, AMD EPYC 7763, 4 nuclei | [Il nucleo della lavagna sul runner della CI](2026-11-15-lavagna-wasm-runner.md) |
+| 2026-11-17 | Linux (Azure), X11 sotto Xvfb, WebKitGTK | runner della CI, 4 nuclei | [L'istanza del nucleo della lavagna sul runner della CI](2026-11-17-lavagna-wasm-istanza-runner.md) |
 
 ## L'inchiostro sulla lavagna
 
