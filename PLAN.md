@@ -363,7 +363,7 @@ Fatto quando: ogni voce dell'elenco di E2 ha il suo test e la sua scena;
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks && FUB_BENCH_PORT=1460 npm run
 bench:motion
-Stato: [~] in corso (coder, `test/gesti-ai-bordi`, 2026-11-17)
+Stato: [~] PR #458 (test/gesti-ai-bordi, spinta il 2026-11-17 con main dentro): test E2 per caso limite, due correzioni (voce annidata portata fuori, posto e cartellino interrotti), 10 coreografie `blocchi-*`, regola 3 fotogramma per fotogramma (`perFrame`, `FRAME_STREAK = 2`; nel tempo che passa da solo anche tre scritture con tre valori diversi); bench:motion 57/57; nessuna baseline
 
 ## T2a · La maniglia a due occhi e il blocco in mano
 
