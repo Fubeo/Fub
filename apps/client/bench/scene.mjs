@@ -1534,6 +1534,31 @@ export const SCENE = touchLast(onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openNoteTypes(page, gesture),
   })),
+  // La pagina del tipo (T33): in fondo alla nota del tipo, le note di quel
+  // tipo con le sue proprietà in evidenza (la vista `note_type_page`).
+  ...[
+    ["tipi-07-pagina", "La pagina del tipo in fondo a «Libro»: le sue note, con le proprietà in evidenza", undefined],
+    ["tipi-08-pagina-stretta", "La pagina del tipo nella finestra minima, 800 px", { width: 800, height: 800 }],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "live=tipo-pagina",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      // Nella finestra stretta l'albero è nel cassetto chiuso: la nota si apre
+      // larga, poi la finestra si stringe.
+      if (viewport) await page.setViewportSize({ width: 1280, height: 800 });
+      await openNote(page, "Tipi/Libro.md");
+      await chooseMode(page, "live_preview");
+      if (viewport) {
+        await page.setViewportSize(viewport);
+        await page.waitForSelector("#layout.layout-compact");
+      }
+      await page.waitForSelector(".pane.focus .cm-day-page[data-type-page]:not([hidden]) .ui-section .ui-list-item");
+      await page.$eval(".pane.focus .cm-day-page[data-type-page]", (section) => section.scrollIntoView({ block: "end" }));
+      await page.mouse.move(0, 0);
+    },
+  })),
   // Scrittura coi Blocchi: la stessa nota, con la maniglia del blocco sotto il
   // puntatore e quella del blocco del cursore; poi la selezione di blocchi e il
   // menu.
