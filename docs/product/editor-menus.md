@@ -137,11 +137,31 @@ Maiusc+tasto destro, che dà sempre il menu del sistema.
 
 ## La mini-barra
 
-Sopra il menu c'è la **mini-barra**: lo stile del paragrafo, le formattazioni
-in riga e i link. Sulla selezione compare da sola quando la barra di
-formattazione è spenta. L'impostazione «Mini-barra di formattazione»
-(`editor.minibar`) sceglie fra `auto` (così), `always` (anche su ogni
-selezione con la barra accesa), `menu` (solo col tasto destro) e `off`.
+La **mini-barra** è una fila compatta, scura di giorno e color foglio di
+notte, con quest'ordine: «Trasforma» (lo stesso menu «Trasforma in» dello
+stile nella [barra di formato](editor-toolbar.md)), Grassetto, Corsivo,
+Sottolineato, Barrato, Codice in riga, Collega, Colore e «Commenta». Ogni
+pulsante esegue l'azione della sua scorciatoia, con lo stesso passo
+d'annullamento, e la sua didascalia dice la scorciatoia vera della persona
+(Ctrl B, Ctrl K, Ctrl Alt M…). «Collega» fa ciò che fa Ctrl K: il riquadro
+«Collegamento» in Live e in Blocchi, il wikilink in Sorgente. «Colore» apre
+le due righe dei nove colori dei Blocchi, Testo e Sfondo; il colore già dato
+alla selezione è segnato, e un clic lo toglie. «Commenta» apre il primo
+messaggio della discussione sulla selezione, come Ctrl Alt M: su più blocchi
+il commento va nel primo, nel codice o in una formula subito dopo il blocco.
+Un pulsante che la nota non sa fare non c'è; in sola lettura sono tutti
+spenti. Il puntatore non prende il fuoco, che resta al testo con la sua
+selezione; da tastiera la fila è un punto di tabulazione con le frecce, ed
+Escape torna al testo.
+
+Sul testo scelto compare da sola quando la barra di formattazione è
+nascosta, sopra la selezione (sotto se sopra non c'è posto) e senza uscire
+dalla finestra; mentre il suo menu Trasforma o Colore è aperto resta ferma.
+Se si apre il menu del tasto destro, la mini-barra ne prende la testa (E29).
+L'impostazione «Mini-barra di formattazione» (`editor.minibar`) sceglie fra
+`auto` (così), `always` (anche su ogni selezione con la barra accesa),
+`menu` (solo col tasto destro) e `off`. Le scene `mini-barra-*` del banco la
+fotografano.
 
 ## Il «/» nel testo
 
@@ -311,7 +331,10 @@ griglia delle tabelle in Live ha il suo
   maniglia e da Ctrl O, e nessun pulsante sopra un blocco a riposo;
 - `apps/client/src/ui/system-menu.ts`: il menu della WebView spento dove Fub
   non ne ha uno;
-- `apps/client/src/panels/mini-bar.ts`: la mini-barra;
+- `apps/client/src/panels/mini-bar.ts`: la mini-barra, e
+  `apps/client/src/panels/selection-bubble.ts` che la posa sul testo scelto;
+  `mini-bar.test.ts` confronta ogni pulsante con la sua scorciatoia su una
+  nota vera;
 - `apps/client/src/panels/slash/` (voci, classifica, comandi rapidi, passi,
   pannello) e `apps/client/src/editors/text/profiles/markdown/slash.ts`
   (contesto e stato): il «/» nel testo;

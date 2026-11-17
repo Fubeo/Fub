@@ -1699,6 +1699,23 @@
     "context-submenu",
     "menu-more",
     "context-strip",
+    "context-strip-mini",
+    "mini-bar",
+    "mini-bar-button",
+    "mini-bar-named",
+    "mini-bar-caret",
+    "mini-bar-glyph",
+    "is-bold",
+    "is-italic",
+    "is-underline",
+    "is-strike",
+    "mini-bar-color-mark",
+    "mini-bar-rule",
+    "mini-bar-colors",
+    "mini-bar-colors-body",
+    "mini-bar-colors-label",
+    "mini-bar-swatches",
+    "mini-bar-swatch",
     "format-bar-follow",
     "format-bar-labelled",
     "format-bar-text",
@@ -3701,6 +3718,23 @@
     "context-submenu": "cornice",
     "menu-more": "cornice",
     "context-strip": "cornice",
+    "context-strip-mini": "cornice",
+    "mini-bar": "cornice",
+    "mini-bar-button": "cornice",
+    "mini-bar-named": "cornice",
+    "mini-bar-caret": "cornice",
+    "mini-bar-glyph": "cornice",
+    "is-bold": "cornice",
+    "is-italic": "cornice",
+    "is-underline": "cornice",
+    "is-strike": "cornice",
+    "mini-bar-color-mark": "cornice",
+    "mini-bar-rule": "cornice",
+    "mini-bar-colors": "cornice",
+    "mini-bar-colors-body": "cornice",
+    "mini-bar-colors-label": "cornice",
+    "mini-bar-swatches": "cornice",
+    "mini-bar-swatch": "cornice",
     "format-bar-follow": "cornice",
     "format-bar-labelled": "cornice",
     "format-bar-text": "cornice",
@@ -8229,10 +8263,52 @@
       "part": "menus",
       "hooks": [
         "context-strip",
-        "format-bar"
+        "context-strip-mini"
       ],
       "states": [
         "rest"
+      ]
+    },
+    {
+      "name": "mini-bar",
+      "part": "menus",
+      "hooks": [
+        "mini-bar",
+        "mini-bar-button",
+        "mini-bar-named",
+        "mini-bar-caret",
+        "mini-bar-glyph",
+        "is-bold",
+        "is-italic",
+        "is-underline",
+        "is-strike",
+        "mini-bar-color-mark",
+        "mini-bar-rule"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "pressed",
+        "disabled"
+      ]
+    },
+    {
+      "name": "mini-bar-colors",
+      "part": "menus",
+      "hooks": [
+        "mini-bar-colors",
+        "mini-bar-colors-body",
+        "mini-bar-colors-label",
+        "mini-bar-swatches",
+        "mini-bar-swatch"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "pressed",
+        "disabled"
       ]
     },
     {
@@ -10627,10 +10703,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 2000,
+    "hooks": 2017,
     "state_names": 7,
-    "assigned_states": 923,
-    "components": 270,
+    "assigned_states": 933,
+    "components": 272,
     "preference_tokens": 191
   }
 }
