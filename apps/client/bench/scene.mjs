@@ -1156,6 +1156,11 @@ export const SCENE = onPage("shell", [
     ["formula-01-riga", "formula-toccata", "La formula in riga toccata: il riquadro sotto, la formula grande col cursore nel numeratore", "inline"],
     ["formula-02-blocco", "formula-toccata", "Il blocco $$ toccato: la formula sul posto col bordo d'accento, il cursore dove cade il clic", "block"],
     ["formula-03-errore", "formula-errore", "Una formula con un errore si apre col suo LaTeX e la nota che lo dice", "error"],
+    // Le proposte dei simboli (T61): `\fr` in fondo alla formula in riga
+    // propone le frazioni e le frecce, disegnate e col nome; `\s` nel
+    // blocco le radici, la somma e il sigma.
+    ["formula-04-simboli", "formula-toccata", "La barra rovesciata e le prime lettere: le proposte dei simboli, disegnati e col nome, sotto la formula", "symbols"],
+    ["formula-05-simboli-blocco", "formula-toccata", "Le proposte dei simboli sotto il blocco $$ toccato", "symbols-block"],
   ].map(([id, live, title, gesture]) => ({
     id,
     title,
@@ -2165,7 +2170,24 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
 async function touchFormula(page, gesture) {
   const ready = ".cm-fub-mx-surface[data-state=\"ready\"]";
   const said = () => page.evaluate(() => document.querySelector(".cm-fub-mx [role=status]")?.textContent ?? "");
-  if (gesture === "block") {
+  if (gesture === "symbols" || gesture === "symbols-block") {
+    // Le proposte dei simboli (T61): in fondo alla formula, `+` e il nome.
+    if (gesture === "symbols") {
+      await openLive(page, ["@ArrowRight"], "top");
+      await page.waitForSelector(`.cm-fub-mx-popover ${ready}`);
+    } else {
+      await openLive(page, [], "top");
+      const box = await page.locator(".cm-content .math-block").first().boundingBox();
+      if (!box) throw new Error("manca il blocco $$");
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+    }
+    await page.keyboard.press("End");
+    await page.keyboard.type(gesture === "symbols" ? "+\\fr" : "+\\s");
+    await page.waitForSelector(".cm-fub-mx-symbols:not([hidden]) [aria-selected=\"true\"] .katex");
+    const names = await page.locator(".cm-fub-mx-symbol-name").allTextContents();
+    if (names.length < 3) throw new Error(`poche proposte: ${names.join(", ")}`);
+  } else if (gesture === "block") {
     await openLive(page, [], "top");
     const centre = async (selector, fy = 0.5, fx = 0.5) => {
       const box = await page.locator(selector).first().boundingBox();
