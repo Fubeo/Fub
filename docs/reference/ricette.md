@@ -249,9 +249,8 @@ passo si è fermato e perché.
 
 La prova è **approssimata** quando un passo dipende da un altro: in simulazione
 niente si sposta, quindi un passo dopo una rinomina vede la nota dov'era. La
-prova è `recipes::plan`, generica su chi esegue i passi in simulazione: oggi
-la usa il comando, ed è la stessa che servirà all'host prima di adottare e
-alla CLI.
+prova è `recipes::plan`, generica su chi esegue i passi in simulazione: la usa
+il comando, ed è quella che serve anche all'host prima di adottare e alla CLI.
 
 ## `recipes.new`
 
