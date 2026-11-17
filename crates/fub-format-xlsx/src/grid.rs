@@ -207,6 +207,9 @@ struct Instance {
     /// Le celle si modificano: il pacchetto e il modello si corrispondono.
     editable: bool,
     notices: Vec<GridNotice>,
+    /// Le formule su un riferimento circolare, salvate con `0`: la griglia le
+    /// mostra con `#CIRC!` finché formula e valore restano quelli del file.
+    circular: HashMap<Key, String>,
     journal: GridJournal,
     entries: BTreeMap<GridCellKey, Entry>,
     deps: Option<Deps>,
@@ -438,7 +441,16 @@ impl Instance {
             .enumerate()
             .map(|(index, sheet)| (sheet.id.clone(), index))
             .collect();
-        let notices = notices(&workbook, &report);
+        // Un errore nella ricerca lascia la cartella com'era: niente avviso.
+        let circular =
+            guarded(|| Ok(crate::circular::circular_formulas(&workbook))).unwrap_or_default();
+        let mut notices = notices(&workbook, &report);
+        if !circular.is_empty() {
+            notices.push(GridNotice {
+                code: "circular".into(),
+                count: u32::try_from(circular.len()).unwrap_or(u32::MAX),
+            });
+        }
         let revision = grid_bytes_revision(&source, "");
         Ok(Instance {
             bytes,
@@ -449,6 +461,7 @@ impl Instance {
             ids,
             editable,
             notices,
+            circular,
             journal: GridJournal::new(),
             entries: BTreeMap::new(),
             deps: None,
@@ -1076,10 +1089,13 @@ impl Instance {
                     .unwrap_or_default(),
                 new_value(&entry.value),
             ),
-            None => (
-                self.disk_input(sheet, at),
-                model.value_ref(at).cloned().unwrap_or(GcValue::Empty),
-            ),
+            None => {
+                let value = model.value_ref(at).cloned().unwrap_or(GcValue::Empty);
+                (
+                    self.disk_input(sheet, at),
+                    circular_value(&self.circular, model, sheet, at).unwrap_or(value),
+                )
+            }
         };
         let look = display::look(workbook, sheet, model, at, cache);
         let formatted = format_value(
@@ -1776,6 +1792,25 @@ fn notices(workbook: &Workbook, report: &gridcraft_xlsx::ReadReport) -> Vec<Grid
         });
     }
     out
+}
+
+/// `#CIRC!` per una formula che il file ha salvato con `0` su un giro di
+/// riferimenti, se la cella ha ancora quella formula e quel valore: una
+/// formula riscritta, o ricalcolata dal motore, mostra il suo.
+fn circular_value(
+    circular: &HashMap<Key, String>,
+    model: &Sheet,
+    sheet: usize,
+    at: CellRef,
+) -> Option<GcValue> {
+    let text = circular.get(&(sheet, at))?;
+    let cell = model.cell(at)?;
+    let same = cell
+        .formula
+        .as_ref()
+        .is_some_and(|formula| &formula.text == text)
+        && matches!(cell.value, GcValue::Number(n) if n == 0.0);
+    same.then_some(GcValue::Error(gridcraft_core::CellError::Circ))
 }
 
 /// Le dipendenze delle formule della cartella.
