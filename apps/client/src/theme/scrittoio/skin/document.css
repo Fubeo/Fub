@@ -564,13 +564,13 @@
 }
 /* I Blocchi (H3–H7, E2): il «+» e la maniglia a due occhi nel margine, i
    blocchi selezionati. Con un puntatore i pulsanti non si vedono a riposo e
-   compaiono tenui sul blocco sotto il puntatore; senza passaggio restano
-   tenui sul blocco del cursore. La maniglia sotto il puntatore prende
-   l'accento e gli occhi crescono appena. */
+   compaiono, nel grigio pieno della pagina (il --muted del prototipo
+   tradotto nella tavolozza del documento), sul blocco sotto il puntatore;
+   senza passaggio restano sul blocco del cursore. La maniglia sotto il
+   puntatore prende l'accento e gli occhi crescono appena. */
 .cm-editor .cm-fub-block-add,
 .cm-editor .cm-fub-block-grip {
   color: var(--doc-gutter-fg);
-  opacity: 0.55;
   transition: opacity 0.12s, background 0.12s, color 0.12s;
 }
 @media (hover: hover) {
