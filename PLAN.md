@@ -2923,7 +2923,7 @@ byte; le scene nelle due luci e al telefono; la battuta sotto i 4 ms.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
 src/editors/text/profiles/markdown/math-live.dom.test.ts
-Stato: [~] in corso (coder, 2026-11-17)
+Stato: [~] fatto dal coder (06733d23a, 2026-11-17), in coda per `integra/editor-1`
 
 ## T61 · Formule: i simboli per nome e i pezzi coi loro spazi vuoti
 
@@ -2948,7 +2948,7 @@ Fatto quando: test del catalogo e delle proposte; ogni pezzo con i suoi
 spazi vuoti.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
-Stato: [ ] da fare
+Stato: [~] in corso (coder, dal ramo di T60, 2026-11-17)
 
 ## T62 · Formule: la tavolozza e la ricerca a parole
 
