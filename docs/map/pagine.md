@@ -43,6 +43,7 @@
 - Come Fub rappresenta documenti di formati diversi senza perdere la sorgente? → [architecture/document-model.md](../architecture/document-model.md)
 - Come si dividono il lavoro fra sessione documento, superfici, motori e profili? → [architecture/editor-surfaces.md](../architecture/editor-surfaces.md)
 - Che cosa succede alla superficie di una scheda di testo quando il riquadro passa a un'altra, e quando si libera? → [architecture/parked-surfaces.md](../architecture/parked-surfaces.md)
+- Come si modifica soltanto una sezione o un blocco di una nota, dentro un'altra, con la sua sessione? → [architecture/range-surface.md](../architecture/range-surface.md)
 - Come comunica la shell TypeScript con il core senza diffondere Tauri? → [architecture/frontend-and-ipc.md](../architecture/frontend-and-ipc.md)
 - Come la shell apre, mostra e modifica una cartella di Excel, e che cosa resta al provider? → [architecture/grid-surface.md](../architecture/grid-surface.md)
 - Come Fub raccoglie l'inchiostro e dove vivono penna, evidenziatore e gomma? → [architecture/ink-and-tools.md](../architecture/ink-and-tools.md)
