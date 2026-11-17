@@ -440,7 +440,7 @@ Esc e l'annuncio; le foto del banco, chiaro e scuro, somigliano alle righe
 828 e 853 del prototipo; la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks
-Stato: [x] in main · PR #377, merge a3ee357dc (2026-11-15), CI completa verde, baseline blocchi-03-menu dal runner
+Stato: [x] in main · PR #377, merge a3ee357dc (2026-11-15), CI completa verde, baseline blocchi-03-menu dal runner · ritocco come nel prototipo in main con #431 (2026-11-17, merge dopo il riuso verde, 46 baseline del runner guardate)
 
 ## T2b · Fuori dalla colonna e lo scorrimento al bordo
 
@@ -1021,7 +1021,7 @@ scorciatoia cambiata; un test del vault d'esempio in `support.rs`; la scena
 del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/frame; cargo nextest run -p fub-host support
-Stato: [~] PR #383 (feat/riga-dei-suggerimenti @ ed7cc6e83, in locale, con main dentro): la riga sotto il controllo di conformità (`suggerimenti.riga`, `suggerimenti.tasto`) e corretta regola per regola dal prototipo; a 700 px toglie le voci intere invece di tagliare con «…» e scrive «Ctrl+O» (da `displayBinding`, fuori perimetro); si spinge dopo #431, poi baseline `live-*` dal runner
+Stato: [~] PR #383 (feat/riga-dei-suggerimenti @ 39dd7f5db spinta il 2026-11-17 con main dentro, CI completa in corso, baseline dal runner): la riga sotto il controllo di conformità (`suggerimenti.riga`, `suggerimenti.tasto`) e corretta regola per regola dal prototipo; a 700 px toglie le voci intere invece di tagliare con «…» e scrive «Ctrl+O» (da `displayBinding`, fuori perimetro); si spinge dopo #431, poi baseline `live-*` dal runner
 
 ## T15a · Le toppe mirate del `.base`
 
@@ -3624,7 +3624,7 @@ ed elenco; un test di «Copia come» da tastiera; il moto a fotogrammi fermi
 in `bench/motion.mjs`; il contrasto delle scorciatoie misurato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/ui/menu.test.ts src/ui/menu-budget.test.ts src/panels/editor-menu.test.ts
-Stato: [x] fatto · in main (#358, d4d349b23, 2026-11-14) · il tocco di 200 ms prima del gesto (Esc annulla; subito con il movimento ridotto); si unisce prima di T3
+Stato: [x] fatto · in main (#358, d4d349b23, 2026-11-14) · il tocco di 200 ms prima del gesto (Esc annulla; subito con il movimento ridotto); si unisce prima di T3 · menu come nel prototipo (ombra, campo come dialogo, anello solo da tastiera) in main con #431 (2026-11-17)
 
 ## T82 · Lo spazio comandi nella stessa lingua
 
