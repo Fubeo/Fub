@@ -770,6 +770,10 @@ export const SCENE = onPage("shell", [
       // Il puntatore lascia l'interruttore: il suo tooltip arriva dopo 500 ms
       // di timer vero, e la foto lo prenderebbe o no (#459).
       await page.mouse.move(0, 0);
+      // Il fuoco passa al menu «Generale», con l'anello di focus-visible, e
+      // la sua didascalia «Formato numero» arriva dopo 500 ms di timer vero:
+      // la si aspetta, perché è lo stato vero del fuoco (#467).
+      await page.waitForSelector(".shell-tooltip:not([hidden])");
     },
   },
   {
