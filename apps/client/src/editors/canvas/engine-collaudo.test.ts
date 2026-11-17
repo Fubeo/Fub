@@ -9,6 +9,7 @@ import { CanvasEngine, type CanvasChange } from "./engine";
 import { DEFAULT_PREFERENCES, type CanvasPreferences } from "./preferences";
 import { canvasCoreReady } from "./wasm/core";
 import { setReducedMotionPreference } from "../../theme/reduced-motion";
+import structure from "../../theme/scrittoio/structure.css?raw";
 
 const watched = vi.hoisted(() => ({ appliers: [] as Array<(preferences: CanvasPreferences) => void> }));
 
@@ -281,5 +282,73 @@ describe("i tasti della shell mentre si scrive in una scheda di testo (dubbia de
       document.removeEventListener("keydown", listen);
     }
     engine.destroy();
+  });
+});
+
+/** Le regole di `structure.css` fuori dalle `@container` (happy-dom non applica il foglio: la prova confronta i selettori veri). */
+function structureRules(): Array<{ selector: string; body: string }> {
+  const flat = structure.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@container[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, "");
+  return [...flat.matchAll(/([^{}@]+)\{([^{}]*)\}/g)].map(([, selector, body]) => ({ selector: selector!.trim(), body: body! }));
+}
+
+/** `el` ha una regola della struttura che lo nasconde (`display: none`). */
+function hiddenByStructure(el: Element): boolean {
+  return structureRules().some(({ selector, body }) => /display\s*:\s*none/.test(body)
+    && selector.split(",").some((one) => {
+      try {
+        return el.matches(one.trim());
+      } catch {
+        return false;
+      }
+    }));
+}
+
+describe("il nome del gruppo una volta sola (#411 C-04)", () => {
+  const GROUPS = JSON.stringify({
+    nodes: [
+      { id: "g", type: "group", x: 0, y: 0, width: 400, height: 300, label: "Media e varianza" },
+      { id: "h", type: "group", x: 60, y: -8, width: 400, height: 300 },
+      { id: "t", type: "text", x: 600, y: 0, width: 200, height: 100, text: "testo" },
+    ],
+    edges: [],
+  });
+
+  it("da vicino il gruppo mostra solo l'etichetta nella cornice: la testata non ripete il nome", () => {
+    const { engine, host } = mounted(GROUPS);
+    for (const id of ["g", "h"]) {
+      const card = cardOf(host, id);
+      const title = card.querySelector(".canvas-node-handle > .canvas-node-title")!;
+      const label = card.querySelector(".canvas-group-label")!;
+      expect(hiddenByStructure(title), `${id}: il titolo della testata`).toBe(true);
+      expect(hiddenByStructure(label), `${id}: l'etichetta`).toBe(false);
+      // Il nome grande da lontano non si vede da vicino: c'è solo col livello lontano.
+      expect(hiddenByStructure(card.querySelector(".canvas-node-far")!)).toBe(true);
+    }
+    expect(cardOf(host, "g").querySelector(".canvas-group-label")!.textContent).toBe("Media e varianza");
+    expect(cardOf(host, "g").querySelector(".canvas-node-far")!.textContent).toBe("Media e varianza");
+    // Le altre schede tengono il loro titolo.
+    expect(hiddenByStructure(cardOf(host, "t").querySelector(".canvas-node-title")!)).toBe(false);
+    engine.destroy();
+  });
+
+  it("il gruppo si sposta trascinando la sua etichetta", () => {
+    const { engine, host, changes } = mounted(GROUPS);
+    const label = cardOf(host, "g").querySelector<HTMLElement>(".canvas-group-label")!;
+    pointer(label, "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 20, 20) });
+    pointer(viewportOf(host), "pointermove", { pointerId: 1, buttons: 1, ...screenOf(host, -20, 20), altKey: true });
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, -20, 20), altKey: true });
+    expect(changes).toHaveLength(1);
+    expect(nodeOf(engine, "g")).toMatchObject({ x: -40, y: 0 });
+    engine.destroy();
+  });
+});
+
+describe("«File mancante» dentro la scheda piccola (IMP-045)", () => {
+  it("ciò che non ci sta esce in basso, mai in alto, e la scheda piccola stringe su una riga", () => {
+    const missing = structureRules().find(({ selector }) => selector === ".canvas-card-missing")!;
+    expect(missing.body).toMatch(/justify-content:\s*safe center/);
+    expect(missing.body).toMatch(/overflow:\s*hidden/);
+    expect(missing.body).toMatch(/container-type:\s*size/);
+    expect(structure).toMatch(/@container \(max-height: 120px\) \{\s*\.canvas-card-missing > \.canvas-media-placeholder \{[^}]*white-space: nowrap/);
   });
 });

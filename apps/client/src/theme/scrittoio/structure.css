@@ -3821,6 +3821,31 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 .canvas-node-group {
   z-index: -1;
 }
+/* Il gruppo ha un'etichetta sola, il suo nome dentro la cornice (#411 C-04):
+   la testata non scrive il titolo, e sta sopra il corpo, in alto, con → a
+   destra. Il resto della testata lascia il puntatore all'etichetta, che
+   sposta il gruppo come il corpo (IMP-041). Da lontano il nome grande è
+   `canvas-node-far`, al posto dell'etichetta. */
+.canvas-node-group > .canvas-node-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+.canvas-node-group > .canvas-node-handle > .canvas-node-title {
+  display: none;
+}
+.canvas-node-group > .canvas-node-handle > * {
+  pointer-events: auto;
+}
+.canvas-group-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .canvas-node-handle {
   display: flex;
