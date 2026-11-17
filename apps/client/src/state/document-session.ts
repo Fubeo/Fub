@@ -48,8 +48,11 @@ export interface DocumentSurface {
   /// Lo legge soltanto la bozza.
   pendingText?(): string | null;
   /// Registra adesso il testo tenuto per sé: diventa una modifica della
-  /// sessione, come alla fine della pausa.
-  commitPending?(): void;
+  /// sessione, come alla fine della pausa. Se la registrazione passa da un
+  /// passo asincrono (la cella di un foglio, confermata dal suo provider) la
+  /// superficie ne dà la promessa, e la sessione la aspetta prima di
+  /// salvare, leggere il disco o chiudersi (`settled`).
+  commitPending?(): void | Promise<void>;
   /// Avvisa a ogni cambio del testo tenuto per sé, con `true` se ne resta.
   /// L'avviso non chiama il nucleo; il disposer lo ferma.
   watchPending?(listener: (pending: boolean) => void): () => void;
@@ -461,15 +464,34 @@ export class DocumentSession implements DraftBuffer {
    * conflitto). Una superficie che fallisce non ferma le altre.
    */
   settlePending(): void {
-    if (!this.#isOpen() || this.#pendingSurfaces.size === 0) return;
+    void this.#commitHeld();
+  }
+
+  /**
+   * `settlePending`, con la promessa delle registrazioni che passano da un
+   * passo asincrono (la cella di un foglio, confermata dal suo provider), o
+   * `null` se non ce ne sono. I passi che possono aspettare — salvare, leggere
+   * il disco, chiudere — la aspettano: un testo confermato dopo la chiusura
+   * non avrebbe più una sessione in cui entrare. Con `null` non si aspetta
+   * niente, e il passo resta sincrono come prima.
+   */
+  settled(): Promise<void> | null {
+    return this.#commitHeld();
+  }
+
+  #commitHeld(): Promise<void> | null {
+    if (!this.#isOpen() || this.#pendingSurfaces.size === 0) return null;
+    const waits: Promise<void>[] = [];
     for (const surface of [...this.#surfaces.values()]) {
       if (!this.#pendingSurfaces.has(surface.id)) continue;
       try {
-        surface.commitPending?.();
+        const done = surface.commitPending?.();
+        if (done) waits.push(done.catch((error: unknown) => console.error(error)));
       } catch (error) {
         console.error(error);
       }
     }
+    return waits.length ? Promise.all(waits).then(() => undefined) : null;
   }
 
   /**
@@ -520,7 +542,8 @@ export class DocumentSession implements DraftBuffer {
    * regola di sempre, perché il testo non salvato va protetto comunque.
    */
   async handleExternalChange(source: Origin, expected = false): Promise<ExternalChangeResult> {
-    this.settlePending();
+    const held = this.settled();
+    if (held) await held;
     const generation = ++this.#externalGeneration;
     if (expected && !this.#state.dirty) {
       const reload = await this.#reloadFromDisk(generation);
@@ -537,7 +560,8 @@ export class DocumentSession implements DraftBuffer {
   /** Reread a clean document during event reconciliation. */
   async reloadIfClean(): Promise<ReloadResult> {
     if (!this.#isOpen()) return { kind: "missing" };
-    this.settlePending();
+    const held = this.settled();
+    if (held) await held;
     if (this.#state.dirty) return { kind: "dirty" };
     return this.#reloadFromDisk(++this.#externalGeneration);
   }
@@ -555,7 +579,8 @@ export class DocumentSession implements DraftBuffer {
    */
   async forceReload(): Promise<ReloadResult> {
     if (!this.#isOpen()) return { kind: "missing" };
-    this.settlePending();
+    const held = this.settled();
+    if (held) await held;
     if (this.#state.dirty && !(await this.flushDraft())) {
       // `flushDraft` ha fermato la cadenza della bozza: si riarma, così il
       // buffer torna protetto appena il disco lo permette.
@@ -588,7 +613,8 @@ export class DocumentSession implements DraftBuffer {
    * dell'utente e la sua bozza, e la scelta si può ripetere.
    */
   async resolveConflict(choice: ConflictChoice): Promise<ConflictResolutionResult> {
-    this.settlePending();
+    const held = this.settled();
+    if (held) await held;
     if (!this.#isOpen() || this.#state.result !== "conflitto") return { kind: "none" };
     if (choice === "mine") {
       await this.saveKeepingMine();
@@ -686,7 +712,8 @@ export class DocumentSession implements DraftBuffer {
   }
 
   async flush(): Promise<boolean> {
-    this.settlePending();
+    const held = this.settled();
+    if (held) await held;
     if (!this.#isOpen() || !this.#state.dirty) return false;
     this.#clearSaveTimer();
     const id = this.#id;
@@ -699,7 +726,8 @@ export class DocumentSession implements DraftBuffer {
    * chiusura della finestra decide su questo esito, non sulla notifica.
    */
   async flushDraft(): Promise<boolean> {
-    this.settlePending();
+    const held = this.settled();
+    if (held) await held;
     this.#clearDraftTimer();
     await this.#writeDraft(this.#id);
     return this.#bufferProtected();
@@ -812,7 +840,8 @@ export class DocumentSession implements DraftBuffer {
   }
 
   async saveKeepingMine(): Promise<void> {
-    this.settlePending();
+    const held = this.settled();
+    if (held) await held;
     if (!this.#isOpen() || this.#state.result !== "conflitto") return;
     this.#activityGeneration++;
     this.#clearSaveTimer();
@@ -1655,8 +1684,10 @@ export class DocumentSessionCollection implements DraftBufferStore {
       return { kind: "missing" };
     }
 
-    // Il testo tenuto dalle superfici entra prima: non è un'attività nuova.
-    session.settlePending();
+    // Il testo tenuto dalle superfici entra prima, anche quello che la
+    // superficie conferma col suo provider: non è un'attività nuova.
+    const held = session.settled();
+    if (held) await held;
     const activity = session.activityGeneration();
     await session.flush();
     if (session.dirty) await session.flushDraft();
