@@ -1383,7 +1383,8 @@ const SCENARIOS = {
     // di release ha dentro.
     const { url } = builtModule(args.dist ? resolve(args.dist) : undefined);
     // `L1_ROUNDS` giri nella stessa pagina, ognuno col modulo compilato da
-    // capo: i p95 sono la mediana dei giri (`l1Values`, #388).
+    // capo: l'istanza e i p95 sono la mediana dei giri (`l1Values`, #388,
+    // #434).
     const rounds = [];
     for (let round = 0; round < L1_ROUNDS; round++) {
       const report = await session.executeAsync(CANVAS_SCRIPT, [url, SIZES, OPENS, COMMITS]);

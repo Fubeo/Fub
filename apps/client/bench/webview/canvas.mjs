@@ -60,13 +60,22 @@ function median(xs) {
 }
 
 /// I valori di L1 dai referti dei giri (`measureCanvasCore`, uno per giro,
-/// nell'ordine). L'istanza, la prima apertura e il primo commit sono del primo
-/// giro, il solo a freddo, come li trova chi apre la prima lavagna; i p95 di
-/// `open` e `commit` sono la mediana dei p95 dei giri (`L1_ROUNDS`).
+/// nell'ordine). La prima istanza, la prima apertura e il primo commit sono
+/// del primo giro, il solo a freddo, come li trova chi apre la prima lavagna:
+/// stanno nel referto senza soglia. L'istanza (`L1.istanza`) e i p95 di
+/// `open` e `commit` sono la mediana dei giri (`L1_ROUNDS`). Ogni giro
+/// compila davvero il modulo da capo (sul runner i giri dopo il primo costano
+/// ancora 13 ms di mediana: WebKit non riusa il codice già compilato), quindi
+/// la mediana dice quanto costa compilarlo; non dice la coda della prima
+/// compilazione nella pagina, che sul runner arriva a 90 ms in un job dove
+/// gli altri quattro giri stanno fra 13 e 24 (#434).
 export function l1Values(reports) {
   if (reports.length === 0) throw new Error("L1 senza giri");
   const [first] = reports;
-  const values = { "L1.istanza": first.instanceMs };
+  const values = {
+    "L1.istanza": median(reports.map((r) => r.instanceMs)),
+    "L1.istanza.prima": first.instanceMs,
+  };
   for (const board of first.boards) {
     const rounds = reports.map((r) => r.boards.find((b) => b.size === board.size));
     if (rounds.some((b) => b === undefined)) throw new Error(`un giro di L1 non ha la lavagna di ${board.size} schede`);

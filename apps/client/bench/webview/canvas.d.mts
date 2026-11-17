@@ -31,6 +31,6 @@ export interface CanvasReport {
 /// Quanti giri fa lo scenario L1 nella stessa WebView.
 export const L1_ROUNDS: number;
 
-/// I valori di L1 dai referti dei giri: istanza, prima apertura e primo commit
-/// del primo giro, i p95 come mediana dei giri.
+/// I valori di L1 dai referti dei giri: prima istanza, prima apertura e primo
+/// commit del primo giro; l'istanza e i p95 come mediana dei giri.
 export function l1Values(reports: readonly CanvasReport[]): Record<string, number | null>;

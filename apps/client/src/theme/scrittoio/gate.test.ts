@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { THEME_ENGINE } from "../../host/contract";
-import { count, mountPreferences, mountThemeBundle, themeProfile, validateThemeBundle } from "../loader";
+import { count, mountedCss, mountPreferences, mountThemeBundle, themeProfile, validateThemeBundle } from "../loader";
 import { declareThemeSeries, preferenceTokens, themeSeries, type ThemeSeries } from "../theme";
 import { THEME_2_ENGINE, THEME_2_PREFERENCE_TOKENS, THEME_2_PROFILE } from "./profile";
 import { SCRITTOIO_SERIES } from "./series";
@@ -23,6 +23,7 @@ let restore: () => void = () => {};
 
 beforeEach(() => {
   document.head.innerHTML = "";
+  document.adoptedStyleSheets = [];
   restore = declareThemeSeries(SCRITTOIO_SERIES);
 });
 
@@ -45,7 +46,7 @@ describe("la serie Scrittoio passa dal cancello", () => {
     expect(result.mounted).toBe(true);
     expect(count("foglio")).toBe(1);
     expect(count("pelle")).toBe(1);
-    expect(document.head.querySelector('style[data-fub="pelle"]')?.textContent).toBe(SCRITTOIO_SERIES.skin);
+    expect(mountedCss("pelle")).toBe(SCRITTOIO_SERIES.skin);
   });
 
   it("è la serie di partenza; un'altra porta il suo profilo, e ritirarla lo ritira", () => {
@@ -121,7 +122,7 @@ describe("il canale delle preferenze", () => {
   it("monta ciò che le preferenze dichiarano", () => {
     const tokens = preferenceTokens({ ...SCRITTOIO_SERIES.defaults, compactness: 4 }, "light", "normal");
     mountPreferences(tokens);
-    const text = document.head.querySelector('style[data-fub="preferenze"]')?.textContent ?? "";
+    const text = mountedCss("preferenze") ?? "";
     expect(text).toContain("--rail-w: 28px");
     expect(text).toContain("--titlebar-h: 28px");
     expect(text).not.toContain("--tab-h");

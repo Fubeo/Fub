@@ -4,6 +4,7 @@
 import type { RenderedDocument } from "../../host/contract";
 import { setSanitizedHtml } from "../../ui/sanitize";
 import { openLifetime } from "../../ui/lifetime";
+import { adoptSheet } from "../../ui/stylesheets";
 import { writeClipboardText } from "../../platform/clipboard";
 import { t } from "../../i18n/strings";
 
@@ -183,9 +184,10 @@ export async function printRendered(options: PrintOptions): Promise<() => void> 
   const host = document.createElement("div");
   host.className = "print-host";
   host.setAttribute("aria-hidden", "true");
-  const stylesheet = document.createElement("style");
-  stylesheet.textContent = PRINT_CSS;
-  host.append(stylesheet);
+  // Un foglio costruito e non un `<style>`: la CSP non ammette stili in linea
+  // (`ui/stylesheets.ts`). Se ne va col contenitore.
+  const stylesheet = adoptSheet(PRINT_CSS);
+  life.add(() => stylesheet.dispose());
   const { page, body } = printPage(options.title);
   host.append(page);
   document.body.append(host);
