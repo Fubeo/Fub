@@ -8,7 +8,7 @@ export const DIAGRAMS: PartAnatomy = {
     // Il disegno: un'immagine inerte, sulla pagina o sulla tavola della sua carta.
     { name: "diagram", states: [S("rest"), S("hover")], hooks: ["mermaid-diagram", "mermaid-diagram-view", "is-stale"] },
     // La didascalia: il titolo del frontmatter, che si scrive lì.
-    { name: "diagram-caption", states: [S("rest"), S("focused")], hooks: ["mermaid-diagram-caption"] },
+    { name: "diagram-caption", states: [S("rest"), S("focused")], hooks: ["mermaid-diagram-caption", "mermaid-diagram-caption-text"] },
     // Il sorgente aperto: le righe a metà, il disegno accanto, la riga
     // dell'errore, «Fatto» nella testata.
     {

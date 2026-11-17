@@ -333,6 +333,7 @@ describe("gli stili dei diagrammi", () => {
     expect(diagram.element.querySelector("button")).toBeNull();
     // Senza `title` la didascalia è vuota: il foglio la nasconde.
     expect(diagram.element.querySelector("figcaption")!.textContent).toBe("");
+    expect(diagram.caption.hasAttribute("data-empty")).toBe(true);
     // Il sorgente compare soltanto quando il disegno non c'è.
     expect(diagram.element.querySelector("details")!.hidden).toBe(true);
   });
@@ -461,9 +462,10 @@ describe("il menu del tasto destro (E26)", () => {
     const source = "---\ntitle: Il flusso\n---\nflowchart LR; A-->B";
     const diagram = mountedView(source, { editSource: (edit) => edits.push(edit) });
     await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
-    const caption = diagram.element.querySelector<HTMLElement>("figcaption.mermaid-diagram-caption")!;
-    expect(caption).toBe(diagram.caption);
+    expect(diagram.element.querySelector("figcaption.mermaid-diagram-caption")).toBe(diagram.caption);
+    const caption = diagram.caption.querySelector<HTMLElement>(".mermaid-diagram-caption-text")!;
     expect(caption.textContent).toBe("Il flusso");
+    expect(diagram.caption.hasAttribute("data-empty")).toBe(false);
     // Mermaid non lo disegna dentro: sta qui, nei caratteri della nota.
     expect(renderer.render.mock.calls[renderer.render.mock.calls.length - 1]![1]).not.toContain("title");
     expect(caption.getAttribute("role")).toBe("textbox");
@@ -473,6 +475,9 @@ describe("il menu del tasto destro (E26)", () => {
     expect(caption.textContent).toBe("Il flusso");
     expect(edits).toEqual([]);
     caption.focus();
+    caption.textContent = "";
+    caption.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(diagram.caption.hasAttribute("data-empty")).toBe(true);
     caption.textContent = "Il percorso: #2";
     caption.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     expect(edits).toEqual([{ from: 4, to: 20, insert: "title: \"Il percorso: #2\"" }]);

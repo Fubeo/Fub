@@ -1725,6 +1725,7 @@
     "mermaid-diagram-view",
     "is-stale",
     "mermaid-diagram-caption",
+    "mermaid-diagram-caption-text",
     "cm-fub-diagram-live",
     "cm-fub-diagram-src",
     "cm-fub-diagram-notice",
@@ -3685,6 +3686,7 @@
     "mermaid-diagram-view": "contenuto",
     "is-stale": "contenuto",
     "mermaid-diagram-caption": "contenuto",
+    "mermaid-diagram-caption-text": "contenuto",
     "cm-fub-diagram-live": "contenuto",
     "cm-fub-diagram-src": "contenuto",
     "cm-fub-diagram-notice": "contenuto",
@@ -8196,7 +8198,8 @@
       "name": "diagram-caption",
       "part": "diagrams",
       "hooks": [
-        "mermaid-diagram-caption"
+        "mermaid-diagram-caption",
+        "mermaid-diagram-caption-text"
       ],
       "states": [
         "rest",
@@ -10461,7 +10464,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1958,
+    "hooks": 1959,
     "state_names": 7,
     "assigned_states": 910,
     "components": 268,

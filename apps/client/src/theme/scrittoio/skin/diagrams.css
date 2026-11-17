@@ -119,24 +119,28 @@
   line-height: 1.5;
   text-align: center;
   overflow-wrap: anywhere;
+}
+.mermaid-diagram-caption[data-empty] {
+  display: none;
+}
+.cm-fub-diagram-live .mermaid-diagram-caption[data-empty],
+.mermaid-diagram-caption:focus-within {
+  display: block;
+}
+.mermaid-diagram-caption-text {
+  display: inline-block;
+  min-width: 4em;
   border-radius: var(--radius-control);
   outline: none;
 }
-.mermaid-diagram-caption:empty {
-  display: none;
-}
-.cm-fub-diagram-live .mermaid-diagram-caption:empty,
-.mermaid-diagram-caption:focus {
-  display: block;
-}
-.mermaid-diagram-caption:empty::before {
+.mermaid-diagram-caption-text:empty::before {
   content: attr(data-placeholder);
   color: var(--muted);
 }
-.mermaid-diagram-caption[contenteditable]:not([contenteditable="false"]) {
+.mermaid-diagram-caption-text[contenteditable]:not([contenteditable="false"]) {
   cursor: text;
 }
-.mermaid-diagram-caption:focus-visible {
+.mermaid-diagram-caption-text:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 2px;
 }
@@ -210,6 +214,10 @@
     height: var(--diagram-rest, 0px);
     margin-top: -10px;
   }
+  /* La didascalia sta sotto il disegno, nella sua metà. */
+  .cm-editor .cm-content .cm-fub-diagram-live > .mermaid-diagram-caption {
+    margin-inline-start: calc(50% + 7px);
+  }
   /* Accanto al sorgente il disegno sta nella sua metà, senza minimo. */
   .cm-fub-diagram-live > .mermaid-diagram img {
     min-width: 0;
@@ -225,7 +233,7 @@
     margin-inline-start: -64px;
   }
   .cm-editor .cm-content .cm-fub-diagram-live > .mermaid-diagram-caption {
-    margin-inline: -64px;
+    margin-inline-end: -64px;
   }
 }
 

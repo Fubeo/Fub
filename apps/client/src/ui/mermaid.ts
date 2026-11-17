@@ -876,10 +876,17 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   // La didascalia: il titolo del frontmatter, sotto il disegno, coi caratteri
   // della nota. Dove il sorgente si riscrive la si scrive lì; vuota non occupa
   // spazio (il CSS la toglie finché non la si apre).
+  // La figura tiene la didascalia, il testo che si scrive sta dentro: un
+  // `figcaption` non può essere una casella di testo.
   const title = diagramTitle(source) ?? "";
   const caption = document.createElement("figcaption");
   caption.className = "mermaid-diagram-caption";
-  caption.textContent = title;
+  const captionText = document.createElement("span");
+  captionText.className = "mermaid-diagram-caption-text";
+  captionText.textContent = title;
+  caption.append(captionText);
+  const markEmpty = () => caption.toggleAttribute("data-empty", (captionText.textContent ?? "") === "");
+  markEmpty();
   element.append(status, stage, caption, linkList, details);
 
   let generation = 0;
@@ -897,8 +904,8 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     image.alt = accessibleDescription || t("mermaid.diagram");
     summary.textContent = t("mermaid.source");
     pre.setAttribute("aria-label", t("mermaid.source"));
-    caption.setAttribute("aria-label", t("mermaid.caption"));
-    caption.dataset.placeholder = t("mermaid.caption.placeholder");
+    captionText.setAttribute("aria-label", t("mermaid.caption"));
+    captionText.dataset.placeholder = t("mermaid.caption.placeholder");
     status.textContent = phase === "error" && problem ? problemSentence(problem) : t("mermaid.loading");
     status.hidden = phase === "ready";
     details.hidden = phase !== "error";
@@ -945,6 +952,8 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     // La lightbox chiude con Esc; Spazio, che l'ha aperta, la richiude.
     overlay.addEventListener("keydown", (event) => {
       if (event.key !== " " || event.ctrlKey || event.metaKey || event.altKey) return;
+      // Su un pulsante della lightbox Spazio lo preme, come sempre.
+      if (event.target instanceof Element && event.target.closest("button, input, select, textarea")) return;
       event.preventDefault();
       event.stopPropagation();
       box.close();
@@ -1293,24 +1302,31 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   // la rimette com'era.
   if (options.editSource) {
     try {
-      caption.contentEditable = "plaintext-only";
+      captionText.contentEditable = "plaintext-only";
     } catch {
-      caption.contentEditable = "true";
+      captionText.contentEditable = "true";
     }
-    caption.spellcheck = true;
-    caption.setAttribute("role", "textbox");
-    life.listen(caption, "keydown", (event: KeyboardEvent) => {
+    captionText.spellcheck = true;
+    captionText.setAttribute("role", "textbox");
+    // Fuori dal percorso Tab: nell'editor il Tab è della nota, e dalla
+    // tastiera il titolo si scrive nel sorgente, nella riga `title:`.
+    captionText.tabIndex = -1;
+    life.listen(captionText, "input", markEmpty);
+    life.listen(captionText, "keydown", (event: KeyboardEvent) => {
       // I tasti della didascalia sono suoi, non della nota attorno.
       event.stopPropagation();
       if (event.isComposing) return;
       if (event.key === "Enter" || event.key === "Escape") {
         event.preventDefault();
-        if (event.key === "Escape") caption.textContent = title;
-        caption.blur();
+        if (event.key === "Escape") {
+          captionText.textContent = title;
+          markEmpty();
+        }
+        captionText.blur();
       }
     });
-    life.listen(caption, "blur", () => {
-      const edit = titleEdit(source, caption.textContent ?? "");
+    life.listen(captionText, "blur", () => {
+      const edit = titleEdit(source, captionText.textContent ?? "");
       if (edit) options.editSource?.(edit);
     });
   }

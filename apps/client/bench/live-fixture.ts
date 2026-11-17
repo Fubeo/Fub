@@ -324,6 +324,8 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   diagramma: { text: DIAGRAM_NOTE, cursor: null },
   "diagramma-stili": { text: DIAGRAM_STYLES, cursor: null },
   "diagramma-casi": { text: DIAGRAM_CASES, cursor: null },
+  // Il sorgente aperto (T58): il cursore nel recinto, dopo «Posti liberi?».
+  "diagramma-sorgente": { text: DIAGRAM_NOTE, cursor: DIAGRAM_NOTE.indexOf("Posti liberi?") + "Posti liberi?".length },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "lunga-4000": longNote(4000),
