@@ -13,7 +13,8 @@ const PREFIX = "settings.components.";
 /// confronta senza maiuscole: in mezzo alla frase «abilita» è la stessa parola
 /// di «Abilita».
 function forbiddenWordIn(text: string): string | null {
-  const lower = text.toLocaleLowerCase("it");
+  // I segnaposto (`{live}`) non sono parole che si leggono: li riempie un numero.
+  const lower = text.replace(/\{[^}]*\}/g, " ").toLocaleLowerCase("it");
   for (const word of FORBIDDEN) {
     const needle = word.toLocaleLowerCase("it");
     for (let at = lower.indexOf(needle); at >= 0; at = lower.indexOf(needle, at + 1)) {

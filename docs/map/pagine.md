@@ -66,6 +66,7 @@
 - Come si prova a mano il moto dello Scrittoio nella finestra? → [development/motion-smoke-test.md](../development/motion-smoke-test.md)
 - Come si creano i plugin (provider nativi o componenti WASM)? → [development/plugin-authoring.md](../development/plugin-authoring.md)
 - Come si misurano i tempi di Fub nella WebView vera? → [development/webview-measurements.md](../development/webview-measurements.md)
+- Come si misura la memoria dell'app vera (R1, raccolta forzata `bench-gc`)? → [development/webview-memory.md](../development/webview-memory.md)
 - Quale stile deve avere ogni file Markdown canonico della repository? → [development/documentation-style.md](../development/documentation-style.md)
 - Quali versioni esistono, chi proteggono e come si prepara un rilascio? → [development/versioning-and-releases.md](../development/versioning-and-releases.md)
 
