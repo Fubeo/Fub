@@ -53,7 +53,11 @@
 //    arriva allo scatto dell'andata e ritorno completa, e ciò che si stava
 //    muovendo prosegue da dov'era — lo stesso elemento o l'immagine che ne
 //    prende il posto, entro `CONTINUITY`. Una corsa che riparte dalla posa di
-//    partenza si vede come un salto all'istante del gesto.
+//    partenza si vede come un salto all'istante del gesto. «Dopo» è il primo
+//    fotogramma che il gesto contrario dipinge, non la fine del clic: chi
+//    rimanda il «da dove» a `requestAnimationFrame` (`tab-strip.ts`) lo fa in
+//    tempo per quel disegno, e uno stato che nessun fotogramma mostra non è un
+//    salto. Chi lo rimanda al fotogramma dopo, invece, sì.
 //
 // Il termine di paragone della regola 4 è l'andata e ritorno **completa**, non
 // lo scatto di prima del gesto: un gesto e il suo contrario lasciano il fuoco
@@ -431,6 +435,25 @@ async function TOOLS() {
       }
       return boxes;
     },
+    /// `moving` come lo dipinge il prossimo fotogramma: dopo tutte le sue
+    /// richiamate di `requestAnimationFrame`, comprese quelle chieste dal
+    /// gesto, e prima del disegno. Lì scatta un osservatore di misura, dopo il
+    /// layout. Letti subito dopo il clic, i riquadri dicevano uno stato che
+    /// nessun fotogramma mostra, e la regola 4 dipendeva da quanto il clic
+    /// era stato lento a tornare.
+    shown(track) {
+      return new Promise((resolve) => {
+        const probe = document.createElement("div");
+        probe.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none";
+        const observer = new ResizeObserver(() => {
+          observer.disconnect();
+          probe.remove();
+          resolve(window.__banco.moving(track, false));
+        });
+        document.body.append(probe);
+        observer.observe(probe);
+      });
+    },
   };
   return moto.motionLevel();
 }
@@ -640,7 +663,7 @@ async function reversal(stage, choreography, scene) {
     if (choreography.undo) {
       await choreography.undo(page);
       if (choreography.reversing) await until(page, choreography.reversing);
-      after = await inPage(page, "moving", track, false);
+      after = await inPage(page, "shown", track);
       const rest = await back();
       interrupted = { ...(await shot(page)), rest };
     } else {
