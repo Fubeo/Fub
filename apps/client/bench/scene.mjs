@@ -600,6 +600,23 @@ export const SCENE = touchLast(onPage("shell", [
     query: "base=1",
     prepare: openBase,
   },
+  // La Bacheca per Stato (T9, passo 13 del prototipo): col registro dei tipi
+  // le corsie sono le opzioni di `stato` nei tre gruppi, anche vuote.
+  ...[
+    ["base-stato-bacheca", "Base: la Bacheca per Stato, le corsie nei tre gruppi e nell'ordine delle opzioni"],
+    ["base-stato-bacheca-stretta", "Base: la Bacheca per Stato nella finestra minima, 800 px", { width: 800, height: 800 }],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "base=1&tipi=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openBase(page);
+      await page.locator(".pane.focus .base-tab[data-view]", { hasText: "Bacheca" }).first().click();
+      await page.waitForSelector(".pane.focus .base-kanban-column[data-option]");
+      await page.mouse.move(0, 0);
+    },
+  })),
   {
     id: "base-filtro",
     title: "Base: il filtro composto a vista, con la stessa riga come ricerca",
@@ -1515,6 +1532,22 @@ export const SCENE = touchLast(onPage("shell", [
     query: "live=proprieta",
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openPropertyEditor(page, gesture),
+  })),
+  // Selezione, Stato e Url nella testata (T9, passo 4 del prototipo): le
+  // pastiglie, l'indirizzo con la matita e uno Stato fuori dalle opzioni;
+  // poi l'elenco delle opzioni dello Stato, da tastiera, e «Crea» su una
+  // Selezione; poi a 800 px.
+  ...[
+    ["opzioni-01-righe", "Selezione, Stato, Url e (con «Altre» aperto) un valore fuori dalle opzioni nella testata", "more"],
+    ["opzioni-02-stato", "L'elenco delle opzioni dello Stato nei tre gruppi, aperto da tastiera", "status"],
+    ["opzioni-03-crea", "Una Selezione con «Crea» per un nome che non c'è", "create"],
+    ["opzioni-04-stato-stretta", "L'elenco delle opzioni dello Stato nella finestra minima, 800 px", "status", { width: 800, height: 800 }],
+  ].map(([id, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: "live=opzioni&tipi=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: (page) => openOptionsEditor(page, gesture),
   })),
   // Scrittura coi Blocchi: la stessa nota, con la maniglia del blocco sotto il
   // puntatore e quella del blocco del cursore; poi la selezione di blocchi e il
@@ -2959,6 +2992,28 @@ async function openPropertyEditor(page, gesture) {
       await page.waitForSelector(".cm-fub-prop-menu [role=menuitemradio]");
     }
   }
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await frames();
+}
+
+/// Le scene di Selezione e Stato (T9): `more` apre «Altre», `status` apre l'elenco dello Stato da
+/// tastiera (il fuoco sul valore e Invio); `create` apre la Selezione col
+/// puntatore e scrive un nome che non c'è.
+async function openOptionsEditor(page, gesture) {
+  await openHeader(page, "live_preview", gesture === "more" ? "more" : undefined);
+  const row = (key) => `.pane.focus .cm-fub-page-prop[data-key="${key}"]`;
+  const frames = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  if (gesture === "status") {
+    await page.focus(`${row("stato")} .cm-fub-page-prop-value`);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(".cm-fub-prop-choices .cm-fub-prop-group");
+  } else if (gesture === "create") {
+    await page.click(`${row("sala")} .cm-fub-page-prop-value`);
+    await page.waitForSelector(".cm-fub-prop-choices [role=option]");
+    await page.keyboard.type("Media");
+    await page.waitForSelector(".cm-fub-prop-choices .cm-fub-prop-create");
+  }
+  await page.mouse.move(0, 0);
   await page.waitForFunction(() => document.getAnimations().length === 0);
   await frames();
 }

@@ -1337,6 +1337,9 @@ export function mountBaseSurface(
       lane.className = "base-kanban-column";
       lane.dataset.group = name;
       const heading = document.createElement("h3");
+      // Sotto il titolo della scheda (h1) la Base non ha un h2: la corsia è
+      // il secondo livello per chi legge i titoli.
+      heading.setAttribute("aria-level", "2");
       if (option && choice) {
         // L'opzione come pastiglia del suo colore, col pallino dello Stato
         // (`.lane-h .opt` del prototipo), e quante schede ha.

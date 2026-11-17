@@ -1533,7 +1533,7 @@ button.cm-fub-page-icon:focus-visible {
   margin: 0;
   padding: 7px var(--space-5);
   border-top: 1px solid var(--doc-rule-soft);
-  color: var(--doc-ghost);
+  color: var(--muted);
   font-size: 11.5px;
   line-height: 1.6;
 }

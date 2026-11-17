@@ -1371,6 +1371,36 @@ const PROPERTIES_DISPLAY: readonly SettingEntry[] = [{
   source: PROPERTIES_CHOSEN ? "machine" : "default",
 }];
 
+/// `?tipi=1`: il registro dei tipi del vault (`properties.types` di
+/// `crates/fub-kernel/src/properties.rs`), per le scene di Selezione e Stato
+/// (T9): la testata di `live=opzioni` e la Bacheca della Base per `stato`.
+const PROPERTY_TYPES_SETTING: readonly SettingEntry[] = params.get("tipi") !== "1" ? [] : [{
+  spec: {
+    key: "properties.types",
+    label: "Tipi delle proprietà",
+    description: "Il tipo di ogni proprietà del vault, con le opzioni di Selezione e Stato.",
+    group: "Proprietà",
+    scope: "vault",
+    kind: { kind: "text", default: "" },
+    program_writable: true,
+  },
+  value: JSON.stringify({
+    version: 1,
+    types: { stato: "status", sala: "select", sito: "url", fase: "status" },
+    options: {
+      stato: [
+        { name: "Prenotata", color: "purple", group: "todo" },
+        { name: "In viaggio", color: "orange", group: "doing" },
+        { name: "In restauro", color: "blue", group: "doing" },
+        { name: "Arrivata", color: "green", group: "done" },
+      ],
+      sala: [{ name: "Grande", color: "purple" }, { name: "Piccola", color: "pink" }],
+      fase: [{ name: "Bozza", color: "yellow", group: "todo" }, { name: "Chiusa", color: "green", group: "done" }],
+    },
+  }),
+  source: "vault",
+}];
+
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
 /// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
@@ -1917,7 +1947,7 @@ const options: Options = {
     // Con le Basi accese c'è `base.view.add`, e il «/» offre «Base».
     ...(BASE_IN_NOTE ? [command("base.view.add", "Aggiungi una vista", "Aggiunge una vista alla Base", null, true)] : []),
   ],
-  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...TOOLBAR_SETTING_ROW],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {
