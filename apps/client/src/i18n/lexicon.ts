@@ -41,6 +41,9 @@ export const LEXICON: readonly LexiconEntry[] = [
   { say: "solo come file", instead: ["Solo file", "Non supportato", "Formato sconosciuto"], why: "Il file c'è e si apre altrove: dice che cosa si può fare lo stesso" },
   // L'editor (EC, A-12): la modalità in cui si scrive è una sola.
   { say: "Scrittura", instead: ["Live", "Modalità Blocchi"], why: "Una modalità sola per scrivere, Live e Blocchi insieme: è la parola dei documenti di Word (Pagina, Scrittura, Lettura)" },
+  // La riga dei suggerimenti (T14, E6): un nome solo nelle Preferenze, nei
+  // menu e nel giro dell'editor.
+  { say: "Riga dei suggerimenti", instead: ["Barra dei suggerimenti", "Suggerimenti dei tasti", "Barra dei tasti"], why: "È una riga della banda, non una barra che si apre: dice dove sta" },
   // I commenti CriticMarkup (T21): il passo evidenziato con la sua discussione.
   { say: "Commento", instead: ["Nota a margine", "Annotazione nel testo"], why: "La parola di Word e di Google Documenti; «nota» è già il file, «annotazione» è dei PDF" },
   { say: "Sbirciata, Sbircia", instead: ["Anteprima modificabile", "Apri in sovrimpressione"], why: "La nota aperta sopra la destra del foglio, dove si scrive: «Anteprima» resta la scheda al passaggio, che si guarda e basta" },

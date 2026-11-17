@@ -768,6 +768,47 @@
   color: var(--muted);
 }
 
+/* ── La banda: la riga dei suggerimenti ──────────────────────────────────── */
+/* Al centro, a voce bassa, i tasti utili per ciò che si sta facendo: una riga
+   di testo come nel prototipo (`.hint`, righe 622-623), coi tasti in linea e
+   gli spazi veri fra un tasto, la sua frase e il punto. Prende lo spazio che
+   resta fra le voci di sinistra e quelle di destra: vuota non fa saltare
+   niente, stretta toglie le voci che non ci stanno (lo fa `hints-row.ts`,
+   mai a metà di una voce). Il grigio è `--muted`, quello della banda: Fub non
+   ha il terzo grigio del prototipo. */
+.status-hints {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Il tasto: la pastiglia dei tasti del prototipo (`.win kbd`), più piccola
+   nella riga. */
+.status-hints-key {
+  padding: 2px 4px 1px;
+  border: none;
+  border-radius: 5px;
+  background: var(--sheet);
+  box-shadow:
+    inset 0 0 0 1px var(--border-strong),
+    0 1px 0 var(--border-strong);
+  color: var(--muted);
+  font: var(--weight-medium) 10px/1 var(--font-mono);
+  white-space: nowrap;
+}
+/* Non c'è al telefono né sotto i 620 px: lì la banda tiene il necessario. */
+:root[data-client-shell="mobile"] .status-hints {
+  display: none;
+}
+@media (max-width: 620px) {
+  .status-hints {
+    display: none;
+  }
+}
+
 /* ── La concentrazione ───────────────────────────────────────────────────── */
 
 /* La scrivania si spegne di un gradino: il foglio resta l'unica cosa chiara.
