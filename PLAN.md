@@ -2090,7 +2090,7 @@ Fatto quando: test con `MemoryHost` coi fusi; il permesso spento non
 notifica; `cargo deny check` verde; la build senza la feature `tasks` verde.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features tasks;
 cargo nextest run -p fub-format-markdown; cargo deny check
-Stato: [~] fatto dal coder (41f23f172, 2026-11-17), in coda per `integra/editor-1`; notify-rust fermo a =4.18.0 per il tetto delle librerie doppie su Windows
+Stato: [~] integrato in `integra/editor-1` (dabbd97ab, 2026-11-17), PR bozza #472
 
 ## T36 · I promemoria nell'editor
 
@@ -2198,7 +2198,7 @@ Fatto quando: un test con `MemoryHost`; un test DOM che il fondo non entra
 nel testo; le foto del banco.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 template; cd apps/client && npx vitest run src/editors/text/profiles/markdown
-Stato: [~] in corso (coder, 2026-11-17)
+Stato: [~] fatto dal coder (86abb15ab, 2026-11-17), in coda per `integra/editor-1`
 
 ## T40 · La Scrivania
 
@@ -2225,7 +2225,7 @@ Casi limite: nessuna nota appuntata; la Base scelta cancellata; finestra a
 Fatto quando: un test della vista e dell'ordine; le foto del banco.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 dashboard
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da `integra/editor-1`, 2026-11-17)
 
 ## T41a · L'ospite delle schede passa in `editors/core`
 
