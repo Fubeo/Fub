@@ -917,9 +917,18 @@ fn unlinked_mentions(
     linked: &BTreeSet<DocId>,
     filter: &QueryExpr,
 ) -> Result<Vec<UnlinkedMention>, PluginError> {
-    let model = host.read_model(active)?;
+    // Del documento attivo servono soltanto gli alias. Un documento che non è
+    // prosa e non si apre (un .docx vuoto o rotto) non ne ha da dire, ma il
+    // suo nome resta menzionabile dalle note: la sezione si calcola sul nome
+    // invece di diventare un guasto. Una nota che non si legge resta un
+    // errore, perché lì gli alias ci sono e mancherebbero.
+    let aliases = match host.read_model(active) {
+        Ok(model) => model.frontmatter.aliases(),
+        Err(_) if !crate::formats::understands(host, active, PROSE) => Vec::new(),
+        Err(error) => return Err(error),
+    };
     let mut names = vec![active.page_name().to_string()];
-    names.extend(model.frontmatter.aliases());
+    names.extend(aliases);
     names.retain(|name| !name.is_empty());
     names.sort();
     names.dedup();
