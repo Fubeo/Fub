@@ -79,5 +79,7 @@ giro storto.
 - la mediana di cinque giri sul runner: le soglie vengono da un giro per job,
   e la mediana non supera il peggiore dei giri; dopo una trentina di job col
   metodo nuovo si possono ritarare sui suoi numeri (l'istanza lo è stata su
-  105 job: [misura](2026-11-17-lavagna-wasm-istanza-runner.md), #434);
+  105 job: [misura](2026-11-17-lavagna-wasm-istanza-runner.md), #434;
+  l'apertura della lavagna piccola su 128:
+  [misura](2026-11-17-banco-webview-s1-l1-runner.md), #388);
 - una macchina con la scheda grafica: L1 non ha ancora obiettivi.

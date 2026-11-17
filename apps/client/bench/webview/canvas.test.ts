@@ -36,6 +36,22 @@ describe("i valori di L1 dai giri", () => {
     expect(values["L1.open.50.p95"]).toBeLessThanOrEqual(ci["L1.open.50.p95"]);
   });
 
+  it("il job peggiore coi cinque giri resta sotto la soglia ritarata (#388)", () => {
+    // I giri del job 44001227524 (EPYC 7763), il peggiore di 128 coi cinque
+    // giri: due giri con intoppi, la mediana a 7 ms.
+    const values = l1Values([8, 7, 2, 3, 8].map((ms) => round(ms)));
+    expect(values["L1.open.50.p95"]).toBe(7);
+    expect(values["L1.open.50.p95"]).toBeLessThanOrEqual(ci["L1.open.50.p95"]);
+  });
+
+  it("un'apertura della lavagna piccola sui 12 ms in ogni giro passa la soglia", () => {
+    // Sei volte la mediana del runner (2 ms): con la soglia di prima, 22 ms,
+    // sarebbe passata.
+    const values = l1Values([12, 13, 12, 14, 12].map((ms) => round(ms)));
+    expect(values["L1.open.50.p95"]).toBe(12);
+    expect(values["L1.open.50.p95"]).toBeGreaterThan(ci["L1.open.50.p95"]);
+  });
+
   it("un nucleo più lento in ogni giro passa la soglia", () => {
     const slow = [24, 23, 26, 25, 30].map((ms) => round(ms));
     const values = l1Values(slow);

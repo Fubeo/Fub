@@ -34,6 +34,7 @@ resta **non provato**.
 | 2026-11-16 | Debian 13, niri su Wayland, schermo a 180 Hz | WebKitGTK 2.54, Safari 605.1.15 | [Le soglie in periodi sullo schermo a 180 Hz](2026-11-16-linux-webkitgtk-frequenza-schermo.md) |
 | 2026-11-17 | Debian 13, niri su Wayland, schermo a 180 Hz, RTX 4070 | WebKitGTK 2.54 | [Il tetto dei 60 Hz su NVIDIA](2026-11-17-linux-webkitgtk-tetto-60hz.md) |
 | 2026-11-17 | Debian 13, niri su Wayland, schermo a 180 Hz, RTX 4070 | WebKitGTK 2.54 | [Il vblank emulato su NVIDIA](2026-11-17-linux-vblank-emulato.md) |
+| 2026-11-17 | Linux 7.0 (Azure), X11 sotto Xvfb | WebKitGTK, Safari 605.1.15 | [Runner della CI: il tasto di S1 e la lavagna piccola](2026-11-17-banco-webview-s1-l1-runner.md) |
 
 ## I motori
 

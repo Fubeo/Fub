@@ -150,4 +150,38 @@ describe("i riscaldamenti", () => {
     expect(done).toEqual([]);
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it("dice se ha ancora lavoro: in attesa del ritardo, in corso, finito", async () => {
+    let release: () => void = () => undefined;
+    warmups.register(async (next) => {
+      await next();
+      await new Promise<void>((resolve) => (release = resolve));
+    });
+    expect(warmups.pending(), "senza `start` non gira niente").toBe(false);
+
+    warmups.start(lifetime, options);
+    expect(warmups.pending(), "un compito aspetta che scada il ritardo").toBe(true);
+    await pass(2000);
+    expect(warmups.pending(), "il compito è a metà").toBe(true);
+    release();
+    await pass(0);
+    expect(warmups.pending()).toBe(false);
+
+    warmups.register(async (next) => {
+      await next();
+    });
+    expect(warmups.pending(), "un compito registrato dopo è lavoro nuovo").toBe(true);
+    await pass(1000);
+    expect(warmups.pending()).toBe(false);
+  });
+
+  it("a vita chiusa non c'è niente in sospeso", async () => {
+    warmups.register(async (next) => {
+      await next();
+    });
+    warmups.start(lifetime, options);
+    expect(warmups.pending()).toBe(true);
+    lifetime.close();
+    expect(warmups.pending()).toBe(false);
+  });
 });

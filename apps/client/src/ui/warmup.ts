@@ -20,6 +20,9 @@
 // - **Ha un padrone.** Lo smontaggio di `register` toglie il compito che non è
 //   partito e ferma quello partito al suo prossimo `next()`; chiudere la vita
 //   data a `start` ferma la coda allo stesso modo.
+// - **Si può chiedere se ha finito** (`pending`): chi deve guardare la pagina
+//   senza lavoro a riposo in sospeso (il banco del moto, che confronta due
+//   scatti al pixel) aspetta che non ci sia più niente in coda né in corso.
 import type { Lifetime, Teardown } from "./lifetime";
 
 /// Un compito di riscaldamento. `next()` si risolve quando si può fare il
@@ -52,6 +55,10 @@ class Stopped extends Error {}
 export interface Warmups {
   register(task: WarmTask): Teardown;
   start(lifetime: Lifetime, options?: WarmupOptions): void;
+  /// Se la coda partita ha ancora lavoro davanti: un compito in corso o uno
+  /// che aspetta il suo turno (anche prima che scada `startMs`). Senza una
+  /// vita aperta data a `start` non gira niente, e non c'è niente in sospeso.
+  pending(): boolean;
 }
 
 export function createWarmups(): Warmups {
@@ -61,6 +68,8 @@ export function createWarmups(): Warmups {
   }
   const queue: Entry[] = [];
   let kick: (() => void) | null = null;
+  /// Il lavoro della partenza in carica: `null` senza una vita aperta.
+  let busy: (() => boolean) | null = null;
 
   return {
     register(task) {
@@ -143,16 +152,22 @@ export function createWarmups(): Warmups {
         }
       };
       const ownKick = (): void => void run();
+      const ownBusy = (): boolean => running || queue.length > 0;
       kick = ownKick;
+      busy = ownBusy;
       // A vita chiusa la coda si può far ripartire con un'altra vita (una
       // shell rimontata): i compiti non ancora partiti aspettano lì.
       lifetime.add(() => {
         if (kick === ownKick) kick = null;
+        if (busy === ownBusy) busy = null;
       });
       later(() => {
         started = true;
         void run();
       }, startMs);
+    },
+    pending() {
+      return busy?.() ?? false;
     },
   };
 }

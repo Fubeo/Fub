@@ -63,7 +63,14 @@ vi.mock("../../../state/document-controller", () => ({
 }));
 vi.mock("../../../ui/commands", () => ({
   allCommands: () => [],
-  displayBinding: () => "",
+  displayBinding: (binding: string | null) => (binding ?? "").replace("Mod-", "Ctrl+"),
+  // La riga dei suggerimenti (`hints-row.ts`), che la banda monta.
+  foldedChord: (binding: string) => (binding.includes("-") ? binding.toLowerCase() : null),
+  keyboardPlatform: () => "other",
+  keyName: (key: string) => key,
+  modifierName: () => null,
+  onKeyOverridesLoaded: () => () => {},
+  parseChords: (binding: string) => (binding.includes("-") ? [] : null),
 }));
 vi.mock("../../../ui/menu", () => ({
   showContextMenu: (anchor: HTMLElement, items: NonNullable<typeof world.menu>["items"], options: { onClose?: () => void } = {}) => {
@@ -111,6 +118,8 @@ vi.mock("../../../ui/tooltip", () => ({
   setTooltip: (el: Element, text: string) => world.tooltips.set(el, text),
 }));
 
+import { openHintSource, resetHintSources } from "../../../editors/core/hints";
+import { HINTS_PAUSE_MS } from "./hints-row";
 import { mountStatusBand } from "./status-band";
 
 let life: Lifetime;
@@ -719,6 +728,101 @@ describe("la somma delle celle scelte (T55)", () => {
     expect(sumEl()).toBeNull();
     expect(listeners.size).toBe(0);
     expect(el("status-band").hasAttribute("data-selection-sum")).toBe(false);
+  });
+});
+
+describe("la riga dei suggerimenti (T14)", () => {
+  /// Le view di stato al loro posto, come in `index.html`: la somma va subito
+  /// dopo di loro, la riga dopo la somma, il lato destro in fondo.
+  const withViews = (): void => {
+    const views = document.createElement("div");
+    views.id = "views-status";
+    el("status-end").before(views);
+  };
+  const pause = () => new Promise((done) => setTimeout(done, HINTS_PAUSE_MS + 20));
+
+  afterEach(() => resetHintSources());
+
+  it("sta al centro, dopo la somma e prima del lato destro, nascosta ai lettori di schermo", () => {
+    withViews();
+    mountStatusBand(life);
+    const row = el("status-hints");
+    expect(row.getAttribute("aria-hidden")).toBe("true");
+    expect(row.nextElementSibling).toBe(el("status-end"));
+    expect(el("views-status").nextElementSibling).toBe(document.getElementById("status-sum"));
+    expect([...el("status-band").children].indexOf(row)).toBeGreaterThan([...el("status-band").children].indexOf(document.getElementById("status-sum")!));
+    life.close();
+    expect(document.getElementById("status-hints")).toBeNull();
+  });
+
+  it("senza niente da dire resta al suo posto, vuota: la banda non salta", async () => {
+    withViews();
+    mountStatusBand(life);
+    const hints = openHintSource(() => ({ id: "vuoto", items: [] }));
+    hints.changed(true);
+    await pause();
+    const row = el("status-hints");
+    expect(row.hidden).toBe(false);
+    expect(row.childElementCount).toBe(0);
+    expect(row.nextElementSibling).toBe(el("status-end"));
+  });
+
+  it("la somma delle celle prende il posto: la riga cede voci intere, mai metà", async () => {
+    withViews();
+    const listeners = new Set<() => void>();
+    let chosen: string[] | null = null;
+    world.tab = { k: "doc" };
+    world.pane = {
+      surface: {
+        modes: [{ id: "a" }],
+        cellSelection: {
+          read: () => (chosen ? { locale: "it", values: () => chosen! } : null),
+          subscribe(listener: () => void) {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+        },
+      },
+    };
+    // La riga rifà la misura quando la sua larghezza cambia: l'osservatore
+    // lo chiama il test, happy-dom non impagina.
+    const resized: (() => void)[] = [];
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: () => void) {
+        resized.push(callback);
+      }
+      observe() {}
+      disconnect() {}
+    });
+    mountStatusBand(life);
+    vi.unstubAllGlobals();
+    const row = el("status-hints");
+    // Lo spazio della riga: 200 px liberi, che la somma accorcia a 90; ogni
+    // voce ne vuole 70.
+    let room = 200;
+    Object.defineProperty(row, "clientWidth", { configurable: true, get: () => room });
+    Object.defineProperty(row, "scrollWidth", { configurable: true, get: () => row.querySelectorAll(".status-hints-item").length * 70 });
+    const hints = openHintSource(() => ({
+      id: "tabella",
+      items: [
+        { keys: ["Enter"], say: "modifica" },
+        { keys: ["Tab"], say: "avanti" },
+        { keys: ["Escape"], say: "esce" },
+      ],
+    }));
+    hints.changed(true);
+    await pause();
+    expect(row.querySelectorAll(".status-hints-item")).toHaveLength(2);
+    expect(row.lastElementChild?.classList.contains("status-hints-item")).toBe(true);
+    chosen = ["1.240", "860"];
+    room = 90;
+    for (const listener of [...listeners]) listener();
+    expect(document.getElementById("status-sum")?.hidden).toBe(false);
+    for (const callback of resized) callback();
+    // Con la somma: una voce intera, senza il punto rimasto in fondo.
+    expect(row.querySelectorAll(".status-hints-item")).toHaveLength(1);
+    expect(row.querySelector(".status-hints-dot")).toBeNull();
+    expect(row.textContent).toBe("Enter modifica");
   });
 });
 

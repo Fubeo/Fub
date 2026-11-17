@@ -471,6 +471,40 @@ describe("createChart", () => {
     }
   });
 
+  it("qualche frame lento all'apertura non lascia il grafo fermo senza etichette", () => {
+    // Pochi frame lenti mentre il grafo si distende (il motore che si carica,
+    // un riscaldamento, una macchina carica) portavano l'EMA sopra 22 ms: il
+    // livello scendeva al gradino economico, il grafo si fermava lì, e l'ultimo
+    // fotogramma, quello che resta a schermo, era senza le etichette minori
+    // finché non lo si toccava.
+    const settle = (): number => {
+      const w = emptyWindow();
+      const chart = createChart(baseOptions(w));
+      chart.mount(fakeHost());
+      const frames = run(w);
+      chart.unmount();
+      return frames;
+    };
+    // Gli ultimi frame prima che il grafo si fermi, ben dentro i 5 s in cui il
+    // gradino economico non si revoca.
+    const frames = settle();
+    expect(frames).toBeGreaterThan(25);
+    g.mount(fakeHost());
+    run(f, frames - 20);
+    runAt(f, 50, 6);
+    expect(lastPainter!.states[lastPainter!.states.length - 1].tier).toBe(2);
+    run(f);
+    expect(f.queue.length).toBe(0);
+    expect(lastPainter!.states[lastPainter!.states.length - 1].tier).toBe(1);
+    // E al risveglio la lentezza di prima non conta: il primo gesto non
+    // rispegne le etichette.
+    const drawn = lastPainter!.states.length;
+    f.t += 5000;
+    g.setOpenDocuments(new Set(["n0"]));
+    run(f);
+    expect(lastPainter!.states.slice(drawn).every((state) => state.tier === 1)).toBe(true);
+  });
+
   it("i risvegli del loop non contano come frame lenti: il livello resta quello del grafo", () => {
     // Ogni risveglio misurava la pausa come un frame da 33 ms: dopo qualche
     // hover o click la media superava 22 ms e un grafo di quattro note

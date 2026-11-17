@@ -182,7 +182,7 @@ describe("i cenni (B5, B6)", () => {
 
   it("il segnaposto sta sulla riga vuota del cursore e non è nel testo", () => {
     const view = live("prima\n|\ndopo");
-    expect(document.querySelector(".cm-fub-placeholder")?.textContent).toBe("Scrivi, oppure premi / per i comandi");
+    expect(document.querySelector(".cm-fub-placeholder")?.textContent).toBe("Scrivi, oppure / per i blocchi e @ per persone e date");
     expect(document.querySelector(".cm-fub-placeholder")?.getAttribute("aria-hidden")).toBe("true");
     expect(view.state.doc.toString()).toBe("prima\n\ndopo");
     view.dispatch({ changes: { from: 6, insert: "- [ ] " }, selection: { anchor: 12 } });

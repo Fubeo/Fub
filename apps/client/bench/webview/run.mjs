@@ -36,6 +36,7 @@ import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, 
 import { CANVAS_SCRIPT, COMMITS, L1_ROUNDS, OPENS, SIZES, builtModule, l1Values } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
+import { S1_ROUNDS, S1_ROUND_GAP_MS, S1_TYPED, s1Note, s1Values } from "./typing.mjs";
 import { commandLines, gtkWatcher, openWithGtkRetry, waylandProblem, xvfbResetProblem } from "./display.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -754,16 +755,27 @@ const SCENARIOS = {
     const rows = Object.entries(gestures).map(([name, g]) => `${name}: bloccato ${g.mainBlocked.perRep.join("/")} ms, fotogrammi ${g.frames?.median ?? "—"}/${g.frames?.p90 ?? "—"} ms, persi ${g.frames?.lost ?? "—"}, CPU web ${g.cpu?.webview ?? "—"} %, long task ${Array.isArray(g.longtasks) ? g.longtasks.length : g.longtasks}`);
     return { report: { gestures, timerGapMs: TIMER_GAP_MS }, values, samples: Object.values(GESTURE_REPS).reduce((a, b) => a + b, 0), notes: rows };
   },
-  /// Scrivere 200 caratteri in una nota di 5.000 righe.
+  /// Scrivere 200 caratteri in una nota di 5.000 righe, `S1_ROUNDS` giri: il
+  /// valore è la mediana dei p95 dei giri (`s1Values`, #293).
   async S1(session) {
     await openByName(session, "Lunga", "Una nota lunga");
     await clickVisibleLine(session);
     await chord(session, CTRL, END);
-    await start(session);
-    await session.keys("Il corso di analisi del lunedì, in aula. ".repeat(5).slice(0, 200));
-    await pause(500);
-    const report = await stop(session);
-    return { report, values: { "S1.keyToPaint.p95": report.input.key.p95 }, samples: report.input.key.count };
+    const rounds = [];
+    for (let round = 0; round < S1_ROUNDS; round++) {
+      if (round > 0) {
+        // Fuori dalla misura: il salvataggio del giro prima finisce, e il giro
+        // scrive su una riga nuova, così la riga non cresce di giro in giro.
+        await pause(S1_ROUND_GAP_MS);
+        await session.keys(ENTER);
+      }
+      await start(session);
+      await session.keys(S1_TYPED);
+      await pause(500);
+      rounds.push(await stop(session));
+    }
+    const samples = rounds.reduce((sum, r) => sum + r.input.key.count, 0);
+    return { report: rounds[0], rounds, values: s1Values(rounds), samples, notes: [s1Note(rounds)] };
   },
   /// Un vault di 10.000 note, venti passaggi da una nota all'altra.
   async S2(session) {

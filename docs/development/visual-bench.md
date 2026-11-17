@@ -27,6 +27,16 @@ richiede invece revisione del foglio, spiegazione delle scene coinvolte e
 rigenerazione nell'ambiente Ubuntu validato: sulle PR la fa la CI
 ([le baseline dal runner](testing-and-quality.md#le-baseline-dal-runner)).
 
+Oltre a ora, fuso, lingua, moto e finestra, il palco (`bench/stage.mjs`) tiene
+fermi due casi che la pagina non dichiara da sé. `Math.random` è a seme fisso:
+CodeMirror lo usa per cercare la posizione sotto un punto, e col caso vero una
+selezione di poche lettere si dipingeva a volte come una riga intera. E un
+elemento che sta per riscriversi da sé porta `data-pending` (la riga dei
+suggerimenti durante la sua pausa): `prepareScene` e `stillShot` aspettano che
+nella pagina non ce ne sia più nessuno, e dopo 5 s falliscono nominando
+l'elemento. Un componente con un timer che cambia ciò che si vede usa lo stesso
+attributo invece di chiedere al banco un'attesa a tempo.
+
 Lo strato d'avvio ha quattro scene: `avvio-attesa` (il marchio e la riga del
 vault che si apre), `avvio-lento` («Ci vuole più del solito.», a 10 s),
 `avvio-guasto` (il motivo, col fuoco su Riprova) e `avvio-telefono` (l'attesa
@@ -77,7 +87,12 @@ Mod+Maiusc+↑/↓); i loro casi ai bordi hanno un test ciascuno in
 `blocks/blocks.dom.test.ts`. I confronti restano al pixel, e per questo il banco apre
 Chromium con `--disable-partial-raster` (`BROWSER_ARGS` in
 `bench/motion-rules.mjs`): col raster parziale lo stesso stato raggiunto per
-due strade dava ogni tanto un pixel di antialiasing diverso. Anche il budget d'interazione (`npm run bench:interaction`) apre
+due strade dava ogni tanto un pixel di antialiasing diverso. Per la stessa
+ragione ogni pagina del banco del moto parte senza lavoro a riposo in
+sospeso: dopo la scena aspetta che la coda dei riscaldamenti
+(`ui/warmup.ts`, `warmups.pending()`) sia vuota, perché un carattere caricato
+mentre si scatta lascia sotto il blocco in mano livelli diversi di un'unità
+da quelli della stessa pagina a caricamento finito. Anche il budget d'interazione (`npm run bench:interaction`) apre
 la pagina col movimento acceso e l'ora vera: misura in quanti millisecondi un
 menu, la palette e una nota arrivano al primo fotogramma e alla fine del moto,
 contro i budget del [budget prestazionale](../product/performance-budget.md#il-budget-dinterazione).

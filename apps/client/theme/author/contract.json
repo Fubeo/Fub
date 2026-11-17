@@ -358,6 +358,8 @@
     "status-sum-part",
     "status-sum-value",
     "status-sum-dot",
+    "status-hints",
+    "status-hints-key",
     "views-status",
     "files-panel",
     "plain-list",
@@ -2256,6 +2258,8 @@
     "status-sum-part": "cornice",
     "status-sum-value": "cornice",
     "status-sum-dot": "cornice",
+    "status-hints": "cornice",
+    "status-hints-key": "cornice",
     "views-status": "cornice",
     "files-panel": "cornice",
     "plain-list": "cornice",
@@ -4727,6 +4731,8 @@
         "status-sum-part",
         "status-sum-value",
         "status-sum-dot",
+        "status-hints",
+        "status-hints-key",
         "views-status"
       ],
       "states": [
@@ -10169,7 +10175,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1896,
+    "hooks": 1898,
     "state_names": 7,
     "assigned_states": 883,
     "components": 260,

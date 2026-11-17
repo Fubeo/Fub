@@ -373,6 +373,9 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     else onAction({ action: OPEN, payload: { [DOC]: id } }, []);
   };
   const settleEngine = (engine: GraphEngine): void => {
+    // Il motore è arrivato per la persona: il riscaldamento del grafo, se non
+    // è ancora passato, non serve più (`graph/warmup.ts`).
+    engine.noteGraphOpened();
     if (disposed) return;
     const next = engine.createChart({ config, data, layout: rememberedLayout });
     next.setVisibleNodes(masked() ? visible : null);
