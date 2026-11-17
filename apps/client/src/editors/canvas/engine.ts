@@ -156,7 +156,7 @@ import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHe
 import { noteHeadingOf } from "./cards/note";
 import { excerptSourcePath, noteExcerptOf, noteSectionsText, sectionHeading, syncExcerptHead } from "./excerpt";
 import { READER_TAP_MS, READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
-import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type DragEmptyAction, type PenButtonAction, type WheelAction } from "./preferences";
+import { DEFAULT_PREFERENCES, currentPreferences, snapStepOf, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type DragEmptyAction, type PenButtonAction, type WheelAction } from "./preferences";
 import { TAP_MAX_MS, TAP_SLOP_PX, isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import { fit, stepCamera, zoomAtPoint, type Camera, type MotionState, type ScaleLimits } from "../../spatial/camera";
 import { onReducedMotionChange, reducedMotion } from "../../theme/reduced-motion";
@@ -498,8 +498,15 @@ interface CardDrag {
   readonly ids: readonly string[];
   readonly origin: Map<string, { x: number; y: number }>;
   moved: boolean;
+  /** Lo spostamento di adesso, in unità intere: la scheda segue il puntatore 1:1. */
   dx: number;
   dy: number;
+  /**
+   * Dove andrà lasciandola (#411 C-05): la guida che vince o la griglia di
+   * `canvas.snap_step`. Uguale a `dx`/`dy` con Alt o con l'aggancio spento.
+   */
+  aimDx: number;
+  aimDy: number;
 }
 
 /**
@@ -1169,6 +1176,17 @@ function snap(value: number): number {
   return Math.round(value / CANVAS_SNAP) * CANVAS_SNAP;
 }
 
+/** `value` al multiplo di `step` più vicino (`canvas.snap_step`, #411 C-05). */
+function snapTo(value: number, step: number): number {
+  return Math.round(value / step) * step;
+}
+
+/**
+ * Quanto dura la scheda che scivola al suo posto agganciato quando la si
+ * lascia (#411 C-05); col movimento ridotto ci va subito.
+ */
+const SETTLE_MS = 120;
+
 /** Spostando una scheda o una selezione, tutti e tre i punti di ogni asse si agganciano (T71). */
 const MOVE_SIDES: readonly GuideSide[] = ["start", "center", "end"];
 
@@ -1224,8 +1242,13 @@ export interface ResizeOptions {
   readonly keepRatio: boolean;
   /** Alt: il centro resta fermo e la misura cambia dai due lati. */
   readonly fromCenter: boolean;
-  /** L'aggancio delle misure a `CANVAS_SNAP` (A-23); con le proporzioni tenute non c'è. */
+  /** L'aggancio delle misure alla griglia (A-23); con le proporzioni tenute non c'è. */
   readonly snap: boolean;
+  /**
+   * Il passo della griglia (`canvas.snap_step`, #411 C-05): di serie
+   * `CANVAS_SNAP`; `null` senza griglia, e la misura si aggancia solo alle guide.
+   */
+  readonly step?: number | null;
   /** Gli assi che una guida ha già messo (T71): su quelli la misura non si aggancia alla griglia. */
   readonly guided?: { readonly x: boolean; readonly y: boolean };
   readonly minWidth: number;
@@ -1253,9 +1276,10 @@ export function resizeBox(start: ResizeBox, corner: ResizeCorner, dx: number, dy
     );
     width = start.width * scale;
     height = start.height * scale;
-  } else if (options.snap) {
-    if (!options.guided?.x) width = snap(width);
-    if (!options.guided?.y) height = snap(height);
+  } else if (options.snap && options.step !== null) {
+    const step = options.step ?? CANVAS_SNAP;
+    if (!options.guided?.x) width = snapTo(width, step);
+    if (!options.guided?.y) height = snapTo(height, step);
   }
   width = Math.round(Math.max(options.minWidth, Number.isFinite(width) ? width : start.width));
   height = Math.round(Math.max(options.minHeight, Number.isFinite(height) ? height : start.height));
@@ -1702,6 +1726,8 @@ export class CanvasEngine {
   /** `canvas.grid` e `canvas.snap` (impostazioni del vault), dal vivo. */
   #gridSetting = DEFAULT_PREFERENCES.grid;
   #snapSetting = DEFAULT_PREFERENCES.snap;
+  /** `canvas.snap_step` (#411 C-05): il passo della griglia dell'aggancio; `null` senza griglia. */
+  #snapStep: number | null = snapStepOf(DEFAULT_PREFERENCES.snapStep);
   /** Ctrl+' per questa lavagna (T71): `null` segue `canvas.grid`; si ricorda con la vista. */
   #gridOverride: boolean | null = null;
   /** Il trascinamento delle schede in corso (`CardDrag`). */
@@ -2119,6 +2145,7 @@ export class CanvasEngine {
       this.#partsPickerSetting = preferences.partsPicker;
       this.#gridSetting = preferences.grid;
       this.#snapSetting = preferences.snap;
+      this.#snapStep = snapStepOf(preferences.snapStep);
       this.#fingerWritesSetting = preferences.fingerWrites;
       this.#paintGrid();
       this.#rail.setToolbar(preferences.toolbar);
@@ -10043,7 +10070,7 @@ export class CanvasEngine {
       }
     }
     const ids = this.#selection.filter((id) => origin.has(id));
-    this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, ids, origin, moved: false, dx: 0, dy: 0 };
+    this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, ids, origin, moved: false, dx: 0, dy: 0, aimDx: 0, aimDy: 0 };
     this.#viewport.setPointerCapture?.(event.pointerId);
     event.preventDefault();
   }
@@ -10719,6 +10746,7 @@ export class CanvasEngine {
       keepRatio: event.shiftKey,
       fromCenter: event.altKey,
       snap: single && this.#snapSetting && !event.altKey,
+      step: this.#snapStep,
       guided,
       minWidth,
       minHeight,
@@ -10894,11 +10922,13 @@ export class CanvasEngine {
       drag.moved = true;
     }
     const byId = new Map(doc.nodes.map((node) => [node.id, node] as const));
-    // Alt tenuto, o `canvas.snap` spento: le schede vanno dove le porta il
-    // puntatore, in unità intere. Altrimenti le guide (T71) vincono sulla
-    // griglia, su ogni asse. Lo spostamento è uno per tutte (una `move`, T24):
-    // la griglia aggancia l'angolo in alto a sinistra del loro riquadro, come
-    // le guide, e le schede tengono le loro distanze.
+    // Le schede seguono il puntatore 1:1, in unità intere (#411 C-05): niente
+    // salti sotto la mano. L'aggancio è la mira, che vale al rilascio
+    // (`#settleDrag`): le guide (T71), che si vedono già, vincono sulla
+    // griglia di `canvas.snap_step`, su ogni asse. Alt tenuto, o `canvas.snap`
+    // spento: la mira è dove sta la scheda. Lo spostamento è uno per tutte
+    // (una `move`, T24): la griglia aggancia l'angolo in alto a sinistra del
+    // loro riquadro, come le guide, e le schede tengono le loro distanze.
     const free = at.altKey || !this.#snapSetting;
     const guide = drag.moved && !free ? this.#dragGuide(drag.origin, byId, dx, dy) : null;
     if (guide === null) this.#hideGuides();
@@ -10909,10 +10939,14 @@ export class CanvasEngine {
       top = Math.min(top, origin.y);
     }
     if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+    const step = this.#snapStep;
     const along = (start: number, delta: number, guided: boolean, pull: number): number =>
-      free || guided ? Math.round(delta + pull) : snap(start + delta) - start;
-    drag.dx = along(left, dx, guide?.guidedX ?? false, guide?.dx ?? 0);
-    drag.dy = along(top, dy, guide?.guidedY ?? false, guide?.dy ?? 0);
+      free || (!guided && step === null) ? Math.round(delta)
+        : guided ? Math.round(delta + pull) : snapTo(start + delta, step!) - start;
+    drag.dx = Math.round(dx);
+    drag.dy = Math.round(dy);
+    drag.aimDx = along(left, dx, guide?.guidedX ?? false, guide?.dx ?? 0);
+    drag.aimDy = along(top, dy, guide?.guidedY ?? false, guide?.dy ?? 0);
     for (const [id, origin] of drag.origin) {
       const node = byId.get(id);
       if (!node) continue;
@@ -10920,6 +10954,40 @@ export class CanvasEngine {
       node.y = origin.y + drag.dy;
     }
     this.#renderLive();
+  }
+
+  /**
+   * Il rilascio di uno spostamento agganciato (#411 C-05): le schede vanno
+   * dalla posizione sotto il puntatore a quella della mira, scivolando in
+   * `SETTLE_MS` (col movimento ridotto subito). Lo stato e i fili sono subito
+   * quelli finali: la scivolata è solo dell'aspetto della scheda.
+   */
+  #settleDrag(drag: CardDrag): void {
+    const fromDx = drag.dx;
+    const fromDy = drag.dy;
+    if (drag.aimDx === fromDx && drag.aimDy === fromDy) return;
+    drag.dx = drag.aimDx;
+    drag.dy = drag.aimDy;
+    const byId = new Map((this.#doc?.nodes ?? []).map((node) => [node.id, node] as const));
+    for (const [id, origin] of drag.origin) {
+      const node = byId.get(id);
+      if (!node) continue;
+      node.x = origin.x + drag.dx;
+      node.y = origin.y + drag.dy;
+    }
+    this.#renderLive();
+    if (this.#reducedMotion) return;
+    for (const [id, origin] of drag.origin) {
+      const article = this.#cards.get(id)?.article;
+      if (typeof article?.animate !== "function") continue;
+      article.animate(
+        [
+          { transform: `translate(${origin.x + fromDx}px, ${origin.y + fromDy}px)` },
+          { transform: `translate(${origin.x + drag.dx}px, ${origin.y + drag.dy}px)` },
+        ],
+        { duration: SETTLE_MS, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+      );
+    }
   }
 
   /**
@@ -11026,6 +11094,8 @@ export class CanvasEngine {
       this.#hideGuides();
       // Una scheda spostata dal corpo non ci entra col clic che segue il rilascio.
       if (drag.moved) this.#pressedSelected = null;
+      // L'aggancio vale qui (#411 C-05), se Alt non è tenuto al rilascio.
+      if (drag.moved && !event.altKey && this.#snapSetting) this.#settleDrag(drag);
       if (drag.moved) this.#writeGesture(this.#dragOps(drag));
       return;
     }

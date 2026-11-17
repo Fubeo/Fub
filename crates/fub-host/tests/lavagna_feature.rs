@@ -3,7 +3,7 @@
 //!
 //! Accesa, il gruppo «Lavagna» ha dodici impostazioni, nell'ordine del
 //! pannello. Le prime cinque sono della macchina: si scrivono nel file della
-//! macchina e non in quello del vault. Le altre sette sono del vault e stanno
+//! macchina e non in quello del vault. Le altre otto sono del vault e stanno
 //! in `<root>/.fub/settings.json`. Un valore scritto a mano che non regge la sua
 //! specie (un interruttore con un testo, una scelta fuori lista, un testo dove
 //! ci vuole un elenco) vale il default, e le altre chiavi non si perdono.
@@ -29,18 +29,19 @@ const MACHINE_KEYS: [&str; 6] = [
     "canvas.drag_empty",
 ];
 
-/// Le sette impostazioni del vault, nell'ordine del pannello.
-const VAULT_KEYS: [&str; 7] = [
+/// Le otto impostazioni del vault, nell'ordine del pannello.
+const VAULT_KEYS: [&str; 8] = [
     "canvas.workspace",
     "canvas.toolbar",
     "canvas.grid",
     "canvas.snap",
+    "canvas.snap_step",
     "canvas.parts_picker",
     "canvas.drop_folder",
     "canvas.drop_folder_path",
 ];
 
-/// Le tredici chiavi, nell'ordine del pannello.
+/// Le quattordici chiavi, nell'ordine del pannello.
 fn all_keys() -> Vec<&'static str> {
     MACHINE_KEYS.into_iter().chain(VAULT_KEYS).collect()
 }
@@ -59,6 +60,7 @@ fn defaults() -> Vec<SettingValue> {
         SettingValue::List(Vec::new()),
         SettingValue::Toggle(true),
         SettingValue::Toggle(true),
+        SettingValue::Text("8".into()),
         SettingValue::Toggle(true),
         SettingValue::Text("notes".into()),
         SettingValue::Text("Allegati".into()),
@@ -203,6 +205,11 @@ fn the_whiteboard_settings_exist_only_with_the_lavagna_feature() {
                 SettingValue::Text("no".into()),
             ),
             (
+                "canvas.snap_step",
+                SettingValue::Text("none".into()),
+                SettingValue::Text("12".into()),
+            ),
+            (
                 "canvas.parts_picker",
                 SettingValue::Toggle(false),
                 SettingValue::Text("no".into()),
@@ -229,7 +236,7 @@ fn the_whiteboard_settings_exist_only_with_the_lavagna_feature() {
             assert_eq!(ws.setting(key).unwrap(), *good, "{key}");
         }
 
-        // Le cinque della macchina stanno nel suo file, le sette del vault in
+        // Le sei della macchina stanno nel suo file, le otto del vault in
         // quello del vault, e nessuna nell'altro.
         let machine_text = std::fs::read_to_string(&machine).expect("il file della macchina");
         let vault_file = root.join(".fub").join("settings.json");

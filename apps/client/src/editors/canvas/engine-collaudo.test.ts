@@ -352,3 +352,91 @@ describe("«File mancante» dentro la scheda piccola (IMP-045)", () => {
     expect(structure).toMatch(/@container \(max-height: 120px\) \{\s*\.canvas-card-missing > \.canvas-media-placeholder \{[^}]*white-space: nowrap/);
   });
 });
+
+describe("l'aggancio solo al rilascio (#411 C-05)", () => {
+  /** La posizione che la scheda `id` mostra adesso (la sua trasformazione), anche a gesto in corso. */
+  function shownAt(host: HTMLElement, id: string): { x: number; y: number } {
+    const match = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(cardOf(host, id).style.transform);
+    if (!match) throw new Error(`trasformazione inattesa: ${cardOf(host, id).style.transform}`);
+    return { x: Number(match[1]), y: Number(match[2]) };
+  }
+
+  /** Trascina la testata di `a` di (dx, dy) unità; `release` falso lascia il gesto aperto. */
+  function dragA(host: HTMLElement, dx: number, dy: number, options: { altMove?: boolean; altUp?: boolean; release?: boolean } = {}) {
+    pointer(handleOf(host, "a"), "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 20, 10) });
+    pointer(viewportOf(host), "pointermove", { pointerId: 1, buttons: 1, ...screenOf(host, 20 + dx, 10 + dy), altKey: options.altMove ?? false });
+    if (options.release === false) return;
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 20 + dx, 10 + dy), altKey: options.altUp ?? false });
+  }
+
+  it("mentre la trascini la scheda segue il puntatore 1:1 con le guide; lasciata, si aggancia alla guida e alla griglia scivolando", () => {
+    const { engine, host, changes } = mounted(BOARD);
+    const animate = vi.fn();
+    (cardOf(host, "a") as HTMLElement & { animate: unknown }).animate = animate;
+    dragA(host, 13, 4, { release: false });
+    // Sotto la mano niente salti: 13 e 4, non 16 e 0.
+    expect(shownAt(host, "a")).toEqual({ x: 13, y: 4 });
+    // La guida del bordo in alto di «b» si vede già.
+    expect(host.querySelector(".canvas-guides")).not.toBeNull();
+    expect(changes).toHaveLength(0);
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 33, 14) });
+    // Lasciata: y sulla guida (0), x sulla griglia di 8 (16), in un passo.
+    expect(nodeOf(engine, "a")).toMatchObject({ x: 16, y: 0 });
+    expect(changes).toHaveLength(1);
+    expect(host.querySelector(".canvas-guides")).toBeNull();
+    // Ci scivola, dalla posizione sotto il puntatore.
+    expect(animate).toHaveBeenCalledTimes(1);
+    const [frames, timing] = animate.mock.calls[0]! as [Keyframe[], KeyframeAnimationOptions];
+    expect(frames.map((frame) => frame.transform)).toEqual(["translate(13px, 4px)", "translate(16px, 0px)"]);
+    expect(timing.duration).toBeGreaterThan(0);
+    engine.destroy();
+  });
+
+  it("col movimento ridotto va al suo posto subito, senza scivolare", () => {
+    setReducedMotionPreference(true);
+    const { engine, host } = mounted(BOARD);
+    const animate = vi.fn();
+    (cardOf(host, "a") as HTMLElement & { animate: unknown }).animate = animate;
+    dragA(host, 13, 4);
+    expect(nodeOf(engine, "a")).toMatchObject({ x: 16, y: 0 });
+    expect(animate).not.toHaveBeenCalled();
+    engine.destroy();
+  });
+
+  it("Alt tenuto al rilascio lo spegne: la scheda resta dove l'hai lasciata", () => {
+    const { engine, host } = mounted(BOARD);
+    dragA(host, 13, 4, { altUp: true });
+    expect(nodeOf(engine, "a")).toMatchObject({ x: 13, y: 4 });
+    engine.destroy();
+  });
+
+  it("il passo della griglia viene da «Passo della griglia»; «Nessuna griglia» aggancia solo alle schede vicine", () => {
+    const { engine, host } = mounted(BOARD);
+    setPreferences({ snapStep: "32" });
+    dragA(host, 13, 40);
+    expect(nodeOf(engine, "a")).toMatchObject({ x: 0, y: 32 });
+    dragA(host, 20, 40);
+    expect(nodeOf(engine, "a")).toMatchObject({ x: 32, y: 64 });
+    setPreferences({ snapStep: "none" });
+    dragA(host, 13, 21);
+    expect(nodeOf(engine, "a")).toMatchObject({ x: 45, y: 85 });
+    // Senza griglia la guida aggancia ancora: il bordo in alto torna su quello di «b».
+    dragA(host, 3, -82);
+    expect(nodeOf(engine, "a")).toMatchObject({ x: 48, y: 0 });
+    engine.destroy();
+  });
+
+  it("il ridimensionamento usa lo stesso passo", () => {
+    const { engine, host } = mounted(BOARD);
+    setPreferences({ snapStep: "32" });
+    pointer(handleOf(host, "a"), "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 20, 10) });
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 20, 10) });
+    const grip = host.querySelector<HTMLElement>('[data-corner="se"]')!;
+    expect(grip).not.toBeNull();
+    pointer(grip, "pointerdown", { pointerId: 2, button: 0, buttons: 1, ...screenOf(host, 200, 100) });
+    pointer(viewportOf(host), "pointermove", { pointerId: 2, buttons: 1, ...screenOf(host, 213, 150) });
+    pointer(viewportOf(host), "pointerup", { pointerId: 2, button: 0, buttons: 0, ...screenOf(host, 213, 150) });
+    expect(nodeOf(engine, "a")).toMatchObject({ width: 224, height: 160 });
+    engine.destroy();
+  });
+});
