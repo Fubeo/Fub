@@ -364,6 +364,12 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     cursor: null,
     files: TYPE_FILES,
   },
+  // La pagina del tipo (T33): lo stesso vault; la scena apre `Tipi/Libro.md`.
+  "tipo-pagina": {
+    text: "---\ntipo: \"[[Tipi/Libro]]\"\nautore: Frank Herbert\nletto: true\n---\n" + NOTE,
+    cursor: null,
+    files: TYPE_FILES,
+  },
   "tipo-mancante": {
     text: "---\ntipo: \"[[Tipi/Romanzo]]\"\nautore: Frank Herbert\nletto: true\n---\n" + NOTE,
     cursor: null,

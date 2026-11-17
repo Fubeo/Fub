@@ -19,6 +19,8 @@ import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
 import { blocksMode, pageArrives, plainMode, type BlocksOptions } from "./blocks";
 import { refreshPageHeader, retitleView } from "./blocks/page";
+import { refreshTypePage } from "./type-page";
+import { TYPES_FOLDER_SETTING } from "../../../../state/note-type-commands";
 import { NO_TYPES, parsePropertyTypes, sameTypes, type PropertyTypes } from "./page/properties/kind";
 import { api } from "../../../../host/ipc";
 import { keepTitle, retitleIn, retitleWaiting } from "./page/title";
@@ -536,6 +538,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           },
         },
       } : {}),
+      // La pagina del tipo (E5): in fondo alla nota di un tipo, quando il
+      // core dice che lo è (`checkTypePage`).
+      typePage: { current: () => typePageDoc },
       tableGrid: {
         active: (grid) => {
           tableGrid = grid;
@@ -711,6 +716,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     changed: () => redrawPageHeader(),
     lifetime: life,
   });
+  /// La nota del tipo di cui la pagina mostra le note (`./type-page`), o
+  /// `null` se la nota non è un tipo; e quante domande sono partite.
+  let typePageDoc: string | null = null;
+  let typePageAsked = 0;
   /// L'ultimo tipo saputo, per sapere quali file lo cambiano.
   let lastNoteType: NoteTypeState | null = null;
   // Un tipo cambiato su disco (le sue proprietà in evidenza, un tipo che
@@ -920,6 +929,26 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   function readingFactTags(): boolean {
     return opts.noteFacts !== undefined && (noteFactsLabels(facts)?.tags.length ?? 0) > 0;
   }
+  /// La nota è un tipo, con la cartella dei tipi di adesso? Chiede al core
+  /// l'elenco dei tipi e, se la risposta cambia, la pagina del tipo compare o
+  /// sparisce. Una risposta vecchia non copre una più nuova.
+  function checkTypePage(): void {
+    const asked = ++typePageAsked;
+    const doc = resources?.documentId ?? documentId;
+    void listNoteTypes().then((list) => {
+      if (life.closed || asked !== typePageAsked) return;
+      const next = list.types.some((type) => type.doc === doc) ? doc : null;
+      if (next === typePageDoc) return;
+      typePageDoc = next;
+      engine.runViewCommand((view) => {
+        refreshTypePage(view);
+        return true;
+      });
+    }, () => {
+      // Senza l'elenco dei tipi la pagina resta com'era: la prossima
+      // domanda riprova.
+    });
+  }
   /// Rifà la testata in Scrittura e in Lettura: è cambiato qualcosa che il
   /// testo non dice (il tipo della nota).
   function redrawPageHeader(): void {
@@ -1001,6 +1030,13 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     setBlocks(rememberBlocks(entries));
   };
   void readSurfaceSettings();
+  checkTypePage();
+  life.add(onEvent("document_renamed", (event) => {
+    if (event.to === (resources?.documentId ?? documentId)) checkTypePage();
+  }));
+  life.add(onEvent("setting_changed", (event) => {
+    if (event.key === TYPES_FOLDER_SETTING) checkTypePage();
+  }));
   life.add(onEvent("setting_changed", (event) => {
     if (event.key === STRICT_LINE_BREAKS_KEY || event.key === RTL_KEY || event.key === EDITOR_BLOCKS_KEY || event.key === PROPERTY_TYPES_KEY) void readSurfaceSettings();
   }));

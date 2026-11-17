@@ -10,7 +10,10 @@ impl ViewProvider for PropertiesView {
     fn interests(&self, instance: &ViewInstance) -> ViewInterests {
         ViewInterests {
             refresh: EventMask::of([EventKind::IndexUpdated, EventKind::BatchEnded]),
-            follows: if instance.view == GLOBAL_PROPERTIES_VIEW {
+            // La pagina del tipo segue i suoi parametri, non la nota attiva.
+            follows: if instance.view == GLOBAL_PROPERTIES_VIEW
+                || instance.view == super::type_page::NOTE_TYPE_PAGE_VIEW
+            {
                 ContextMask::default()
             } else {
                 ContextMask(vec![ContextKind::Document])
@@ -41,6 +44,7 @@ impl ViewProvider for PropertiesView {
                 ViewSurface::StatusBar,
             )
             .open_by_default(),
+            super::type_page::type_page_spec(),
         ]
     }
 
@@ -49,7 +53,9 @@ impl ViewProvider for PropertiesView {
         instance: &ViewInstance,
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
-        if instance.view == GLOBAL_PROPERTIES_VIEW {
+        if instance.view == super::type_page::NOTE_TYPE_PAGE_VIEW {
+            super::type_page::type_page(instance, host)
+        } else if instance.view == GLOBAL_PROPERTIES_VIEW {
             global_tree(host)
         } else if instance.view == PROPERTIES_STATUS_VIEW {
             status_count(host)
@@ -66,6 +72,9 @@ impl ViewProvider for PropertiesView {
     ) -> Result<ViewUpdate, PluginError> {
         if instance.view == GLOBAL_PROPERTIES_VIEW {
             return global_action(action, host);
+        }
+        if instance.view == super::type_page::NOTE_TYPE_PAGE_VIEW {
+            return Ok(super::type_page::type_page_action(&action));
         }
         match action.action.0.as_str() {
             "mode" => {

@@ -12,6 +12,7 @@
 // solo, mai per battuta.
 import { onEvent } from "../state/kernel";
 import { listNoteTypes, NO_TYPES, type NoteType, type NoteTypeList } from "../state/note-types";
+import { TYPES_FOLDER_SETTING } from "../state/note-type-commands";
 import { on, state } from "../state/store";
 import { t, onLanguage } from "../i18n/strings";
 import type { Lifetime } from "../ui/lifetime";
@@ -19,8 +20,6 @@ import { drawTypeIcon } from "../ui/note-type-menu";
 import { Race } from "../ui/race";
 import { setTooltip } from "../ui/tooltip";
 
-/// L'impostazione della cartella dei tipi: cambiarla cambia la sezione.
-const TYPES_FOLDER_KEY = "files.types-folder";
 /// Quanto si aspetta dopo l'ultimo cambio dell'indice prima di rileggere.
 const SETTLE_MS = 250;
 
@@ -104,7 +103,7 @@ export function mountExplorerTypes(options: ExplorerTypesOptions): ExplorerTypes
   lifetime.add(on("documents", soon));
   lifetime.add(onEvent("index_updated", soon));
   lifetime.add(onEvent("setting_changed", (event) => {
-    if (event.key === TYPES_FOLDER_KEY) soon();
+    if (event.key === TYPES_FOLDER_SETTING) soon();
   }));
   lifetime.add(on("active-doc", markActive));
   lifetime.add(onLanguage(render));

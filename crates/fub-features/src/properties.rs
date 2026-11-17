@@ -29,12 +29,14 @@ use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, UiOption, ViewUpd
 mod catalog;
 mod commands;
 mod relation;
+mod type_page;
 mod types;
 mod view;
 
 pub use catalog::catalog;
 pub use commands::PropertiesCommands;
 pub use relation::{linked_from, LinkedFrom};
+pub use type_page::NOTE_TYPE_PAGE_VIEW;
 pub use view::PropertiesView;
 use view::{date_formats, frontmatter_span, property_types, show_date, show_link, show_list};
 

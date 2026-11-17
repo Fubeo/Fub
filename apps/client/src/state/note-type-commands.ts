@@ -7,6 +7,9 @@ export const NOTE_TYPE_LIST = "note.type.list";
 export const NOTE_TYPE_GET = "note.type.get";
 export const NOTE_FROM_TYPE = "note.from_type";
 export const NOTE_TYPE_SET = "note.type.set";
+/// L'impostazione della cartella dei tipi: cambiarla cambia quali note sono
+/// tipi.
+export const TYPES_FOLDER_SETTING = "files.types-folder";
 
 /// I comandi dei tipi che leggono e non scrivono niente: il cassetto e la
 /// testata li chiamano da sé quando il vault cambia.

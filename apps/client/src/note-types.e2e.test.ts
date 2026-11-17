@@ -189,6 +189,21 @@ describe("la sezione «Tipi» del cassetto", () => {
   });
 });
 
+describe("la pagina del tipo", () => {
+  it("la nota di un tipo ha il posto della pagina in fondo, una nota col tipo no", async () => {
+    const host = await start({ "Tipi/Libro.md": LIBRO, "Biblioteca/Dune.md": DUNE });
+    await open("Tipi/Libro.md");
+    await waitFor("il posto della pagina c'è", () => document.querySelector(".pane.focus .pane-editor .cm-day-page[data-type-page]") !== null);
+    // Il tipo, che è il modello delle note nuove, non è cambiato.
+    expect(host.files()["Tipi/Libro.md"]).toBe(LIBRO);
+    await open("Biblioteca/Dune.md");
+    await settle();
+    // L'editor attivo è quello di Dune (quello di Libro resta a riposo).
+    expect(document.querySelector(".pane.focus .pane-editor .cm-content")?.textContent).toContain("Il deserto.");
+    expect(document.querySelector(".pane.focus .pane-editor .cm-day-page[data-type-page]")).toBeNull();
+  });
+});
+
 describe("«In evidenza» in una nota con un tipo", () => {
   it("scrive nel tipo, la testata lo segue, e «Annulla» lo rimette", async () => {
     const host = await start({ "Tipi/Libro.md": LIBRO, "Biblioteca/Dune.md": DUNE });

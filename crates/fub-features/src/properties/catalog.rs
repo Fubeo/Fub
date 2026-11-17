@@ -6,7 +6,7 @@ use super::*;
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stiano qui.
 pub fn catalog() -> Vec<StringCatalog> {
     crate::note_types::speaking(crate::formats::speaking(vec![
-        options_it(StringCatalog::new("it"))
+        super::type_page::type_page_strings_it(options_it(StringCatalog::new("it")))
             .with(VIEW_TITLE, "Proprietà")
             .with(EMPTY_NO_NOTES, "Nessuna nota aperta.")
             .with(EMPTY_NO_PROPS, "Questa nota non ha proprietà.")
@@ -231,7 +231,7 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "note.properties.clear.doc.desc",
                 "La nota; se manca, quella attiva.",
             ),
-        options_en(StringCatalog::new("en"))
+        super::type_page::type_page_strings_en(options_en(StringCatalog::new("en")))
             .with(VIEW_TITLE, "Properties")
             .with(EMPTY_NO_NOTES, "No note open.")
             .with(EMPTY_NO_PROPS, "This note has no properties.")

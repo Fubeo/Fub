@@ -70,13 +70,28 @@ Invio, apre la nota del tipo. Senza tipi, o mentre il filtro delle note è
 attivo, la sezione non c'è. Si rilegge quando cambiano le note o la cartella
 dei tipi nelle impostazioni.
 
+## La pagina del tipo
+
+In fondo alla nota del tipo, dopo l'ultima riga, la pagina del tipo elenca le
+note di quel tipo, per nome, con i valori delle sue proprietà in evidenza
+(«Frank Herbert · letto»); il titolo dice quante sono («Note di tipo Libro ·
+2»). Un clic apre la nota. Oltre le 50 righe una riga dice quante ne restano;
+senza note dice che «Nuova nota» le crea. Valgono tutte le forme di `tipo`
+che valgono per la testata; un tipo che non si legge non ha la pagina.
+
+La pagina non è testo: non si scrive nel file, quindi nemmeno nel modello delle
+note nuove, e copiare o esportare il tipo non la porta. La disegna il
+componente delle proprietà: spento, la pagina non c'è. Si rilegge quando cambia
+l'indice, mai per battuta; la nota la mostra o la toglie quando cambia la
+cartella dei tipi o la nota viene rinominata dentro o fuori.
+
 ## Limiti
 
 - Rinominare o spostare un tipo non aggiorna i `tipo` delle note: i link del
   frontmatter non sono nel grafo dei link. La testata dice che il tipo non c'è
   e «Scegli il tipo» lo rimette.
-- La nota del tipo non mostra ancora la Base delle sue note: il corpo del tipo
-  è il modello, e una Base scritta lì finirebbe in ogni nota nuova.
+- La pagina del tipo è un elenco, non una Base: niente colonne, filtri o
+  ordini scelti da chi la guarda.
 
 ## Dove sta nel codice
 
@@ -88,7 +103,12 @@ dei tipi nelle impostazioni.
   tipo»), `page/featured.ts` (l'evidenza del tipo), `page/header.ts`;
   «In evidenza» nel tipo e «Annulla» in `markdown/surface.ts`.
 - Il cassetto: `apps/client/src/panels/explorer-types.ts`.
+- La pagina del tipo: la vista `note_type_page` in
+  `crates/fub-features/src/properties/type_page.rs`, sopra
+  `note_types::typed_notes` (la stessa risoluzione dei conti); il posto in
+  fondo alla nota è `markdown/type-page.ts`, acceso da `markdown/surface.ts`.
 - Stile: `skin/document.css` (`.cm-fub-page-type-*`), `skin/drawers.css`
   (`.note-type-menu*`). Scene del banco `tipi-*` e `mobile-tipi-*`; prove in
   `src/note-types.e2e.test.ts`, `src/state/new-note.test.ts` e
-  `page/note-type.dom.test.ts`.
+  `page/note-type.dom.test.ts`, `markdown/type-page.dom.test.ts`; scene
+  `tipi-07-pagina` e `tipi-08-pagina-stretta`.
