@@ -2948,7 +2948,7 @@ Fatto quando: test del catalogo e delle proposte; ogni pezzo con i suoi
 spazi vuoti.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
-Stato: [~] in corso (coder, dal ramo di T60, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (ba1bd3b80, 2026-11-17), PR bozza #472; 79 simboli in 7 gruppi coi nomi it/en; modelli senza lo spazio finale del prototipo (Pandoc/Obsidian); la battuta va rimisurata a macchina scarica
 
 ## T62 · Formule: la tavolozza e la ricerca a parole
 
