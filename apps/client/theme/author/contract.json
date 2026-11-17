@@ -545,6 +545,7 @@
     "cm-fub-note-card-cover",
     "cm-line",
     "cm-markdown-block",
+    "markdown-table-scroll",
     "cm-fub-heading-line",
     "cm-fub-h1",
     "cm-fub-h2",
@@ -2441,6 +2442,7 @@
     "cm-fub-note-card-cover": "cornice",
     "cm-line": "contenuto",
     "cm-markdown-block": "contenuto",
+    "markdown-table-scroll": "contenuto",
     "cm-fub-heading-line": "contenuto",
     "cm-fub-h1": "contenuto",
     "cm-fub-h2": "contenuto",
@@ -5364,7 +5366,8 @@
         "cm-editor",
         "cm-content",
         "cm-line",
-        "cm-markdown-block"
+        "cm-markdown-block",
+        "markdown-table-scroll"
       ],
       "states": [
         "rest",
@@ -10163,7 +10166,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1894,
+    "hooks": 1895,
     "state_names": 7,
     "assigned_states": 883,
     "components": 260,

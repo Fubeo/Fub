@@ -204,6 +204,7 @@
 .markdown-rendered blockquote,
 .markdown-rendered pre,
 .markdown-rendered table,
+.markdown-rendered .markdown-table-scroll,
 .markdown-rendered hr,
 .markdown-rendered h1,
 .markdown-rendered h2,
@@ -1805,34 +1806,101 @@ button.cm-fub-page-icon:focus-visible {
 
 /* ── Tabelle ─────────────────────────────────────────────────────────────── */
 
-/* Una tabella è un dato: carattere dell'interfaccia, cifre incolonnate, solo
-   fili orizzontali. La griglia della Live è la stessa tabella con le maniglie
-   intorno: le celle prendono queste regole in tutte e due. */
+/* Una tabella è un dato: carattere dell'interfaccia, cifre incolonnate, una
+   griglia di fili sottili dentro una cornice arrotondata (il prototipo,
+   `.gridw`, `.gr`, `.gr-box`). La griglia della Live è la stessa tabella con
+   le maniglie intorno: le celle prendono queste regole in tutte e due, e la
+   cornice della Live sta in `skin/tabella.css`, dove la prima riga e la
+   prima colonna della tabella non sono le prime del `<table>`.
+   Dentro la pagina i colori sono quelli del documento, come il resto del
+   contenuto: i fili `--doc-rule-soft` (il `--line` del prototipo), la
+   cornice `--doc-rule` (il `--line-2`), la testata `--doc-fill-soft` (il
+   `--tray`).
+   Il corpo è tre quarti del testo (13,5 px sul testo di serie, e cresce con
+   lui). La tabella riempie la colonna del testo e le celle non vanno a capo:
+   quando il contenuto è più largo, scorre l'involucro che la Lettura le mette
+   attorno (`markdown-table-scroll`, da `markdown/mount.ts`). Dove una resa
+   non lo mette (l'anteprima del lanciatore, le schede dei link) la tabella
+   resta larga quanto il contenuto e scorre da sé.
+   I bordi sono separati, non uniti (`structure.css`, perché una pelle non
+   scrive `border-spacing`): solo così gli angoli si arrotondano. Ogni
+   cella ha il filo a destra e sotto; l'ultima colonna e l'ultima riga hanno
+   al loro posto la cornice. La testata ha il suo fondo fino al bordo: la
+   cornice lì è trasparente, come nel prototipo dove il fondo la copre. */
 .markdown-rendered table {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   overflow-x: auto;
-  border-collapse: collapse;
   font-family: var(--font-ui);
-  font-size: 0.9em;
+  font-size: 0.75em;
   font-variant-numeric: tabular-nums;
-  line-height: var(--leading-normal);
+  line-height: 1.4;
+}
+.markdown-rendered .markdown-table-scroll {
+  overflow-x: auto;
+}
+.markdown-rendered .markdown-table-scroll > table {
+  display: table;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow: visible;
 }
 .markdown-rendered th,
 .markdown-rendered td {
+  height: 34px;
   min-width: 4ch;
-  padding: var(--space-4) var(--space-5);
+  padding: 0 var(--space-5);
   border: 0;
+  border-right: 1px solid var(--doc-rule-soft);
   border-bottom: 1px solid var(--doc-rule-soft);
-  /* Una cella non spezza le parole (né i numeri) a metà: se la tabella non ci
-     sta, scorre. */
-  overflow-wrap: normal;
+  /* Una cella non va a capo, come nel prototipo (`.gr td`): se la tabella
+     non ci sta, scorre. */
+  white-space: nowrap;
   text-align: start;
-  vertical-align: top;
+  vertical-align: middle;
 }
 .markdown-rendered th {
-  background: var(--sheet-2);
+  background: var(--doc-fill-soft);
   color: var(--doc-heading);
   font-weight: var(--weight-bold);
+}
+.markdown-rendered tr > :first-child {
+  border-left: 1px solid var(--doc-rule);
+}
+.markdown-rendered tr > :last-child {
+  border-right: 1px solid var(--doc-rule);
+}
+.markdown-rendered table > :first-child > tr:first-child > * {
+  border-top: 1px solid var(--doc-rule);
+}
+.markdown-rendered table > :last-child > tr:last-child > * {
+  border-bottom: 1px solid var(--doc-rule);
+}
+.markdown-rendered tr > th:first-child {
+  border-left-color: transparent;
+}
+.markdown-rendered tr > th:last-child {
+  border-right-color: transparent;
+}
+.markdown-rendered table > :first-child > tr:first-child > th {
+  border-top-color: transparent;
+}
+.markdown-rendered table > :last-child > tr:last-child > th {
+  border-bottom-color: transparent;
+}
+.markdown-rendered table > :first-child > tr:first-child > :first-child {
+  border-top-left-radius: var(--radius-md);
+}
+.markdown-rendered table > :first-child > tr:first-child > :last-child {
+  border-top-right-radius: var(--radius-md);
+}
+.markdown-rendered table > :last-child > tr:last-child > :first-child {
+  border-bottom-left-radius: var(--radius-md);
+}
+.markdown-rendered table > :last-child > tr:last-child > :last-child {
+  border-bottom-right-radius: var(--radius-md);
 }
 .markdown-rendered table:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
