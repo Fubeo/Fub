@@ -440,3 +440,50 @@ describe("l'aggancio solo al rilascio (#411 C-05)", () => {
     engine.destroy();
   });
 });
+
+describe("la barra della scelta durante lo zoom (#411 C-06)", () => {
+  /** Una rotella con Ctrl (ingrandisce); `ctrlKey` e il punto a mano: l'evento di happy-dom non li porta. */
+  function zoomWheel(viewport: HTMLElement, deltaY: number): void {
+    const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, composed: true, deltaY, clientX: 300, clientY: 200 });
+    for (const [name, value] of [["ctrlKey", true], ["clientX", 300], ["clientY", 200]] as const) Object.defineProperty(event, name, { value });
+    viewport.dispatchEvent(event);
+  }
+
+  it("la rotella che ingrandisce non toglie la barra: la barra segue la scheda a ogni passo, e lo spostamento la toglie", () => {
+    vi.useFakeTimers();
+    try {
+      const { engine, host } = mounted(BOARD);
+      pointer(handleOf(host, "a"), "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 20, 10) });
+      pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 20, 10) });
+      const bar = host.querySelector<HTMLElement>(".canvas-selection-bar")!;
+      expect(bar.hidden).toBe(false);
+      const before = { left: bar.style.left, top: bar.style.top };
+      const relabelled = vi.spyOn(bar, "querySelectorAll");
+      zoomWheel(viewportOf(host), -100);
+      // A rotella che gira la barra c'è, e si è spostata con la scheda.
+      expect(bar.hidden).toBe(false);
+      expect({ left: bar.style.left, top: bar.style.top }).not.toEqual(before);
+      const camera = cameraOf(host);
+      // La barra sta centrata sulla scheda (larga 200, centro a 100): segue il centro sullo schermo.
+      const placedLeft = parseFloat(bar.style.left);
+      zoomWheel(viewportOf(host), -100);
+      const next = cameraOf(host);
+      expect(next.zoom).not.toBe(camera.zoom);
+      expect(parseFloat(bar.style.left) - placedLeft).toBeCloseTo((100 * next.zoom + next.x) - (100 * camera.zoom + camera.x), 5);
+      expect(bar.hidden).toBe(false);
+      // Il passo di zoom sposta la barra senza rifarne i pulsanti.
+      expect(relabelled).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(2000);
+      expect(bar.hidden).toBe(false);
+      // Spostare la scheda è un gesto sulle schede: la barra si toglie.
+      pointer(handleOf(host, "a"), "pointerdown", { pointerId: 2, button: 0, buttons: 1, ...screenOf(host, 20, 10) });
+      pointer(viewportOf(host), "pointermove", { pointerId: 2, buttons: 1, ...screenOf(host, 60, 50) });
+      expect(bar.hidden).toBe(true);
+      pointer(viewportOf(host), "pointerup", { pointerId: 2, button: 0, buttons: 0, ...screenOf(host, 60, 50) });
+      expect(bar.hidden).toBe(false);
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

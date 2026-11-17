@@ -112,6 +112,7 @@ import {
   selectionBarWanted,
   type CanvasSelectionBar,
   type SelectionBarRestyle,
+  type SelectionBarShow,
   type SelectionBarStrokes,
 } from "./chrome/selection-bar";
 import { Lasso, LASSO_MIN_STEP, extendLasso, lassoPath, type LassoPoint } from "./lasso";
@@ -5310,8 +5311,10 @@ export class CanvasEngine {
     this.#markAllHandles();
     // Il selettore delle sezioni resta attaccato alla sua scheda (T74).
     this.#partsPicker?.handle.reposition();
-    // E la barra del ritaglio alla sua (T78).
+    // E la barra del ritaglio alla sua (T78), e quella della selezione alle
+    // schede scelte, anche durante lo zoom (#411 C-06).
     this.#placeCropBar();
+    this.#followSelectionBar();
     // Anche la resa passa di qui: la scelta cambiata si ricorda con la camera.
     this.#viewMemo?.changed();
     // Ogni cambio di zoom passa di qui (bottoni, tasti, menu, `fitCamera`): la
@@ -7868,8 +7871,10 @@ export class CanvasEngine {
    * con la stessa firma di prima non avvisa.
    */
   #statusSettle(): void {
-    // La barra della selezione si rilegge anche lei qui: dentro un gesto sparisce.
-    this.#syncSelectionBar();
+    // La barra della selezione si rilegge anche lei qui: dentro un gesto sulle
+    // schede sparisce. Dentro un gesto della camera (la rotella, il volo) la
+    // segue già `#followSelectionBar`, senza rifarla a ogni passo (#411 C-06).
+    if (!this.#gestureActive() || this.#cardGestureActive()) this.#syncSelectionBar();
     if (this.#destroyed || !this.#doc || this.#gestureActive()) return;
     // Il navigatore si rilegge con la banda, a fine gesto e al cambio del documento (T55).
     this.#navigator.settle();
@@ -8590,9 +8595,12 @@ export class CanvasEngine {
 
   /**
    * Mostra la barra della selezione sopra le schede scelte, o la toglie: la
-   * toglie durante un gesto, con la penna giù e mentre si scrive in una scheda
-   * (`selectionBarWanted`), e quando le schede sono tutte fuori dalla vista.
-   * Con la penna giù torna quando si alza (il silenzio della penna).
+   * toglie durante un gesto sulle schede (spostare, ridimensionare, scegliere
+   * col rettangolo o col lazo), con la penna giù e mentre si scrive in una
+   * scheda (`selectionBarWanted`), e quando le schede sono tutte fuori dalla
+   * vista. Con la penna giù torna quando si alza (il silenzio della penna).
+   * Lo zoom e lo spostamento della vista non la tolgono: la barra segue le
+   * schede a ogni passo della camera (`#followSelectionBar`, #411 C-06).
    */
   #syncSelectionBar(): void {
     const bar = this.#selectionBar as CanvasSelectionBar | undefined;
@@ -8608,11 +8616,38 @@ export class CanvasEngine {
     const writing = this.#editor !== null || this.#activeId !== null || this.#canvasOptions.mode === "writing" || this.#crop !== null;
     // La vista ha cambiato misura, o la scheda: la barra del ritaglio si riposa.
     this.#placeCropBar();
-    if (!selectionBarWanted({ chosen, gesture: this.#gestureActive(), pen, writing })) {
+    if (!selectionBarWanted({ chosen, gesture: this.#cardGestureActive(), pen, writing })) {
       bar.hide();
       if (pen && chosen > 0 && this.#quiet.active) this.#quiet.defer("selection-bar", () => this.#syncSelectionBar());
       return;
     }
+    const one = nodes.length === 1 ? nodes[0]! : null;
+    const open = one?.type === "file" && one.file ? "canvas.open" : one?.type === "link" ? "canvas.open_url" : null;
+    bar.show({
+      chosen: nodes.length,
+      open,
+      crop: one !== null && !this.#readOnly && this.#cropImage(one) && this.#cropRenderer(),
+      strokes: this.#strokesShown(units),
+      ...this.#selectionBarWhere(nodes, units),
+    });
+  }
+
+  /**
+   * La barra della selezione già mostrata segue le schede scelte alla camera
+   * di adesso (#411 C-06): solo il posto, senza rifare i pulsanti, così
+   * regge un passo di zoom a ogni fotogramma.
+   */
+  #followSelectionBar(): void {
+    const bar = this.#selectionBar as CanvasSelectionBar | undefined;
+    if (!bar?.shown) return;
+    bar.follow(this.#selectionBarWhere(this.#selectedNodes(), this.#chosenStrokes()));
+  }
+
+  /** Dove sta la barra della selezione: il riquadro delle schede e dei tratti scelti sullo schermo, e la vista. */
+  #selectionBarWhere(
+    nodes: readonly CanvasNode[],
+    units: readonly { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number }[],
+  ): Pick<SelectionBarShow, "box" | "view" | "offset"> {
     const zoom = this.#camera.zoom;
     let left = Infinity;
     let top = Infinity;
@@ -8637,17 +8672,11 @@ export class CanvasEngine {
       bottom: bottom * zoom + this.#camera.y,
     };
     const rect = this.#viewport.getBoundingClientRect();
-    const one = nodes.length === 1 ? nodes[0]! : null;
-    const open = one?.type === "file" && one.file ? "canvas.open" : one?.type === "link" ? "canvas.open_url" : null;
-    bar.show({
-      chosen: nodes.length,
-      open,
-      crop: one !== null && !this.#readOnly && this.#cropImage(one) && this.#cropRenderer(),
-      strokes: this.#strokesShown(units),
+    return {
       box,
       view: { width: rect.width || 800, height: rect.height || 600 },
       offset: { left: this.#viewport.offsetLeft, top: this.#viewport.offsetTop },
-    });
+    };
   }
 
   /**
@@ -11776,6 +11805,17 @@ export class CanvasEngine {
   #gestureMoving(): boolean {
     return this.#drag !== null || this.#resize !== null || this.#pan !== null || this.#pinch !== null
       || this.#lasso !== null || this.#strokeDrag !== null || this.#marquee?.moved === true;
+  }
+
+  /**
+   * Un gesto sulle schede o sui tratti (spostare, ridimensionare, il
+   * rettangolo, il lazo): la barra della selezione si toglie. La camera che
+   * si muove (lo zoom, lo spostamento della vista, il volo) non lo è: la barra
+   * la segue (#411 C-06).
+   */
+  #cardGestureActive(): boolean {
+    return this.#drag !== null || this.#resize !== null || this.#lasso !== null
+      || this.#strokeDrag !== null || this.#marquee?.moved === true;
   }
 
   /** Un gesto in corso, rotella, volo e inerzia compresi (T53): nessuna scheda cambia modo. */
