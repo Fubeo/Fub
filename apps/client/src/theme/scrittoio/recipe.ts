@@ -30,8 +30,8 @@
  * passaggio, e una ricetta che ne importasse gli aiutanti la terrebbe in vita
  * per tre funzioni.
  */
-import { contrast } from "../contrast";
-import { toHex, type Oklch } from "../oklch";
+import { channelLuminance, contrast, luminance, luminanceRatio } from "../contrast";
+import { channelsOf, toHex, type Oklch } from "../oklch";
 import type { CONTENT_COLORS } from "../../ui/sanitize";
 
 export type Light = "light" | "dark";
@@ -106,9 +106,14 @@ const lch = (l: number, c: number, h: number): Oklch => ({ l, c, h: ((h % 360) +
 /// perché l'arrotondamento a otto bit e la riduzione del croma al gamut possono
 /// togliere il centesimo che la bisezione aveva trovato.
 function hold(start: Oklch, backgrounds: readonly string[], target: number, light: Light): string {
+  // Le luminanze dei fondi non cambiano fra un tentativo e l'altro: contarle a
+  // ogni prova costava metà della ricetta, rifatta a ogni cambio d'accento
+  // (`docs/product/performance-webview.md`). Il conto è lo stesso di
+  // `contrast`, quindi i byte non cambiano.
+  const floors = backgrounds.map(luminance);
   const passes = (color: Oklch): boolean => {
-    const hex = toHex(color);
-    return backgrounds.every((background) => contrast(hex, background) >= target);
+    const ink = channelLuminance(channelsOf(color));
+    return floors.every((floor) => luminanceRatio(ink, floor) >= target);
   };
   if (passes(start)) return toHex(start);
 

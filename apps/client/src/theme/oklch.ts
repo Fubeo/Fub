@@ -86,7 +86,7 @@ function inGamut([r, g, b]: [number, number, number]): boolean {
 /// sul croma sotto un milionesimo, cioè molto sotto un passo di quantizzazione.
 /// È fisso e non «finché converge» perché la generazione deve dare gli stessi
 /// byte a ogni corsa, su qualunque macchina.
-function channelsOf({ l, c, h }: Oklch): [number, number, number] {
+export function channelsOf({ l, c, h }: Oklch): [number, number, number] {
   const rad = (h * Math.PI) / 180;
   const linear = (chroma: number) =>
     toLinear(l, chroma * Math.cos(rad), chroma * Math.sin(rad));

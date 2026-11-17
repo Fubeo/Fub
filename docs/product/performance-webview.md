@@ -149,3 +149,80 @@ riposo, tre blocchi di fila di 38–42, 55–57 e 30–32 ms (il grafo) e poi
 blocchi di 10–22 ms (i caratteri). Il menu e il lanciatore aperti prima che i
 caratteri siano caricati costano come prima per la parte dei caratteri, meno il
 fuoco doppio (primo menu 19).
+
+## Il gesto che misura
+
+Un gesto che prima scrive e poi misura fa rifare il layout alla WebView dentro
+il gesto stesso; se dopo la misura scrive ancora, il layout del fotogramma lo
+rifà da capo. Tre regole tengono le misure dove il layout è già fatto, o le
+tolgono del tutto:
+
+- **il menu della maniglia seleziona la tratta dopo essersi messo al suo
+  posto**: `openMenu` (`blocks/handles.ts`) selezionava i blocchi e poi
+  apriva il menu, e `placeBeside` misurava la maniglia su un editor appena
+  riscritto dalla selezione; con il fuoco ancora nell'editor CodeMirror
+  riscriveva anche la selezione del documento. Adesso il menu si apre, si
+  mette accanto alla maniglia e prende il fuoco, e la selezione arriva dopo,
+  nello stesso gesto. Le voci ritrovano il blocco dalla sua chiave
+  (`withRun`), non dalla selezione. Il primo menu della maniglia scende da
+  29 a 25 ms di mediana; restano ~10 ms del primo layout del menu stesso
+  (le tre misure di `placeBeside`) e ~10 dell'aggiornamento di CodeMirror per
+  la selezione, entrambi solo la prima volta. La guardia è
+  `blocks.dom.test.ts` («seleziona la tratta dopo che il menu è al suo posto
+  e ha il fuoco»);
+- **il lanciatore misura la fila dei modi dopo la superficie**: aprendo,
+  `setMode` misurava la scheda del modo per tenerla in vista e il resto
+  dell'apertura (le righe, l'anteprima) rendeva subito vecchio quel layout,
+  che la misura della corsa rifaceva. La fila si misura adesso subito dopo la
+  superficie, sullo stesso layout; cambiando modo a lanciatore aperto si
+  misura come prima. La guardia è `launcher.test.ts` («aprendosi misura la
+  fila dei modi solo dopo la superficie»);
+- **la ricetta del tema conta i fondi una volta**: a ogni cambio d'accento la
+  tavolozza si ricalcola, e `hold` (`theme/scrittoio/recipe.ts`) cerca la
+  luminosità di ogni colore con una bisezione che, a ogni tentativo, rileggeva
+  dal testo l'esadecimale del colore e quello di ogni fondo. Le luminanze dei
+  fondi si contano una volta per colore e quella del colore dai suoi canali,
+  con la stessa aritmetica di `contrast`: i fogli generati restano uguali byte
+  per byte (`npm run theme:verify`) e una tavolozza costa in Node 1,0 ms
+  invece di 3,4. La guardia è `recipe-cost.test.ts`.
+
+Misura breve con una sonda sull'ispettore remoto di WebKit nell'app vera,
+pc-debian-di-fub, 17 novembre 2026, vault del banco, giri alternati; tempo
+sincrono del gesto e blocco più lungo del thread in ms, carico medio a un
+minuto fra 0,1 e 3,9:
+
+| Gesto | Prima: sincrono · blocco | Dopo: sincrono · blocco |
+|---|---:|---:|
+| Primo menu della maniglia (5 giri) | 29 · 30–44 (mediana 29) | 21–35 · 22–37 (mediana 25) |
+| Primo lanciatore (Ctrl O, 2 giri) | 24 · 25, 35 · 38 | 24 · 26, 23 · 28 |
+| Cambio d'accento (12 cambi): fotogramma più lungo | 29–46 | 27–44 |
+
+«Prima» è `2890f9e8f`. Il cambio d'accento resta dominato dal ricalcolo
+dello stile (sotto).
+
+Quello che resta non è di chi apre il gesto, o non vale il rischio:
+
+- **l'accento** cambia proprietà sulla radice, e WebKit ricalcola lo stile di
+  tutta la pagina (circa 1350 elementi): ~25 ms comunque lo si scriva (foglio
+  sostituito, testo del foglio, CSSOM, stile in linea su `<html>`);
+- **lo zoom** è della finestra (`set_zoom` in `crates/fub-app/src/lib.rs`):
+  WebKit rifà il layout di tutto in 20–30 ms fuori da JavaScript. Dentro, la
+  barra di formato (`fit` in `panels/format-bar.ts`) rilegge `scrollWidth`
+  una volta per gruppo nascosto, fino a 9 letture e 2–6 ms quando la barra è
+  stretta; una stima a posizioni la porterebbe a due letture, ma i gruppi
+  della barra possono restringersi e la stima rischia di nascondere un gruppo
+  di troppo;
+- **il primo lanciatore** paga 10–16 ms prima del suo codice (CodeMirror
+  costruisce la mappa dei tasti al primo tasto premuto in un editor, e la
+  prima volta il passo delle scorciatoie della shell compila) e 9–11 ms per il
+  primo layout della superficie. Un HTML uguale montato a riposo non lo
+  abbassa; un'apertura e chiusura vera a riposo sì (9 ms invece di 25), ma
+  toccherebbe fuoco, pillola e memoria dei modi, e non si fa;
+- **la prima apertura del grafo** resta un fotogramma da ~50 ms
+  (`graph/chart.ts`): non toccata in questo giro.
+
+Il «blocco dopo la chiusura del secondo menu» delle misure precedenti non
+esiste: era il blocco del primo lanciatore attribuito al gesto prima, perché la
+sonda segna l'inizio di un blocco all'ultimo giro di `setTimeout(0)`, qualche
+ms prima del gesto che lo causa. La sonda adesso attribuisce un blocco al
+gesto il cui inizio cade dentro il blocco.
