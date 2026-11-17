@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-// La prova del rinvio di `selectionchange` in `test-setup.ts`: senza, happy-dom
+// La prova del rinvio di `selectionchange` in `src/test-setup.ts`: senza, happy-dom
 // manda l'evento dentro l'update di una vista CodeMirror a fuoco, e la vista
 // rientra nel suo update (PR #421).
 

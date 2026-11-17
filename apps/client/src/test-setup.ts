@@ -58,7 +58,7 @@ if (typeof Element !== "undefined") {
 // (`properties.e2e.test.ts`, PR #421). Qui lo si rimanda una volta per tutta
 // la suite: una microtask e non un timer, così arriva subito dopo il codice
 // sincrono che ha cambiato la selezione anche coi timer finti. La prova è in
-// `test-setup.dom.test.ts`.
+// `editors/text/selectionchange.dom.test.ts`.
 // Il prototipo è quello del `document` vero (`HTMLDocument`): il `Document`
 // globale di happy-dom è una classe della finestra fuori dalla sua catena.
 if (typeof document !== "undefined") {
