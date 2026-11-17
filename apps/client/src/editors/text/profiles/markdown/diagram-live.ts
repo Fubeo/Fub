@@ -200,7 +200,9 @@ export class DiagramLive {
   /// La fase di lettura: le misure che la disposizione usa. `lift` lo dà chi
   /// sa dove sta il recinto (il widget).
   read(lift: number): DiagramLayout {
-    const beside = getComputedStyle(this.root).getPropertyValue("--diagram-beside").trim() === "1";
+    // Accanto il foglio mostra lo spazio sotto il sorgente; uno sopra l'altro
+    // lo toglie (`skin/diagrams.css`, `@container sheet`).
+    const beside = getComputedStyle(this.spacer).display !== "none";
     const figure = this.shown?.element;
     return {
       lift,

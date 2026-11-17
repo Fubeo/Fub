@@ -152,9 +152,9 @@
    sopra l'altro. Il widget sotto il recinto porta la riga dell'errore, il
    disegno (che sale di `--diagram-lift` accanto alle righe), lo spazio che il
    disegno supera (`--diagram-rest`) e la didascalia; `ui/mermaid.ts` e
-   `diagram-live.ts` scrivono le misure, e leggono qui `--diagram-beside`. */
+   `diagram-live.ts` scrivono le misure, e sanno se il disegno sta accanto
+   dallo spazio sotto il sorgente, che c'è soltanto accanto. */
 .cm-editor .cm-content .cm-fub-diagram-live {
-  --diagram-beside: 0;
   display: grid;
   gap: 10px;
   padding-bottom: var(--space-4);
@@ -197,7 +197,6 @@
 }
 @container sheet (min-width: 941px) {
   .cm-editor .cm-content .cm-fub-diagram-live {
-    --diagram-beside: 1;
     position: relative;
   }
   .cm-editor .cm-content .cm-line.cm-fub-diagram-src,
