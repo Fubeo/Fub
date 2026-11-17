@@ -2198,7 +2198,7 @@ Fatto quando: un test con `MemoryHost`; un test DOM che il fondo non entra
 nel testo; le foto del banco.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 template; cd apps/client && npx vitest run src/editors/text/profiles/markdown
-Stato: [~] fatto dal coder (86abb15ab, 2026-11-17), in coda per `integra/editor-1`
+Stato: [~] integrato in `integra/editor-1` (dcf3eff17, 2026-11-17), PR bozza #472
 
 ## T40 · La Scrivania
 
@@ -2923,7 +2923,7 @@ byte; le scene nelle due luci e al telefono; la battuta sotto i 4 ms.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
 src/editors/text/profiles/markdown/math-live.dom.test.ts
-Stato: [~] fatto dal coder (06733d23a, 2026-11-17), in coda per `integra/editor-1`
+Stato: [~] integrato in `integra/editor-1` (6a126f905, 2026-11-17), PR bozza #472
 
 ## T61 · Formule: i simboli per nome e i pezzi coi loro spazi vuoti
 
