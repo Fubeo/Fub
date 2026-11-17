@@ -75,8 +75,9 @@ programma a ogni tasto.
   che si chiamano così, poi quelli descritti con quella parola. Invio mette il
   primo. Senza risultati lo dice, e suggerisce di provare in inglese o di
   descrivere il simbolo.
-- In fondo, il nome del simbolo sotto il puntatore o col fuoco; ogni simbolo
-  ha il suo nome anche per il lettore di schermo.
+- In fondo, il nome del simbolo sotto il puntatore o col fuoco, e la sua
+  scrittura veloce («veloce: `sqrt`»); col LaTeX a vista anche ciò che entra
+  (`\sqrt{}`). Ogni simbolo ha il suo nome anche per il lettore di schermo.
 - Da tastiera: Alt ↓ dalla formula porta ai pezzi, che si scorrono con ← e →
   (un solo Tab per la fila). «Tutti» con Invio va alla ricerca; ↓ dalla
   ricerca porta alla griglia, che si percorre con le quattro frecce; ↑ dalla
@@ -86,18 +87,67 @@ programma a ogni tasto.
 - Al telefono il riquadro è largo quanto lo schermo e la griglia ha otto
   colonne; a una finestra stretta i pezzi si stringono prima che «Tutti» esca
   dalla fila.
-- Una formula col LaTeX a vista (con un errore) non mostra la tavolozza.
+- Una formula con un errore non mostra la tavolozza; col LaTeX a vista la
+  decidono gli aiuti (sotto).
 
 La tavolozza (`math/palette.ts`) legge lo stesso catalogo delle proposte e
 cerca in memoria: nessuna chiamata al programma a ogni tasto, e una ricerca
 sta ben sotto un fotogramma.
 
+## La scrittura veloce
+
+Quello che si scrive com'è diventa LaTeX. Backspace subito dopo una
+trasformazione la annulla e rimette ciò che si era scritto; la prima volta un
+avviso lo spiega.
+
+| Si scrive | Diventa |
+| --- | --- |
+| `a/`, `(a+b)/` | una frazione col numeratore (`\frac{a}{}`), il cursore al denominatore |
+| `^`, `_` | l'esponente e il pedice (nella formula che si tocca); `x^10` diventa `x^{10}` |
+| `*` | il punto del prodotto `\cdot` (nella formula che si tocca) |
+| `(`, `[` | la coppia di parentesi, col cursore in mezzo; `)` scavalca quella chiusa, Backspace fra due vuote le toglie |
+| `->`, `<->`, `=>`, `<=`, `>=`, `!=`, `+-`, `~=`, `...` | `\to`, `\leftrightarrow`, `\Rightarrow`, `\le`, `\ge`, `\ne`, `\pm`, `\approx`, `\dots` |
+| `pi`, `alpha`, `sin`, `sum`, `inf`… seguiti da uno spazio o da un segno | `\pi`, `\alpha`, `\sin`, `\sum`, `\infty`; `sqrt` apre la radice |
+| `3,14` | `3{,}14`, la virgola decimale; solo con l'app in italiano: in inglese la virgola separa |
+| `"due parole"` | `\text{due parole}`; nella formula che si tocca `"` apre il testo e la seconda lo chiude |
+| `α`, `×`, `≤`, `²`… già disegnati | il loro comando |
+
+Nel testo (`\text{…}`) niente si trasforma, `->` compreso; una parola dentro
+un'altra (`pin`) resta com'è. Il testo di un IME (cinese, giapponese, coreano)
+entra com'è, senza scrittura veloce. Le regole stanno in `math/edit.ts`, senza
+DOM: ogni tasto lavora sul TeX della formula aperta, in memoria.
+
 ## Quando si vede il LaTeX
 
 La preferenza «Mostra il LaTeX delle formule» (`editor.math.source`, spenta di
-partenza) torna al riquadro col TeX e l'anteprima. Lo stesso vale con Vim, in
-sola lettura e con la presenza `elemento`, che mostra la sorgente col cursore
-dentro.
+partenza) mette sotto la formula, in riga e a blocco, il campo del suo LaTeX:
+si scrive lì, e la formula sopra ne è l'anteprima. Il clic sulla formula porta
+soltanto agli spazi vuoti; Tab va da uno spazio vuoto al seguente, poi fuori
+dalla graffa, poi fuori dalla formula. Le proposte dopo `\` dicono anche il
+comando.
+
+Col campo valgono tre misure di aiuto (`editor.math.help`, «Pieni» di
+partenza):
+
+| | Pieni | Discreti | Spenti |
+| --- | --- | --- | --- |
+| Parentesi che si chiudono | sì | sì | no |
+| Proposte dopo `\` | sì | sì | no |
+| Scrittura veloce | sì | solo i segni già disegnati e le cifre di un esponente | no |
+| Tavolozza | sempre | a richiesta: il pulsante «Simboli» o Alt ↓ | no |
+
+Con «Spenti» restano il LaTeX e la sua anteprima, nient'altro. Nella formula
+che si tocca gli aiuti sono sempre pieni.
+
+I tre puntini del riquadro (in cima a destra della formula in riga, accanto al
+campo, in fondo alla fila dei pezzi di un blocco; da tastiera Maiusc F10 o il
+tasto del menu) cambiano «Mostra il LaTeX» e gli aiuti: la scelta vale subito
+per tutte le formule aperte e si scrive nelle Impostazioni, sulla macchina. Se
+non si può scrivere, torna la scelta di prima e un avviso lo dice. Un valore
+degli aiuti scritto a mano che non è fra i tre vale «Pieni».
+
+Con Vim resta il riquadro di prima, col TeX e l'anteprima; in sola lettura e
+con la presenza `elemento` si vede la sorgente col cursore dentro.
 
 ## Limiti
 

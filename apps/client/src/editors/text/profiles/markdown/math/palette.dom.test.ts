@@ -67,7 +67,10 @@ describe("la tavolozza", () => {
     const tip = $(".cm-fub-mx-tip");
     expect(tip.textContent).toBe("Passa su un simbolo per vedere come si chiama");
     $$(".cm-fub-mx-quick .cm-fub-mx-tile")[3]!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-    expect(tip.textContent).toBe("Radice quadrata");
+    expect(tip.querySelector(".cm-fub-mx-tip-name")!.textContent).toBe("Radice quadrata");
+    // La sua scrittura veloce (T63), e niente LaTeX: la formula si tocca.
+    expect(tip.querySelector(".cm-fub-mx-tip-quick")!.textContent).toBe("veloce: sqrt");
+    expect(tip.querySelector("code")).toBeNull();
     $(".cm-fub-mx-all").dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
     expect(tip.textContent).toBe("Passa su un simbolo per vedere come si chiama");
   });
@@ -141,7 +144,7 @@ describe("la tavolozza", () => {
     key(quick[0]!, "ArrowRight");
     expect(document.activeElement).toBe(quick[1]);
     // Il nome si legge anche per il pezzo col fuoco.
-    expect($(".cm-fub-mx-tip").textContent).toBe("Potenza");
+    expect($(".cm-fub-mx-tip .cm-fub-mx-tip-name").textContent).toBe("Potenza");
     key(quick[1]!, "End");
     expect(document.activeElement).toBe($(".cm-fub-mx-all"));
     key($(".cm-fub-mx-all"), "Escape");

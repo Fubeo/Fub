@@ -1,7 +1,8 @@
 import katex from "katex";
 import { describe, expect, it } from "vitest";
 import { readOptions } from "../math";
-import { arrow, backspace, deleteForward, edge, finishCommand, insertText, space, stack, tab, typeChar, type MathState, type Outcome } from "./edit";
+import { arrow, backspace, deleteForward, dropPair, edge, finishCommand, inTextGroup, insertTemplate, insertText, openPair, QUICK_WORDS, quickWrite, sourceHoles, sourceTab, space, stack, stepOver, tab, typeChar, undoQuick, type MathState, type Outcome, type QuickOptions, type QuickUndo } from "./edit";
+import { SYMBOLS } from "./symbols";
 
 // Le regole dei tasti nella formula toccata (T60, E27), senza DOM. Il cursore
 // si scrive `|` nel TeX: `s("x^{|}")` è la formula `x^{}` col cursore dentro.
@@ -171,5 +172,174 @@ describe("l'incolla", () => {
     expect(insertText(s("|"), "\\frac{a").kind).toBe("none");
     expect(insertText(s("|"), "a $ b").kind).toBe("none");
     expect(insertText(s("|"), "`a`").kind).toBe("none");
+  });
+});
+
+// ── La scrittura veloce (T63) ───────────────────────────────────────────────
+
+const FULL: QuickOptions = { help: "piene", decimalComma: true };
+
+/// Scrive `text` un tasto alla volta in un campo, come l'evento `input`: ogni
+/// segno entra, poi la scrittura veloce. `undo` è l'ultima trasformazione, se
+/// il tasto ne ha fatta una.
+function write(text: string, options: QuickOptions = FULL, from: MathState = s("|")) {
+  let state = from;
+  let undo: QuickUndo | null = null;
+  for (const ch of text) {
+    state = { tex: state.tex.slice(0, state.caret) + ch + state.tex.slice(state.caret), caret: state.caret + ch.length };
+    const quick = quickWrite(state, ch, options);
+    undo = quick?.undo ?? null;
+    if (quick) state = quick.state;
+  }
+  return { state, undo, shown: show(state) };
+}
+
+/// Backspace subito dopo: rimette ciò che si era scritto.
+function undone(text: string, options: QuickOptions = FULL): string {
+  const { state, undo } = write(text, options);
+  expect(undo, `«${text}» non si annulla`).not.toBeNull();
+  return show(undoQuick(state, undo!)!);
+}
+
+describe("la scrittura veloce", () => {
+  it("la tabella di E27, e ogni trasformazione si annulla con Backspace", () => {
+    const table: readonly (readonly [string, string])[] = [
+      ["a/", "\\frac{a}{|}"],
+      ["(a+b)/", "\\frac{a+b}{|}"],
+      ["x^2/", "\\frac{x^2}{|}"],
+      ["x^10", "x^{10|}"],
+      ["x_12", "x_{12|}"],
+      ["->", "\\to |"],
+      ["<->", "\\leftrightarrow |"],
+      ["=>", "\\Rightarrow |"],
+      ["<=", "\\le |"],
+      [">=", "\\ge |"],
+      ["!=", "\\ne |"],
+      ["+-", "\\pm |"],
+      ["~=", "\\approx |"],
+      ["...", "\\dots |"],
+      ["pi ", "\\pi |"],
+      ["alpha+", "\\alpha+|"],
+      ["sin(", "\\sin(|"],
+      ["sqrt ", "\\sqrt{|}"],
+      ["sqrt2", "\\sqrt{2|}"],
+      ["inf ", "\\infty |"],
+      ["3,1", "3{,}1|"],
+      ["\"due parole\"", "\\text{due parole}|"],
+      ["α", "\\alpha |"],
+      ["×", "\\times |"],
+      ["²", "^2|"],
+      ["√", "\\sqrt{|}"],
+    ];
+    for (const [typed, expected] of table) {
+      expect(write(typed).shown, typed).toBe(expected);
+      expect(undone(typed), typed).toBe(`${typed}|`);
+    }
+  });
+
+  it("Backspace annulla soltanto subito dopo, col cursore dov'era", () => {
+    const { state, undo } = write("->");
+    expect(undoQuick({ tex: state.tex, caret: state.caret - 1 }, undo!)).toBeNull();
+    expect(undoQuick({ tex: `${state.tex}x`, caret: state.caret }, { ...undo!, replaced: "\\ne " })).toBeNull();
+  });
+
+  it("le parentesi si chiudono, si scavalcano e Backspace fra due vuote le toglie", () => {
+    expect(show(openPair(s("a|"), "(")!)).toBe("a(|)");
+    expect(show(openPair(s("|"), "[")!)).toBe("[|]");
+    expect(show(openPair(s("|"), "{")!)).toBe("{|}");
+    // `\{` è una graffa da vedere, non un gruppo.
+    expect(openPair(s("\\|"), "{")).toBeNull();
+    expect(openPair(s("|"), "a")).toBeNull();
+    expect(stepOver(s("(a|)"), ")")).toBe(3);
+    expect(stepOver(s("(a|"), ")")).toBeNull();
+    expect(show(dropPair(s("a(|)")!)!)).toBe("a|");
+    expect(show(dropPair(s("x^{|}")!)!)).toBe("x^|");
+    expect(dropPair(s("\\{|}"))).toBeNull();
+    expect(dropPair(s("(a|)"))).toBeNull();
+  });
+
+  it("un esponente di più cifre raggruppato: il primo segno che non è una cifra ne esce", () => {
+    const { state } = write("x^10");
+    const out = quickWrite({ tex: `${state.tex.slice(0, state.caret)}+${state.tex.slice(state.caret)}`, caret: state.caret + 1 }, "+", FULL);
+    expect(show(out!.state)).toBe("x^{10}+|");
+    // Un salto del cursore, non una trasformazione: non c'è niente da annullare.
+    expect(out!.undo).toBeNull();
+  });
+
+  it("nel testo `->` resta com'è, e così ogni altra scrittura veloce", () => {
+    expect(write("->", FULL, s("\\text{a |}")).shown).toBe("\\text{a ->|}");
+    expect(write("pi ", FULL, s("\\text{|}")).shown).toBe("\\text{pi |}");
+    expect(write("a/", FULL, s("\\textbf{|}")).shown).toBe("\\textbf{a/|}");
+    expect(inTextGroup("\\text{a")).toBe(true);
+    expect(inTextGroup("\\text{a} b")).toBe(false);
+    // Fuori dal testo sì.
+    expect(write("->", FULL, s("\\text{a} |")).shown).toBe("\\text{a} \\to |");
+  });
+
+  it("`3,14` in inglese resta una virgola che separa", () => {
+    const english: QuickOptions = { help: "piene", decimalComma: false };
+    expect(write("3,14", english).shown).toBe("3,14|");
+    expect(write("f(1,2)", english).shown).toBe("f(1,2)|");
+    // In italiano sì, e il resto delle cifre segue.
+    expect(write("3,14").shown).toBe("3{,}14|");
+  });
+
+  it("una parola dentro un'altra, o dopo `\\`, non si trasforma", () => {
+    expect(write("pin ").shown).toBe("pin |");
+    expect(write("\\pi ").shown).toBe("\\pi |");
+    // Il numeratore è soltanto ciò che si è appena scritto, non la frazione prima.
+    expect(write("x/", FULL, s("\\frac{a}{b}|")).shown).toBe("\\frac{a}{b}\\frac{x}{|}");
+  });
+
+  it("con gli aiuti discreti valgono soltanto i segni già disegnati e le cifre di un esponente", () => {
+    const discreet: QuickOptions = { help: "discrete", decimalComma: true };
+    expect(write("a/", discreet).shown).toBe("a/|");
+    expect(write("->", discreet).shown).toBe("->|");
+    expect(write("pi ", discreet).shown).toBe("pi |");
+    expect(write("3,14", discreet).shown).toBe("3,14|");
+    expect(write("\"a\"", discreet).shown).toBe("\"a\"|");
+    expect(write("α", discreet).shown).toBe("\\alpha |");
+    expect(write("x^10", discreet).shown).toBe("x^{10|}");
+  });
+
+  it("con gli aiuti spenti niente si trasforma", () => {
+    const off: QuickOptions = { help: "spente", decimalComma: true };
+    for (const typed of ["a/", "->", "pi ", "3,14", "α", "x^10", "\"a\""]) expect(write(typed, off).shown).toBe(`${typed}|`);
+  });
+
+  it("ogni scrittura veloce del catalogo funziona e si annulla", () => {
+    for (const symbol of SYMBOLS) {
+      const quick = symbol.quick;
+      // `^` e `_` sono tasti della formula che si tocca; `a/b` una frazione.
+      if (!quick || quick === "^" || quick === "_") continue;
+      const typed = quick === "a/b" ? "a/" : /[a-zA-Z]$/.test(quick) ? `${quick} ` : quick;
+      const { state, undo } = write(typed);
+      expect(state.tex, `${symbol.id}: «${typed}»`).not.toBe(typed);
+      expect(renders(state.tex.replace("{}", "{x}")), `${symbol.id}: ${state.tex}`).toBe(true);
+      expect(show(undoQuick(state, undo!)!)).toBe(`${typed}|`);
+    }
+    for (const word of QUICK_WORDS) expect(write(`${word} `).state.tex).toMatch(/^\\/);
+  });
+});
+
+describe("il campo del LaTeX", () => {
+  it("gli spazi vuoti sono le graffe vuote, non `\\{}`", () => {
+    expect(sourceHoles("\\frac{}{}")).toEqual([6, 8]);
+    expect(sourceHoles("\\{}+x^{}")).toEqual([7]);
+  });
+
+  it("Tab va allo spazio vuoto dopo, poi fuori dalla graffa, poi fuori dalla formula", () => {
+    expect(result(s("\\frac{|}{}"), sourceTab(s("\\frac{|}{}"), false))).toBe("\\frac{}{|}");
+    expect(result(s("\\frac{a}{|b}"), sourceTab(s("\\frac{a}{|b}"), false))).toBe("\\frac{a}{b}|");
+    expect(sourceTab(s("x|"), false)).toEqual({ kind: "leave", side: "after" });
+    expect(result(s("\\frac{}{|}"), sourceTab(s("\\frac{}{|}"), true))).toBe("\\frac{|}{}");
+    expect(sourceTab(s("|\\frac{}{}"), true).kind).toBe("none");
+  });
+
+  it("un modello del catalogo entra al posto del nome, col cursore nel primo spazio vuoto", () => {
+    expect(show(insertTemplate(s("a+\\fr|"), "\\frac{}{}", 2))).toBe("a+\\frac{|}{}");
+    expect(show(insertTemplate(s("|"), "\\alpha", 0))).toBe("\\alpha|");
+    // Una selezione se ne va.
+    expect(show(insertTemplate({ tex: "abc", caret: 0 }, "\\sqrt{}", 0, 3))).toBe("\\sqrt{|}");
   });
 });

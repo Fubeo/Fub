@@ -803,6 +803,7 @@
     "cm-fub-mx-symbol",
     "cm-fub-mx-symbol-glyph",
     "cm-fub-mx-symbol-name",
+    "cm-fub-mx-symbol-code",
     "cm-fub-mx-palette",
     "cm-fub-mx-quick",
     "cm-fub-mx-tile",
@@ -819,6 +820,16 @@
     "cm-fub-mx-none",
     "cm-fub-mx-tip",
     "cm-fub-mx-tip-name",
+    "cm-fub-mx-tip-code",
+    "cm-fub-mx-tip-quick",
+    "cm-fub-mx-row",
+    "cm-fub-mx-more",
+    "cm-fub-mx-palette-toggle",
+    "cm-fub-mx-options",
+    "cm-fub-mx-option",
+    "cm-fub-mx-option-name",
+    "cm-fub-mx-segments",
+    "cm-fub-mx-segment",
     "cm-focused",
     "cm-scroller",
     "cm-activeLine",
@@ -2825,6 +2836,7 @@
     "cm-fub-mx-symbol": "cornice",
     "cm-fub-mx-symbol-glyph": "cornice",
     "cm-fub-mx-symbol-name": "cornice",
+    "cm-fub-mx-symbol-code": "cornice",
     "cm-fub-mx-palette": "cornice",
     "cm-fub-mx-quick": "cornice",
     "cm-fub-mx-tile": "cornice",
@@ -2841,6 +2853,16 @@
     "cm-fub-mx-none": "cornice",
     "cm-fub-mx-tip": "cornice",
     "cm-fub-mx-tip-name": "cornice",
+    "cm-fub-mx-tip-code": "cornice",
+    "cm-fub-mx-tip-quick": "cornice",
+    "cm-fub-mx-row": "cornice",
+    "cm-fub-mx-more": "cornice",
+    "cm-fub-mx-palette-toggle": "cornice",
+    "cm-fub-mx-options": "cornice",
+    "cm-fub-mx-option": "cornice",
+    "cm-fub-mx-option-name": "cornice",
+    "cm-fub-mx-segments": "cornice",
+    "cm-fub-mx-segment": "cornice",
     "cm-focused": "contenuto",
     "cm-scroller": "contenuto",
     "cm-activeLine": "segno",
@@ -6254,7 +6276,8 @@
         "cm-fub-mx-symbols",
         "cm-fub-mx-symbol",
         "cm-fub-mx-symbol-glyph",
-        "cm-fub-mx-symbol-name"
+        "cm-fub-mx-symbol-name",
+        "cm-fub-mx-symbol-code"
       ],
       "states": [
         "rest",
@@ -6280,13 +6303,35 @@
         "cm-fub-mx-grid",
         "cm-fub-mx-none",
         "cm-fub-mx-tip",
-        "cm-fub-mx-tip-name"
+        "cm-fub-mx-tip-name",
+        "cm-fub-mx-tip-code",
+        "cm-fub-mx-tip-quick"
       ],
       "states": [
         "rest",
         "hover",
         "pressed",
         "selected",
+        "focused"
+      ]
+    },
+    {
+      "name": "math-source",
+      "part": "math",
+      "hooks": [
+        "cm-fub-mx-row",
+        "cm-fub-mx-more",
+        "cm-fub-mx-palette-toggle",
+        "cm-fub-mx-options",
+        "cm-fub-mx-option",
+        "cm-fub-mx-option-name",
+        "cm-fub-mx-segments",
+        "cm-fub-mx-segment"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
         "focused"
       ]
     },
@@ -10710,10 +10755,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 2020,
+    "hooks": 2031,
     "state_names": 7,
-    "assigned_states": 930,
-    "components": 272,
+    "assigned_states": 934,
+    "components": 273,
     "preference_tokens": 191
   }
 }
