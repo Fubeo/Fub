@@ -400,8 +400,12 @@ async function inspectKeyboard(page) {
       const rect = el.getBoundingClientRect();
       return rect.width === 0 || rect.height === 0;
     };
+    // Un menu dentro una superficie modale (il menu della maniglia: un
+    // dialogo col campo della ricerca e, sotto, il menu delle voci) ne è una
+    // parte: il giro del Tab è quello della superficie, campo compreso.
     const modal = [...document.querySelectorAll("[aria-modal=\"true\"], [role=\"menu\"]")]
       .filter((el) => !hidden(el))
+      .filter((el) => el.getAttribute("role") !== "menu" || !el.parentElement?.closest("[aria-modal=\"true\"]"))
       .at(-1);
     const scope = modal ?? document;
     const nodes = [...scope.querySelectorAll("*")].filter(

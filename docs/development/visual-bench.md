@@ -64,7 +64,9 @@ passo per fotogramma e una proprietà estranea cambiata in due fotogrammi di
 fila è un errore), un gesto invertito a metà torna allo stato di
 partenza senza salti (ogni riquadro in corsa prosegue da dov'era, lui o la
 sua immagine che esce, e il referto dice com'era e com'è il riquadro che
-salta), e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
+salta; il «dopo» si legge al primo fotogramma che il gesto contrario dipinge,
+dopo le sue richiamate di `requestAnimationFrame` e prima del disegno, non
+appena torna il clic), e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
 finisce entro 140 ms. Ogni file della shell e del kit che fa partire una corsa
 ha la sua coreografia, e ogni gesto del trascinamento dei
 [Blocchi](../product/editor-blocks.md) la sua (`blocchi-*`: la presa di un

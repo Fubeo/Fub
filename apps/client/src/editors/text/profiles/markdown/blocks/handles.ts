@@ -13,7 +13,7 @@
 // al rilascio, in una transazione.
 import { EditorSelection, type EditorState, type Extension, Facet } from "@codemirror/state";
 import { BlockType, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
-import { closeContextMenu, showContextMenu, type MenuItem } from "../../../../../ui/menu";
+import { closeContextMenu, menuKeyFoot, showContextMenu, type MenuItem } from "../../../../../ui/menu";
 import { displayBinding } from "../../../../../ui/commands";
 import { writeClipboardText } from "../../../../../platform/clipboard";
 import { type Lifetime, openLifetime } from "../../../../../ui/lifetime";
@@ -453,10 +453,11 @@ class HandlesView {
     // carattere del documento, che lo farebbe piccolo o sottile.
     const plus = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     plus.setAttribute("class", "cm-fub-block-add-plus");
-    plus.setAttribute("viewBox", "0 0 12 12");
+    // Il tracciato del prototipo (`#i-plus`), sulla sua griglia da 16.
+    plus.setAttribute("viewBox", "0 0 16 16");
     plus.setAttribute("aria-hidden", "true");
     const cross = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    cross.setAttribute("d", "M6 1.5v9M1.5 6h9");
+    cross.setAttribute("d", "M8 3.2v9.6M3.2 8h9.6");
     plus.append(cross);
     this.add.append(plus);
     this.add.setAttribute("aria-label", liveStrings.t("blocks.add"));
@@ -677,9 +678,10 @@ class HandlesView {
 
   /// Il menu del blocco, sotto la maniglia: lo stesso menu del tasto destro
   /// del resto di Fub, coi suoi gruppi, le scorciatoie e ciò che elimina in
-  /// fondo. Mentre è aperto i blocchi su cui lavora restano selezionati, così
-  /// si vede che cosa toccherà, e i tasti della selezione (Mod-d, Canc) sono
-  /// quelli che le voci dicono.
+  /// fondo. Come nel prototipo: in cima il campo «Cerca un'azione…», poi il
+  /// nome del blocco, le voci e il piede coi tasti. Mentre è aperto i blocchi
+  /// su cui lavora restano selezionati, così si vede che cosa toccherà, e i
+  /// tasti della selezione (Mod-d, Canc) sono quelli che le voci dicono.
   openMenu(pointer = false, at: MouseEvent | null = null): void {
     if (this.menu) closeContextMenu();
     const view = this.view;
@@ -695,12 +697,17 @@ class HandlesView {
       run();
       view.focus();
     };
-    const excerpt = gripExcerpt(view.state, blocks, index);
+    const many = siblingsOf(blocks, run.first).filter((i) => i >= run.first && i <= run.last).length;
+    const title = many > 1 ? liveStrings.t("blocks.drag.count", { count: String(many) }) : kindName(blocks[index]!);
     this.menu = true;
     this.grip.setAttribute("aria-expanded", "true");
     showContextMenu(at ?? this.grip, this.mainItems(key, act), {
       pointer,
-      header: { icon: "outline", kind: liveStrings.t("blocks.menu.head"), ...(excerpt ? { name: excerpt } : {}) },
+      field: liveStrings.t("blocks.menu.search"),
+      title,
+      label: `${liveStrings.t("blocks.menu.head")} · ${title}`,
+      searchable: this.moreItems(key, act),
+      keys: menuKeyFoot(),
       onClose: () => {
         this.menu = false;
         this.grip.setAttribute("aria-expanded", "false");
@@ -732,27 +739,17 @@ class HandlesView {
     const run = runFor(view.state, blocks, index);
     const sibs = siblingsOf(blocks, run.first);
     const transformable = sibs.filter((i) => i >= run.first && i <= run.last).some((i) => canTransform(blocks[i]!));
-    const moveSpec = (dir: -1 | 1) => () =>
-      this.withRun(key, (state, all, found) => {
-        const spec = moveRun(state, all, found, dir);
-        if (!spec) return;
-        const { follow, origin, moved, ...move } = spec;
-        const value = state.field(blockSelection, false);
-        const effects = value
-          ? [setBlockSelection.of({ anchor: follow(value.anchor) ?? value.anchor, head: follow(value.head) ?? value.head, depth: value.depth })]
-          : [];
-        view.dispatch({ ...move, effects });
-      });
     const colors = this.colorItems(key, act);
     // Ciò che adesso non si può fare non si vede: una voce grigia senza un
     // perché è soltanto rumore.
     const groups: (MenuItem | false)[][] = [[
-      transformable && { label: liveStrings.t("blocks.menu.transform"), items: this.transformItems(key, act) },
-      colors.length > 0 && { label: liveStrings.t("blocks.menu.color"), items: colors },
+      transformable && { label: liveStrings.t("blocks.menu.transform"), icon: "sync", items: this.transformItems(key, act) },
+      colors.length > 0 && { label: liveStrings.t("blocks.menu.color"), icon: "fmt-color", items: colors },
       // Un ripiegabile: se la nota lo apre già aperto (K2). La freccia
       // invece apre e chiude soltanto nella vista.
       blocks[index]?.kind === "details" && {
         label: liveStrings.t("blocks.menu.details-open"),
+        icon: "fmt-details",
         choice: "checkbox",
         checked: detailsAt(view.state, blocks[index]!.from)?.head.open === true,
         run: act(() => this.withRun(key, (state, all, _found, at) => {
@@ -764,13 +761,47 @@ class HandlesView {
     ], [
       {
         label: liveStrings.t("blocks.menu.duplicate"),
+        icon: "copy",
         hint: displayBinding("Mod-d"),
         run: act(() => this.withRun(key, (state, all, found) => view.dispatch(duplicateRun(state, all, found)))),
       },
-      run.first === run.last && { label: liveStrings.t("blocks.menu.link"), run: act(() => this.copyLink(key)) },
+      run.first === run.last && { label: liveStrings.t("blocks.menu.link"), icon: "fmt-link", run: act(() => this.copyLink(key)) },
     ], [
-      // Su e giù si vedono solo se la tratta può davvero muoversi: il primo
-      // testo sotto il frontmatter non sale, e il frontmatter non scende.
+      {
+        label: liveStrings.t("blocks.menu.delete"),
+        icon: "trash",
+        hint: displayBinding("Delete"),
+        danger: true,
+        run: act(() => this.withRun(key, (state, all, found) => view.dispatch(deleteRun(state, all, found)))),
+      },
+    ]];
+    return groupGaps(groups.map((group) => group.filter((item): item is MenuItem => item !== false)));
+  }
+
+  /// Le voci che il prototipo non ha nel menu e che si trovano scrivendo nel
+  /// suo campo: «Sposta su», «Sposta giù» (che hanno Ctrl Maiusc ↑ ↓ e il
+  /// trascinamento) e «Affianca in colonne» (che è anche il trascinamento al
+  /// bordo del blocco, «Accanto»). Come prima, solo quando si possono fare.
+  moreItems(key: BlockKey, act: (run: () => void) => () => void): MenuItem[] {
+    const view = this.view;
+    const blocks = view.state.field(blockModel).blocks;
+    const index = indexOf(blocks, key);
+    if (index < 0) return [];
+    const run = runFor(view.state, blocks, index);
+    const moveSpec = (dir: -1 | 1) => () =>
+      this.withRun(key, (state, all, found) => {
+        const spec = moveRun(state, all, found, dir);
+        if (!spec) return;
+        const { follow, origin, moved, ...move } = spec;
+        const value = state.field(blockSelection, false);
+        const effects = value
+          ? [setBlockSelection.of({ anchor: follow(value.anchor) ?? value.anchor, head: follow(value.head) ?? value.head, depth: value.depth })]
+          : [];
+        view.dispatch({ ...move, effects });
+      });
+    const items: (MenuItem | false)[] = [
+      // Su e giù solo se la tratta può davvero muoversi: il primo testo sotto
+      // il frontmatter non sale, e il frontmatter non scende.
       moveRun(view.state, blocks, run, -1) !== null && {
         label: liveStrings.t("blocks.menu.up"), hint: displayBinding("Mod-Shift-ArrowUp"), run: act(moveSpec(-1)),
       },
@@ -780,20 +811,14 @@ class HandlesView {
       // Il blocco col fratello che lo segue, o la tratta, uno per colonna (K3).
       columnsRun(view.state, blocks, run) !== null && {
         label: liveStrings.t("blocks.menu.columns"),
+        icon: "fmt-columns",
         run: act(() => this.withRun(key, (state, all, found) => {
           const picked = columnsRun(state, all, found);
           if (picked) view.dispatch({ ...intoColumns(state, all, picked), annotations: blockGesture.of({ kind: "columns" }) });
         })),
       },
-    ], [
-      {
-        label: liveStrings.t("blocks.menu.delete"),
-        hint: displayBinding("Delete"),
-        danger: true,
-        run: act(() => this.withRun(key, (state, all, found) => view.dispatch(deleteRun(state, all, found)))),
-      },
-    ]];
-    return groupGaps(groups.map((group) => group.filter((item): item is MenuItem => item !== false)));
+    ];
+    return items.filter((item): item is MenuItem => item !== false);
   }
 
   transformItems(key: BlockKey, act: (run: () => void) => () => void): MenuItem[] {
@@ -1886,9 +1911,10 @@ export const blockHandles: Extension = [
     },
     ".cm-fub-block-grip": { cursor: "grab", touchAction: "none" },
     "&.cm-fub-blocks-dragging .cm-fub-block-grip": { cursor: "grabbing" },
+    // 16 px, come le icone del prototipo (`.i`).
     ".cm-fub-block-add-plus": {
-      width: "0.75rem",
-      height: "0.75rem",
+      width: "16px",
+      height: "16px",
       fill: "none",
       stroke: "currentColor",
       strokeWidth: "1.5",
@@ -1901,7 +1927,7 @@ export const blockHandles: Extension = [
       justifyContent: "center",
       pointerEvents: "none",
     },
-    ".cm-fub-block-grip-eyes svg, .cm-fub-block-grip-held svg, .cm-fub-block-lift-grip svg": { width: "18px", height: "18px" },
+    ".cm-fub-block-grip-eyes svg, .cm-fub-block-grip-held svg, .cm-fub-block-lift-grip svg": { width: "16px", height: "16px" },
     ".cm-fub-block-grip-held svg path, .cm-fub-block-lift-grip svg path": { strokeWidth: "2.6" },
     ".cm-fub-block-grip-held": { display: "none" },
     ".cm-fub-block-grip[data-held] .cm-fub-block-grip-eyes": { display: "none" },

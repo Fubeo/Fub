@@ -269,11 +269,26 @@ describe("il menu della maniglia", () => {
     document.body.removeEventListener("contextmenu", count);
     expect(textMenus, "il menu del testo non si apre").toBe(0);
     const menu = document.querySelector<HTMLElement>("#context-menu")!;
-    expect(menu.querySelector(".menu-head")?.textContent).toContain("Uno");
-    expect(document.activeElement?.getAttribute("role"), "il fuoco non è su una voce").not.toBe("menuitem");
-    expect(labels()).toEqual(expect.arrayContaining(["Affianca in colonne", "Duplica", "Elimina il blocco"]));
-    expect(labels(), "il primo blocco non sale").not.toContain("Sposta su");
-    expect(labels()[labels().length - 1], "ciò che elimina sta in fondo").toBe("Elimina il blocco");
+    // Come nel prototipo: il campo «Cerca un'azione…» col fuoco, il nome del
+    // blocco, le voci con le loro figure e il piede dei tasti.
+    expect(menu.querySelector(".menu-head"), "niente testata").toBeNull();
+    const field = menu.querySelector<HTMLInputElement>(".menu-field-input")!;
+    expect(field.placeholder).toBe("Cerca un'azione…");
+    expect(document.activeElement, "il fuoco è nel campo").toBe(field);
+    expect(menu.querySelector(".menu-title")?.textContent).toBe("Testo");
+    expect(menu.getAttribute("aria-label")).toBe("Blocco · Testo");
+    expect(labels()).toEqual(["Trasforma in", "Colore", "Duplica", "Copia il link al blocco", "Elimina"]);
+    const hints = [...menu.querySelectorAll<HTMLElement>("[role^=menuitem] .menu-hint")].map((hint) => hint.textContent).filter((hint) => hint !== "›");
+    expect(hints).toEqual(["Ctrl D", "Canc"]);
+    expect(menu.querySelectorAll("[role^=menuitem] .menu-icon").length, "ogni voce ha la sua figura").toBe(5);
+    expect(menu.querySelector(".menu-foot-keys")?.textContent).toBe("↵ sceglie→ apreEsc chiude");
+    // «Sposta su/giù» e «Affianca in colonne» si trovano scrivendo.
+    field.value = "affianca";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(labels()).toEqual(["Affianca in colonne"]);
+    field.value = "sposta";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(labels(), "il primo blocco non sale").toEqual(["Sposta giù"]);
     expect(grip.getAttribute("aria-expanded")).toBe("true");
     closeContextMenu();
     expect(grip.getAttribute("aria-expanded")).toBe("false");
@@ -282,19 +297,24 @@ describe("il menu della maniglia", () => {
   it("il frontmatter resta il primo: il testo sotto non offre «Sposta su», lui non offre «Sposta giù»", () => {
     const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
     const text = open(doc, 1);
-    const up = text.handles.mainItems(text.handles.shown!, (run) => run).map((item) => item.label);
+    const up = text.handles.moreItems(text.handles.shown!, (run) => run).map((item) => item.label);
     expect(up, "il primo testo non sale sopra il frontmatter").not.toContain("Sposta su");
     expect(up, "il testo può ancora scendere").toContain("Sposta giù");
     const front = open(doc, 0);
-    const own = front.handles.mainItems(front.handles.shown!, (run) => run).map((item) => item.label);
+    const own = front.handles.moreItems(front.handles.shown!, (run) => run).map((item) => item.label);
     expect(own, "il frontmatter non scende").not.toContain("Sposta giù");
     expect(own).not.toContain("Sposta su");
   });
 
-  it("aperto da Invio ha già la prima voce", () => {
+  it("aperto da Invio ha il fuoco nel campo e la prima voce accesa; ↓ porta alla seconda", () => {
     const { view } = open("Uno\n\nDue");
     view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 }));
+    const field = document.querySelector<HTMLInputElement>("#context-menu .menu-field-input")!;
+    expect(document.activeElement).toBe(field);
+    expect(document.querySelector("#context-menu .menu-items .menu-lit .menu-label")?.textContent).toBe("Trasforma in");
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
     expect(document.activeElement?.getAttribute("role")).toBe("menuitem");
+    expect(document.activeElement?.querySelector(".menu-label")?.textContent).toBe("Colore");
   });
 
   it("«Trasforma in ▸» dice Riquadro, Elenco di attività e Blocco di codice, e Duplica dice Mod-d", () => {
