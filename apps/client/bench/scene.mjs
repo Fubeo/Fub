@@ -1700,6 +1700,10 @@ export const SCENE = onPage("shell", [
           const offset = parseFloat(style.outlineOffset);
           return style.outlineStyle !== "none" && width > 0 && offset < 0 && -offset >= width;
         }, null, { timeout: 5_000 });
+        // Col fuoco della tastiera la didascalia del bottone arriva dopo 500 ms
+        // di timer vero (`ui/tooltip.ts`): la si aspetta, perché è lo stato
+        // vero del fuoco e una foto scattata prima la prenderebbe o no (#461).
+        await page.waitForSelector(".shell-tooltip:not([hidden])");
       },
     },
     {
