@@ -169,58 +169,12 @@ cima anche quando la resa si rifà da sé (un embed arrivato). In sola lettura
 si guarda soltanto. La densità «Compatta» la stringe con il resto del foglio.
 Le scene `testata-*` e `mobile-testata` del banco la fotografano.
 
-## La barra che segue il blocco
-
-Sopra il foglio, in Scrittura e in Sorgente, la barra di formato dice dove
-sta il cursore. Nella forma compatta, di serie, tiene poche cose fisse:
-annulla e ripeti; lo stile del blocco, che lo dice a parole («Testo»,
-«Titolo 2», «Compito») e apre «Trasforma in» (Testo, Titolo 2 e 3,
-Citazione, Elenco puntato, Elenco di attività, e «Altri titoli ▸»);
-grassetto, corsivo, link, elenco e compito; i comandi che un plugin mette
-nella barra. A destra «+ Inserisci» apre gli stessi blocchi del «/», coi
-nomi scritti e divisi per sezione, con un campo per cercarli: si inseriscono
-sotto il blocco del cursore.
-
-Accanto ai pulsanti fissi compare il gruppo del blocco del cursore, col suo
-nome sul velo d'accento:
-
-| Blocco | Gesti |
-| --- | --- |
-| Compito | Scadenza (la `@` della data in fondo alla riga) |
-| Riquadro | il tipo, Ripiegabile (scrive o toglie il `+` dopo il tipo) |
-| Base | A tutta pagina |
-| Trasclusione | Apri l'origine (la nota, al titolo o al blocco) |
-| Tabella | Riga, Colonna, Ordina |
-| Codice | il linguaggio, Copia |
-| Immagine | Larghezza, Testo alternativo |
-
-Il gruppo lo dichiara la superficie, con i comandi e i gesti che già ha: chi
-non scrive (sola lettura) vede soltanto quelli che non scrivono. Fra due
-blocchi, in un paragrafo e con una selezione su più blocchi il gruppo non
-c'è. Cambia soltanto quando il cursore cambia blocco, dopo una pausa breve:
-chi scrive di fila non fa lavoro per battuta. Mentre il fuoco è nella barra o
-in un suo menu il gruppo resta quello da cui si è partiti; un gruppo nuovo
-si annuncia una volta a chi usa un lettore di schermo. La barra ha un solo
-punto di tabulazione, e le frecce vi si muovono dentro. Nella finestra
-stretta ciò che non entra scende in «…», per ultimo il gruppo del blocco; al
-telefono la barra sta sopra la tastiera, i gesti si dicono con la figura e
-il gruppo del blocco lascia il posto ai fissi.
-
-L'impostazione `editor.toolbar` sceglie la forma: `compatta` (di serie),
-`completa` (tutti i pulsanti, la fila della pre-alpha) o `nascosta` (resta
-la mini-barra sul testo scelto). Il comando «Mostra o nascondi la barra di
-formato», nel menu Vista, alterna `nascosta` e l'ultima forma visibile. Una
-sola fonte: `chrome.formatbar.visible` spento da un Fub di prima vale
-`nascosta` finché `editor.toolbar` non c'è, e non si riscrive mai. La
-bolla della selezione e la mini-barra restano intere in ogni forma. Le scene
-`barra-blocco-*` del banco la fotografano, e `mobile-keyboard` al telefono.
-
 ## Tre porte per ogni funzione
 
 Chi scrive non deve ricordarsi dove sta una funzione: ognuna si raggiunge dal
 «/» nel testo, dalla palette dei comandi e dal tasto destro o da un menu,
 con la scorciatoia scritta accanto quando c'è. Le funzioni dei blocchi hanno
-anche «+ Inserisci» nella barra di formato. Una funzione nuova del foglio entra
+anche «+ Inserisci» nella [barra di formato](editor-toolbar.md). Una funzione nuova del foglio entra
 da tutte e tre le porte; i menu sono descritti in
 [Tasto destro, mini-barra e «/»](editor-menus.md).
 
@@ -452,13 +406,6 @@ foglio, in ogni editor di testo che non sia un campo:
   modalità del riquadro, i comandi `shell.mode.*` e il commutatore della banda;
 - `crates/fub-host/src/settings.rs`: `editor.default-mode` e le sue scelte;
   `apps/client/src/panels/settings-model.ts`: le scelte che il pannello mostra;
-- `apps/client/src/panels/format-bar.ts`: la barra che segue il blocco (lo
-  stile, il gruppo del blocco, «+ Inserisci», le forme e `toolbarFormOf`);
-  `editors/core/registry.ts`: la porta `blockGroup`;
-  `editors/text/profiles/markdown/block-groups.ts`: i gruppi della nota;
-  `apps/client/src/desktop-shell.ts`: `data-toolbar` e `shell.toolbar.toggle`;
-  `crates/fub-host/src/settings.rs`: `editor.toolbar`;
-  `theme/scrittoio/skin/menus.css`: la sua veste;
 - `apps/client/src/editors/core/presence.ts`: i livelli di presenza;
 - `apps/client/src/editors/core/hints.ts`: la porta dei suggerimenti
   (`openHintSource`, `currentHints`, `onHintsChanged`);

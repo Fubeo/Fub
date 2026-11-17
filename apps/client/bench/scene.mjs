@@ -1143,7 +1143,7 @@ export const SCENE = onPage("shell", [
   ...[
     ["barra-blocco-compito", "La barra che segue il blocco: il cursore in un compito, «Compito · Scadenza»", "Da fare", "task"],
     ["barra-blocco-codice", "La barra che segue il blocco: il cursore nel codice, il linguaggio e «Copia»", "let (x, y)", "code"],
-    ["barra-blocco-stretta", "La barra che segue il blocco a 700 px, nel codice: la fila compatta entra intera", "let (x, y)", "code", { width: 700, height: 800 }],
+    ["barra-blocco-stretta", "La barra che segue il blocco nella finestra minima (800 px), nel codice: la fila compatta entra intera", "let (x, y)", "code", { width: 800, height: 800 }],
   ].map(([id, title, line, block, viewport]) => ({
     id,
     title,
