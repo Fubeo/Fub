@@ -96,6 +96,7 @@ const S_RECENT_NONE: &str = "desk.recent.none";
 const S_TASKS_NONE: &str = "desk.tasks.none";
 const S_TASKS_UNSERVED: &str = "desk.tasks.unserved";
 const S_TASKS_FAILED: &str = "desk.tasks.failed";
+const S_TILE_FAILED: &str = "desk.tile.failed";
 const S_TASKS_UNREAD: &str = "desk.tasks.unread";
 const S_BASE_CHOOSE: &str = "desk.base.choose";
 const S_BASE_UNSET: &str = "desk.base.unset";
@@ -223,6 +224,13 @@ pub(super) fn strings(language: &str) -> Vec<(&'static str, &'static str)> {
             pick(
                 "I compiti si leggono con la ricerca, che in questo vault è spenta.",
                 "Tasks are read through search, which is off in this vault.",
+            ),
+        ),
+        (
+            S_TILE_FAILED,
+            pick(
+                "Questo riquadro non si legge adesso. Si riprova al prossimo cambiamento del vault.",
+                "This tile can't be read right now. It is read again at the next change in the vault.",
             ),
         ),
         (
@@ -357,8 +365,10 @@ const WEEKDAY_KEYS: [&str; 7] = [
 /// I riquadri mostrati, nell'ordine dell'impostazione: gli id sconosciuti
 /// fuori, i doppioni una volta sola.
 pub fn shown_tiles(host: &dyn ReadApi) -> Result<Vec<Tile>, PluginError> {
-    let ids = match host.setting(DESK_TILES_KEY)? {
-        SettingValue::List(ids) => ids,
+    let ids = match host.setting(DESK_TILES_KEY) {
+        Ok(SettingValue::List(ids)) => ids,
+        // Chiave non dichiarata (un host senza le impostazioni della
+        // Scrivania) o di un altro tipo: valgono tutti i riquadri, in ordine.
         _ => return Ok(Tile::ALL.to_vec()),
     };
     Ok(tiles_of(&ids))
@@ -417,10 +427,13 @@ pub(super) fn render(instance: &ViewInstance, host: &dyn ReadApi) -> Result<UiNo
             .iter()
             .enumerate()
             .map(|(at, tile)| {
-                let body = tile_body(*tile, host, today)?;
-                Ok(frame(instance, *tile, at, count, body))
+                // Un riquadro che non si legge lo dice dentro di sé: gli altri
+                // si vedono lo stesso, e lui si può spostare o togliere.
+                let body = tile_body(*tile, host, today)
+                    .unwrap_or_else(|_| vec![UiNode::text(Text::key(S_TILE_FAILED))]);
+                frame(instance, *tile, at, count, body)
             })
-            .collect::<Result<Vec<_>, PluginError>>()?;
+            .collect::<Vec<_>>();
         children.push(UiNode::keyed(
             "desk-board",
             UiKind::Stack {
@@ -769,8 +782,9 @@ fn tasks(host: &dyn ReadApi, today: i64) -> Vec<UiNode> {
 // --- Base -------------------------------------------------------------------------
 
 fn base(host: &dyn ReadApi) -> Result<Vec<UiNode>, PluginError> {
-    let chosen = match host.setting(DESK_BASE_KEY)? {
-        SettingValue::Text(path) => path.trim().to_string(),
+    let chosen = match host.setting(DESK_BASE_KEY) {
+        Ok(SettingValue::Text(path)) => path.trim().to_string(),
+        // Chiave non dichiarata: nessuna Base scelta.
         _ => String::new(),
     };
     let entries = match host.query_index(IndexQuery::Entries {
@@ -785,7 +799,7 @@ fn base(host: &dyn ReadApi) -> Result<Vec<UiNode>, PluginError> {
         .items
         .into_iter()
         .map(|entry| entry.id)
-        .filter(is_base)
+        .filter(|id| is_base(host, id))
         .collect();
     bases.sort();
     let exists = !chosen.is_empty() && bases.iter().any(|id| id.as_str() == chosen);
@@ -850,10 +864,16 @@ fn base(host: &dyn ReadApi) -> Result<Vec<UiNode>, PluginError> {
     Ok(out)
 }
 
-fn is_base(id: &DocId) -> bool {
-    id.as_str()
-        .rsplit_once('.')
-        .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("base"))
+/// L'id del formato Base (`fub_format_base::model::BASE_FORMAT_ID`, che qui
+/// non si importa: la Scrivania non dipende dalla feature `base`).
+const BASE_FORMAT: &str = "base";
+
+/// Una Base è ciò che il formato Base rivendica: lo decide il registro dei
+/// formati sul nome, come per i comandi della Base, e non una regola sua.
+/// Senza il formato Base nel vault, nessun file è una Base.
+fn is_base(host: &dyn ReadApi, id: &DocId) -> bool {
+    host.format_of(id)
+        .is_some_and(|format| format.descriptor.id == BASE_FORMAT)
 }
 
 // --- Il mese --------------------------------------------------------------------

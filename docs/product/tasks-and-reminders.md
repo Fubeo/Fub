@@ -176,13 +176,14 @@ di riquadri:
 
 - **Appuntate**: le note appuntate, nello stesso ordine della barra laterale;
 - **Recenti**: le ultime note cambiate, la più recente in cima;
-- **Compiti di oggi**: i compiti aperti che scadono oggi (`📅` col giorno di
-  oggi, vedi «La scadenza nel testo»), con la nota da cui vengono. Li trova la
-  ricerca: con la ricerca spenta il riquadro lo dice, e gli altri funzionano;
+- **I compiti del giorno**: i compiti aperti la cui scadenza (`📅`, vedi «La
+  scadenza nel testo») è la data del giorno, con la nota da cui vengono. Li
+  trova la ricerca: con la ricerca spenta il riquadro lo dice, e gli altri
+  funzionano;
 - **Base**: una Base scelta dalla tendina del riquadro, mostrata intera. Se la
   Base scelta viene spostata o cancellata, il riquadro dice quale era e ne fa
   scegliere un'altra;
-- **Il mese**: il mese di oggi, con le settimane che cominciano dal primo
+- **Il mese**: il mese corrente, con le settimane che cominciano dal primo
   giorno della lingua scelta. Un giorno apre la sua nota del giorno, e la crea
   se non c'è, come il calendario.
 

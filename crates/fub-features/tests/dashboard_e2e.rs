@@ -33,6 +33,11 @@ impl Vault {
         registry
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
+        // Il formato Base: è lui a dire quali file sono una Base.
+        #[cfg(feature = "base")]
+        registry
+            .register(fub_format_base::BaseProvider::boxed())
+            .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         // Il manifest come lo monta l'host: le stringhe e le due impostazioni
         // della Scrivania.
@@ -351,6 +356,7 @@ mod desk {
         assert!(words(&tree).contains("Lavoro Progetti"), "{}", words(&tree));
     }
 
+    #[cfg(feature = "base")]
     #[test]
     fn la_base_scelta_si_mostra_e_cancellata_lo_dice() {
         let vault = Vault::new();
