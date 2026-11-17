@@ -19,6 +19,17 @@ impl TemplateCommands {
                 .with_param(parameter(NOTES_FROM_TEMPLATE, NAME, ParamKind::Text))
                 .with_param(parameter(NOTES_FROM_TEMPLATE, FOLDER, ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
+            command(NOTES_FROM_TYPE)
+                .offered_in(CommandSurface::Slash)
+                .with_param(parameter(NOTES_FROM_TYPE, TYPE, ParamKind::Text).required())
+                .with_param(parameter(NOTES_FROM_TYPE, NAME, ParamKind::Text))
+                .with_param(parameter(NOTES_FROM_TYPE, FOLDER, ParamKind::Text))
+                .with_param(parameter(
+                    NOTES_FROM_TYPE,
+                    EXPECTED_REVISION,
+                    ParamKind::Text,
+                ))
+                .with_scope(CommandScope::writing(CommandReach::Vault)),
             command(NOTES_DAILY)
                 .offered_in(CommandSurface::Slash)
                 .with_param(parameter(NOTES_DAILY, DATE, ParamKind::Text))
@@ -176,6 +187,7 @@ impl CommandProvider for TemplateCommands {
         let args = Args::new(&args);
         match command {
             NOTES_FROM_TEMPLATE => from_template(args, mode, host),
+            NOTES_FROM_TYPE => from_type(args, mode, host),
             NOTES_DAILY => daily(args, mode, host),
             NOTES_UNIQUE => unique(args, mode, host),
             NOTES_RANDOM => random(mode, host),

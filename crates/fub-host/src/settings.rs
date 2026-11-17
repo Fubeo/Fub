@@ -487,6 +487,13 @@ pub const FILES_STARTUP_NOTE: &str = "files.startup-note";
 /// scrive `[[Persone/Nome|Nome]]`; una persona nuova vi nasce. Vuota, `@` non
 /// propone persone.
 pub const FILES_PEOPLE_FOLDER: &str = "files.people-folder";
+/// La cartella dei tipi di nota (E5): ogni nota che ci sta, sottocartelle
+/// comprese, è un tipo, e il suo testo è il modello delle note nuove. Del
+/// vault, di serie `Tipi`; vuota, i tipi sono spenti. La legge
+/// `fub-features` (`note_types`).
+pub const FILES_TYPES_FOLDER: &str = "files.types-folder";
+/// Il valore di serie di [`FILES_TYPES_FOLDER`].
+pub const DEFAULT_TYPES_FOLDER: &str = "Tipi";
 
 /// La shell ricorda cosa si è cercato e cosa si è aperto? (chiave dell'app)
 ///
@@ -641,6 +648,17 @@ pub fn core_settings() -> Vec<SettingSpec> {
             },
         )
         .describing(Text::key(C_FILES_PEOPLE_FOLDER_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::new(
+            FILES_TYPES_FOLDER,
+            Text::key(C_FILES_TYPES_FOLDER),
+            SettingKind::Text {
+                default: DEFAULT_TYPES_FOLDER.into(),
+            },
+        )
+        .describing(Text::key(C_FILES_TYPES_FOLDER_DESC))
         .grouped(Text::key(C_GROUP_FILES)),
     );
     settings.push(
@@ -1738,6 +1756,8 @@ const C_FILES_STARTUP_NOTE: &str = "core.files_startup_note";
 const C_FILES_STARTUP_NOTE_DESC: &str = "core.files_startup_note.desc";
 const C_FILES_PEOPLE_FOLDER: &str = "core.files_people_folder";
 const C_FILES_PEOPLE_FOLDER_DESC: &str = "core.files_people_folder.desc";
+const C_FILES_TYPES_FOLDER: &str = "core.files_types_folder";
+const C_FILES_TYPES_FOLDER_DESC: &str = "core.files_types_folder.desc";
 
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
 const C_GROUP_EDITOR: &str = "core.group.editor";
@@ -2373,6 +2393,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_FILES_PEOPLE_FOLDER_DESC,
             "@ in una nota propone le note di questa cartella e scrive il link alla persona; una persona nuova nasce qui. Vuota, @ non propone persone.",
+        )
+        .with(C_FILES_TYPES_FOLDER, "Cartella dei tipi di nota")
+        .with(
+            C_FILES_TYPES_FOLDER_DESC,
+            "Ogni nota di questa cartella è un tipo: il suo frontmatter dice icona, proprietà e cartella delle note nuove, il suo testo è il modello. Vuota, i tipi sono spenti.",
         )
         .with(C_GROUP_APPEARANCE, "Aspetto")
         .with(C_GROUP_CHROME, "Interfaccia")
@@ -3065,6 +3090,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_FILES_PEOPLE_FOLDER_DESC,
             "@ in a note offers the notes in this folder and writes the link to the person; a new person is created here. Empty, @ offers no people.",
         )
+        .with(C_FILES_TYPES_FOLDER, "Note types folder")
+        .with(
+            C_FILES_TYPES_FOLDER_DESC,
+            "Every note in this folder is a type: its frontmatter gives the icon, the properties and the folder for new notes, its text is the template. Empty, note types are off.",
+        )
         .with(C_GROUP_APPEARANCE, "Appearance")
         .with(C_GROUP_PROFILE, "Profile")
         .with(C_PROFILE_NAME, "Your name")
@@ -3635,6 +3665,22 @@ mod tests {
         assert!(matches!(
             &spec.kind,
             SettingKind::Text { default } if default == "Persone"
+        ));
+    }
+
+    /// La cartella dei tipi di nota (E5) è del vault, viaggia con lui, e
+    /// parte da `Tipi`.
+    #[test]
+    fn the_types_folder_is_a_vault_text_starting_at_tipi() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == FILES_TYPES_FOLDER)
+            .expect("la cartella dei tipi è fra le impostazioni");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Vault);
+        assert_eq!(spec.group, Text::key(C_GROUP_FILES));
+        assert!(matches!(
+            &spec.kind,
+            SettingKind::Text { default } if default == DEFAULT_TYPES_FOLDER
         ));
     }
 

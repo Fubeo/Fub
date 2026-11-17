@@ -12,7 +12,7 @@ use fub_abi::edit::{EditRequest, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
 use fub_abi::model::{
-    DateFormats, DateOrder, DocId, DocumentModel, LinkTarget, OptionMatch, PropertyColor,
+    Block, DateFormats, DateOrder, DocId, DocumentModel, LinkTarget, OptionMatch, PropertyColor,
     PropertyOption, PropertyScalar, PropertyType, PropertyTypes, PropertyValue, RelationTarget,
     Span, StatusGroup,
 };
@@ -29,6 +29,7 @@ use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, UiOption, ViewUpd
 mod catalog;
 mod commands;
 mod relation;
+mod types;
 mod view;
 
 pub use catalog::catalog;
@@ -65,6 +66,9 @@ pub const PROPERTY_KEYS_MIGRATE: &str = "property.keys.migrate";
 /// Aggiunge, rinomina o colora un'opzione di una proprietà Selezione o Stato
 /// nel registro dei tipi del vault.
 pub const PROPERTY_OPTION_SET: &str = "property.option.set";
+/// Cambia il tipo della nota (E5): `tipo` diventa il link al tipo, e le
+/// proprietà del tipo che mancano si aggiungono; non si toglie niente.
+pub const NOTES_TYPE_SET: &str = "note.type.set";
 /// Rimette il registro dei tipi com'era, se nessuno l'ha cambiato nel
 /// frattempo: è l'annullo di [`PROPERTY_OPTION_SET`] e di
 /// [`PROPERTY_TARGET_SET`].
@@ -194,6 +198,12 @@ const SAME_DAY_ROWS: usize = 50;
 /// Una nota con la chiave al singolare e al plurale insieme: la conversione
 /// non sceglie per l'utente.
 const E_BOTH_FORMS: &str = "e_both_forms";
+/// Il tipo della nota (E5).
+const E_NOTE_CHANGED: &str = "e_note_changed";
+const P_NOTE_TYPE: &str = "p_note_type";
+const P_TYPE_SAME: &str = "p_type_same";
+const U_NOTE_TYPE: &str = "u_note_type";
+const A_COUNT: &str = "count";
 
 fn global_action(action: UiAction, host: &mut dyn HostApi) -> Result<ViewUpdate, PluginError> {
     match action.action.0.as_str() {

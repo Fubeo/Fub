@@ -5,7 +5,7 @@ use super::*;
 /// Le stringhe del pannello e dei comandi. Vedi
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stiano qui.
 pub fn catalog() -> Vec<StringCatalog> {
-    crate::formats::speaking(vec![
+    crate::note_types::speaking(crate::formats::speaking(vec![
         options_it(StringCatalog::new("it"))
             .with(VIEW_TITLE, "Proprietà")
             .with(EMPTY_NO_NOTES, "Nessuna nota aperta.")
@@ -183,6 +183,33 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 "note.properties.clear.desc",
                 "Toglie tutto il frontmatter della nota, con anteprima e annullo.",
+            )
+            .with(E_NOTE_CHANGED, "{doc} è cambiata mentre sceglievi: riprova.")
+            .with(
+                P_NOTE_TYPE,
+                "Tipo «{type}» per {doc} · proprietà aggiunte: {count}",
+            )
+            .with(P_TYPE_SAME, "{doc} è già di tipo «{type}»")
+            .with(U_NOTE_TYPE, "Annulla: tipo «{type}» per {doc}")
+            .with("note.type.set.title", "Cambia il tipo della nota")
+            .with(
+                "note.type.set.desc",
+                "Dà un tipo alla nota: aggiunge le proprietà del tipo che mancano e non toglie niente.",
+            )
+            .with("note.type.set.doc.title", "Nota")
+            .with(
+                "note.type.set.doc.desc",
+                "La nota; se manca, quella attiva.",
+            )
+            .with("note.type.set.type.title", "Tipo")
+            .with(
+                "note.type.set.type.desc",
+                "Il tipo: un link come [[Tipi/Libro]], un percorso o un nome.",
+            )
+            .with("note.type.set.expected_revision.title", "Revisione della nota")
+            .with(
+                "note.type.set.expected_revision.desc",
+                "La revisione della nota letta: se è cambiata, non si scrive niente.",
             )
             .with("note.properties.clear.doc.title", "Nota")
             .with(
@@ -362,8 +389,35 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 "note.properties.clear.doc.desc",
                 "The note; the active one if omitted.",
+            )
+            .with(E_NOTE_CHANGED, "{doc} changed while you were choosing: try again.")
+            .with(
+                P_NOTE_TYPE,
+                "Type «{type}» for {doc} · properties added: {count}",
+            )
+            .with(P_TYPE_SAME, "{doc} is already of type «{type}»")
+            .with(U_NOTE_TYPE, "Undo: type «{type}» for {doc}")
+            .with("note.type.set.title", "Change note type")
+            .with(
+                "note.type.set.desc",
+                "Gives the note a type: adds the type's missing properties and removes nothing.",
+            )
+            .with("note.type.set.doc.title", "Note")
+            .with(
+                "note.type.set.doc.desc",
+                "The note; the active one if omitted.",
+            )
+            .with("note.type.set.type.title", "Type")
+            .with(
+                "note.type.set.type.desc",
+                "The type: a link like [[Tipi/Libro]], a path or a name.",
+            )
+            .with("note.type.set.expected_revision.title", "Note revision")
+            .with(
+                "note.type.set.expected_revision.desc",
+                "The revision of the note that was read: if it changed, nothing is written.",
             ),
-    ])
+    ]))
 }
 
 /// I nove colori e i tre gruppi, coi nomi dei colori dei Blocchi

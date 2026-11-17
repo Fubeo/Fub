@@ -1947,6 +1947,26 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  `sanitize_component` perché qui la regola decide la citazione, non la pulizia.",
             ),
         ),
+        (
+            "crates/fub-features/src/note_types.rs::frontmatter_line",
+            (
+                Family::AsciiCase,
+                "abbassa la chiave per riconoscere `null|true|false|~` prima di citarla in YAML, \
+                 come `properties.rs::encoded_key`: parole riservate del formato, ASCII per \
+                 specifica. Diverge da lei perché scrive una riga nuova di una nota che nasce da \
+                 un tipo, nel modulo condiviso che i modelli usano senza le proprietà.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/note_types.rs::property_kind",
+            (
+                Family::AsciiCase,
+                "abbassa la parola con cui un tipo di nota dice il tipo di una proprietà \
+                 (`Numero`, `casella`, `date_time`) per confrontarla con un elenco fisso di \
+                 parole ASCII. Non confronta due nomi: riconosce una parola chiave, e una parola \
+                 con altri caratteri non è nessuna di quelle.",
+            ),
+        ),
         // -- CasoAscii: il nome più vicino di un'operazione o di un campo -------
         (
             "crates/fub-canvas-core/src/spec.rs::distance",
@@ -2237,6 +2257,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  taglia da entrambi i capi perché qui non c'è un rifiuto accanto a coprirne uno. \
                  Diverge da `vault_archive` perché là il `/` iniziale è un assoluto da rifiutare \
                  altrove, qui è cortesia da tollerare qui.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/note_types.rs::folder_path",
+            (
+                Family::FolderBoundary,
+                "è la regola di `template.rs::valid_folder` (stessi tagli, stessa sonda \
+                 `{cartella}/_`) per la cartella dei tipi e per il campo `folder` di un tipo. \
+                 Diverge da lei perché `note_types` è un modulo condiviso fra i modelli e le \
+                 proprietà e non può chiamare una feature; e perché qui una cartella che non va \
+                 non è un rifiuto: spegne i tipi o dice che il tipo non si legge.",
             ),
         ),
         (
