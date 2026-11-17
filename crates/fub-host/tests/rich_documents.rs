@@ -264,7 +264,10 @@ fn un_docx_che_non_si_apre_lo_dice_in_una_frase() {
         let wire = serde_json::to_value(&error).unwrap();
         let message = wire["message"].as_str().unwrap_or_else(|| panic!("{wire}"));
         assert!(message.contains(name), "{message}");
-        assert!(!message.contains("zip") && !message.contains("EOCD"), "{message}");
+        assert!(
+            !message.contains("zip") && !message.contains("EOCD"),
+            "{message}"
+        );
         assert_eq!(std::fs::read(vault.root.join(name)).unwrap(), bytes);
     }
 }

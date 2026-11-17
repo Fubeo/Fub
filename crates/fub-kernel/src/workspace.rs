@@ -4431,7 +4431,10 @@ impl Workspace {
     /// il prestito del workspace e torna qui per le parole.
     ///
     /// [`localized`]: Workspace::localized
-    pub fn localized_query_failure(&self, failure: crate::index::plan::QueryFailure) -> PluginError {
+    pub fn localized_query_failure(
+        &self,
+        failure: crate::index::plan::QueryFailure,
+    ) -> PluginError {
         match failure.owner {
             Some(owner) => self.localized(&owner, failure.error),
             None => failure.error,

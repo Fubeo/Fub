@@ -12,7 +12,10 @@ const REVISIONI: &str = concat!(
 
 fn projection(bytes: &[u8]) -> Projection {
     let opened = open(Codec::Docx, bytes).unwrap();
-    assert_eq!(opened.readonly, None, "il documento deve essere modificabile");
+    assert_eq!(
+        opened.readonly, None,
+        "il documento deve essere modificabile"
+    );
     Projection::from_json(&opened.projection).unwrap()
 }
 
