@@ -1758,7 +1758,7 @@ function stepRecentTab(step: 1 | -1): void {
   const index = p.tabs.findIndex((each) => sameTab(each, next.order[next.at]!));
   if (index < 0) return;
   activateTab(id, index);
-  void synchronize();
+  void focusShownAfter(synchronize());
 }
 
 function registerCommands(): void {
@@ -1874,7 +1874,7 @@ function registerCommands(): void {
     description: "commands.tab.reopen.desc",
     layer: "global",
     run: () => {
-      if (reopenClosedTab()) void synchronize();
+      if (reopenClosedTab()) void focusShownAfter(synchronize());
     },
   });
   registerShellCommand({
@@ -1883,7 +1883,7 @@ function registerCommands(): void {
     description: "commands.tab.next.desc",
     layer: "global",
     run: () => {
-      if (cycleTab(layout.focus, 1)) void synchronize();
+      if (cycleTab(layout.focus, 1)) void focusShownAfter(synchronize());
     },
   });
   registerShellCommand({
@@ -1892,7 +1892,7 @@ function registerCommands(): void {
     description: "commands.tab.previous.desc",
     layer: "global",
     run: () => {
-      if (cycleTab(layout.focus, -1)) void synchronize();
+      if (cycleTab(layout.focus, -1)) void focusShownAfter(synchronize());
     },
   });
   for (const [id, step] of [["shell.tab.recent", 1], ["shell.tab.recent.back", -1]] as const) {
@@ -1927,7 +1927,7 @@ function registerCommands(): void {
       description: `commands.tab.go.${position}.desc`,
       layer: "global",
       run: () => {
-        if (goToTab(layout.focus, position === "last" ? "last" : position - 1)) void synchronize();
+        if (goToTab(layout.focus, position === "last" ? "last" : position - 1)) void focusShownAfter(synchronize());
       },
     });
   }
@@ -2060,10 +2060,13 @@ function splitPane(dir: "row" | "col"): void {
   const toSplit = layout.focus;
   const current = activeDoc(toSplit);
   const newItem = split(toSplit, dir);
-  if (newItem && current) openIn(newItem, current);
+  if (!newItem) return;
+  if (current) openIn(newItem, current);
+  void focusShownAfter(synchronize());
 }
 
 async function closeCurrentPane(): Promise<void> {
+  const origin = document.activeElement;
   const id = layout.focus;
   const tabs = paneState(id)?.tabs ?? [];
   if (!closePane(id)) return;
@@ -2073,27 +2076,18 @@ async function closeCurrentPane(): Promise<void> {
     if (tab.k === "view") unmountViewFromPane(tab.view, id);
     else await dismissIfUnwatched(tab.doc);
   }
-  await synchronize();
-  const pane = panes.get(layout.focus);
-  if (!pane) return;
-  const nextActive = paneState(layout.focus)?.active ?? -1;
-  if (nextActive >= 0) view.focusTab(pane, nextActive);
-  else pane.root.focus();
+  await focusShownAfter(synchronize(), origin);
 }
 
 export async function closeCurrentTab(): Promise<void> {
+  const origin = document.activeElement;
   const id = layout.focus;
   const p = activePane();
   const tab = activeTab(id);
   if (p.active < 0) return;
   closeTab(id, p.active);
-  const nextActive = paneState(id)?.active ?? -1;
   await releaseTab(id, tab);
-  await synchronize();
-  const pane = panes.get(id);
-  if (!pane) return;
-  if (nextActive >= 0) view.focusTab(pane, nextActive);
-  else pane.root.focus();
+  await focusShownAfter(synchronize(), origin);
 }
 
 /// Appunta o stacca la tab corrente (shell.tab.pin/unpin): stesso `run` di
@@ -2154,12 +2148,12 @@ export function closeUnpinnedTabs(): void {
 /// cronologia del riquadro.
 export function paneBack(): void {
   if (panes.get(layout.focus)?.surface?.jumps?.back()) return;
-  if (goBack(layout.focus)) void synchronize();
+  if (goBack(layout.focus)) void focusShownAfter(synchronize());
 }
 
 export function paneForward(): void {
   if (panes.get(layout.focus)?.surface?.jumps?.forward()) return;
-  if (goForward(layout.focus)) void synchronize();
+  if (goForward(layout.focus)) void focusShownAfter(synchronize());
 }
 
 /// Collega o scollega il riquadro col fuoco (shell.pane.link/unlink): il
@@ -2432,13 +2426,50 @@ function keepFocusInPanes(held: HTMLElement | null): void {
     held.focus({ preventScroll: true });
     return;
   }
-  if (r.surface?.focus && selectedMode(r)?.presentation !== "rendered") {
+  focusPaneSurface(r);
+}
+
+/// Il fuoco nella superficie che il riquadro mostra: il testo col suo cursore,
+/// il foglio di un disegno, la pagina in Lettura — ciò che la superficie
+/// chiama il suo `focus`. Se la superficie non lo prende (non ne ha, si sta
+/// ancora caricando, lo mette in una parte che non si vede) va sulla linguetta
+/// attiva, e in un riquadro vuoto sul riquadro: mai sul `body`.
+function focusPaneSurface(r: Pane): void {
+  if (r.surface?.focus) {
     r.surface.focus();
-    if (r.root.contains(document.activeElement)) return;
+    if (focusedVisiblyIn(r.root)) return;
   }
   const active = paneState(r.id)?.active ?? -1;
   if (active >= 0) view.focusTab(r, active);
   else r.root.focus({ preventScroll: true });
+}
+
+/// Il fuoco è in `root`, su un elemento che si vede.
+function focusedVisiblyIn(root: HTMLElement): boolean {
+  const focused = document.activeElement;
+  return focused instanceof HTMLElement && root.contains(focused) && focused.closest("[hidden]") === null;
+}
+
+/// Un cambio di scheda chiesto con un comando — un tasto globale, la palette,
+/// il menu — porta il fuoco nella superficie della scheda che diventa attiva,
+/// a giro di disegno finito (IMP-048…051, Ctrl+\). È la regola di tutti i
+/// comandi che cambiano la scheda attiva, e sta qui e non in ognuno.
+///
+/// Un clic su una linguetta non passa di qui: lascia il fuoco sulla linguetta,
+/// da cui le frecce della striscia continuano. Un fuoco che intanto è andato
+/// altrove fuori dai riquadri (un dialogo, il lanciatore) non si tocca; quello
+/// rimasto dov'era quando il comando è partito (l'albero, una linguetta), o
+/// caduto sul `body`, sì: chi ha cambiato scheda con un tasto scrive lì.
+function focusShownAfter(drawn: Promise<void>, origin: Element | null = document.activeElement): Promise<void> {
+  return drawn.finally(() => {
+    const now = document.activeElement;
+    const fallen = !(now instanceof HTMLElement) || now === document.body || !now.isConnected
+      || now.closest("[hidden]") !== null;
+    const inPanes = now instanceof HTMLElement && [...panes.values()].some((r) => r.root.contains(now));
+    if (!fallen && !inPanes && now !== origin) return;
+    const r = panes.get(layout.focus);
+    if (r) focusPaneSurface(r);
+  });
 }
 
 /// Ricostruisce l'albero di contenitori, ma **solo se è cambiato**.

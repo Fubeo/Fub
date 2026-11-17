@@ -345,6 +345,51 @@ describe("un .svg è un disegno", () => {
   });
 });
 
+// Un cambio di scheda da tastiera porta il fuoco nella superficie della scheda
+// nuova anche quando non è testo: nel foglio del disegno, che si rimonta e si
+// carica dopo il giro di disegno (IMP-048, IMP-049).
+describe("il fuoco dopo un cambio di scheda da tastiera", () => {
+  const sheetFocused = () => {
+    const focused = document.activeElement;
+    return focused instanceof HTMLElement && focused.matches(".draw-surface") && focused.closest("[hidden]") === null
+      && focusedPane().contains(focused);
+  };
+  const noteFocused = () => {
+    const focused = document.activeElement;
+    const note = mountedTextEditors().find((view) => view.state.doc.toString().includes("# Benvenuto"));
+    return focused instanceof HTMLElement && note?.contentDOM === focused && focused.closest(".pane-editor") !== null
+      && focused.closest("[hidden]") === null;
+  };
+  const pressCtrl = (key: string) => {
+    press(key, { ctrlKey: true });
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", bubbles: true }));
+  };
+
+  it("Ctrl+Tab porta il fuoco nel foglio del disegno, e di nuovo nel testo della nota", async () => {
+    await start();
+    await open("Benvenuto.md");
+    await open("casa.svg");
+    focusedPane().querySelector<HTMLElement>(".draw-surface")!.focus();
+    expect(sheetFocused()).toBe(true);
+    pressCtrl("Tab");
+    await waitFor("il fuoco è nel testo della nota", noteFocused);
+    pressCtrl("Tab");
+    await loaded();
+    await waitFor("il fuoco è nel foglio del disegno", sheetFocused, FIRST_IMPORT_MS);
+  });
+
+  it("Ctrl+W su una nota porta il fuoco nel foglio del disegno accanto", async () => {
+    await start();
+    await open("casa.svg");
+    await open("Benvenuto.md");
+    mountedTextEditors().find((view) => view.state.doc.toString().includes("Benvenuto"))!.focus();
+    expect(noteFocused()).toBe(true);
+    pressCtrl("w");
+    await loaded();
+    await waitFor("il fuoco è nel foglio del disegno", sheetFocused, FIRST_IMPORT_MS);
+  });
+});
+
 describe("due riquadri sullo stesso disegno", () => {
   it("si allineano, e ciascuno annulla soltanto i suoi gesti", async () => {
     const host = await start();
