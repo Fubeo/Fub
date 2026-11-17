@@ -257,6 +257,9 @@ export function themeCssFor(style: DiagramStyleId, p: DiagramPalette): string {
     `.edgeLabel,.edgeLabel p,.labelBkg{background-color:${p.paper ?? p.ground};}`,
     `.edgeLabel rect{fill:${p.paper ?? p.ground};opacity:1;rx:5px;ry:5px;}`,
     `.edgeLabel .label text,.edgeLabel .label tspan{fill:${p.muted};}`,
+    // Le punte sottili (`decorateSvg`): solo il pieno, nel colore del tratto.
+    // Più forte di `[id$="-arrowhead"] path` e di `.marker` di Mermaid.
+    `marker path.${ARROW_CLASS}{fill:${p.line};stroke:none;}`,
     `.actor,.note,.labelBox,rect.task,rect.section{rx:${Math.min(r, 8)}px;ry:${Math.min(r, 8)}px;}`,
     `.titleText,.pieTitleText,.cluster-label .nodeLabel{font-weight:600;}`,
     `.actor-man circle,.actor-man line{stroke:${p.primary.border};fill:${p.primary.fill};}`,
@@ -405,6 +408,8 @@ const ARROW_REF_START = 0.4 + ((POINT_OFFSET - ARROW_GAP) * 10) / ARROW_SIZE;
 /// La punta delle sequenze, in unità del disegno: la stessa forma, con la
 /// cima dove Mermaid la mette (10, sulla linea della vita).
 const SEQUENCE_ARROW = "M1.9 1.76L10 5 1.9 8.24 3.7 5z";
+/// La classe delle punte rifatte, che il CSS del disegno lascia senza bordo.
+export const ARROW_CLASS = "fub-arrow";
 
 /// Le punte piene e larghe di Mermaid diventano quelle sottili del prototipo:
 /// i marcatori `point` dei flussi (fine e inizio) e la freccia delle
@@ -416,9 +421,11 @@ function thinArrows(root: Element): void {
     const path = marker.querySelector(":scope > path");
     if (!path) return;
     path.setAttribute("d", d);
-    // Solo il pieno, nel colore del tratto: il bordo la ingrosserebbe. Lo
-    // stile in linea vince sulle regole di Mermaid che la dipingono.
-    path.setAttribute("style", "stroke:none");
+    // Solo il pieno, nel colore del tratto: il bordo la ingrosserebbe. Via
+    // lo spessore in linea di Mermaid; la classe la toglie al bordo
+    // (`.fub-arrow` in `themeCssFor`).
+    path.removeAttribute("style");
+    path.classList.add(ARROW_CLASS);
     if (refX !== null) marker.setAttribute("refX", refX.toFixed(3));
     if (size !== null) {
       marker.setAttribute("markerWidth", String(size));

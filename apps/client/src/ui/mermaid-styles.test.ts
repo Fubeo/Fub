@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { DIAGRAM_STYLE_IDS } from "../theme/diagram-style";
 import {
+  ARROW_CLASS,
   decorateSvg,
   FLOW_NODE_SPACING,
   FLOW_RANK_SPACING,
@@ -196,6 +197,7 @@ describe("la configurazione di Mermaid", () => {
       // L'etichetta su un ritaglio pieno della carta, nel colore attenuato.
       expect(css).toContain(`.edgeLabel rect{fill:${p.paper ?? p.ground};opacity:1;rx:5px;ry:5px;}`);
       expect(css).toContain(`.edgeLabel .label text,.edgeLabel .label tspan{fill:${p.muted};}`);
+      expect(css).toContain(`marker path.${ARROW_CLASS}{fill:${p.line};stroke:none;}`);
       expect(contrast(p.muted, p.paper ?? p.ground), `${style} ${light} ${level}`).toBeGreaterThanOrEqual(4.5);
     }
   });
@@ -291,7 +293,8 @@ describe("la tavola", () => {
 
       const end = marker("d1_flowchart-v2-pointEnd");
       expect(path(end.id).getAttribute("d")).toBe("M0.6 1.4L9.6 5 0.6 8.6 2.6 5z");
-      expect(path(end.id).getAttribute("style")).toBe("stroke:none");
+      expect(path(end.id).hasAttribute("style")).toBe(false);
+      expect(path(end.id).classList.contains(ARROW_CLASS)).toBe(true);
       expect(end.getAttribute("markerWidth")).toBe("9");
       // Mermaid ferma il tratto a 4 dal bordo: la cima arriva a 1.8 dal bordo,
       // e la fine del tratto cade nel pieno, fra l'incavo (2.6) e la cima.

@@ -108,7 +108,7 @@ Ciò che Mermaid 11 non permette, e che quindi il disegno non fa:
   lascerebbe il ritaglio misurato sul testo grande.
 
 Un tracciato solo ortogonale chiederebbe il motore di disposizione ELK
-(`@mermaid-js/layout-elk`), che oggi non è fra le dipendenze.
+(`@mermaid-js/layout-elk`), che non è fra le dipendenze di Fub.
 
 Le variabili e il CSS del tracciato sono in
 `apps/client/src/ui/mermaid-drawing.ts` (`mermaidStyleConfig`, `themeCssFor`,
