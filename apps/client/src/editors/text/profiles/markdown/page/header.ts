@@ -31,6 +31,8 @@ import { liveStrings } from "../strings";
 import { coverElement, coverYOf } from "./cover";
 import { foldedHeading } from "./title";
 import { featuredProperties, propertiesElement, samePageProperties, type PageProperties } from "./featured";
+import type { NoteType, NoteTypeList, NoteTypeState } from "../../../../../state/note-types";
+import { openTypeChooser, TYPE_KEY, typeIconElement, typeNoticeElement, typeStamp } from "./note-type";
 
 export type { PageProperties } from "./featured";
 
@@ -67,6 +69,15 @@ export interface PageOptions {
   /// Le persone il cui nome combacia con il testo, per l'editor delle
   /// persone.
   readonly searchPeople?: (text: string) => Promise<string[]>;
+  /// Il tipo (E5) che il valore `raw` di `tipo` nomina, se si sa già; `null`
+  /// finché non si sa. Chi risponde rifà la testata quando lo sa.
+  readonly noteType?: (raw: string) => NoteTypeState | null;
+  /// I tipi del vault, per «Scegli il tipo».
+  readonly listTypes?: () => Promise<NoteTypeList>;
+  /// Apre la nota di un tipo.
+  readonly openType?: (doc: string) => void;
+  /// «In evidenza» in una nota con un tipo: scrive nel tipo, con l'annulla.
+  readonly featureInType?: (type: NoteType, key: string, on: boolean) => void;
 }
 
 /// Ciò che la testata mostra, letto dallo stato e dalle opzioni.
@@ -86,6 +97,9 @@ export interface PageData {
   readonly unreadable: boolean;
   /// Le proprietà della testata; `null` in `source`, dove resta lo YAML.
   readonly properties: PageProperties | null;
+  /// Il tipo che la nota nomina (E5): `null` se non ne nomina uno, o finché
+  /// non si sa.
+  readonly noteType: NoteTypeState | null;
 }
 
 /// La testata di questo stato. `block` è il frontmatter già letto, se chi
@@ -101,7 +115,10 @@ export function pageData(
 ): PageData {
   const entries = block?.entries ?? [];
   const value = (key: string) => lastEntry(entries, key)?.value ?? null;
-  const split = featuredProperties(entries, factTags);
+  const raw = value(TYPE_KEY);
+  const noteType = raw === null ? null : options.noteType?.(raw) ?? null;
+  const typed = noteType?.state === "typed" ? noteType.type : null;
+  const split = featuredProperties(entries, factTags, typed ? typed.featured : null);
   const unreadable = block?.unreadable ?? false;
   return {
     title: options.page?.() ?? "",
@@ -126,7 +143,9 @@ export function pageData(
       unreadable,
       open,
       types: options.propertyTypes?.() ?? NO_TYPES,
+      type: typed,
     },
+    noteType: noteType?.state === "untyped" ? null : noteType,
   };
 }
 
@@ -135,7 +154,7 @@ export function samePage(a: PageData, b: PageData): boolean {
   return a.title === b.title && a.folder === b.folder && a.icon === b.icon && a.cover === b.cover
     && a.coverY === b.coverY && a.description === b.description
     && a.readOnly === b.readOnly && a.renamable === b.renamable && a.subpages === b.subpages
-    && a.unreadable === b.unreadable
+    && a.unreadable === b.unreadable && typeStamp(a.noteType) === typeStamp(b.noteType)
     && a.classes.length === b.classes.length && a.classes.every((name, i) => name === b.classes[i])
     && samePageProperties(a.properties, b.properties);
 }
@@ -177,6 +196,11 @@ export interface PageHost {
   addPropertyOption?(key: string, option: NewOption): Promise<string | null>;
   /// Le persone per l'editor delle persone.
   searchPeople?(text: string): Promise<string[]>;
+  /// «Scegli il tipo»: i tipi del vault, e la scelta scritta nella nota.
+  listTypes?(): Promise<NoteTypeList>;
+  chooseType?(type: NoteType): void;
+  /// Apre la nota di un tipo (un tipo che non si legge si corregge lì).
+  openType?(doc: string): void;
   /// Le classi della pagina adesso, per il menu «…».
   classes(): readonly string[];
   /// Rinomina col titolo scritto; `null` se è andata.
@@ -254,7 +278,12 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
   // Un `fub:` che questa versione non sa disegnare non si mostra, e torna
   // «Aggiungi un'icona» per sceglierne un'altra.
   const label = pageMarkLabel(data.icon);
-  if (data.icon && label !== null) {
+  const typed = data.noteType?.state === "typed" ? data.noteType.type : null;
+  // Senza un'icona sua la nota mostra quella del suo tipo; sceglierne una la
+  // scrive nella nota.
+  const typeIcon = !(data.icon && label !== null) && typed?.icon ? typed : null;
+  if (typeIcon) root.append(typeIconElement(typeIcon, host.writing, writable, iconButton, life));
+  else if (data.icon && label !== null) {
     const icon = document.createElement(host.writing ? "button" : "span");
     icon.className = "cm-fub-page-icon";
     drawPageMark(icon, data.icon);
@@ -291,7 +320,7 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
       tools.append(button);
       return button;
     };
-    if (label === null) tool("fmt-icon", liveStrings.t("page.icon.add"), iconButton);
+    if (label === null && !typeIcon) tool("fmt-icon", liveStrings.t("page.icon.add"), iconButton);
     if (!data.cover) tool("fmt-cover", liveStrings.t("page.cover.add"), coverButton);
     if (!data.description) tool("fmt-text", liveStrings.t("page.description.add"), () => host.addDescription());
     if (data.subpages) tool("notes", liveStrings.t("page.subpage.add"), subpageButton);
@@ -305,6 +334,35 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
   }
 
   root.append(host.writing ? titleField(data, host, root, life) : titleHeading(data));
+
+  // Un tipo che non c'è, non si legge o non è un nome: la testata lo dice,
+  // e dove si scrive offre «Scegli il tipo». La nota non cambia da sola.
+  const listTypes = host.listTypes;
+  const chooseType = host.chooseType;
+  const notice = typeNoticeElement(data.noteType, {
+    open: host.openType ? (doc) => host.openType!(doc) : undefined,
+    choose: writable && listTypes && chooseType ? (anchor) => {
+      closePopover();
+      host.popover?.(true);
+      void listTypes().then((list) => {
+        if (life.closed || !anchor.isConnected) {
+          host.popover?.(false);
+          return;
+        }
+        popover = openTypeChooser(anchor, list, (type) => {
+          chooseType(type);
+          host.focusText();
+        }, life, () => {
+          popover = null;
+          host.popover?.(false);
+        });
+      }, (error: unknown) => {
+        host.popover?.(false);
+        host.notify?.(error instanceof Error ? error.message : String(error), "guasto");
+      });
+    } : undefined,
+  }, life);
+  if (notice) root.append(notice);
 
   if (data.properties) {
     const section = propertiesElement(data.properties, {
@@ -771,6 +829,7 @@ export function mountReadingHeader(
     currentProperty: (key) => lastEntry(block?.entries ?? [], key),
     renameProperty: () => null,
     featureProperty: noop,
+    openType: options.openType,
     classes: () => data.classes,
     openProperty: noop,
     addProperty: noop,

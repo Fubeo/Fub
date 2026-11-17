@@ -48,6 +48,7 @@ import {
 import type { Call, FakeHost } from "./host/fake";
 import type { KernelNotice, SettingEntry, CommandSpec, KnownVault } from "./host/contract";
 import { SHELL_KEYS } from "./ui/shell-keys.generated";
+import { withoutTypeReads } from "./state/note-type-commands";
 
 // Ogni gesto monta la shell vera: qui un giro sta fra 0,5 e 3 s, sul runner CI
 // è circa tre volte più lento e i 5 s del default li superava ora un gesto ora
@@ -1246,7 +1247,7 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     press();
     await waitFor("la domanda arriva", () => box.asked === asked + 1);
     await settle();
-    expect(host.atGate("invokeCommand").some((call) => call.args[0] === "folder.trash")).toBe(false);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).some((call) => call.args[0] === "folder.trash")).toBe(false);
 
     const noConfirm = {
       spec: {
@@ -1265,7 +1266,7 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     asked = box.asked;
     press();
     await waitFor("la cartella va nel cestino", () =>
-      host.atGate("invokeCommand").some((call) => call.args[0] === "folder.trash"));
+      withoutTypeReads(host.atGate("invokeCommand")).some((call) => call.args[0] === "folder.trash"));
     expect(box.asked).toBe(asked);
   });
 
@@ -1340,7 +1341,7 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     expect(again.getAttribute("aria-describedby")).toBe(problem.id);
     expect(problem.textContent).toContain("CON");
     // Niente è partito verso il kernel, e alla prima battuta la frase se ne va.
-    expect(host.atGate("invokeCommand").filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
     again.dispatchEvent(new Event("input", { bubbles: true }));
     expect(noteItem("note/Spesa.md")!.querySelector(".tree-rename-problem")).toBeNull();
     expect(again.hasAttribute("aria-invalid")).toBe(false);
@@ -1399,7 +1400,7 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     riunione.dispatchEvent(canc);
     expect(canc.defaultPrevented).toBe(true);
     await waitFor("anche la seconda è nel cestino", () => host.trash().length === 2);
-    expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args.slice(0, 2))).toEqual([
       ["note.trash", { doc: "note/Spesa.md" }],
       ["note.trash", { doc: "note/Riunione.md" }],
     ]);
@@ -1639,7 +1640,7 @@ describe("apri un vault", () => {
     await contextMenu(fileRow()!, "Sposta nel cestino");
     await waitFor("l'allegato è nel cestino", () => host.trash().length === 1);
     expect(Object.keys(host.files())).not.toContain("note/foto.png");
-    expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args.slice(0, 2))).toEqual([
       ["note.trash", { doc: "note/foto.png" }],
     ]);
     await waitFor("la riga sparisce", () => !fileRow());
@@ -2362,7 +2363,7 @@ describe("una sessione e le sue superfici", () => {
     if (!field) throw new Error("la riga non è diventata un campo");
     field.value = "Indice";
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    await waitFor("la rinomina arriva al kernel", () => host.atGate("invokeCommand").length > 0);
+    await waitFor("la rinomina arriva al kernel", () => withoutTypeReads(host.atGate("invokeCommand")).length > 0);
     await settle();
     // La barriera è la **linguetta**: l'albero si riscrive con un evento, la
     // migrazione dell'identità aperta (evento `document_renamed` → layout →
@@ -2443,10 +2444,10 @@ describe("rinomina", () => {
     field.value = "Indice";
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await settle();
-    await waitFor("la rinomina arriva al kernel", () => host.atGate("invokeCommand").length > 0);
+    await waitFor("la rinomina arriva al kernel", () => withoutTypeReads(host.atGate("invokeCommand")).length > 0);
     await settle();
 
-    const invoked = host.atGate("invokeCommand")[0];
+    const invoked = withoutTypeReads(host.atGate("invokeCommand"))[0];
     expect(invoked.args[0]).toBe("note.rename");
     expect(invoked.args[1]).toEqual({ doc: "Benvenuto.md", to: "Indice.md" });
     expect(Object.keys(host.files())).toContain("Indice.md");
@@ -2486,7 +2487,7 @@ describe("nuova cartella", () => {
     await contextMenu(folderRow("note")!, "Nuovo", "Cartella");
     await typeFolder("Progetti");
     await waitFor("la sottocartella compare aperta sotto la madre", () => !!folderRow("note/Progetti"));
-    expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args.slice(0, 2))).toEqual([
       ["folder.create", { path: "note/Progetti" }],
     ]);
 
@@ -2497,7 +2498,7 @@ describe("nuova cartella", () => {
     await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuova cartella");
     await typeFolder("note");
     await waitFor("il rifiuto chiude il campo", () => !document.querySelector("input.new-folder"));
-    expect(host.atGate("invokeCommand")).toHaveLength(3);
+    expect(withoutTypeReads(host.atGate("invokeCommand"))).toHaveLength(3);
     expect(document.querySelectorAll('#file-list li[data-path="note"]')).toHaveLength(1);
   });
 });
@@ -2529,7 +2530,7 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     return el;
   };
   const commands = (host: FakeHost, id: string) =>
-    host.atGate("invokeCommand").filter((call) => call.args[0] === id).map((call) => call.args[1]);
+    withoutTypeReads(host.atGate("invokeCommand")).filter((call) => call.args[0] === id).map((call) => call.args[1]);
 
   it("una cartella si rinomina con F2 e si sposta trascinandola su un'altra", async () => {
     const host = await start({ ...VAULT, "Archivio/vecchio.md": "x" });
@@ -2720,12 +2721,12 @@ describe("rinomina durante un salvataggio in volo", () => {
     field.value = "Indice";
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await settle();
-    expect(host.atGate("invokeCommand").filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
 
     unlock();
     await waitFor(
       "la rinomina parte dopo il salvataggio",
-      () => host.atGate("invokeCommand").some((c) => c.args[0] === "note.rename"),
+      () => withoutTypeReads(host.atGate("invokeCommand")).some((c) => c.args[0] === "note.rename"),
     );
     await settle();
 
@@ -3057,7 +3058,7 @@ describe("chiudere linguette e superfici", () => {
     await contextMenu(row("Benvenuto"), "Sposta nel cestino");
     await waitFor(
       "la cancellazione arriva al kernel",
-      () => host.atGate("invokeCommand").some((c) => c.args[0] === "note.trash"),
+      () => withoutTypeReads(host.atGate("invokeCommand")).some((c) => c.args[0] === "note.trash"),
     );
 
     // Keep the delete command in flight past the save debounce. If the delete
@@ -3090,7 +3091,7 @@ describe("chiudere linguette e superfici", () => {
 
     const deleting = trashWithConfirm("Benvenuto.md");
     await microtasks();
-    expect(host.atGate("invokeCommand").some((c) => c.args[0] === "note.trash")).toBe(true);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).some((c) => c.args[0] === "note.trash")).toBe(true);
     expect(view.state.readOnly).toBe(true);
 
     view.focus();
@@ -3419,7 +3420,7 @@ describe("spostare un file col testo non ancora sul disco", () => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await settle(20);
 
-    const renames = host.atGate("invokeCommand").filter((c) => c.args[0] === "note.rename");
+    const renames = withoutTypeReads(host.atGate("invokeCommand")).filter((c) => c.args[0] === "note.rename");
     expect(
       renames,
       "il file si è mosso mentre il testo battuto era solo in RAM: la " +
@@ -3659,7 +3660,7 @@ describe("il cestino scelto", () => {
 
     await contextMenu(row("Benvenuto"), "Sposta nel cestino");
     await waitFor("la nota è nel cestino", () => host.trash().length === 1);
-    expect(host.atGate("invokeCommand").map((call) => call.args[0])).toEqual(["trash.os"]);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args[0])).toEqual(["trash.os"]);
     const { recentNotices } = await import("./ui/notify");
     expect(recentNotices().some((a) => a.text.includes("cestino del vault"))).toBe(true);
   });

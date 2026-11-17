@@ -80,6 +80,7 @@
 - Come sono le superfici di scrittura (editor e anteprima)? → [product/editor-and-preview.md](../product/editor-and-preview.md)
 - Quali modalità ha una nota, e quando compare ciò che sta sul foglio? → [product/editor-writing.md](../product/editor-writing.md)
 - Come funzionano i blocchi di Scrittura? → [product/editor-blocks.md](../product/editor-blocks.md)
+- Che cosa chiede «Nuova nota» e che cosa mostra la testata di una nota con un tipo? → [product/editor-note-types.md](../product/editor-note-types.md)
 - Come si scrive dentro una nota riportata (`![[Nota#Sezione]]`)? → [product/editor-transclusion.md](../product/editor-transclusion.md)
 - Come funzionano tasto destro, mini-barra e comando «/»? → [product/editor-menus.md](../product/editor-menus.md)
 - Che cosa mostra la barra di formato e come si sceglie la sua forma? → [product/editor-toolbar.md](../product/editor-toolbar.md)

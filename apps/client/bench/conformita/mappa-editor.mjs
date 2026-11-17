@@ -188,6 +188,20 @@ export const VISTE = {
     },
     app: { scena: "menu-selezione" },
   },
+  /// «Nuova nota» che chiede il tipo (T33, `newNote()` del prototipo): il
+  /// menu sotto il pulsante del cassetto. Solo largo: nel prototipo il
+  /// cassetto c'è a finestra piena.
+  "nuova-nota": {
+    stati: LARGHI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "A riposo");
+        await page.click("#win #new-note");
+        await page.waitForSelector("#win .pop .m-i .ic.tile");
+      },
+    },
+    app: { scena: "tipi-01-nuova" },
+  },
   /// Le proposte dei simboli (T61): la formula in riga aperta, in fondo `+`
   /// e `\fr`. Il prototipo al passo «La formula si tocca», che apre la terza
   /// formula della nota; l'app dalla scena del banco.
@@ -675,6 +689,42 @@ export const PEZZI = [
     prototipo: ".m-find",
     app: ".context-menu .menu-foot",
     proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  // «Nuova nota di tipo» (T33).
+  {
+    id: "nuova-nota.testa",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-h",
+    app: ".note-type-popover .note-type-menu-head",
+    proprieta: ["font", "color", "padding"],
+  },
+  {
+    id: "nuova-nota.voce",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-l > button.m-i:not(.act)",
+    app: ".note-type-popover .note-type-menu-item:not([data-active])",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "nuova-nota.tassello",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-l > button.m-i:not(.act) .ic.tile",
+    app: ".note-type-popover .note-type-menu-item:not([data-active]) .note-type-menu-tile",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "nuova-nota.sotto",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-l > button.m-i:not(.act) small",
+    app: ".note-type-popover .note-type-menu-item:not([data-active]) .note-type-menu-sub",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "nuova-nota.piede",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-foot",
+    app: ".note-type-popover .note-type-menu-foot",
+    proprieta: [...BASE],
   },
   // Il menu della maniglia.
   {

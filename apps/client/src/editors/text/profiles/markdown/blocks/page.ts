@@ -32,6 +32,8 @@ import { firstHeading, retitled, sameTitle, type FirstHeading } from "../page/ti
 import { FEATURED_LIMIT, featuredProperties } from "../page/featured";
 import { entryStamp, type WriteOutcome } from "../page/properties/row";
 import { liveStrings } from "../strings";
+import { typedChanges } from "../page/note-type";
+import type { NoteType } from "../../../../../state/note-types";
 
 export { PAGE_FONTS, pageClassesWith, type PageData, type PageFont } from "../page/header";
 
@@ -131,10 +133,17 @@ function renamePropertyInNote(view: EditorView, key: string, name: string): stri
 
 /// «Metti in evidenza»: in una nota senza tipo la voce va fra le prime
 /// quattro del frontmatter, al posto della quarta, che scende fra le altre
-/// (A-15). «Togli dall'evidenza»: in fondo al frontmatter.
+/// (A-15). «Togli dall'evidenza»: in fondo al frontmatter. In una nota con un
+/// tipo (E5) l'evidenza è del tipo: si scrive nel suo file, per tutte le sue
+/// note, e la nota non cambia.
 function featurePropertyInNote(view: EditorView, key: string, on: boolean): void {
   const state = view.state;
   if (state.readOnly) return;
+  const type = state.field(pageHeader, false)?.data.properties?.type ?? null;
+  if (type) {
+    state.facet(blocksOptions).featureInType?.(type, key, on);
+    return;
+  }
   const block = propertyBlock(state);
   if (!block || block.unreadable) return;
   const split = featuredProperties(block.entries, factTags(state));
@@ -148,6 +157,14 @@ function featurePropertyInNote(view: EditorView, key: string, on: boolean): void
     return;
   }
   const changes = moveEntryBefore(state, key, target);
+  if (changes) view.dispatch({ changes, annotations: isolateHistory.of("full"), userEvent: "input" });
+}
+
+/// «Scegli il tipo»: `tipo` diventa il link al tipo e le sue proprietà che
+/// mancano arrivano vuote, in un passo d'annullamento solo. Niente si toglie.
+function chooseTypeInNote(view: EditorView, type: NoteType): void {
+  if (view.state.readOnly) return;
+  const changes = typedChanges(view.state, type);
   if (changes) view.dispatch({ changes, annotations: isolateHistory.of("full"), userEvent: "input" });
 }
 
@@ -231,6 +248,9 @@ function hostFor(view: EditorView, root: HTMLElement): PageHost {
     setPropertyType: options.setPropertyType,
     addPropertyOption: options.addPropertyOption,
     searchPeople: options.searchPeople,
+    listTypes: options.listTypes,
+    chooseType: (type) => chooseTypeInNote(view, type),
+    openType: options.openType,
     classes: () => propertyList(view.state, "cssclasses"),
     // La rinomina dal titolo porta con sé l'H1 ripiegato: riuscita, l'H1
     // diventa il nome nuovo nello stesso gesto; fallita, non cambia.

@@ -109,7 +109,9 @@ Regola: `touchMode` in `handles.ts`; scene `mobile-tocco-*`.
 In cima alla nota, in Scrittura e in Lettura, sta la testata: copertina, icona,
 titolo, proprietà e [riga dei dati](editor-note-facts.md). Che cosa fa ogni
 parte, come si scrivono le proprietà e come il titolo segue il primo H1 lo dice
-la [pagina della testata](editor-header.md).
+la [pagina della testata](editor-header.md); che cosa cambia in una nota con un
+tipo (Libro, Progetto) e che cosa chiede «Nuova nota» lo dicono i
+[tipi di nota](editor-note-types.md).
 
 ## Tre porte per ogni funzione
 
