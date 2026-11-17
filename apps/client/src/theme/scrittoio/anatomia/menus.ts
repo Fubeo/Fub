@@ -12,7 +12,19 @@ export const MENUS: PartAnatomy = {
     { name: "menu-choices", states: [S("rest"), S("hover"), S("focused"), S("pressed")], hooks: ["menu-choices", "menu-choice", "menu-choice-set", "menu-choice-name"] },
     { name: "menu-foot", states: [S("rest")], hooks: ["menu-foot", "menu-foot-text", "menu-foot-query", "menu-foot-caret", "menu-finding", "menu-path", "menu-foot-keys", "menu-foot-key"] },
     { name: "context-submenu", states: [S("rest")], hooks: ["context-submenu", "menu-more"] },
-    { name: "context-strip", states: [S("rest")], hooks: ["context-strip", "format-bar"] },
+    { name: "context-strip", states: [S("rest")], hooks: ["context-strip", "context-strip-mini"] },
+    // La mini-barra (T12): sul testo scelto e in testa al menu; «Colore» apre
+    // le due righe dei nove campioni.
+    {
+      name: "mini-bar",
+      states: [S("rest"), S("hover"), S("focused"), S("pressed"), S("disabled")],
+      hooks: ["mini-bar", "mini-bar-button", "mini-bar-named", "mini-bar-caret", "mini-bar-glyph", "is-bold", "is-italic", "is-underline", "is-strike", "mini-bar-color-mark", "mini-bar-rule"],
+    },
+    {
+      name: "mini-bar-colors",
+      states: [S("rest"), S("hover"), S("focused"), S("pressed"), S("disabled")],
+      hooks: ["mini-bar-colors", "mini-bar-colors-body", "mini-bar-colors-label", "mini-bar-swatches", "mini-bar-swatch"],
+    },
     // La barra che segue il blocco (E8): lo stile, il gruppo del blocco,
     // «+ Inserisci».
     {

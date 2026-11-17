@@ -249,6 +249,11 @@ const FOLDS = new Map<string, (view: EditorView) => boolean>([
   ["text.fold.properties", foldProperties],
 ]);
 
+/// «Collega», il gesto di Mod-k come azione dell'editor (la mini-barra, il
+/// tasto destro): in Live e in Blocchi apre il riquadro «Collegamento», in
+/// Sorgente fa il wikilink, come la scorciatoia.
+const LINK_EDIT_ACTION = "markdown.link.edit";
+
 /// La palette slash si apre a inizio riga o dopo uno spazio: dentro una
 /// parola il `/` è testo («e/o», «km/h», 24/09).
 export function slashOpensAt(lineBefore: string): boolean {
@@ -1157,8 +1162,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     );
   }
   const editable = () => !readOnly && mode !== "reading" && !life.closed;
+  /// La vista ha il riquadro «Collegamento» (Live e Blocchi): lì Mod-k apre
+  /// lui, in Sorgente il wikilink.
+  const linkDialogHere = (): boolean => engine.readState((state) => state.facet(linkDialogOpener) !== null);
   const editorActions: SurfaceEditorActions = {
-    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION || id === BASE_ACTION,
+    has: (id) =>
+      MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION || id === BASE_ACTION || id === LINK_EDIT_ACTION,
     editable,
     state(id): EditorActionState {
       if (!editable()) return ACTION_UNAVAILABLE;
@@ -1169,6 +1178,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
       }
       if (id === COMMENT_ACTION) return { enabled: comments.canComment(), active: null };
+      if (id === LINK_EDIT_ACTION) return linkDialogHere() ? { enabled: true, active: null } : editorActions.state("markdown.wikilink");
       if (tableGrid) return tableGrid.actionState(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return ACTION_UNAVAILABLE;
@@ -1191,6 +1201,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           return true;
         });
       }
+      if (id === LINK_EDIT_ACTION) {
+        if (!linkDialogHere()) return editorActions.run("markdown.wikilink");
+        return engine.runViewCommand((view) => {
+          const open = view.state.facet(linkDialogOpener);
+          if (!open) return false;
+          open(view);
+          return true;
+        });
+      }
       if (tableGrid) return tableGrid.runAction(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return false;
@@ -1203,6 +1222,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (id === "text.undo") return "Mod-z";
       if (id === "text.redo") return "Mod-y";
       if (id === COMMENT_ACTION) return COMMENT_CHORD;
+      if (id === LINK_EDIT_ACTION) return "Mod-k";
       return MARKDOWN_ACTIONS.get(id)?.chord ?? null;
     },
     subscribe(listener) {
@@ -1404,7 +1424,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const linkDialogItem = (label: string, from: number, to: number, chord: string | null = null): SurfaceMenuItem[] => {
     if (!engine.readState((state) => state.facet(linkDialogOpener) !== null)) return [];
     return [{
-      id: "markdown.link.edit",
+      id: LINK_EDIT_ACTION,
       label,
       chord,
       run: () => void engine.runViewCommand((view) => {

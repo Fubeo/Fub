@@ -215,6 +215,19 @@ export const VISTE = {
     },
     app: { scena: "formula-06-tavolozza" },
   },
+  /// La mini-barra sul testo scelto (T12): il prototipo la mostra al passo
+  /// «La mini-barra sulla selezione», che sceglie due parole; l'app dalla
+  /// scena del banco con la barra del foglio nascosta.
+  "mini-barra": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La mini-barra sulla selezione");
+        await page.waitForSelector("#win #minibar:not([hidden])");
+      },
+    },
+    app: { scena: "mini-barra-selezione" },
+  },
   /// Le maniglie accanto a un blocco: «+» e la presa con gli occhi, col
   /// puntatore sul blocco e non sulle maniglie.
   maniglie: {
@@ -1250,6 +1263,42 @@ export const PEZZI = [
     prototipo: '.blk[data-t="base"]',
     app: '.pane.focus .base-surface[data-embedded="true"]',
     proprieta: ["margin-right"],
+  },
+  // ── la mini-barra (T12) ───────────────────────────────────────────────────
+  {
+    id: "mini-barra.superficie",
+    vista: "mini-barra",
+    prototipo: "#minibar",
+    app: ".selection-bubble .mini-bar",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "mini-barra.grassetto",
+    vista: "mini-barra",
+    prototipo: '#minibar [data-mx="bold"]',
+    app: '.selection-bubble .mini-bar [data-command="markdown.bold"]',
+    proprieta: ["padding", "border-radius", "color", "background", ...DIMENSIONI, ...ALLINEAMENTO],
+  },
+  {
+    id: "mini-barra.trasforma",
+    vista: "mini-barra",
+    prototipo: '#minibar [data-mx="turn"]',
+    app: '.selection-bubble .mini-bar [data-command="mini-bar.transform"]',
+    proprieta: ["padding", "gap", "border-radius", "font", "color", "background", "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "mini-barra.commenta",
+    vista: "mini-barra",
+    prototipo: '#minibar [data-mx="comment"]',
+    app: '.selection-bubble .mini-bar [data-command="markdown.comment.add"]',
+    proprieta: ["padding", "gap", "border-radius", "font", "color", "background", "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "mini-barra.filo",
+    vista: "mini-barra",
+    prototipo: "#minibar .sepv",
+    app: ".selection-bubble .mini-bar .mini-bar-rule",
+    proprieta: ["margin", "background", ...DIMENSIONI],
   },
 ];
 

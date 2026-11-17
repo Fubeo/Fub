@@ -246,6 +246,58 @@ const BLOCK_NAMES: readonly (readonly [string, () => string])[] = [
   ["markdown.quote", () => t("format_bar.style.quote")],
 ];
 
+/// Il comando del blocco del cursore, il primo acceso nell'ordine dello
+/// stile; `markdown.paragraph` quando non è niente di più. Una sola voce di
+/// «Trasforma in» è spuntata: un compito è anche un elenco, ma è un compito.
+function blockId(surface: SurfaceEditorActions | undefined): string {
+  if (surface?.editable()) {
+    for (const [id] of BLOCK_NAMES) {
+      if (surface.has(id) && surface.state(id).active === true) return id;
+    }
+  }
+  return "markdown.paragraph";
+}
+
+/// Le voci di «Trasforma in» per il blocco del cursore: lo stesso menu dallo
+/// stile del blocco della barra e da «Trasforma» della mini-barra
+/// (`mini-bar.ts`). `titles` sono i comandi dichiarati (un plugin spento
+/// toglie le sue voci); `run` esegue l'azione scelta.
+export function transformItems(
+  surface: SurfaceEditorActions,
+  titles: ReadonlyMap<string, string>,
+  run: (id: string) => void,
+): MenuItem[] {
+  const current = blockId(surface);
+  const item = (id: string): MenuItem | null => {
+    const title = titles.get(id);
+    if (title === undefined || !surface.has(id)) return null;
+    const state = surface.state(id);
+    return {
+      label: transformLabel(id) ?? title,
+      icon: ACTION_LOOKS[id]?.icon || undefined,
+      hint: displayBinding(surface.chord(id)) || undefined,
+      disabled: !state.enabled,
+      choice: "radio",
+      checked: id === current,
+      run: () => run(id),
+    };
+  };
+  const items = TRANSFORMS.flatMap((id) => item(id) ?? []);
+  const more = MORE_HEADINGS.flatMap((id) => item(id) ?? []);
+  if (more.length > 0) items.push({ label: t("format_bar.style.more_headings"), icon: "fmt-h1", items: more });
+  return items;
+}
+
+/// «Trasforma in» ha qualcosa da offrire su questa superficie, scrivibile o no.
+export function transformOffered(surface: SurfaceEditorActions | undefined, titles: ReadonlyMap<string, string>): boolean {
+  return surface !== undefined && TRANSFORMS.some((id) => titles.has(id) && surface.has(id));
+}
+
+/// «Trasforma in» ha qualcosa da offrire adesso.
+export function canTransform(surface: SurfaceEditorActions | undefined, titles: ReadonlyMap<string, string>): boolean {
+  return surface?.editable() === true && transformOffered(surface, titles);
+}
+
 /// Le sezioni del «/» che «+ Inserisci» non offre: i colori e lo stile del
 /// carattere non sono blocchi.
 const NOT_INSERTED: ReadonlySet<string> = new Set(["style"]);
@@ -714,35 +766,6 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     return BLOCK_NAMES.find(([each]) => each === id)?.[1]() ?? t("format_bar.style.text");
   }
 
-  /// Il comando del blocco del cursore, il primo acceso nell'ordine dello
-  /// stile; `markdown.paragraph` quando non è niente di più. Una sola voce di
-  /// «Trasforma in» è spuntata: un compito è anche un elenco, ma è un compito.
-  function blockId(surface: SurfaceEditorActions | undefined): string {
-    if (surface?.editable()) {
-      for (const [id] of BLOCK_NAMES) {
-        if (surface.has(id) && surface.state(id).active === true) return id;
-      }
-    }
-    return "markdown.paragraph";
-  }
-
-  /// Una voce di «Trasforma in», o niente se la superficie non sa farla.
-  function transformItem(surface: SurfaceEditorActions, id: string, current: string): MenuItem | null {
-    // Il comando dichiarato dice che l'azione c'è (un plugin spento la toglie).
-    const title = titles.get(id);
-    if (title === undefined || !surface.has(id)) return null;
-    const state = surface.state(id);
-    return {
-      label: transformLabel(id) ?? title,
-      icon: ACTION_LOOKS[id]?.icon || undefined,
-      hint: displayBinding(surface.chord(id)) || undefined,
-      disabled: !state.enabled,
-      choice: "radio",
-      checked: id === current,
-      run: () => runAction(id),
-    };
-  }
-
   /// Lo stile del blocco della barra che segue il blocco: dice dove sta il
   /// cursore («Testo», «Titolo 2», «Compito») e apre «Trasforma in».
   function drawStyle(): HTMLButtonElement {
@@ -756,15 +779,11 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     trigger.addEventListener("click", () => {
       const surface = actions();
       if (!surface?.editable()) return;
-      const current = blockId(surface);
-      const items = TRANSFORMS.flatMap((id) => transformItem(surface, id, current) ?? []);
-      const more = MORE_HEADINGS.flatMap((id) => transformItem(surface, id, current) ?? []);
-      if (more.length > 0) items.push({ label: t("format_bar.style.more_headings"), icon: "fmt-h1", items: more });
-      openMenu(trigger, items, { title: t("format_bar.style.menu"), label: t("format_bar.style.menu") });
+      openMenu(trigger, transformItems(surface, titles, runAction), { title: t("format_bar.style.menu"), label: t("format_bar.style.menu") });
     });
     refreshers.push(() => {
       const surface = actions();
-      setDisabled(trigger, !surface?.editable() || !TRANSFORMS.some((id) => titles.has(id) && surface.has(id)));
+      setDisabled(trigger, !canTransform(surface, titles));
       const name = blockName(surface);
       if (text.textContent !== name) text.textContent = name;
       setAttr(trigger, "aria-label", `${label}: ${name}`);

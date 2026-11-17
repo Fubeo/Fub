@@ -1,31 +1,28 @@
-// La bolla di selezione: i gesti di formattazione accanto al testo scelto,
-// quando la barra del foglio è spenta (`chrome.formatbar.visible`) o
-// l'impostazione `editor.minibar` la vuole sempre (`mini-bar.ts`).
-//
-// È la stessa barra, ristretta ai gruppi che si fanno su un testo scelto
-// (corsivo, grassetto, collegamento): nessun comando nuovo, nessuna scorciatoia
-// in più, e la tastiera resta quella della barra — un solo punto di tabulazione,
-// le frecce, Escape che riporta al testo. Con la barra accesa, di norma, la
-// bolla non c'è: due copie degli stessi pulsanti sullo stesso foglio sarebbero
-// rumore, a meno che chi scrive non la chieda (`editor.minibar` = `always`).
+// La bolla di selezione: la mini-barra (`mini-bar.ts`) accanto al testo
+// scelto. Con `editor.minibar` = `auto` c'è sempre tranne con la barra del
+// foglio `completa` (`editor.toolbar`), che ha già tutti i pulsanti: due copie
+// sullo stesso foglio sarebbero rumore; `always` la vuole comunque, `menu` e
+// `off` mai (`bubbleWanted`). La tastiera resta quella della barra:
+// un solo punto di tabulazione, le frecce, Escape che riporta al testo.
 //
 // Dove sta il testo lo dice la superficie (`selectionBox`), mai l'editor: qui
-// passano soltanto quattro numeri.
+// passano soltanto quattro numeri. La bolla si posa al più una volta per
+// fotogramma, e la sua misura la tiene un `ResizeObserver`: seguire la
+// selezione non chiede al motore un'impaginazione per evento. Mentre un suo
+// menu è aperto (Trasforma, Colore) resta ferma dov'è; il menu del tasto
+// destro, che le finirebbe sopra, la prende in testa (E29): lì la bolla si
+// toglie, perché il fuoco è nel menu.
 import type { CommandSpec } from "../host/contract";
-import { createFormatBar, FORMATBAR_EVENT, type FormatBar, type FormatBarHost, type GroupId } from "./format-bar";
+import { FORMATBAR_EVENT } from "./format-bar";
+import { createMiniBar, type MiniBar, type MiniBarHost } from "./mini-bar";
 import { openLifetime } from "../ui/lifetime";
-
-/// I gruppi che la bolla offre: il carattere e i collegamenti. Il resto — gli
-/// stili di paragrafo, le liste, i blocchi — si fa su una riga, non su una
-/// selezione.
-const BUBBLE_GROUPS: readonly GroupId[] = ["inline", "links"];
 
 /// Lo spazio fra la bolla e il testo.
 const GAP = 8;
 
 /// L'evento con cui la shell dice che la barra ha cambiato forma (nasce con
 /// la barra, `format-bar.ts`).
-export { FORMATBAR_EVENT } from "./format-bar";
+export { FORMATBAR_EVENT };
 
 export interface SelectionBubble {
   readonly element: HTMLElement;
@@ -34,9 +31,9 @@ export interface SelectionBubble {
   destroy(): void;
 }
 
-export interface BubbleHost extends Omit<FormatBarHost, "only"> {
-  /// La bolla è voluta adesso: barra del foglio spenta, o `editor.minibar`
-  /// che la chiede sempre (`bubbleWanted`).
+export interface BubbleHost extends MiniBarHost {
+  /// La bolla è voluta adesso, secondo `editor.minibar` e la forma della
+  /// barra del foglio (`bubbleWanted`).
   wanted(): boolean;
   /// Il riquadro ha il fuoco (o la bolla ce l'ha): un riquadro che non si sta
   /// usando non mostra una bolla per una selezione di prima.
@@ -62,16 +59,33 @@ export function createSelectionBubble(host: BubbleHost): SelectionBubble {
   const element = document.createElement("div");
   element.className = "selection-bubble";
   element.hidden = true;
-  const bar: FormatBar = createFormatBar({ ...host, only: BUBBLE_GROUPS });
+  const bar: MiniBar = createMiniBar(host);
   element.append(bar.element);
-  document.body.append(element);
+  // Dove sta il menu del tasto destro: dentro la regione del lavoro, che chi
+  // usa un lettore di schermo trova fra i punti di riferimento.
+  (document.getElementById("workspace") ?? document.body).append(element);
   const life = openLifetime();
   let unsubscribe: (() => void) | null = null;
   let observed: unknown = null;
   let frame: number | null = null;
+  /// La misura della bolla, tenuta dal `ResizeObserver`; `null` finché non
+  /// si è vista (nascosta non ne ha una).
+  let size: { width: number; height: number } | null = null;
+  if (typeof ResizeObserver !== "undefined") {
+    const observer = new ResizeObserver((entries) => {
+      const box = entries[entries.length - 1]?.borderBoxSize?.[0];
+      size = box && box.inlineSize > 0 ? { width: box.inlineSize, height: box.blockSize } : null;
+    });
+    observer.observe(element);
+    life.add(() => observer.disconnect());
+  }
 
   const place = (): void => {
     frame = null;
+    const holding = bar.holding();
+    // Un suo menu aperto la tiene ferma: il fuoco è nel menu, la selezione
+    // nell'editor è quella di prima.
+    if (holding && !element.hidden) return;
     const surface = host.surface();
     const box = !host.wanted() || !host.active() ? null : surface?.editorActions?.selectionBox?.() ?? null;
     // Ciò che resta uguale non si riscrive: il posto si ricalcola a ogni
@@ -80,12 +94,13 @@ export function createSelectionBubble(host: BubbleHost): SelectionBubble {
       if (!element.hidden) element.hidden = true;
       return;
     }
-    if (element.hidden) element.hidden = false;
-    const at = bubblePlace(
-      box,
-      { width: element.offsetWidth, height: element.offsetHeight },
-      { width: window.innerWidth, height: window.innerHeight },
-    );
+    bar.refresh();
+    if (element.hidden) {
+      element.hidden = false;
+      size = null;
+    }
+    const measured = size ?? { width: element.offsetWidth, height: element.offsetHeight };
+    const at = bubblePlace(box, measured, { width: window.innerWidth, height: window.innerHeight });
     const left = `${at.left}px`;
     const top = `${at.top}px`;
     if (element.style.left !== left) element.style.left = left;
