@@ -3,15 +3,19 @@
 > **Per chi:** chi scrive una ricetta, a mano o con un'AI, e chi lavora sul
 > componente che le legge.
 > **Fonte autorevole:** `crates/fub-features/src/recipes.rs` e, per la
-> lettura e i controlli, `crates/fub-features/src/recipes/format.rs`; le date
-> dei segnaposto in `crates/fub-features/src/vocabulary.rs`.
+> lettura e i controlli, `crates/fub-features/src/recipes/format.rs`, per
+> l'esecuzione, l'annullamento e la prova `crates/fub-features/src/recipes/run.rs`;
+> le date dei segnaposto in `crates/fub-features/src/vocabulary.rs`.
 > **Presidi:** i test di `recipes.rs` (l'esempio di questa pagina è quello che
-> scrive `recipes.new`, e si rilegge come YAML), `tests/recipes_format.rs` (un
-> caso per codice, le righe, l'impronta, la spec, i controlli contro le spec
-> vere; ogni codice di questa pagina ha la sua frase nei cataloghi),
-> `tests/recipes_e2e.rs` (il comando e il suo annullamento attraverso il
-> kernel), `tests/componenti.rs` e `tests/censimento.rs` per la riga della
-> mappa, tutti in `crates/fub-features`.
+> scrive `recipes.new`, e si rilegge come YAML) e di `recipes/run.rs` (l'ordine
+> dell'annullamento, il passo senza annullamento, la fusione dei piani),
+> `tests/recipes_format.rs` (un caso per codice, le righe, l'impronta, la spec,
+> i controlli contro le spec vere; ogni codice di questa pagina ha la sua frase
+> nei cataloghi), `tests/recipes_e2e.rs` (`recipes.new` e una ricetta adottata
+> attraverso il kernel e il `Guard`: i passi, l'annullamento, l'esito a metà,
+> la prova), `tests/command_conformance.rs` (il comando di una ricetta passa la
+> conformità dei comandi), `tests/componenti.rs` e `tests/censimento.rs` per
+> la riga della mappa, tutti in `crates/fub-features`.
 
 Una ricetta è una nota che dice a Fub quali comandi fare, in fila, sulla nota
 su cui la si usa: «segna la data e sposta in Archivio», «chiudi le attività e
@@ -24,8 +28,9 @@ della pagina dei componenti, cargo feature `recipes`): richiede le Note e i
 Comandi, e spento lui le note della cartella restano note come le altre.
 
 Questa pagina dice dove vive una ricetta, com'è fatto il blocco, i suoi campi
-e i limiti, i segnaposto, i controlli con i loro codici e che cosa fa
-`recipes.new`. Il componente sa leggere e controllare una ricetta, ma l'host
+e i limiti, i segnaposto, i controlli con i loro codici, come gira, si annulla
+e si prova, e che cosa fa `recipes.new`. Il componente sa leggere, controllare,
+eseguire e provare una ricetta, ma l'host
 non le cerca ancora nel vault: una ricetta scritta in un vault **non** compare
 fra i comandi.
 
@@ -204,6 +209,49 @@ larga dei passi. I parametri, in quest'ordine:
 2. `doc` (una nota, obbligatorio) se un passo usa `{{doc}}`, `{{title}}` o
    `{{folder}}`;
 3. i parametri dichiarati, con il loro titolo letterale.
+
+## Come gira e come si annulla
+
+Il comando fa i passi in ordine, ognuno come lo farebbe la palette, con gli
+argomenti del blocco e i segnaposto già sostituiti. Ogni passo scrive col
+recinto del comando che lancia; la ricetta di suo non scrive niente, e lancia
+soltanto i comandi che il suo consenso (`fub:run-command`) nomina: un altro
+viene rifiutato.
+
+| Che cosa succede | Che cosa vede chi la usa |
+|---|---|
+| tutti i passi riescono | «fatto», e un «Annulla» toglie la ricetta intera |
+| il primo passo non riesce | l'errore di quel passo, e niente è cambiato |
+| un passo dopo il primo non riesce | i passi prima restano fatti, un avviso nomina il passo (numero e comando) e il perché, l'esito è «a metà» e «Annulla» toglie i passi fatti; i passi dopo non si provano |
+| un passo che scrive torna senza annullamento | la ricetta resta fatta ma non si annulla, e l'avviso lo dice |
+
+L'annullamento è uno solo, col titolo della ricetta: gli annullamenti dei passi,
+dall'ultimo passo al primo. Un passo che si dichiara di sola lettura non ha
+niente da annullare. Un passo che scrive e torna senza annullamento (anche un
+passo che non ha trovato niente da cambiare, come togliere una proprietà che
+non c'è) lascia tutta la ricetta senza: togliere metà dei passi e lasciare
+l'altra metà sarebbe un annullamento che mente. Ciò che la shell fa dopo (aprire
+una nota) è quello dell'ultimo passo riuscito.
+
+I passi non si passano niente, nemmeno il percorso: dopo un passo che sposta la
+nota, `{{doc}}` è ancora il percorso di prima. «Rinomina, poi segna una
+proprietà su `{{doc}}`» non trova la nota al secondo passo e si ferma a metà;
+segna prima, poi sposta, come fa la ricetta d'esempio.
+
+## La prova
+
+Invocata in prova (`DryRun`), la ricetta fa ogni passo in
+simulazione e fonde ciò che ognuno farebbe: i riassunti dei passi in fila, le
+note toccate senza doppioni, le modifiche da mostrare in fila. Niente si
+scrive. Se il primo passo non si può provare, la prova risponde col suo errore;
+se non si può provare un passo dopo, la prova mostra i passi prima e dice quale
+passo si è fermato e perché.
+
+La prova è **approssimata** quando un passo dipende da un altro: in simulazione
+niente si sposta, quindi un passo dopo una rinomina vede la nota dov'era. La
+prova è `recipes::plan`, generica su chi esegue i passi in simulazione: oggi
+la usa il comando, ed è la stessa che servirà all'host prima di adottare e
+alla CLI.
 
 ## `recipes.new`
 

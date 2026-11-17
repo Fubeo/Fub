@@ -173,3 +173,352 @@ fn la_prova_nomina_la_nota_e_non_scrive_niente() {
     assert_eq!(plan.docs, vec![DocId::new("Recipes/Libri.md")]);
     assert!(!vault.exists("Recipes"));
 }
+
+// ---------------------------------------------------------------------------
+// L'esecuzione, l'annullamento e la prova di una ricetta (`RecipeCommand`)
+// ---------------------------------------------------------------------------
+
+/// Le ricette che lavorano sulle proprietà: con `properties` acceso.
+#[cfg(feature = "properties")]
+mod run {
+    use super::*;
+    use fub_abi::command::CommandOutcome;
+    use fub_abi::format::{DocumentSource, ParseContext};
+    use fub_abi::options::permission;
+    use fub_abi::traits::PluginPermissions;
+    use fub_abi::FormatProvider;
+    use fub_features::recipes::{parse, RecipeCommand};
+    use fub_features::{PropertiesCommands, PROPERTIES_ID};
+
+    const NOTA: &str = "Idee.md";
+    const TESTO: &str = "# Idee\n\nUna riga da archiviare.\n";
+
+    /// La ricetta «archivia» del contratto.
+    const ARCHIVIA: &str = r#"fub-recipe: 1
+id: archivia
+title: Archivia la nota
+description: Segna la data e sposta la nota in Archivio.
+steps:
+  - run: note.property.set
+    args: { doc: "{{doc}}", key: archiviata, value: "{{date}}" }
+  - run: note.rename
+    args: { doc: "{{doc}}", to: "Archivio/{{title}}.md" }"#;
+
+    const BOTH: &[&str] = &["note.property.set", "note.rename"];
+
+    impl Vault {
+        fn write(&self, rel: &str, text: &str) {
+            let path = self.root.join(rel);
+            std::fs::create_dir_all(path.parent().expect("una cartella")).expect("la cartella");
+            std::fs::write(path, text).expect("la nota");
+        }
+
+        fn read(&self, rel: &str) -> String {
+            std::fs::read_to_string(self.root.join(rel)).expect("la nota c'è")
+        }
+
+        /// Il vault con i comandi del core, le proprietà e la ricetta `yaml`
+        /// montata nel suo bundle `recipe.<id>`, con `fub:run-command` che
+        /// nomina soltanto `allowed`: il consenso che l'host darà adottandola.
+        fn with_recipe(&self, yaml: &str, allowed: &[&str]) -> (Workspace, String) {
+            let mut ws = self.open();
+            ws.register_plugin(
+                PluginManifest::core(PROPERTIES_ID, PROPERTIES_ID)
+                    .speaking("it", fub_features::properties::catalog()),
+                Trust::Core,
+            )
+            .expect("le proprietà");
+            ws.register_command_provider(PROPERTIES_ID, Box::new(PropertiesCommands))
+                .expect("le proprietà");
+            let source = format!("# Ricetta\n\n```fub-recipe\n{yaml}\n```\n");
+            let model = MarkdownProvider::new()
+                .parse(
+                    &DocumentSource::Text(source.clone()),
+                    &ParseContext::obsidian("Recipes/Ricetta.md"),
+                )
+                .expect("il Markdown si legge");
+            let recipe = parse(&model, &source).expect("la ricetta si legge");
+            let bundle = format!("recipe.{}", recipe.id);
+            let command = RecipeCommand::new(recipe, &ws.commands());
+            let id = command.spec().id.clone();
+            let mut permissions = PluginPermissions::of(&[permission::RUN_COMMAND]);
+            permissions
+                .granted
+                .set(permission::RUN_COMMAND, serde_json::json!(allowed));
+            ws.register_plugin(
+                PluginManifest::new(bundle.as_str(), bundle.as_str())
+                    .granting(permissions)
+                    .speaking("it", fub_features::recipes::catalog()),
+                Trust::Community,
+            )
+            .expect("il bundle della ricetta");
+            ws.register_command_provider(bundle.as_str(), Box::new(command))
+                .expect("il comando della ricetta");
+            ws.reindex().expect("reindex");
+            (ws, id)
+        }
+    }
+
+    fn run(
+        ws: &mut Workspace,
+        id: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+    ) -> Result<CommandOutcome, PluginError> {
+        ws.invoke_command(id, args, mode, Actor::User)
+    }
+
+    fn on_the_note(ws: &mut Workspace, id: &str) -> Result<CommandOutcome, PluginError> {
+        run(
+            ws,
+            id,
+            serde_json::json!({ "doc": NOTA }),
+            InvokeMode::Apply,
+        )
+    }
+
+    fn undo(ws: &mut Workspace) {
+        ws.invoke_command(
+            VAULT_UNDO,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("l'annullamento riesce");
+    }
+
+    fn notify(outcome: &CommandOutcome) -> String {
+        outcome
+            .notify
+            .as_ref()
+            .and_then(|t| t.as_literal())
+            .expect("l'avviso arriva già nella lingua di chi usa Fub")
+            .to_string()
+    }
+
+    /// `archiviata: AAAA-MM-GG` nel frontmatter.
+    fn archived_today(text: &str) -> bool {
+        let Some(rest) = text.split("archiviata: ").nth(1) else {
+            return false;
+        };
+        let date: String = rest.chars().take(10).collect();
+        date.len() == 10
+            && date.chars().enumerate().all(|(i, c)| {
+                if i == 4 || i == 7 {
+                    c == '-'
+                } else {
+                    c.is_ascii_digit()
+                }
+            })
+    }
+
+    #[test]
+    fn archivia_segna_la_data_sposta_la_nota_e_un_annulla_la_riporta() {
+        let vault = Vault::new();
+        vault.write(NOTA, TESTO);
+        let (mut ws, id) = vault.with_recipe(ARCHIVIA, BOTH);
+        assert_eq!(id, "recipe.archivia:run");
+        assert!(!vault.exists("Archivio"));
+
+        let outcome = on_the_note(&mut ws, &id).expect("la ricetta riesce");
+        assert_eq!(outcome.partial, None);
+        assert!(notify(&outcome).contains("Archivia la nota"), "{outcome:?}");
+        assert!(!vault.exists(NOTA), "la nota si è spostata");
+        let moved = vault.read("Archivio/Idee.md");
+        assert!(archived_today(&moved), "la data è segnata:\n{moved}");
+        assert!(moved.contains("Una riga da archiviare."));
+
+        undo(&mut ws);
+        assert!(!vault.exists("Archivio/Idee.md"));
+        assert_eq!(vault.read(NOTA), TESTO, "testo e percorso com'erano");
+    }
+
+    #[test]
+    fn la_prova_non_scrive_niente_e_nomina_i_due_documenti() {
+        let vault = Vault::new();
+        vault.write(NOTA, TESTO);
+        let (mut ws, id) = vault.with_recipe(ARCHIVIA, BOTH);
+        let outcome = run(
+            &mut ws,
+            &id,
+            serde_json::json!({ "doc": NOTA }),
+            InvokeMode::DryRun,
+        )
+        .expect("la prova riesce");
+        let CommandEffect::Plan(plan) = outcome.effect else {
+            panic!("la prova dà un piano: {outcome:?}")
+        };
+        assert!(plan.docs.contains(&DocId::new(NOTA)), "{:?}", plan.docs);
+        assert!(
+            plan.docs.contains(&DocId::new("Archivio/Idee.md")),
+            "{:?}",
+            plan.docs
+        );
+        assert_eq!(plan.edits.len(), 1, "la data, come modifica da mostrare");
+        let summary = plan.summary.as_literal().expect("già nella lingua");
+        assert!(summary.starts_with("«Archivia la nota»: "), "{summary}");
+        assert_eq!(vault.read(NOTA), TESTO, "niente è cambiato");
+        assert!(!vault.exists("Archivio"));
+    }
+
+    #[test]
+    fn un_secondo_passo_che_cade_lascia_il_primo_un_partial_e_il_suo_annullamento() {
+        let vault = Vault::new();
+        vault.write(NOTA, TESTO);
+        vault.write("Archivio/Idee.md", "occupata\n");
+        let (mut ws, id) = vault.with_recipe(ARCHIVIA, BOTH);
+
+        let outcome = on_the_note(&mut ws, &id).expect("a metà è un esito");
+        let partial = outcome.partial.clone().expect("a metà");
+        assert_eq!((partial.attempted, partial.done), (2, 1));
+        assert_eq!(partial.failures[0].subject, Some(DocId::new(NOTA)));
+        let said = notify(&outcome);
+        assert!(said.contains("passo 2 (note.rename)"), "{said}");
+        assert!(archived_today(&vault.read(NOTA)), "il primo passo è fatto");
+        assert_eq!(vault.read("Archivio/Idee.md"), "occupata\n");
+
+        undo(&mut ws);
+        assert_eq!(vault.read(NOTA), TESTO, "l'annullamento toglie il primo");
+        assert_eq!(vault.read("Archivio/Idee.md"), "occupata\n");
+    }
+
+    #[test]
+    fn la_nota_spostata_al_primo_passo_non_si_trova_al_secondo() {
+        let vault = Vault::new();
+        vault.write(NOTA, TESTO);
+        let yaml = r#"fub-recipe: 1
+id: sposta-e-segna
+title: Sposta e segna
+description: Il secondo passo cerca la nota dov'era.
+steps:
+  - run: note.rename
+    args: { doc: "{{doc}}", to: "Archivio/{{title}}.md" }
+  - run: note.property.set
+    args: { doc: "{{doc}}", key: archiviata, value: "{{date}}" }"#;
+        let (mut ws, id) = vault.with_recipe(yaml, BOTH);
+        let outcome = on_the_note(&mut ws, &id).expect("a metà");
+        assert!(outcome.partial.is_some(), "{outcome:?}");
+        assert_eq!(vault.read("Archivio/Idee.md"), TESTO);
+        undo(&mut ws);
+        assert_eq!(vault.read(NOTA), TESTO);
+        assert!(!vault.exists("Archivio/Idee.md"));
+    }
+
+    #[test]
+    fn un_passo_fuori_dall_elenco_e_rifiutato_dal_guard() {
+        // Il secondo passo fuori dall'elenco: il primo resta, a metà.
+        let vault = Vault::new();
+        vault.write(NOTA, TESTO);
+        let (mut ws, id) = vault.with_recipe(ARCHIVIA, &["note.property.set"]);
+        let outcome = on_the_note(&mut ws, &id).expect("a metà");
+        let partial = outcome.partial.clone().expect("a metà");
+        assert!(
+            matches!(partial.failures[0].error, PluginError::PermissionDenied(_)),
+            "{partial:?}"
+        );
+        assert!(vault.exists(NOTA), "la rinomina non è avvenuta");
+        undo(&mut ws);
+        assert_eq!(vault.read(NOTA), TESTO);
+
+        // Il primo passo fuori dall'elenco: l'errore, e niente cambia.
+        let vault = Vault::new();
+        vault.write(NOTA, TESTO);
+        let (mut ws, id) = vault.with_recipe(ARCHIVIA, &["note.rename"]);
+        let refused = on_the_note(&mut ws, &id);
+        assert!(
+            matches!(refused, Err(PluginError::PermissionDenied(_))),
+            "{refused:?}"
+        );
+        assert_eq!(vault.read(NOTA), TESTO);
+        assert!(!vault.exists("Archivio"));
+    }
+
+    #[test]
+    fn un_passo_sparito_dal_registro_si_ferma_con_un_partial() {
+        let vault = Vault::new();
+        vault.write(NOTA, TESTO);
+        let yaml = r#"fub-recipe: 1
+id: sparito
+title: Con un passo sparito
+description: Il secondo comando non c'è più.
+steps:
+  - run: note.property.set
+    args: { doc: "{{doc}}", key: archiviata, value: "{{date}}" }
+  - run: altro.sparito
+    args: { doc: "{{doc}}" }"#;
+        let (mut ws, id) = vault.with_recipe(yaml, &["note.property.set", "altro.sparito"]);
+        let outcome = on_the_note(&mut ws, &id).expect("a metà");
+        let partial = outcome.partial.clone().expect("a metà");
+        assert!(
+            matches!(partial.failures[0].error, PluginError::UnknownCommand(_)),
+            "{partial:?}"
+        );
+        undo(&mut ws);
+        assert_eq!(vault.read(NOTA), TESTO);
+    }
+
+    #[test]
+    fn un_passo_che_torna_senza_annullamento_lascia_la_ricetta_senza() {
+        let vault = Vault::new();
+        vault.write(NOTA, TESTO);
+        // Togliere una proprietà che non c'è non cambia niente e torna senza
+        // annullamento: la ricetta non lo distingue da un passo che non si
+        // annulla, e non promette un annullamento a metà.
+        let yaml = r#"fub-recipe: 1
+id: senza-annulla
+title: Senza annullamento
+description: Il primo passo torna senza annullamento.
+steps:
+  - run: note.property.remove
+    args: { doc: "{{doc}}", key: assente }
+  - run: note.property.set
+    args: { doc: "{{doc}}", key: archiviata, value: "{{date}}" }"#;
+        let (mut ws, id) = vault.with_recipe(yaml, &["note.property.remove", "note.property.set"]);
+        let outcome = on_the_note(&mut ws, &id).expect("riesce");
+        assert_eq!(outcome.undo, None);
+        assert!(
+            notify(&outcome).contains("non si può annullare"),
+            "{outcome:?}"
+        );
+        assert!(archived_today(&vault.read(NOTA)));
+    }
+
+    #[test]
+    fn un_parametro_number_vuole_un_numero() {
+        let vault = Vault::new();
+        vault.write(NOTA, TESTO);
+        let yaml = r#"fub-recipe: 1
+id: numera
+title: Numera
+description: Segna un numero.
+params:
+  - name: quanti
+    title: Quanti
+    kind: number
+    required: true
+steps:
+  - run: note.property.set
+    args: { doc: "{{doc}}", key: numero, value: "n. {{param.quanti}}" }"#;
+        let (mut ws, id) = vault.with_recipe(yaml, &["note.property.set"]);
+        let refused = run(
+            &mut ws,
+            &id,
+            serde_json::json!({ "doc": NOTA, "quanti": "5" }),
+            InvokeMode::Apply,
+        );
+        assert!(
+            matches!(refused, Err(PluginError::BadArgs(_))),
+            "{refused:?}"
+        );
+        assert_eq!(vault.read(NOTA), TESTO);
+
+        run(
+            &mut ws,
+            &id,
+            serde_json::json!({ "doc": NOTA, "quanti": 5 }),
+            InvokeMode::Apply,
+        )
+        .expect("con un numero riesce");
+        assert!(vault.read(NOTA).contains("n. 5"), "{}", vault.read(NOTA));
+    }
+}

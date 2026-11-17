@@ -9,16 +9,19 @@
 //! Questo modulo dà alle ricette il loro componente (si spegne e si vede
 //! nella mappa), l'impostazione della cartella, il punto di partenza per chi
 //! non usa un'AI (`recipes.new`, che scrive una ricetta d'esempio) e, nel
-//! sottomodulo `format`, la lettura e i controlli del blocco. L'esecuzione
-//! arriva dopo, qui accanto.
+//! sottomodulo `format`, la lettura e i controlli del blocco; nel sottomodulo
+//! `run` il comando che una ricetta diventa, con la sua esecuzione, il suo
+//! annullamento e la sua prova.
 
 mod format;
+mod run;
 
 pub use format::{
     check_against, check_unique, command_id, expand, fingerprint, parse, spec, Problem,
     ProblemCode, Recipe, RecipeParam, RecipeParamKind, RecipeStep, FORMAT_VERSION, RECIPES_MAX,
     RECIPE_NS, STEPS_MAX,
 };
+pub use run::{plan, RecipeCommand};
 
 use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
@@ -128,7 +131,38 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ),
     (P_NEW, "Crea la ricetta {doc}", "Create the recipe {doc}"),
     (D_NEW, "Ricetta creata: {doc}", "Recipe created: {doc}"),
-    (U_NEW, "Creazione della ricetta {doc}", "Creation of the recipe {doc}"),    (
+    (U_NEW, "Creazione della ricetta {doc}", "Creation of the recipe {doc}"),
+    // L'esecuzione e la prova di una ricetta (`run.rs`): `{title}` è il
+    // titolo della ricetta, `{step}` il numero del passo da 1, `{command}` il
+    // suo comando, `{error}` il perché già nella lingua di chi lo ha scritto.
+    ("recipes.run.done", "«{title}»: fatto.", "“{title}”: done."),
+    (
+        "recipes.run.no-undo",
+        "«{title}»: fatto, ma un passo non si può annullare, e quindi nemmeno la ricetta.",
+        "“{title}”: done, but one step cannot be undone, so neither can the recipe.",
+    ),
+    (
+        "recipes.run.partial",
+        "«{title}»: il passo {step} ({command}) non è riuscito; i passi prima sono fatti, e «Annulla» li toglie. Perché: {error}",
+        "“{title}”: step {step} ({command}) failed; the steps before it are done, and “Undo” removes them. Why: {error}",
+    ),
+    (
+        "recipes.run.partial-no-undo",
+        "«{title}»: il passo {step} ({command}) non è riuscito; i passi prima sono fatti, e uno di loro non si può annullare. Perché: {error}",
+        "“{title}”: step {step} ({command}) failed; the steps before it are done, and one of them cannot be undone. Why: {error}",
+    ),
+    ("recipes.run.undo", "Ricetta «{title}»", "Recipe “{title}”"),
+    (
+        "recipes.plan.summary",
+        "«{title}»: {steps}",
+        "“{title}”: {steps}",
+    ),
+    (
+        "recipes.plan.stopped",
+        "«{title}»: {steps}. Il passo {step} ({command}) non si può provare, spesso perché dipende da un passo prima, che nella prova non cambia niente. Perché: {error}",
+        "“{title}”: {steps}. Step {step} ({command}) cannot be previewed, often because it depends on an earlier step, which changes nothing in the preview. Why: {error}",
+    ),
+    (
         crate::vocabulary::E_BAD_ZONE,
         "Fuso orario «{zone}» non riconosciuto: scegli un nome IANA valido.",
         "Unknown time zone «{zone}»: choose a valid IANA name.",

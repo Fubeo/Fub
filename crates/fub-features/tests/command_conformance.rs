@@ -68,3 +68,81 @@ fn the_official_command_providers_respect_the_contract() {
     assert!(seen > 0, "l'inventario non ha nessun provider di comandi");
     let _ = seen;
 }
+
+/// Il comando di una ricetta passa la stessa suite, giudicato come un bundle
+/// di terzi (`Owner::Plugin("recipe.<id>")`): è un provider che l'host monterà
+/// per ogni ricetta adottata.
+///
+/// Due ricette: quella d'esempio del contratto, che chiede la nota (la suite
+/// non la invoca, perché ha un parametro obbligatorio), e una senza parametri
+/// obbligatori, che la suite invoca in simulazione. `MemoryHost` non ha un
+/// registro dei comandi, quindi il suo primo passo risponde `UnknownCommand` e
+/// la ricetta si ferma lì senza scrivere: saltata e detta, mai contata come
+/// provata. I passi veri attraverso il kernel sono in `tests/recipes_e2e.rs`.
+#[cfg(feature = "recipes")]
+#[test]
+fn the_command_of_a_recipe_respects_the_contract() {
+    use fub_abi::format::{DocumentSource, ParseContext};
+    use fub_abi::FormatProvider;
+    use fub_features::recipes::{parse, RecipeCommand};
+
+    const ESEMPIO: &str = r#"fub-recipe: 1
+id: archivia-la-nota
+title: Archivia la nota
+description: Segna la data e sposta la nota in Archivio.
+steps:
+  - run: note.property.set
+    args:
+      doc: "{{doc}}"
+      key: archiviata
+      value: "{{date}}"
+  - run: note.rename
+    args:
+      doc: "{{doc}}"
+      to: "Archivio/{{title}}.md""#;
+    const SENZA_NOTA: &str = r#"fub-recipe: 1
+id: diario-di-oggi
+title: Diario di oggi
+description: Apre la nota del giorno.
+keybinding: Mod-Alt-d
+surfaces: [slash]
+params:
+  - name: tono
+    title: Tono
+    kind: choice
+    options: [calmo, allegro]
+steps:
+  - run: note.daily
+    args: { date: "{{date}}" }"#;
+
+    let registry: Vec<_> = fub_features::every_official_feature()
+        .iter()
+        .filter_map(|feature| feature.commands)
+        .flat_map(|provider| provider().commands())
+        .collect();
+    for (yaml, invoked) in [(ESEMPIO, false), (SENZA_NOTA, true)] {
+        let source = format!("# Ricetta\n\n```fub-recipe\n{yaml}\n```\n");
+        let model = fub_format_markdown::MarkdownProvider::new()
+            .parse(
+                &DocumentSource::Text(source.clone()),
+                &ParseContext::obsidian("Recipes/Ricetta.md"),
+            )
+            .expect("il Markdown si legge");
+        let recipe = parse(&model, &source).expect("la ricetta si legge");
+        let bundle = format!("recipe.{}", recipe.id);
+        let mut command = RecipeCommand::new(recipe, &registry);
+        for mut host in [MemoryHost::new(), with_an_open_note()] {
+            let skipped = conformance::a_command_provider_respects_the_contract(
+                &mut command,
+                &mut host,
+                Owner::Plugin(&bundle),
+            );
+            if invoked {
+                assert_eq!(skipped.len(), 1, "{bundle}: {skipped:?}");
+                assert!(skipped[0].why.contains("note.daily"), "{skipped:?}");
+            } else {
+                assert!(skipped.is_empty(), "{bundle}: {skipped:?}");
+            }
+        }
+    }
+}
