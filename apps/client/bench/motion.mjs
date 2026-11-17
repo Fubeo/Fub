@@ -638,12 +638,37 @@ async function shot(page) {
   }
 }
 
-/// Porta la pagina alla scena, ferma, con gli attrezzi installati.
+/// Aspetta che l'app non abbia più lavoro a riposo in sospeso. La coda dei
+/// riscaldamenti (`ui/warmup.ts`) parte due secondi dopo la consegna e fa un
+/// passo dopo ogni pausa di 600 ms senza ingressi: le pause del banco bastano
+/// a lasciarne partire uno a metà coreografia. Un carattere caricato mentre si
+/// scatta una foto ricalcola lo stile di tutta la pagina, e quella foto tiene
+/// sotto il blocco in mano livelli diversi di un'unità da quelli che la stessa
+/// pagina dipinge a caricamento finito (#456): è la storia del riscaldamento,
+/// non lo stato della coreografia. Per questo ogni pagina parte con la coda
+/// vuota. Durante l'attesa nessun ingresso, sennò la coda non trova mai il suo
+/// silenzio; una pagina senza la shell non fa partire la coda e non aspetta.
+async function warmed(page) {
+  const done = await page.evaluate(async (limit) => {
+    const { warmups } = await import("/src/ui/warmup.ts");
+    const start = performance.now();
+    while (warmups.pending()) {
+      if (performance.now() - start > limit) return false;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return true;
+  }, REST_LIMIT_MS);
+  if (!done) throw new Error(`la coda dei riscaldamenti non si svuota in ${REST_LIMIT_MS} ms`);
+}
+
+/// Porta la pagina alla scena, ferma, senza riscaldamenti da fare (`warmed`)
+/// e con gli attrezzi installati.
 async function ready(stage, choreography, scene, reducedMotion) {
   const opened = await openPage(stage.browser, scene, reducedMotion);
   try {
     const { page } = opened;
     await prepareScene(page, scene, LIGHT, stage.base, sceneUrl);
+    await warmed(page);
     if (choreography.setup) await choreography.setup(page);
     const level = await page.evaluate(TOOLS);
     if (!choreography.mount) {

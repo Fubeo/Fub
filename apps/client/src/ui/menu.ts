@@ -484,10 +484,11 @@ export function showContextMenu(
   // e, se nel frattempo se n'era aperto un altro, chiudeva quello. Su una vita
   // già chiusa `ascolta` non fa niente, e il caso non è da ricordarsi: non c'è.
   if (strip !== null) stripTabs(menu, strip, () => root.focusActive(), lifetime);
-  lifetime.add(trapFocus(menu, closeContextMenu));
   // `trapFocus` conserva e ripristina il fuoco precedente; il fuoco operativo
-  // del menu, però, è una sola voce, secondo la regola del roving tabindex.
+  // del menu, però, è una sola voce, secondo la regola del roving tabindex, e
+  // lo mette qui sotto una volta sola (ogni `focus()` ricalcola lo stile).
   // Aperto dal puntatore, il fuoco sta nel menu finché una freccia non sceglie.
+  lifetime.add(trapFocus(menu, closeContextMenu, { moveFocus: false }));
   // Col campo della ricerca, il fuoco sta nel campo: si scrive subito.
   if (root.field !== null) {
     if (pointer) root.field.classList.add("menu-field-pointer");
@@ -678,7 +679,7 @@ function renderMenu(
         back();
       }
     });
-    childLifetime.add(trapFocus(sub, back));
+    childLifetime.add(trapFocus(sub, back, { moveFocus: false }));
     if (focus) child.focusActive();
     else button.focus({ preventScroll: true });
   };
@@ -1758,12 +1759,11 @@ export function pickIcon(
   // Il selettore di icona è la stessa specie di superficie fissa effimera.
   lifetime.add(() => exitSurface(pop, () => pop.remove()));
   enterSurface(pop);
-  // La trappola prima del `focus()` esplicito: `trapFocus` metterebbe il
-  // fuoco sul primo elemento — la prima emoji — mentre qui la cosa giusta è il
-  // campo, che è ciò che permette di scriverne una qualsiasi senza attraversare
-  // venti pulsanti. Le due righe non sono in conflitto: la seconda sposta il
-  // fuoco dentro la stessa superficie, che è dove la trappola lo vuole.
-  lifetime.add(trapFocus(pop, close));
+  // La trappola prima del `focus()` esplicito, e senza spostare il fuoco da
+  // sé: lo metterebbe sul primo elemento — la prima emoji — mentre qui la cosa
+  // giusta è il campo, che è ciò che permette di scriverne una qualsiasi senza
+  // attraversare venti pulsanti.
+  lifetime.add(trapFocus(pop, close, { moveFocus: false }));
   input.focus();
   lifetime.listen(document, "mousedown", outside, { capture: true });
 }

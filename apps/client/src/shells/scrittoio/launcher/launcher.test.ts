@@ -469,6 +469,21 @@ describe("il campo è un combobox, l'elenco un listbox", () => {
     expect(said()).toBe("");
   });
 
+  it("aprendosi mette il fuoco nel campo una volta sola", () => {
+    // In WebKit ogni `focus()` ricalcola lo stile e la ricerca del primo
+    // elemento raggiungibile (`offsetParent`) forza il layout: la trappola li
+    // faceva entrambi prima che il campo prendesse il fuoco per conto suo.
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      launcher.open("all");
+      expect(document.activeElement).toBe(field());
+      expect(focus.mock.contexts).toEqual([field()]);
+    } finally {
+      focus.mockRestore();
+      launcher.close();
+    }
+  });
+
   it("la superficie è un dialogo con un nome, e la pillola dice che è aperto", () => {
     launcher.open("all");
     expect(surface()!.getAttribute("role")).toBe("dialog");

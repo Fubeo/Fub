@@ -374,6 +374,22 @@ describe("lifecycle del renderer graph", () => {
     expect(host.querySelector(".graph-zoom")).toBeNull();
   });
 
+  it("aperto il grafo vero, il riscaldamento non monta più niente", async () => {
+    mountTestGraph();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const stop = customRenderer(GRAPH_NS, null)!(host, { nodes: ["a"], edges: [] }, vi.fn(), NO_RENDER_CONTEXT)!;
+    await vi.dynamicImportSettled();
+    expect(fakes.charts).toHaveLength(1);
+    const { warmGraph } = await import("../graph/warmup");
+    const next = vi.fn(async () => {});
+    await warmGraph(next, { frame: (run) => void setTimeout(run, 0) });
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(fakes.charts, "nessun grafico d'esercizio").toHaveLength(1);
+    expect(document.querySelector(".graph-warmup")).toBeNull();
+    stop();
+  });
+
   it("non monta un motore arrivato dopo lo smontaggio della superficie", async () => {
     mountTestGraph();
     const host = document.createElement("div");
