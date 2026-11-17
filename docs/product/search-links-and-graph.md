@@ -254,11 +254,11 @@ dichiara invece di inventare un grafo completo.
 
 Il provider ufficiale prepara un payload dichiarativo con nodi e archi. La
 shell possiede il renderer Canvas e l'interazione. Il kernel non conosce pixel,
-camera o animazioni. Il payload dichiara vista locale fino a tre passi, gruppi
-per cartella o primo tag, filtri per orfani e allegati e timestamp di modifica;
-assenti valgono il grafo globale. Gli allegati sono nascosti di default; il
-filtro li aggiunge come nodi con i loro archi. Quale nodo è un documento lo
-dice il registro dei formati. Posizione e animazione restano stato della
+camera o animazioni. Il payload dichiara vista locale fino a tre passi (di
+partenza nei due versi), gruppi per cartella o primo tag, filtri per orfani e
+allegati e timestamp di modifica; assenti valgono il grafo globale. Gli
+allegati sono nascosti di default; il filtro li aggiunge come nodi con i loro
+archi. Quale nodo è un documento lo dice il registro dei formati. Posizione e animazione restano stato della
 shell, in memoria e mai nel vault.
 
 Due altri filtri, spenti di default, aggiungono nodi che non sono file:
