@@ -844,7 +844,7 @@ Fatto quando: un test della regola condivisa con le parole dell'artifact
 e i casi limite; un test DOM dell'editor.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/dates.test.ts src/editors/text/profiles/markdown/page
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da 9e69029ae di `integra/editor-1`, 2026-11-17)
 
 ## T11 · La barra che segue il blocco, «Inserisci», `editor.toolbar`
 
@@ -2148,7 +2148,7 @@ Fatto quando: test dell'elenco e del segnaposto; un test che nessun iframe
 entra nella shell; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/web-embed.test.ts
-Stato: [~] in corso (coder, `feat/pagine-web-incorporate`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (fe0554c51, 2026-11-17), PR bozza #472. La nota mostra un segnaposto, e «Carica» apre la pagina nel visore web: nella shell non c'è mai un iframe. I siti ammessi sono in `WEB_EMBED_SITES`: YouTube, Vimeo, OpenStreetMap, Google Maps, Figma, Excalidraw, tldraw. Un indirizzo `http:` si apre in https. I parametri di tracciamento si tolgono da ciò che si apre e da ciò che «Incorpora» scrive. Rischio aperto: nella Live, Invio, Spazio e Tab su un pulsante dentro un widget immagine arrivano all'editor. Nel segnaposto è corretto; «Scarica nel vault» di `.image-remote` non è provato.
 
 ## T38 · La tipografia italiana
 
