@@ -778,7 +778,7 @@ Fatto quando: test degli editor da tastiera; un test della Base prova le
 corsie e lo spostamento che scrive lo stato; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/page src/editors/base
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da 09e8d7045 di `integra/editor-1`, 2026-11-17)
 
 ## T9a · Selezione, Stato e Url nel contratto
 
@@ -937,7 +937,7 @@ Fatto quando: un test per pulsante confronta il risultato con quello della
 scorciatoia; le foto del banco nelle due luci.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/panels/mini-bar.test.ts
-Stato: [~] in corso (coder, da 185812a03, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (9430a925f, 2026-11-17), PR bozza #472. «Modifica il link» è un'azione della superficie (`LINK_EDIT_ACTION`): apre il riquadro Collegamento in Live e Blocchi, il wikilink in Sorgente. Rischio aperto: la bolla compare anche su un blocco intero scelto o su un'immagine; il prototipo la mostra solo sul testo. Serve un segnale «la scelta è testo» dalla superficie: da fare in un task dopo.
 
 ## T13 · Ctrl O: prefissi, anteprima, azioni
 
@@ -1628,7 +1628,7 @@ Fatto quando: le scene al tocco nelle due luci; un test che col tocco la
 maniglia segue il cursore.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks src/panels/format-bar.test.ts
-Stato: [~] in corso (coder, da 166c7aed9, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (09e8d7045, 2026-11-17), PR bozza #472. Al tocco vale `(any-hover: hover)`, non `(hover: none)`: un tablet col mouse segue il mouse. Lo StateField `touchMode` mette `cm-fub-blocks-touch` sull'editor, così JS e CSS leggono la stessa regola. La pelle sta in `skin/document.css`. Le scene `mobile-tocco-*` girano per ultime (`touchLast`): Chromium non spegne il tocco per le pagine dopo. In `ui/long-press.ts` il click mangiato dopo una pressione lunga è solo quello del dito. Da vedere alla CI: le baseline delle scene che prima ereditavano il tocco.
 
 ## T26 · Il giro della scrittura sul banco
 
@@ -1779,7 +1779,7 @@ con la coda piena; `check-listeners` verde; le foto del banco nelle due luci;
 la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/transclusion.test.ts
-Stato: [ ] da fare
+Stato: [~] integrato in `integra/editor-1` (87427be61, 2026-11-17), PR bozza #472. Gancio in `mount.ts` (idratazione degli embed), resa ferma mentre si scrive; icona nuova solo `transclusion-open`; pagina `docs/product/editor-transclusion.md`. Rischi aperti: (1) Grassetto, Annulla e gli altri gesti della barra agiscono sulla nota che ospita, non sull'editor del tratto; (2) se la Live ricostruisce il widget l'editor si chiude, ma i dati si salvano; (3) se l'editor usa già Esc, serve un secondo Esc; (4) la scheda di nota della lavagna eredita la trasclusione senza una prova dedicata.
 
 ## T30 · Il blocco sincronizzato
 
@@ -1971,7 +1971,7 @@ Fatto quando: un e2e crea una nota da un tipo e la rilegge; un test della
 testata col tipo guasto; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/new-note.test.ts src/editors/text/profiles/markdown/page
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da 09e8d7045 di `integra/editor-1`, 2026-11-17)
 
 ## T34 · La linea del tempo
 
