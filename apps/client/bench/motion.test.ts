@@ -20,6 +20,7 @@ import {
   CHOREOGRAPHIES as choreographies,
   BROWSER_ARGS,
   EXIT_LIMIT_MS,
+  FRAME_STREAK,
   UNCOVERED as uncovered,
   cssName,
   family,
@@ -28,6 +29,7 @@ import {
   jumps,
   longExits,
   midpoint,
+  perFrame,
   residue,
 } from "./motion-rules.mjs";
 
@@ -161,6 +163,18 @@ describe("la regola 3: solo le proprietà ammesse", () => {
     expect(family("flex-basis")).toBe("layout");
     // Ciò che non si conosce costa come un layout: non passa per pittura.
     expect(family("--qualcosa")).toBe("layout");
+  });
+
+  it("durante un gesto è scritta a ogni fotogramma la proprietà estranea cambiata in due fotogrammi di fila", () => {
+    expect(FRAME_STREAK).toBe(2);
+    const slot = ".cm-fub-block-slot";
+    expect(perFrame([
+      { target: slot, property: "top", frames: 1 },
+      { target: slot, property: "height", frames: 2 },
+      { target: slot, property: "transform", frames: 30 },
+      { target: slot, property: "translate", frames: 30 },
+      { target: slot, property: "opacity", frames: 12 },
+    ])).toEqual([{ target: slot, property: "height", frames: 2 }]);
   });
 });
 
