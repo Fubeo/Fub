@@ -208,6 +208,33 @@ solo se il contenuto è cambiato (`mountThemeBundle`): una preferenza come
 `appearance.accent` riscrive soltanto il canale delle preferenze, senza
 ripassare foglio e pelle dal sanitizer.
 
+Il pannello Impostazioni aperto sulla scheda della configurazione, a un
+`setting_changed` con chiave, rilegge le impostazioni e aggiorna solo le righe
+il cui valore, provenienza, attesa o errore è cambiato, con il conto delle
+modificate della loro sezione, «Ripristina gruppo» e il numero nell'indice
+(`refreshRows` in `panels/settings.ts`); le altre righe restano gli stessi
+nodi, e lo scroll non si tocca. La riga si aggiorna sul posto (`patchRow`):
+resta lo stesso nodo, testo e campo della vista si rifanno, e i nodi che una
+shell ha messo nel controllo (le vesti delle preferenze) non si staccano. La riga che ha il fuoco e una bozza non
+si sostituisce: il valore salvato nuovo lo dice una riga sotto il campo.
+Ridisegnano il corpo intero un evento senza chiave, uno schema cambiato (righe
+comparse, sparite o ridichiarate), il tema, i frammenti CSS, `chrome.frame`, la
+lingua e ogni altra scheda. Una scrittura partita da una riga aggiorna una volta
+sola, al suo esito: l'evento della sua chiave che arriva mentre è in volo non
+ridisegna, e uno che arriva dopo trova la riga già uguale.
+
+Una riga in volo resta usabile e il fuoco resta sul controllo della persona:
+lo dicono `aria-busy` e la riga «Salvataggio…» (`role="status"`). Le scritture
+della stessa chiave vanno in fila: una sola in volo, e dietro solo l'ultima
+chiesta, che sostituisce quella che aspettava; così all'host arrivano in
+ordine e una vecchia non sovrascrive mai la nuova. L'esito che conta è quello
+dell'ultima: se non va, la riga torna al valore salvato e mette sotto
+l'errore con l'input provato. Si spengono invece, finché l'esito non arriva,
+le righe la cui scrittura è un cambio rispetto al valore disegnato (aggiungere
+o togliere una voce di lista), perché una seconda scrittura partita dallo
+stesso disegno perderebbe la prima. Un ridisegno intero porta le righe in volo
+com'erano, con la scelta della persona.
+
 Le linguette sono pulsanti nativi, posseduti dal `tablist` tramite `aria-owns`;
 il pulsante di chiusura è un controllo fratello, non un elemento interattivo
 annidato. Frecce, Home ed End spostano il focus, Invio e Spazio attivano la

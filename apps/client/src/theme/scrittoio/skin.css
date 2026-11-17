@@ -3150,8 +3150,8 @@ kbd,
 /* ── La banda: la somma delle celle scelte ───────────────────────────────── */
 /* «Somma 2.520 · Media 840 · Conteggio 3» al posto delle parole: la view
    delle parole si fa da parte finché la somma c'è. Ogni conto è un bottone
-   che copia il suo numero; il primo numero è in inchiostro, gli altri a voce
-   bassa. */
+   che copia il suo numero; il primo numero è in inchiostro e in grassetto
+   pieno (il `<b>` del prototipo, 700), gli altri a voce bassa. */
 .status-band[data-selection-sum] .views-status > [data-view-id="stats"] {
   display: none;
 }
@@ -3167,7 +3167,7 @@ kbd,
 }
 .status-sum-part[data-lead] > .status-sum-value {
   color: var(--text);
-  font-weight: var(--weight-bold);
+  font-weight: 700;
 }
 .status-sum-dot {
   padding: 0 var(--space-1);
@@ -3848,11 +3848,12 @@ kbd,
    colonna: la casella col testo, e sotto una riga con la scadenza e la nota.
    Qui la riga di dettagli rientra sotto il testo, in piccolo, e la nota è un
    rimando sommesso invece di un bottone. Le intestazioni dei gruppi (Scaduti,
-   Questa settimana…) sono etichette in maiuscoletto, non titoli. */
+   Questa settimana…) sono etichette in maiuscoletto, non titoli. Le misure
+   sono quelle del prototipo (`.ith`, `.trow`): l'etichetta a 4 px dal bordo,
+   la riga con 6 px tutt'intorno, la casella di 15 px a 9 px dal testo. */
 .declared-view[data-view-id="tasks"] .ui-section > summary {
   min-height: 0;
-  padding-top: var(--space-6);
-  padding-bottom: var(--space-2);
+  padding: 14px var(--space-2) var(--space-2);
   color: var(--muted);
   font-size: var(--text-xs);
   font-weight: var(--weight-bold);
@@ -3863,8 +3864,10 @@ kbd,
   padding: 0 0 var(--space-2);
 }
 .declared-view[data-view-id="tasks"] .ui-children > .ui-stack[data-dir="column"] {
+  /* A filo dell'etichetta del gruppo: il rientro dei figli della sezione
+     torna indietro. */
   margin: 0 calc(var(--space-4) * -1);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3);
   border-radius: var(--radius-control);
 }
 .declared-view[data-view-id="tasks"] .ui-children > .ui-stack[data-dir="column"]:hover {
@@ -3872,17 +3875,32 @@ kbd,
 }
 .declared-view[data-view-id="tasks"] .ui-checkbox {
   align-items: flex-start;
+  gap: 9px;
   min-height: 0;
 }
-.declared-view[data-view-id="tasks"] .ui-checkbox input {
+/* La casella del prototipo (`.trow .chk`): 15 px, raggio 4, l'anello forte;
+   sotto il puntatore l'anello prende l'accento. */
+.declared-view[data-view-id="tasks"] .ui-checkbox input[type="checkbox"] {
+  width: 15px;
+  min-width: 15px;
+  height: 15px;
+  min-height: 15px;
   margin-top: 1px;
+  border-color: var(--border-strong);
+  border-radius: var(--radius-xs);
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox input[type="checkbox"]:hover {
+  border-color: var(--accent);
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox input[type="checkbox"]:checked {
+  border-color: var(--accent);
 }
 .declared-view[data-view-id="tasks"] .ui-checkbox .ui-field-label {
   overflow-wrap: anywhere;
 }
 /* Sotto il testo: la casella più lo spazio fra casella e testo. */
 .declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack[data-dir="row"] {
-  margin-left: calc(13px + var(--space-4));
+  margin-left: calc(15px + 9px);
 }
 .declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack .ui-button {
   min-height: 0;
@@ -6273,6 +6291,7 @@ kbd,
 .markdown-rendered blockquote,
 .markdown-rendered pre,
 .markdown-rendered table,
+.markdown-rendered .markdown-table-scroll,
 .markdown-rendered hr,
 .markdown-rendered h1,
 .markdown-rendered h2,
@@ -6632,13 +6651,13 @@ kbd,
 }
 /* I Blocchi (H3–H7, E2): il «+» e la maniglia a due occhi nel margine, i
    blocchi selezionati. Con un puntatore i pulsanti non si vedono a riposo e
-   compaiono tenui sul blocco sotto il puntatore; senza passaggio restano
-   tenui sul blocco del cursore. La maniglia sotto il puntatore prende
-   l'accento e gli occhi crescono appena. */
+   compaiono, nel grigio pieno della pagina (il --muted del prototipo
+   tradotto nella tavolozza del documento), sul blocco sotto il puntatore;
+   senza passaggio restano sul blocco del cursore. La maniglia sotto il
+   puntatore prende l'accento e gli occhi crescono appena. */
 .cm-editor .cm-fub-block-add,
 .cm-editor .cm-fub-block-grip {
   color: var(--doc-gutter-fg);
-  opacity: 0.55;
   transition: opacity 0.12s, background 0.12s, color 0.12s;
 }
 @media (hover: hover) {
@@ -7874,34 +7893,101 @@ button.cm-fub-page-icon:focus-visible {
 
 /* ── Tabelle ─────────────────────────────────────────────────────────────── */
 
-/* Una tabella è un dato: carattere dell'interfaccia, cifre incolonnate, solo
-   fili orizzontali. La griglia della Live è la stessa tabella con le maniglie
-   intorno: le celle prendono queste regole in tutte e due. */
+/* Una tabella è un dato: carattere dell'interfaccia, cifre incolonnate, una
+   griglia di fili sottili dentro una cornice arrotondata (il prototipo,
+   `.gridw`, `.gr`, `.gr-box`). La griglia della Live è la stessa tabella con
+   le maniglie intorno: le celle prendono queste regole in tutte e due, e la
+   cornice della Live sta in `skin/tabella.css`, dove la prima riga e la
+   prima colonna della tabella non sono le prime del `<table>`.
+   Dentro la pagina i colori sono quelli del documento, come il resto del
+   contenuto: i fili `--doc-rule-soft` (il `--line` del prototipo), la
+   cornice `--doc-rule` (il `--line-2`), la testata `--doc-fill-soft` (il
+   `--tray`).
+   Il corpo è tre quarti del testo (13,5 px sul testo di serie, e cresce con
+   lui). La tabella riempie la colonna del testo e le celle non vanno a capo:
+   quando il contenuto è più largo, scorre l'involucro che la Lettura le mette
+   attorno (`markdown-table-scroll`, da `markdown/mount.ts`). Dove una resa
+   non lo mette (l'anteprima del lanciatore, le schede dei link) la tabella
+   resta larga quanto il contenuto e scorre da sé.
+   I bordi sono separati, non uniti (`structure.css`, perché una pelle non
+   scrive `border-spacing`): solo così gli angoli si arrotondano. Ogni
+   cella ha il filo a destra e sotto; l'ultima colonna e l'ultima riga hanno
+   al loro posto la cornice. La testata ha il suo fondo fino al bordo: la
+   cornice lì è trasparente, come nel prototipo dove il fondo la copre. */
 .markdown-rendered table {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   overflow-x: auto;
-  border-collapse: collapse;
   font-family: var(--font-ui);
-  font-size: 0.9em;
+  font-size: 0.75em;
   font-variant-numeric: tabular-nums;
-  line-height: var(--leading-normal);
+  line-height: 1.4;
+}
+.markdown-rendered .markdown-table-scroll {
+  overflow-x: auto;
+}
+.markdown-rendered .markdown-table-scroll > table {
+  display: table;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow: visible;
 }
 .markdown-rendered th,
 .markdown-rendered td {
+  height: 34px;
   min-width: 4ch;
-  padding: var(--space-4) var(--space-5);
+  padding: 0 var(--space-5);
   border: 0;
+  border-right: 1px solid var(--doc-rule-soft);
   border-bottom: 1px solid var(--doc-rule-soft);
-  /* Una cella non spezza le parole (né i numeri) a metà: se la tabella non ci
-     sta, scorre. */
-  overflow-wrap: normal;
+  /* Una cella non va a capo, come nel prototipo (`.gr td`): se la tabella
+     non ci sta, scorre. */
+  white-space: nowrap;
   text-align: start;
-  vertical-align: top;
+  vertical-align: middle;
 }
 .markdown-rendered th {
-  background: var(--sheet-2);
+  background: var(--doc-fill-soft);
   color: var(--doc-heading);
   font-weight: var(--weight-bold);
+}
+.markdown-rendered tr > :first-child {
+  border-left: 1px solid var(--doc-rule);
+}
+.markdown-rendered tr > :last-child {
+  border-right: 1px solid var(--doc-rule);
+}
+.markdown-rendered table > :first-child > tr:first-child > * {
+  border-top: 1px solid var(--doc-rule);
+}
+.markdown-rendered table > :last-child > tr:last-child > * {
+  border-bottom: 1px solid var(--doc-rule);
+}
+.markdown-rendered tr > th:first-child {
+  border-left-color: transparent;
+}
+.markdown-rendered tr > th:last-child {
+  border-right-color: transparent;
+}
+.markdown-rendered table > :first-child > tr:first-child > th {
+  border-top-color: transparent;
+}
+.markdown-rendered table > :last-child > tr:last-child > th {
+  border-bottom-color: transparent;
+}
+.markdown-rendered table > :first-child > tr:first-child > :first-child {
+  border-top-left-radius: var(--radius-md);
+}
+.markdown-rendered table > :first-child > tr:first-child > :last-child {
+  border-top-right-radius: var(--radius-md);
+}
+.markdown-rendered table > :last-child > tr:last-child > :first-child {
+  border-bottom-left-radius: var(--radius-md);
+}
+.markdown-rendered table > :last-child > tr:last-child > :last-child {
+  border-bottom-right-radius: var(--radius-md);
 }
 .markdown-rendered table:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
@@ -8501,40 +8587,86 @@ button.cm-fub-page-icon:focus-visible {
    colonna resta a filo del testo, come in Lettura, e le maniglie compaiono
    accanto senza spostarla. Anche le lettere delle colonne stanno fuori:
    la riga che le porta sale nello spazio sopra la tabella, così la prima
-   riga resta dove la mette la Lettura. Sotto i «+» c'è almeno mezza riga
-   d'aria prima del testo che segue. */
+   riga resta dove la mette la Lettura. Come in Lettura la tabella riempie
+   la colonna del testo (il prototipo, `.gr{width:100%}`): le celle sono
+   larghe quanto la cornice, la colonna dei numeri sta nel margine, e la
+   griglia scorre quando il contenuto non ci sta. I «+» del prototipo
+   (`.tg-add`) stanno sul bordo destro della cornice e sotto, e sotto la
+   barra della riga resta mezza riga d'aria prima del testo che segue. */
 .cm-editor .cm-content .tb-frame {
-  padding: 0 0 calc(var(--text-reading) * var(--leading-relaxed) / 2);
+  padding: 0 0 calc(19px + var(--text-reading) * var(--leading-relaxed) / 2);
 }
 .cm-editor .cm-content .tb-grid {
-  margin-top: calc(-1 * var(--text-xs) * var(--leading-relaxed));
+  margin-top: -15px;
   margin-left: calc(-1 * var(--space-7));
   padding: 0;
 }
 .cm-editor .cm-content .tb-grid table {
   display: table;
+  width: 100%;
+  max-width: none;
   margin: 0;
   overflow: visible;
 }
+/* La cornice della tabella attorno alle celle soltanto: nella Live la prima
+   riga è dopo quella delle lettere e la prima colonna dopo quella dei
+   numeri. */
+.cm-editor .cm-content .tb-grid .tb-rowhead + .tb-cell {
+  border-left: 1px solid var(--doc-rule);
+}
+.cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-cell {
+  border-top: 1px solid var(--doc-rule);
+}
+.cm-editor .cm-content .tb-grid .tb-rowhead + .tb-head {
+  border-left-color: transparent;
+}
+.cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-head {
+  border-top-color: transparent;
+}
+.cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-rowhead + .tb-cell {
+  border-top-left-radius: var(--radius-md);
+}
+.cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-cell:last-child {
+  border-top-right-radius: var(--radius-md);
+}
+.cm-editor .cm-content .tb-grid tbody > tr:last-child > .tb-rowhead + .tb-cell {
+  border-bottom-left-radius: var(--radius-md);
+}
+/* Le lettere e i numeri del prototipo (`.gr-let`, `.gr-num`): 10,5 px in
+   peso pieno, a voce bassa. La lettera sta in una striscia di 13 px, 2 px
+   sopra la tabella; il numero in una colonna di 16 px, 4 px prima della
+   tabella. */
 .cm-editor .cm-content .tb-grid .tb-corner,
 .cm-editor .cm-content .tb-grid .tb-letter,
 .cm-editor .cm-content .tb-grid .tb-rowhead {
+  box-sizing: border-box;
   min-width: 0;
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--doc-gutter-fg);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  line-height: var(--leading-relaxed);
-  height: calc(var(--text-xs) * var(--leading-relaxed));
+  font-size: 10.5px;
+  font-weight: var(--weight-bold);
+  line-height: 1;
   text-align: center;
   vertical-align: middle;
+}
+.cm-editor .cm-content .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-grid .tb-letter {
+  height: 15px;
+  padding-bottom: 2px;
+  /* La riga del testo è la striscia intera (il prototipo, `.tg .gr-let span`:
+     13 px d'altezza e d'interlinea): 15 px meno i 2 px d'aria sotto. */
+  line-height: 13px;
 }
 .cm-editor .cm-content .tb-grid .tb-corner,
 .cm-editor .cm-content .tb-grid .tb-rowhead {
   width: var(--space-7);
   min-width: var(--space-7);
+}
+.cm-editor .cm-content .tb-grid .tb-rowhead {
+  padding-right: var(--space-2);
 }
 /* Le intestazioni si cliccano: la lettera sceglie la colonna, il numero la
    riga. Il puntatore sopra e la scelta danno un fondo arrotondato, disegnato
@@ -8550,9 +8682,14 @@ button.cm-fub-page-icon:focus-visible {
 .cm-editor .cm-content .tb-grid .tb-rowhead::before {
   content: "";
   position: absolute;
-  inset: 1px;
   z-index: -1;
   border-radius: var(--radius-xs);
+}
+.cm-editor .cm-content .tb-grid .tb-letter::before {
+  inset: 0 0 2px;
+}
+.cm-editor .cm-content .tb-grid .tb-rowhead::before {
+  inset: 0 var(--space-2) 0 0;
 }
 .cm-editor .cm-content .tb-grid .tb-letter:hover,
 .cm-editor .cm-content .tb-grid .tb-rowhead:hover {
@@ -8564,12 +8701,47 @@ button.cm-fub-page-icon:focus-visible {
 }
 .cm-editor .cm-content .tb-grid .tb-letter.is-selected,
 .cm-editor .cm-content .tb-grid .tb-rowhead.is-selected {
-  color: var(--accent);
-  font-weight: var(--weight-bold);
+  color: var(--accent-soft);
 }
 .cm-editor .cm-content .tb-grid .tb-letter.is-selected::before,
 .cm-editor .cm-content .tb-grid .tb-rowhead.is-selected::before {
   background: var(--accent-wash);
+}
+/* Una tabella più larga della colonna scorre di lato dentro la griglia: le
+   lettere scorrono con le loro colonne, i numeri delle righe (e l'angolo)
+   restano fermi nel margine e coprono le celle che ci passano sotto, che si
+   tagliano lì come in Lettura al bordo dell'involucro. A riposo i numeri si
+   nascondono col colore, non con l'opacità della `table-widget.ts` che
+   svuoterebbe anche il fondo che copre. */
+.cm-editor .cm-content .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-grid .tb-rowhead {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  opacity: 1;
+}
+/* Per coprire serve il fondo del foglio, ma solo con la griglia scorsa
+   (`data-scrolled`, dalla cornice): a inizio corsa sotto non passa niente, e
+   i numeri restano trasparenti come nel prototipo. */
+.cm-editor .cm-content .tb-grid[data-scrolled] .tb-corner,
+.cm-editor .cm-content .tb-grid[data-scrolled] .tb-rowhead {
+  background: var(--doc-bg);
+}
+/* Il fondo che copre è squadrato: l'angolo arrotondato che `document.css`
+   dà alla prima cella della prima e dell'ultima riga della tabella qui
+   lascerebbe vedere un filo della cella che passa sotto. */
+.cm-editor .cm-content .tb-frame .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-frame .tb-grid .tb-rowhead {
+  border-radius: 0;
+}
+/* A riposo, senza fuoco nella griglia: il numero e il suo fondo arrotondato
+   non si vedono, ma il fondo del foglio della griglia scorsa resta a coprire. */
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-corner,
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-rowhead {
+  color: transparent;
+}
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-rowhead::before {
+  visibility: hidden;
 }
 /* Mentre si trascinano le intestazioni scelte il puntatore dice che si
    sposta qualcosa, e una linea d'accento segna dove arriverà. */
@@ -8630,7 +8802,7 @@ button.cm-fub-page-icon:focus-visible {
   background: transparent;
 }
 .cm-editor .cm-content .tb-grid:focus-within .tb-head.is-selected {
-  background: var(--sheet-2);
+  background: var(--doc-fill-soft);
 }
 .cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-active {
   box-shadow: none;
@@ -8659,10 +8831,37 @@ button.cm-fub-page-icon:focus-visible {
   visibility: hidden;
 }
 /* Il segno del taglio: le celle tagliate restano tratteggiate finché non si
-   incolla, anche quando la tabella perde il fuoco. */
+   incolla, anche quando la tabella perde il fuoco. Il tratteggio è quello
+   del prototipo (`.tg-cut`): quattro bordi di 1,5 px, 4 px pieni e 4 vuoti,
+   che girano attorno alle celle come formiche in fila (`tg-ants`).
+   È l'unica eccezione al foglio fermo (`skin/motion.css` spegne ogni moto
+   dentro l'editor): il giro dice che il taglio aspetta ancora di essere
+   incollato, e finisce con lui — col taglio chiuso il riquadro è `hidden`.
+   Per questo la regola scrive `!important` con più peso di quella di
+   `motion.css`, e `theme/motion.test.ts` la nomina come sola eccezione.
+   Col moto ridotto, del sistema o di Fub, il tratteggio sta fermo. */
 .cm-editor .cm-content .tb-grid .tb-cut {
-  border: 1.5px dashed var(--accent);
+  border: 0;
   border-radius: 0;
+  background:
+    linear-gradient(90deg, var(--accent) 50%, transparent 0) 0 0 / 8px 1.5px repeat-x,
+    linear-gradient(90deg, var(--accent) 50%, transparent 0) 0 100% / 8px 1.5px repeat-x,
+    linear-gradient(0deg, var(--accent) 50%, transparent 0) 0 0 / 1.5px 8px repeat-y,
+    linear-gradient(0deg, var(--accent) 50%, transparent 0) 100% 0 / 1.5px 8px repeat-y;
+  animation: tb-ants 0.6s linear infinite !important;
+}
+@keyframes tb-ants {
+  to {
+    background-position: 8px 0, -8px 100%, 0 -8px, 100% 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cm-editor .cm-content .tb-grid .tb-cut {
+    animation: none !important;
+  }
+}
+:root[data-motion="reduced"] .cm-editor .cm-content .tb-grid .tb-cut {
+  animation: none !important;
 }
 /* Le maniglie del tocco agli angoli della selezione: si tirano per
    allargarla. Soltanto dove il puntatore è un dito. */
@@ -8684,36 +8883,75 @@ button.cm-fub-page-icon:focus-visible {
     background: var(--accent);
   }
 }
-.cm-editor .cm-content .tb-add {
-  padding: var(--space-1) var(--space-4);
-  border-radius: var(--radius-chip);
-  color: var(--muted);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
+/* «Aggiungi una riga» e «Aggiungi una colonna» (il prototipo, `.tg-add`):
+   due barre di 15 px con un «+», 4 px sotto la tabella e 4 px alla sua
+   destra, che compaiono col puntatore sopra la tabella o col fuoco dentro.
+   Il riquadro che le porta copre le celle (la cornice meno i 19 px della
+   barra e la mezza riga d'aria sotto), e non prende il puntatore: lo
+   prendono soltanto le barre. */
+.cm-editor .cm-content .tb-adders {
+  position: absolute;
+  inset: 0 0 calc(19px + var(--text-reading) * var(--leading-relaxed) / 2);
+  display: block;
+  min-height: 0;
+  padding: 0;
+  pointer-events: none;
 }
-.cm-editor .cm-content .tb-add:hover {
-  background: var(--sheet-2);
+.cm-editor .cm-content .tb-add {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--doc-gutter-fg);
+  pointer-events: auto;
+}
+.cm-editor .cm-content .tb-add[data-add="row"] {
+  left: 0;
+  right: 0;
+  bottom: -19px;
+  height: 15px;
+}
+.cm-editor .cm-content .tb-add[data-add="column"] {
+  top: 0;
+  bottom: 0;
+  right: -19px;
+  width: 15px;
+}
+.cm-editor .cm-content .tb-add svg {
+  width: 14px;
+  height: 14px;
+}
+.cm-editor .cm-content .tb-add:hover,
+.cm-editor .cm-content .tb-add:active {
+  background: var(--bg-hover);
   color: var(--text);
 }
-.cm-editor .cm-content .tb-add:active {
-  background: var(--accent-wash);
-  color: var(--accent);
+/* Al telefono la barra della colonna uscirebbe dal margine: resta la riga,
+   e la colonna si aggiunge dal menu. */
+@media (max-width: 620px) {
+  .cm-editor .cm-content .tb-add[data-add="column"] {
+    display: none;
+  }
 }
-.cm-editor .cm-content .tb-adders {
-  gap: var(--space-2);
-  min-height: calc(var(--text-reading) * var(--leading-relaxed));
-  padding-left: var(--space-7);
-  align-items: center;
-}
-/* La maniglia di riempimento all'angolo della selezione, e le celle che il
-   riempimento raggiungerà mentre la si tira. */
+/* La maniglia di riempimento all'angolo della selezione (il prototipo,
+   `.tg-fill`: 9 px, raggio 2, un anello del colore del foglio), e le celle
+   che il riempimento raggiungerà mentre la si tira. */
 .cm-editor .cm-content .tb-grid .tb-fill {
   z-index: 3;
   left: 0;
   top: 0;
-  border-color: var(--doc-bg);
-  border-radius: 1px;
+  width: 9px;
+  height: 9px;
+  margin: -4px 0 0 -4px;
+  border: 0;
+  border-radius: 2px;
   background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--doc-bg);
 }
 .cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-fill {
   box-shadow: inset 0 0 0 1px var(--accent);
@@ -17585,31 +17823,35 @@ h6.ui-heading {
 
 /* I menu. */
 
-/* Un menu è un rialzo: carta più chiara di tutto ciò che copre, staccata
-   dall'ombra e da nient'altro. Contestuale o a tendina è lo stesso oggetto
-   (`ui/menu.ts`), con la lingua del «/»: testata, appunti e piede restano
-   fermi, l'elenco in mezzo scorre. Cambia solo da dove parte. */
+/* Un menu è un rialzo: il foglio del prototipo (`.pop`), staccato dall'ombra
+   di ciò che si apre sopra tutto (`--shadow-pop`, il `--sh-pop` del
+   prototipo, la stessa del lanciatore); un tema che non la dichiara ha un
+   filo appena accennato e l'ombra della struttura. Contestuale o a tendina è
+   lo stesso oggetto (`ui/menu.ts`), con la lingua del «/»: testata, appunti e
+   piede restano fermi, l'elenco in mezzo scorre. Cambia solo da dove parte. */
 .context-menu {
   position: fixed;
   z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
-  min-width: 200px;
-  max-width: min(400px, 90vw);
+  min-width: 220px;
+  max-width: min(380px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);
   padding: 0;
   border: none;
   border-radius: calc(var(--radius-menu) + var(--space-2));
-  background: var(--bg-elev);
-  box-shadow: var(--shadow-3);
+  background: var(--sheet);
+  box-shadow: var(--shadow-pop, 0 0 0 1px color-mix(in oklab, var(--text) 8%, transparent), var(--shadow-3));
   color: var(--text);
   font-size: var(--text-base);
+  line-height: 1.4;
   overflow: hidden;
 }
 /* Il menu del posto, aperto col tasto destro o col tasto Menu: largo quanto
-   il prototipo, e di più soltanto per un nome che non ci sta. */
+   il prototipo (`.pop.cx`, 316 px fissi); un nome che non ci sta si taglia. */
 .context-menu.menu-at-point {
-  min-width: 316px;
+  width: 316px;
+  min-width: 0;
 }
 /* Aperto col mouse il menu tiene il fuoco su di sé soltanto per le frecce:
    non è una cosa da scegliere, e l'anello va sulle voci. */
@@ -17627,11 +17869,79 @@ h6.ui-heading {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
+.context-menu .menu-clipboard + .menu-items {
+  padding-top: var(--space-3);
+}
+
+/* **Il campo della ricerca** in cima (il menu della maniglia): la lente in
+   grigio e il campo senza bordo, sopra un filo. Si scrive lì, e aperto dal
+   puntatore il fuoco resta lì senza anello, come nel prototipo: lo dicono il
+   cursore e la voce accesa. */
+.context-menu .menu-field {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.context-menu .menu-field > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.context-menu .menu-field-input {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  /* Quello che il browser dà a un campo, e che il prototipo tiene. */
+  padding: 1px 2px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.context-menu .menu-field-input:hover,
+.context-menu .menu-field-input:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+/* Il fuoco arrivato dalla tastiera (aperto da tastiera, ↑ dalla prima voce,
+   il Tab) ha l'anello di casa, attorno al testo: chi non vede il cursore
+   deve sapere dove si è. `menu-field-pointer` lo tace finché il fuoco viene
+   dall'apertura col puntatore (`ui/menu.ts`). */
+.context-menu .menu-field-input:focus-visible:not(.menu-field-pointer) {
+  border-radius: var(--radius-xs);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+.context-menu .menu-field-input::placeholder {
+  color: var(--muted);
+}
 
 /* Una voce è una riga del kit (`kit/row.ts`, vestita in `skin/kit.css`): una
    linea sola da 34, con il segno, il nome e a destra, in monospazio grigio,
    la scorciatoia o la freccia del sottomenu. Qui sta ciò che è solo del
-   menu. */
+   menu: la figura accesa nell'inchiostro d'accento e la freccia che si
+   sposta appena verso il sottomenu. */
+/* L'interlinea del foglio (1,4, `.m-i` del prototipo), non quella stretta
+   della riga del kit. */
+.context-menu .menu-items [role^="menuitem"] {
+  line-height: inherit;
+}
+.context-menu .menu-lit .menu-icon {
+  color: var(--accent-soft);
+}
+.context-menu .menu-more {
+  transition: transform 0.14s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.12s;
+}
+.context-menu .menu-lit .menu-more {
+  transform: translateX(2px);
+}
 /* **La scelta è una sola**, e la dice la pastiglia che scivola da una voce
    all'altra: la voce accesa ha il fuoco, che il puntatore sposta e che resta
    dov'è quando il puntatore esce. L'anello della tastiera sta dentro la voce,
@@ -17715,12 +18025,12 @@ h6.ui-heading {
   clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
 }
 
-/* Un filetto rientrato, con la sua aria sopra e sotto. A metà del
-   contrasto di un bordo: separa i gruppi senza rigare il menu. */
+/* Un filetto rientrato, con la sua aria sopra e sotto, nel colore dei
+   bordi. */
 .context-menu .menu-separator {
   height: 1px;
   margin: 5px var(--space-4);
-  background: color-mix(in oklab, var(--border) 50%, transparent);
+  background: var(--border);
 }
 
 /* **La voce distruttiva** scrive in rosso a riposo. Accesa non prende la
@@ -17774,8 +18084,10 @@ h6.ui-heading {
    d'autore (`menu-label`, `menu-more`, `menu-group-label`) accanto a quelli
    del kit, perché un tema che li vestiva continui a valere. L'aspetto è della
    riga e dell'etichetta del kit; qui solo ciò che è del menu: l'etichetta
-   non si sceglie, il nome e la freccia non si selezionano col trascinamento. */
-.context-menu .menu-group-label {
+   (e il titolo del menu della maniglia, `menu-title`) non si sceglie, il
+   nome e la freccia non si selezionano col trascinamento. */
+.context-menu .menu-group-label,
+.context-menu .menu-title {
   cursor: default;
 }
 .context-menu .menu-label,
@@ -17795,20 +18107,20 @@ h6.ui-heading {
   height: 40px;
   padding: 0 14px;
   border-bottom: 1px solid var(--border);
-  color: var(--muted);
+  color: var(--text);
   font-size: calc(var(--text-sm) + 0.5px);
   white-space: nowrap;
 }
 .context-menu .menu-head > svg {
   flex: none;
-  width: 16px;
-  height: 16px;
-  color: var(--accent);
+  width: 14px;
+  height: 14px;
+  color: var(--accent-soft);
 }
 .context-menu .menu-head-kind {
   flex: none;
   color: var(--text);
-  font-weight: var(--weight-bold);
+  font-weight: 650;
 }
 .context-menu .menu-head-name {
   min-width: 0;
@@ -17831,7 +18143,7 @@ h6.ui-heading {
   margin: var(--space-4) var(--space-4) var(--space-1);
   padding: 3px;
   border-radius: 11px;
-  background: var(--overlay-hover);
+  background: var(--sheet-2);
 }
 .context-menu .menu-clipboard[hidden] {
   display: none;
@@ -17843,8 +18155,8 @@ h6.ui-heading {
   bottom: 3px;
   width: 0;
   border-radius: var(--radius-control);
-  background: var(--bg-elev);
-  box-shadow: 0 0 0 1px var(--border), var(--shadow-1);
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--text) 6%, transparent), var(--shadow-1);
   opacity: 0;
   pointer-events: none;
 }
@@ -17874,6 +18186,19 @@ h6.ui-heading {
 .context-menu .menu-clipboard .menu-quick.menu-pressed {
   color: var(--accent-contrast);
 }
+/* La parte accesa scrive nell'inchiostro pieno, con la figura d'accento. */
+/* Le parti della barra (`.m-t`): senza margine di lato, con l'interlinea del
+   foglio. */
+.context-menu .menu-clipboard .menu-quick {
+  padding-inline: 0;
+  line-height: inherit;
+}
+.context-menu .menu-clipboard .menu-quick.menu-lit {
+  color: var(--text);
+}
+.context-menu .menu-clipboard .menu-quick.menu-lit svg {
+  color: var(--accent-soft);
+}
 .context-menu .menu-choice.menu-pressed > svg {
   display: none;
 }
@@ -17890,13 +18215,12 @@ h6.ui-heading {
    coi segni dei formati, stretti in ogni lingua. Il nome del formato compare
    accanto alla voce mentre la riga è accesa. */
 .context-menu .menu-choices {
-  padding: var(--space-2) var(--space-3);
   line-height: inherit;
   cursor: default;
 }
 .context-menu .menu-choice-name {
   margin-left: 0.35em;
-  color: var(--accent);
+  color: var(--accent-soft);
 }
 .context-menu .menu-choice-set {
   display: flex;
@@ -17920,9 +18244,10 @@ h6.ui-heading {
   height: 26px;
   padding: 0;
   border-radius: var(--radius-control);
-  background: var(--bg-elev);
+  background: var(--sheet);
   box-shadow: inset 0 0 0 1px var(--border-strong);
   color: var(--muted);
+  transition: background 0.12s, box-shadow 0.12s, color 0.12s, transform 0.14s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .context-menu .menu-choices .menu-choice > svg {
   width: 15px;
@@ -17931,7 +18256,14 @@ h6.ui-heading {
 .context-menu .menu-choices .menu-choice.menu-lit {
   background: var(--accent-wash);
   box-shadow: inset 0 0 0 1.5px var(--accent);
-  color: var(--accent);
+  color: var(--accent-soft);
+}
+/* Sotto il puntatore il tastino si solleva appena; premuto, si stringe. */
+.context-menu .menu-choices .menu-choice:hover {
+  transform: translateY(-1px);
+}
+.context-menu .menu-choices .menu-choice:active {
+  transform: scale(0.94);
 }
 .context-menu .menu-choices .menu-choice.menu-pressed {
   background: var(--accent);
@@ -17962,7 +18294,9 @@ h6.ui-heading {
   height: 36px;
   padding: 0 14px;
   border-top: 1px solid var(--border);
-  background: color-mix(in oklab, var(--overlay-hover) 55%, var(--bg-elev));
+  /* La fascia del prototipo (`.m-find`): il vassoio mescolato al foglio,
+     piena. */
+  background: color-mix(in srgb, var(--sheet-2) 55%, var(--sheet));
   color: var(--muted);
   font-size: calc(var(--text-sm) + 0.5px);
   white-space: nowrap;
@@ -17992,6 +18326,32 @@ h6.ui-heading {
   margin-left: 1px;
   vertical-align: -3px;
   background: var(--accent);
+}
+
+/* **Il piede dei tasti** (il menu della maniglia): una riga quieta, senza
+   fondo, coi tasti disegnati come altrove e cosa fanno. */
+.context-menu .menu-foot.menu-foot-keys {
+  display: block;
+  gap: normal;
+  height: auto;
+  padding: 7px 12px;
+  background: none;
+  font-size: calc(var(--text-xs) + 0.5px);
+  line-height: 1.6;
+}
+.context-menu .menu-foot-key {
+  margin-right: 12px;
+  white-space: nowrap;
+}
+.context-menu .menu-foot-key > kbd {
+  padding: 3px 5px 2px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border-strong), 0 1px 0 var(--border-strong);
+  color: var(--muted);
+  font: var(--weight-medium) 10.5px/1 var(--font-mono);
+  white-space: nowrap;
 }
 
 /* Col dito le voci sono alte quanto un dito. */

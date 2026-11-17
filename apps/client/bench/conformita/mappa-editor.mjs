@@ -407,7 +407,6 @@ export const PEZZI = [
   {
     id: "menu.superficie",
     vista: "menu-selezione",
-    attende: "#431",
     prototipo: ".pop.cx",
     app: ".context-menu",
     proprieta: [...BASE, "width", "min-width"],
@@ -415,7 +414,6 @@ export const PEZZI = [
   {
     id: "menu.testa",
     vista: "menu-selezione",
-    attende: "#431",
     prototipo: ".m-head",
     app: ".context-menu .menu-head",
     proprieta: [...BASE, "height", ...ALLINEAMENTO],
@@ -423,7 +421,6 @@ export const PEZZI = [
   {
     id: "menu.testa-icona",
     vista: "menu-selezione",
-    attende: "#431",
     prototipo: ".m-head .ic svg",
     app: ".context-menu .menu-head > svg",
     proprieta: ["color", ...DIMENSIONI],
@@ -431,7 +428,6 @@ export const PEZZI = [
   {
     id: "menu.testa-tipo",
     vista: "menu-selezione",
-    attende: "#431",
     prototipo: ".m-head b",
     app: ".context-menu .menu-head-kind",
     proprieta: ["font", "color"],
@@ -439,7 +435,6 @@ export const PEZZI = [
   {
     id: "menu.testa-nome",
     vista: "menu-selezione",
-    attende: "#431",
     prototipo: ".m-head .x",
     app: ".context-menu .menu-head-name",
     proprieta: ["font", "color"],
@@ -447,7 +442,6 @@ export const PEZZI = [
   {
     id: "menu.appunti",
     vista: "menu-selezione",
-    attende: "#431",
     prototipo: ".m-tiles",
     app: ".context-menu .menu-clipboard",
     proprieta: BASE,
@@ -455,7 +449,6 @@ export const PEZZI = [
   {
     id: "menu.appunto",
     vista: "menu-selezione",
-    attende: "#431",
     prototipo: ".m-t",
     app: ".context-menu .menu-quick",
     proprieta: [...BASE, "height", ...ALLINEAMENTO],
@@ -463,7 +456,6 @@ export const PEZZI = [
   {
     id: "menu.appunto-icona",
     vista: "menu-selezione",
-    attende: "#431",
     prototipo: ".m-t .ti svg",
     app: ".context-menu .menu-quick .kit-tile-icon svg",
     proprieta: ["color", ...DIMENSIONI],
@@ -471,7 +463,6 @@ export const PEZZI = [
   {
     id: "menu.voce",
     vista: "menu-selezione",
-    attende: "#431",
     prototipo: ".m-l > button.m-i:not(.act)",
     app: ".context-menu .menu-items > button.kit-row:not(.menu-lit)",
     proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
@@ -479,7 +470,6 @@ export const PEZZI = [
   {
     id: "menu.voce-icona",
     vista: "menu-selezione",
-    attende: "#431",
     prototipo: ".m-l > button.m-i:not(.act) .ic",
     app: ".context-menu .menu-items > button.kit-row:not(.menu-lit) .menu-icon",
     proprieta: ["color", ...DIMENSIONI],
@@ -487,7 +477,6 @@ export const PEZZI = [
   {
     id: "menu.voce-tasti",
     vista: "menu-selezione",
-    attende: "#431",
     prototipo: ".m-l > button.m-i:not(.act) kbd",
     app: ".context-menu .menu-items > button.kit-row:not(.menu-lit) .kit-row-keys",
     proprieta: ["font", "color", "padding", "background", "box-shadow", "border-radius"],
@@ -495,7 +484,6 @@ export const PEZZI = [
   {
     id: "menu.piede",
     vista: "menu-selezione",
-    attende: "#431",
     prototipo: ".m-find",
     app: ".context-menu .menu-foot",
     proprieta: [...BASE, "height", ...ALLINEAMENTO],
@@ -504,7 +492,6 @@ export const PEZZI = [
   {
     id: "menu.superficie-blocco",
     vista: "menu-blocco",
-    attende: "#431",
     prototipo: ".pop",
     app: ".context-menu",
     proprieta: [...BASE, "min-width"],
@@ -512,7 +499,6 @@ export const PEZZI = [
   {
     id: "menu.campo",
     vista: "menu-blocco",
-    attende: "#431",
     prototipo: ".m-s",
     app: ".context-menu .menu-field",
     proprieta: [...BASE, ...ALLINEAMENTO],
@@ -520,7 +506,6 @@ export const PEZZI = [
   {
     id: "menu.campo-lente",
     vista: "menu-blocco",
-    attende: "#431",
     prototipo: ".m-s > svg",
     app: ".context-menu .menu-field > svg",
     proprieta: ["color", ...DIMENSIONI],
@@ -528,7 +513,6 @@ export const PEZZI = [
   {
     id: "menu.campo-testo",
     vista: "menu-blocco",
-    attende: "#431",
     prototipo: ".m-s input",
     app: ".context-menu .menu-field-input",
     proprieta: ["font", "color", "padding", "border", "background"],
@@ -536,7 +520,6 @@ export const PEZZI = [
   {
     id: "menu.titolo",
     vista: "menu-blocco",
-    attende: "#431",
     prototipo: ".m-h",
     app: ".context-menu .menu-title",
     proprieta: ["font", "color", "padding", "margin", "text-transform"],
@@ -544,7 +527,6 @@ export const PEZZI = [
   {
     id: "menu.voce-accesa",
     vista: "menu-blocco",
-    attende: "#431",
     prototipo: ".m-i.act",
     app: ".context-menu .kit-row.menu-lit",
     proprieta: ["color", "background", "font"],
@@ -552,7 +534,6 @@ export const PEZZI = [
   {
     id: "menu.voce-accesa-icona",
     vista: "menu-blocco",
-    attende: "#431",
     prototipo: ".m-i.act .ic",
     app: ".context-menu .kit-row.menu-lit .menu-icon",
     proprieta: ["color", ...DIMENSIONI],
@@ -560,7 +541,6 @@ export const PEZZI = [
   {
     id: "menu.scia",
     vista: "menu-blocco",
-    attende: "#431",
     prototipo: ".m-hl",
     app: ".context-menu .menu-glide",
     proprieta: ["background", "border-radius", "opacity"],
@@ -568,7 +548,6 @@ export const PEZZI = [
   {
     id: "menu.separatore",
     vista: "menu-blocco",
-    attende: "#431",
     prototipo: ".m-sep",
     app: ".context-menu .menu-separator",
     proprieta: ["height", "margin", "background", "border"],
@@ -576,7 +555,6 @@ export const PEZZI = [
   {
     id: "menu.voce-pericolo",
     vista: "menu-blocco",
-    attende: "#431",
     prototipo: ".m-i.danger",
     app: ".context-menu .kit-row.danger",
     proprieta: ["color", "background"],
@@ -584,7 +562,6 @@ export const PEZZI = [
   {
     id: "menu.piede-tasti",
     vista: "menu-blocco",
-    attende: "#431",
     prototipo: ".m-foot",
     app: ".context-menu .menu-foot-keys",
     proprieta: BASE,
@@ -592,7 +569,6 @@ export const PEZZI = [
   {
     id: "menu.piede-tasto",
     vista: "menu-blocco",
-    attende: "#431",
     prototipo: ".m-foot kbd",
     app: ".context-menu .menu-foot-keys kbd",
     proprieta: BASE,
@@ -601,7 +577,6 @@ export const PEZZI = [
   {
     id: "maniglie.aggiungi",
     vista: "maniglie",
-    attende: "#431",
     contesto: "documento",
     prototipo: "#g-add",
     app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-add',
@@ -610,7 +585,6 @@ export const PEZZI = [
   {
     id: "maniglie.aggiungi-icona",
     vista: "maniglie",
-    attende: "#431",
     contesto: "documento",
     prototipo: "#g-add svg",
     app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-add svg',
@@ -619,7 +593,6 @@ export const PEZZI = [
   {
     id: "maniglie.presa",
     vista: "maniglie",
-    attende: "#431",
     contesto: "documento",
     prototipo: "#g-grip",
     app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-grip',
@@ -628,7 +601,6 @@ export const PEZZI = [
   {
     id: "maniglie.occhi",
     vista: "maniglie",
-    attende: "#431",
     contesto: "documento",
     prototipo: "#g-grip svg.ea",
     app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-grip-eyes svg',
@@ -642,7 +614,6 @@ export const PEZZI = [
   {
     id: "tabella.intestazione",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr tr:first-child td:nth-child(2)",
     app: '.tb-grid .tb-cell.tb-head[data-col="0"]',
@@ -651,7 +622,6 @@ export const PEZZI = [
   {
     id: "tabella.cella",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr tr:nth-child(2) td:nth-child(2)",
     app: '.tb-grid .tb-cell[data-row="1"][data-col="1"]',
@@ -660,7 +630,6 @@ export const PEZZI = [
   {
     id: "tabella.lettera",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr-let span:not(.on)",
     app: ".tb-grid .tb-letter:not(.is-selected)",
@@ -669,7 +638,6 @@ export const PEZZI = [
   {
     id: "tabella.lettera-scelta",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr-let span.on",
     app: ".tb-grid .tb-letter.is-selected",
@@ -679,7 +647,6 @@ export const PEZZI = [
   {
     id: "tabella.lettera-scelta-fondo",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr-let span.on",
     app: ".tb-grid .tb-letter.is-selected::before",
@@ -688,7 +655,6 @@ export const PEZZI = [
   {
     id: "tabella.numero",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr-num span:not(.on)",
     app: ".tb-grid .tb-rowhead:not(.is-selected)",
@@ -697,7 +663,6 @@ export const PEZZI = [
   {
     id: "tabella.numero-scelto",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr-num span.on",
     app: ".tb-grid .tb-rowhead.is-selected",
@@ -706,7 +671,6 @@ export const PEZZI = [
   {
     id: "tabella.numero-scelto-fondo",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".gr-num span.on",
     app: ".tb-grid .tb-rowhead.is-selected::before",
@@ -715,7 +679,6 @@ export const PEZZI = [
   {
     id: "tabella.riempi",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".tg-fill",
     app: ".tb-grid .tb-fill",
@@ -724,7 +687,6 @@ export const PEZZI = [
   {
     id: "tabella.aggiungi-riga",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".tg-add.row",
     app: '.tb-add[data-add="row"]',
@@ -733,7 +695,6 @@ export const PEZZI = [
   {
     id: "tabella.aggiungi-colonna",
     vista: "tabella",
-    attende: "#432",
     contesto: "documento",
     prototipo: ".tg-add.col",
     app: '.tb-add[data-add="column"]',
@@ -742,7 +703,6 @@ export const PEZZI = [
   {
     id: "somma.valore",
     vista: "somma",
-    attende: "#432",
     prototipo: "#band-words b",
     app: ".status-sum-part[data-lead] > .status-sum-value",
     proprieta: ["font", "color"],

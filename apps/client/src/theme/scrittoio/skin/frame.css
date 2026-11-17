@@ -744,8 +744,8 @@
 /* ── La banda: la somma delle celle scelte ───────────────────────────────── */
 /* «Somma 2.520 · Media 840 · Conteggio 3» al posto delle parole: la view
    delle parole si fa da parte finché la somma c'è. Ogni conto è un bottone
-   che copia il suo numero; il primo numero è in inchiostro, gli altri a voce
-   bassa. */
+   che copia il suo numero; il primo numero è in inchiostro e in grassetto
+   pieno (il `<b>` del prototipo, 700), gli altri a voce bassa. */
 .status-band[data-selection-sum] .views-status > [data-view-id="stats"] {
   display: none;
 }
@@ -761,7 +761,7 @@
 }
 .status-sum-part[data-lead] > .status-sum-value {
   color: var(--text);
-  font-weight: var(--weight-bold);
+  font-weight: 700;
 }
 .status-sum-dot {
   padding: 0 var(--space-1);

@@ -86,6 +86,8 @@ export interface MarkdownMountOptions {
 
 const MAX_EMBED_DEPTH = 5;
 const mounts = new WeakMap<HTMLElement, Teardown>();
+/// L'involucro che scorre attorno a ogni tabella resa (`skin/document.css`).
+const TABLE_SCROLL = "markdown-table-scroll";
 
 
 function hydrateAllowedHtml(container: HTMLElement): void {
@@ -148,7 +150,17 @@ export function sourceElementAt(container: HTMLElement, offset: number): HTMLEle
 
 function wireContent(container: HTMLElement, options: MarkdownMountOptions, life: Lifetime): void {
   for (const table of container.querySelectorAll<HTMLTableElement>("table")) {
-    if (!table.closest("[data-ui-slot]")) table.tabIndex = 0;
+    if (table.closest("[data-ui-slot]")) continue;
+    table.tabIndex = 0;
+    // La tabella è larga quanto la colonna del testo e non va a capo nelle
+    // celle: l'involucro scorre in orizzontale quando il contenuto non ci sta.
+    // La tabella resta focalizzabile, così le frecce lo fanno scorrere.
+    if (!table.parentElement?.classList.contains(TABLE_SCROLL)) {
+      const scroll = document.createElement("div");
+      scroll.className = TABLE_SCROLL;
+      table.replaceWith(scroll);
+      scroll.append(table);
+    }
   }
   const codeLabels: { pre: HTMLElement; button: HTMLButtonElement | null }[] = [];
   for (const pre of container.querySelectorAll<HTMLElement>("pre")) {

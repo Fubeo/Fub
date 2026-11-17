@@ -37,6 +37,7 @@
 // tirano per allargarla; un tocco lungo apre il menu.
 
 import { resolvedLanguage, t, type Key } from "../../i18n/strings";
+import { iconButton, labelButton } from "../../kit";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import type { TableAlign, TableBlock, TableCaps, TableClipboard, TableEdit, TableMenuEntry, TableSize } from "../adapter";
 import { clipboardData, clipboardRows, cutMoves, cutTarget, pasteTargets, tellCutOnce, type CutMark } from "../clipboard";
@@ -243,6 +244,12 @@ export class TableFrame {
       this.#placeOverlays();
     });
     this.#life.listen(this.#grid, "focusout", () => queueMicrotask(() => this.#placeOverlays()));
+    // La griglia scorsa di lato lo dice con `data-scrolled`: la pelle della
+    // Live dà il fondo del foglio ai numeri delle righe fermi a sinistra solo
+    // allora, quando le celle ci passano sotto. A inizio corsa sotto non c'è
+    // niente da coprire, e i numeri restano trasparenti come nel prototipo.
+    // L'attributo cambia solo quando si passa da zero.
+    this.#life.listen(this.#grid, "scroll", () => this.#grid.toggleAttribute("data-scrolled", this.#grid.scrollLeft !== 0), { passive: true });
     this.#life.listen(this.#grid, "copy", (event) => this.#copy(event, false));
     this.#life.listen(this.#grid, "cut", (event) => this.#copy(event, true));
     this.#life.listen(this.#grid, "paste", (event) => this.#paste(event));
@@ -504,8 +511,9 @@ export class TableFrame {
   #fill(): void {
     this.#grid.setAttribute("aria-label", t("table.grid.label"));
     const [addRow, addColumn] = this.#adders;
-    if (addRow) addRow.textContent = `+ ${t("table.grid.add_row")}`;
-    if (addColumn) addColumn.textContent = `+ ${t("table.grid.add_column")}`;
+    // Il nome si riscrive a ogni giro: la lingua può essere cambiata.
+    if (addRow) labelButton(addRow, t("table.grid.add_row_here"));
+    if (addColumn) labelButton(addColumn, t("table.grid.add_column_here"));
     const caps = this.#host.caps();
     if (addRow) addRow.hidden = this.#host.readOnly() || !caps.insertRows;
     if (addColumn) addColumn.hidden = this.#host.readOnly() || !caps.insertColumns;
@@ -643,31 +651,39 @@ export class TableFrame {
     this.#cells[this.#focus.row]?.[this.#focus.column]?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }
 
+  /// I due «+» del prototipo (`.tg-add`): una barra sotto la tabella che
+  /// aggiunge una riga in fondo e una alla sua destra che aggiunge una
+  /// colonna. Sono pulsanti a icona col loro nome; fuori dall'ordine del
+  /// Tab, perché la tastiera ha già Tab dall'ultima cella e Ctrl +.
   #drawAdders(): HTMLElement {
     const bar = document.createElement("div");
     bar.className = `${C}-adders`;
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = `${C}-add`;
-    row.dataset.add = "row";
-    row.setAttribute("aria-label", t("table.grid.add_row_here"));
-    const column = document.createElement("button");
-    column.type = "button";
-    column.className = `${C}-add`;
-    column.dataset.add = "column";
-    column.setAttribute("aria-label", t("table.grid.add_column_here"));
-    this.#adders = [row, column];
-    for (const button of [row, column]) {
-      button.tabIndex = -1;
-      this.#life.listen(button, "mousedown", (event) => event.preventDefault());
-      this.#life.listen(button, "click", () => {
-        if (this.#host.readOnly()) return;
-        const { rows, columns } = this.#host.size();
-        if (button === row) this.apply({ kind: "insert-rows", at: rows, count: 1 }, one(rows, 0));
-        else this.apply({ kind: "insert-columns", at: columns, count: 1 }, one(0, columns));
-        this.#grid.focus({ preventScroll: true });
+    const add = (kind: "row" | "column", label: string): HTMLButtonElement => {
+      const button = iconButton({
+        icon: "plus",
+        label,
+        lifetime: this.#life,
+        onPress: () => {
+          if (this.#host.readOnly()) return;
+          const { rows, columns } = this.#host.size();
+          if (kind === "row") this.apply({ kind: "insert-rows", at: rows, count: 1 }, one(rows, 0));
+          else this.apply({ kind: "insert-columns", at: columns, count: 1 }, one(0, columns));
+          this.#grid.focus({ preventScroll: true });
+        },
       });
-    }
+      button.classList.add(`${C}-add`);
+      // Il «+» è un'icona che registra la cornice della shell: dove non c'è,
+      // resta il segno scritto.
+      if (!button.firstChild) button.textContent = "+";
+      button.dataset.add = kind;
+      button.tabIndex = -1;
+      // Il clic non toglie il fuoco alla tabella.
+      this.#life.listen(button, "mousedown", (event) => event.preventDefault());
+      return button;
+    };
+    const row = add("row", t("table.grid.add_row_here"));
+    const column = add("column", t("table.grid.add_column_here"));
+    this.#adders = [row, column];
     bar.append(row, column);
     return bar;
   }
