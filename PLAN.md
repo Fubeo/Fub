@@ -1812,7 +1812,7 @@ nell'altra; l'annulla rimette tutti e due i file; la battuta resta nel
 budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/transclusion.test.ts
-Stato: [~] in corso (coder, da 3332a59b3 di `integra/editor-1`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (be7081424, 2026-11-17), PR bozza #472. Il formato resta `![[Nota#^id]]`, senza vassoio e senza «Modifica qui». Si apre sul posto con un clic, con Invio o con «Scrivi qui», e si esce con Esc o perdendo il fuoco. La voce del menu è «Blocco sincronizzato…», come nel prototipo. La trasclusione va in fondo alla nota scelta. Il comando è `note.block.sync`. Il «/» «Blocco di un'altra nota» costa due annulla, non uno. Aperto: mentre si scrive nel blocco si vede il «^» dell'id. Le baseline delle 3 scene nuove e di blocchi-03-menu vengono dal runner.
 
 ## T31 · `[[^^` cerca i blocchi del vault
 
