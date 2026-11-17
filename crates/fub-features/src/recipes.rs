@@ -231,7 +231,7 @@ fn new_recipe(
         return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
     }
     let stem = stem_of(&doc);
-    let source = sample(&stem, &say)?;
+    let source = sample(&stem, &say);
     // `create_document`: se nel frattempo il nome si è occupato, fallisce
     // invece di sovrascrivere la nota di qualcuno. La cartella che manca la
     // crea l'host.
@@ -258,16 +258,17 @@ fn stem_of(doc: &DocId) -> String {
 }
 
 /// L'`id` di una ricetta che si chiama `title`: minuscole latine, cifre e
-/// trattini, da 1 a 48 caratteri. Le lettere accentate perdono l'accento
-/// («Città» diventa `citta`); un titolo senza nessuna lettera latina prende
-/// `fallback`.
+/// trattini, da 1 a 48 caratteri. Parte dallo slug dei titoli di sezione
+/// ([`heading_slug`](fub_abi::model::heading_slug), che compone, piega il caso
+/// e fa degli spazi un trattino), poi toglie gli accenti delle lettere latine
+/// («Città» diventa `citta`) e lascia cadere ogni altro carattere. Un titolo
+/// senza lettere né cifre latine prende `fallback`.
 fn id_of(title: &str, fallback: &str) -> String {
     let mut id = String::new();
-    for c in title.chars().flat_map(char::to_lowercase) {
-        let c = unaccented(c);
+    for c in fub_abi::model::heading_slug(title).chars().map(unaccented) {
         if c.is_ascii_alphanumeric() {
             id.push(c);
-        } else if !id.is_empty() && !id.ends_with('-') {
+        } else if c == '-' && !id.is_empty() && !id.ends_with('-') {
             id.push('-');
         }
     }
@@ -282,7 +283,8 @@ fn id_of(title: &str, fallback: &str) -> String {
     }
 }
 
-/// La lettera latina senza accento, per le lettere delle lingue di Fub.
+/// La lettera latina senza accento, per le lettere minuscole delle lingue di
+/// Fub (lo slug è già minuscolo e composto).
 fn unaccented(c: char) -> char {
     match c {
         'à' | 'á' | 'â' | 'ä' | 'ã' | 'å' => 'a',
@@ -296,43 +298,56 @@ fn unaccented(c: char) -> char {
     }
 }
 
-/// Uno scalare YAML su una riga: il serializzatore mette le virgolette quando
-/// servono (un titolo con «: » o «#» resta un titolo).
-fn scalar(value: &str) -> Result<String, PluginError> {
-    serde_yaml_ng::to_string(value)
-        .map(|yaml| yaml.trim_end().to_string())
-        .map_err(|e| PluginError::Internal(format!("{RECIPES_NEW}: YAML: {e}").into()))
+/// Uno scalare YAML su una riga. Senza virgolette soltanto quando non c'è
+/// niente da fraintendere: comincia con una lettera, ha solo lettere, cifre,
+/// spazi e `.`, `-`, `_`, `/`, e non è una parola latina di cinque lettere o
+/// meno, la misura delle parole che YAML legge come booleano o nulla (`yes`,
+/// `Off`, `false`, `null`). Altrimenti fra virgolette doppie con gli escape di
+/// JSON, che sono anche quelli di YAML: un titolo con «: », «#» o «{» resta un
+/// titolo.
+fn scalar(value: &str) -> String {
+    let short_word = value.len() <= 5 && value.chars().all(|c| c.is_ascii_alphabetic());
+    let plain = value.chars().next().is_some_and(char::is_alphabetic)
+        && !short_word
+        && !value.ends_with(' ')
+        && value
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '.' | '-' | '_' | '/'));
+    if plain {
+        value.to_string()
+    } else {
+        serde_json::Value::String(value.to_string()).to_string()
+    }
 }
 
 /// La ricetta d'esempio, quella della pagina `ricette.md`: segna la data e
 /// sposta la nota in Archivio. Titolo e `id` vengono dal nome della nota, così
 /// due ricette nuove non si contendono lo stesso `id`. Gli `args` sono mappe a
-/// blocchi e non `{ … }`: dentro le graffe un valore con una virgola o una
-/// graffa vorrebbe altre virgolette, e qui ogni valore passa da [`scalar`].
-fn sample(title: &str, say: &dyn Fn(&str) -> String) -> Result<String, PluginError> {
+/// blocchi e non `{ … }`, che vorrebbero le virgolette anche per una virgola.
+fn sample(title: &str, say: &dyn Fn(&str) -> String) -> String {
     let id = id_of(title, &say(N_FALLBACK_ID));
     let to = format!("{}/{{{{title}}}}.{EXTENSION}", say(N_ARCHIVE));
     let lines = [
         "fub-recipe: 1".to_string(),
         format!("id: {id}"),
-        format!("title: {}", scalar(title)?),
-        format!("description: {}", scalar(&say(N_DESCRIPTION))?),
+        format!("title: {}", scalar(title)),
+        format!("description: {}", scalar(&say(N_DESCRIPTION))),
         "steps:".to_string(),
         "  - run: note.property.set".to_string(),
         "    args:".to_string(),
-        format!("      doc: {}", scalar("{{doc}}")?),
-        format!("      key: {}", scalar(&say(N_PROPERTY))?),
-        format!("      value: {}", scalar("{{date}}")?),
+        format!("      doc: {}", scalar("{{doc}}")),
+        format!("      key: {}", scalar(&say(N_PROPERTY))),
+        format!("      value: {}", scalar("{{date}}")),
         "  - run: note.rename".to_string(),
         "    args:".to_string(),
-        format!("      doc: {}", scalar("{{doc}}")?),
-        format!("      to: {}", scalar(&to)?),
+        format!("      doc: {}", scalar("{{doc}}")),
+        format!("      to: {}", scalar(&to)),
     ];
-    Ok(format!(
+    format!(
         "{intro}\n\n```{FENCE}\n{block}\n```\n",
         intro = say(N_INTRO),
         block = lines.join("\n"),
-    ))
+    )
 }
 
 #[cfg(test)]
@@ -365,6 +380,8 @@ mod tests {
     fn l_id_nasce_dal_nome_nella_forma_del_contratto() {
         assert_eq!(id_of("Nuova ricetta 1", "ricetta"), "nuova-ricetta-1");
         assert_eq!(id_of("Città -- più  bella!", "ricetta"), "citta-piu-bella");
+        assert_eq!(id_of("Città: più bella!", "ricetta"), "citta-piu-bella");
+        assert_eq!(id_of("ÀRCHIVIA_la nota", "ricetta"), "archivia-la-nota");
         assert_eq!(id_of("日記", "ricetta"), "ricetta");
         assert_eq!(id_of(&"a".repeat(90), "ricetta").len(), ID_MAX);
         let edge = id_of(&format!("{} b", "a".repeat(47)), "ricetta");
@@ -373,7 +390,7 @@ mod tests {
 
     #[test]
     fn la_ricetta_d_esempio_e_quella_del_contratto() {
-        let block = block_of(&sample("Archivia la nota", &say_in("it")).unwrap());
+        let block = block_of(&sample("Archivia la nota", &say_in("it")));
         assert_eq!(
             block,
             serde_json::json!({
@@ -395,17 +412,40 @@ mod tests {
         );
     }
 
+    /// Il blocco così come sta nella pagina `docs/reference/ricette.md`.
+    #[test]
+    fn il_blocco_d_esempio_e_quello_della_pagina() {
+        let source = sample("Archivia la nota", &say_in("it"));
+        let page = include_str!("../../../docs/reference/ricette.md");
+        let start = page.find("```yaml\n").expect("la pagina mostra il blocco") + 8;
+        let end = start + page[start..].find("```").expect("il blocco chiude");
+        let block = &page[start..end];
+        assert!(
+            source.contains(&format!("```{FENCE}\n{block}```\n")),
+            "la pagina e `recipes.new` non scrivono lo stesso blocco:\n{source}"
+        );
+    }
+
     #[test]
     fn un_titolo_con_i_segni_dello_yaml_resta_un_titolo() {
-        for title in ["Idee: #bozze, {prima}", "- elenco", "'citata'", "yes", "12"] {
-            let block = block_of(&sample(title, &say_in("it")).unwrap());
+        for title in [
+            "Idee: #bozze, {prima}",
+            "- elenco",
+            "'citata'",
+            "yes",
+            "Off",
+            "12",
+            "Dice \"ciao\"",
+            "Riga\\storta",
+        ] {
+            let block = block_of(&sample(title, &say_in("it")));
             assert_eq!(block["title"], title, "«{title}»");
         }
     }
 
     #[test]
     fn la_ricetta_inglese_parla_inglese() {
-        let source = sample("New recipe", &say_in("en")).unwrap();
+        let source = sample("New recipe", &say_in("en"));
         assert!(source.starts_with("This note is a recipe"), "{source}");
         let block = block_of(&source);
         assert_eq!(block["id"], "new-recipe");

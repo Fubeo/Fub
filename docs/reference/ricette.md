@@ -3,9 +3,10 @@
 > **Per chi:** chi scrive una ricetta, a mano o con un'AI, e chi lavora sul
 > componente che le legge.
 > **Fonte autorevole:** `crates/fub-features/src/recipes.rs`.
-> **Presidi:** i test di `recipes.rs` (`recipes.new` e il suo annullamento,
-> l'esempio che si rilegge come YAML), `crates/fub-features/tests/componenti.rs`
-> e `crates/fub-features/tests/censimento.rs` per la riga della mappa.
+> **Presidi:** i test di `recipes.rs` (l'esempio di questa pagina è quello che
+> scrive `recipes.new`, e si rilegge come YAML), `tests/recipes_e2e.rs` (il
+> comando e il suo annullamento attraverso il kernel), `tests/componenti.rs` e
+> `tests/censimento.rs` per la riga della mappa, tutti in `crates/fub-features`.
 
 Una ricetta è una nota che dice a Fub quali comandi fare, in fila, sulla nota
 su cui la si usa: «segna la data e sposta in Archivio», «chiudi le attività e
@@ -17,11 +18,10 @@ Le ricette sono il componente **Ricette** (`fub.recipes`, gruppo «Scrivere»
 della pagina dei componenti, cargo feature `recipes`): richiede le Note e i
 Comandi, e spento lui le note della cartella restano note come le altre.
 
-Questa pagina dice oggi dove vive una ricetta, com'è fatto il blocco, i suoi
-campi e i limiti, e che cosa fa `recipes.new`. Il controllo delle ricette,
-l'esecuzione, l'annullamento e il consenso arrivano con le parti successive
-del lavoro sulle ricette, e questa pagina li descriverà quando ci saranno:
-oggi una ricetta scritta in un vault **non** compare fra i comandi.
+Questa pagina dice dove vive una ricetta, com'è fatto il blocco, i suoi campi
+e i limiti, e che cosa fa `recipes.new`. Fub non legge ancora le ricette: una
+ricetta scritta in un vault **non** compare fra i comandi, e campi e limiti
+sono il formato a cui scriverla, non controlli che girano.
 
 ## Dove vive
 
@@ -57,13 +57,13 @@ description: Segna la data e sposta la nota in Archivio.
 steps:
   - run: note.property.set
     args:
-      doc: '{{doc}}'
+      doc: "{{doc}}"
       key: archiviata
-      value: '{{date}}'
+      value: "{{date}}"
   - run: note.rename
     args:
-      doc: '{{doc}}'
-      to: Archivio/{{title}}.md
+      doc: "{{doc}}"
+      to: "Archivio/{{title}}.md"
 ```
 
 Le mappe si possono scrivere anche fra graffe
@@ -73,7 +73,7 @@ Le mappe si possono scrivere anche fra graffe
 
 | Campo | Obbligatorio | Che cosa vuol dire |
 |---|---|---|
-| `fub-recipe` | sì | la versione del formato: oggi `1` |
+| `fub-recipe` | sì | la versione del formato: `1` |
 | `id` | sì | l'identità stabile: minuscole latine, cifre e `-`, da 1 a 48 caratteri |
 | `title` | sì | il nome nella palette e nel menu «/», così com'è scritto |
 | `description` | sì | una frase che dice che cosa fa, così com'è scritta |
@@ -89,8 +89,7 @@ Un parametro ha `name`, `title`, `kind` (`text`, `number`, `bool`,
 Negli `args` di un passo i valori possono portare i segnaposto: `{{doc}}` (il
 percorso della nota su cui si usa la ricetta), `{{title}}` (il suo nome senza
 estensione), `{{folder}}`, `{{selection}}`, le date e le ore dei template
-(`{{date}}`, `{{time}}` e compagni) e `{{param.<name>}}`. L'elenco completo e
-le regole di sostituzione arrivano con il controllo delle ricette.
+(`{{date}}`, `{{time}}` e compagni) e `{{param.<name>}}`.
 
 ## I limiti
 
@@ -121,9 +120,10 @@ Il comando:
 - se il nome c'è già prende il primo libero («Nuova ricetta 1»), come
   `note.create`, e non sovrascrive mai;
 - scrive la ricetta d'esempio, con `title` uguale al nome della nota e `id`
-  ricavato dal nome (minuscole, accenti tolti, trattini al posto del resto:
-  «Nuova ricetta 1» dà `nuova-ricetta-1`; senza lettere né cifre latine,
-  `ricetta`). Così due ricette nuove non hanno lo stesso `id`;
+  ricavato dal nome come l'ancora di un titolo di sezione, poi senza accenti e
+  con le sole lettere e cifre latine: «Nuova ricetta 1» dà `nuova-ricetta-1`,
+  «Città: più bella!» dà `citta-piu-bella`, un nome senza lettere né cifre
+  latine dà `ricetta`. Così due ricette nuove non hanno lo stesso `id`;
 - apre la nota (`Navigate`);
 - rifiuta con `BadArgs` un titolo con `/`, `\`, che comincia con `.` o che un
   disco rifiuta;
