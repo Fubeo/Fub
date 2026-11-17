@@ -188,8 +188,56 @@ spazio vuoto, e Esc torna al campo. Le regole stanno in `math/errors.ts`,
 senza DOM: `diagnose` legge l'errore di KaTeX e il TeX, `explain` lo mette in
 parole.
 
+## Incollare, copiare, cambiare posto
+
+- **Incollare.** Una formula copiata con i suoi delimitatori (`\( \)`,
+  `\[ \]`, `$ $`, `$$ $$`, o un recinto `latex`/`tex`/`math`) entra nel
+  riquadro, nella formula che si tocca o nel campo del LaTeX, senza i
+  delimitatori. Nella nota, dentro una formula, lo stesso; fuori, le formule
+  `\( \)` e `\[ \]` di un assistente diventano `$…$` e `$$…$$`, il testo
+  intorno resta com'era. Il codice (in riga e nei recinti) non si tocca, e un
+  testo con dollari che non sono formule (`costa $5 e $6`) entra com'è. Le
+  regole stanno in `math/paste.ts`.
+- **Il tasto destro.** Su una formula, in Live, il menu ha in testa «Formula»
+  col suo TeX, e poi: «Modifica» (apre il riquadro o il blocco), «Copia come
+  immagine» (un PNG disegnato dalla resa di KaTeX, col colore della pagina,
+  più il TeX come testo), «Copia per Word» (il MathML, che Word e LibreOffice
+  incollano come equazione), «Copia il LaTeX» e «Da riga a blocco» o «Da
+  blocco a riga». Al passaggio del mouse non compare niente.
+- **Il posto.** «Da riga a blocco» porta la formula su un blocco `$$` suo:
+  se era in mezzo a una frase, la frase si divide prima e dopo. «Da blocco a
+  riga» la rimette fra `$`, con gli a capo diventati spazi. Lo stesso fanno
+  «In riga» e «A blocco» nella riga «Posto» dei tre puntini. Solo in un
+  paragrafo semplice: in un elenco, una citazione o una tabella il posto non
+  cambia; un blocco con un commento `%` non va su una riga sola. Le regole
+  stanno in `math/place.ts`.
+
+## Invio in una formula a blocco
+
+In un blocco, Invio va a capo e allinea gli uguali: la prima volta la formula
+entra in un `\begin{aligned}…\end{aligned}`, col primo `=` fuori dalle graffe
+che diventa `&=`, e sotto una riga nuova che comincia con `&=`; poi ogni Invio
+aggiunge una riga dopo quella del cursore, senza spezzare un pezzo a metà. La
+prima volta un avviso lo spiega. Ctrl Invio o Esc finiscono. In una formula in
+riga Invio finisce, come prima. La regola sta in `math/align.ts`.
+
+## Le macro del vault
+
+Le macro di tutte le formule del vault stanno in una nota normale,
+`Formule/Macro.md`, con le sue righe `\newcommand` (il formato è in
+[Le convenzioni scritte nelle note](../reference/note-conventions.md#le-macro-delle-formule)).
+Si leggono la prima volta che serve KaTeX e di nuovo quando la nota cambia o
+si apre un altro vault; valgono come premessa di ogni formula, in lettura e
+mentre si scrive. Fub non scrive mai la nota. Una formula che dichiara da sé
+un nome della premessa usa il suo. Una macro che non si legge o che chiama sé stessa senza fine si
+salta e un avviso lo dice, una volta per testo, con la riga; le altre restano.
+Una nota che non c'è non dice niente; una che non si legge si ignora e lo si
+dice. Il codice sta in `math/macros.ts`, caricato a parte.
+
 ## Limiti
 
 La resa per scrivere usa KaTeX con i soli segni `data-fub*` ammessi; la resa
-di lettura resta senza fiducia. Ogni tasto tocca solo la formula aperta: la
-nota cambia con una modifica, la formula si ridisegna al fotogramma dopo.
+di lettura resta senza fiducia. Le macro sono quelle del vault aperto: se
+nella stessa finestra è aperta una nota di un altro vault, le sue formule
+usano comunque quelle. Ogni tasto tocca solo la formula aperta: la nota
+cambia con una modifica, la formula si ridisegna al fotogramma dopo.

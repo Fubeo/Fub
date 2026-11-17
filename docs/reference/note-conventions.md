@@ -2,14 +2,16 @@
 
 > **Ambito:** le forme che Fub legge e riscrive dentro il testo di una nota
 > Markdown, oltre a CommonMark e alle estensioni di Obsidian: i commenti con
-> la discussione e l'archivio dei risolti, i tipi di nota e il promemoria di
-> un compito.
+> la discussione e l'archivio dei risolti, i tipi di nota, il promemoria di
+> un compito e le macro delle formule.
 > **Fonti autorevoli:** `crates/fub-format-markdown/src/parse/comments.rs`,
 > `crates/fub-abi/src/model.rs` (`custom_kind::COMMENT_RANGE`,
 > `custom_kind::COMMENT_MESSAGE`), i casi «discussione» di
 > `crates/fub-format-markdown/tests/corpus/mod.rs`;
 > `crates/fub-features/src/note_types.rs` per i tipi di nota;
-> `crates/fub-abi/src/rules/tasks.rs` (`task_reminder`) per il promemoria.
+> `crates/fub-abi/src/rules/tasks.rs` (`task_reminder`) per il promemoria;
+> `apps/client/src/editors/text/profiles/markdown/math/macros.ts` per le
+> macro delle formule.
 
 Una convenzione di questa pagina è testo semplice nel file: un'altra app la
 mostra così com'è, e Fub la rilegge e la riscrive byte per byte. Nessuna
@@ -200,3 +202,30 @@ portare un promemoria: `⏰`, poi la data e, se si vuole, l'ora.
   lo mostra così com'è, e Fub non riscrive mai la riga per suonarlo. La regola
   che lo legge è una sola, nel contratto (`task_reminder`), e cosa succede
   quando suona sta in [Compiti](../product/tasks-and-reminders.md#i-promemoria).
+
+## Le macro delle formule
+
+Le macro di tutte le formule di un vault stanno nella nota `Formule/Macro.md`:
+una nota normale, che si scrive come le altre e che Fub legge soltanto.
+
+```markdown
+# Macro
+
+$$
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\vect}[1]{\mathbf{#1}}
+\DeclareMathOperator{\sgn}{sgn}
+$$
+```
+
+- Valgono le righe `\newcommand`, `\renewcommand`, `\providecommand`,
+  `\DeclareMathOperator` (anche `*`), `\def`, `\gdef`, `\edef`, `\xdef` e
+  `\let`, dovunque stiano nella nota; metterle in un blocco `$$` le fa vedere
+  anche lì. Il resto del testo non conta.
+- Un nome che KaTeX conosce già (`\R`) si ridefinisce senza `\renewcommand`.
+  Gli argomenti facoltativi (`[2][a]`) non si leggono.
+- Una dichiarazione che non si legge, scritta a metà o che chiama sé stessa
+  senza fine si salta, con un avviso che dice la riga; le altre valgono. Oltre
+  300 macro si usano le prime 300; una nota oltre 100 000 caratteri si ignora.
+- Le formule restano scritte con i nomi delle macro: un altro programma che
+  non legge questa nota le mostra col nome che non conosce.
