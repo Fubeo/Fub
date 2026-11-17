@@ -209,10 +209,32 @@ ordina i gruppi (quelli non detti seguono nel loro ordine). I blocchi sono
 dichiarati da `fub.formatting`: spento il plugin, il «/» offre soltanto i
 comandi del vault, senza tessere. Ogni voce resta un comando del registro, con
 i suoi parametri (`markdown.table` con `rows` e `cols`). Fa eccezione «Base»
-(`markdown.base`), un'azione dell'editor: chiede il nome e crea il file
-accanto alla nota prima di scrivere l'embed
-([Basi](bases.md#una-base-nuova-dal-)), e c'è soltanto con la componente delle
-Basi accesa.
+(`markdown.base`), un'azione dell'editor che crea un file prima di scrivere.
+
+### Una Base dal «/»
+
+«Base» (`/base`, o la tessera dopo «Tabella») crea una
+[Base](bases.md) accanto alla nota e la mette al posto della riga. C'è con la
+componente delle Basi accesa e in una nota che si può scrivere.
+
+1. Chiede il nome, di serie il titolo della nota. Se nel vault c'è già un file
+   con quel nome propone «Nome 2», «Nome 3»…, perché `![[Nome.base]]` trova il
+   file per nome in tutto il vault; un nome scritto a mano e già preso fa
+   richiedere. I caratteri che rompono il link o il nome del file
+   (`# | ^ [ ] / \ : * ? " < >`) diventano spazi.
+2. Crea `Nome.base` nella cartella della nota, soltanto se non c'è: non
+   sovrascrive mai. Dentro, una vista «Tabella» sulle note della cartella e
+   delle sottocartelle (filtro `file.path` `in_folder`); nella radice, su tutto
+   il vault.
+3. Scrive `![[Nome.base#Tabella]]` al posto del «/base», da solo e staccato
+   da una riga vuota dal testo intorno (se il «/» seguiva del testo, in un
+   paragrafo sotto), e porta il cursore oltre, perché in Live si veda la Base.
+
+Se il file non nasce (cartella in sola lettura, disco pieno) la nota non
+cambia, il «/base» resta e un avviso dice perché; rinunciare al nome lascia la
+nota com'era. Intanto la nota resta scrivibile, e l'embed va dove il «/base» è
+finito. Un Annulla toglie l'embed e rimette il «/base»; il file resta, come un
+allegato.
 
 ## Gli altri editor
 
