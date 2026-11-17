@@ -1180,7 +1180,7 @@ Fatto quando: un test DOM del trascinamento che rilegge la data dal file;
 le foto del banco nelle due luci.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/base
-Stato: [~] fatto in locale (worktree-agent-a3965cc791f53e6de @ 74a1d9ab4, 2026-11-17), da spingere dopo le PR grafiche in coda; 5 scene nuove (baseline dal runner); scostamenti in DECISIONS (2026-11-17)
+Stato: [~] PR #469 (feat/base-calendario, 2026-11-17, CI completa in corso); 5 scene nuove (baseline dal runner); scostamenti in DECISIONS (2026-11-17)
 
 ## T18 · La Base nella nota dal «/»
 
@@ -1570,7 +1570,7 @@ Fatto quando: un test della faccetta; la scena del banco; la battuta resta
 nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/typewriter.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder, `feat/concentrazione-macchina`, 2026-11-17)
 
 ## T25 · Incollare un indirizzo: link e scheda
 
@@ -1869,7 +1869,7 @@ modifica; l'annulla dopo che un file è cambiato.
 Fatto quando: test del kernel con `MemoryHost` per ogni caso limite;
 nessun lucchetto del workspace attraverso una chiamata di provider.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-kernel batch
-Stato: [ ] da fare
+Stato: [~] in corso (coder, `feat/piano-piu-documenti`, 2026-11-17)
 
 ## T32 · «Sposta in…» e il blocco lasciato sul cassetto
 
@@ -2025,7 +2025,7 @@ Fatto quando: test della proiezione e dei riepiloghi; il registro senza
 `target` torna byte per byte; il mirror è verde.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-abi -p
 fub-kernel -p fub-features -p fub-format-base properties base
-Stato: [ ] da fare
+Stato: [~] in corso (coder, `feat/relazione-nel-contratto`, 2026-11-17)
 
 ## T35 · Relazioni e riepiloghi nell'editor e nella Base
 
@@ -3674,7 +3674,7 @@ telefono; un test che i tasti arrivano alla banda e non stanno nel
 pannello.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/launcher src/shells/scrittoio/frame/pill.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder, `feat/spazio-comandi-lingua`, 2026-11-17)
 
 ## T83 · Tessera, etichetta e riga nel kit; le guardie
 
@@ -3761,4 +3761,4 @@ risultati, nelle due luci; un test dell'ordine per uso; un test che i tasti
 arrivano alla banda; nessuna classe della versione a due colonne rimasta.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/panels/slash
-Stato: [ ] da fare
+Stato: [~] in corso (coder, `feat/slash-una-colonna`, 2026-11-17)
