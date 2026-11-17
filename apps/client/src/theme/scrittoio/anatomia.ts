@@ -21,6 +21,7 @@ import { GRAPH } from "./anatomia/graph";
 import { KIT } from "./anatomia/kit";
 import { LAUNCHER } from "./anatomia/launcher";
 import { MEDIA } from "./anatomia/media";
+import { MATH } from "./anatomia/math";
 import { MENUS } from "./anatomia/menus";
 import { MOTION } from "./anatomia/motion";
 import { NODES } from "./anatomia/nodes";
@@ -47,6 +48,7 @@ const DECLARED: readonly PartAnatomy[] = [
   SHEETS,
   DOCUMENT,
   TABELLA,
+  MATH,
   EDITORS,
   DRAW,
   MEDIA,

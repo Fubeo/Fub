@@ -361,7 +361,7 @@ export function mapFormula(tex: string): FormulaMap {
       const start = i;
       atom(context, last);
       if (i <= start) i = start + 1;
-      const kind = atoms.at(-1)?.kind;
+      const kind = atoms[atoms.length - 1]?.kind;
       if (kind !== "script" && !space(v[start])) last = { text: v.slice(start, i) };
     }
   }
@@ -390,7 +390,7 @@ export function pointAt(map: FormulaMap, at: number): Point | undefined {
 /// Il punto buono più vicino a `at`: quello stesso, o il primo dopo, o l'ultimo.
 export function snap(map: FormulaMap, at: number): number {
   for (const point of map.points) if (point.at >= at) return point.at;
-  return map.points.at(-1)?.at ?? 0;
+  return map.points[map.points.length - 1]?.at ?? 0;
 }
 
 /// Il punto buono prima (`-1`) o dopo (`1`) di `at`.

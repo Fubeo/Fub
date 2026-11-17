@@ -38,7 +38,7 @@ describe("i punti buoni", () => {
     for (const { tex } of CORPUS) {
       const stops = stopsOf(mapFormula(tex));
       expect(stops[0], tex).toBe(0);
-      expect(stops.at(-1), tex).toBe(tex.length);
+      expect(stops[stops.length - 1], tex).toBe(tex.length);
       for (const at of stops) {
         // Mai fra la barra e il nome, né dentro il nome di un comando.
         expect(/\\[a-zA-Z]*$/.test(tex.slice(0, at)) && /^[a-zA-Z]/.test(tex.slice(at)), `${tex} @${at}`).toBe(false);
@@ -65,18 +65,16 @@ describe("i punti buoni", () => {
     }
   });
 
-  it("scrivere in un punto buono non rompe mai la formula", () => {
+  // Un tasto per prova: tutto il corpus in ogni punto, con KaTeX vero.
+  // La `\` comincia un comando, che resta in sospeso: la provano le regole del
+  // comando.
+  it.each(["x", "2", "^", "_", "*", "+", "%", "$", "&", "{", "}", "'", "|"])("scrivere %s in un punto buono non rompe mai la formula", (ch) => {
     const failures: string[] = [];
     for (const { tex, display } of CORPUS) {
       for (const caret of stopsOf(mapFormula(tex))) {
-        for (const ch of ["x", "2", "^", "_", "*", "+", "%", "$", "&", "{", "}", "'", "|", "\\"]) {
-          const outcome = typeChar({ tex, caret }, ch);
-          if (outcome.kind !== "edit") continue;
-          // La `\` comincia un comando, che resta in sospeso: la provano le
-          // regole del comando.
-          if (ch === "\\") continue;
-          if (!reads(outcome.state.tex, display)) failures.push(`${ch} in ${tex} @${caret} → ${outcome.state.tex}`);
-        }
+        const outcome = typeChar({ tex, caret }, ch);
+        if (outcome.kind !== "edit") continue;
+        if (!reads(outcome.state.tex, display)) failures.push(`${ch} in ${tex} @${caret} → ${outcome.state.tex}`);
       }
     }
     expect(failures).toEqual([]);

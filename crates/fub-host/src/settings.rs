@@ -246,6 +246,12 @@ pub const EDITOR_LIVE_GUIDE: &str = "editor.live-guide";
 /// (Mod+A il corpo della nota, Mod+D la prossima occorrenza). La testata della
 /// pagina resta in tutti e due i casi. Cambia senza riaprire la nota.
 pub const EDITOR_BLOCKS: &str = "editor.blocks";
+/// Le formule di Scrittura mostrano il loro LaTeX: accesa, il clic su una
+/// formula apre il riquadro col TeX e un blocco `$$` toccato mostra la
+/// sorgente col disegno sotto. Spenta (di serie) la formula si modifica
+/// toccandola: resta disegnata, col cursore dentro, e il LaTeX nel file non si
+/// vede. Coi tasti di Vim le formule mostrano il LaTeX comunque.
+pub const EDITOR_MATH_SOURCE: &str = "editor.math.source";
 /// Il nome di chi scrive su questa macchina (Impostazioni › Profilo): firma i
 /// commenti delle note (`{>>@Nome 2026-11-08 17:40: …<<}`). Vuoto finché la
 /// persona non lo sceglie; il primo commento lo chiede, con l'avviso che il
@@ -876,6 +882,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 C_EDITOR_LIVE_GUIDE,
                 C_EDITOR_LIVE_GUIDE_DESC,
                 true,
+            ),
+            (
+                EDITOR_MATH_SOURCE,
+                C_EDITOR_MATH_SOURCE,
+                C_EDITOR_MATH_SOURCE_DESC,
+                false,
             ),
             (
                 EDITOR_FOLD_GUTTER,
@@ -1798,6 +1810,8 @@ const C_EDITOR_LIVE_REVEAL_ELEMENT: &str = "core.editor.live_reveal.element";
 const C_EDITOR_LIVE_REVEAL_LINE: &str = "core.editor.live_reveal.line";
 const C_EDITOR_LIVE_GUIDE: &str = "core.editor.live_guide";
 const C_EDITOR_LIVE_GUIDE_DESC: &str = "core.editor.live_guide.desc";
+const C_EDITOR_MATH_SOURCE: &str = "core.editor.math_source";
+const C_EDITOR_MATH_SOURCE_DESC: &str = "core.editor.math_source.desc";
 const C_EDITOR_BLOCKS: &str = "core.editor.blocks";
 const C_EDITOR_BLOCKS_DESC: &str = "core.editor.blocks.desc";
 const C_MODE_SOURCE: &str = "core.mode.source";
@@ -2456,6 +2470,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Della riga del cursore")
         .with(C_EDITOR_LIVE_GUIDE, "Guida mentre scrivi")
         .with(C_EDITOR_LIVE_GUIDE_DESC, "In Scrittura un segno aperto dà subito lo stile al testo e mostra in grigio la chiusura che manca; lo spazio chiude apice e pedice.")
+        .with(C_EDITOR_MATH_SOURCE, "Mostra il LaTeX delle formule")
+        .with(C_EDITOR_MATH_SOURCE_DESC, "Accesa, il clic su una formula apre il suo LaTeX. Spenta, la formula resta disegnata e si modifica toccandola: si clicca dove si vuole scrivere.")
         .with(C_EDITOR_BLOCKS, "Blocchi: maniglie e selezione")
         .with(C_EDITOR_BLOCKS_DESC, "Accesi, ogni blocco ha la maniglia e il «+», Esc seleziona il blocco e Ctrl A prende il blocco, poi tutti. Spenti, Scrittura è un editor di testo: Ctrl A seleziona tutto il testo e Ctrl D la prossima occorrenza.")
         .with(C_MODE_SOURCE, "Sorgente")
@@ -3117,6 +3133,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Of the line at the cursor")
         .with(C_EDITOR_LIVE_GUIDE, "Guide while typing")
         .with(C_EDITOR_LIVE_GUIDE_DESC, "In Writing an opened mark styles the text at once and shows the missing close in grey; a space closes superscript and subscript.")
+        .with(C_EDITOR_MATH_SOURCE, "Show the LaTeX of formulas")
+        .with(C_EDITOR_MATH_SOURCE_DESC, "On, clicking a formula opens its LaTeX. Off, the formula stays drawn and you edit it by touching it: click where you want to write.")
         .with(C_EDITOR_BLOCKS, "Blocks: handles and selection")
         .with(C_EDITOR_BLOCKS_DESC, "On, every block has its handle and «+», Esc selects the block and Ctrl A takes the block, then all of them. Off, Writing is a text editor: Ctrl A selects all the text and Ctrl D the next occurrence.")
         .with(C_MODE_SOURCE, "Source")

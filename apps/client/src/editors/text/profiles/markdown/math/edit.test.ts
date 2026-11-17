@@ -1,7 +1,7 @@
 import katex from "katex";
 import { describe, expect, it } from "vitest";
 import { readOptions } from "../math";
-import { arrow, backspace, deleteForward, edge, finishCommand, insertText, space, tab, typeChar, type MathState, type Outcome } from "./edit";
+import { arrow, backspace, deleteForward, edge, finishCommand, insertText, space, stack, tab, typeChar, type MathState, type Outcome } from "./edit";
 
 // Le regole dei tasti nella formula toccata (T60, E27), senza DOM. Il cursore
 // si scrive `|` nel TeX: `s("x^{|}")` è la formula `x^{}` col cursore dentro.
@@ -39,6 +39,20 @@ describe("le frecce", () => {
   it("Inizio e Fine vanno ai due capi", () => {
     expect(result(s("a+\\frac{b|}{c}"), edge(s("a+\\frac{b|}{c}"), -1))).toBe("|a+\\frac{b}{c}");
     expect(result(s("a+\\frac{b|}{c}"), edge(s("a+\\frac{b|}{c}"), 1))).toBe("a+\\frac{b}{c}|");
+  });
+});
+
+describe("le frecce su e giù", () => {
+  it("vanno dal numeratore al denominatore e ritorno, a pari distanza", () => {
+    expect(result(s("\\frac{a|b}{cd}"), stack(s("\\frac{a|b}{cd}"), 1))).toBe("\\frac{ab}{c|d}");
+    expect(result(s("\\frac{ab}{c|d}"), stack(s("\\frac{ab}{c|d}"), -1))).toBe("\\frac{a|b}{cd}");
+    expect(result(s("\\frac{abc|}{d}"), stack(s("\\frac{abc|}{d}"), 1))).toBe("\\frac{abc}{d|}");
+    expect(result(s("\\frac{|}{}"), stack(s("\\frac{|}{}"), 1))).toBe("\\frac{}{|}");
+  });
+
+  it("fuori da una frazione lasciano fare al disegno", () => {
+    expect(stack(s("\\frac{a|}{b}"), -1).kind).toBe("none");
+    expect(stack(s("x^{2|}"), 1).kind).toBe("none");
   });
 });
 

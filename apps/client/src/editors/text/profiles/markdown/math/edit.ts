@@ -92,7 +92,28 @@ export function arrow(state: MathState, dir: -1 | 1): Outcome {
 /// Inizio e Fine: il primo e l'ultimo punto della formula.
 export function edge(state: MathState, dir: -1 | 1): Outcome {
   const stops = stopsOf(mapFormula(state.tex));
-  return move(dir < 0 ? stops[0] ?? 0 : stops.at(-1) ?? state.tex.length);
+  return move(dir < 0 ? stops[0] ?? 0 : stops[stops.length - 1] ?? state.tex.length);
+}
+
+/// ↓ dal numeratore va al denominatore, ↑ dal denominatore al numeratore, a
+/// pari distanza dall'inizio (o alla fine, se l'altro è più corto). Fuori da
+/// una frazione `none`: decide la geometria del disegno.
+export function stack(state: MathState, dir: -1 | 1): Outcome {
+  const map = mapFormula(state.tex);
+  const inside = enclosing(map, state.caret);
+  if (!inside) return NONE;
+  const role = placeAt(map, state.caret).role;
+  if (role !== (dir > 0 ? "numerator" : "denominator")) return NONE;
+  const spans = inside.atom.inner;
+  const index = spans.indexOf(inside.span);
+  const want = dir > 0 ? "denominator" : "numerator";
+  for (let k = index + dir; k >= 0 && k < spans.length; k += dir) {
+    const span = spans[k]!;
+    if (placeAt(map, span.from).role !== want) continue;
+    const at = Math.min(span.to, span.from + (state.caret - inside.span.from));
+    return move(snap(map, at));
+  }
+  return NONE;
 }
 
 /// Il punto subito dopo il tratto in cui sta il cursore: dal numeratore al
@@ -109,7 +130,8 @@ export function tab(state: MathState, back: boolean): Outcome {
   const map = mapFormula(state.tex);
   const holes = holesOf(map);
   if (back) {
-    const previous = holes.filter((at) => at < state.caret).at(-1);
+    const before = holes.filter((at) => at < state.caret);
+    const previous = before[before.length - 1];
     return previous === undefined ? NONE : move(previous);
   }
   const next = holes.find((at) => at > state.caret);
@@ -210,7 +232,7 @@ export function backspace(state: MathState): Outcome {
     const previous = neighbour(map, state.caret, -1);
     return previous === null ? NONE : move(previous);
   }
-  const last = atom.inner.at(-1);
+  const last = atom.inner[atom.inner.length - 1];
   if (last) return move(snap(map, last.to));
   if (structural(map, atom)) {
     const previous = neighbour(map, state.caret, -1);
