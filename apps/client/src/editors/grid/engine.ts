@@ -67,7 +67,8 @@ import {
 import { attachCommentCards, commentDescription } from "./comment-card";
 import { drawObject, GridMediaCache, objectLabel } from "./objects";
 import { hasBorders, horizontalOf, iconOf, paintBorders, paintCell, spills } from "./paint";
-import { currencyFormat, shortcutCommand, shortcutDialog } from "./shortcuts";
+import { syncAttributes } from "./dom-sync";
+import { currencyFormat, namedKey, shortcutCommand, shortcutDialog } from "./shortcuts";
 import {
   cellKey,
   decimalSeparator,
@@ -169,9 +170,12 @@ const QUERIES: ReadonlySet<string> = new Set([
   // L'anteprima e il PDF senza percorso leggono la cartella com'è adesso.
   "file.printPreview",
   "file.exportPdf",
+  // L'area di dati della cella attiva: sposta la selezione della facciata e
+  // basta, che il comando dopo rimette; «Crea tabella» la propone.
+  "selection.currentRegion",
 ]);
 /// I comandi di `QUERIES` che leggono soltanto senza parametri.
-const READ_WITHOUT_PARAMS: ReadonlySet<string> = new Set(["pageLayout.pageSetup"]);
+const READ_WITHOUT_PARAMS: ReadonlySet<string> = new Set(["pageLayout.pageSetup", "selection.currentRegion"]);
 const UNDO = "edit.undo";
 const REDO = "edit.redo";
 /// Perché una cella non si modifica, per codice di blocco.
@@ -235,6 +239,22 @@ const DRAG_SLOP = 3;
 /// Gli oggetti che l'elenco per chi non vede nomina, al più.
 const SUMMARY_OBJECTS = 50;
 
+/// Il valore che il motore dà a una formula su un riferimento circolare.
+const CIRCULAR = "#CIRC!";
+
+function isCircular(cell: GridBytesCell): boolean {
+  return cell.value.kind === "error" && cell.value.value === CIRCULAR;
+}
+
+/// Un passo della history delle celle: le patch che lo fanno, e se il suo
+/// comando è ancora in cima al giornale del provider (`journaled`), dove lo
+/// annulla `edit.undo`. Un passo che non lo è più (il giornale è finito nei
+/// byte, o un'altra scrittura gli è passata sopra) si annulla con le patch.
+interface HistoryStep {
+  readonly patches: readonly GridCellPatch[];
+  journaled: boolean;
+}
+
 interface EditingState {
   readonly position: GridPosition;
   /// L'input della cella quando si è aperta: confermare scrive soltanto se
@@ -270,16 +290,6 @@ export function typingOpens(event: KeyboardEvent): "browser" | "seed" | null {
 
 /// Gli elementi che `#render` disegna direttamente nella griglia.
 const DRAWN = ".grid-row, .grid-freeze, .grid-object, .grid-selection, .grid-fill-handle, .grid-fill-preview, .grid-cut-mark, .grid-resize-guide, .grid-resize-label, .grid-move-preview, .grid-formula-ref";
-
-/// Dà a `target` gli attributi di `source`, e toglie quelli che lui non ha.
-function syncAttributes(target: Element, source: Element): void {
-  for (const attribute of [...target.attributes]) {
-    if (!source.hasAttribute(attribute.name)) target.removeAttribute(attribute.name);
-  }
-  for (const attribute of source.attributes) {
-    if (target.getAttribute(attribute.name) !== attribute.value) target.setAttribute(attribute.name, attribute.value);
-  }
-}
 
 export class GridEngine {
   readonly #root: HTMLElement;
@@ -350,8 +360,13 @@ export class GridEngine {
   #readOnlyDialogs: ReadonlySet<string> = new Set();
   #destroyed = false;
   #providerCommitTail: Promise<void> = Promise.resolve();
-  #undo: GridCellPatch[][] = [];
-  #redo: GridCellPatch[][] = [];
+  /// Annulla e ripeti dei gesti sulle celle. Un passo «nel giornale» è un
+  /// comando che il provider ha ancora in cima al suo giornale (una formula
+  /// scritta nella sessione a comandi): lo annulla il provider. Gli altri si
+  /// annullano scrivendo l'input di prima, anche dopo che un salvataggio ha
+  /// messo il giornale nei byte (IMP-027).
+  #undo: HistoryStep[] = [];
+  #redo: HistoryStep[] = [];
   /// Il gesto del puntatore sulle celle: una selezione che si allarga
   /// (celle, righe o colonne intere) o il quadratino di riempimento tirato.
   #drag: CellDrag | null = null;
@@ -703,27 +718,43 @@ export class GridEngine {
   }
 
   undo(): boolean {
-    if (this.#commandMode()) return this.#documentHistory(UNDO);
-    const patches = this.#undo.pop();
-    if (!patches) return false;
-    if (!this.#commit(inverseGridPatches(patches), "undo", false)) {
-      this.#undo.push(patches);
-      return false;
-    }
-    this.#redo.push(patches);
-    return true;
+    return this.#history(this.#undo, this.#redo, UNDO, (step) => this.#commit(inverseGridPatches(step.patches), "undo", false));
   }
 
   redo(): boolean {
-    if (this.#commandMode()) return this.#documentHistory(REDO);
-    const patches = this.#redo.pop();
-    if (!patches) return false;
-    if (!this.#commit(patches, "redo", false)) {
-      this.#redo.push(patches);
+    return this.#history(this.#redo, this.#undo, REDO, (step) => this.#commit(step.patches, "redo", false));
+  }
+
+  /// Un passo da `from` a `to`. Nella sessione a comandi, un passo ancora in
+  /// cima al giornale (o nessun passo delle celle: un comando della barra) va
+  /// al provider; altrimenti si scrivono le sue patch, e da lì nessun passo è
+  /// più in cima al giornale.
+  #history(from: HistoryStep[], to: HistoryStep[], id: typeof UNDO | typeof REDO, write: (step: HistoryStep) => boolean): boolean {
+    const step = from[from.length - 1];
+    if (this.#commandMode() && (!step || step.journaled)) {
+      if (!this.#documentHistory(id)) return false;
+      if (step) to.push(from.pop()!);
+      // Il provider ha annullato un comando che le celle non conoscono:
+      // ciò che si ripeterebbe da qui è soltanto suo.
+      else to.length = 0;
+      return true;
+    }
+    if (!step) return false;
+    from.pop();
+    if (!write(step)) {
+      from.push(step);
       return false;
     }
-    this.#undo.push(patches);
+    to.push(step);
+    this.#foldHistory();
     return true;
+  }
+
+  /// Nessun passo è più in cima al giornale del provider: si annullano tutti
+  /// con le loro patch.
+  #foldHistory(): void {
+    for (const step of this.#undo) step.journaled = false;
+    for (const step of this.#redo) step.journaled = false;
   }
 
   /// Il catalogo dei comandi sulla selezione: vuoto se la sessione non ne
@@ -1043,8 +1074,12 @@ export class GridEngine {
     const command: GridCommand = { id, params, ...selection };
     // Un comando cambia la cartella sotto ciò che si è copiato.
     if (id !== PASTE_FROM) this.#copied = null;
-    this.#undo = [];
-    this.#redo = [];
+    // Un comando della barra lo annulla soltanto il provider, finché è nel
+    // suo giornale; annulla e ripeti tengono la history (`#history`).
+    if (id !== UNDO && id !== REDO) {
+      this.#undo = [];
+      this.#redo = [];
+    }
     this.#pendingCommandMode += 1;
     const epoch = this.#bytesEpoch;
     const edits = this.#editEpoch;
@@ -1266,6 +1301,10 @@ export class GridEngine {
       this.#undo = [];
       this.#redo = [];
     }
+    // Una sessione nuova del provider non ha la history di quella di prima:
+    // i passi si annullano con le loro patch (un salvataggio ha messo il
+    // giornale nei byte, o un altro riquadro l'ha cambiato).
+    this.#foldHistory();
     this.#enqueueProtocol(() => this.#openBytes(journal, reset, epoch));
   }
 
@@ -1598,7 +1637,8 @@ export class GridEngine {
     const written: CellWrite[] = [];
     // Su una sessione a comandi il giornale lo scrive il provider: la griglia
     // mostra subito le celle e pubblica il giornale che lui conferma.
-    let commanding = this.#commandMode();
+    const wasCommanding = this.#commandMode();
+    let commanding = wasCommanding;
     for (const write of writes) {
       const refusal = this.#writeRefusal(write.position);
       if (refusal) {
@@ -1634,12 +1674,13 @@ export class GridEngine {
     if (!request.length) return false;
     for (const write of written) this.#showWritten(write.position, write.after);
     if (commanding) {
-      // Annulla e ripeti sono del documento, cioè del provider.
-      this.#undo = [];
-      this.#redo = [];
+      // Entrando nei comandi il provider porta le voci del giornale di celle
+      // nel suo, una per cella: i passi di prima non sono suoi.
+      if (!wasCommanding) this.#foldHistory();
       this.#pendingCommandMode += 1;
-    } else if (recordHistory) {
-      this.#undo.push(history);
+    }
+    if (recordHistory) {
+      this.#undo.push({ patches: history, journaled: commanding });
       this.#redo = [];
     }
     this.#bytesMessage = null;
@@ -1752,6 +1793,8 @@ export class GridEngine {
         case "macros": lines.push(t("grid.workbook.macros")); break;
         case "external-links": lines.push(t("grid.workbook.external_links")); break;
         case "uncomputed": lines.push(t("grid.workbook.uncomputed")); break;
+        // Detto dalle celle qui sotto, con le formule scritte adesso.
+        case "circular": break;
         case "incomplete": lines.push(plural(notice.count, "grid.workbook.incomplete_one", "grid.workbook.incomplete")); break;
         default: other = true;
       }
@@ -1764,6 +1807,16 @@ export class GridEngine {
     if (this.#bytesConflicts) lines.push(plural(this.#bytesConflicts, "grid.workbook.conflicts_one", "grid.workbook.conflicts"));
     if (this.#view?.sheets.some((sheet) => [...sheet.cells.values()].some((cell) => cell.bytes.stale))) {
       lines.push(t("grid.workbook.stale"));
+    }
+    // Un riferimento circolare, come lo dice un foglio di calcolo: le celle
+    // del giro mostrano `#CIRC!`, e la riga lo spiega (IMP-028). Il provider
+    // lo conta all'apertura, anche fuori dalle finestre lette; le formule
+    // scritte dopo le dicono le loro celle.
+    if (
+      this.#view?.notices.some((notice) => notice.code === "circular")
+      || this.#view?.sheets.some((sheet) => [...sheet.cells.values()].some((cell) => isCircular(cell.bytes)))
+    ) {
+      lines.push(t("grid.workbook.circular"));
     }
     if (this.#bytesMessage) lines.push(this.#bytesMessage);
     this.#notice.textContent = lines.join(" ");
@@ -2518,7 +2571,7 @@ export class GridEngine {
     const object = this.#objectByKey(this.#selectedObject);
     if (!object) return false;
     const kind = MOVABLE[object.kind];
-    switch (event.key) {
+    switch (namedKey(event)) {
       case "Escape":
         this.#selectObject(null);
         return true;
@@ -3228,7 +3281,7 @@ export class GridEngine {
       return;
     }
     const extend = event.shiftKey;
-    switch (event.key) {
+    switch (namedKey(event)) {
       case "ArrowUp": this.#move(-1, 0, extend); break;
       case "ArrowDown": this.#move(1, 0, extend); break;
       case "ArrowLeft": this.#move(0, -1, extend); break;

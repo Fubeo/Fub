@@ -284,7 +284,10 @@ export function workbookHost(options: {
   let failApply: PluginError | null = null;
   let journal = "";
   let instances = 0;
-  const base = options.base ?? (() => xlsx.document_revision);
+  /// Le celle che `save` ha messo nei byte, sopra quelle della fixture.
+  const saved = new Map<string, string>();
+  let savedRevision = xlsx.document_revision;
+  const base = options.base ?? (() => savedRevision);
   const given: GridCommandRequest[] = [];
   const undone: GridCommand[] = [];
   const catalog = (): GridCommandState[] => (structuredClone(xlsx.session.commands) as GridCommandState[])
@@ -293,14 +296,20 @@ export function workbookHost(options: {
   const sessionFor = (text: string): GridBytesSession => {
     if (text === xlsx.conflict.journal) return structuredClone(xlsx.conflict.session) as GridBytesSession;
     const session = structuredClone(xlsx.session) as GridBytesSession;
-    return { ...session, revision: text === "" ? session.revision : `rev:${text}`, commands: catalog() };
+    return { ...session, revision: plainRevision(text), commands: catalog() };
   };
-  const diskOf = (sheet: string, row: string, column: string) => (xlsx.windows as GridBytesWindow[])
-    .find((window) => window.sheet === sheet)?.cells
-    .find((cell) => cell.key.row === row && cell.key.column === column)?.input ?? "";
-  const revisionOf = (text: string) => text === xlsx.edit.commit.edit.inserted
+  const diskOf = (sheet: string, row: string, column: string) => saved.get(`${sheet}\u0000${row}\u0000${column}`)
+    ?? (xlsx.windows as GridBytesWindow[])
+      .find((window) => window.sheet === sheet)?.cells
+      .find((cell) => cell.key.row === row && cell.key.column === column)?.input ?? "";
+  // Dopo un `save` la revisione dice anche i byte salvati.
+  function plainRevision(text: string): string {
+    if (!saved.size) return text === "" ? xlsx.session.revision : `rev:${text}`;
+    return text === "" ? `${xlsx.session.revision}:${savedRevision}` : `rev:${savedRevision}:${text}`;
+  }
+  const revisionOf = (text: string) => text === xlsx.edit.commit.edit.inserted && saved.size === 0
     ? xlsx.edit.commit.revision
-    : text === "" ? xlsx.session.revision : `rev:${text}`;
+    : plainRevision(text);
   const host: GridHost = {
     listGridSurfaces: async () => {
       calls.push("list");
@@ -310,6 +319,8 @@ export function workbookHost(options: {
       calls.push(`open ${surface} ${doc} ${text === "" ? "∅" : "journal"} ${revision === xlsx.document_revision ? "base" : revision}`);
       if (revision !== base()) throw { kind: "conflict", message: "grid source changed" } satisfies PluginError;
       journal = text;
+      // Un'istanza nuova non ha niente da ripetere.
+      undone.length = 0;
       const session = sessionFor(text);
       session.instance = `xlsx-${++instances}`;
       opened.push(session.instance);
@@ -328,6 +339,7 @@ export function workbookHost(options: {
       window.revision = request.revision;
       const parsed = parseGridJournal(journal);
       const written = [
+        ...[...saved].map(([key, input]) => [...key.split("\u0000"), input] as [string, string, string, string]),
         ...parsed.entries.map((entry) => [entry.sheet, entry.row, entry.column, entry.after] as const),
         ...[...commandInputs(parsed)].map(([key, input]) => [...key.split("\u0000"), input] as [string, string, string, string]),
       ];
@@ -438,6 +450,21 @@ export function workbookHost(options: {
     applied,
     given,
     journal: () => journal,
+    /// Il disco, cella per cella: l'input che i byte salvati danno a `sheet`,
+    /// `row`, `column`.
+    disk: diskOf,
+    /// La revisione dei byte su disco.
+    base: () => savedRevision,
+    /// Salva il giornale `text` nei byte, come la scrittura del documento: le
+    /// celle che scrive (voci o `range.setValues`) vanno sul disco, e la
+    /// revisione cambia.
+    save: (text: string) => {
+      const parsed = parseGridJournal(text);
+      for (const entry of parsed.entries) saved.set(`${entry.sheet}\u0000${entry.row}\u0000${entry.column}`, entry.after);
+      for (const [key, input] of commandInputs(parsed)) saved.set(key, input);
+      savedRevision = `sha256:salvato-${saved.size}-${text.length}-${Math.random().toString(36).slice(2)}`;
+      return savedRevision;
+    },
     hold: (value: boolean) => { hold = value; },
     release: () => { for (const answer of answers.splice(0)) answer(); },
     failApply: (error: PluginError | null) => { failApply = error; },

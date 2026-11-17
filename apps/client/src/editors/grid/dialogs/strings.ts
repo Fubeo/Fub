@@ -207,6 +207,10 @@ const IT = {
 
   "grid.dialog.table_resize.title": "Ridimensiona tabella",
   "grid.dialog.table_resize.range": "Selezionare il nuovo intervallo di dati per la tabella:",
+  "grid.dialog.create_table.title": "Crea tabella",
+  "grid.dialog.create_table.range": "Dove sono i dati della tabella?",
+  "grid.dialog.create_table.header": "Tabella con intestazioni",
+  "grid.dialog.create_table.no_header": "Senza intestazioni, Fub aggiunge sopra i dati una riga con i nomi Colonna1, Colonna2…: i dati scendono di una riga.",
 
   "grid.dialog.validation.title": "Convalida dati",
   "grid.dialog.validation.tab.settings": "Impostazioni",
@@ -804,6 +808,10 @@ const EN: Record<DialogKey, string> = {
 
   "grid.dialog.table_resize.title": "Resize Table",
   "grid.dialog.table_resize.range": "Select the new data range for your table:",
+  "grid.dialog.create_table.title": "Create Table",
+  "grid.dialog.create_table.range": "Where is the data for your table?",
+  "grid.dialog.create_table.header": "My table has headers",
+  "grid.dialog.create_table.no_header": "Without headers, Fub adds a row named Column1, Column2… above the data: the data moves down one row.",
 
   "grid.dialog.validation.title": "Data Validation",
   "grid.dialog.validation.tab.settings": "Settings",

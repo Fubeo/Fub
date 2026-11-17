@@ -441,8 +441,10 @@ Nella finestra:
   prende il colore della shell.
 
 Gli avvisi della sessione sono `macros`, `external-links`, `incomplete` (la
-lettura ha lasciato indietro qualcosa), `not-shown-slicers` e `uncomputed`
-(formule senza valore salvato), ciascuno con il suo conteggio. Le unioni, le
+lettura ha lasciato indietro qualcosa), `not-shown-slicers`, `uncomputed`
+(formule senza valore salvato) e `circular` (formule su un riferimento
+circolare, salvate con `0`: la finestra le dà come `#CIRC!`), ciascuno con il
+suo conteggio. Le unioni, le
 note, la formattazione condizionale e gli oggetti (grafici, grafici
 sparkline, immagini e forme) arrivano nella finestra, e non sono avvisi.
 
