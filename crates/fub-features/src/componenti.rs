@@ -597,13 +597,13 @@ const DESCRIZIONI: &[(&str, &str, &str)] = &[
     ),
     (
         "component.rich.description",
-        "I file Word e OpenDocument, semplici o completi.",
-        "Word and OpenDocument files, simple or complete.",
+        "I file .docx, .doc e OpenDocument, semplici o completi.",
+        ".docx, .doc and OpenDocument files, simple or complete.",
     ),
     (
         "component.xlsx.description",
-        "I file Excel e OpenDocument, semplici o completi.",
-        "Excel and OpenDocument files, simple or complete.",
+        "I file .xlsx e OpenDocument, semplici o completi.",
+        ".xlsx and OpenDocument files, simple or complete.",
     ),
     (
         "component.lavagna.description",

@@ -478,7 +478,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -499,7 +499,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -1387,7 +1387,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -1408,7 +1408,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -2297,7 +2297,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -2318,7 +2318,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -3211,7 +3211,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -3232,7 +3232,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -4115,7 +4115,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -4136,7 +4136,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -5029,7 +5029,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -5050,7 +5050,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -5942,7 +5942,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -5963,7 +5963,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -6823,7 +6823,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -6844,7 +6844,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -7711,7 +7711,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -7732,7 +7732,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -8602,7 +8602,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -8623,7 +8623,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -9490,7 +9490,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -9511,7 +9511,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -10373,7 +10373,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -10394,7 +10394,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -11254,7 +11254,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -11275,7 +11275,7 @@
           "acceso": false,
           "perche": "Spento",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"
@@ -12138,7 +12138,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "descrizione": "I file .docx, .doc e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/rich"
@@ -12159,7 +12159,7 @@
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "descrizione": "I file .xlsx e OpenDocument, semplici o completi.",
           "tipo": "mode",
           "ui": [
             "editors/grid"

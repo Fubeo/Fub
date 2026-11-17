@@ -472,13 +472,9 @@ pub(crate) fn mount_with_formats(
     // vengono col codec, e un vault senza la feature non li vede.
     #[cfg(feature = "rich")]
     bundles.push(Arc::new(
-        CoreBundle::new(
-            crate::rich::RICH_ID,
-            "Word processing",
-            crate::rich::register,
-        )
-        .speaking(crate::settings::CORE_DEFAULT_LOCALE, crate::rich::catalog())
-        .described_by(componenti::riga(crate::rich::RICH_ID).as_ref()),
+        CoreBundle::new(crate::rich::RICH_ID, "Documents", crate::rich::register)
+            .speaking(crate::settings::CORE_DEFAULT_LOCALE, crate::rich::catalog())
+            .described_by(componenti::riga(crate::rich::RICH_ID).as_ref()),
     ));
 
     // La griglia delle cartelle di Excel, sui byte del file, e la loro stampa
@@ -487,7 +483,7 @@ pub(crate) fn mount_with_formats(
     bundles.push(Arc::new(
         CoreBundle::new(
             crate::workbook::WORKBOOK_ID,
-            "Excel workbooks",
+            "Spreadsheets",
             crate::workbook::register,
         )
         .speaking(
