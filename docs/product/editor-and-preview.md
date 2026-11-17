@@ -164,7 +164,9 @@ aperto a mano e mostra in grigio la chiusura: → o Tab la scrivono, Esc la speg
 spazio chiude apice e pedice e Backspace lo annulla; un segno lasciato aperto è
 ondulato. Senza i blocchi il titolo del cursore ha «H2» nel margine, che apre i livelli
 (coi blocchi quel margine è della maniglia, [Scrittura](editor-writing.md)); la riga
-vuota un segnaposto. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
+vuota un segnaposto. Le righe vuote dopo un blocco reso (tabella, richiamo, embed) sono
+alte zero, e lo stacco è del blocco; col cursore su una di loro la riga si vede e prende
+lo stacco, così il testo sotto non si sposta. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
 
 Immagini e media del vault si risolvono con la regola dei link del kernel:
 un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`
