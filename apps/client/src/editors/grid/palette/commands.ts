@@ -111,6 +111,7 @@ export const OWN_DIALOGS: Readonly<Record<string, OwnDialog>> = {
   "home.manageRules": "manageRules",
   "home.rowHeight": "rowHeight",
   "insert.link": "insertLink",
+  "insert.table": "createTable",
   "pageLayout.pageSetup": "pageSetup",
   "review.newComment": "comment",
   "review.newNote": "note",

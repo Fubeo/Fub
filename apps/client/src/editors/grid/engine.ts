@@ -67,7 +67,8 @@ import {
 import { attachCommentCards, commentDescription } from "./comment-card";
 import { drawObject, GridMediaCache, objectLabel } from "./objects";
 import { hasBorders, horizontalOf, iconOf, paintBorders, paintCell, spills } from "./paint";
-import { currencyFormat, shortcutCommand, shortcutDialog } from "./shortcuts";
+import { syncAttributes } from "./dom-sync";
+import { currencyFormat, namedKey, shortcutCommand, shortcutDialog } from "./shortcuts";
 import {
   cellKey,
   decimalSeparator,
@@ -169,9 +170,12 @@ const QUERIES: ReadonlySet<string> = new Set([
   // L'anteprima e il PDF senza percorso leggono la cartella com'è adesso.
   "file.printPreview",
   "file.exportPdf",
+  // L'area di dati della cella attiva: sposta la selezione della facciata e
+  // basta, che il comando dopo rimette; «Crea tabella» la propone.
+  "selection.currentRegion",
 ]);
 /// I comandi di `QUERIES` che leggono soltanto senza parametri.
-const READ_WITHOUT_PARAMS: ReadonlySet<string> = new Set(["pageLayout.pageSetup"]);
+const READ_WITHOUT_PARAMS: ReadonlySet<string> = new Set(["pageLayout.pageSetup", "selection.currentRegion"]);
 const UNDO = "edit.undo";
 const REDO = "edit.redo";
 /// Perché una cella non si modifica, per codice di blocco.
@@ -235,6 +239,13 @@ const DRAG_SLOP = 3;
 /// Gli oggetti che l'elenco per chi non vede nomina, al più.
 const SUMMARY_OBJECTS = 50;
 
+/// Il valore che il motore dà a una formula su un riferimento circolare.
+const CIRCULAR = "#CIRC!";
+
+function isCircular(cell: GridBytesCell): boolean {
+  return cell.value.kind === "error" && cell.value.value === CIRCULAR;
+}
+
 /// Un passo della history delle celle: le patch che lo fanno, e se il suo
 /// comando è ancora in cima al giornale del provider (`journaled`), dove lo
 /// annulla `edit.undo`. Un passo che non lo è più (il giornale è finito nei
@@ -279,16 +290,6 @@ export function typingOpens(event: KeyboardEvent): "browser" | "seed" | null {
 
 /// Gli elementi che `#render` disegna direttamente nella griglia.
 const DRAWN = ".grid-row, .grid-freeze, .grid-object, .grid-selection, .grid-fill-handle, .grid-fill-preview, .grid-cut-mark, .grid-resize-guide, .grid-resize-label, .grid-move-preview, .grid-formula-ref";
-
-/// Dà a `target` gli attributi di `source`, e toglie quelli che lui non ha.
-function syncAttributes(target: Element, source: Element): void {
-  for (const attribute of [...target.attributes]) {
-    if (!source.hasAttribute(attribute.name)) target.removeAttribute(attribute.name);
-  }
-  for (const attribute of source.attributes) {
-    if (target.getAttribute(attribute.name) !== attribute.value) target.setAttribute(attribute.name, attribute.value);
-  }
-}
 
 export class GridEngine {
   readonly #root: HTMLElement;
@@ -1792,6 +1793,8 @@ export class GridEngine {
         case "macros": lines.push(t("grid.workbook.macros")); break;
         case "external-links": lines.push(t("grid.workbook.external_links")); break;
         case "uncomputed": lines.push(t("grid.workbook.uncomputed")); break;
+        // Detto dalle celle qui sotto, con le formule scritte adesso.
+        case "circular": break;
         case "incomplete": lines.push(plural(notice.count, "grid.workbook.incomplete_one", "grid.workbook.incomplete")); break;
         default: other = true;
       }
@@ -1804,6 +1807,16 @@ export class GridEngine {
     if (this.#bytesConflicts) lines.push(plural(this.#bytesConflicts, "grid.workbook.conflicts_one", "grid.workbook.conflicts"));
     if (this.#view?.sheets.some((sheet) => [...sheet.cells.values()].some((cell) => cell.bytes.stale))) {
       lines.push(t("grid.workbook.stale"));
+    }
+    // Un riferimento circolare, come lo dice un foglio di calcolo: le celle
+    // del giro mostrano `#CIRC!`, e la riga lo spiega (IMP-028). Il provider
+    // lo conta all'apertura, anche fuori dalle finestre lette; le formule
+    // scritte dopo le dicono le loro celle.
+    if (
+      this.#view?.notices.some((notice) => notice.code === "circular")
+      || this.#view?.sheets.some((sheet) => [...sheet.cells.values()].some((cell) => isCircular(cell.bytes)))
+    ) {
+      lines.push(t("grid.workbook.circular"));
     }
     if (this.#bytesMessage) lines.push(this.#bytesMessage);
     this.#notice.textContent = lines.join(" ");
@@ -2558,7 +2571,7 @@ export class GridEngine {
     const object = this.#objectByKey(this.#selectedObject);
     if (!object) return false;
     const kind = MOVABLE[object.kind];
-    switch (event.key) {
+    switch (namedKey(event)) {
       case "Escape":
         this.#selectObject(null);
         return true;
@@ -3268,7 +3281,7 @@ export class GridEngine {
       return;
     }
     const extend = event.shiftKey;
-    switch (event.key) {
+    switch (namedKey(event)) {
       case "ArrowUp": this.#move(-1, 0, extend); break;
       case "ArrowDown": this.#move(1, 0, extend); break;
       case "ArrowLeft": this.#move(0, -1, extend); break;

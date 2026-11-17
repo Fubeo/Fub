@@ -393,6 +393,28 @@ describe("GridEngine con una cartella di Excel", () => {
     engine.destroy();
   });
 
+  // IMP-028: una formula su un riferimento circolare dice `#CIRC!`, e la
+  // riga degli avvisi spiega che cosa vuol dire.
+  it("una cella con #CIRC! porta l'avviso del riferimento circolare", async () => {
+    const plain = await workbookMounted(workbookHost());
+    expect(plain.host.querySelector<HTMLElement>(".grid-notice")?.textContent ?? "").not.toContain(t("grid.workbook.circular"));
+    plain.engine.destroy();
+    document.body.replaceChildren();
+    const grid = workbookHost({
+      window: (window) => {
+        if (window.sheet !== "s1") return;
+        const affitto = window.cells.find((cell) => cell.key.row === "r1" && cell.key.column === "c0")!;
+        affitto.input = "=A2+1";
+        affitto.value = { kind: "error", value: "#CIRC!" };
+        affitto.display = "#CIRC!";
+      },
+    });
+    const { engine, host, cell } = await workbookMounted(grid);
+    expect(cell(1, 0)?.textContent).toBe("#CIRC!");
+    expect(host.querySelector<HTMLElement>(".grid-notice")!.textContent).toContain(t("grid.workbook.circular"));
+    engine.destroy();
+  });
+
   it("disegna lo stile, i bordi, le barre, le icone e i commenti delle celle", async () => {
     const grid = workbookHost({
       window: (window) => {
