@@ -415,7 +415,8 @@ static OFFICIALS: &[OfficialFeature] = &[
         syntax: None,
         renderers: None,
         exports: None,
-        settings: None,
+        // L'ordine dei riquadri della Scrivania e la sua Base.
+        settings: Some(dashboard::settings),
         provides: &[],
         requires: &[],
         wiring: HostWiring::None,

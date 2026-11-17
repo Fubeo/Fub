@@ -150,7 +150,10 @@ pub use commands::{
     VAULT_UNDO,
 };
 #[cfg(feature = "dashboard")]
-pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
+pub use dashboard::{
+    DashboardView, DASHBOARD_ID, DASHBOARD_VIEW, DESK_BASE_KEY, DESK_TILES_KEY, DESK_TILE_NS,
+    DESK_VIEW,
+};
 #[cfg(feature = "draw")]
 pub use draw::{
     AnnotatedPdfExport, DrawCommands, DrawioExport, ExcalidrawExport, JpegExport, PdfExport,
