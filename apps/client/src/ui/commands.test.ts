@@ -786,6 +786,22 @@ describe("la parola Ctrl", () => {
     // La forma canonica tiene la parola che si è scritta.
     expect(normalize("Shift-Ctrl-Tab")).toBe("ctrl-shift-tab");
   });
+
+  // WebKitGTK passa Maiusc+Tab (`ISO_Left_Tab` per GTK) come `Unidentified`,
+  // col tasto fisico in `code`: il giro all'indietro non arrivava (IMP-050).
+  it("Ctrl+Maiusc+Tab si riconosce anche quando la WebView lo passa come Unidentified", () => {
+    const back = entry({ id: "back", binding: "Ctrl-Shift-Tab" });
+    const webkit = chord({ key: "Unidentified", code: "Tab", ctrlKey: true, shiftKey: true });
+    for (const platform of ["other", "mac", "any"] as const) {
+      expect(advance([back], null, webkit, platform).type).toBe("esegue");
+      expect(matchesBinding(webkit, "Ctrl-Shift-Tab", platform)).toBe(true);
+    }
+    // Un tasto davvero senza nome resta senza nome, e passa.
+    expect(advance([back], null, chord({ key: "Unidentified", code: "KeyQ", ctrlKey: true, shiftKey: true }), "other").type).toBe("passa");
+    // Esc senza nome chiude un'attesa come Esc.
+    const waiting = { pressed: [], label: "Mod-K" };
+    expect(advance([back], waiting, chord({ key: "Unidentified", code: "Escape" }), "other").type).toBe("annulla");
+  });
 });
 
 describe("gli accordi del sistema", () => {
