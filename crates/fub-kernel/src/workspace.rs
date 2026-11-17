@@ -12312,19 +12312,87 @@ impl Workspace {
     /// niente è ancora «fallito», che è la promessa che
     /// [`HostCommands::undo_last`](fub_abi::traits::HostCommands::undo_last)
     /// faceva già.
+    ///
+    /// # Prima di toccare un file si guardano tutti (A-10)
+    ///
+    /// Le [`UndoStep::Edit`] in testa alla voce — quelle prima del primo passo
+    /// [`Command`](UndoStep::Command), una per documento — portano la
+    /// revisione che l'operazione ha lasciato, e si controllano **tutte prima
+    /// del primo passo**. Se un documento è cambiato dopo l'operazione,
+    /// l'annullamento non tocca niente: torna un [`PluginError::Conflict`] che
+    /// nomina i file cambiati, e la voce resta in pila. È ciò che rende un
+    /// piano su più documenti ([`fub_abi::command::WritePlan`]) annullabile in
+    /// un passo: [`AppliedPlan::undo`](fub_abi::command::AppliedPlan::undo)
+    /// mette davanti, per ogni file, l'inverso della modifica o una richiesta
+    /// vuota che fa solo da guardia. Dopo il primo comando la regola si ferma:
+    /// che cosa un comando tocca lo sa lui, e la base di un passo dopo di lui
+    /// può essere quella che lui stesso produrrà.
     pub fn prepare_undo_replay(&mut self) -> Option<UndoReplay> {
         let entry = self.undo.pop()?;
+        let failure = self.stale_undo_guards(&entry.undo.steps);
         Some(UndoReplay {
             entry,
             next: 0,
             done: 0,
-            failure: None,
+            failure,
             before_replay: self.undo.begin_replay(),
             // Tutto dentro un lotto solo: annullare una rinomina che aveva
             // riscritto quaranta sorgenti è un gesto, quindi un `batch-ended` e
             // un ridisegno.
             owns_batch: self.dispatch.open_batch(),
         })
+    }
+
+    /// Le guardie in testa a una voce di annullamento che non tengono più: il
+    /// perché per [`prepare_undo_replay`](Self::prepare_undo_replay), o `None`
+    /// se tutte reggono.
+    ///
+    /// Un documento che non si legge più (cancellato, un permesso, un disco)
+    /// conta come cambiato: l'annullamento non sa più su cosa andrebbe a
+    /// scrivere, e non scrivere niente è la risposta che non perde niente.
+    fn stale_undo_guards(&self, steps: &[UndoStep]) -> Option<Failure> {
+        let mut seen: Vec<&DocId> = Vec::new();
+        let mut stale: Vec<DocId> = Vec::new();
+        for step in steps {
+            let UndoStep::Edit(planned) = step else {
+                break;
+            };
+            if seen.contains(&&planned.doc) {
+                continue;
+            }
+            seen.push(&planned.doc);
+            let base = &planned.edit.base;
+            let holds = match self.document_revision(&planned.doc) {
+                Ok(current) if current == *base => true,
+                // Una base della forma vecchia non si confronta per
+                // uguaglianza: si ricalcola sui byte.
+                Ok(_) if !base.is_current_form() => self
+                    .read_source_bytes(&planned.doc)
+                    .is_ok_and(|bytes| base.matches_bytes(&bytes)),
+                Ok(_) | Err(_) => false,
+            };
+            if !holds {
+                stale.push(planned.doc.clone());
+            }
+        }
+        let first = stale.first()?.clone();
+        let names = stale
+            .iter()
+            .map(|doc| format!("«{doc}»"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let verb = if stale.len() == 1 {
+            "è cambiato"
+        } else {
+            "sono cambiati"
+        };
+        Some(Failure::of(
+            first,
+            PluginError::Conflict(
+                format!("l'annullamento non ha toccato niente: {names} {verb} dopo l'operazione")
+                    .into(),
+            ),
+        ))
     }
 
     /// Chiude il batch senza chiamare handler. Replay resta attivo nel token:
@@ -12755,12 +12823,19 @@ impl Workspace {
     /// Alla chiusura, se qualcosa è stato toccato, arriva un
     /// [`Event::BatchEnded`] con l'elenco dei documenti; poi la coda si drena.
     ///
-    /// **Non è una transazione.** Se una delle scritture dentro `f` fallisce, le
-    /// altre restano fatte: il lotto non annulla niente e non lo promette (il
-    /// tutto-o-niente vuole il registro delle mutazioni, che dalla 0067 c'è e di
-    /// ogni lotto tiene i confini: manca chi lo ripercorre). Ciò che è andato storto lo
-    /// riporta `f` col proprio valore di ritorno, che questa funzione passa
-    /// intatto.
+    /// **Il lotto da solo non è una transazione.** Se una delle scritture dentro
+    /// `f` fallisce, le altre restano fatte: il lotto raggruppa ciò che si dice a
+    /// chi ascolta, non ciò che si scrive. Ciò che è andato storto lo riporta `f`
+    /// col proprio valore di ritorno, che questa funzione passa intatto.
+    ///
+    /// Il tutto-o-niente c'è, ed è un altro attrezzo che dentro il lotto ci
+    /// gira: un comando che scrive più documenti li consegna come
+    /// [`WritePlan`](fub_abi::command::WritePlan), che controlla ogni revisione
+    /// prima di scrivere e disfa all'indietro se un passo cade
+    /// ([`fub_abi::rules::plan`]). Sta nel contratto e non qui perché chi lo usa
+    /// riceve soltanto un `HostApi`, e passa così da ogni guardia e da ogni
+    /// turno come le capacità che compone; il lotto del comando che lo apre fa
+    /// uscire scritture e ritorni **una volta, dopo**, come fatti in coda.
     ///
     /// Annidato, entra nel lotto che c'è invece di aprirne un secondo: chiudere
     /// quello interno farebbe arrivare un `batch-ended` mentre l'operazione

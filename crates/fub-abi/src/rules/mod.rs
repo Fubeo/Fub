@@ -71,7 +71,10 @@
 //! - [`theme_icons`] — **quale icona di un tema regge**: il file del set, il
 //!   nome, i tracciati (`PATH_DATA`) e i limiti, la stessa regola con cui la
 //!   shell accetta le icone registrate dai suoi moduli;
-//! - [`health`] — cosa conta come link rotto, e cosa no.
+//! - [`health`] — cosa conta come link rotto, e cosa no;
+//! - [`plan`] — **come si scrive un piano su più documenti**: tutto o
+//!   niente, il controllo di ogni revisione prima di scrivere, il ritorno
+//!   all'indietro se un passo cade e la copia di ciò che non torna.
 //!
 //! Le regole che erano **già** nel contratto restano dove sono e si raggiungono
 //! anche da qui, perché il posto in cui si cerca «la regola X» dev'essere uno:
@@ -106,6 +109,7 @@ pub mod loads;
 pub mod media;
 pub mod path;
 pub mod path_policy;
+pub mod plan;
 pub mod properties;
 pub mod search_syntax;
 pub mod snippet;
