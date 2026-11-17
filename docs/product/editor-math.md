@@ -60,6 +60,38 @@ nella formula, il nome in italiano e in inglese, le parole con cui si trova e
 la sua scrittura veloce. Le proposte si scelgono in memoria, senza chiamate al
 programma a ogni tasto.
 
+## La tavolozza
+
+- Sotto la formula toccata, in riga e a blocco, ci sono gli otto pezzi più
+  usati (frazione, potenza, pedice, radice, sommatoria, integrale, limite,
+  testo) e «Tutti». Un clic mette il pezzo dove sta il cursore, coi suoi spazi
+  vuoti, e il fuoco resta nella formula.
+- «Tutti» apre la ricerca, i sette gruppi del catalogo (struttura, lettere
+  greche, operatori, relazioni, frecce, insiemi e logica, parentesi e matrici)
+  e la griglia del gruppo scelto.
+- La ricerca trova a parole, in italiano e in inglese, senza badare ad
+  accenti e maiuscole: «radice», «alfa», «freccia», «minore», `root`,
+  `\alpha`. Più parole restringono («freccia sin»); prima vengono i simboli
+  che si chiamano così, poi quelli descritti con quella parola. Invio mette il
+  primo. Senza risultati lo dice, e suggerisce di provare in inglese o di
+  descrivere il simbolo.
+- In fondo, il nome del simbolo sotto il puntatore o col fuoco; ogni simbolo
+  ha il suo nome anche per il lettore di schermo.
+- Da tastiera: Alt ↓ dalla formula porta ai pezzi, che si scorrono con ← e →
+  (un solo Tab per la fila). «Tutti» con Invio va alla ricerca; ↓ dalla
+  ricerca porta alla griglia, che si percorre con le quattro frecce; ↑ dalla
+  prima riga torna ai gruppi, che si scelgono con ← e →. Invio o spazio
+  mettono il simbolo e il fuoco torna nella formula; Esc, o Maiusc Tab dai
+  pezzi, ci torna senza mettere niente.
+- Al telefono il riquadro è largo quanto lo schermo e la griglia ha otto
+  colonne; a una finestra stretta i pezzi si stringono prima che «Tutti» esca
+  dalla fila.
+- Una formula col LaTeX a vista (con un errore) non mostra la tavolozza.
+
+La tavolozza (`math/palette.ts`) legge lo stesso catalogo delle proposte e
+cerca in memoria: nessuna chiamata al programma a ogni tasto, e una ricerca
+sta ben sotto un fotogramma.
+
 ## Quando si vede il LaTeX
 
 La preferenza «Mostra il LaTeX delle formule» (`editor.math.source`, spenta di

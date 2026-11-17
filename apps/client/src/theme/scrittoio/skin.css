@@ -9409,6 +9409,205 @@ button.cm-fub-page-icon:focus-visible {
   font-size: 13px;
 }
 
+/* La tavolozza (T62; il prototipo `.mx-pal`, `.mx-quick`, `.mx-s`,
+   `.mx-all`, `.mx-full`, `.mx-find`, `.mx-tabs`, `.mx-grid`, `.mx-tip`):
+   sotto la formula gli otto pezzi più usati e «Tutti», che apre la ricerca,
+   i sette gruppi e la griglia; in fondo il nome del simbolo sotto il
+   puntatore. Con «Tutti» aperto il riquadro cresce verso il basso. */
+.cm-fub-mx-palette {
+  /* Il nome in fondo non allarga il riquadro: si taglia. */
+  min-width: 0;
+  border-top: 1px solid var(--border);
+}
+/* Una formula col LaTeX a vista non ha la tavolozza. */
+.cm-fub-mx[data-mode="latex"] .cm-fub-mx-palette {
+  display: none;
+}
+/* Sopra la tavolozza la formula ha gli angoli in basso dritti. */
+.cm-fub-mx-popover .cm-fub-mx[data-mode="visual"] .cm-fub-mx-surface {
+  border-radius: 14px 14px 0 0;
+}
+.cm-fub-mx-quick {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+}
+.cm-fub-mx-tile {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: background var(--duration-state), transform var(--duration-state);
+}
+.cm-fub-mx-tile:hover,
+.cm-fub-mx-tile:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-fub-mx-tile:active {
+  transform: scale(0.93);
+}
+.cm-fub-mx-tile .katex,
+.cm-fub-mx-group .katex {
+  font-size: 1em;
+}
+.cm-fub-mx-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0 8px 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cm-fub-mx-all:hover,
+.cm-fub-mx-all[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+/* La freccia guarda in giù, e in su con «Tutti» aperto. */
+.cm-fub-mx-all-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  transform: rotate(180deg);
+  transition: transform var(--duration-fast);
+}
+.cm-fub-mx-all[aria-expanded="true"] .cm-fub-mx-all-icon {
+  transform: none;
+}
+.cm-fub-mx-full {
+  padding: 0 8px 8px;
+}
+.cm-fub-mx-full[hidden] {
+  display: none;
+}
+/* Il campo di ricerca: la scatola e il suo anello sono dell'`input`, che ha
+   il fuoco; la lente gli sta sopra, a sinistra. */
+.cm-fub-mx-find {
+  position: relative;
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+.cm-fub-mx-find-icon {
+  position: absolute;
+  top: 8px;
+  left: 9px;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+.cm-fub-mx-find-input {
+  display: block;
+  width: 100%;
+  height: 30px;
+  min-height: 0;
+  padding: 0 9px 0 31px;
+  border: 0;
+  border-radius: 8px;
+  outline: none;
+  background: var(--sheet-2);
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+}
+.cm-fub-mx-find-input::placeholder {
+  color: var(--muted);
+}
+/* L'anello del prototipo, dentro la scatola: niente alone dei campi. */
+.cm-fub-mx-find-input:focus,
+.cm-fub-mx-find-input:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.cm-fub-mx-groups {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+.cm-fub-mx-group {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 1;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.cm-fub-mx-group:hover {
+  background: var(--overlay-hover);
+}
+.cm-fub-mx-group[aria-selected="true"] {
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+}
+/* Mentre si cerca, la griglia non è del gruppo scelto. */
+.cm-fub-mx-searching .cm-fub-mx-group[aria-selected="true"] {
+  background: none;
+  color: var(--muted);
+}
+.cm-fub-mx-grid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 2px;
+  align-content: start;
+  min-height: 70px;
+}
+.cm-fub-mx-grid .cm-fub-mx-tile {
+  width: auto;
+}
+.cm-fub-mx-none {
+  grid-column: 1 / -1;
+  padding: 16px 4px;
+  color: var(--muted);
+}
+.cm-fub-mx-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.cm-fub-mx-tip-name {
+  color: var(--text);
+  font-weight: 600;
+}
+/* Nel blocco la tavolozza sta in una scheda sotto la formula. */
+.cm-fub-mx-block .cm-fub-mx-palette {
+  margin-top: 8px;
+  border-top: 0;
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-size: 13px;
+}
+
 /* Il campo che prende i tasti: dentro la formula, invisibile, perché l'IME
    e il lettore di schermo abbiano un campo vero. */
 .cm-fub-mx-input {
@@ -9495,9 +9694,42 @@ button.cm-fub-page-icon:focus-visible {
   .cm-fub-mx-block .cm-fub-mx-surface {
     outline: 1px solid Highlight;
   }
-  .cm-fub-mx-symbol[aria-selected="true"] {
+  .cm-fub-mx-symbol[aria-selected="true"],
+  .cm-fub-mx-group[aria-selected="true"] {
     outline: 1px solid Highlight;
     outline-offset: -1px;
+  }
+}
+
+/* Al telefono il riquadro prende tutta la larghezza, meno un margine per
+   parte, e la griglia ha otto colonne. */
+@media (max-width: 620px) {
+  .kit-popover.cm-fub-mx-popover {
+    width: calc(100vw - 16px);
+  }
+  .cm-fub-mx-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+  /* I pezzi si stringono prima che «Tutti» esca dalla fila. */
+  .cm-fub-mx-quick .cm-fub-mx-tile {
+    flex: 0 1 34px;
+    min-width: 0;
+  }
+}
+/* Sul telefono i bottoni sono alti 44 px: le tessere lo restano, per il
+   dito, ma non si allargano a 44, che porterebbe «Tutti» fuori dalla fila e
+   le colonne della griglia una sull'altra. */
+:root[data-client-shell="mobile"] .cm-fub-mx-tile {
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-fub-mx-tile,
+  .cm-fub-mx-all-icon {
+    transition: none;
+  }
+  .cm-fub-mx-tile:active {
+    transform: none;
   }
 }
 
