@@ -149,7 +149,7 @@ pub use model::{
     Anchor, Block, ColumnAlign, DateFormats, DateOrder, DocId, DocumentModel, Frontmatter, Heading,
     HeadingSlugs, Inline, Link, LinkTarget, ListItem, OptionMatch, ParsedWikilink, PropertyColor,
     PropertyDate, PropertyOption, PropertyScalar, PropertyTime, PropertyType, PropertyTypes,
-    PropertyValue, Span, StatusGroup, TableCell, TableRow, Tag, TaskMarker,
+    PropertyValue, RelationTarget, Span, StatusGroup, TableCell, TableRow, Tag, TaskMarker,
 };
 pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 pub use options::{OptionMap, OptionStatus};
