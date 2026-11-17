@@ -14,7 +14,7 @@ import { plural, t } from "../../strings";
 import { gesture as asGesture, removeOps } from "../edit";
 import { gripAt } from "../frame";
 import { toScene } from "../../view";
-import type { Unit } from "../hit";
+import { Unit, type Erasable, type ForeignBlock } from "../hit";
 import { preciseEraseOps, type StrokeCut } from "../erase-precise";
 import { HIT_PX } from "./constants";
 import type { EditorContext } from "./context";
@@ -59,37 +59,51 @@ export function installCurvatureTool(ctx: EditorContext): void {
   ctx.redoable = redoable;
 
   const finishErase = (g: EraseGesture): void => {
-    const units = g.sweep.marked();
+    const marked = g.sweep.marked();
     if (ctx.grid.eraser === "precise") {
-      finishPrecise(g, units);
+      finishPrecise(g, marked);
       return;
     }
-    if (units.length === 0) {
+    if (marked.length === 0) {
       painter.setDraft(null);
       return;
     }
-    if (commit("draw.action.erase", asGesture(removeOps(withLabels(units)))) !== null) {
-      announce(`${plural(units.length, "draw.erased.one", "draw.erased.other")} ${objects()}`);
+    const [units, foreign] = split(marked);
+    if (commit("draw.action.erase", asGesture(removeOps(withLabels(units), foreign))) !== null) {
+      announce(`${plural(marked.length, "draw.erased.one", "draw.erased.other")} ${objects()}`);
     }
+  };
+
+  /// Ciò che la gomma ha segnato, diviso fra gli oggetti e i blocchi
+  /// estranei, che se ne vanno interi.
+  const split = (marked: readonly Erasable[]): [Unit[], ForeignBlock[]] => {
+    const units: Unit[] = [];
+    const foreign: ForeignBlock[] = [];
+    for (const each of marked) {
+      if (each instanceof Unit) units.push(each);
+      else foreign.push(each);
+    }
+    return [units, foreign];
   };
 
   /// La gomma precisa: i tratti tagliati restano a pezzi, gli oggetti che
   /// non sono tratti, e i tratti cancellati tutti, se ne vanno interi.
-  const finishPrecise = (g: EraseGesture, units: readonly Unit[]): void => {
+  const finishPrecise = (g: EraseGesture, marked: readonly Erasable[]): void => {
     const whole: Unit[] = [];
     const cuts: StrokeCut[] = [];
+    const [units, foreign] = split(marked);
     for (const unit of units) {
       const cut = g.cuts.get(unit.key);
       if (cut === undefined) continue;
       if (cut === "whole") whole.push(unit);
       else cuts.push(cut);
     }
-    const gone = whole.length + cuts.filter((cut) => cut.pieces.length === 0).length;
-    if (whole.length === 0 && cuts.length === 0) {
+    const gone = whole.length + foreign.length + cuts.filter((cut) => cut.pieces.length === 0).length;
+    if (whole.length === 0 && foreign.length === 0 && cuts.length === 0) {
       painter.setDraft(null);
       return;
     }
-    const planned = preciseEraseOps(ctx.engine.model!, cuts, withLabels(whole), newIds());
+    const planned = preciseEraseOps(ctx.engine.model!, cuts, withLabels(whole), newIds(), foreign);
     if (commit("draw.action.erase", asGesture(planned.ops)) === null) return;
     const said = [
       ...(planned.cut > 0 ? [plural(planned.cut, "draw.erased.part.one", "draw.erased.part.other")] : []),

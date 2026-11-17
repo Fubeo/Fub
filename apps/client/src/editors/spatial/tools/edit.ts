@@ -38,7 +38,7 @@ import { elementChildren, originalsIn, pathOf, tagName, type ContainerNode, type
 import { ROOT, type AddOp, type Op, type Target } from "../scene/ops";
 import { formatTransform, type Elem } from "../scene/serialize";
 import type { Page } from "../painter/paint";
-import type { LayerInfo, SceneIndex, Unit } from "./hit";
+import type { ForeignBlock, LayerInfo, SceneIndex, Unit } from "./hit";
 import { formatShortest } from "../../../ink/number";
 
 /// Il passo con cui la pagina si allarga.
@@ -244,8 +244,9 @@ function comparePaths(a: readonly number[], b: readonly number[]): number {
 /// Un originale di una ripetizione porta via prima le sue copie: dopo, se
 /// stanno dopo di lui, o subito prima della prima, se ce n'è una prima, che
 /// lo nomina ancora. Togliere tutti gli originali di una ripetizione toglie
-/// la ripetizione.
-export function removeOps(units: readonly Unit[]): Op[] {
+/// la ripetizione. I blocchi estranei di `foreign` se ne vanno interi, nello
+/// stesso ordine.
+export function removeOps(units: readonly Unit[], foreign: readonly ForeignBlock[] = []): Op[] {
   const chosen = new Set(units.map((unit) => unit.node));
   /// Ciò che si toglie, per percorso: gli oggetti, le copie dei loro
   /// originali e le ripetizioni che restano senza.
@@ -272,6 +273,7 @@ export function removeOps(units: readonly Unit[]): Op[] {
       add(path, copy.facts.id ?? { path, tag: tagName(copy) });
     }
   }
+  for (const block of foreign) add(block.path, block.target);
   // Ciò che sta dentro qualcosa che se ne va se ne va con lui.
   const all = [...doomed.values()].filter((item) => {
     for (let n = item.path.length - 1; n > 0; n--) if (doomed.has(item.path.slice(0, n).join("."))) return false;

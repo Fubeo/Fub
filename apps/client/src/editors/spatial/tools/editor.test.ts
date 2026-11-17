@@ -478,6 +478,38 @@ describe("gli strumenti", () => {
     expect(editor.engine.text).toContain('id="d"');
   });
 
+  it("la gomma toglie intero un testo di un altro programma che attraversa, e lascia i vicini (IMP-038)", () => {
+    // Come la «Mappa del quartiere» adottata: un livello di Inkscape con un
+    // collegamento `mailto:` e un testo senza righe, che il formato dei
+    // disegni non sa riscrivere e lascia estranei.
+    const source = doc(
+      '<g id="strade"><a href="mailto:comune@example.org"><text x="60" y="200">Scrivi al comune</text></a>'
+        + '<text x="60" y="300">Resto</text>'
+        + '<rect id="b" x="60" y="60" width="20" height="20"/></g>',
+    );
+    mount(source);
+    const before = editor.engine.text;
+    editor.setTool("eraser");
+    drag([[50, 194], [80, 194], [120, 194]]);
+    const after = editor.engine.text;
+    expect(after).not.toContain("Scrivi al comune");
+    expect(after).not.toContain("mailto:");
+    for (const kept of ['id="strade"', ">Resto</text>", 'id="b"']) expect(after).toContain(kept);
+    expect(spoken()).toBe("1 oggetto cancellato. Il disegno ha 1 oggetto.");
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("la gomma precisa toglie intero un testo di un altro programma in un livello", () => {
+    mount(doc(`<title>Prova</title>${LAYER}<text x="60" y="200">Via Roma</text><rect id="b" x="60" y="60" width="20" height="20"/></g>`), {
+      grid: { ...DEFAULT_GRID, eraser: "precise" },
+    });
+    editor.setTool("eraser");
+    drag([[50, 194], [80, 194], [120, 194]]);
+    expect(editor.engine.text).not.toContain("Via Roma");
+    expect(editor.engine.text).toContain('id="b"');
+  });
+
   it("la gomma ferma mentre la rotella sposta la vista non cancella ciò che non ha toccato", () => {
     mount();
     editor.setTool("eraser");
