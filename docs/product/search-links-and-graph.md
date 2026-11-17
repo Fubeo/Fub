@@ -113,11 +113,10 @@ Heading e blocchi condividono slug e ancore canoniche; un punto rinominato apre
 la nota senza inventare una destinazione. Completamento e cambio rapido
 propongono nomi per pertinenza senza riordinare nella shell, e la rinomina
 riscrive solo i wikilink che nominavano la nota, e l'estensione se era scritta.
-Il pannello mostra incoming, outgoing con contesto per riferimento, menzioni
-non collegate in entrata e in uscita con filtro, e la conversione esplicita
-della menzione in wikilink. Una menzione è il nome o un alias come parola intera
-in prosa: non dentro un link, nel codice, in un tag, in una formula o nel
-frontmatter. La conversione è il comando `mention.link`: rilegge la nota alla
+Il pannello mostra incoming, outgoing con contesto, menzioni non collegate nei
+due versi con filtro, e la conversione esplicita in wikilink. Una menzione è il
+nome o un alias, parola intera in prosa: non in un link, nel codice, in un tag,
+in una formula o nel frontmatter. La converte `mention.link`: rilegge la nota alla
 revisione e allo span dichiarati, rifiuta se il testo è cambiato o non è più una
 menzione, e si annulla in un passo con «Annulla l'ultima operazione». Il
 riferimento scritto è il più corto che la risoluzione manda davvero alla nota
