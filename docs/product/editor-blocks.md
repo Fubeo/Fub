@@ -131,12 +131,14 @@ sono fatte. Il cassetto offre le sue righe con la stessa porta
 «Sposta in…» manda il blocco (o i blocchi selezionati) **in un'altra nota**:
 dal menu della maniglia, dallo spazio comandi (<kbd>Ctrl O</kbd>, «Sposta
 in…») e trascinandolo su una nota del cassetto. Dal menu le domande sono
-due: prima la nota, in un elenco che si filtra scrivendo («Cerca una
-nota…», la nota stessa dice «questa nota»); poi una finestra «Sposta in
+due: prima la nota, in un elenco per nome che si filtra scrivendo («Cerca
+una nota…»; la nota stessa è l'ultima e dice «questa nota»); poi una finestra «Sposta in
 «Progetto»» con **Dove** («In fondo alla nota», o «In fondo a «Titolo»» per
 ogni titolo, rientrato per livello) e **Al suo posto** («Un link alla nota»,
 «Niente», «Una trasclusione del blocco», quest'ultima per un blocco solo).
-Le scelte di serie sono in fondo e col link: Invio sposta subito.
+Le scelte di serie sono in fondo e col link: Invio sposta subito. Il blocco
+è quello del momento del menu: se la nota cambia mentre si sceglie, non si
+sposta niente e lo dice («La nota è cambiata mentre sceglievi»).
 
 Lo fa il comando del nucleo `note.block.move`
 (`crates/fub-features/src/commands/move_block.rs`), con i byte del blocco e
