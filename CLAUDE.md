@@ -55,7 +55,8 @@ that was needed or an unverified architectural change.
   see. For those, ask and wait.
 - No subagents, workflows or parallel sessions unless the maintainer allows them
   for that task; then they are read-only (the plan workflow's coders are the
-  standing exception).
+  standing exception, and each coder may use up to two Haiku helpers: see
+  [`.claude/agents/coder.md`](.claude/agents/coder.md)).
 - Work only inside the repository; don't install system packages or change
   system settings — give the exact command and why.
 - Tests and probes never use the maintainer's real vault or files: use the
