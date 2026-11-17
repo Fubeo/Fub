@@ -1334,6 +1334,48 @@ const PROPERTIES_DISPLAY: readonly SettingEntry[] = [{
   source: PROPERTIES_CHOSEN ? "machine" : "default",
 }];
 
+/// Le due preferenze delle formule (T63), come le voci dell'host: di
+/// macchina, «Mostra il LaTeX» spenta e gli aiuti pieni di serie. Le scene
+/// del campo del LaTeX le cambiano con `?mathsource=1` e
+/// `?mathhelp=piene|discrete|spente`.
+const MATH_SOURCE_CHOSEN = params.get("mathsource") === "1";
+const MATH_HELP_PARAM = params.get("mathhelp");
+const MATH_HELP_CHOSEN = MATH_HELP_PARAM === "piene" || MATH_HELP_PARAM === "discrete" || MATH_HELP_PARAM === "spente" ? MATH_HELP_PARAM : null;
+/// Solo nelle scene che le chiedono: le altre (le Impostazioni) restano com'erano.
+const MATH_SETTINGS: readonly SettingEntry[] = !params.has("mathsource") && !params.has("mathhelp") ? [] : [{
+  spec: {
+    key: "editor.math.source",
+    label: "Mostra il LaTeX delle formule",
+    description: "Accesa, sotto la formula toccata c'è il campo del suo LaTeX e si scrive lì.",
+    group: "Editor",
+    scope: "machine",
+    kind: { kind: "toggle", default: false },
+    program_writable: true,
+  },
+  value: MATH_SOURCE_CHOSEN,
+  source: MATH_SOURCE_CHOSEN ? "machine" : "default",
+}, {
+  spec: {
+    key: "editor.math.help",
+    label: "Aiuti nel LaTeX delle formule",
+    description: "Con «Mostra il LaTeX»: quanto aiuta il campo.",
+    group: "Editor",
+    scope: "machine",
+    kind: {
+      kind: "choice",
+      default: "piene",
+      options: [
+        { value: "piene", label: "Pieni" },
+        { value: "discrete", label: "Discreti" },
+        { value: "spente", label: "Spenti" },
+      ],
+    },
+    program_writable: true,
+  },
+  value: MATH_HELP_CHOSEN ?? "piene",
+  source: MATH_HELP_CHOSEN ? "machine" : "default",
+}];
+
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
 /// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
@@ -1843,7 +1885,7 @@ const options: Options = {
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
   ],
-  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...MATH_SETTINGS],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {

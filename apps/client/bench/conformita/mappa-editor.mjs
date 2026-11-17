@@ -215,6 +215,34 @@ export const VISTE = {
     },
     app: { scena: "formula-06-tavolozza" },
   },
+  /// Il LaTeX a vista (T63): il campo sotto la formula, coi tre puntini. Il
+  /// prototipo al passo «Il LaTeX, per chi lo vuole», che apre una formula
+  /// nuova col campo; l'app dalla scena del banco, con la preferenza accesa.
+  "formula-latex": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il LaTeX, per chi lo vuole");
+        await page.waitForSelector("#win .mx .mx-tex");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "formula-11-latex" },
+  },
+  /// I tre puntini aperti (T63): «Mostra il LaTeX» e gli aiuti.
+  "formula-latex-opzioni": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il LaTeX, per chi lo vuole");
+        await page.waitForSelector("#win .mx .mx-tex");
+        await page.click("#win .mx .mx-more");
+        await page.waitForSelector("#win .mx .mx-opts:not([hidden])");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "formula-12-latex-opzioni" },
+  },
   /// Le maniglie accanto a un blocco: «+» e la presa con gli occhi, col
   /// puntatore sul blocco e non sulle maniglie.
   maniglie: {
@@ -782,6 +810,56 @@ export const PEZZI = [
     prototipo: ".mx-tip",
     app: ".cm-fub-mx-popover .cm-fub-mx-tip",
     proprieta: ["height", "padding", "font", "color"],
+  },
+  // ── il LaTeX a vista e i tre puntini (T63) ────────────────────────────────
+  {
+    id: "formula.latex-riga",
+    vista: "formula-latex",
+    prototipo: ".mx .mx-row",
+    app: ".cm-fub-mx-popover .cm-fub-mx-row",
+    proprieta: ["padding", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.latex",
+    vista: "formula-latex",
+    prototipo: ".mx .mx-tex",
+    app: ".cm-fub-mx-popover .cm-fub-mx-latex",
+    proprieta: ["height", "padding", "font", "color", "border-radius", "box-shadow"],
+  },
+  {
+    id: "formula.puntini",
+    vista: "formula-latex",
+    prototipo: ".mx .mx-row .mx-more",
+    app: ".cm-fub-mx-popover .cm-fub-mx-row .cm-fub-mx-more",
+    proprieta: [...DIMENSIONI, "border-radius", "color", "background"],
+  },
+  {
+    id: "formula.opzioni",
+    vista: "formula-latex-opzioni",
+    prototipo: ".mx .mx-opts",
+    app: ".cm-fub-mx-popover .cm-fub-mx-options",
+    proprieta: ["padding", "gap"],
+  },
+  {
+    id: "formula.opzione",
+    vista: "formula-latex-opzioni",
+    prototipo: ".mx .mx-opts > div",
+    app: ".cm-fub-mx-popover .cm-fub-mx-option",
+    proprieta: ["font", "color", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.opzione-scelta",
+    vista: "formula-latex-opzioni",
+    prototipo: '.mx .mx-opts .seg2 button[aria-pressed="true"]',
+    app: '.cm-fub-mx-popover .cm-fub-mx-segment[aria-pressed="true"]',
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background", "box-shadow"],
+  },
+  {
+    id: "formula.opzione-altra",
+    vista: "formula-latex-opzioni",
+    prototipo: '.mx .mx-opts .seg2 button[aria-pressed="false"]',
+    app: '.cm-fub-mx-popover .cm-fub-mx-segment[aria-pressed="false"]',
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background"],
   },
   // Le maniglie: «+» e la presa a due occhi.
   {
