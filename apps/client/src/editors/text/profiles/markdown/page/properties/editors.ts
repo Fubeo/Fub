@@ -385,7 +385,11 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
   const drawTime = () => {
     timeRow.hidden = !withTime;
     timeToggle.hidden = !withTime && !timeAllowed;
-    timeToggle.textContent = liveStrings.t(withTime ? "page.properties.date.remove_time" : "page.properties.date.add_time");
+    // L'orologio davanti al testo, come nel prototipo: decorativo, il nome del
+    // pulsante resta il testo.
+    const figure = iconEl("clock");
+    figure?.setAttribute("aria-hidden", "true");
+    timeToggle.replaceChildren(...(figure ? [figure] : []), liveStrings.t(withTime ? "page.properties.date.remove_time" : "page.properties.date.add_time"));
   };
 
   /// Scrive la data (con l'ora, se c'è), o la toglie con `""`.

@@ -234,6 +234,23 @@ describe("la data", () => {
     expect(text(view)).toContain("scadenza: 2026-03-02T18:00\n");
   });
 
+  it("«Aggiungi l'ora» ha l'orologio davanti al testo: decorativo, e il nome del pulsante resta il testo", () => {
+    const { view } = mount("---\nscadenza: 2026-03-02\n---\nTesto");
+    valueOf(view, "scadenza").click();
+    const toggle = [...popover().querySelectorAll<HTMLElement>(".cm-fub-prop-date-action")].find((b) => b.textContent === "Aggiungi l'ora")!;
+    const clock = toggle.firstElementChild!;
+    expect(toggle.firstChild).toBe(clock);
+    expect(clock.tagName.toLowerCase()).toBe("svg");
+    expect(clock.getAttribute("data-icon")).toBe("clock");
+    expect(clock.getAttribute("aria-hidden")).toBe("true");
+    expect(toggle.hasAttribute("aria-label")).toBe(false);
+    expect(toggle.textContent).toBe("Aggiungi l'ora");
+    // Con l'ora il pulsante dice «Togli l'ora»: l'orologio resta, è lo stesso pulsante.
+    toggle.click();
+    expect(toggle.textContent).toBe("Togli l'ora");
+    expect(toggle.firstElementChild?.getAttribute("data-icon")).toBe("clock");
+  });
+
   it("la data scritta a mano: ISO, all'italiana, a parole, con l'ora", () => {
     const today = new Date(2026, 2, 20, 10, 0);
     const parse = (text: string) => parseDateInput(text, today, 1, "it");
