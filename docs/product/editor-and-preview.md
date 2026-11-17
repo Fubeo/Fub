@@ -191,10 +191,11 @@ apre i tipi, la freccia scambia `+` e `-`. Le voci d'elenco (e le righe che
 ne continuano il paragrafo) vanno a capo sotto il testo; cancellare o spostare righe rinumera le seguenti. L'HTML ammesso
 (`<kbd>`, `<u>`, i [colori](editor-blocks.md#i-colori)) si vede senza tag. I
 recinti con info string dichiarata (Mermaid, formule) tornano sorgente col
-cursore dentro, con la resa sotto. Con `mai` una formula in riga resta resa: un
-clic, o → e ← che ci entrano, aprono il riquadro col TeX e l'anteprima, e Invio
-o Esc lo chiudono. Con `elemento` torna la sorgente, con l'anteprima sopra la
-riga, o sotto per `$$`. L'ID di blocco finale è nascosto.
+cursore dentro, con la resa sotto. Con `mai` una formula si modifica
+toccandola, senza vedere il LaTeX ([Formule in Live](editor-math.md)); con
+«Mostra il LaTeX delle formule», o con Vim, un clic o le frecce aprono invece il
+riquadro col TeX e l'anteprima. Con `elemento` torna la sorgente, con
+l'anteprima sopra la riga, o sotto per `$$`. L'ID di blocco finale è nascosto.
 
 La vista Struttura può spostare una sezione fra fratelli adiacenti con una
 singola modifica protetta dalla revisione osservata. La vista Note a piè di

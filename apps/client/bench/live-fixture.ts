@@ -180,6 +180,12 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     "Vedi [[Itinerario dettagliato#Giorno 2|il secondo giorno]] domani, §ok.\n\nVedi [[Itinerario dettagliato#Giorno 2|il secondo giorno]] domani.",
   ),
   "riga-vuota": at("# Nota nuova\n\n§"),
+  // La formula che si modifica toccandola (T60): una in riga col cursore
+  // davanti, un blocco `$$` da cliccare; poi una formula con un errore.
+  "formula-toccata": at(
+    "# Il moto\n\nLa velocità media è §$v = \\frac{s}{t}$, e lo spazio cresce con $t^{2}$.\n\n$$\n\\frac{a+b}{c} + x^{2} + \\sqrt{y}\n$$\n\nSotto, il testo che segue.",
+  ),
+  "formula-errore": at("# Il moto\n\nUna formula rotta: §$\\frac{a}$ da correggere.\n\nSotto, il testo che segue."),
   "immagine-selezionata": selected("Sopra, il testo.\n\n", "![Lo schema del viaggio|240](../Risorse/schema.png)", "\n\nSotto, il testo che segue."),
   // La testata della pagina dei Blocchi (H12, H13): icona, copertina e
   // proprietà; la seconda con la pagina a tutta larghezza.

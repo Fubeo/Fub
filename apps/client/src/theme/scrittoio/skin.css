@@ -8010,9 +8010,14 @@ button.cm-fub-page-icon:focus-visible {
   max-width: 100%;
   vertical-align: baseline;
 }
+/* Una formula larga scorre di lato; in verticale no: i puntelli invisibili di
+   KaTeX sotto una frazione sporgono di qualche pixel, e col solo `overflow-x`
+   il blocco scorrerebbe anche in alto e in basso, diventando una fermata del
+   Tab senza niente da leggere. */
 .markdown-rendered .math-block {
   display: block;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: var(--space-2) 0;
   text-align: center;
 }
@@ -9397,6 +9402,10 @@ button.cm-fub-page-icon:focus-visible {
 .cm-fub-mx-surface[data-state="stale"] {
   opacity: 0.45;
 }
+/* Non c'è ancora niente da disegnare (il LaTeX di una formula rotta). */
+.cm-fub-mx-surface[data-state="empty"] {
+  display: none;
+}
 .cm-fub-mx-surface .katex {
   font-size: 1.12em;
 }
@@ -9430,8 +9439,8 @@ button.cm-fub-page-icon:focus-visible {
 .cm-fub-mx-surface [data-fubcmd] {
   padding: 0 0.2em;
   border-radius: 4px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent-wash);
+  color: var(--accent-soft);
 }
 .cm-fub-mx-placeholder {
   margin-left: 6px;
@@ -9466,6 +9475,7 @@ button.cm-fub-page-icon:focus-visible {
   box-shadow: none;
 }
 .cm-fub-mx-latex {
+  min-height: 0;
   margin: 8px 8px 0 10px;
   padding: 5px 6px;
   border: 0;
@@ -9494,6 +9504,9 @@ button.cm-fub-page-icon:focus-visible {
 .cm-editor .cm-content .cm-fub-mx-block {
   margin: 14px 0;
 }
+.cm-fub-mx-block .cm-fub-mx {
+  font-size: inherit;
+}
 .cm-fub-mx-block .cm-fub-mx-surface {
   min-height: 0;
   padding: 12px 8px;
@@ -9509,9 +9522,9 @@ button.cm-fub-page-icon:focus-visible {
 }
 
 /* Nella frase, la formula che si sta modificando. */
-.cm-editor .cm-content .cm-fub-math-on .cm-fub-math {
+.cm-editor .cm-content .cm-fub-math.cm-fub-math-on {
   border-radius: 5px;
-  background: var(--accent-soft);
+  background: var(--accent-wash);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 

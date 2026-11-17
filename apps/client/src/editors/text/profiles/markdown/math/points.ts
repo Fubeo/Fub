@@ -124,8 +124,22 @@ interface Context {
   cell?: { row: number; column: number };
 }
 
+/// Le ultime letture: a ogni tasto le regole, il cursore e il lettore di
+/// schermo leggono la stessa formula più volte, e Ctrl Z torna alla prima.
+const read = new Map<string, FormulaMap>();
+const READ_LIMIT = 4;
+
 /// Legge la formula: punti e pezzi.
 export function mapFormula(tex: string): FormulaMap {
+  const known = read.get(tex);
+  if (known) return known;
+  const map = readFormula(tex);
+  read.set(tex, map);
+  if (read.size > READ_LIMIT) read.delete(read.keys().next().value!);
+  return map;
+}
+
+function readFormula(tex: string): FormulaMap {
   const v = tex;
   const points = new Map<number, Point>();
   const atoms: Atom[] = [];

@@ -11,8 +11,8 @@
 // cursore dentro e l'anteprima sta in un riquadro sopra la riga, senza
 // prendere il fuoco.
 import { syntaxTree } from "@codemirror/language";
-import { Annotation, type ChangeDesc, type EditorState, type Extension, Facet, Prec, StateEffect, StateField } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
+import { Annotation, type ChangeDesc, type EditorState, type Extension, Facet, Prec } from "@codemirror/state";
+import { EditorView, keymap, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import { openPopover, type PopoverHandle, textField, type VirtualAnchor } from "../../../../kit";
 import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifetime";
 import { liveReveal, mathSource } from "../../live-reveal";
@@ -80,32 +80,8 @@ export function blockTexRange(state: EditorState, from: number): { from: number;
 /// sposta due volte.
 const ownEdit = Annotation.define<true>();
 
-/// La formula in riga che si sta modificando, segnata nella frase. `owner` è
-/// il riquadro che l'ha segnata: chiudendosi toglie il suo segno, non quello
-/// del riquadro aperto dopo.
-interface Editing {
-  readonly owner: object;
-  readonly marks: DecorationSet;
-}
-const markEditing = StateEffect.define<{ owner: object; range: { from: number; to: number } | null }>();
-const editingMark = Decoration.mark({ class: "cm-fub-math-on" });
-const editingField = StateField.define<Editing | null>({
-  create: () => null,
-  update(value, transaction) {
-    let next = value && { owner: value.owner, marks: value.marks.map(transaction.changes) };
-    for (const effect of transaction.effects) {
-      if (!effect.is(markEditing)) continue;
-      const { owner, range } = effect.value;
-      if (range) {
-        next = { owner, marks: range.to > range.from ? Decoration.set([editingMark.range(range.from, range.to)]) : Decoration.none };
-      } else if (next?.owner === owner) {
-        next = null;
-      }
-    }
-    return next;
-  },
-  provide: (field) => EditorView.decorations.from(field, (value) => value?.marks ?? Decoration.none),
-});
+/// Il segno della formula in riga che si sta modificando, nella frase.
+const EDITING_CLASS = "cm-fub-math-on";
 
 /// Chi trova le formule in riga: lo dà la Live.
 const formulaLookup = Facet.define<FormulaLookup, FormulaLookup | null>({
@@ -215,6 +191,9 @@ interface InlineSession {
   readonly popover: PopoverHandle;
   /// Sposta la formula con le modifiche degli altri (un'altra superficie).
   map(changes: ChangeDesc): void;
+  /// Segna nella frase la formula che si modifica: il suo disegno si rifà a
+  /// ogni TeX nuovo, e il segno con lui.
+  mark(): void;
 }
 
 function editInline(view: EditorView, formula: LiveFormula, start: MathStart, owner: Lifetime): InlineSession {
@@ -255,7 +234,7 @@ function editInline(view: EditorView, formula: LiveFormula, start: MathStart, ow
       changes = { from: from + dollars, to: to - dollars, insert: text };
       to = from + text.length + 2 * dollars;
     }
-    view.dispatch({ changes, effects: markEditing.of({ owner: life, range: { from, to } }), userEvent: "input", annotations: ownEdit.of(true) });
+    view.dispatch({ changes, userEvent: "input", annotations: ownEdit.of(true) });
     popover.reposition();
   };
   const leave = (reason: LeaveReason) => {
@@ -284,16 +263,32 @@ function editInline(view: EditorView, formula: LiveFormula, start: MathStart, ow
     lifetime: owner,
     onClose: () => {
       life.close();
-      // Fuori dal giro: il riquadro può chiudersi mentre la vista si aggiorna.
-      queueMicrotask(() => {
-        if (!owner.closed) view.dispatch({ effects: markEditing.of({ owner: life, range: null }) });
-      });
+      marked?.classList.remove(EDITING_CLASS);
+      marked = null;
     },
   });
-  view.dispatch({ effects: markEditing.of({ owner: life, range: { from, to } }) });
+  let marked: HTMLElement | null = null;
+  const mark = () => {
+    if (life.closed) return;
+    let found: HTMLElement | null = null;
+    if (!gone) {
+      for (const element of view.contentDOM.querySelectorAll<HTMLElement>(".cm-fub-math")) {
+        if (view.posAtDOM(element) === from) {
+          found = element;
+          break;
+        }
+      }
+    }
+    if (found === marked) return;
+    marked?.classList.remove(EDITING_CLASS);
+    found?.classList.add(EDITING_CLASS);
+    marked = found;
+  };
+  mark();
   editor.focus();
   return {
     popover,
+    mark,
     map(changes) {
       from = changes.mapPos(from, 1);
       to = gone ? from : changes.mapPos(to, -1);
@@ -402,6 +397,11 @@ class MathPlugin {
       // Fuori dal ciclo di aggiornamento: il riquadro misura la vista.
       queueMicrotask(() => this.follow());
     }
+    if (this.inline && (update.docChanged || update.viewportChanged)) {
+      // Il disegno della formula nella frase è nuovo dopo l'aggiornamento.
+      const inline = this.inline;
+      queueMicrotask(() => inline.mark());
+    }
   }
 
   takeEntry(from: number): MathStart {
@@ -493,40 +493,44 @@ class MathPlugin {
   destroy(): void { this.life.close(); }
 }
 
-const mathPlugin = ViewPlugin.fromClass(MathPlugin, {
-  eventHandlers: {
-    mousedown(event, view) {
-      if (view.state.facet(liveReveal) !== "mai" || event.button !== 0) return false;
-      const target = event.target instanceof Element ? event.target : null;
-      // Un clic su un blocco `$$` reso: il cursore della formula va dove cade.
-      const block = target?.closest<HTMLElement>(".math-block");
-      if (block && mathTouchable(view.state) && !block.closest(".cm-fub-mx")) {
-        const host = block.closest<HTMLElement>(".cm-widgetBuffer, .markdown-rendered") ?? block;
-        let at: number | null = null;
-        try {
-          at = view.lineBlockAt(view.posAtDOM(host)).from;
-        } catch {
-          at = null;
-        }
-        if (at !== null) {
-          this.noteClick(event.clientX, event.clientY, at);
-          this.entryFocus = true;
-          event.preventDefault();
-          view.dispatch({ selection: { anchor: at }, userEvent: "select.pointer" });
-          return true;
-        }
+const mathPlugin = ViewPlugin.fromClass(MathPlugin);
+
+/// Il clic su una formula. Prima degli altri gestori della Live: il clic su un
+/// blocco reso altrimenti lo sceglie, e il cursore della formula non saprebbe
+/// dov'è caduto.
+const mathClicks = Prec.highest(EditorView.domEventHandlers({
+  mousedown(event, view) {
+    const plugin = view.plugin(mathPlugin);
+    if (!plugin || view.state.facet(liveReveal) !== "mai" || event.button !== 0) return false;
+    const target = event.target instanceof Element ? event.target : null;
+    // Un clic su un blocco `$$` reso: il cursore della formula va dove cade.
+    const block = target?.closest<HTMLElement>(".math-block");
+    if (block && mathTouchable(view.state) && !block.closest(".cm-fub-mx")) {
+      const host = block.closest<HTMLElement>(".cm-widgetBuffer, .markdown-rendered") ?? block;
+      let at: number | null = null;
+      try {
+        at = view.lineBlockAt(view.posAtDOM(host)).from;
+      } catch {
+        at = null;
       }
-      const inline = target?.closest<HTMLElement>(".cm-fub-math");
-      if (!inline) return false;
-      const lookup = view.state.facet(formulaLookup);
-      const formula = lookup?.(view, view.posAtDOM(inline), 1);
-      if (!formula) return false;
-      event.preventDefault();
-      this.open(formula, inline, { x: event.clientX, y: event.clientY });
-      return true;
-    },
+      if (at !== null) {
+        plugin.noteClick(event.clientX, event.clientY, at);
+        plugin.entryFocus = true;
+        event.preventDefault();
+        view.dispatch({ selection: { anchor: at }, userEvent: "select.pointer" });
+        return true;
+      }
+    }
+    const inline = target?.closest<HTMLElement>(".cm-fub-math");
+    if (!inline) return false;
+    const lookup = view.state.facet(formulaLookup);
+    const formula = lookup?.(view, view.posAtDOM(inline), 1);
+    if (!formula) return false;
+    event.preventDefault();
+    plugin.open(formula, inline, { x: event.clientX, y: event.clientY });
+    return true;
   },
-});
+}));
 
 function hoverPreview(formula: LiveFormula, anchor: Element, owner: Lifetime): { popover: PopoverHandle; preview: Preview } {
   const life = openLifetime();
@@ -561,7 +565,7 @@ export function mathPopovers(lookup: FormulaLookup): Extension {
   return [
     formulaLookup.of(lookup),
     mathPlugin,
-    editingField,
+    mathClicks,
     theme,
     Prec.high(keymap.of([
       { key: "ArrowRight", run: enter(1) },

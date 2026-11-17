@@ -79,6 +79,10 @@ export class MathEditor {
     this.input = document.createElement("textarea");
     this.input.className = "cm-fub-mx-input";
     this.input.rows = 1;
+    // La formula fa parte del testo della nota, che è una fermata sola del
+    // Tab: ci si entra col cursore (le frecce, il clic), e dentro Tab va da
+    // uno spazio vuoto all'altro.
+    this.input.tabIndex = -1;
     this.input.spellcheck = false;
     this.input.setAttribute("autocomplete", "off");
     this.input.setAttribute("autocapitalize", "off");
@@ -149,8 +153,9 @@ export class MathEditor {
         library.render(instrument(tex, pending), staging, editOptions(this.options.display));
       }
     } catch {
-      // L'ultima resa buona resta, attenuata.
-      this.surface.dataset.state = "stale";
+      // L'ultima resa buona resta, attenuata; senza, il riquadro si toglie
+      // finché il LaTeX non si legge.
+      this.surface.dataset.state = this.surface.childElementCount > 0 ? "stale" : "empty";
       return;
     }
     const nodes: Node[] = [...staging.childNodes];

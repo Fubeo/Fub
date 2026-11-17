@@ -7,6 +7,7 @@ import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { markdownGrammar } from "../grammar";
 import { livePreview } from "../livepreview";
 import { liveReveal, mathSource, type RevealPolicy } from "../../../live-reveal";
+import { CORPUS, LONG_FORMULA } from "./corpus";
 import { MathEditor } from "./editor";
 import { openLifetime } from "../../../../../ui/lifetime";
 
@@ -72,6 +73,8 @@ describe("una formula in riga", () => {
     await settle();
     expect(document.querySelector(".cm-fub-mx-popover")).not.toBeNull();
     expect(document.activeElement).toBe(input());
+    // Nella frase la formula che si modifica ha il suo segno.
+    expect(document.querySelector(".cm-fub-math.cm-fub-math-on")).not.toBeNull();
     expect(document.querySelector(".cm-fub-mx-surface")?.getAttribute("data-state")).toBe("ready");
     type(["c"]);
     expect(view.state.doc.toString()).toBe("x $ca+b$ y");
@@ -225,5 +228,27 @@ describe("l'editor da solo", () => {
     }
     expect(seen).toEqual(["esponente di x", "esponente di x", "fine della formula"]);
     life.close();
+  });
+
+  it("ogni formula del corpus, percorsa da capo a fondo senza scrivere, non cambia di un byte", async () => {
+    const touched: string[] = [];
+    for (const { tex, display } of [...CORPUS, { tex: LONG_FORMULA, display: true }]) {
+      const life = openLifetime();
+      let left = 0;
+      // Le frecce sono regole senza disegno: si parte dalla fine e si torna
+      // indietro un pezzo alla volta, fino a uscire dall'inizio.
+      const editor = new MathEditor({ tex, display, start: "end", onChange: () => touched.push(tex), onLeave: () => left++, lifetime: life });
+      document.body.append(editor.element);
+      const field = editor.element.querySelector("textarea")!;
+      const press = (key: string) => field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+      for (let i = 0; i < 2000 && left === 0; i++) press("ArrowLeft");
+      expect(left, tex).toBe(1);
+      left = 0;
+      for (const key of ["Home", "End", "ArrowUp", "ArrowDown", "Escape"]) press(key);
+      expect(editor.tex).toBe(tex);
+      life.close();
+      editor.element.remove();
+    }
+    expect(touched).toEqual([]);
   });
 });
