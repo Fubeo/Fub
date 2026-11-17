@@ -79,20 +79,19 @@ ancora sotto il gate.
 ## Scrivere nelle celle
 
 Come in Excel e LibreOffice, una battuta apre la cella in «Inserisci»: Invio e
-Maiuscolo+Invio confermano e scendono o salgono, Tab e Maiuscolo+Tab (con
-`key` `Unidentified` vale il tasto fisico) confermano e vanno a destra o a
-sinistra, le frecce confermano e si spostano. Invio dopo una serie di Tab
-torna alla colonna da cui la serie è partita. F2 e il doppio clic aprono in
-«Modifica», dove le frecce muovono il cursore; F2 alterna i due modi, e la
-banda di stato dice il modo («Pronto», «Inserisci», «Modifica»). Alt+Invio va
-a capo, Ctrl+Invio scrive la bozza in tutta la selezione, Esc annulla. Un clic
-su un'altra cella, o il fuoco che lascia l'editor, conferma; dalla cella alla
-barra della formula la bozza passa con il fuoco. Sulla selezione Invio e Tab
-spostano la cella attiva senza aprirla, dentro l'intervallo se è più di una
-cella. La regola pura di dove andare sta in
-`apps/client/src/tabella/navigation.ts`, quella del riempimento in
-`tabella/selection.ts` (`fillRange`): sono le regole di ogni tabella ([ADR
-0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
+Maiuscolo+Invio confermano e scendono o salgono, Tab e Maiuscolo+Tab (anche
+`Unidentified` da GTK) confermano e vanno a destra o a sinistra, le frecce
+confermano e si spostano. Invio dopo una serie di Tab torna alla colonna da
+cui la serie è partita. F2 e il doppio clic aprono in «Modifica», dove le
+frecce muovono il cursore; F2 alterna i due modi, e la banda di stato dice il
+modo («Pronto», «Inserisci», «Modifica»). Alt+Invio va a capo, Ctrl+Invio
+scrive la bozza in tutta la selezione, Esc annulla. Un clic su un'altra cella,
+o il fuoco che lascia l'editor, conferma; dalla cella alla barra della formula
+la bozza passa con il fuoco. Sulla selezione Invio e Tab spostano la cella
+attiva senza aprirla, dentro l'intervallo se è più di una cella. La regola
+pura di dove andare sta in `apps/client/src/tabella/navigation.ts`, quella
+del riempimento in `tabella/selection.ts` (`fillRange`): sono le regole di
+ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
 
 Una battuta vera (stampabile, un tasto morto o una composizione dell'IME)
 mette il fuoco nel campo della cella durante il `keydown` e non si ferma: il
