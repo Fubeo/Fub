@@ -150,6 +150,24 @@ bersaglio resta un link. Una parola che non si legge (vuota, `[[]]`, una
 cartella con `..`) vale ogni nota e resta nel file com'è; un bersaglio che
 non è una parola (un oggetto) rende illeggibile il registro.
 
+### Nell'editor
+
+Nella testata della nota una Relazione mostra i nomi delle note legate
+(`[[Libri/Dune]]` si legge «Dune», l'alias se c'è); un clic sul nome apre la
+nota (Alt+Invio la prima), un clic altrove apre il riquadro. Il riquadro
+cerca per nome fra le note del bersaglio (20 al più; per un tipo, fra le
+prime 200 con la chiave `tipo`), lega o slega con un clic o con Invio, e
+«Crea …» fa una nota nuova col nome scritto: dal modello del tipo
+(`note.from_type`) o nella cartella del bersaglio. Le note legate restano in
+cima, spuntate; il valore resta un link solo se era un link solo. Un link
+scritto da solo come testo (`tipo: "[[Tipi/Libro]]"`) si mostra come una
+Relazione anche senza tipo nel registro. In sola lettura il nome apre la
+nota e niente si scrive.
+
+Rinominare una nota legata **non** aggiorna le Relazioni che la nominano: i
+link del frontmatter non sono archi del grafo dei link, e il link resta
+rotto finché non lo si riscrive.
+
 ### Collegata da
 
 La relazione inversa di una nota sono le note che la legano con una
@@ -159,6 +177,9 @@ delle Relazioni delle altre note, risolti con le regole dei link del vault
 frontmatter non sono archi del grafo dei link, quindi i backlink non
 bastano. Contano solo le chiavi dichiarate `relation`; un link rotto non
 lega; una nota che lega sé stessa compare fra chi la lega.
+
+Il client non la mostra ancora: nessuna porta la espone all'interfaccia, e
+la riga «Collegata da» della testata aspetta quella porta.
 
 ### Il riepilogo in una Base
 
@@ -191,6 +212,12 @@ chiedere; il `derive` riceve le note legate in `linked`, una per pagina di
 link risolta, `{target, doc, props}`. Una pagina che non risolve non si
 manda ed è un link rotto. Una formula che non dice per scritto la Relazione,
 il riepilogo o la proprietà non si legge (`#PARSE!`).
+
+Il menu della colonna di una Relazione scrive questi riepiloghi nel piede
+(`summaries` della vista, con `expression` e `name`), non come colonne
+`formulas`: nessuna porta scrive le formule. Il piede mette insieme le righe
+(somma per `count` e `sum`, media, minimo, massimo). Una colonna per riga si
+scrive a mano in `formulas`.
 
 ## Quando il registro non si legge
 

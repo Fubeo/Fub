@@ -16,8 +16,8 @@ import type { PropertyEntry, PropertyWrite } from "../../properties";
 import { saidDay } from "../../dates";
 import { firstWeekday } from "../../../../../../state/dates";
 import { liveStrings } from "../../strings";
-import { freeColor, KIND_ICONS, linkName, linkTo, OPTION_GROUPS, optionsOf, parseNumber, validDate, type OptionGroup, type PropertyOption, type RowKind } from "./kind";
-import { entryStamp, longDate, optionElement, personElement, type PropertyRowHost, type WriteOutcome } from "./values";
+import { freeColor, KIND_ICONS, linkName, linkTo, OPTION_GROUPS, optionsOf, parseNumber, targetOf, validDate, type OptionGroup, type PropertyOption, type RelationTarget, type RowKind } from "./kind";
+import { entryStamp, longDate, optionElement, personElement, relationItems, type PropertyRowHost, type RelationNote, type WriteOutcome } from "./values";
 
 /// Un editor aperto su una chiave: l'impronta che porta alla scrittura.
 interface Session {
@@ -79,6 +79,9 @@ export function openEditor(entry: PropertyEntry, kind: RowKind, value: HTMLButto
       return;
     case "people":
       openPeopleEditor(entry, value, host, life);
+      return;
+    case "relation":
+      openRelationEditor(entry, value, host, life);
       return;
     case "select":
     case "status":
@@ -729,6 +732,246 @@ export function openPeopleEditor(entry: PropertyEntry, anchor: HTMLButtonElement
   own.listen(input, "input", () => look(input.value));
   look("");
   const popover = popoverFor(anchor, body, liveStrings.t("page.properties.people.label", { key: entry.key }), host, life, own);
+  input.focus();
+  return popover;
+}
+
+// ——— Relazione ———
+
+/// La pagina di un link `[[Libri/Dune|Il libro]]`, com'è scritta (`Libri/Dune`),
+/// in minuscolo: due link alla stessa pagina sono la stessa nota.
+function linkPage(link: string): string {
+  return link.trim().replace(/^\[\[/, "").replace(/\]\]$/, "").split("|")[0]!.split("#")[0]!.trim().toLocaleLowerCase();
+}
+
+/// Il link scelto e la nota trovata sono la stessa? La stessa pagina, o un
+/// link scritto col nome solo (`[[Dune]]`) e una nota che si chiama così: è
+/// il nome con cui il vault lo risolve. Senza risolvere non si sa di più.
+function sameNote(chosen: string, found: RelationNote): boolean {
+  const page = linkPage(chosen);
+  const other = linkPage(found.link);
+  if (page === other) return true;
+  return !page.includes("/") && other.slice(other.lastIndexOf("/") + 1) === page;
+}
+
+/// La cartella di un documento, per la riga che la dice sotto il nome.
+function folderOf(doc: string): string {
+  const at = doc.lastIndexOf("/");
+  return at < 0 ? "" : doc.slice(0, at);
+}
+
+/// Il nome che un bersaglio ha nell'interfaccia: il tipo per il suo nome
+/// (`Libro`), la cartella per il suo percorso.
+function targetLabel(target: RelationTarget): string {
+  return target.kind === "type" ? target.page.slice(target.page.lastIndexOf("/") + 1) : target.path;
+}
+
+type RelationRow =
+  | { readonly kind: "group"; readonly id: string }
+  | { readonly kind: "chosen"; readonly id: string; readonly item: string }
+  | { readonly kind: "found"; readonly id: string; readonly note: RelationNote }
+  | { readonly kind: "create"; readonly id: string; readonly name: string };
+
+/// Relazione (T35): la scelta di più note, con la ricerca ristretta al
+/// bersaglio del registro (le note di un tipo, o di una cartella; senza,
+/// ogni nota). Le note legate stanno in cima, spuntate; un clic, Invio o
+/// Spazio ne mette una o la toglie. Un nome che non c'è si crea («Crea
+/// «nome»», nel tipo o nella cartella del bersaglio) e diventa subito una
+/// nota legata. Il valore è un elenco di link `[[…]]`; un link solo scritto
+/// come testo (`tipo: "[[Tipi/Libro]]"`) resta un link solo finché le note
+/// legate sono al più una. Le voci che non sono link restano dove sono.
+export function openRelationEditor(entry: PropertyEntry, anchor: HTMLButtonElement, host: PropertyRowHost, life: Lifetime): PopoverHandle {
+  const state = session(entry, host);
+  const own = openLifetime();
+  const target = targetOf(host.types, entry.key);
+  const port = host.relations;
+  const scalar = (host.current(entry.key) ?? entry).items === null;
+  let chosen = relationItems(host.current(entry.key) ?? entry);
+  let found: RelationNote[] = [];
+  let query = "";
+  let asked = 0;
+  let creating = false;
+  const body = document.createElement("div");
+  body.className = "cm-fub-prop-relation";
+  const search = document.createElement("div");
+  search.className = "cm-fub-prop-search";
+  const icon = iconEl("search");
+  icon?.setAttribute("aria-hidden", "true");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.autocomplete = "off";
+  input.placeholder = liveStrings.t("page.properties.relation.search");
+  input.setAttribute("aria-label", liveStrings.t("page.properties.relation.search"));
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-expanded", "true");
+  input.setAttribute("aria-autocomplete", "list");
+  search.append(...(icon ? [icon] : []), input);
+  const list = document.createElement("div");
+  list.className = "cm-fub-block-menu cm-fub-prop-options";
+  list.setAttribute("aria-label", liveStrings.t("page.properties.relation.label", { key: entry.key }));
+  list.setAttribute("aria-multiselectable", "true");
+  const empty = document.createElement("p");
+  empty.className = "cm-fub-prop-empty";
+  const note = noteElement();
+  const foot = document.createElement("p");
+  foot.className = "cm-fub-prop-foot";
+  const footIcon = iconEl(target?.kind === "folder" ? "folder" : "backlink");
+  footIcon?.setAttribute("aria-hidden", "true");
+  const footText = document.createElement("span");
+  footText.textContent = target === null
+    ? liveStrings.t("page.properties.relation.foot.any")
+    : liveStrings.t(target.kind === "type" ? "page.properties.relation.foot.type" : "page.properties.relation.foot.folder", { target: targetLabel(target) });
+  foot.append(...(footIcon ? [footIcon] : []), footText);
+  body.append(search, list, empty, note, foot);
+
+  const rows = (): RelationRow[] => {
+    const wanted = query.trim().toLocaleLowerCase();
+    const mine = chosen
+      .filter((item) => wanted === "" || linkName(item).toLocaleLowerCase().includes(wanted) || item.toLocaleLowerCase().includes(wanted))
+      .map((item): RelationRow => ({ kind: "chosen", id: `c:${item}`, item }));
+    const others = found
+      .filter((each) => !chosen.some((item) => sameNote(item, each)))
+      .map((each): RelationRow => ({ kind: "found", id: `f:${each.doc}`, note: each }));
+    const name = query.trim();
+    const exact = name !== "" && (chosen.some((item) => linkName(item).toLocaleLowerCase() === wanted)
+      || found.some((each) => linkName(each.link).toLocaleLowerCase() === wanted));
+    const create: RelationRow[] = port?.create && name !== "" && !exact && !/[[\]|#^]/.test(name)
+      ? [{ kind: "create", id: `n:${name}`, name }]
+      : [];
+    const notes = [...mine, ...others];
+    return [...(notes.length > 0 ? [{ kind: "group", id: "g" } as RelationRow] : []), ...notes, ...create];
+  };
+
+  const handle = createList<RelationRow>({
+    container: list,
+    role: "listbox",
+    items: [],
+    key: (row) => row.id,
+    render: (row, element) => {
+      if (row.kind === "group") {
+        element.classList.add("cm-fub-prop-group");
+        element.textContent = liveStrings.t("page.properties.relation.group");
+        return;
+      }
+      if (row.kind === "create") {
+        const figure = iconEl("plus");
+        figure?.setAttribute("aria-hidden", "true");
+        const label = document.createElement("span");
+        label.className = "cm-fub-prop-menu-label";
+        const named = document.createElement("span");
+        named.textContent = liveStrings.t("page.properties.relation.create", { name: row.name });
+        const hint = document.createElement("small");
+        hint.className = "cm-fub-prop-menu-hint";
+        hint.textContent = target === null
+          ? liveStrings.t("page.properties.relation.create.any")
+          : liveStrings.t(target.kind === "type" ? "page.properties.relation.create.type" : "page.properties.relation.create.folder", { target: targetLabel(target) });
+        label.append(named, hint);
+        element.classList.add("cm-fub-prop-create");
+        element.replaceChildren(...(figure ? [figure] : []), label);
+        return;
+      }
+      const check = document.createElement("span");
+      check.className = "cm-fub-page-check";
+      check.setAttribute("aria-hidden", "true");
+      check.textContent = row.kind === "chosen" ? "✓" : "";
+      const figure = iconEl("notes");
+      figure?.setAttribute("aria-hidden", "true");
+      const label = document.createElement("span");
+      label.className = "cm-fub-prop-menu-label";
+      const named = document.createElement("span");
+      const link = row.kind === "chosen" ? row.item : row.note.link;
+      const isLink = /^\[\[[^[\]]+\]\]$/.test(link.trim());
+      named.textContent = isLink ? linkName(link) : link;
+      label.append(named);
+      // Sotto il nome, più piano, dov'è: la cartella della nota trovata, o il
+      // link com'è scritto per una nota legata.
+      const where = row.kind === "found" ? folderOf(row.note.doc) : isLink ? link.trim().replace(/^\[\[|\]\]$/g, "") : "";
+      if (where !== "" && where !== named.textContent) {
+        const hint = document.createElement("small");
+        hint.className = "cm-fub-prop-menu-hint";
+        hint.textContent = where;
+        label.append(hint);
+      }
+      element.replaceChildren(check, ...(figure ? [figure] : []), label);
+    },
+    disabled: (row) => row.kind === "group",
+    selected: (row) => row.kind === "chosen",
+    onActivate: (row) => {
+      if (row.kind === "chosen") write(chosen.filter((item) => item !== row.item));
+      else if (row.kind === "found") write([...chosen, row.note.link]);
+      else if (row.kind === "create") void create(row.name);
+    },
+    owner: input,
+    focus: "activedescendant",
+    lifetime: own,
+  });
+
+  /// Il valore da scrivere: un link solo resta testo se lo era.
+  const valueOf = (next: string[]): PropertyWrite => scalar && next.length <= 1 ? next[0] ?? "" : next;
+  /// Scrive le note legate. Se il valore è cambiato sotto, la scelta resta
+  /// (le spunte la mostrano), lo si dice, e «Scrivi la mia» la scrive.
+  function write(next: string[]): void {
+    const outcome = commit(state, valueOf(next));
+    if (outcome === "conflict") {
+      chosen = next;
+      sayConflict(note, conflictText(state), own, () => write(chosen));
+    } else if (outcome === "written") {
+      chosen = next;
+      say(note, null);
+    }
+    refresh();
+    input.focus();
+  }
+
+  /// Crea la nota nel bersaglio, poi la lega. Se non si crea, il riquadro
+  /// lo dice e la proprietà non cambia.
+  async function create(name: string): Promise<void> {
+    if (creating || !port?.create) return;
+    creating = true;
+    const made = await port.create(name, target).then(
+      (created) => created ?? liveStrings.t("page.properties.relation.create.unknown"),
+      (error: unknown) => error instanceof Error ? error.message : String(error),
+    );
+    creating = false;
+    if (own.closed) return;
+    if (typeof made === "string") {
+      say(note, liveStrings.t("page.properties.relation.create.failed", { name, reason: made }));
+      input.focus();
+      return;
+    }
+    query = "";
+    input.value = "";
+    write([...chosen, made.link]);
+  }
+
+  /// `first`: una ricerca nuova attiva la prima proposta, che Invio sceglie.
+  function refresh(first = false): void {
+    const items = rows();
+    handle.setItems(items);
+    if (first) handle.setActive(items.find((row) => row.kind !== "group")?.id ?? null);
+    const nothing = items.length === 0;
+    empty.hidden = !nothing;
+    if (nothing) {
+      empty.textContent = query.trim() !== "" ? liveStrings.t("page.properties.relation.none")
+        : target === null ? liveStrings.t("page.properties.relation.empty.any")
+          : liveStrings.t(target.kind === "type" ? "page.properties.relation.empty.type" : "page.properties.relation.empty.folder", { target: targetLabel(target) });
+    }
+  }
+  const look = (text: string) => {
+    query = text;
+    const question = ++asked;
+    say(note, null);
+    refresh(true);
+    if (!port) return;
+    void port.search(text, target).then((notes) => {
+      if (question !== asked || own.closed) return;
+      found = notes;
+      refresh(true);
+    }, () => {});
+  };
+  own.listen(input, "input", () => look(input.value));
+  look("");
+  const popover = popoverFor(anchor, body, liveStrings.t("page.properties.relation.label", { key: entry.key }), host, life, own);
   input.focus();
   return popover;
 }

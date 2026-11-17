@@ -1434,7 +1434,8 @@ const PROPERTY_TYPES_SETTING: readonly SettingEntry[] = params.get("tipi") !== "
   },
   value: JSON.stringify({
     version: 1,
-    types: { stato: "status", sala: "select", sito: "url", fase: "status" },
+    types: { stato: "status", sala: "select", sito: "url", fase: "status", libri: "relation" },
+    targets: { libri: "Biblioteca" },
     options: {
       stato: [
         { name: "Prenotata", color: "purple", group: "todo" },

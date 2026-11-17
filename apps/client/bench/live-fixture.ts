@@ -375,6 +375,20 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     cursor: null,
     files: TYPE_FILES,
   },
+  // La Relazione (T35, passo 4 del prototipo), col registro di `?tipi=1`
+  // (`libri` è una Relazione verso la cartella `Biblioteca`): il tipo come
+  // nome della nota, due libri legati, uno rotto; altri libri da legare.
+  relazioni: {
+    text: "---\nicon: 📚\ntipo: \"[[Tipi/Riunione]]\"\nlibri: [\"[[Biblioteca/Dune]]\", \"[[Biblioteca/Solaris]]\", \"[[Il libro perduto]]\"]\nluogo: Biblioteca civica\n---\n" + NOTE,
+    cursor: null,
+    files: {
+      ...TYPE_FILES,
+      "Tipi/Riunione.md": "---\nicon: 🗓️\nproperties:\n  libri: relazione\n  luogo: testo\nfeatured: [libri, luogo]\n---\n## Ordine del giorno\n",
+      "Biblioteca/Solaris.md": "---\ntipo: \"[[Tipi/Libro]]\"\nautore: Stanisław Lem\n---\nL'oceano.\n",
+      "Biblioteca/Ubik.md": "---\ntipo: \"[[Tipi/Libro]]\"\nautore: Philip K. Dick\n---\nIl tempo.\n",
+      "Biblioteca/La mano sinistra del buio.md": "---\ntipo: \"[[Tipi/Libro]]\"\nautore: Ursula K. Le Guin\n---\nIl ghiaccio.\n",
+    },
+  },
   "testata-illeggibile": { text: "---\nicon: 🧳\nuna riga che non è una chiave\nstato: In corso\n---\n" + NOTE, cursor: null },
   "testata-senza-immagine": { text: "---\ncover: ../Risorse/non-c-e.png\nstato: In corso\n---\n" + NOTE, cursor: null },
   // I colori del contenuto (K1): i nove del testo e i nove del fondo, uno per

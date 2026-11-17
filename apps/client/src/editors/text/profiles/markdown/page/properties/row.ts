@@ -6,8 +6,9 @@ import type { Lifetime } from "../../../../../../ui/lifetime";
 import type { PropertyEntry } from "../../properties";
 import { liveStrings } from "../../strings";
 import { openWebLink } from "../../../../../../ui/web-viewer";
+import { TYPE_KEY } from "../note-type";
 import { emptyValue, KIND_ICONS, linkName, optionOf, outsideOptions, rowIcon, rowKind, type PropertyTypes, type RowKind } from "./kind";
-import { chipElement, figure, longDate, optionElement, personElement, typeName, type PropertyRowHost } from "./values";
+import { chipElement, figure, longDate, optionElement, personElement, relationElement, relationItems, typeName, type PropertyRowHost } from "./values";
 
 export type { PropertyRowHost, WriteOutcome } from "./values";
 export { entryStamp } from "./values";
@@ -85,6 +86,19 @@ function fillValue(value: HTMLElement, entry: PropertyEntry, kind: RowKind, type
       value.replaceChildren(...items.map(personElement));
       return items.map(linkName).join(", ");
     }
+    case "relation": {
+      // I nomi delle note in fila, divisi da virgole, come i link nel testo
+      // (`wl` nel prototipo): un testo solo che va a capo.
+      const items = relationItems(entry);
+      const line = document.createElement("span");
+      line.className = "cm-fub-prop-rels";
+      items.forEach((item, index) => {
+        if (index > 0) line.append(", ");
+        line.append(relationElement(item, value instanceof HTMLButtonElement ? "button" : "page"));
+      });
+      value.replaceChildren(line);
+      return items.map((item) => /^\[\[[^[\]]+\]\]$/.test(item.trim()) ? linkName(item) : item).join(", ");
+    }
     default:
       value.textContent = entry.value;
       return entry.value;
@@ -150,8 +164,19 @@ export function propertyRow(entry: PropertyEntry, host: PropertyRowHost, life: L
       value.setAttribute("aria-haspopup", kind.kind === "text" || kind.kind === "number" || kind.kind === "url" ? "false" : kind.kind === "select" || kind.kind === "status" ? "listbox" : "dialog");
       value.setAttribute("aria-label", liveStrings.t("page.properties.edit", { key: entry.key, value: shown }));
     }
-    const edit = () => propertyActions.run((actions) => actions.openEditor(entry, kind, value, host, life), alive);
-    life.listen(value, "click", () => {
+    // `tipo` si sceglie con «Scegli il tipo», che porta anche le proprietà
+    // del tipo; le altre Relazioni col loro editor.
+    const chooseType = entry.key === TYPE_KEY && kind.kind === "relation" && host.chooseType ? host.chooseType.bind(host) : null;
+    const edit = () => chooseType ? chooseType(value) : propertyActions.run((actions) => actions.openEditor(entry, kind, value, host, life), alive);
+    const relations = kind.kind === "relation" ? host.relations : undefined;
+    if (relations && relationItems(entry).some((item) => /^\[\[[^[\]]+\]\]$/.test(item.trim()))) value.setAttribute("aria-keyshortcuts", "Alt+Enter");
+    life.listen(value, "click", (event) => {
+      // Il nome di una nota legata la apre; il resto del valore la modifica.
+      const named = relations ? (event.target as Element | null)?.closest<HTMLElement>(".cm-fub-prop-rel") : null;
+      if (named?.dataset.link) {
+        relations!.open(named.dataset.link);
+        return;
+      }
       if (!entry.simple) {
         host.open(entry.from);
         return;
@@ -161,7 +186,8 @@ export function propertyRow(entry: PropertyEntry, host: PropertyRowHost, life: L
       else edit();
     });
     // Il menu della proprietà anche dal valore, da tastiera; F2 modifica
-    // anche un link.
+    // anche un link; Alt+Invio apre la prima nota di una Relazione, come
+    // «Apri la nota» di un link nel testo.
     life.listen(value, "keydown", (event) => {
       if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
         event.preventDefault();
@@ -169,6 +195,12 @@ export function propertyRow(entry: PropertyEntry, host: PropertyRowHost, life: L
       } else if (event.key === "F2" && link) {
         event.preventDefault();
         edit();
+      } else if (event.key === "Enter" && event.altKey && relations) {
+        const first = value.querySelector<HTMLElement>(".cm-fub-prop-rel")?.dataset.link;
+        if (!first) return;
+        event.preventDefault();
+        event.stopPropagation();
+        relations.open(first);
       }
     });
     if (link) {
@@ -188,6 +220,16 @@ export function propertyRow(entry: PropertyEntry, host: PropertyRowHost, life: L
       row.append(key, cell);
       return row;
     }
+  } else if (kind.kind === "relation" && host.relations) {
+    // In Lettura e in sola lettura i nomi sono link veri: il clic (o Invio)
+    // apre la nota.
+    const relations = host.relations;
+    life.listen(value, "click", (event) => {
+      const named = (event.target as Element | null)?.closest<HTMLElement>(".cm-fub-prop-rel");
+      if (!named?.dataset.link) return;
+      event.preventDefault();
+      relations.open(named.dataset.link);
+    });
   }
   row.append(key, value);
   return row;

@@ -1,7 +1,7 @@
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { propertyBlock, type PropertyEntry } from "../../properties";
-import { freeColor, initials, linkName, optionOf, parseNumber, parsePropertyTypes, rowKind, sameTypes, validDate, type OptionColor, type PropertyTypes } from "./kind";
+import { freeColor, initials, linkName, optionOf, parseNumber, parsePropertyTypes, rowKind, sameTypes, targetOf, validDate, type OptionColor, type PropertyTypes } from "./kind";
 
 // Il tipo di una riga della testata (T8): il registro vince, se no il valore.
 
@@ -120,5 +120,24 @@ describe("il colore libero di un'opzione nuova (T9)", () => {
     const all = (["blue", "green", "orange", "purple", "pink", "yellow", "red", "brown"] as const).map(option);
     expect(freeColor(all)).toBe("blue");
     expect(freeColor([...all, option("gray")])).toBe("green");
+  });
+});
+
+describe("la Relazione (T35)", () => {
+  it("un link solo è una Relazione; dichiarata, anche un elenco o un valore vuoto", () => {
+    expect(kind('tipo: "[[Tipi/Libro]]"').kind).toBe("relation");
+    expect(kind("luogo: Torino").kind).toBe("text");
+    const types = parsePropertyTypes(JSON.stringify({ version: 1, types: { libri: "relation" } }));
+    expect(kind('libri: ["[[Dune]]", "[[Ubik]]"]', types).kind).toBe("relation");
+    expect(kind("libri:", types).kind).toBe("relation");
+  });
+
+  it("il bersaglio si legge dal registro: un tipo o una cartella; il resto non vale", () => {
+    const types = parsePropertyTypes(JSON.stringify({ version: 1, types: { libri: "relation", autore: "relation", x: "relation" }, targets: { libri: "[[Tipi/Libro]]", autore: "Persone", x: 12 } }));
+    expect(targetOf(types, "libri")).toEqual({ kind: "type", page: "Tipi/Libro" });
+    expect(targetOf(types, "autore")).toEqual({ kind: "folder", path: "Persone" });
+    expect(targetOf(types, "x")).toBeNull();
+    const other = parsePropertyTypes(JSON.stringify({ version: 1, types: { libri: "relation", autore: "relation", x: "relation" }, targets: { libri: "[[Tipi/Libro]]", autore: "Altro" } }));
+    expect(sameTypes(types, other)).toBe(false);
   });
 });

@@ -5,7 +5,7 @@ import { resolvedLanguage } from "../../../../../../i18n/strings";
 import { iconEl } from "../../../../../../ui/icons";
 import type { PropertyEntry, PropertyWrite } from "../../properties";
 import { liveStrings } from "../../strings";
-import { avatarTone, initials, linkName, type OptionColor, type OptionGroup, type PropertyKind, type PropertyTypes } from "./kind";
+import { avatarTone, initials, linkName, type OptionColor, type OptionGroup, type PropertyKind, type PropertyTypes, type RelationTarget } from "./kind";
 
 /// Com'è andata una scrittura: scritta; rifiutata perché il valore è cambiato
 /// da quando l'editor si è aperto (`conflict`); non scritta per un'altra
@@ -19,6 +19,27 @@ export interface NewOption {
   readonly name: string;
   readonly color: OptionColor;
   readonly group: OptionGroup | null;
+}
+
+/// Una nota che l'editor della Relazione propone: il documento e il link che
+/// il valore scrive (`[[Libri/Dune]]`).
+export interface RelationNote {
+  readonly doc: string;
+  readonly link: string;
+}
+
+/// Le note di una Relazione (T35), da chi ospita la testata: cercarle dentro
+/// il bersaglio, crearne una che non c'è, aprirne una dal suo link.
+export interface RelationPort {
+  /// Le note del bersaglio (ogni nota, senza) il cui nome combacia con
+  /// `text`, dalla più pertinente; con `text` vuoto, le prime.
+  search(text: string, target: RelationTarget | null): Promise<RelationNote[]>;
+  /// Crea la nota `name` nel bersaglio (del tipo, o nella cartella): la nota
+  /// creata, o `null` se il comando non dice quale. Senza, l'editor non offre
+  /// «Crea».
+  create?(name: string, target: RelationTarget | null): Promise<RelationNote | null>;
+  /// Apre la nota del link `[[…]]`, risolto dalla nota che lo scrive.
+  open(link: string): void;
 }
 
 /// Ciò che le righe chiedono a chi ospita la testata.
@@ -48,6 +69,13 @@ export interface PropertyRowHost {
   /// combacia con `text`. Senza, l'editor delle persone cerca fra quelle che
   /// la proprietà ha già.
   searchPeople?(text: string): Promise<string[]>;
+  /// Le note delle Relazioni. Senza, l'editor della Relazione cerca fra i
+  /// link che la proprietà ha già, e un nome non si apre.
+  readonly relations?: RelationPort;
+  /// Il valore di `tipo` premuto: «Scegli il tipo» sotto `anchor`, che dà
+  /// alla nota anche le proprietà del tipo. Senza, `tipo` si sceglie come
+  /// ogni Relazione.
+  chooseType?(anchor: HTMLElement): void;
   notify?(message: string, tone: "info" | "guasto"): void;
   /// Un editor o un menu si è aperto o chiuso: chi ospita non rifà la testata
   /// sotto le mani di chi scrive, e la rifà alla chiusura.
@@ -103,6 +131,37 @@ export function optionElement(name: string, color: OptionColor, status: boolean)
   if (status) pill.dataset.status = "";
   pill.textContent = name;
   return pill;
+}
+
+/// Le voci di una Relazione: un elenco, o il link solo.
+export function relationItems(entry: PropertyEntry | undefined): string[] {
+  if (!entry) return [];
+  if (entry.items) return [...entry.items];
+  const value = entry.value.trim();
+  return value === "" ? [] : [value];
+}
+
+/// Una voce di una Relazione come si legge: il nome della nota (l'alias, se
+/// il link ne scrive uno), sottolineato come un link della pagina. Dentro un
+/// valore che è già un pulsante (la riga che si scrive) è un testo, che il
+/// clic apre; altrove (Lettura, sola lettura) è un link vero, col fuoco. Una
+/// voce che non è un link resta testo.
+export function relationElement(item: string, inside: "button" | "page"): HTMLElement {
+  if (!/^\[\[[^[\]]+\]\]$/.test(item.trim())) {
+    const text = document.createElement("span");
+    text.className = "cm-fub-prop-rel-text";
+    text.textContent = item;
+    return text;
+  }
+  const link = document.createElement(inside === "button" ? "span" : "a");
+  link.className = "cm-fub-prop-rel";
+  link.dataset.link = item.trim();
+  link.textContent = linkName(item);
+  if (link instanceof HTMLAnchorElement) {
+    link.href = "#";
+    link.title = item.trim();
+  }
+  return link;
 }
 
 /// Una persona: il tondo con le iniziali e il nome.

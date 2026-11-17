@@ -248,6 +248,7 @@ function hostFor(view: EditorView, root: HTMLElement): PageHost {
     setPropertyType: options.setPropertyType,
     addPropertyOption: options.addPropertyOption,
     searchPeople: options.searchPeople,
+    relations: options.relations,
     listTypes: options.listTypes,
     chooseType: (type) => chooseTypeInNote(view, type),
     openType: options.openType,
