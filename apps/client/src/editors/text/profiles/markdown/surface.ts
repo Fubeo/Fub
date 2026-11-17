@@ -426,6 +426,17 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       pageIcon: opts.pageIcons?.icon,
       isPerson: opts.pageIcons?.isPerson,
       linkCard: linkCards,
+      // La pagina del giorno (E17): in fondo alla giornaliera, se questa nota
+      // lo è con la cartella e il formato di adesso.
+      ...(opts.completions.dates?.dailyDate ? {
+        dayPage: {
+          current: () => {
+            const doc = resources?.documentId ?? documentId;
+            const date = opts.completions.dates?.dailyDate?.(doc) ?? null;
+            return date === null ? null : { doc, date };
+          },
+        },
+      } : {}),
       tableGrid: {
         active: (grid) => {
           tableGrid = grid;

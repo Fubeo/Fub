@@ -167,6 +167,47 @@ monta la vista attraverso `apps/client/src/ui/embedded-views.ts`; la pastiglia �
 in `task-due.ts` (con `query-block.ts` per la Lettura e `livepreview.ts` per la
 Live).
 
+## La pagina del giorno
+
+In fondo alla nota del giorno, in Live, dopo l'ultima riga, Fub mostra la
+**pagina del giorno**: tre gruppi che si chiudono con un clic sul titolo.
+
+- **Compiti di oggi** (o «Compiti del giorno» per una giornaliera di un altro
+  giorno): i compiti aperti che scadono quel giorno, in tutto il vault, col
+  nome della nota accanto.
+- **Stesso giorno**: le note con una proprietà data di quel giorno (anche in
+  una lista di date), con accanto il nome della proprietà.
+- **Create e cambiate**: le note cambiate quel giorno, la più recente in cima,
+  con l'ora. La giornaliera stessa non c'è.
+
+Una riga apre la sua nota. Il giorno è quello del nome della nota, non quello
+di oggi: la giornaliera di ieri mostra i compiti di ieri. Il giorno di una
+modifica e l'ora seguono il fuso e il formato dell'ora di chi guarda.
+
+La pagina **non è nel file**: non si scrive, non entra in ciò che si copia né
+nell'esportazione, e il cursore non ci entra. È la vista `day_page` del
+componente dei template (`crates/fub-features/src/template/view/day.rs`), che
+legge tutto dall'indice con `query_index`; la shell la monta in fondo alla nota
+con `apps/client/src/editors/text/profiles/markdown/day-page.ts`, attraverso
+`apps/client/src/ui/embedded-views.ts`. Si ridisegna quando l'indice cambia,
+mai a ogni tasto. Una nota è una giornaliera quando il suo percorso, tolta
+l'estensione, è quello che la cartella e il formato delle note del giorno
+scrivono per la sua data: la shell lo riconosce (`dailyDate` in
+`apps/client/src/state/dates.ts`) e il componente lo ricontrolla; una nota che
+non lo è non ha la pagina, e nemmeno una richiesta in più.
+
+Limiti:
+
+- ogni gruppo mostra al più **50** righe e scrive quante ne restano;
+- i compiti si leggono al più da **50** note con compiti di quel giorno, e la
+  pagina scrive quante altre note non ha letto;
+- i compiti vengono dall'indice di ricerca: senza un indice attivo il gruppo lo
+  dice invece di restare vuoto;
+- «Create e cambiate» guarda l'ultima modifica del file: il vault non tiene la
+  data di nascita, e una nota creata e poi ricambiata un altro giorno compare
+  in quel giorno;
+- i compiti nella pagina non si spuntano: la riga apre la nota.
+
 ## Il componente
 
 «Compiti» è un componente di Fub, con la sua riga nella pagina **Componenti**

@@ -430,6 +430,31 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector(".pane.focus .pane-editor .cm-content");
     },
   },
+  // **La pagina del giorno** (T39): in fondo alla giornaliera, in Live, i tre
+  // gruppi della vista `day_page` (`?giorno=1` la dichiara, con la cartella
+  // `Diario` del componente dei template).
+  ...[
+    ["pagina-del-giorno", "La pagina del giorno in fondo alla giornaliera: compiti, stesso giorno, create e cambiate", undefined],
+    ["pagina-del-giorno-stretta", "La pagina del giorno nella finestra stretta: le righe lunghe vanno a capo", NOTE_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "giorno=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      // Nella finestra stretta l'albero è nel cassetto chiuso: la nota si apre
+      // larga, poi la finestra si stringe.
+      if (viewport) await page.setViewportSize({ width: 1280, height: 800 });
+      await openNote(page, "Diario/2026-08-19.md");
+      if (viewport) {
+        await page.setViewportSize(viewport);
+        await page.waitForSelector("#layout.layout-compact");
+      }
+      await page.waitForSelector(".pane.focus .cm-day-page:not([hidden]) .ui-section .ui-list-item");
+      await page.$eval(".pane.focus .cm-day-page", (section) => section.scrollIntoView({ block: "end" }));
+      await page.mouse.move(0, 0);
+    },
+  })),
   {
     id: "inspector",
     title: "L'ispettore, sulla seconda scheda",

@@ -87,6 +87,10 @@ export interface CompletionSources {
 export interface DateSource {
   /// Il path della giornaliera di `iso` (`YYYY-MM-DD`), senza estensione.
   dailyPath(iso: string): string;
+  /// Il giorno (`YYYY-MM-DD`) della giornaliera `path`, estensione compresa,
+  /// o `null` se la nota non lo è: la pagina del giorno (E17). Assente, la
+  /// pagina non c'è.
+  dailyDate?(path: string): string | null;
   /// Il primo giorno della settimana: 1 = lunedì … 7 = domenica.
   firstDay(): number;
   /// Oggi; assente, l'orologio.
