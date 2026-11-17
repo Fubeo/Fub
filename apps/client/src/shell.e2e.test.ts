@@ -3167,6 +3167,38 @@ describe("chiudere linguette e superfici", () => {
   });
 });
 
+describe("chiudere un riquadro", () => {
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const tabNames = (pane: HTMLElement) => [...pane.querySelectorAll<HTMLElement>(".tab .tab-name")].map((tab) => tab.textContent);
+  const run = async (id: string) => {
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === id)?.run?.();
+  };
+
+  // La scheda unica di un riquadro chiuso col testo ancora da salvare: il
+  // testo arriva sul disco prima che la sessione si chiuda, e la scheda si
+  // riapre con Mod-Shift-t come una chiusa con la × (IMP-018).
+  it("la scheda unica non si perde: il testo va sul disco e Mod-Shift-t la riapre (IMP-018)", async () => {
+    const host = await start(VAULT);
+    await twoPanes();
+    // Nel secondo riquadro resta solo Riunione.
+    panes()[1]!.querySelector<HTMLElement>(".tab-entry .tab-close")!.click();
+    await waitFor("il secondo riquadro ha solo Riunione", () => tabNames(panes()[1]!).join() === "Riunione");
+    const right = editorViews()[1]!;
+    right.dispatch({ changes: { from: right.state.doc.length, insert: "testo del riquadro chiuso" } });
+    expect(host.files()["note/Riunione.md"]).not.toContain("testo del riquadro chiuso");
+
+    await run("shell.pane.close");
+    expect(panes()).toHaveLength(1);
+    expect(host.files()["note/Riunione.md"]).toContain("testo del riquadro chiuso");
+    expect(tabNames(panes()[0]!)).toEqual(["Benvenuto"]);
+
+    await run("shell.tab.reopen");
+    await waitFor("Riunione torna nel riquadro rimasto", () => tabNames(panes()[0]!).includes("Riunione"));
+    await waitFor("col testo scritto", () => editorViews()[0]?.state.doc.toString().includes("testo del riquadro chiuso") === true);
+  });
+});
+
 describe("spostare linguette dal registro dei comandi", () => {
   const press = (on: Element, key: string, mods: KeyboardEventInit): KeyboardEvent => {
     const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods });
