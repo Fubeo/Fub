@@ -23,6 +23,7 @@ import { summariesValue } from "./data";
 import type { FilterDef } from "./filter";
 import type { ValueShape } from "./icons";
 import { sameKey, sortBy, sortValue, sortedBy, toggleColumn } from "./sort";
+import { declaredType, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
 import type { BaseLock } from "./toolbar";
 
 /// La specie dei valori di una colonna, letta dalle celle che il core ha
@@ -102,8 +103,119 @@ export function summariesWith(summaries: readonly BaseSummaryDef[], column: stri
   return [...kept.slice(0, before), next, ...kept.slice(before)];
 }
 
+// ——— i riepiloghi di una Relazione (T35) ———
+
+/// I riepiloghi di una Relazione, coi nomi che `rollup` accetta
+/// (`ROLLUP_AGGREGATES` di `fub-format-base`).
+export type RollupAggregate = "count" | "sum" | "average" | "min" | "max";
+const ROLLUPS: readonly RollupAggregate[] = ["count", "sum", "average", "min", "max"];
+
+/// Un riepilogo di una Relazione scelto dal menu: quante note legate, o la
+/// somma, la media, il minimo o il massimo di una loro proprietà.
+export interface RollupChoice {
+  readonly aggregate: RollupAggregate;
+  /// La proprietà delle note legate; `null` per il conteggio.
+  readonly property: string | null;
+}
+
+/// Una Relazione, vista dal menu della colonna: le proprietà delle note
+/// legate che si sommano (i numeri) e quelle che hanno un minimo e un
+/// massimo (numeri e date), dal registro dei tipi del vault.
+export interface RelationColumn {
+  readonly numbers: readonly string[];
+  readonly dates: readonly string[];
+}
+
+/// La colonna `column` come Relazione, se il registro dei tipi la dichiara
+/// così: le proprietà numero e data del registro, in ordine di nome, sono
+/// quelle che i riepiloghi delle note legate offrono. `null` per ogni altra
+/// colonna.
+export function relationColumn(types: PropertyTypes, column: string): RelationColumn | null {
+  const property = columnProperty(column);
+  if (property === null || declaredType(types, property) !== "relation") return null;
+  const of = (wanted: readonly PropertyType[]) => [...types].filter(([, type]) => wanted.includes(type)).map(([key]) => key).sort((a, b) => a.localeCompare(b));
+  return { numbers: of(["number"]), dates: of(["date", "date_time"]) };
+}
+
+/// Una chiave che una formula legge come `prop.<chiave>`: lettere e cifre
+/// ASCII e `_` (`parse_ident` del valutatore).
+const FORMULA_KEY = /^[A-Za-z0-9_]+$/;
+
+/// L'espressione per riga di un riepilogo di Relazione:
+/// `rollup(prop.libri, "sum", "pagine")`. `null` se la chiave della Relazione
+/// o la proprietà non si scrivono in una formula.
+export function rollupExpression(relation: string, choice: RollupChoice): string | null {
+  if (!FORMULA_KEY.test(relation)) return null;
+  if (choice.property === null) return choice.aggregate === "count" ? `rollup(prop.${relation}, "count")` : null;
+  if (choice.property === "" || /["\\\n]/.test(choice.property)) return null;
+  return `rollup(prop.${relation}, "${choice.aggregate}", "${choice.property}")`;
+}
+
+const ROLLUP_SOURCE = /^\s*rollup\(\s*(?:prop\.)?([A-Za-z0-9_]+)\s*,\s*"(count|sum|average|min|max)"\s*(?:,\s*"([^"\\]+)"\s*)?\)\s*$/;
+
+/// Il riepilogo di Relazione che l'espressione `source` dice, se è uno di
+/// quelli che il menu scrive su `relation`.
+export function rollupOf(source: string | null, relation: string): RollupChoice | null {
+  if (source === null) return null;
+  const match = ROLLUP_SOURCE.exec(source);
+  if (!match || match[1] !== relation) return null;
+  const aggregate = match[2] as RollupAggregate;
+  const property = match[3] ?? null;
+  if ((aggregate === "count") !== (property === null)) return null;
+  return { aggregate, property };
+}
+
+/// Come il piede mette insieme i valori delle righe: i conteggi e le somme
+/// si sommano, i minimi e i massimi restano tali; la media è quella delle
+/// righe (ogni riga pesa uno).
+const FOOTER_AGGREGATE: Readonly<Record<RollupAggregate, BaseAggregate>> = {
+  count: "sum", sum: "sum", average: "average", min: "min", max: "max",
+};
+
+/// Il nome del riepilogo nel piede e nel file: «Note legate», «Somma di pagine».
+export function rollupName(choice: RollupChoice): string {
+  return choice.property === null ? t("base.rollup.count") : t(`base.rollup.${choice.aggregate}` as "base.rollup.sum", { property: choice.property });
+}
+
+/// Il riepilogo della Relazione scelto per la colonna, se c'è: un riepilogo
+/// sotto la colonna la cui espressione è una di quelle che il menu scrive. Il
+/// nome non conta (cambia con la lingua); un'espressione diversa, scritta a
+/// mano, resta del file.
+function chosenRollup(summary: BaseSummaryDef, column: string): RollupChoice | null {
+  if (!sameKey(summary.key, column)) return null;
+  return rollupOf(summary.expression, column.replace(/^prop\./, ""));
+}
+
+/// Il riepilogo di Relazione che il menu mostra scelto, se c'è.
+export function columnRollup(summaries: readonly BaseSummaryDef[], column: string): RollupChoice | null {
+  for (const summary of summaries) {
+    const choice = chosenRollup(summary, column);
+    if (choice) return choice;
+  }
+  return null;
+}
+
+/// I riepiloghi con il riepilogo di Relazione `choice` sulla colonna (`null`:
+/// nessuno). Come `summariesWith`: un riepilogo della colonna scelto dal menu
+/// (di Relazione o no) lascia il posto al nuovo, nella sua riga; quelli
+/// scritti a mano restano.
+export function summariesWithRollup(summaries: readonly BaseSummaryDef[], column: string, choice: RollupChoice | null): BaseSummaryDef[] {
+  const relation = column.replace(/^prop\./, "");
+  const mine = (summary: BaseSummaryDef) => chosen(summary, column) || chosenRollup(summary, column) !== null;
+  const at = summaries.findIndex(mine);
+  const key = at >= 0 ? summaries[at]!.key : column;
+  const kept = summaries.filter((summary) => !mine(summary));
+  const expression = choice === null ? null : rollupExpression(relation, choice);
+  if (choice === null || expression === null) return kept;
+  const name = rollupName(choice);
+  const next: BaseSummaryDef = { key, aggregate: FOOTER_AGGREGATE[choice.aggregate], expression, name, label: name };
+  if (at < 0) return [...kept, next];
+  const before = summaries.slice(0, at).filter((summary) => !mine(summary)).length;
+  return [...kept.slice(0, before), next, ...kept.slice(before)];
+}
+
 /// I tipi di proprietà che il menu propone, nell'ordine dell'editor del tipo.
-export const PROPERTY_TYPES: readonly PropertyType[] = ["text", "number", "checkbox", "date", "date_time", "list", "tags", "select", "status", "url"];
+export const PROPERTY_TYPES: readonly PropertyType[] = ["text", "number", "checkbox", "date", "date_time", "list", "tags", "select", "status", "relation", "url"];
 
 /// La colonna della nota (il nome del file), che non è una proprietà.
 export const NOTE_COLUMN = "\u0000file";
@@ -143,6 +255,9 @@ export interface ColumnMenuModel {
   readonly busy: boolean;
   /// La superficie è in sola lettura: nemmeno le note si cambiano.
   readonly readOnly: boolean;
+  /// La colonna è una Relazione (il registro dei tipi la dichiara così): il
+  /// riepilogo offre anche quelli delle note legate. Assente: non lo è.
+  readonly relation?: RelationColumn | null;
 }
 
 export interface ColumnMenuActions {
@@ -201,19 +316,29 @@ export function columnMenu(model: ColumnMenuModel, actions: ColumnMenuActions): 
     });
   }
   const current = columnSummary(plan.summaries, column);
+  const relation = model.relation ?? null;
+  const rollup = relation ? columnRollup(plan.summaries, column) : null;
   const choices = summaryChoices(model.kind);
   const summary = (aggregate: BaseAggregate | null): ColumnEntry => ({
     id: `base.column.summary.${aggregate ?? "none"}`,
     label: aggregate === null ? t("base.summary.none") : t(`base.summary.${aggregate}`),
-    radio: true, checked: current === aggregate, enabled: true,
-    run: () => { if (current !== aggregate) actions.write("summaries", summariesValue(summariesWith(plan.summaries, column, aggregate))); },
+    radio: true, checked: rollup === null && current === aggregate, enabled: true,
+    run: () => {
+      if (rollup === null && current === aggregate) return;
+      const base = rollup === null ? plan.summaries : summariesWithRollup(plan.summaries, column, null);
+      actions.write("summaries", summariesValue(summariesWith(base, column, aggregate)));
+    },
   });
   groupGroup.push({
     id: "base.column.summary", label: t("base.column.summary"), icon: "base-sigma",
     ...off(writes, fileReason),
     // Un riepilogo scritto a mano che la specie di adesso non propone resta
     // fra le scelte: il file l'ha scritto così.
-    items: [summary(null), ...(current !== null && !choices.includes(current) ? [...choices, current] : choices).map(summary)],
+    items: [
+      summary(null),
+      ...(current !== null && !choices.includes(current) ? [...choices, current] : choices).map(summary),
+      ...(relation ? rollupEntries(relation, column, rollup, plan.summaries, actions) : []),
+    ],
   });
   groupGroup[0] = { ...groupGroup[0]!, separator: true };
   entries.push(...groupGroup);
@@ -245,6 +370,42 @@ export function columnMenu(model: ColumnMenuModel, actions: ColumnMenuActions): 
     },
   );
   return entries;
+}
+
+/// Le voci dei riepiloghi delle note legate, dopo quelli della colonna:
+/// «Note legate» e, per ogni riepilogo di una proprietà, il sottomenu delle
+/// proprietà che il registro dice numeri (e date, per minimo e massimo). Una
+/// Relazione col nome che una formula non legge le mostra spente, col perché.
+function rollupEntries(relation: RelationColumn, column: string, current: RollupChoice | null, summaries: readonly BaseSummaryDef[], actions: ColumnMenuActions): ColumnEntry[] {
+  const key = column.replace(/^prop\./, "");
+  const readable = FORMULA_KEY.test(key);
+  const reason = readable ? null : t("base.rollup.unreadable", { key });
+  const pick = (choice: RollupChoice) => () => {
+    if (current !== null && current.aggregate === choice.aggregate && current.property === choice.property) return;
+    actions.write("summaries", summariesValue(summariesWithRollup(summaries, column, choice)));
+  };
+  const same = (choice: RollupChoice) => current !== null && current.aggregate === choice.aggregate && current.property === choice.property;
+  const count: RollupChoice = { aggregate: "count", property: null };
+  const out: ColumnEntry[] = [{
+    id: "base.column.rollup.count", label: t("base.rollup.count"), icon: "backlink", radio: true, checked: same(count), separator: true,
+    ...(readable ? { enabled: true } : { enabled: false, description: reason! }),
+    run: pick(count),
+  }];
+  for (const aggregate of ROLLUPS.filter((each) => each !== "count")) {
+    const properties = aggregate === "sum" || aggregate === "average" ? relation.numbers : [...relation.numbers, ...relation.dates];
+    const usable = properties.filter((property) => rollupExpression(key, { aggregate, property }) !== null);
+    const items = usable.map((property): ColumnEntry => {
+      const choice: RollupChoice = { aggregate, property };
+      return { id: `base.column.rollup.${aggregate}.${property}`, label: property, radio: true, checked: same(choice), enabled: true, run: pick(choice) };
+    });
+    out.push({
+      id: `base.column.rollup.${aggregate}`, label: t(`base.rollup.${aggregate}.menu` as "base.rollup.sum.menu"),
+      ...(reason !== null ? { enabled: false, description: reason }
+        : items.length === 0 ? { enabled: false, description: t("base.rollup.no_properties") }
+          : { enabled: true, items }),
+    });
+  }
+  return out;
 }
 
 /// Le voci come righe del menu del clic.
