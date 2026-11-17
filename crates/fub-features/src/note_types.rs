@@ -68,11 +68,20 @@ pub(crate) fn types_folder(host: &dyn ReadApi) -> Option<String> {
         Err(_) => TYPES_FOLDER_DEFAULT.to_string(),
         Ok(_) => return None,
     };
-    let folder = raw.trim().trim_matches('/').to_string();
-    if folder.is_empty() || check_name(&format!("{folder}/_"), Naming::New).is_err() {
-        return None;
+    folder_path(&raw).ok().flatten()
+}
+
+/// Una cartella del vault scritta da una persona: senza spazi e `/` ai bordi,
+/// `Ok(None)` se vuota, `Err` se risale (`..`) o nomina lo spazio macchina.
+/// La sonda `{cartella}/_` la giudica come il nome di una nota che vi nasce.
+fn folder_path(raw: &str) -> Result<Option<String>, ()> {
+    let folder = raw.trim().trim_matches('/');
+    if folder.is_empty() {
+        return Ok(None);
     }
-    Some(folder)
+    check_name(&format!("{folder}/_"), Naming::New)
+        .map(|_| Some(folder.to_string()))
+        .map_err(|_| ())
 }
 
 /// Un tipo trovato nella cartella dei tipi, prima di leggerlo.
@@ -225,7 +234,9 @@ impl Unreadable {
 /// l'id del registro. Una parola che Fub non conosce (`persone`) resta
 /// scritta nel tipo e non dà un tipo: decide il registro, o nessuno.
 pub(crate) fn property_kind(word: &str) -> Option<PropertyType> {
-    let word = word.trim().to_lowercase();
+    // Le parole sono ASCII: la corsia ASCII dà la stessa risposta della
+    // piegatura piena, e una parola con altri caratteri non è nessuna di loro.
+    let word = word.trim().to_ascii_lowercase();
     Some(match word.as_str() {
         "text" | "testo" => PropertyType::Text,
         "list" | "elenco" | "lista" => PropertyType::List,
@@ -325,14 +336,7 @@ pub(crate) fn read_type(
     let folder = match fm.get(DEF_FOLDER) {
         None | Some(serde_json::Value::Null) => None,
         Some(serde_json::Value::String(raw)) => {
-            let folder = raw.trim().trim_matches('/').to_string();
-            if folder.is_empty() {
-                None
-            } else if check_name(&format!("{folder}/_"), Naming::New).is_err() {
-                return Err(Unreadable::Folder(raw.clone()));
-            } else {
-                Some(folder)
-            }
+            folder_path(raw).map_err(|()| Unreadable::Folder(raw.clone()))?
         }
         Some(_) => return Err(Unreadable::field(DEF_FOLDER, Expected::Text)),
     };
@@ -407,7 +411,7 @@ fn wanted_of_text(text: &str) -> Option<String> {
 }
 
 fn non_empty(text: &str) -> Option<String> {
-    let text = text.trim().trim_matches('/');
+    let text = text.trim();
     (!text.is_empty()).then(|| text.to_string())
 }
 
@@ -422,12 +426,14 @@ pub(crate) enum Resolution {
     Ambiguous(Vec<DocId>),
 }
 
-/// Il tipo che `wanted` nomina fra `types`. Si confronta senza badare alle
-/// maiuscole, come un link: prima il percorso intero (`Tipi/Libro`, con o
+/// Il tipo che `wanted` nomina fra `types`. Si confronta con la chiave dei
+/// nomi di documento (`resolution_key`: NFC, senza badare alle maiuscole),
+/// come un link: prima il percorso intero (`Tipi/Libro`, con o
 /// senza estensione), poi il percorso dentro la cartella dei tipi
 /// (`Lavoro/Progetto`), poi il solo nome, che deve essere di un tipo solo.
 pub(crate) fn resolve(types: &[TypeRef], folder: Option<&str>, wanted: &str) -> Resolution {
-    let wanted = wanted.trim().trim_matches('/').to_lowercase();
+    let key = fub_abi::rules::path::resolution_key;
+    let wanted = key(wanted);
     let pick = |hits: Vec<&TypeRef>| match hits.as_slice() {
         [] => None,
         [one] => Some(Resolution::Found((*one).clone())),
@@ -437,16 +443,16 @@ pub(crate) fn resolve(types: &[TypeRef], folder: Option<&str>, wanted: &str) -> 
     };
     let full: Vec<&TypeRef> = types
         .iter()
-        .filter(|t| t.link.to_lowercase() == wanted || t.doc.as_str().to_lowercase() == wanted)
+        .filter(|t| key(&t.link) == wanted || key(t.doc.as_str()) == wanted)
         .collect();
     if let Some(found) = pick(full) {
         return found;
     }
     if let Some(folder) = folder {
-        let inside = format!("{}/{wanted}", folder.to_lowercase());
+        let inside = format!("{}/{wanted}", key(folder));
         let hits: Vec<&TypeRef> = types
             .iter()
-            .filter(|t| t.link.to_lowercase() == inside)
+            .filter(|t| key(&t.link) == inside)
             .collect();
         if let Some(found) = pick(hits) {
             return found;
@@ -455,7 +461,7 @@ pub(crate) fn resolve(types: &[TypeRef], folder: Option<&str>, wanted: &str) -> 
     if !wanted.contains('/') {
         let hits: Vec<&TypeRef> = types
             .iter()
-            .filter(|t| t.name.to_lowercase() == wanted)
+            .filter(|t| key(&t.name) == wanted)
             .collect();
         if let Some(found) = pick(hits) {
             return found;
