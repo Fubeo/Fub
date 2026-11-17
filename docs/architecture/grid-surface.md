@@ -42,10 +42,9 @@ Editor in-cell e formula bar usano due istanze di `TextEngine` con
 nel giornale, lo pubblica subito alla sessione e lo consegna al provider, che
 controlla le preimmagini sulla revisione, rifiuta le celle bloccate e risponde
 con le celle da rileggere. Le modifiche in coda partono una dopo l'altra.
-Su una cartella annulla e ripeti sono del provider (`edit.undo`, `edit.redo`,
-anche dal menu): celle e comandi in una pila, anche oltre il salvataggio
-([contratto](../reference/ipc-contract.md#cartelle-di-excel)); le superfici
-senza provider tengono l'undo locale. Un giornale cambiato altrove (un altro riquadro, un salvataggio, una
+Su una cartella annulla e ripeti sono del provider, celle e comandi in una pila
+anche oltre il salvataggio ([contratto](../reference/ipc-contract.md#cartelle-di-excel));
+senza provider l'undo è locale. Un giornale cambiato altrove (un altro riquadro, un salvataggio, una
 ricarica) riapre la sessione e chiude la precedente; la bozza aperta resta,
 con il cursore e il fuoco. Se la sua cella è cambiata sotto, un avviso chiede
 «Tieni la tua» o «Prendi quella nuova»; se il foglio non c'è più, la bozza si
@@ -289,8 +288,8 @@ che la finestra darebbe, o dall'esito di un comando che chiede una finestra
 finestra di un commento uno per ciò che è cambiato); un rifiuto resta scritto
 nella finestra aperta. Formato celle dà soltanto ciò che è cambiato, e
 l'esempio del formato lo calcola il provider con `TEXT`. Crea tabella dà
-l'area di dati della cella e dice che senza intestazioni i dati scendono.
-Ordina da una cella sola allarga prima la selezione alla sua area di dati.
+l'area di dati della cella e dice che senza intestazioni i dati scendono;
+ordinare da una cella sola allarga prima la selezione a quell'area.
 
 ## I comandi nella tavolozza
 
