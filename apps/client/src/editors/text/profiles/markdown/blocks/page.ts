@@ -4,8 +4,9 @@
 // tasti che entrano e escono dalla testata e i gesti che scrivono nel testo
 // (una proprietà, la voce della descrizione, il link a una sottopagina).
 // La testata vera, il suo DOM e i suoi riquadri sono gli stessi della Lettura.
-import { EditorSelection, type EditorState, type Extension, Prec, StateEffect, StateField, type Transaction } from "@codemirror/state";
+import { EditorSelection, EditorState, type Extension, Prec, StateEffect, StateField, Transaction, type TransactionSpec } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, keymap, WidgetType } from "@codemirror/view";
+import { isolateHistory } from "@codemirror/commands";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
 import { propertiesDisplay } from "../../../properties-display";
 import {
@@ -16,13 +17,21 @@ import {
   openPropertyAt,
   propertyBlock,
   propertyList,
+  hasAnchors,
+  moveEntryBefore,
+  renamePropertyKey,
   setProperty,
+  type PropertyWrite,
   type PropertyBlock,
 } from "../properties";
 import { blocksOptions, type BlocksOptions } from "./handles";
 import { withLineBreaks } from "../../../line-breaks";
 import { noteFactsElement, noteFactsOf, sameLabels, type NoteFactsLabels } from "../note-facts";
 import { pageData as pageDataOf, pageStops, renderPageHeader, samePage, type PageData, type PageHost } from "../page/header";
+import { firstHeading, retitled, sameTitle, type FirstHeading } from "../page/title";
+import { FEATURED_LIMIT, featuredProperties } from "../page/featured";
+import { entryStamp, type WriteOutcome } from "../page/properties/row";
+import { liveStrings } from "../strings";
 
 export { PAGE_FONTS, pageClassesWith, type PageData, type PageFont } from "../page/header";
 
@@ -39,10 +48,29 @@ export function pageData(state: EditorState, options: BlocksOptions = state.face
 }
 
 /// Dove comincia il testo della pagina: dopo il frontmatter, se c'è.
-function bodyStart(state: EditorState): number {
-  const block = propertyBlock(state);
+function bodyStart(state: EditorState, block: PropertyBlock | null = propertyBlock(state)): number {
   if (!block) return 0;
   return Math.min(state.doc.length, block.to + 1);
+}
+
+/// Dove comincia il testo che si vede: dopo il frontmatter e dopo l'H1
+/// ripiegato nel titolo (con le righe vuote che lo seguono), se c'è.
+function textStart(state: EditorState): number {
+  const fold = state.field(titleFold, false);
+  if (fold?.heading && !fold.revealed) return Math.min(state.doc.length, fold.heading.hideTo + 1);
+  return bodyStart(state, state.field(pageHeader, false)?.block ?? propertyBlock(state));
+}
+
+/// L'H1 ripiegato col nome `before` diventa il nome `after`, con un passo
+/// d'annullamento suo (T7, A-15): così titolo e H1 restano uguali dopo una
+/// rinomina dal titolo. Se l'H1 non si ripiega più (cambiato nel frattempo)
+/// non scrive niente. Vale in ogni modalità: chi chiama è la rinomina.
+export function retitleView(view: EditorView, before: string, after: string): boolean {
+  if (view.state.readOnly) return false;
+  const change = retitled(view.state.doc, bodyStart(view.state), before, after);
+  if (!change) return false;
+  view.dispatch({ changes: change, annotations: isolateHistory.of("full"), userEvent: "input" });
+  return true;
 }
 
 /// Scrive una proprietà della pagina con un passo d'annullamento suo.
@@ -50,13 +78,14 @@ function bodyStart(state: EditorState): number {
 /// non legge non scrive niente; una voce con un commento, un'ancora, un
 /// alias o in una forma che la riscrittura perderebbe non la tocca, e apre lo
 /// YAML su di lei; un valore uguale a quello che c'è non lo riscrive.
-function writeProperty(view: EditorView, key: string, value: string | number | readonly string[] | null): void {
+function writeProperty(view: EditorView, key: string, value: PropertyWrite | null): void {
   if (view.state.readOnly) return;
   const block = propertyBlock(view.state);
   if (block?.unreadable) return;
   const entry = block ? lastEntry(block.entries, key) : undefined;
   if (entry) {
-    const same = value !== null && entry.value === (typeof value === "object" ? value.join(", ") : String(value));
+    const shown = value === null ? null : Array.isArray(value) ? value.join(", ") : typeof value === "object" ? (value as { date: string }).date : String(value);
+    const same = shown !== null && entry.value === shown;
     if (same) return;
     if (!entry.simple) {
       openPropertyAt(view, entry.from);
@@ -64,7 +93,62 @@ function writeProperty(view: EditorView, key: string, value: string | number | r
     }
   }
   const change = setProperty(view.state, key, value);
-  if (change) view.dispatch({ changes: change, userEvent: "input" });
+  if (change) view.dispatch({ changes: change, annotations: isolateHistory.of("full"), userEvent: "input" });
+}
+
+/// La scrittura di un editor delle proprietà (T8): come `writeProperty`, ma
+/// solo se la voce vale ancora ciò che l'editor ha visto aprendosi
+/// (`expected`, `entryStamp`); se no non scrive e lo dice, e chi scriveva non
+/// perde niente. Una voce che la testata non sa riscrivere apre lo YAML.
+function writePropertyChecked(view: EditorView, key: string, value: PropertyWrite | null, expected: string | null): WriteOutcome {
+  if (view.state.readOnly) return "refused";
+  const block = propertyBlock(view.state);
+  if (block?.unreadable) return "refused";
+  const entry = block ? lastEntry(block.entries, key) : undefined;
+  if (entryStamp(entry) !== expected) return "conflict";
+  if (entry && !entry.simple) {
+    openPropertyAt(view, entry.from);
+    return "refused";
+  }
+  const change = setProperty(view.state, key, value);
+  if (!change || view.state.sliceDoc(change.from, change.to) === change.insert) return "written";
+  view.dispatch({ changes: change, annotations: isolateHistory.of("full"), userEvent: "input" });
+  return "written";
+}
+
+/// Rinomina la chiave nella nota, valore e posto restano: `null` se è
+/// andata (o non c'era niente da fare), se no il perché no.
+function renamePropertyInNote(view: EditorView, key: string, name: string): string | null {
+  if (view.state.readOnly) return null;
+  const next = name.trim();
+  const block = propertyBlock(view.state);
+  if (!block || block.unreadable || next === "" || next === key) return null;
+  if (lastEntry(block.entries, next)) return liveStrings.t("page.properties.rename.taken", { key: next });
+  const change = renamePropertyKey(view.state, key, next);
+  if (change) view.dispatch({ changes: change, annotations: isolateHistory.of("full"), userEvent: "input" });
+  return null;
+}
+
+/// «Metti in evidenza»: in una nota senza tipo la voce va fra le prime
+/// quattro del frontmatter, al posto della quarta, che scende fra le altre
+/// (A-15). «Togli dall'evidenza»: in fondo al frontmatter.
+function featurePropertyInNote(view: EditorView, key: string, on: boolean): void {
+  const state = view.state;
+  if (state.readOnly) return;
+  const block = propertyBlock(state);
+  if (!block || block.unreadable) return;
+  const split = featuredProperties(block.entries, factTags(state));
+  const featured = split.featured.some((entry) => entry.key === key);
+  if (featured === on) return;
+  const target = on ? split.featured[FEATURED_LIMIT - 1]?.key ?? null : null;
+  if (on && target === null) return;
+  const entry = lastEntry(block.entries, key);
+  if (entry && hasAnchors(state, block)) {
+    openPropertyAt(view, entry.from);
+    return;
+  }
+  const changes = moveEntryBefore(state, key, target);
+  if (changes) view.dispatch({ changes, annotations: isolateHistory.of("full"), userEvent: "input" });
 }
 
 /// Una voce `key:` da scrivere: se c'è già il cursore va alla sua fine,
@@ -105,6 +189,14 @@ export function subpageLink(state: EditorState, name: string): { from: number; i
 /// Rilegge la testata: dopo una rinomina il titolo è cambiato fuori dal testo.
 const refreshPage = StateEffect.define<null>();
 
+/// Rilegge la testata da fuori: è cambiato qualcosa che il testo non dice
+/// (il registro dei tipi delle proprietà). Senza testata non fa niente.
+export function refreshPageHeader(view: EditorView): boolean {
+  if (view.state.field(pageHeader, false) === undefined) return false;
+  view.dispatch({ effects: refreshPage.of(null) });
+  return true;
+}
+
 /// «Altre N proprietà» aperto o chiuso: dura quanto l'editor, e una testata
 /// rifatta (una battuta nel frontmatter) lo ritrova.
 const setPageMore = StateEffect.define<boolean>();
@@ -113,9 +205,10 @@ const pageMore = StateField.define<boolean>({
   update: (value, transaction) => transaction.effects.reduce((open, effect) => effect.is(setPageMore) ? effect.value : open, value),
 });
 
-/// Il fuoco al testo, sulla prima riga dopo il frontmatter.
+/// Il fuoco al testo, sulla prima riga che si vede dopo il frontmatter (e
+/// dopo l'H1 ripiegato nel titolo).
 function toBody(view: EditorView): void {
-  view.dispatch({ selection: EditorSelection.cursor(bodyStart(view.state)), scrollIntoView: true, userEvent: "select" });
+  view.dispatch({ selection: EditorSelection.cursor(textStart(view.state)), scrollIntoView: true, userEvent: "select" });
   view.focus();
 }
 
@@ -128,8 +221,27 @@ function hostFor(view: EditorView, root: HTMLElement): PageHost {
     writing: true,
     mountImage: options.mountImage,
     writeProperty: (key, value) => writeProperty(view, key, value),
+    writePropertyChecked: (key, value, expected) => writePropertyChecked(view, key, value, expected),
+    currentProperty: (key) => {
+      const block = propertyBlock(view.state);
+      return block ? lastEntry(block.entries, key) : undefined;
+    },
+    renameProperty: (key, name) => renamePropertyInNote(view, key, name),
+    featureProperty: (key, on) => featurePropertyInNote(view, key, on),
+    setPropertyType: options.setPropertyType,
+    searchPeople: options.searchPeople,
     classes: () => propertyList(view.state, "cssclasses"),
-    rename: options.rename,
+    // La rinomina dal titolo porta con sé l'H1 ripiegato: riuscita, l'H1
+    // diventa il nome nuovo nello stesso gesto; fallita, non cambia.
+    rename: options.rename ? async (name) => {
+      const before = options.page?.() ?? "";
+      const problem = await options.rename!(name);
+      // Il nome che la pagina prende davvero: `Archivio/Nuova` sposta il file
+      // e la pagina si chiama `Nuova`.
+      const after = options.renamedPage?.(name.trim()) ?? name.trim();
+      if (problem === null && before !== "") retitleView(view, before, after);
+      return problem;
+    } : undefined,
     notify: options.notify,
     subpage: subpage ? async (name) => {
       const problem = await subpage(name).catch((error: unknown) => error instanceof Error ? error.message : String(error));
@@ -183,6 +295,10 @@ const drawn = new WeakMap<HTMLElement, Drawn>();
 /// Il controllo col fuoco, riconosciuto dopo un rifacimento: la classe, e il
 /// testo che porta (lo stesso pulsante in una testata nuova).
 function focusKey(element: Element): string {
+  // Il nome e il valore di una proprietà: la riga, non il testo, che cambia
+  // proprio con la scrittura.
+  const row = element.closest<HTMLElement>(".cm-fub-page-prop");
+  if (row) return `${element.className}\u0000prop\u0000${row.dataset.key ?? ""}`;
   return `${element.className}\u0000${element.getAttribute("aria-label") ?? element.textContent ?? ""}`;
 }
 
@@ -337,11 +453,139 @@ const pageHeader = StateField.define<PageState>({
   provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
 });
 
+/// L'H1 ripiegato nel titolo (T7): il primo H1 che dice il nome della
+/// pagina non si vede, perché il titolo lo dice già. Il file non cambia. Si
+/// rivede quando una selezione ci entra (una ricerca, Ctrl-Home in una nota
+/// senza frontmatter), come il frontmatter: niente si scrive al buio.
+interface TitleFold {
+  readonly name: string;
+  readonly heading: FirstHeading | null;
+  readonly revealed: boolean;
+  readonly decorations: DecorationSet;
+}
+
+/// Una selezione entra nell'H1 ripiegato (o nelle righe vuote che nasconde).
+/// Un cursore all'inizio della sua riga sta *prima* del titolo, come quello
+/// prima dell'apertura del frontmatter: non lo apre (`foldGuard`).
+function foldRevealed(state: EditorState, heading: FirstHeading): boolean {
+  return state.selection.ranges.some((range) => range.to > heading.from && range.from <= heading.hideTo);
+}
+
+/// Il cursore prima dell'H1 ripiegato: una nota appena aperta senza
+/// frontmatter, Ctrl-Home, il testo che la protezione del frontmatter manda
+/// sotto la chiusura. Ciò che vi si scrive andrebbe dentro il titolo nascosto,
+/// e non si vedrebbe: scende sotto, dove comincia il testo che si vede. Un
+/// cursore che ci arriva da solo scende con lui.
+const foldGuard = EditorState.transactionFilter.of((transaction): TransactionSpec | readonly TransactionSpec[] => {
+  const fold = transaction.startState.field(titleFold, false);
+  const heading = fold?.heading;
+  if (!heading || fold.revealed) return transaction;
+  const start = transaction.startState.doc;
+  const below = heading.hideTo < start.length ? heading.hideTo + 1 : heading.hideTo;
+  if (!transaction.docChanged) {
+    const main = transaction.newSelection.main;
+    // Fino all'inizio del testo del titolo: il resto della resa viva salta
+    // i segni `# ` nascosti, e il cursore può arrivare qui già spostato.
+    if (!transaction.selection || transaction.newSelection.ranges.length !== 1 || !main.empty
+      || main.head < heading.from || main.head > heading.textFrom) return transaction;
+    return [transaction, { selection: EditorSelection.cursor(below), sequential: true }];
+  }
+  // Solo ciò che si batte o s'incolla: la testata che crea il frontmatter
+  // in cima (`input`) scrive prima dell'H1, ed è giusto così.
+  if (!transaction.isUserEvent("input.type") && !transaction.isUserEvent("input.paste") && !transaction.isUserEvent("input.drop")) {
+    // Un'altra modifica (il testo appeso da un altro riquadro, la testata)
+    // lascia il cursore prima dell'H1 ripiegato, dove il DOM non lo sa
+    // mettere: scende sotto nella stessa modifica, come col movimento, così
+    // la selezione letta dal DOM non torna diversa a metà aggiornamento.
+    let untouched = true;
+    transaction.changes.iterChangedRanges((fromA, toA) => {
+      if (toA > heading.from && fromA < heading.hideTo) untouched = false;
+      if (fromA === toA && fromA > heading.from && fromA < heading.hideTo) untouched = false;
+    });
+    const main = transaction.newSelection.main;
+    if (!untouched || transaction.newSelection.ranges.length !== 1 || !main.empty) return transaction;
+    const from = transaction.changes.mapPos(heading.from, 1);
+    const textFrom = transaction.changes.mapPos(heading.textFrom, 1);
+    if (main.head < from || main.head > textFrom) return transaction;
+    // Sotto il blocco nascosto nel testo nuovo: l'H1 e le righe vuote che lo
+    // seguono, comprese quelle che la modifica ha appena aggiunto.
+    const doc = transaction.newDoc;
+    let line = doc.lineAt(transaction.changes.mapPos(heading.hideTo, -1));
+    while (line.number < doc.lines && doc.line(line.number + 1).text.trim() === "") line = doc.line(line.number + 1);
+    const after = line.number < doc.lines ? line.to + 1 : line.to;
+    return [transaction, { selection: EditorSelection.cursor(after), sequential: true }];
+  }
+  let pure: string | null = null;
+  let touched = false;
+  transaction.changes.iterChanges((fromA, toA, _fromB, _toB, text) => {
+    if (toA < heading.from || fromA > heading.hideTo) return;
+    touched = true;
+    if (fromA === heading.from && toA === heading.from && pure === null) pure = text.toString();
+    else pure = "";
+  });
+  if (!touched) return transaction;
+  const inserted = pure as string | null;
+  if (inserted === null || inserted === "") return transaction;
+  const insert = heading.hideTo < start.length ? inserted : `\n${inserted}`;
+  return {
+    changes: { from: below, insert: withLineBreaks(transaction.startState, insert) },
+    selection: { anchor: below + insert.length },
+    scrollIntoView: true,
+    userEvent: transaction.annotation(Transaction.userEvent) ?? "input",
+  };
+});
+
+function computeFold(state: EditorState): TitleFold {
+  const name = state.facet(blocksOptions).page?.() ?? "";
+  const block = state.field(pageHeader, false)?.block ?? propertyBlock(state);
+  const found = name === "" ? null : firstHeading(state.doc, bodyStart(state, block));
+  const heading = found && sameTitle(found.text, name) ? found : null;
+  const revealed = heading !== null && foldRevealed(state, heading);
+  const decorations = heading && !revealed
+    ? Decoration.set([Decoration.replace({ block: true }).range(heading.from, heading.hideTo)])
+    : Decoration.none;
+  return { name, heading, revealed, decorations };
+}
+
+/// Il nome viene dalle opzioni, che il testo non avverte quando cambiano: si
+/// rilegge a ogni transazione (una chiamata e un confronto). Il primo H1 si
+/// cerca di nuovo solo quando il testo cambia, e la ricerca guarda soltanto
+/// le righe in cima al testo.
+const titleFold = StateField.define<TitleFold>({
+  create: computeFold,
+  update(value, transaction) {
+    const state = transaction.state;
+    const name = state.facet(blocksOptions).page?.() ?? "";
+    if (!transaction.docChanged && name === value.name && transaction.effects.length === 0
+      && transaction.startState.facet(blocksOptions) === state.facet(blocksOptions)) {
+      if (!transaction.selection || !value.heading) return value;
+      if (foldRevealed(state, value.heading) === value.revealed) return value;
+    }
+    return computeFold(state);
+  },
+  provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+});
+
+/// Backspace all'inizio della prima riga sotto l'H1 ripiegato non la unisce
+/// al titolo nascosto: il testo resta dov'è, come sotto il titolo di Notion.
+const foldKeys = Prec.highest(keymap.of([{
+  key: "Backspace",
+  run: (view) => {
+    const fold = view.state.field(titleFold, false);
+    if (!fold?.heading || fold.revealed) return false;
+    const main = view.state.selection.main;
+    return main.empty && view.state.selection.ranges.length === 1 && main.head === Math.min(view.state.doc.length, fold.heading.hideTo + 1);
+  },
+}]));
+
 /// La prima riga che si vede: dopo il frontmatter quando la testata lo
 /// copre, altrimenti la prima del file.
 function firstVisibleLine(state: EditorState): number {
+  const fold = state.field(titleFold, false);
   const block = state.field(pageHeader, false)?.block ?? null;
-  if (!block || block.unreadable || frontmatterOpen(state, block)) return 1;
+  if (block && (block.unreadable || frontmatterOpen(state, block))) return 1;
+  if (fold?.heading && !fold.revealed) return state.doc.lineAt(Math.min(state.doc.length, fold.heading.hideTo + 1)).number;
+  if (!block) return 1;
   return state.doc.lineAt(Math.min(state.doc.length, block.to + 1)).number;
 }
 
@@ -374,4 +618,4 @@ const theme = EditorView.baseTheme({
   ".cm-fub-page-actions": { display: "flex", gap: "0.5em", justifyContent: "flex-end" },
 });
 
-export const pageHeaderExtension: Extension = [pageMore, pageHeader, headerShowsProperties.of(true), toHeader, theme];
+export const pageHeaderExtension: Extension = [pageMore, pageHeader, titleFold, Prec.high(foldGuard), headerShowsProperties.of(true), toHeader, foldKeys, theme];

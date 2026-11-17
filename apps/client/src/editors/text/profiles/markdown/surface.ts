@@ -13,10 +13,15 @@ import { currentTheme as getCurrentTheme, type Theme } from "../../../../theme/t
 import type { SyntaxForm } from "../../../../host/contract";
 import { byteToNormalizedCharIndices, normalizeLineBreaks } from "../../../../rules/offsets";
 import { isFolderPage, pageName, taskChecked } from "../../../../rules/mirrored";
+import { renamedPageName, renamedPagePath } from "../../../../state/page-rename";
 import { onLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
 import { blocksMode, pageArrives, plainMode, type BlocksOptions } from "./blocks";
+import { refreshPageHeader, retitleView } from "./blocks/page";
+import { NO_TYPES, parsePropertyTypes, sameTypes, type PropertyTypes } from "./page/properties/kind";
+import { api } from "../../../../host/ipc";
+import { keepTitle, retitleIn, retitleWaiting } from "./page/title";
 import { selectBlockThenAll, selectBody } from "./blocks/keys";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { mountReadingHeader, type PageOptions } from "./page/header";
@@ -277,6 +282,8 @@ let proofModule: typeof import("./proof") | null = null;
 const FOLLOW_QUIET_MS = 150;
 const STRICT_LINE_BREAKS_KEY = "editor.strict-line-breaks";
 const RTL_KEY = "editor.rtl";
+/// Il registro dei tipi delle proprietà del vault (`fub-kernel`, `TYPES`).
+const PROPERTY_TYPES_KEY = "properties.types";
 
 /// I titoli della pagina, fuori dai blocchi di codice: l'anteprima
 /// dell'Indice nel «/» mostra questi.
@@ -587,12 +594,28 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // questa superficie, e ogni cambio, li accendono o spengono senza riaprire
   // la nota. La testata della pagina è la stessa in Scrittura e in Lettura
   // (`page/header.ts`): le stesse opzioni per tutte e due.
+  // Il registro dei tipi delle proprietà: lo legge la lettura delle
+  // impostazioni di questa superficie, e ogni suo cambio rifà la testata.
+  let propertyTypes: PropertyTypes = NO_TYPES;
+  let propertyTypesRaw: unknown = undefined;
   const pageOptions: PageOptions = {
     page: () => pageName(resources?.documentId ?? documentId),
     notify: (message, tone) => notify(message, tone),
     folderPage: () => isFolderPage(resources?.documentId ?? documentId),
+    renamedPage: (name) => renamedPageName(resources?.documentId ?? documentId, name),
+    // La rinomina riuscita riscrive l'H1 ripiegato (T7) sulla vista viva
+    // della superficie: rinominare può rifare la vista, e quella che ha
+    // aperto il campo del titolo non è più nella pagina.
     rename: opts.onRenamePage
-      ? (name) => opts.onRenamePage!(resources?.documentId ?? documentId, name)
+      ? async (name) => {
+        const from = resources?.documentId ?? documentId;
+        const to = renamedPagePath(from, name);
+        const problem = await opts.onRenamePage!(from, name);
+        // La superficie che mostra la pagina adesso, in questo riquadro: se
+        // la rinomina ha rifatto la superficie è un'altra, nello stesso posto.
+        if (problem === null) retitleIn(parent.closest("[data-pane]") ?? parent, { from, to }, pageName(from), pageName(to));
+        return problem;
+      }
       : undefined,
     // L'immagine della Live ha il menu della superficie, con la
     // larghezza e «Sostituisci»: la resa non apre il suo.
@@ -600,6 +623,23 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     subpage: opts.onNewSubpage
       ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
       : undefined,
+    propertyTypes: () => propertyTypes,
+    // «Tipo» nel menu di una proprietà: vale per tutto il vault, ed è il
+    // comando del registro (`property.type.set`) a scriverlo.
+    setPropertyType: async (key, type) => {
+      try {
+        await api.invokeCommand("property.type.set", { key, type }, "apply");
+        void readSurfaceSettings();
+        return null;
+      } catch (error) {
+        return errorText(error);
+      }
+    },
+    // Le persone: la cartella delle persone, se c'è; se no le note.
+    searchPeople: (text) => {
+      const people = opts.completions.people;
+      return people && people.folder() !== "" ? people.search(text) : opts.completions.searchNotes(text);
+    },
   };
   const blocksOptions: BlocksOptions = {
     ...pageOptions,
@@ -665,6 +705,18 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       });
     }));
   }
+  // La rinomina dal titolo del foglio porta con sé l'H1 ripiegato nel titolo
+  // (T7): in ogni modalità, perché l'H1 resti uguale al nome anche quando si
+  // torna in Scrittura.
+  const titleKeeper = {
+    root: parent,
+    documentId: () => resources?.documentId ?? documentId,
+    retitle: (before: string, after: string) => {
+      if (life.closed) return;
+      engine.runViewCommand((view) => retitleView(view, before, after));
+    },
+  };
+  life.add(keepTitle(titleKeeper));
   if (opts.pageIcons) {
     life.add(opts.pageIcons.watch(() => {
       engine.runViewCommand((view) => {
@@ -754,11 +806,20 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     else delete parent.dataset.lineBreaks;
     if (entries.find((entry) => entry.spec.key === RTL_KEY)?.value === true) reading.dir = "rtl";
     else reading.removeAttribute("dir");
+    const types = entries.find((entry) => entry.spec.key === PROPERTY_TYPES_KEY)?.value;
+    if (types !== propertyTypesRaw) {
+      propertyTypesRaw = types;
+      const next = parsePropertyTypes(types);
+      if (!sameTypes(next, propertyTypes)) {
+        propertyTypes = next;
+        engine.runViewCommand((view) => refreshPageHeader(view));
+      }
+    }
     setBlocks(rememberBlocks(entries));
   };
   void readSurfaceSettings();
   life.add(onEvent("setting_changed", (event) => {
-    if (event.key === STRICT_LINE_BREAKS_KEY || event.key === RTL_KEY || event.key === EDITOR_BLOCKS_KEY) void readSurfaceSettings();
+    if (event.key === STRICT_LINE_BREAKS_KEY || event.key === RTL_KEY || event.key === EDITOR_BLOCKS_KEY || event.key === PROPERTY_TYPES_KEY) void readSurfaceSettings();
   }));
 
   // Accendere o spegnere i blocchi riconfigura soltanto Scrittura, sulla
@@ -1835,6 +1896,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         closeSlashPalette(parent);
         engine.setDoc(text);
         syncReading();
+        // Il testo di un documento appena rinominato dal titolo: l'H1
+        // ripiegato prende il nome nuovo (T7). Dopo questo giro, fuori da
+        // chi sta montando la superficie.
+        queueMicrotask(() => retitleWaiting(titleKeeper));
       },
       syncDoc: (update) => {
         closeSlashPalette(parent);

@@ -58,9 +58,14 @@ describe("le proprietà che la testata scrive", () => {
     expect(apply("Testo", "icon", "🌱")).toBe("---\nicon: 🌱\n---\nTesto");
   });
 
-  it("sostituisce la voce che c'era, con tutte le sue righe", () => {
+  it("sostituisce la voce che c'era, con tutte le sue righe, e tiene la forma dell'elenco", () => {
     expect(apply("---\ncssclasses:\n  - wide\n  - serif\ntags: a\n---\nX", "cssclasses", ["wide"]))
-      .toBe("---\ncssclasses: [wide]\ntags: a\n---\nX");
+      .toBe("---\ncssclasses:\n  - wide\ntags: a\n---\nX");
+    expect(apply("---\ncssclasses: [wide, serif]\n---\nX", "cssclasses", ["wide"]))
+      .toBe("---\ncssclasses: [wide]\n---\nX");
+    // Senza voci un elenco a righe non sa più dire d'essere un elenco: `[]`.
+    expect(apply("---\ncssclasses:\n- wide\n---\nX", "cssclasses", []))
+      .toBe("---\ncssclasses: []\n---\nX");
   });
 
   it("aggiunge la voce prima della riga di chiusura, e la toglie con null", () => {

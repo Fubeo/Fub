@@ -48,6 +48,10 @@ export const GESTURE_FOLDER = "F3/Cartella";
 
 /// Il nome della nota `i` di S2, da 1 a `NOTES`.
 export const noteName = (i) => `Nota ${String(i).padStart(5, "0")}`;
+/// Il segno che solo la nota `i` ha nel testo: il titolo uguale al nome non si
+/// vede in Scrittura (il primo H1 si ripiega nel campo del titolo, T7), e i
+/// nomi delle note compaiono anche nei collegamenti delle vicine.
+export const noteMark = (i) => `numero ${String(i).padStart(5, "0")}`;
 
 function longNote() {
   const lines = ["# Una nota lunga", ""];
@@ -71,7 +75,7 @@ function blocksNote() {
 
 function note(i) {
   const near = [i - 1, i + 1, i + 97].map((n) => ((n - 1 + NOTES) % NOTES) + 1);
-  return `# ${noteName(i)}\n\nUna nota del vault grande. Rimanda a ${near.map((n) => `[[${noteName(n)}]]`).join(", ")}.\n\n- una voce\n- un'altra voce\n`;
+  return `# ${noteName(i)}\n\nUna nota del vault grande, ${noteMark(i)}. Rimanda a ${near.map((n) => `[[${noteName(n)}]]`).join(", ")}.\n\n- una voce\n- un'altra voce\n`;
 }
 
 /// Le schede di S3 e i loro archi: S9 le riprende uguali.

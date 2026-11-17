@@ -3,13 +3,15 @@
 // dietro «Altre N proprietà». Le chiavi che la testata mostra a modo suo
 // (icona, copertina, classi della pagina) non sono righe, e nemmeno le
 // etichette quando le mostra la riga dei dati, come nel prototipo. Il valore
-// è quello che il frontmatter dice, in una riga: gli editor dei tipi
-// arrivano con T8, e intanto il clic riapre lo YAML.
+// si disegna secondo il tipo, e un clic apre l'editor del tipo; un clic sul
+// nome apre il menu della proprietà (`properties/`, T8).
 import { t } from "../../../../../i18n/strings";
 import { iconEl } from "../../../../../ui/icons";
 import type { Lifetime } from "../../../../../ui/lifetime";
 import type { PropertyEntry } from "../properties";
 import { liveStrings } from "../strings";
+import type { PropertyTypes } from "./properties/kind";
+import { propertyRow, type PropertyRowHost } from "./properties/row";
 
 /// Quante proprietà stanno in evidenza in una nota senza tipo.
 export const FEATURED_LIMIT = 4;
@@ -57,27 +59,29 @@ export interface PageProperties {
   /// Lo YAML è aperto in Scrittura (il cursore ci è entrato): le righe si
   /// fanno da parte, e si scrive lì.
   readonly open: boolean;
+  /// Il registro dei tipi del vault, con cui le righe scelgono l'editor.
+  readonly types: PropertyTypes;
 }
 
 export function samePageProperties(a: PageProperties | null, b: PageProperties | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  return a.display === b.display && a.unreadable === b.unreadable && a.open === b.open
+  return a.display === b.display && a.unreadable === b.unreadable && a.open === b.open && a.types === b.types
     && sameEntries(a.featured, b.featured) && sameEntries(a.rest, b.rest);
 }
 
 function sameEntries(a: readonly PropertyEntry[], b: readonly PropertyEntry[]): boolean {
   return a.length === b.length && a.every((entry, index) => {
     const other = b[index]!;
-    return entry.key === other.key && entry.value === other.value && entry.from === other.from;
+    return entry.key === other.key && entry.value === other.value && entry.from === other.from
+      && entry.simple === other.simple && entry.quoted === other.quoted
+      && (entry.items ?? []).join("\u0000") === (other.items ?? []).join("\u0000") && (entry.items === null) === (other.items === null);
   });
 }
 
-export interface PropertiesHost {
-  /// Si scrive: i valori si premono e c'è «Aggiungi una proprietà».
-  readonly editable: boolean;
-  /// Il valore premuto: lo YAML si apre sulla sua voce.
-  open(at: number): void;
+/// Chi ospita le proprietà: ciò che chiedono le righe (`PropertyRowHost`),
+/// più la sezione.
+export interface PropertiesHost extends PropertyRowHost {
   /// «Aggiungi una proprietà».
   add(): void;
   /// «Altre N proprietà» aperto o chiuso, ricordato da chi ospita.
@@ -111,7 +115,7 @@ export function propertiesElement(model: PageProperties, host: PropertiesHost, l
       ? [...model.featured, ...(more ? model.rest : [])]
       : more ? [...model.featured, ...model.rest] : [];
     const hidden = model.display === "visible" ? model.rest.length : total;
-    const children: HTMLElement[] = rows.map((entry) => propertyRow(entry, host, life));
+    const children: HTMLElement[] = rows.map((entry) => propertyRow(entry, host, life, model.rest.length > 0 ? model.featured.includes(entry) : null));
     if (hidden > 0) {
       const toggle = document.createElement("button");
       toggle.type = "button";
@@ -153,29 +157,4 @@ function labelled(button: HTMLButtonElement, icon: string, text: string): void {
   const label = document.createElement("span");
   label.textContent = text;
   button.replaceChildren(...(figure ? [figure] : []), label);
-}
-
-/// Una riga: il nome e il valore. Il nome lungo si taglia e si legge intero
-/// al passaggio; il valore va a capo.
-function propertyRow(entry: PropertyEntry, host: PropertiesHost, life: Lifetime): HTMLElement {
-  const row = document.createElement("div");
-  row.className = "cm-fub-page-prop";
-  row.dataset.key = entry.key;
-  const key = document.createElement("span");
-  key.className = "cm-fub-page-prop-key";
-  key.textContent = entry.key;
-  key.title = entry.key;
-  const empty = entry.value.trim() === "";
-  const value = document.createElement(host.editable ? "button" : "span");
-  value.className = "cm-fub-page-prop-value";
-  if (empty) value.dataset.empty = "true";
-  value.textContent = empty ? liveStrings.t("page.properties.empty") : entry.value;
-  if (value instanceof HTMLButtonElement) {
-    value.type = "button";
-    value.dataset.pageNav = "";
-    value.setAttribute("aria-label", liveStrings.t("page.properties.edit", { key: entry.key, value: value.textContent }));
-    life.listen(value, "click", () => host.open(entry.from));
-  }
-  row.append(key, value);
-  return row;
 }

@@ -398,7 +398,9 @@ export const SCENE = onPage("shell", [
     prepare: async (page) => {
       await openNote(page, "Guida/Sintassi di Fub.md");
       await chooseMode(page, "reading");
-      await page.waitForSelector(".pane-preview h1, .markdown-preview h1");
+      // Il primo `# titolo` uguale al nome è nascosto sotto la testata: si
+      // aspetta il reso, non che quel titolo si veda.
+      await page.waitForSelector(".pane-preview h1, .markdown-preview h1", { state: "attached" });
     },
   },
   {
@@ -1199,6 +1201,26 @@ export const SCENE = onPage("shell", [
     query: `live=${live}`,
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openHeader(page, mode, gesture),
+  })),
+  // Gli editor dei tipi della testata (T8, E5, riga «Le proprietà» del
+  // prototipo): le righe con la figura del tipo, poi ogni editor aperto, da
+  // tastiera (il fuoco sul valore e Invio) o col puntatore; poi a 800 px.
+  ...[
+    ["proprieta-01-righe", "Le proprietà coi loro tipi: testo, stato, data, persone"],
+    ["proprieta-02-testo", "Il testo si scrive al posto del valore (da tastiera)", "text"],
+    ["proprieta-03-data", "Il riquadro della data, aperto da tastiera", "date"],
+    ["proprieta-04-persone", "Il riquadro delle persone, aperto col puntatore", "people"],
+    ["proprieta-05-elenco", "Il riquadro di un elenco, aperto col puntatore, con «Altre» aperto", "list"],
+    ["proprieta-06-menu", "Il menu della proprietà, aperto dal nome", "menu"],
+    ["proprieta-07-tipo", "Il menu «Tipo» della proprietà", "type"],
+    ["proprieta-08-data-stretta", "Il riquadro della data nella finestra minima, 800 px", "date", { width: 800, height: 800 }],
+    ["proprieta-09-persone-stretta", "Il riquadro delle persone nella finestra minima, 800 px", "people", { width: 800, height: 800 }],
+  ].map(([id, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: "live=proprieta",
+    ...(viewport ? { viewport } : {}),
+    prepare: (page) => openPropertyEditor(page, gesture),
   })),
   // Scrittura coi Blocchi: la stessa nota, con la maniglia del blocco sotto il
   // puntatore e quella del blocco del cursore; poi la selezione di blocchi e il
@@ -2192,6 +2214,34 @@ async function openHeader(page, mode, gesture) {
     for (const scroller of document.querySelectorAll(".pane.focus .pane-editor .cm-scroller, .pane.focus .pane-editor .markdown-rendered")) scroller.scrollTop = 0;
   });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+/// Gli editor dei tipi (T8): apre la testata a riposo, poi l'editor della
+/// voce che il gesto dice, come lo apre chi usa Fub. Il puntatore resta
+/// sull'editor aperto solo quando è il puntatore ad aprirlo.
+async function openPropertyEditor(page, gesture) {
+  await openHeader(page, "live_preview", gesture === "list" ? "more" : undefined);
+  if (!gesture) return;
+  const row = (key) => `.pane.focus .cm-fub-page-prop[data-key="${key}"]`;
+  const frames = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  if (gesture === "text" || gesture === "date") {
+    const key = gesture === "text" ? "tipo" : "scadenza";
+    await page.focus(`${row(key)} .cm-fub-page-prop-value`);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(gesture === "text" ? `${row(key)} .cm-fub-prop-input` : ".cm-fub-prop-date");
+  } else if (gesture === "people" || gesture === "list") {
+    await page.click(`${row(gesture === "people" ? "persone" : "luoghi")} .cm-fub-page-prop-value`);
+    await page.waitForSelector(gesture === "people" ? ".cm-fub-prop-people [role=option]" : ".cm-fub-prop-list");
+  } else {
+    await page.click(`${row("stato")} .cm-fub-page-prop-key`);
+    await page.waitForSelector(".cm-fub-prop-menu");
+    if (gesture === "type") {
+      await page.locator(".cm-fub-prop-menu [role^=menuitem]", { hasText: "Tipo" }).first().click();
+      await page.waitForSelector(".cm-fub-prop-menu [role=menuitemradio]");
+    }
+  }
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await frames();
 }
 
 /// Scrittura a riposo (T3): apre la nota con la testata, prova che ciò che
