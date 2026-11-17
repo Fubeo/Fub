@@ -1066,16 +1066,31 @@ fn tracked(
     props
 }
 
+/// Il nome che il codec di Word scrive in `w:author` per una revisione
+/// senza autore: l'attributo è obbligatorio, e Word fa lo stesso.
+const UNKNOWN_AUTHOR: &str = "Unknown";
+
 /// L'indice della revisione `rev` nel documento: quella uguale che c'è già,
 /// o una nuova in fondo.
+///
+/// Una revisione **nuova** senza autore (la shell scrive senza un nome quando
+/// il documento registrava già le modifiche all'apertura) prende il nome che
+/// il codec scriverà nel file: altrimenti la rilettura dei byte nuovi
+/// troverebbe «Unknown» dove il voluto dice niente, e il salvataggio
+/// fallirebbe sempre per [`RichError::Fidelity`]. Una revisione senza autore
+/// che il file ha già resta com'è: è la stessa, e non c'è niente da scrivere.
 fn revision(document: &mut Document, kind: RevisionKind, rev: &Rev) -> u32 {
-    let wanted = Revision {
+    let mut wanted = Revision {
         kind,
         author: rev.by.clone(),
         date: rev.at.clone(),
         move_name: rev.mv.clone(),
     };
-    let index = match document.revisions.iter().position(|r| *r == wanted) {
+    let found = document.revisions.iter().position(|r| *r == wanted);
+    if found.is_none() && wanted.author.is_empty() {
+        wanted.author = UNKNOWN_AUTHOR.to_string();
+    }
+    let index = match found.or_else(|| document.revisions.iter().position(|r| *r == wanted)) {
         Some(index) => index,
         None => {
             document.revisions.push(wanted);
