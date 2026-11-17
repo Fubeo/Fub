@@ -1180,7 +1180,7 @@ Fatto quando: un test DOM del trascinamento che rilegge la data dal file;
 le foto del banco nelle due luci.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/base
-Stato: [~] PR #469 (feat/base-calendario, 2026-11-17, CI completa in corso); 5 scene nuove (baseline dal runner); scostamenti in DECISIONS (2026-11-17)
+Stato: [x] fatto · in main (#469, 2026-11-17); 5 scene nuove con le baseline del runner; correzioni a11y (titolo del mese h2, nota presa col contorno tratteggiato); scostamenti in DECISIONS (2026-11-17)
 
 ## T18 · La Base nella nota dal «/»
 
@@ -1869,7 +1869,7 @@ modifica; l'annulla dopo che un file è cambiato.
 Fatto quando: test del kernel con `MemoryHost` per ogni caso limite;
 nessun lucchetto del workspace attraverso una chiamata di provider.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-kernel batch
-Stato: [~] in corso (coder, `feat/piano-piu-documenti`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (797928285, 2026-11-17), in attesa del gruppo
 
 ## T32 · «Sposta in…» e il blocco lasciato sul cassetto
 
