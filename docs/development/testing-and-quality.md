@@ -243,6 +243,22 @@ commenti, rientri e spazi che non contano, lasciando intatte stringhe, escape
 e `url(…)`. Il suo test confronta, sulla pelle vera, l'albero di postcss prima
 e dopo regola per regola e la fa passare dal cancello del tema; in sviluppo e
 al banco la pelle resta quella scritta.
+Minimizzata, la pelle supera comunque il budget di un chunk, e Rollup non
+divide un modulo: [`build/skin-split.mjs`](../../apps/client/build/skin-split.mjs)
+la taglia ai confini fra i pezzi di `skin/order.ts` in gruppi di circa
+300 000 byte (`theme-skin`, `theme-skin-2`, …, uno in più a ogni 300 000
+byte di crescita). Il modulo della pelle li importa staticamente e li rimette
+insieme: il testo che arriva al tema è, byte per byte, la pelle minimizzata
+intera (la build si ferma se non lo è), e si carica all'avvio come prima, con
+un file in più. Si è scelto questo, e non una pelle caricata a pezzi con la
+sua superficie, perché non cambia né la cascata né il momento in cui una
+regola c'è: nessun lampo senza stile da prevenire, e i temi d'autore restano
+come sono. `build/skin-split.test.mjs` prova che i pezzi rimessi insieme sono
+la pelle, nell'ordine di `order.ts`.
+Il chunk condiviso della shell (`search`, che Rollup nomina dal primo modulo)
+lascia le discussioni dei commenti della Live a `markdown-comments`: le sue
+regole in `manualChunks` dicono quali moduli e perché, e la build si ferma se
+quel chunk entra in un ciclo.
 
 L'audit npm della supply chain
 ([`npm-audit.mjs`](../../.github/scripts/npm-audit.mjs)) è rosso per ogni

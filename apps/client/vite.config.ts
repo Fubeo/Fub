@@ -2,9 +2,18 @@ import { searchForWorkspaceRoot, type Rollup } from "vite";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 import { canvasWasm } from "./build/canvas-wasm.mjs";
-import { minifySkin } from "./build/skin-minify.mjs";
+import { SKIN_GROUP_TARGET, skinGroups } from "./build/skin-split.mjs";
 
 const CHUNK_BUDGET = 500_000;
+
+/// I moduli virtuali dei gruppi della pelle: come si importano e come li
+/// nomina Rollup una volta risolti.
+const SKIN_GROUP_PREFIX = "virtual:fub-skin-group/";
+const SKIN_GROUP = /^virtual:fub-skin-group\/\d+$/;
+const SKIN_GROUP_RESOLVED = /^\0virtual:fub-skin-group\/(\d+)$/;
+/// I gruppi dell'ultima pelle trasformata, che `load` serve ai moduli
+/// virtuali. Il modulo della pelle è uno solo per build.
+let skinGroupTexts: string[] = [];
 // Il parser upstream arriva già precompilato: resta separato e solo lazy.
 const MERMAID_PARSER_BUDGET = 700_000;
 
@@ -135,13 +144,38 @@ export default defineConfig({
     // come regole. Nella build si tolgono con gli spazi che non contano
     // (`build/skin-minify.mjs`, con le regole identiche provate dal suo test);
     // in sviluppo e al banco la pelle resta quella scritta.
+    // Minimizzata, la pelle sta comunque in un modulo solo, che Rollup non
+    // divide: la si taglia ai confini fra i suoi pezzi in gruppi di circa
+    // `SKIN_GROUP_TARGET` byte (`build/skin-split.mjs`), ognuno un modulo
+    // virtuale col suo chunk. Il modulo della pelle li importa staticamente e
+    // li rimette insieme: il testo è lo stesso, byte per byte, e arriva
+    // all'avvio come prima.
     name: "skin-minify",
     apply: "build",
+    resolveId(source) {
+      return SKIN_GROUP.test(source) ? `\0${source}` : null;
+    },
+    load(id) {
+      const group = SKIN_GROUP_RESOLVED.exec(id);
+      if (!group) return null;
+      const text = skinGroupTexts[Number(group[1])];
+      if (text === undefined) this.error(`${id}: la pelle non ha questo gruppo`);
+      return { code: `export default ${JSON.stringify(text)};`, map: null };
+    },
     transform(code, id) {
       if (!/\/src\/theme\/scrittoio\/skin\.css\?raw$/.test(id)) return null;
       const match = /^export default (".*");?\s*$/s.exec(code);
       if (!match) this.error(`${id}: il testo della pelle non ha più la forma di \`?raw\``);
-      return { code: `export default ${JSON.stringify(minifySkin(JSON.parse(match[1]!) as string))};`, map: null };
+      skinGroupTexts = skinGroups(JSON.parse(match[1]!) as string, SKIN_GROUP_TARGET).map((group) => group.text);
+      const names = skinGroupTexts.map((_, index) => `group${index}`);
+      return {
+        code: [
+          ...names.map((name, index) => `import ${name} from "${SKIN_GROUP_PREFIX}${index}";`),
+          `export default ${names.join(" + ")};`,
+          "",
+        ].join("\n"),
+        map: null,
+      };
     },
   }, {
     name: "bundle-size-budgets",
@@ -193,6 +227,12 @@ export default defineConfig({
           // quello del codice.
           if (chunk.name.startsWith("drawing-") && reaches(chunk.fileName, "surface")) {
             this.error(`${chunk.fileName}: un chunk dei disegni non importa la superficie`);
+          }
+          // I commenti delle note stanno sotto il chunk condiviso che li
+          // importa: tornare a sé per import statici vuol dire un loro modulo
+          // che importa qualcosa rimasto lì, e un ciclo fra chunk.
+          if (chunk.name === "markdown-comments" && reaches(chunk.fileName, "markdown-comments")) {
+            this.error(`${chunk.fileName}: i commenti delle note importano un chunk che li importa; un loro modulo importa qualcosa fuori dalla loro regola in \`manualChunks\``);
           }
           // La resa delle note e il renderer delle viste stanno sotto il
           // ponte dei documenti e importano soltanto i chunk sotto di loro.
@@ -376,8 +416,12 @@ export default defineConfig({
           }
           // La pelle composta è testo, come il catalogo delle stringhe: cresce
           // con ogni superficie, e dentro la serie ne consumava tutto il
-          // margine. La leggono la serie e la finestra del documento.
+          // margine. La leggono la serie e la finestra del documento. Il
+          // modulo che la rimette insieme sta col primo gruppo; ogni altro
+          // gruppo ha il suo chunk (`theme-skin-2`, `theme-skin-3`, …).
           if (/\/src\/theme\/scrittoio\/skin\.css\?raw$/.test(id)) return "theme-skin";
+          const skinGroup = SKIN_GROUP_RESOLVED.exec(id);
+          if (skinGroup) return skinGroup[1] === "0" ? "theme-skin" : `theme-skin-${Number(skinGroup[1]) + 1}`;
           // La serie che la shell monta: ricetta, fogli, pelle, e i conti del
           // colore che la ricetta usa.
           if (/\/src\/theme\/(scrittoio\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
@@ -421,6 +465,19 @@ export default defineConfig({
           // (`UNDER_THE_RENDER`).
           if (/\/src\/editors\/text\/profiles\/markdown\/(render|render-inline|strings|grammar|link-syntax|details|toc|callout-head|comments\/syntax)\.ts$|\/src\/rules\/syntax(\.generated)?\.ts$|\/src\/ui\/sanitize\.ts$/.test(id)) {
             return "markdown-render";
+          }
+          // Le discussioni dei commenti nella Live (il margine, il riquadro, il
+          // filo, il loro modello): la superficie Markdown le monta, ma
+          // cambiano con i commenti e non con l'editor, e da sole tengono il
+          // chunk condiviso della shell sotto il budget. La sintassi sta nella
+          // resa, qui sopra; i pezzi che usano anche la finestra del documento
+          // (`threads`, `copy`, `mask`, `source`) restano dove li mette Rollup,
+          // così quella finestra non si porta dietro le discussioni. Chiuse
+          // verso il basso: nessuna importa un modulo che starebbe nel chunk
+          // condiviso, e il plugin `bundle-size-budgets` ferma la build se il
+          // chunk entra in un ciclo.
+          if (/\/src\/editors\/text\/profiles\/markdown\/comments\/(discussions|margin|inspector|thread|resolve|author|model)\.ts$/.test(id)) {
+            return "markdown-comments";
           }
           // Il renderer delle viste dichiarative (`UiNode`) con il suo
           // riconciliatore, i `ns` che sa disegnare e i piccoli aiuti che
