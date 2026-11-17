@@ -1971,7 +1971,7 @@ Fatto quando: un e2e crea una nota da un tipo e la rilegge; un test della
 testata col tipo guasto; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/new-note.test.ts src/editors/text/profiles/markdown/page
-Stato: [~] in corso (coder, da 09e8d7045 di `integra/editor-1`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (f004550a5, 2026-11-17), PR bozza #472. «Nuova nota» chiede il tipo, la testata lo mostra, il cassetto ha la sezione «Tipi». Le letture `note.type.list` e `note.type.get` sono comandi di sola lettura: `IndexProvider::query` non ha l'host (vedi DECISIONS). La prima voce del menu è «Nota · Una nota semplice», come nel prototipo. Il cassetto mostra il nome del tipo, non il plurale. In corso, sullo stesso ramo: la vista del core `note_type_page`, cioè le note del tipo sotto la pagina del tipo, disegnate e mai scritte nel file. Aperto: `tipo` mostra «[[Tipi/Libro]]» grezzo perché l'editor dei valori non disegna un link singolo (→ T35). Aperto: rinominare un tipo non aggiorna le note che lo usano (è nella documentazione).
 
 ## T34 · La linea del tempo
 
