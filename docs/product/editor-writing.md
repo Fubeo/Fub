@@ -358,6 +358,38 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
   l'indice cambia si richiedono solo le schede tenute, e la Scrittura ridisegna
   soltanto quelle davvero cambiate.
 
+## La trasclusione viva
+
+Un embed di una sezione o di un blocco di un'altra nota (`![[Riunioni#Decisioni]]`,
+`![[Riunioni#^decisioni]]`) si vede in Scrittura come un vassoio col filo
+d'accento: in testata la provenienza («Riunioni › Decisioni») e, al passaggio
+o col fuoco, **Modifica qui** e **Apri**. Il testo resta nella nota d'origine:
+la trasclusione lo scrive dove sta.
+
+- **Modifica qui**, o Invio sul blocco scelto, o «Modifica qui» nel gruppo
+  «Trasclusione» della barra, apre dentro l'embed un editor sul solo tratto,
+  col bordo d'accento e la fascia «Scrivi in X: si salva là, con la sua
+  revisione. Esc esce.». **Esc** (o **Fatto**) salva ed esce. L'editor del
+  tratto è la superficie ristretta della sessione dell'origine: con l'origine
+  aperta in un riquadro, anche con modifiche non salvate, si scrive sullo
+  stesso testo, e ogni battuta passa all'altro riquadro; l'annulla è di
+  ciascuno.
+- Si scrive un livello solo: una trasclusione dentro quella riportata resta da
+  leggere. Una nota che riporta sé stessa non si scrive da lì, e lo dice. La
+  nota intera (`![[Riunioni]]`) si apre e basta.
+- Il salvataggio è quello della nota d'origine, con la sua revisione: una
+  revisione cambiata nel frattempo dà il conflitto di ogni riquadro, con le
+  sue scelte, dentro la trasclusione; Esc non esce finché non si sceglie.
+- Chiudere la nota che ospita salva l'origine; se non si salva, chiede come
+  un riquadro che si chiude.
+- Un'àncora che non c'è (un blocco senza id, un titolo cambiato) non apre
+  niente e lo dice. Un tratto tolto o riscritto altrove mentre si scrive, o
+  l'origine cancellata, fermano l'editor sull'ultimo testo, da leggere. Una
+  nota rinominata segue il nome nuovo. Un'origine in sola lettura (chiusura in
+  corso, prestata a un'app) non si apre, e dice perché.
+- Una nuova resa della nota che ospita (l'origine salvata) aspetta che si esca
+  dall'editor del tratto: chi scrive non perde il fuoco.
+
 ## La concentrazione
 
 La concentrazione (`shell.focus.toggle`, «Modalità concentrazione» nel menu
@@ -428,6 +460,12 @@ foglio, in ogni editor di testo che non sia un campo:
 - `apps/client/src/editors/text/profiles/markdown/link-card.ts`
   (`NoteCardWidget`) e `apps/client/src/state/note-cards.ts`: la scheda della
   nota e le sue proprietà;
+- `apps/client/src/editors/text/profiles/markdown/transclusion.ts`: la
+  trasclusione viva (`Transclusions`, `LiveTransclusion`), sulla superficie
+  ristretta di `editors/core/range-surface.ts`; `markdown/mount.ts` la monta
+  sugli embed (`transclude`) e tiene ferma la resa mentre si scrive;
+  `state/document-controller.ts` le dà le sessioni e il conflitto di un
+  riquadro;
 - `apps/client/src/desktop-shell.ts`: la concentrazione (`toggleFocusMode`,
   «Esci» nella banda, Esc); `apps/client/src/state/concentration.ts`: lo stato
   per chi sta sotto la shell e la regola di Esc;

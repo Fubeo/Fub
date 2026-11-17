@@ -152,5 +152,9 @@ export const EDITORS: PartAnatomy = {
     // Scrittura e in Lettura, più pieno col cursore dentro, e il commento
     // intero colorato in Sorgente. Segni di Fub sulla carta, non il testo.
     { name: "note-comments", layer: "segno", layers: { "markdown-rendered": "contenuto" }, states: [S("rest"), S("focused")], hooks: ["cm-fub-comment-range", "cm-fub-comment-range-on", "comment-range", "cm-fub-comment-source", "markdown-rendered"] },
+    // La trasclusione viva (T29): il vassoio della nota riportata, la testata
+    // con «Modifica qui» e «Apri», la fascia di chi scrive, gli avvisi e
+    // l'editor del tratto.
+    { name: "live-transclusion", layer: "contenuto", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["embed", "transclusion", "transclusion-head", "transclusion-source", "transclusion-spacer", "transclusion-self", "transclusion-band", "transclusion-notice", "transclusion-conflict", "transclusion-editing", "transclusion-editor", "cm-editor", "cm-focused"] },
   ],
 };

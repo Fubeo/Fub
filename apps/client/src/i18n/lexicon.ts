@@ -47,6 +47,9 @@ export const LEXICON: readonly LexiconEntry[] = [
   // I commenti CriticMarkup (T21): il passo evidenziato con la sua discussione.
   { say: "Commento", instead: ["Nota a margine", "Annotazione nel testo"], why: "La parola di Word e di Google Documenti; «nota» è già il file, «annotazione» è dei PDF" },
   { say: "Sbirciata, Sbircia", instead: ["Anteprima modificabile", "Apri in sovrimpressione"], why: "La nota aperta sopra la destra del foglio, dove si scrive: «Anteprima» resta la scheda al passaggio, che si guarda e basta" },
+  // La trasclusione viva (T29): la sezione di un'altra nota che si scrive dove
+  // è riportata. «Modifica qui» è il gesto, «Apri» porta all'origine.
+  { say: "Trasclusione viva", instead: ["Embed modificabile", "Incorporamento modificabile", "Blocco collegato"], why: "La parola della barra («Trasclusione») e il fatto che si scrive: il testo resta nella nota d'origine, che si salva con la sua revisione" },
 ];
 
 /// Le varianti, tutte: nessuna voce di menu le contiene. «Arancio» è anche
