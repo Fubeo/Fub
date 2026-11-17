@@ -132,7 +132,7 @@ partenza):
 | | Pieni | Discreti | Spenti |
 | --- | --- | --- | --- |
 | Parentesi che si chiudono | sì | sì | no |
-| Proposte dopo `\` | sì | sì | no |
+| Proposte dopo la barra rovescia | sì | sì | no |
 | Scrittura veloce | sì | solo i segni già disegnati e le cifre di un esponente | no |
 | Tavolozza | sempre | a richiesta: il pulsante «Simboli» o Alt ↓ | no |
 
