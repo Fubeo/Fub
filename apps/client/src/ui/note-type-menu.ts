@@ -11,7 +11,7 @@ import { createList, openPopover, type PopoverAnchor } from "../kit";
 import type { NoteType, NoteTypeList } from "../state/note-types";
 import { iconEl } from "./icons";
 import { openLifetime } from "./lifetime";
-import { drawPageMark, FIGURE_PREFIX } from "./page-mark";
+import { drawPageMark } from "./page-mark";
 
 /// La figura di un tipo senza icona, e quella della nota semplice.
 export const TYPE_FIGURE = "template";
@@ -24,26 +24,14 @@ interface Choice {
   readonly type: NoteType | null;
 }
 
-/// Disegna l'icona di un tipo dentro `host`: un'emoji o una figura `fub:`
-/// come l'icona di una pagina, il nome di una figura della shell (`book`),
-/// se no la figura dei tipi.
+/// Disegna l'icona di un tipo dentro `host`: un'emoji o una figura (`book`,
+/// `fub:book`) lette come l'icona di una pagina (`ui/page-mark.ts`), se no la
+/// figura dei tipi.
 export function drawTypeIcon(host: HTMLElement, icon: string | null): void {
-  const written = icon?.trim() ?? "";
-  // Un nome nudo (`book`) è una figura, non la parola scritta: prima quella
-  // delle pagine (`fub:book`), poi quella della shell.
-  if (BARE_NAME.test(written)) {
-    if (drawPageMark(host, FIGURE_PREFIX + written)) return;
-    const figure = iconEl(written) ?? iconEl(TYPE_FIGURE);
-    host.replaceChildren(...(figure ? [figure] : []));
-    return;
-  }
-  if (drawPageMark(host, written)) return;
+  if (drawPageMark(host, icon)) return;
   const figure = iconEl(TYPE_FIGURE);
   host.replaceChildren(...(figure ? [figure] : []));
 }
-
-/// Il nome di una figura scritto senza `fub:`.
-const BARE_NAME = /^[a-z][a-z0-9-]*$/;
 
 /// Che cosa porta un tipo, in una riga: le proprietà in evidenza (o le
 /// prime), altrimenti la cartella delle sue note.
