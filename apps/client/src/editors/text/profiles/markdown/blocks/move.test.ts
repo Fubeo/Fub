@@ -322,6 +322,20 @@ describe("annidare e portare fuori col gesto di lato", () => {
     expect(state.update(outdentRun(state, blocksOf(state), { first: b, last: b })!).state.doc.toString()).toBe("- uno\n  - a\n- b\n- due");
   });
 
+  it("la sola voce annidata portata fuori non lascia una riga vuota: l'elenco resta stretto", () => {
+    const state = stateOf("- uno\n  - a\n- due");
+    const a = indexAt(state, "  - a");
+    expect(apply(state, outdentRun(state, blocksOf(state), { first: a, last: a })).doc.toString()).toBe("- uno\n- a\n- due");
+    // In fondo alla nota, e con tutte le sorelle insieme.
+    const last = stateOf("- uno\n  - a\n  - b");
+    const run = { first: indexAt(last, "  - a"), last: indexAt(last, "  - b") };
+    expect(apply(last, outdentRun(last, blocksOf(last), run)).doc.toString()).toBe("- uno\n- a\n- b");
+    // Un elenco largo resta largo: la riga vuota che c'era resta una.
+    const loose = stateOf("- uno\n\n  - a\n\n- due");
+    const b = indexAt(loose, "  - a");
+    expect(apply(loose, outdentRun(loose, blocksOf(loose), { first: b, last: b })).doc.toString()).toBe("- uno\n\n- a\n\n- due");
+  });
+
   it("non annida ciò che non è una voce, né sotto ciò che non è una voce", () => {
     const state = stateOf("Testo\n\n- uno\n\nAltro");
     const blocks = blocksOf(state);
