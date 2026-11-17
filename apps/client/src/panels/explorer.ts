@@ -366,8 +366,14 @@ export function mountExplorer(lifetime: Lifetime): void {
   lifetime.add(on("documents", () => filter?.stale()));
   lifetime.add(on("vault", () => filter?.hide()));
   // L'organizzazione cambiata ridisegna la stessa vista senza richiederla:
-  // icone, pin e ordine non passano dal kernel.
-  lifetime.add(on("organization", renderFileList));
+  // icone, pin e ordine non passano dal kernel. Un'appuntata nuova sì: quali
+  // appuntate esistano lo dice il kernel (`view.existing`), e una nota appena
+  // appuntata non c'era nella domanda di prima, così la lista restava vuota fino
+  // al ridisegno dopo (IMP-009). Si chiede, e il giro ridisegna se è cambiato.
+  lifetime.add(on("organization", () => {
+    renderFileList();
+    if (state.meta.pinned.some((id) => !view.existing.has(id))) void refreshFromKernel();
+  }));
   lifetime.add(on("page-icons", renderFileList));
   lifetime.add(on("reveal-folder", (folder) => void revealPath(folder, true)));
   lifetime.add(on("reveal-path", (path) => void revealPath(path, false)));

@@ -205,6 +205,19 @@ describe("«Tutte le note» sopra l'albero", () => {
   });
 });
 
+describe("le appuntate", () => {
+  it("una nota appuntata dal menu compare subito fra le appuntate (IMP-009)", async () => {
+    await start();
+    const pinnedList = document.getElementById("pinned-list")!;
+    expect(pinnedList.hidden).toBe(true);
+    const { setPinned } = await import("../state/organization");
+    await setPinned("Benvenuto.md", true);
+    await waitFor("l'appuntata nella lista", () => pinnedList.querySelector('.tree-row[data-path="Benvenuto.md"]') !== null);
+    expect(pinnedList.hidden).toBe(false);
+    expect(document.getElementById("pinned-title")!.hidden).toBe(false);
+  });
+});
+
 describe("le azioni del titolo", () => {
   it("«nuova nota» è una figura col suo nome", async () => {
     await start();
