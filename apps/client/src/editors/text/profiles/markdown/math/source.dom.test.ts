@@ -188,6 +188,14 @@ describe("«Mostra il LaTeX»", () => {
     key("Tab");
     expect(shown()).toBe("\\frac{}{|}");
     key("Tab");
+    // Dopo l'ultima graffa il Tab segue la pagina: i tre puntini, poi fuori.
+    expect(key("Tab").defaultPrevented).toBe(false);
+    expect(left).toEqual([]);
+  });
+
+  it("senza i tre puntini, il Tab dopo l'ultimo spazio vuoto esce dalla formula", async () => {
+    const { field, key, left } = await open("\\frac{}{}", { preferences: SOURCE, dots: false });
+    field().setSelectionRange(9, 9);
     key("Tab");
     expect(left).toEqual(["after"]);
   });

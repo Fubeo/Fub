@@ -122,9 +122,9 @@ DOM: ogni tasto lavora sul TeX della formula aperta, in memoria.
 La preferenza «Mostra il LaTeX delle formule» (`editor.math.source`, spenta di
 partenza) mette sotto la formula, in riga e a blocco, il campo del suo LaTeX:
 si scrive lì, e la formula sopra ne è l'anteprima. Il clic sulla formula porta
-soltanto agli spazi vuoti; Tab va da uno spazio vuoto al seguente, poi fuori
-dalla graffa, poi fuori dalla formula. Le proposte dopo `\` dicono anche il
-comando.
+soltanto agli spazi vuoti; Tab va da uno spazio vuoto al seguente e fuori
+dall'ultima graffa, poi segue il riquadro: i tre puntini, la tavolozza, la
+nota. Le proposte dopo `\` dicono anche il comando.
 
 Col campo valgono tre misure di aiuto (`editor.math.help`, «Pieni» di
 partenza):

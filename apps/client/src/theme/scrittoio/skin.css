@@ -9678,6 +9678,10 @@ button.cm-fub-page-icon:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
+/* Col fuoco da tastiera il prototipo arrotonda a 6 px, come ogni anello. */
+.cm-fub-mx-latex:focus-visible {
+  border-radius: 6px;
+}
 .cm-fub-mx-latex::placeholder {
   color: var(--muted);
   font-family: var(--font-ui);

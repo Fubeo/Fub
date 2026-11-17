@@ -590,8 +590,11 @@ export class MathEditor {
         this.options.onLeave("escape");
         return;
       case "Tab": {
-        handled();
         const outcome = rules.sourceTab(here, event.shiftKey);
+        // Dopo l'ultimo spazio vuoto il Tab segue la pagina: i tre puntini,
+        // la tavolozza, poi fuori dal riquadro, come dalla tavolozza.
+        if (outcome.kind === "leave" && this.more) return;
+        handled();
         if (outcome.kind === "move") {
           this.input.setSelectionRange(outcome.caret, outcome.caret);
           this.readField();
