@@ -322,7 +322,9 @@ describe("i comandi che lo aprono", () => {
     showContextMenu(new MouseEvent("contextmenu", { clientX: 10, clientY: 10 }), [{ label: "Apri", run: () => {} }], { pointer: false });
     for (const ch of "zz") document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true, cancelable: true }));
     const offer = document.querySelector<HTMLButtonElement>("#context-menu .menu-items [role=menuitem]")!;
-    expect(offer.querySelector(".menu-hint")?.textContent).toBe("Ctrl+Shift+P");
+    // Nel menu i tasti si scrivono come nel prototipo, separati da uno spazio
+    // (il nome di Maiusc è la sua chiave, perché `t` è finta).
+    expect(offer.querySelector(".menu-hint")?.textContent).toBe("Ctrl context.key.shift P");
     offer.click();
     expect(selectedMode()).toContain("launcher.mode.commands");
     expect(world.asked[world.asked.length - 1]).toEqual(["commands", "zz"]);
