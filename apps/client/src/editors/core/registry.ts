@@ -178,8 +178,13 @@ export interface SurfaceBuffer {
    * back. It reaches the recovery drafts, never the file.
    */
   pendingText?(): string | null;
-  /** Records the held-back text now, as the end of its pause would. */
-  commitPending?(): void;
+  /**
+   * Records the held-back text now, as the end of its pause would. A surface
+   * whose record reaches the document through an asynchronous step (a grid
+   * cell confirmed by its provider) returns the promise of that step: the
+   * session waits for it before it saves, reads the disk or closes.
+   */
+  commitPending?(): void | Promise<void>;
   /**
    * Calls `listener` each time the held-back text changes, with whether some
    * is left. The call does no other work: the session asks `pendingText` only

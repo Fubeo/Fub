@@ -159,6 +159,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   /// La revisione dei byte da cui il testo della sessione di `doc` discende
   /// adesso: una cartella di Excel ci apre il suo giornale.
   readonly documentBase?: (doc: string) => string | null;
+  /// La revisione che il file `doc` ha adesso sul disco: la cartella di Excel
+  /// la chiede quando i byte di `documentBase` non ci sono più.
+  readonly documentDiskRevision?: (doc: string) => Promise<string | null>;
   /// Le scritture dei documenti aperti, per i gesti della barra di una Base:
   /// salvare prima, e annunciare la scrittura perché la ricarica non si dica.
   readonly documentWrites?: BaseDocumentWrites;
@@ -931,6 +934,7 @@ function mountGrid(
       revision: context.revision,
       documentId: context.documentId,
       base: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
+      diskRevision: options.documentDiskRevision ? () => options.documentDiskRevision!(context.documentId) : undefined,
       onChange: (change) => {
         options.onChange(context.paneId, change);
         cellChanged();
@@ -1007,6 +1011,11 @@ function mountGrid(
         setDoc: (text) => engine.setDoc(text),
         syncDoc: (update) => engine.syncDoc(update),
         getDoc: () => engine.getDoc(),
+        // La cella aperta e non confermata: entra nella bozza di recupero, e
+        // si conferma prima che la sessione si chiuda o legga il disco.
+        pendingText: () => engine.pendingText(),
+        commitPending: () => engine.commitPending(),
+        watchPending: (listener) => engine.watchPending(listener),
       },
       focus: () => engine.focus(),
       selectedText: () => engine.selectedText(),

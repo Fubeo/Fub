@@ -41,18 +41,21 @@ Editor in-cell e formula bar usano due istanze di `TextEngine` con
 `FormulaProfile`, e nessuna battuta attraversa IPC. Un commit scrive le voci
 nel giornale, lo pubblica subito alla sessione e lo consegna al provider, che
 controlla le preimmagini sulla revisione, rifiuta le celle bloccate e risponde
-con le celle da rileggere. Le modifiche in coda partono una dopo l'altra.
+con le celle da rileggere; le modifiche in coda partono una dopo l'altra.
 Finché il giornale ha soltanto celle l'undo è locale alla superficie; in
 modalità a comandi annulla e ripeti sono del documento (`edit.undo`,
 `edit.redo`) e, dopo il salvataggio, le celle scritte si annullano con le loro
-patch. Un giornale cambiato altrove (un altro riquadro, un salvataggio, una
-ricarica) riapre la sessione e chiude la precedente; la bozza aperta resta,
-con il cursore e il fuoco. Se la sua cella è cambiata sotto, un avviso chiede
-«Tieni la tua» o «Prendi quella nuova»; se il foglio non c'è più, la bozza si
-chiude e l'avviso lo dice. Se non c'è una superficie compatibile, la sessione
-non si apre o una finestra fallisce, la superficie dichiara
-`data-grid-protocol="unavailable"`, lo dice nell'avviso e non scrive; il
-linguaggio delle formule non si duplica in TypeScript.
+patch. Un giornale cambiato altrove (altro riquadro, salvataggio, ricarica)
+riapre la sessione e chiude la precedente; la bozza aperta resta, col cursore
+e il fuoco. Se la sua cella è cambiata sotto, un avviso chiede «Tieni la tua»
+o «Prendi quella nuova»; se il foglio non c'è più, la bozza si chiude e
+l'avviso lo dice. La cella aperta è testo [in
+sospeso](frontend-and-ipc.md#il-testo-in-sospeso): va nelle bozze, e si
+conferma prima di salvare, di chiudere o di un cambio da fuori (che diventa un
+conflitto). Se i byte di base del giornale non sono più sul disco, la griglia
+lo apre su quelli di adesso (come «Tieni il mio testo»). Senza superficie
+compatibile, o se sessione o finestra non si aprono, la griglia è
+`data-grid-protocol="unavailable"`, lo dice nell'avviso e non scrive.
 
 La shell non riceve DOM, callback JavaScript o oggetti CodeMirror: possiede
 rendering, input, clipboard, selezione e stato visuale, mentre il provider
@@ -93,14 +96,13 @@ pura di dove andare sta in `apps/client/src/tabella/navigation.ts`, quella
 del riempimento in `tabella/selection.ts` (`fillRange`): sono le regole di
 ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
 
-Una battuta vera (stampabile, un tasto morto o una composizione dell'IME)
-mette il fuoco nel campo della cella durante il `keydown` e non si ferma: il
-carattere lo scrive il browser, come lo manda il sistema. Una battuta
-sintetica, che il browser non scrive, apre la cella col suo carattere
-(`typingOpens`). PagSu e PagGiù scorrono di una schermata di righe vere, con
-le loro altezze, e la cella attiva resta allo stesso punto dello schermo;
-Alt+PagSu e Alt+PagGiù fanno lo stesso di lato, Ctrl+Backspace riporta in
-vista la cella attiva. Le frecce senza Maiuscolo partono dalla cella attiva.
+Una battuta vera (stampabile, un tasto morto, una composizione dell'IME) porta
+il fuoco nella cella durante il `keydown` e il carattere lo scrive il browser;
+una sintetica apre la cella col suo carattere (`typingOpens`). PagSu e PagGiù
+scorrono di una schermata di righe vere e la cella attiva resta allo stesso
+punto dello schermo; Alt+PagSu e Alt+PagGiù fanno lo stesso di lato,
+Ctrl+Backspace riporta in vista la cella attiva, da cui partono le frecce
+senza Maiuscolo.
 
 Nelle formule si punta come nei fogli di calcolo. Dove la formula aspetta un
 operando (`operandSlot` in `profiles/formula.ts`: dopo `=`, un operatore,
@@ -115,10 +117,8 @@ del suo intervallo sulla griglia; un riferimento a un altro foglio si
 contorna solo su quel foglio. Puntare celle di un altro foglio non c'è
 ancora: il riferimento si scrive a mano.
 
-Il disegno riusa gli elementi che non cambiano (`#reconcile`): una cella
-uguale a quella di prima resta lo stesso nodo e cambia soltanto le classi
-della selezione, così il doppio clic arriva e l'editor aperto non perde il
-fuoco. Lo scorrimento disegna al più una volta per fotogramma.
+Il disegno riusa i nodi che non cambiano (`#reconcile`): il doppio clic
+arriva, l'editor tiene il fuoco, e si disegna al più una volta per fotogramma.
 
 La riga delle intestazioni, l'angolo, i numeri delle righe e le righe
 bloccate stanno fermi con `position: sticky`: sono nel flusso del riquadro,

@@ -338,6 +338,10 @@ export class GridEngine {
   #rows: AxisLayout = { offsets: [0], sizes: [], total: 0 };
   #columns: AxisLayout = { offsets: [0], sizes: [], total: 0 };
   #editing: EditingState | null = null;
+  /// Chi vuole sapere se la cella aperta tiene testo non confermato (la
+  /// sessione, per la bozza di recupero), e l'ultima risposta data.
+  readonly #pendingWatchers = new Set<(pending: boolean) => void>();
+  #pendingSaid = false;
   #pointing: Pointing | null = null;
   /// Ciò che si è tagliato e non ancora incollato: le formiche attorno
   /// all'intervallo, e il testo che l'incolla riconosce per spostarlo.
@@ -645,6 +649,61 @@ export class GridEngine {
   }
 
   getDoc(): string { return this.#journal; }
+
+  /// Il giornale con dentro la cella aperta, come lo scriverebbe la sua
+  /// conferma; `null` se la cella non tiene niente di nuovo, o se la conferma
+  /// passa dal provider (una sessione a comandi, una formula): allora la
+  /// bozza tiene l'ultimo giornale accettato. Non cambia niente.
+  pendingText(): string | null {
+    const editing = this.#editing;
+    if (this.#destroyed || !editing || editing.draft === editing.original || this.#readOnly || !this.#view) return null;
+    if (this.#commandMode() || this.#writeRefusal(editing.position)) return null;
+    const coordinate = coordinateAt(this.#sheet(), editing.position);
+    if (!coordinate) return null;
+    const after = fileInput(editing.draft, this.#decimal);
+    const current = this.#workbookCell(editing.position)?.bytes.input ?? "";
+    try {
+      const journal = parseGridJournal(this.#journal);
+      if (after.startsWith("=") && gridJournalEntry(journal, coordinate)?.before !== after) return null;
+      return after === current ? this.#journal : gridJournalText(recordGridJournal(journal, coordinate, current, after));
+    } catch {
+      return null;
+    }
+  }
+
+  /// Conferma adesso la cella aperta, come Invio senza spostarsi. La
+  /// conferma arriva al giornale definitivo col suo turno della coda del
+  /// provider (subito in anticipo per un valore, soltanto allora per una
+  /// formula o in una sessione a comandi): la promessa dice quando, e chi
+  /// salva o chiude la sessione la aspetta.
+  commitPending(): Promise<void> | undefined {
+    if (this.#destroyed || !this.#pendingNow()) return undefined;
+    const ticket = this.#bytesTickets;
+    this.#finishEditing(true, "input", false);
+    return this.#bytesTickets !== ticket ? this.#providerCommitTail : undefined;
+  }
+
+  /// Avvisa a ogni cambio del testo della cella aperta, con `true` finché
+  /// ce n'è di non confermato. Il disposer ferma gli avvisi.
+  watchPending(listener: (pending: boolean) => void): () => void {
+    this.#pendingWatchers.add(listener);
+    return () => this.#pendingWatchers.delete(listener);
+  }
+
+  #pendingNow(): boolean {
+    const editing = this.#editing;
+    return editing !== null && editing.draft !== editing.original;
+  }
+
+  /// Ogni battuta conta (la sessione riarma la bozza su ogni cambio); quando
+  /// non resta niente lo si dice una volta.
+  #pendingChanged(): void {
+    const pending = this.#pendingNow();
+    if (!pending && !this.#pendingSaid) return;
+    this.#pendingSaid = pending;
+    for (const listener of [...this.#pendingWatchers]) listener(pending);
+  }
+
   selection(): GridSelection {
     const { anchor, focus, active } = this.#selection;
     return active
@@ -1175,7 +1234,15 @@ export class GridEngine {
   /// contiene la cella attiva e la cella attiva, che è l'àncora quando è un
   /// angolo dell'intervallo.
   #adoptSelection(selection: GridCommandSelection): void {
-    const index = this.#workbook?.sheets.findIndex((sheet) => sheet.id === selection.sheet) ?? -1;
+    const indexOf = () => this.#workbook?.sheets.findIndex((sheet) => sheet.id === selection.sheet) ?? -1;
+    let index = indexOf();
+    // Un comando che ha aggiunto il foglio (Inserisci foglio) lo lascia
+    // attivo: la cartella mostrata lo conosce dopo essersi riletta dalla
+    // sessione del provider, che lo ha già.
+    if (index < 0 && this.#shownSession?.sheets.some((sheet) => sheet.id === selection.sheet)) {
+      this.#showView(this.#sheet().id, false);
+      index = indexOf();
+    }
     const active = parseCellA1(selection.active);
     if (index < 0 || !active) return;
     const areas = selection.selection.split(",").map(parseRangeA1).filter((area): area is GridRange => area !== null);
@@ -1326,7 +1393,19 @@ export class GridEngine {
         if (!this.#destroyed && epoch === this.#bytesEpoch) this.#openFailed(journal, t("grid.workbook.unavailable"));
         return;
       }
-      const session = await host.openGridBytes(surface.id, doc, journal, base);
+      let session: GridBytesSession;
+      try {
+        session = await host.openGridBytes(surface.id, doc, journal, base);
+      } catch (error) {
+        // I byte da cui il giornale discende non sono più sul disco: il file
+        // è cambiato fuori (un conflitto, una bozza ritrovata dopo). Il
+        // giornale si apre sui byte di adesso, come li scriverebbe «Tieni il
+        // mio testo»: la cartella si legge invece di restare bianca, e la
+        // scelta resta alla sessione.
+        const disk = isErrorKind(error, "conflict") ? await this.#options.diskRevision?.().catch(() => null) : null;
+        if (!disk || disk === base || this.#destroyed || epoch !== this.#bytesEpoch) throw error;
+        session = await host.openGridBytes(surface.id, doc, journal, disk);
+      }
       opened = { surface: surface.id, instance: session.instance };
       validateBytesSession(session);
       if (this.#destroyed || epoch !== this.#bytesEpoch) return;
@@ -2080,6 +2159,7 @@ export class GridEngine {
         this.#cellEditorHost.hidden = true;
         this.#cellEditorHost.setAttribute("aria-hidden", "true");
         this.#canvas.append(this.#cellEditorHost);
+        this.#pendingChanged();
       }
     }
     const active = this.#active();
@@ -3394,6 +3474,7 @@ export class GridEngine {
       this.#formulaEditor.setDoc(this.#editing.draft);
     }
     this.#options.onEditMode?.();
+    this.#pendingChanged();
   }
 
   /// Lo scorrimento chiede un disegno: uno per fotogramma.
@@ -3498,6 +3579,7 @@ export class GridEngine {
     // I contorni dei riferimenti seguono la formula.
     const formula = draft.startsWith("=") || editing.draft.startsWith("=");
     editing.draft = draft;
+    this.#pendingChanged();
     if (formula) this.#scheduleRender();
   }
 
@@ -3636,6 +3718,7 @@ export class GridEngine {
     if (commit && editing.draft !== editing.original) {
       this.#commitCells([{ position: editing.position, after: fileInput(editing.draft, this.#decimal) }], origin, true);
     }
+    this.#pendingChanged();
     this.#syncFormulaBar();
     this.#render();
     // Il fuoco torna alla griglia, se nel frattempo non si è aperta un'altra
@@ -3663,6 +3746,7 @@ export class GridEngine {
       editing.original = now;
       editing.theirs = null;
       this.#draftNotice.hidden = true;
+      this.#pendingChanged();
       return;
     }
     editing.theirs = now;
@@ -3677,6 +3761,7 @@ export class GridEngine {
     editing.original = editing.theirs;
     editing.theirs = null;
     this.#draftNotice.hidden = true;
+    this.#pendingChanged();
     (editing.owner === "cell" ? this.#cellEditor : this.#formulaEditor).focus();
   }
 

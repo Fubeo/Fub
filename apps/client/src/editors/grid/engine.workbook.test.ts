@@ -9,6 +9,7 @@ import { gridJournalText, parseGridJournal } from "../../state/grid-journal";
 import { DEFAULT_SHEET_VIEW, decimalSeparator, localInput } from "./workbook";
 import xlsx from "../../__fixtures__/xlsx-grid.json";
 import { settle, typeInActiveCell, workbookHost, workbookMounted } from "./test-support";
+import type { GridHost } from "./engine";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -695,5 +696,36 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(selections()).toBe(1);
     engine.destroy();
     expect(host.querySelector(".grid-sheets")).toBeNull();
+  });
+
+  it("Inserisci foglio rende attivo il foglio nuovo, che la cartella non conosceva ancora (IMP-033)", async () => {
+    const grid = workbookHost();
+    const added = { id: "s4", name: "Sheet1", row_count: 100, column_count: 26 };
+    const host: GridHost = {
+      ...grid.host,
+      // Come il provider: il foglio entra dopo l'attivo e diventa attivo.
+      gridBytesCommand: async (surface, instance, request) => {
+        const outcome = await grid.host.gridBytesCommand(surface, instance, request);
+        if (request.command.id !== "home.insertSheet") return outcome;
+        const sheets = [...outcome.sheets];
+        sheets.splice(1, 0, added);
+        return { ...outcome, sheets, selection: { sheet: added.id, selection: "A1", active: "A1" } };
+      },
+      gridBytesWindow: async (surface, instance, request) => {
+        if (request.sheet !== added.id) return grid.host.gridBytesWindow(surface, instance, request);
+        const window = await grid.host.gridBytesWindow(surface, instance, { ...request, sheet: "s2" });
+        return { ...window, sheet: added.id, cells: [] };
+      },
+    };
+    const { engine, host: root, cell } = await workbookMounted({ ...grid, host });
+    expect(engine.command("home.insertSheet")).toBe(true);
+    await settle();
+    await settle();
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>(".grid-sheets [role=tab]")];
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Conti", "Sheet1", "Note"]);
+    expect(tabs[1]!.getAttribute("aria-selected")).toBe("true");
+    expect(engine.selectionRefs()).toEqual({ sheet: "Sheet1", range: "A1", active: "A1" });
+    expect(cell(0, 0)?.textContent).toBe("");
+    engine.destroy();
   });
 });
