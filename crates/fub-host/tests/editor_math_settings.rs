@@ -43,7 +43,10 @@ fn the_math_settings_start_off_and_full_and_survive_a_restart() {
         let mut mounted = mounted(&root, &machine);
         let ws = &mut mounted.workspace;
         assert_eq!(ws.setting(SOURCE).unwrap(), SettingValue::Toggle(false));
-        assert_eq!(ws.setting(HELP).unwrap(), SettingValue::Text("piene".into()));
+        assert_eq!(
+            ws.setting(HELP).unwrap(),
+            SettingValue::Text("piene".into())
+        );
 
         ws.set_setting(SOURCE, SettingValue::Toggle(true)).unwrap();
         ws.set_setting(HELP, SettingValue::Text("spente".into()))
@@ -53,13 +56,22 @@ fn the_math_settings_start_off_and_full_and_survive_a_restart() {
             .set_setting(HELP, SettingValue::Text("tante".into()))
             .is_err());
         assert!(ws.set_setting(HELP, SettingValue::Toggle(true)).is_err());
-        assert_eq!(ws.setting(HELP).unwrap(), SettingValue::Text("spente".into()));
+        assert_eq!(
+            ws.setting(HELP).unwrap(),
+            SettingValue::Text("spente".into())
+        );
     }
 
     // Nel file della macchina, non in quello del vault.
     let machine_text = std::fs::read_to_string(&machine).expect("il file della macchina");
-    assert!(machine_text.contains(&format!("\"{HELP}\"")), "{machine_text}");
-    assert!(machine_text.contains(&format!("\"{SOURCE}\"")), "{machine_text}");
+    assert!(
+        machine_text.contains(&format!("\"{HELP}\"")),
+        "{machine_text}"
+    );
+    assert!(
+        machine_text.contains(&format!("\"{SOURCE}\"")),
+        "{machine_text}"
+    );
     let vault_file = root.join(".fub").join("settings.json");
     if let Ok(vault_text) = std::fs::read_to_string(&vault_file) {
         assert!(!vault_text.contains(HELP), "{vault_text}");
