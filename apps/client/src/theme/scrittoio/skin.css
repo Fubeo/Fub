@@ -10261,6 +10261,7 @@ button.cm-fub-page-icon:focus-visible {
   background: none;
   font-family: var(--font-mono);
   font-size: 12px;
+  line-height: normal;
 }
 .cm-fub-mx-error-fix {
   flex: none;
