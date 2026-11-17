@@ -5,13 +5,21 @@ import { resolvedLanguage } from "../../../../../../i18n/strings";
 import { iconEl } from "../../../../../../ui/icons";
 import type { PropertyEntry, PropertyWrite } from "../../properties";
 import { liveStrings } from "../../strings";
-import { avatarTone, initials, linkName, type OptionColor, type PropertyKind, type PropertyTypes } from "./kind";
+import { avatarTone, initials, linkName, type OptionColor, type OptionGroup, type PropertyKind, type PropertyTypes } from "./kind";
 
 /// Com'è andata una scrittura: scritta; rifiutata perché il valore è cambiato
 /// da quando l'editor si è aperto (`conflict`); non scritta per un'altra
 /// ragione (sola lettura, una voce che la testata non sa riscrivere: lo YAML
 /// si apre su di lei).
 export type WriteOutcome = "written" | "conflict" | "refused";
+
+/// Un'opzione da aggiungere al registro: il nome, il colore e, per lo Stato,
+/// il gruppo (`null` per una Selezione).
+export interface NewOption {
+  readonly name: string;
+  readonly color: OptionColor;
+  readonly group: OptionGroup | null;
+}
 
 /// Ciò che le righe chiedono a chi ospita la testata.
 export interface PropertyRowHost {
@@ -32,6 +40,10 @@ export interface PropertyRowHost {
   /// Dichiara il tipo nel registro del vault: `null` se è andata, se no il
   /// perché no. Senza, il menu non offre «Tipo».
   setType?(key: string, type: PropertyType): Promise<string | null>;
+  /// Aggiunge un'opzione di Selezione o di Stato nel registro del vault
+  /// (`property.option.set`): `null` se è andata, se no il perché no. Senza,
+  /// l'editor delle opzioni sceglie soltanto fra quelle che ci sono.
+  addOption?(key: string, option: NewOption): Promise<string | null>;
   /// Le persone (le note della cartella delle persone, o le note) il cui nome
   /// combacia con `text`. Senza, l'editor delle persone cerca fra quelle che
   /// la proprietà ha già.

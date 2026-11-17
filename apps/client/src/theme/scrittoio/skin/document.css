@@ -1174,9 +1174,57 @@ button.cm-fub-page-icon:focus-visible {
   font-weight: var(--weight-bold);
   line-height: 1;
 }
-.cm-fub-page-prop[data-mismatch] .cm-fub-page-prop-value {
+.cm-fub-page-prop[data-mismatch] .cm-fub-page-prop-value,
+.cm-fub-page-prop[data-outside] .cm-fub-page-prop-value {
   text-decoration: underline wavy var(--doc-wavy) 1px;
   text-underline-offset: 3px;
+}
+/* L'indirizzo (T9): il testo è un link, che il clic apre; la matita accanto
+   lo modifica in riga. */
+.cm-fub-prop-url {
+  color: var(--doc-link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--doc-link) 42%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+}
+.cm-fub-prop-url-cell {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+}
+.cm-fub-prop-url-cell > .cm-fub-page-prop-value {
+  flex: 1;
+}
+.cm-fub-prop-url-edit {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--doc-gutter-fg);
+  cursor: pointer;
+}
+.cm-fub-prop-url-edit > svg {
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-prop-url-edit:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+.cm-fub-prop-url-edit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* Mentre il campo è aperto la matita non serve. */
+.cm-fub-page-prop-value[data-editing] + .cm-fub-prop-url-edit {
+  display: none;
 }
 .cm-fub-prop-mismatch {
   color: var(--doc-gutter-fg);
@@ -1413,7 +1461,8 @@ button.cm-fub-page-icon:focus-visible {
   cursor: pointer;
 }
 /* Le persone: la ricerca in cima (`.m-s` del prototipo), le proposte sotto. */
-.cm-fub-prop-people {
+.cm-fub-prop-people,
+.cm-fub-prop-choices {
   width: 300px;
   font-family: var(--font-ui);
   font-size: 13px;
@@ -1441,8 +1490,58 @@ button.cm-fub-page-icon:focus-visible {
   font-size: 12.5px;
   line-height: var(--leading-normal);
 }
-.cm-fub-prop-people .cm-fub-prop-note {
+.cm-fub-prop-people .cm-fub-prop-note,
+.cm-fub-prop-choices .cm-fub-prop-note {
   margin: var(--space-4) var(--space-5);
+}
+/* Selezione e Stato (T9, `propEditor` del prototipo): i gruppi dello Stato
+   come intestazioni (`.m-h`), «Crea» col nome e, sotto, dove va (`.lb
+   small`), in fondo la riga sul registro (`.m-foot`). */
+.cm-fub-prop-group[aria-disabled="true"] {
+  min-height: 0;
+  padding: 9px var(--space-4) var(--space-2);
+  color: var(--doc-ghost);
+  font-size: 11.5px;
+  font-weight: var(--weight-bold);
+  opacity: 1;
+  cursor: default;
+}
+.cm-fub-prop-create > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-prop-create .cm-fub-prop-menu-label {
+  display: grid;
+  min-width: 0;
+}
+.cm-fub-prop-create .cm-fub-prop-menu-hint {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-fub-prop-empty {
+  margin: 0;
+  padding: 14px var(--space-5);
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-prop-empty[hidden] {
+  display: none;
+}
+.cm-fub-prop-foot {
+  margin: 0;
+  padding: 7px var(--space-5);
+  border-top: 1px solid var(--doc-rule-soft);
+  color: var(--doc-ghost);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.cm-fub-prop-foot > svg {
+  width: 12px;
+  height: 12px;
+  margin-right: var(--space-2);
+  vertical-align: -2px;
 }
 .cm-fub-prop-note[hidden] {
   display: none;

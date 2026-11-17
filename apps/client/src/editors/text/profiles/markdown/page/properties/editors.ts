@@ -1,6 +1,7 @@
-// Gli editor dei valori della testata (T8), uno per tipo. Testo, numero e
+// Gli editor dei valori della testata (T8, T9), uno per tipo. Testo, numero e
 // indirizzo si scrivono in riga; la casella si spunta col clic o con Spazio;
-// data, elenco, etichette e persone aprono un riquadro. Ogni modifica è una
+// data, elenco, etichette, persone, Selezione e Stato aprono un riquadro.
+// Ogni modifica è una
 // scrittura sola, con un passo d'annullamento suo (`PropertyRowHost.write`),
 // e porta l'impronta del valore di quando l'editor si è aperto: se nel
 // frattempo il valore è cambiato (un altro riquadro, il file da fuori) non si
@@ -12,8 +13,8 @@ import { iconEl } from "../../../../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../../../../ui/lifetime";
 import type { PropertyEntry, PropertyWrite } from "../../properties";
 import { liveStrings } from "../../strings";
-import { KIND_ICONS, linkName, linkTo, parseNumber, validDate, type RowKind } from "./kind";
-import { entryStamp, longDate, personElement, type PropertyRowHost, type WriteOutcome } from "./values";
+import { freeColor, KIND_ICONS, linkName, linkTo, OPTION_GROUPS, optionsOf, parseNumber, validDate, type OptionGroup, type PropertyOption, type RowKind } from "./kind";
+import { entryStamp, longDate, optionElement, personElement, type PropertyRowHost, type WriteOutcome } from "./values";
 
 /// Un editor aperto su una chiave: l'impronta che porta alla scrittura.
 interface Session {
@@ -75,6 +76,10 @@ export function openEditor(entry: PropertyEntry, kind: RowKind, value: HTMLButto
       return;
     case "people":
       openPeopleEditor(entry, value, host, life);
+      return;
+    case "select":
+    case "status":
+      openOptionsEditor(entry, kind.kind, value, host, life);
       return;
     case "checkbox":
       toggleCheckbox(entry, host);
@@ -681,6 +686,178 @@ export function openPeopleEditor(entry: PropertyEntry, anchor: HTMLButtonElement
   own.listen(input, "input", () => look(input.value));
   look("");
   const popover = popoverFor(anchor, body, liveStrings.t("page.properties.people.label", { key: entry.key }), host, life, own);
+  input.focus();
+  return popover;
+}
+
+// ——— Selezione e Stato ———
+
+type ChoiceRow =
+  | { readonly kind: "group"; readonly id: string; readonly group: OptionGroup }
+  | { readonly kind: "option"; readonly id: string; readonly option: PropertyOption }
+  | { readonly kind: "create"; readonly id: string; readonly name: string };
+
+/// Selezione e Stato: le opzioni del registro come pastiglie del loro colore;
+/// lo Stato le raggruppa in Da fare, In corso, Fatto. La ricerca le filtra;
+/// un nome che non c'è si crea («Crea «nome»»): l'opzione entra nel registro
+/// del vault (`addOption`, lo Stato in Da fare, con un colore libero) e poi
+/// diventa il valore. Se il registro non si scrive (illeggibile, di una
+/// versione futura) il riquadro lo dice e la nota non cambia. Il valore è il
+/// nome dell'opzione, scritto come testo.
+export function openOptionsEditor(entry: PropertyEntry, kind: "select" | "status", anchor: HTMLButtonElement, host: PropertyRowHost, life: Lifetime): PopoverHandle {
+  const state = session(entry, host);
+  const own = openLifetime();
+  const status = kind === "status";
+  const options: PropertyOption[] = [...optionsOf(host.types, entry.key)];
+  let chosen = (host.current(entry.key) ?? entry).value;
+  let query = "";
+  let creating = false;
+  const body = document.createElement("div");
+  body.className = "cm-fub-prop-choices";
+  const search = document.createElement("div");
+  search.className = "cm-fub-prop-search";
+  const icon = iconEl("search");
+  icon?.setAttribute("aria-hidden", "true");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.autocomplete = "off";
+  input.placeholder = liveStrings.t("page.properties.options.search");
+  input.setAttribute("aria-label", liveStrings.t("page.properties.options.search"));
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-expanded", "true");
+  input.setAttribute("aria-autocomplete", "list");
+  search.append(...(icon ? [icon] : []), input);
+  const list = document.createElement("div");
+  list.className = "cm-fub-block-menu cm-fub-prop-options";
+  list.setAttribute("aria-label", liveStrings.t("page.properties.options.label", { key: entry.key }));
+  const empty = document.createElement("p");
+  empty.className = "cm-fub-prop-empty";
+  empty.textContent = liveStrings.t("page.properties.options.none");
+  const note = noteElement();
+  const foot = document.createElement("p");
+  foot.className = "cm-fub-prop-foot";
+  const footIcon = iconEl("base-sliders");
+  footIcon?.setAttribute("aria-hidden", "true");
+  const footText = document.createElement("span");
+  footText.textContent = liveStrings.t("page.properties.options.foot", { key: entry.key });
+  foot.append(...(footIcon ? [footIcon] : []), footText);
+  body.append(search, list, empty, note, foot);
+
+  const rows = (): ChoiceRow[] => {
+    const wanted = query.trim().toLocaleLowerCase();
+    const shown = options.filter((option) => wanted === "" || option.name.toLocaleLowerCase().includes(wanted));
+    const row = (option: PropertyOption): ChoiceRow => ({ kind: "option", id: `o:${option.name}`, option });
+    const out: ChoiceRow[] = status
+      ? OPTION_GROUPS.flatMap((group): ChoiceRow[] => {
+        const members = shown.filter((option) => option.group === group);
+        return members.length === 0 ? [] : [{ kind: "group", id: `g:${group}`, group }, ...members.map(row)];
+      })
+      : shown.map(row);
+    const name = query.trim();
+    if (host.addOption && name !== "" && !options.some((option) => option.name === name)) out.push({ kind: "create", id: `c:${name}`, name });
+    return out;
+  };
+
+  const handle = createList<ChoiceRow>({
+    container: list,
+    role: "listbox",
+    items: [],
+    key: (row) => row.id,
+    render: (row, element) => {
+      if (row.kind === "group") {
+        // L'intestazione di un gruppo: si vede, non si sceglie, le frecce la
+        // saltano (`disabled`).
+        element.classList.add("cm-fub-prop-group");
+        element.textContent = liveStrings.t(`page.properties.options.group.${row.group}`);
+        return;
+      }
+      if (row.kind === "create") {
+        const figure = iconEl("plus");
+        figure?.setAttribute("aria-hidden", "true");
+        // Il nome e, sotto, più piano, dove va e con che colore (`.lb small`).
+        const label = document.createElement("span");
+        label.className = "cm-fub-prop-menu-label";
+        const named = document.createElement("span");
+        named.textContent = liveStrings.t("page.properties.options.create", { name: row.name });
+        const hint = document.createElement("small");
+        hint.className = "cm-fub-prop-menu-hint";
+        hint.textContent = liveStrings.t(status ? "page.properties.options.create.status" : "page.properties.options.create.select");
+        label.append(named, hint);
+        element.classList.add("cm-fub-prop-create");
+        element.replaceChildren(...(figure ? [figure] : []), label);
+        return;
+      }
+      const check = document.createElement("span");
+      check.className = "cm-fub-page-check";
+      check.setAttribute("aria-hidden", "true");
+      check.textContent = row.option.name === chosen ? "✓" : "";
+      element.replaceChildren(check, optionElement(row.option.name, row.option.color, status));
+    },
+    disabled: (row) => row.kind === "group",
+    selected: (row) => row.kind === "option" && row.option.name === chosen,
+    onActivate: (row) => {
+      if (row.kind === "option") choose(row.option.name);
+      else if (row.kind === "create") void create(row.name);
+    },
+    owner: input,
+    focus: "activedescendant",
+    lifetime: own,
+  });
+
+  /// `first`: una ricerca nuova attiva la prima proposta, che Invio sceglie;
+  /// senza ricerca è attiva l'opzione del valore.
+  const refresh = (first = false) => {
+    const items = rows();
+    handle.setItems(items);
+    if (first) {
+      const current = query.trim() === "" ? items.find((row) => row.kind === "option" && row.option.name === chosen) : undefined;
+      handle.setActive((current ?? items.find((row) => row.kind !== "group"))?.id ?? null);
+    }
+    empty.hidden = items.length > 0;
+  };
+
+  /// Scrive l'opzione come valore e chiude. Se il valore è cambiato sotto, la
+  /// scelta resta segnata, lo si dice, e «Scrivi la mia» la scrive.
+  function choose(name: string): void {
+    const outcome = commit(state, name);
+    if (outcome === "conflict") {
+      chosen = name;
+      sayConflict(note, conflictText(state), own, () => choose(name));
+      refresh();
+      input.focus();
+      return;
+    }
+    popover.close();
+  }
+
+  /// Crea l'opzione nel registro, poi la scrive. Un rifiuto del registro si
+  /// dice nel riquadro, e la nota non cambia.
+  async function create(name: string): Promise<void> {
+    if (creating || !host.addOption) return;
+    creating = true;
+    const color = freeColor(options);
+    const group: OptionGroup | null = status ? "todo" : null;
+    const problem = await host.addOption(entry.key, { name, color, group }).catch((error: unknown) => error instanceof Error ? error.message : String(error));
+    creating = false;
+    if (own.closed) return;
+    if (problem !== null) {
+      say(note, liveStrings.t("page.properties.options.failed", { name, reason: problem }));
+      input.focus();
+      return;
+    }
+    options.push({ name, color, group: group ?? "todo" });
+    query = "";
+    input.value = "";
+    choose(name);
+  }
+
+  own.listen(input, "input", () => {
+    query = input.value;
+    say(note, null);
+    refresh(true);
+  });
+  refresh(true);
+  const popover = popoverFor(anchor, body, liveStrings.t("page.properties.options.label", { key: entry.key }), host, life, own);
   input.focus();
   return popover;
 }

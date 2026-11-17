@@ -229,6 +229,7 @@ function hostFor(view: EditorView, root: HTMLElement): PageHost {
     renameProperty: (key, name) => renamePropertyInNote(view, key, name),
     featureProperty: (key, on) => featurePropertyInNote(view, key, on),
     setPropertyType: options.setPropertyType,
+    addPropertyOption: options.addPropertyOption,
     searchPeople: options.searchPeople,
     classes: () => propertyList(view.state, "cssclasses"),
     // La rinomina dal titolo porta con sé l'H1 ripiegato: riuscita, l'H1

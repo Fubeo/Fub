@@ -707,6 +707,19 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         return errorText(error);
       }
     },
+    // «Crea «nome»» nell'editor di Selezione e Stato: l'opzione entra nel
+    // registro del vault (`property.option.set`, con l'annullo suo). Il
+    // registro si rilegge prima di scrivere il valore, così la riga lo
+    // mostra già come opzione.
+    addPropertyOption: async (key, option) => {
+      try {
+        await api.invokeCommand("property.option.set", { key, option: option.name, color: option.color, ...(option.group ? { group: option.group } : {}) }, "apply");
+        await readSurfaceSettings();
+        return null;
+      } catch (error) {
+        return errorText(error);
+      }
+    },
     // Le persone: la cartella delle persone, se c'è; se no le note.
     searchPeople: (text) => {
       const people = opts.completions.people;

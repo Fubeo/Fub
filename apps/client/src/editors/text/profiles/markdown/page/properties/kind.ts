@@ -9,7 +9,8 @@ import type { PropertyEntry } from "../../properties";
 
 /// Gli editor che la testata sa aprire. `people` è un elenco di soli link a
 /// note (le persone): il registro non ha un tipo suo, lo legge dal valore.
-export type PropertyKind = "text" | "number" | "checkbox" | "date" | "date_time" | "list" | "tags" | "people" | "url";
+/// Selezione e Stato vengono solo dal registro: un valore non le dice da sé.
+export type PropertyKind = "text" | "number" | "checkbox" | "date" | "date_time" | "list" | "tags" | "people" | "url" | "select" | "status";
 
 /// I nove colori di un'opzione (`PropertyColor` nel core): i nomi dei colori
 /// del contenuto, che il tema disegna con `--doc-color-*` e `--doc-tint-*`.
@@ -86,6 +87,25 @@ export function parsePropertyTypes(raw: unknown): PropertyTypes {
   }
   if (out.size === 0 && choices.size === 0) return NO_TYPES;
   return choices.size === 0 ? out : Object.assign(out, { options: choices as ReadonlyMap<string, readonly PropertyOption[]> });
+}
+
+/// Le opzioni di `key` nel loro ordine: nessuna, se il registro non ne ha.
+export function optionsOf(types: PropertyTypes, key: string): readonly PropertyOption[] {
+  return types.options?.get(key) ?? [];
+}
+
+/// L'ordine dei gruppi dello Stato: Da fare, In corso, Fatto.
+export const OPTION_GROUPS: readonly OptionGroup[] = ["todo", "doing", "done"];
+
+/// I colori che un'opzione nuova prende, nell'ordine: il primo che nessuna
+/// opzione della chiave ha già. Il grigio resta di chi non ne dice uno.
+const FREE_COLORS: readonly OptionColor[] = ["blue", "green", "orange", "purple", "pink", "yellow", "red", "brown"];
+
+/// Il colore libero per un'opzione nuova fra `options`: il primo non usato;
+/// se ci sono tutti, il giro ricomincia.
+export function freeColor(options: readonly PropertyOption[]): OptionColor {
+  const used = new Set(options.map((option) => option.color));
+  return FREE_COLORS.find((color) => !used.has(color)) ?? FREE_COLORS[options.length % FREE_COLORS.length]!;
 }
 
 /// L'opzione di `key` che si chiama `value`, carattere per carattere (la
@@ -171,8 +191,10 @@ function fits(entry: PropertyEntry, type: PropertyType): boolean {
 }
 
 /// Il tipo di una riga: quello dichiarato, se il valore torna; altrimenti
-/// testo, e `mismatch` dice quale tipo il valore non rispetta. Selezione e
-/// Stato hanno i loro editor più avanti: intanto si scrivono come testo.
+/// testo, e `mismatch` dice quale tipo il valore non rispetta. Un valore di
+/// Selezione o di Stato fuori dalle opzioni torna lo stesso (è un testo): la
+/// riga lo segna (`outsideOptions`) e il suo editor resta quello delle
+/// opzioni.
 export interface RowKind {
   readonly kind: PropertyKind;
   readonly declared: PropertyType | null;
@@ -184,7 +206,6 @@ export function rowKind(entry: PropertyEntry, types: PropertyTypes): RowKind {
   if (!declared) return { kind: inferred(entry), declared: null, mismatch: null };
   if (!fits(entry, declared)) return { kind: "text", declared, mismatch: declared };
   if (declared === "list") return { kind: entry.items && entry.items.length > 0 && inferred(entry) === "people" ? "people" : "list", declared, mismatch: null };
-  if (declared === "select" || declared === "status") return { kind: "text", declared, mismatch: null };
   // La Relazione ha il suo editor con T35: intanto i suoi link si scrivono
   // come un elenco.
   if (declared === "relation") return { kind: "list", declared, mismatch: null };
@@ -203,13 +224,12 @@ export const KIND_ICONS: Readonly<Record<PropertyKind, string>> = {
   tags: "prop-tags",
   people: "prop-people",
   url: "prop-url",
+  select: "prop-select",
+  status: "prop-status",
 };
 
-/// La figura di un tipo del registro: Selezione e Stato hanno la loro anche
-/// se il valore si scrive intanto come testo.
+/// La figura di un tipo del registro.
 export function typeIcon(type: PropertyType): string {
-  if (type === "select") return "prop-select";
-  if (type === "status") return "prop-status";
   if (type === "relation") return "backlink";
   return KIND_ICONS[type];
 }
@@ -220,9 +240,17 @@ export function rowIcon(kind: RowKind): string {
   return kind.declared ? typeIcon(kind.declared) : KIND_ICONS[kind.kind];
 }
 
-/// I tipi che il menu «Tipo» offre, nell'ordine del prototipo. Selezione e
-/// Stato arrivano coi loro editor; Persone è un elenco di link.
-export const MENU_TYPES: readonly PropertyType[] = ["text", "number", "checkbox", "date", "date_time", "list", "tags", "url"];
+/// I tipi che il menu «Tipo» offre, nell'ordine del prototipo (`TYPES`):
+/// Selezione e Stato dopo il numero. Persone è un elenco di link.
+export const MENU_TYPES: readonly PropertyType[] = ["text", "number", "select", "status", "checkbox", "date", "date_time", "list", "tags", "url"];
+
+/// Un valore di Selezione o di Stato che non è il nome di un'opzione: resta
+/// testo, segnato. Vuoto non lo è.
+export function outsideOptions(entry: PropertyEntry, kind: RowKind, types: PropertyTypes): boolean {
+  if (kind.kind !== "select" && kind.kind !== "status") return false;
+  if (emptyValue(entry)) return false;
+  return optionOf(types, entry.key, entry.value) === null;
+}
 
 /// Una data `aaaa-mm-gg` che esiste nel calendario.
 export function validDate(text: string): boolean {
