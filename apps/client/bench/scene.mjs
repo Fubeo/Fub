@@ -1224,18 +1224,18 @@ export const SCENE = onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openComments(page, mode, gesture),
   })),
-  // Il menu «/» (N12) su una riga vuota della Live, coi comandi veri di
+  // Il menu «/» (N12, T84) su una riga vuota della Live, coi comandi veri di
   // `fub.formatting`: aperto, filtrato, un comando rapido, niente trovato, i
-  // passi di tabella, colore e data, poi la finestra stretta e il foglio.
+  // passi di tabella, colore e data, poi la finestra minima e il foglio.
   ...[
-    ["slash-01-aperto", "Il menu «/» appena aperto: le sezioni, la prima voce e la sua anteprima", ["/"]],
-    ["slash-02-filtro", "Il menu «/» filtrato da «tit»: i Risultati, la parte trovata in evidenza", ["/tit"]],
+    ["slash-01-aperto", "Il menu «/» appena aperto: una colonna, le sei tessere dei più usati con la prima accesa, i gruppi e il disegno in fondo", ["/"]],
+    ["slash-02-filtro", "Il menu «/» filtrato da «tit»: un elenco solo, la parte trovata in evidenza, «Cerca fra tutti i comandi» in fondo", ["/tit"]],
     ["slash-03-rapido", "Il menu «/» con un comando rapido: «/tab 3x4»", ["/tab 3x4"]],
-    ["slash-04-nessuno", "Il menu «/» senza risultati: Invio cerca fra tutti i comandi", ["/qwerty"]],
+    ["slash-04-nessuno", "Il menu «/» senza risultati: lo dice, e Invio cerca fra tutti i comandi", ["/qwerty"]],
     ["slash-05-tabella", "Il passo della tabella, allargato a 3 × 4", ["/tabella", "@Enter", "@ArrowRight"]],
     ["slash-06-colore", "Il passo del colore: il testo e il fondo, coi nomi", ["/colore", "@Enter"]],
     ["slash-07-data", "Il passo della data: i giorni a portata e il calendario", ["/data", "@Enter"]],
-    ["slash-08-stretta", "Il menu «/» nella finestra minima, con meno di 760 px a destra del riquadro: resta l'elenco", ["/"], { width: 800, height: 800 }],
+    ["slash-08-stretta", "Il menu «/» nella finestra minima, scesi nelle righe: il titolo del gruppo resta in cima", ["/", "@ArrowDown", "@Tab", "@Tab"], { width: 800, height: 800 }],
     ["slash-09-dito", "Il menu «/» toccato col dito: un foglio in fondo, righe da 44 px", ["/"], { width: 800, height: 800 }, true],
   ].map(([id, title, keys, viewport, touch]) => ({
     id,
@@ -1257,8 +1257,7 @@ export const SCENE = onPage("shell", [
         else await page.keyboard.type(key);
       }
       await page.waitForSelector(".slash-panel");
-      // L'anteprima arriva 40 ms dopo l'ultima freccia; poi due fotogrammi.
-      await page.waitForTimeout(80);
+      // Poi due fotogrammi, perché il pannello si posi.
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     },
   })),

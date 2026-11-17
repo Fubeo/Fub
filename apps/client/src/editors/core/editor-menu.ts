@@ -164,10 +164,10 @@ export interface SurfaceMiniBar {
   mount(host: HTMLElement): () => void;
 }
 
-/// Le sezioni del menu «/» nel testo, nell'ordine in cui si vedono.
+/// I gruppi delle righe del menu «/» nel testo, nell'ordine di serie. I più
+/// usati non sono un gruppo: stanno sopra, come tessere.
 export type SlashSection =
-  | "suggested" | "favorites" | "recent" | "text" | "lists" | "blocks" | "code"
-  | "media" | "people" | "style" | "page" | "vault";
+  | "text" | "lists" | "blocks" | "code" | "media" | "people" | "style" | "page" | "vault";
 
 /// Il passo che una voce con «›» apre nello stesso riquadro.
 export type SlashPicker = "table" | "color" | "date" | "callout" | "note" | "embed" | "code" | "diagram";
@@ -198,8 +198,8 @@ export interface SlashMenuEntry {
   readonly why: "iniziali" | "forse" | null;
 }
 
-/// Dove si scrive il «/»: lo dice la superficie, lo usano la testata e i
-/// Suggeriti.
+/// Dove si scrive il «/»: lo dice la superficie; la classifica ne tiene
+/// conto (in un elenco, gli elenchi vengono prima).
 export interface SlashPlace {
   /// Su una riga vuota il blocco scelto prende la riga; dopo del testo ne
   /// nasce uno sotto.

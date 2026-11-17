@@ -158,8 +158,8 @@ function tooltipAt(from: number): Tooltip {
 }
 
 /// Quanto può accorciarsi il pannello prima di aprirsi sopra la riga (px):
-/// la testata, le linguette, tre righe e il piede.
-export const SLASH_MIN_HEIGHT = 220;
+/// le tessere, il titolo di un gruppo, tre righe e il disegno in fondo.
+export const SLASH_MIN_HEIGHT = 300;
 /// Lo stacco fra la riga e il pannello (px), sopra come sotto.
 export const SLASH_GAP = 8;
 

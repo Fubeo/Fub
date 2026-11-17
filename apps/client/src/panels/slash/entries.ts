@@ -1,5 +1,5 @@
-// Le voci del menu «/» nel testo: quali, con che nome, in che sezione e in che
-// ordine. Il pannello le disegna (`panel.ts`) e la superficie le esegue; qui
+// Le voci del menu «/» nel testo: quali, con che nome, in che gruppo e in che
+// ordine, e quali sono le tessere dei più usati. Il pannello le disegna (`panel.ts`) e la superficie le esegue; qui
 // c'è soltanto la regola, pura sui dati.
 //
 // Le voci vengono dal registro, come quelle del «/» con la selezione e di
@@ -17,14 +17,20 @@ import { t } from "../../i18n/strings";
 import { displayBinding } from "../../ui/commands";
 import { ACTION_LOOKS } from "../format-bar";
 import { quickCommand } from "./quick";
-import { rank, type RankContext } from "./rank";
+import { byUse, rank, type RankContext } from "./rank";
 
-/// Quante voci recenti stanno in cima, a menu appena aperto.
-export const SLASH_RECENT = 5;
 /// Quanti risultati, al più, quando si scrive.
 export const SLASH_RESULTS = 12;
-/// Quanti Suggeriti.
-const SUGGESTED = 3;
+/// Quante tessere dei più usati, in cima a menu appena aperto.
+export const SLASH_TOP = 6;
+/// Le tessere di un vault nuovo, prima di ogni uso: Attività, Titolo,
+/// Riquadro, Tabella, poi gli altri blocchi che si usano spesso. Base e
+/// Scheda vengono subito dopo Tabella: le aggiungono i task che portano le
+/// loro voci.
+export const SLASH_TOP_DEFAULTS: readonly string[] = [
+  "markdown.list.task", "markdown.heading.2", "markdown.callout", "markdown.table",
+  "markdown.list.bullet", "markdown.codeblock", "markdown.quote", "markdown.image", "markdown.rule",
+];
 
 /// La voce sola dei colori, che apre la tavolozza.
 export const COLOR_ENTRY = "slash.color";
@@ -148,10 +154,9 @@ function sectionOf(id: string): SlashSection {
   return "media";
 }
 
-/// Le sezioni nell'ordine delle linguette. Suggeriti e Recenti ci sono solo
-/// a menu appena aperto.
+/// I gruppi delle righe nel loro ordine di serie.
 export const SECTION_ORDER: readonly SlashSection[] = [
-  "suggested", "favorites", "recent", "text", "lists", "blocks", "code", "media", "people", "style", "page", "vault",
+  "text", "lists", "blocks", "code", "media", "people", "style", "page", "vault",
 ];
 
 /// Ciò che il pannello sa dell'uso e del posto.
@@ -167,22 +172,23 @@ export interface SlashUse {
   readonly sections?: readonly string[];
 }
 
-/// Le sezioni nell'ordine dell'uso: Suggeriti, Preferiti e Recenti in cima,
-/// poi quelle scelte, poi le altre.
+/// I gruppi nell'ordine scelto (`editor.slash.sections`), poi gli altri nel
+/// loro ordine.
 function sectionOrder(use: SlashUse): readonly SlashSection[] {
-  const head = SECTION_ORDER.slice(0, 3);
-  const rest = SECTION_ORDER.slice(3);
-  const chosen = (use.sections ?? []).filter((id): id is SlashSection => (rest as readonly string[]).includes(id));
-  return [...head, ...new Set([...chosen, ...rest])];
+  const chosen = (use.sections ?? []).filter((id): id is SlashSection => (SECTION_ORDER as readonly string[]).includes(id));
+  return [...new Set([...chosen, ...SECTION_ORDER])];
 }
 
 const NO_USE: SlashUse = { recent: [], favorites: [], chord: () => null, today: new Date() };
 
-/// Le voci di un'apertura: per sezioni a menu appena aperto, al più dodici
-/// dal più pertinente scrivendo, i comandi rapidi in cima.
+/// Le voci di un'apertura: a menu appena aperto le tessere dei più usati e
+/// le righe per gruppi; scrivendo un elenco solo, al più dodici dal più
+/// pertinente, col comando rapido in cima.
 export interface SlashResults {
+  /// I più usati, come tessere; vuoto scrivendo.
+  readonly top: readonly SlashMenuEntry[];
   readonly entries: readonly SlashMenuEntry[];
-  /// Le sezioni che hanno voci, nell'ordine delle linguette.
+  /// I gruppi che hanno righe, nell'ordine in cui si vedono; vuoto scrivendo.
   readonly sections: readonly SlashSection[];
   /// Si è scritto qualcosa.
   readonly filtering: boolean;
@@ -226,13 +232,10 @@ export function slashCatalog(specs: readonly CommandSpec[], has: (id: string) =>
   return { listed, colors };
 }
 
-/// Le voci che stanno bene dopo il blocco sopra, nell'ordine in cui le si
-/// propone.
-function suggestionsFor(place: SlashPlace): readonly string[] {
-  if (place.inList || place.above === "task") return ["markdown.list.task", "markdown.list.bullet", "markdown.paragraph"];
-  if (place.above === "list") return ["markdown.list.bullet", "markdown.list.task", "markdown.paragraph"];
-  if (place.above === "heading") return ["markdown.paragraph", "markdown.list.task", "markdown.list.bullet"];
-  return ["markdown.paragraph", "markdown.heading.2", "markdown.list.task"];
+/// Un blocco che può stare fra le tessere: un'azione dell'editor che mette
+/// qualcosa nella nota, non uno stile né un comando del vault.
+function blockLike(entry: SlashMenuEntry): boolean {
+  return entry.action && entry.section !== "style" && entry.section !== "vault";
 }
 
 /// Le voci del «/» per `query`, dove si scrive.
@@ -246,14 +249,10 @@ export function slashMenuEntries(
   const { listed, colors } = slashCatalog(specs, has, use);
   const order = sectionOrder(use);
   if (query.trim() === "") {
-    const pick = (ids: readonly string[], section: SlashSection, max: number) =>
-      ids.map((id) => listed.find((each) => each.id === id)).filter((each): each is SlashMenuEntry => each !== undefined)
-        .slice(0, max).map((each) => ({ ...each, section }));
-    const favorites = pick(use.favorites, "favorites", SLASH_RESULTS);
-    const top = pick(use.recent.filter((id) => !use.favorites.includes(id)), "recent", SLASH_RECENT);
-    const suggested = pick(suggestionsFor(place), "suggested", SUGGESTED);
-    const entries = [...suggested, ...favorites, ...top, ...order.flatMap((section) => listed.filter((each) => each.section === section))];
-    return { entries, sections: order.filter((section) => entries.some((each) => each.section === section)), filtering: false };
+    const blocks = new Map(listed.filter(blockLike).map((each) => [each.id, each]));
+    const top = byUse(new Set(blocks.keys()), use, SLASH_TOP_DEFAULTS, SLASH_TOP).map((id) => blocks.get(id)!);
+    const entries = order.flatMap((section) => listed.filter((each) => each.section === section));
+    return { top, entries, sections: order.filter((section) => entries.some((each) => each.section === section)), filtering: false };
   }
   const recentRank = (id: string) => {
     const at = use.recent.indexOf(id);
@@ -286,5 +285,5 @@ export function slashMenuEntries(
       })]
     : [];
   const entries = [...quickEntry, ...ranked].slice(0, SLASH_RESULTS);
-  return { entries, sections: [], filtering: true };
+  return { top: [], entries, sections: [], filtering: true };
 }
