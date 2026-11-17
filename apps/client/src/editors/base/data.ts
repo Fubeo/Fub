@@ -45,11 +45,10 @@ export interface BaseDocumentWrites {
   expect(doc: string): () => void;
 }
 
-export type BaseViewKind = "table" | "cards" | "list" | "kanban" | "map" | "calendar";
-/// I tipi di vista che la superficie disegna. La linea del tempo (`timeline`)
-/// il contratto la porta già (T17a), ma finché la superficie non la disegna
-/// (T34) si legge come un tipo sconosciuto.
-const DRAWN_VIEW_KINDS: readonly string[] = ["table", "cards", "list", "kanban", "map", "calendar"];
+export type BaseViewKind = "table" | "cards" | "list" | "kanban" | "map" | "calendar" | "timeline";
+/// I tipi di vista che la superficie disegna: un altro tipo si legge come
+/// sconosciuto.
+const DRAWN_VIEW_KINDS: readonly string[] = ["table", "cards", "list", "kanban", "map", "calendar", "timeline"];
 export type BaseCellValue =
   | { kind: "empty" }
   | { kind: "number" | "date" | "duration"; value: number }
@@ -68,6 +67,10 @@ export interface BaseRow {
   /// civile della proprietà data, che l'ora non sposta), `null` se la nota non
   /// ha la data; assente nelle altre viste. Lo dice `derive`.
   readonly day?: string | null;
+  /// L'intervallo della nota in una vista di linea del tempo: i giorni civili
+  /// d'inizio e di fine (`null` se la nota non ha la data) e se la fine viene
+  /// prima dell'inizio; assente nelle altre viste. Lo dice `derive`.
+  readonly span?: { readonly start: string | null; readonly end: string | null; readonly inverted: boolean };
 }
 export interface BaseMapConfig {
   readonly lat_key: string;
@@ -244,7 +247,7 @@ export const BASE_VIEW_SET = "base.view.set";
 export const BASE_VIEW_ADD = "base.view.add";
 export const BASE_VIEW_REMOVE = "base.view.remove";
 /// I tipi di vista che «+» crea: quelli che la Base disegna.
-export const NEW_VIEW_KINDS: readonly BaseViewKind[] = ["table", "cards", "list", "kanban", "map", "calendar"];
+export const NEW_VIEW_KINDS: readonly BaseViewKind[] = ["table", "cards", "list", "kanban", "map", "calendar", "timeline"];
 
 /// Scrive la chiave `key` della vista `view` del file `doc` con
 /// `base.view.set`: `value` è il valore JSON, `null` toglie la chiave. Con
@@ -380,8 +383,13 @@ export async function deriveBaseRows(deps: BaseSurfaceDeps, source: string, view
     const row: BaseRow = { doc: record.doc, values: values as Record<string, BaseCellValue>, properties: properties.get(record.doc)! };
     if (record.time === undefined) return row;
     const time = object(record.time, "tempo");
+    const civil = (value: unknown): value is string | null => value === null || (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value));
+    if (time.start !== undefined || time.end !== undefined) {
+      if (!civil(time.start) || !civil(time.end) || typeof time.inverted !== "boolean") throw new Error("base: intervallo malformato");
+      return { ...row, span: { start: time.start, end: time.end, inverted: time.inverted } };
+    }
     if (time.day === undefined) return row;
-    if (time.day !== null && (typeof time.day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(time.day))) throw new Error("base: giorno malformato");
+    if (!civil(time.day)) throw new Error("base: giorno malformato");
     return { ...row, day: time.day };
   });
   const summaries = object(raw.summaries, "riepiloghi");
