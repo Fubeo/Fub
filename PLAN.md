@@ -1743,7 +1743,7 @@ ristretta) che si scambiano modifiche senza perderne; l'annulla locale non
 contiene le modifiche altrui; `check-listeners` verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/document-session.test.ts
-Stato: [~] in corso (coder, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (2026-11-17), PR bozza #472; rischio per T29: `section-anchor.ts` copia le regole di section_of/block_of del kernel
 
 ## T29 · La trasclusione viva
 
@@ -1995,7 +1995,7 @@ Fatto quando: un test DOM del trascinamento che rilegge le date dal file;
 le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/base
-Stato: [ ] da fare
+Stato: [~] in corso (coder, 2026-11-17)
 
 ## T35a · La Relazione nel contratto e i riepiloghi nel core
 
@@ -2172,7 +2172,7 @@ separatore resta); Vim; testo arrivato in un colpo.
 Fatto quando: un test per regola e per ogni luogo dove non vale.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/typography.test.ts
-Stato: [~] fatto dal coder (7a0e417c7, 2026-11-17), in coda per `integra/editor-1`
+Stato: [~] integrato in `integra/editor-1` (1df35003c, 2026-11-17), PR bozza #472
 
 ## T39 · La pagina del giorno
 
@@ -2198,7 +2198,7 @@ Fatto quando: un test con `MemoryHost`; un test DOM che il fondo non entra
 nel testo; le foto del banco.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 template; cd apps/client && npx vitest run src/editors/text/profiles/markdown
-Stato: [ ] da fare
+Stato: [~] in corso (coder, 2026-11-17)
 
 ## T40 · La Scrivania
 
@@ -2812,7 +2812,7 @@ indietro uscendo dal menu; `%% stile:` scritto e tolto senza toccare il
 resto del recinto.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/ui/mermaid.test.ts src/editors/text/profiles/markdown/diagram-live.test.ts
-Stato: [~] in corso (coder, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (e9542466d, 2026-11-17); 6 scene nuove diagramma-01…06 (baseline dal runner)
 
 ## T58 · Diagramma: sorgente affiancato, errore con la riga, didascalia, misura
 
