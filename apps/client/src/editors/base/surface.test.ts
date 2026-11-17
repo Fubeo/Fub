@@ -678,7 +678,7 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
       expect(press(viewport, { key: "z", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
       expect(invokeCommand).not.toHaveBeenCalled();
       // In sola lettura la Base non annulla il vault per conto suo.
-      surface.setReadOnly(true);
+      surface.setReadOnly!(true);
       expect(press(viewport, { key: "z", ctrlKey: true }).defaultPrevented).toBe(false);
       expect(invokeCommand).not.toHaveBeenCalled();
     } finally { done(); }
