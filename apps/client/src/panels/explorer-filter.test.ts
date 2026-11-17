@@ -140,6 +140,14 @@ describe("il campo sopra l'albero", () => {
     expect(tree.hidden).toBe(false);
   });
 
+  it("senza risultati lo dice con una frase per le persone, non con un errore di percorso (IMP-007)", async () => {
+    const { filter, type, rows } = mount(async () => VAULT);
+    filter.show();
+    await type("citta");
+    expect(rows()).toEqual([]);
+    expect(document.querySelector(".search-results")!.textContent).toBe("Niente corrisponde al filtro: prova con meno parole.");
+  });
+
   it("i documenti cambiati si richiedono, e un rifiuto si dice nell'elenco", async () => {
     let answer: () => Promise<FilterEntry[]> = async () => VAULT;
     const { filter, type, rows } = mount(() => answer());
