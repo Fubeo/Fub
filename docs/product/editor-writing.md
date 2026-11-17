@@ -3,8 +3,8 @@
 > **Per chi:** chi scrive nelle note Markdown e chi aggiunge qualcosa al foglio
 > dell'editor.
 > **Risultato:** sapere quali modalità ha una nota, che cosa fa Scrittura, quando
-> compare ciò che sta sul foglio, da dove si raggiunge una funzione e che cosa
-> succede quando si incolla un indirizzo.
+> compare ciò che sta sul foglio, da dove si raggiunge una funzione, che cosa
+> succede quando si incolla un indirizzo e come si scrive in tipografia italiana.
 
 ## Le modalità di una nota
 
@@ -262,6 +262,31 @@ Non tutto diventa un link:
   senza link e senza scelta;
 - durante una composizione (IME) l'incolla entra come testo.
 
+## La tipografia italiana
+
+Con «Tipografia italiana» accesa nelle Preferenze (`editor.typography`,
+spenta di serie, di questa macchina) la nota si scrive coi segni della
+tipografia italiana mentre si batte:
+
+- `"` diventa « dopo uno spazio, una parentesi o a inizio riga, » dopo una
+  parola; dentro una citazione già aperta diventa “ e ”;
+- `--` diventa —; un terzo `-` subito dopo rimette `---`;
+- `...` diventa …; l'apostrofo `'` diventa ’, anche a inizio parola (’90).
+
+Scatta sul tasto che chiude la forma. Un annulla o un Backspace subito dopo
+rimettono ciò che si era scritto. Non cambia mai:
+
+- il codice (in linea e a blocchi), le formule (`$…$`, `$$…$$`), i link e i
+  wikilink, l'HTML, i commenti e il frontmatter, anche mentre li si sta
+  ancora scrivendo;
+- una riga di soli trattini, barre e due punti: il separatore `---`, la
+  sottolineatura di un titolo, la riga di una tabella;
+- ciò che si incolla o si trascina, un testo che arriva in un colpo e la
+  composizione (IME); con Vim, i tasti del modo normale.
+
+Vale nelle note in italiano: la lingua dichiarata dalla nota (`lang: it`),
+altrimenti quella dell'app.
+
 ## La sbirciata
 
 Alt col clic su un wikilink o su un link Markdown a una nota,
@@ -363,6 +388,9 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
   `followWikilink`, `followPath`);
 - `apps/client/src/editors/text/profiles/markdown/open-link.ts`: Alt-Invio e
   il link sotto il cursore;
+- `apps/client/src/editors/text/profiles/markdown/typography.ts`: la
+  tipografia italiana (`italianTypography`, montata da `profile.ts`);
+  `crates/fub-host/src/settings.rs`: `editor.typography`;
 - `apps/client/src/editors/text/profiles/markdown/link-card.ts`
   (`NoteCardWidget`) e `apps/client/src/state/note-cards.ts`: la scheda della
   nota e le sue proprietà;
