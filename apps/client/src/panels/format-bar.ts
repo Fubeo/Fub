@@ -220,6 +220,20 @@ const TRANSFORMS: readonly string[] = [
 ];
 const MORE_HEADINGS: readonly string[] = ["markdown.heading.1", "markdown.heading.4", "markdown.heading.5", "markdown.heading.6"];
 
+/// I nomi di «Trasforma in», quelli del prototipo: dicono il blocco che si
+/// ottiene, non il gesto del comando («Elenco di attività»).
+function transformLabel(id: string): string | null {
+  const level = /^markdown\.heading\.(\d)$/.exec(id)?.[1];
+  if (level) return t("format_bar.style.heading", { level: Number(level) });
+  switch (id) {
+    case "markdown.paragraph": return t("format_bar.style.text");
+    case "markdown.quote": return t("format_bar.style.quote");
+    case "markdown.list.bullet": return t("format_bar.style.bullet");
+    case "markdown.list.task": return t("format_bar.style.tasks");
+    default: return null;
+  }
+}
+
 /// Come lo stile dice il blocco del cursore, nell'ordine in cui lo cerca: un
 /// riquadro è anche una citazione, un compito anche un elenco.
 const BLOCK_NAMES: readonly (readonly [string, () => string])[] = [
@@ -487,6 +501,21 @@ export function toolbarGroups(specs: readonly CommandSpec[], actions: SurfaceEdi
   return groups;
 }
 
+/// La barra che segue il blocco ha un solo stile del blocco: i comandi dello
+/// stile sparsi fra altri (un plugin che ne dichiara uno dopo) stanno nel
+/// primo gruppo `block`.
+function oneStyle(groups: readonly Group[]): Group[] {
+  const first = groups.find((group) => group.id === "block");
+  if (!first) return [...groups];
+  const merged: Group = { id: "block", inline: [...first.inline], menu: [...first.menu] };
+  for (const group of groups) {
+    if (group.id !== "block" || group === first) continue;
+    merged.inline.push(...group.inline);
+    merged.menu.push(...group.menu);
+  }
+  return groups.flatMap((group) => (group === first ? [merged] : group.id === "block" ? [] : [group]));
+}
+
 function hintOf(actions: SurfaceEditorActions | undefined, entry: Entry): string | null {
   return entry.action ? actions?.chord(entry.action) ?? null : entry.spec.keybinding;
 }
@@ -681,26 +710,35 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   /// Il nome del blocco del cursore, come lo stile lo dice: «Testo» quando
   /// non è niente di più.
   function blockName(surface: SurfaceEditorActions | undefined): string {
+    const id = blockId(surface);
+    return BLOCK_NAMES.find(([each]) => each === id)?.[1]() ?? t("format_bar.style.text");
+  }
+
+  /// Il comando del blocco del cursore, il primo acceso nell'ordine dello
+  /// stile; `markdown.paragraph` quando non è niente di più. Una sola voce di
+  /// «Trasforma in» è spuntata: un compito è anche un elenco, ma è un compito.
+  function blockId(surface: SurfaceEditorActions | undefined): string {
     if (surface?.editable()) {
-      for (const [id, name] of BLOCK_NAMES) {
-        if (surface.has(id) && surface.state(id).active === true) return name();
+      for (const [id] of BLOCK_NAMES) {
+        if (surface.has(id) && surface.state(id).active === true) return id;
       }
     }
-    return t("format_bar.style.text");
+    return "markdown.paragraph";
   }
 
   /// Una voce di «Trasforma in», o niente se la superficie non sa farla.
-  function transformItem(surface: SurfaceEditorActions, id: string): MenuItem | null {
+  function transformItem(surface: SurfaceEditorActions, id: string, current: string): MenuItem | null {
+    // Il comando dichiarato dice che l'azione c'è (un plugin spento la toglie).
     const title = titles.get(id);
     if (title === undefined || !surface.has(id)) return null;
     const state = surface.state(id);
     return {
-      label: title,
+      label: transformLabel(id) ?? title,
       icon: ACTION_LOOKS[id]?.icon || undefined,
       hint: displayBinding(surface.chord(id)) || undefined,
       disabled: !state.enabled,
       choice: "radio",
-      checked: state.active === true,
+      checked: id === current,
       run: () => runAction(id),
     };
   }
@@ -718,8 +756,9 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     trigger.addEventListener("click", () => {
       const surface = actions();
       if (!surface?.editable()) return;
-      const items = TRANSFORMS.flatMap((id) => transformItem(surface, id) ?? []);
-      const more = MORE_HEADINGS.flatMap((id) => transformItem(surface, id) ?? []);
+      const current = blockId(surface);
+      const items = TRANSFORMS.flatMap((id) => transformItem(surface, id, current) ?? []);
+      const more = MORE_HEADINGS.flatMap((id) => transformItem(surface, id, current) ?? []);
       if (more.length > 0) items.push({ label: t("format_bar.style.more_headings"), icon: "fmt-h1", items: more });
       openMenu(trigger, items, { title: t("format_bar.style.menu"), label: t("format_bar.style.menu") });
     });
@@ -971,7 +1010,7 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
       box.append(name);
       for (const [id, item] of items) {
         const menu = item.items !== undefined;
-        const control = button("format-bar-button format-bar-labelled", item.label, item.hint ?? null, contextDrawn);
+        const control = button("format-bar-button format-bar-labelled", item.label, null, contextDrawn);
         control.dataset.command = id;
         labelled(control, item.icon, item.label, menu);
         if (menu) {
@@ -1201,8 +1240,9 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     // intere.
     const form = only ? "completa" : host.form?.() ?? "completa";
     const all = host.writing() && !own ? toolbarGroups(specs, surface, form) : [];
-    const next = only ? all.filter((each) => only.includes(each.id)) : all;
-    const blocks = !only && host.blocks === true && next.length > 0;
+    const followsBlock = !only && host.blocks === true;
+    const next = only ? all.filter((each) => only.includes(each.id)) : followsBlock ? oneStyle(all) : all;
+    const blocks = followsBlock && next.length > 0;
     // La lingua fa parte della forma: gruppi ed etichette sono della shell.
     // Anche le scorciatoie scritte nei suggerimenti e i tasti del dito: le
     // dice la superficie. Il resto della superficie no, e tornare a una

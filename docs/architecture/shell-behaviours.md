@@ -24,8 +24,12 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   della modalità che si apre dalla banda dove scende la pila. Un vault senza rilevamento delle modifiche esterne lo dice in testa al
   centro con «Riapri il vault», che scrive ciò che è in sospeso, chiude il
   vault nell'host e lo riapre.
-- **Scrittura.** Con la barra di formattazione spenta
-  (`chrome.formatbar.visible`) compare la mini-barra sulla selezione;
+- **Scrittura.** La barra di formato ha tre forme (`editor.toolbar`:
+  `compatta`, `completa`, `nascosta`; `chrome.formatbar.visible` spento da
+  un Fub di prima vale `nascosta` finché quella non c'è). La shell la mette
+  su `#app[data-toolbar]` e, nascosta, `data-formatbar-off`; il comando
+  `shell.toolbar.toggle` alterna `nascosta` e l'ultima forma visibile. Con la
+  barra nascosta compare la mini-barra sulla selezione;
   l'impostazione `editor.minibar` (`auto`, `always`, `menu`, `off`) dice se
   compare anche col tasto destro e su ogni selezione. Il «/» a inizio riga o
   dopo uno spazio apre nella nota il menu dei blocchi e dei comandi, filtrato

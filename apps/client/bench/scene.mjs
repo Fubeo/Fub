@@ -1136,6 +1136,64 @@ export const SCENE = onPage("shell", [
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     },
   })),
+  // **La barra che segue il blocco** (T11, E8 del prototipo dell'editor): la
+  // barra compatta col gruppo del blocco del cursore, sulla nota della
+  // sintassi; a 700 px ciò che non entra scende in «…»; poi i due menu della
+  // barra, «Trasforma in» e «+ Inserisci». Il telefono è `mobile-keyboard`.
+  ...[
+    ["barra-blocco-compito", "La barra che segue il blocco: il cursore in un compito, «Compito · Scadenza»", "Da fare", "task"],
+    ["barra-blocco-codice", "La barra che segue il blocco: il cursore nel codice, il linguaggio e «Copia»", "let (x, y)", "code"],
+    ["barra-blocco-stretta", "La barra che segue il blocco a 700 px, nel codice: la fila compatta entra intera", "let (x, y)", "code", { width: 700, height: 800 }],
+  ].map(([id, title, line, block, viewport]) => ({
+    id,
+    title,
+    query: "formatbar=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      // La nota si apre dall'albero, che a 700 px sta nel cassetto chiuso: si
+      // apre a finestra larga, poi la finestra torna quella della scena.
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await openNote(page, "Guida/Sintassi di Fub.md");
+      if (viewport) await page.setViewportSize(viewport);
+      // Il codice sta in fondo alla nota, fuori dalle righe che CodeMirror
+      // disegna: prima il cursore in fondo, poi la riga.
+      if (block === "code") {
+        await page.click(".pane.focus .pane-editor .cm-content");
+        await page.keyboard.press("Control+End");
+      }
+      await placeCursorOn(page, line);
+      // Il gruppo arriva dopo la pausa della barra (un tempo vero: l'orologio
+      // fermo del banco ferma la data, non i timer).
+      await page.waitForSelector(`.pane.focus .format-bar-context[data-block="${block}"]`, { state: "attached" });
+      await settleBar(page);
+    },
+  })),
+  {
+    id: "barra-blocco-trasforma",
+    title: "La barra che segue il blocco: lo stile del blocco apre «Trasforma in»",
+    // `slash=1`: i comandi di «Testo» e «Titolo 3» li dà il «/» dell'host finto.
+    query: "formatbar=1&slash=1",
+    prepare: async (page) => {
+      await placeCursorOn(page, "Un elenco corto");
+      await page.waitForSelector(".pane.focus .format-bar-style:not(:disabled)");
+      await page.click(".pane.focus .format-bar-style");
+      await page.waitForSelector('#context-menu [role="menuitemradio"][aria-checked="true"]');
+      await page.mouse.move(0, 0);
+    },
+  },
+  {
+    id: "barra-blocco-inserisci",
+    title: "La barra che segue il blocco: «+ Inserisci», gli stessi blocchi del «/» coi nomi",
+    // `slash=1` dà all'host finto i comandi del «/»: «+ Inserisci» offre quelli.
+    query: "formatbar=1&slash=1",
+    prepare: async (page) => {
+      await placeCursorOn(page, "Un elenco corto");
+      await page.waitForSelector(".pane.focus .format-bar-insert:not(:disabled)");
+      await page.click(".pane.focus .format-bar-insert");
+      await page.waitForSelector("#context-menu .menu-field-input");
+      await page.mouse.move(0, 0);
+    },
+  },
   ...[
     ["icone-figure", "Il selettore dell'icona su una cartella: le figure del vault", ""],
     ["icone-emoji", "Il selettore dell'icona su una cartella, col vault delle emoji", "icone=emoji"],
@@ -2177,6 +2235,21 @@ export async function chooseMode(page, mode, label = MODE_LABELS[mode]) {
 /// e la cartella contiene il testo di tutti i suoi figli. Il `data-path` è
 /// invece l'identità stabile che l'esploratore mette sulle voci dell'albero e
 /// che non dipende dall'implementazione del tooltip.
+/// Il cursore in fondo alla riga del foglio a fuoco che contiene `text`, con
+/// la barra di formato già montata coi suoi pulsanti.
+async function placeCursorOn(page, text) {
+  await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
+  await page.click(`.pane.focus .pane-editor .cm-content .cm-line:has-text(${JSON.stringify(text)})`);
+  await page.keyboard.press("End");
+}
+
+/// La barra misurata (il «…» deciso al fotogramma) e il puntatore lontano,
+/// senza suggerimenti.
+async function settleBar(page) {
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 async function openNote(page, path) {
   const folder = path.slice(0, path.lastIndexOf("/"));
   const name = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
