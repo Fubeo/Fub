@@ -35,6 +35,8 @@ import { sameKey, sortedBy } from "./sort";
 import { freeColor, NO_TYPES, optionsOf, parsePropertyTypes, sameTypes, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
 import { notify } from "../../ui/notify";
+import { keyboardPlatform } from "../../ui/commands";
+import { TEXT_INPUT_TYPES, fieldHistoryStep, isPlainTextField } from "../../ui/field-history";
 import { writeClipboardText } from "../../platform/clipboard";
 
 export interface BaseMountDeps extends BaseSurfaceDeps {
@@ -610,6 +612,19 @@ export function mountBaseSurface(
       notify(t("commands.undo_failed", { reason: errorText(failure) }), "guasto");
     }
   };
+  // Ctrl+Z fuori da un campo di testo chiede lo stesso «Annulla» del vault,
+  // anche quando non c'è niente da disfare: il tasto è della Base (IMP-124).
+  // Dentro un campo resta del campo (`ui/field-history.ts`). Ctrl+Maiusc+Z e
+  // Ctrl+Y non passano di qui: il vault non ha un «rifai» da chiamare.
+  const undoKey = (event: KeyboardEvent): void => {
+    if (readOnly || event.defaultPrevented || event.isComposing) return;
+    if (fieldHistoryStep(event, keyboardPlatform(navigator.platform)) !== "undo") return;
+    if (isPlainTextField(event.target, TEXT_INPUT_TYPES)) return;
+    if (event.target instanceof HTMLElement && event.target.isContentEditable) return;
+    event.preventDefault();
+    void undoWrite();
+  };
+  root.addEventListener("keydown", undoKey);
   // Un gesto che scrive il `.base` con un comando (`invoke`, che riceve la
   // revisione da confrontare). Torna quando la barra si riaccende: `true` se
   // il file è stato scritto. `quiet` tace la frase del comando (un passo di
@@ -2029,7 +2044,7 @@ export function mountBaseSurface(
       for (const stop of stopEvents) stop();
       for (const [url, timer] of downloads) { window.clearTimeout(timer); URL.revokeObjectURL(url); }
       downloads.clear();
-      stopLanguage(); root.remove();
+      stopLanguage(); root.removeEventListener("keydown", undoKey); root.remove();
     },
   };
 }

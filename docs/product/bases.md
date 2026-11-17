@@ -283,12 +283,12 @@ un gesto è in volo la barra non ne accetta un altro.
 Il file riscritto da un gesto si ricarica **in silenzio**: niente avviso «è
 cambiato su disco», perché il cambio l'ha chiesto chi usa la Base, e la tabella
 resta dove era scorsa. La frase del comando arriva come avviso con «Annulla»,
-che disfa l'ultima operazione del vault come dalla tavolozza: se quella non
-riscrive il `.base` (niente da annullare, o era su un altro file), la Base non
-resta in attesa e un cambio che arriva dopo si dice. Un cambio fatto da
-un'altra app, da un'altra finestra o da un altro comando si dice come sempre.
-Se il `.base` è aperto anche come testo con modifiche non salvate, il gesto
-prima le salva; se non si salvano, il gesto non parte e la barra lo dice.
+che disfa l'ultima operazione del vault come dalla tavolozza o con Ctrl+Z: se
+quella non riscrive il `.base` (niente da annullare, o era su un altro file), la
+Base non resta in attesa e un cambio che arriva dopo si dice. Un cambio fatto da
+un'altra app, da un'altra finestra o da un altro comando si dice come sempre. Se
+il `.base` è aperto anche come testo con modifiche non salvate, il gesto prima
+le salva; se non si salvano, il gesto non parte e la barra lo dice.
 
 La riga di ricerca diventa filtro quando ogni suo pezzo è una proprietà con un
 valore (`[stato:Arrivata]`, `[valore:>3000]`), unito con uno spazio (tutte vere)

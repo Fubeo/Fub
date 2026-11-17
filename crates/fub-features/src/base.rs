@@ -1310,7 +1310,10 @@ fn respond(query: Value) -> Result<Value, PluginError> {
                 } else {
                     "note.property.remove"
                 };
-                let mut args = json!({"doc":edit.doc,"key":edit.key,"expected":serde_json::to_string(&edit.expected).map_err(|e| bad(e.to_string()))?});
+                // Il comando scrive il nome del frontmatter (`prop.stato` è
+                // la proprietà `stato`). La chiave di primo livello resta
+                // quella della vista: il client la confronta con la richiesta.
+                let mut args = json!({"doc":edit.doc,"key":property_name(&edit.key),"expected":serde_json::to_string(&edit.expected).map_err(|e| bad(e.to_string()))?});
                 if let Some(value) = edit.value {
                     args["value"] = Value::String(value);
                 }
@@ -2513,6 +2516,31 @@ mod tests {
             ]}),
         );
         assert!(timeline.is_ok());
+    }
+
+    /// Una colonna `prop.stato` scrive la proprietà `stato` della nota: il
+    /// comando riceve il nome del frontmatter, senza il prefisso della vista
+    /// (IMP-123). La chiave di colonna resta quella della vista nel suo eco,
+    /// e una colonna che la vista non ha resta rifiutata.
+    #[test]
+    fn una_colonna_prop_scrive_la_proprieta_senza_il_prefisso() {
+        let source = "views:\n  - name: Tab\n    type: table\n    order:\n      - file.name\n      - prop.stato\n      - valore\n";
+        let edit = |key: &str| {
+            respond(
+                json!({"version":1,"op":"mutate","source":source,"view":"Tab","edits":[
+                    {"doc":"a.md","key":key,"expected":{"kind":"absent"},"value":"Confermata"}
+                ]}),
+            )
+        };
+        let written = edit("prop.stato").unwrap();
+        assert_eq!(written["mutations"][0]["key"], "prop.stato");
+        assert_eq!(written["mutations"][0]["command"], "note.property.set");
+        assert_eq!(written["mutations"][0]["args"]["key"], "stato");
+        assert_eq!(
+            edit("valore").unwrap()["mutations"][0]["args"]["key"],
+            "valore"
+        );
+        assert!(edit("prop.altro").is_err());
     }
 
     /// Le viste che non sono di tempo non portano il campo `time`.

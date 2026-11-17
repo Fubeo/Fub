@@ -73,12 +73,14 @@ const mount = (notes: Record<string, string>, { group = "stato", registry = REGI
       view: "Bacheca", view_type: "kanban", columns: [group], column_labels: {}, required_props: [], all_properties: true,
       group, limit: null, map: null, create_defaults: {}, filters: "all", sort: [], order: [],
     } };
+    // Come il core: la colonna `prop.x` ha il valore di `x`.
     if (query.op === "derive") return { kind: "custom", value: { summaries: {}, rows: docs().map(({ doc, properties }) => ({
-      doc, values: Object.fromEntries(properties.map(({ key, value }) => [key, value])),
+      doc, values: Object.fromEntries(properties.flatMap(({ key, value }) => [[key, value], [`prop.${key}`, value]])),
     })) } };
+    // Come il core: il comando riceve il nome della proprietà, non la colonna.
     if (query.op === "mutate") return { kind: "custom", value: { mutations: query.edits!.map((edit) => ({
       doc: edit.doc, key: edit.key, command: "note.property.set",
-      args: { doc: edit.doc, key: edit.key, expected: JSON.stringify(edit.expected), value: edit.value },
+      args: { doc: edit.doc, key: edit.key.replace(/^prop\./, ""), expected: JSON.stringify(edit.expected), value: edit.value },
     })) } };
     throw new Error(`unexpected Base operation ${query.op}`);
   });
@@ -172,6 +174,17 @@ describe("la Bacheca su uno Stato", () => {
       expect(files.get("Nebbia.md")).toBe('---\nstato: "In attesa"\nfase: Bozza\n---\n# Nebbia\n\nTesto che resta.\n');
       await vi.waitFor(() => expect(cardsOf(host, "In attesa")).toEqual(["Nebbia.md"]));
       expect(cardsOf(host, "In corso")).toEqual([]);
+    } finally { done(); }
+  });
+
+  it("su una colonna prop.stato la scheda cambia corsia scrivendo stato, e nella nota non nasce nessuna riga prop.stato", async () => {
+    const { host, files, invokeCommand, done } = mount(NOTES, { group: "prop.stato" });
+    try {
+      await ready(host);
+      drag(host.querySelector<HTMLElement>('.base-kanban-card[data-doc="Nebbia.md"]')!, host.querySelector<HTMLElement>('.base-kanban-column[data-group="In attesa"]')!);
+      await vi.waitFor(() => expect(cardsOf(host, "In attesa")).toEqual(["Nebbia.md"]));
+      expect(invokeCommand).toHaveBeenCalledWith("note.property.set", expect.objectContaining({ doc: "Nebbia.md", key: "stato" }));
+      expect(files.get("Nebbia.md")).toBe('---\nstato: "In attesa"\nfase: Bozza\n---\n# Nebbia\n\nTesto che resta.\n');
     } finally { done(); }
   });
 
