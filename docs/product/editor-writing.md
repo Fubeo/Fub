@@ -96,6 +96,25 @@ foglio non deve restare visibile nessun elemento con `data-presence` e nessun
 pulsante, salvo quelli che sono contenuto (l'icona della pagina, la riga dei
 dati, la testata di un blocco di codice).
 
+### Al tocco
+
+Senza un puntatore che passi sopra le cose (nessun dispositivo risponde a
+`(any-hover: hover)`) il secondo livello non segue il passaggio ma il
+cursore: il «+» e la maniglia stanno sul blocco del cursore finché la nota
+ha il fuoco, la maniglia accanto alla prima riga e il «+» sotto, larghi
+28 px. Un tablet con un mouse collegato segue il puntatore, e la regola
+cambia appena il mouse arriva o va via. Al tocco il foglio stretto tiene
+sempre 40 px di margine a sinistra, così le maniglie che compaiono non
+spostano il testo; la copertina resta da bordo a bordo. Il blocco si prende
+tenendo premuta la maniglia 300 ms, con un colpetto dove il sistema lo
+offre; un movimento prima è uno scorrimento. Il gruppo del blocco sta nella
+[barra sopra la tastiera](editor-toolbar.md). La regola sta in `touchMode`
+(`markdown/blocks/handles.ts`), che mette la classe `cm-fub-blocks-touch`
+sull'editor: la leggono le maniglie e la pelle. Le scene `mobile-tocco-*`
+del banco la fotografano a riposo, col cursore in un blocco e con un blocco
+in mano; accendono il tocco e stanno in fondo all'elenco, perché Chromium,
+una volta acceso, non lo spegne più per le pagine dopo.
+
 ## La testata
 
 In cima alla nota, in Scrittura e in Lettura, sta la stessa testata, in
