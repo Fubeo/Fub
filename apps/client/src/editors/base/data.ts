@@ -5,7 +5,7 @@ import type { Theme } from "../../theme/theme";
 import type { DocumentUpdate } from "../core/text-operation";
 import type { SurfaceMode, SurfaceMountContext } from "../core/registry";
 import { parseFilter, type FilterDef } from "./filter";
-import { parseOrder, parseSort, type SortEntry } from "./sort";
+import { parseOrder, parseSort, propertyName, type SortEntry } from "./sort";
 // Il registro dei tipi del vault (`properties.types`) si legge come lo legge
 // la testata delle note: una regola sola per tipi, opzioni e gruppi.
 import { declaredType, OPTION_GROUPS, optionsOf, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
@@ -503,12 +503,19 @@ export async function prepareBaseMutations(deps: BaseSurfaceDeps, source: string
     try { actual = JSON.parse(args.expected as string) as BaseExpected; }
     catch { throw new Error("base: expected command malformato"); }
     const command = edit.value == null ? "note.property.remove" : "note.property.set";
-    if (mutation.doc !== edit.doc || mutation.key !== edit.key || args.doc !== edit.doc || args.key !== edit.key || actual.kind !== edit.expected.kind || (actual.kind === "value" && edit.expected.kind === "value" && !sameJson(actual.value, edit.expected.value)) || mutation.command !== command || (edit.value == null ? Object.prototype.hasOwnProperty.call(args, "value") : args.value !== edit.value)) throw new Error("base: mutazione diversa dalla richiesta");
+    // Il comando scrive la proprietà (`prop.stato` → `stato`), non la chiave
+    // di colonna: una risposta che ripete `prop.stato` scriverebbe una riga
+    // `prop.stato:` nel frontmatter, e qui si ferma.
+    if (mutation.doc !== edit.doc || mutation.key !== edit.key || args.doc !== edit.doc || args.key !== propertyName(edit.key) || actual.kind !== edit.expected.kind || (actual.kind === "value" && edit.expected.kind === "value" && !sameJson(actual.value, edit.expected.value)) || mutation.command !== command || (edit.value == null ? Object.prototype.hasOwnProperty.call(args, "value") : args.value !== edit.value)) throw new Error("base: mutazione diversa dalla richiesta");
     return { doc: edit.doc, key: edit.key, command, args };
   });
 }
+/// Lo stato letto della proprietà che la chiave di colonna scrive (`prop.stato`
+/// è `stato`): il comando lo confronta col file, e se la nota è cambiata non
+/// scrive niente.
 export function expectedProperty(row: BaseRow, key: string): BaseExpected {
-  return Object.prototype.hasOwnProperty.call(row.properties, key) ? { kind: "value", value: row.properties[key] } : { kind: "absent" };
+  const name = propertyName(key);
+  return Object.prototype.hasOwnProperty.call(row.properties, name) ? { kind: "value", value: row.properties[name] } : { kind: "absent" };
 }
 export function baseRowsToCsv(rows: BaseRow[], columns: string[]): string {
   const escape = (value: string): string => /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
