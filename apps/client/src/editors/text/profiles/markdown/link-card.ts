@@ -283,13 +283,15 @@ export class LinkCardWidget extends WidgetType {
 const choiceLives = new WeakMap<HTMLElement, Lifetime>();
 
 /// La scelta sotto un indirizzo incollato su una riga vuota (T25): «Link», la
-/// scelta di partenza, e «Scheda», che scrive l'indirizzo da solo sulla riga.
-/// È una barra degli strumenti (`kit/toolbar-keys`): un solo punto di
-/// tabulazione, e le frecce fra le due voci. Quello che sceglie Invio, Spazio,
-/// Esc o Tab lo decide `paste.ts`, che sa che cosa scrivere.
+/// scelta di partenza, «Scheda», che scrive l'indirizzo da solo sulla riga, e,
+/// per un sito dell'elenco chiuso (`web-embed.ts`, T37), «Incorpora», che lo
+/// scrive come pagina incorporata. È una barra degli strumenti
+/// (`kit/toolbar-keys`): un solo punto di tabulazione, e le frecce fra le
+/// voci. Quello che sceglie Invio, Spazio, Esc o Tab lo decide `paste.ts`, che
+/// sa che cosa scrivere.
 export class AddressChoiceWidget extends WidgetType {
-  constructor(readonly url: string) { super(); }
-  eq(other: AddressChoiceWidget): boolean { return other.url === this.url; }
+  constructor(readonly url: string, readonly embeddable = false) { super(); }
+  eq(other: AddressChoiceWidget): boolean { return other.url === this.url && other.embeddable === this.embeddable; }
   get estimatedHeight(): number { return 32; }
   toDOM(): HTMLElement {
     const root = document.createElement("div");
@@ -300,9 +302,12 @@ export class AddressChoiceWidget extends WidgetType {
     root.setAttribute("aria-label", liveStrings.t("paste.address.label"));
     const link = choiceControl("link", liveStrings.t("paste.address.link"), liveStrings.t("paste.address.link.title"), true);
     const card = choiceControl("card", liveStrings.t("paste.address.card"), liveStrings.t("paste.address.card.title"), false);
-    root.append(link, card);
+    const controls = this.embeddable
+      ? [link, card, choiceControl("embed", liveStrings.t("paste.address.embed"), liveStrings.t("paste.address.embed.title"), false)]
+      : [link, card];
+    root.append(...controls);
     const life = openLifetime();
-    rovingToolbar(root, { controls: () => [link, card] }, life).refresh(link);
+    rovingToolbar(root, { controls: () => controls }, life).refresh(link);
     choiceLives.set(root, life);
     return root;
   }
@@ -317,7 +322,7 @@ export class AddressChoiceWidget extends WidgetType {
   }
 }
 
-function choiceControl(kind: "link" | "card", label: string, title: string, pressed: boolean): HTMLButtonElement {
+function choiceControl(kind: "link" | "card" | "embed", label: string, title: string, pressed: boolean): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.tabIndex = -1;

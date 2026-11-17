@@ -18,6 +18,7 @@
 // ascoltatore. `defaultPrevented` è il loro verdetto osservabile: nessun elenco
 // di collisioni cablato nella shell e nessun listener globale nei renderer.
 import { t } from "../i18n/strings";
+import { fieldHistoryStep, isPlainTextField, runFieldHistory } from "./field-history";
 import type { Lifetime } from "./lifetime";
 import {
   WAIT_MS,
@@ -52,7 +53,13 @@ export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry)
     const result = advance(allCommands(), waiting, e, platform);
     // L'unico esito che lascia passare il tasto. Gli altri tre sono gesti
     // dell'app, e un gesto dell'app non finisce anche dentro la nota.
-    if (result.type === "passa") return;
+    if (result.type === "passa") {
+      // Annulla e ripeti di un campo di testo, che il WebView di Linux non
+      // lega da sé (`ui/field-history.ts`): solo se nessun comando lo ha preso.
+      const step = waiting === null && isPlainTextField(e.target, TEXT_INPUTS) ? fieldHistoryStep(e, platform) : null;
+      if (step !== null && runFieldHistory(step)) e.preventDefault();
+      return;
+    }
     // Popup e editor locali sono già passati: da qui decide l'ordine dei layer
     // nel registro, e ogni esito diverso da `passa` appartiene alla shell.
     e.preventDefault();

@@ -1,5 +1,7 @@
 import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type SystemTarget } from "../text/profiles/markdown/surface";
 import type { TransclusionDeps } from "../text/profiles/markdown/transclusion";
+import type { MoveBlockPort } from "../text/profiles/markdown/blocks/move-to";
+import type { SyncBlockPort } from "../text/profiles/markdown/blocks/sync-to";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import type { PeekLink } from "../text/profiles/markdown/link-gesture";
@@ -131,6 +133,10 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onRenamePage?: (doc: string, name: string) => Promise<string | null>;
   /// «Nuova sottopagina» dalla testata dei Blocchi.
   readonly onNewSubpage?: (doc: string, name: string) => Promise<string | null>;
+  /// «Sposta in…» dal menu del blocco e sulle note del cassetto (T32).
+  readonly moveBlock?: MoveBlockPort;
+  /// Il blocco sincronizzato dal menu del blocco e dal «/» (T30).
+  readonly syncBlock?: SyncBlockPort;
   /// Le icone delle pagine per i wikilink della Live.
   readonly pageIcons?: PageIcons;
   /// Le schede dei collegamenti della Live (K8).
@@ -687,6 +693,8 @@ export function createDocumentSurfaceRegistry(
             onSearchTag: options.onSearchTag,
             onRenamePage: options.onRenamePage,
             onNewSubpage: options.onNewSubpage,
+            ...(options.moveBlock ? { moveBlock: options.moveBlock } : {}),
+            ...(options.syncBlock ? { syncBlock: options.syncBlock } : {}),
             pageIcons: options.pageIcons,
             linkCards: options.linkCards,
             ...(options.transclusion ? { transclusion: options.transclusion } : {}),

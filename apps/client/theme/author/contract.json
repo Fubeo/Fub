@@ -309,6 +309,13 @@
     "window-controls",
     "brand-mark",
     "brand-glyph",
+    "brand-logo",
+    "marcuzzo",
+    "logo-cartella",
+    "logo-cartella-retro",
+    "logo-cartella-ombra",
+    "logo-foglio-1",
+    "logo-foglio-2",
     "vault-chip",
     "vault-chip-icon",
     "vault-chip-name",
@@ -394,6 +401,16 @@
     "palette-row",
     "palette-title",
     "palette-desc",
+    "note-type-popover",
+    "note-type-menu",
+    "note-type-menu-head",
+    "note-type-menu-list",
+    "note-type-menu-item",
+    "note-type-menu-tile",
+    "note-type-menu-label",
+    "note-type-menu-name",
+    "note-type-menu-sub",
+    "note-type-menu-foot",
     "icon-picker",
     "icon-picker-title",
     "icon-grid",
@@ -598,6 +615,7 @@
     "cm-fub-address-choice",
     "cm-fub-address-choice-link",
     "cm-fub-address-choice-card",
+    "cm-fub-address-choice-embed",
     "fub-color-gray",
     "fub-color-brown",
     "fub-color-orange",
@@ -667,6 +685,7 @@
     "embed",
     "embed-cycle",
     "embed-too-deep",
+    "embed-missing",
     "embed-media",
     "cm-fub-block-handles",
     "cm-fub-blocks-touch",
@@ -706,6 +725,9 @@
     "fub-note--serif",
     "fub-note--sans",
     "fub-note--mono",
+    "cm-fub-page-type-notice",
+    "cm-fub-page-type-text",
+    "cm-fub-page-type-action",
     "cm-fub-page-props",
     "cm-fub-page-prop",
     "cm-fub-page-prop-key",
@@ -871,6 +893,9 @@
     "cm-fub-mx-option-name",
     "cm-fub-mx-segments",
     "cm-fub-mx-segment",
+    "cm-fub-mx-error",
+    "cm-fub-mx-error-text",
+    "cm-fub-mx-error-fix",
     "cm-focused",
     "cm-scroller",
     "cm-activeLine",
@@ -1462,6 +1487,7 @@
     "transclusion-conflict",
     "transclusion-editing",
     "transclusion-editor",
+    "transclusion-synced",
     "draw-export",
     "draw-export-text",
     "draw-rail",
@@ -1676,6 +1702,12 @@
     "media-recorder",
     "web-viewer-bar",
     "web-viewer-address",
+    "web-embed",
+    "web-embed-icon",
+    "web-embed-text",
+    "web-embed-name",
+    "web-embed-detail",
+    "web-embed-load",
     "slide-deck",
     "slide-status",
     "slide-stage",
@@ -2126,6 +2158,8 @@
     "settings-section-hint",
     "settings-section-body",
     "settings-card",
+    "about-version",
+    "about-logo",
     "setting-row",
     "setting-block",
     "setting-features",
@@ -2427,6 +2461,13 @@
     "window-controls": "cornice",
     "brand-mark": "cornice",
     "brand-glyph": "cornice",
+    "brand-logo": "cornice",
+    "marcuzzo": "cornice",
+    "logo-cartella": "cornice",
+    "logo-cartella-retro": "cornice",
+    "logo-cartella-ombra": "cornice",
+    "logo-foglio-1": "cornice",
+    "logo-foglio-2": "cornice",
     "vault-chip": "cornice",
     "vault-chip-icon": "cornice",
     "vault-chip-name": "cornice",
@@ -2512,6 +2553,16 @@
     "palette-row": "cornice",
     "palette-title": "cornice",
     "palette-desc": "cornice",
+    "note-type-popover": "cornice",
+    "note-type-menu": "cornice",
+    "note-type-menu-head": "cornice",
+    "note-type-menu-list": "cornice",
+    "note-type-menu-item": "cornice",
+    "note-type-menu-tile": "cornice",
+    "note-type-menu-label": "cornice",
+    "note-type-menu-name": "cornice",
+    "note-type-menu-sub": "cornice",
+    "note-type-menu-foot": "cornice",
     "icon-picker": "cornice",
     "icon-picker-title": "cornice",
     "icon-grid": "cornice",
@@ -2716,6 +2767,7 @@
     "cm-fub-address-choice": "contenuto",
     "cm-fub-address-choice-link": "contenuto",
     "cm-fub-address-choice-card": "contenuto",
+    "cm-fub-address-choice-embed": "contenuto",
     "fub-color-gray": "contenuto",
     "fub-color-brown": "contenuto",
     "fub-color-orange": "contenuto",
@@ -2785,6 +2837,7 @@
     "embed": "contenuto",
     "embed-cycle": "contenuto",
     "embed-too-deep": "contenuto",
+    "embed-missing": "contenuto",
     "embed-media": "contenuto",
     "cm-fub-block-handles": "contenuto",
     "cm-fub-blocks-touch": "contenuto",
@@ -2824,6 +2877,9 @@
     "fub-note--serif": "contenuto",
     "fub-note--sans": "contenuto",
     "fub-note--mono": "contenuto",
+    "cm-fub-page-type-notice": "contenuto",
+    "cm-fub-page-type-text": "contenuto",
+    "cm-fub-page-type-action": "contenuto",
     "cm-fub-page-props": "contenuto",
     "cm-fub-page-prop": "contenuto",
     "cm-fub-page-prop-key": "contenuto",
@@ -2989,6 +3045,9 @@
     "cm-fub-mx-option-name": "cornice",
     "cm-fub-mx-segments": "cornice",
     "cm-fub-mx-segment": "cornice",
+    "cm-fub-mx-error": "cornice",
+    "cm-fub-mx-error-text": "cornice",
+    "cm-fub-mx-error-fix": "cornice",
     "cm-focused": "contenuto",
     "cm-scroller": "contenuto",
     "cm-activeLine": "segno",
@@ -3580,6 +3639,7 @@
     "transclusion-conflict": "contenuto",
     "transclusion-editing": "contenuto",
     "transclusion-editor": "contenuto",
+    "transclusion-synced": "contenuto",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-rail": "cornice",
@@ -3794,6 +3854,12 @@
     "media-recorder": "cornice",
     "web-viewer-bar": "cornice",
     "web-viewer-address": "cornice",
+    "web-embed": "contenuto",
+    "web-embed-icon": "contenuto",
+    "web-embed-text": "contenuto",
+    "web-embed-name": "contenuto",
+    "web-embed-detail": "contenuto",
+    "web-embed-load": "contenuto",
     "slide-deck": "contenuto",
     "slide-status": "cornice",
     "slide-stage": "contenuto",
@@ -4244,6 +4310,8 @@
     "settings-section-hint": "cornice",
     "settings-section-body": "cornice",
     "settings-card": "cornice",
+    "about-version": "cornice",
+    "about-logo": "cornice",
     "setting-row": "cornice",
     "setting-block": "cornice",
     "setting-features": "cornice",
@@ -4988,6 +5056,22 @@
       ]
     },
     {
+      "name": "logo",
+      "part": "frame",
+      "hooks": [
+        "brand-logo",
+        "marcuzzo",
+        "logo-cartella",
+        "logo-cartella-retro",
+        "logo-cartella-ombra",
+        "logo-foglio-1",
+        "logo-foglio-2"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "vault-chip",
       "part": "frame",
       "hooks": [
@@ -5285,6 +5369,30 @@
         "pressed",
         "selected",
         "focused"
+      ]
+    },
+    {
+      "name": "note-type-menu",
+      "part": "drawers",
+      "hooks": [
+        "kit-popover",
+        "note-type-popover",
+        "note-type-menu",
+        "note-type-menu-head",
+        "note-type-menu-list",
+        "note-type-menu-item",
+        "note-type-menu-tile",
+        "note-type-menu-label",
+        "note-type-menu-name",
+        "note-type-menu-sub",
+        "note-type-menu-foot"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focused",
+        "disabled"
       ]
     },
     {
@@ -5930,7 +6038,8 @@
       "hooks": [
         "cm-fub-address-choice",
         "cm-fub-address-choice-link",
-        "cm-fub-address-choice-card"
+        "cm-fub-address-choice-card",
+        "cm-fub-address-choice-embed"
       ],
       "states": [
         "rest",
@@ -6106,6 +6215,7 @@
         "embed",
         "embed-cycle",
         "embed-too-deep",
+        "embed-missing",
         "embed-media"
       ],
       "states": [
@@ -6166,6 +6276,21 @@
         "fub-note--serif",
         "fub-note--sans",
         "fub-note--mono"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-page-type",
+      "part": "document",
+      "hooks": [
+        "cm-fub-page-type-notice",
+        "cm-fub-page-type-text",
+        "cm-fub-page-type-action",
+        "cm-fub-page-icon"
       ],
       "states": [
         "rest",
@@ -6544,6 +6669,20 @@
         "rest",
         "hover",
         "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "math-error",
+      "part": "math",
+      "hooks": [
+        "cm-fub-mx-error",
+        "cm-fub-mx-error-text",
+        "cm-fub-mx-error-fix"
+      ],
+      "states": [
+        "rest",
+        "hover",
         "focused"
       ]
     },
@@ -7788,6 +7927,7 @@
         "transclusion-conflict",
         "transclusion-editing",
         "transclusion-editor",
+        "transclusion-synced",
         "cm-editor",
         "cm-focused",
         "cm-content",
@@ -8197,6 +8337,25 @@
       "hooks": [
         "web-viewer-bar",
         "web-viewer-address"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "web-embed",
+      "part": "media",
+      "hooks": [
+        "web-embed",
+        "web-embed-icon",
+        "web-embed-text",
+        "web-embed-name",
+        "web-embed-detail",
+        "web-embed-load"
       ],
       "states": [
         "rest",
@@ -9566,6 +9725,17 @@
       ]
     },
     {
+      "name": "about-version",
+      "part": "settings",
+      "hooks": [
+        "about-version",
+        "about-logo"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "setting-row",
       "part": "settings",
       "hooks": [
@@ -10537,7 +10707,12 @@
     "paper-author-3",
     "paper-author-4",
     "paper-author-5",
-    "paper-author-6"
+    "paper-author-6",
+    "logo-cartella",
+    "logo-cartella-retro",
+    "logo-cartella-ombra",
+    "logo-foglio-1",
+    "logo-foglio-2"
   ],
   "optional_pairs": [
     [
@@ -11074,7 +11249,12 @@
     "paper-author-3",
     "paper-author-4",
     "paper-author-5",
-    "paper-author-6"
+    "paper-author-6",
+    "logo-cartella",
+    "logo-cartella-retro",
+    "logo-cartella-ombra",
+    "logo-foglio-1",
+    "logo-foglio-2"
   ],
   "vocabulary": {
     "properties": [
@@ -11128,11 +11308,11 @@
   },
   "counts": {
     "required_roles": 154,
-    "optional_roles": 68,
-    "hooks": 2116,
+    "optional_roles": 73,
+    "hooks": 2150,
     "state_names": 7,
-    "assigned_states": 963,
-    "components": 282,
-    "preference_tokens": 191
+    "assigned_states": 981,
+    "components": 288,
+    "preference_tokens": 196
   }
 }

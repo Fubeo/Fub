@@ -22,7 +22,7 @@ import {
   setSpace,
 } from "../state/organization";
 import { on, saveActiveSpace, saveExpanded, saveExplorerSort, state } from "../state/store";
-import { createFolder, createNote, duplicateNote, handToSystem, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation, useAsFolderPage } from "../state/vault";
+import { createFolder, duplicateNote, handToSystem, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation, useAsFolderPage } from "../state/vault";
 import { carriesFiles, offerOutside, pickedFiles, readDropped, type Dropped } from "../ui/vault-transfer";
 import { confirm } from "../platform/confirm";
 import {
@@ -44,9 +44,10 @@ import { FORMAT_ICON, formatKindOf, formatTagOf } from "../ui/format-kind";
 import { craftServed } from "../state/craft-previews";
 import { mountTreeThumbnails, type TreeThumbnails } from "../state/tree-thumbnails";
 import { iconEl } from "../ui/icons";
-import { pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
+import { closeContextMenu, pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
 import { drawPageMark, pageMarkText, readPageMark } from "../ui/page-mark";
-import { selectInspectorTab } from "../ui/views";
+import { selectInspectorTab, visibleRect } from "../ui/views";
+import { dropOffersChanged, offerDropTargets, type SurfaceDropDocument, type SurfaceDropOffer } from "../editors/core/registry";
 import {
   newKinds,
   canImportDrawing,
@@ -69,7 +70,9 @@ import { writeClipboardText } from "../platform/clipboard";
 import { searchFor } from "../state/search-port";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
 import { onComponents } from "../state/components";
-import { canShowFile, copyNoteLinks, focusEditor, openDocument, openDocumentBeside } from "../state/document-controller";
+import { canShowFile, copyNoteLinks, openDocument, openDocumentBeside } from "../state/document-controller";
+import { newNoteInActiveSpace } from "../state/new-note";
+import { mountExplorerTypes, type ExplorerTypes } from "./explorer-types";
 import { addBookmark, loadBookmarks, type BookmarkTarget } from "../state/bookmarks";
 import { openCurrentInNewWindow } from "../state/document-windows";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
@@ -168,6 +171,10 @@ let lastSignature = "";
 export function mountExplorer(lifetime: Lifetime): void {
   treeLife = lifetime;
   thumbnails = mountTreeThumbnails(lifetime);
+  // Le note del cassetto sono bersagli di un blocco in mano (E13, «Sposta
+  // in…»): la porta di T2b, che dice soltanto dove sta la riga e come si
+  // chiama; che cosa fa il rilascio lo decide l'editor.
+  lifetime.add(offerDropTargets({ offers: noteOffers }));
   lifetime.add(() => {
     treeLife = null;
     treeMotion = null;
@@ -181,6 +188,13 @@ export function mountExplorer(lifetime: Lifetime): void {
   sortButtonEl.replaceChildren(iconEl("sort") ?? "");
   lifetime.listen(newNoteEl, "click", () => void newNote());
   lifetime.listen(sortButtonEl, "click", () => {
+    // Il secondo clic sul pulsante chiude il menu che ha aperto (IMP-006):
+    // riaprirlo chiudeva il vecchio, che rimetteva `aria-expanded` a «false»
+    // sopra un menu nuovo e aperto.
+    if (sortButtonEl.getAttribute("aria-expanded") === "true") {
+      closeContextMenu();
+      return;
+    }
     sortButtonEl.setAttribute("aria-expanded", "true");
     showContextMenu(sortButtonEl, sortItems(), {
       label: t("explorer.sort"),
@@ -308,6 +322,9 @@ export function mountExplorer(lifetime: Lifetime): void {
     run: () => setSort("modified-old"),
   });
   treeArrows(lifetime);
+  // Prima della scelta multipla, che ascolta i clic sullo stesso albero.
+  primaryClicksOnly(lifetime, fileListEl);
+  primaryClicksOnly(lifetime, pinnedListEl);
   wireRootDropTarget(lifetime);
   wireOutsideDrops(lifetime);
   lifetime.add(cancelHoverOpen);
@@ -332,8 +349,8 @@ export function mountExplorer(lifetime: Lifetime): void {
   lifetime.add(() => {
     selection = null;
   });
-  // «Tutte le note» sta subito sopra l'albero, sotto la barra della scelta
-  // multipla, che si è appena messa davanti all'albero.
+  // «Tutte le note» sta subito sopra l'albero; la barra della scelta multipla
+  // sta subito sotto.
   fileListEl.before(allTitleEl);
   // Il titolo del pannello è **di qui** e non del testo fermo di `index.html`:
   // a casa dice «Note», dentro uno spazio dice il nome dello spazio. Un
@@ -356,11 +373,25 @@ export function mountExplorer(lifetime: Lifetime): void {
     open: openFiltered,
   });
   lifetime.add(() => (filter = null));
+  // I tipi di nota (E5) fra le appuntate e «Tutte le note».
+  types = mountExplorerTypes({
+    lifetime,
+    after: pinnedListEl,
+    covered: () => filter?.active() === true,
+    open: (doc) => void openDocument(doc, { gesture: true }),
+  });
+  lifetime.add(() => (types = null));
   lifetime.add(on("documents", () => filter?.stale()));
   lifetime.add(on("vault", () => filter?.hide()));
   // L'organizzazione cambiata ridisegna la stessa vista senza richiederla:
-  // icone, pin e ordine non passano dal kernel.
-  lifetime.add(on("organization", renderFileList));
+  // icone, pin e ordine non passano dal kernel. Un'appuntata nuova sì: quali
+  // appuntate esistano lo dice il kernel (`view.existing`), e una nota appena
+  // appuntata non c'era nella domanda di prima, così la lista restava vuota fino
+  // al ridisegno dopo (IMP-009). Si chiede, e il giro ridisegna se è cambiato.
+  lifetime.add(on("organization", () => {
+    renderFileList();
+    if (state.meta.pinned.some((id) => !view.existing.has(id))) void refreshFromKernel();
+  }));
   lifetime.add(on("page-icons", renderFileList));
   lifetime.add(on("reveal-folder", (folder) => void revealPath(folder, true)));
   lifetime.add(on("reveal-path", (path) => void revealPath(path, false)));
@@ -613,6 +644,8 @@ function renderFileList(only: string | null = null): void {
   treeMotion?.settle();
   treeMotion = null;
   paintThumbnails();
+  // Righe ridisegnate: un blocco già fuori dalla colonna rimisura le note.
+  dropOffersChanged();
   if (toRestore !== undefined) {
     const row = entry(toRestore);
     const control = onChevron
@@ -744,6 +777,30 @@ function roving(preferred?: string): void {
       if (li !== targetLi) li.tabIndex = -1;
     });
   targetLi.tabIndex = 0;
+}
+
+/// Solo il tasto sinistro apre, chiude e sceglie le righe (IMP-002).
+///
+/// WebKitGTK manda un `click` anche dopo il tasto centrale, e col `button` del
+/// sinistro: le righe, che ascoltano `click`, aprivano e chiudevano la cartella
+/// a ogni clic centrale. Chromium non lo manda. Il tasto di un clic si sa
+/// quindi dalla pressione che lo ha cominciato, e un clic cominciato da un altro
+/// tasto non arriva alle righe. Il centrale non fa niente: niente scorrimento
+/// automatico né incolla della selezione di X11 sopra l'albero.
+function primaryClicksOnly(lifetime: Lifetime, list: HTMLElement): void {
+  let pressed = 0;
+  lifetime.listen(list, "mousedown", (e) => {
+    pressed = e.button;
+    if (e.button === 1) e.preventDefault();
+  }, { capture: true });
+  const swallow = (e: MouseEvent): void => {
+    // `detail` 0: un clic dato da Invio o da `.click()`, che non ha tasti.
+    if (e.detail === 0 || (pressed === 0 && e.button === 0)) return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  lifetime.listen(list, "click", swallow, { capture: true });
+  lifetime.listen(list, "auxclick", swallow, { capture: true });
 }
 
 /// Le frecce dentro l'albero (§12.4).
@@ -978,6 +1035,33 @@ let entryCount = 0;
 
 /// La scelta multipla dell'albero, viva finché il pannello è montato.
 let selection: TreeSelection | null = null;
+
+/// Le note Markdown che il cassetto mostra adesso, come bersagli per un
+/// blocco della nota `document`: soltanto se è del vault aperto (FUB-001),
+/// perché un blocco va in una nota del suo vault. Le appuntate e l'albero
+/// sono due righe della stessa nota: vale quella che si vede.
+function noteOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
+  if (document.vault !== undefined && document.vault !== openVaultRoot()) return [];
+  const out: SurfaceDropOffer[] = [];
+  const rows = [...pinnedListEl.querySelectorAll<HTMLElement>(".tree-row.note[data-path]"), ...fileListEl.querySelectorAll<HTMLElement>(".tree-row.note[data-path]")];
+  for (const row of rows) {
+    const id = row.dataset.path!;
+    if (formatKindOf(id) !== "note" || !/\.(md|markdown)$/i.test(id)) continue;
+    const rect = visibleRect(row);
+    if (!rect) continue;
+    out.push({
+      kind: "note",
+      document: { documentId: id, vault: document.vault },
+      title: pageName(id),
+      rect,
+      hover: (on) => {
+        if (on) row.dataset.dropHot = "true";
+        else delete row.dataset.dropHot;
+      },
+    });
+  }
+  return out;
+}
 
 /// La riga di una nota, usata sia nell'albero sia tra le appuntate (dove il
 /// drag non ha senso: l'ordine delle appuntate è l'ordine in cui si appunta).
@@ -1625,6 +1709,8 @@ async function followActive(): Promise<void> {
 
 /// Il filtro per percorso sopra l'albero, finché l'esplora è montata.
 let filter: ExplorerFilter | null = null;
+/// La sezione «Tipi», finché l'esplora è montata.
+let types: ExplorerTypes | null = null;
 
 /// Ogni voce e cartella dello spazio corrente, per il filtro: due domande sole
 /// a tutto lo spazio, fatte una volta per filtro.
@@ -1752,6 +1838,7 @@ function renderPinned(): void {
   const hidePinned = pinned.length === 0 || filter?.active() === true;
   pinnedTitleEl.hidden = hidePinned;
   pinnedListEl.hidden = hidePinned;
+  types?.render();
   pinnedListEl.innerHTML = "";
   for (const id of pinned) {
     const li = document.createElement("li");
@@ -2054,19 +2141,18 @@ function searchInFolder(path: string): void {
 }
 
 async function newNote(folder: string | null = state.activeSpace): Promise<void> {
-  try {
-    const created = await createNote(undefined, folder ?? undefined);
-    if (created) {
+  // Il gesto è quello di ogni shell (`state/new-note.ts`): coi tipi nel vault
+  // chiede prima il tipo, nel menu sotto «Nuova nota» (E5).
+  await newNoteInActiveSpace({
+    anchor: newNoteEl,
+    folder,
+    beforeOpen: () => {
       if (folder && !state.expanded.has(folder)) {
         state.expanded.add(folder);
         saveExpanded();
       }
-      await openDocument(created);
-    }
-    focusEditor();
-  } catch (error) {
-    notify(t("explorer.create_failed", { reason: errorText(error) }), "guasto");
-  }
+    },
+  });
 }
 
 /// Una cartella nuova dentro `parent` ("" è la radice): un campo in cima al

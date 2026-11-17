@@ -188,6 +188,20 @@ export const VISTE = {
     },
     app: { scena: "menu-selezione" },
   },
+  /// «Nuova nota» che chiede il tipo (T33, `newNote()` del prototipo): il
+  /// menu sotto il pulsante del cassetto. Solo largo: nel prototipo il
+  /// cassetto c'è a finestra piena.
+  "nuova-nota": {
+    stati: LARGHI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "A riposo");
+        await page.click("#win #new-note");
+        await page.waitForSelector("#win .pop .m-i .ic.tile");
+      },
+    },
+    app: { scena: "tipi-01-nuova" },
+  },
   /// Le proposte dei simboli (T61): la formula in riga aperta, in fondo `+`
   /// e `\fr`. Il prototipo al passo «La formula si tocca», che apre la terza
   /// formula della nota; l'app dalla scena del banco.
@@ -260,6 +274,27 @@ export const VISTE = {
       },
     },
     app: { scena: "formula-12-latex-opzioni" },
+  },
+  /// Gli errori in chiaro (T64): un nome che non c'è nel campo del LaTeX,
+  /// dopo la pausa la frase e «Usa \alpha». Il prototipo al passo «Il LaTeX,
+  /// per chi lo vuole», col campo riempito com'è (senza la scrittura veloce);
+  /// l'app dalla scena del banco.
+  "formula-latex-errore": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il LaTeX, per chi lo vuole");
+        await page.waitForSelector("#win .mx .mx-tex");
+        await page.evaluate(() => {
+          const field = document.querySelector("#win .mx .mx-tex");
+          field.value = "v + \\alfa";
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        await page.waitForSelector("#win .mx .mx-err:not([hidden]) button");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "formula-16-latex-errore" },
   },
   /// Le maniglie accanto a un blocco: «+» e la presa con gli occhi, col
   /// puntatore sul blocco e non sulle maniglie.
@@ -655,6 +690,42 @@ export const PEZZI = [
     app: ".context-menu .menu-foot",
     proprieta: [...BASE, "height", ...ALLINEAMENTO],
   },
+  // «Nuova nota di tipo» (T33).
+  {
+    id: "nuova-nota.testa",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-h",
+    app: ".note-type-popover .note-type-menu-head",
+    proprieta: ["font", "color", "padding"],
+  },
+  {
+    id: "nuova-nota.voce",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-l > button.m-i:not(.act)",
+    app: ".note-type-popover .note-type-menu-item:not([data-active])",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "nuova-nota.tassello",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-l > button.m-i:not(.act) .ic.tile",
+    app: ".note-type-popover .note-type-menu-item:not([data-active]) .note-type-menu-tile",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "nuova-nota.sotto",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-l > button.m-i:not(.act) small",
+    app: ".note-type-popover .note-type-menu-item:not([data-active]) .note-type-menu-sub",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "nuova-nota.piede",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-foot",
+    app: ".note-type-popover .note-type-menu-foot",
+    proprieta: [...BASE],
+  },
   // Il menu della maniglia.
   {
     id: "menu.superficie-blocco",
@@ -662,6 +733,15 @@ export const PEZZI = [
     prototipo: ".pop",
     app: ".context-menu",
     proprieta: [...BASE, "min-width"],
+  },
+  {
+    // La riga piccola sotto una voce (T30: «lo stesso blocco in più note»
+    // sotto «Sincronizza in un'altra nota…»).
+    id: "menu.voce-descrizione",
+    vista: "menu-blocco",
+    prototipo: ".m-i small",
+    app: ".context-menu .menu-description",
+    proprieta: ["font", "color", "margin", "white-space"],
   },
   {
     id: "menu.campo",
@@ -910,6 +990,28 @@ export const PEZZI = [
     vista: "formula-latex-opzioni",
     prototipo: '.mx .mx-opts .seg2 button[aria-pressed="false"]',
     app: '.cm-fub-mx-popover .cm-fub-mx-segment[aria-pressed="false"]',
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background"],
+  },
+  // ── gli errori in chiaro (T64) ────────────────────────────────────────────
+  {
+    id: "formula.errore",
+    vista: "formula-latex-errore",
+    prototipo: ".mx .mx-err",
+    app: ".cm-fub-mx-popover .cm-fub-mx-error",
+    proprieta: ["margin", "padding", "gap", "border-radius", "background", "font", "color", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.errore-codice",
+    vista: "formula-latex-errore",
+    prototipo: ".mx .mx-err code",
+    app: ".cm-fub-mx-popover .cm-fub-mx-error code",
+    proprieta: ["font", "background", "padding"],
+  },
+  {
+    id: "formula.errore-correzione",
+    vista: "formula-latex-errore",
+    prototipo: ".mx .mx-err button",
+    app: ".cm-fub-mx-popover .cm-fub-mx-error-fix",
     proprieta: ["height", "padding", "border-radius", "font", "color", "background"],
   },
   // Le maniglie: «+» e la presa a due occhi.

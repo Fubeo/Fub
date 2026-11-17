@@ -22,6 +22,13 @@
 // Si scrive un livello solo: le note riportate dentro questa (nella resa e
 // nell'editor del tratto) non ricevono la trasclusione viva, e restano da
 // leggere. La nota che riporta un pezzo di sé non si scrive da qui: lo dice.
+//
+// Il blocco sincronizzato (T30) è la trasclusione viva di un blocco
+// (`![[Nota#^id]]`), mostrata come un blocco della nota: niente vassoio né
+// «Modifica qui», un segno discreto a sinistra e «Sincronizzato con …» al
+// passaggio. Si scrive direttamente: un clic (o Invio sul blocco scelto) apre
+// la stessa superficie sul tratto, e si esce con Esc o portando il fuoco
+// altrove. Salvataggio, revisione e conflitto sono quelli di sempre.
 import { Prec, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import type { RangeStatus, RangeSurface } from "../../../core/range-surface";
@@ -113,6 +120,12 @@ export function transclusionAnchor(embed: Pick<TranscludedEmbed, "heading" | "bl
   return null;
 }
 
+/// La trasclusione di un blocco è un blocco sincronizzato: il blocco vince sul
+/// titolo, come nella resa.
+export function isSyncedBlock(embed: Pick<TranscludedEmbed, "block">): boolean {
+  return embed.block !== null && embed.block !== "";
+}
+
 /// Un elemento con una classe e, se c'è, un testo.
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -180,6 +193,8 @@ export class LiveTransclusion {
   readonly slot: HTMLElement;
   readonly embed: TranscludedEmbed;
   readonly anchor: SectionAnchor | null;
+  /// Un blocco sincronizzato: si scrive direttamente, senza «Modifica qui».
+  readonly synced: boolean;
   readonly #host: TransclusionHost;
   readonly #life: Lifetime;
   readonly #hold: HoldRender;
@@ -189,6 +204,8 @@ export class LiveTransclusion {
   readonly #notice: HTMLElement;
   readonly #conflict: HTMLElement;
   readonly #edit: HTMLButtonElement | null;
+  /// Qui si può scrivere: un'àncora, una sessione da prendere, non sé stessa.
+  readonly #canEdit: boolean;
   #phase: Phase = "idle";
   #writing: Writing | null = null;
   #unhold: (() => void) | null = null;
@@ -201,25 +218,39 @@ export class LiveTransclusion {
     this.slot = slot;
     this.embed = embed;
     this.anchor = transclusionAnchor(embed);
+    this.synced = isSyncedBlock(embed);
     this.#host = host;
     this.#life = life;
     this.#hold = hold;
     const source = transclusionSource(embed.doc, this.anchor);
+    const self = embed.doc === host.hostDoc();
+    this.#canEdit = !self && this.anchor !== null && host.deps !== null && host.editable();
     slot.classList.add("transclusion");
     slot.dataset.transclusion = "";
     slot.setAttribute("role", "group");
-    slot.setAttribute("aria-label", liveStrings.t("transclusion.label", { source }));
+    const from = transclusionSource(embed.doc, null);
+    slot.setAttribute("aria-label", this.synced
+      ? liveStrings.t("transclusion.synced.label", { source: from })
+      : liveStrings.t("transclusion.label", { source }));
 
     const head = element("div", "transclusion-head");
     const sync = iconNode("sync");
     if (sync) head.append(sync);
-    head.append(element("span", "transclusion-source", source), element("span", "transclusion-spacer"));
-    const self = embed.doc === host.hostDoc();
-    if (self) head.append(element("span", "transclusion-self", liveStrings.t("transclusion.self")));
-    this.#edit = !self && this.anchor && host.deps && host.editable()
+    if (this.synced) {
+      // Il blocco della nota: la provenienza al passaggio, sopra il blocco.
+      slot.classList.add("transclusion-synced");
+      slot.dataset.transclusionSynced = "";
+      if (this.#canEdit) slot.dataset.transclusionDirect = "";
+      head.append(element("span", "transclusion-source", liveStrings.t("transclusion.synced", { source: from })));
+    } else {
+      head.append(element("span", "transclusion-source", source), element("span", "transclusion-spacer"));
+      if (self) head.append(element("span", "transclusion-self", liveStrings.t("transclusion.self")));
+    }
+    this.#edit = this.#canEdit && !this.synced
       ? headButton("transclusion-edit", "pen", liveStrings.t("transclusion.edit"))
       : null;
     const open = headButton("transclusion-open", "transclusion-open", liveStrings.t("transclusion.open"));
+    if (this.synced) open.setAttribute("aria-label", liveStrings.t("transclusion.synced.open", { doc: transclusionDocName(embed.doc) }));
     if (this.#edit) head.append(this.#edit);
     head.append(open);
 
@@ -252,6 +283,31 @@ export class LiveTransclusion {
       event.stopPropagation();
       host.open(embed.page, embed.heading, embed.block);
     });
+    if (this.synced && this.#canEdit) {
+      // Il blocco si scrive dove sta: un clic sul testo apre l'editor col
+      // cursore dove si è cliccato. Un link nel testo resta un link.
+      life.listen(this.#body, "click", (event) => {
+        if (this.#phase !== "idle" || event.button !== 0) return;
+        if (event.target instanceof Element && event.target.closest("a, button, input, summary")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void this.edit({ x: event.clientX, y: event.clientY });
+      });
+      // Dopo Esc il fuoco resta sul blocco: Invio ci rientra.
+      life.listen(slot, "keydown", (event) => {
+        if (this.#phase !== "idle" || event.target !== slot || event.key !== "Enter") return;
+        event.preventDefault();
+        event.stopPropagation();
+        void this.edit();
+      });
+      // Il fuoco che esce dal blocco esce anche dalla scrittura.
+      life.listen(slot, "focusout", (event) => {
+        if (this.#phase !== "editing") return;
+        const next = event.relatedTarget;
+        if (next instanceof Node && slot.contains(next)) return;
+        void this.leave();
+      });
+    }
     life.add(() => this.#teardown(true));
   }
 
@@ -259,9 +315,9 @@ export class LiveTransclusion {
     return this.#phase;
   }
 
-  /// Se «Modifica qui» c'è: un'àncora, una sessione da prendere, non sé stessa.
+  /// Se qui si scrive: un'àncora, una sessione da prendere, non sé stessa.
   get editable(): boolean {
-    return this.#edit !== null;
+    return this.#canEdit;
   }
 
   /// L'editor del tratto, mentre si scrive.
@@ -279,19 +335,21 @@ export class LiveTransclusion {
     return this.#writing?.range ?? null;
   }
 
-  /// «Modifica qui»: prende la sessione dell'origine e apre l'editor sul
-  /// tratto. `false` se qui non si scrive.
-  async edit(): Promise<boolean> {
+  /// «Modifica qui» (o il clic su un blocco sincronizzato, al punto `at`):
+  /// prende la sessione dell'origine e apre l'editor sul tratto. `false` se
+  /// qui non si scrive.
+  async edit(at: { readonly x: number; readonly y: number } | null = null): Promise<boolean> {
     if (this.#phase === "editing") {
       this.#writing?.engine.focus();
       return true;
     }
     const deps = this.#host.deps;
     const anchor = this.anchor;
-    if (this.#phase !== "idle" || !this.#edit || !deps || !anchor || this.#life.closed || !this.#host.editable()) return false;
+    if (this.#phase !== "idle" || !this.#canEdit || !deps || !anchor || this.#life.closed || !this.#host.editable()) return false;
     this.#phase = "opening";
-    this.#say(liveStrings.t("transclusion.opening", { doc: transclusionDocName(this.embed.doc) }));
-    this.#edit.disabled = true;
+    // Il blocco sincronizzato si apre senza dirlo: è un blocco della nota.
+    if (!this.synced) this.#say(liveStrings.t("transclusion.opening", { doc: transclusionDocName(this.embed.doc) }));
+    if (this.#edit) this.#edit.disabled = true;
     this.#unhold = this.#hold();
     const path = this.embed.doc;
     const retained = { path, release: deps.sessions.retain(path) };
@@ -313,7 +371,7 @@ export class LiveTransclusion {
         anchor: formatSectionAnchor(anchor),
       }));
     }
-    this.#startWriting(deps, session, range, retained);
+    this.#startWriting(deps, session, range, retained, at);
     return true;
   }
 
@@ -346,19 +404,26 @@ export class LiveTransclusion {
     const refocus = this.slot.contains(document.activeElement);
     this.#teardown(true);
     if (!refocus) return;
-    this.#edit?.focus();
-    // L'origine salvata rifà la resa: il fuoco passa al «Modifica qui» nuovo.
+    this.focusEdit();
+    // L'origine salvata rifà la resa: il fuoco passa al «Modifica qui» nuovo
+    // (al blocco sincronizzato nuovo).
     this.#owner.refocusLater(this.embed);
   }
 
-  /// Il fuoco su «Modifica qui», se c'è.
+  /// Il fuoco su «Modifica qui», o sul blocco sincronizzato, se c'è.
   focusEdit(): boolean {
-    if (!this.#edit || !this.slot.isConnected) return false;
+    if (!this.slot.isConnected) return false;
+    if (this.synced && this.#canEdit) {
+      this.slot.tabIndex = -1;
+      this.slot.focus({ preventScroll: true });
+      return true;
+    }
+    if (!this.#edit) return false;
     this.#edit.focus();
     return true;
   }
 
-  #startWriting(deps: TransclusionDeps, session: DocumentSession, range: RangeSurface, retained: Writing["retained"]): void {
+  #startWriting(deps: TransclusionDeps, session: DocumentSession, range: RangeSurface, retained: Writing["retained"], at: { readonly x: number; readonly y: number } | null): void {
     const life = openLifetime();
     const box = element("div", "transclusion-editor");
     this.#editorBox = box;
@@ -390,8 +455,11 @@ export class LiveTransclusion {
     this.#phase = "editing";
     this.slot.classList.add("transclusion-editing");
     this.slot.dataset.transclusionEditing = "";
-    this.#band.replaceChildren(...[iconNode("pen")].filter((node): node is Element => node !== null), bandText(session.id));
-    this.#band.hidden = false;
+    // Il blocco sincronizzato non ha la fascia: si scrive come nella nota.
+    if (!this.synced) {
+      this.#band.replaceChildren(...[iconNode("pen")].filter((node): node is Element => node !== null), bandText(session.id));
+      this.#band.hidden = false;
+    }
     this.#say(null);
     // La resa resta sotto, nascosta: uscendo senza una resa nuova torna lei.
     this.#hidden = Array.from(this.#body.children).filter((child): child is HTMLElement => child instanceof HTMLElement && !child.hidden);
@@ -403,9 +471,16 @@ export class LiveTransclusion {
     }
     this.#owner.started(this);
     this.slot.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
-    // Il cursore in fondo al tratto, dove si aggiunge, come nel prototipo.
+    // Il cursore dove si è cliccato, se lì c'è testo; altrimenti in fondo al
+    // tratto, dove si aggiunge, come nel prototipo.
     engine.runViewCommand((view) => {
-      view.dispatch({ selection: { anchor: view.state.doc.length } });
+      let found: number | null = null;
+      try {
+        found = at ? view.posAtCoords(at) : null;
+      } catch {
+        // Un punto che l'editor non sa misurare (appena montato): in fondo.
+      }
+      view.dispatch({ selection: { anchor: found ?? view.state.doc.length } });
       return true;
     });
     engine.focus();
@@ -442,7 +517,14 @@ export class LiveTransclusion {
     const previous = writing.retained;
     writing.retained = { path, release: deps.sessions.retain(path) };
     previous.release();
-    this.#band.replaceChildren(...[iconNode("pen")].filter((node): node is Element => node !== null), bandText(path));
+    if (!this.synced) this.#band.replaceChildren(...[iconNode("pen")].filter((node): node is Element => node !== null), bandText(path));
+    else {
+      // Il blocco sincronizzato dice la provenienza nuova, in targhetta e a voce.
+      const source = transclusionSource(path, null);
+      this.slot.setAttribute("aria-label", liveStrings.t("transclusion.synced.label", { source }));
+      const label = this.slot.querySelector(":scope > .transclusion-head > .transclusion-source");
+      if (label) label.textContent = liveStrings.t("transclusion.synced", { source });
+    }
   }
 
   #drawConflict(deps: TransclusionDeps, writing: Writing): void {

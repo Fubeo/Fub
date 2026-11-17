@@ -3,9 +3,10 @@ import { history, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
-import type { SurfaceDropOffer } from "../../../../core/registry";
+import type { SurfaceNoteOffer, SurfacePlaceOffer } from "../../../../core/registry";
 import { markdownGrammar } from "../grammar";
-import { headingOfPlace, moveToSectionEnd, placeTargets, sectionEnd, targetAt } from "./drop-targets";
+import { headingOfPlace, moveToSectionEnd, noteTargets, placeTargets, sectionEnd, targetAt } from "./drop-targets";
+import { blockBytes } from "./move-to";
 import { blockModel } from "./model";
 
 // I bersagli fuori dalla colonna (E2): i titoli della Struttura, «In fondo a …».
@@ -21,7 +22,7 @@ const indexAt = (state: EditorState, text: string) => blocksOf(state).findIndex(
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 
 /// Il posto che la Struttura offre per il titolo che comincia con `heading`.
-function offer(doc: string, heading: string, title: string, rect = { left: 0, top: 0, right: 100, bottom: 28 }): SurfaceDropOffer {
+function offer(doc: string, heading: string, title: string, rect = { left: 0, top: 0, right: 100, bottom: 28 }): SurfacePlaceOffer {
   const at = bytes(doc.slice(0, doc.indexOf(heading)));
   return { kind: "place", document: { documentId: "nota.md", vault: undefined }, span: { start: at, end: at + bytes(heading) }, title, rect, hover: vi.fn() };
 }
@@ -132,7 +133,7 @@ describe("il titolo di un posto della Struttura", () => {
     const blocks = blocksOf(state);
     expect(state.sliceDoc(), "la sorgente esce coi suoi a capo").toBe(disk);
     const first = bytes(disk.slice(0, disk.indexOf("## A")));
-    const place: SurfaceDropOffer = { kind: "place", document: { documentId: "nota.md", vault: undefined }, span: { start: first, end: first + 4 }, title: "A", rect: { left: 0, top: 0, right: 100, bottom: 28 }, hover: vi.fn() };
+    const place: SurfacePlaceOffer = { kind: "place", document: { documentId: "nota.md", vault: undefined }, span: { start: first, end: first + 4 }, title: "A", rect: { left: 0, top: 0, right: 100, bottom: 28 }, hover: vi.fn() };
     const headings = blocks.map((block, i) => [block, i] as const).filter(([block]) => block.kind === "heading" && state.sliceDoc(block.from, block.to).startsWith("## A"));
     expect(headings).toHaveLength(2);
     expect(headingOfPlace(state, blocks, place.span, "A"), "il primo «A», quello dello span").toBe(headings[0]![1]);
@@ -180,5 +181,34 @@ describe("i bersagli", () => {
     const [target] = placeTargets(state, blocksOf(state), { first: uno, last: uno }, [place]);
     target!.hover(true);
     expect(place.hover).toHaveBeenCalledWith(true);
+  });
+});
+
+describe("le note del cassetto (E13)", () => {
+  const note = (title: string, rect = { left: 0, top: 300, right: 240, bottom: 328 }): SurfaceNoteOffer =>
+    ({ kind: "note", document: { documentId: `${title}.md`, vault: undefined }, title, rect, hover: vi.fn() });
+
+  it("una nota per riga, «Sposta in «…»»; il rilascio non tocca il documento, lo dice `note`", () => {
+    const state = stateOf(DOC);
+    const uno = indexAt(state, "Uno");
+    const progetto = note("Progetto");
+    const targets = noteTargets([progetto, note("Nascosta", { left: 0, top: 0, right: 0, bottom: 0 }), offer(DOC, "## Fine", "Fine")]);
+    expect(targets.map((target) => target.label), "la riga che non si vede e il titolo della Struttura no").toEqual(["Sposta in «Progetto»"]);
+    expect(targets[0]!.note).toEqual({ document: { documentId: "Progetto.md", vault: undefined }, title: "Progetto" });
+    expect(targets[0]!.drop(state, blocksOf(state), { first: uno, last: uno })).toBeNull();
+    targets[0]!.hover(true);
+    expect(progetto.hover).toHaveBeenCalledWith(true);
+    expect(placeTargets(state, blocksOf(state), { first: uno, last: uno }, [progetto]), "una nota non è un posto della Struttura").toEqual([]);
+  });
+
+  it("i byte del blocco sono quelli del file: i `\\r` e i caratteri di più byte contano", () => {
+    const disk = "Città\r\n\r\n- uno\r\n  - figlio\r\n\r\nFine";
+    const state = EditorState.create({ doc: disk, extensions: [EditorState.lineSeparator.of("\r\n"), markdown({ base: markdownGrammar }), blockModel] });
+    ensureSyntaxTree(state, state.doc.length, 5000);
+    const blocks = blocksOf(state);
+    const item = blocks.findIndex((block) => block.depth === 0 && state.sliceDoc(block.from, block.to).startsWith("- uno"));
+    const { at, text } = blockBytes(state, blocks, { first: item, last: item });
+    expect(text).toBe("- uno\r\n  - figlio");
+    expect(at).toEqual([bytes("Città\r\n\r\n"), bytes("Città\r\n\r\n- uno\r\n  - figlio")]);
   });
 });

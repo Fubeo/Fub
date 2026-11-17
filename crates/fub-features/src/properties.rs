@@ -69,6 +69,15 @@ pub const PROPERTY_OPTION_SET: &str = "property.option.set";
 /// Cambia il tipo della nota (E5): `tipo` diventa il link al tipo, e le
 /// proprietà del tipo che mancano si aggiungono; non si toglie niente.
 pub const NOTES_TYPE_SET: &str = "note.type.set";
+/// I tipi di nota del vault coi conteggi (E5), per il cassetto e per «Nuova
+/// nota»: un comando di sola lettura il cui esito porta i dati
+/// (`CommandEffect::Custom`, spazio [`NOTE_TYPES_NS`]).
+pub const NOTES_TYPE_LIST: &str = "note.type.list";
+/// Il tipo che un valore di `tipo` nomina, com'è adesso (E5): icona, proprietà
+/// in evidenza, o che cosa non va. Sola lettura, come [`NOTES_TYPE_LIST`].
+pub const NOTES_TYPE_GET: &str = "note.type.get";
+/// Lo spazio dell'esito di [`NOTES_TYPE_LIST`] e [`NOTES_TYPE_GET`].
+pub const NOTE_TYPES_NS: &str = "fub.note_types";
 /// Rimette il registro dei tipi com'era, se nessuno l'ha cambiato nel
 /// frattempo: è l'annullo di [`PROPERTY_OPTION_SET`] e di
 /// [`PROPERTY_TARGET_SET`].

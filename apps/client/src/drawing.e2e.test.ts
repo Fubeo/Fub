@@ -14,6 +14,7 @@ import { checkAccessibility, formatIssues } from "./ui/a11y-check";
 import { mountedTextEditors } from "./editors/text/test-support";
 import { DEFAULT_CURVE } from "./ink/input/pressure";
 import { FIRST_IMPORT_MS, waiter } from "./test-wait";
+import { NOTE_TYPE_READS } from "./state/note-type-commands";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -683,7 +684,7 @@ describe("«Esporta…» su un disegno", () => {
       { target: "draw.png", selection: { kind: "documents", value: ["casa.svg"] }, options: { background: "paper", scope: "drawing", scale: 2 } },
     ]);
     const saved = host.calls.findIndex((call) => call.gate === "writeDocument" && call.args[0] === "casa.svg");
-    const asked = host.calls.findIndex((call) => call.gate === "invokeCommand");
+    const asked = host.calls.findIndex((call) => call.gate === "invokeCommand" && !NOTE_TYPE_READS.has(String(call.args[0])));
     expect(saved).toBeGreaterThanOrEqual(0);
     expect(asked).toBeGreaterThan(saved);
     expect(written(host, "casa.svg")[0]!.match(/<rect /g)).toHaveLength(2);

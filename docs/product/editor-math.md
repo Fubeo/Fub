@@ -15,8 +15,8 @@ cursore).
 - **Formula a blocco.** Un blocco `$$` sulle sue righe si modifica sul posto,
   con un bordo del colore d'accento. Un blocco dentro una citazione o un
   elenco resta sorgente.
-- **Formula con un errore.** Si apre col suo LaTeX a vista, con una nota che lo
-  dice; quando torna leggibile si corregge lì.
+- **Formula con un errore.** Si apre col suo LaTeX a vista, e sotto il campo
+  c'è subito che cosa non va (vedi «Gli errori»); si corregge lì.
 
 ## Il cursore
 
@@ -148,6 +148,48 @@ degli aiuti scritto a mano che non è fra i tre vale «Pieni».
 
 Con Vim resta il riquadro di prima, col TeX e l'anteprima; in sola lettura e
 con la presenza `elemento` si vede la sorgente col cursore dentro.
+
+## Gli errori
+
+Nella formula che si tocca il TeX resta sempre leggibile: gli errori nascono
+nel campo del LaTeX, e in una formula già rotta nel file. Mentre si scrive non
+lampeggia niente: l'ultima resa buona resta com'è. Dopo 450 ms dall'ultimo
+tasto la resa si attenua e sotto il campo compare una frase in chiaro, nella
+lingua dell'interfaccia; una formula rotta nel file la mostra subito, perché
+nessuno sta scrivendo. Il messaggio grezzo di KaTeX non si vede mai. La stessa
+frase, senza pulsante, è il suggerimento di una formula rotta anche in lettura
+e nell'anteprima del riquadro classico di Vim (e il nome, per il lettore di
+schermo).
+
+Quando la correzione è una sola, accanto alla frase c'è il suo pulsante:
+
+| Che cosa non va | La frase | Il pulsante |
+| --- | --- | --- |
+| Graffe aperte | Manca una `}` di chiusura. | Chiudi |
+| Graffe in più | C'è una `}` in più. | Toglila |
+| Un nome che non c'è | Non conosco `\alfa`. Forse volevi `\alpha`? | Usa `\alpha` (tutti gli `\alfa`) |
+| Un esponente, un pedice o un argomento vuoto | Dopo `^` manca l'esponente. · A `\frac` manca un pezzo. | Aggiungi lo spazio |
+| `\left` senza `\right` | A `\left(` manca il suo `\right)`. | Chiudi |
+| `\begin` senza `\end` | Manca `\end{matrix}`, che chiude `\begin{matrix}`. | Chiudi |
+| `\begin` e `\end` diversi | `\begin{matrix}` si chiude con `\end{pmatrix}`. | Usa `\end{matrix}` |
+| `$`, `#`, `%` nudi | In una formula `$` si scrive `\$`. | Usa `\$` |
+| `\(` `\)` `\[` `\]` incollati | `\(` apre o chiude una formula: qui dentro non serve. | Toglilo (tutti) |
+| Una lettera accentata | La lettera `à` in una formula va in un testo: `\text{à}`. | Mettila nel testo |
+
+Un nome con più simboli vicini (`\s`) li elenca senza pulsante: la scelta è
+di chi scrive. Gli altri errori noti (due esponenti di fila, un `&` fuori da
+una matrice, una macro che si richiama, un ambiente che non c'è…) hanno la
+loro frase senza pulsante; uno che KaTeX non spiega dice «Qui c'è qualcosa che
+non torna:» col pezzo di TeX dove capita, o «C'è qualcosa che non torna nella
+formula.».
+
+La correzione non entra mai da sola: il TeX cambia solo col clic (o Invio,
+o lo spazio) sul pulsante, ed è un passo solo dell'annulla. Se intanto il TeX
+è cambiato, il pulsante non applica la proposta vecchia: la frase si rifà sul
+TeX di adesso. Da tastiera il pulsante si raggiunge con Tab dopo l'ultimo
+spazio vuoto, e Esc torna al campo. Le regole stanno in `math/errors.ts`,
+senza DOM: `diagnose` legge l'errore di KaTeX e il TeX, `explain` lo mette in
+parole.
 
 ## Limiti
 

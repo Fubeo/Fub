@@ -16,6 +16,7 @@ import { BlockType, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/
 import { closeContextMenu, menuKeyFoot, showContextMenu, type MenuItem } from "../../../../../ui/menu";
 import { displayBinding } from "../../../../../ui/commands";
 import { writeClipboardText } from "../../../../../platform/clipboard";
+import { errorText } from "../../../../../host/errors";
 import { type Lifetime, openLifetime } from "../../../../../ui/lifetime";
 import { iconEl } from "../../../../../ui/icons";
 import { attachTooltip } from "../../../../../ui/tooltip";
@@ -42,12 +43,15 @@ import {
 import { animate, halt, liveState, type Motion, motionLevel, onFrame } from "../../../../../moto";
 import { markPresence } from "../../../../core/presence";
 import { dropOffers, type SurfaceDropDocument, watchDropOffers } from "../../../../core/registry";
-import { type DropTarget, placeTargets, targetAt } from "./drop-targets";
+import { type DropTarget, noteTargets, placeTargets, targetAt } from "./drop-targets";
+import { blockBytes, type MoveBlockPort, moveWithQuestions, registerMoveIcon } from "./move-to";
+import type { SyncBlockPort } from "./sync-to";
 import { edgeDepth, edgeScroll, type EdgeScroll } from "./autoscroll";
 import type { Teardown } from "../../../../../ui/lifetime";
 import type { PropertyType } from "../../../../../host/enums.generated";
 import type { PropertyTypes } from "../page/properties/kind";
 import type { NewOption } from "../page/properties/values";
+import type { NoteType, NoteTypeList, NoteTypeState } from "../../../../../state/note-types";
 
 export interface BlocksOptions {
   /// La nota e il suo vault: i posti fuori dalla colonna (i titoli della sua
@@ -88,6 +92,21 @@ export interface BlocksOptions {
   readonly addPropertyOption?: (key: string, option: NewOption) => Promise<string | null>;
   /// Le persone il cui nome combacia col testo, per l'editor delle persone.
   readonly searchPeople?: (text: string) => Promise<string[]>;
+  /// «Sposta in…» (E13): le note del vault, i loro titoli e il comando che
+  /// sposta il blocco. Senza, il menu non offre la voce e le note del cassetto
+  /// non sono bersagli.
+  readonly move?: MoveBlockPort;
+  /// Il tipo della nota (E5) e i suoi gesti, come in `PageOptions`
+  /// (`../page/header.ts`): il tipo che `tipo` nomina, i tipi del vault per
+  /// «Scegli il tipo», la nota di un tipo da aprire, «In evidenza» nel tipo.
+  readonly noteType?: (raw: string) => NoteTypeState | null;
+  readonly listTypes?: () => Promise<NoteTypeList>;
+  readonly openType?: (doc: string) => void;
+  readonly featureInType?: (type: NoteType, key: string, on: boolean) => void;
+  /// Il blocco sincronizzato (E14): le note del vault e il comando che dà
+  /// l'id al blocco e scrive la sua trasclusione in un'altra nota. Senza,
+  /// il menu non offre «Sincronizza in un'altra nota».
+  readonly sync?: SyncBlockPort;
   /// Esc è di chi ospita l'editor, che con lui ne esce (una scheda della
   /// lavagna): sul testo Esc non seleziona il blocco del cursore e passa
   /// all'ospite; una selezione di blocchi già fatta la chiude ancora.
@@ -832,7 +851,15 @@ class HandlesView {
         hint: displayBinding("Mod-d"),
         run: act(() => this.withRun(key, (state, all, found) => view.dispatch(duplicateRun(state, all, found)))),
       },
+      view.state.facet(blocksOptions).move !== undefined && registerMoveIcon() && { label: liveStrings.t("blocks.menu.move"), icon: "move", run: act(() => this.moveTo(key)) },
       run.first === run.last && { label: liveStrings.t("blocks.menu.link"), icon: "fmt-link", run: act(() => this.copyLink(key)) },
+      // Un blocco solo, e non le proprietà: la trasclusione porta un blocco.
+      run.first === run.last && blocks[run.first]?.kind !== "frontmatter" && view.state.facet(blocksOptions).sync !== undefined && {
+        label: liveStrings.t("blocks.menu.sync"),
+        description: liveStrings.t("blocks.menu.sync.desc"),
+        icon: "sync",
+        run: act(() => this.syncTo(key)),
+      },
     ], [
       {
         label: liveStrings.t("blocks.menu.delete"),
@@ -939,6 +966,45 @@ class HandlesView {
           }),
         })),
       };
+    });
+  }
+
+  /// «Sposta in…»: le domande, poi il comando del nucleo. Il blocco si
+  /// rilegge dalla chiave quando tutto è deciso, perché il testo può essere
+  /// cambiato mentre le finestre erano aperte.
+  moveTo(key: BlockKey): void {
+    const options = this.view.state.facet(blocksOptions);
+    const port = options.move;
+    const doc = options.document?.()?.documentId;
+    if (!port || !doc) return;
+    this.withRun(key, (state, blocks, run) => {
+      // La tratta si legge adesso, col menu: aprendo le finestre la selezione
+      // dei blocchi si spegne. Se intanto il testo cambia, i byte di prima
+      // non dicono più quel blocco: non si sposta niente.
+      const taken = state.doc;
+      const bytes = blockBytes(state, blocks, run);
+      const now = () => (this.view.state.doc === taken ? bytes : null);
+      void moveWithQuestions(port, doc, run.first === run.last, now, (message, tone) => options.notify?.(message, tone));
+    });
+  }
+
+  /// «Sincronizza in un'altra nota»: la nota, poi il comando del nucleo. Il
+  /// blocco si legge adesso, col menu; se il testo cambia mentre si sceglie,
+  /// non si scrive niente. Il resto si carica al primo uso.
+  syncTo(key: BlockKey): void {
+    const options = this.view.state.facet(blocksOptions);
+    const port = options.sync;
+    const doc = options.document?.()?.documentId;
+    if (!port || !doc) return;
+    const say = (message: string, tone: "info" | "guasto") => options.notify?.(message, tone);
+    this.withRun(key, (state, blocks, run) => {
+      const taken = state.doc;
+      const bytes = blockBytes(state, blocks, run);
+      const now = () => (this.view.state.doc === taken ? bytes : null);
+      void import("./sync-to").then(
+        (sync) => sync.syncWithQuestions(port, doc, now, say),
+        (error: unknown) => say(liveStrings.t("blocks.sync.failed", { reason: errorText(error) }), "guasto"),
+      );
     });
   }
 
@@ -1372,7 +1438,12 @@ class HandlesView {
   measureTargets(drag: Drag, hold: Hold): void {
     const doc = this.view.state.facet(blocksOptions).document?.() ?? null;
     const state = this.view.state;
-    hold.targets = doc === null ? [] : placeTargets(state, state.field(blockModel).blocks, hold.run, dropOffers(doc));
+    const offers = doc === null ? [] : dropOffers(doc);
+    hold.targets = [
+      ...placeTargets(state, state.field(blockModel).blocks, hold.run, offers),
+      // Le note del cassetto, se c'è chi sposta fra le note.
+      ...(state.facet(blocksOptions).move ? noteTargets(offers) : []),
+    ];
     // Il bersaglio di prima appartiene a misure vecchie: si spegne sempre, e
     // si riaccende quello nuovo sotto il puntatore (anche la stessa riga).
     hold.hot?.hover(false);
@@ -1851,6 +1922,7 @@ class HandlesView {
     const view = this.view;
     const state = view.state;
     const blocks = state.field(blockModel).blocks;
+    if (target.note) return this.dropOnNote(target.note, run);
     const spec = target.drop(state, blocks, run);
     if (!spec) {
       if (state.field(dragPose).lifted) view.dispatch({ effects: setDragPose.of(null), annotations: blockGesture.of({ kind: "drop", say: "" }) });
@@ -1869,6 +1941,28 @@ class HandlesView {
       annotations: blockGesture.of({ kind: "drop", origin, lead: moved }),
     });
     view.focus();
+    return false;
+  }
+
+  /// Il rilascio su una nota del cassetto: «Sposta in…» senza domande, in
+  /// fondo alla nota e col link al posto del blocco, come nel prototipo. Il
+  /// blocco si posa dov'era; lo toglie la ricarica dopo la scrittura delle due
+  /// note, e un errore lo dice senza aver toccato niente.
+  dropOnNote(note: NonNullable<DropTarget["note"]>, run: BlockRun): boolean {
+    const view = this.view;
+    const state = view.state;
+    const options = state.facet(blocksOptions);
+    const doc = options.document?.()?.documentId;
+    if (state.field(dragPose).lifted) view.dispatch({ effects: setDragPose.of(null), annotations: blockGesture.of({ kind: "drop", say: "" }) });
+    if (!options.move || !doc) return false;
+    const block = blockBytes(state, state.field(blockModel).blocks, run);
+    const failed = (reason: string) => options.notify?.(liveStrings.t("blocks.move.failed", { reason }), "guasto");
+    void options.move.move({ doc, at: block.at, text: block.text, to: note.document.documentId, heading: null, leave: "link" }).then(
+      (reason) => {
+        if (reason !== null) failed(reason);
+      },
+      (error: unknown) => failed(errorText(error)),
+    );
     return false;
   }
 

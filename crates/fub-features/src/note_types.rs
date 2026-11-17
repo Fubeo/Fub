@@ -504,6 +504,16 @@ pub(crate) fn state_of(
             TypeState::NotAName
         });
     };
+    state_of_wanted(host, wanted)
+}
+
+/// Il tipo che il nome `wanted` (già tolto dal valore di `tipo`, vedi
+/// [`wanted_of_json`]) nomina, com'è adesso: la metà di [`state_of`] che non
+/// guarda la nota.
+pub(crate) fn state_of_wanted(
+    host: &dyn ReadApi,
+    wanted: String,
+) -> Result<TypeState, PluginError> {
     let folder = types_folder(host);
     let types = type_refs(host)?;
     Ok(match resolve(&types, folder.as_deref(), &wanted) {
@@ -553,6 +563,8 @@ pub(crate) struct TypeCount {
     /// Il tipo non si legge: si elenca lo stesso, perché lo si possa aprire
     /// e aggiustare.
     pub(crate) unreadable: Option<Unreadable>,
+    /// Il tipo letto, se si legge: chi elenca i tipi ne mostra le proprietà.
+    pub(crate) found: Option<NoteType>,
 }
 
 /// I tipi del vault con quante note ha ognuno, in ordine di percorso. Le
@@ -596,16 +608,17 @@ pub(crate) fn counts(host: &dyn ReadApi) -> Result<Vec<TypeCount>, PluginError> 
     }
     let mut out = Vec::with_capacity(types.len());
     for (reference, notes) in types.into_iter().zip(notes) {
-        let (icon, unreadable) = match load_type(host, reference.clone()) {
-            Ok(Ok(found)) => (found.icon, None),
+        let (found, unreadable) = match load_type(host, reference.clone()) {
+            Ok(Ok(found)) => (Some(found), None),
             Ok(Err(why)) => (None, Some(why)),
             Err(_) => (None, Some(Unreadable::File)),
         };
         out.push(TypeCount {
             reference,
             notes,
-            icon,
+            icon: found.as_ref().and_then(|f| f.icon.clone()),
             unreadable,
+            found,
         });
     }
     Ok(out)
@@ -753,7 +766,7 @@ const KINDS_EN: [(&str, &str); 10] = [
 ];
 
 /// L'id del registro di un tipo di proprietà (`number`, `date_time`).
-fn kind_id(kind: PropertyType) -> String {
+pub(crate) fn kind_id(kind: PropertyType) -> String {
     serde_json::to_value(kind)
         .ok()
         .and_then(|v| v.as_str().map(str::to_string))

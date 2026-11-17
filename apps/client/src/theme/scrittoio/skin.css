@@ -2435,8 +2435,9 @@ kbd,
   gap: var(--space-4);
 }
 
-/* Il marchio: un quadrato di matita blu con la effe in corsivo. È anche il
-   bottone del menu dell'applicazione. */
+/* Il marchio: Marcuzzo, il logo dell'utente (D26), un gufo che spunta da una
+   cartella. È anche il bottone del menu dell'applicazione: resta trasparente
+   e prende il velo del passaggio come le icone accanto. */
 .brand-mark {
   display: inline-flex;
   align-items: center;
@@ -2444,8 +2445,8 @@ kbd,
   padding: 0;
   border: none;
   border-radius: var(--radius-control);
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: transparent;
+  color: inherit;
   cursor: pointer;
   transition: transform var(--duration-state) var(--ease);
 }
@@ -2459,14 +2460,48 @@ kbd,
   transform: scale(0.96);
 }
 
+/* Il glifo del marchio è il disegno: la forma minima (`marcuzzo-24.svg`) a
+   24 px nel bottone di 28. */
 .brand-glyph {
-  font-family: var(--font-reading);
-  font-size: var(--text-2xl);
-  font-style: italic;
-  font-weight: var(--weight-medium);
-  line-height: 1;
-  transform: translateY(-1px);
+  display: block;
+  flex: none;
 }
+
+.brand-logo {
+  width: 24px;
+  height: 24px;
+}
+
+/* ── Il logo ────────────────────────────────────────────────────────────────
+   Il gufo ha i colori scritti nel disegno e non cambia mai. La cartella, il
+   suo retro, l'ombra sotto le zampe e i due fogli prendono la tinta del tema
+   dai ruoli `--logo-*`: la ricetta li calcola per la serie e per ogni tinta
+   scelta, la serie per un tema installato che non li dichiara. Sono già
+   lontani dal fondo quanto basta (3:1, 4,5:1 nel contrasto alto); senza ruoli
+   ripiegano sull'accento. Vale per ogni Marcuzzo della finestra: il marchio e
+   le Informazioni. */
+.marcuzzo .logo-cartella {
+  fill: var(--logo-cartella, var(--accent));
+}
+
+.marcuzzo .logo-cartella-retro {
+  fill: var(--logo-cartella-retro, var(--accent));
+}
+
+.marcuzzo .logo-cartella-ombra {
+  fill: var(--logo-cartella-ombra, var(--accent));
+}
+
+.marcuzzo .logo-foglio-1 {
+  fill: var(--logo-foglio-1, var(--sheet-2));
+}
+
+.marcuzzo .logo-foglio-2 {
+  fill: var(--logo-foglio-2, var(--sheet-2));
+}
+
+/* Coi colori forzati il logo diventa una sagoma nei colori del sistema: è
+   una garanzia, e sta nella struttura (`structure.css`). */
 
 /* Il chip del vault: il nome in inchiostro, un quadratino d'ambra davanti. */
 .vault-chip {
@@ -3950,6 +3985,100 @@ kbd,
   text-decoration: underline;
 }
 
+/* **«Nuova nota di tipo»** (E5, prototipo `newNote()`): il menu sotto
+   «Nuova nota», e lo stesso per «Scegli il tipo» della testata. Il foglio del
+   prototipo (`.pop`, 13 px, angoli da 14), una testata in grigio
+   (`.m-h`), le voci con il tassello dell'icona (`.m-i .ic.tile`, 34 px) e
+   sotto il nome che cosa porta il tipo (`small`), e il piede che dice dove
+   stanno i tipi (`.m-foot`). */
+.kit-popover.note-type-popover {
+  min-width: 220px;
+  max-width: min(380px, calc(100vw - 16px));
+  padding: 0;
+  border-radius: calc(var(--radius-menu) + var(--space-2));
+  background: var(--sheet);
+  box-shadow: var(--shadow-pop, 0 0 0 1px color-mix(in oklab, var(--text) 8%, transparent), var(--shadow-3));
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+}
+.note-type-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.note-type-menu-head {
+  margin: 0 var(--space-3);
+  padding: 9px 8px 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: var(--weight-bold);
+}
+.note-type-menu-list {
+  position: relative;
+  max-height: min(360px, calc(100vh - 120px));
+  padding: var(--space-1) var(--space-3) var(--space-3);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.note-type-menu-head + .note-type-menu-list {
+  padding-top: 0;
+}
+.note-type-menu-item {
+  gap: 10px;
+  min-height: 34px;
+  padding: 4px 10px 4px 6px;
+  border-radius: var(--radius-control);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+.note-type-menu-tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+}
+.note-type-menu-tile > svg {
+  width: 16px;
+  height: 16px;
+}
+.note-type-menu-item[data-active] .note-type-menu-tile {
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+}
+.note-type-menu-label {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.note-type-menu-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-type-menu-sub {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-type-menu-foot {
+  margin: 0;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
 /* ── skin/tree.css ──────────────────────────────────────────────────────── */
 
 /* L'albero dei file. */
@@ -4320,6 +4449,15 @@ kbd,
   background: var(--accent-wash);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
+/* **Una nota sotto un blocco in mano** (E13, «Sposta in…»): come il titolo
+   della Struttura, il filo e il velo d'accento, col cartellino dei Blocchi
+   sopra; vince sul passaggio e sulla nota aperta. */
+.tree-row[data-drop-hot],
+.tree-row[data-drop-hot]:hover,
+[role="treeitem"][aria-selected="true"] > .tree-row[data-drop-hot] {
+  background: var(--accent-veil);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
 /* **Colori forzati.** Fondi, ombre e sfumature sono del sistema o spariscono:
    ciò che qui era detto con quelli torna a dirsi con contorni e caratteri. */
 @media (forced-colors: active) {
@@ -4347,7 +4485,8 @@ kbd,
   .tree-row.drop-after {
     border-bottom: 2px solid Highlight;
   }
-  .tree-row.drop-into {
+  .tree-row.drop-into,
+  .tree-row[data-drop-hot] {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
@@ -4373,18 +4512,24 @@ kbd,
   margin-left: calc(var(--space-3) * -1);
 }
 
-/* **Più note scelte insieme.** La barra sta sopra l'albero e dice quante sono;
-   le righe scelte hanno il fondo della nota aperta ma non il suo peso, e un
-   segno a sinistra, così non si scambiano con «la nota che sto leggendo». */
+/* **Più note scelte insieme.** La barra sta sotto l'albero, ferma in fondo
+   alla colonna mentre l'albero scorre, e dice quante sono: comparendo non
+   sposta nessuna riga sotto il puntatore. Le righe scelte hanno il fondo della
+   nota aperta ma non il suo peso, e un segno a sinistra, così non si scambiano
+   con «la nota che sto leggendo». */
 .tree-selection {
+  position: sticky;
+  bottom: var(--space-2);
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  margin: 0 var(--space-3) var(--space-2);
+  margin: var(--space-2) var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-control);
   background: var(--accent-wash);
+  box-shadow: var(--shadow-1);
   color: var(--text);
   font-size: var(--text-sm);
 }
@@ -6598,17 +6743,20 @@ kbd,
 .cm-editor .cm-content .cm-fub-link-card-fetch:disabled {
   color: var(--doc-gutter-fg);
 }
-/* La scelta sotto un indirizzo incollato su una riga vuota (T25): «Link» e
-   «Scheda», due pulsanti piccoli nei toni del margine. Quello scelto è premuto. */
+/* La scelta sotto un indirizzo incollato su una riga vuota (T25): «Link»,
+   «Scheda» e, per un sito dell'elenco chiuso, «Incorpora» (T37); pulsanti
+   piccoli nei toni del margine. Quello scelto è premuto. */
 .cm-editor .cm-content .cm-fub-address-choice {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   margin: var(--space-1) 0;
   font-family: var(--font-ui);
   font-size: var(--text-sm);
 }
 .cm-editor .cm-content .cm-fub-address-choice-link,
-.cm-editor .cm-content .cm-fub-address-choice-card {
+.cm-editor .cm-content .cm-fub-address-choice-card,
+.cm-editor .cm-content .cm-fub-address-choice-embed {
   padding: var(--space-1) var(--space-3);
   border: 1px solid var(--doc-rule-soft);
   border-radius: var(--radius-control);
@@ -6617,17 +6765,20 @@ kbd,
   font: inherit;
 }
 .cm-editor .cm-content .cm-fub-address-choice-link:hover,
-.cm-editor .cm-content .cm-fub-address-choice-card:hover {
+.cm-editor .cm-content .cm-fub-address-choice-card:hover,
+.cm-editor .cm-content .cm-fub-address-choice-embed:hover {
   background: var(--doc-fill-soft);
   color: var(--doc-fg);
 }
 .cm-editor .cm-content .cm-fub-address-choice-link[aria-pressed="true"],
-.cm-editor .cm-content .cm-fub-address-choice-card[aria-pressed="true"] {
+.cm-editor .cm-content .cm-fub-address-choice-card[aria-pressed="true"],
+.cm-editor .cm-content .cm-fub-address-choice-embed[aria-pressed="true"] {
   color: var(--doc-fg);
   border-color: var(--doc-fg);
 }
 .cm-editor .cm-content .cm-fub-address-choice-link:focus-visible,
-.cm-editor .cm-content .cm-fub-address-choice-card:focus-visible {
+.cm-editor .cm-content .cm-fub-address-choice-card:focus-visible,
+.cm-editor .cm-content .cm-fub-address-choice-embed:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
@@ -7697,6 +7848,56 @@ button.cm-fub-page-icon:focus-visible {
   font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
+/* Il tipo che la nota nomina non c'è, non si legge o non è un nome (E5):
+   un avviso come quello del frontmatter che non si legge, nel colore
+   dell'attenzione e non del guasto (la nota va), con i gesti che lo
+   risolvono in fondo alla riga. */
+.cm-fub-page-type-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill-soft);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+.cm-fub-page-type-notice > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--warning);
+}
+.cm-fub-page-type-text {
+  flex: 1 1 16em;
+  min-width: 0;
+}
+.cm-fub-page-type-action {
+  flex: none;
+  height: 26px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cm-fub-page-type-action:hover {
+  background: var(--doc-block-hover);
+}
+/* L'icona del tipo, al posto di quella che la nota non ha: la stessa, un
+   po' più quieta, perché non è della nota. */
+.cm-fub-page-icon[data-from-type] {
+  opacity: 0.85;
+}
+
 /* La riga dei dati chiude la testata, con un filo che la stacca dal testo.
    Le misure di `.facts` del prototipo (12.5/1.4), nei colori della carta.
    L'altezza non intera della riga non sposta le maniglie: CodeMirror misura
@@ -8730,9 +8931,15 @@ button.cm-fub-page-icon:focus-visible {
    destro, la maniglia della larghezza (D9) con la misura mentre la si tira. */
 .cm-editor .cm-content .cm-fub-image.cm-fub-image-selected img:not([hidden]),
 .cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .embed,
-.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .image-missing {
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .image-missing,
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected [data-web-embed-site] {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+/* Una pagina web incorporata (T37) non ha una larghezza da tirare: il
+   segnaposto è uno solo, e la pagina si vede nel visore. */
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected:has([data-web-embed-site]) .cm-fub-image-handle {
+  display: none;
 }
 /* La selezione del testo non si stende sotto l'immagine scelta: il contorno
    dice già che è presa, come in Word. */
@@ -8838,7 +9045,8 @@ button.cm-fub-page-icon:focus-visible {
   padding-top: 0;
 }
 /* Il motivo lo scrive la shell nella lingua corrente (`data-embed-note`): un
-   ciclo e una catena troppo profonda sono due cose diverse. */
+   ciclo, una catena troppo profonda e un blocco che non c'è più sono cose
+   diverse. */
 .embed-cycle::after,
 .embed-too-deep::after {
   color: var(--muted);
@@ -8849,6 +9057,12 @@ button.cm-fub-page-icon:focus-visible {
 .embed.unresolved {
   border-left-color: var(--doc-rule-soft);
   color: var(--muted);
+}
+/* Il blocco sincronizzato il cui blocco non c'è più: la frase, nella lingua
+   della UI, al posto del link. */
+.embed.embed-missing {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
 }
 /* Un'immagine, un audio o un video incorporati sono il media, non una nota
    riportata: niente filo intorno. */
@@ -9906,7 +10120,8 @@ button.cm-fub-page-icon:focus-visible {
    e il cursore dentro; un blocco `$$` si modifica sul posto, col bordo
    d'accento. Il campo che prende i tasti non si vede: il LaTeX resta del
    file. Una formula con un errore mostra invece il suo LaTeX, in un campo a
-   vista. I segni del cursore li mette KaTeX (`math/caret.ts`). */
+   vista, con sotto che cosa non va (T64). I segni del cursore li mette KaTeX
+   (`math/caret.ts`). */
 
 /* Il riquadro sotto la formula in riga: largo quanto il prototipo, mai più
    largo della finestra (al telefono resta un margine per parte). */
@@ -10331,6 +10546,62 @@ button.cm-fub-page-icon:focus-visible {
   font-size: 12.5px;
 }
 
+/* Che cosa non va nel LaTeX (T64, E27; il prototipo `.mx-err`): sotto il
+   campo, dopo una pausa, una frase in chiaro su un vassoio, e la correzione
+   in un pulsante d'accento quando è una sola. */
+.cm-fub-mx-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 8px 8px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--sheet-2);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.cm-fub-mx-error[hidden] {
+  display: none;
+}
+.cm-fub-mx-error-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cm-fub-mx-error code {
+  padding: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: normal;
+}
+.cm-fub-mx-error-fix {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--sheet);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cm-fub-mx-error-fix:hover {
+  background: color-mix(in oklch, var(--accent) 88%, var(--text));
+}
+.cm-fub-mx-error-fix:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Nel blocco la frase sta sotto il campo, larga quanto lui. */
+.cm-fub-mx-block .cm-fub-mx-error {
+  margin: 8px 0 0;
+}
+
 /* ── «Mostra il LaTeX» e le tre misure di aiuto ───────────────────────────
    (T63, E27; il prototipo `.mx-prev`, `.mx-row`, `.mx-tex`, `.mx-more`,
    `.mx-opts`, `.seg2`.) Sopra la resa della formula, sotto la fila col campo
@@ -10535,6 +10806,12 @@ button.cm-fub-page-icon:focus-visible {
   .cm-fub-mx-segment[aria-pressed="true"] {
     outline: 1px solid Highlight;
     outline-offset: -1px;
+  }
+  .cm-fub-mx-error {
+    outline: 1px solid CanvasText;
+  }
+  .cm-fub-mx-error-fix {
+    border: 1px solid ButtonText;
   }
 }
 
@@ -16187,6 +16464,65 @@ input.canvas-toolbar-item {
   outline: none;
 }
 
+/* ── Il blocco sincronizzato ─────────────────────────────────────────────── */
+
+/* La trasclusione di un blocco (`![[Nota#^id]]`, T30) sta nella nota come un
+   suo blocco: niente vassoio, un filo d'accento discreto a sinistra (lo
+   stesso `inset` della trasclusione, più sottile e più chiaro). La
+   provenienza è una targhetta sopra il blocco, a destra, che si vede al
+   passaggio e col fuoco; si scrive con un clic, senza «Modifica qui». */
+.embed.transclusion-synced {
+  padding: 0 0 0 14px;
+  background: transparent;
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.transclusion-synced[data-transclusion-direct] .transclusion-body {
+  cursor: text;
+}
+.transclusion-synced:hover {
+  background: var(--doc-block-hover);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.transclusion-synced:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.transclusion-synced > .transclusion-head {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: 100%;
+  max-width: calc(100% - var(--space-6));
+  height: 24px;
+  padding: 0 2px 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--doc-bg);
+  box-shadow: var(--shadow-1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.transclusion-synced:hover > .transclusion-head,
+.transclusion-synced:focus-within > .transclusion-head,
+.transclusion-synced:focus-visible > .transclusion-head {
+  opacity: 1;
+  pointer-events: auto;
+}
+.transclusion-synced .transclusion-head button {
+  height: 20px;
+  padding: 0 var(--space-3);
+  opacity: 1;
+}
+/* Mentre si scrive resta un blocco della nota: il filo pieno, nessun foglio. */
+.embed.transclusion-synced.transclusion-editing {
+  background: transparent;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+/* Il testo non si sposta quando l'editor prende il posto della resa. */
+.pane-editor[data-markdown-mode] .transclusion-synced .transclusion-editor .cm-content {
+  padding: 0;
+}
+
 /* ── skin/draw.css ──────────────────────────────────────────────────────── */
 
 /* L'editor del disegno (FubDraw): la barra e il foglio. La geometria e i
@@ -18527,6 +18863,93 @@ button.draw-isolation-crumb:hover {
   padding: 0 var(--space-3);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* ── La pagina web incorporata ───────────────────────────────────────────── */
+
+/*
+   Un video, una mappa o un disegno di un sito dell'elenco chiuso (T37): il
+   segnaposto dell'immagine remota, un poco più largo, con l'icona della specie
+   su un cartoncino, il nome del sito e «Carica», la stessa pillola di
+   «Scarica nel vault». Nessuna anteprima e nessuna icona del sito: aprire la
+   nota non chiede niente alla rete. La pagina si apre nel visore.
+*/
+.web-embed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  width: 28rem;
+  max-width: 100%;
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: left;
+  vertical-align: middle;
+}
+.web-embed-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.web-embed-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.web-embed-name {
+  color: var(--text);
+  font-weight: 600;
+}
+.web-embed-detail {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* In Lettura la figura è larga quanto il segnaposto, come in Scrittura: la
+   didascalia sta sotto di lui, non al centro della colonna. */
+.markdown-rendered figure:has(.web-embed) {
+  width: fit-content;
+  max-width: 100%;
+}
+/* Rifiutata o senza visore la riga dice che cosa è successo: va a capo. */
+.web-embed[data-state="refused"] .web-embed-detail,
+.web-embed[data-state="unavailable"] .web-embed-detail {
+  white-space: normal;
+}
+.web-embed-load {
+  flex: none;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.web-embed-load:hover,
+.web-embed-load:focus-visible {
+  color: var(--accent);
+}
+.web-embed-load:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.web-embed-load:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 /* ── skin/nodes.css ─────────────────────────────────────────────────────── */
@@ -26222,6 +26645,21 @@ h6.ui-heading {
   .setting-field-error {
     text-align: left;
   }
+}
+
+/* Informazioni: Marcuzzo intero (`marcuzzo.svg`, D26) a 48 px, accanto alla
+ * versione; i suoi colori sono quelli del marchio (skin/frame.css). La riga
+ * tiene le tre colonne anche stretta: il logo è piccolo e il nome resta
+ * accanto. */
+.about-version {
+  grid-template-columns: auto minmax(40%, 1fr) auto;
+  align-items: center;
+}
+
+.about-logo {
+  flex: none;
+  width: 48px;
+  height: 48px;
 }
 
 /* Chi ha chiesto meno movimento: niente freccia che ruota, niente pressione. */

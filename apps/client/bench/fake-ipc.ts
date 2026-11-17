@@ -49,6 +49,7 @@ import type {
   DrawingGesture,
   DrawingLoss,
   DrawingOutcome,
+  Heading,
   IndexQuery,
   IndexResult,
   JobStatus,
@@ -1598,6 +1599,16 @@ function embedSection(text: string, heading: string | null): string {
   return lines.slice(start, end).join("\n").trim();
 }
 
+/// Il blocco col suo `^id` a fine paragrafo (il blocco sincronizzato, T30),
+/// senza l'id, come lo rende il kernel. Un id che non c'è è l'errore del
+/// kernel: la resa scrive «Blocco non trovato».
+function embedBlock(text: string, block: string): string {
+  const mark = new RegExp(`\\s\\^${block.replace(/[^A-Za-z0-9-]/g, "")}\\s*$`);
+  const found = text.split(/\n\s*\n/).find((paragraph) => mark.test(paragraph));
+  if (found === undefined) throw new Error(`Blocco non trovato nel banco: ^${block}`);
+  return found.replace(mark, "").trim();
+}
+
 /// Una resa di Markdown per le note che il banco non ha scritte a mano in
 /// `OUTPUT`: titoli, paragrafi, elenchi (con le caselle dei compiti), blocchi
 /// di codice, collegamenti e grassetto. Non è il renderer vero, e non vuole
@@ -1688,7 +1699,8 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
     const liveFile = LIVE?.files?.[page];
     if (liveFile !== undefined) {
       const text = host.files()[page] ?? liveFile;
-      return { kind: "render_embed", value: { doc_id: page, html: plainHtml(embedSection(text, q.heading ?? null)), parts: [] } };
+      const part = q.block ? embedBlock(text, q.block) : embedSection(text, q.heading ?? null);
+      return { kind: "render_embed", value: { doc_id: page, html: plainHtml(part), parts: [] } };
     }
     const doc = Object.keys(CORPUS).find((id) => id === page || id.endsWith(`/${page}`));
     if (!doc || OUTPUT[doc] === undefined || q.heading || q.block) {
@@ -1708,6 +1720,28 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
   backlinks: (q) => {
     const total = q.kind === "backlinks" ? (NOTE_FACTS[q.target]?.links ?? 0) : 0;
     return { kind: "backlinks", value: { items: [], offset: 0, total } };
+  },
+  // I titoli `#` di una nota del corpus, coi byte del sorgente: quelli che
+  // «Sposta in…» offre come destinazione. Lo slug è quello semplice, minuscole
+  // e trattini; una nota fuori dal corpus non ha titoli.
+  outline: (q) => {
+    const source = q.kind === "outline" ? (CORPUS[q.doc] ?? "") : "";
+    const encoder = new TextEncoder();
+    const value: Heading[] = [];
+    let offset = 0;
+    let fence = false;
+    for (const line of source.split("\n")) {
+      if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+      const found = fence ? null : /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+      if (found) {
+        const text = found[2]!;
+        const start = encoder.encode(source.slice(0, offset)).length;
+        const slug = text.toLocaleLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").trim().replace(/\s+/g, "-");
+        value.push({ level: found[1]!.length, text, slug, span: { start, end: start + encoder.encode(line).length }, explicit_anchor: null });
+      }
+      offset += line.length + 1;
+    }
+    return { kind: "outline", value };
   },
   organization: () => ({ kind: "organization", value: ORGANIZATION }),
   jobs: () => ({ kind: "jobs", value: JOBS }),

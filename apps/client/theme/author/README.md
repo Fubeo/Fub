@@ -2,17 +2,17 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **2116 hook**, **7 stati** (963 assegnazioni su 282 componenti) e lascia ridichiarare alla persona **191 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **2150 hook**, **7 stati** (981 assegnazioni su 288 componenti) e lascia ridichiarare alla persona **196 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
-Dichiara anche **68 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
+Dichiara anche **73 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
 ## Strati
 
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
-- **cornice** (1611 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
+- **cornice** (1633 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
 - **segno** (148 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
-- **contenuto** (357 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
+- **contenuto** (369 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
 Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.
 
@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 520 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 521 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup base-board base-cards base-chevron-down
@@ -118,7 +118,7 @@ gr-text-columns gr-theme gr-ungroup gr-unlock gr-unmerge gr-validation gr-view-n
 gr-wrap gr-zoom gr-zoom-100 gr-zoom-selection graph grip-eyes grip-eyes-held hash heading heart help
 history home image inbox info keyboard kit-eyedropper line-number media-dark-pages media-fit-width
 media-page-next media-page-previous media-show-annotations media-thumbnails media-two-pages minus
-monitor moon more music notes outline palette panel-left panel-right pen people pin plus
+monitor moon more move music notes outline palette panel-left panel-right pen people pin plus
 prop-checkbox prop-date prop-list prop-number prop-people prop-select prop-status prop-tags
 prop-text prop-url properties publish query rc-align-center rc-align-justify rc-align-left
 rc-align-right rc-break-column rc-break-page rc-bullets rc-chevron-down rc-chevron-up rc-clear

@@ -337,6 +337,125 @@ describe("la trasclusione viva", () => {
   });
 });
 
+describe("il blocco sincronizzato", () => {
+  const SYNCED = "# 4 novembre\n\nLe chiavi le tiene Sara. ^chiavi\n\nFine.\n";
+  const synced = (deps: TransclusionDeps | null, options: Parameters<typeof transclude>[2] = {}) =>
+    transclude(deps, { heading: null, block: "chiavi" }, options);
+  const click = (slot: HTMLElement) =>
+    slot.querySelector(".transclusion-body")!.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0, clientX: 1, clientY: 1 }));
+
+  it("è un blocco della nota: senza «Modifica qui», con la provenienza al passaggio", () => {
+    const { slot, live, opened } = synced(depsOf(new DocumentSessionCollection(fakeApi(SYNCED))));
+    expect(live.synced).toBe(true);
+    expect(live.editable).toBe(true);
+    expect(slot.classList.contains("transclusion-synced")).toBe(true);
+    expect(slot.hasAttribute("data-transclusion-direct")).toBe(true);
+    expect(slot.querySelector(".transclusion-edit")).toBeNull();
+    expect(slot.querySelector(".transclusion-source")?.textContent).toBe("Sincronizzato con Riunioni / 2026-11-04");
+    expect(slot.getAttribute("aria-label")).toBe("Blocco sincronizzato con Riunioni / 2026-11-04");
+    const open = slot.querySelector<HTMLButtonElement>(".transclusion-open")!;
+    expect(open.getAttribute("aria-label")).toBe("Apri Riunioni/2026-11-04");
+    open.click();
+    expect(opened).toEqual([["Riunioni/2026-11-04", null, "chiavi"]]);
+    // La trasclusione di una sezione resta quella di T29.
+    const section = transclude(depsOf(new DocumentSessionCollection(fakeApi())));
+    expect(section.live.synced).toBe(false);
+    expect(section.slot.querySelector(".transclusion-edit")).not.toBeNull();
+  });
+
+  it("un clic lo scrive dove sta; due riquadri sull'origine vedono la stessa cosa; Esc salva ed esce", async () => {
+    const api = fakeApi(SYNCED);
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read(ORIGIN);
+    const a = pane(sessions, "riquadro-a");
+    const { slot, live } = synced(depsOf(sessions, { shownInPane: () => true }));
+
+    click(slot);
+    await vi.waitFor(() => expect(live.phase).toBe("editing"));
+    // Niente fascia né avviso d'apertura: si scrive come nella nota.
+    expect(slot.querySelector<HTMLElement>(".transclusion-band")?.hidden).toBe(true);
+    expect(slot.querySelector<HTMLElement>(".transclusion-notice")?.hidden).toBe(true);
+    const inner = live.engine!;
+    expect(inner.getDoc()).toBe("Le chiavi le tiene Sara. ^chiavi");
+    const innerView = viewOf(slot.querySelector(".transclusion-editor")!);
+    type(innerView, "Le chiavi".length, " di casa");
+    expect(a.engine.getDoc()).toBe(SYNCED.replace("Le chiavi", "Le chiavi di casa"));
+    type(a.view, a.view.state.doc.toString().indexOf("Sara."), "a ");
+    expect(inner.getDoc()).toBe("Le chiavi di casa le tiene a Sara. ^chiavi");
+
+    innerView.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await vi.waitFor(() => expect(live.phase).toBe("idle"));
+    expect(api.writeDocument).toHaveBeenCalledWith(
+      ORIGIN, "# 4 novembre\n\nLe chiavi di casa le tiene a Sara. ^chiavi\n\nFine.\n", { kind: "descends_from", value: "rev-1" }, null, expect.any(String),
+    );
+  });
+
+  it("il fuoco che esce dal blocco esce anche dalla scrittura", async () => {
+    const sessions = new DocumentSessionCollection(fakeApi(SYNCED));
+    const { slot, live } = synced(depsOf(sessions));
+    expect(await live.edit()).toBe(true);
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    slot.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: outside }));
+    await vi.waitFor(() => expect(live.phase).toBe("idle"));
+  });
+
+  it("dieci blocchi sincronizzati non leggono niente finché non si scrive in uno", async () => {
+    const api = fakeApi(SYNCED);
+    const sessions = new DocumentSessionCollection(api);
+    const blocks = Array.from({ length: 10 }, () => synced(depsOf(sessions)));
+    expect(blocks.every((each) => each.live.synced && each.live.phase === "idle")).toBe(true);
+    // Nessun editor, nessuna sessione: la battuta nella nota che li ospita non
+    // ha niente in più da aggiornare.
+    expect(document.querySelectorAll(".transclusion-editor")).toHaveLength(0);
+    expect(api.readDocument).not.toHaveBeenCalled();
+    expect(sessions.get(ORIGIN)).toBeUndefined();
+    click(blocks[3]!.slot);
+    await vi.waitFor(() => expect(blocks[3]!.live.phase).toBe("editing"));
+    expect(document.querySelectorAll(".transclusion-editor")).toHaveLength(1);
+  });
+
+  it("l'origine in sola lettura: il clic non apre niente e dice perché", async () => {
+    const sessions = new DocumentSessionCollection(fakeApi(SYNCED));
+    const { slot, live } = synced(depsOf(sessions, { held: () => true, heldWhy: () => "La nota è prestata a un'altra app." }));
+    click(slot);
+    await vi.waitFor(() => expect(slot.querySelector(".transclusion-notice")?.textContent).toBe("La nota è prestata a un'altra app."));
+    expect(live.phase).toBe("idle");
+    expect(slot.querySelector(".transclusion-editor")).toBeNull();
+  });
+
+  it("una revisione cambiata nel frattempo non si sovrascrive", async () => {
+    const api = fakeApi(SYNCED);
+    api.writeDocument = vi.fn(async () => {
+      throw { kind: "conflict", message: "revisione superata" };
+    });
+    const sessions = new DocumentSessionCollection(api);
+    const deps = depsOf(sessions);
+    const { slot, live } = synced(deps);
+    expect(await live.edit()).toBe(true);
+    const innerView = viewOf(slot.querySelector(".transclusion-editor")!);
+    type(innerView, 0, "Ora: ");
+    await live.leave();
+    expect(live.phase).toBe("editing");
+    expect(sessions.saveState(ORIGIN)).toBe("conflitto");
+    expect(slot.querySelector<HTMLElement>(".transclusion-conflict")?.hidden).toBe(false);
+    expect(api.writeDocument).not.toHaveBeenCalledWith(ORIGIN, expect.any(String), { kind: "dictated" }, expect.anything(), expect.anything());
+  });
+
+  it("l'origine rinominata mentre si scrive: la provenienza dice il nome nuovo", async () => {
+    const sessions = new DocumentSessionCollection(fakeApi(SYNCED));
+    const { slot, live } = synced(depsOf(sessions));
+    expect(await live.edit()).toBe(true);
+    expect(sessions.rename(ORIGIN, "Riunioni/Novembre.md").kind).toBe("renamed");
+    const innerView = viewOf(slot.querySelector(".transclusion-editor")!);
+    type(innerView, 0, "Ora: ");
+    expect(sessions.text("Riunioni/Novembre.md")).toContain("Ora: Le chiavi");
+    expect(slot.getAttribute("aria-label")).toBe("Blocco sincronizzato con Riunioni / Novembre");
+    expect(slot.querySelector(".transclusion-source")?.textContent).toBe("Sincronizzato con Riunioni / Novembre");
+    expect(live.writingDoc).toBe("Riunioni/Novembre.md");
+  });
+});
+
 describe("la resa che ospita", () => {
   function resources(contents: Record<string, EmbedContent>) {
     const listeners = new Set<(change: MarkdownResourceChange) => void>();
@@ -386,6 +505,27 @@ describe("la resa che ospita", () => {
     expect(container.querySelector("[data-seen]")).not.toBeNull();
     release!();
     await vi.waitFor(() => expect(embed.mock.calls.length).toBeGreaterThan(calls));
+    dispose();
+  });
+
+  it("il blocco d'origine cancellato: «Blocco non trovato», e niente trasclusione viva", async () => {
+    const { port } = resources({});
+    port.embed = vi.fn(async () => {
+      throw { kind: "not_found", message: "^chiavi" };
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const transclude = vi.fn();
+    const dispose = mountMarkdown(container, '<div class="embed" data-embed-page="Riunioni" data-embed-block="chiavi"></div>', {
+      documentId: "Mostra.md",
+      resources: port,
+      transclude,
+    });
+    const slot = container.querySelector<HTMLElement>(".embed")!;
+    await vi.waitFor(() => expect(slot.classList.contains("unresolved")).toBe(true));
+    expect(slot.classList.contains("embed-missing")).toBe(true);
+    expect(slot.textContent).toBe("Blocco non trovato");
+    expect(transclude).not.toHaveBeenCalled();
     dispose();
   });
 });

@@ -23,6 +23,8 @@ import { NO_TYPES, parsePropertyTypes, sameTypes, type PropertyTypes } from "./p
 import { api } from "../../../../host/ipc";
 import { keepTitle, retitleIn, retitleWaiting } from "./page/title";
 import { selectBlockThenAll, selectBody } from "./blocks/keys";
+import type { MoveBlockPort } from "./blocks/move-to";
+import type { SyncBlockPort } from "./blocks/sync-to";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { mountReadingHeader, type PageOptions } from "./page/header";
 import { propertiesDisplay } from "../../properties-display";
@@ -35,6 +37,10 @@ import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
 import { resolvedReference, settings } from "../../../../host/query";
 import { onEvent } from "../../../../state/kernel";
 import { openVaultRoot } from "../../../../state/store";
+import { featureInType, listNoteTypes, noteTypeOf, type NoteType, type NoteTypeState } from "../../../../state/note-types";
+import { undoLastOperation } from "../../../../state/vault";
+import { isErrorKind } from "../../../../host/errors";
+import { noteTypeSource } from "./page/note-type";
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { notify } from "../../../../ui/notify";
 import { errorText } from "../../../../host/errors";
@@ -57,7 +63,7 @@ import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine } from "../../engine";
 import { withLineBreaks } from "../../line-breaks";
 import type { CompletionSources } from "./completions";
-import { BASE_ACTION, createBaseHere, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
+import { BASE_ACTION, SYNC_BLOCK_ACTION, createBaseHere, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
 import { promptText } from "../../../../ui/dialogs";
 import { dailyLink } from "./completions";
 import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";
@@ -189,6 +195,12 @@ export interface MarkdownSurfaceOptions {
   /// «Nuova sottopagina» dalla testata dei Blocchi: `null` se è andata,
   /// altrimenti la frase che dice perché no.
   onNewSubpage?(doc: string, name: string): Promise<string | null>;
+  /// «Sposta in…» (T32): le note, i loro titoli e il comando che sposta il
+  /// blocco. Senza, il menu del blocco non lo offre.
+  moveBlock?: MoveBlockPort;
+  /// Il blocco sincronizzato (T30): «Sincronizza in un'altra nota» nel menu
+  /// del blocco e «Blocco di un'altra nota» nel «/». Senza, non ci sono.
+  syncBlock?: SyncBlockPort;
   /// Le icone delle pagine (`icon:`) per i wikilink della Live (K9): la
   /// lettura per nome, e chi avvisa quando cambiano.
   pageIcons?: PageIcons;
@@ -388,6 +400,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (entry.id === BASE_ACTION && !transform) {
         // Il «/base» resta finché il file non c'è: lo toglie l'embed.
         startBase(view, from, to);
+      } else if (entry.id === SYNC_BLOCK_ACTION && !transform) {
+        // Come la Base: il «/» resta finché la trasclusione non c'è.
+        startSync(view, from, to);
       } else if (entry.action && transform) {
         const action = MARKDOWN_ACTIONS.get(entry.id);
         const command = action && (Object.keys(params).length > 0 ? action.withParams?.(params) : action.run);
@@ -427,6 +442,25 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     void createBaseHere(view, from, to, port)
       .catch((error: unknown) => port.notify(errorText(error)))
       .finally(() => { creatingBase = false; });
+  };
+  /// «Blocco di un'altra nota» dal «/» (T30): la nota, il blocco, l'id, poi
+  /// la trasclusione qui. Una alla volta; il resto si carica al primo uso.
+  let syncing = false;
+  const startSync = (view: EditorView, from: number, to: number): void => {
+    const port = opts.syncBlock;
+    if (syncing || !port) return;
+    syncing = true;
+    const say = (message: string) => {
+      if (!life.closed) notify(message, "guasto");
+    };
+    void import("./blocks/sync-to")
+      .then((sync) => sync.syncedBlockHere(view, from, to, port, {
+        doc: linkSource(),
+        writable: () => editable() && !tableGrid,
+        notify: say,
+      }))
+      .catch((error: unknown) => say(errorText(error)))
+      .finally(() => { syncing = false; });
   };
   /// Gli argomenti di un'azione come li vuole il profilo: la data detta
   /// diventa il link alla sua giornaliera, che sa dove sta soltanto la shell.
@@ -670,6 +704,53 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // impostazioni di questa superficie, e ogni suo cambio rifà la testata.
   let propertyTypes: PropertyTypes = NO_TYPES;
   let propertyTypesRaw: unknown = undefined;
+  // Il tipo della nota (E5): lo dice il core quando il valore di `tipo`
+  // cambia, e la testata si rifà quando la risposta arriva.
+  const noteTypes = noteTypeSource({
+    lookup: (raw) => noteTypeOf(raw),
+    changed: () => redrawPageHeader(),
+    lifetime: life,
+  });
+  /// L'ultimo tipo saputo, per sapere quali file lo cambiano.
+  let lastNoteType: NoteTypeState | null = null;
+  // Un tipo cambiato su disco (le sue proprietà in evidenza, un tipo che
+  // arriva o se ne va) si richiede, raccolto dopo una pausa: mai per battuta.
+  let typeTimer: ReturnType<typeof setTimeout> | null = null;
+  const typeTouched = (...docs: string[]): void => {
+    const known = lastNoteType;
+    if (known === null) return;
+    if (known.state === "typed" && !docs.includes(known.type.doc)) return;
+    if (typeTimer !== null) clearTimeout(typeTimer);
+    typeTimer = setTimeout(() => {
+      typeTimer = null;
+      noteTypes.refresh();
+    }, 250);
+  };
+  life.add(() => {
+    if (typeTimer !== null) clearTimeout(typeTimer);
+  });
+  life.add(onEvent("document_changed", (event) => typeTouched(event.id)));
+  life.add(onEvent("document_removed", (event) => typeTouched(event.id)));
+  life.add(onEvent("document_renamed", (event) => typeTouched(event.from, event.to)));
+  /// «In evidenza» in una nota con un tipo: scrive nel file del tipo, con la
+  /// revisione letta; dice com'è andata, con «Annulla».
+  const featureTyped = async (type: NoteType, key: string, on: boolean): Promise<void> => {
+    try {
+      await featureInType(type, key, on);
+      notify(liveStrings.t(on ? "page.type.featured" : "page.type.unfeatured", { key, type: type.name }), "info", {
+        label: t("app.undo"),
+        run: () => void undoLastOperation().catch((error: unknown) => notify(errorText(error), "guasto")),
+      });
+    } catch (error) {
+      const message = isErrorKind(error, "conflict")
+        ? liveStrings.t("page.type.feature.changed", { type: type.name })
+        : isErrorKind(error, "permission_denied")
+          ? liveStrings.t("page.type.feature.denied", { type: type.name })
+          : liveStrings.t("page.type.feature.failed", { type: type.name, reason: errorText(error) });
+      notify(message, "guasto");
+    }
+    noteTypes.refresh();
+  };
   const pageOptions: PageOptions = {
     page: () => pageName(resources?.documentId ?? documentId),
     notify: (message, tone) => notify(message, tone),
@@ -696,6 +777,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
       : undefined,
     propertyTypes: () => propertyTypes,
+    noteType: (raw) => {
+      const known = noteTypes.stateFor(raw);
+      lastNoteType = known;
+      return known;
+    },
+    listTypes: () => listNoteTypes(),
+    openType: (doc) => void Promise.resolve(opts.onOpenPath(doc, linkSource())).catch((error: unknown) => notify(errorText(error), "guasto")),
+    featureInType: (type, key, on) => void featureTyped(type, key, on),
     // «Tipo» nel menu di una proprietà: vale per tutto il vault, ed è il
     // comando del registro (`property.type.set`) a scriverlo.
     setPropertyType: async (key, type) => {
@@ -731,6 +820,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // La nota e il suo vault: i bersagli fuori dalla colonna (T2b). Solo dei
     // Blocchi, la testata non li usa.
     document: () => ({ documentId: resources?.documentId ?? documentId, vault }),
+    ...(opts.moveBlock ? { move: opts.moveBlock } : {}),
+    ...(opts.syncBlock ? { sync: opts.syncBlock } : {}),
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,
   };
@@ -828,6 +919,13 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   let readingPageTags = false;
   function readingFactTags(): boolean {
     return opts.noteFacts !== undefined && (noteFactsLabels(facts)?.tags.length ?? 0) > 0;
+  }
+  /// Rifà la testata in Scrittura e in Lettura: è cambiato qualcosa che il
+  /// testo non dice (il tipo della nota).
+  function redrawPageHeader(): void {
+    if (life.closed) return;
+    engine.runViewCommand((view) => refreshPageHeader(view));
+    if (mode === "reading" && unmountReadingPage) mountReadingPage();
   }
   function mountReadingPage(): void {
     unmountReadingPage?.();
@@ -1217,12 +1315,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const linkDialogHere = (): boolean => engine.readState((state) => state.facet(linkDialogOpener) !== null);
   const editorActions: SurfaceEditorActions = {
     has: (id) =>
-      MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION || id === BASE_ACTION || id === LINK_EDIT_ACTION,
+      MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION || id === BASE_ACTION || id === LINK_EDIT_ACTION ||
+      (id === SYNC_BLOCK_ACTION && opts.syncBlock !== undefined),
     editable,
     state(id): EditorActionState {
       if (!editable()) return ACTION_UNAVAILABLE;
       if (FOLDS.has(id)) return { enabled: true, active: null };
       if (id === BASE_ACTION) return { enabled: !tableGrid && !creatingBase, active: null };
+      if (id === SYNC_BLOCK_ACTION) return { enabled: !tableGrid && !syncing && opts.syncBlock !== undefined, active: null };
       if (id === "text.undo" || id === "text.redo") {
         const depth = engine.historyDepth();
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
@@ -1248,6 +1348,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         return engine.runViewCommand((view) => {
           const at = view.state.selection.main.head;
           startBase(view, at, at);
+          return true;
+        });
+      }
+      if (id === SYNC_BLOCK_ACTION) {
+        // Da un menu, al cursore: senza «/» da togliere.
+        if (tableGrid || syncing || !opts.syncBlock) return false;
+        return engine.runViewCommand((view) => {
+          const at = view.state.selection.main.head;
+          startSync(view, at, at);
           return true;
         });
       }

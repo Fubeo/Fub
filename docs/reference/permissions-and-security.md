@@ -55,21 +55,13 @@ L'elenco esatto delle funzioni vive nel contratto.
 
 ### Le notifiche del sistema
 
-`fub:notifications` è un permesso del core stretto come gli altri: non sta in
-`PluginPermissions::core()`, e lo dichiara soltanto il componente che ne ha
-bisogno, dalla sua riga dell'inventario (`OfficialFeature::permissions`).
-Lo dichiara «Compiti» (`fub.tasks`), per i promemoria. Come ogni permesso
-dichiarato ha il suo interruttore nella pagina **Componenti** delle
-impostazioni (`fub.tasks:permissions.notifications`), acceso di serie.
-
-Nessun metodo dell'host mostra una notifica, e il permesso non ha una funzione
-WIT: un plugin WASM non può notificare. Chi notifica è l'app
-(`crates/fub-app/src/promemoria.rs`), a nome del componente, e prima di ogni
-notifica chiede al `Guard` del vault se la famiglia `Notifications` è concessa
-in quel momento (`Host::component_allows`). Spento l'interruttore, o spento il
-componente, la risposta è no dalla notifica dopo; i promemoria restano nella
-nota. La prova è `the_reminder_notifications_are_a_permission_of_the_tasks_alone`
-in `crates/fub-host/src/legacy_tests/switches.rs`.
+`fub:notifications` non sta in `PluginPermissions::core()`: lo dichiara solo
+«Compiti» (`fub.tasks`, per i promemoria) dalla sua riga dell'inventario, con
+l'interruttore `fub.tasks:permissions.notifications` in **Componenti**, acceso
+di serie. Non ha una funzione WIT, quindi un plugin WASM non può notificare:
+notifica l'app (`crates/fub-app/src/promemoria.rs`), che prima di ognuna chiede
+al `Guard` (`Host::component_allows`). Spento l'interruttore o il componente, la
+notifica dopo non parte e i promemoria restano nella nota (prova in `switches.rs`).
 
 ## Path fence
 
@@ -157,6 +149,18 @@ Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount (non
 un bundle uguale per contenuto, mai per id, a quello montato: `MountedBundle`).
 Una preview non cambia la scelta persistente: annullarla o chiuderla rimonta il
 tema autorevole; un bundle illeggibile o rifiutato non si monta a metà.
+
+Il logo (Marcuzzo, nella barra, nelle Informazioni e all'avvio) prende i
+colori da cinque ruoli facoltativi: `--logo-cartella`, `--logo-cartella-retro`,
+`--logo-cartella-ombra`, `--logo-foglio-1` e `--logo-foglio-2`. La serie li
+ricava dall'accento (`logoColors` in `recipe.ts`) con la cartella tenuta alla
+soglia dei segni su `--bg` e `--bg-elev`. Un tema installato che non dichiara
+nessun ruolo del logo li riceve prima della validazione, calcolati dal suo
+`--accent` per la stessa luce e lo stesso contrasto (`completeSheet` della
+serie); un tema che ne dichiara anche uno solo resta com'è, e i ruoli mancanti
+cadono sull'accento e su `--sheet-2`. Il gufo tiene i suoi colori. Con i colori
+forzati il logo diventa una sagoma nei colori di sistema, regola in
+`structure.css`, che un tema non tocca.
 
 Un tema veste la cornice e i segni di Fub, e il contenuto soltanto dove la
 modalità della superficie ne dà l'autorità al tema: una regola sul contenuto si
@@ -311,6 +315,13 @@ o quando `viewer.links` è acceso. Un indirizzo `http` che il visore non apre
 va al browser di sistema; ogni altro schema non si apre, con o senza visore
 montato (`apps/client/src/ui/web-viewer.ts`). Un nodo `web_view` di una vista
 incornicia soltanto un indirizzo `https:`.
+
+Una pagina incorporata in una nota (`![](https://…)` di un sito dell'elenco
+chiuso, `WEB_EMBED_SITES` in
+`apps/client/src/editors/text/profiles/markdown/web-embed.ts`) è un segnaposto
+che non chiede niente alla rete. «Carica» la apre soltanto nel visore, con lo
+stesso consenso; senza visore, o per un indirizzo che il visore non apre, non
+va al browser di sistema. Nessun iframe entra nella shell.
 
 Le letture del client con `fetch` (asset del vault, file dell'app, tessere
 della mappa) non seguono redirect e non portano credenziali né referrer:

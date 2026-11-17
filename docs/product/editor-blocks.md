@@ -53,8 +53,8 @@ nome del blocco e il piede dei tasti ([Tasto destro](editor-menus.md)). Ha:
   prende più righe le unisce con uno spazio, e le sottovoci restano blocchi
   sotto. Una tabella non si trasforma;
 - **Colore ▸**, il testo e il fondo coi nove colori dei Blocchi;
-- **Duplica** e, per ultimo, **Elimina**; **Sposta su**, **Sposta giù** e
-  **Affianca in colonne** si trovano scrivendo;
+- **Duplica**, **Sposta in…** ([in un'altra nota](editor-move-to.md)) e, per
+  ultimo, **Elimina**; **Sposta su**, **Sposta giù** e **Affianca in colonne** si trovano scrivendo;
 - **Copia il link al blocco**: scrive negli appunti `[[Nota#Titolo]]` per un
   titolo e `[[Nota#^id]]` per il resto. Se il blocco non ha un id, ne riceve uno
   di sei caratteri: in coda all'ultima riga per paragrafi, titoli e voci, su una
@@ -384,13 +384,13 @@ wikilink.
 
 ## Le date
 
-`@` propone anche i giorni: il giorno stesso, «domani», «ieri», un giorno della
-settimana («venerdì», il prossimo con quel nome), «prossimo venerdì» (quello
-della settimana dopo, che comincia dal giorno scelto in
-`locale.first-day-of-week` o da quello del sistema), «4 novembre», «nov 4» e
-`2026-11-04`, in italiano e in inglese. Una parola a metà basta. Il giorno
-diventa il link alla sua giornaliera, nella cartella e col formato di
-`daily.folder` e `daily.format`, con il giorno per esteso come testo:
+`@` propone anche i giorni: il giorno stesso, «domani», «ieri», «venerdì»
+(il prossimo), «prossimo venerdì» (nella settimana dopo, dal giorno di
+`locale.first-day-of-week` o del sistema), «4 novembre», «nov 4», `2026-11-04`
+e, con la regola del campo della data nelle proprietà (`saidDay`), «fra due
+settimane» e «3/4»; in italiano e in inglese, e una parola a metà basta. Il
+giorno diventa il link alla sua giornaliera (`daily.folder`, `daily.format`),
+col giorno per esteso come testo:
 
 ```markdown
 Consegna [[Daily/2026-11-04|4 novembre 2026]].

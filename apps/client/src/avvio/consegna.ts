@@ -99,15 +99,24 @@ const INERTI = ["#app", ".skip-link", "#document-window"];
 /// durante l'avvio su un `#app` inerte si sono perse. Nell'ordine: ciò che si
 /// scrive nel foglio attivo, o nella finestra di un documento, il primo bottone
 /// della scelta del vault, i fogli.
-const FUOCO = [
-  ".pane.focus [contenteditable='true']",
-  "#document-window [contenteditable='true']",
-  "#onboarding:not([hidden]) button:not([hidden])",
-  "#panes",
+///
+/// `#panes` è una regione e non un controllo: ci si parcheggia il fuoco perché
+/// il primo Tab parta dai fogli, ma nessuno l'ha chiesto con un tasto. L'anello
+/// lì, all'avvio, è un contorno senza un perché, e copriva il bordo della
+/// colonna accanto (IMP-005): ci va senza anello (`focusVisible: false`). Un
+/// campo o un bottone invece l'anello lo tengono, perché dicono dove si scrive
+/// o che cosa preme Invio.
+const FUOCO: readonly (readonly [selettore: string, anello: boolean])[] = [
+  [".pane.focus [contenteditable='true']", true],
+  ["#document-window [contenteditable='true']", true],
+  ["#onboarding:not([hidden]) button:not([hidden])", true],
+  ["#panes", false],
 ];
 
-/// I colori dello strato, con la variabile del tema da cui si leggono.
-const COLORI: readonly (readonly [chiave: string, variabile: string])[] = [
+/// I colori dello strato, con la variabile del tema da cui si leggono e, per
+/// la cartella del logo, quella su cui ripiega la pelle quando il tema non la
+/// dà (`skin/frame.css`): così l'avvio mostra il logo che l'app mostrerà.
+const COLORI: readonly (readonly [chiave: string, variabile: string, ripiego?: string])[] = [
   ["sfondo", "--bg"],
   ["testo", "--text"],
   ["tenue", "--muted"],
@@ -116,6 +125,12 @@ const COLORI: readonly (readonly [chiave: string, variabile: string])[] = [
   ["bordo", "--border"],
   ["guasto", "--danger"],
   ["fuoco", "--focus-ring"],
+  // La cartella di Marcuzzo, nella tinta del tema (D26).
+  ["cartella", "--logo-cartella", "--accent"],
+  ["cartella-retro", "--logo-cartella-retro", "--accent"],
+  ["cartella-ombra", "--logo-cartella-ombra", "--accent"],
+  ["foglio-1", "--logo-foglio-1", "--sheet-2"],
+  ["foglio-2", "--logo-foglio-2", "--sheet-2"],
 ];
 
 /// I testi che lo strato dice: i suoi, «Riprova» e i nomi delle fasi che il
@@ -263,10 +278,13 @@ function vivifica(el: HTMLElement): void {
   }
   const attivo = document.activeElement;
   if (attivo && attivo !== document.body && !el.contains(attivo)) return;
-  for (const selettore of FUOCO) {
+  for (const [selettore, anello] of FUOCO) {
     const bersaglio = document.querySelector<HTMLElement>(selettore);
     if (!bersaglio) continue;
-    bersaglio.focus({ preventScroll: true });
+    // `focusVisible` non è ancora nei tipi della DOM di TypeScript; WebKitGTK
+    // e Chromium lo onorano, un motore che non lo conosce lo ignora.
+    const opzioni: FocusOptions & { focusVisible?: boolean } = anello ? { preventScroll: true } : { preventScroll: true, focusVisible: false };
+    bersaglio.focus(opzioni);
     if (document.activeElement === bersaglio) return;
   }
 }
@@ -299,8 +317,9 @@ function coloreBuono(valore: string): boolean {
 function coloriDellApp(): Record<string, string> {
   const stile = getComputedStyle(document.documentElement);
   const colori: Record<string, string> = {};
-  for (const [chiave, variabile] of COLORI) {
-    const valore = stile.getPropertyValue(variabile).trim();
+  for (const [chiave, variabile, ripiego] of COLORI) {
+    const proprio = stile.getPropertyValue(variabile).trim();
+    const valore = proprio === "" && ripiego !== undefined ? stile.getPropertyValue(ripiego).trim() : proprio;
     if (coloreBuono(valore)) colori[chiave] = valore;
   }
   return colori;

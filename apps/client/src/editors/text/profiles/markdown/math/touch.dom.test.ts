@@ -154,7 +154,9 @@ describe("una formula in riga", () => {
     await settle();
     const latex = document.querySelector<HTMLTextAreaElement>(".cm-fub-mx-latex");
     expect(latex?.value).toBe("\\frac{a}");
-    expect(document.querySelector(".cm-fub-mx-note")?.hasAttribute("hidden")).toBe(false);
+    // Sotto, che cosa non va, in chiaro (T64), al posto della nota generica.
+    expect(document.querySelector(".cm-fub-mx-error:not([hidden]) .cm-fub-mx-error-text")?.textContent).toBe("A \\frac manca un pezzo.");
+    expect(document.querySelector(".cm-fub-mx-note")?.hasAttribute("hidden")).toBe(true);
     latex!.value = "\\frac{a}{b}";
     latex!.dispatchEvent(new Event("input", { bubbles: true }));
     expect(view.state.doc.toString()).toBe("x $\\frac{a}{b}$ y");

@@ -86,6 +86,8 @@ const SHEET_FULL = { width: 1308, height: 800 };
 const NOTE_NARROW = { width: 800, height: 800 };
 /// La testata della trasclusione viva nel riquadro col fuoco.
 const TRANSCLUSION_HEAD = ".pane.focus .pane-editor .transclusion .transclusion-head";
+/// Il blocco sincronizzato nel riquadro col fuoco.
+const SYNCED_BLOCK = ".pane.focus .pane-editor .transclusion-synced";
 /// Una finestra documento appena aperta.
 const DOCUMENT_WINDOW = { width: 900, height: 700 };
 
@@ -1415,7 +1417,7 @@ export const SCENE = touchLast(onPage("shell", [
   ...[
     ["formula-01-riga", "formula-toccata", "La formula in riga toccata: il riquadro sotto, la formula grande col cursore nel numeratore", "inline"],
     ["formula-02-blocco", "formula-toccata", "Il blocco $$ toccato: la formula sul posto col bordo d'accento, il cursore dove cade il clic", "block"],
-    ["formula-03-errore", "formula-errore", "Una formula con un errore si apre col suo LaTeX e la nota che lo dice", "error"],
+    ["formula-03-errore", "formula-errore", "Una formula con un errore si apre col suo LaTeX e sotto che cosa non va, con la correzione", "error"],
     // Le proposte dei simboli (T61): `\fr` in fondo alla formula in riga
     // propone le frazioni e le frecce, disegnate e col nome; `\s` nel
     // blocco le radici, la somma e il sigma.
@@ -1438,6 +1440,12 @@ export const SCENE = touchLast(onPage("shell", [
     ["formula-13-latex-discreti", "formula-toccata&mathsource=1&mathhelp=discrete", "Gli aiuti discreti: il completamento resta, la tavolozza a richiesta col pulsante «Simboli»", "source-discrete"],
     ["formula-14-latex-spenti", "formula-toccata&mathsource=1&mathhelp=spente", "Gli aiuti spenti: soltanto il LaTeX e la sua anteprima", "source-off"],
     ["formula-15-latex-blocco", "formula-toccata&mathsource=1", "Il blocco $$ con Mostra il LaTeX: la formula sopra, il campo e la tavolozza sotto", "source-block"],
+    // Gli errori in chiaro (T64): dopo la pausa, sotto il campo, la frase
+    // con la correzione quando è una sola; con più correzioni nessun
+    // pulsante. Il TeX non cambia da solo.
+    ["formula-16-latex-errore", "formula-toccata&mathsource=1", "Un nome che non c'è: «Non conosco \\alfa. Forse volevi \\alpha?» e «Usa \\alpha»", "source-unknown"],
+    ["formula-17-latex-graffa", "formula-toccata&mathsource=1&mathhelp=spente", "Una graffa aperta con gli aiuti spenti: «Manca una } di chiusura» e «Chiudi»", "source-brace"],
+    ["formula-18-latex-piu-correzioni", "formula-toccata&mathsource=1&mathhelp=spente", "Un nome con più simboli vicini: la frase li elenca, senza pulsante", "source-guesses"],
   ].map(([id, live, title, gesture]) => ({
     id,
     title,
@@ -1478,6 +1486,34 @@ export const SCENE = touchLast(onPage("shell", [
     // Il passaggio è l'ultimo gesto, dopo che il palco ha portato via il
     // puntatore.
     ...(writing ? {} : { hover: (page) => page.hover(TRANSCLUSION_HEAD) }),
+  })),
+  // Il blocco sincronizzato (T30): un blocco della nota col filo discreto a
+  // sinistra; al passaggio la targhetta «Sincronizzato con …»; un clic lo
+  // scrive dove sta. Sotto, un blocco d'origine cancellato: «Blocco non
+  // trovato».
+  ...[
+    ["blocco-sincronizzato-01-passaggio", "Il blocco sincronizzato al passaggio: «Sincronizzato con …» e «Apri»; sotto, «Blocco non trovato»", false],
+    ["blocco-sincronizzato-02-scrive", "Un clic sul blocco sincronizzato: si scrive dove sta, senza fascia", true],
+    ["blocco-sincronizzato-03-stretta", "Il blocco sincronizzato al passaggio nella finestra stretta, 800 px", false, NOTE_NARROW],
+  ].map(([id, title, writing, viewport]) => ({
+    id,
+    title,
+    query: "live=sincronizzato",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForSelector(`${SYNCED_BLOCK} .transclusion-body p`);
+      await page.waitForSelector(".pane.focus .pane-editor .embed-missing");
+      if (!writing) return;
+      await page.click(`${SYNCED_BLOCK} .transclusion-body p`);
+      await page.waitForSelector(`${SYNCED_BLOCK}.transclusion-editing .transclusion-editor .cm-content:focus`);
+    },
+    ...(writing ? {} : {
+      hover: async (page) => {
+        await page.hover(`${SYNCED_BLOCK} .transclusion-body`);
+        await page.waitForFunction((selector) => getComputedStyle(document.querySelector(selector)).opacity === "1", `${SYNCED_BLOCK} > .transclusion-head`);
+      },
+    }),
   })),
   // La riga dei suggerimenti (T14): al centro della banda, i tasti per ciò che
   // si sta facendo. Una parola scelta a 1280 px; un blocco scelto nella
@@ -1558,6 +1594,24 @@ export const SCENE = touchLast(onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openOptionsEditor(page, gesture),
   })),
+  // I tipi di nota (T33, E5; il prototipo `newNote()` e la sezione «Tipi» del
+  // cassetto): «Nuova nota» che chiede il tipo, la testata di una nota con un
+  // tipo, quella di una nota il cui tipo non c'è, e «Scegli il tipo»; poi a
+  // 800 px.
+  ...[
+    ["tipi-01-nuova", "tipo", "«Nuova nota» chiede il tipo: la nota semplice in cima, poi i tipi; nel cassetto la sezione «Tipi»", "new"],
+    ["tipi-02-testata", "tipo", "La testata di una nota con un tipo: l'icona del tipo, «tipo» e le proprietà in evidenza del tipo", "typed"],
+    ["tipi-03-mancante", "tipo-mancante", "La testata di una nota il cui tipo non c'è: lo dice, con «Scegli il tipo»", "missing"],
+    ["tipi-04-scegli", "tipo-mancante", "«Scegli il tipo» aperto dalla testata, da tastiera", "choose"],
+    ["tipi-05-nuova-stretta", "tipo", "«Nuova nota» chiede il tipo nella finestra minima, 800 px", "new", { width: 800, height: 800 }],
+    ["tipi-06-mancante-stretta", "tipo-mancante", "Il tipo che non c'è nella finestra minima, 800 px", "missing", { width: 800, height: 800 }],
+  ].map(([id, live, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: (page) => openNoteTypes(page, gesture),
+  })),
   // Scrittura coi Blocchi: la stessa nota, con la maniglia del blocco sotto il
   // puntatore e quella del blocco del cursore; poi la selezione di blocchi e il
   // menu.
@@ -1569,6 +1623,12 @@ export const SCENE = touchLast(onPage("shell", [
     ["blocchi-05-pagina", "pagina", "I Blocchi con la testata della pagina: icona, copertina, titolo e proprietà", "page"],
     ["blocchi-06-pagina-larga", "pagina-larga", "I Blocchi con la pagina a tutta larghezza, a 900 px", "page", { width: 900, height: 800 }],
     ["blocchi-07-pagina-larga-stretta", "pagina-larga", "I Blocchi con la pagina a tutta larghezza, a 800 px", "page", { width: 800, height: 800 }],
+    // «Sposta in…» (E13): la nota, poi dove e che cosa resta; e il blocco
+    // in mano sopra una nota del cassetto.
+    ["blocchi-08-sposta-nota", "titolo-attivo", "«Sposta in…» dal menu del blocco: la scelta della nota", "move-note"],
+    ["blocchi-09-sposta-dove", "titolo-attivo", "«Sposta in…»: dove va il blocco e che cosa resta al suo posto", "move-where"],
+    ["blocchi-10-sposta-dove-stretta", "titolo-attivo", "«Sposta in…»: dove e che cosa resta, nella finestra minima", "move-where", { width: 800, height: 800 }],
+    ["blocchi-11-sposta-cassetto", "riga-attiva", "Un blocco in mano sopra una nota del cassetto: «Sposta in «…»»", "move-drawer", { width: 1280, height: 800 }],
   ].map(([id, live, title, gesture, viewport]) => ({
     id,
     title,
@@ -1588,7 +1648,7 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForFunction(() => document.getAnimations().length === 0);
       await page.evaluate(() => { document.querySelector(".pane.focus .pane-editor .cm-scroller").scrollTop = 0; });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      if (gesture === "hover") return;
+      if (gesture === "hover" || gesture === "move-drawer") return;
       if (gesture === "page") {
         if (live === "pagina-larga") await page.waitForSelector(".pane.focus.fub-note--wide");
         await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -1602,6 +1662,17 @@ export const SCENE = touchLast(onPage("shell", [
         await page.click(".pane.focus .pane-editor .cm-fub-block-grip");
         await page.waitForSelector("#context-menu");
       }
+      if (gesture === "move-note" || gesture === "move-where") {
+        await page.click("#context-menu [role^=menuitem]:has(.menu-label:text-is('Sposta in…'))");
+        await page.waitForSelector(".modale [role=option]");
+        if (gesture === "move-where") {
+          // Una nota coi suoi titoli, perché «Dove» li mostri rientrati.
+          await page.keyboard.type("Sintassi");
+          await page.keyboard.press("Enter");
+          await page.waitForSelector(".modale .palette-form select[name=where]");
+        }
+        await page.waitForFunction(() => document.getAnimations().length === 0);
+      }
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     },
     // Il puntatore è l'ultimo gesto: `prepareScene` lo porta via prima.
@@ -1609,6 +1680,24 @@ export const SCENE = touchLast(onPage("shell", [
       hover: async (page) => {
         await page.hover(".pane.focus .pane-editor .cm-content .cm-line:has-text('Cose da fare')");
         await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles[data-active=\"true\"]");
+      },
+    } : {}),
+    // Il blocco preso per la maniglia e tenuto sulla prima nota del cassetto
+    // che non è quella aperta: il puntatore è il gesto, e resta giù.
+    ...(gesture === "move-drawer" ? {
+      hover: async (page) => {
+        await page.hover(".pane.focus .pane-editor .cm-content .cm-line:has-text('Cose da fare')");
+        await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles[data-active=\"true\"]");
+        const grip = await page.locator(".pane.focus .pane-editor .cm-fub-block-handles[data-active=\"true\"] .cm-fub-block-grip").boundingBox();
+        const row = await page.locator("#file-list .tree-row.note[data-path$='.md']:not([aria-current]):visible").first().boundingBox();
+        if (!grip || !row) throw new Error("manca la maniglia o una nota nel cassetto");
+        await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 + 12, { steps: 4 });
+        await page.mouse.move(row.x + row.width / 2, row.y + row.height / 2, { steps: 16 });
+        await page.waitForSelector(".cm-fub-block-lift[data-free=\"true\"]");
+        await page.waitForSelector("#file-list .tree-row[data-drop-hot]");
+        await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"));
       },
     } : {}),
   })),
@@ -2262,6 +2351,22 @@ export const SCENE = touchLast(onPage("shell", [
       viewport: PHONE,
       prepare: (page) => openHeader(page, "live_preview"),
     },
+    // I tipi di nota (T33) sul telefono: «Nuova nota» dal cassetto chiede il
+    // tipo dentro lo schermo; l'avviso del tipo che non c'è va a capo.
+    {
+      id: "mobile-tipi-nuova",
+      title: "Il telefono: «Nuova nota» chiede il tipo, il menu dentro lo schermo",
+      query: "live=tipo",
+      viewport: PHONE,
+      prepare: (page) => openNoteTypes(page, "new"),
+    },
+    {
+      id: "mobile-tipi-mancante",
+      title: "Il telefono: la testata di una nota il cui tipo non c'è, con «Scegli il tipo»",
+      query: "live=tipo-mancante",
+      viewport: PHONE,
+      prepare: (page) => openNoteTypes(page, "missing"),
+    },
     // I commenti (T22) sul telefono: il segno sta nel testo, e la discussione
     // si apre larga quanto la vista.
     {
@@ -2861,6 +2966,28 @@ async function touchFormula(page, gesture) {
       await page.waitForSelector(".cm-fub-mx-palette-toggle:not([hidden])");
       await page.keyboard.type("+\\al");
       await page.waitForSelector(".cm-fub-mx-symbols:not([hidden]) .cm-fub-mx-symbol-code");
+    } else if (gesture === "source-unknown" || gesture === "source-brace" || gesture === "source-guesses") {
+      // Gli errori in chiaro (T64): il nome che non c'è (Esc chiude le
+      // proposte), la graffa aperta, il nome con più simboli vicini.
+      const typed = { "source-unknown": "+\\alfa", "source-brace": "+x^{2", "source-guesses": "+\\s 1" }[gesture];
+      await page.keyboard.type(typed);
+      if (gesture === "source-unknown") {
+        await page.waitForSelector(".cm-fub-mx-symbols:not([hidden])");
+        await page.keyboard.press("Escape");
+        await page.waitForSelector(".cm-fub-mx-symbols", { state: "hidden" });
+      }
+      const tex = await value();
+      await page.waitForSelector(".cm-fub-mx-error:not([hidden])");
+      if ((await value()) !== tex) throw new Error(`il TeX è cambiato da solo: ${tex} → ${await value()}`);
+      const sentence = await page.locator(".cm-fub-mx-error-text").textContent();
+      const fix = await page.locator(".cm-fub-mx-error-fix").allTextContents();
+      const expected = {
+        "source-unknown": ["Non conosco \\alfa. Forse volevi \\alpha?", ["Usa \\alpha"]],
+        "source-brace": ["Manca una } di chiusura.", ["Chiudi"]],
+        "source-guesses": [/^Non conosco \\s\. Forse volevi .+ o .+\?$/, []],
+      }[gesture];
+      const sentenceOk = typeof expected[0] === "string" ? sentence === expected[0] : expected[0].test(sentence ?? "");
+      if (!sentenceOk || fix.join("|") !== expected[1].join("|")) throw new Error(`la frase dell'errore non è quella attesa: ${sentence} · ${fix.join("|")}`);
     } else {
       await page.keyboard.type("+a/b->c (");
       if (!(await value()).endsWith("+a/b->c (")) throw new Error(`con gli aiuti spenti qualcosa si trasforma: ${await value()}`);
@@ -2945,6 +3072,8 @@ async function touchFormula(page, gesture) {
   } else {
     await openLive(page, ["@ArrowRight"], "top");
     await page.waitForSelector(gesture === "error" ? ".cm-fub-mx[data-mode=\"latex\"] .cm-fub-mx-latex" : `.cm-fub-mx-popover ${ready}`);
+    // Sotto il LaTeX, che cosa non va, con la correzione (T64).
+    if (gesture === "error") await page.waitForSelector(".cm-fub-mx[data-mode=\"latex\"] .cm-fub-mx-error:not([hidden]) .cm-fub-mx-error-fix");
     if (gesture === "inline") {
       // Un pezzo alla volta: v, =, poi dentro la frazione.
       for (let i = 0; i < 6 && (await said()) !== "numeratore"; i++) await page.keyboard.press("ArrowRight");
@@ -3015,6 +3144,35 @@ async function openHeader(page, mode, gesture) {
     for (const scroller of document.querySelectorAll(".pane.focus .pane-editor .cm-scroller, .pane.focus .pane-editor .markdown-rendered")) scroller.scrollTop = 0;
   });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+/// I tipi di nota (T33): la nota della Live a riposo, poi il gesto. `new`
+/// apre «Nuova nota» (dal cassetto, che in una finestra stretta si apre
+/// prima); `typed` e `missing` aspettano che la testata sappia il tipo;
+/// `choose` apre «Scegli il tipo» da tastiera.
+async function openNoteTypes(page, gesture) {
+  await openHeader(page, "live_preview");
+  const frames = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  if (gesture === "typed") await page.waitForSelector(".pane.focus .cm-fub-page-icon[data-from-type]");
+  if (gesture === "missing" || gesture === "choose") await page.waitForSelector(".pane.focus .cm-fub-page-type-notice");
+  if (gesture === "new") {
+    const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
+    if (compact) {
+      await page.click('#views-ribbon .rail-btn[data-panel="files"]');
+      await page.waitForSelector("#sidebar-scrim:not([hidden])");
+    }
+    await page.waitForSelector("#types-list:not([hidden]) .type-row");
+    await page.click("#new-note");
+    await page.waitForSelector(".note-type-popover .note-type-menu-item");
+  }
+  if (gesture === "choose") {
+    await page.focus(".pane.focus .cm-fub-page-type-action");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(".note-type-popover .note-type-menu-item");
+  }
+  await page.mouse.move(0, 0);
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await frames();
 }
 
 /// Gli editor dei tipi (T8): apre la testata a riposo, poi l'editor della

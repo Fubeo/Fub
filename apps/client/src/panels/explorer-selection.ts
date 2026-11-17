@@ -2,7 +2,7 @@
 //
 // Ctrl/Cmd-clic aggiunge o toglie una nota dalla scelta, Maiusc-clic sceglie
 // tutte le note visibili fra l'ultima toccata e questa, Ctrl-Spazio fa come il
-// Ctrl-clic da tastiera. Una barra sopra l'albero dice quante sono e offre i
+// Ctrl-clic da tastiera. Una barra sotto l'albero dice quante sono e offre i
 // gesti che hanno senso su un gruppo — **sposta in…**, **in una cartella
 // nuova** e **cestina** — più «deseleziona»; Esc la azzera. Un clic normale riprende a funzionare com'è:
 // azzera la scelta e apre la nota.
@@ -76,7 +76,11 @@ export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
   const trash = button("", "tree-selection-trash", () => void act(host.trash));
   const clearButton = button("", "tree-selection-clear", () => clear());
   bar.append(count, move, group, trash, clearButton);
-  list.before(bar);
+  // **Sotto** l'albero, e ferma in fondo alla colonna mentre l'albero scorre.
+  // Sopra spingeva giù tutte le righe al primo Ctrl-clic: la riga appena
+  // scelta scappava da sotto il puntatore, e il Ctrl-clic dopo cadeva sulla
+  // riga di prima e la toglieva (IMP-010). Sotto, nessuna riga si muove.
+  list.after(bar);
   lifetime.add(() => bar.remove());
   list.setAttribute("aria-multiselectable", "true");
   lifetime.add(() => list.removeAttribute("aria-multiselectable"));

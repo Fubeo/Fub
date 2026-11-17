@@ -217,7 +217,7 @@ describe("la data", () => {
     type(input, "31/2/2026");
     expect(input.getAttribute("aria-invalid")).not.toBeNull();
     key(input, "Enter");
-    expect(popover().querySelector(".cm-fub-prop-note")!.textContent).toContain("Non è una data");
+    expect(popover().querySelector(".cm-fub-prop-note")!.textContent).toContain("Non capisco «31/2/2026» come data");
     expect(text(view)).toBe("---\nscadenza: 2026-04-10\n---\nTesto");
     type(input, "5/5/2026");
     key(input, "Enter");
@@ -239,13 +239,142 @@ describe("la data", () => {
     expect(text(view)).toContain("scadenza: 2026-03-02T18:00\n");
   });
 
-  it("la data scritta a mano: ISO, all'italiana, con l'ora", () => {
-    expect(parseDateInput("2026-03-20")).toEqual({ date: "2026-03-20", time: null });
-    expect(parseDateInput("20/3/2026")).toEqual({ date: "2026-03-20", time: null });
-    expect(parseDateInput("20.3.26")).toEqual({ date: "2026-03-20", time: null });
-    expect(parseDateInput("2026-03-20 9:05")).toEqual({ date: "2026-03-20", time: "09:05" });
-    expect(parseDateInput("30/2/2026")).toBeNull();
-    expect(parseDateInput("domani")).toBeNull();
+  it("la data scritta a mano: ISO, all'italiana, a parole, con l'ora", () => {
+    const today = new Date(2026, 2, 20, 10, 0);
+    const parse = (text: string) => parseDateInput(text, today, 1, "it");
+    expect(parse("2026-03-20")).toEqual({ date: "2026-03-20", time: null });
+    expect(parse("20/3/2026")).toEqual({ date: "2026-03-20", time: null });
+    expect(parse("20.3.26")).toEqual({ date: "2026-03-20", time: null });
+    expect(parse("2026-03-20 9:05")).toEqual({ date: "2026-03-20", time: "09:05" });
+    expect(parse("2026-03-20T10:30")).toEqual({ date: "2026-03-20", time: "10:30" });
+    expect(parse("domani")).toEqual({ date: "2026-03-21", time: null });
+    expect(parse("venerdì 18:30")).toEqual({ date: "2026-03-27", time: "18:30" });
+    expect(parse("domani alle 9")).toEqual({ date: "2026-03-21", time: "09:00" });
+    expect(parse("tomorrow at 7:15")).toEqual({ date: "2026-03-21", time: "07:15" });
+    expect(parse("30/2/2026")).toBeNull();
+    expect(parse("domani 25:00")).toBeNull();
+    expect(parse("domani alle")).toBeNull();
+    expect(parse("20 marzo 26")).toEqual({ date: "2026-03-20", time: null });
+  });
+});
+
+describe("la data a parole (T10)", () => {
+  const field = () => popover().querySelector<HTMLInputElement>(".cm-fub-prop-date-field input")!;
+
+  it("da tastiera: «fra tre settimane» si vede nel mese e Invio scrive il giorno ISO", () => {
+    const { view } = mount("---\nscadenza: 2026-03-02\n---\nTesto");
+    byKeyboard(view, "scadenza");
+    const input = field();
+    expect(document.activeElement).toBe(input);
+    expect(input.placeholder).toBe("venerdì, fra due settimane, 20 marzo…");
+    expect(input.getAttribute("aria-label")).toBe("Data a parole");
+    type(input, "fra tre settimane");
+    expect(input.hasAttribute("aria-invalid")).toBe(false);
+    expect(popover().querySelector(".cm-fub-prop-date-head")!.textContent).toContain("aprile 2026");
+    expect(popover().querySelector("[data-day='2026-04-10']")!.getAttribute("aria-pressed")).toBe("true");
+    // Ancora niente nel file: le parole sono la resa, non il valore.
+    expect(text(view)).toBe("---\nscadenza: 2026-03-02\n---\nTesto");
+    key(input, "Enter");
+    expect(text(view)).toBe("---\nscadenza: 2026-04-10\n---\nTesto");
+    expect(document.querySelector(".cm-fub-prop-popover")).toBeNull();
+    undo(view);
+    expect(text(view)).toBe("---\nscadenza: 2026-03-02\n---\nTesto");
+  });
+
+  it("le parole del prototipo, una per volta", () => {
+    const { view } = mount("---\nscadenza: 2026-03-02\n---\nTesto");
+    for (const [words, iso] of [["venerdì", "2026-03-27"], ["fra due settimane", "2026-04-03"], ["20 marzo", "2026-03-20"], ["3/4", "2026-04-03"], ["fra 0 giorni", "2026-03-20"]] as const) {
+      valueOf(view, "scadenza").click();
+      type(field(), words);
+      key(field(), "Enter");
+      expect(text(view)).toBe(`---\nscadenza: ${iso}\n---\nTesto`);
+    }
+  });
+
+  it("col puntatore: ciò che non si capisce resta nel campo, lo dice, e il valore non cambia", () => {
+    const { view } = mount("---\nscadenza: 2026-03-02\n---\nTesto");
+    valueOf(view, "scadenza").click();
+    const input = field();
+    type(input, "fra tre settimane");
+    expect(popover().querySelector("[data-day='2026-04-10']")!.getAttribute("aria-pressed")).toBe("true");
+    type(input, "fra poco");
+    expect(input.hasAttribute("aria-invalid")).toBe(true);
+    key(input, "Enter");
+    // Il mese torna sul valore di prima, che resta.
+    expect(popover().querySelector("[data-day='2026-03-02']")!.getAttribute("aria-pressed")).toBe("true");
+    const note = popover().querySelector<HTMLElement>(".cm-fub-prop-note")!;
+    expect(note.hidden).toBe(false);
+    expect(note.textContent).toBe("Non capisco «fra poco» come data: prova «venerdì», «fra due settimane», «20 marzo» o 20/3/2026. La data di prima non è cambiata.");
+    expect(input.value).toBe("fra poco");
+    expect(text(view)).toBe("---\nscadenza: 2026-03-02\n---\nTesto");
+    // «31/2» non scivola al 3 marzo.
+    type(input, "31/2");
+    expect(note.hidden).toBe(true);
+    key(input, "Enter");
+    expect(note.hidden).toBe(false);
+    expect(text(view)).toBe("---\nscadenza: 2026-03-02\n---\nTesto");
+    // Il campo vuotato torna al valore di prima; Invio non fa niente.
+    type(input, "");
+    expect(input.hasAttribute("aria-invalid")).toBe(false);
+    key(input, "Enter");
+    expect(document.querySelector(".cm-fub-prop-popover")).not.toBeNull();
+    // Un giorno scelto nel mese col puntatore scrive come sempre.
+    popover().querySelector<HTMLElement>("[data-day='2026-03-12']")!.click();
+    expect(text(view)).toBe("---\nscadenza: 2026-03-12\n---\nTesto");
+  });
+
+  it("una data a parole con l'ora diventa data e ora", () => {
+    const { view } = mount("---\nscadenza: 2026-03-02\n---\nTesto");
+    valueOf(view, "scadenza").click();
+    type(field(), "venerdì 18:30");
+    key(field(), "Enter");
+    expect(text(view)).toBe("---\nscadenza: 2026-03-27T18:30\n---\nTesto");
+    expect(row(view, "scadenza").dataset.kind).toBe("date_time");
+  });
+
+  it("«Aggiungi l'ora» su una proprietà dichiarata Data la dichiara Data e ora", async () => {
+    const types = parsePropertyTypes(JSON.stringify({ version: 1, types: { scadenza: "date" } }));
+    const setPropertyType = vi.fn(async () => null);
+    const { view, notices } = mount("---\nscadenza: 2026-03-02\n---\nTesto", { propertyTypes: () => types, setPropertyType });
+    valueOf(view, "scadenza").click();
+    const toggle = [...popover().querySelectorAll<HTMLElement>(".cm-fub-prop-date-action")].find((b) => b.textContent === "Aggiungi l'ora")!;
+    expect(toggle.hidden).toBe(false);
+    toggle.click();
+    const time = popover().querySelector<HTMLInputElement>("input[type=time]")!;
+    expect(document.activeElement).toBe(time);
+    time.value = "18:00";
+    key(time, "Enter");
+    expect(text(view)).toBe("---\nscadenza: 2026-03-02T18:00\n---\nTesto");
+    expect(setPropertyType).toHaveBeenCalledWith("scadenza", "date_time");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(notices).toContain("«scadenza» ora è data e ora, in tutto il vault: le date senza ora restano come sono.");
+  });
+
+  it("una Data dichiarata senza registro da scrivere non offre l'ora, e un'ora scritta lo dice", () => {
+    const types = parsePropertyTypes(JSON.stringify({ version: 1, types: { scadenza: "date" } }));
+    const { view } = mount("---\nscadenza: 2026-03-02\n---\nTesto", { propertyTypes: () => types });
+    valueOf(view, "scadenza").click();
+    const toggle = [...popover().querySelectorAll<HTMLElement>(".cm-fub-prop-date-action")].find((b) => b.textContent === "Aggiungi l'ora")!;
+    expect(toggle.hidden).toBe(true);
+    type(field(), "domani alle 9");
+    key(field(), "Enter");
+    expect(popover().querySelector(".cm-fub-prop-note")!.textContent).toBe("«scadenza» è una data senza ora: scrivi solo il giorno.");
+    expect(text(view)).toBe("---\nscadenza: 2026-03-02\n---\nTesto");
+  });
+
+  it("in inglese le parole e il campo parlano inglese", () => {
+    vi.stubGlobal("navigator", { language: "en-US" });
+    const { view } = mount("---\ndue: 2026-03-02\n---\nText");
+    valueOf(view, "due").click();
+    expect(field().placeholder).toBe("Friday, in two weeks, March 20…");
+    type(field(), "in two weeks");
+    key(field(), "Enter");
+    expect(text(view)).toBe("---\ndue: 2026-04-03\n---\nText");
+    valueOf(view, "due").click();
+    type(field(), "4/3");
+    key(field(), "Enter");
+    expect(text(view)).toBe("---\ndue: 2026-04-03\n---\nText");
   });
 });
 

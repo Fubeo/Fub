@@ -20,6 +20,7 @@ import kernelKeys from "../__fixtures__/command-keys.json";
 import { obsidianKeymap } from "../editors/text/profiles/markdown/commands";
 import { conflicts, normalize, shadowedPrefixes, registerShellCommand, resetShellCommands, type CommandEntry } from "./commands";
 import { mountKeyboard } from "./keyboard";
+import { state } from "../state/store";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { SHELL_KEYS } from "./shell-keys.generated";
 
@@ -361,6 +362,60 @@ describe("i tasti senza Mod cedono ai campi", () => {
         press(field('<input type="checkbox">'), { key: "ArrowLeft", altKey: true });
         press(field("<input readonly>"), { key: "ArrowLeft", altKey: true });
         expect(executed).toEqual(["shell.pane.back", "shell.pane.back"]);
+      });
+
+      // IMP-008: il WebView di Linux non lega Ctrl+Z ai campi; lo fa la
+      // tastiera dell'app, sulla pila del campo stesso.
+      describe("annulla e ripeti in un campo", () => {
+        let steps: string[] = [];
+        beforeEach(() => {
+          steps = [];
+          Object.defineProperty(document, "execCommand", {
+            configurable: true,
+            value: (command: string) => {
+              steps.push(command);
+              return true;
+            },
+          });
+        });
+        afterEach(() => {
+          delete (document as { execCommand?: unknown }).execCommand;
+        });
+
+        for (const html of ['<input type="search">', "<textarea></textarea>"]) {
+          it(`Mod+Z annulla e Mod+Maiusc+Z ripete in ${html}`, () => {
+            mount(on);
+            const input = field(html);
+            const undo = press(input, { key: "z", ...mod });
+            const redo = press(input, { key: "Z", shiftKey: true, ...mod });
+            expect(steps).toEqual(["undo", "redo"]);
+            expect(undo.defaultPrevented).toBe(true);
+            expect(redo.defaultPrevented).toBe(true);
+          });
+        }
+
+        it("non tocca un contenteditable, che ha la sua pila", () => {
+          mount(on);
+          const event = press(field('<div contenteditable="true"></div>'), { key: "z", ...mod });
+          expect(steps).toEqual([]);
+          expect(event.defaultPrevented).toBe(false);
+        });
+
+        it("un comando dell'app sullo stesso accordo vince", () => {
+          // Un comando del kernel rilegato a Mod-z (l'annulla del vault, per
+          // chi lo vuole lì): la tastiera lo esegue, e il campo non annulla.
+          const spec = { id: "vault.undo", title: "vault.undo", description: "", keybinding: "Mod-z", scope: { reach: "vault" } };
+          const specs = state.commandSpecs;
+          state.commandSpecs = [spec as unknown as (typeof specs)[number]];
+          try {
+            const executed = mount(on);
+            press(field("<input>"), { key: "z", ...mod });
+            expect(steps).toEqual([]);
+            expect(executed).toEqual(["vault.undo"]);
+          } finally {
+            state.commandSpecs = specs;
+          }
+        });
       });
 
       it("un accordo con Mod resta dell'app anche in un campo", () => {

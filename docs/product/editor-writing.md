@@ -4,7 +4,8 @@
 > dell'editor.
 > **Risultato:** sapere quali modalità ha una nota, che cosa fa Scrittura, quando
 > compare ciò che sta sul foglio, da dove si raggiunge una funzione, che cosa
-> succede quando si incolla un indirizzo e come si scrive in tipografia italiana.
+> succede quando si incolla un indirizzo o si incorpora una pagina web e come
+> si scrive in tipografia italiana.
 
 ## Le modalità di una nota
 
@@ -108,7 +109,9 @@ Regola: `touchMode` in `handles.ts`; scene `mobile-tocco-*`.
 In cima alla nota, in Scrittura e in Lettura, sta la testata: copertina, icona,
 titolo, proprietà e [riga dei dati](editor-note-facts.md). Che cosa fa ogni
 parte, come si scrivono le proprietà e come il titolo segue il primo H1 lo dice
-la [pagina della testata](editor-header.md).
+la [pagina della testata](editor-header.md); che cosa cambia in una nota con un
+tipo (Libro, Progetto) e che cosa chiede «Nuova nota» lo dicono i
+[tipi di nota](editor-note-types.md).
 
 ## Tre porte per ogni funzione
 
@@ -175,6 +178,9 @@ l'indirizzo tra tonde. Che cosa succede dipende da dove cade.
   - **Scheda**: scrive l'indirizzo da solo sulla riga. Diventa il segnalibro web
     della pagina, con titolo, descrizione e sito; l'anteprima si chiede a parte,
     come nella [pagina dei blocchi](editor-blocks.md#i-segnalibri-web).
+  - **Incorpora**, solo per un sito dell'elenco chiuso: scrive la pagina
+    incorporata, `![](https://…)`, che si vede come un segnaposto «Carica»
+    (vedi [Incorporare una pagina web](#incorporare-una-pagina-web)).
 - **Dentro un testo** l'indirizzo entra com'è, come testo semplice.
 
 La scelta compare solo per un incolla, mai per un indirizzo scritto lettera per
@@ -184,9 +190,11 @@ che esce dalla riga la chiude senza cambiare nulla.
 Con la tastiera:
 
 - Tab, dall'editor, porta il fuoco sulla scelta, sul Link. La scelta è una barra
-  con un solo punto di tabulazione: ← e → passano da Link a Scheda.
+  con un solo punto di tabulazione: ← e → passano da Link a Scheda e, quando
+  c'è, a Incorpora.
 - Invio o Spazio applicano la voce col fuoco, come un clic: Link chiude la
-  scelta, Scheda scrive l'indirizzo da solo. Il fuoco torna nell'editor.
+  scelta, Scheda scrive l'indirizzo da solo, Incorpora scrive la pagina
+  incorporata. Il fuoco torna nell'editor.
 - Esc, Tab o Maiusc+Tab riportano il fuoco nell'editor tenendo Link.
 - Qualunque altro tasto tiene Link, chiude la scelta e va all'editor, dove fa
   il suo lavoro.
@@ -230,6 +238,51 @@ rimettono ciò che si era scritto. Non cambia mai:
 
 Vale nelle note in italiano: la lingua dichiarata dalla nota (`lang: it`),
 altrimenti quella dell'app.
+
+## Incorporare una pagina web
+
+Un video, una mappa o un disegno di un sito dell'elenco chiuso si incorpora
+nella nota. Sul disco è `![](https://…)`, la forma che Obsidian incorpora a sua
+volta per i video; si scrive a mano o con «Incorpora» dopo un incolla.
+
+In Scrittura e in Lettura la pagina si vede come un **segnaposto**: l'icona
+della specie, il nome del sito, la specie e l'host, e il pulsante **Carica**.
+Aprire la nota non chiede niente alla rete: nessuna anteprima, nessuna icona
+del sito. Carica apre la pagina nel [visore web](../reference/permissions-and-security.md#visore-web),
+la finestra isolata, mai dentro la nota: un sito nuovo chiede il sì, come ogni
+pagina che il visore apre, e il sì resta in `viewer.hosts`.
+
+- **Rifiutato.** Se alla domanda si risponde di no, il segnaposto dice «Non
+  caricata: hai scelto di non aprire …» e Carica diventa «Chiedi di nuovo».
+- **Senza visore.** Dove il visore non c'è il segnaposto lo dice; la pagina non
+  va al browser di sistema.
+- **`http:`.** Un indirizzo `http` di un sito dell'elenco si apre in `https`,
+  l'unico che il visore apre. Credenziali nell'indirizzo o una porta diversa
+  da quella di sempre lo lasciano fuori dall'elenco.
+- **Tracciamento.** I parametri che seguono chi apre la pagina (`utm_…`,
+  `fbclid`, `gclid` e simili, `si` e `feature` di YouTube, `share` di Vimeo)
+  non entrano nell'indirizzo che Carica apre né in quello che Incorpora
+  scrive. Un indirizzo già scritto nella nota resta com'è sul disco.
+- **Fuori dall'elenco** un `![](https://…)` resta l'immagine remota, che si
+  scarica nel vault soltanto col gesto; un indirizzo da solo resta un link o
+  una scheda.
+- **Export.** L'HTML esportato scrive un link alla pagina, e il rapporto lo
+  conta fra le immagini remote: il file non carica niente da fuori.
+
+L'elenco sta in una costante sola, `WEB_EMBED_SITES` in
+`apps/client/src/editors/text/profiles/markdown/web-embed.ts`. Un sito vale
+per gli host esatti scritti lì, e soltanto per le pagine che mostrano un
+contenuto:
+
+| Sito | Specie | Pagine |
+|---|---|---|
+| YouTube (`youtube.com`, `www.`, `m.`, `www.youtube-nocookie.com`, `youtu.be`) | video | un video, un corto, una diretta, una playlist |
+| Vimeo (`vimeo.com`, `www.`, `player.`) | video | un video |
+| OpenStreetMap (`openstreetmap.org`, `www.`) | mappa | la mappa, un luogo, un percorso |
+| Google Maps (`www.google.com/maps`, `google.com/maps`, `maps.google.com/maps`) | mappa | la mappa |
+| Figma (`figma.com`, `www.`) | disegno | un file, una lavagna, un prototipo |
+| Excalidraw (`excalidraw.com`) | disegno | la lavagna |
+| tldraw (`tldraw.com`, `www.`) | disegno | una stanza o un file condiviso |
 
 ## La sbirciata
 
@@ -305,7 +358,8 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
 ## La trasclusione viva
 
 Una sezione o un blocco di un'altra nota riportati con `![[Nota#Sezione]]` si
-scrivono dove stanno, con **Modifica qui**: [La trasclusione
+scrivono dove stanno, con **Modifica qui**; lo stesso blocco in più note
+(`![[Nota#^id]]`) è il blocco sincronizzato: [La trasclusione
 viva](editor-transclusion.md).
 
 ## La concentrazione

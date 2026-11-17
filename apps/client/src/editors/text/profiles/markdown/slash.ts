@@ -545,6 +545,12 @@ export function runSlashAction(
 /// `panels/slash/entries.ts`, che la mette nel menu.
 export const BASE_ACTION = "markdown.base";
 
+/// L'azione «Blocco di un'altra nota» del «/» (E14, T30): sceglie una nota e
+/// un suo blocco, gli dà l'id se manca e scrive qui la sua trasclusione, il
+/// blocco sincronizzato (`blocks/sync-to.ts`). Lo stesso id di
+/// `SYNC_BLOCK_ENTRY` in `panels/slash/entries.ts`.
+export const SYNC_BLOCK_ACTION = "markdown.syncblock";
+
 /// Quanti nomi si provano, al più, per trovarne uno libero.
 const BASE_NAME_TRIES = 100;
 
@@ -667,6 +673,26 @@ const pendingBases = StateField.define<ReadonlyMap<number, { readonly from: numb
 });
 
 let baseIds = 0;
+
+/// Un «/query» seguito mentre un gesto del «/» aspetta l'host (la Base, il
+/// blocco di un'altra nota): `range` dice dove sta adesso, `drop` smette di
+/// seguirlo. Su un editor chiuso CodeMirror aggiorna soltanto lo stato.
+export interface TrackedSlash {
+  range(): { readonly from: number; readonly to: number } | null;
+  drop(): void;
+}
+
+export function trackSlashRange(view: EditorView, from: number, to: number): TrackedSlash {
+  const id = ++baseIds;
+  if (view.state.field(pendingBases, false) === undefined) {
+    view.dispatch({ effects: StateEffect.appendConfig.of(pendingBases) });
+  }
+  view.dispatch({ effects: trackBase.of({ id, from, to }) });
+  return {
+    range: () => view.state.field(pendingBases, false)?.get(id) ?? null,
+    drop: () => view.dispatch({ effects: trackBase.of({ id, drop: true }) }),
+  };
+}
 
 function alreadyExists(error: unknown): boolean {
   return typeof error === "object" && error !== null && "kind" in error && (error as { kind: unknown }).kind === "already_exists";
