@@ -81,17 +81,14 @@ export interface TransclusionHost {
   theme?(): Theme;
 }
 
-/// Le figure della testata e della fascia, sulla griglia di 24 del set della
-/// shell (quelle del prototipo, da 16, per una volta e mezza).
+/// La sola figura che il set non ha: «Apri» (quella del prototipo, da 16, per
+/// una volta e mezza). Le altre sono del set: `sync`, `pen` e `check`.
 const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "transclusion-sync": ["M4.5 10.5a7.5 7.5 0 0 1 13.5-3l1.5 2.1", "M19.5 13.5a7.5 7.5 0 0 1-13.5 3l-1.5-2.1", "M19.5 4.8v4.95h-4.95", "M4.5 19.2v-4.95h4.95"],
-  "transclusion-pen": ["M4.5 19.5l1.5-5.4 10.2-10.2 3.9 3.9L9.9 18z"],
   "transclusion-open": ["M13.5 4.5h6v6", "M19.5 4.5 12 12", "M17.25 14.25v4.5a1.5 1.5 0 0 1-1.5 1.5h-10.5a1.5 1.5 0 0 1-1.5-1.5v-10.5a1.5 1.5 0 0 1 1.5-1.5h4.5"],
-  "transclusion-done": ["M4.5 12.75l4.5 4.5L19.5 6.75"],
 };
 
 /// Registra le figure che il set non ha ancora, una volta per tutte.
-function transclusionIcons(): void {
+export function transclusionIcons(): void {
   for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
 }
 
@@ -207,13 +204,13 @@ export class LiveTransclusion {
     slot.setAttribute("aria-label", liveStrings.t("transclusion.label", { source }));
 
     const head = element("div", "transclusion-head");
-    const sync = iconNode("transclusion-sync");
+    const sync = iconNode("sync");
     if (sync) head.append(sync);
     head.append(element("span", "transclusion-source", source), element("span", "transclusion-spacer"));
     const self = embed.doc === host.hostDoc();
     if (self) head.append(element("span", "transclusion-self", liveStrings.t("transclusion.self")));
     this.#edit = !self && this.anchor && host.deps && host.editable()
-      ? headButton("transclusion-edit", "transclusion-pen", liveStrings.t("transclusion.edit"))
+      ? headButton("transclusion-edit", "pen", liveStrings.t("transclusion.edit"))
       : null;
     const open = headButton("transclusion-open", "transclusion-open", liveStrings.t("transclusion.open"));
     if (this.#edit) head.append(this.#edit);
@@ -381,7 +378,7 @@ export class LiveTransclusion {
     this.#phase = "editing";
     this.slot.classList.add("transclusion-editing");
     this.slot.dataset.transclusionEditing = "";
-    this.#band.replaceChildren(...[iconNode("transclusion-pen")].filter((node): node is Element => node !== null), bandText(session.id));
+    this.#band.replaceChildren(...[iconNode("pen")].filter((node): node is Element => node !== null), bandText(session.id));
     this.#band.hidden = false;
     this.#say(null);
     // La resa resta sotto, nascosta: uscendo senza una resa nuova torna lei.
@@ -390,7 +387,7 @@ export class LiveTransclusion {
     this.#body.append(box);
     if (this.#edit) {
       this.#edit.disabled = false;
-      setButton(this.#edit, "transclusion-done", liveStrings.t("transclusion.done"));
+      setButton(this.#edit, "check", liveStrings.t("transclusion.done"));
     }
     this.#owner.started(this);
     this.slot.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
@@ -433,7 +430,7 @@ export class LiveTransclusion {
     const previous = writing.retained;
     writing.retained = { path, release: deps.sessions.retain(path) };
     previous.release();
-    this.#band.replaceChildren(...[iconNode("transclusion-pen")].filter((node): node is Element => node !== null), bandText(path));
+    this.#band.replaceChildren(...[iconNode("pen")].filter((node): node is Element => node !== null), bandText(path));
   }
 
   #drawConflict(deps: TransclusionDeps, writing: Writing): void {
@@ -499,7 +496,7 @@ export class LiveTransclusion {
       this.#conflict.hidden = true;
       this.#conflict.replaceChildren();
       if (writing) this.#say(null);
-      if (this.#edit) setButton(this.#edit, "transclusion-pen", liveStrings.t("transclusion.edit"));
+      if (this.#edit) setButton(this.#edit, "pen", liveStrings.t("transclusion.edit"));
       this.slot.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
     }
     this.#phase = "idle";
