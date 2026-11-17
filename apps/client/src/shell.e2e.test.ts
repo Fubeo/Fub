@@ -4009,6 +4009,62 @@ describe("una rinomina che questa finestra non ha chiesto", () => {
     // passato per una nota duplicata invece che per una battuta persa.
     expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
   });
+
+  it("lascia l'editor dov'era: stesso editor, stesso fuoco, stesso cursore (IMP-046)", async () => {
+    // La scheda segue il nome nuovo, ma rimontare la superficie buttava via il
+    // fuoco: le battute dopo un `mv` da fuori finivano sul body, perse.
+    const host = await start(VAULT);
+    const before = editorViews()[0]!;
+    before.focus();
+    before.dispatch({ selection: { anchor: 3 } });
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+
+    host.renameFromOutside("Benvenuto.md", "Fuori.md");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Fuori"));
+    await settle();
+
+    const after = editorViews();
+    expect(after).toHaveLength(1);
+    expect(after[0]).toBe(before);
+    expect(before.dom.isConnected).toBe(true);
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+    expect(before.state.selection.main.head).toBe(3);
+
+    // La battuta dopo la rinomina va alla sessione col nome nuovo, e da lì sul disco.
+    before.dispatch({ changes: { from: 3, insert: "dopo" }, userEvent: "input.type" });
+    await waitFor("il salvataggio parte col nome nuovo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Fuori.md" && String(w.args[1]).includes("dopo")));
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+  });
+});
+
+describe("una nota cancellata da fuori con testo non salvato", () => {
+  it("«Ricrea la nota» riscrive il testo e toglie la bozza che lo teneva (IMP-047)", async () => {
+    // La bozza scritta alla cancellazione ha come base la revisione del file
+    // sparito: lasciata lì dopo la ricreazione, alla riapertura dava un
+    // conflitto con un disco uguale a lei.
+    const host = await start(VAULT);
+    const unlock = host.throttle("saveDraft");
+    typeInEditor(" e il testo non salvato");
+    expect(host.emit({ type: "document_removed", id: "Benvenuto.md" })).toBe(true);
+    await waitFor("la bozza parte", () => host.atGate("saveDraft").some((call) => call.args[0] === "Benvenuto.md"));
+
+    await waitFor("il riquadro offre di ricrearla", () =>
+      !!document.querySelector('.sheet-notice[data-notice="removed"]'));
+    const notice = document.querySelector<HTMLElement>('.sheet-notice[data-notice="removed"]')!;
+    const action = [...notice.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Ricrea la nota");
+    expect(action).toBeDefined();
+    action!.click();
+    await waitFor("il file torna col testo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Benvenuto.md" && String(w.args[1]).includes("il testo non salvato")));
+    await settle();
+    // La bozza è ancora in scrittura: scartarla prima la lascerebbe dopo.
+    expect(host.atGate("discardDraft")).toHaveLength(0);
+
+    unlock();
+    await waitFor("la bozza se ne va", () => host.atGate("discardDraft").some((call) => call.args[0] === "Benvenuto.md"));
+  });
 });
 
 describe("segui un link dentro la nota", () => {

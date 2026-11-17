@@ -122,6 +122,11 @@ interface SessionPort {
   discardDraft(id: string): Promise<void>;
 }
 
+/// La chiave di una bozza lasciata da una cancellazione da fuori.
+function removedDraftKey(id: string, vault: string | null): string {
+  return `${vault ?? ""}\u0000${id}`;
+}
+
 /// Una chiave di apertura nuova: un UUID, o 32 cifre esadecimali dove
 /// `crypto.randomUUID` manca (una pagina servita in un contesto non sicuro,
 /// come il client di prova su HTTP). Tutte e due stanno nella forma che l'host
@@ -1187,6 +1192,10 @@ export class DocumentSessionCollection implements DraftBufferStore {
   #blindDraft = false;
   /// A pending open reserves this owner before any flush/read `await`.
   readonly #openIntents = new Map<string, number>();
+  /// Le bozze scritte per un file cancellato da fuori con testo non salvato,
+  /// per vault e id: «Ricrea la nota» le toglie dopo la riscrittura
+  /// (`discardRemovedDraft`), aspettando che la loro scrittura sia finita.
+  readonly #removedDrafts = new Map<string, Promise<void>>();
   /// Il vault in cui è nata ciascuna sessione (FUB-001), `null` se nessun vault
   /// era aperto. Si fissa una volta e non cambia: la sessione scrive lì anche
   /// quando l'host ha già aperto un altro vault.
@@ -1651,10 +1660,29 @@ export class DocumentSessionCollection implements DraftBufferStore {
     }
     // Il file non c'è più, il lavoro sì: resta in bozza (la ritrova il
     // recupero al prossimo avvio) e torna a chi può offrire di ricrearlo.
-    void this.#api.saveDraft(session.id, text, base, ...vaultArg(this.#vaults.get(session) ?? null)).catch(() => {
+    const vault = this.#vaults.get(session) ?? null;
+    const saving = this.#api.saveDraft(session.id, text, base, ...vaultArg(vault)).catch(() => {
       this.#emit({ kind: "draft-blind", id: session.id });
     });
+    this.#removedDrafts.set(removedDraftKey(session.id, vault), saving);
     return { kind: "removed", dirty, text };
+  }
+
+  /**
+   * Il file cancellato da fuori è tornato con il testo della sua bozza
+   * («Ricrea la nota», riuscita): la bozza non ha più niente da dire, e
+   * lasciata lì alla riapertura farebbe un conflitto falso, perché la sua
+   * base è la revisione del file cancellato e non quella ricreata (IMP-047).
+   * Si aspetta che la sua scrittura sia finita, così non arriva dopo lo
+   * scarto. Una sessione nel frattempo riaperta sull'id tiene la sua bozza.
+   */
+  async discardRemovedDraft(id: string, vault: string | null | undefined): Promise<void> {
+    const key = removedDraftKey(id, vault ?? null);
+    const saving = this.#removedDrafts.get(key);
+    this.#removedDrafts.delete(key);
+    await saving;
+    if (this.#sessions.has(id)) return;
+    await this.#api.discardDraft(id, ...vaultArg(vault));
   }
   async release(id: string): Promise<CloseResult> {
     if ((this.#openIntents.get(id) ?? 0) > 0) return { kind: "active" };
