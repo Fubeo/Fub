@@ -626,6 +626,89 @@ fn catalog_it() -> StringCatalog {
             "done.block_move.here.under",
             "Spostato in fondo a «{heading}».",
         )
+        // --- note.block.sync (il blocco sincronizzato, E14) ---------------
+        .with("note.block.sync.title", "Sincronizza in un'altra nota")
+        .with(
+            "note.block.sync.desc",
+            "Mette lo stesso blocco in fondo a un'altra nota, come \
+             trasclusione: da lì si scrive da tutte e due le parti. Il blocco \
+             riceve un id se non ce l'ha. Le due note si scrivono insieme, e \
+             un annullamento le rimette tutte e due.",
+        )
+        .with("note.block.sync.to.title", "Nota")
+        .with(
+            "note.block.sync.to.desc",
+            "La nota che riceve il blocco. Vuoto: il blocco riceve soltanto \
+             l'id.",
+        )
+        .with("note.block.sync.doc.title", "Nota del blocco")
+        .with("note.block.sync.doc.desc", "Vuoto: la nota aperta.")
+        .with("note.block.sync.at.title", "Byte del blocco")
+        .with(
+            "note.block.sync.at.desc",
+            "Inizio e fine del blocco in byte. Vuoto: il blocco del cursore.",
+        )
+        .with("note.block.sync.text.title", "Testo del blocco")
+        .with(
+            "note.block.sync.text.desc",
+            "Il testo letto fra quei byte: se la nota è cambiata, non si \
+             scrive niente.",
+        )
+        .with("note.block.sync.id.title", "Id del blocco")
+        .with(
+            "note.block.sync.id.desc",
+            "L'id da dare al blocco se non ne ha uno. Vuoto: lo sceglie Fub.",
+        )
+        .with(
+            sync_block::E_SYNC_NO_CARET,
+            "Non c'è un cursore in questa nota: mettilo nel blocco da \
+             sincronizzare.",
+        )
+        .with(
+            sync_block::E_SYNC_DIRTY,
+            "La nota ha modifiche non salvate: salvala, poi sincronizza il \
+             blocco.",
+        )
+        .with(
+            sync_block::E_SYNC_NOT_FOUND,
+            "Il cursore non sta in un blocco: mettilo nel blocco da \
+             sincronizzare.",
+        )
+        .with(
+            sync_block::E_SYNC_CHANGED,
+            "«{doc}» è cambiata e il blocco non è più lì: non si è scritto \
+             niente. Riprova.",
+        )
+        .with(
+            sync_block::E_SYNC_SAME,
+            "Il blocco è già in questa nota: scegline un'altra.",
+        )
+        .with(
+            sync_block::E_SYNC_MANY,
+            "Si sincronizza un blocco alla volta: scegline uno solo.",
+        )
+        .with(
+            sync_block::E_SYNC_ID,
+            "«{id}» non è un id di blocco: usa lettere, cifre e trattini.",
+        )
+        .with(
+            sync_block::E_SYNC_ID_TAKEN,
+            "In «{doc}» un altro blocco ha già l'id ^{id}: non si è scritto \
+             niente. Riprova.",
+        )
+        .with(
+            sync_block::E_SYNC_OTHER_ID,
+            "In «{doc}» il blocco ha già l'id ^{id}, ed è cambiato: non si è \
+             scritto niente. Riprova.",
+        )
+        .with(sync_block::P_BLOCK_SYNC, "Sincronizza il blocco in «{to}»")
+        .with(sync_block::U_BLOCK_SYNC, "il blocco sincronizzato in «{to}»")
+        .with(sync_block::U_BLOCK_ID, "l'id dato al blocco in «{doc}»")
+        .with(
+            sync_block::D_BLOCK_SYNC,
+            "Sincronizzato in fondo a «{to}»: si scrive da tutte e due le parti.",
+        )
+        .with(sync_block::D_BLOCK_ID, "Il blocco ha l'id ^{id}.")
 }
 
 fn catalog_en() -> StringCatalog {
@@ -1211,4 +1294,85 @@ fn catalog_en() -> StringCatalog {
         )
         .with("done.block_move.here.end", "Moved to the end of the note.")
         .with("done.block_move.here.under", "Moved to the end of “{heading}”.")
+        // --- note.block.sync (synced block, E14) ---------------------------
+        .with("note.block.sync.title", "Sync to another note")
+        .with(
+            "note.block.sync.desc",
+            "Puts the same block at the end of another note, as an embed: \
+             from then on it is written from both sides. The block gets an \
+             id if it has none. Both notes are written together, and one undo \
+             puts both back.",
+        )
+        .with("note.block.sync.to.title", "Note")
+        .with(
+            "note.block.sync.to.desc",
+            "The note that receives the block. Empty: the block only gets an \
+             id.",
+        )
+        .with("note.block.sync.doc.title", "Note of the block")
+        .with("note.block.sync.doc.desc", "Empty: the open note.")
+        .with("note.block.sync.at.title", "Block bytes")
+        .with(
+            "note.block.sync.at.desc",
+            "Start and end of the block in bytes. Empty: the block at the \
+             cursor.",
+        )
+        .with("note.block.sync.text.title", "Block text")
+        .with(
+            "note.block.sync.text.desc",
+            "The text read between those bytes: if the note changed, nothing \
+             is written.",
+        )
+        .with("note.block.sync.id.title", "Block id")
+        .with(
+            "note.block.sync.id.desc",
+            "The id to give the block if it has none. Empty: Fub picks one.",
+        )
+        .with(
+            sync_block::E_SYNC_NO_CARET,
+            "There is no cursor in this note: put it in the block to sync.",
+        )
+        .with(
+            sync_block::E_SYNC_DIRTY,
+            "The note has unsaved changes: save it, then sync the block.",
+        )
+        .with(
+            sync_block::E_SYNC_NOT_FOUND,
+            "The cursor is not in a block: put it in the block to sync.",
+        )
+        .with(
+            sync_block::E_SYNC_CHANGED,
+            "“{doc}” changed and the block is no longer there: nothing was \
+             written. Try again.",
+        )
+        .with(
+            sync_block::E_SYNC_SAME,
+            "The block is already in this note: pick another one.",
+        )
+        .with(
+            sync_block::E_SYNC_MANY,
+            "Blocks are synced one at a time: pick just one.",
+        )
+        .with(
+            sync_block::E_SYNC_ID,
+            "“{id}” is not a block id: use letters, numbers and hyphens.",
+        )
+        .with(
+            sync_block::E_SYNC_ID_TAKEN,
+            "In “{doc}” another block already has the id ^{id}: nothing was \
+             written. Try again.",
+        )
+        .with(
+            sync_block::E_SYNC_OTHER_ID,
+            "In “{doc}” the block already has the id ^{id}, and it changed: \
+             nothing was written. Try again.",
+        )
+        .with(sync_block::P_BLOCK_SYNC, "Sync the block to “{to}”")
+        .with(sync_block::U_BLOCK_SYNC, "the block synced to “{to}”")
+        .with(sync_block::U_BLOCK_ID, "the id given to the block in “{doc}”")
+        .with(
+            sync_block::D_BLOCK_SYNC,
+            "Synced at the end of “{to}”: it is written from both sides.",
+        )
+        .with(sync_block::D_BLOCK_ID, "The block has the id ^{id}.")
 }
