@@ -14,6 +14,7 @@ import { promptText } from "../ui/dialogs";
 import { openCompare } from "../ui/compare";
 import { pageIcon } from "../state/page-icons";
 import { readPageMark } from "../ui/page-mark";
+import { primaryClicksOnly } from "../ui/primary-clicks";
 import { modeIcon, openModeMenu } from "../state/mode-menu";
 import type { SurfaceMode } from "../editors/core/registry";
 import { FORMAT_ICON, formatKindOf, formatNameOf } from "../ui/format-kind";
@@ -492,6 +493,13 @@ function createPane(id: string): PaneElements {
     })));
   });
   tabsShell.append(tabMenuEl);
+  // Il tasto centrale chiude la scheda sotto il puntatore, sulla linguetta come
+  // sulla ×, come nei browser; non la attiva mai (IMP-012). La striscia resta
+  // la stessa per tutta la vita del riquadro: si ascolta una volta.
+  primaryClicksOnly(tabsShell, {
+    onMiddle: (target) => target.closest(".tab-entry")?.querySelector<HTMLElement>(".tab-close")?.click(),
+  });
+  sameControlForClickRuns(tabsShell);
 
   const contentEl = document.createElement("div");
   contentEl.setAttribute("role", "tabpanel");
@@ -612,6 +620,30 @@ function createPane(id: string): PaneElements {
   };
   frames.set(id, r);
   return { root, editorEl, viewEl };
+}
+
+/// Il secondo clic di un doppio clic vale solo sul controllo del primo (IMP-013).
+///
+/// Chiusa una scheda con la ×, la vicina (o il «+») scorre sotto il puntatore
+/// prima del secondo clic: il doppio clic sulla × attivava la vicina, o creava
+/// una nota. Un clic che continua una serie (`detail` > 1) e cade su un
+/// controllo diverso da quello della prima pressione non arriva a nessuno, e
+/// nemmeno il suo `dblclick`. Il vuoto della striscia è un controllo anche lui:
+/// il doppio clic lì crea una nota (`tab-strip.ts`), ma solo se ci comincia.
+function sameControlForClickRuns(strip: HTMLElement): void {
+  const controlOf = (target: EventTarget | null): Element =>
+    (target instanceof Element ? target.closest(".tab, .tab-close, .tab-new, [data-tab-menu]") : null) ?? strip;
+  let first: Element = strip;
+  strip.addEventListener("mousedown", (event) => {
+    if (event.detail <= 1) first = controlOf(event.target);
+  }, { capture: true });
+  const guard = (event: MouseEvent): void => {
+    if (event.detail <= 1 || controlOf(event.target) === first) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  strip.addEventListener("click", guard, { capture: true });
+  strip.addEventListener("dblclick", guard, { capture: true });
 }
 
 function panePanelId(id: string): string {
@@ -789,16 +821,6 @@ function buildTab(r: PaneFrame, target: Tab, index: number): HTMLElement {
   close.addEventListener("click", (event) => {
     event.stopPropagation();
     event.preventDefault();
-    remove();
-  });
-  // Il clic centrale chiude la tab, come nei browser.
-  tab.addEventListener("mousedown", (event) => {
-    if (event.button === 1) event.preventDefault();
-  });
-  tab.addEventListener("auxclick", (event) => {
-    if (event.button !== 1) return;
-    event.preventDefault();
-    event.stopPropagation();
     remove();
   });
   // Invio/Spazio sul Chiudi non devono anche attivare la tab: l'attivazione
