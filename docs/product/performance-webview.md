@@ -171,7 +171,9 @@ che non erano di chi le apre. Tre regole le tolgono dal fotogramma del gesto:
     puntatore), che non salva niente. La WebView compila lì le sue procedure di
     disegno del canvas (gradienti, `drawImage` dall'atlas, curve, testo), che
     alla prima apertura vera costavano un fotogramma da ~50 ms di script e uno
-    da ~90 di pittura;
+    da ~90 di pittura. Se la persona ha già aperto il grafo (lo segna il
+    pannello, `noteGraphOpened`), il passo che resta non si fa: le prime volte
+    sono pagate, e scaldare ruberebbe fotogrammi al grafo aperto;
 - **l'atlas si cuoce una volta per colori**: `atlasFor` (`graph/render/atlas.ts`)
   tiene l'ultimo atlas e il pittore lo riprende se i colori sono gli stessi; un
   tema nuovo lo rifà. La guardia è `atlas.test.ts` («il secondo pittore con gli

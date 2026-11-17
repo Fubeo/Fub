@@ -45,6 +45,16 @@ export function warmupHost(): HTMLElement {
   return host;
 }
 
+/// Un grafo vero è già stato aperto in questa sessione: le sue prime volte
+/// (il motore, l'atlas, le procedure di disegno della WebView) sono pagate, e
+/// scaldarlo dopo non risparmierebbe niente a nessuno: ruberebbe soltanto
+/// fotogrammi al grafo aperto. Lo segna il pannello del grafo, che è il solo
+/// a sapere che un grafico è quello della persona e non questo d'esercizio.
+let graphOpened = false;
+export function noteGraphOpened(): void {
+  graphOpened = true;
+}
+
 export interface WarmGraphOptions {
   /// Per i test: il fotogramma (predefinito `requestAnimationFrame`).
   readonly frame?: (run: () => void) => void;
@@ -52,6 +62,8 @@ export interface WarmGraphOptions {
 
 /// Scalda la prima apertura del grafo: due passi, ciascuno dopo `next()`.
 /// L'host esce dalla pagina e il grafico si smonta anche se un passo rifiuta.
+/// Se nel frattempo un grafo vero è stato aperto (`noteGraphOpened`), il passo
+/// dopo non si fa e non si monta niente.
 export async function warmGraph(next: () => Promise<void>, options: WarmGraphOptions = {}): Promise<void> {
   let pendingFrame: number | null = null;
   const frame =
@@ -63,11 +75,13 @@ export async function warmGraph(next: () => Promise<void>, options: WarmGraphOpt
       });
     });
   await next();
+  if (graphOpened) return;
   const host = warmupHost();
   document.body.append(host);
   try {
     atlasFor(readTints(host), RADIUS_BUCKETS);
     await next();
+    if (graphOpened) return;
     const chart = createChart({ data: warmupData(), config: loadConfig() });
     try {
       // Il grafico scrive il suo `position` sull'elemento dove si monta: si
