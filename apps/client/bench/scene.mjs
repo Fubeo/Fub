@@ -1151,17 +1151,15 @@ export const SCENE = onPage("shell", [
   // nel numeratore; il blocco `$$` si apre col clic, sul posto, e la scena
   // prova i clic su numeratore, denominatore, esponente e radice (il posto
   // detto al lettore di schermo), se no è rossa; la formula con un errore si
-  // apre col suo LaTeX; poi il riquadro al telefono.
+  // apre col suo LaTeX (il telefono sta fra le scene di `mobile.html`).
   ...[
     ["formula-01-riga", "formula-toccata", "La formula in riga toccata: il riquadro sotto, la formula grande col cursore nel numeratore", "inline"],
     ["formula-02-blocco", "formula-toccata", "Il blocco $$ toccato: la formula sul posto col bordo d'accento, il cursore dove cade il clic", "block"],
     ["formula-03-errore", "formula-errore", "Una formula con un errore si apre col suo LaTeX e la nota che lo dice", "error"],
-    ["formula-04-telefono", "formula-toccata", "La formula in riga toccata sul telefono: il riquadro non esce dallo schermo", "inline", PHONE],
-  ].map(([id, live, title, gesture, viewport]) => ({
+  ].map(([id, live, title, gesture]) => ({
     id,
     title,
     query: `live=${live}`,
-    ...(viewport ? { viewport } : {}),
     prepare: (page) => touchFormula(page, gesture),
   })),
   // Scrittura a riposo (T3, E1, passo 1 del prototipo): la pagina mostra solo
@@ -1655,6 +1653,15 @@ export const SCENE = onPage("shell", [
   // dal basso, la barra di formattazione sta sopra la tastiera. La finestra è
   // quella di un telefono in piedi; l'ultima scena lo sdraia.
   onPage("mobile", [
+    // La formula in riga toccata (T60) sul telefono: il riquadro non esce
+    // dallo schermo.
+    {
+      id: "mobile-formula",
+      title: "Il telefono: la formula in riga toccata, il riquadro dentro lo schermo",
+      query: "live=formula-toccata",
+      viewport: PHONE,
+      prepare: (page) => touchFormula(page, "inline"),
+    },
     // La testata della pagina (T6) sul telefono: la copertina bassa, le
     // colonne delle proprietà strette.
     {

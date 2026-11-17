@@ -237,7 +237,7 @@ describe("l'editor da solo", () => {
       let left = 0;
       // Le frecce sono regole senza disegno: si parte dalla fine e si torna
       // indietro un pezzo alla volta, fino a uscire dall'inizio.
-      const editor = new MathEditor({ tex, display, start: "end", onChange: () => touched.push(tex), onLeave: () => left++, lifetime: life });
+      const editor = new MathEditor({ tex, display: display ?? false, start: "end", onChange: () => touched.push(tex), onLeave: () => left++, lifetime: life });
       document.body.append(editor.element);
       const field = editor.element.querySelector("textarea")!;
       const press = (key: string) => field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
