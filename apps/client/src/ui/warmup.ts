@@ -142,7 +142,13 @@ export function createWarmups(): Warmups {
           running = false;
         }
       };
-      kick = () => void run();
+      const ownKick = (): void => void run();
+      kick = ownKick;
+      // A vita chiusa la coda si può far ripartire con un'altra vita (una
+      // shell rimontata): i compiti non ancora partiti aspettano lì.
+      lifetime.add(() => {
+        if (kick === ownKick) kick = null;
+      });
       later(() => {
         started = true;
         void run();

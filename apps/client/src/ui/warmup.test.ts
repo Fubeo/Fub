@@ -29,6 +29,23 @@ afterEach(() => {
 });
 
 describe("i riscaldamenti", () => {
+  it("chiusa la vita, la coda riparte con una vita nuova", async () => {
+    const first = openLifetime();
+    warmups.start(first, options);
+    first.close();
+    const done: string[] = [];
+    warmups.register(async (next) => {
+      await next();
+      done.push("dopo");
+    });
+    await pass(5000);
+    expect(done, "la vita chiusa non fa partire niente").toEqual([]);
+
+    warmups.start(lifetime, options);
+    await pass(2000);
+    expect(done).toEqual(["dopo"]);
+  });
+
   it("non partono prima di `start` né prima del ritardo, poi girano nell'ordine", async () => {
     const done: string[] = [];
     warmups.register(async (next) => {
