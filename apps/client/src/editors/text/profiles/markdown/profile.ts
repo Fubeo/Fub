@@ -24,6 +24,7 @@ import { blockIdMarks } from "./block-id";
 import { transformKeymap } from "./blocks/transform";
 import { commentSource } from "./comments/source";
 import type { NoteFactsExtensions } from "./note-facts";
+import { italianTypography } from "./typography";
 
 const typography = Prec.high(EditorView.theme({
   ".cm-content": {
@@ -179,6 +180,10 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
   // Sorgente) tiene la stessa istanza del plugin, e con lei le parole
   // ignorate in questa sessione.
   let proof: Extension = [];
+  // La tipografia italiana (`editor.typography`), in Sorgente e in Scrittura:
+  // un'istanza sola, che tiene l'impostazione letta fra un `reconfigure` e
+  // l'altro.
+  const quotes = italianTypography({ forms: () => syntaxForms });
 
   return {
     extensions() {
@@ -188,6 +193,7 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
         frontmatter,
         markdownEditingExtensions(),
         markdownPaste,
+        quotes,
         openLinkKeymap(options.callbacks),
         markdown({ base: markdownGrammar, codeLanguages: languages }),
         cursorElements,

@@ -228,6 +228,12 @@ pub const EDITOR_SLASH_SECTIONS: &str = "editor.slash.sections";
 /// si sta facendo, letti dalle scorciatoie della persona. Accesa di serie;
 /// non c'è al telefono né sotto i 620 px.
 pub const EDITOR_HINTS: &str = "editor.hints";
+/// La tipografia italiana mentre si scrive: `"` diventa « o » (“ ” dentro
+/// una citazione già aperta), `--` diventa —, `...` diventa … e l'apostrofo
+/// diventa ’. Spenta di serie. Vale nella prosa delle note in italiano (la
+/// lingua dichiarata nella nota, altrimenti quella dell'app), mai in codice,
+/// formule, link, frontmatter, nell'incolla e nella composizione (IME).
+pub const EDITOR_TYPOGRAPHY: &str = "editor.typography";
 /// In che modalità si apre un riquadro nuovo: `live_preview` (Scrittura),
 /// `source` o `reading`, gli id delle modalità della superficie testuale.
 /// `blocks`, scritto da un Fub che aveva la modalità Blocchi, resta un valore
@@ -997,6 +1003,12 @@ fn editor_settings() -> Vec<SettingSpec> {
     settings.push(
         SettingSpec::toggle(EDITOR_HINTS, Text::key(C_EDITOR_HINTS), true)
             .describing(Text::key(C_EDITOR_HINTS_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
+    settings.push(
+        SettingSpec::toggle(EDITOR_TYPOGRAPHY, Text::key(C_EDITOR_TYPOGRAPHY), false)
+            .describing(Text::key(C_EDITOR_TYPOGRAPHY_DESC))
             .grouped(Text::key(C_GROUP_EDITOR))
             .for_machine(),
     );
@@ -1791,6 +1803,8 @@ const C_EDITOR_SLASH: &str = "core.editor.slash";
 const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
 const C_EDITOR_HINTS: &str = "core.editor.hints";
 const C_EDITOR_HINTS_DESC: &str = "core.editor.hints.desc";
+const C_EDITOR_TYPOGRAPHY: &str = "core.editor.typography";
+const C_EDITOR_TYPOGRAPHY_DESC: &str = "core.editor.typography.desc";
 const C_EDITOR_SLASH_HIDDEN: &str = "core.editor.slash.hidden";
 const C_EDITOR_SLASH_HIDDEN_DESC: &str = "core.editor.slash.hidden.desc";
 const C_EDITOR_SLASH_SECTIONS: &str = "core.editor.slash.sections";
@@ -2456,6 +2470,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
         .with(C_EDITOR_HINTS, "Riga dei suggerimenti")
         .with(C_EDITOR_HINTS_DESC, "Al centro della banda in basso, i tasti utili per ciò che stai facendo, con le tue scorciatoie. Non c'è al telefono né in una finestra più stretta di 620 px.")
+        .with(C_EDITOR_TYPOGRAPHY, "Tipografia italiana")
+        .with(C_EDITOR_TYPOGRAPHY_DESC, "Mentre scrivi, le virgolette diventano « », due trattini —, tre punti … e l'apostrofo ’. Vale nelle note in italiano, fuori da codice, formule e link; Backspace subito dopo rimette ciò che avevi scritto.")
         .with(C_EDITOR_SLASH_HIDDEN, "Voci nascoste dal menu «/»")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "Gli id dei comandi che il menu «/» non mostra. Restano nella palette e da tastiera.")
         .with(C_EDITOR_SLASH_SECTIONS, "Ordine delle sezioni del menu «/»")
@@ -3119,6 +3135,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
         .with(C_EDITOR_HINTS, "Hints row")
         .with(C_EDITOR_HINTS_DESC, "In the middle of the bottom band, the keys useful for what you are doing, with your shortcuts. Not on the phone nor in a window narrower than 620 px.")
+        .with(C_EDITOR_TYPOGRAPHY, "Italian typography")
+        .with(C_EDITOR_TYPOGRAPHY_DESC, "As you type, quotes become « », two hyphens —, three dots … and the apostrophe ’. It applies to notes in Italian, outside code, formulas and links; Backspace right after puts back what you typed.")
         .with(C_EDITOR_SLASH_HIDDEN, "Items hidden from the «/» menu")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "The ids of the commands the «/» menu leaves out. They stay in the palette and on the keyboard.")
         .with(C_EDITOR_SLASH_SECTIONS, "Order of the «/» menu sections")
@@ -3738,6 +3756,22 @@ mod tests {
             assert!(matches!(&spec.kind, SettingKind::Toggle { default } if *default == expected));
             assert!(!spec.program_writable);
         }
+    }
+
+    /// La tipografia italiana è della macchina e spenta di serie (D8 A): chi
+    /// non la accende scrive i caratteri della tastiera, e un programma non
+    /// la cambia.
+    #[test]
+    fn typography_is_an_opt_in_machine_toggle_of_the_editor() {
+        let machine = core_machine_settings();
+        let spec = machine
+            .iter()
+            .find(|spec| spec.key == EDITOR_TYPOGRAPHY)
+            .expect("la tipografia fra le impostazioni");
+        assert!(matches!(&spec.kind, SettingKind::Toggle { default: false }));
+        assert_eq!(spec.label, Text::key(C_EDITOR_TYPOGRAPHY));
+        assert_eq!(spec.group, Text::key(C_GROUP_EDITOR));
+        assert!(!spec.program_writable);
     }
 
     /// La Live si scrive come in Word se nessuno sceglie altro: i segni si
