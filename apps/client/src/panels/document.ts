@@ -62,7 +62,7 @@ import { textButton } from "../kit/button";
 import { setTooltip } from "../ui/tooltip";
 import { distinctiveTails } from "./tab-names";
 import { tabIndexForKey } from "../ui/tab-keys";
-import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
+import { createFormatBar, currentToolbarForm, registerFormatIcons, type FormatBar } from "./format-bar";
 import { createSelectionBubble, type SelectionBubble } from "./selection-bubble";
 import { bubbleWanted, miniBarMode, mountMiniBar } from "./mini-bar";
 import { openEditorMenu, type EditorMenuHost } from "./editor-menu";
@@ -541,7 +541,9 @@ function createPane(id: string): PaneElements {
     focusPane: () => focusPane(id),
     runCommand: (command: string) => deps.runCommand(command),
   };
-  const formatBar = createFormatBar(barHost);
+  // La barra del riquadro segue il blocco del cursore, nella forma che
+  // `editor.toolbar` sceglie; la bolla e la mini-barra restano intere.
+  const formatBar = createFormatBar({ ...barHost, blocks: true, form: currentToolbarForm });
   const selectionBubble: SelectionBubble = createSelectionBubble({
     ...barHost,
     wanted: () => bubbleWanted(miniBarMode(), document.getElementById("app")?.hasAttribute("data-formatbar-off") === true),

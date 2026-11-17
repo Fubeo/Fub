@@ -12,7 +12,7 @@
 // Dove sta il testo lo dice la superficie (`selectionBox`), mai l'editor: qui
 // passano soltanto quattro numeri.
 import type { CommandSpec } from "../host/contract";
-import { createFormatBar, type FormatBar, type FormatBarHost, type GroupId } from "./format-bar";
+import { createFormatBar, FORMATBAR_EVENT, type FormatBar, type FormatBarHost, type GroupId } from "./format-bar";
 import { openLifetime } from "../ui/lifetime";
 
 /// I gruppi che la bolla offre: il carattere e i collegamenti. Il resto — gli
@@ -23,8 +23,9 @@ const BUBBLE_GROUPS: readonly GroupId[] = ["inline", "links"];
 /// Lo spazio fra la bolla e il testo.
 const GAP = 8;
 
-/// L'evento con cui la shell dice che la barra si è accesa o spenta.
-export const FORMATBAR_EVENT = "shell:formatbar";
+/// L'evento con cui la shell dice che la barra ha cambiato forma (nasce con
+/// la barra, `format-bar.ts`).
+export { FORMATBAR_EVENT } from "./format-bar";
 
 export interface SelectionBubble {
   readonly element: HTMLElement;
