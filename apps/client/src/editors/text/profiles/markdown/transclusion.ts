@@ -336,7 +336,17 @@ export class LiveTransclusion {
     }
     const refocus = this.slot.contains(document.activeElement);
     this.#teardown(true);
-    if (refocus) this.#edit?.focus();
+    if (!refocus) return;
+    this.#edit?.focus();
+    // L'origine salvata rifà la resa: il fuoco passa al «Modifica qui» nuovo.
+    this.#owner.refocusLater(this.embed);
+  }
+
+  /// Il fuoco su «Modifica qui», se c'è.
+  focusEdit(): boolean {
+    if (!this.#edit || !this.slot.isConnected) return false;
+    this.#edit.focus();
+    return true;
   }
 
   #startWriting(deps: TransclusionDeps, session: DocumentSession, range: RangeSurface, retained: Writing["retained"]): void {
@@ -384,6 +394,11 @@ export class LiveTransclusion {
     }
     this.#owner.started(this);
     this.slot.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
+    // Il cursore in fondo al tratto, dove si aggiunge, come nel prototipo.
+    engine.runViewCommand((view) => {
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+      return true;
+    });
     engine.focus();
   }
 
@@ -511,12 +526,17 @@ export class LiveTransclusion {
 
 /// Le trasclusioni vive di una superficie: chi le monta, chi le trova dal
 /// testo, e chi scrive adesso.
+function sameEmbed(a: TranscludedEmbed, b: TranscludedEmbed): boolean {
+  return a.doc === b.doc && a.page === b.page && a.heading === b.heading && a.block === b.block;
+}
+
 export class Transclusions {
   readonly #host: TransclusionHost;
   readonly #views = new WeakMap<HTMLElement, LiveTransclusion>();
   readonly #writing = new Set<LiveTransclusion>();
   #theme: Theme | null = null;
   #keys: Extension | null = null;
+  #refocus: TranscludedEmbed | null = null;
 
   constructor(host: TransclusionHost) {
     this.#host = host;
@@ -527,7 +547,20 @@ export class Transclusions {
     const view = new LiveTransclusion(this, slot, embed, this.#host, life, hold);
     this.#views.set(slot, view);
     life.add(() => this.#views.delete(slot));
+    const refocus = this.#refocus;
+    if (refocus && sameEmbed(refocus, embed)) {
+      this.#refocus = null;
+      // Soltanto se il fuoco è andato perso con la resa vecchia.
+      const active = slot.ownerDocument.activeElement;
+      if (!active || active === slot.ownerDocument.body) view.focusEdit();
+    }
   };
+
+  /// Dopo l'uscita, la prossima resa della stessa trasclusione riprende il
+  /// fuoco su «Modifica qui».
+  refocusLater(embed: TranscludedEmbed): void {
+    this.#refocus = embed;
+  }
 
   /// La trasclusione di un elemento della resa, se c'è.
   at(slot: Element | null): LiveTransclusion | null {
@@ -568,6 +601,7 @@ export class Transclusions {
   }
 
   started(view: LiveTransclusion): void {
+    this.#refocus = null;
     this.#writing.add(view);
     if (this.#theme) view.engine?.setTheme(this.#theme);
   }

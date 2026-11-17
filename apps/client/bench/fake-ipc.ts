@@ -1476,6 +1476,19 @@ function askedDocs(expr: QueryExpr): string[] | null {
   return docs.length > 0 ? docs : null;
 }
 
+/// La sezione di `text` sotto il titolo `heading`, titolo compreso, fino al
+/// prossimo titolo dello stesso livello o più alto; senza titolo, tutto.
+function embedSection(text: string, heading: string | null): string {
+  if (heading === null) return text;
+  const lines = text.split("\n");
+  const start = lines.findIndex((line) => /^#{1,6} /.test(line) && line.replace(/^#+ /, "").trim() === heading);
+  if (start < 0) throw new Error(`Titolo non trovato nel banco: ${heading}`);
+  const level = /^#+/.exec(lines[start]!)![0].length;
+  let end = start + 1;
+  while (end < lines.length && !(/^#{1,6} /.test(lines[end]!) && /^#+/.exec(lines[end]!)![0].length <= level)) end++;
+  return lines.slice(start, end).join("\n").trim();
+}
+
 /// Una resa di Markdown per le note che il banco non ha scritte a mano in
 /// `OUTPUT`: titoli, paragrafi, elenchi (con le caselle dei compiti), blocchi
 /// di codice, collegamenti e grassetto. Non è il renderer vero, e non vuole
@@ -1546,6 +1559,14 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
   render_embed: (q) => {
     if (q.kind !== "render_embed") throw new Error("Richiesta embed non valida");
     const page = q.page.endsWith(".md") ? q.page : `${q.page}.md`;
+    // Una nota che un caso della Live riporta (la trasclusione viva): la
+    // sezione dal suo titolo al prossimo dello stesso livello, letta dal
+    // vault com'è adesso, come la rende il kernel dopo un salvataggio.
+    const liveFile = LIVE?.files?.[page];
+    if (liveFile !== undefined) {
+      const text = host.files()[page] ?? liveFile;
+      return { kind: "render_embed", value: { doc_id: page, html: plainHtml(embedSection(text, q.heading ?? null)), parts: [] } };
+    }
     const doc = Object.keys(CORPUS).find((id) => id === page || id.endsWith(`/${page}`));
     if (!doc || OUTPUT[doc] === undefined || q.heading || q.block) {
       throw new Error(`Embed non dichiarato nel banco: ${q.page}`);
@@ -1819,7 +1840,7 @@ const options: Options = {
     // Il testo di un documento di videoscrittura è la sua proiezione.
     ...(RICH_DOC === null ? {} : { [RICH_DOC.doc]: RICH_DOC.text }),
     // La nota della Live, per le scene che la chiedono.
-    ...(LIVE === null ? {} : { [LIVE_DOC]: LIVE.text }),
+    ...(LIVE === null ? {} : { [LIVE_DOC]: LIVE.text, ...LIVE.files }),
     ...(PDF_SCENE === null ? {} : pdfSceneFiles(PDF_SCENE)),
     ...(TREE_SCENE === null ? {} : treeSceneFiles()),
     ...(BASE === null ? {} : BASE.files),

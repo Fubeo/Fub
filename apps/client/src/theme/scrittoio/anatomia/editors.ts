@@ -155,6 +155,6 @@ export const EDITORS: PartAnatomy = {
     // La trasclusione viva (T29): il vassoio della nota riportata, la testata
     // con «Modifica qui» e «Apri», la fascia di chi scrive, gli avvisi e
     // l'editor del tratto.
-    { name: "live-transclusion", layer: "contenuto", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["embed", "transclusion", "transclusion-head", "transclusion-source", "transclusion-spacer", "transclusion-self", "transclusion-band", "transclusion-notice", "transclusion-conflict", "transclusion-editing", "transclusion-editor", "cm-editor", "cm-focused"] },
+    { name: "live-transclusion", layer: "contenuto", layers: { "pane-editor": "cornice" }, states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["embed", "transclusion", "transclusion-head", "transclusion-source", "transclusion-spacer", "transclusion-self", "transclusion-body", "transclusion-band", "transclusion-notice", "transclusion-conflict", "transclusion-editing", "transclusion-editor", "cm-editor", "cm-focused", "cm-content", "pane-editor", "markdown-rendered"] },
   ],
 };

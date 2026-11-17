@@ -84,6 +84,8 @@ const SHEET_FULL = { width: 1308, height: 800 };
 /// prototipo): la misura «700 px» del prototipo di Scrittoio 2, che sul
 /// computer non si può avere.
 const NOTE_NARROW = { width: 800, height: 800 };
+/// La testata della trasclusione viva nel riquadro col fuoco.
+const TRANSCLUSION_HEAD = ".pane.focus .pane-editor .transclusion .transclusion-head";
 /// Una finestra documento appena aperta.
 const DOCUMENT_WINDOW = { width: 900, height: 700 };
 
@@ -1360,6 +1362,30 @@ export const SCENE = onPage("shell", [
     query: "live=pagina",
     prepare: (page) => writingAtRest(page),
   },
+  // La trasclusione viva (T29, il prototipo `.tx`): al passaggio la testata
+  // con «Modifica qui» e «Apri»; «Modifica qui» apre l'editor del tratto col
+  // bordo d'accento e la fascia di chi scrive; lo stesso nella finestra stretta.
+  ...[
+    ["trasclusione-viva-01-passaggio", "La trasclusione viva al passaggio: la provenienza, «Modifica qui» e «Apri»", false],
+    ["trasclusione-viva-02-scrive", "«Modifica qui»: l'editor del tratto, il bordo d'accento e «Scrivi in …: si salva là»", true],
+    ["trasclusione-viva-03-stretta", "La trasclusione che si scrive nella finestra stretta, 800 px", true, NOTE_NARROW],
+  ].map(([id, title, writing, viewport]) => ({
+    id,
+    title,
+    query: "live=trasclusione",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForSelector(`${TRANSCLUSION_HEAD} .transclusion-edit`);
+      if (!writing) return;
+      await page.click(`${TRANSCLUSION_HEAD} .transclusion-edit`);
+      // Il cursore va in fondo al tratto, sull'ultima voce: il titolo resta reso.
+      await page.waitForSelector(".pane.focus .pane-editor .transclusion-editing .transclusion-editor .cm-content:focus");
+    },
+    // Il passaggio è l'ultimo gesto, dopo che il palco ha portato via il
+    // puntatore.
+    ...(writing ? {} : { hover: (page) => page.hover(TRANSCLUSION_HEAD) }),
+  })),
   // La riga dei suggerimenti (T14): al centro della banda, i tasti per ciò che
   // si sta facendo. Una parola scelta a 1280 px; un blocco scelto nella
   // finestra minima, dove la riga toglie dalla fine le voci che non ci stanno.

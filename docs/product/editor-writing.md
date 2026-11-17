@@ -369,7 +369,10 @@ la trasclusione lo scrive dove sta.
 - **Modifica qui**, o Invio sul blocco scelto, o «Modifica qui» nel gruppo
   «Trasclusione» della barra, apre dentro l'embed un editor sul solo tratto,
   col bordo d'accento e la fascia «Scrivi in X: si salva là, con la sua
-  revisione. Esc esce.». **Esc** (o **Fatto**) salva ed esce. L'editor del
+  revisione. Esc esce.», col cursore in fondo al tratto. **Esc** (o
+  **Fatto**) salva ed esce, e il fuoco torna su «Modifica qui»; un Esc che
+  l'editor usa già (la chiusura in grigio, un completamento) resta suo, come
+  nella sbirciata. L'editor del
   tratto è la superficie ristretta della sessione dell'origine: con l'origine
   aperta in un riquadro, anche con modifiche non salvate, si scrive sullo
   stesso testo, e ogni battuta passa all'altro riquadro; l'annulla è di
@@ -476,5 +479,6 @@ foglio, in ogni editor di testo che non sia un campo:
   faccetta `typewriter`); `apps/client/src/editors/text/engine.ts` la legge
   da `editor.typewriter` (`crates/fub-host/src/settings.rs`);
 - `apps/client/bench/scene.mjs`: le scene `scrittura-a-riposo`,
-  `riga-dei-suggerimenti`, `concentration`, `concentration-writing` e
-  `typewriter`.
+  `riga-dei-suggerimenti`, `concentration`, `concentration-writing`,
+  `typewriter` e `trasclusione-viva-*` (la nota della Live `trasclusione` in
+  `bench/live-fixture.ts`).
