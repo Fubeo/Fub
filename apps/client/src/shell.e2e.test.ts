@@ -1031,7 +1031,7 @@ describe("il formato si vede", () => {
     expect(bar().querySelector(".pane-format")).toBeNull();
     const tab = () => document.querySelector<HTMLElement>('.pane.focus .tab[aria-selected="true"]')!;
     expect(tab().querySelector("svg.tab-format")).not.toBeNull();
-    expect(tab().getAttribute("aria-label")).toContain("Documento di Word");
+    expect(tab().getAttribute("aria-label")).toContain("Documento .docx");
     // «Salvato» è il bottone dello stato, che ridice la parola nel nome; «…» è
     // una figura col nome di sempre.
     const save = bar().querySelector<HTMLButtonElement>(".pane-status-slot button.sheet-save")!;
@@ -1046,7 +1046,7 @@ describe("il formato si vede", () => {
     row("Benvenuto.md")!.click();
     await waitFor("la nota si apre", () => name() === "Benvenuto");
     expect(tab().querySelector("svg.tab-format")).not.toBeNull();
-    expect(tab().getAttribute("aria-label")).not.toContain("Documento di Word");
+    expect(tab().getAttribute("aria-label")).not.toContain("Documento .docx");
   });
 });
 
