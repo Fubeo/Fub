@@ -116,13 +116,12 @@ riscrive solo i wikilink che nominavano la nota, e l'estensione se era scritta.
 Il pannello mostra incoming, outgoing con contesto, menzioni non collegate nei
 due versi con filtro, e la conversione esplicita in wikilink. Una menzione è il
 nome o un alias, parola intera in prosa: non in un link, nel codice, in un tag,
-in una formula o nel frontmatter; un disegno o un foglio non ne offrono, né
-il loro markup come contesto. La converte `mention.link`: rilegge la nota alla
-revisione e allo span dichiarati, rifiuta se il testo è cambiato o non è più
-una menzione, e si annulla in un passo con «Annulla l'ultima operazione». Il
-riferimento scritto è il più corto che la risoluzione manda davvero alla nota
-(nome, nome con estensione, percorso senza estensione, percorso intero); una
-parola scritta altrimenti, come un alias, resta testo del link (`[[Rossi|Mario]]`).
+in una formula o nel frontmatter; disegni e fogli non ne offrono. La converte
+`mention.link`: rilegge la nota alla revisione e allo span dichiarati, rifiuta
+se il testo è cambiato o non è più una menzione, e si annulla in un passo con
+«Annulla l'ultima operazione». Il riferimento scritto è il più corto che la
+risoluzione manda davvero alla nota (nome, con estensione, percorso senza o con
+estensione); un alias resta testo del link (`[[Rossi|Mario]]`).
 Il pannello tag mostra gerarchia piatta o ad albero, ordinamento per nome o
 conteggio e selezione multipla per esemplare; click e selezione lanciano
 tramite RunSearch la stessa ricerca che si scriverebbe nella barra
