@@ -1431,6 +1431,17 @@
     "cm-fub-comment-range-on",
     "comment-range",
     "cm-fub-comment-source",
+    "transclusion",
+    "transclusion-head",
+    "transclusion-source",
+    "transclusion-spacer",
+    "transclusion-self",
+    "transclusion-body",
+    "transclusion-band",
+    "transclusion-notice",
+    "transclusion-conflict",
+    "transclusion-editing",
+    "transclusion-editor",
     "draw-export",
     "draw-export-text",
     "draw-rail",
@@ -3518,6 +3529,17 @@
     "cm-fub-comment-range-on": "segno",
     "comment-range": "segno",
     "cm-fub-comment-source": "segno",
+    "transclusion": "contenuto",
+    "transclusion-head": "contenuto",
+    "transclusion-source": "contenuto",
+    "transclusion-spacer": "contenuto",
+    "transclusion-self": "contenuto",
+    "transclusion-body": "contenuto",
+    "transclusion-band": "contenuto",
+    "transclusion-notice": "contenuto",
+    "transclusion-conflict": "contenuto",
+    "transclusion-editing": "contenuto",
+    "transclusion-editor": "contenuto",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-rail": "cornice",
@@ -7679,6 +7701,35 @@
       ]
     },
     {
+      "name": "live-transclusion",
+      "part": "editors",
+      "hooks": [
+        "embed",
+        "transclusion",
+        "transclusion-head",
+        "transclusion-source",
+        "transclusion-spacer",
+        "transclusion-self",
+        "transclusion-body",
+        "transclusion-band",
+        "transclusion-notice",
+        "transclusion-conflict",
+        "transclusion-editing",
+        "transclusion-editor",
+        "cm-editor",
+        "cm-focused",
+        "cm-content",
+        "pane-editor",
+        "markdown-rendered"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
       "name": "draw-editor",
       "part": "draw",
       "hooks": [
@@ -11006,10 +11057,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 2085,
+    "hooks": 2096,
     "state_names": 7,
-    "assigned_states": 955,
-    "components": 280,
+    "assigned_states": 959,
+    "components": 281,
     "preference_tokens": 191
   }
 }

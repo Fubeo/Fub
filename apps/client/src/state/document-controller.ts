@@ -1425,6 +1425,16 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
         };
       },
     },
+    // La trasclusione viva (E14): le sessioni, la sola lettura e il conflitto
+    // di un riquadro, come per una scheda della lavagna.
+    transclusion: {
+      sessions: documentSessions,
+      held: heldReadOnly,
+      heldWhy,
+      shownInPane: isOpen,
+      conflict: (box, path) => view.drawCardConflict(box, path),
+      unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
+    },
     runShellCommand: (id) => deps.runCommand(id),
     ...(deps.openSettings ? { onOpenSettings: (key: string) => deps.openSettings?.(key) } : {}),
     requestMode: (paneId, mode) => {

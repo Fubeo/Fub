@@ -295,6 +295,12 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
   l'indice cambia si richiedono solo le schede tenute, e la Scrittura ridisegna
   soltanto quelle davvero cambiate.
 
+## La trasclusione viva
+
+Una sezione o un blocco di un'altra nota riportati con `![[Nota#Sezione]]` si
+scrivono dove stanno, con **Modifica qui**: [La trasclusione
+viva](editor-transclusion.md).
+
 ## La concentrazione
 
 La concentrazione (`shell.focus.toggle`, «Modalità concentrazione» nel menu
@@ -375,5 +381,5 @@ foglio, in ogni editor di testo che non sia un campo:
   faccetta `typewriter`); `apps/client/src/editors/text/engine.ts` la legge
   da `editor.typewriter` (`crates/fub-host/src/settings.rs`);
 - `apps/client/bench/scene.mjs`: le scene `scrittura-a-riposo`,
-  `riga-dei-suggerimenti`, `concentration`, `concentration-writing` e
+  `riga-dei-suggerimenti`, `concentration`, `concentration-writing`,
   `typewriter`.

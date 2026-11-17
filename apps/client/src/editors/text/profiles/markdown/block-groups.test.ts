@@ -126,6 +126,29 @@ describe("i gruppi", () => {
     expect(markdownBlockGroup(hostOf("![[Atto.pdf]]\n", 3).host, null)).toBeNull();
   });
 
+  it("Trasclusione: «Modifica qui» c'è per una sezione o un blocco, dove si scrive", () => {
+    const edited: number[] = [];
+    const withEdit = (doc: string, editable = true) => {
+      const made = hostOf(doc, 3, { editable });
+      made.host.editHere = (start) => {
+        edited.push(start);
+        return true;
+      };
+      return made.host;
+    };
+    const group = markdownBlockGroup(withEdit("testo\n\n![[Riunioni/2026-11-04#^decisioni]]\n"), "testo\n\n".length + 2);
+    expect(ids(group)).toEqual(["markdown.link.open", "markdown.transclusion.edit"]);
+    expect(item(group, "markdown.transclusion.edit").label).toBe("Modifica qui");
+    item(group, "markdown.transclusion.edit").run?.();
+    expect(edited).toEqual(["testo\n\n".length]);
+    expect(ids(markdownBlockGroup(withEdit("![[Diario#Riunione]]\n"), null))).toContain("markdown.transclusion.edit");
+    // La nota intera si apre e basta; in sola lettura non si scrive niente.
+    expect(ids(markdownBlockGroup(withEdit("![[Diario]]\n"), null))).toEqual(["markdown.link.open"]);
+    expect(ids(markdownBlockGroup(withEdit("![[Diario#^a1]]\n", false), null))).toEqual(["markdown.link.open"]);
+    // Senza la trasclusione viva della superficie la voce non c'è.
+    expect(ids(markdownBlockGroup(hostOf("![[Diario#^a1]]\n", 3).host, null))).toEqual(["markdown.link.open"]);
+  });
+
   it("Tabella: riga, colonna e ordina sono le azioni della tabella", () => {
     const doc = "| a | b |\n| - | - |\n| 1 | 2 |\n";
     const { host } = hostOf(doc, doc.indexOf("1"));

@@ -1,4 +1,5 @@
 import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type SystemTarget } from "../text/profiles/markdown/surface";
+import type { TransclusionDeps } from "../text/profiles/markdown/transclusion";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import type { PeekLink } from "../text/profiles/markdown/link-gesture";
@@ -133,6 +134,8 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly pageIcons?: PageIcons;
   /// Le schede dei collegamenti della Live (K8).
   readonly linkCards?: LinkCardSource;
+  /// La trasclusione viva delle note (E14): le sessioni della finestra.
+  readonly transclusion?: TransclusionDeps;
   /// Un comando della shell dato da dentro una superficie, come dalla
   /// palette: lo zoom della barra del documento.
   readonly runShellCommand?: (id: string) => void;
@@ -684,6 +687,7 @@ export function createDocumentSurfaceRegistry(
             onNewSubpage: options.onNewSubpage,
             pageIcons: options.pageIcons,
             linkCards: options.linkCards,
+            ...(options.transclusion ? { transclusion: options.transclusion } : {}),
             noteFacts,
             completions: options.completions,
             slash: options.slash,

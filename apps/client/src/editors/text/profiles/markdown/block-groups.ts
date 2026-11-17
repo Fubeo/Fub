@@ -151,6 +151,9 @@ export interface BlockGroupHost {
   copy(text: string): void;
   /// Apre la nota (o il file) di un link, al titolo o al blocco.
   openLink(page: string, heading: string | null, block: string | null): void;
+  /// «Modifica qui» sulla trasclusione del blocco che comincia in `start`
+  /// (`transclusion.ts`): `false` se lì non si scrive. Senza, la voce non c'è.
+  editHere?(start: number): boolean;
 }
 
 /// I nomi dei gruppi, nella lingua dell'interfaccia.
@@ -208,12 +211,21 @@ const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
     icon: "fmt-expand",
     run: () => host.openLink(block.page, null, null),
   }],
-  transclusion: (block, host) => [{
-    id: "markdown.link.open",
-    label: liveStrings.t("blockgroup.transclusion.open"),
-    icon: "fmt-open",
-    run: () => host.openLink(block.page, block.heading, block.block),
-  }],
+  // «Modifica qui» (E14) scrive nella nota d'origine: c'è dove la nota che
+  // ospita si scrive, e per una sezione o un blocco, non per la nota intera.
+  transclusion: (block, host, writable) => [
+    {
+      id: "markdown.link.open",
+      label: liveStrings.t("blockgroup.transclusion.open"),
+      icon: "fmt-open",
+      run: () => host.openLink(block.page, block.heading, block.block),
+    },
+    ...(writable && host.editHere && (block.heading !== null || block.block !== null) ? [{
+      id: "markdown.transclusion.edit",
+      label: liveStrings.t("blockgroup.transclusion.edit"),
+      run: () => void host.editHere?.(block.start),
+    }] : []),
+  ],
   // Le azioni della tabella, coi nomi corti della barra: le spegne la
   // superficie dove non c'è una tabella da cambiare.
   table: () => [

@@ -353,6 +353,19 @@ export const VISTE = {
     },
     app: { scena: "base-nota" },
   },
+  /// La trasclusione viva che si scrive (T29): il prototipo al passo «La
+  /// trasclusione viva» (`editTx(true)`), l'app dalla scena del banco dopo
+  /// «Modifica qui».
+  "trasclusione-scrive": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La trasclusione viva");
+        await page.waitForSelector("#win .tx.editing");
+      },
+    },
+    app: { scena: "trasclusione-viva-02-scrive" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -1299,6 +1312,39 @@ export const PEZZI = [
     prototipo: "#minibar .sepv",
     app: ".selection-bubble .mini-bar .mini-bar-rule",
     proprieta: ["margin", "background", ...DIMENSIONI],
+  },
+  // ── la trasclusione viva (T29) ──────────────────────────────────────────
+  {
+    id: "trasclusione.vassoio",
+    vista: "trasclusione-scrive",
+    contesto: "documento",
+    prototipo: ".tx.editing",
+    app: ".embed.transclusion-editing",
+    proprieta: ["padding", "border-radius", "box-shadow", "background-color"],
+  },
+  {
+    id: "trasclusione.testata",
+    vista: "trasclusione-scrive",
+    contesto: "documento",
+    prototipo: ".tx-h",
+    app: ".transclusion-head",
+    proprieta: ["height", "gap", "font", "color", ...ALLINEAMENTO],
+  },
+  {
+    id: "trasclusione.modifica",
+    vista: "trasclusione-scrive",
+    contesto: "documento",
+    prototipo: "#tx-edit",
+    app: ".transclusion-edit",
+    proprieta: ["height", "padding", "gap", "border-radius", "font", "color", "opacity", ...ALLINEAMENTO],
+  },
+  {
+    id: "trasclusione.fascia",
+    vista: "trasclusione-scrive",
+    contesto: "documento",
+    prototipo: ".tx-band",
+    app: ".transclusion-band",
+    proprieta: ["padding", "margin", "gap", "border-radius", "background-color", "font", "color", ...ALLINEAMENTO],
   },
 ];
 

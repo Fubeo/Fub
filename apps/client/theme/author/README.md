@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **2085 hook**, **7 stati** (955 assegnazioni su 280 componenti) e lascia ridichiarare alla persona **191 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **2096 hook**, **7 stati** (959 assegnazioni su 281 componenti) e lascia ridichiarare alla persona **191 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
 Dichiara anche **68 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
@@ -12,7 +12,7 @@ Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
 - **cornice** (1595 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
 - **segno** (148 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
-- **contenuto** (342 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
+- **contenuto** (353 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
 Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.
 
@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 519 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 520 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup base-board base-cards base-chevron-down
@@ -131,8 +131,8 @@ rc-page rc-painter rc-paper-size rc-quote rc-redo rc-replace rc-rev-accept rc-re
 rc-rev-next rc-rev-previous rc-rev-reject rc-rev-reject-all rc-row-after rc-row-before rc-row-delete
 rc-row-down rc-row-up rc-spacing rc-split rc-styles rc-table rc-toc rc-track rc-undo rc-wrap
 rc-wrap-behind rc-wrap-front rc-wrap-inline rc-wrap-square rc-zoom-in rc-zoom-out rc-zoom-reset
-restore ring search settings sort split square star stats sun sync tag tasks template trash vault
-view warning
+restore ring search settings sort split square star stats sun sync tag tasks template
+transclusion-open trash vault view warning
 ```
 
 ## Limiti e pubblicazione

@@ -16,7 +16,39 @@ export const LIVE_DOC = "Guida/Live.md";
 /// Un caso: il testo della nota e dove sta il cursore (`null`: la nota si
 /// guarda senza fuoco, dall'alto).
 /// `head`, se c'è, fa del cursore una selezione da `cursor` a `head`.
-export type LiveCase = Readonly<{ text: string; cursor: number | null; head?: number }>;
+/// `files`, se c'è, mette nel vault altre note che il caso riporta (la
+/// trasclusione viva).
+export type LiveCase = Readonly<{ text: string; cursor: number | null; head?: number; files?: Readonly<Record<string, string>> }>;
+
+/// La trasclusione viva (T29): la nota riporta le «Decisioni» della riunione,
+/// che stanno in un'altra nota del vault e si scrivono da qui.
+export const TRANSCLUSION_ORIGIN = "Riunioni/2026-11-04.md";
+const TRANSCLUSION_NOTE = [
+  "# Mostra di primavera",
+  "",
+  "Le decisioni della riunione del 4 novembre, riportate qui come stanno:",
+  "",
+  "![[Riunioni/2026-11-04#Decisioni]]",
+  "",
+  "Il resto del lavoro si divide la settimana prossima.",
+].join("\n");
+const TRANSCLUSION_MEETING = [
+  "# Riunione del 4 novembre",
+  "",
+  "## Presenti",
+  "",
+  "Anna, Luca, Sara.",
+  "",
+  "## Decisioni",
+  "",
+  "- Le didascalie le scrive Anna, entro il 20 novembre.",
+  "- I prestiti passano tutti da Luca.",
+  "",
+  "## Prossima riunione",
+  "",
+  "Il 18 novembre.",
+  "",
+].join("\n");
 
 const FENCE = "```";
 
@@ -387,6 +419,7 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   "diagramma-tracciato-casi": { text: DIAGRAM_TRACE_CASES, cursor: null },
   // Il sorgente aperto (T58): il cursore nel recinto, dopo «Posti liberi?».
   "diagramma-sorgente": { text: DIAGRAM_NOTE, cursor: DIAGRAM_NOTE.indexOf("Posti liberi?") + "Posti liberi?".length },
+  trasclusione: { text: TRANSCLUSION_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: TRANSCLUSION_MEETING } },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "lunga-4000": longNote(4000),

@@ -23,6 +23,7 @@ import { useRibbonIcons } from "../editors/grid/ribbon/icons";
 import { registerFormatIcons } from "../panels/format-bar";
 import { createMiniBar } from "../panels/mini-bar";
 import { commentIcons } from "../editors/text/profiles/markdown/comments/thread";
+import { transclusionIcons } from "../editors/text/profiles/markdown/transclusion";
 import { registerDiagramIcons } from "./diagram-menu";
 import { createColorPicker, type ColorPickerText } from "../kit/color/picker";
 
@@ -37,6 +38,7 @@ const REGISTRARS = [
   "../editors/base/icons.ts",
   "../editors/grid/ribbon/icons.ts",
   "../editors/text/profiles/markdown/comments/thread.ts",
+  "../editors/text/profiles/markdown/transclusion.ts",
   "../panels/format-bar.ts",
   "../panels/mini-bar.ts",
   "../kit/color/picker.ts",
@@ -80,6 +82,7 @@ describe("i nomi che un tema può ridisegnare", () => {
     life.add(registerFormatIcons());
     commentIcons();
     createMiniBar({ surface: () => null, writing: () => true, focusPane: () => {}, runCommand: () => {} }).destroy();
+    transclusionIcons();
     registerDiagramIcons();
     createColorPicker({
       value: "#000000",
