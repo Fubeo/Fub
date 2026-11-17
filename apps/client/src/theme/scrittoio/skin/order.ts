@@ -32,6 +32,7 @@ export const ORDER = [
   "nodes",
   "graph",
   "menus",
+  "diagrams",
   "launcher",
   "centres",
   "draw-dialogs",

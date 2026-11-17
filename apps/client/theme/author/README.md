@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **1936 hook**, **7 stati** (902 assegnazioni su 264 componenti) e lascia ridichiarare alla persona **191 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **1950 hook**, **7 stati** (904 assegnazioni su 265 componenti) e lascia ridichiarare alla persona **191 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
 Dichiara anche **68 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
@@ -10,9 +10,9 @@ Dichiara anche **68 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla
 
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
-- **cornice** (1493 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
+- **cornice** (1506 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
 - **segno** (143 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
-- **contenuto** (300 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
+- **contenuto** (301 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
 Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.
 
@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 500 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 505 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup base-board base-cards base-chevron-down
@@ -72,45 +72,46 @@ base-sort base-sort-asc base-sort-desc base-table base-timeline bell blocks book
 calendar canvas-connect canvas-find-next canvas-find-previous canvas-finger canvas-lasso
 canvas-ruler canvas-text caret-down check chevron chevron-up clock close cloud code collection
 command comment comment-check comment-send component compose copy copy-html copy-markdown copy-text
-cut dashboard draw-access draw-access-info draw-access-warning draw-align draw-align-bottom
-draw-align-center draw-align-left draw-align-middle draw-align-right draw-align-top draw-anchor-end
-draw-anchor-middle draw-anchor-start draw-arrow draw-back draw-color-more draw-commands draw-cover
-draw-design draw-distribute-x draw-distribute-y draw-duplicate draw-ellipse draw-eraser draw-export
-draw-fit draw-flip-h draw-flip-v draw-group draw-hand draw-here draw-hidden draw-hide-ui
-draw-highlighter draw-history draw-image draw-into-layer draw-keys draw-landscape draw-layers
-draw-line draw-link draw-lock draw-mark draw-menu draw-more draw-navigator draw-none draw-note
-draw-open-link draw-order draw-order-back draw-order-backward draw-order-forward draw-order-front
-draw-page-grid draw-pen draw-portrait draw-ratio draw-rect draw-redo draw-rotate draw-section
-draw-select draw-selection draw-simple draw-snap draw-suggestion draw-swap draw-symbols draw-text
-draw-text-bold draw-text-italic draw-text-strike draw-text-underline draw-tip-bar-end
-draw-tip-bar-start draw-tip-circle-end draw-tip-circle-start draw-tip-diamond-end
-draw-tip-diamond-start draw-tip-none draw-tip-other-end draw-tip-other-start draw-tip-square-end
-draw-tip-square-start draw-tip-triangle-end draw-tip-triangle-start draw-tip-vee-end
-draw-tip-vee-start draw-tips-swap draw-to-shape draw-undo draw-ungroup draw-unlink draw-unmark
-draw-zoom draw-zoom-in draw-zoom-out eye flag fmt-bold fmt-bullets fmt-callout fmt-chevron-down
-fmt-clear fmt-code fmt-codeblock fmt-color fmt-columns fmt-comment fmt-cover fmt-date fmt-details
-fmt-diagram fmt-embed fmt-footnote fmt-h1 fmt-h2 fmt-h3 fmt-h4 fmt-h5 fmt-h6 fmt-hide fmt-highlight
-fmt-icon fmt-image fmt-indent fmt-italic fmt-link fmt-math fmt-mathblock fmt-more fmt-numbers
-fmt-outdent fmt-person fmt-property fmt-quick fmt-quote fmt-redo fmt-rule fmt-star fmt-strike
-fmt-subscript fmt-superscript fmt-table fmt-tasks fmt-text fmt-toc fmt-underline fmt-undo
-fmt-webpage fmt-wikilink focus footnote format-drawing format-odt format-photo format-sheet
-format-word gr-accounting gr-align-bottom gr-align-center gr-align-left gr-align-middle
-gr-align-right gr-align-top gr-arrow-down gr-arrow-left gr-arrow-right gr-arrow-up gr-border-all
-gr-border-bottom gr-border-double gr-border-inside gr-border-left gr-border-none gr-border-outside
-gr-border-right gr-border-thick gr-border-thick-bottom gr-border-top gr-border-top-bottom gr-breaks
-gr-bring-forward gr-bring-front gr-calc gr-calc-now gr-cell-style gr-cells gr-cf gr-cf-bars
-gr-cf-icons gr-cf-scale gr-cf-top gr-chart-column gr-chart-element gr-chart-layout gr-chart-line
-gr-chart-other gr-chart-pie gr-chart-recommended gr-chart-scatter gr-chart-switch gr-checkbox
-gr-chevron-down gr-chevron-up gr-clear gr-comment gr-comment-delete gr-comment-new gr-convert
-gr-date gr-decimal-less gr-decimal-more gr-delete gr-delete-column gr-delete-row gr-dependents
-gr-duplicates gr-fill gr-fill-down gr-filter gr-filter-advanced gr-filter-clear gr-financial gr-find
-gr-flash gr-font gr-format gr-freeze gr-function gr-gridlines gr-group gr-icons gr-indent-less
-gr-indent-more gr-insert gr-insert-column gr-insert-row gr-link gr-lock gr-logical gr-lookup
-gr-margins gr-math gr-merge gr-merge-across gr-merge-cells gr-minus gr-more gr-name gr-note
-gr-number gr-orientation gr-orientation-down gr-orientation-up gr-orientation-vertical gr-page
-gr-page-landscape gr-page-orientation gr-page-setup gr-paper gr-pdf gr-plus gr-precedents
-gr-print-area gr-print-preview gr-print-titles gr-reapply gr-recent gr-resize gr-send-back
-gr-send-backward gr-shape-ellipse gr-shape-line gr-shape-outline gr-shape-rectangle gr-shape-rounded
+cut dashboard diagram-down diagram-enlarge diagram-export diagram-mark diagram-right draw-access
+draw-access-info draw-access-warning draw-align draw-align-bottom draw-align-center draw-align-left
+draw-align-middle draw-align-right draw-align-top draw-anchor-end draw-anchor-middle
+draw-anchor-start draw-arrow draw-back draw-color-more draw-commands draw-cover draw-design
+draw-distribute-x draw-distribute-y draw-duplicate draw-ellipse draw-eraser draw-export draw-fit
+draw-flip-h draw-flip-v draw-group draw-hand draw-here draw-hidden draw-hide-ui draw-highlighter
+draw-history draw-image draw-into-layer draw-keys draw-landscape draw-layers draw-line draw-link
+draw-lock draw-mark draw-menu draw-more draw-navigator draw-none draw-note draw-open-link draw-order
+draw-order-back draw-order-backward draw-order-forward draw-order-front draw-page-grid draw-pen
+draw-portrait draw-ratio draw-rect draw-redo draw-rotate draw-section draw-select draw-selection
+draw-simple draw-snap draw-suggestion draw-swap draw-symbols draw-text draw-text-bold
+draw-text-italic draw-text-strike draw-text-underline draw-tip-bar-end draw-tip-bar-start
+draw-tip-circle-end draw-tip-circle-start draw-tip-diamond-end draw-tip-diamond-start draw-tip-none
+draw-tip-other-end draw-tip-other-start draw-tip-square-end draw-tip-square-start
+draw-tip-triangle-end draw-tip-triangle-start draw-tip-vee-end draw-tip-vee-start draw-tips-swap
+draw-to-shape draw-undo draw-ungroup draw-unlink draw-unmark draw-zoom draw-zoom-in draw-zoom-out
+eye flag fmt-bold fmt-bullets fmt-callout fmt-chevron-down fmt-clear fmt-code fmt-codeblock
+fmt-color fmt-columns fmt-comment fmt-cover fmt-date fmt-details fmt-diagram fmt-embed fmt-footnote
+fmt-h1 fmt-h2 fmt-h3 fmt-h4 fmt-h5 fmt-h6 fmt-hide fmt-highlight fmt-icon fmt-image fmt-indent
+fmt-italic fmt-link fmt-math fmt-mathblock fmt-more fmt-numbers fmt-outdent fmt-person fmt-property
+fmt-quick fmt-quote fmt-redo fmt-rule fmt-star fmt-strike fmt-subscript fmt-superscript fmt-table
+fmt-tasks fmt-text fmt-toc fmt-underline fmt-undo fmt-webpage fmt-wikilink focus footnote
+format-drawing format-odt format-photo format-sheet format-word gr-accounting gr-align-bottom
+gr-align-center gr-align-left gr-align-middle gr-align-right gr-align-top gr-arrow-down
+gr-arrow-left gr-arrow-right gr-arrow-up gr-border-all gr-border-bottom gr-border-double
+gr-border-inside gr-border-left gr-border-none gr-border-outside gr-border-right gr-border-thick
+gr-border-thick-bottom gr-border-top gr-border-top-bottom gr-breaks gr-bring-forward gr-bring-front
+gr-calc gr-calc-now gr-cell-style gr-cells gr-cf gr-cf-bars gr-cf-icons gr-cf-scale gr-cf-top
+gr-chart-column gr-chart-element gr-chart-layout gr-chart-line gr-chart-other gr-chart-pie
+gr-chart-recommended gr-chart-scatter gr-chart-switch gr-checkbox gr-chevron-down gr-chevron-up
+gr-clear gr-comment gr-comment-delete gr-comment-new gr-convert gr-date gr-decimal-less
+gr-decimal-more gr-delete gr-delete-column gr-delete-row gr-dependents gr-duplicates gr-fill
+gr-fill-down gr-filter gr-filter-advanced gr-filter-clear gr-financial gr-find gr-flash gr-font
+gr-format gr-freeze gr-function gr-gridlines gr-group gr-icons gr-indent-less gr-indent-more
+gr-insert gr-insert-column gr-insert-row gr-link gr-lock gr-logical gr-lookup gr-margins gr-math
+gr-merge gr-merge-across gr-merge-cells gr-minus gr-more gr-name gr-note gr-number gr-orientation
+gr-orientation-down gr-orientation-up gr-orientation-vertical gr-page gr-page-landscape
+gr-page-orientation gr-page-setup gr-paper gr-pdf gr-plus gr-precedents gr-print-area
+gr-print-preview gr-print-titles gr-reapply gr-recent gr-resize gr-send-back gr-send-backward
+gr-shape-ellipse gr-shape-line gr-shape-outline gr-shape-rectangle gr-shape-rounded
 gr-shape-triangle gr-shapes gr-sheet gr-show-formulas gr-sort gr-sort-asc gr-sort-desc
 gr-sort-filter gr-styles gr-subtotal gr-sum gr-symbol gr-table gr-table-style gr-text gr-text-box
 gr-text-columns gr-theme gr-ungroup gr-unlock gr-unmerge gr-validation gr-view-normal gr-what-if

@@ -3,12 +3,15 @@ import { api } from "../host/ipc";
 import { errorText } from "../host/errors";
 import { fetchLocal } from "../editors/core/local-fetch";
 import { onLanguage, t } from "../i18n/strings";
-import { writeClipboardText } from "../platform/clipboard";
+import { DURATION, prepareExit } from "../moto";
+import type { PopoverHandle } from "../kit/popover";
+import { clipboardSupports, writeClipboardData, writeClipboardText } from "../platform/clipboard";
 import { on } from "../state/store";
 import {
   DIAGRAM_STYLE_IDS,
   DIAGRAM_STYLE_SETTING,
   diagramStylePreference,
+  frontmatterEnd,
   onDiagramStyleChange,
   ownDiagramStyle,
   setDiagramStylePreference,
@@ -18,14 +21,21 @@ import {
   type SourceEdit,
 } from "../theme/diagram-style";
 import { identifier } from "./a11y";
+import { displayBinding } from "./commands";
+import {
+  openDiagramMenu,
+  type DiagramDirection,
+  type DiagramMenuModel,
+  type DiagramScope,
+  type DiagramSwatchColors,
+} from "./diagram-menu";
 import { openLightbox, svgSource } from "./lightbox";
 import { openLifetime, type Teardown } from "./lifetime";
 import { registerCustomRenderer } from "./custom";
-import { showContextMenu, type MenuItem } from "./menu";
+import { closeContextMenu, showContextMenu, type MenuPoint } from "./menu";
 import {
   DIAGRAM_FONTS,
   paletteFor,
-  swatchesOf,
   type DiagramContrast,
   type DiagramFont,
   type DiagramLight,
@@ -112,7 +122,7 @@ let drawing: Promise<typeof import("./mermaid-drawing")> | undefined;
 
 /// I token che Armonia legge, così come il tema montato li dichiara.
 const THEME_TOKENS = [
-  "--doc-bg", "--doc-fill-soft", "--doc-fg", "--muted", "--accent", "--warning",
+  "--doc-bg", "--doc-fg", "--muted", "--accent", "--warning",
   "--syn-function", "--syn-keyword", "--syn-string", "--syn-literal",
   "--syn-operator", "--syn-name", "--syn-type",
 ] as const;
@@ -163,10 +173,11 @@ function resolveTokens(raw: ReadonlyMap<string, string>): Map<string, string> {
   try {
     const paper = computed("--doc-bg");
     if (!paper) return values;
-    const ground = paintedHex(context, [paper, computed("--doc-fill-soft") ?? "transparent"]);
+    // Armonia sta sulla pagina senza fondo (E26): il suo fondo è la pagina.
+    const ground = paintedHex(context, [paper]);
     if (!ground) return values;
     values.set("ground", ground);
-    for (const name of THEME_TOKENS.slice(2)) {
+    for (const name of THEME_TOKENS.slice(1)) {
       const color = computed(name);
       const hex = color ? paintedHex(context, [ground, color]) : null;
       if (hex) values.set(name, hex);
@@ -201,9 +212,11 @@ function themeLight(): DiagramLight {
   return document.documentElement.dataset.theme === "light" ? "light" : "dark";
 }
 
-function lookOf(source: string, appearance: DiagramLight | undefined): Look {
+/// L'aspetto del diagramma: `preview`, lo stile in anteprima dal menu, vince
+/// su quello scritto e sulla preferenza finché dura.
+function lookOf(source: string, appearance: DiagramLight | undefined, preview: DiagramStyleId | null = null): Look {
   const own = ownDiagramStyle(source);
-  const style = own ?? diagramStylePreference();
+  const style = preview ?? own ?? diagramStylePreference();
   const light = appearance ?? themeLight();
   const contrast = document.documentElement.dataset.contrast === "high" ? "high" : "normal";
   // Armonia prende i colori dal tema, ma soltanto se il tema è nella stessa
@@ -277,6 +290,12 @@ interface Rendered {
   readonly width: number | null;
   readonly height: number | null;
   readonly background: string;
+  /// Il disegno per la vista: lo stesso senza la carta, che la tavola sotto
+  /// l'immagine dipinge da sé (E26) per tutta la larghezza della colonna.
+  /// Lo schermo intero, gli appunti e l'esportazione usano `svg`, con la carta.
+  readonly view: string;
+  /// La carta della tavola: `null` per Armonia, che sta sulla pagina.
+  readonly board: { readonly paper: string; readonly texture: string; readonly tint: string } | null;
 }
 
 const CACHE_LIMIT = 64;
@@ -388,37 +407,188 @@ async function chooseStyle(style: DiagramStyleId): Promise<void> {
   }
 }
 
-function openMenu(trigger: HTMLButtonElement, items: MenuItem[]): void {
-  trigger.setAttribute("aria-expanded", "true");
-  showContextMenu(trigger, items, {
-    onClose: () => trigger.setAttribute("aria-expanded", "false"),
-  });
+// ---------------------------------------------------------------------------
+// Il sorgente che il menu legge e riscrive: il titolo, la direzione del flusso.
+// ---------------------------------------------------------------------------
+
+/// Il `title` del frontmatter di Mermaid, senza virgolette; `null` se non c'è.
+export function diagramTitle(source: string): string | null {
+  const end = frontmatterEnd(source);
+  if (end === 0) return null;
+  for (const line of source.slice(0, end).split("\n").slice(1, -1)) {
+    const match = /^\s*title\s*:\s*(.*?)\s*$/.exec(line.replace(/\r$/, ""));
+    if (!match) continue;
+    const value = match[1]!.replace(/^(["'])(.*)\1$/, "$2").trim();
+    return value || null;
+  }
+  return null;
 }
 
-function swatchStrip(className: string, colors: readonly string[]): HTMLSpanElement {
-  const strip = document.createElement("span");
-  strip.className = className;
-  strip.setAttribute("aria-hidden", "true");
-  for (const color of colors) {
-    const swatch = document.createElement("span");
-    swatch.style.background = color;
-    strip.append(swatch);
-  }
-  return strip;
+/// La direzione di un diagramma di flusso, come la scrive Mermaid.
+export type FlowDirectionWritten = "TD" | "TB" | "LR" | "RL" | "BT";
+
+export interface FlowLine {
+  /// La direzione scritta, o `null` se la riga non ne ha una (vale TB).
+  readonly direction: FlowDirectionWritten | null;
+  /// Dove sta la direzione nel sorgente; senza direzione, il punto dopo la
+  /// parola `flowchart` o `graph`, dove si scrive.
+  readonly from: number;
+  readonly to: number;
 }
+
+const FLOW_LINE = /^([ \t]*(?:flowchart(?:-elk)?|graph))(?:([ \t]+)(TD|TB|LR|RL|BT))?(?=$|[\s;])/i;
+
+/// La riga che apre un diagramma di flusso: la prima che non è vuota, un
+/// commento o il frontmatter. `null` se il diagramma non è un flusso.
+export function flowLine(source: string): FlowLine | null {
+  let from = frontmatterEnd(source);
+  while (from <= source.length) {
+    const end = source.indexOf("\n", from);
+    const to = end < 0 ? source.length : end;
+    const line = source.slice(from, to).replace(/\r$/, "");
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith("%%")) {
+      const match = FLOW_LINE.exec(line);
+      if (!match) return null;
+      const head = match[1]!.length;
+      if (!match[3]) return { direction: null, from: from + head, to: from + head };
+      const start = from + head + match[2]!.length;
+      return { direction: match[3]!.toUpperCase() as FlowDirectionWritten, from: start, to: start + match[3]!.length };
+    }
+    if (end < 0) break;
+    from = end + 1;
+  }
+  return null;
+}
+
+/// La modifica che dà al flusso la direzione `direction`: soltanto la parola
+/// della direzione, il resto della riga resta com'è. `null` se il diagramma
+/// non è un flusso o va già in quella direzione.
+export function flowDirectionEdit(source: string, direction: DiagramDirection): SourceEdit | null {
+  const line = flowLine(source);
+  if (!line) return null;
+  const now = line.direction === "TB" || line.direction === null ? "TD" : line.direction;
+  if (now === direction && line.direction !== null) return null;
+  if (line.direction === null) return direction === "TD" ? null : { from: line.from, to: line.to, insert: ` ${direction}` };
+  return { from: line.from, to: line.to, insert: direction };
+}
+
+// ---------------------------------------------------------------------------
+// Il menu del tasto destro, come dati.
+// ---------------------------------------------------------------------------
+
+export interface DiagramMenuInput {
+  readonly source: string;
+  /// Lo stile che il diagramma mostra adesso (senza anteprima).
+  readonly style: DiagramStyleId;
+  readonly light: DiagramLight;
+  readonly contrast: DiagramContrast;
+  readonly read: TokenReader;
+  /// Il sorgente si può riscrivere: c'è chi scrive e la nota non è in sola lettura.
+  readonly editable: boolean;
+  /// C'è chi apre il sorgente (Scrittura).
+  readonly revealable: boolean;
+  /// Il disegno c'è: ingrandire, copiare ed esportare hanno qualcosa.
+  readonly ready: boolean;
+}
+
+/// I colori della miniatura di uno stile, presi dalla tavolozza che lo disegna.
+function swatchColors(style: DiagramStyleId, input: DiagramMenuInput): DiagramSwatchColors {
+  const palette = paletteFor(style, input.light, input.contrast, style === "armonia" ? input.read : undefined);
+  return {
+    paper: palette.paper ?? palette.ground,
+    node: palette.primary.fill,
+    nodeBorder: palette.primary.border,
+    choice: palette.secondary.fill,
+    choiceBorder: palette.secondary.border,
+    pill: palette.tertiary.fill,
+    pillBorder: palette.tertiary.border,
+    line: palette.line,
+  };
+}
+
+/// Che cosa offre il tasto destro su un diagramma (E26).
+export function diagramMenuModel(input: DiagramMenuInput): DiagramMenuModel {
+  const written = styleDirective(input.source);
+  const own = written?.style ?? null;
+  const unknown = written && !own ? written.name : null;
+  const flow = flowLine(input.source);
+  const current: DiagramDirection | null = !flow ? null
+    : flow.direction === "LR" ? "LR"
+      : flow.direction === null || flow.direction === "TD" || flow.direction === "TB" ? "TD"
+        : null;
+  let notice: string | null = null;
+  if (unknown !== null) {
+    notice = t(unknown ? "mermaid.menu.unknown" : "mermaid.menu.unknown_empty", { name: unknown, style: t(`mermaid.style.${input.style}`) });
+  } else if (own && !input.editable) {
+    notice = t("mermaid.style.fixed", { name: t(`mermaid.style.${own}`) });
+  }
+  return {
+    kind: t("mermaid.menu.kind"),
+    title: diagramTitle(input.source),
+    styleLabel: t("mermaid.menu.style"),
+    styles: DIAGRAM_STYLE_IDS.map((id) => ({
+      id,
+      label: t(`mermaid.style.${id}`),
+      colors: swatchColors(id, input),
+      checked: id === input.style,
+    })),
+    notice,
+    scopeLabel: t("mermaid.menu.scope"),
+    scopes: [
+      { id: "this", label: t("mermaid.menu.scope.this"), disabled: !input.editable },
+      { id: "all", label: t("mermaid.menu.scope.all"), disabled: false },
+    ],
+    // Parte da «Questo» quando il diagramma ha già uno stile suo, scritto.
+    scope: own !== null && input.editable ? "this" : "all",
+    orientation: flow === null ? null : {
+      label: t("mermaid.menu.orientation"),
+      options: [
+        { id: "TD", label: t("mermaid.menu.orientation.down"), icon: "diagram-down" },
+        { id: "LR", label: t("mermaid.menu.orientation.right"), icon: "diagram-right" },
+      ],
+      current,
+      disabled: !input.editable,
+    },
+    actions: [
+      ...(input.revealable ? [{ id: "source" as const, label: t("mermaid.menu.source"), icon: "code", hint: displayBinding("Enter"), disabled: false }] : []),
+      { id: "enlarge", label: t("mermaid.menu.enlarge"), icon: "diagram-enlarge", hint: displayBinding("Space"), disabled: !input.ready },
+      { id: "copy", label: t("mermaid.menu.copy"), icon: "copy", hint: displayBinding("Mod-c"), disabled: !input.ready },
+      { id: "export", label: t("mermaid.menu.export"), icon: "diagram-export", note: t("mermaid.menu.export.note"), disabled: !input.ready },
+    ],
+  };
+}
+
+/// Il testo che negli appunti accompagna l'immagine: il recinto intero, così
+/// incollato in una nota torna un diagramma.
+export function diagramFence(source: string): string {
+  const longest = Math.max(2, ...Array.from(source.matchAll(/`{3,}/g), (match) => match[0].length));
+  const fence = "`".repeat(longest + 1);
+  return `${fence}mermaid\n${source.replace(/\n$/, "")}\n${fence}`;
+}
+
+/// Una voce scritta nel diagramma lo dice una volta per sessione: poi si sa.
+let toldWritten = false;
 
 export interface MermaidView {
   readonly element: HTMLElement;
+  /// Apre il menu del diagramma nel punto `at`. `pointer`: aperto dal puntatore.
+  menu(at: MenuPoint, pointer: boolean): void;
+  /// Il diagramma a tutta finestra; `false` se non c'è ancora un disegno.
+  enlarge(): boolean;
+  /// L'immagine, l'SVG e il sorgente negli appunti, insieme.
+  copy(): Promise<void>;
   destroy(): void;
 }
 
 export interface MermaidViewOptions {
+  /// Apre il sorgente del diagramma, dove lo si scrive (Scrittura).
   revealSource?: () => void;
   onResize?: () => void;
   /// La luce del diagramma, invece di quella del tema: la stampa è chiara.
   appearance?: DiagramLight;
-  /// Scrive nel sorgente la modifica che dà (o toglie) lo stile a questo
-  /// diagramma soltanto. C'è dove il sorgente si può modificare (Live).
+  /// Scrive nel sorgente una modifica del corpo: lo stile di questo diagramma,
+  /// la direzione del flusso. C'è dove il sorgente si può modificare.
   editSource?: (edit: SourceEdit) => void;
   /// Mostra le note dei nodi `internal-link` come wikilink: soltanto dove chi
   /// monta la resa li apre (Live e Lettura), non in una vista dichiarativa.
@@ -426,50 +596,34 @@ export interface MermaidViewOptions {
 }
 
 /** A diagram is an image, never active SVG/HTML in the shell. The source is
- * always available, including syntax errors and unavailable lazy chunks. */
+ * always available, including syntax errors and unavailable lazy chunks.
+ *
+ * A riposo e al passaggio c'è soltanto il disegno (E26): niente barra, niente
+ * pulsanti. Le azioni stanno nel menu del tasto destro (`menu`) e nei tasti
+ * del blocco scelto, che chiamano `enlarge` e `copy`. */
 export function createMermaidView(source: string, options: MermaidViewOptions = {}): MermaidView {
   const life = openLifetime();
   const element = document.createElement("figure");
   element.className = "mermaid-diagram";
   element.contentEditable = "false";
-  const caption = document.createElement("figcaption");
-  const name = document.createElement("span");
-  name.textContent = "Mermaid";
-  const bar = document.createElement("span");
-  bar.className = "mermaid-bar";
-  const action = (): HTMLButtonElement => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "mermaid-action";
-    return button;
-  };
-  const styleButton = action();
-  styleButton.setAttribute("aria-haspopup", "menu");
-  styleButton.setAttribute("aria-expanded", "false");
-  const styleName = document.createElement("span");
-  const exportButton = action();
-  exportButton.setAttribute("aria-haspopup", "menu");
-  exportButton.setAttribute("aria-expanded", "false");
-  exportButton.hidden = true;
-  const fullButton = action();
-  fullButton.hidden = true;
-  bar.append(styleButton, exportButton, fullButton);
-  const reveal = options.revealSource ? action() : null;
-  if (reveal) {
-    life.listen(reveal, "click", () => options.revealSource?.());
-    bar.append(reveal);
-  }
-  caption.append(name, bar);
   const status = document.createElement("p");
   status.setAttribute("role", "status");
+  // Il disegno: l'immagine, e sopra, per il tempo di una dissolvenza,
+  // l'immagine di prima.
+  const stage = document.createElement("div");
+  stage.className = "mermaid-diagram-view";
   const image = document.createElement("img");
+  stage.append(image);
   const linkList = document.createElement("nav");
   linkList.hidden = true;
   const linkItems = document.createElement("ul");
   linkList.append(linkItems);
   image.hidden = true;
   image.decoding = "async";
+  // Il sorgente si vede soltanto quando il disegno non c'è: un errore, un
+  // diagramma troppo grande. Col disegno sta nella nota, e il menu lo apre.
   const details = document.createElement("details");
+  details.hidden = true;
   const summary = document.createElement("summary");
   const pre = document.createElement("pre");
   pre.tabIndex = 0;
@@ -477,14 +631,16 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   code.textContent = source;
   pre.append(code);
   details.append(summary, pre);
-  element.append(caption, status, image, linkList, details);
+  element.append(status, stage, linkList, details);
 
   let generation = 0;
   let url: string | undefined;
   let phase: "loading" | "ready" | "error" = "loading";
   let reason = "";
   let accessibleDescription = "";
-  let look = lookOf(source, options.appearance);
+  /// Lo stile in anteprima dal menu, finché il puntatore ci sta sopra.
+  let preview: DiagramStyleId | null = null;
+  let look = lookOf(source, options.appearance, preview);
   let shown: Rendered | null = null;
   const labels = () => {
     element.setAttribute("aria-label", t("mermaid.diagram"));
@@ -492,20 +648,9 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     image.alt = accessibleDescription || t("mermaid.diagram");
     summary.textContent = t("mermaid.source");
     pre.setAttribute("aria-label", t("mermaid.source"));
-    if (reveal) reveal.textContent = t("mermaid.edit");
-    const styleLabel = t(`mermaid.style.${look.style}`);
-    styleName.textContent = styleLabel;
-    styleButton.replaceChildren(
-      swatchStrip("mermaid-swatches", swatchesOf(paletteFor(look.style, look.light, look.contrast, look.read)).slice(1, 4)),
-      styleName,
-    );
-    styleButton.setAttribute("aria-label", t(look.own ? "mermaid.style.button_own" : "mermaid.style.button", { name: styleLabel }));
-    exportButton.textContent = t("mermaid.export");
-    exportButton.hidden = phase !== "ready";
-    fullButton.textContent = t("mermaid.fullscreen");
-    fullButton.hidden = phase !== "ready";
     status.textContent = phase === "error" ? t("mermaid.error", { reason }) : t("mermaid.loading");
     status.hidden = phase === "ready";
+    details.hidden = phase !== "error";
     element.dataset.state = phase;
     element.dataset.diagramStyle = look.style;
     element.setAttribute("aria-busy", String(phase === "loading"));
@@ -523,10 +668,10 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     options.onResize?.();
   };
   const resize = () => options.onResize?.();
-  // Il diagramma a tutta finestra, con lo zoom: dal bottone o dall'immagine.
-  const enlarge = () => {
+  // Il diagramma a tutta finestra, con lo zoom: dal menu, da Spazio o dal clic.
+  const enlarge = (): boolean => {
     const rendered = shown;
-    if (!rendered) return;
+    if (!rendered) return false;
     openLightbox({
       source: svgSource(rendered.svg),
       label: accessibleDescription || t("mermaid.diagram"),
@@ -537,8 +682,8 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
       background: rendered.background,
       vector: true,
     });
+    return true;
   };
-  life.listen(fullButton, "click", enlarge);
   life.listen(image, "click", (event) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -581,9 +726,14 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
       item.append(anchor);
       items.push(item);
     }
+    // Un altro stile sullo stesso diagramma: i colori sfumano dai vecchi ai
+    // nuovi (220 ms), invece di scattare. Col moto ridotto, niente.
+    if (shown !== null && shown !== rendered && !image.hidden && image.isConnected) {
+      prepareExit(image).play({ to: { opacity: 0 }, duration: DURATION.short, easing: "ease-out" });
+    }
     // Ogni vista ha il suo URL, anche quando la resa viene dalla cache: così
     // lo revoca da sola, senza contare chi altro lo mostra.
-    const nextUrl = URL.createObjectURL(new Blob([rendered.svg], { type: "image/svg+xml" }));
+    const nextUrl = URL.createObjectURL(new Blob([rendered.view], { type: "image/svg+xml" }));
     if (url) URL.revokeObjectURL(url);
     url = nextUrl;
     image.src = nextUrl;
@@ -596,20 +746,34 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     linkItems.replaceChildren(...items);
     linkList.hidden = items.length === 0;
     image.hidden = false;
+    // La tavola prende la carta dello stile; Armonia non ne ha, e sta sulla pagina.
+    if (rendered.board) {
+      element.style.setProperty("--diagram-paper", rendered.board.paper);
+      element.style.setProperty("--diagram-paper-tint", rendered.board.tint);
+      element.dataset.diagramTexture = rendered.board.texture;
+    } else {
+      element.style.removeProperty("--diagram-paper");
+      element.style.removeProperty("--diagram-paper-tint");
+      delete element.dataset.diagramTexture;
+    }
     shown = rendered;
     phase = "ready";
     labels();
     resize();
   };
 
-  const render = () => {
+  /// `soft`: un'anteprima dal menu, che non spegne il disegno che c'è: resta,
+  /// coi suoi link, finché arriva l'altro.
+  const render = (soft = false) => {
     const request = ++generation;
     const current = () => !life.closed && request === generation;
-    look = lookOf(source, options.appearance);
+    look = lookOf(source, options.appearance, preview);
     const wanted = look;
-    linkItems.replaceChildren();
-    linkList.hidden = true;
-    phase = "loading";
+    if (!soft || shown === null) {
+      linkItems.replaceChildren();
+      linkList.hidden = true;
+      phase = "loading";
+    }
     labels();
     if (source.length > MAX_SOURCE_LENGTH) {
       fail(new Error(t("mermaid.too_large", { limit: MAX_SOURCE_LENGTH })));
@@ -671,14 +835,25 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
         const widened = isSvg ? decorateSvg(svgDocument, palette, font ? fontFaceCss(palette.font, font) : null) : null;
         const width = widened ?? naturalWidth(svgDocument);
         const box = boxOf(svgDocument);
+        const svg = isSvg ? new XMLSerializer().serializeToString(svgDocument) : result.svg;
+        // La vista senza il foglio della carta: la tavola lo dipinge sotto.
+        const paperSheet = isSvg ? svgDocument.querySelector("rect.fub-paper") : null;
+        paperSheet?.remove();
+        const view = paperSheet ? new XMLSerializer().serializeToString(svgDocument) : svg;
         const rendered: Rendered = {
-          svg: isSvg ? new XMLSerializer().serializeToString(svgDocument) : result.svg,
+          svg,
+          view,
           links,
           notes,
           description,
           width,
           height: box && width !== null ? (box.height * width) / box.width : null,
           background: palette.paper ?? palette.ground,
+          board: palette.paper === null ? null : {
+            paper: palette.paper,
+            texture: palette.texture,
+            tint: palette.texture2 ?? palette.paper,
+          },
         };
         // La resa vale anche se nel frattempo la vista è cambiata: un altro
         // diagramma uguale, o questo al ritorno, la ritrova.
@@ -694,9 +869,9 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   };
 
   /// Ridisegna soltanto se l'aspetto è davvero cambiato: tema, contrasto,
-  /// accento, stile scelto.
+  /// accento, stile scelto o in anteprima.
   const refresh = () => {
-    if (lookOf(source, options.appearance).key === look.key && phase !== "error") return;
+    if (lookOf(source, options.appearance, preview).key === look.key && phase !== "error") return;
     render();
   };
   const observer = new MutationObserver(refresh);
@@ -705,54 +880,39 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   life.add(onDiagramStyleChange(refresh));
   life.add(on("theme", refresh));
 
-  const styleItems = (): MenuItem[] => {
-    const own = styleDirective(source);
-    const editable = options.editSource !== undefined;
-    const items: MenuItem[] = DIAGRAM_STYLE_IDS.map((style) => ({
-      label: t(`mermaid.style.${style}`),
-      description: t(`mermaid.style.${style}.desc`),
-      swatches: swatchesOf(paletteFor(style, look.light, look.contrast, style === "armonia" ? look.read : undefined)),
-      choice: "radio" as const,
-      checked: style === look.style,
-      selected: style === look.style,
-      run: () => {
-        // Con uno stile suo, e il sorgente a portata di mano, la scelta resta
-        // a questo diagramma; altrimenti è la preferenza di tutti.
-        if (look.own && editable) {
-          const edit = styleDirectiveEdit(source, style);
-          if (edit) options.editSource?.(edit);
-        } else {
-          void chooseStyle(style);
-        }
-      },
-    }));
-    if (editable) {
-      items.push({
-        label: t("mermaid.style.only_here"),
-        description: t(look.own ? "mermaid.style.only_here_on" : "mermaid.style.only_here_off"),
-        choice: "checkbox",
-        checked: look.own,
-        separator: true,
-        run: () => {
-          const edit = styleDirectiveEdit(source, look.own ? null : look.style);
-          if (edit) options.editSource?.(edit);
-        },
-      });
-    } else if (own?.style) {
-      items.unshift({
-        label: t("mermaid.style.fixed", { name: t(`mermaid.style.${own.style}`) }),
-        disabled: true,
-        run: () => {},
-      });
-    }
-    return items;
-  };
-  life.listen(styleButton, "click", () => openMenu(styleButton, styleItems()));
+  // ── Il menu del tasto destro ────────────────────────────────────────────
+  let menu: PopoverHandle | null = null;
+  life.add(() => menu?.close("lifetime"));
 
-  const exportItems = (): MenuItem[] => {
+  const copy = async (): Promise<void> => {
     const rendered = shown;
-    if (!rendered) return [];
-    return [
+    if (!rendered) return;
+    const text = diagramFence(source);
+    try {
+      if (clipboardSupports("image/png")) {
+        // Le promesse dei byte entrano subito negli appunti, dentro il gesto:
+        // alcuni motori non lasciano scrivere dopo.
+        const png = pngOf(rendered).then((bytes) => new Blob([bytes as BlobPart], { type: "image/png" }));
+        png.catch(() => undefined);
+        await writeClipboardData({
+          "image/png": png,
+          ...(clipboardSupports("image/svg+xml") ? { "image/svg+xml": new Blob([standaloneSvg(rendered)], { type: "image/svg+xml" }) } : {}),
+          "text/plain": new Blob([text], { type: "text/plain" }),
+        });
+        notify(t("mermaid.copy.done"), "info");
+      } else {
+        await writeClipboardText(text);
+        notify(t("mermaid.copy.text_only"), "info");
+      }
+    } catch (error) {
+      notify(t("mermaid.copy.failed", { reason: errorText(error) }), "guasto");
+    }
+  };
+
+  const exportMenu = (at: MenuPoint): void => {
+    const rendered = shown;
+    if (!rendered) return;
+    showContextMenu(at, [
       {
         label: t("mermaid.export.copy_svg"),
         run: () => void writeClipboardText(standaloneSvg(rendered))
@@ -770,12 +930,99 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
           .then((bytes) => saveExport(exportName(source, "png"), "image/png", bytes))
           .catch(exportFailed),
       },
-    ];
+    ], { header: { icon: "diagram-mark", kind: t("mermaid.menu.kind"), ...(diagramTitle(source) ? { name: diagramTitle(source)! } : {}) } });
   };
-  life.listen(exportButton, "click", () => openMenu(exportButton, exportItems()));
+
+  const setPreview = (style: DiagramStyleId | null): void => {
+    const next = style === lookOf(source, options.appearance, null).style ? null : style;
+    if (next === preview) return;
+    preview = next;
+    if (lookOf(source, options.appearance, preview).key !== look.key || phase === "error") render(true);
+  };
+
+  const choose = (style: DiagramStyleId, scope: DiagramScope): void => {
+    preview = null;
+    if (scope === "this" && options.editSource) {
+      const edit = styleDirectiveEdit(source, style);
+      if (edit) {
+        options.editSource(edit);
+        if (!toldWritten) {
+          toldWritten = true;
+          notify(t("mermaid.style.written", { name: style }), "info");
+        }
+      } else {
+        refresh();
+      }
+      return;
+    }
+    // Per tutti: la preferenza, e via la scelta scritta in questo diagramma.
+    const own = styleDirective(source);
+    if (own && options.editSource) {
+      const edit = styleDirectiveEdit(source, null);
+      if (edit) options.editSource(edit);
+    }
+    void chooseStyle(style);
+    refresh();
+    notify(t("mermaid.style.for_all", { name: t(`mermaid.style.${style}`) }), "info");
+  };
+
+  const openMenu = (at: MenuPoint, pointer: boolean): void => {
+    menu?.close("manual");
+    closeContextMenu();
+    const base = lookOf(source, options.appearance, null);
+    const model = diagramMenuModel({
+      source,
+      style: base.style,
+      light: base.light,
+      contrast: base.contrast,
+      read: base.read,
+      editable: options.editSource !== undefined,
+      revealable: options.revealSource !== undefined,
+      ready: shown !== null,
+    });
+    menu = openDiagramMenu(at, model, {
+      preview: setPreview,
+      choose,
+      orient: (direction) => {
+        const edit = flowDirectionEdit(source, direction);
+        if (edit) options.editSource?.(edit);
+      },
+      act: (action, point) => {
+        if (action === "source") options.revealSource?.();
+        else if (action === "enlarge") enlarge();
+        else if (action === "copy") void copy();
+        else exportMenu(point);
+      },
+    }, {
+      pointer,
+      onClose: () => { menu = null; },
+    });
+  };
+
+  life.listen(element, "contextmenu", (event: MouseEvent) => {
+    // Un menu già preso più dentro vince; un link del diagramma e il sorgente
+    // hanno quello di sempre; Maiusc lascia il menu del sistema, come nel
+    // resto della nota.
+    if (event.defaultPrevented || event.shiftKey) return;
+    if (event.target instanceof Element && event.target.closest("a, pre, summary")) return;
+    event.preventDefault();
+    openMenu({ x: event.clientX, y: event.clientY }, !fromKeyboard(event));
+  });
 
   render();
-  return { element, destroy: () => life.close() };
+  return {
+    element,
+    menu: openMenu,
+    enlarge,
+    copy,
+    destroy: () => life.close(),
+  };
+}
+
+/// Un `contextmenu` nato dal mouse e non dalla tastiera (il tasto Menu,
+/// Maiusc+F10), che ha un punto vero.
+function fromKeyboard(event: MouseEvent): boolean {
+  return event.button !== 2 || (event.clientX === 0 && event.clientY === 0);
 }
 
 /** The native provider uses the same viewer; other engines keep their fallback. */

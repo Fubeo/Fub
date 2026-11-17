@@ -10,6 +10,7 @@
 import { ORDER } from "./skin/order";
 import { CENTRES } from "./anatomia/centres";
 import { CONTROLS } from "./anatomia/controls";
+import { DIAGRAMS } from "./anatomia/diagrams";
 import { DOCUMENT } from "./anatomia/document";
 import { DRAW } from "./anatomia/draw";
 import { DRAW_DIALOGS } from "./anatomia/draw-dialogs";
@@ -53,6 +54,7 @@ const DECLARED: readonly PartAnatomy[] = [
   NODES,
   GRAPH,
   MENUS,
+  DIAGRAMS,
   LAUNCHER,
   CENTRES,
   DRAW_DIALOGS,

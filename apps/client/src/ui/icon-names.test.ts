@@ -22,6 +22,7 @@ import { useBaseIcons } from "../editors/base/icons";
 import { useRibbonIcons } from "../editors/grid/ribbon/icons";
 import { registerFormatIcons } from "../panels/format-bar";
 import { commentIcons } from "../editors/text/profiles/markdown/comments/thread";
+import { registerDiagramIcons } from "./diagram-menu";
 import { createColorPicker, type ColorPickerText } from "../kit/color/picker";
 
 /// I moduli che chiamano `registerIcon`, e la prova li monta tutti qui sopra.
@@ -37,6 +38,7 @@ const REGISTRARS = [
   "../editors/text/profiles/markdown/comments/thread.ts",
   "../panels/format-bar.ts",
   "../kit/color/picker.ts",
+  "./diagram-menu.ts",
 ];
 
 const sources = import.meta.glob("../**/*.ts", { query: "?raw", import: "default", eager: true }) as Record<
@@ -75,6 +77,7 @@ describe("i nomi che un tema può ridisegnare", () => {
     life.add(useRibbonIcons());
     life.add(registerFormatIcons());
     commentIcons();
+    registerDiagramIcons();
     createColorPicker({
       value: "#000000",
       text: TEXT,

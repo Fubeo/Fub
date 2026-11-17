@@ -664,14 +664,11 @@
     "cm-fub-image-shares",
     "craft-figure",
     "craft-figure-page",
+    "mermaid-diagram",
     "embed",
     "embed-cycle",
     "embed-too-deep",
     "embed-media",
-    "mermaid-diagram",
-    "mermaid-bar",
-    "mermaid-action",
-    "mermaid-swatches",
     "cm-fub-block-handles",
     "cm-fub-block-add",
     "cm-fub-block-grip",
@@ -1726,6 +1723,23 @@
     "is-out",
     "is-today",
     "is-empty",
+    "mermaid-diagram-view",
+    "diagram-menu",
+    "diagram-menu-label",
+    "diagram-menu-styles",
+    "diagram-menu-style",
+    "diagram-menu-style-name",
+    "diagram-menu-swatch",
+    "diagram-menu-swatch-node",
+    "diagram-menu-swatch-choice",
+    "diagram-menu-swatch-pill",
+    "diagram-menu-swatch-line",
+    "diagram-menu-notice",
+    "diagram-menu-row",
+    "diagram-menu-row-name",
+    "diagram-menu-segments",
+    "diagram-menu-segment",
+    "diagram-menu-actions",
     "palette-box",
     "palette-heading",
     "palette-input",
@@ -2602,14 +2616,11 @@
     "cm-fub-image-shares": "contenuto",
     "craft-figure": "contenuto",
     "craft-figure-page": "contenuto",
+    "mermaid-diagram": "contenuto",
     "embed": "contenuto",
     "embed-cycle": "contenuto",
     "embed-too-deep": "contenuto",
     "embed-media": "contenuto",
-    "mermaid-diagram": "contenuto",
-    "mermaid-bar": "cornice",
-    "mermaid-action": "cornice",
-    "mermaid-swatches": "cornice",
     "cm-fub-block-handles": "contenuto",
     "cm-fub-block-add": "contenuto",
     "cm-fub-block-grip": "contenuto",
@@ -3664,6 +3675,23 @@
     "is-out": "cornice",
     "is-today": "cornice",
     "is-empty": "cornice",
+    "mermaid-diagram-view": "contenuto",
+    "diagram-menu": "cornice",
+    "diagram-menu-label": "cornice",
+    "diagram-menu-styles": "cornice",
+    "diagram-menu-style": "cornice",
+    "diagram-menu-style-name": "cornice",
+    "diagram-menu-swatch": "cornice",
+    "diagram-menu-swatch-node": "cornice",
+    "diagram-menu-swatch-choice": "cornice",
+    "diagram-menu-swatch-pill": "cornice",
+    "diagram-menu-swatch-line": "cornice",
+    "diagram-menu-notice": "cornice",
+    "diagram-menu-row": "cornice",
+    "diagram-menu-row-name": "cornice",
+    "diagram-menu-segments": "cornice",
+    "diagram-menu-segment": "cornice",
+    "diagram-menu-actions": "cornice",
     "palette-box": "cornice",
     "palette-heading": "cornice",
     "palette-input": "cornice",
@@ -5733,7 +5761,8 @@
         "cm-fub-image-dialog",
         "cm-fub-image-shares",
         "craft-figure",
-        "craft-figure-page"
+        "craft-figure-page",
+        "mermaid-diagram"
       ],
       "states": [
         "rest"
@@ -5750,23 +5779,6 @@
       ],
       "states": [
         "rest"
-      ]
-    },
-    {
-      "name": "document-diagram",
-      "part": "document",
-      "hooks": [
-        "mermaid-diagram",
-        "mermaid-bar",
-        "mermaid-action",
-        "mermaid-swatches"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "pressed",
-        "focused",
-        "disabled"
       ]
     },
     {
@@ -8153,6 +8165,49 @@
       ]
     },
     {
+      "name": "diagram",
+      "part": "diagrams",
+      "hooks": [
+        "mermaid-diagram",
+        "mermaid-diagram-view"
+      ],
+      "states": [
+        "rest",
+        "hover"
+      ]
+    },
+    {
+      "name": "diagram-menu",
+      "part": "diagrams",
+      "hooks": [
+        "context-menu",
+        "diagram-menu",
+        "diagram-menu-label",
+        "diagram-menu-styles",
+        "diagram-menu-style",
+        "diagram-menu-style-name",
+        "diagram-menu-swatch",
+        "diagram-menu-swatch-node",
+        "diagram-menu-swatch-choice",
+        "diagram-menu-swatch-pill",
+        "diagram-menu-swatch-line",
+        "diagram-menu-notice",
+        "diagram-menu-row",
+        "diagram-menu-row-name",
+        "diagram-menu-segments",
+        "diagram-menu-segment",
+        "diagram-menu-actions",
+        "menu-icon"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
       "name": "modal-surface",
       "part": "launcher",
       "hooks": [
@@ -10345,10 +10400,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1936,
+    "hooks": 1950,
     "state_names": 7,
-    "assigned_states": 902,
-    "components": 264,
+    "assigned_states": 904,
+    "components": 265,
     "preference_tokens": 191
   }
 }
