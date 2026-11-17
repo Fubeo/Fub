@@ -38,6 +38,28 @@ cursore).
 
 Una formula aperta e chiusa senza scrivere resta byte per byte com'era.
 
+## I simboli per nome
+
+- `\` e le prime lettere mostrano sotto la formula al più cinque proposte, col
+  simbolo disegnato e il nome nella lingua dell'app; il nome scritto resta in
+  una pastiglia finché non si sceglie, e la nota non cambia.
+- ↑ e ↓ scelgono; Invio, Tab o spazio mettono la proposta scelta, e così il
+  clic. Esc chiude le proposte (tornano con la lettera dopo); un secondo Esc
+  toglie il nome.
+- Si trova col comando (`\fr`), col nome in italiano o in inglese
+  (`\radice`, `\arrow`) e con altre parole (`\somma`); un nome che non
+  esiste propone il più vicino (`\alfa`, `\alpah` danno α).
+- I pezzi entrano coi loro spazi vuoti, anche con le proposte chiuse:
+  frazione `\frac{}{}`, radice `\sqrt{}`, sommatoria `\sum_{}^{}`, integrale
+  `\int_{}^{}`, limite `\lim_{}`, testo `\text{}`; potenza e pedice coi loro
+  tasti, `^` e `_`. Il cursore va nel primo spazio vuoto.
+- Ctrl Z dopo un simbolo torna a prima della `\`.
+
+Il catalogo (`math/symbols.ts`) dà a ogni simbolo il disegno, ciò che entra
+nella formula, il nome in italiano e in inglese, le parole con cui si trova e
+la sua scrittura veloce. Le proposte si scelgono in memoria, senza chiamate al
+programma a ogni tasto.
+
 ## Quando si vede il LaTeX
 
 La preferenza «Mostra il LaTeX delle formule» (`editor.math.source`, spenta di

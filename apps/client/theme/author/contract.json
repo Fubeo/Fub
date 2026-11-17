@@ -801,6 +801,10 @@
     "katex",
     "text",
     "mord",
+    "cm-fub-mx-symbols",
+    "cm-fub-mx-symbol",
+    "cm-fub-mx-symbol-glyph",
+    "cm-fub-mx-symbol-name",
     "cm-focused",
     "cm-scroller",
     "cm-activeLine",
@@ -2760,6 +2764,10 @@
     "katex": "cornice",
     "text": "cornice",
     "mord": "cornice",
+    "cm-fub-mx-symbols": "cornice",
+    "cm-fub-mx-symbol": "cornice",
+    "cm-fub-mx-symbol-glyph": "cornice",
+    "cm-fub-mx-symbol-name": "cornice",
     "cm-focused": "contenuto",
     "cm-scroller": "contenuto",
     "cm-activeLine": "segno",
@@ -6134,6 +6142,20 @@
       "states": [
         "rest",
         "focused"
+      ]
+    },
+    {
+      "name": "math-symbols",
+      "part": "math",
+      "hooks": [
+        "cm-fub-mx-symbols",
+        "cm-fub-mx-symbol",
+        "cm-fub-mx-symbol-glyph",
+        "cm-fub-mx-symbol-name"
+      ],
+      "states": [
+        "rest",
+        "selected"
       ]
     },
     {
@@ -10428,10 +10450,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1957,
+    "hooks": 1961,
     "state_names": 7,
-    "assigned_states": 906,
-    "components": 266,
+    "assigned_states": 908,
+    "components": 267,
     "preference_tokens": 191
   }
 }

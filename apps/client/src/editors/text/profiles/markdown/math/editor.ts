@@ -12,6 +12,7 @@
 // Il disegno si rifà a ogni TeX nuovo, una volta per fotogramma; spostare il
 // cursore non ridisegna, sposta soltanto il segno acceso.
 import type katex from "katex";
+import { resolvedLanguage } from "../../../../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
 import { loadKatex, readOptions } from "../math";
 import { liveStrings } from "../strings";
@@ -19,6 +20,7 @@ import { editOptions, instrument, markerElement, markersIn, nearestPoint, vertic
 import * as rules from "./edit";
 import type { MathState, Outcome } from "./edit";
 import { holesOf, mapFormula, placeAt, type Place } from "./points";
+import { commandName, propose, proposalsAddNothing, SYMBOLS, symbolName, type MathSymbol } from "./symbols";
 
 /// Perché il cursore lascia la formula.
 export type LeaveReason = "before" | "after" | "enter" | "escape" | "up" | "down";
@@ -42,6 +44,8 @@ export interface MathEditorOptions {
 
 const HISTORY_LIMIT = 200;
 const CARET_CLASS = "cm-fub-mx-caret";
+/// Gli id delle proposte: uno per riquadro, perché il campo li nomina.
+let lists = 0;
 
 export class MathEditor {
   readonly element: HTMLElement;
@@ -49,6 +53,12 @@ export class MathEditor {
   private readonly input: HTMLTextAreaElement;
   private readonly note: HTMLElement;
   private readonly status: HTMLElement;
+  /// Le proposte dei simboli per il nome scritto dopo `\` (T61).
+  private readonly list: HTMLElement;
+  private proposals: readonly MathSymbol[] = [];
+  private active = 0;
+  /// Esc ha chiuso le proposte: tornano con la lettera dopo.
+  private dismissed = false;
   private readonly life: Lifetime;
   private state: MathState;
   /// La `\` di un comando che si sta scrivendo per nome.
@@ -97,7 +107,15 @@ export class MathEditor {
     this.status.setAttribute("role", "status");
     this.status.setAttribute("aria-live", "polite");
 
-    this.element.append(this.surface, this.input, this.note, this.status);
+    this.list = document.createElement("div");
+    this.list.className = "cm-fub-mx-symbols";
+    this.list.id = `cm-fub-mx-symbols-${++lists}`;
+    this.list.hidden = true;
+    this.list.setAttribute("role", "listbox");
+    this.list.setAttribute("aria-label", liveStrings.t("live.math.symbols"));
+    this.input.setAttribute("aria-controls", this.list.id);
+
+    this.element.append(this.surface, this.list, this.input, this.note, this.status);
     this.listen();
     this.life.add(() => cancelAnimationFrame(this.frame));
 
@@ -206,6 +224,7 @@ export class MathEditor {
     if (changed && this.pending === null) this.options.onChange(next.tex);
     if (changed || this.pending !== null) this.schedule();
     else this.showCaret();
+    this.offer();
     this.announce();
   }
 
@@ -301,6 +320,15 @@ export class MathEditor {
       this.finishPending();
       this.apply(rules.insertText(this.state, event.clipboardData?.getData("text/plain") ?? ""));
     });
+    on(this.list, "mousedown", (event) => {
+      // Il fuoco resta nel campo: il clic mette il simbolo.
+      event.preventDefault();
+      event.stopPropagation();
+      const option = (event.target as Element | null)?.closest<HTMLElement>("[role=option]");
+      const symbol = option ? this.proposals[Number(option.dataset.index)] : undefined;
+      if (symbol) this.choose(symbol);
+      this.focus();
+    });
     on(this.surface, "mousedown", (event) => {
       if (event.button !== 0 || this.mode !== "visual") return;
       // Il fuoco resta nel campo: il clic porta soltanto il cursore.
@@ -348,6 +376,10 @@ export class MathEditor {
       return;
     }
     if (event.altKey) return;
+    if (!this.list.hidden && this.proposalKey(event.key)) {
+      handled();
+      return;
+    }
     switch (event.key) {
       case "ArrowLeft":
       case "ArrowRight": {
@@ -391,6 +423,12 @@ export class MathEditor {
       case "Escape":
         handled();
         if (this.pending !== null) {
+          // Prima chiude le proposte, poi toglie il nome.
+          if (!this.list.hidden) {
+            this.dismissed = true;
+            this.offer();
+            return;
+          }
           this.dropPending();
           return;
         }
@@ -423,6 +461,114 @@ export class MathEditor {
     }
   }
 
+  // ── Le proposte dei simboli (T61) ─────────────────────────────────────────
+
+  /// Un tasto con le proposte aperte: ↑ e ↓ scelgono, Invio, Tab e lo
+  /// spazio mettono quella scelta. Gli altri passano.
+  private proposalKey(key: string): boolean {
+    switch (key) {
+      case "ArrowDown":
+      case "ArrowUp": {
+        const count = this.proposals.length;
+        this.active = (this.active + (key === "ArrowDown" ? 1 : count - 1)) % count;
+        this.paintProposals();
+        return true;
+      }
+      case "Enter":
+      case "Tab":
+      case " ": {
+        const symbol = this.proposals[this.active];
+        if (symbol) this.choose(symbol);
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  /// Le proposte per il nome che si sta scrivendo, in memoria: nessuna
+  /// chiamata per tasto. Si nascondono quando non aggiungono niente.
+  private offer(): void {
+    const name = this.pending === null ? null : rules.pendingName(this.state, this.pending);
+    let next: readonly MathSymbol[] = [];
+    if (name && !this.dismissed) {
+      next = propose(name);
+      if (proposalsAddNothing(name, next)) next = [];
+    }
+    if (name === null || name === "") this.dismissed = false;
+    const same = next.length === this.proposals.length && next.every((symbol, i) => symbol === this.proposals[i]);
+    if (!same) {
+      this.proposals = next;
+      this.active = 0;
+    }
+    if (next.length === 0) {
+      if (!this.list.hidden) {
+        this.list.hidden = true;
+        this.list.replaceChildren();
+        this.input.removeAttribute("aria-activedescendant");
+      }
+      return;
+    }
+    if (!same || this.list.hidden) this.paintProposals(true);
+  }
+
+  private paintProposals(rebuild = false): void {
+    const language = resolvedLanguage();
+    if (rebuild) {
+      this.list.replaceChildren(...this.proposals.map((symbol, i) => {
+        const option = document.createElement("div");
+        option.className = "cm-fub-mx-symbol";
+        option.id = `${this.list.id}-${i}`;
+        option.setAttribute("role", "option");
+        const glyph = document.createElement("span");
+        glyph.className = "cm-fub-mx-symbol-glyph";
+        glyph.setAttribute("aria-hidden", "true");
+        this.drawGlyph(symbol, glyph);
+        const name = document.createElement("span");
+        name.className = "cm-fub-mx-symbol-name";
+        name.textContent = symbolName(symbol, language);
+        option.dataset.index = String(i);
+        option.append(glyph, name);
+        return option;
+      }));
+      this.list.hidden = false;
+    }
+    this.list.querySelectorAll<HTMLElement>("[role=option]").forEach((option, i) => {
+      option.setAttribute("aria-selected", String(i === this.active));
+    });
+    this.input.setAttribute("aria-activedescendant", `${this.list.id}-${this.active}`);
+  }
+
+  /// Il disegno di un simbolo, con la resa di lettura. KaTeX costruisce i
+  /// nodi (gli stili passano dal CSSOM, che la CSP ammette): niente HTML in
+  /// una stringa. Si disegnano solo le proposte nuove, al più cinque.
+  private drawGlyph(symbol: MathSymbol, into: HTMLElement): void {
+    if (!this.library) return;
+    try {
+      this.library.render(symbol.glyph, into, { ...readOptions(false), output: "html" });
+    } catch {
+      into.replaceChildren();
+    }
+  }
+
+  /// Mette il simbolo al posto del nome scritto, coi suoi spazi vuoti; `false`
+  /// se la formula non si leggerebbe più.
+  private choose(symbol: MathSymbol): boolean {
+    const from = this.pending;
+    if (from === null) return false;
+    const outcome = rules.insertSymbol(this.state, symbol.template, from, (tex) => this.reads(tex), { inTable: this.options.inTable });
+    if (outcome.kind === "none") return false;
+    this.pending = null;
+    this.dismissed = false;
+    // Il TeX prima della `\`: quello che si torna ad avere con Ctrl Z.
+    this.state = { tex: this.state.tex.slice(0, from) + this.state.tex.slice(this.state.caret), caret: from };
+    this.apply(outcome);
+    // Il posto si ridice: «numeratore, spazio vuoto».
+    this.said = "";
+    this.announce();
+    return true;
+  }
+
   private leave(reason: LeaveReason): void {
     this.dropPending();
     this.options.onLeave(reason);
@@ -432,6 +578,7 @@ export class MathEditor {
   private type(ch: string): void {
     if (this.pending !== null) {
       if (/[a-zA-Z]/.test(ch)) {
+        this.dismissed = false;
         const { tex, caret } = this.state;
         this.commit({ tex: tex.slice(0, caret) + ch + tex.slice(caret), caret: caret + 1 }, false);
         return;
@@ -464,14 +611,18 @@ export class MathEditor {
   private finishPending(drop = false): "none" | "done" | "kept" {
     const from = this.pending;
     if (from === null) return "none";
+    // Un pezzo del catalogo entra coi suoi spazi vuoti (`\sum` è
+    // `\sum_{}^{}`), anche con le proposte chiuse.
+    const name = rules.pendingName(this.state, from);
+    const piece = name ? SYMBOLS.find((symbol) => commandName(symbol) === `\\${name}`) : undefined;
+    if (piece && this.choose(piece)) return "done";
     const outcome = rules.finishCommand(this.state, from, (tex) => this.reads(tex));
     if (!outcome) {
       if (drop) {
         this.dropPending();
         return "done";
       }
-      const name = this.state.tex.slice(from + 1, this.state.caret);
-      this.status.textContent = liveStrings.t("live.math.unknown", { name });
+      this.status.textContent = liveStrings.t("live.math.unknown", { name: name ?? "" });
       this.said = "";
       return "kept";
     }
