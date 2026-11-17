@@ -1570,7 +1570,7 @@ Fatto quando: un test della faccetta; la scena del banco; la battuta resta
 nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/typewriter.test.ts
-Stato: [~] in corso (coder, `feat/concentrazione-macchina`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (2026-11-17), in attesa del gruppo; baseline di concentration, concentration-writing e typewriter dal runner
 
 ## T25 · Incollare un indirizzo: link e scheda
 
@@ -1743,7 +1743,7 @@ ristretta) che si scambiano modifiche senza perderne; l'annulla locale non
 contiene le modifiche altrui; `check-listeners` verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/document-session.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder, 2026-11-17)
 
 ## T29 · La trasclusione viva
 
@@ -2090,7 +2090,7 @@ Fatto quando: test con `MemoryHost` coi fusi; il permesso spento non
 notifica; `cargo deny check` verde; la build senza la feature `tasks` verde.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features tasks;
 cargo nextest run -p fub-format-markdown; cargo deny check
-Stato: [ ] da fare
+Stato: [~] in corso (coder, 2026-11-17)
 
 ## T36 · I promemoria nell'editor
 
@@ -2172,7 +2172,7 @@ separatore resta); Vim; testo arrivato in un colpo.
 Fatto quando: un test per regola e per ogni luogo dove non vale.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/typography.test.ts
-Stato: [~] in corso (coder, 2026-11-17)
+Stato: [~] fatto dal coder (7a0e417c7, 2026-11-17), in coda per `integra/editor-1`
 
 ## T39 · La pagina del giorno
 
