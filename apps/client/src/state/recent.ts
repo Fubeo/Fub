@@ -49,6 +49,7 @@
 // proverebbero solo aprendo l'app.
 import { existingDocuments, settings } from "../host/query";
 import { onEvent } from "./kernel";
+import { settingTouches } from "./setting-change";
 import { readState, on, writeState } from "./store";
 
 /// Quante se ne ricordano, **per elenco**.
@@ -281,9 +282,11 @@ export function rememberOpens(): () => void {
     void loadHistory();
   });
   // L'interruttore che cambia: da questo pannello, da un'altra finestra, da un
-  // `settings.json` riscritto sotto. L'evento non porta il valore (§11.1), e
-  // quindi si rilegge.
-  const stopSetting = onEvent("setting_changed", () => void rereadToggle());
+  // `settings.json` riscritto sotto. L'evento porta la chiave ma non il valore
+  // (§11.1): si rilegge solo quando la chiave è la sua.
+  const stopSetting = onEvent("setting_changed", ({ key }) => {
+    if (settingTouches(key, (changed) => changed === HISTORY_KEY)) void rereadToggle();
+  });
   return () => {
     stopActive();
     stopVault();

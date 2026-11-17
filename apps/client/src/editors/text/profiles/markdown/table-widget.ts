@@ -317,9 +317,11 @@ function enter(view: EditorView, direction: 1 | -1): boolean {
 const theme = EditorView.baseTheme({
   ".tb-frame": { position: "relative", padding: "0.2em 0 0.4em" },
   ".tb-grid": { position: "relative", overflowX: "auto", outline: "none", padding: "2px" },
-  ".tb-grid table": { borderCollapse: "collapse", margin: "0" },
+  // Bordi separati: solo così la cornice della tabella arrotonda gli angoli.
+  ".tb-grid table": { borderCollapse: "separate", borderSpacing: "0", margin: "0" },
   // Le testate a riposo sono trasparenti, non nascoste: la riga delle lettere
   // resta una riga di intestazioni anche per chi legge con la sintesi.
+  // Compaiono col fuoco nella tabella, come nel prototipo (`.gr-let`).
   ".tb-grid .tb-corner, .tb-grid .tb-letter, .tb-grid .tb-rowhead": {
     opacity: "0",
     border: "none",
@@ -332,7 +334,7 @@ const theme = EditorView.baseTheme({
     userSelect: "none",
     cursor: "pointer",
   },
-  ".tb-grid:focus-within .tb-letter, .tb-grid:focus-within .tb-rowhead, .tb-grid:focus-within .tb-corner, .tb-grid:hover .tb-letter, .tb-grid:hover .tb-rowhead": {
+  ".tb-grid:focus-within .tb-letter, .tb-grid:focus-within .tb-rowhead, .tb-grid:focus-within .tb-corner": {
     opacity: "1",
   },
   ".tb-grid .tb-letter.is-selected, .tb-grid .tb-rowhead.is-selected": {

@@ -44,8 +44,8 @@ import {
   type OpenWay,
   type Reading,
 } from "./model";
-import { createPreview } from "./preview";
-import { answersAtOnce, listing, prefetchFiles, rereadFiles, selectable, type Listing, type Row } from "./sources";
+import { createPreview, folderOf } from "./preview";
+import { answersAtOnce, listing, prefetchFiles, rereadFiles, selectable, type ActionId, type Listing, type Row } from "./sources";
 
 /// Quanto si aspetta dopo l'ultima battuta prima di chiedere a una sorgente
 /// che risponde da lontano (ms).
@@ -85,15 +85,37 @@ const PLACEHOLDER = {
   line: "launcher.placeholder.line",
 } as const;
 
-const MODE_ICON: Readonly<Record<Mode, string>> = {
-  all: "notes",
-  commands: "palette",
-  tags: "tag",
-  people: "people",
-  blocks: "blocks",
-  help: "info",
-  line: "keyboard",
+/// L'icona davanti a ogni riga, per specie: ciò che si sceglie si riconosce
+/// prima di leggerlo. Le intestazioni, le etichette e le righe hanno un segno
+/// scritto (`ROW_GLYPH`) al posto di un disegno, come i prefissi della fila.
+const ROW_ICON = {
+  note: "notes",
+  person: "people",
+  "create-person": "people",
+  command: "palette",
+  block: "blocks",
+  help: "keyboard",
+} as const;
+
+/// Il segno scritto delle righe che non hanno un disegno.
+const ROW_GLYPH = {
+  heading: "#",
+  tag: "#",
+  line: ":",
+} as const;
+
+/// L'icona di ogni azione della riga (Tab).
+const ACTION_ICON: Readonly<Record<ActionId, string>> = {
+  open: "notes",
+  split: "struttura",
+  peek: "eye",
+  rename: "pen",
+  "copy-link": "backlinks",
+  pin: "pin",
 };
+
+/// Esc, com'è scritto sul segno che chiude.
+const ESC_KEY = "Esc";
 
 /// Che cosa fa Invio in un modo, detto nel piede. L'aiuto non ha un gesto.
 const ENTER_HINT = {
@@ -139,7 +161,7 @@ const MEDIA_ICON: Readonly<Partial<Record<MediaKind, string>>> = {
 };
 
 /// L'icona della riga di un file: il formato di un documento che non è una
-/// nota, o la specie di un file; nessuna per una nota.
+/// nota, o la specie di un file; nessuna per una nota (porta quella delle note).
 function kindIcon(doc: string): string | null {
   const format = formatKindOf(doc);
   if (format) return format === "note" ? null : FORMAT_ICON[format];
@@ -169,11 +191,6 @@ function hint(keys: string, label: string): HTMLElement {
   const item = el("span", "launcher-hint");
   item.append(keyOf(keys), label);
   return item;
-}
-
-/// La cartella di un documento, letta come una strada.
-function folderOf(doc: string): string {
-  return doc.split("/").filter(Boolean).slice(0, -1).join(" › ");
 }
 
 /// Monta il lanciatore e dichiara i comandi che lo aprono. Chiudere `lifetime`
@@ -218,9 +235,20 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     // lascia axe indeciso su `aria-controls`.
     input.setAttribute("aria-expanded", "false");
     input.setAttribute("aria-label", t("launcher.field"));
+    // La lente è una sola per tutti i modi: il modo lo dice la fila sotto.
+    const lensIcon = iconEl("search");
+    if (lensIcon) lens.append(lensIcon);
     const wait = el("span", "launcher-wait");
     wait.setAttribute("aria-hidden", "true");
-    head.append(lens, input, wait);
+    // Il segno «Esc» in fondo al campo chiude, come il tasto che porta scritto.
+    // Non è una fermata del Tab (qui Tab mostra le azioni): è per il puntatore.
+    const dismiss = el("button", "launcher-close");
+    dismiss.type = "button";
+    dismiss.tabIndex = -1;
+    dismiss.textContent = ESC_KEY;
+    dismiss.setAttribute("aria-label", t("launcher.close"));
+    dismiss.setAttribute("aria-keyshortcuts", "Escape");
+    head.append(lens, input, wait, dismiss);
 
     const strip = el("div", "launcher-modes");
     // Il modo, detto a chi non vede la fila: letto col campo quando si entra,
@@ -344,6 +372,17 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       cell.classList.add("launcher-row");
       cell.style.removeProperty("--launcher-indent");
       cell.removeAttribute("aria-disabled");
+      const mark = el("span", "launcher-row-icon");
+      mark.setAttribute("aria-hidden", "true");
+      const draw = (name: string): void => {
+        const drawn = iconEl(name);
+        if (drawn) mark.append(drawn);
+      };
+      if (row.kind === "heading" || row.kind === "tag" || row.kind === "line") mark.textContent = ROW_GLYPH[row.kind];
+      else if (row.kind === "action") draw(ACTION_ICON[row.action]);
+      else if (row.kind === "note") draw(kindIcon(row.doc) ?? ROW_ICON.note);
+      else draw(ROW_ICON[row.kind]);
+      cell.append(mark);
       const main = el("span", "launcher-row-main");
       const title = el("span", "launcher-row-title");
       const meta = el("span", "launcher-row-meta");
@@ -355,14 +394,8 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       };
       switch (row.kind) {
         case "note": {
-          // Un documento che non è una nota porta l'icona del suo formato, un
-          // file (un PDF, un'immagine) quella della sua specie.
-          const drawn = kindIcon(row.doc);
-          const format = drawn ? iconEl(drawn) : null;
-          if (format) {
-            format.classList.add("launcher-row-format");
-            title.append(format);
-          }
+          // L'icona davanti alla riga è quella del formato di un documento che
+          // non è una nota, o della specie di un file (un PDF, un'immagine).
           title.append(markedTerms(pageName(row.doc), input.value));
           if (row.snippet) {
             const snippet = row.snippet;
@@ -497,6 +530,9 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       owner: input,
       lifetime: life,
     });
+    // L'evidenziatore che il kit fa scivolare sotto la riga attiva: qui ha il
+    // vestito del lanciatore, e la pelle lo trova col suo nome.
+    rows.querySelector(":scope > .kit-list-highlight")?.classList.add("launcher-highlight");
 
     /// I tasti in fondo al piede: quelli del modo, o quelli delle azioni.
     const paintHints = (): void => {
@@ -685,9 +721,6 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     };
 
     const dress = (): void => {
-      lens.replaceChildren();
-      const drawn = iconEl(MODE_ICON[mode]);
-      if (drawn) lens.append(drawn);
       input.placeholder = t(PLACEHOLDER[mode]);
       paintHints();
     };
@@ -703,16 +736,23 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       },
       lifetime: life,
     });
-    // Il prefisso sta accanto al nome del modo: è lì che lo si impara.
+    // Il prefisso sta in un quadratino davanti al nome del modo: è lì che lo
+    // si impara. «Tutto» non ne ha, e porta la lente.
     for (const each of MODES) {
       const prefix = PREFIX[each];
       const button = tabs.tab(each);
-      if (!button || prefix === null) continue;
-      const glyph = el("span", "launcher-mode-prefix");
-      glyph.setAttribute("aria-hidden", "true");
-      glyph.textContent = prefix;
-      button.append(glyph);
-      button.setAttribute("aria-label", t("launcher.mode.hint", { mode: t(MODE_LABEL[each]), prefix }));
+      if (!button) continue;
+      button.classList.add("launcher-mode");
+      const tile = el("span", "launcher-mode-tile");
+      tile.setAttribute("aria-hidden", "true");
+      if (prefix === null) {
+        const drawn = iconEl("search");
+        if (drawn) tile.append(drawn);
+      } else {
+        tile.textContent = prefix;
+        button.setAttribute("aria-label", t("launcher.mode.hint", { mode: t(MODE_LABEL[each]), prefix }));
+      }
+      button.prepend(tile);
     }
     /// Tab qui non cambia modo e non lascia il campo: nessuna linguetta è una
     /// fermata del Tab, e non deve dichiararsi tale. Il kit ne tiene una a
@@ -886,6 +926,7 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       if (event.target !== input) event.preventDefault();
     });
     life.listen(veil, "click", () => close());
+    life.listen(dismiss, "click", () => close());
     // In un'altra lingua le parole sarebbero quelle di prima: si chiude, e
     // riaprendolo parla la lingua nuova.
     life.add(onLanguage(() => close()));
@@ -921,8 +962,9 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     document.body.append(layer);
     // La trappola è quella della shell, con la sua pila: Esc chiude solo la
     // superficie in cima, e un Tab partito da fuori rientra nel campo invece
-    // di camminare sulla pagina sotto il velo.
-    life.add(trapFocus(surface, close));
+    // di camminare sulla pagina sotto il velo. Il fuoco va nel campo, una
+    // volta sola, qui sotto.
+    life.add(trapFocus(surface, close, { moveFocus: false }));
     pill?.setAttribute("aria-expanded", "true");
     closeOpen = close;
     switchOpen = (next, asked) => {

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
-const SCRIPTS = ["i18n.js", "capture.js", "convert.js", "matcher.js", "templates.js", "selectors.js", "images.js", "interpreter.js", "channel.js", "popup.js"];
+const SCRIPTS = ["i18n.js", "capture.js", "convert.js", "matcher.js", "templates.js", "selectors.js", "images.js", "interpreter.js", "keystore.js", "channel.js", "popup.js"];
 const DIRTY = "https://user:token@example.com/a?b=c";
 const CLEAN = "https://example.com/a?b=c";
 
@@ -18,13 +18,14 @@ function element() {
     style: {}, dataset: {}, options: [], children: [],
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
+    fire(type) { for (const fn of listeners[type] || []) fn({ target: this }); },
     removeEventListener() {}, appendChild(child) { return child; }, append() {}, replaceChildren() {},
     setAttribute() {}, removeAttribute() {}, getAttribute: () => null, focus() {}, click() {},
     querySelector: () => null, querySelectorAll: () => [],
   };
 }
 
-async function runPopup() {
+async function runPopup({ local = {}, session = null, fetch = undefined } = {}) {
   const elements = new Map();
   const byId = (id) => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   byId("kind").value = "article";
@@ -34,15 +35,17 @@ async function runPopup() {
   const messages = [];
   const storage = {
     "fub-highlights-v1": { [CLEAN]: { enabled: true, marks: [{ id: "h-1", text: "kept" }] } },
+    ...local,
   };
+  const areaOf = (data) => ({
+    get: async (keys) => Object.fromEntries([].concat(keys).filter((k) => k in data).map((k) => [k, data[k]])),
+    set: async (value) => { Object.assign(data, value); },
+    remove: async (keys) => { for (const k of [].concat(keys)) delete data[k]; },
+  });
   const tab = { id: 7, url: DIRTY, title: "Page" };
   const browser = {
     runtime: { id: "abcdefghijklmnopabcdefghijklmnop", lastError: null },
-    storage: { local: {
-      get: async (keys) => Object.fromEntries([].concat(keys).filter((k) => k in storage).map((k) => [k, storage[k]])),
-      set: async (value) => { Object.assign(storage, value); },
-      remove: async () => {},
-    } },
+    storage: session ? { local: areaOf(storage), session: areaOf(session) } : { local: areaOf(storage) },
     tabs: {
       query: async () => [tab],
       get: async () => tab,
@@ -62,6 +65,7 @@ async function runPopup() {
     console,
     URL, TextEncoder, TextDecoder, Promise, setTimeout, clearTimeout,
     crypto: globalThis.crypto,
+    fetch,
     navigator: { language: "en" },
     location: { search: "" },
     localStorage: {
@@ -104,5 +108,40 @@ describe("popup: credentials in the page address", () => {
     // The highlights saved under the clean address are found again, so the
     // key the popup computed is the clean one.
     assert.ok(messages.some((m) => m.type === "fub:restore-highlights"), JSON.stringify(messages));
+  });
+});
+
+describe("popup: the assistant key", () => {
+  const remote = {
+    "fub-ai": { enabled: true, provider: "remote", remoteBaseUrl: "https://api.example.com", remoteModel: "m", context: "article" },
+    "fub-origins": { provider: ["https://api.example.com"], images: [] },
+  };
+  const settle = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 1)); };
+
+  it("is read from storage.session at every Ask, so a second Ask still works", async () => {
+    const auth = [];
+    const fetch = async (_url, init) => {
+      auth.push(init.headers.authorization);
+      return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: "ok" } }] }) };
+    };
+    const session = { "fub-ai-key": "sk-session" };
+    const { byId } = await runPopup({ local: remote, session, fetch });
+    byId("aiAsk").fire("click");
+    await settle();
+    byId("aiAsk").fire("click");
+    await settle();
+    assert.deepEqual(auth, ["Bearer sk-session", "Bearer sk-session"]);
+    assert.equal(byId("aiResult").value, "ok");
+    assert.equal(byId("error").textContent, "");
+  });
+
+  it("without a key says where to enter it and sends nothing", async () => {
+    let called = false;
+    const fetch = async () => { called = true; return { ok: true }; };
+    const { byId } = await runPopup({ local: remote, session: {}, fetch });
+    byId("aiAsk").fire("click");
+    await settle();
+    assert.equal(called, false);
+    assert.match(byId("error").textContent, /key is missing/);
   });
 });

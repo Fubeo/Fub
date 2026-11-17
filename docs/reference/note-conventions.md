@@ -2,7 +2,7 @@
 
 > **Ambito:** le forme che Fub legge e riscrive dentro il testo di una nota
 > Markdown, oltre a CommonMark e alle estensioni di Obsidian: i commenti con
-> la discussione.
+> la discussione e l'archivio dei risolti.
 > **Fonti autorevoli:** `crates/fub-format-markdown/src/parse/comments.rs`,
 > `crates/fub-abi/src/model.rs` (`custom_kind::COMMENT_RANGE`,
 > `custom_kind::COMMENT_MESSAGE`), i casi «discussione» di
@@ -75,6 +75,33 @@ non si normalizza.
   `{"comments": true}` ogni discussione diventa un rimando numerato dopo il
   passo e una nota in fondo alla pagina.
 - **Pubblicazione**: il passo resta, i messaggi no.
+- **Editor**: in Scrittura e in Lettura il passo ha il fondo del commento e
+  segni e messaggi non si vedono; in Sorgente si vede tutto, colorato. Come si
+  scrive, si cancella e si copia: [I commenti nel testo](../product/editor-comments.md).
+
+### L'archivio dei risolti
+
+«Risolvi» toglie i segni dal passo (il passo resta testo della nota) e
+archivia la discussione in fondo alla nota, in commenti `%%…%%` di una riga:
+la testa con la data della risoluzione e la citazione, poi un messaggio per
+riga, com'era scritto.
+
+```markdown
+%%fub:risolto 2026-11-16 14:02: la conferma dei prestiti%%
+%%> @Anna Bianchi 2026-11-08 17:40: Il Museo Rossi risponde entro venerdì.%%
+%%> @Luca Ferri 2026-11-09 09:12: Confermato.%%
+```
+
+- Le righe dell'archivio stanno in un paragrafo solo in fondo alla nota,
+  staccato dal testo da una riga vuota; una discussione risolta dopo si
+  aggiunge in coda.
+- Dentro una riga `%%` si scrive `%\%`, un `%` in fondo `%\`, e `{==`, `{>>`
+  hanno la barra davanti: niente chiude il commento prima né apre un commento
+  vivo. Un messaggio va su una riga sola: un a capo diventa uno spazio.
+- Una riga `%%> …%%` senza una testa prima non è archivio: resta un commento
+  `%%` come gli altri.
+- Obsidian e la Lettura di Fub non mostrano i commenti `%%`, e l'export li
+  toglie: l'archivio resta nel file, per chi lo vuole rileggere.
 
 Le modifiche suggerite di CriticMarkup (`{++ ++}`, `{-- --}`, `{~~ ~> ~~}`)
 non sono una convenzione di Fub: restano testo.

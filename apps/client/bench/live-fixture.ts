@@ -129,8 +129,31 @@ export function longNote(paragraphs: number): LiveCase {
   return { text: `${text}\n`, cursor: null };
 }
 
+/// La nota dei commenti (T22): due discussioni aperte, una con la risposta, e
+/// l'archivio dei risolti in fondo, che in Scrittura e in Lettura non si vede.
+const COMMENTS = [
+  "# La mostra di primavera",
+  "",
+  "Il {==Museo Rossi==}{>>@Anna Bianchi 2026-11-08 17:40: Il prestito delle tre tele va confermato per iscritto.<<}{>>@Luca Ferri 2026-11-09 09:12: Ho scritto alla direttrice, risponde entro venerdì.<<} presta le tre tele del secondo piano; il trasporto è assicurato dal museo.",
+  "",
+  "L'allestimento comincia il 3 marzo. Le {==didascalie in due lingue==}{>>@Marta Rinaldi 2026-11-09 11:48: Chi le traduce? Serve un nome entro gennaio.<<} si stampano a febbraio, con il catalogo.",
+  "",
+  "L'inaugurazione è il 21 marzo alle 18.",
+  "",
+  "%%fub:risolto 2026-11-10 10:05: il budget del catalogo%%",
+  "%%> @Anna Bianchi 2026-11-07 16:20: Restiamo sotto i 4.000 euro?%%",
+  "%%> @Luca Ferri 2026-11-08 09:00: Sì, con la carta riciclata.%%",
+  "",
+].join("\n");
+
 /// I casi, per nome. Il nome è quello della query (`?live=…`).
 export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
+  commenti: { text: COMMENTS, cursor: null },
+  "commenti-scelta": {
+    text: COMMENTS,
+    cursor: COMMENTS.indexOf("inaugurazione"),
+    head: COMMENTS.indexOf("inaugurazione") + "inaugurazione".length,
+  },
   panoramica: { text: NOTE, cursor: null },
   "riga-attiva": inNote("Il **treno**", 6),
   "titolo-attivo": inNote("## Cose da fare", 8),

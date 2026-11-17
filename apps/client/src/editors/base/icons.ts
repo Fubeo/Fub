@@ -21,6 +21,11 @@ export const BASE_ICONS: Readonly<Record<string, readonly string[]>> = {
   "base-timeline": ["M3 6h9M7.5 12h10.5M5 18h8", "M3 3v18"],
   "base-plus": ["M12 4.8v14.4M4.8 12h14.4"],
   "base-chevron-down": ["M6.75 9.3 12 14.7l5.25-5.4"],
+  "base-sort-asc": ["M7.5 19.5v-15", "M3.75 8.25 7.5 4.5l3.75 3.75", "M14.25 7.5h6M14.25 12h4.5M14.25 16.5h3"],
+  "base-sort-desc": ["M7.5 4.5v15", "M3.75 15.75 7.5 19.5l3.75-3.75", "M14.25 7.5h3M14.25 12h4.5M14.25 16.5h6"],
+  "base-group": ["M3.75 4.5h16.5v5.25H3.75z", "M3.75 14.25h16.5v5.25H3.75z", "M6.75 7.125h.01M6.75 16.875h.01"],
+  "base-sigma": ["M17.25 5.25H6.75L12 12l-5.25 6.75h10.5"],
+  "base-eye-off": ["M2.5 12S6 5.5 12 5.5c1.6 0 3 .45 4.25 1.15M21.5 12s-3.5 6.5-9.5 6.5c-1.6 0-3-.45-4.25-1.15", "M9.9 14.1a2.8 2.8 0 0 1 4.2-4.2", "M4 20 20 4"],
   "base-grip": ["M9 6.5h.01M15 6.5h.01M9 12h.01M15 12h.01M9 17.5h.01M15 17.5h.01"],
 };
 
@@ -35,6 +40,23 @@ export function viewIcon(type: string | null): string {
     case "calendar": return "calendar";
     case "timeline": return "base-timeline";
     default: return "base-table";
+  }
+}
+
+/// La specie di valore che una colonna mostra, per la figura della sua
+/// intestazione (`valueShape` in `column-menu.ts`).
+export type ValueShape = "text" | "number" | "date" | "bool" | "list" | "link";
+
+/// La figura davanti al nome di una colonna, per la specie dei suoi valori.
+/// La colonna della nota ha quella del testo, come il titolo.
+export function columnIcon(shape: ValueShape): string {
+  switch (shape) {
+    case "number": return "hash";
+    case "date": return "calendar";
+    case "bool": return "check";
+    case "list": return "fmt-bullets";
+    case "link": return "fmt-link";
+    default: return "fmt-text";
   }
 }
 

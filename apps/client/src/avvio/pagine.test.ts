@@ -69,13 +69,17 @@ describe("lo strato d'avvio nelle tre pagine", () => {
     expect(doc.body.firstElementChild?.classList.contains("avvio")).toBe(true);
   });
 
-  // Tauri mette un nonce a ogni <style> delle pagine e lo aggiunge a
-  // `style-src`: con un nonce la WebView ignora `'unsafe-inline'`, e gli
-  // elementi <style> che CodeMirror e gli altri moduli aggiungono a pagina
-  // avviata vengono rifiutati (gli editor senza stile, S7 di bench:webview).
-  // Uno script in linea lo vieta già `script-src 'self'`.
-  it.each(Object.entries(PAGINE))("%s: niente <style> né script in linea", (_, html) => {
-    expect(html).not.toMatch(/<style[\s>]/i);
+  // La CSP è `style-src 'self'; style-src-attr 'none'`: niente stili in
+  // linea. Il solo <style> è il portatore vuoto del nonce, che Tauri scrive
+  // servendo la pagina e CodeMirror rilegge (`ui/stylesheets.ts`): uno con
+  // del testo sarebbe uno stile in linea, e senza portatore gli editor
+  // resterebbero senza stile (S7 di bench:webview). Uno script in linea lo
+  // vieta già `script-src 'self'`.
+  it.each(Object.entries(PAGINE))("%s: niente stili né script in linea, un portatore del nonce", (_, html) => {
+    const stili = html.match(/<style[\s>][\s\S]*?<\/style>/gi) ?? [];
+    expect(stili).toEqual(["<style data-fub-nonce></style>"]);
+    expect(parse(html).head.querySelector("style[data-fub-nonce]")).not.toBeNull();
+    expect(html).not.toMatch(/\sstyle=/i);
     for (const script of parse(html).querySelectorAll("script")) {
       expect(script.getAttribute("src"), script.outerHTML).toBeTruthy();
       expect(script.textContent?.trim()).toBe("");

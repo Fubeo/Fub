@@ -243,16 +243,36 @@
 
   /* I sette modi non stanno in una riga, e una fila che scorre qui non ha
      niente che prenda il fuoco (nessuna linguetta è una fermata del Tab): axe
-     la rifiuta (`scrollable-region-focusable`). Vanno a capo. Il segno scorre
-     lungo una riga sola; su due non saprebbe dove stare, e il modo scelto
-     resta detto dal suo colore. */
+     la rifiuta (`scrollable-region-focusable`). Vanno a capo; il modo scelto
+     lo dice il suo quadratino d'accento, su qualunque riga stia. Ogni modo
+     stringe il margine dopo il nome, come nel prototipo al telefono. */
   :root[data-client-shell="mobile"] .launcher-modes {
     flex-wrap: wrap;
     overflow-x: visible;
   }
 
-  :root[data-client-shell="mobile"] .launcher-modes > .kit-tab-indicator {
-    display: none;
+  :root[data-client-shell="mobile"] .launcher-modes > .kit-tab {
+    padding-right: 6px;
+  }
+
+  /* «Esc» in fondo al campo resta il segno di un tasto, alto 22 come sul
+     computer: la regola dei 44 px lo farebbe un riquadro alto quanto il campo.
+     Il tocco resta di 44 px con un `::after` trasparente, che non disegna
+     niente (come il pallino della testata, `shells/mobile/mobile.css`). */
+  :root[data-client-shell="mobile"] .launcher-close {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  :root[data-client-shell="mobile"] .launcher-close::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: 44px;
+    transform: translate(-50%, -50%);
   }
 
   /* Niente tasti sul telefono: i bottoni del piede («Azioni», «Crea la nota»,

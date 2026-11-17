@@ -193,6 +193,48 @@ selezione effimera senza IPC di scrittura: `cancelThemePreview`, la chiusura
 delle Impostazioni o un'applicazione esplicita terminano la preview. Solo
 `selectTheme` persiste la scelta.
 
+`setting_changed` porta la chiave cambiata, e il backend ne manda uno per
+chiave (anche un cambio di profilo). Ogni ascoltatore della shell rilegge le
+impostazioni solo per le chiavi che legge: il tema per quelle di `reread`
+(`THEME_READS` in `theme/theme.ts`) e per le scelte dei temi (`<id>:<nome>`), le
+stringhe per `locale.language`, la cronologia per `history.enabled`, la cornice
+per `chrome.*` tranne i due pannelli laterali, che hanno l'ascoltatore loro.
+Un evento senza chiave vale «tutto» (`state/setting-change.ts`). Il tema
+raccoglie una raffica in al più due riletture, e l'ultima parte dopo l'ultimo
+evento. Così aprire la barra laterale dal comando scrive
+`chrome.sidebar.visible` e la rilegge una volta, invece di cinque riletture e
+un rimontaggio del tema. Anche per una sua chiave il tema rimonta il bundle
+solo se il contenuto è cambiato (`mountThemeBundle`): una preferenza come
+`appearance.accent` riscrive soltanto il canale delle preferenze, senza
+ripassare foglio e pelle dal sanitizer.
+
+Il pannello Impostazioni aperto sulla scheda della configurazione, a un
+`setting_changed` con chiave, rilegge le impostazioni e aggiorna solo le righe
+il cui valore, provenienza, attesa o errore è cambiato, con il conto delle
+modificate della loro sezione, «Ripristina gruppo» e il numero nell'indice
+(`refreshRows` in `panels/settings.ts`); le altre righe restano gli stessi
+nodi, e lo scroll non si tocca. La riga si aggiorna sul posto (`patchRow`):
+resta lo stesso nodo, testo e campo della vista si rifanno, e i nodi che una
+shell ha messo nel controllo (le vesti delle preferenze) non si staccano. La riga che ha il fuoco e una bozza non
+si sostituisce: il valore salvato nuovo lo dice una riga sotto il campo.
+Ridisegnano il corpo intero un evento senza chiave, uno schema cambiato (righe
+comparse, sparite o ridichiarate), il tema, i frammenti CSS, `chrome.frame`, la
+lingua e ogni altra scheda. Una scrittura partita da una riga aggiorna una volta
+sola, al suo esito: l'evento della sua chiave che arriva mentre è in volo non
+ridisegna, e uno che arriva dopo trova la riga già uguale.
+
+Una riga in volo resta usabile e il fuoco resta sul controllo della persona:
+lo dicono `aria-busy` e la riga «Salvataggio…» (`role="status"`). Le scritture
+della stessa chiave vanno in fila: una sola in volo, e dietro solo l'ultima
+chiesta, che sostituisce quella che aspettava; così all'host arrivano in
+ordine e una vecchia non sovrascrive mai la nuova. L'esito che conta è quello
+dell'ultima: se non va, la riga torna al valore salvato e mette sotto
+l'errore con l'input provato. Si spengono invece, finché l'esito non arriva,
+le righe la cui scrittura è un cambio rispetto al valore disegnato (aggiungere
+o togliere una voce di lista), perché una seconda scrittura partita dallo
+stesso disegno perderebbe la prima. Un ridisegno intero porta le righe in volo
+com'erano, con la scelta della persona.
+
 Le linguette sono pulsanti nativi, posseduti dal `tablist` tramite `aria-owns`;
 il pulsante di chiusura è un controllo fratello, non un elemento interattivo
 annidato. Frecce, Home ed End spostano il focus, Invio e Spazio attivano la
@@ -264,7 +306,9 @@ pannelli) lo Scrittoio compone:
   quell'editor. La fila non ha un costruttore: chi costruisce la barra mette sul suo DOM
   `kit-bar` (il vassoio), `kit-bar-group` (un foglietto), `kit-bar-button`
   e `kit-bar-field`, e per ciò che non ci sta usa `kit/options-bar.ts`
-  (`kit-options`, «…»). Le frecce della fila sono `kit/toolbar-keys.ts`
+  (`kit-options`, «…»: un popover con gli stessi controlli, Su e Giù fra
+  loro, Esc che riporta il fuoco su «…»; `onFit` dopo ogni conto, per chi
+  rimette il punto di tabulazione). Le frecce della fila sono `kit/toolbar-keys.ts`
   (`rovingToolbar`): un solo punto di tabulazione, destra e sinistra che
   girano ai capi, Home ed End, soltanto fra i controlli visibili e accesi;
   in un campo di testo le frecce passano oltre solo ai capi del testo, ed
@@ -282,7 +326,17 @@ pannelli) lo Scrittoio compone:
   critica più rigida che non dura più di quella piena. Menu, modali,
   pannelli, centri e avvisi entrano ed escono da `ui/motion.ts`, sopra
   `moto`: la pelle non ha fotogrammi chiave d'entrata o d'uscita, e
-  un'uscita è un'immagine che se ne va in 140 ms al più;
+  un'uscita è un'immagine che se ne va in 140 ms al più. Il default di
+  `appearance.motion` lo decide l'host (`fub_host::settings::motion_default`):
+  `""` (segue il sistema), tranne su Linux con WebKitGTK dalla 2.54.0, che
+  dopo un'animazione ripresenta fotogrammi vecchi; lì parte da `reduced`.
+  La versione è quella della libreria caricata, che l'app dichiara per prima
+  cosa, prima del percorso di disegno e dell'host (`declare_the_webview` in
+  `crates/fub-app/src/lib.rs`);
+  l'intervallo difettoso è la costante `WEBKITGTK_FLICKER_FROM`, aperta in
+  alto finché una versione corretta non è verificata. Un valore scritto,
+  anche `""`, vale sempre; sotto la riga Animazioni le Impostazioni dicono
+  perché il valore di partenza è «ridotte»;
 - `theme/scrittoio/`: la serie di serie (motore `theme-2`), con ricetta dei
   colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
   del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.
@@ -299,6 +353,13 @@ ricetta. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
 400 px, ispettore da 248 a 440 px. Un tema `theme-1` non si monta; uno con
 `extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`,
 dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
+
+`theme/loader.ts` monta gli strati del tema (caratteri, foglio, pelli,
+preferenze, frammenti) come fogli costruiti in `document.adoptedStyleSheets`,
+non come elementi `<style>`, che la CSP rifiuterebbe: un foglio per canale,
+nell'ordine dichiarato, sostituiti tutti insieme; le `@font-face` diventano
+`FontFace` in `document.fonts`. Ordine, cascata e caratteri:
+[Gli stili e la CSP](../reference/styles-and-csp.md#il-caricatore-del-tema).
 
 ### Comportamenti della shell
 
@@ -364,6 +425,8 @@ Oltre al confine di CodeMirror, i guard del frontend impediscono:
 - listener globali senza owner;
 - ruoli del tema scritti sull'elemento negli editor, oltre l'elenco delle eccezioni
   (`check-inline-theme.mjs`);
+- un `<style>` creato da uno script o uno `style` scritto come markup, che la
+  CSP rifiuterebbe (`check-inline-styles.mjs`);
 - attese concorrenti senza il primitivo di cancellazione;
 - mirror TypeScript non aggiornati;
 - parole del codice nei testi italiani dell'interfaccia: il glossario in

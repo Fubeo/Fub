@@ -233,6 +233,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/// Le regole della vista dei contorni montate nel documento: un foglio
+/// costruito (`adoptedStyleSheets`), non un `<style>`, per la CSP.
+function outlineRules(): string {
+  return document.adoptedStyleSheets
+    .flatMap((sheet) => Array.from(sheet.cssRules, (rule) => rule.cssText))
+    .filter((text) => text.includes("[data-outline]"))
+    .join("\n");
+}
+
 describe("la barra e il foglio", () => {
   it("mettono in fila strumenti, colori, spessori, modifica e vista, e il titolo", () => {
     mount();
@@ -860,10 +869,10 @@ describe("disporre, nel Completo", () => {
     named("Ordine").click();
     expect(named("Ordine").getAttribute("aria-expanded")).toBe("true");
     expect(menu().map((entry) => [entry.querySelector(".menu-label")!.textContent, entry.querySelector(".menu-hint")!.textContent, entry.getAttribute("aria-disabled")])).toEqual([
-      ["Porta in primo piano", "Ctrl+Shift+]", "true"],
-      ["Porta avanti", "Ctrl+]", "true"],
-      ["Porta indietro", "Ctrl+[", null],
-      ["Porta in secondo piano", "Ctrl+Shift+[", null],
+      ["Porta in primo piano", "Ctrl Maiusc ]", "true"],
+      ["Porta avanti", "Ctrl ]", "true"],
+      ["Porta indietro", "Ctrl [", null],
+      ["Porta in secondo piano", "Ctrl Maiusc [", null],
     ]);
     item("Porta in secondo piano").click();
     expect(order()).toEqual([C, A, B]);
@@ -4985,13 +4994,13 @@ describe("la Mano e la Lente", () => {
     surface().focus();
     expect(key("y", { ctrlKey: true }).defaultPrevented).toBe(true);
     expect(painted.hasAttribute("data-outline")).toBe(true);
-    expect(painted.querySelector("style")!.textContent).toContain("fill:none!important");
+    expect(outlineRules()).toMatch(/fill:\s*none\s*!important/);
     expect(spoken()).toBe("Vista dei contorni: Ctrl+Y torna al disegno pieno.");
     expect(band()).toContain("outline");
     // Dalla banda si torna al disegno pieno.
     editor.status.items().find((item) => item.id === "outline")!.open!();
     expect(painted.hasAttribute("data-outline")).toBe(false);
-    expect(painted.querySelector("style")).toBeNull();
+    expect(outlineRules()).toBe("");
     expect(band()).not.toContain("outline");
     key("y", { ctrlKey: true });
     key("y", { ctrlKey: true });

@@ -96,6 +96,7 @@ function searchPath(): string | null {
 describe("il cancello legge il set di icone del fascio", () => {
   beforeEach(() => {
     document.head.innerHTML = "";
+    document.adoptedStyleSheets = [];
     expect(mountThemeBundle(SERIES_BUNDLE, "light")).toEqual({ mounted: true });
   });
 
@@ -170,6 +171,7 @@ describe("la shell monta le icone del tema e torna alla serie", () => {
   beforeEach(async () => {
     system();
     document.head.innerHTML = "";
+    document.adoptedStyleSheets = [];
     document.body.innerHTML = `<button>${icon("search")}</button>`;
     localStorage.clear();
     await cancelThemePreview();

@@ -221,6 +221,10 @@ pub const EDITOR_SLASH_HIDDEN: &str = "editor.slash.hidden";
 /// L'ordine delle sezioni del menu «/», dopo Suggeriti, Preferiti e Recenti.
 /// Le sezioni non dette seguono nel loro ordine, gli id sconosciuti non contano.
 pub const EDITOR_SLASH_SECTIONS: &str = "editor.slash.sections";
+/// La riga dei suggerimenti al centro della banda: i tasti utili per ciò che
+/// si sta facendo, letti dalle scorciatoie della persona. Accesa di serie;
+/// non c'è al telefono né sotto i 620 px.
+pub const EDITOR_HINTS: &str = "editor.hints";
 /// In che modalità si apre un riquadro nuovo: `live_preview` (Scrittura),
 /// `source` o `reading`, gli id delle modalità della superficie testuale.
 /// `blocks`, scritto da un Fub che aveva la modalità Blocchi, resta un valore
@@ -242,6 +246,19 @@ pub const EDITOR_LIVE_GUIDE: &str = "editor.live-guide";
 /// (Mod+A il corpo della nota, Mod+D la prossima occorrenza). La testata della
 /// pagina resta in tutti e due i casi. Cambia senza riaprire la nota.
 pub const EDITOR_BLOCKS: &str = "editor.blocks";
+/// Il nome di chi scrive su questa macchina (Impostazioni › Profilo): firma i
+/// commenti delle note (`{>>@Nome 2026-11-08 17:40: …<<}`). Vuoto finché la
+/// persona non lo sceglie; il primo commento lo chiede, con l'avviso che il
+/// nome finisce nel file della nota. È della macchina perché dice chi siede
+/// davanti allo schermo, non di che cosa parla il vault.
+pub const PROFILE_NAME: &str = "profile.name";
+/// Come firma i commenti questo vault: col nome di [`PROFILE_NAME`], con le
+/// sue iniziali o senza firma. È del vault perché la scelta segue le note: il
+/// nome nel vault del lavoro, niente in quello personale. Un commento senza
+/// firma si legge «Senza nome», come quelli scritti da un altro programma.
+pub const COMMENTS_AUTHOR: &str = "comments.author";
+/// Le firme che [`COMMENTS_AUTHOR`] offre, la predefinita per prima.
+pub const COMMENTS_AUTHOR_CHOICES: [&str; 3] = ["nome", "iniziali", "niente"];
 /// Le animazioni della shell: `""` segue il sistema, `calm` toglie rimbalzi e
 /// scene, `reduced` le spegne anche quando il sistema non lo chiede. Nessun
 /// valore scavalca la richiesta di moto ridotto del sistema.
@@ -252,6 +269,92 @@ pub const APPEARANCE_MOTION: &str = "appearance.motion";
 pub const APPEARANCE_FRAME_RATE: &str = "appearance.frame-rate";
 /// I tetti offerti dal pannello, dal più alto.
 pub const FRAME_RATE_CAPS: [u32; 7] = [240, 165, 144, 120, 90, 60, 30];
+/// Chi disegna le pagine della webview su Linux (WebKitGTK): `auto` lascia
+/// il percorso di WebKit e avvisa dei problemi noti, `gpu` lo stesso senza
+/// proposte, `cpu` chiede il disegno col processore
+/// (`WEBKIT_SKIA_ENABLE_CPU_RENDERING`). Si legge una volta, prima che parta
+/// GTK (`fub_app::disegno`): cambiarla vale dal prossimo avvio. Dichiarata
+/// solo su Linux.
+pub const APPEARANCE_RENDERING: &str = "appearance.rendering";
+/// I percorsi offerti, il predefinito per primo.
+pub const RENDERING_MODES: [&str; 3] = ["auto", "gpu", "cpu"];
+
+/// La webview su cui gira la shell, per quel tanto che decide un default.
+///
+/// È un fatto della piattaforma, e lo dichiara l'app (`fub_app::run`, con
+/// [`declare_webview`]) leggendo la versione **dalla libreria caricata** —
+/// non dal nome del pacchetto né dal momento della compilazione: chi ha
+/// compilato con la 2.52 può girare con la 2.54, e viceversa.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Webview {
+    /// WebKitGTK, con la versione `major.minor.micro` della libreria caricata.
+    WebKitGtk(u32, u32, u32),
+}
+
+impl Webview {
+    /// La WebKitGTK di una versione scritta `major.minor.micro`, come la dà
+    /// `webkit_get_{major,minor,micro}_version` (via `tauri::webview_version`).
+    /// Una stringa che non è tre numeri non dice niente: `None`.
+    pub fn webkitgtk(version: &str) -> Option<Self> {
+        let mut parts = version.trim().split('.').map(str::parse::<u32>);
+        let (Some(Ok(major)), Some(Ok(minor)), Some(Ok(micro)), None) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        else {
+            return None;
+        };
+        Some(Self::WebKitGtk(major, minor, micro))
+    }
+
+    /// Questa webview ha il difetto che fa sfarfallare le animazioni
+    /// ([`WEBKITGTK_FLICKER_FROM`])?
+    pub fn flickers_after_animations(self) -> bool {
+        match self {
+            Self::WebKitGtk(major, minor, micro) => (major, minor, micro) >= WEBKITGTK_FLICKER_FROM,
+        }
+    }
+}
+
+/// **La prima WebKitGTK che sfarfalla dopo un'animazione**, ed è l'unico posto
+/// in cui l'intervallo difettoso è scritto.
+///
+/// Dalla 2.54.0 il renderer DMA-BUF di WebKitGTK, finita un'animazione,
+/// ripresenta per un istante fotogrammi vecchi; su ogni GPU, non solo NVIDIA
+/// (janhq/jan#9588, cjpais/Handy#2166 e #2360). La 2.52 non lo fa. Con
+/// Impostazioni → Aspetto → Animazioni = «ridotte» lo sfarfallio sparisce
+/// (verificato su Debian 13, WebKitGTK 2.54, 2026-11-16).
+///
+/// L'intervallo è aperto in alto: nessuna versione corretta è ancora
+/// verificata. Il giorno che una lo è, si aggiunge qui un limite superiore
+/// escluso (per esempio `WEBKITGTK_FLICKER_UNTIL = (2, 54, 4)`) e
+/// [`Webview::flickers_after_animations`] lo confronta; i test di questo file
+/// dicono quale versione resta difettosa e quale no.
+pub const WEBKITGTK_FLICKER_FROM: (u32, u32, u32) = (2, 54, 0);
+
+static WEBVIEW: std::sync::OnceLock<Webview> = std::sync::OnceLock::new();
+
+/// Dichiara la webview del processo. La chiama l'app **prima** di costruire
+/// l'[`Host`](crate::Host), perché il livello macchina riceve lo schema (e i
+/// suoi default) nel costruttore. Vale una volta sola, come la libreria che
+/// il processo ha caricato: una seconda dichiarazione è ignorata e la funzione
+/// dice `false`. Chi non dichiara niente — le altre piattaforme, la CLI, i
+/// test — ha i default di sempre.
+pub fn declare_webview(webview: Webview) -> bool {
+    WEBVIEW.set(webview).is_ok()
+}
+
+/// Il default di [`APPEARANCE_MOTION`] su questa webview: `reduced` dove la
+/// webview sfarfalla dopo le animazioni, altrimenti `""` (segue il sistema).
+///
+/// Cambia **solo il default**: un valore che la persona ha scritto — anche
+/// `""` — resta il suo, perché il livello macchina legge il default soltanto
+/// dove non c'è un valore. La shell mostra il perché sotto la riga quando il
+/// default è `reduced` (`decorateMotion` in `apps/client/src/panels/settings.ts`).
+pub fn motion_default(webview: Option<Webview>) -> &'static str {
+    match webview {
+        Some(webview) if webview.flickers_after_animations() => "reduced",
+        _ => fub_kernel::locale::AS_SYSTEM,
+    }
+}
 /// Lo stile dei diagrammi Mermaid: uno degli id di [`DIAGRAM_STYLES`]. Lo
 /// disegna la shell (`apps/client/src/ui/mermaid-styles.ts`); una nota può
 /// sceglierne un altro per un diagramma solo, con `%% stile: <id>`.
@@ -443,6 +546,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     let mut settings = appearance_settings();
     settings.extend(chrome_settings());
     settings.extend(editor_settings());
+    settings.extend(profile_settings());
     settings.push(
         SettingSpec::new(
             ATTACHMENT_FOLDER,
@@ -655,6 +759,39 @@ pub fn core_machine_settings() -> Vec<SettingSpec> {
         .collect()
 }
 
+/// Chi scrive (D11 A): il nome della persona, di macchina, e la firma dei
+/// commenti scelta per il vault. Nessuna delle due è `program_writable`: il
+/// nome che finisce nei file lo sceglie la persona, dalla shell.
+fn profile_settings() -> Vec<SettingSpec> {
+    let [name_choice, initials_choice, none_choice] = COMMENTS_AUTHOR_CHOICES;
+    vec![
+        SettingSpec::new(
+            PROFILE_NAME,
+            Text::key(C_PROFILE_NAME),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(C_PROFILE_NAME_DESC))
+        .grouped(Text::key(C_GROUP_PROFILE))
+        .for_machine(),
+        SettingSpec::new(
+            COMMENTS_AUTHOR,
+            Text::key(C_COMMENTS_AUTHOR),
+            SettingKind::Choice {
+                default: name_choice.into(),
+                options: vec![
+                    UiOption::new(name_choice, Text::key(C_COMMENTS_AUTHOR_NAME)),
+                    UiOption::new(initials_choice, Text::key(C_COMMENTS_AUTHOR_INITIALS)),
+                    UiOption::new(none_choice, Text::key(C_COMMENTS_AUTHOR_NONE)),
+                ],
+            },
+        )
+        .describing(Text::key(C_COMMENTS_AUTHOR_DESC))
+        .grouped(Text::key(C_GROUP_PROFILE)),
+    ]
+}
+
 fn editor_settings() -> Vec<SettingSpec> {
     let choice = |key, label, description, default: &str, options: Vec<UiOption>| {
         SettingSpec::new(
@@ -849,6 +986,12 @@ fn editor_settings() -> Vec<SettingSpec> {
             .for_machine(),
     );
     settings.push(
+        SettingSpec::toggle(EDITOR_HINTS, Text::key(C_EDITOR_HINTS), true)
+            .describing(Text::key(C_EDITOR_HINTS_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
+    settings.push(
         SettingSpec::new(
             EDITOR_SLASH_HIDDEN,
             Text::key(C_EDITOR_SLASH_HIDDEN),
@@ -892,6 +1035,12 @@ fn editor_settings() -> Vec<SettingSpec> {
 /// un pezzo di 6.2, dove si decide se un componente possa avere in mano
 /// l'aspetto e con che permesso.
 fn appearance_settings() -> Vec<SettingSpec> {
+    appearance_settings_on(WEBVIEW.get().copied())
+}
+
+/// Le chiavi dell'aspetto su una webview data: i test scelgono la webview che
+/// il processo, una volta dichiarata, non può più cambiare.
+fn appearance_settings_on(webview: Option<Webview>) -> Vec<SettingSpec> {
     let choice = |key, label, description, default: &str, options: Vec<UiOption>| {
         SettingSpec::new(
             key,
@@ -926,7 +1075,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
         .for_machine()
     };
 
-    vec![
+    let mut settings = vec![
         choice(
             APPEARANCE_THEME,
             C_THEME,
@@ -991,7 +1140,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_MOTION,
             C_MOTION,
             C_MOTION_DESC,
-            fub_kernel::locale::AS_SYSTEM,
+            motion_default(webview),
             vec![
                 system(),
                 UiOption::new("calm", Text::key(C_MOTION_CALM)),
@@ -1098,7 +1247,30 @@ fn appearance_settings() -> Vec<SettingSpec> {
         .describing(Text::key(C_CSS_SNIPPETS_DESC))
         .grouped(Text::key(C_GROUP_APPEARANCE))
         .for_machine(),
-    ]
+    ];
+    // Solo dove c'è WebKitGTK: su Windows e macOS la scelta non avrebbe
+    // niente da cambiare, e una riga che non fa niente è una riga che mente.
+    if cfg!(target_os = "linux") {
+        let at = settings
+            .iter()
+            .position(|spec| spec.key == APPEARANCE_FRAME_RATE)
+            .map_or(settings.len(), |index| index + 1);
+        settings.insert(
+            at,
+            choice(
+                APPEARANCE_RENDERING,
+                C_RENDERING,
+                C_RENDERING_DESC,
+                RENDERING_MODES[0],
+                vec![
+                    UiOption::new(RENDERING_MODES[0], Text::key(C_RENDERING_AUTO)),
+                    UiOption::new(RENDERING_MODES[1], Text::key(C_RENDERING_GPU)),
+                    UiOption::new(RENDERING_MODES[2], Text::key(C_RENDERING_CPU)),
+                ],
+            ),
+        );
+    }
+    settings
 }
 
 fn chrome_settings() -> Vec<SettingSpec> {
@@ -1206,6 +1378,36 @@ pub fn frame_rate_cap(value: &str) -> Option<u32> {
         .parse()
         .ok()
         .filter(|cap| FRAME_RATE_CAPS.contains(cap))
+}
+
+/// I valori di testo di macchina che servono **prima che parta GTK**, letti dal
+/// file di macchina senza montare l'host: oggi `appearance.rendering` e
+/// `appearance.motion`, per il percorso di disegno di `fub_app::run`.
+///
+/// Si legge come lo legge l'host: schema del core, profilo attivo, un valore
+/// sconosciuto che vale il predefinito, un file assente o illeggibile che vale
+/// i predefiniti. Il file non si scrive. Senza cartella di configurazione
+/// valgono i predefiniti. Una chiave non dichiarata (`appearance.rendering`
+/// fuori da Linux) non compare.
+pub fn startup_machine_texts(
+    config_dir: Option<&camino::Utf8Path>,
+    keys: &[&str],
+) -> BTreeMap<String, String> {
+    let machine = match config_dir {
+        Some(dir) => {
+            fub_kernel::MachineSettings::open(&crate::config::machine_settings_path(dir)).0
+        }
+        None => fub_kernel::MachineSettings::in_memory(),
+    };
+    if machine.declare(&core_machine_settings()).is_err() {
+        return BTreeMap::new();
+    }
+    keys.iter()
+        .filter_map(|key| {
+            let (value, _) = machine.effective(key).ok()?;
+            Some(((*key).to_owned(), value.as_text()?.to_owned()))
+        })
+        .collect()
 }
 
 pub fn setting_requires_reopen(key: &str) -> bool {
@@ -1518,6 +1720,14 @@ const C_FILES_PEOPLE_FOLDER_DESC: &str = "core.files_people_folder.desc";
 
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
 const C_GROUP_EDITOR: &str = "core.group.editor";
+const C_GROUP_PROFILE: &str = "core.group.profile";
+const C_PROFILE_NAME: &str = "core.profile.name";
+const C_PROFILE_NAME_DESC: &str = "core.profile.name.desc";
+const C_COMMENTS_AUTHOR: &str = "core.comments.author";
+const C_COMMENTS_AUTHOR_DESC: &str = "core.comments.author.desc";
+const C_COMMENTS_AUTHOR_NAME: &str = "core.comments.author.name";
+const C_COMMENTS_AUTHOR_INITIALS: &str = "core.comments.author.initials";
+const C_COMMENTS_AUTHOR_NONE: &str = "core.comments.author.none";
 const C_EDITOR_SPELLCHECK: &str = "core.editor.spellcheck";
 const C_EDITOR_SPELLCHECK_DESC: &str = "core.editor.spellcheck.desc";
 const C_EDITOR_VIM: &str = "core.editor.vim";
@@ -1568,6 +1778,8 @@ const C_EDITOR_LINK_CLICK_OPEN: &str = "core.editor.link_click.open";
 const C_EDITOR_LINK_CLICK_PEEK: &str = "core.editor.link_click.peek";
 const C_EDITOR_SLASH: &str = "core.editor.slash";
 const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
+const C_EDITOR_HINTS: &str = "core.editor.hints";
+const C_EDITOR_HINTS_DESC: &str = "core.editor.hints.desc";
 const C_EDITOR_SLASH_HIDDEN: &str = "core.editor.slash.hidden";
 const C_EDITOR_SLASH_HIDDEN_DESC: &str = "core.editor.slash.hidden.desc";
 const C_EDITOR_SLASH_SECTIONS: &str = "core.editor.slash.sections";
@@ -1655,6 +1867,11 @@ const C_FRAME_RATE: &str = "core.frame_rate";
 const C_FRAME_RATE_DESC: &str = "core.frame_rate.desc";
 const C_FRAME_RATE_DISPLAY: &str = "core.frame_rate.display";
 const C_FRAME_RATE_CAP: &str = "core.frame_rate.cap";
+const C_RENDERING: &str = "core.rendering";
+const C_RENDERING_DESC: &str = "core.rendering.desc";
+const C_RENDERING_AUTO: &str = "core.rendering.auto";
+const C_RENDERING_GPU: &str = "core.rendering.gpu";
+const C_RENDERING_CPU: &str = "core.rendering.cpu";
 const C_DIAGRAM_STYLE: &str = "core.diagram_style";
 const C_DIAGRAM_STYLE_DESC: &str = "core.diagram_style.desc";
 const C_DIAGRAM_STYLE_ARMONIA: &str = "core.diagram_style.armonia";
@@ -1925,6 +2142,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.uri.no_vault", "Nessun vault aperto: il collegamento non ha dove scrivere.")
         .with("host.uri.reads", "«{action}» non scrive: lo esegue la finestra.")
         .with("host.uri.capture_missing", "La cattura chiede anche «{what}».")
+        .with("host.uri.capture_replayed", "Questa cattura è già stata scritta: un nuovo invio con lo stesso nonce non la scrive di nuovo.")
         .with("host.web.clip.title", "Salva la pagina web come nota")
         .with("host.web.clip.desc", "Scarica di nuovo una pagina di un sito approvato e la scrive come nota Markdown, con la fonte; in prova dice soltanto dove.")
         .with("host.param.url", "Indirizzo")
@@ -2095,7 +2313,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_URI_ALLOWED, "Collegamenti fub:// che scrivono senza chiedere")
         .with(
             C_URI_ALLOWED_DESC,
-            "Le azioni scelte (nota nuova, giornaliera, nota unica, cattura) scrivono appena il collegamento arriva, senza conferma. Aprire un altro vault chiede sempre. Vale su questo computer.",
+            "Le azioni scelte (nota nuova, giornaliera, nota unica) scrivono appena il collegamento arriva, senza conferma. Una cattura e l'apertura di un altro vault chiedono sempre. Vale su questo computer.",
         )
         .with(C_FILES_LINK_STYLE, "Nuovi link")
         .with(
@@ -2158,6 +2376,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_CHROME_FRAME_DESC, "Il cambio di cornice richiede la riapertura e dipende dalle capacità del sistema.")
         .with(C_FRAME_SYSTEM, "Del sistema")
         .with(C_FRAME_CUSTOM, "Personalizzata")
+        .with(C_GROUP_PROFILE, "Profilo")
+        .with(C_PROFILE_NAME, "Il tuo nome")
+        .with(
+            C_PROFILE_NAME_DESC,
+            "Firma i commenti che scrivi nelle note. Il nome finisce nel file della nota: chi lo apre, anche con un altro programma, lo legge. Cambiarlo vale per i commenti nuovi.",
+        )
+        .with(C_COMMENTS_AUTHOR, "Firma dei commenti in questo vault")
+        .with(
+            C_COMMENTS_AUTHOR_DESC,
+            "Che cosa scrive Fub accanto a ogni commento nuovo di questo vault. Senza firma il commento si legge «Senza nome».",
+        )
+        .with(C_COMMENTS_AUTHOR_NAME, "Il nome")
+        .with(C_COMMENTS_AUTHOR_INITIALS, "Le iniziali")
+        .with(C_COMMENTS_AUTHOR_NONE, "Nessuna firma")
         .with(C_GROUP_EDITOR, "Editor")
         .with(C_EDITOR_SPELLCHECK, "Controllo ortografico")
         .with(C_EDITOR_SPELLCHECK_DESC, "Usa il controllo ortografico del sistema mentre scrivi.")
@@ -2209,6 +2441,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LINK_CLICK_PEEK, "Sbircia la nota")
         .with(C_EDITOR_SLASH, "Menu «/» nel testo")
         .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
+        .with(C_EDITOR_HINTS, "Riga dei suggerimenti")
+        .with(C_EDITOR_HINTS_DESC, "Al centro della banda in basso, i tasti utili per ciò che stai facendo, con le tue scorciatoie. Non c'è al telefono né in una finestra più stretta di 620 px.")
         .with(C_EDITOR_SLASH_HIDDEN, "Voci nascoste dal menu «/»")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "Gli id dei comandi che il menu «/» non mostra. Restano nella palette e da tastiera.")
         .with(C_EDITOR_SLASH_SECTIONS, "Ordine delle sezioni del menu «/»")
@@ -2334,6 +2568,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FRAME_RATE_DESC, "Tetto delle animazioni disegnate dall'interfaccia. Il massimo segue il refresh dello schermo, qualunque sia.")
         .with(C_FRAME_RATE_DISPLAY, "Massimo dello schermo")
         .with(C_FRAME_RATE_CAP, "{fps} fps")
+        .with(C_RENDERING, "Disegno delle pagine")
+        .with(
+            C_RENDERING_DESC,
+            "Chi disegna le finestre di Fub. Automatico lascia la scelta a WebKit e ti avvisa dei problemi noti; Processore aiuta con alcuni driver che sfarfallano. Vale dal prossimo avvio.",
+        )
+        .with(C_RENDERING_AUTO, "Automatico")
+        .with(C_RENDERING_GPU, "Scheda grafica")
+        .with(C_RENDERING_CPU, "Processore")
         .with(C_DIAGRAM_STYLE, "Stile dei diagrammi")
         .with(
             C_DIAGRAM_STYLE_DESC,
@@ -2564,6 +2806,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.uri.no_vault", "No vault is open: the link has nowhere to write.")
         .with("host.uri.reads", "“{action}” does not write: the window runs it.")
         .with("host.uri.capture_missing", "The capture also needs “{what}”.")
+        .with("host.uri.capture_replayed", "This capture has already been written: sending it again with the same nonce does not write it twice.")
         .with("host.web.clip.title", "Save the web page as a note")
         .with("host.web.clip.desc", "Downloads a page of an approved site again and writes it as a Markdown note, with its source; a dry run only says where.")
         .with("host.param.url", "Address")
@@ -2757,7 +3000,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_URI_ALLOWED, "fub:// links that write without asking")
         .with(
             C_URI_ALLOWED_DESC,
-            "The chosen actions (new note, daily note, unique note, capture) write as soon as the link arrives, without a confirmation. Opening another vault always asks. Applies on this computer.",
+            "The chosen actions (new note, daily note, unique note) write as soon as the link arrives, without a confirmation. A capture and opening another vault always ask. Applies on this computer.",
         )
         .with(C_FILES_LINK_STYLE, "New links")
         .with(
@@ -2794,6 +3037,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "@ in a note offers the notes in this folder and writes the link to the person; a new person is created here. Empty, @ offers no people.",
         )
         .with(C_GROUP_APPEARANCE, "Appearance")
+        .with(C_GROUP_PROFILE, "Profile")
+        .with(C_PROFILE_NAME, "Your name")
+        .with(
+            C_PROFILE_NAME_DESC,
+            "Signs the comments you write in notes. The name ends up in the note's file: anyone who opens it, even with another program, reads it. Changing it applies to new comments.",
+        )
+        .with(C_COMMENTS_AUTHOR, "Comment signature in this vault")
+        .with(
+            C_COMMENTS_AUTHOR_DESC,
+            "What Fub writes next to every new comment in this vault. Without a signature the comment reads “No name”.",
+        )
+        .with(C_COMMENTS_AUTHOR_NAME, "The name")
+        .with(C_COMMENTS_AUTHOR_INITIALS, "The initials")
+        .with(C_COMMENTS_AUTHOR_NONE, "No signature")
         .with(C_GROUP_EDITOR, "Editor")
         .with(C_EDITOR_SPELLCHECK, "Spellcheck")
         .with(C_EDITOR_SPELLCHECK_DESC, "Use the system spellchecker while editing.")
@@ -2845,6 +3102,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LINK_CLICK_PEEK, "Peeks at the note")
         .with(C_EDITOR_SLASH, "«/» menu in the text")
         .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
+        .with(C_EDITOR_HINTS, "Hints row")
+        .with(C_EDITOR_HINTS_DESC, "In the middle of the bottom band, the keys useful for what you are doing, with your shortcuts. Not on the phone nor in a window narrower than 620 px.")
         .with(C_EDITOR_SLASH_HIDDEN, "Items hidden from the «/» menu")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "The ids of the commands the «/» menu leaves out. They stay in the palette and on the keyboard.")
         .with(C_EDITOR_SLASH_SECTIONS, "Order of the «/» menu sections")
@@ -2964,6 +3223,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FRAME_RATE_DESC, "Cap for animations drawn by the interface. The maximum follows the display refresh rate, whatever it is.")
         .with(C_FRAME_RATE_DISPLAY, "Display maximum")
         .with(C_FRAME_RATE_CAP, "{fps} fps")
+        .with(C_RENDERING, "Page rendering")
+        .with(
+            C_RENDERING_DESC,
+            "What draws Fub's windows. Automatic leaves the choice to WebKit and warns you about known problems; Processor helps with some drivers that flicker. Applies from the next start.",
+        )
+        .with(C_RENDERING_AUTO, "Automatic")
+        .with(C_RENDERING_GPU, "Graphics card")
+        .with(C_RENDERING_CPU, "Processor")
         .with(C_DIAGRAM_STYLE, "Diagram style")
         .with(
             C_DIAGRAM_STYLE_DESC,
@@ -3494,6 +3761,61 @@ mod tests {
         assert!(!spec.program_writable);
     }
 
+    /// Chi firma i commenti (D11 A): il nome è della macchina, vuoto finché la
+    /// persona non lo sceglie; la firma è del vault, col nome di serie e le
+    /// iniziali o niente come scelte. Un programma non le cambia, e tutte e
+    /// due stanno nel gruppo «Profilo», con le parole nelle due lingue.
+    #[test]
+    fn the_comment_signature_is_a_machine_name_and_a_vault_choice() {
+        let all = core_settings();
+        let spec = |key: &str| {
+            all.iter()
+                .find(|spec| spec.key == key)
+                .unwrap_or_else(|| panic!("{key} fra le impostazioni"))
+        };
+        let name = spec(PROFILE_NAME);
+        assert_eq!(name.scope, fub_abi::settings::SettingScope::Machine);
+        assert!(matches!(&name.kind, SettingKind::Text { default } if default.is_empty()));
+        assert_eq!(name.group, Text::key(C_GROUP_PROFILE));
+        assert!(!name.program_writable);
+        assert!(core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == PROFILE_NAME));
+
+        let author = spec(COMMENTS_AUTHOR);
+        assert_eq!(author.scope, fub_abi::settings::SettingScope::Vault);
+        let SettingKind::Choice { default, options } = &author.kind else {
+            panic!("la firma è una scelta");
+        };
+        assert_eq!(default, "nome");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, COMMENTS_AUTHOR_CHOICES);
+        assert_eq!(author.group, Text::key(C_GROUP_PROFILE));
+        assert!(!author.program_writable);
+        assert!(!core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == COMMENTS_AUTHOR));
+
+        for catalog in core_catalog() {
+            for key in [
+                C_GROUP_PROFILE,
+                C_PROFILE_NAME,
+                C_PROFILE_NAME_DESC,
+                C_COMMENTS_AUTHOR,
+                C_COMMENTS_AUTHOR_DESC,
+                C_COMMENTS_AUTHOR_NAME,
+                C_COMMENTS_AUTHOR_INITIALS,
+                C_COMMENTS_AUTHOR_NONE,
+            ] {
+                assert!(
+                    catalog.entries.contains_key(key),
+                    "{key} in {}",
+                    catalog.locale
+                );
+            }
+        }
+    }
+
     /// Le scelte della modalità iniziale sono Scrittura, Sorgente e Lettura;
     /// `blocks` resta valido in fondo, con l'etichetta di Scrittura, perché il
     /// pannello lo nasconda (due scelte con la stessa etichetta sono una) e la
@@ -3592,6 +3914,73 @@ mod tests {
         assert_eq!(std::fs::read(&path).expect("il file"), unknown);
     }
 
+    /// Il percorso di disegno si legge prima di GTK, senza host: senza file,
+    /// senza cartella o con un valore sconosciuto vale `auto`; una scelta
+    /// scritta si legge com'è; il file non cambia di un byte. Solo Linux
+    /// dichiara la chiave.
+    #[test]
+    fn rendering_is_read_before_the_host_and_unknown_values_are_auto() {
+        use fub_abi::settings::SettingValue;
+        use fub_kernel::MachineSettings;
+
+        let keys = [APPEARANCE_RENDERING, APPEARANCE_MOTION];
+        let dir = tempfile::tempdir().expect("cartella temporanea");
+        let config =
+            camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("percorso UTF-8");
+        let rendering = |config: Option<&camino::Utf8Path>| {
+            startup_machine_texts(config, &keys)
+                .get(APPEARANCE_RENDERING)
+                .cloned()
+        };
+        if !cfg!(target_os = "linux") {
+            assert_eq!(rendering(Some(&config)), None);
+            assert!(!core_machine_settings()
+                .iter()
+                .any(|spec| spec.key == APPEARANCE_RENDERING));
+            return;
+        }
+        // Un file di prima, che la chiave non la conosce.
+        assert_eq!(rendering(None).as_deref(), Some("auto"));
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        let path = crate::config::machine_settings_path(&config);
+        {
+            let (machine, _) = MachineSettings::open(&path);
+            machine.declare(&core_machine_settings()).expect("schema");
+            machine
+                .set(APPEARANCE_MOTION, SettingValue::Text("calm".into()))
+                .expect("motion");
+        }
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        assert_eq!(
+            startup_machine_texts(Some(&config), &keys)
+                .get(APPEARANCE_MOTION)
+                .map(String::as_str),
+            Some("calm")
+        );
+        {
+            let (machine, _) = MachineSettings::open(&path);
+            machine.declare(&core_machine_settings()).expect("schema");
+            machine
+                .set(APPEARANCE_RENDERING, SettingValue::Text("cpu".into()))
+                .expect("`cpu` è una scelta valida");
+            assert!(machine
+                .set(APPEARANCE_RENDERING, SettingValue::Text("never".into()))
+                .is_err());
+        }
+        let before = std::fs::read(&path).expect("il file della macchina");
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("cpu"));
+        assert_eq!(std::fs::read(&path).expect("il file"), before);
+
+        let unknown = String::from_utf8(before)
+            .expect("JSON")
+            .replace("\"cpu\"", "\"never\"");
+        std::fs::write(&path, &unknown).expect("valore sconosciuto");
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        std::fs::write(&path, b"{ rotto").expect("file rotto");
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        assert_eq!(std::fs::read(&path).expect("il file"), b"{ rotto");
+    }
+
     /// Il default è il massimo dello schermo, e ogni tetto offerto dal pannello
     /// si legge come tale: un'opzione che `frame_rate_cap` non riconoscesse
     /// resterebbe nel menu e non limiterebbe niente.
@@ -3614,5 +4003,104 @@ mod tests {
         assert_eq!(caps, FRAME_RATE_CAPS.map(Some).to_vec());
         assert_eq!(frame_rate_cap("59"), None);
         assert_eq!(frame_rate_cap("veloce"), None);
+    }
+
+    fn motion_spec(webview: Option<Webview>) -> SettingSpec {
+        appearance_settings_on(webview)
+            .into_iter()
+            .find(|spec| spec.key == APPEARANCE_MOTION)
+            .expect("l'aspetto dichiara le animazioni")
+    }
+
+    fn motion_spec_default(webview: Option<Webview>) -> String {
+        let SettingKind::Choice { default, options } = motion_spec(webview).kind else {
+            panic!("le animazioni sono una scelta");
+        };
+        assert!(
+            options.iter().any(|option| option.value == default),
+            "il default `{default}` è fra le scelte"
+        );
+        default
+    }
+
+    /// Sulla WebKitGTK che sfarfalla (dalla 2.54.0, senza limite superiore
+    /// finché nessuna versione corretta è verificata) le animazioni partono
+    /// ridotte; sulla 2.52 e su ogni webview non dichiarata seguono il sistema.
+    #[test]
+    fn motion_starts_reduced_only_on_the_flickering_webkitgtk() {
+        for faulty in ["2.54.0", "2.54.3", "2.55.1", "2.56.0", "3.0.0"] {
+            let webview = Webview::webkitgtk(faulty).expect("una versione");
+            assert_eq!(motion_spec_default(Some(webview)), "reduced", "{faulty}");
+        }
+        for sound in ["2.52.3", "2.53.90", "2.50.0", "2.44.1"] {
+            let webview = Webview::webkitgtk(sound).expect("una versione");
+            assert_eq!(motion_spec_default(Some(webview)), "", "{sound}");
+        }
+        // Le altre piattaforme non dichiarano una webview: come prima.
+        assert_eq!(motion_spec_default(None), "");
+        // Il processo dei test non ne dichiara nessuna.
+        assert_eq!(
+            core_machine_settings()
+                .into_iter()
+                .find(|spec| spec.key == APPEARANCE_MOTION)
+                .map(|spec| spec.kind),
+            Some(motion_spec(None).kind)
+        );
+    }
+
+    /// Solo tre numeri sono una versione: altrimenti la webview resta non
+    /// dichiarata e il default non cambia.
+    #[test]
+    fn a_webkitgtk_version_is_three_numbers() {
+        assert_eq!(
+            Webview::webkitgtk("2.54.0"),
+            Some(Webview::WebKitGtk(2, 54, 0))
+        );
+        assert_eq!(
+            Webview::webkitgtk(" 2.52.3\n"),
+            Some(Webview::WebKitGtk(2, 52, 3))
+        );
+        for junk in [
+            "",
+            "2.54",
+            "2.54.0.1",
+            "2.54.x",
+            "webkit 2.54.0",
+            "130.0.2849.80x",
+        ] {
+            assert_eq!(Webview::webkitgtk(junk), None, "{junk:?}");
+        }
+    }
+
+    /// Il default nuovo non scavalca una scelta: un valore scritto — anche
+    /// `""`, «segue il sistema» — si legge com'è, con la provenienza della
+    /// macchina; senza un valore si legge `reduced`, con la provenienza del
+    /// default.
+    #[test]
+    fn a_written_motion_value_beats_the_webkitgtk_default() {
+        use fub_abi::settings::{SettingSource, SettingValue};
+        use fub_kernel::MachineSettings;
+
+        let specs: Vec<SettingSpec> = appearance_settings_on(Webview::webkitgtk("2.54.0"))
+            .into_iter()
+            .filter(|spec| spec.scope == fub_abi::settings::SettingScope::Machine)
+            .collect();
+        let machine = MachineSettings::in_memory();
+        machine.declare(&specs).expect("schema");
+        let read = || machine.effective(APPEARANCE_MOTION).expect("dichiarata");
+        assert_eq!(
+            read(),
+            (SettingValue::Text("reduced".into()), SettingSource::Default)
+        );
+        for written in ["", "calm", "reduced"] {
+            machine
+                .set(APPEARANCE_MOTION, SettingValue::Text(written.into()))
+                .expect("una scelta valida");
+            assert_eq!(
+                read(),
+                (SettingValue::Text(written.into()), SettingSource::Machine),
+                "{written:?}"
+            );
+        }
     }
 }

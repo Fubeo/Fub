@@ -21,7 +21,7 @@ import type { Wobble } from "../sim/wobble";
 import { deformationOf } from "../sim/wobble";
 import type { Camera } from "../../spatial/camera";
 import type { Atlas, Tints, TintRole } from "./atlas";
-import { generateAtlas, readTints, drawNode, RADIUS_BUCKETS } from "./atlas";
+import { atlasFor, readTints, drawNode, RADIUS_BUCKETS } from "./atlas";
 
 /// Un'onda visiva in `DrawState.ripples`: x, y di mondo, età 0..1, portata
 /// di mondo.
@@ -212,7 +212,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
   let H = 1;
   let dpr = 1;
   let tints: Tints = readTints(host);
-  let atlas: Atlas = generateAtlas(tints, RADIUS_BUCKETS);
+  let atlas: Atlas = atlasFor(tints, RADIUS_BUCKETS);
   const fontStack = () => getComputedStyle(host).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
   const focusColor = () => getComputedStyle(host).getPropertyValue("--focus-ring").trim();
   let currentFont = fontStack();
@@ -276,7 +276,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     tints = t;
     currentFont = font;
     currentFocus = focus;
-    if (colorsChanged) atlas = generateAtlas(tints, RADIUS_BUCKETS);
+    if (colorsChanged) atlas = atlasFor(tints, RADIUS_BUCKETS);
     // Il font delle etichette può dipendere dal tema: la cache delle
     // larghezze misurate col font vecchio non vale più.
     if (colorsChanged || fontChanged) widths.clear();

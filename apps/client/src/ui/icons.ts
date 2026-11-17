@@ -185,6 +185,16 @@ const ALIASES: Record<string, string> = {
 /// Le icone registrate dai moduli della shell, sopra il set di serie.
 const REGISTERED = new Map<string, string>();
 
+/// Quante volte le figure disegnabili sono cambiate (una registrazione, il set
+/// del tema). Chi riusa elementi già disegnati senza rifarli (il
+/// riconciliatore di `ui/node.ts`) sa da qui se le loro figure valgono ancora.
+let revision = 0;
+
+/// La revisione delle figure: cambia a ogni registrazione e a ogni set del tema.
+export function iconsRevision(): number {
+  return revision;
+}
+
 /// Il set del tema in vigore, per nome canonico (un alias vale per il nome a
 /// cui punta): il corpo, costruito soltanto da tracciati che hanno passato la
 /// regola. Vuoto quando il tema montato non porta icone.
@@ -231,8 +241,11 @@ export function registerIcon(name: string, paths: readonly string[]): Teardown {
   }
   const body = pathsBody(paths);
   REGISTERED.set(name, body);
+  revision += 1;
   return () => {
-    if (REGISTERED.get(name) === body) REGISTERED.delete(name);
+    if (REGISTERED.get(name) !== body) return;
+    REGISTERED.delete(name);
+    revision += 1;
   };
 }
 
@@ -279,6 +292,7 @@ export function replaceThemeIcons(set: Readonly<Record<string, readonly string[]
   }
   THEMED = next;
   THEMED_SOURCE = Object.fromEntries(entries.map(([name, paths]) => [name, [...paths]]));
+  if (changed.size > 0) revision += 1;
   redrawIcons(changed);
 }
 

@@ -40,6 +40,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { waiter } from "./test-wait";
 import {
   appendToTextEditor as typeInEditor,
+  findTextEditor,
+  isDarkTheme,
   mountedTextEditors as editorViews,
   undoDepth,
 } from "./editors/text/test-support";
@@ -165,8 +167,9 @@ async function mount(
   settings: SettingEntry[] = [],
   root: string | null | undefined = undefined,
   throttles: string[] = [],
-  notice: KernelNotice | null = null,
+  notice: KernelNotice | readonly KernelNotice[] | null = null,
   commands: CommandSpec[] = [],
+  prepare: (host: FakeHost) => void = () => {},
 ): Promise<{ host: FakeHost; startup: Promise<() => void>; unlock: Map<string, () => void> }> {
   vi.resetModules();
   box.confirm = true;
@@ -182,6 +185,7 @@ async function mount(
   box.known = [];
   box.host = host;
   const unlock = new Map(throttles.map((p) => [p, host.throttle(p)]));
+  prepare(host);
   mountShell();
   const main = await import("./main");
   // Quello del montaggio prima, se il suo avvio non è mai arrivato in fondo.
@@ -205,7 +209,7 @@ async function start(
   file: Record<string, string>,
   settings: SettingEntry[] = [],
   root: string | null | undefined = undefined,
-  notice: KernelNotice | null = null,
+  notice: KernelNotice | readonly KernelNotice[] | null = null,
   commands: CommandSpec[] = [],
 ): Promise<FakeHost> {
   const { host, startup } = await mount(file, settings, root, [], notice, commands);
@@ -315,7 +319,7 @@ async function shortcutField(label: string): Promise<HTMLInputElement> {
 
 /// Il testo dell'editor, letto dal DOM di CodeMirror come lo legge chi guarda.
 function textToVideo(): string {
-  const rows = [...document.querySelectorAll(".cm-content .cm-line")];
+  const rows = [...document.querySelectorAll(".pane-editor .cm-content .cm-line")];
   return rows.map((r) => r.textContent).join("\n");
 }
 
@@ -327,8 +331,9 @@ const VAULT = {
 
 function editorTexts(): string[] {
   // `.cm-scroller > `: il livello dei fantasmi dei Blocchi (`blocks/motion.ts`)
-  // porta la classe del contenuto, ma non è un editor.
-  return [...document.querySelectorAll(".cm-scroller > .cm-content")].map((content) =>
+  // porta la classe del contenuto, ma non è un editor; `.pane-editor`: quelli
+  // delle schede messe da parte sono nascosti, in `.pane-editor-riposo`.
+  return [...document.querySelectorAll(".pane-editor .cm-scroller > .cm-content")].map((content) =>
     [...content.querySelectorAll(".cm-line")].map((line) => line.textContent ?? "").join("\n"),
   );
 }
@@ -674,6 +679,121 @@ describe("vita della finestra", () => {
   });
 });
 
+describe("aperture in gara: vince l'ultima chiesta", () => {
+  /// Tiene in volo le sole chiamate di `port` che `match` riconosce, finché
+  /// non si chiama `release`; `reached` si risolve alla prima tenuta. Le altre
+  /// chiamate della stessa porta passano: `throttle` le fermerebbe tutte, e
+  /// l'avvio non arriverebbe mai al punto che si vuole guardare.
+  function hold(host: FakeHost, port: string, match: (...args: unknown[]) => boolean) {
+    const api = host.module.api as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    const original = api[port]!.bind(api);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let reach!: () => void;
+    const reached = new Promise<void>((resolve) => (reach = resolve));
+    api[port] = (...args: unknown[]) => {
+      if (!match(...args)) return original(...args);
+      reach();
+      return gate.then(() => original(...args));
+    };
+    return { reached, release };
+  }
+
+  /// Il riquadro col fuoco dice lo stesso documento dappertutto: la scheda
+  /// scelta, il percorso in testa, il testo dell'editor.
+  function expectShowing(title: string, text: string): void {
+    expect(document.querySelector('.pane.focus .tab[aria-selected="true"]')?.textContent).toContain(title);
+    expect(document.querySelector(".pane.focus .muted")?.textContent).toContain(title);
+    expect(textToVideo()).toContain(text);
+  }
+
+  function tabNames(): string[] {
+    return [...document.querySelectorAll(".pane.focus .tab")].map((tab) => tab.textContent ?? "");
+  }
+
+  it("la prima nota lenta all'avvio non vince sul documento aperto intanto", async () => {
+    const { host, startup, unlock } = await mount(VAULT, [], undefined, ["openDocument"]);
+    await waitFor("l'avvio apre la prima nota", () => host.atGate("openDocument").some((c) => c.args[0] === "Benvenuto.md"));
+    const controller = await import("./state/document-controller");
+    const opening = controller.openDocument("note/Spesa.md", { gesture: true });
+    unlock.get("openDocument")!();
+    await Promise.all([startup, opening]);
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+  });
+
+  it("la prima nota decisa prima di un'apertura chiesta intanto non parte", async () => {
+    // L'ordine inverso: l'avvio ha visto il riquadro vuoto e cerca la prima
+    // nota; intanto si apre un documento. Arrivata la risposta, la decisione
+    // è vecchia e non deve scavalcare il documento aperto.
+    let first!: ReturnType<typeof hold>;
+    const { host, startup } = await mount(VAULT, [], undefined, [], null, [], (fake) => {
+      first = hold(fake, "queryIndex", (q) => {
+        const query = q as { kind?: string; of_kind?: string | null; page?: { limit?: number } };
+        return query.kind === "entries" && query.of_kind === "document" && query.page?.limit === 1;
+      });
+    });
+    await first.reached;
+    const controller = await import("./state/document-controller");
+    await controller.openDocument("note/Spesa.md", { gesture: true });
+    first.release();
+    await startup;
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+    expect(tabNames().some((name) => name.includes("Benvenuto"))).toBe(false);
+    expect(host.atGate("openDocument").some((c) => c.args[0] === "Benvenuto.md")).toBe(false);
+  });
+
+  it("la nota d'avvio non scavalca il documento aperto mentre la si controllava", async () => {
+    const choice = (key: string, value: string) => ({ spec: { key }, value, source: "machine" }) as unknown as SettingEntry;
+    let check!: ReturnType<typeof hold>;
+    const settings = [choice("files.startup", "note"), choice("files.startup-note", "note/Riunione.md")];
+    const { startup } = await mount(VAULT, settings, undefined, [], null, [], (fake) => {
+      check = hold(fake, "readDocument", (id) => id === "note/Riunione.md");
+    });
+    await check.reached;
+    const controller = await import("./state/document-controller");
+    await controller.openDocument("note/Spesa.md", { gesture: true });
+    check.release();
+    await startup;
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+    expect(tabNames().some((name) => name.includes("Riunione"))).toBe(false);
+  });
+
+  it("durante un'apertura lenta il percorso in testa è già del documento chiesto", async () => {
+    const host = await start(VAULT);
+    await waitFor("Benvenuto è a schermo", () => textToVideo().includes("primo documento"));
+    const controller = await import("./state/document-controller");
+    const unlock = host.throttle("openDocument");
+    const opening = controller.openDocument("note/Spesa.md", { gesture: true });
+    await waitFor("la lettura di Spesa è partita", () => host.atGate("openDocument").some((c) => c.args[0] === "note/Spesa.md"));
+    await settle();
+    // La scheda è già di Spesa: il percorso dice lo stesso, non Benvenuto.
+    expect(document.querySelector('.pane.focus .tab[aria-selected="true"]')?.textContent).toContain("Spesa");
+    expect(document.querySelector(".pane.focus .muted")?.textContent).toContain("Spesa");
+    expect(document.querySelector(".pane.focus .muted")?.textContent).not.toContain("Benvenuto");
+    unlock();
+    await opening;
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+  });
+
+  it("due aperture rapide: resta l'ultima, e la prima resta una scheda", async () => {
+    const host = await start(VAULT);
+    const controller = await import("./state/document-controller");
+    const unlock = host.throttle("openDocument");
+    const first = controller.openDocument("note/Riunione.md", { gesture: true });
+    const second = controller.openDocument("note/Spesa.md", { gesture: true });
+    await settle();
+    unlock();
+    await Promise.all([first, second]);
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+    expect(tabNames().some((name) => name.includes("Riunione"))).toBe(true);
+  });
+});
+
 describe("navigazione accessibile dell'esploratore", () => {
   it("espande e richiude senza aprire la pagina della cartella né perdere il focus", async () => {
     await start({ ...VAULT, "note/_index.md": "La pagina della cartella.\n" });
@@ -827,6 +947,70 @@ describe("navigazione accessibile dell'esploratore", () => {
       document.querySelector('#file-list li[data-path="note"]')?.getAttribute("aria-expanded"),
     ).toBe("true");
     expect(document.querySelector(".sheet-title-edit")).toBeNull();
+  });
+});
+
+describe("il cassetto sopra i fogli (A-02)", () => {
+  // A 700 px albero e ispettore sono cassetti col velo: la tastiera non deve
+  // arrivare al foglio coperto. Scegliere un documento chiude il cassetto e dà
+  // il fuoco al documento; qualunque fuoco che entra sotto il velo lo chiude.
+  const narrow = async (body: () => Promise<void>): Promise<void> => {
+    const saved = Object.getOwnPropertyDescriptor(window, "innerWidth");
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 700 });
+    try {
+      await body();
+    } finally {
+      if (saved) Object.defineProperty(window, "innerWidth", saved);
+      else delete (window as { innerWidth?: number }).innerWidth;
+    }
+  };
+  const run = async (id: string) => {
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === id)!.run!();
+    await settle();
+  };
+  const layout = () => document.getElementById("layout")!;
+  const inSheet = () => !!document.activeElement?.closest(".pane");
+
+  it("scegliere una nota dall'albero chiude il cassetto e porta il fuoco nella nota", async () => {
+    await narrow(async () => {
+      await start(VAULT);
+      await run("shell.sidebar.toggle");
+      expect(layout().classList.contains("drawer-sidebar-open")).toBe(true);
+      const chevron = document.querySelector<HTMLButtonElement>('#file-list li[data-path="note"] > .tree-row > .chevron')!;
+      chevron.click();
+      await waitFor("la cartella si apre", () => !!document.querySelector('#file-list li[data-path="note/Spesa.md"]'));
+      // Aprire la cartella non è scegliere un documento: il cassetto resta.
+      expect(layout().classList.contains("drawer-sidebar-open")).toBe(true);
+      const row = document.querySelector<HTMLElement>('#file-list li[data-path="note/Spesa.md"]')!;
+      row.focus();
+      row.querySelector<HTMLElement>(":scope > .tree-row")!.click();
+      await waitFor("la nota si apre", () => textToVideo().includes("pane, latte"));
+      await settle();
+      expect(layout().classList.contains("drawer-sidebar-open")).toBe(false);
+      expect(document.getElementById("sidebar-scrim")!.hidden).toBe(true);
+      expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+    });
+  });
+
+  it("finché il cassetto è aperto il fuoco non resta nel foglio coperto, anche nell'ispettore", async () => {
+    await narrow(async () => {
+      await start(VAULT);
+      const controller = await import("./state/document-controller");
+      for (const side of ["sidebar", "inspector"] as const) {
+        await run(side === "sidebar" ? "shell.sidebar.toggle" : "shell.inspector.toggle");
+        expect(layout().classList.contains(`drawer-${side}-open`)).toBe(true);
+        // La rail sta sopra il velo: il fuoco lì non chiude niente.
+        document.querySelector<HTMLElement>("#rail button")!.focus();
+        expect(layout().classList.contains(`drawer-${side}-open`)).toBe(true);
+        // Una voce dello schema, un collegamento: chi porta il fuoco all'editor
+        // sotto il velo chiude il cassetto prima che arrivi una battuta.
+        controller.focusEditor();
+        expect(inSheet()).toBe(true);
+        expect(layout().classList.contains(`drawer-${side}-open`)).toBe(false);
+        expect(document.getElementById(side === "sidebar" ? "sidebar-scrim" : "inspector-scrim")!.hidden).toBe(true);
+      }
+    });
   });
 });
 
@@ -993,7 +1177,7 @@ describe("i menu dell'albero e della scheda", () => {
     await start({ ...VAULT, "foto.png": "png" });
     const { setSidePanelController } = await import("./ui/side-panels");
     const revealed: string[] = [];
-    const restore = setSidePanelController({ visible: () => false, reveal: (side) => void revealed.push(side), toggle: () => {} });
+    const restore = setSidePanelController({ visible: () => false, reveal: (side) => void revealed.push(side), toggle: () => {}, dismiss: () => {} });
     await contextMenu(tree("foto.png"), "Mostra le note che lo usano");
     await waitFor("il file si apre", () => [...document.querySelectorAll(".pane .tab")].some((tab) => tab.textContent?.includes("foto")));
     expect(revealed).toEqual(["inspector"]);
@@ -1099,6 +1283,44 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     const field = noteItem("note/Riunione.md")?.querySelector<HTMLInputElement>("input");
     expect(field?.value).toBe("Riunione");
     expect(document.activeElement).toBe(field);
+  });
+
+  it("dopo la rinomina il fuoco resta sulla riga rinominata, o va dove si è cliccato (B-02)", async () => {
+    await start(VAULT);
+    noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la cartella si apre", () => !!noteItem("note/Spesa.md"));
+    const rename = (from: string, name: string, commit: (field: HTMLInputElement) => void): void => {
+      noteItem(from)!.focus();
+      noteItem(from)!.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+      const field = noteItem(from)!.querySelector<HTMLInputElement>("input")!;
+      expect(document.activeElement).toBe(field);
+      field.value = name;
+      commit(field);
+    };
+
+    // Invio: il fuoco segue la voce al nome nuovo, non cade su `body`.
+    rename("note/Spesa.md", "Lista", (field) =>
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    await waitFor("la voce rinominata", () => !!noteItem("note/Lista.md"));
+    await settle();
+    expect(document.activeElement).toBe(noteItem("note/Lista.md"));
+
+    // Un clic fuori su niente di focalizzabile: il fuoco torna alla riga.
+    rename("note/Lista.md", "Elenco", (field) =>
+      field.dispatchEvent(new FocusEvent("blur", { relatedTarget: null })));
+    await waitFor("la voce rinominata ancora", () => !!noteItem("note/Elenco.md"));
+    await settle();
+    expect(document.activeElement).toBe(noteItem("note/Elenco.md"));
+
+    // Un clic su un controllo: il fuoco resta lì.
+    const elsewhere = document.getElementById("new-note")!;
+    rename("note/Elenco.md", "Compere", (field) => {
+      field.dispatchEvent(new FocusEvent("blur", { relatedTarget: elsewhere }));
+      elsewhere.focus();
+    });
+    await waitFor("la terza rinomina", () => !!noteItem("note/Compere.md"));
+    await settle();
+    expect(document.activeElement).toBe(elsewhere);
   });
 
   it("un nome rifiutato riapre il campo col testo digitato e la frase accanto", async () => {
@@ -1853,6 +2075,242 @@ describe("una sessione e le sue superfici", () => {
     expect(texts[0]).toContain(" [dopo il rimonto]");
   });
 
+  // C5: tornare a una scheda aperta non rimonta l'editor. La sua superficie
+  // resta da parte, nascosta, col cursore, lo scorrimento e la cronologia
+  // locale; il testo cambiato altrove intanto arriva come da fuori.
+  describe("tornare a una scheda già aperta", () => {
+    const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+    const tabOf = (pane: HTMLElement, name: string) =>
+      [...pane.querySelectorAll<HTMLElement>(".tab")].find((tab) => tab.textContent?.includes(name))!;
+    const viewIn = (pane: HTMLElement) => {
+      const host = pane.querySelector<HTMLElement>(".pane-editor");
+      return host ? findTextEditor(host) : null;
+    };
+    type TextView = NonNullable<ReturnType<typeof findTextEditor>>;
+    /// Una superficie liberata ha distrutto il suo editor, e con lui gli
+    /// ascoltatori e i plugin: il campo è privato in CodeMirror, ma è il segno.
+    const destroyed = (view: TextView) => (view as unknown as { destroyed: boolean }).destroyed;
+    /// Apre Spesa nel primo riquadro, torna su Benvenuto e dà l'editor di Spesa,
+    /// rimasto da parte.
+    const parkSpesa = async (): Promise<TextView> => {
+      const { openDocument } = await import("./panels/document");
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const spesa = viewIn(panes()[0]!)!;
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Spesa va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
+      return spesa;
+    };
+
+    it("ritrova la stessa superficie, col cursore e la cronologia locale", async () => {
+      const host = await start({ ...VAULT });
+      const { openDocument } = await import("./panels/document");
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const spesa = viewIn(panes()[0]!)!;
+      spesa.dispatch({ changes: { from: 4, insert: " fresco" }, selection: { anchor: 11 }, userEvent: "input.type" });
+      const depth = undoDepth(spesa.state);
+      expect(depth).toBeGreaterThan(0);
+
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Benvenuto torna davanti", () => viewIn(panes()[0]!)?.state.doc.toString().includes("Il primo documento") === true);
+      expect(editorViews()).toHaveLength(1);
+      expect(panes()[0]!.querySelectorAll(".pane-editor")).toHaveLength(1);
+      expect(panes()[0]!.querySelector<HTMLElement>(".pane-editor-riposo")?.hidden).toBe(true);
+
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti", () => viewIn(panes()[0]!) === spesa);
+      expect(spesa.state.doc.toString()).toContain("pane fresco, latte");
+      expect(spesa.state.selection.main.head).toBe(11);
+      expect(undoDepth(spesa.state)).toBe(depth);
+      expect(spesa.state.readOnly).toBe(false);
+      // La superficie che torna scrive ancora nella sessione.
+      spesa.dispatch({ changes: { from: 0, insert: "X" }, userEvent: "input.type" });
+      await settle();
+      const { documentSessions } = await import("./state/document-session");
+      expect(documentSessions.text("note/Spesa.md")).toContain("Xpane fresco");
+      // Il salvataggio arriva al disco qui, non nella prova dopo.
+      await waitFor("il salvataggio arriva al disco", () =>
+        host.atGate("writeDocument").some((call) => String(call.args[1]).includes("Xpane fresco")) &&
+        (host.files()["note/Spesa.md"] ?? "").includes("Xpane fresco"));
+    });
+
+    it("il testo cambiato in un altro riquadro intanto arriva, fuori dalla cronologia locale", async () => {
+      await start({ ...VAULT });
+      await splitRight();
+      await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+      await settle();
+      const { openDocument } = await import("./panels/document");
+      panes()[0]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await openDocument("note/Spesa.md");
+      await settle();
+      await waitFor("Spesa si apre a sinistra", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const parked = viewIn(panes()[0]!)!;
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Benvenuto torna davanti", () => viewIn(panes()[0]!) !== parked);
+
+      panes()[1]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre a destra", () => viewIn(panes()[1]!)?.state.doc.toString().includes("pane, latte") === true);
+      const right = viewIn(panes()[1]!)!;
+      right.dispatch({ changes: { from: 0, insert: "Lista: " }, userEvent: "input.type" });
+      await settle();
+
+      panes()[0]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti a sinistra", () => viewIn(panes()[0]!) === parked);
+      expect(parked.state.doc.toString()).toContain("Lista: pane, latte");
+      expect(undoDepth(parked.state)).toBe(0);
+    });
+
+    it("chiudere una scheda messa da parte smonta la sua superficie", async () => {
+      await start({ ...VAULT });
+      const { openDocument } = await import("./panels/document");
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const parked = viewIn(panes()[0]!)!;
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Spesa va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
+      const close = tabOf(panes()[0]!, "Spesa").parentElement!.querySelector<HTMLElement>(".tab-close");
+      expect(close).not.toBeNull();
+      close!.click();
+      await waitFor("la superficie da parte se ne va", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
+      expect(document.querySelectorAll(".cm-editor")).toHaveLength(1);
+      expect(destroyed(parked)).toBe(true);
+    });
+
+    it("il testo cambiato sul disco mentre è da parte arriva al ritorno", async () => {
+      const host = await start({ ...VAULT });
+      const parked = await parkSpesa();
+      host.writeFromOutside("note/Spesa.md", "cambiato da un'altra app\n");
+      const { documentSessions } = await import("./state/document-session");
+      await waitFor("la sessione rilegge il disco", () => documentSessions.text("note/Spesa.md") === "cambiato da un'altra app\n");
+      // Da parte non si ridisegna: è staccata dalla sessione.
+      expect(parked.state.doc.toString()).toContain("pane, latte");
+
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti", () => viewIn(panes()[0]!) === parked);
+      expect(parked.state.doc.toString()).toBe("cambiato da un'altra app\n");
+      expect(undoDepth(parked.state)).toBe(0);
+    });
+
+    it("una rinomina o uno spostamento smontano la superficie da parte, e la scheda rimonta col testo", async () => {
+      const host = await start({ ...VAULT });
+      const parked = await parkSpesa();
+      host.renameFromOutside("note/Spesa.md", "note/Lista.md");
+      await waitFor("la scheda segue la rinomina", () => !!tabOf(panes()[0]!, "Lista"));
+      await waitFor("la superficie da parte se ne va", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
+      expect(destroyed(parked)).toBe(true);
+
+      tabOf(panes()[0]!, "Lista").click();
+      await waitFor("Lista si monta", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const lista = viewIn(panes()[0]!)!;
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Lista va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
+
+      host.renameFromOutside("note/Lista.md", "Archivio/Lista.md");
+      await waitFor("la superficie da parte se ne va dopo lo spostamento", () =>
+        panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
+      expect(destroyed(lista)).toBe(true);
+      tabOf(panes()[0]!, "Lista").click();
+      await waitFor("Lista si monta dalla cartella nuova", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      expect(editorViews()).toHaveLength(1);
+    });
+
+    it("un salvataggio in volo quando la scheda va da parte arriva al disco, e la superficie torna intatta", async () => {
+      const host = await start({ ...VAULT });
+      const { openDocument } = await import("./panels/document");
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const spesa = viewIn(panes()[0]!)!;
+      const release = host.throttle("writeDocument");
+      spesa.dispatch({ changes: { from: 0, insert: "A " }, userEvent: "input.type" });
+      await waitFor("il primo salvataggio è in volo", () =>
+        host.atGate("writeDocument").some((call) => String(call.args[1]).startsWith("A pane")));
+      // Il secondo resta nel debounce della superficie: andare da parte lo registra.
+      spesa.dispatch({ changes: { from: 2, insert: "B " }, userEvent: "input.type" });
+      const depth = undoDepth(spesa.state);
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Spesa va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
+      const { documentSessions } = await import("./state/document-session");
+      expect(documentSessions.text("note/Spesa.md")).toBe("A B pane, latte, arance\n");
+
+      release();
+      await waitFor("tutto arriva al disco", () => host.files()["note/Spesa.md"] === "A B pane, latte, arance\n");
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti", () => viewIn(panes()[0]!) === spesa);
+      expect(spesa.state.doc.toString()).toBe("A B pane, latte, arance\n");
+      expect(undoDepth(spesa.state)).toBe(depth);
+      expect(document.querySelector('.sheet-notice[data-notice]')).toBeNull();
+    });
+
+    it("la luce cambiata mentre è da parte arriva al ritorno", async () => {
+      await start({ ...VAULT });
+      const { setEditorTheme } = await import("./panels/document");
+      setEditorTheme("light");
+      const parked = await parkSpesa();
+      expect(isDarkTheme(parked)).toBe(false);
+
+      setEditorTheme("dark");
+      expect(isDarkTheme(viewIn(panes()[0]!)!)).toBe(true);
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti", () => viewIn(panes()[0]!) === parked);
+      expect(isDarkTheme(parked)).toBe(true);
+    });
+
+    it("dividere non copia le superfici da parte, e chiudere il riquadro le smonta", async () => {
+      await start({ ...VAULT });
+      const left = await parkSpesa();
+      await splitRight();
+      await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+      await settle();
+      expect(panes()[1]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(0);
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(1);
+
+      const { openDocument } = await import("./panels/document");
+      panes()[1]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await openDocument("note/Riunione.md");
+      await waitFor("Riunione si apre a destra", () => viewIn(panes()[1]!)?.state.doc.toString().includes("Appunti") === true);
+      const right = viewIn(panes()[1]!)!;
+      tabOf(panes()[1]!, "Benvenuto").click();
+      await waitFor("Riunione va da parte a destra", () => panes()[1]!.querySelectorAll(".pane-editor-riposo").length === 1);
+
+      const registry = await import("./ui/commands");
+      await registry.allCommands().find((entry) => entry.id === "shell.pane.close")?.run?.();
+      await waitFor("il riquadro si chiude", () => panes().length === 1);
+      expect(destroyed(right)).toBe(true);
+      expect(destroyed(left)).toBe(false);
+      expect(document.querySelectorAll(".pane-editor-riposo")).toHaveLength(1);
+    });
+
+    it("tiene da parte al più quattro superfici per riquadro: la quinta libera la meno recente", async () => {
+      const notes: Record<string, string> = {};
+      for (let i = 1; i <= 5; i += 1) notes[`n/Nota ${i}.md`] = `testo della nota ${i}\n`;
+      await start({ ...VAULT, ...notes });
+      const { openDocument } = await import("./panels/document");
+      const views: TextView[] = [viewIn(panes()[0]!)!];
+      for (let i = 1; i <= 5; i += 1) {
+        await openDocument(`n/Nota ${i}.md`);
+        await waitFor(`Nota ${i} si apre`, () => viewIn(panes()[0]!)?.state.doc.toString() === `testo della nota ${i}\n`);
+        views.push(viewIn(panes()[0]!)!);
+      }
+      // Da parte: Benvenuto, Nota 1…4; la quinta superficie da parte ha liberato Benvenuto.
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(4);
+      expect(destroyed(views[0]!)).toBe(true);
+      expect(views.slice(1).map(destroyed)).toEqual([false, false, false, false, false]);
+      expect(document.querySelectorAll(".cm-editor")).toHaveLength(5);
+
+      // Benvenuto torna montato da capo; Nota 1, ora la meno recente, se ne va.
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Benvenuto si rimonta", () => viewIn(panes()[0]!)?.state.doc.toString().includes("Il primo documento") === true);
+      expect(viewIn(panes()[0]!)).not.toBe(views[0]);
+      expect(destroyed(views[1]!)).toBe(true);
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(4);
+      tabOf(panes()[0]!, "Nota 3").click();
+      await waitFor("Nota 3 torna com'era", () => viewIn(panes()[0]!) === views[3]);
+    });
+  });
+
   it("«Apri a lato» dal menu della riga apre la nota in un secondo riquadro", async () => {
     await start(VAULT);
     await contextMenu(row("Benvenuto"), "Apri a lato");
@@ -2173,7 +2631,7 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     Object.defineProperty(drop, "dataTransfer", {
       value: { types: ["application/x-fub-entries"], files: [], getData: (kind: string) => (kind === "application/x-fub-entries" ? entries : "") },
     });
-    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    document.querySelector(".pane-editor .cm-content")!.dispatchEvent(drop);
     expect(drop.defaultPrevented).toBe(true);
     await waitFor("il rimando è nel testo", () => editorTexts().some((text) => text.includes("img/foto.png")));
     expect(editorTexts().join("\n")).not.toContain("/vault/");
@@ -2207,7 +2665,7 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     Object.defineProperty(drop, "dataTransfer", {
       value: { types: ["application/x-fub-entries"], files: [], getData: (kind: string) => (kind === "application/x-fub-entries" ? entries : "") },
     });
-    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    document.querySelector(".pane-editor .cm-content")!.dispatchEvent(drop);
     await waitFor("il link è nel testo", () => editorTexts().some((text) => text.includes("[Spesa](note/Spesa.md)")));
     expect(editorTexts().join("\n")).not.toContain("[[");
   });
@@ -2221,7 +2679,7 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     const files = [shortcut, new File([new Uint8Array([1, 2, 3])], "foto.png")];
     const drop = new Event("drop", { bubbles: true, cancelable: true });
     Object.defineProperty(drop, "dataTransfer", { value: { types: ["Files"], files, getData: () => "" } });
-    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    document.querySelector(".pane-editor .cm-content")!.dispatchEvent(drop);
     expect(drop.defaultPrevented).toBe(true);
     await waitFor("il link è nel testo", () => editorTexts().some((text) => text.includes("[Pagina utile](https://example.org/pagina)")));
     await waitFor("l'immagine è depositata", () => host.atGate("resourceWrite").length === 1);
@@ -3314,7 +3772,8 @@ describe("la finestra senza vault", () => {
     };
     const host = await start({}, [], null, notice);
 
-    expect(host.atGate("sessionNotice").length).toBe(1);
+    // Un tiraggio per l'avviso, uno che risponde vuoto e ferma il ciclo.
+    expect(host.atGate("sessionNotice").length).toBe(2);
     const { recentNotices } = await import("./ui/notify");
     expect(recentNotices().some((a) => a.text.includes("non si può scrivere"))).toBe(true);
 
@@ -3326,6 +3785,37 @@ describe("la finestra senza vault", () => {
     const { recentNotices: healthyRecent } = await import("./ui/notify");
     expect(healthy.atGate("sessionNotice").length).toBe(1);
     expect(healthyRecent().some((a) => a.text.includes("non si può scrivere"))).toBe(false);
+  });
+
+  it("dopo la diagnosi tira gli avvisi del percorso di disegno e li mostra", async () => {
+    // Il driver disallineato nasce in `fub_app::run` prima di GTK, e arriva
+    // in coda all'avviso di sessione come `custom` col topic `rendering`:
+    // senza il ciclo dei tiraggi si vedrebbe solo il primo.
+    const trouble: KernelNotice = {
+      event: {
+        type: "trouble",
+        severity: "warning",
+        subject: null,
+        error: { kind: "io", message: "`/config` non si può scrivere" },
+        gate: null,
+      },
+      origin: { actor: { kind: "kernel" }, batch: null },
+    };
+    const rendering: KernelNotice = {
+      event: {
+        type: "custom",
+        topic: "rendering",
+        payload: { kind: "driver_mismatch", kernel: "550.163.01", library: "595.112.07" },
+      },
+      origin: { actor: { kind: "kernel" }, batch: null },
+    };
+    const host = await start({}, [], null, [trouble, rendering]);
+
+    expect(host.atGate("sessionNotice").length).toBe(3);
+    const { recentNotices } = await import("./ui/notify");
+    const texts = recentNotices().map((a) => a.text);
+    expect(texts.some((text) => text.includes("non si può scrivere"))).toBe(true);
+    expect(texts.some((text) => text.includes("riavvia il computer") && text.includes("550.163.01"))).toBe(true);
   });
 });
 
@@ -3678,7 +4168,7 @@ describe("i riquadri dopo un'attesa", () => {
     await openDocument("note/Spesa.md");
     await settle();
 
-    expect(panes()[1]!.querySelector(".cm-content")?.textContent).toContain("pane, latte");
+    expect(panes()[1]!.querySelector(".pane-editor .cm-content")?.textContent).toContain("pane, latte");
     expect(state.currentDoc).toBe("note/Spesa.md");
     expect(panes()[0]!.querySelector(".document-surface-error")).not.toBeNull();
   });

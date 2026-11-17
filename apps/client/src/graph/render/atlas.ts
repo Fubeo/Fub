@@ -211,6 +211,20 @@ export function generateAtlas(t: Tints, bucket: RadiusBucket[]): Atlas {
   return { canvas, bucket, source: atlasKey(t, bucket), cell, cells, rows, colors };
 }
 
+/// L'atlas per questi colori, cotto una volta sola finché i colori non
+/// cambiano: l'ultimo resta e il pittore dopo lo riprende. Cuocerlo costa una
+/// quindicina di ms (diciotto gradienti radiali e, per un colore che non è un
+/// esadecimale, una lettura di pixel); riaprire il grafo, o scaldarlo prima
+/// (`graph/warmup.ts`), non lo rifà. Il canvas dell'atlas si legge soltanto
+/// (`drawImage`): due pittori possono averlo insieme.
+let lastAtlas: Atlas | null = null;
+export function atlasFor(t: Tints, bucket: RadiusBucket[]): Atlas {
+  const key = atlasKey(t, bucket);
+  if (lastAtlas?.source === key && lastAtlas.bucket === bucket) return lastAtlas;
+  lastAtlas = generateAtlas(t, bucket);
+  return lastAtlas;
+}
+
 /// Disegna un nodo di raggio `radius` (px CSS sullo schermo) centrato su
 /// (x,y). `dpr` sceglie il livello: il raggio in pixel del dispositivo. Lo
 /// sprite si prende dal suo ritaglio esatto — non dalla cella intera, che per

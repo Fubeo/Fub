@@ -27,7 +27,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setMotionDriver, setMotionPreference } from "../moto";
 import { createManualDriver } from "../moto/driver";
-import { closeContextMenu, menuPointFor, pickIcon, registerMenuSearch, showContextMenu } from "./menu";
+import { closeContextMenu, menuKeyFoot, menuKeys, menuPointFor, pickIcon, registerMenuSearch, showContextMenu } from "./menu";
 import { openLifetime } from "./lifetime";
 import { mountFrameIcons } from "../shells/scrittoio/icons";
 import { channels, contrast } from "../theme/contrast";
@@ -169,6 +169,31 @@ describe("tastiera e fuoco del menu", () => {
     expect(document.activeElement).toBe(again);
     again.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
     expect(document.activeElement, "e la freccia su va all'ultima").toBe([...again.querySelectorAll("[role=menuitem]")][1]);
+  });
+
+  it("aprendosi sposta il fuoco una volta sola, dal puntatore e dalla tastiera", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      // In WebKit ogni `focus()` ricalcola lo stile della pagina: la trappola
+      // metteva il fuoco sulla prima voce e il menu lo rimetteva subito dove
+      // voleva lui, due ricalcoli nel fotogramma del clic.
+      showContextMenu(clickEvent(), [{ label: "Prima", run: () => {} }, { label: "Seconda", run: () => {} }], { pointer: true });
+      expect(focus).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(document.getElementById("context-menu"));
+      closeContextMenu();
+      vi.runAllTimers();
+      expect(document.activeElement, "il fuoco torna da dove era partito").toBe(opener);
+
+      focus.mockClear();
+      showContextMenu(clickEvent(), [{ label: "Prima", run: () => {} }, { label: "Seconda", run: () => {} }], { pointer: false });
+      expect(focus).toHaveBeenCalledTimes(1);
+      expect(document.activeElement?.textContent).toContain("Prima");
+    } finally {
+      focus.mockRestore();
+    }
   });
 
   it("attiva una sola volta e restituisce il fuoco anche chiudendo con Escape", () => {
@@ -936,7 +961,7 @@ describe("la testata, la riga degli appunti e il piede", () => {
     expect(foot.classList.contains("menu-finding")).toBe(true);
     expect(foot.querySelector(".menu-foot-query")!.textContent).toBe("zz");
     const offer = document.querySelector<HTMLButtonElement>("#context-menu .menu-items [role=menuitem]")!;
-    expect(offer.querySelector(".menu-hint")!.textContent).toBe("Ctrl+Maiusc+P");
+    expect(offer.querySelector(".menu-hint")!.textContent).toBe("Ctrl Maiusc P");
     off();
   });
 
@@ -1313,6 +1338,162 @@ describe("il menu che cerca dappertutto", () => {
 /// menu, nelle quattro luci: sul rialzo, sotto la pastiglia della scelta, nella
 /// barra degli appunti e nel piede. I veli si compongono sul rialzo prima di
 /// contare (`theme/contrast.ts` non legge l'alfa).
+describe("i tasti nelle voci", () => {
+  afterEach(() => closeContextMenu());
+
+  it("si scrivono come nel prototipo: i tasti separati da uno spazio, coi nomi italiani", () => {
+    expect(menuKeys("Ctrl+K")).toBe("Ctrl K");
+    expect(menuKeys("Ctrl+Shift+V")).toBe("Ctrl Maiusc V");
+    expect(menuKeys("Ctrl+Maiusc+P")).toBe("Ctrl Maiusc P");
+    expect(menuKeys("Del")).toBe("Canc");
+    expect(menuKeys("Shift+Tab")).toBe("Maiusc Tab");
+    expect(menuKeys("/")).toBe("/");
+    // Un tasto «+» da solo resta sé stesso; la forma del Mac non si tocca.
+    expect(menuKeys("Ctrl++")).toBe("Ctrl +");
+    expect(menuKeys("⌘K")).toBe("⌘K");
+  });
+
+  it("la voce mostra la forma del menu, ma a chi ascolta dice la scorciatoia com'è", () => {
+    showContextMenu(clickEvent(), [{ label: "Collega a una nota…", hint: "Ctrl+K", run: () => {} }], { pointer: false });
+    const row = document.querySelector<HTMLElement>("#context-menu [role=menuitem]")!;
+    expect(row.querySelector(".menu-hint")!.textContent).toBe("Ctrl K");
+    expect(row.getAttribute("aria-keyshortcuts")).toBe("Ctrl+K");
+  });
+});
+
+describe("il menu col campo, il titolo e il piede dei tasti", () => {
+  const key = (target: EventTarget, name: string): KeyboardEvent => {
+    const e = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true });
+    target.dispatchEvent(e);
+    return e;
+  };
+  const write = (input: HTMLInputElement, text: string): void => {
+    input.value = text;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const rows = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>("#context-menu .menu-items [role^=menuitem]")];
+  const labels = (): string[] => rows().map((b) => b.querySelector(".menu-label")!.textContent!);
+  let runs: string[];
+  const open = (): HTMLInputElement => {
+    runs = [];
+    const item = (label: string) => ({ label, run: () => runs.push(label) });
+    showContextMenu(clickEvent(), [item("Duplica"), item("Copia il link al blocco"), item("Elimina")], {
+      pointer: true,
+      field: "Cerca un'azione…",
+      title: "Riquadro",
+      label: "Blocco · Riquadro",
+      searchable: [item("Sposta su"), item("Affianca in colonne")],
+      keys: menuKeyFoot(),
+    });
+    return document.querySelector<HTMLInputElement>("#context-menu .menu-field-input")!;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    document.body.replaceChildren();
+  });
+
+  afterEach(() => {
+    closeContextMenu();
+    vi.useRealTimers();
+  });
+
+  it("si apre col fuoco nel campo, il titolo sopra le voci e il piede «↵ sceglie · → apre · Esc chiude»", () => {
+    const input = open();
+    const menu = document.getElementById("context-menu")!;
+    expect(document.activeElement).toBe(input);
+    expect(input.placeholder).toBe("Cerca un'azione…");
+    expect(input.getAttribute("aria-label")).toBe("Cerca un'azione…");
+    expect(menu.getAttribute("aria-label")).toBe("Blocco · Riquadro");
+    const title = menu.querySelector<HTMLElement>(".menu-items .menu-title")!;
+    expect(title.textContent).toBe("Riquadro");
+    expect(title.getAttribute("aria-hidden")).toBe("true");
+    const foot = menu.querySelector<HTMLElement>(".menu-foot.menu-foot-keys")!;
+    expect(foot.getAttribute("aria-hidden")).toBe("true");
+    expect([...foot.querySelectorAll(".menu-foot-key")].map((part) => part.textContent)).toEqual(["↵ sceglie", "→ apre", "Esc chiude"]);
+    expect([...foot.querySelectorAll("kbd")].map((k) => k.textContent)).toEqual(["↵", "→", "Esc"]);
+    // Le voci che si trovano solo scrivendo non si vedono; la prima è accesa,
+    // come nel prototipo, e Invio la sceglie.
+    expect(labels()).toEqual(["Duplica", "Copia il link al blocco", "Elimina"]);
+    expect([...menu.querySelectorAll(".menu-items .menu-lit")]).toEqual([rows()[0]]);
+    key(input, "Enter");
+    expect(runs).toEqual(["Duplica"]);
+  });
+
+  it("scrivendo filtra, anche fra le voci nascoste, accende la prima e Invio la sceglie", () => {
+    const input = open();
+    write(input, "sposta");
+    expect(document.activeElement).toBe(input);
+    expect(labels()).toEqual(["Sposta su"]);
+    expect(document.querySelector("#context-menu .menu-title")).toBeNull();
+    expect(rows()[0]!.classList.contains("menu-lit")).toBe(true);
+    key(input, "Enter");
+    expect(runs).toEqual(["Sposta su"]);
+  });
+
+  it("↓ dal campo va alla voce dopo l'accesa, ↑ dalla prima torna al campo; le lettere su una voce vanno nel campo", () => {
+    const input = open();
+    key(input, "ArrowDown");
+    expect(document.activeElement).toBe(rows()[1]);
+    key(rows()[1]!, "ArrowUp");
+    expect(document.activeElement).toBe(rows()[0]);
+    key(rows()[0]!, "ArrowUp");
+    expect(document.activeElement).toBe(input);
+    expect(rows()[0]!.classList.contains("menu-lit"), "torna accesa la voce di prima").toBe(true);
+    key(input, "ArrowUp");
+    expect(document.activeElement, "↑ dal campo fa il giro in fondo").toBe(rows()[2]);
+    key(document.activeElement!, "e");
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("e");
+    expect(labels()).toContain("Elimina");
+  });
+
+  it("il campo non sta dentro il menu: un dialogo modale tiene il campo e il menu delle voci, col suo nome", () => {
+    const input = open();
+    const surface = document.getElementById("context-menu")!;
+    expect(surface.getAttribute("role")).toBe("dialog");
+    expect(surface.getAttribute("aria-modal")).toBe("true");
+    expect(surface.hasAttribute("aria-orientation")).toBe(false);
+    const list = surface.querySelector<HTMLElement>(".menu-items")!;
+    expect(list.getAttribute("role")).toBe("menu");
+    expect(list.getAttribute("aria-orientation")).toBe("vertical");
+    expect(list.getAttribute("aria-labelledby")).toBe("context-menu");
+    expect(input.closest('[role="menu"]'), "nessun menu attorno al campo").toBeNull();
+    expect(rows().every((row) => row.closest('[role="menu"]') === list)).toBe(true);
+  });
+
+  it("aperto dal puntatore il campo ha il fuoco senza anello; il Tab o il fuoco che torna dalla tastiera lo accendono", () => {
+    let input = open();
+    expect(input.classList.contains("menu-field-pointer")).toBe(true);
+    key(input, "Tab");
+    expect(input.classList.contains("menu-field-pointer"), "il Tab chiede dove si è").toBe(false);
+    closeContextMenu();
+    input = open();
+    key(input, "ArrowDown");
+    key(document.activeElement!, "ArrowUp");
+    key(document.activeElement!, "ArrowUp");
+    expect(document.activeElement).toBe(input);
+    expect(input.classList.contains("menu-field-pointer"), "tornato dalla voce").toBe(false);
+    closeContextMenu();
+    showContextMenu(document.body, [{ label: "Duplica", run: () => {} }], { pointer: false, field: "Cerca un'azione…" });
+    input = document.querySelector<HTMLInputElement>("#context-menu .menu-field-input")!;
+    expect(document.activeElement).toBe(input);
+    expect(input.classList.contains("menu-field-pointer"), "aperto da tastiera").toBe(false);
+  });
+
+  it("Esc prima svuota il campo, poi chiude", () => {
+    const input = open();
+    write(input, "dup");
+    expect(labels()).toEqual(["Duplica"]);
+    key(input, "Escape");
+    expect(input.value).toBe("");
+    expect(labels()).toEqual(["Duplica", "Copia il link al blocco", "Elimina"]);
+    expect(document.getElementById("context-menu")).not.toBeNull();
+    key(input, "Escape");
+    expect(document.getElementById("context-menu")).toBeNull();
+  });
+});
+
 describe("il contrasto dei grigi del menu", () => {
   const sheets = { "sheet-light": sheetLight, "sheet-light-high": sheetLightHigh, "sheet-dark": sheetDark, "sheet-dark-high": sheetDarkHigh };
   const token = (css: string, name: string): string => {

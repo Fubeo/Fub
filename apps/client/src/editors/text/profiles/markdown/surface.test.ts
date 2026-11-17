@@ -9,6 +9,7 @@ import { api } from "../../../../host/ipc";
 import { state } from "../../../../state/store";
 import { closeCommandPalette } from "../../../../ui/palette";
 import { declareClipboard } from "../../../../platform/clipboard";
+import { liveStrings } from "./strings";
 
 interface TestEditor {
   ed: MarkdownSurface;
@@ -701,7 +702,14 @@ describe("le azioni dell'editor della superficie", () => {
     expect(menu?.clipboard?.copyAs?.map((item) => item.label)).toEqual([
       t("editor_menu.copy_as.markdown"), t("editor_menu.copy_as.html"), t("editor_menu.copy_as.text"),
     ]);
-    expect(entryOf(menu, t("editor_menu.search_vault"))?.find).toEqual({ where: "vault", query: "due parole" });
+    // Come nel prototipo: «Collega a una nota…», poi «Estrai»; «Cerca nel
+    // vault» si trova scrivendo.
+    expect(contextLabels(menu)).toEqual([t("editor_menu.link.to_note"), "—", t("editor_menu.extract")]);
+    expect(menu?.context?.[0]).toMatchObject({ icon: "fmt-link" });
+    expect(menu?.searchable?.find((item) => typeof item === "object" && "label" in item && item.label === t("editor_menu.search_vault"))).toMatchObject({
+      icon: "search",
+      find: { where: "vault", query: "due parole" },
+    });
     expect(menu?.miniBar).toBe(true);
     ed.destroy();
   });
@@ -710,7 +718,12 @@ describe("le azioni dell'editor della superficie", () => {
     const { ed, view } = editor();
     ed.setMode("source");
     const text = at(ed, view, "Un paragrafo\n", 3);
-    expect(text?.target.kind).toBe("text");
+    // La testata dice il paragrafo con le sue prime parole; poi «Trasforma il
+    // blocco ▸» e «Inserisci un blocco… /», come nel prototipo.
+    expect(text?.target).toMatchObject({ kind: "text", name: "Un paragrafo" });
+    expect(contextLabels(text)[0]).toBe(t("editor_menu.transform_block"));
+    expect(at(ed, view, "Una frase molto lunga che non entra nella testata del menu\n", 3)?.target.name).toBe("Una frase molto lunga che non ent…");
+    expect(at(ed, view, "Uno\n\n\nDue\n", 5)?.target.name).toBe(t("editor_menu.head.empty"));
     expect(entryOf(text, t("editor_menu.transform_block"))?.items?.length).toBeGreaterThan(6);
     expect(text?.clipboard?.offers).toMatchObject({ paste: true, "paste-plain": true });
     ed.setMode("reading");
@@ -738,6 +751,13 @@ describe("le azioni dell'editor della superficie", () => {
       const { ed, view } = editor(() => {}, slash);
       ed.setMode("source");
       const menu = at(ed, view, `Un paragrafo${nl}fine`, 3);
+      // Come nel prototipo: «Trasforma il blocco ▸», poi «Inserisci un
+      // blocco… /», con la sua figura.
+      expect(contextLabels(menu).slice(0, 2)).toEqual([t("editor_menu.transform_block"), t("editor_menu.insert_block")]);
+      expect(entryOf(menu, t("editor_menu.insert_block"))).toMatchObject({ icon: "plus", chord: "/" });
+      // La testata dice come comincia il paragrafo, dalla sua prima riga.
+      expect(menu?.target.name).toBe("Un paragrafo");
+      expect(at(ed, view, `Un paragrafo${nl}fine`, `Un paragrafo${nl}fi`.length)?.target.name).toBe("Un paragrafo");
       entryOf(menu, t("editor_menu.insert_block"))!.run!();
       expect(ed.buffer.getDoc()).toBe(`Un paragrafo${nl}/${nl}fine`);
       expect(view().state.selection.main.head).toBe("Un paragrafo\n/".length);
@@ -1054,5 +1074,172 @@ describe("Scrittura in due riquadri (H16)", () => {
     expect(source.ed.undo()).toBe(true);
     blocks.ed.destroy();
     source.ed.destroy();
+  });
+});
+
+describe("i commenti nella superficie (T21)", () => {
+  const NOTE = "Il {==passo==}{>>@Anna 2026-11-08: va riscritto<<} poi.\n\nAltro.\n";
+  const COMMENT = "{==passo==}{>>@Anna 2026-11-08: va riscritto<<}";
+  const FROM = NOTE.indexOf("passo");
+  const TO = NOTE.indexOf("==}");
+  const END = NOTE.indexOf(" poi");
+
+  /// Gli appunti di un evento `copy`, `cut` o `paste`, in una mappa.
+  const clipboardEvent = (type: "copy" | "cut" | "paste", data = new Map<string, string>()) => {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        clearData: () => data.clear(),
+        setData: (kind: string, value: string) => void data.set(kind, value),
+        getData: (kind: string) => data.get(kind) ?? "",
+      },
+    });
+    return { event, data };
+  };
+
+  /// Appunti finti con più tipi, che leggono ciò che hanno scritto.
+  const fakeClipboard = () => {
+    const written: Record<string, string>[] = [];
+    const texts: string[] = [];
+    const undeclare = declareClipboard(async (text) => void texts.push(text), {
+      write: async (content) => {
+        const entry: Record<string, string> = {};
+        for (const [type, blob] of Object.entries(content)) entry[type] = await (await blob).text();
+        written.push(entry);
+      },
+      read: async () => {
+        const last = written[written.length - 1] ?? {};
+        return [{ types: Object.keys(last), getType: async (type: string) => new Blob([last[type] ?? ""], { type }) }];
+      },
+      supports: () => true,
+    });
+    return { written, texts, undeclare };
+  };
+
+  it("Copia e «Copia come» dal menu non portano i segni nascosti, e le parole della selezione sono quelle che si leggono", async () => {
+    const clipboard = fakeClipboard();
+    try {
+      const { ed, view } = editor();
+      ed.setMode("live_preview");
+      ed.buffer.setDoc(NOTE);
+      // Dal passo a « poi»: dentro ci sono la chiusura e il messaggio, nascosti.
+      view().dispatch({ selection: { anchor: FROM, head: END + 4 } });
+      const menu = ed.contextMenu!(null)!;
+      expect(menu.target).toMatchObject({ kind: "selection", name: t("editor_menu.words.many", { count: 2 }) });
+      const copyAs = (label: string) => menu.clipboard!.copyAs!.find((item) => item.label === label)!.run!();
+      copyAs(t("editor_menu.copy_as.markdown"));
+      copyAs(t("editor_menu.copy_as.text"));
+      copyAs(t("editor_menu.copy_as.html"));
+      await vi.waitFor(() => expect(clipboard.texts).toHaveLength(3));
+      expect(clipboard.texts.slice(0, 2)).toEqual(["passo poi", "passo poi"]);
+      expect(clipboard.texts[2]).not.toContain("riscritto");
+      menu.clipboard!.run("copy");
+      await vi.waitFor(() => expect(clipboard.written).toHaveLength(1));
+      expect(clipboard.written[0]!["text/plain"]).toBe("passo poi");
+      // In Sorgente i segni si vedono, e si copiano come sono scritti.
+      ed.setMode("source");
+      view().dispatch({ selection: { anchor: FROM, head: END + 4 } });
+      ed.contextMenu!(null)!.clipboard!.copyAs!.find((item) => item.label === t("editor_menu.copy_as.markdown"))!.run!();
+      await vi.waitFor(() => expect(clipboard.texts).toHaveLength(4));
+      expect(clipboard.texts[3]).toBe(NOTE.slice(FROM, END + 4));
+      ed.destroy();
+    } finally {
+      clipboard.undeclare();
+    }
+  });
+
+  it("tagliare tutto il passo e incollarlo altrove porta il commento col testo; il testo semplice resta senza segni", () => {
+    const { ed, view } = editor();
+    ed.setMode("live_preview");
+    ed.buffer.setDoc(NOTE);
+    view().dispatch({ selection: { anchor: FROM, head: TO } });
+    view().focus();
+    for (const toast of document.querySelectorAll(".toast")) toast.remove();
+    const cut = clipboardEvent("cut");
+    view().contentDOM.dispatchEvent(cut.event);
+    // Un gesto, un avviso: quello del taglio, non anche quello della cancellazione.
+    expect([...document.querySelectorAll<HTMLElement>(".toast")].map((toast) => toast.dataset["text"]))
+      .toEqual([liveStrings.t("comments.cut")]);
+    expect(cut.data.get("text/plain")).toBe("passo");
+    expect(cut.data.get("application/x-fub-markdown")).toBe(COMMENT);
+    expect(cut.data.get("text/html")).not.toContain("riscritto");
+    expect(ed.buffer.getDoc()).toBe("Il  poi.\n\nAltro.\n");
+    // Incollato dopo «Altro», il commento torna attaccato al testo.
+    view().dispatch({ selection: { anchor: ed.buffer.getDoc().indexOf("Altro") + 5 } });
+    view().contentDOM.dispatchEvent(clipboardEvent("paste", cut.data).event);
+    expect(ed.buffer.getDoc()).toBe(`Il  poi.\n\nAltro${COMMENT}.\n`);
+    ed.destroy();
+  });
+
+  it("la copia del passo e il taglio di una parte restano quelli di sempre", () => {
+    const gesture = (type: "copy" | "cut", head: number) => {
+      const { ed, view } = editor();
+      ed.setMode("live_preview");
+      ed.buffer.setDoc(NOTE);
+      view().dispatch({ selection: { anchor: FROM, head } });
+      view().focus();
+      const { event, data } = clipboardEvent(type);
+      view().contentDOM.dispatchEvent(event);
+      const doc = ed.buffer.getDoc();
+      ed.destroy();
+      return { data, doc };
+    };
+    const copy = gesture("copy", TO);
+    expect(copy.data.get("text/plain")).toBe("passo");
+    expect(copy.data.has("application/x-fub-markdown")).toBe(false);
+    const partial = gesture("cut", FROM + 3);
+    expect(partial.data.get("text/plain")).toBe("pas");
+    expect(partial.data.has("application/x-fub-markdown")).toBe(false);
+    expect(partial.doc).toBe(NOTE.replace("passo", "so"));
+  });
+
+  it("anche Taglia e Incolla dal menu portano il commento; «Incolla come testo» no", async () => {
+    const clipboard = fakeClipboard();
+    try {
+      const { ed, view } = editor();
+      ed.setMode("live_preview");
+      ed.buffer.setDoc(NOTE);
+      view().dispatch({ selection: { anchor: FROM, head: TO } });
+      for (const toast of document.querySelectorAll(".toast")) toast.remove();
+      ed.contextMenu!(null)!.clipboard!.run("cut");
+      await vi.waitFor(() => expect(ed.buffer.getDoc()).toBe("Il  poi.\n\nAltro.\n"));
+      expect(clipboard.written[0]!["text/plain"]).toBe("passo");
+      expect([...document.querySelectorAll<HTMLElement>(".toast")].map((toast) => toast.dataset["text"]))
+        .toEqual([liveStrings.t("comments.cut")]);
+      view().dispatch({ selection: { anchor: ed.buffer.getDoc().indexOf("Altro") + 5 } });
+      ed.contextMenu!(null)!.clipboard!.run("paste-plain");
+      await vi.waitFor(() => expect(ed.buffer.getDoc()).toBe("Il  poi.\n\nAltropasso.\n"));
+      ed.contextMenu!(null)!.clipboard!.run("paste");
+      await vi.waitFor(() => expect(ed.buffer.getDoc()).toBe(`Il  poi.\n\nAltropasso${COMMENT}.\n`));
+      ed.destroy();
+    } finally {
+      clipboard.undeclare();
+    }
+  });
+
+  it("nella nota dentro una scheda della lavagna valgono le stesse regole", () => {
+    // La scheda monta questa superficie, compatta e con Esc che esce
+    // (`state/card-editors.ts`).
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const ed = mountMarkdownSurface({ paneId: "card:1", documentId: "notes/scheda.md", parent, compact: true, escapeLeaves: true }, {
+      onChange: () => {},
+      onSelectionChange: () => {},
+      onOpenWikilink: () => {},
+      onOpenPath: () => {},
+      onSearchTag: () => {},
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    ed.setMode("live_preview");
+    ed.buffer.setDoc(NOTE);
+    const view = EditorView.findFromDOM(parent)!;
+    view.dispatch({ selection: { anchor: NOTE.length } });
+    expect(view.contentDOM.querySelector(".cm-line")?.textContent).toBe("Il passo poi.");
+    expect(view.contentDOM.querySelector(".cm-fub-comment-range")?.textContent).toBe("passo");
+    // Una selezione che prende il segno nascosto `{==` cancella il testo e lascia il commento.
+    view.dispatch({ selection: { anchor: 1, head: FROM + 2 } });
+    view.dispatch(view.state.replaceSelection(""), { userEvent: "delete.backward" });
+    expect(ed.buffer.getDoc()).toBe("I{==sso==}{>>@Anna 2026-11-08: va riscritto<<} poi.\n\nAltro.\n");
+    ed.destroy();
   });
 });

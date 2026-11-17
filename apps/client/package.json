@@ -24,9 +24,12 @@
     "bench:fidelity": "node bench/fidelity.mjs",
     "bench:grid": "node bench/grid-gestures.mjs",
     "bench:large": "node bench/large.mjs",
+    "bench:conformita": "node bench/conformita/verifica.mjs",
     "bench:webview": "node bench/webview/run.mjs",
     "theme:generate": "node theme/generate.mjs",
-    "theme:verify": "node theme/generate.mjs --verify"
+    "theme:verify": "node theme/generate.mjs --verify",
+    "entities:generate": "node scripts/html-entities.mjs",
+    "entities:verify": "node scripts/html-entities.mjs --verify"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

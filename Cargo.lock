@@ -2044,6 +2044,7 @@ dependencies = [
  "fub-live",
  "fub-wasm-host",
  "gethostname",
+ "libc",
  "objc2",
  "parking_lot",
  "serde",
@@ -2057,6 +2058,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "webkit2gtk",
  "windows-sys 0.61.2",
 ]
 
@@ -2425,6 +2427,7 @@ dependencies = [
  "serde",
  "serde_json",
  "subtle",
+ "tempfile",
  "thiserror 2.0.19",
  "uuid",
 ]

@@ -134,10 +134,10 @@ documento come `data-opt-<nome>` e, per i numeri, `--opt-<nome>`. La pubblicazio
 sovrascrive un id esistente. I limiti correnti sono 64 KiB per il manifest,
 4 MiB per ciascun foglio/skin, 1.024 asset, 64 MiB per asset e 256 MiB totali.
 
-Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount. Una
-preview dalle Impostazioni non cambia la scelta persistente: annullamento o
-chiusura rimontano il tema autorevole precedente; un bundle non leggibile o
-rifiutato non ottiene un mount parziale.
+Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount (non
+un bundle uguale per contenuto, mai per id, a quello montato: `MountedBundle`).
+Una preview non cambia la scelta persistente: annullarla o chiuderla rimonta il
+tema autorevole; un bundle illeggibile o rifiutato non si monta a metà.
 
 Un tema veste la cornice e i segni di Fub, e il contenuto soltanto dove la
 modalità della superficie ne dà l'autorità al tema: una regola sul contenuto si
@@ -237,15 +237,14 @@ scrive a mano.
 Una WebView che non conosce `'wasm-unsafe-eval'` non compila il modulo: la
 lavagna non si cambia, e non c'è un ripiego in TypeScript.
 
-`style-src` è `'self' 'unsafe-inline'`: i moduli della shell, CodeMirror per
-primo, aggiungono elementi `<style>` a pagina avviata. Per questo
-`index.html`, `mobile.html` e `document.html` non hanno un `<style>`: Tauri
-metterebbe un nonce a ognuno e lo aggiungerebbe a `style-src`, e con un nonce
-la WebView ignora `'unsafe-inline'` e rifiuta gli stili aggiunti dopo (gli
-editor restano senza stile). Lo stile che serve prima dei moduli, quello dello
-strato d'avvio, è un file in `public/avvio/`. `src/avvio/pagine.test.ts` tiene
-le tre pagine senza `<style>` né script in linea; nella WebView vera la stessa
-caduta la vede lo scenario S7 di `bench:webview`.
+### Gli stili
+
+`style-src` è `'self'` e `style-src-attr` è `'none'`: nessuno stile in linea.
+Un `<style>` o un attributo `style` che arriva con il markup di un documento,
+di un tema o di un plugin la WebView lo rifiuta, in silenzio. La shell mette i
+suoi stili con file, fogli costruiti, CSSOM e il nonce della pagina; le
+quattro strade, quello che resta fuori e i presidi sono in
+[Gli stili e la CSP](styles-and-csp.md).
 
 ### Immagini remote
 
@@ -299,52 +298,16 @@ della mappa) non seguono redirect e non portano credenziali né referrer:
 passano da `LOCAL_FETCH` in `apps/client/src/editors/core/local-fetch.ts`, e un
 test ferma un `fetch` senza quelle opzioni.
 
-## Host nativo del clipper
+## Clipper del browser
 
-Il clipper del browser consegna prima a `fub-clipper-host` (nome
-`local.fub.clipper`), per messaggistica nativa: è il solo canale autenticato,
-perché l'host accetta soltanto un'estensione abbinata con
-`fub-cli pair pair --extension-id ID`. `fub://capture` e il file
-`.fubcapture.json` sono il ripiego, senza autenticazione e con
-un'approvazione per ogni cattura.
-
-Il browser trova l'host da un manifest dell'utente, mai di sistema.
-`fub-cli native-install --extension-id ID` dice dove lo scriverebbe; con
-`--yes` lo scrive in ogni browser installato, o in quelli dati con
-`--browser`. Su Windows scrive anche la chiave di `HKEY_CURRENT_USER` che punta
-al manifest. L'id decide la famiglia: le 32 lettere di un'estensione Chromium
-danno `allowed_origins`, l'id di Firefox `allowed_extensions`, e un id della
-famiglia sbagliata per il browser nominato è un errore d'uso. Un file con quel
-nome che non è un manifest dell'host resta com'è; `--uninstall` toglie
-soltanto ciò che l'host ha scritto. Quando l'invio ripiega, il popup scrive i
-due comandi con l'id vero dell'estensione.
-
-L'estensione non ha permessi di host all'installazione. Quelli che può
-chiedere dopo, uno per uno dalle opzioni, per l'assistente e per le immagini
-da scaricare, sono i siti `https` e il loopback `http` (`127.0.0.1`,
-`localhost`), uguali nel manifest di Chromium (MV3) e in quello di Firefox
-(MV2); mai `<all_urls>`. Il permesso del browser non basta: una richiesta a un
-sito remoto parte soltanto se l'utente ha concesso quell'origine anche nelle opzioni
-(`apps/clipper/src/interpreter.js`).
-
-La chiave dell'assistente remoto, se l'utente la scrive nelle opzioni, sta
-nello spazio locale dell'estensione (`storage.local`, voce `fub-ai-key`): il
-popup la legge in memoria per la sola domanda e la dimentica dopo, e non
-entra mai in una pagina, in un indirizzo `fub://` o in una cattura. Il rischio
-che resta: chi legge il profilo del browser con i diritti dell'utente, o un
-difetto che esegua codice nella pagina delle opzioni, legge anche la chiave.
-Il pulsante «Forget API key» delle opzioni la toglie.
-
-La conversione della pagina in Markdown (`apps/clipper/src/convert.js`, gemella
-di `crates/fub-importers/src/html.rs`, che la usano anche gli importatori e il
-salvataggio del visore) legge un `href` come lo legge il browser: senza
-caratteri di controllo ai bordi, senza tab e a capo in mezzo. Lo schema si
-giudica sull'indirizzo che il Markdown risolverà, con escape ed entità sciolti.
-Con `javascript:`, `vbscript:` o `data:`, anche mascherati da un'entità
-(`javascript&colon;`, `&#106;avascript:`) o da un escape (`javascript\:`), il
-link cade e la sua etichetta resta testo, senza parentesi quadre. Gli altri
-schemi e i percorsi relativi (`a&amp;b.html`) restano destinazioni, perché un
-importatore porta i suoi (`evernote://`): la resa li filtra di nuovo.
+Il clipper ha un solo canale autenticato, l'host nativo `fub-clipper-host`
+abbinato con `fub-cli pair`. `fub://capture` e il file `.fubcapture.json`
+sono importazioni non autenticate: qualunque pagina apre un `fub://`, e
+l'origine che la cattura dichiara è un'etichetta. Una cattura da lì chiede
+sempre conferma, con limiti di coda e di `nonce`. L'estensione non ha
+permessi di host all'installazione, e la chiave dell'assistente sta di serie
+nella memoria di sessione del browser. Le regole sono in
+[Il clipper del browser](web-clipper.md).
 
 ## Server MCP
 
@@ -509,6 +472,13 @@ lettura, mai una pila o una memoria esaurite.
   di comporli con la radice del vault.
 - L'append del kernel rifiuta symlink, hardlink e target non regolari, e
   conta i nomi del file sull'handle aperto, non riaprendo il path.
+
+Il client scioglie le entità del Markdown senza DOM
+(`apps/client/src/editors/text/profiles/markdown/link-syntax.ts`): le
+numeriche e le nominate della tabella completa di HTML, generata da
+`vendor/whatwg-entities/`, sempre con il `;` finale come vuole CommonMark.
+Un nome che la tabella non ha, o una forma senza `;`, resta testo; un test
+ferma un ritorno di `innerHTML` in quel file.
 
 ### Testo verso un foglio di calcolo
 

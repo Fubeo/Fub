@@ -14,8 +14,13 @@ docx) il cursore resta nel testo della cella.
 
 In Live ogni tabella è una griglia da foglio di calcolo, anche col cursore
 dentro; la sorgente con le pipe resta della modalità Sorgente, e Lettura la
-mostra resa. Sulla griglia compaiono le lettere delle colonne e i numeri
-delle righe; la prima riga è l'intestazione della tabella. La griglia non è una
+mostra resa. Quando la griglia ha il fuoco compaiono le lettere delle colonne
+e i numeri delle righe; la prima riga è l'intestazione della tabella. In tutte
+e due la tabella sta in una cornice arrotondata, con un filo fra le celle,
+riempie la colonna del testo e non va a capo nelle celle: quando il contenuto
+non ci sta, scorre in orizzontale (in Live i numeri delle righe restano fermi
+nel margine e, solo con la griglia scorsa, prendono il fondo del foglio per
+coprire le celle che passano sotto). La griglia non è una
 fermata del Tab: ci si entra dal testo con le frecce, come in una riga. Sulle
 celle il puntatore resta la freccia.
 
@@ -47,7 +52,8 @@ celle il puntatore resta la freccia.
 - Mod+C, Mod+X e Mod+V usano il TSV dei fogli di calcolo (e una tabella HTML),
   dove una cella su più righe resta una cella; incollare oltre il bordo allarga
   la tabella, e un valore incollato riempie le celle scelte. Taglia non svuota:
-  le celle tagliate restano tratteggiate finché non si incolla, e l'incolla le
+  le celle tagliate restano in un tratteggio che gira (fermo col moto ridotto)
+  finché non si incolla, e l'incolla le
   sposta in un passo solo; Escape rinuncia, e ogni altra modifica della
   tabella toglie il segno. Il segno vale dentro la sua tabella: incollato in
   un'altra tabella o nel testo, il taglio è un incolla qualunque e le celle
@@ -105,8 +111,12 @@ celle il puntatore resta la freccia.
   tocco lungo) inserisce, sposta ed elimina righe e colonne, ordina secondo la
   colonna attiva (i numeri, letti come nella somma, prima del testo; le celle
   vuote in fondo), allinea a sinistra, al centro o a destra, copia, taglia e
-  svuota. I pulsanti «+ Riga» e «+ Colonna» sotto la tabella aggiungono in
-  fondo. Al tocco due maniglie agli angoli della selezione la allargano.
+  svuota. Col puntatore sopra la tabella o il fuoco dentro compaiono due
+  barre col «+», una sotto la tabella («Aggiungi una riga») e una alla sua
+  destra («Aggiungi una colonna»), che aggiungono in fondo; non sono fermate
+  del Tab (la tastiera ha Tab dall'ultima cella e Mod+«+»), e al telefono resta
+  soltanto quella della riga. Al tocco due maniglie agli angoli della
+  selezione la allargano.
 - Dove si scrive col dito, col cursore in una tabella la barra di
   formattazione apre in testa Tab, Invio e «+ riga»: i primi due arrivano
   alla tabella come i tasti veri, il terzo aggiunge una riga sotto.

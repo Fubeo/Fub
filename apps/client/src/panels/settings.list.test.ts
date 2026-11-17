@@ -414,12 +414,19 @@ describe("il focus resta sulla riga (A03)", () => {
     expect(document.activeElement).toBe(control(FIRST));
   });
 
-  it("un setting_changed per un'altra chiave ridisegna l'elenco e il fuoco resta", async () => {
+  it("un setting_changed per un'altra chiave rifà solo quella riga, e il fuoco resta", async () => {
     const first = await openToggles();
     stored(SECOND).value = true;
     settingChanged(SECOND);
     await vi.waitFor(() => expect(control(SECOND).checked).toBe(true));
-    expect(control(FIRST)).not.toBe(first);
+    expect(control(FIRST)).toBe(first);
+    expect(document.activeElement).toBe(first);
+  });
+
+  it("un setting_changed senza chiave ridisegna tutto, e il fuoco resta sulla riga", async () => {
+    const first = await openToggles();
+    settingChanged("");
+    await vi.waitFor(() => expect(control(FIRST)).not.toBe(first));
     expect(document.activeElement).toBe(control(FIRST));
   });
 
@@ -484,6 +491,12 @@ describe("la bozza di un campo sopravvive al ridisegno (#401)", () => {
     });
   }
 
+  /// Un evento senza chiave: «può essere cambiato tutto», e il corpo si
+  /// ridisegna intero. È la via in cui ogni bozza deve passare al controllo nuovo.
+  function redrawAll(): void {
+    settingChanged("");
+  }
+
   /// Scrive come una persona: il valore cambia e parte `input`, ma niente
   /// `change` — il campo non è ancora uscito né ha avuto Invio.
   function type(input: HTMLInputElement | HTMLTextAreaElement, value: string): void {
@@ -507,10 +520,22 @@ describe("la bozza di un campo sopravvive al ridisegno (#401)", () => {
     return input;
   }
 
-  it("un setting_changed di un'altra chiave non cancella il testo non salvato, e fuoco e selezione restano", async () => {
+  it("un setting_changed di un'altra chiave non tocca la riga in cui si scrive", async () => {
     const before = await openText();
     stored(OTHER).value = true;
     settingChanged(OTHER);
+    await vi.waitFor(() => expect(control(OTHER).checked).toBe(true));
+    expect(control(DIARY)).toBe(before);
+    expect(before.value).toBe("Diario/2026");
+    expect(document.activeElement).toBe(before);
+    expect([before.selectionStart, before.selectionEnd]).toEqual([3, 5]);
+    expect(fake.setSetting).not.toHaveBeenCalled();
+  });
+
+  it("un ridisegno intero non cancella il testo non salvato, e fuoco e selezione restano", async () => {
+    const before = await openText();
+    stored(OTHER).value = true;
+    redrawAll();
     await vi.waitFor(() => expect(control(OTHER).checked).toBe(true));
     const after = control(DIARY);
     expect(after).not.toBe(before);
@@ -537,7 +562,7 @@ describe("la bozza di un campo sopravvive al ridisegno (#401)", () => {
       }
       replace(...nodes);
     };
-    settingChanged(OTHER);
+    redrawAll();
     await vi.waitFor(() => expect(control(DIARY)).not.toBe(before));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(fake.setSetting).not.toHaveBeenCalled();
@@ -546,7 +571,7 @@ describe("la bozza di un campo sopravvive al ridisegno (#401)", () => {
 
   it("la bozza ripristinata si salva ancora uscendo dal campo, come prima del ridisegno", async () => {
     const before = await openText();
-    settingChanged(OTHER);
+    redrawAll();
     await vi.waitFor(() => expect(control(DIARY)).not.toBe(before));
     expect(document.activeElement).toBe(control(DIARY));
     control(DIARY).blur();
@@ -558,7 +583,7 @@ describe("la bozza di un campo sopravvive al ridisegno (#401)", () => {
 
   it("la bozza ripristinata si salva con Invio", async () => {
     const before = await openText();
-    settingChanged(OTHER);
+    redrawAll();
     await vi.waitFor(() => expect(control(DIARY)).not.toBe(before));
     control(DIARY).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     control(DIARY).dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true, cancelable: true }));
@@ -566,24 +591,36 @@ describe("la bozza di un campo sopravvive al ridisegno (#401)", () => {
     expect(fake.setSetting).toHaveBeenCalledTimes(1);
   });
 
-  it("il valore salvato della sua chiave cambia da fuori: la bozza resta e una riga lo dice", async () => {
+  it("il valore salvato della sua chiave cambia da fuori: la riga col fuoco resta, la bozza pure, e una riga lo dice", async () => {
     const before = await openText();
     stored(DIARY).value = "Quaderno";
     stored(DIARY).source = "vault";
     settingChanged(DIARY);
-    await vi.waitFor(() => expect(control(DIARY)).not.toBe(before));
-    const after = control(DIARY);
-    expect(after.value).toBe("Diario/2026");
+    await vi.waitFor(() => expect(document.getElementById(`setting-${DIARY}-changed`)).not.toBeNull());
+    // La riga in cui si scrive non si sostituisce: testo, fuoco e selezione
+    // restano gli stessi nodi.
+    expect(control(DIARY)).toBe(before);
+    expect(before.value).toBe("Diario/2026");
+    expect(document.activeElement).toBe(before);
+    expect([before.selectionStart, before.selectionEnd]).toEqual([3, 5]);
     const note = document.getElementById(`setting-${DIARY}-changed`);
     expect(note?.textContent).toContain("cambiato altrove");
-    expect(after.getAttribute("aria-describedby")?.split(" ")).toContain(note!.id);
-    // Un ridisegno per un'altra chiave non fa sparire l'avviso: il salvato è
-    // ancora diverso da quello da cui si era partiti.
+    expect(before.getAttribute("aria-describedby")?.split(" ")).toContain(note!.id);
+    // Un aggiornamento per un'altra chiave, e poi un ridisegno intero, non
+    // fanno sparire l'avviso: il salvato è ancora diverso da quello da cui si
+    // era partiti.
+    stored(OTHER).value = true;
     settingChanged(OTHER);
-    await vi.waitFor(() => expect(control(DIARY)).not.toBe(after));
+    await vi.waitFor(() => expect(control(OTHER).checked).toBe(true));
+    expect(document.querySelectorAll(`[id="setting-${DIARY}-changed"]`)).toHaveLength(1);
+    redrawAll();
+    await vi.waitFor(() => expect(control(DIARY)).not.toBe(before));
     expect(control(DIARY).value).toBe("Diario/2026");
     expect(document.getElementById(`setting-${DIARY}-changed`)).not.toBeNull();
     expect(fake.setSetting).not.toHaveBeenCalled();
+    // Confermata, la bozza si scrive con il testo di chi scrive.
+    control(DIARY).blur();
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(DIARY, "Diario/2026"));
   });
 
   it("una scrittura della riga rifiutata: torna il valore autorevole e l'input provato sta sotto", async () => {
@@ -608,7 +645,7 @@ describe("la bozza di un campo sopravvive al ridisegno (#401)", () => {
     expect(number.type).toBe("number");
     number.focus();
     type(number, "22");
-    settingChanged(OTHER);
+    redrawAll();
     await vi.waitFor(() => expect(control(SIZE)).not.toBe(number));
     expect(control(SIZE).value).toBe("22");
     expect((document.getElementById(`setting-${SIZE}-range`) as HTMLInputElement).value).toBe("22");
@@ -620,9 +657,22 @@ describe("la bozza di un campo sopravvive al ridisegno (#401)", () => {
     await openPanel([listEntry(EXCLUDED, ["node_modules"]), entry(OTHER, { kind: "toggle", default: false }, false)]);
     const input = control(EXCLUDED);
     type(input, "Bozze");
-    settingChanged(OTHER);
+    redrawAll();
     await vi.waitFor(() => expect(control(EXCLUDED)).not.toBe(input));
     expect(control(EXCLUDED).value).toBe("Bozze");
+  });
+
+  it("la riga senza fuoco che cambia da fuori si rifà da sola, e la sua bozza passa al campo nuovo", async () => {
+    await openPanel([listEntry(EXCLUDED, ["node_modules"]), entry(OTHER, { kind: "toggle", default: false }, false)]);
+    const input = control(EXCLUDED);
+    const other = control(OTHER);
+    type(input, "Bozze");
+    stored(EXCLUDED).value = ["node_modules", "target"];
+    stored(EXCLUDED).source = "vault";
+    settingChanged(EXCLUDED);
+    await vi.waitFor(() => expect(control(EXCLUDED)).not.toBe(input));
+    expect(control(EXCLUDED).value).toBe("Bozze");
+    expect(control(OTHER)).toBe(other);
   });
 
   it("cambiando scheda la bozza non torna: la pagina di prima non c'è più", async () => {

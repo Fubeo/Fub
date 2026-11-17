@@ -32,6 +32,10 @@ const world = vi.hoisted(() => ({
   languageListeners: new Set<() => void>(),
   render: null as unknown as (doc: string) => Promise<{ html: string; parts: [] }>,
   rendered: [] as string[],
+  /// L'ultima modifica di una nota, come la dà l'anagrafe.
+  modified: null as unknown as (doc: string) => Promise<number | null>,
+  /// Le note di cui si è chiesta la data, in ordine.
+  dated: [] as string[],
   /// Quante volte il lanciatore ha dimenticato i file letti (e li rilegge).
   forgot: 0,
   /// Quante volte li ha riletti tenendo quelli di prima.
@@ -78,6 +82,16 @@ vi.mock("../../../host/query", () => ({
     return world.render(doc);
   },
   notesByName: async () => world.named,
+}));
+// La data dell'anteprima: anche questa la decide il test.
+vi.mock("../../../state/note-facts", () => ({
+  modifiedFromEntries: (doc: string) => {
+    world.dated.push(doc);
+    return world.modified(doc);
+  },
+}));
+vi.mock("../../../ui/when", () => ({
+  relativeTime: (when: number) => `alle ${when}`,
 }));
 vi.mock("../../../host/ipc", () => ({
   api: {
@@ -264,6 +278,8 @@ beforeEach(() => {
   world.openFails = false;
   world.answer = () => nothing("niente");
   world.rendered.length = 0;
+  world.dated.length = 0;
+  world.modified = async () => null;
   world.render = async (doc) => ({ html: `<p>Resa di ${doc}</p>`, parts: [] });
   world.forgot = 0;
   world.reread = 0;
@@ -306,7 +322,9 @@ describe("i comandi che lo aprono", () => {
     showContextMenu(new MouseEvent("contextmenu", { clientX: 10, clientY: 10 }), [{ label: "Apri", run: () => {} }], { pointer: false });
     for (const ch of "zz") document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true, cancelable: true }));
     const offer = document.querySelector<HTMLButtonElement>("#context-menu .menu-items [role=menuitem]")!;
-    expect(offer.querySelector(".menu-hint")?.textContent).toBe("Ctrl+Shift+P");
+    // Nel menu i tasti si scrivono come nel prototipo, separati da uno spazio
+    // (il nome di Maiusc è la sua chiave, perché `t` è finta).
+    expect(offer.querySelector(".menu-hint")?.textContent).toBe("Ctrl context.key.shift P");
     offer.click();
     expect(selectedMode()).toContain("launcher.mode.commands");
     expect(world.asked[world.asked.length - 1]).toEqual(["commands", "zz"]);
@@ -451,6 +469,21 @@ describe("il campo è un combobox, l'elenco un listbox", () => {
     expect(said()).toBe("");
   });
 
+  it("aprendosi mette il fuoco nel campo una volta sola", () => {
+    // In WebKit ogni `focus()` ricalcola lo stile e la ricerca del primo
+    // elemento raggiungibile (`offsetParent`) forza il layout: la trappola li
+    // faceva entrambi prima che il campo prendesse il fuoco per conto suo.
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      launcher.open("all");
+      expect(document.activeElement).toBe(field());
+      expect(focus.mock.contexts).toEqual([field()]);
+    } finally {
+      focus.mockRestore();
+      launcher.close();
+    }
+  });
+
   it("la superficie è un dialogo con un nome, e la pillola dice che è aperto", () => {
     launcher.open("all");
     expect(surface()!.getAttribute("role")).toBe("dialog");
@@ -486,11 +519,29 @@ describe("i modi", () => {
     expect(document.activeElement).toBe(field());
   });
 
+  it("il prefisso sta in un quadratino davanti al nome; «Tutto» porta la lente", () => {
+    launcher.open("all");
+    const tabs = [...document.querySelectorAll<HTMLElement>('.launcher-modes [role="tab"]')];
+    for (const tab of tabs) {
+      const tile = tab.firstElementChild as HTMLElement;
+      expect(tile.classList.contains("launcher-mode-tile")).toBe(true);
+      expect(tile.getAttribute("aria-hidden")).toBe("true");
+    }
+    expect(tabs[0]!.querySelector<SVGElement>(".launcher-mode-tile svg")?.dataset.icon).toBe("search");
+    expect(tabs.slice(1).every((tab) => tab.querySelector(".launcher-mode-tile svg") === null)).toBe(true);
+    // La lente del campo è una sola: non cambia col modo.
+    const lens = (): string | undefined => document.querySelector<SVGElement>(".launcher-lens svg")?.dataset.icon;
+    expect(lens()).toBe("search");
+    launcher.open("commands");
+    expect(lens()).toBe("search");
+    expect(document.querySelectorAll(".launcher-lens svg")).toHaveLength(1);
+  });
+
   it("la fila è cliccabile, e porta scritto il prefisso di ogni modo", () => {
     launcher.open("all");
     const tabs = [...document.querySelectorAll<HTMLElement>('.launcher-modes [role="tab"]')];
     expect(tabs).toHaveLength(7);
-    expect(tabs.map((tab) => tab.querySelector(".launcher-mode-prefix")?.textContent ?? "")).toEqual(["", ">", "#", "@", "/", "?", ":"]);
+    expect(tabs.map((tab) => tab.querySelector(".launcher-mode-tile")?.textContent ?? "")).toEqual(["", ">", "#", "@", "/", "?", ":"]);
     tabs[2]!.click();
     expect(selectedMode()).toContain("launcher.mode.tags");
     expect(world.asked[world.asked.length - 1]![0]).toBe("tags");
@@ -582,9 +633,9 @@ describe("scegliere una riga", () => {
     world.answer = () => listed([note("R1/Stampa.pdf"), note("R1/Immagine.png"), note("Relazione.docx"), note("Due.md")]);
     launcher.open("all");
     const icons = [...document.querySelectorAll<HTMLElement>(".launcher-row")].map(
-      (row) => row.querySelector<SVGElement>(".launcher-row-format")?.dataset.icon ?? null,
+      (row) => row.querySelector<SVGElement>(".launcher-row-icon svg")?.dataset.icon ?? null,
     );
-    expect(icons).toEqual(["book", "image", "format-word", null]);
+    expect(icons).toEqual(["book", "image", "format-word", "notes"]);
     expect(document.querySelector(".launcher-row-title")?.textContent).toBe("Stampa");
     press(field(), "Enter");
     await settle();
@@ -772,6 +823,29 @@ describe("scegliere una riga", () => {
     press(field(), "ArrowDown");
     press(field(), "Enter");
     expect(world.log).toEqual(["start note.rename"]);
+  });
+
+  it("ogni riga porta davanti l'icona della sua specie, fuori dal titolo", () => {
+    world.answer = () =>
+      listed([
+        note("Uno.md"),
+        { kind: "person", key: "p:Ada", doc: "Persone/Ada.md" },
+        { kind: "command", key: "c:x", entry: command("x", null) },
+        { kind: "heading", key: "h:3", doc: "Uno.md", level: 2, text: "Capitolo", at: 3 },
+        { kind: "tag", key: "t:tema", name: "tema", count: 2 },
+      ]);
+    launcher.open("all");
+    const rows = [...document.querySelectorAll<HTMLElement>(".launcher-row")];
+    for (const row of rows) {
+      expect(row.firstElementChild?.classList.contains("launcher-row-icon")).toBe(true);
+      expect(row.querySelector(".launcher-row-title svg")).toBeNull();
+    }
+    const marks = rows.map((row) => {
+      const mark = row.querySelector<HTMLElement>(".launcher-row-icon")!;
+      return mark.querySelector<SVGElement>("svg")?.dataset.icon ?? mark.textContent;
+    });
+    expect(marks).toEqual(["notes", "people", "palette", "#", "#"]);
+    expect(titles()).toEqual(["Uno", "Ada", "Titolo x", "Capitolo", "#tema"]);
   });
 
   it("un'etichetta porta alle sue note in Tutto, con la ricerca sul tag: si resta aperti", () => {
@@ -978,6 +1052,19 @@ describe("chiudere", () => {
     expect(document.querySelector(".launcher-layer")).toBeNull();
     expect(document.activeElement).toBe(elsewhere);
     expect(launcher.isOpen).toBe(false);
+  });
+
+  it("il segno «Esc» in fondo al campo chiude col puntatore, e non è una fermata del Tab", () => {
+    const elsewhere = document.getElementById("altrove")!;
+    elsewhere.focus();
+    launcher.open("all");
+    const chip = document.querySelector<HTMLButtonElement>(".launcher-head > .launcher-close")!;
+    expect(chip.textContent).toBe("Esc");
+    expect(chip.getAttribute("aria-label")).toBe("launcher.close");
+    expect(chip.tabIndex).toBe(-1);
+    chip.click();
+    expect(surface()).toBeNull();
+    expect(document.activeElement).toBe(elsewhere);
   });
 
   it("senza nessuno a cui tornare il fuoco va all'editor", () => {
@@ -1512,6 +1599,108 @@ describe("l'anteprima accanto all'elenco", () => {
     world.answer = () => listed([note("a/Uno.md"), note("Due.md")]);
   });
 
+  it("sotto il foglio la cartella della nota attiva, con l'icona; in cima al vault niente", async () => {
+    world.answer = () => listed([note("Progetti/Mostra/Uno.md"), note("Due.md")]);
+    launcher.open("all");
+    const meta = document.querySelector<HTMLElement>(".launcher-preview > .launcher-preview-meta")!;
+    expect(meta.previousElementSibling?.classList.contains("launcher-preview-note")).toBe(true);
+    expect(meta.hidden).toBe(false);
+    expect(meta.querySelector(".launcher-preview-fact > span")?.textContent).toBe("Progetti › Mostra");
+    expect(meta.querySelector<SVGElement>(".launcher-preview-fact > svg")?.dataset.icon).toBe("folder");
+    press(field(), "ArrowDown");
+    expect(meta.hidden).toBe(true);
+    // Una riga passata senza fermarsi non chiede niente: né resa né data.
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(world.rendered).toEqual(["Due.md"]);
+    expect(world.dated).toEqual(["Due.md"]);
+  });
+
+  const facts = (): HTMLElement[] =>
+    [...document.querySelectorAll<HTMLElement>(".launcher-preview-meta > .launcher-preview-fact")];
+  const shownFacts = (): string[] =>
+    facts().filter((row) => !row.hidden).map((row) => `${row.querySelector<SVGElement>("svg")?.dataset.icon} ${row.textContent}`);
+
+  it("sotto la cartella la data dell'ultima modifica, chiesta con la resa e una volta per nota", async () => {
+    world.answer = () => listed([note("Progetti/Mostra/Uno.md"), note("Due.md")]);
+    world.modified = async (doc) => (doc === "Due.md" ? 2000 : 1000);
+    launcher.open("all");
+    expect(shownFacts()).toEqual(["folder Progetti › Mostra"]);
+    expect(world.dated).toEqual([]);
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    // La data parte insieme alla resa, non dopo.
+    expect(world.dated).toEqual(["Progetti/Mostra/Uno.md"]);
+    expect(world.rendered).toEqual(["Progetti/Mostra/Uno.md"]);
+    await settle();
+    expect(shownFacts()).toEqual([
+      "folder Progetti › Mostra",
+      'clock launcher.preview.modified {"when":"alle 1000"}',
+    ]);
+    // In cima al vault c'è soltanto la data.
+    press(field(), "ArrowDown");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(shownFacts()).toEqual(['clock launcher.preview.modified {"when":"alle 2000"}']);
+    // Tornando su una nota già vista, la data c'è subito e non si richiede.
+    press(field(), "ArrowUp");
+    expect(shownFacts()).toEqual([
+      "folder Progetti › Mostra",
+      'clock launcher.preview.modified {"when":"alle 1000"}',
+    ]);
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(world.dated).toEqual(["Progetti/Mostra/Uno.md", "Due.md"]);
+    expect(world.rendered).toEqual(["Progetti/Mostra/Uno.md", "Due.md", "Progetti/Mostra/Uno.md"]);
+  });
+
+  it("una data che non arriva lascia la sola cartella, e si richiede la volta dopo", async () => {
+    world.answer = () => listed([note("Progetti/Uno.md"), note("Due.md")]);
+    world.modified = () => Promise.reject(new Error("anagrafe caduta"));
+    launcher.open("all");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(shownFacts()).toEqual(["folder Progetti"]);
+    expect(page().textContent).toBe("Resa di Progetti/Uno.md");
+    expect(world.notices).toEqual([]);
+    // Una nota che l'anagrafe non conosce non ha data, come un guasto.
+    world.modified = async () => null;
+    press(field(), "ArrowDown");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(document.querySelector<HTMLElement>(".launcher-preview-meta")?.hidden).toBe(true);
+    // Il guasto non è stato ricordato: tornando su, si richiede.
+    world.modified = async () => 5000;
+    press(field(), "ArrowUp");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(world.dated).toEqual(["Progetti/Uno.md", "Due.md", "Progetti/Uno.md"]);
+    expect(shownFacts()).toEqual(["folder Progetti", 'clock launcher.preview.modified {"when":"alle 5000"}']);
+  });
+
+  it("una data superata da una riga più nuova non si scrive", async () => {
+    let landFirst: (value: number) => void = () => {};
+    let landSecond: (value: number) => void = () => {};
+    world.answer = () => listed([note("a/Uno.md"), note("b/Due.md")]);
+    world.modified = (doc) => new Promise((resolve) => {
+      if (doc === "a/Uno.md") landFirst = resolve;
+      else landSecond = resolve;
+    });
+    launcher.open("all");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    press(field(), "ArrowDown");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    expect(world.dated).toEqual(["a/Uno.md", "b/Due.md"]);
+    landSecond(2000);
+    await settle();
+    expect(shownFacts()).toEqual(["folder b", 'clock launcher.preview.modified {"when":"alle 2000"}']);
+    landFirst(1000);
+    await settle();
+    expect(shownFacts()).toEqual(["folder b", 'clock launcher.preview.modified {"when":"alle 2000"}']);
+    // Nemmeno se la riga vecchia arriva mentre si aspetta quella nuova.
+    press(field(), "ArrowUp");
+    expect(shownFacts()).toEqual(["folder a"]);
+  });
+
   it("un file che non è un documento non chiede una resa: il riquadro lo dice", async () => {
     world.answer = () => listed([note("R1/Stampa.pdf"), note("Due.md")]);
     launcher.open("all");
@@ -1633,6 +1822,59 @@ describe("l'anteprima accanto all'elenco", () => {
     await settle();
     expect(page().textContent).toBe("Questa sì");
     expect(paneSays()).toBe("");
+  });
+
+  it("il foglio senza niente dentro porta `data-empty`, scritto solo quando cambia", async () => {
+    // Lo legge `launcher.css` per nascondere il foglio, al posto di un
+    // `:has(> .launcher-preview-page:empty)` (`theme/structure.test.ts`).
+    const slow = rendering();
+    const answers: Record<string, string> = { "Tre.md": "", "Quattro.md": "<p></p>" };
+    world.answer = () => listed(["Uno.md", "R1/Stampa.pdf", "Due.md", "Tre.md", "Quattro.md"].map((doc) => note(doc)));
+    world.render = async (doc) => {
+      if (doc === "Uno.md") return slow.promise;
+      if (doc === "Due.md") throw new Error("provider caduto");
+      return { html: answers[doc] ?? "", parts: [] };
+    };
+    launcher.open("all");
+    const sheet = document.querySelector<HTMLElement>(".launcher-preview-sheet")!;
+    const bare = (): boolean => sheet.hasAttribute("data-empty");
+    const writes: string[] = [];
+    const watch = new MutationObserver((records) => writes.push(...records.map(() => (bare() ? "vuoto" : "pieno"))));
+    watch.observe(sheet, { attributes: true, attributeFilter: ["data-empty"] });
+    const next = async (): Promise<void> => {
+      press(field(), "ArrowDown");
+      vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+      await settle();
+    };
+
+    // Prima di ogni resa il foglio è vuoto; lo scheletro lo riempie.
+    expect(bare()).toBe(true);
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS + PREVIEW_SLOW_MS);
+    expect(page().querySelector(".skeleton")).not.toBeNull();
+    expect(bare()).toBe(false);
+    slow.land("<p>Piena</p>");
+    await settle();
+    expect(page().textContent).toBe("Piena");
+    expect(bare()).toBe(false);
+    // Un file che non è un documento svuota la pagina, e così un guasto.
+    await next();
+    expect(paneSays()).toBe("launcher.preview.file");
+    expect(bare()).toBe(true);
+    await next();
+    expect(paneSays()).toBe("launcher.preview.failed");
+    expect(bare()).toBe(true);
+    // Una resa senza nodi è vuota; `<p></p>` no, come per `:empty`, anche se
+    // la frase dice che la nota è vuota.
+    await next();
+    expect(page().childNodes).toHaveLength(0);
+    expect(bare()).toBe(true);
+    await next();
+    expect(paneSays()).toBe("launcher.preview.empty");
+    expect(bare()).toBe(false);
+    // Lo stesso stato di fila non riscrive l'attributo.
+    await settle();
+    watch.disconnect();
+    expect(writes).toEqual(["pieno", "vuoto", "pieno"]);
   });
 
   it("una nota senza niente dentro lo dice", async () => {

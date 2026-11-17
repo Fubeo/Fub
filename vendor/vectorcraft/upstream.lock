@@ -19,6 +19,14 @@ sha256 = "sha256:0de78ca32607995e006165f7a990755cd1507a50dcf6406ce6623ae3f08af85
 path = "patches/0003-bitmap-trattenute.patch"
 sha256 = "sha256:7abe7e138cf464bb9f6dcd0f79cd016e07cc25b963d080228b78d452db192077"
 
+[[patch]]
+path = "patches/0004-ellissi-importate.patch"
+sha256 = "sha256:0957d0c1a32b8b503bf1c4ff4d204a1ba1fe48f54ac60461b08229b76f930b8d"
+
+[[patch]]
+path = "patches/0005-test-paralleli.patch"
+sha256 = "sha256:9453a6b51e165e3da7ddfc0389b7f32e679a223b4c773e49af3b689ebe4abbdc"
+
 [[file]]
 path = "ASSETS.md"
 upstream = "sha256:2417b03b20596fb6d2b266c5acb2d31c1dd33a4922f1db49b4979f6d23975eaa"
@@ -3524,6 +3532,7 @@ upstream = "sha256:4f225ba75acf2aaf8c15305489fa98c6f181b4694f8597bc954e2fc71d11a
 [[file]]
 path = "crates/render/src/addons/halftone/tests.rs"
 upstream = "sha256:a16bb9b614ea933a5451229601bd7b7c51595be410349f7fcf689b18076ef516"
+result = "sha256:ffe3263faf768cfda911e0fc5eaface3888a4de4d95c8d2fe19b5ebc7639867e"
 
 [[file]]
 path = "crates/render/src/blobs.rs"
@@ -3708,6 +3717,7 @@ upstream = "sha256:a4e5674a6e15c4d68ae204aa36ecd231f967d26fffc90bbaba58184c4c7d0
 [[file]]
 path = "crates/render/src/pattern/tests.rs"
 upstream = "sha256:d4322fee8335c03520ecded2258127da298ed4db90cb3eb55dab26d8d2a14ef3"
+result = "sha256:26e33bec42ee6c56e5cd4d67b1e53096d5091a3dc35d49a03d2ec2c1426cc6a8"
 
 [[file]]
 path = "crates/render/src/placed_document.rs"
@@ -3977,6 +3987,7 @@ upstream = "sha256:24f26c62389ee3487dbee54e2eab5ce9919a6a2e718e209a4fab45fffc073
 [[file]]
 path = "crates/svg/src/import/convert.rs"
 upstream = "sha256:c79ab063880deaac8fa77155e4feaf4232b70fb6310bba7aa34e7d7d36363acb"
+result = "sha256:c3a5d5184d156228b921b992ab1f0ce17e6f3ca324ca306536efbe954ee4c8b7"
 
 [[file]]
 path = "crates/svg/src/import/css.rs"
@@ -4141,6 +4152,7 @@ upstream = "sha256:efc3b13bb800eced5a1efa1e319b94ecfea2d91ec997e6ebcf7b353c4ebd6
 [[file]]
 path = "crates/svg/tests/it/prop_svg.rs"
 upstream = "sha256:52779676af63285d81e38f45f2be2cceb937630645d9262b894922958d6b4415"
+result = "sha256:337641cffd6fe696860331b86f3937f5e5e8eef7bf1b7dea10f5eb52e1110407"
 
 [[file]]
 path = "crates/svg/tests/it/raster_paints.rs"

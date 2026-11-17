@@ -1051,7 +1051,7 @@ describe("l'interruttore «Scrivi col mouse»", () => {
   it("sta in testa alla barra di N4 (la penna è nella riga delle opzioni), col nome, il suggerimento e lo stato per il lettore di schermo", () => {
     const { host } = mounted();
     const button = inkMouseButton(host);
-    const bar = host.querySelector(".canvas-toolbar")!;
+    const bar = host.querySelector(".canvas-toolbar > .kit-options-row")!;
     expect(bar.firstElementChild).toBe(button);
     expect(button.textContent).toBe(t("canvas.ink.mouse"));
     expect(button.title).toBe(t("canvas.ink.mouse_hint"));
@@ -1689,6 +1689,7 @@ describe("a chi appartiene il tratto (T69)", () => {
         measured = callback;
       }
       observe(): void {}
+      unobserve(): void {}
       disconnect(): void {}
     });
     try {

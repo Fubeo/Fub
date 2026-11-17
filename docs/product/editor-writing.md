@@ -151,8 +151,7 @@ sono icona, copertina, titolo e menu «⋯» lo dice la
   elenco e le etichette sono pastiglie.
 - **`editor.properties`** decide quanto se ne vede: `visible` (il default) le
   mostra come sopra, `hidden` le mette tutte dietro «Altre N», `source` lascia
-  lo YAML sotto il titolo, senza righe. In Lettura vale lo stesso,
-  all'apertura.
+  lo YAML sotto il titolo, senza righe. In Lettura vale lo stesso, all'apertura.
 - **Scrivere.** In Scrittura il clic su un valore (o Invio col fuoco sopra)
   apre l'editor del suo tipo. Testo, numero e indirizzo si scrivono al posto
   del valore: Invio o l'uscita dal campo scrivono, Esc torna a prima; un
@@ -241,6 +240,45 @@ con la scorciatoia scritta accanto quando c'è. Le funzioni dei blocchi hanno
 anche «+ Inserisci» nella barra di formato. Una funzione nuova del foglio entra
 da tutte e tre le porte; i menu sono descritti in
 [Tasto destro, mini-barra e «/»](editor-menus.md).
+
+## La riga dei suggerimenti
+
+Al centro della banda in basso, in grigio, ci sono i tasti utili per ciò che si
+sta facendo. Niente finestre che coprono il lavoro: la riga suggerisce e basta.
+
+| Dove sta il cursore | Che cosa dice la riga |
+| --- | --- |
+| in una riga qualunque | «/ inserisce un blocco · @ persone e date · Ctrl+O cerca o esegue · Esc seleziona il blocco» |
+| su un testo scelto | «Ctrl+B grassetto · Ctrl+I corsivo · Ctrl+K collega» |
+| in un compito | «Ctrl+Enter spunta · @ una data diventa la scadenza · Tab rientra» |
+| su un link | «Ctrl sopra il link: l'anteprima · Alt+Enter lo apre» |
+| su blocchi scelti | «↑ ↓ scegli · Shift+↑ Shift+↓ allarga · Ctrl+Shift+↑ Ctrl+Shift+↓ sposta · Ctrl+D duplica · Del elimina · Enter scrivi» |
+| nel titolo della pagina | «Enter rinomina il file e scende nel testo · ↓ scende nel testo · Esc lascia il nome» |
+| col «/» aperto | «↑ ↓ scegli · Enter metti · Tab gruppo dopo · Esc lascia il testo · Ctrl+/ tutti i comandi» |
+
+Le regole:
+
+- i comandi si scrivono coi tasti della persona: la scorciatoia cambiata nelle
+  Preferenze si vede alla prima pausa, quella tolta toglie la voce. Un comando
+  senza scorciatoia propria mostra quella con cui l'editor lo esegue da sé
+  (Ctrl+B per il grassetto). Se due comandi hanno lo stesso tasto, la voce resta
+  a quello che il tasto esegue davvero, e un tasto si dice una volta sola;
+- la riga cambia dopo una pausa breve (almeno 300 ms senza battute), non a
+  ogni battuta né a ogni freccia, e non chiede niente al backend;
+- quando lo spazio non basta (una finestra stretta, la somma delle celle scelte
+  che entra nella banda) la riga toglie le voci dalla fine, sempre intere; senza
+  niente da dire resta vuota al suo posto, e la banda non si sposta;
+- è `aria-hidden`: i gesti si annunciano da sé, la riga no;
+- non c'è al telefono né in una finestra più stretta di 620 px, e si spegne
+  nelle Preferenze con «Riga dei suggerimenti» (`editor.hints`, accesa di
+  serie).
+
+La pubblica la nota in Scrittura, attraverso la porta degli editor
+(`openHintSource` in `editors/core/hints.ts`); un altro editor che vuole i suoi
+suggerimenti apre la sua fonte coi suoi tasti. Anche il segnaposto della riga
+vuota dice i due tasti del testo: «Scrivi, oppure / per i blocchi e @ per
+persone e date». Il vault della demo ha «Il giro dell'editor», una nota con
+dieci cose da provare, ciascuna un compito da spuntare.
 
 ## Incollare un indirizzo
 
@@ -373,6 +411,12 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
 - `crates/fub-host/src/settings.rs`: `editor.default-mode` e le sue scelte;
   `apps/client/src/panels/settings-model.ts`: le scelte che il pannello mostra;
 - `apps/client/src/editors/core/presence.ts`: i livelli di presenza;
+- `apps/client/src/editors/core/hints.ts`: la porta dei suggerimenti
+  (`openHintSource`, `currentHints`, `onHintsChanged`);
+  `shells/scrittoio/frame/hints-row.ts`: la riga che la ascolta e i tasti della
+  persona (`resolveHints`); `editors/text/profiles/markdown/hints.ts`: i
+  contesti della nota (`markdownHints`); `crates/fub-host/src/settings.rs`: `editor.hints`;
+  `crates/fub-host/src/support.rs`: «Il giro dell'editor» nella demo;
 - `apps/client/src/state/note-peek.ts`: la sbirciata (`createNotePeek`), con
   l'editor montato dalla porta delle schede (`state/card-editors.ts`);
   `state/document-controller.ts` la cabla al riquadro col fuoco e legge
@@ -401,5 +445,5 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
   le scrive con un passo d'annullamento e controlla l'impronta
   (`writePropertyChecked`), `surface.ts` legge il registro e cabla «Tipo» e la
   ricerca delle persone;
-- `apps/client/bench/scene.mjs`: la scena `scrittura-a-riposo` e le scene
-  `proprieta-*` (gli editor dei tipi).
+- `apps/client/bench/scene.mjs`: le scene `scrittura-a-riposo` e
+  `riga-dei-suggerimenti`, e le scene `proprieta-*` (gli editor dei tipi).
