@@ -8,7 +8,7 @@ import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { readOptions } from "../math";
-import { notePaste, pastedFormulas, unwrapFormula, wordMathml } from "./paste";
+import { notePaste, pastedFormulas, unwrapFormula, equationMathml } from "./paste";
 
 const stateOf = (doc: string): EditorState => {
   const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] });
@@ -85,7 +85,7 @@ describe("nella nota le formule di un assistente diventano quelle di Fub", () =>
 
 describe("la copia come equazione", () => {
   it("il solo <math>, con lo spazio dei nomi, senza l'annotazione del TeX", () => {
-    const made = wordMathml(katex.renderToString("\\frac{a}{b} + \\sqrt{x}", { ...readOptions(false), output: "mathml" }));
+    const made = equationMathml(katex.renderToString("\\frac{a}{b} + \\sqrt{x}", { ...readOptions(false), output: "mathml" }));
     expect(made).not.toBeNull();
     expect(made!.startsWith("<math xmlns=\"http://www.w3.org/1998/Math/MathML\"")).toBe(true);
     expect(made!.endsWith("</math>")).toBe(true);
@@ -97,7 +97,7 @@ describe("la copia come equazione", () => {
   });
 
   it("a blocco dice display=\"block\"; senza <math> non c'è niente", () => {
-    expect(wordMathml(katex.renderToString("x", { ...readOptions(true), output: "mathml" }))).toContain("display=\"block\"");
-    expect(wordMathml("<span>niente</span>")).toBeNull();
+    expect(equationMathml(katex.renderToString("x", { ...readOptions(true), output: "mathml" }))).toContain("display=\"block\"");
+    expect(equationMathml("<span>niente</span>")).toBeNull();
   });
 });

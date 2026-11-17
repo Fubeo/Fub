@@ -135,6 +135,34 @@ describe("il compositore del menu dell'editor", () => {
     expect(menu.items.find((item) => item.label === "Copia come")?.icon).toBe("copy");
   });
 
+  it("la formula ha la stessa «Copia come ▸» del testo, dopo «Modifica», coi segni delle sue scelte", () => {
+    const host = hostFor(surfaceWith({}), []);
+    const menu = composeEditorMenu({
+      target: { kind: "block", label: "Formula", name: "a+b" },
+      context: [
+        { id: "edit", label: "Modifica", icon: "pen", run: () => {} },
+        MENU_RULE,
+        { id: "place", label: "Da riga a blocco", run: () => {} },
+      ],
+      clipboard: {
+        offers: {},
+        copyAs: [
+          { id: "latex", label: "LaTeX", icon: "copy-latex", run: () => {} },
+          { id: "image", label: "immagine", icon: "copy-image", run: () => {} },
+          { id: "equation", label: "equazione", icon: "copy-equation", run: () => {} },
+        ],
+        run: () => {},
+      },
+    }, host);
+    expect(menu.clipboard, "nessun gesto degli appunti in riga").toEqual([]);
+    expect(groupsOf(menu.items)).toEqual([["Modifica", "Copia come"], ["Da riga a blocco"]]);
+    const copyAs = menu.items.find((item) => item.label === "Copia come")!;
+    expect(copyAs.icon).toBe("copy");
+    expect((copyAs.items as readonly { label: string; icon?: string }[]).map((item) => [item.label, item.icon])).toEqual([
+      ["LaTeX", "copy-latex"], ["immagine", "copy-image"], ["equazione", "copy-equation"],
+    ]);
+  });
+
   it("la testata prende l'icona che la superficie dà, o quella del tipo", () => {
     const host = hostFor(surfaceWith({}), []);
     expect(composeEditorMenu({ target: { kind: "heading", label: "Titolo 1", icon: "fmt-h1" } }, host).header?.icon).toBe("fmt-h1");

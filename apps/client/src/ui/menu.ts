@@ -291,7 +291,7 @@ const TAB_GLIDE_MS = 200;
 const SUB_SHIFT = 12;
 
 /// I segni dei formati che una scelta in riga sa disegnare (`icons.ts`).
-const SIGNS: ReadonlySet<string> = new Set(["copy-markdown", "copy-html", "copy-text"]);
+const SIGNS: ReadonlySet<string> = new Set(["copy-markdown", "copy-html", "copy-text", "copy-latex", "copy-image", "copy-equation"]);
 
 /// Accende o spegne una parte del menu: la classe `menu-lit`, che il banco del
 /// moto e le scene leggono, e lo stato del kit, che veste righe e tessere.
@@ -301,9 +301,9 @@ function light(el: HTMLElement, on: boolean): void {
 }
 
 /// Il segno di una scelta: la sua icona, se è uno dei segni dei formati, o
-/// quello del formato che il suo nome dice. Le superfici di oggi dichiarano
-/// «Copia come ▸» senza icone (`SurfaceMenuItem`), e i nomi dei formati sono
-/// quelli del catalogo.
+/// quello del formato che il suo nome dice: il testo dichiara «Copia come ▸»
+/// senza icone, coi nomi dei formati del catalogo; la formula dà il segno
+/// con l'icona di ogni scelta.
 function signOf(item: MenuItem): string | null {
   if (item.icon !== undefined && SIGNS.has(item.icon)) return item.icon;
   const named = new Map<string, string>([
