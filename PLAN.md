@@ -664,7 +664,7 @@ lunghissimo o con maiuscole, 21 passi, un passo `recipe.altra:run`, un comando
 Fatto quando: `cargo test -p fub-features --test recipes_format --test template_e2e --test independent_modules`
 verdi, con i test dei template invariati.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · e3122bcad · check --rapido 25/25 verde; nextest fub-features 833/833. Differenze: parse(model, source), Problem {code, field, line, message}, nomi dei parametri [a-z][a-z0-9_]{0,47}, doc e selection riservati; check_unique e i costruttori di id-occupato e troppe per T9
 
 ## T6 · La palette propone la nota aperta, e i permessi dicono gli elenchi
 
