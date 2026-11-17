@@ -2344,18 +2344,22 @@ mod tests {
     #[test]
     fn il_calendario_scrive_la_sua_data_anche_se_non_e_una_colonna() {
         let edit = |key: &str| {
-            respond(json!({"version":1,"op":"mutate","source":TIME_SOURCE,"view":"Cal","edits":[
-                {"doc":"a.md","key":key,"expected":{"kind":"absent"},"value":"2026-11-15"}
-            ]}))
+            respond(
+                json!({"version":1,"op":"mutate","source":TIME_SOURCE,"view":"Cal","edits":[
+                    {"doc":"a.md","key":key,"expected":{"kind":"absent"},"value":"2026-11-15"}
+                ]}),
+            )
         };
         let written = edit("scadenza").unwrap();
         assert_eq!(written["mutations"][0]["command"], "note.property.set");
         assert_eq!(written["mutations"][0]["args"]["key"], "scadenza");
         assert!(edit("altro").is_err());
         // La linea del tempo: inizio e fine.
-        let timeline = respond(json!({"version":1,"op":"mutate","source":TIME_SOURCE,"view":"Lin","edits":[
-            {"doc":"a.md","key":"fine","expected":{"kind":"absent"},"value":"2026-11-15"}
-        ]}));
+        let timeline = respond(
+            json!({"version":1,"op":"mutate","source":TIME_SOURCE,"view":"Lin","edits":[
+                {"doc":"a.md","key":"fine","expected":{"kind":"absent"},"value":"2026-11-15"}
+            ]}),
+        );
         assert!(timeline.is_ok());
     }
 

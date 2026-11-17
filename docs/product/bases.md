@@ -1,11 +1,10 @@
 # Basi (file `.base`)
 
 Una Base è un file `.base` che mostra le note del vault come tabella, schede,
-elenco, bacheca, mappa o calendario. La linea del tempo si legge e si scrive
-già nel file, ma la Base non la disegna ancora: arriva con le prossime
-modifiche dell'editor (vedi sotto). Il file è testo YAML che si legge
-e si scrive a mano: Fub lo cambia solo nelle righe che un comando tocca, e lascia
-il resto com'è.
+elenco, bacheca, mappa o calendario; la linea del tempo è già nel file, ma la
+Base non la disegna ancora (vedi sotto). Il file è testo YAML che si legge e si
+scrive a mano: Fub lo cambia solo nelle righe che un comando tocca, e lascia il
+resto com'è.
 
 ```mermaid
 flowchart LR
