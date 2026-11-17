@@ -202,3 +202,85 @@ fn unlinked_mentions_without_search_say_so_instead_of_failing() {
     }
     assert!(!failed(&tree), "{json}");
 }
+
+/// Le azioni «Collega» dell'albero, con il loro payload.
+fn convert_actions(tree: &UiNode) -> Vec<serde_json::Value> {
+    fn walk(value: &serde_json::Value, out: &mut Vec<serde_json::Value>) {
+        match value {
+            serde_json::Value::Object(map) => {
+                if map.get("action").and_then(|a| a.as_str()) == Some("convert_to_link") {
+                    out.push(map.get("payload").cloned().unwrap_or_default());
+                }
+                map.values().for_each(|v| walk(v, out));
+            }
+            serde_json::Value::Array(items) => items.iter().for_each(|v| walk(v, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(&serde_json::to_value(tree).unwrap(), &mut out);
+    out
+}
+
+/// IMP-102, IMP-104, IMP-105 attraverso il kernel vero: il pannello offre
+/// solo la menzione in prosa (non quella già dentro un link, non quella nel
+/// codice); «Collega» la converte sul disco; la stessa azione ripetuta non
+/// scrive niente; «Annulla l'ultima operazione» riporta i byte di prima in un
+/// passo solo.
+#[cfg(feature = "commands")]
+#[test]
+fn linking_a_mention_writes_the_file_once_and_undoes_in_one_step() {
+    use fub_abi::command::InvokeMode;
+    use fub_abi::event::Actor;
+    use fub_features::commands::{CoreCommands, COMMANDS_ID, VAULT_UNDO};
+    use fub_features::MentionCommands;
+
+    let before = "Il Capo passa. Vedi [[Altra|Capo]] e `Capo`.\n";
+    let vault = Vault::new();
+    vault.put("Diario.md", before);
+    vault.put("Mario Rossi.md", "---\naliases: [Capo]\n---\n# Mario\n");
+    vault.put("Altra.md", "# Altra\n");
+    let mut ws = vault.open();
+    ws.register_command_provider(BACKLINKS_ID, Box::new(MentionCommands))
+        .expect("registrato");
+    ws.register_plugin(
+        fub_abi::traits::PluginManifest::core(COMMANDS_ID, COMMANDS_ID),
+        fub_kernel::Trust::Core,
+    )
+    .expect("dichiarato");
+    ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands))
+        .expect("registrato");
+    ws.set_active_document(Some(DocId::new("Diario.md")));
+    let instance = ViewInstance::only(BACKLINKS_VIEW);
+    let disk = || std::fs::read_to_string(vault.root.join("Diario.md")).unwrap();
+
+    let offered = convert_actions(&ws.render_view(&instance).expect("render"));
+    assert_eq!(offered.len(), 1, "solo la menzione in prosa: {offered:?}");
+    assert_eq!(offered[0]["start"], 3, "{offered:?}");
+    let convert = UiAction::new("convert_to_link").with_payload(offered[0].clone());
+
+    ws.view_action(&instance, convert.clone()).expect("collega");
+    let linked = disk();
+    assert_eq!(
+        linked,
+        "Il [[Mario Rossi|Capo]] passa. Vedi [[Altra|Capo]] e `Capo`.\n"
+    );
+    assert!(
+        convert_actions(&ws.render_view(&instance).expect("render")).is_empty(),
+        "una menzione collegata non si offre di nuovo"
+    );
+
+    // Il secondo «Collega» (un clic doppio, un pannello vecchio) non scrive.
+    let again = ws.view_action(&instance, convert);
+    assert!(again.is_err(), "{again:?}");
+    assert_eq!(disk(), linked);
+
+    ws.invoke_command(
+        VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("annulla");
+    assert_eq!(disk(), before, "un passo solo riporta i byte di prima");
+}

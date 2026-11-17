@@ -129,7 +129,8 @@ pub mod versioning;
 
 #[cfg(feature = "backlinks")]
 pub use backlinks::{
-    build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_STATUS_VIEW, BACKLINKS_VIEW,
+    build_backlinks_view, BacklinksView, MentionCommands, BACKLINKS_ID, BACKLINKS_STATUS_VIEW,
+    BACKLINKS_VIEW, MENTION_LINK,
 };
 #[cfg(feature = "backup")]
 pub use backup::{
