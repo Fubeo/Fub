@@ -41,11 +41,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use camino::Utf8PathBuf;
 use fub_abi::rules::tasks::civil_minute;
 use fub_abi::Locale;
-use fub_features::tasks::reminders::{
+use fub_host::reminders::{
     notification_more, notification_words, NotificationWords, ReminderEntry, ReminderList,
-    ReminderWatch, RemindersQuery, WatchStep,
+    ReminderWatch, RemindersQuery, WatchStep, TASKS_ID,
 };
-use fub_features::TASKS_ID;
 use fub_host::Host;
 use fub_kernel::Capability;
 use tauri::{AppHandle, Manager};

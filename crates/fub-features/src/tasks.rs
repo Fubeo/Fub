@@ -245,6 +245,14 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 reminders::E_QUERY,
                 "La domanda dei promemoria non ha la forma giusta: {detail}.",
+            )
+            .with(
+                reminders::E_ROUTE,
+                "L'indice dei promemoria non risponde a questa domanda.",
+            )
+            .with(
+                reminders::E_ANSWER,
+                "Non sono riuscito a scrivere la risposta dei promemoria: {detail}.",
             ),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Tasks")
@@ -310,6 +318,14 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 reminders::E_QUERY,
                 "The reminders question does not have the right shape: {detail}.",
+            )
+            .with(
+                reminders::E_ROUTE,
+                "The reminders index does not answer this question.",
+            )
+            .with(
+                reminders::E_ANSWER,
+                "Could not write the reminders answer: {detail}.",
             ),
     ]
 }

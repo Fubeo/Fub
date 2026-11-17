@@ -76,6 +76,10 @@ pub const REMINDERS_VERSION: u32 = 1;
 /// frase sta nel catalogo dei compiti.
 pub(super) const E_QUERY: &str = "reminders_query";
 const DETAIL: &str = "detail";
+/// La chiave d'errore di una domanda arrivata a una rotta che l'indice non
+/// serve, e quella di una risposta che non si è potuta scrivere.
+pub(super) const E_ROUTE: &str = "reminders_route";
+pub(super) const E_ANSWER: &str = "reminders_answer";
 /// La chiave del titolo della notifica.
 pub(super) const REMINDER_TITLE: &str = "reminder_title";
 /// La chiave dell'azione che apre la nota dalla notifica.
@@ -255,7 +259,12 @@ impl ReminderIndex {
         let limit = limit.unwrap_or(REMINDER_LIMIT).min(REMINDER_LIMIT);
         serde_json::to_value(self.between(after, until, limit))
             .map(IndexResult::Custom)
-            .map_err(|error| PluginError::Internal(error.to_string().into()))
+            .map_err(|error| {
+                PluginError::Internal(Text::message(
+                    E_ANSWER,
+                    vec![Arg::text(DETAIL, error.to_string())],
+                ))
+            })
     }
 }
 
@@ -300,7 +309,7 @@ impl IndexProvider for ReminderIndex {
     fn query(&self, request: IndexQuery) -> Result<IndexResult, PluginError> {
         match request {
             IndexQuery::Custom { ns, query } if ns == TASKS_ID => self.answer(query),
-            _ => Err(PluginError::Unserved(Text::from("tasks: undeclared route"))),
+            _ => Err(PluginError::Unserved(Text::key(E_ROUTE))),
         }
     }
 }

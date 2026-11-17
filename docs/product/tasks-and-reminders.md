@@ -84,8 +84,8 @@ Il nome della nota d'origine, accanto al compito, apre la nota.
   ridisegno costa così circa 70 ms invece di 180.
 - La vista legge le note con compiti aperti dall'indice di ricerca. Se il vault
   non ha un indice attivo, la vista lo dice invece di mostrare un elenco vuoto.
-- La pastiglia del `⏰` nel testo e l'elenco dei promemoria passati all'avvio
-  non ci sono ancora: oggi c'è la notifica (vedi sotto).
+- Il `⏰` nel testo non ha una pastiglia, e i promemoria passati ad app chiusa
+  non hanno un elenco all'avvio: c'è la notifica (vedi sotto).
 
 ## La scadenza nel testo
 
@@ -141,8 +141,8 @@ Linux non c'è un servizio di notifiche) l'app lo scrive nel log e va avanti.
 L'indice dei promemoria sta in memoria e si ricostruisce dalle note a ogni
 apertura del vault (`crates/fub-features/src/tasks/reminders.rs`); la notifica
 la mostra l'app (`crates/fub-app/src/promemoria.rs`), con `notify-rust`.
-Provato su Linux; macOS e Windows usano la stessa libreria ma non sono ancora
-stati provati a mano.
+Provato su Linux; macOS e Windows usano la stessa libreria, senza una prova a
+mano.
 
 ## Il recinto ```` ```tasks ````
 

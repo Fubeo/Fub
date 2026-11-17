@@ -329,12 +329,12 @@ fn a_permission_denied_survives_to_the_shutdown_and_to_the_reopening() {
 /// Le notifiche dei promemoria sono un permesso del componente dei compiti,
 /// stretto come gli altri: lo ha solo lui, si spegne con il suo interruttore,
 /// e spento i promemoria restano leggibili (la nota e l'elenco all'avvio).
+#[cfg(feature = "tasks")]
 #[test]
 fn the_reminder_notifications_are_a_permission_of_the_tasks_alone() {
     use fub_abi::options::permission;
     use fub_abi::settings::permission_key;
-    use fub_features::tasks::reminders::{ReminderList, RemindersQuery};
-    use fub_features::TASKS_ID;
+    use fub_host::reminders::{ReminderList, RemindersQuery, TASKS_ID};
     use fub_kernel::Capability;
 
     let v = Vault::new();
@@ -345,6 +345,7 @@ fn the_reminder_notifications_are_a_permission_of_the_tasks_alone() {
     .unwrap();
     let host = headless();
     host.open(&v.root).expect("opens");
+    host.wait_indexed(None).expect("indexed");
     let allows = |plugin: &str| {
         host.component_allows(None, plugin, Capability::Notifications)
             .expect("open")
