@@ -719,6 +719,9 @@ export const SCENE = onPage("shell", [
       await openRibbon(page, 700);
       await page.click('.pane.focus .grid-ribbon [data-group="number"] .grid-ribbon-group-toggle');
       await page.waitForSelector('.pane.focus .grid-ribbon [data-group="number"][data-open="true"]');
+      // Il puntatore lascia l'interruttore: il suo tooltip arriva dopo 500 ms
+      // di timer vero, e la foto lo prenderebbe o no (#459).
+      await page.mouse.move(0, 0);
     },
   },
   {
@@ -1729,6 +1732,9 @@ export const SCENE = onPage("shell", [
         await openRibbon(page, "phone");
         await page.click('.pane.focus .grid-ribbon [data-group="alignment"] .grid-ribbon-group-toggle');
         await page.waitForSelector('.pane.focus .grid-ribbon [data-group="alignment"][data-open="true"]');
+        // Il puntatore lascia l'interruttore: il suo tooltip arriva dopo 500 ms
+        // di timer vero, e la foto lo prenderebbe o no (#459).
+        await page.mouse.move(0, 0);
       },
     },
     {
