@@ -351,8 +351,9 @@ struct Crtc {
     /// L'id del CRTC per `drmModeGetCrtc`, letto una volta.
     id: Option<u32>,
     griglia: Option<Griglia>,
-    /// La frequenza in vigore (0: niente emulazione) e quando la si è letta.
-    mhz: u32,
+    /// La frequenza in vigore (0: niente emulazione; `None`: mai letta, così
+    /// la prima lettura va nel log anche quando dice 0) e quando la si è letta.
+    mhz: Option<u32>,
     letta_ns: i64,
 }
 
@@ -454,7 +455,7 @@ pub unsafe fn drm_wait_vblank(fd: c_int, vbl: *mut DrmVBlank) -> c_int {
                     pipe,
                     id: None,
                     griglia: None,
-                    mhz: 0,
+                    mhz: None,
                     letta_ns: i64::MIN,
                 });
             }
@@ -500,7 +501,7 @@ fn pianifica(
             .and_then(|id| drm::modo_del_crtc(fd, id))
             .and_then(frequenza_mhz);
         let mhz = letta.filter(|&mhz| nei_limiti(mhz)).unwrap_or(0);
-        if mhz != crtc.mhz {
+        if crtc.mhz != Some(mhz) {
             tracing::info!(
                 target: "fub.app",
                 pipe,
@@ -513,7 +514,7 @@ fn pianifica(
                 Some(griglia) => griglia.con_periodo(ora, periodo_ns(mhz)),
                 None => Griglia::nuova(ora, periodo_ns(mhz)),
             });
-            crtc.mhz = mhz;
+            crtc.mhz = Some(mhz);
         }
     }
     let griglia = crtc.griglia?;
