@@ -38,6 +38,15 @@ export { RICH_FAMILY, RICH_FORMATS, RICH_OWNER, RICH_PROFILE };
 export const RICH_PAGE_MODE = "document";
 export const RICH_WRITING_MODE = "writing";
 export const RICH_READING_MODE = "reading";
+/// Pagina e Lettura mostrano il file sulla sua carta, o adattato a quella del
+/// tema; Scrittura è del tema, e del file tiene struttura ed enfasi. Le
+/// figure le registra la barra del documento (`useRichIcons`); dove non ci
+/// sono, il menu delle modalità usa quelle del ruolo.
+export const RICH_MODES: readonly SurfaceMode[] = [
+  { id: "document", label: () => t("mode.page"), presentation: "surface", contextMode: "live_preview", looks: ["file", "adattato"], icon: "rc-mode-page" },
+  { id: "writing", label: () => t("mode.writing"), presentation: "surface", contextMode: "live_preview", looks: ["tema"], icon: "rc-mode-writing" },
+  { id: "reading", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading", looks: ["file", "adattato"], icon: "rc-mode-reading" },
+];
 /// Sotto questa larghezza (px) la vista è stretta: la carta le sta dentro, e
 /// il pannello del documento è un foglio che sale dal basso.
 export const NARROW_PX = 600;
@@ -156,6 +165,10 @@ export const RICH_CHORDS: Readonly<Record<string, string>> = {
   "markdown.table.column.delete": "Mod-Alt-Shift-Backspace",
 };
 
+/// Dopo quanto silenzio (ms) un altro tentativo in un blocco chiuso torna a
+/// dirlo.
+export const CLOSED_QUIET_MS = 4000;
+
 /// L'immagine più pesante che un documento accoglie, come il codec.
 export const RICH_IMAGE_LIMIT = 16 * 1024 * 1024;
 
@@ -260,6 +273,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         onChange: (change) => callbacks.onChange(context.paneId, change),
         onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
         proof: callbacks.proof,
+        onClosedWrite: warnClosed,
       });
       const ribbonHost = document.createElement("div");
       ribbonHost.className = "rich-ribbon-host";
@@ -328,13 +342,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     engine?.refresh();
   });
 
-  // Pagina e Lettura mostrano il file sulla sua carta, o adattato a quella
-  // del tema; Scrittura è del tema, e del file tiene struttura ed enfasi.
-  const modes: SurfaceMode[] = [
-    { id: "document", label: () => t("mode.page"), presentation: "surface", contextMode: "live_preview", looks: ["file", "adattato"] },
-    { id: "writing", label: () => t("mode.writing"), presentation: "surface", contextMode: "live_preview", looks: ["tema"] },
-    { id: "reading", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading", looks: ["file", "adattato"] },
-  ];
+  const modes = RICH_MODES;
 
   /// L'aspetto che il contenitore mostra adesso: lo decide la shell, con la
   /// classe `look-*`.
@@ -394,6 +402,16 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   };
 
   const tell = (message: string) => callbacks.proof?.notify?.(message);
+
+  // Una battuta in un blocco chiuso non entra (`closed.ts`): lo si dice con
+  // un avviso, uno solo finché chi scrive ci riprova senza fermarsi.
+  let closedTriedAt = Number.NEGATIVE_INFINITY;
+  function warnClosed(): void {
+    const now = Date.now();
+    const quiet = now - closedTriedAt > CLOSED_QUIET_MS;
+    closedTriedAt = now;
+    if (quiet) tell(t("rich.locked.refused"));
+  }
 
   /// Una voce per un'azione del motore, col nome della striscia: le azioni
   /// `rich.*` non le dichiara un comando, e la striscia le mostra comunque.

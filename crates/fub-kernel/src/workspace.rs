@@ -90,7 +90,7 @@ use fub_abi::session::ViewContext;
 use fub_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
-use fub_abi::text::{Localize, Strings, Text};
+use fub_abi::text::{Arg, Localize, Strings, Text};
 use fub_abi::traits::{
     BacklinkRef, CivilTime, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler,
     HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress,
@@ -142,6 +142,7 @@ use crate::registry::FormatRegistry;
 use crate::rename_recovery::{self, RenameRecoveryEdit, RenameRecoveryReceipt, RenameRecoveryScan};
 use crate::renderer::RenderedDocument;
 use crate::safety::Gate;
+use crate::same_content::{LearnedFingerprints, SameContentOutcome};
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
 use crate::transfer::{MemorySink, OpenSources, ResourceLease, SourceBacking, PROLOGUE};
@@ -2432,6 +2433,13 @@ impl PreparedMaintenanceRebuild {
     }
 }
 
+/// La chiave del rifiuto di un annullamento quando **un** file è cambiato
+/// dopo l'operazione (argomento `doc`). Il testo sta nel catalogo dei comandi
+/// del core, accanto a `vault.undo`.
+pub const UNDO_STALE_ONE: &str = "vault.undo.stale_one";
+/// Come [`UNDO_STALE_ONE`], per più file (argomento `docs`, separati da virgole).
+pub const UNDO_STALE_MANY: &str = "vault.undo.stale_many";
+
 /// Stato owned di un annullamento fra un passo e il successivo.
 ///
 /// Il token tiene aperti replay e batch senza prestare il [`Workspace`], così
@@ -2850,6 +2858,14 @@ pub struct PreparedDocumentBytesWrite {
 pub struct PreparedResourceOpen {
     vault: crate::vault::Vault,
     id: DocId,
+}
+
+/// La domanda «c'è già questo contenuto nel vault?» sul vault attivo, eseguibile
+/// senza custodia workspace: i candidati si prendono dall'indice vivo sotto il
+/// lucchetto, il confronto si fa fuori (vedi [`crate::same_content`]).
+pub struct PreparedSameContent {
+    vault: crate::vault::Vault,
+    plan: crate::same_content::Plan,
 }
 
 /// Il lettore delle lease di un vault, da tenere fuori dal workspace.
@@ -3607,6 +3623,17 @@ impl PreparedDocumentBytesWrite {
 impl PreparedResourceOpen {
     pub fn invoke(self) -> Result<ResourceLease> {
         crate::transfer::resource_open_on(&self.vault, &self.id)
+    }
+}
+
+impl PreparedSameContent {
+    /// Il contenuto, già in memoria, confrontato con i candidati: vedi
+    /// [`SameContent`](crate::same_content::SameContent). I byte devono essere
+    /// quelli della misura data a [`Workspace::prepare_same_content`]; le
+    /// impronte calcolate per strada tornano all'indice con
+    /// [`Workspace::learn_fingerprints`].
+    pub fn invoke(self, bytes: &[u8]) -> SameContentOutcome {
+        crate::same_content::answer(&self.vault, self.plan, bytes)
     }
 }
 
@@ -4395,6 +4422,23 @@ impl Workspace {
     pub(crate) fn localized(&self, plugin: &str, mut and: PluginError) -> PluginError {
         self.localize(plugin, &mut and);
         and
+    }
+
+    /// L'errore di una domanda al canale dati, nel catalogo dell'indice che
+    /// l'ha prodotto (§12.2): la stessa via d'uscita di [`localized`], per la
+    /// domanda che il pianificatore ha girato a un indice. Vale anche per la
+    /// domanda staccata ([`PreparedIndexQuery::invoke`]), che fallisce senza
+    /// il prestito del workspace e torna qui per le parole.
+    ///
+    /// [`localized`]: Workspace::localized
+    pub fn localized_query_failure(
+        &self,
+        failure: crate::index::plan::QueryFailure,
+    ) -> PluginError {
+        match failure.owner {
+            Some(owner) => self.localized(&owner, failure.error),
+            None => failure.error,
+        }
     }
 
     /// Il locale di sistema condiviso: chi monta lo passa alla shell perché ci
@@ -5724,6 +5768,7 @@ impl Workspace {
         for entry in entries {
             self.indexes.core.set_entry_observed(entry, observed_at);
         }
+        self.indexes.core.mark_scanned();
 
         // **Riapertura incrementale**: per ogni documento descritto dall'anagrafe
         // (size+mtime+timbro di cambiamento → impronta) che porta i metadati e
@@ -6483,14 +6528,26 @@ impl Workspace {
             .values()
             .filter(|entry| !self.indexes.core.observed_at_the_same_instant(&entry.id))
             .map(|entry| {
+                let now = crate::same_content::FileWitness::of(&self.docs.vault, &entry.id);
+                // Un'impronta imparata da una domanda vale per il file su cui
+                // la si è imparata: se adesso al suo posto c'è un altro file,
+                // con la stessa misura e la stessa data e senza un evento, la
+                // riga non la porta, e la prossima apertura rilegge il file
+                // invece di certificarlo con i byte di prima.
+                let fingerprint = entry.fingerprint.clone().filter(|_| {
+                    self.indexes
+                        .core
+                        .learned_on(&entry.id)
+                        .is_none_or(|witness| witness.agrees(&now))
+                });
                 (
                     entry.id.clone(),
                     StoredEntry {
                         size: entry.size,
                         mtime: entry.mtime,
-                        change_stamp: self.docs.vault.change_stamp(&entry.id),
-                        identity: self.docs.vault.file_identity(&entry.id),
-                        fingerprint: entry.fingerprint.clone(),
+                        change_stamp: now.change_stamp,
+                        identity: now.identity,
+                        fingerprint,
                         metadata: self.indexes.core.stored_metadata(&entry.id),
                     },
                 )
@@ -6572,6 +6629,82 @@ impl Workspace {
             vault: self.docs.vault.clone(),
             id: valid_doc_id(id.as_str())?,
         })
+    }
+
+    /// La domanda «c'è già un file con questi `bytes_len` byte, dello stesso
+    /// tipo di `target`?», da fare fuori dal lucchetto del workspace: i
+    /// candidati si prendono adesso dall'indice vivo (le voci in memoria, con
+    /// misura e impronta), il vault si clona, e la custodia si rilascia (vedi
+    /// [`PreparedSameContent`]). Finché la scansione non ha installato
+    /// l'anagrafe la risposta è «non so».
+    pub fn prepare_same_content(&self, target: &DocId, bytes_len: u64) -> PreparedSameContent {
+        let plan = crate::same_content::plan(
+            self.indexes.core.entries.values(),
+            |id| self.indexes.core.learned_on(id),
+            self.indexes.core.anagrafe_complete(),
+            &self.docs.vault.ignore_policy(),
+            target,
+            bytes_len,
+        );
+        PreparedSameContent {
+            vault: self.docs.vault.clone(),
+            plan,
+        }
+    }
+
+    /// Riporta nell'indice vivo le impronte che una domanda sul contenuto ha
+    /// calcolato fuori dal lucchetto. Ciascuna si tiene solo se:
+    ///
+    /// - la data letta era già nel passato quando la domanda è cominciata
+    ///   (*racily clean*);
+    /// - la voce c'è ancora con la misura e la data lette: una voce cambiata
+    ///   nel frattempo, da una scrittura o dal rilevatore, non torna indietro;
+    /// - se l'anagrafe ha una riga con quella misura e quella data, la riga
+    ///   descrive lo stesso file ([`FileWitness::agrees`](crate::same_content::FileWitness::agrees)).
+    ///   Un file sostituito da un altro con la stessa misura e la stessa data,
+    ///   senza che il rilevatore lo dicesse, ha una voce che descrive ancora
+    ///   quello di prima.
+    ///
+    /// Il file letto (segno del cambio e identità) l'ha preso la domanda, fuori
+    /// dal lucchetto: qui si confronta soltanto, senza domande al supporto e
+    /// senza copiare la riga dell'anagrafe. L'impronta resta nella voce col
+    /// suo testimone: chi la usa dopo la crede solo per quel file, e
+    /// [`store_entries`](Self::store_entries) non la scrive per un file che nel
+    /// frattempo è un altro.
+    ///
+    /// Non scrive niente su disco: l'anagrafe porta le impronte in
+    /// `entries.json` con [`store_entries`](Self::store_entries), l'unico che lo
+    /// scrive. Ritorna quante impronte ha tenuto.
+    pub fn learn_fingerprints(&mut self, learned: LearnedFingerprints) -> usize {
+        let mut kept = 0;
+        for learned in learned.0 {
+            if learned.mtime == 0 || learned.mtime >= learned.observed_at {
+                continue;
+            }
+            let table_disagrees = self
+                .entry_store
+                .ask_known(&learned.id, |known| {
+                    known.describes(learned.size, learned.mtime)
+                        && !learned.witness.agrees(&crate::same_content::FileWitness {
+                            change_stamp: known.change_stamp,
+                            identity: known.identity,
+                        })
+                })
+                .unwrap_or(false);
+            if table_disagrees {
+                continue;
+            }
+            if self.indexes.core.learn_fingerprint(
+                &learned.id,
+                learned.size,
+                learned.mtime,
+                &learned.fingerprint,
+                learned.witness,
+            ) {
+                kept += 1;
+            }
+        }
+        kept
     }
 
     fn check_resource_lease(&self, lease: &ResourceLease) -> Result<()> {
@@ -10811,7 +10944,10 @@ impl Workspace {
             }
             other => {
                 let needles = occurrences::wanted(&other);
-                let result = self.indexes.query(other)?;
+                let result = self
+                    .indexes
+                    .query(other)
+                    .map_err(|failure| self.localized_query_failure(failure))?;
                 match result {
                     IndexResult::Documents(page) if !needles.is_empty() => {
                         Ok(IndexResult::Documents(self.locate(page, &needles)))
@@ -12203,19 +12339,87 @@ impl Workspace {
     /// niente è ancora «fallito», che è la promessa che
     /// [`HostCommands::undo_last`](fub_abi::traits::HostCommands::undo_last)
     /// faceva già.
+    ///
+    /// # Prima di toccare un file si guardano tutti (A-10)
+    ///
+    /// Le [`UndoStep::Edit`] in testa alla voce — quelle prima del primo passo
+    /// [`Command`](UndoStep::Command), una per documento — portano la
+    /// revisione che l'operazione ha lasciato, e si controllano **tutte prima
+    /// del primo passo**. Se un documento è cambiato dopo l'operazione,
+    /// l'annullamento non tocca niente: torna un [`PluginError::Conflict`] che
+    /// nomina i file cambiati, e la voce resta in pila. È ciò che rende un
+    /// piano su più documenti ([`fub_abi::command::WritePlan`]) annullabile in
+    /// un passo: [`AppliedPlan::undo`](fub_abi::command::AppliedPlan::undo)
+    /// mette davanti, per ogni file, l'inverso della modifica o una richiesta
+    /// vuota che fa solo da guardia. Dopo il primo comando la regola si ferma:
+    /// che cosa un comando tocca lo sa lui, e la base di un passo dopo di lui
+    /// può essere quella che lui stesso produrrà.
     pub fn prepare_undo_replay(&mut self) -> Option<UndoReplay> {
         let entry = self.undo.pop()?;
+        let failure = self.stale_undo_guards(&entry.undo.steps);
         Some(UndoReplay {
             entry,
             next: 0,
             done: 0,
-            failure: None,
+            failure,
             before_replay: self.undo.begin_replay(),
             // Tutto dentro un lotto solo: annullare una rinomina che aveva
             // riscritto quaranta sorgenti è un gesto, quindi un `batch-ended` e
             // un ridisegno.
             owns_batch: self.dispatch.open_batch(),
         })
+    }
+
+    /// Le guardie in testa a una voce di annullamento che non tengono più: il
+    /// perché per [`prepare_undo_replay`](Self::prepare_undo_replay), o `None`
+    /// se tutte reggono.
+    ///
+    /// Un documento che non si legge più (cancellato, un permesso, un disco)
+    /// conta come cambiato: l'annullamento non sa più su cosa andrebbe a
+    /// scrivere, e non scrivere niente è la risposta che non perde niente.
+    fn stale_undo_guards(&self, steps: &[UndoStep]) -> Option<Failure> {
+        let mut seen: Vec<&DocId> = Vec::new();
+        let mut stale: Vec<DocId> = Vec::new();
+        for step in steps {
+            let UndoStep::Edit(planned) = step else {
+                break;
+            };
+            if seen.contains(&&planned.doc) {
+                continue;
+            }
+            seen.push(&planned.doc);
+            let base = &planned.edit.base;
+            let holds = match self.document_revision(&planned.doc) {
+                Ok(current) if current == *base => true,
+                // Una base della forma vecchia non si confronta per
+                // uguaglianza: si ricalcola sui byte.
+                Ok(_) if !base.is_current_form() => self
+                    .read_source_bytes(&planned.doc)
+                    .is_ok_and(|bytes| base.matches_bytes(&bytes)),
+                Ok(_) | Err(_) => false,
+            };
+            if !holds {
+                stale.push(planned.doc.clone());
+            }
+        }
+        let first = stale.first()?.clone();
+        // La frase è una chiave del catalogo di chi annulla: la scrive
+        // `vault.undo` (fub-features), che è il comando da cui passa l'utente.
+        // Due chiavi e non una, perché il catalogo non sceglie il plurale.
+        let text = match stale.as_slice() {
+            [one] => Text::message(UNDO_STALE_ONE, vec![Arg::text("doc", one.as_str())]),
+            many => Text::message(
+                UNDO_STALE_MANY,
+                vec![Arg::text(
+                    "docs",
+                    many.iter()
+                        .map(DocId::as_str)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                )],
+            ),
+        };
+        Some(Failure::of(first, PluginError::Conflict(text)))
     }
 
     /// Chiude il batch senza chiamare handler. Replay resta attivo nel token:
@@ -12646,12 +12850,19 @@ impl Workspace {
     /// Alla chiusura, se qualcosa è stato toccato, arriva un
     /// [`Event::BatchEnded`] con l'elenco dei documenti; poi la coda si drena.
     ///
-    /// **Non è una transazione.** Se una delle scritture dentro `f` fallisce, le
-    /// altre restano fatte: il lotto non annulla niente e non lo promette (il
-    /// tutto-o-niente vuole il registro delle mutazioni, che dalla 0067 c'è e di
-    /// ogni lotto tiene i confini: manca chi lo ripercorre). Ciò che è andato storto lo
-    /// riporta `f` col proprio valore di ritorno, che questa funzione passa
-    /// intatto.
+    /// **Il lotto da solo non è una transazione.** Se una delle scritture dentro
+    /// `f` fallisce, le altre restano fatte: il lotto raggruppa ciò che si dice a
+    /// chi ascolta, non ciò che si scrive. Ciò che è andato storto lo riporta `f`
+    /// col proprio valore di ritorno, che questa funzione passa intatto.
+    ///
+    /// Il tutto-o-niente c'è, ed è un altro attrezzo che dentro il lotto ci
+    /// gira: un comando che scrive più documenti li consegna come
+    /// [`WritePlan`](fub_abi::command::WritePlan), che controlla ogni revisione
+    /// prima di scrivere e disfa all'indietro se un passo cade
+    /// ([`fub_abi::rules::plan`]). Sta nel contratto e non qui perché chi lo usa
+    /// riceve soltanto un `HostApi`, e passa così da ogni guardia e da ogni
+    /// turno come le capacità che compone; il lotto del comando che lo apre fa
+    /// uscire scritture e ritorni **una volta, dopo**, come fatti in coda.
     ///
     /// Annidato, entra nel lotto che c'è invece di aprirne un secondo: chiudere
     /// quello interno farebbe arrivare un `batch-ended` mentre l'operazione

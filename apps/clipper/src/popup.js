@@ -39,7 +39,7 @@
   var highlightsStore = {};
   var currentUrl = "";
   function pageKey(tab) {
-    var url = tab && tab.url;
+    var url = tab && FubCapture.withoutCredentials(tab.url);
     return typeof url === "string" && /^https?:\/\//i.test(url) && url.length <= 2048 ? url : "";
   }
   function savedFor(url) {
@@ -132,7 +132,6 @@
   var converted = null; // { markdown, assets, notes }
   var lastArtifact = null;
   var aiSettings = FubInterpreter.DEFAULTS;
-  var aiKey = null;
   var aiGrants = { provider: [], images: [] };
   var downloadDisposers = new Set();
   var manualUrls = [];
@@ -288,6 +287,9 @@
   function onData(data, tab) {
     current = data;
     var meta = data.metadata || {};
+    // Credentials in the page address never reach the note, the templates
+    // or the capture.
+    if (meta.url) meta.url = FubCapture.withoutCredentials(meta.url);
     var reader = data.reader || {};
     var head = (meta.title || (tab && tab.title) || t("popup.untitled", "Untitled")) +
       (meta.author ? " — " + meta.author : "") +
@@ -619,13 +621,21 @@
     setError("");
     var req = aiPreview();
     if (!req) return;
-    var ctx = { apiKey: aiKey || undefined, grants: aiGrants };
-    // fetch is only reached after explicit Ask click; key lives in memory.
-    FubInterpreter.sendRequest(aiSettings, req, ctx).then(function (r) {
-      $("aiResult").value = r.text;
-      aiKey = null; // drop key from memory after the call
-    }, function (e) {
-      aiKey = null;
+    // fetch is only reached after an explicit Ask click. The key is read
+    // from keystore.js (storage.session first, storage.local only when the
+    // user chose Remember) for this call only and never kept in the popup.
+    var keyFor = req.auth === "bearer-key" ? FubKeyStore.read(bn) : Promise.resolve(null);
+    keyFor.then(function (key) {
+      if (req.auth === "bearer-key" && !key) {
+        setError(errLabel("bad_args") + ": " + t("options.key.missing", "The remote assistant key is missing: enter it in Options (unless Remember is on, enter it again after each browser restart)."));
+        return;
+      }
+      var ctx = { apiKey: key || undefined, grants: aiGrants };
+      key = null;
+      return FubInterpreter.sendRequest(aiSettings, req, ctx).then(function (r) {
+        $("aiResult").value = r.text;
+      });
+    }).then(null, function (e) {
       var extra = e && e.code === "denied" ? " — " + t("options.origins", "Allowed origins") + ": " + t("options.origins.hint.short", "Options > Origins") : "";
       setError(errLabel(e.code || "bad_args") + ": " + (e && e.message ? e.message : "") + extra);
     });
@@ -652,7 +662,7 @@
     $("aiPreview").addEventListener("click", aiPreview);
     $("aiAsk").addEventListener("click", aiAsk);
     // Templates + assistant settings + origin grants from extension storage.
-    storeGet(["fub-templates", "fub-ai", "fub-ai-key", "fub-origins", HIGHLIGHTS_KEY]).then(function (got) {
+    storeGet(["fub-templates", "fub-ai", "fub-origins", HIGHLIGHTS_KEY]).then(function (got) {
       var sel = $("template");
       (got["fub-templates"] || []).forEach(function (t) {
         if (!t || !t.name) return;
@@ -662,7 +672,6 @@
         try { localStorage.setItem("fub-template-" + t.name, JSON.stringify(t)); } catch (e) { /* ignore */ }
       });
       if (got["fub-ai"]) aiSettings = FubInterpreter.sanitizeSettings(got["fub-ai"]);
-      aiKey = got["fub-ai-key"] || null; // memory only, never written anywhere else
       aiGrants = FubInterpreter.sanitizeGrants(got["fub-origins"] || {});
       var saved = got[HIGHLIGHTS_KEY];
       highlightsStore = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};

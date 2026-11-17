@@ -32,8 +32,10 @@ jobs:
           cache-dependency-path: apps/client/package-lock.json
       - name: Installa esattamente il lockfile
         run: npm ci
-      - name: Nessuna vulnerabilità alta o critica
-        run: npm audit --audit-level=high
+      # Le eccezioni stanno in .github/npm-audit-eccezioni.json: solo per
+      # pacchetti che non entrano nell'app, con motivo e scadenza.
+      - name: Nessuna vulnerabilità alta o critica senza eccezione
+        run: node ../../.github/scripts/npm-audit.mjs --self-test && node ../../.github/scripts/npm-audit.mjs
       - name: Genera SBOM npm SPDX
         run: npm sbom --sbom-format=spdx > fub-client-sbom.spdx.json
       - name: Valida SPDX e licenze

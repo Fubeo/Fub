@@ -114,20 +114,9 @@ si fa comunque ([Disegni, esportare](drawing-export.md)).
 
 ## Nel file
 
-Gli effetti stanno in `fub:effect`, e un filtro di SVG 1.1, privato, ne
-discende, come una sfumatura fra le [risorse](drawing-resources.md); la
-fusione sta in `style`, perché i browser leggono soltanto lì
-`mix-blend-mode` e `isolation`.
-
-```xml
-<rect id="o1" x="10" y="10" width="60" height="40" fill="#ffffff"
-  filter="url(#r8k2m4p1q)" fub:effect="shadow 0 4 8 #000000 0.25"/>
-<circle id="o2" cx="80" cy="40" r="20" fill="#e69f00"
-  style="mix-blend-mode: multiply"/>
-```
-
-La grammatica, il filtro e quando un filtro è di Fub sono in [Formato
-della scena, effetti e fusione](../reference/scene-format-effects.md).
+Gli effetti stanno in `fub:effect` (con un filtro SVG 1.1 privato fra le
+risorse); la fusione sta in `style` con `mix-blend-mode`. La grammatica è in
+[Formato della scena, effetti e fusione](../reference/scene-format-effects.md).
 
 ## Spazi e parti
 

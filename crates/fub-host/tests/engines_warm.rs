@@ -117,3 +117,64 @@ fn scaldare_costruisce_il_motore_senza_aprire_file() {
     assert!(host.close().is_empty());
     assert!(!host.warm_engine("docx"));
 }
+
+/// Il motore del disegno spento nella pagina Componenti non si scalda: né
+/// spento a mano (`components.off`) né con i disegni spenti
+/// (`plugins.disabled`). Basta un vault aperto che lo ha acceso.
+#[cfg(feature = "engine-drawing")]
+#[test]
+fn spento_nel_vault_il_motore_del_disegno_non_si_scalda() {
+    use fub_disegno::motore::{Disegni, SPAZIO};
+    use fub_motori::{Caratteri, Generiche, Servizi};
+
+    let vault = |settings: Option<serde_json::Value>| {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).expect("utf8");
+        std::fs::write(root.join("Nota.md"), "# Nota\n").unwrap();
+        if let Some(values) = settings {
+            std::fs::create_dir_all(root.join(".fub")).unwrap();
+            std::fs::write(
+                root.join(".fub").join("settings.json"),
+                serde_json::json!({"version": 1, "values": values}).to_string(),
+            )
+            .unwrap();
+        }
+        (dir, root)
+    };
+    // Il motore del processo, iscritto e con i caratteri, ma non costruito.
+    let _ = Servizi::processo().fornisci_caratteri(Caratteri::nuovi(
+        [],
+        Generiche {
+            serif: "Serif".into(),
+            sans: "Sans".into(),
+            mono: "Mono".into(),
+        },
+    ));
+    let disegni = Disegni::processo();
+    assert!(Motori::processo().voce(SPAZIO).is_ok(), "iscritto");
+    assert!(!disegni.acceso());
+
+    let config = tempfile::tempdir().expect("config");
+    let host = Host::without_watcher()
+        .with_config_dir(&Utf8PathBuf::from_path_buf(config.path().to_path_buf()).unwrap());
+    let (_spento, spento) = vault(Some(
+        serde_json::json!({"components.off": ["fub.motore-vettoriale"]}),
+    ));
+    let (_senza_disegni, senza_disegni) =
+        vault(Some(serde_json::json!({"plugins.disabled": ["fub.draw"]})));
+    host.open(&spento).expect("opens the vault");
+    host.open(&senza_disegni).expect("opens the vault");
+    assert!(!host.warm_engine("svg"), "spento in ogni vault aperto");
+    std::thread::sleep(Duration::from_millis(50));
+    assert!(!disegni.acceso(), "spento, il motore non si costruisce");
+
+    // Un vault che lo ha acceso basta.
+    let (_acceso, acceso) = vault(None);
+    host.open(&acceso).expect("opens the vault");
+    assert!(host.warm_engine("svg"));
+    assert!(
+        acceso_entro(disegni.as_ref()),
+        "il motore del disegno si accende"
+    );
+    assert!(host.close().is_empty());
+}

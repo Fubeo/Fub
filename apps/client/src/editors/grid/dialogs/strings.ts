@@ -207,6 +207,10 @@ const IT = {
 
   "grid.dialog.table_resize.title": "Ridimensiona tabella",
   "grid.dialog.table_resize.range": "Selezionare il nuovo intervallo di dati per la tabella:",
+  "grid.dialog.create_table.title": "Crea tabella",
+  "grid.dialog.create_table.range": "Dove sono i dati della tabella?",
+  "grid.dialog.create_table.header": "Tabella con intestazioni",
+  "grid.dialog.create_table.no_header": "Senza intestazioni, Fub aggiunge sopra i dati una riga con i nomi Colonna1, Colonna2…: i dati scendono di una riga.",
 
   "grid.dialog.validation.title": "Convalida dati",
   "grid.dialog.validation.tab.settings": "Impostazioni",
@@ -558,7 +562,7 @@ const IT = {
   "grid.dialog.page.scale": "% della dimensione normale:",
   "grid.dialog.page.fit_width": "Pagine di larghezza:",
   "grid.dialog.page.fit_height": "Pagine di altezza:",
-  "grid.dialog.page.fit_note": "0 pagine lascia quella direzione libera, come «Automatica» in Excel.",
+  "grid.dialog.page.fit_note": "0 pagine lascia quella direzione libera: il foglio si stampa su quante pagine servono.",
   "grid.dialog.page.paper": "Formato carta:",
   "grid.dialog.page.margins": "Margini (cm)",
   "grid.dialog.page.margin.left": "Sinistro:",
@@ -804,6 +808,10 @@ const EN: Record<DialogKey, string> = {
 
   "grid.dialog.table_resize.title": "Resize Table",
   "grid.dialog.table_resize.range": "Select the new data range for your table:",
+  "grid.dialog.create_table.title": "Create Table",
+  "grid.dialog.create_table.range": "Where is the data for your table?",
+  "grid.dialog.create_table.header": "My table has headers",
+  "grid.dialog.create_table.no_header": "Without headers, Fub adds a row named Column1, Column2… above the data: the data moves down one row.",
 
   "grid.dialog.validation.title": "Data Validation",
   "grid.dialog.validation.tab.settings": "Settings",
@@ -1155,7 +1163,7 @@ const EN: Record<DialogKey, string> = {
   "grid.dialog.page.scale": "% normal size:",
   "grid.dialog.page.fit_width": "Pages wide:",
   "grid.dialog.page.fit_height": "Pages tall:",
-  "grid.dialog.page.fit_note": "0 pages leaves that direction free, like «Automatic» in Excel.",
+  "grid.dialog.page.fit_note": "0 pages leaves that direction free: the sheet prints on as many pages as it needs.",
   "grid.dialog.page.paper": "Paper size:",
   "grid.dialog.page.margins": "Margins (cm)",
   "grid.dialog.page.margin.left": "Left:",

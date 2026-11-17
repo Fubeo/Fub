@@ -1,0 +1,15 @@
+{
+  "name": "read-sections-on-pdf",
+  "description": "Le sezioni sono di una nota: su un PDF non valgono.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Libro.pdf\", \"subpath\": \"#Varianza\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"sections\", \"sections\": [\"Varianza\", \"Media\"] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "kept",
+        "reason": "file",
+        "shows": "#Varianza"
+      }
+    ]
+  }
+}

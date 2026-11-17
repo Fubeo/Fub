@@ -52,7 +52,21 @@ expected.
   redesign it. Then look at the result in the bench, following
   `.claude/skills/banco/SKILL.md`: both lights and 700 px wide, compared with
   the prototype. Save the screenshots outside the repo and give their paths in
-  the report.
+  the report. Add the pieces you ported to the map in
+  `apps/client/bench/conformita/` (prototype selector, app selector, states,
+  properties), regenerate the expected values with
+  `node bench/conformita/estrai.mjs <prototipo>` and make
+  `npm run bench:conformita` green; a deliberate difference needs an entry in
+  `eccezioni-<prototipo>.json` with its reason and its DECISIONS or plan
+  reference (`docs/development/visual-bench.md`).
+- **Look critically before the report.** Open the screenshots and judge them as
+  the person using Fub would, not only against the prototype:
+  - is every word in the UI language, with no raw host text, id or key?
+  - are the order and the priority what a person expects?
+  - are error messages human, saying what happened and what to do?
+  - are the empty, error, pending and focus states there?
+  - does anything clip, overflow or sit on top of something else at 700 px?
+  Fix what you find, or list it under `RISCHI` when it is outside `Tocca`.
 
 ## Closing
 
@@ -62,7 +76,9 @@ expected.
 2. At most **two** fix attempts on the same red step. Still red: stop and
    report `ROSSO` with the step and what you tried. A step that is also red at
    the base commit is not yours: prove it (run that step at the base) and say
-   so.
+   so. A test that only times out on a loaded machine, and fails in a
+   different file on each run, is load, not your change: rerun that file alone
+   and report both runs. Never raise a threshold or a timeout to get green.
 3. A `SALTA` line means the step couldn't run on this machine: list it under
    `CHECK`, never call it green.
 4. Commit on your branch: `tipo(scope): frase in italiano`, no co-author or

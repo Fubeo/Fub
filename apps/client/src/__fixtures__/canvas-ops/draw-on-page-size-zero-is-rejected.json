@@ -1,0 +1,61 @@
+{
+  "about": "Una misura della pagina che non è positiva non fa un'ancora: Invalid.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p1",
+        "type": "file",
+        "file": "Corsi/dispensa.pdf",
+        "x": 0,
+        "y": 0,
+        "width": 360,
+        "height": 509
+      },
+      {
+        "id": "f1",
+        "type": "file",
+        "file": "Corsi/voti.xlsx",
+        "x": 400,
+        "y": 0,
+        "width": 640,
+        "height": 420
+      },
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 600,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": {
+        "card": "p1",
+        "page": 1,
+        "page_size": [
+          595,
+          0
+        ]
+      },
+      "points": [
+        [
+          72,
+          100
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

@@ -1,0 +1,1026 @@
+// Il banco di questa vista vive con lei: senza la cargo feature `tasks` il modulo
+// non è compilato. Serve anche `search`, che è la sua sorgente di note, e
+// `commands`, perché ciò che la vista prova a fare con la spunta è un comando del
+// registro.
+#![cfg(feature = "tasks")]
+//! I compiti del vault **end-to-end attraverso il kernel vero**: note vere sul
+//! disco, indice di ricerca vero, comando di spunta vero, e un orologio e un
+//! locale che la prova sceglie.
+//!
+//! Prova ciò che la vista promette: i quattro gruppi, i casi limite (una scadenza
+//! assente, una data che non esiste, un compito annidato o in una citazione, un
+//! compito ricorrente, una nota in sola lettura), la spunta che rifiuta di
+//! scrivere su un compito che la nota non ha più in quella posizione, il giorno
+//! che cambia a mezzanotte del fuso dell'utente, la settimana che inizia dove dice
+//! il locale, il tetto dei compiti, e il caso di un vault senza indice.
+
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
+use camino::Utf8PathBuf;
+use fub_abi::command::InvokeMode;
+use fub_abi::custom::SyntaxTrigger;
+use fub_abi::event::Actor;
+use fub_abi::locale::{days_from_civil, Locale, Weekday};
+use fub_abi::traits::{CommandProvider, PluginManifest, ViewInstance, ViewProvider, ViewSurface};
+use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, ViewUpdate};
+use fub_abi::PluginError;
+use fub_features::{
+    CoreCommands, SearchIndex, TasksView, COMMANDS_ID, SEARCH_ID, TASKS_ID, TASKS_QUERY_VIEW,
+    TASKS_VIEW,
+};
+use fub_format_markdown::MarkdownProvider;
+use fub_kernel::time::Clock;
+use fub_kernel::{FormatRegistry, SystemLocale, Trust, Workspace};
+
+/// Un orologio che la prova sposta a mano.
+#[derive(Clone)]
+struct Fixed(Arc<AtomicU64>);
+
+impl Clock for Fixed {
+    fn now_unix_millis(&self) -> u64 {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
+/// Un istante UTC, scritto come si scrive un orologio da parete.
+fn utc(year: i64, month: u64, day: u64, hour: u64, minute: u64) -> u64 {
+    let days = days_from_civil(year, month, day) as u64;
+    days * 86_400_000 + (hour * 60 + minute) * 60_000
+}
+
+/// Un locale con il fuso e il primo giorno della settimana che la prova vuole.
+fn locale(offset_minutes: i16, first: Weekday) -> Locale {
+    Locale {
+        language: "it".to_string(),
+        utc_offset_minutes: offset_minutes,
+        first_day_of_week: first,
+        ..Locale::default()
+    }
+}
+
+struct Vault {
+    _dir: tempfile::TempDir,
+    root: Utf8PathBuf,
+}
+
+impl Vault {
+    fn new() -> Self {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+        Vault { _dir: dir, root }
+    }
+
+    fn put(&self, rel: &str, body: &str) {
+        std::fs::write(self.root.join(rel), body).unwrap();
+    }
+
+    fn read(&self, rel: &str) -> String {
+        std::fs::read_to_string(self.root.join(rel)).unwrap()
+    }
+
+    /// Apre il vault con la ricerca accesa, e con l'orologio e il locale della prova.
+    fn open(&self, clock: &Fixed, locale: Locale) -> Workspace {
+        self.open_with(clock, locale, true)
+    }
+
+    fn open_with(&self, clock: &Fixed, locale: Locale, with_search: bool) -> Workspace {
+        let mut registry = FormatRegistry::new();
+        registry
+            .register(MarkdownProvider::boxed())
+            .expect("nessun conflitto di estensioni");
+        let system = Arc::new(SystemLocale::default());
+        assert!(system.publish(locale), "il locale di prova si pubblica");
+        let mut ws = Workspace::new(&self.root, registry)
+            .expect("l'apertura del vault riesce")
+            .with_clock(Arc::new(clock.clone()))
+            .with_system_locale(system);
+        // Il comando di spunta e la vista, come li monta l'app.
+        ws.register_plugin(
+            PluginManifest::core(COMMANDS_ID, COMMANDS_ID)
+                .speaking("it", fub_features::commands::catalog()),
+            Trust::Core,
+        )
+        .expect("dichiarato");
+        ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands))
+            .expect("registrato");
+        if with_search {
+            ws.register_core_feature(SEARCH_ID, SEARCH_ID)
+                .expect("dichiarato");
+            let dir = ws.plugin_data_dir(SEARCH_ID).expect("spazio dati");
+            let index = SearchIndex::open(&dir).expect("indice");
+            ws.register_index_provider(SEARCH_ID, Box::new(index))
+                .expect("attivazione dell'indice");
+        }
+        ws.register_plugin(
+            PluginManifest::core(TASKS_ID, TASKS_ID).speaking("it", fub_features::tasks::catalog()),
+            Trust::Core,
+        )
+        .expect("dichiarato");
+        ws.register_view_provider(TASKS_ID, Box::new(TasksView))
+            .expect("registrato");
+        ws.reindex().expect("reindex");
+        ws
+    }
+}
+
+fn instance() -> ViewInstance {
+    ViewInstance::only(TASKS_VIEW)
+}
+
+/// Un'intera giornata di lavoro di prova: venerdì 13 novembre 2026, alle 23:30 del
+/// fuso di chi guarda (UTC+2).
+fn friday_night(clock: &Fixed) {
+    clock.0.store(utc(2026, 11, 13, 21, 30), Ordering::SeqCst);
+}
+
+/// Il vault della prova: un compito per gruppo, più i casi limite.
+fn seeded_vault() -> Vault {
+    let vault = Vault::new();
+    vault.put("Oggi.md", "- [ ] Pagare la bolletta 📅 2026-11-13\n");
+    vault.put("Ieri.md", "- [ ] Chiamare Anna 📅 2026-11-12\n");
+    vault.put(
+        "Lontano.md",
+        "- [ ] Rinnovare il passaporto 📅 2026-11-20\n",
+    );
+    vault.put("Senza.md", "- [ ] Idea da sviluppare\n");
+    vault.put("Fatto.md", "- [x] Già fatto 📅 2026-11-13\n");
+    vault.put("Annidato.md", "- [ ] Padre\n  - [ ] Figlio 📅 2026-11-12\n");
+    vault.put(
+        "Citazione.md",
+        "> - [ ] Dentro una citazione 📅 2026-11-13\n",
+    );
+    vault.put("Refuso.md", "- [ ] Data sbagliata 📅 2026-02-30\n");
+    vault
+}
+
+/// I gruppi disegnati, in ordine: il titolo di ciascuno e le sue righe.
+fn groups(tree: &UiNode) -> Vec<(String, Vec<String>)> {
+    fn walk(node: &UiNode, out: &mut Vec<(String, Vec<String>)>) {
+        if let UiKind::Section {
+            title, children, ..
+        } = &node.kind
+        {
+            let mut labels = Vec::new();
+            for child in children {
+                labels.extend(task_labels(child));
+            }
+            out.push((title.to_string(), labels));
+        }
+        for child in node.children() {
+            walk(child, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(tree, &mut out);
+    out
+}
+
+/// Il testo delle spunte in un nodo e nei suoi figli.
+fn task_labels(node: &UiNode) -> Vec<String> {
+    let mut out = Vec::new();
+    if let UiKind::Checkbox { label, .. } = &node.kind {
+        out.push(label.to_string());
+    }
+    for child in node.children() {
+        out.extend(task_labels(child));
+    }
+    out
+}
+
+/// L'azione della spunta di un compito, per il suo testo.
+fn toggle_of(tree: &UiNode, text: &str) -> ActionRef {
+    fn walk(node: &UiNode, text: &str) -> Option<ActionRef> {
+        if let UiKind::Checkbox {
+            label,
+            action: Some(action),
+            ..
+        } = &node.kind
+        {
+            let shown = label.to_string();
+            if shown == text {
+                return Some(action.clone());
+            }
+        }
+        node.children()
+            .into_iter()
+            .find_map(|child| walk(child, text))
+    }
+    walk(tree, text).unwrap_or_else(|| panic!("nessuna spunta per «{text}»"))
+}
+
+/// Ogni messaggio che l'albero mostra, come lo consegna la vista.
+///
+/// Il kernel traduce i testi a chiave nella lingua di chi guarda prima di consegnare
+/// l'albero: qui arrivano già in italiano, la lingua del locale della prova.
+fn messages(tree: &UiNode) -> Vec<String> {
+    fn walk(node: &UiNode, out: &mut Vec<String>) {
+        match &node.kind {
+            UiKind::Failed { message, .. } => out.push(message.to_string()),
+            UiKind::Text { content } => out.push(content.to_string()),
+            UiKind::Badge { label, .. } => out.push(label.to_string()),
+            UiKind::EmptyState { title, .. } => out.push(title.to_string()),
+            _ => {}
+        }
+        for child in node.children() {
+            walk(child, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(tree, &mut out);
+    out
+}
+
+/// I messaggi della vista, come il testo italiano che la prova si aspetta.
+const UNREADABLE_DATE: &str = "Data non leggibile";
+const EMPTY: &str = "Nessun compito aperto nel vault.";
+const CHANGED: &str = "Il compito è cambiato nel frattempo: l'ho riletto, controlla e riprova.";
+const READ_ONLY: &str = "Non posso spuntarlo: la nota è in sola lettura.";
+const NO_INDEX: &str = "Il vault non ha un indice di ricerca attivo: i compiti non si leggono.";
+const SHOWN_MANY: &str =
+    "Mostro 300 compiti: il vault ne ha più di 10000. Restringi con la ricerca.";
+
+/// Esegue la spunta di un compito come la farebbe il clic sulla sua riga.
+fn click(ws: &mut Workspace, tree: &UiNode, text: &str) -> ViewUpdate {
+    let action = toggle_of(tree, text);
+    ws.view_action(
+        &instance(),
+        UiAction::new(action.action.0).with_payload(action.payload),
+    )
+    .expect("la spunta risponde")
+}
+
+#[test]
+fn the_view_is_a_right_sidebar_view_closed_by_default() {
+    let views = TasksView.views();
+    assert_eq!(views.len(), 2);
+    assert_eq!(views[0].id, TASKS_VIEW);
+    assert_eq!(views[0].surface, ViewSurface::RightSidebar);
+    assert!(!views[0].open_by_default, "l'ispettore non si apre da sé");
+    // Il recinto: un esemplare per recinto, con le righe come parametro
+    // obbligatorio, così non compare fra le viste che si aprono da sole.
+    assert_eq!(views[1].id, TASKS_QUERY_VIEW);
+    assert_eq!(views[1].surface, ViewSurface::Main);
+    assert!(views[1].params.iter().all(|p| p.required));
+}
+
+#[test]
+fn the_check_is_a_command_of_the_registry() {
+    let commands = CoreCommands.commands();
+    assert!(
+        commands.iter().any(|spec| spec.id == "note.task.toggle"),
+        "la spunta chiama `note.task.toggle`, che il registro deve avere"
+    );
+}
+
+#[test]
+fn the_open_tasks_of_the_vault_fall_in_four_groups() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+
+    let tree = ws.render_view(&instance()).expect("la vista si disegna");
+    assert_eq!(
+        groups(&tree),
+        vec![
+            (
+                "Scaduti".to_string(),
+                vec!["Figlio".to_string(), "Chiamare Anna".to_string()],
+            ),
+            (
+                "Questa settimana".to_string(),
+                vec![
+                    "Dentro una citazione".to_string(),
+                    "Pagare la bolletta".to_string(),
+                ],
+            ),
+            (
+                "Più avanti".to_string(),
+                vec!["Rinnovare il passaporto".to_string()],
+            ),
+            (
+                "Senza data".to_string(),
+                vec![
+                    "Padre".to_string(),
+                    "Data sbagliata".to_string(),
+                    "Idea da sviluppare".to_string(),
+                ],
+            ),
+        ],
+        "le spunte fatte non compaiono, e il compito annidato e quello in citazione sì"
+    );
+}
+
+#[test]
+fn a_wrong_date_is_shown_as_unreadable_and_a_missing_one_is_not() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws.render_view(&instance()).unwrap();
+
+    let shown = messages(&tree);
+    assert!(
+        shown.iter().any(|m| m == UNREADABLE_DATE),
+        "la data che non esiste si vede come tale: {shown:?}"
+    );
+    let no_date = groups(&tree)
+        .into_iter()
+        .find(|(title, _)| title == "Senza data")
+        .expect("il gruppo c'è");
+    assert_eq!(
+        no_date.1.len(),
+        3,
+        "un compito senza data, o con una data sbagliata, non sparisce"
+    );
+}
+
+#[test]
+fn an_empty_vault_says_so() {
+    let vault = Vault::new();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws.render_view(&instance()).unwrap();
+    assert!(messages(&tree).iter().any(|m| m == EMPTY));
+    assert!(groups(&tree).is_empty());
+}
+
+#[test]
+fn checking_a_task_writes_the_note_and_it_leaves_the_list() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let mut ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws.render_view(&instance()).unwrap();
+
+    let update = click(&mut ws, &tree, "Pagare la bolletta");
+    assert_eq!(update, ViewUpdate::None, "la spunta si vede al ridisegno");
+    assert_eq!(
+        vault.read("Oggi.md"),
+        "- [x] Pagare la bolletta 📅 2026-11-13\n",
+        "il comando cambia un carattere, e nient'altro del compito"
+    );
+
+    let after = ws.render_view(&instance()).unwrap();
+    assert!(
+        !task_labels(&after).contains(&"Pagare la bolletta".to_string()),
+        "il compito fatto esce dalla vista"
+    );
+}
+
+#[test]
+fn a_recurring_task_leaves_the_next_occurrence_open() {
+    let vault = Vault::new();
+    vault.put("Casa.md", "- [ ] Annaffia 🔁 every week 📅 2026-11-13\n");
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let mut ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws.render_view(&instance()).unwrap();
+
+    click(&mut ws, &tree, "Annaffia 🔁 every week");
+    assert_eq!(
+        vault.read("Casa.md"),
+        "- [ ] Annaffia 🔁 every week 📅 2026-11-20\n- [x] Annaffia 🔁 every week 📅 2026-11-13\n",
+        "la riga fatta resta dov'era, e la successiva le nasce sopra"
+    );
+    let after = ws.render_view(&instance()).unwrap();
+    let later = groups(&after)
+        .into_iter()
+        .find(|(title, _)| title == "Più avanti")
+        .expect("la prossima occorrenza è più avanti");
+    assert_eq!(later.1, vec!["Annaffia 🔁 every week".to_string()]);
+}
+
+#[test]
+fn a_task_that_moved_under_the_view_is_not_checked() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let mut ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws.render_view(&instance()).unwrap();
+
+    // La nota cambia sotto la vista: una riga in testa sposta tutto di un carattere.
+    vault.put(
+        "Oggi.md",
+        "Nuova riga in testa\n- [ ] Pagare la bolletta 📅 2026-11-13\n",
+    );
+    ws.reindex().unwrap();
+
+    let update = click(&mut ws, &tree, "Pagare la bolletta");
+    let ViewUpdate::Replace { root } = update else {
+        panic!("una spunta su una posizione cambiata si ridisegna, e non scrive");
+    };
+    assert!(
+        messages(&root).iter().any(|m| m == CHANGED),
+        "la vista dice che il compito è cambiato"
+    );
+    assert_eq!(
+        vault.read("Oggi.md"),
+        "Nuova riga in testa\n- [ ] Pagare la bolletta 📅 2026-11-13\n",
+        "nessuna riga è stata spuntata al posto di un'altra"
+    );
+}
+
+#[test]
+fn the_day_moves_at_midnight_of_the_users_zone() {
+    let vault = Vault::new();
+    vault.put("Oggi.md", "- [ ] Pagare la bolletta 📅 2026-11-13\n");
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    // 23:30 a UTC+2: il 13 è ancora oggi, e la scadenza del 13 è questa settimana.
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let before = ws.render_view(&instance()).unwrap();
+    assert_eq!(groups(&before)[0].0, "Questa settimana");
+
+    // Mezz'ora dopo sono le 00:00 del 14 a UTC+2: il giorno di chi guarda è
+    // cambiato, e il compito del 13 è scaduto. Lo stesso workspace, con l'orologio
+    // che si sposta: il disegno legge l'istante a ogni giro.
+    clock.0.fetch_add(30 * 60_000, Ordering::SeqCst);
+    let after = ws.render_view(&instance()).unwrap();
+    assert_eq!(groups(&after)[0].0, "Scaduti");
+}
+
+/// Il gruppo in cui la vista mette la riga che contiene `label`.
+fn group_showing(tree: &UiNode, label: &str) -> String {
+    groups(tree)
+        .into_iter()
+        .find(|(_, rows)| rows.iter().any(|row| row == label))
+        .map(|(title, _)| title)
+        .unwrap_or_else(|| panic!("«{label}» non è nella vista"))
+}
+
+#[test]
+fn the_week_starts_on_the_first_day_of_the_locale() {
+    let vault = Vault::new();
+    vault.put("Lunedi.md", "- [ ] Consegnare 📅 2026-11-16\n");
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    // Domenica 15 novembre 2026, a mezzogiorno del fuso di chi guarda: il compito è
+    // di lunedì 16, il giorno dopo.
+    clock.0.store(utc(2026, 11, 15, 10, 0), Ordering::SeqCst);
+
+    // Con la settimana che inizia di lunedì, la domenica la chiude: lunedì è della
+    // settimana dopo, cioè «Più avanti».
+    {
+        let monday = vault.open(&clock, locale(120, Weekday::Monday));
+        let tree = monday.render_view(&instance()).unwrap();
+        assert_eq!(group_showing(&tree, "Consegnare"), "Più avanti");
+    }
+    // Con quella che inizia di domenica, la domenica apre una settimana nuova che
+    // arriva a sabato 21: lunedì è di questa settimana. Si apre un workspace alla
+    // volta, perché due indici sullo stesso vault si contendono il lock.
+    {
+        let sunday = vault.open(&clock, locale(120, Weekday::Sunday));
+        let tree = sunday.render_view(&instance()).unwrap();
+        assert_eq!(group_showing(&tree, "Consegnare"), "Questa settimana");
+    }
+}
+
+#[test]
+fn a_read_only_note_is_not_written() {
+    let vault = seeded_vault();
+    let path = vault.root.join("Oggi.md");
+    // `set_readonly` toglie i bit di scrittura su Unix e mette l'attributo su
+    // Windows: la stessa prova sui tre sistemi della CI.
+    set_read_only(&path, true);
+
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let mut ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws.render_view(&instance()).unwrap();
+    let update = click(&mut ws, &tree, "Pagare la bolletta");
+
+    assert_eq!(
+        vault.read("Oggi.md"),
+        "- [ ] Pagare la bolletta 📅 2026-11-13\n",
+        "una nota in sola lettura resta com'è"
+    );
+    let ViewUpdate::Replace { root } = update else {
+        panic!("il rifiuto si dice nella vista");
+    };
+    // Una nota in sola lettura è un rifiuto di permesso, e la vista lo dice come tale.
+    let shown = messages(&root);
+    assert!(
+        shown.iter().any(|m| m == READ_ONLY),
+        "la vista dice che la nota è in sola lettura: {shown:?}"
+    );
+    // Su Windows la cartella temporanea non si cancella con un file in sola lettura.
+    set_read_only(&path, false);
+}
+
+fn set_read_only(path: impl AsRef<std::path::Path>, read_only: bool) {
+    let path = path.as_ref();
+    let mut permissions = std::fs::metadata(path).unwrap().permissions();
+    // Su Unix `set_readonly(false)` dà la scrittura a tutti: va bene per una
+    // cartella temporanea che sta per essere cancellata.
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(read_only);
+    std::fs::set_permissions(path, permissions).unwrap();
+}
+
+#[test]
+fn notes_are_read_up_to_a_limit_and_the_view_and_the_fence_say_so() {
+    let vault = Vault::new();
+    let limit = fub_features::tasks::NOTE_LIMIT;
+    // Cinque note più del tetto, un compito ciascuna; e una nota sola in
+    // `Altro/`, che un recinto col percorso legge senza toccare il tetto.
+    for note in 0..limit + 5 {
+        vault.put(
+            &format!("N{note:05}.md"),
+            &format!("- [ ] Compito {note}\n"),
+        );
+    }
+    std::fs::create_dir(vault.root.join("Altro")).unwrap();
+    vault.put("Altro/Sola.md", "- [ ] Il compito di Altro\n");
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let total = limit + 6;
+
+    let tree = ws.render_view(&instance()).unwrap();
+    let said = format!(
+        "Ho letto le prime {limit} note con compiti aperti su {total}: i compiti delle altre non sono qui."
+    );
+    assert!(
+        messages(&tree).contains(&said),
+        "la vista dice il tetto alle note: {:?}",
+        &messages(&tree)[..3]
+    );
+
+    let tree = ws.render_view(&fence("not done")).unwrap();
+    let said = format!(
+        "Ho letto le prime {limit} note su {total} che possono rispondere: restringi con le righe del recinto."
+    );
+    assert!(
+        messages(&tree).contains(&said),
+        "il recinto dice il tetto alle note: {:?}",
+        &messages(&tree)[..3]
+    );
+
+    let tree = ws
+        .render_view(&fence("not done\npath includes Altro"))
+        .unwrap();
+    assert_eq!(task_labels(&tree), vec!["Il compito di Altro".to_string()]);
+    assert!(
+        !messages(&tree).iter().any(|m| m.starts_with("Ho letto")),
+        "le note fuori dal percorso non contano nel tetto: {:?}",
+        messages(&tree)
+    );
+}
+
+#[test]
+fn ten_thousand_tasks_are_read_up_to_a_limit_and_the_view_says_so() {
+    let vault = Vault::new();
+    // 503 note da 20 compiti: 10.060 compiti, più di quanti la vista ne legge.
+    for note in 0..503 {
+        let mut body = String::new();
+        for task in 0..20 {
+            body.push_str(&format!("- [ ] Compito {note}-{task} 📅 2026-11-13\n"));
+        }
+        vault.put(&format!("Note{note:03}.md"), &body);
+    }
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws.render_view(&instance()).unwrap();
+
+    let shown: usize = groups(&tree).iter().map(|(_, rows)| rows.len()).sum();
+    assert_eq!(
+        shown,
+        fub_features::tasks::SHOW_LIMIT,
+        "la vista disegna al più il suo tetto"
+    );
+    assert!(
+        messages(&tree).iter().any(|m| m == SHOWN_MANY),
+        "e dice che il vault ne ha di più"
+    );
+}
+
+#[test]
+fn without_a_search_index_the_view_says_it_cannot_read() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open_with(&clock, locale(120, Weekday::Monday), false);
+    let tree = ws
+        .render_view(&instance())
+        .expect("la vista si disegna lo stesso");
+    assert!(
+        messages(&tree).iter().any(|m| m == NO_INDEX),
+        "senza indice la vista lo dice invece di mostrare un elenco vuoto"
+    );
+    assert!(groups(&tree).is_empty());
+}
+
+#[test]
+fn a_note_that_changed_since_the_view_read_it_is_not_written() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let mut ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws.render_view(&instance()).unwrap();
+
+    // Il compito resta al suo posto, ma la nota non è più quella che la vista
+    // ha letto: la spunta porta la revisione letta, e non scrive.
+    let changed = "- [ ] Pagare la bolletta 📅 2026-11-13\n- [ ] Riga aggiunta altrove\n";
+    vault.put("Oggi.md", changed);
+    ws.reindex().unwrap();
+
+    let update = click(&mut ws, &tree, "Pagare la bolletta");
+    let ViewUpdate::Replace { root } = update else {
+        panic!("la spunta su una nota cambiata si ridisegna, e non scrive");
+    };
+    assert!(messages(&root).iter().any(|m| m == CHANGED));
+    assert_eq!(vault.read("Oggi.md"), changed);
+}
+
+#[test]
+fn the_command_refuses_a_revision_that_is_not_the_notes() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let mut ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws.render_view(&instance()).unwrap();
+    let payload = toggle_of(&tree, "Pagare la bolletta").payload;
+    assert!(
+        payload["revision"].is_string(),
+        "la vista dice cosa ha letto: {payload}"
+    );
+    let args = serde_json::json!({
+        "doc": payload["doc"],
+        "at": [payload["at"]],
+        "revision": payload["revision"],
+    });
+
+    let changed = "- [ ] Pagare la bolletta 📅 2026-11-13\nAltro testo\n";
+    vault.put("Oggi.md", changed);
+    ws.reindex().unwrap();
+    let refused = ws.invoke_command("note.task.toggle", args, InvokeMode::Apply, Actor::User);
+    assert!(
+        matches!(refused, Err(PluginError::Conflict(_))),
+        "una revisione vecchia è un conflitto: {refused:?}"
+    );
+    assert_eq!(vault.read("Oggi.md"), changed, "niente è stato scritto");
+}
+
+// ---------------------------------------------------------------------------
+// Il recinto ```tasks
+// ---------------------------------------------------------------------------
+
+fn fence(query: &str) -> ViewInstance {
+    ViewInstance::new(
+        TASKS_QUERY_VIEW,
+        "recinto-1",
+        serde_json::json!({ "query": query }),
+    )
+}
+
+#[test]
+fn the_fence_shows_the_tasks_its_lines_ask_for() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+
+    let tree = ws
+        .render_view(&fence("not done\ndue before tomorrow\nsort by due"))
+        .expect("il recinto si disegna");
+    assert_eq!(
+        task_labels(&tree),
+        vec![
+            "Figlio".to_string(),
+            "Chiamare Anna".to_string(),
+            "Dentro una citazione".to_string(),
+            "Pagare la bolletta".to_string(),
+        ],
+        "aperti, in scadenza entro venerdì, per scadenza; il testo senza la data"
+    );
+    assert!(
+        messages(&tree).iter().any(|m| m == "4 compiti"),
+        "{:?}",
+        messages(&tree)
+    );
+}
+
+#[test]
+fn the_fence_says_which_lines_it_skips_and_what_an_empty_fence_needs() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+
+    let tree = ws
+        .render_view(&fence("not done\ngroup by filename"))
+        .unwrap();
+    assert!(
+        messages(&tree)
+            .iter()
+            .any(|m| m == "Non capisco la riga 2 («group by filename»): la salto."),
+        "{:?}",
+        messages(&tree)
+    );
+    assert!(!task_labels(&tree).is_empty(), "le righe capite valgono");
+
+    for empty in ["", "# solo un commento\n\n", "group by filename"] {
+        let tree = ws.render_view(&fence(empty)).unwrap();
+        assert!(
+            task_labels(&tree).is_empty(),
+            "«{empty}» non sceglie niente"
+        );
+        assert!(
+            messages(&tree)
+                .iter()
+                .any(|m| m.starts_with("Scrivi nel recinto")),
+            "un recinto senza filtri spiega cosa scrivere: {:?}",
+            messages(&tree)
+        );
+    }
+}
+
+#[test]
+fn the_fence_reads_done_tasks_with_a_due_date_and_a_literal_path() {
+    let vault = Vault::new();
+    std::fs::create_dir(vault.root.join("Lavoro (2026)")).unwrap();
+    vault.put(
+        "Lavoro (2026)/Fatti.md",
+        "- [x] Consegnato 📅 2026-11-10\n- [ ] Aperto 📅 2026-11-10\n",
+    );
+    vault.put("Casa.md", "- [x] Spesa 📅 2026-11-10\n");
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+
+    let tree = ws
+        .render_view(&fence(
+            "done\ndue before 2026-11-13\npath includes lavoro (2026)",
+        ))
+        .unwrap();
+    assert_eq!(
+        task_labels(&tree),
+        vec!["Consegnato".to_string()],
+        "un compito fatto ha la sua scadenza, e le parentesi del percorso sono testo"
+    );
+}
+
+#[test]
+fn the_fence_finds_nothing_and_says_so() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws
+        .render_view(&fence("not done\npath includes nessuna-nota"))
+        .unwrap();
+    assert!(task_labels(&tree).is_empty());
+    assert!(
+        messages(&tree)
+            .iter()
+            .any(|m| m.starts_with("Nessun compito")),
+        "{:?}",
+        messages(&tree)
+    );
+}
+
+#[test]
+fn a_check_in_the_fence_writes_the_note() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let mut ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let inst = fence("not done\npath includes oggi");
+    let tree = ws.render_view(&inst).unwrap();
+    let action = toggle_of(&tree, "Pagare la bolletta");
+    let update = ws
+        .view_action(
+            &inst,
+            UiAction::new(action.action.0).with_payload(action.payload),
+        )
+        .expect("la spunta risponde");
+    assert_eq!(update, ViewUpdate::None);
+    assert_eq!(
+        vault.read("Oggi.md"),
+        "- [x] Pagare la bolletta 📅 2026-11-13\n"
+    );
+}
+
+#[test]
+fn the_fence_is_declared_by_a_syntax_rule_of_the_component() {
+    let rules = fub_features::tasks::syntax_rules();
+    let spec = rules.first().expect("la regola del recinto").spec();
+    assert!(matches!(
+        &spec.trigger,
+        SyntaxTrigger::Fence { info } if info == &vec!["tasks".to_string()]
+    ));
+    assert!(
+        !fub_features::tasks::renderers().is_empty(),
+        "e il suo esportatore HTML"
+    );
+}
+
+/// Le scadenze disegnate, ognuna con la sua intenzione, nell'ordine dell'albero.
+fn badges(tree: &UiNode) -> Vec<(String, Intent)> {
+    fn walk(node: &UiNode, out: &mut Vec<(String, Intent)>) {
+        if let UiKind::Badge { label, intent } = &node.kind {
+            out.push((label.to_string(), *intent));
+        }
+        for child in node.children() {
+            walk(child, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(tree, &mut out);
+    out
+}
+
+#[test]
+fn the_badge_is_red_when_overdue_and_orange_when_near_like_the_pill() {
+    let vault = Vault::new();
+    // Venerdì 13: scaduta fino a giovedì 12, vicina da oggi a giovedì 19.
+    vault.put(
+        "Date.md",
+        "- [ ] Ieri 📅 2026-11-12\n\
+         - [ ] Oggi 📅 2026-11-13\n\
+         - [ ] Fra quattro giorni 📅 2026-11-17\n\
+         - [ ] Fra dieci giorni 📅 2026-11-23\n\
+         - [x] Fatto ieri 📅 2026-11-12\n",
+    );
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let expected = [
+        ("2026-11-12", Intent::Danger),
+        ("2026-11-13", Intent::Primary),
+        ("2026-11-17", Intent::Primary),
+        ("2026-11-23", Intent::Neutral),
+    ];
+    // Il recinto, in ordine di scadenza, coi fatti compresi.
+    let tree = ws
+        .render_view(&fence("path includes date\nsort by due"))
+        .expect("il recinto si disegna");
+    assert_eq!(
+        badges(&tree),
+        vec![
+            ("2026-11-12".to_string(), Intent::Danger),
+            ("2026-11-12".to_string(), Intent::Neutral),
+            ("2026-11-13".to_string(), Intent::Primary),
+            ("2026-11-17".to_string(), Intent::Primary),
+            ("2026-11-23".to_string(), Intent::Neutral),
+        ],
+        "la regola è `due_urgency`, la stessa della pastiglia nel testo"
+    );
+    // La vista dell'ispettore, che raggruppa ma dice lo stesso.
+    let tree = ws.render_view(&instance()).expect("la vista si disegna");
+    let shown = badges(&tree);
+    for (date, intent) in expected {
+        assert!(
+            shown.contains(&(date.to_string(), intent)),
+            "{date} come {intent:?} nella vista: {shown:?}"
+        );
+    }
+}
+
+#[test]
+fn a_stale_revision_is_a_conflict_even_when_the_position_has_no_task_any_more() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let mut ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws.render_view(&instance()).unwrap();
+    let payload = toggle_of(&tree, "Pagare la bolletta").payload;
+    let args = serde_json::json!({
+        "doc": payload["doc"],
+        "at": [payload["at"]],
+        "revision": payload["revision"],
+    });
+
+    // Una riga nuova in cima: la posizione letta cade dentro un paragrafo.
+    let changed = "Una riga scritta in cima alla nota\n\n- [ ] Pagare la bolletta 📅 2026-11-13\n";
+    vault.put("Oggi.md", changed);
+    ws.reindex().unwrap();
+    let refused = ws.invoke_command("note.task.toggle", args, InvokeMode::Apply, Actor::User);
+    assert!(
+        matches!(refused, Err(PluginError::Conflict(_))),
+        "la nota è cambiata, non «qui non c'è un compito»: {refused:?}"
+    );
+    assert_eq!(vault.read("Oggi.md"), changed, "niente è stato scritto");
+}
+
+#[test]
+fn a_note_outside_the_fence_path_is_not_read() {
+    let vault = Vault::new();
+    std::fs::create_dir(vault.root.join("Progetti")).unwrap();
+    std::fs::create_dir(vault.root.join("Altro")).unwrap();
+    vault.put("Progetti/Fub.md", "- [x] Consegnato 📅 2026-11-10\n");
+    vault.put("Altro/Casa.md", "- [x] Spesa 📅 2026-11-10\n");
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    // L'indice nomina ancora la nota, che dal disco è sparita: se la vista la
+    // leggesse, direbbe che una nota non si è letta. È il contatore delle
+    // letture.
+    std::fs::remove_file(vault.root.join("Altro/Casa.md")).unwrap();
+
+    let tree = ws
+        .render_view(&fence("done\npath includes progetti"))
+        .unwrap();
+    assert_eq!(task_labels(&tree), vec!["Consegnato".to_string()]);
+    assert!(
+        !messages(&tree)
+            .iter()
+            .any(|m| m.contains("non si sono lette")),
+        "la nota fuori dal percorso non si legge: {:?}",
+        messages(&tree)
+    );
+    // La prova vede davvero le letture: senza il percorso la nota sparita si
+    // legge, e la vista lo dice.
+    let everything = ws.render_view(&fence("done")).unwrap();
+    assert!(
+        messages(&everything)
+            .iter()
+            .any(|m| m.contains("non si sono lette")),
+        "{:?}",
+        messages(&everything)
+    );
+}
+
+#[test]
+fn the_cut_comes_after_the_order_in_the_view_and_in_the_fence() {
+    let vault = Vault::new();
+    // 503 note da 20 compiti lontani, più di quanti la vista ne tiene, e in
+    // fondo all'elenco una nota con l'unico compito scaduto.
+    for note in 0..503 {
+        let mut body = String::new();
+        for task in 0..20 {
+            body.push_str(&format!("- [ ] Compito {note}-{task} 📅 2026-12-20\n"));
+        }
+        vault.put(&format!("Note{note:03}.md"), &body);
+    }
+    vault.put("Zeta.md", "- [ ] Il più urgente 📅 2026-11-01\n");
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+
+    let tree = ws.render_view(&instance()).unwrap();
+    let first = groups(&tree).into_iter().next().expect("un gruppo");
+    assert_eq!(
+        first,
+        ("Scaduti".to_string(), vec!["Il più urgente".to_string()]),
+        "lo scaduto c'è anche se la sua nota si legge per ultima"
+    );
+
+    let fenced = ws
+        .render_view(&fence("not done\nsort by due\nlimit 1"))
+        .unwrap();
+    assert_eq!(task_labels(&fenced), vec!["Il più urgente".to_string()]);
+    assert!(
+        !messages(&fenced).iter().any(|m| m.contains("più di 10000")),
+        "un limite che taglia non è un vault con troppi compiti: {:?}",
+        messages(&fenced)
+    );
+}
+
+/// Misura, non prova: quanto costa ridisegnare la vista e un recinto su un
+/// vault grande, in un tempdir. `cargo test --release -p fub-features --test
+/// tasks_e2e -- --ignored --nocapture large_vault`.
+#[test]
+#[ignore]
+fn large_vault_redraw_cost() {
+    let vault = Vault::new();
+    for n in 0..5_000 {
+        let mut body = format!(
+            "# Nota {n}\n\nUn paragrafo di testo che parla di altro, con un [[link]] e un #tag.\n\n"
+        );
+        for k in 0..3 {
+            body.push_str(&format!(
+                "- [ ] Compito {n}.{k} 📅 2026-{:02}-{:02}\n",
+                1 + (n + k) % 12,
+                1 + (n * 7 + k) % 28
+            ));
+        }
+        body.push_str("- [x] Fatto\n\nAltro testo sotto la lista.\n");
+        vault.put(&format!("n{n}.md"), &body);
+    }
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let started = std::time::Instant::now();
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    eprintln!("apertura e indice: {:?}", started.elapsed());
+    for (name, view) in [
+        ("vista", instance()),
+        ("recinto aperti", fence("not done\nsort by due")),
+        ("recinto due", fence("due before 2026-03-01")),
+    ] {
+        let mut times = Vec::new();
+        for _ in 0..5 {
+            let at = std::time::Instant::now();
+            ws.render_view(&view).expect("si disegna");
+            times.push(at.elapsed());
+        }
+        times.sort();
+        eprintln!(
+            "{name}: mediana {:?}, min {:?}, max {:?}",
+            times[2], times[0], times[4]
+        );
+    }
+}

@@ -30,8 +30,8 @@
  * passaggio, e una ricetta che ne importasse gli aiutanti la terrebbe in vita
  * per tre funzioni.
  */
-import { contrast } from "../contrast";
-import { toHex, type Oklch } from "../oklch";
+import { channelLuminance, contrast, luminance, luminanceRatio } from "../contrast";
+import { channelsOf, toHex, type Oklch } from "../oklch";
 import type { CONTENT_COLORS } from "../../ui/sanitize";
 
 export type Light = "light" | "dark";
@@ -106,11 +106,21 @@ const lch = (l: number, c: number, h: number): Oklch => ({ l, c, h: ((h % 360) +
 /// perché l'arrotondamento a otto bit e la riduzione del croma al gamut possono
 /// togliere il centesimo che la bisezione aveva trovato.
 function hold(start: Oklch, backgrounds: readonly string[], target: number, light: Light): string {
+  return toHex({ ...start, l: holdLightness(start, backgrounds, target, light) });
+}
+
+/// La luminosità che `hold` trova: serve a chi sposta altri colori insieme.
+function holdLightness(start: Oklch, backgrounds: readonly string[], target: number, light: Light): number {
+  // Le luminanze dei fondi non cambiano fra un tentativo e l'altro: contarle a
+  // ogni prova costava metà della ricetta, rifatta a ogni cambio d'accento
+  // (`docs/product/performance-webview.md`). Il conto è lo stesso di
+  // `contrast`, quindi i byte non cambiano.
+  const floors = backgrounds.map(luminance);
   const passes = (color: Oklch): boolean => {
-    const hex = toHex(color);
-    return backgrounds.every((background) => contrast(hex, background) >= target);
+    const ink = channelLuminance(channelsOf(color));
+    return floors.every((floor) => luminanceRatio(ink, floor) >= target);
   };
-  if (passes(start)) return toHex(start);
+  if (passes(start)) return start.l;
 
   const limit = light === "light" ? 0 : 1;
   let near = start.l;
@@ -125,7 +135,52 @@ function hold(start: Oklch, backgrounds: readonly string[], target: number, ligh
   for (let guard = 0; guard < 600 && !passes({ ...start, l }); guard += 1) {
     l = Math.min(1, Math.max(0, l + step));
   }
-  return toHex({ ...start, l });
+  return l;
+}
+
+/** I colori del logo che seguono il tema: la cartella e i suoi fogli (D26). */
+export const LOGO_ROLES = [
+  "logo-cartella",
+  "logo-cartella-retro",
+  "logo-cartella-ombra",
+  "logo-foglio-1",
+  "logo-foglio-2",
+] as const;
+export type LogoRole = (typeof LOGO_ROLES)[number];
+
+/// La cartella del logo nella tinta del tema (D26). Il gufo ha i suoi colori e
+/// non cambia; la cartella, il suo retro, l'ombra sotto le zampe e i due fogli
+/// prendono la tinta. Luminosità e crome sono quelle dei due file dell'utente,
+/// «Smeraldo» di giorno e «Menta» di notte, tutti e due a 160. La cartella e
+/// il retro stanno sul fondo, quindi si allontanano dai fondi finché reggono
+/// la soglia dei confini (`ui`): la cartella non sparisce mai nella barra.
+/// L'ombra segue la cartella; i fogli stanno dentro e restano dove sono.
+/// `chroma` scala le crome (1 = quelle dei file): un tema fatto a mano con un
+/// accento quasi grigio ha una cartella quasi grigia.
+export function logoColors(
+  light: Light,
+  level: ContrastLevel,
+  accentHue: number,
+  backgrounds: readonly string[],
+  chroma = 1,
+): Record<LogoRole, string> {
+  const day = light === "light";
+  const target = THRESHOLDS[level].ui;
+  const k = Math.min(1, Math.max(0, chroma));
+  const at = (l: number): number => Math.min(1, Math.max(0, l));
+  const folder = day ? lch(0.62, 0.115 * k, accentHue) : lch(0.79, 0.086 * k, accentHue);
+  const l = holdLightness(folder, backgrounds, target, light);
+  const shift = l - folder.l;
+  const back = day ? lch(at(0.519 + shift), 0.099 * k, accentHue) : lch(at(0.691 + shift), 0.09 * k, accentHue);
+  return {
+    "logo-cartella": toHex({ ...folder, l }),
+    "logo-cartella-retro": hold(back, backgrounds, target, light),
+    "logo-cartella-ombra": toHex(
+      day ? lch(at(0.549 + shift), 0.094 * k, accentHue) : lch(at(0.719 + shift), 0.08 * k, accentHue),
+    ),
+    "logo-foglio-1": toHex(day ? lch(0.78, 0.055 * k, accentHue + 35) : lch(0.475, 0.108 * k, accentHue)),
+    "logo-foglio-2": toHex(day ? lch(0.709, 0.059 * k, accentHue - 30) : lch(0.581, 0.09 * k, accentHue + 35)),
+  };
 }
 
 /// Il colore che si legge sopra un pieno: quasi bianco o quasi nero, quello dei
@@ -163,6 +218,108 @@ function shadow(light: Light, near: readonly [number, number, number], far: read
   const ink = light === "light" ? "24 28 44" : "0 0 0";
   const layer = ([y, blur, alpha]: readonly [number, number, number]) => `0 ${y}px ${blur}px rgb(${ink} / ${alpha}%)`;
   return `${layer(near)}, ${layer(far)}`;
+}
+
+/// Il rialzo più basso (`--shadow-raise`): un foglio appena sollevato dentro
+/// un'altra superficie, come quello dell'anteprima del lanciatore. Un anello
+/// di un pixel e un'ombra corta, più bassi di `shadow-1`, che è già un'ombra
+/// da carta con un alone di 20 px. Sono i valori del prototipo (`--sh-raise`):
+/// di giorno l'inchiostro verde scuro, di notte un filo di luce e il nero.
+/// Come le altre ombre, col contrasto alto gli stessi valori.
+function raiseShadow(light: Light): string {
+  return light === "light"
+    ? "0 0 0 1px rgb(20 44 30 / 6%), 0 1px 3px rgb(20 44 30 / 10%)"
+    : "0 0 0 1px rgb(255 255 255 / 6%), 0 1px 3px rgb(0 0 0 / 50%)";
+}
+
+/// L'ombra di ciò che si apre sopra tutto (`--shadow-pop`): il lanciatore,
+/// poi i menu. Un anello sottile che la tiene staccata anche su un fondo
+/// uguale, e un'ombra lunga che scende sotto il bordo. Sono i valori del
+/// prototipo (`--sh-pop`): di giorno l'inchiostro verde scuro in tre parti, di
+/// notte un filo di luce e un nero profondo. Come le altre ombre, col
+/// contrasto alto gli stessi valori.
+function popShadow(light: Light): string {
+  return light === "light"
+    ? "0 0 0 1px rgb(20 44 30 / 8%), 0 4px 12px rgb(20 44 30 / 8%), 0 18px 44px -10px rgb(20 44 30 / 24%)"
+    : "0 0 0 1px rgb(255 255 255 / 7%), 0 18px 48px -8px rgb(0 0 0 / 70%)";
+}
+
+/// L'ombra del foglio appoggiato sulla scrivania (`--shadow-sheet`, e
+/// `--shadow-sheet-focus` per quello col fuoco, un passo più fondo): un
+/// contatto stretto, una penombra corta e una lunga. I due strati larghi hanno
+/// lo spread negativo, così l'ombra scende sotto il foglio e si vede ai fianchi
+/// senza salire sopra la linguetta. Di giorno l'inchiostro di `shadow()`, di
+/// notte il nero, più fondo perché la scrivania è già quasi nera; col
+/// contrasto alto gli stessi valori. Niente filo di luce: sotto il 10 % non si
+/// vede, sopra è un bordo che si interrompe alla linguetta.
+///
+/// **Senza sfocatura.** Ogni strato sfumato è scritto come una pila di ombre
+/// nette (`sharpLayers`): la stessa sfumatura, a gradini di tre pixel al più.
+/// La WebView che dipinge senza GPU (WebKitGTK sotto Xvfb, S3 del banco
+/// WebView) ridipinge la carta con tutto ciò che le sta sopra, e un'ombra con
+/// `blur` le costava una ventina di ms a fotogramma mentre la lavagna si
+/// sposta, che lo strato suo della carta non risparmia; le ombre nette non
+/// costano niente.
+function sheetShadow(light: Light, focus: boolean): string {
+  const ink = light === "light" ? "24 28 44" : "0 0 0";
+  const [contact, short, long] = focus ? (light === "light" ? [9, 10, 18] : [45, 50, 66]) : light === "light" ? [8, 8, 14] : [40, 45, 60];
+  const layers: readonly SoftLayer[] = focus
+    ? [[1, 3, 0, contact], [3, 10, -1, short], [10, 20, -6, long]]
+    : [[1, 2, 0, contact], [2, 8, -1, short], [8, 16, -6, long]];
+  return layers.flatMap((layer) => sharpLayers(layer, ink)).join(", ");
+}
+
+/// Uno strato d'ombra sfumato: scostamento verticale, sfocatura, spread (px)
+/// e opacità (%).
+type SoftLayer = readonly [y: number, blur: number, spread: number, alpha: number];
+
+/// La funzione d'errore (Abramowitz e Stegun 7.1.26: errore sotto 1,5·10⁻⁷).
+function erf(x: number): number {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return x >= 0 ? y : -y;
+}
+
+/// Uno strato sfumato come pila di ombre nette, dalla più larga alla più
+/// stretta. La sfocatura CSS `b` è una gaussiana di deviazione `b / 2`: a
+/// distanza `d` fuori dal bordo (spread compreso) copre `Φ(-d / σ)` del colore.
+/// L'intervallo `[-b, b]` si divide in fasce di tre pixel al più (le
+/// sfocature piccole in quattro fasce), e lo strato `k` copre tutte le fasce
+/// fino al suo bordo: le opacità si risolvono dalla fascia più esterna verso
+/// dentro, perché la copertura composta di ogni fascia (`1 - Π(1 - αᵢ)`) sia
+/// la media della gaussiana su di lei. Le opacità vanno a 1/255: è il passo
+/// con cui il colore si dipinge, e il resto dell'arrotondamento lo corregge
+/// la fascia dopo.
+function sharpLayers([y, blur, spread, alpha]: SoftLayer, ink: string): string[] {
+  if (blur === 0) return [`0 ${y}px 0 ${spread}px rgb(${ink} / ${alpha}%)`];
+  const sigma = blur / 2;
+  const cover = (d: number) => 0.5 * (1 - erf(d / (sigma * Math.SQRT2)));
+  const mean = (lo: number, hi: number) => {
+    let sum = 0;
+    for (let i = 0; i < 8; i++) sum += cover(lo + ((i + 0.5) * (hi - lo)) / 8);
+    return (alpha / 100) * (sum / 8);
+  };
+  const bands = Math.max(4, Math.round((2 * blur) / Math.min(3, blur / 2)));
+  const edges = Array.from({ length: bands }, (_, k) => -blur + ((k + 1) * 2 * blur) / bands);
+  const steps: number[] = new Array<number>(bands);
+  let inner = 0;
+  for (let k = bands - 1; k >= 0; k--) {
+    const lo = k === 0 ? -blur * 1.5 : edges[k - 1]!;
+    const need = 1 - (1 - mean(lo, edges[k]!)) / (1 - inner);
+    steps[k] = Math.round(Math.max(0, need) * 255);
+    inner = 1 - (1 - inner) * (1 - steps[k]! / 255);
+  }
+  const out: string[] = [];
+  for (let k = bands - 1; k >= 0; k--) {
+    const step = steps[k]!;
+    if (step === 0) continue;
+    // Un terzo di passo in più: il motore che tronca invece di arrotondare
+    // trova lo stesso passo.
+    const percent = Math.round(((step + 0.3) / 255) * 100_000) / 1000;
+    const reach = Math.round((spread + edges[k]!) * 10) / 10;
+    out.push(`0 ${y}px 0 ${reach}px rgb(${ink} / ${percent}%)`);
+  }
+  return out;
 }
 
 /// I sette livelli del rilievo: due strati morbidi, vicino e lontano.
@@ -401,6 +558,16 @@ export function palette(
     "shadow-2": levels[1]!,
     "shadow-3": levels[2]!,
     "shadow-4": levels[3]!,
+    // Il foglio sulla scrivania: ruoli facoltativi (`OPTIONAL_ROLES`), che la
+    // pelle legge col ripiego di `shadow-1` e `shadow-2`.
+    "shadow-sheet": sheetShadow(light, false),
+    "shadow-sheet-focus": sheetShadow(light, true),
+    // Il foglio appena rialzato dentro un riquadro: facoltativo anche questo,
+    // col ripiego di `shadow-1`.
+    "shadow-raise": raiseShadow(light),
+    // Ciò che si apre sopra tutto: facoltativo, col ripiego che la pelle
+    // scrive accanto.
+    "shadow-pop": popShadow(light),
     "shadow-5": levels[4]!,
     "shadow-6": levels[5]!,
     "shadow-7": levels[6]!,
@@ -426,6 +593,12 @@ export function palette(
     // La scrivania del disegno, attorno alla carta bianca: chiara di giorno,
     // e di notte abbastanza chiara da non far abbagliare la carta.
     "draw-desk": toHex(day ? lch(0.95, 0.004, 260) : lch(0.3, 0.008, 260)),
+
+    // Il vassoio della barra in una fila e della colonna del disegno: appena
+    // più chiaro della carta di un campo, perché i suoi bottoni si leggano
+    // come strumenti e non come campi. Ad alto contrasto resta la carta del
+    // campo, che ha già le sue coppie.
+    "bar-tray": high ? sheet2 : toHex(day ? lch(0.984, 0.004, paper) : lch(0.238, 0.017, paper)),
 
     // Il grafo.
     "graph-node": graphNode,
@@ -488,6 +661,10 @@ export function palette(
     "paper-find-now": hold(lch(0.84, 0.14, 80), [paperInk], T.text, "dark"),
     "paper-comment": hold(lch(0.68, 0.15, 70), paperPapers, T.ui, "light"),
     ...paperAuthors,
+
+    // Il logo: la cartella nella tinta, sui fondi dove sta il marchio (la
+    // barra) e le Informazioni (il rialzo). Facoltativi anche questi.
+    ...logoColors(light, level, hue, [bg, raise]),
   };
 }
 
@@ -548,7 +725,7 @@ const CONSTANTS: readonly (readonly [string, string])[] = [
   ["text-xl", "16px"],
   ["text-2xl", "19px"],
   ["text-3xl", "23px"],
-  ["text-reading", "17px"],
+  ["text-reading", "18px"],
   ["text-source", "14px"],
   ["weight-regular", "400"],
   ["weight-medium", "500"],
@@ -556,7 +733,7 @@ const CONSTANTS: readonly (readonly [string, string])[] = [
   ["leading-tight", "1.3"],
   ["leading-normal", "1.45"],
   ["leading-relaxed", "1.65"],
-  ["content-width", "68ch"],
+  ["content-width", "58ch"],
   ["tracking-caps", "0.06em"],
 
   // I tempi: stato, scambio, breve, ampio; la scena è dei momenti rari.
@@ -593,14 +770,14 @@ export const COLOR_TOKENS: readonly string[] = Object.keys(palette("light", "nor
 /**
  * I ruoli che la serie dichiara e che un tema può non dichiarare: i segni
  * sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un
- * file (`--paper-*`), e la scrivania del disegno (`--draw-desk`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
+ * file (`--paper-*`), i colori del logo (`--logo-*`), la scrivania del disegno (`--draw-desk`), il vassoio della barra in una fila (`--bar-tray`), l'ombra del foglio (`--shadow-sheet`, `--shadow-sheet-focus`), il rialzo più basso (`--shadow-raise`) e ciò che si apre sopra tutto (`--shadow-pop`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
  * rifiutare ogni tema `theme-2` di oggi; chi non li dichiara ha il ripiego di
  * `structure.css`, e le loro coppie si contano solo quando ci sono
  * (`THEME_2_OPTIONAL_PAIRS`).
  */
 export const OPTIONAL_ROLES: readonly string[] = COLOR_TOKENS.filter(
-  (name) => name.startsWith("paper-") || name.startsWith("doc-author-") || name.startsWith("doc-color-") || name.startsWith("doc-tint-") ||
-    ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk",
+  (name) => name.startsWith("paper-") || name.startsWith("logo-") || name.startsWith("doc-author-") || name.startsWith("doc-color-") || name.startsWith("doc-tint-") ||
+    ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk", "bar-tray", "shadow-sheet", "shadow-sheet-focus", "shadow-raise", "shadow-pop",
       "doc-syntax-near", "doc-ghost", "doc-wavy", "doc-block-hover", "doc-block-selected", "doc-drop-line"].includes(name),
 );
 

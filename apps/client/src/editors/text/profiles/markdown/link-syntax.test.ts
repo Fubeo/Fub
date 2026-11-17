@@ -1,7 +1,54 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
-import { decodeDestination, escapeLinkLabel, linkDestination, normalizeLabel, routeHref } from "./link-syntax";
+import { describe, expect, it, vi } from "vitest";
+import { decodeDestination, decodeEntities, decodeNamedEntity, escapeLinkLabel, linkDestination, normalizeLabel, routeHref } from "./link-syntax";
 import { renderMarkdown } from "./render";
+
+describe("le entità", () => {
+  it("le nominate si risolvono dalla tabella, senza mai toccare il DOM", () => {
+    const created = vi.spyOn(document, "createElement");
+    try {
+      for (const text of ["&amp;&lt;", "&rarr;<b>x</b>", "<img src=x onerror=alert(1)>", "&rarr", "rarr;", " &rarr;"]) {
+        expect(decodeNamedEntity(text)).toBe(text);
+      }
+      expect(decodeNamedEntity("&amp;")).toBe("&");
+      expect(decodeNamedEntity("&rarr;")).toBe("→");
+      expect(decodeNamedEntity("&NotNestedGreaterGreater;")).toBe("⪢̸");
+      expect(decodeNamedEntity("&CounterClockwiseContourIntegral;")).toBe("∳");
+      expect(created).not.toHaveBeenCalled();
+    } finally {
+      created.mockRestore();
+    }
+  });
+
+  it("comuni, rare e a due caratteri", () => {
+    expect(decodeEntities("&copy; &eacute; &nbsp; &hellip; &mdash; &euro; &Auml;")).toBe("© é   … — € Ä");
+    expect(decodeEntities("&ngE; &fjlig; &bne; &Fopf; &ThickSpace;")).toBe("≧̸ fj =⃥ 𝔽   ");
+    expect(decodeEntities("&Tab;&NewLine;&quot;&apos;&bsol;")).toBe("\t\n\"'\\");
+  });
+
+  it("le numeriche, con U+FFFD per lo zero e per ciò che non è un carattere", () => {
+    expect(decodeEntities("&#x41;&#66;&#X1F600;&#128512;")).toBe("AB\u{1F600}\u{1F600}");
+    expect(decodeEntities("&#0; &#xD800; &#x110000; &#1114112;")).toBe("� � � �");
+    // Oltre 7 cifre decimali o 6 esadecimali non è un riferimento (CommonMark).
+    expect(decodeEntities("&#12345678; &#x1234567;")).toBe("&#12345678; &#x1234567;");
+  });
+
+  it("le non valide restano testo: senza `;`, nomi ignoti, prototipo, maiuscole sbagliate", () => {
+    for (const text of ["&amp", "&copy", "&ignota;", "&constructor;", "&__proto__;", "&toString;", "&hasOwnProperty;", "&AMp;", "&RARR;", "& amp;", "&#;", "&#x;", "&;"]) {
+      expect(decodeEntities(text)).toBe(text);
+    }
+    expect(decodeEntities("a&amp;b &rarr; &#x41;&#66; &ignota; &#0;")).toBe("a&b → AB &ignota; �");
+  });
+
+  it("una destinazione scioglie anche le rare", () => {
+    expect(decodeDestination("<https://e.it/?a=1&NotNestedGreaterGreater;b>")).toBe("https://e.it/?a=1⪢̸b");
+  });
+
+  it("il modulo non passa più dal DOM per le entità", async () => {
+    const source = (await import("./link-syntax.ts?raw")).default;
+    expect(source).not.toMatch(/innerHTML|createElement|DOMParser|textarea/);
+  });
+});
 
 /// Il testo e l'indirizzo del primo link della resa.
 function rendered(markdown: string): { text: string; href: string | null } | null {

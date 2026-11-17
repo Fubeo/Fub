@@ -1,0 +1,81 @@
+{
+  "about": "Lo spessore di un tratto su un'immagine 2:1 scritto a 300×300, ora 600×200: con la proporzione del contenuto (aspect = 2, s = 4/3) 6 unità della lavagna sono 4,5 nelle unità dell'ancora (senza sarebbero 9).",
+  "before": {
+    "nodes": [
+      {
+        "id": "img",
+        "type": "file",
+        "file": "Foto/lavagna.png",
+        "x": 0,
+        "y": 0,
+        "width": 600,
+        "height": 200,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 300,
+                "height": 300
+              },
+              "ink": "1 s100 cxy 15000,15000 1000,0"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "restyle_strokes",
+      "layer": {
+        "node": "img"
+      },
+      "ids": [
+        "s1"
+      ],
+      "size": 6,
+      "aspect": 2
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "img",
+          "type": "file",
+          "file": "Foto/lavagna.png",
+          "x": 0,
+          "y": 0,
+          "width": 600,
+          "height": 200,
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "s1",
+                "tool": "pen",
+                "brush": "pf1 size=4.5 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 300,
+                  "height": 300
+                },
+                "ink": "1 s100 cxy 15000,15000 1000,0"
+              }
+            ]
+          }
+        }
+      ],
+      "edges": []
+    }
+  }
+}

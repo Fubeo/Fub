@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeHost } from "../../../host/fake";
 import type { ImportDialog } from "./dialog";
+import { waiter } from "../../../test-wait";
 
 /// L'host finto, e il motivo con cui il disco rifiuta di scrivere; `null`
 /// se scrive.
@@ -62,14 +63,7 @@ const submitButton = (): HTMLButtonElement => document.querySelector<HTMLButtonE
 const text = (selector: string): string | undefined => document.querySelector<HTMLElement>(selector)?.textContent ?? undefined;
 const notes = (): string[] => [...document.querySelectorAll<HTMLElement>(".draw-import-note")].map((note) => note.textContent ?? "");
 
-async function until(thing: string, cond: () => boolean, within = 4000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const until = waiter(4000);
 
 function host() {
   return { onEffect: vi.fn(async () => {}), notify: vi.fn() };

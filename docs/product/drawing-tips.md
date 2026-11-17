@@ -74,23 +74,9 @@ Triangolo, media».
 
 ## Nel file
 
-Una punta è un marcatore fra le [risorse](drawing-resources.md) del
-disegno, che la linea nomina con `marker-start` o `marker-end`. Le linee con
-la stessa punta dello stesso colore ne usano una sola, e quando nessuno la
-usa più se ne va, nello stesso passo.
-
-```xml
-<marker id="p1" fub:role="shared" fub:marker="triangle medium end"
-  refX="3.44" refY="3" markerWidth="5.34" markerHeight="6" orient="auto">
-  <path d="M4.84 3 L0.51 5.5 L0.51 0.5 Z" fill="#0072b2"/>
-</marker>
-<line id="o1" x1="16" y1="20" x2="104" y2="20" stroke="#0072b2"
-  stroke-width="3" marker-end="url(#p1)"/>
-```
-
-`fub:marker` dice la forma, la misura e il capo; Fub riconosce come sua
-soltanto la punta che scriverebbe identica, e ogni altro marcatore è
-«Un’altra punta». Come lo scrive il file è in [Formato della scena,
+Una punta è un `marker` fra le risorse del disegno, nominato dalla linea con
+`marker-start`/`marker-end` e descritto da `fub:marker`. Come lo scrive il
+file è in [Formato della scena,
 risorse](../reference/scene-format-resources.md#le-punte-delle-linee).
 
 ## Con gli altri comandi

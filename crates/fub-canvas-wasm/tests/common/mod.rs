@@ -14,7 +14,8 @@ use fub_canvas_core::patch::same_value;
 use fub_canvas_core::source::canvas_value;
 use serde_json::{json, Value};
 
-/// Una via fino al nucleo: le sette funzioni della facciata, più il modello.
+/// Una via fino al nucleo: le funzioni della facciata, più il modello e i
+/// livelli d'inchiostro.
 pub trait Via {
     fn open(&mut self, source: &[u8]) -> Result<(u32, Value), Value>;
     fn reset(&mut self, handle: u32, source: &[u8]) -> Result<Value, Value>;
@@ -23,6 +24,9 @@ pub trait Via {
     fn compile(&mut self, handle: u32, request: &[u8]) -> Result<Value, Value>;
     fn model(&mut self, handle: u32) -> Result<Value, Value>;
     fn node_at(&mut self, handle: u32, byte: u32) -> Result<Option<usize>, Value>;
+    fn ink_layers(&mut self, handle: u32) -> Result<Value, Value>;
+    fn describe(&mut self, handle: u32, request: &[u8]) -> Result<Value, Value>;
+    fn check(&mut self, handle: u32, request: &[u8]) -> Result<Value, Value>;
     fn close(&mut self, handle: u32) -> Result<(), Value>;
 }
 
@@ -253,6 +257,234 @@ pub fn every_vector(via: &mut impl Via) {
     }
 }
 
+/// Quanti vettori dell'inchiostro: gli stessi 32 di
+/// `crates/fub-canvas-core/tests/ink_vectors.rs` e di
+/// `apps/client/src/editors/canvas/wasm/ink-vectors.test.ts`.
+pub const INK_VECTORS: usize = 32;
+
+/// Ogni vettore di `canvas-ink/`: `ink_layers` dà i livelli attesi (quelli
+/// che legge il nucleo nativo), la stessa risposta finché il testo non
+/// cambia, e i livelli del testo nuovo dopo un `reset`. Su un handle chiuso
+/// è `handle`.
+pub fn every_ink_vector(via: &mut impl Via) {
+    let vectors = read_vectors("canvas-ink");
+    assert_eq!(vectors.len(), INK_VECTORS, "canvas-ink: i vettori");
+    for (name, vector) in &vectors {
+        let source = vector["source"].as_str().expect("source");
+        let (handle, _) = via
+            .open(source.as_bytes())
+            .unwrap_or_else(|e| panic!("{name}: non si apre: {e}"));
+        let given = via
+            .ink_layers(handle)
+            .unwrap_or_else(|e| panic!("{name}: ink_layers rifiuta: {e}"));
+        assert_eq!(given, vector["expect"], "{name}: i livelli");
+        assert_eq!(
+            via.ink_layers(handle).expect("di nuovo"),
+            given,
+            "{name}: il testo non è cambiato"
+        );
+        // Una lavagna vuota non ha livelli; il testo di prima li ridà.
+        via.reset(handle, b"").expect("reset");
+        assert_eq!(
+            via.ink_layers(handle).expect("vuota"),
+            json!({ "layers": [] }),
+            "{name}: dopo reset"
+        );
+        via.reset(handle, source.as_bytes()).expect("reset");
+        assert_eq!(via.ink_layers(handle).expect("riaperta"), given, "{name}");
+        via.close(handle).expect("close");
+        expect_code(via.ink_layers(handle), "handle");
+    }
+}
+
+/// Un tratto di penna libero, valido, con questo id.
+pub fn free_stroke(id: &str) -> Value {
+    json!({
+        "id": id,
+        "tool": "pen",
+        "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+        "color": "#0072b2",
+        "anchor": { "kind": "free" },
+        "ink": "1 s100 cxy 4000,2500 120,40 95,-10",
+    })
+}
+
+/// La toppa che aggiunge [`free_stroke`] in cima al livello della radice.
+pub fn add_free_stroke(id: &str) -> Vec<u8> {
+    bytes(&json!([{
+        "kind": "ink", "layer": "board", "at": 0, "before": null, "after": free_stroke(id),
+    }]))
+}
+
+/// Un `commit` d'inchiostro cambia la risposta di `ink_layers`, e l'annulla
+/// la rimette.
+pub fn ink_layers_follow_commits(via: &mut impl Via) {
+    let (handle, _) = via.open(br#"{"nodes":[],"edges":[]}"#).expect("si apre");
+    let empty = json!({ "layers": [] });
+    assert_eq!(via.ink_layers(handle).expect("vuota"), empty);
+    let committed = via.commit(handle, &add_free_stroke("s-1")).expect("commit");
+    assert_eq!(
+        via.ink_layers(handle).expect("dopo"),
+        json!({ "layers": [{ "layer": "board", "state": "ok", "strokes": [{ "id": "s-1", "drawn": true }] }] })
+    );
+    via.commit(handle, &bytes(&committed["inverse"]))
+        .expect("annulla");
+    assert_eq!(via.ink_layers(handle).expect("annullata"), empty);
+    via.close(handle).expect("close");
+}
+
+/// Un tratto valido ancorato a una scheda di 640 × 420.
+pub fn card_stroke(id: &str) -> Value {
+    let mut stroke = free_stroke(id);
+    stroke["anchor"] = json!({ "kind": "card", "width": 640, "height": 420 });
+    stroke
+}
+
+/// Il modello di prima più il `changed` di un commit: le schede riscritte al
+/// loro posto, le chiavi della radice riscritte dove stavano.
+pub fn apply_changed(model: &Value, changed: &Value) -> (Value, usize) {
+    let mut model = model.clone();
+    let mut spliced = 0;
+    let splice = |layer: &mut Value, change: &Value| {
+        let start = change["start"].as_u64().expect("start") as usize;
+        let remove = change["remove"].as_u64().expect("remove") as usize;
+        let insert = change["insert"].as_array().expect("insert").clone();
+        let strokes = layer["strokes"]
+            .as_array_mut()
+            .expect("il livello ha strokes");
+        assert!(
+            start + remove <= strokes.len(),
+            "{change} fuori dalla lista"
+        );
+        strokes.splice(start..start + remove, insert);
+    };
+    for entry in changed["nodes"].as_array().expect("changed.nodes") {
+        let at = entry["at"].as_u64().expect("at") as usize;
+        if let Some(node) = entry.get("node") {
+            model["nodes"][at] = node.clone();
+        } else {
+            assert_eq!(
+                model["nodes"][at]["id"], entry["id"],
+                "la scheda al suo posto"
+            );
+            splice(&mut model["nodes"][at]["fub:ink"], &entry["strokes"]);
+            spliced += 1;
+        }
+    }
+    for (key, value) in changed["root"].as_object().expect("changed.root") {
+        assert!(
+            model.get(key).is_some(),
+            "la chiave {key} nasce: non è un ritocco"
+        );
+        model[key] = value.clone();
+    }
+    if let Some(board) = changed.get("board") {
+        splice(&mut model["fub:ink"], board);
+        spliced += 1;
+    }
+    (model, spliced)
+}
+
+/// I commit di un tratto, uno dopo l'altro: il loro `changed` sul modello di
+/// prima è il modello di dopo (chiavi nell'ordine comprese), il tratto UTF-16
+/// ricostruisce il sorgente, e `ink_layers` e il modello sono quelli di una
+/// lavagna aperta da capo sullo stesso testo. Un commit che cambia altro non
+/// ha `changed`, e i tratti dopo di lui tornano a seguire il modello.
+pub fn stroke_commits_follow_the_model(via: &mut impl Via) {
+    let mut source = serde_json::to_string_pretty(&json!({
+        "nodes": [
+            { "id": "a", "type": "text", "x": 0, "y": 0, "width": 640, "height": 420,
+              "text": "😀 prima € é", "fub:ink": { "v": 1, "strokes": [card_stroke("a-0")] } },
+            { "id": "b", "type": "text", "x": 700, "y": 0, "width": 640, "height": 420,
+              "text": "𝄞 senza inchiostro" },
+            { "id": "c", "type": "text", "x": 0, "y": 500, "width": 640, "height": 420, "text": "ñ" },
+        ],
+        "edges": [],
+        "fub:ink": { "v": 1, "strokes": [free_stroke("f-0")] },
+        "x-dopo": "😀",
+    }))
+    .expect("si scrive")
+    .replace('\n', "\r\n");
+    source.insert(0, '\u{feff}');
+    let (handle, opened) = via.open(source.as_bytes()).expect("si apre");
+    let mut model = opened["canvas"].clone();
+    // I livelli letti prima dei commit: da qui la facciata li tiene.
+    via.ink_layers(handle).expect("i livelli");
+    let ink = |layer: Value, at: usize, before: Value, after: Value| {
+        bytes(
+            &json!([{ "kind": "ink", "layer": layer, "at": at, "before": before, "after": after }]),
+        )
+    };
+    let mut requests = vec![
+        ink(json!({ "node": "a" }), 1, Value::Null, card_stroke("a-1")),
+        ink(json!("board"), 1, Value::Null, free_stroke("f-1")),
+        // Il primo tratto di una scheda senza livello: la chiave nasce nella
+        // scheda, che resta al suo posto.
+        ink(json!({ "node": "b" }), 0, Value::Null, card_stroke("b-0")),
+        ink(json!({ "node": "a" }), 0, card_stroke("a-0"), Value::Null),
+        // Uno spostamento: non è un tratto.
+        bytes(
+            &json!([{ "kind": "upsert-node", "before": model["nodes"][2].clone(),
+            "after": { "id": "c", "type": "text", "x": 9, "y": 500, "width": 640, "height": 420, "text": "ñ" } }]),
+        ),
+        ink(json!({ "node": "c" }), 0, Value::Null, card_stroke("c-0")),
+        ink(json!("board"), 0, free_stroke("f-0"), Value::Null),
+    ];
+    let mut inverses = Vec::new();
+    let mut ink_commits = 0;
+    let mut spliced = 0;
+    let mut step = 0;
+    while step < requests.len() {
+        let request = requests[step].clone();
+        step += 1;
+        let committed = via.commit(handle, &request).expect("commit");
+        source = apply_utf16(&source, &committed["edit"]);
+        let now = via.model(handle).expect("model")["canvas"].clone();
+        let only_ink = serde_json::from_slice::<Value>(&request).expect("json")[0]["kind"] == "ink";
+        match committed.get("changed") {
+            Some(changed) => {
+                assert!(
+                    only_ink,
+                    "{changed}: changed per un commit che non è di tratti"
+                );
+                let (patched, splices) = apply_changed(&model, changed);
+                spliced += splices;
+                assert_eq!(patched, now, "il changed del passo {step}");
+                assert_eq!(
+                    serde_json::to_string(&patched).expect("si scrive"),
+                    serde_json::to_string(&now).expect("si scrive"),
+                    "l'ordine delle chiavi al passo {step}"
+                );
+                ink_commits += 1;
+            }
+            None => assert!(!only_ink, "il passo {step} di tratti non ha changed"),
+        }
+        model = now;
+        let (fresh, reopened) = via.open(source.as_bytes()).expect("il testo si riapre");
+        assert_eq!(reopened["canvas"], model, "il modello del passo {step}");
+        assert_eq!(
+            via.ink_layers(handle).expect("i livelli"),
+            via.ink_layers(fresh).expect("i livelli da capo"),
+            "i livelli del passo {step}"
+        );
+        via.close(fresh).expect("close");
+        inverses.push(bytes(&committed["inverse"]));
+        // Finita la lista, l'annulla di ogni passo, dall'ultimo.
+        if step == requests.len() && requests.len() < 2 * inverses.len() {
+            requests.extend(inverses.drain(..).rev());
+        }
+    }
+    assert!(
+        ink_commits >= 10,
+        "solo {ink_commits} commit hanno seguito il modello"
+    );
+    // I più dicono solo la lista dei tratti; il livello che nasce o sparisce
+    // in una scheda la dà intera.
+    assert!(spliced >= 8, "solo {spliced} cambi della lista dei tratti");
+    assert_eq!(model, opened["canvas"], "l'annulla di tutto");
+    via.close(handle).expect("close");
+}
+
 /// Una lavagna di una scheda di testo, con o senza BOM e CRLF.
 pub fn one_card(text: &str, bom: bool, crlf: bool) -> String {
     let node =
@@ -332,6 +564,8 @@ pub fn bad_input(via: &mut impl Via) {
         expect_code(via.commit(handle, bad), "utf8");
         expect_code(via.preview(handle, bad), "utf8");
         expect_code(via.compile(handle, bad), "utf8");
+        expect_code(via.describe(handle, bad), "utf8");
+        expect_code(via.check(handle, bad), "utf8");
         // Anche dentro una stringa JSON.
         let mut wrapped = b"[\"".to_vec();
         wrapped.extend_from_slice(bad);
@@ -410,6 +644,8 @@ pub fn handles(via: &mut impl Via) {
         expect_code(via.commit(handle, b"[]"), "handle");
         expect_code(via.preview(handle, b"[]"), "handle");
         expect_code(via.compile(handle, br#"{"ops": []}"#), "handle");
+        expect_code(via.describe(handle, br#"{"form": "code"}"#), "handle");
+        expect_code(via.check(handle, br#"{"ops": []}"#), "handle");
         expect_code(via.model(handle), "handle");
         expect_code(via.node_at(handle, 0), "handle");
         expect_code(via.close(handle), "handle");
@@ -489,5 +725,204 @@ pub fn results(via: &mut impl Via) {
     let preview = via.preview(handle, b"[]").expect("preview");
     assert!(preview.len() > 65_536);
     assert_eq!(preview, source.as_bytes());
+    via.close(handle).expect("close");
+}
+
+/// Una lavagna con un gruppo, una scheda di testo con un tratto, una di file
+/// nel gruppo, un arco e un tratto libero: ciò che `describe` deve ridare.
+pub fn described_board() -> String {
+    let card_stroke = card_stroke("s-a");
+    let board = json!({
+        "nodes": [
+            {"id": "g", "type": "group", "x": 0, "y": 400, "width": 560, "height": 520, "label": "Gruppo"},
+            {"id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Ciclo dell'acqua",
+             "fub:ink": {"v": 1, "strokes": [card_stroke]}},
+            {"id": "b", "type": "file", "x": 40, "y": 440, "width": 400, "height": 400, "file": "Scienze/nuvole.png"},
+        ],
+        "edges": [
+            {"id": "e", "fromNode": "a", "toNode": "b", "fromSide": "bottom", "toSide": "top"},
+        ],
+        "fub:ink": {"v": 1, "strokes": [free_stroke("s-free")]},
+    });
+    serde_json::to_string_pretty(&board).expect("si scrive")
+}
+
+/// `describe` dà la lista che ricrea la lavagna, inchiostro compreso: compilata
+/// su una lavagna vuota ridà lo stesso modello. Con `ids` legge solo quelle
+/// schede e gli archi fra loro, senza l'inchiostro libero. Una richiesta
+/// sbagliata è `request`, e niente cambia la lavagna.
+pub fn describe_gives_the_code(via: &mut impl Via) {
+    let source = described_board();
+    let (handle, opened) = via.open(source.as_bytes()).expect("si apre");
+    let answer = via
+        .describe(handle, br#"{"form": "code"}"#)
+        .expect("describe");
+    assert_eq!(answer["form"], "code");
+    let text = answer["text"].as_str().expect("il codice è testo");
+    // Il testo è quello di `canvas.read` in forma `code`: JSON con i rientri.
+    assert!(text.starts_with("[\n  {"), "{text}");
+    let ops: Value = serde_json::from_str(text).expect("il codice è JSON");
+    let layers: Vec<&str> = ops
+        .as_array()
+        .expect("una lista")
+        .iter()
+        .filter(|op| op["op"] == "add_strokes")
+        .map(|op| op["layer"].as_str().unwrap_or("una scheda"))
+        .collect();
+    assert_eq!(layers.len(), 2, "i due livelli d'inchiostro: {ops}");
+    assert!(layers.contains(&"board"), "{layers:?}");
+    let (empty, _) = via.open(b"").expect("vuota");
+    let compiled = via
+        .compile(empty, &bytes(&json!({ "ops": ops, "seed": 7 })))
+        .expect("si compila");
+    via.commit(empty, &bytes(&compiled["patches"]))
+        .expect("si scrive");
+    assert_eq!(
+        via.model(empty).expect("dopo")["canvas"],
+        opened["canvas"],
+        "la lista ricrea la lavagna"
+    );
+    via.close(empty).expect("close");
+
+    // Solo `a` e `b` (e un id che non c'è): le due schede e l'arco fra loro,
+    // niente gruppo né inchiostro libero.
+    let some = via
+        .describe(handle, br#"{"form": "code", "ids": ["a", "b", "nessuna"]}"#)
+        .expect("con ids");
+    let some: Value = serde_json::from_str(some["text"].as_str().expect("testo")).expect("JSON");
+    let some = some.as_array().expect("una lista");
+    let count = |name: &str| some.iter().filter(|op| op["op"] == name).count();
+    assert_eq!(count("add_card"), 2, "{some:?}");
+    assert_eq!(count("connect"), 1, "{some:?}");
+    assert!(
+        !some
+            .iter()
+            .any(|op| op["op"] == "add_strokes" && op["layer"] == "board"),
+        "{some:?}"
+    );
+    // Una lavagna vuota è una lista vuota.
+    let (blank, _) = via.open(b"").expect("vuota");
+    let none = via.describe(blank, br#"{"form": "code"}"#).expect("vuota");
+    assert_eq!(none["text"], "[]");
+    via.close(blank).expect("close");
+
+    for bad in [
+        &b""[..],
+        b"{",
+        b"{}",
+        b"[]",
+        br#"{"form": "outline"}"#,
+        br#"{"form": "json"}"#,
+        br#"{"form": "code", "ids": "a"}"#,
+        br#"{"form": "code", "ids": [1]}"#,
+        br#"{"form": "code", "max_chars": 10}"#,
+    ] {
+        expect_code(via.describe(handle, bad), "request");
+    }
+    assert_eq!(
+        utf8(via.preview(handle, b"[]").expect("preview")),
+        source,
+        "describe non cambia la lavagna"
+    );
+    via.close(handle).expect("close");
+}
+
+/// `check` dà il rapporto del nucleo: il riassunto senza problemi, il primo
+/// problema col suggerimento, una lista che non è un array come problema della
+/// lista intera. Il seme è quello di `compile`, anche come stringa di cifre;
+/// niente cambia la lavagna. Il testo degli appunti lo legge chi chiama.
+pub fn check_gives_the_report(via: &mut impl Via) {
+    let source = described_board();
+    let (handle, _) = via.open(source.as_bytes()).expect("si apre");
+    let ops = json!([
+        {"op": "add_card", "id": "n1", "text": "Evaporazione", "near": "a"},
+        {"op": "add_card", "id": "n2", "text": "Pioggia", "x": 2000, "y": 0},
+        {"op": "connect", "from": "n1", "to": "n2"},
+        {"op": "move", "ids": ["a"], "dx": 800, "dy": -800},
+    ]);
+    let report = via
+        .check(handle, &bytes(&json!({ "ops": ops, "seed": 3 })))
+        .expect("check");
+    assert_eq!(report["ok"], true, "{report}");
+    assert_eq!(report["problems"], json!([]));
+    let summary = &report["summary"];
+    assert_eq!(summary["cards_added"].as_array().map(Vec::len), Some(2));
+    assert_eq!(summary["edges_added"].as_array().map(Vec::len), Some(1));
+    assert_eq!(summary["cards_changed"][0]["id"], "a");
+    assert!(
+        summary["cards_changed"][0]["moved"].is_object(),
+        "{summary}"
+    );
+    assert!(report["outline_after"]
+        .as_str()
+        .is_some_and(|text| text.contains("Pioggia")));
+    // Il seme come stringa di cifre dà lo stesso rapporto.
+    let as_text_seed = via
+        .check(handle, &bytes(&json!({ "ops": ops, "seed": "3" })))
+        .expect("check col seme in cifre");
+    assert_eq!(as_text_seed, report);
+
+    // Il primo problema, col suggerimento: `bb` non c'è, `b` è a un passo.
+    let wrong = json!([
+        {"op": "move", "ids": ["bb"], "dx": 8, "dy": 0},
+        {"op": "move", "ids": ["zz"], "dx": 8, "dy": 0},
+    ]);
+    let refused = via
+        .check(handle, &bytes(&json!({ "ops": wrong })))
+        .expect("check con un problema");
+    assert_eq!(refused["ok"], false);
+    assert_eq!(refused["summary"], Value::Null);
+    assert_eq!(refused["outline_after"], Value::Null);
+    let problems = refused["problems"].as_array().expect("i problemi");
+    assert_eq!(problems.len(), 1, "la compilazione si ferma al primo");
+    assert_eq!(problems[0]["code"], "unknown_node");
+    assert_eq!(problems[0]["index"], 0);
+    assert_eq!(problems[0]["path"], "/0/ids/0");
+    assert!(
+        problems[0]["suggestion"]
+            .as_str()
+            .is_some_and(|near| near.split(", ").any(|id| id == "b")),
+        "{refused}"
+    );
+    // La forma sbagliata: un campo con un solo nome vicino ha la correzione.
+    let shape = via
+        .check(
+            handle,
+            &bytes(&json!({ "ops": [{"op": "add_card", "txet": "x"}] })),
+        )
+        .expect("check della forma");
+    assert_eq!(shape["problems"][0]["code"], "unknown_field", "{shape}");
+    assert!(shape["problems"][0]["fix"].is_object(), "{shape}");
+
+    // Un valore che non è una lista, anche `null`: il problema della lista
+    // intera, senza indice; la chiamata riesce.
+    for ops in [json!({}), Value::Null, json!("[]")] {
+        let report = via
+            .check(handle, &bytes(&json!({ "ops": ops })))
+            .expect("una lista che non è un array non è un errore della chiamata");
+        assert_eq!(report["ok"], false, "{ops}");
+        assert_eq!(report["summary"], Value::Null, "{ops}");
+        assert!(report["problems"][0]["code"].is_string(), "{ops}");
+        assert_eq!(report["problems"][0]["index"], Value::Null, "{ops}");
+    }
+
+    for bad in [
+        &b""[..],
+        b"{",
+        b"[]",
+        b"{}",
+        br#"{"seed": 1}"#,
+        br#"{"ops": [], "text": "[]"}"#,
+        br#"{"text": "[]"}"#,
+        br#"{"ops": [], "seed": -1}"#,
+        br#"{"ops": [], "other": 1}"#,
+    ] {
+        expect_code(via.check(handle, bad), "request");
+    }
+    assert_eq!(
+        utf8(via.preview(handle, b"[]").expect("preview")),
+        source,
+        "check non cambia la lavagna"
+    );
     via.close(handle).expect("close");
 }

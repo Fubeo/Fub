@@ -91,10 +91,11 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // (`selectSelectionMatches`) e vinceva sempre; `Mod-e` alterna già.
     ("shell.mode.live", None),
     ("shell.mode.source", None),
-    // I Blocchi di una nota (N13). Sono una modalità della superficie
-    // Markdown, non un ruolo: il comando c'è soltanto dove la superficie ne
-    // dichiara una con quell'id. `Mod-Shift-b` era libero; `Mod-Alt-b` è la
-    // barra laterale.
+    // I Blocchi di una nota (N13), che oggi sono dentro Scrittura: il comando
+    // porta a Scrittura («Passa a Scrittura (era Blocchi)») e c'è soltanto dove
+    // una superficie dichiara `blocks` fra i suoi id (anche di prima,
+    // `formerIds`). L'id e l'accordo restano, perché restino le scorciatoie
+    // della persona. `Mod-Shift-b` era libero; `Mod-Alt-b` è la barra laterale.
     ("shell.mode.blocks", Some("Mod-Shift-b")),
     // Apre la linguetta attiva nella vista sorgente che la sua superficie
     // dichiara (un disegno come testo SVG, ADR 0203), lì o in un riquadro
@@ -225,6 +226,9 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.zoom.reset", Some("Mod-0")),
     // La scrittura senza cornice: via pannelli, rail e toolbar.
     ("shell.focus.toggle", None),
+    // La barra di formato (`editor.toolbar`): nascosta, o l'ultima forma
+    // visibile.
+    ("shell.toolbar.toggle", None),
     // Lo spazio dell'interfaccia (`chrome.compactness`), un passo alla volta
     // come lo zoom: più compatta lascia più posto al foglio. **Senza accordo**:
     // `Mod-=` e `Mod--` sono dello zoom, e un gesto che si fa quando si cambia
@@ -282,6 +286,10 @@ pub const SETTINGS_WITH_THEIR_OWN_GESTURE: &[&str] = &[
     fub_kernel::properties::TYPES,
     // Il catalogo dei temi.
     crate::settings::APPEARANCE_THEME_ID,
+    // La barra di formato accesa o spenta di un Fub di prima: si legge come
+    // `editor.toolbar` = `nascosta` finché quella non c'è, e la sceglie
+    // `editor.toolbar` nel modulo, una fonte sola.
+    crate::settings::CHROME_FORMATBAR_VISIBLE,
 ];
 
 /// Il job il cui esito, quando riesce, può portare gli artefatti di un export

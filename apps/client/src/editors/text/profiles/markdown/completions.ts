@@ -34,6 +34,7 @@ import { Prec, type EditorState, type Extension } from "@codemirror/state";
 import { keymap, type EditorView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { isTaskLine, mentionDates } from "./dates";
+import { withLineBreaks } from "../../line-breaks";
 import { isStrictlyInsideCode } from "./parser";
 import { liveStrings } from "./strings";
 import { catalogLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
@@ -42,6 +43,7 @@ import { TAG_CHARACTER } from "../../../../rules/mirrored";
 import { tagInProgress } from "../../../../rules/syntax";
 import { calloutTypeSource, codeLanguageSource, slashMenuExtension, type SlashMenuSource } from "./slash";
 import { headingLinkText, noteTargets, pathWithoutExtension } from "./kinds";
+import type { VaultBlockPort } from "./blocks/vault-blocks";
 
 export { headingLinkText };
 
@@ -72,6 +74,9 @@ export interface CompletionSources {
   /// I blocchi con un id della nota che `page` nomina, per `[[Nota#^`; `page`
   /// vuota è la nota stessa. Assente, `#^` non completa.
   blocksOf?(page: string): Promise<readonly BlockOption[]>;
+  /// I blocchi di tutto il vault, per `[[^^parole` (E13). Assente, `[[^^`
+  /// non completa.
+  vaultBlocks?: VaultBlockPort;
   /// Il menu «/» nel testo (`slash.ts`). Assente, il «/» è testo.
   slash?: SlashMenuSource;
   /// Le persone per `@` (K5). Assente, `@` non propone persone.
@@ -86,6 +91,10 @@ export interface CompletionSources {
 export interface DateSource {
   /// Il path della giornaliera di `iso` (`YYYY-MM-DD`), senza estensione.
   dailyPath(iso: string): string;
+  /// Il giorno (`YYYY-MM-DD`) della giornaliera `path`, estensione compresa,
+  /// o `null` se la nota non lo è: la pagina del giorno (E17). Assente, la
+  /// pagina non c'è.
+  dailyDate?(path: string): string | null;
   /// Il primo giorno della settimana: 1 = lunedì … 7 = domenica.
   firstDay(): number;
   /// Oggi; assente, l'orologio.
@@ -297,7 +306,7 @@ export function wikilinkSource(searchNotes: CompletionSources["searchNotes"]): C
     if (!match) return null;
     // Dopo `#` si scrive un titolo, non il nome della nota: lo completano le
     // sorgenti dei titoli.
-    if (headingContext(before) || vaultHeadingContext(before) || blockContext(before)) return null;
+    if (headingContext(before) || vaultHeadingContext(before) || blockContext(before) || vaultBlockContext(before)) return null;
     const cursorOffset = ctx.pos - line.from;
     const afterCursor = line.text.slice(cursorOffset);
     const suffix = afterCursor.search(/(?:[|#]|\]\])/);
@@ -422,6 +431,97 @@ export function vaultHeadingSource(searchHeadings: NonNullable<CompletionSources
   };
 }
 
+/// `[[^^parole`: un blocco cercato in tutto il vault. `from` è l'inizio di
+/// `^^`, che la scelta sostituisce con `Nota#^id`; `query` sono le parole.
+export function vaultBlockContext(before: string): ContextMatch | null {
+  const open = before.lastIndexOf("[[");
+  if (open === -1) return null;
+  const inner = before.slice(open + 2);
+  if (!inner.startsWith("^^") || /\]\]|[\n|#]/u.test(inner)) return null;
+  return { from: open + 2, query: inner.slice(2) };
+}
+
+/// Quanto aspetta `[[^^` dopo l'ultima battuta prima di cercare: si cerca
+/// una volta per pausa, non per battuta.
+export const VAULT_BLOCK_PAUSE_MS = 250;
+/// Il tetto dei blocchi proposti: diecimila risultati non arrivano mai al
+/// menu, le parole in più restringono.
+export const VAULT_BLOCKS_MAX = 50;
+/// Il tetto delle parole cercate: oltre, il testo non è più una ricerca.
+const VAULT_BLOCK_QUERY_MAX = 200;
+
+/// La riga di ricerca dell'indice per le parole di `[[^^`: tutte nello
+/// stesso blocco (`block:(…)`). Le parentesi e le virgolette sono segni
+/// della sintassi, non parole: vanno via. `null` se non resta niente.
+export function vaultBlockQuery(words: string): string | null {
+  const clean = words.slice(0, VAULT_BLOCK_QUERY_MAX).replace(/[()"]/gu, " ").split(/\s+/u).filter((word) => word !== "");
+  return clean.length === 0 ? null : `block:(${clean.join(" ")})`;
+}
+
+type VaultBlocks = typeof import("./blocks/vault-blocks");
+let vaultBlocksModule: Promise<VaultBlocks> | undefined;
+
+/// La sorgente dei blocchi del vault, dopo `[[^^`: cerca dopo una pausa
+/// (`pause`), e una risposta superata da una battuta dopo non arriva al
+/// menu. Ogni opzione mostra il testo del blocco e la nota; la scelta dà
+/// l'id al blocco se manca e scrive `Nota#^id` (`blocks/vault-blocks.ts`).
+export function vaultBlockSource(port: VaultBlockPort, pause = VAULT_BLOCK_PAUSE_MS): CompletionSource {
+  let latest = 0;
+  return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
+    if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
+    const line = ctx.state.doc.lineAt(ctx.pos);
+    const match = vaultBlockContext(ctx.state.sliceDoc(line.from, ctx.pos));
+    if (!match || vaultBlockQuery(match.query) === null) return null;
+    const ticket = ++latest;
+    const current = () => ticket === latest && !ctx.aborted;
+    // La pausa finisce prima se CodeMirror lascia la domanda (un'altra
+    // battuta, il menu chiuso): il timer non le sopravvive.
+    const paused = await new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(true), pause);
+      ctx.addEventListener("abort", () => {
+        clearTimeout(timer);
+        resolve(false);
+      });
+    });
+    // Durante una composizione (IME) le lettere non sono ancora parole: si
+    // cerca alla fine, che è un'altra battuta.
+    if (!paused || !current() || ctx.view?.composing) return null;
+    vaultBlocksModule ??= import("./blocks/vault-blocks").catch((error: unknown) => {
+      vaultBlocksModule = undefined;
+      throw error;
+    });
+    const [blocks, notes] = await Promise.all([vaultBlocksModule, port.notes(match.query).catch(() => [])]);
+    if (!current()) return null;
+    const hits = blocks.blocksOfNotes(notes, match.query, VAULT_BLOCKS_MAX);
+    if (hits.length === 0) return null;
+    const docs = [...new Set(hits.map((hit) => hit.doc))];
+    const names = new Map(noteTargets(docs).map((target, index) => [docs[index]!, target.target]));
+    const section = liveStrings.t("blocks.vault.section");
+    const { to } = fieldEnd(ctx);
+    return {
+      from: line.from + match.from,
+      to,
+      options: hits.map((hit): Completion => {
+        const name = names.get(hit.doc) ?? pathWithoutExtension(hit.doc);
+        return {
+          label: hit.label,
+          detail: name,
+          type: "text",
+          section,
+          apply: (view, _completion, from, until) => {
+            void blocks.linkVaultBlock(view, port, hit, { from, to: until }, {
+              name,
+              writable: () => view.dom.isConnected && !view.state.readOnly,
+            });
+          },
+        };
+      }),
+      // L'ordine è quello dell'indice, e si ricerca dopo ogni pausa.
+      filter: false,
+    };
+  };
+}
+
 /// Dove finisce il tag che il cursore attraversa: i caratteri da tag dopo
 /// il cursore fanno parte del token sostituito.
 function tagEnd(text: string, offset: number): number {
@@ -519,8 +619,8 @@ export function diagramFenceContext(state: EditorState, pos: number): DiagramFen
   if (!typed || state.sliceDoc(pos, line.to).trim() !== "") return null;
   const bodyEnd = closing ? closing.from - 1 : node.to;
   const others = [
-    line.from > opening.to + 1 ? state.sliceDoc(opening.to + 1, line.from - 1) : "",
-    line.to < bodyEnd ? state.sliceDoc(line.to + 1, bodyEnd) : "",
+    line.from > opening.to + 1 ? state.doc.sliceString(opening.to + 1, line.from - 1) : "",
+    line.to < bodyEnd ? state.doc.sliceString(line.to + 1, bodyEnd) : "",
   ].join("\n");
   const empty = others.split("\n").every((row) => {
     const content = row.replace(/^[\s>]*/, "");
@@ -567,7 +667,9 @@ export function diagramTemplateSource(today: () => Date = () => new Date()): Com
         info: t(template.description),
         type: "text",
         section,
-        apply: templateText(template, language, match.indent, day) + match.close,
+        // Il completamento divide il testo sugli a capo della nota, e conta
+        // la lunghezza in posizioni (`insertCompletionText`).
+        apply: withLineBreaks(ctx.state, templateText(template, language, match.indent, day) + match.close),
       }));
       if (options.length === 0) return null;
       return { from: match.from, to: match.to, options, filter: false };
@@ -766,6 +868,7 @@ export function markdownCompletions(sources: CompletionSources): Extension {
         ...(sources.headingsOf ? [headingSource(sources.headingsOf)] : []),
         ...(sources.searchHeadings ? [vaultHeadingSource(sources.searchHeadings)] : []),
         ...(sources.blocksOf ? [blockSource(sources.blocksOf)] : []),
+        ...(sources.vaultBlocks ? [vaultBlockSource(sources.vaultBlocks)] : []),
         tagSource(sources.listTags),
         diagramTemplateSource(),
         emojiSource(),

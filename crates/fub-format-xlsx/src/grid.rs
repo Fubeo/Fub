@@ -30,7 +30,7 @@ use std::sync::Arc;
 use fub_abi::{
     grid_bytes_revision, grid_journal_match, Arg, GridApplyRequest, GridBook, GridBytesCell,
     GridBytesProvider, GridBytesSession, GridBytesWindow, GridCalculation, GridCellKey,
-    GridCellStyle, GridColumn, GridCommand, GridCommandOutcome, GridCommandRequest,
+    GridCellPatch, GridCellStyle, GridColumn, GridCommand, GridCommandOutcome, GridCommandRequest,
     GridCommandState, GridComment, GridCommentReply, GridCommit, GridDataBar, GridIcon,
     GridInvalidation, GridJournal, GridJournalMatch, GridLink, GridMerge, GridNotice, GridRow,
     GridSelection, GridSheet, GridSheetView, GridSourceEdit, GridSurfaceSpec, GridTable, GridValue,
@@ -47,7 +47,8 @@ use gridcraft_model::{CalcMode, Sheet, SheetViewMode, Visibility, Workbook};
 use gridcraft_numfmt::{format_value, NumberFormat};
 use serde_json::{json, Value as Json};
 
-use crate::commands::{self, Facade, Ran, Rewrite, REDO, UNDO};
+use crate::commands::{self, Facade, Ran, Rewrite, Snapshot, REDO, UNDO};
+use crate::cronologia::{self, Archivio, Cambio, Linea, Passo, Punto, Stato, RESTORE};
 use crate::display::{self, NotShown, Warning};
 use crate::graft::{graft, CellEdit, GraftError};
 use crate::input::{self, InputError, NewValue};
@@ -204,9 +205,14 @@ struct Instance {
     files: Vec<FileSheet>,
     sheets: Vec<SheetInfo>,
     ids: HashMap<String, usize>,
+    /// I fogli come il file li dà, per tornare a un giornale di celle.
+    base_sheets: Vec<SheetInfo>,
     /// Le celle si modificano: il pacchetto e il modello si corrispondono.
     editable: bool,
     notices: Vec<GridNotice>,
+    /// Le formule su un riferimento circolare, salvate con `0`: la griglia le
+    /// mostra con `#CIRC!` finché formula e valore restano quelli del file.
+    circular: HashMap<Key, String>,
     journal: GridJournal,
     entries: BTreeMap<GridCellKey, Entry>,
     deps: Option<Deps>,
@@ -219,6 +225,8 @@ struct Instance {
     facade: Option<Facade>,
     /// La riscrittura della cartella, misurata alla prima domanda.
     rewrite: Rewrite,
+    /// La cronologia del documento ([`crate::cronologia`]).
+    line: Linea,
     /// La presa sul motore dei fogli: conta l'istanza fra quelle aperte.
     /// Data dopo che l'istanza è nata: un'apertura fallita non conta.
     presa: Option<Presa>,
@@ -233,6 +241,9 @@ pub struct XlsxGridProvider {
     next_instance: u64,
     instances: HashMap<String, Instance>,
     fogli: Arc<Fogli>,
+    /// Le cronologie pubblicate, per la sessione che si riapre dopo un
+    /// salvataggio.
+    archivio: Archivio,
 }
 
 impl Default for XlsxGridProvider {
@@ -256,13 +267,23 @@ impl XlsxGridProvider {
             next_instance: 0,
             instances: HashMap::new(),
             fogli,
+            archivio: Archivio::default(),
         }
     }
 
     fn instance(&mut self, instance: &str) -> Result<&mut Instance, PluginError> {
-        self.instances
-            .get_mut(instance)
-            .ok_or_else(|| PluginError::NotFound(format!("grid instance `{instance}`").into()))
+        instance_in(&mut self.instances, instance)
+    }
+
+    /// Pubblica la cronologia dell'istanza `id` se la sua revisione non è
+    /// più `before`.
+    fn publish(&mut self, id: &str, before: &Revision) {
+        if let Some(instance) = self.instances.get(id) {
+            if instance.revision != *before {
+                self.archivio
+                    .publish(instance.revision.clone(), instance.line.clone());
+            }
+        }
     }
 
     fn new_instance_id(&mut self) -> String {
@@ -308,8 +329,19 @@ impl GridBytesProvider for XlsxGridProvider {
             .motore()
             .map_err(|error| PluginError::Internal(error.to_string().into()))?;
         let read = crate::read(source).map_err(xlsx_error)?;
-        let mut instance = Instance::new(source.to_vec(), revision, read)?;
-        instance.set_journal(journal.clone())?;
+        let mut instance = Instance::new(source.to_vec(), revision.clone(), read)?;
+        let (archivio, instances) = (&self.archivio, &self.instances);
+        instance.set_journal_from(journal.clone(), &|id| {
+            instances
+                .values()
+                .find_map(|open| open.line.find(id))
+                .or_else(|| archivio.find(id))
+        })?;
+        // La cronologia di chi ha scritto questi byte, o questo giornale.
+        instance.line = self
+            .archivio
+            .line_for(&instance.revision, &revision, journal.is_empty())
+            .unwrap_or_else(|| Linea::new(journal.to_text()));
         let id = self.new_instance_id();
         let summary = instance.summary(&id)?;
         instance.presa = Some(self.fogli.prendi(motore));
@@ -334,7 +366,10 @@ impl GridBytesProvider for XlsxGridProvider {
         request: GridApplyRequest,
     ) -> Result<GridCommit, PluginError> {
         request.validate()?;
-        let commit = self.instance(instance)?.apply(&request)?;
+        let before = self.instance(instance)?.revision.clone();
+        let commit = self.instance(instance)?.apply(&request);
+        self.publish(instance, &before);
+        let commit = commit?;
         commit.validate()?;
         Ok(commit)
     }
@@ -358,12 +393,15 @@ impl GridBytesProvider for XlsxGridProvider {
         request: GridCommandRequest,
     ) -> Result<GridCommandOutcome, PluginError> {
         request.validate()?;
-        let instance = self.instance(instance)?;
+        let id = instance;
+        let instance = self.instance(id)?;
+        let before = instance.revision.clone();
         let outcome = instance.command(&request);
         // Anche un comando fallito può aver usato le cache.
         if let Some(presa) = &instance.presa {
             presa.motore().dopo_il_comando(&request.command.id);
         }
+        self.publish(id, &before);
         let outcome = outcome?;
         outcome.validate()?;
         Ok(outcome)
@@ -374,7 +412,14 @@ impl GridBytesProvider for XlsxGridProvider {
         instance: &str,
         expected: Revision,
     ) -> Result<Vec<u8>, PluginError> {
-        self.instance(instance)?.bytes_to_write(&expected)
+        let instance = instance_in(&mut self.instances, instance)?;
+        let bytes = instance.bytes_to_write(&expected)?;
+        // La sessione che si aprirà sui byte nuovi ritrova la cronologia.
+        if bytes != instance.bytes {
+            self.archivio
+                .saved(Revision::of_bytes(&bytes), instance.revision.clone());
+        }
+        Ok(bytes)
     }
 
     /// Chiude l'istanza. Se era l'ultima aperta sul motore dei fogli, la sua
@@ -400,6 +445,24 @@ impl GridBytesProvider for XlsxGridProvider {
         }
         Ok(())
     }
+}
+
+fn instance_in<'a>(
+    instances: &'a mut HashMap<String, Instance>,
+    instance: &str,
+) -> Result<&'a mut Instance, PluginError> {
+    instances
+        .get_mut(instance)
+        .ok_or_else(|| PluginError::NotFound(format!("grid instance `{instance}`").into()))
+}
+
+/// Gli indici dei fogli per id.
+fn ids_of(sheets: &[SheetInfo]) -> HashMap<String, usize> {
+    sheets
+        .iter()
+        .enumerate()
+        .map(|(index, sheet)| (sheet.id.clone(), index))
+        .collect()
 }
 
 impl Instance {
@@ -433,22 +496,29 @@ impl Instance {
             });
             files.push(FileSheet { part, shape: None });
         }
-        let ids = sheets
-            .iter()
-            .enumerate()
-            .map(|(index, sheet)| (sheet.id.clone(), index))
-            .collect();
-        let notices = notices(&workbook, &report);
+        let ids = ids_of(&sheets);
+        // Un errore nella ricerca lascia la cartella com'era: niente avviso.
+        let circular =
+            guarded(|| Ok(crate::circular::circular_formulas(&workbook))).unwrap_or_default();
+        let mut notices = notices(&workbook, &report);
+        if !circular.is_empty() {
+            notices.push(GridNotice {
+                code: "circular".into(),
+                count: u32::try_from(circular.len()).unwrap_or(u32::MAX),
+            });
+        }
         let revision = grid_bytes_revision(&source, "");
         Ok(Instance {
             bytes,
             source,
             workbook,
             files,
+            base_sheets: sheets.clone(),
             sheets,
             ids,
             editable,
             notices,
+            circular,
             journal: GridJournal::new(),
             entries: BTreeMap::new(),
             deps: None,
@@ -457,6 +527,7 @@ impl Instance {
             commanding: false,
             facade: None,
             rewrite: Rewrite::Unknown,
+            line: Linea::new(String::new()),
             presa: None,
         })
     }
@@ -496,8 +567,12 @@ impl Instance {
             Rewrite::Loses(why) => Some(why.clone()),
             _ => None,
         });
-        let undo = self.commanding && !self.journal.commands().is_empty();
-        let mut catalog = self.facade().catalog(at, edits.as_deref(), blocked, undo);
+        let cursor = self.line.cursor();
+        let undo = cursor.checked_sub(1).is_some_and(|to| self.can_travel(to));
+        let redo = cursor + 1 < self.line.len() && self.can_travel(cursor + 1);
+        let mut catalog = self
+            .facade()
+            .catalog(at, edits.as_deref(), blocked, undo, redo);
         // Senza id stabili dei fogli la facciata non si apre affatto.
         if let Some(why) = blocked {
             for command in &mut catalog {
@@ -569,12 +644,7 @@ impl Instance {
                 }
             })
             .collect();
-        self.ids = self
-            .sheets
-            .iter()
-            .enumerate()
-            .map(|(index, sheet)| (sheet.id.clone(), index))
-            .collect();
+        self.ids = ids_of(&self.sheets);
     }
 
     /// L'indice nel file del foglio `id`.
@@ -730,8 +800,17 @@ impl Instance {
     /// Il giornale nuovo, con le voci lette contro il file e le formule non
     /// aggiornate.
     fn set_journal(&mut self, journal: GridJournal) -> Result<(), PluginError> {
+        self.set_journal_from(journal, &|_| None)
+    }
+
+    /// [`Instance::set_journal`], con gli stati che [`RESTORE`] può chiamare.
+    fn set_journal_from(
+        &mut self,
+        journal: GridJournal,
+        find: &dyn Fn(&str) -> Option<Arc<Stato>>,
+    ) -> Result<(), PluginError> {
         if !journal.commands().is_empty() {
-            return self.replay(journal);
+            return self.replay(journal, find);
         }
         let mut entries = BTreeMap::new();
         for (key, before, after) in journal.entries() {
@@ -780,10 +859,28 @@ impl Instance {
         Ok(())
     }
 
-    /// Il giornale di comandi `journal`, rifatto sulla cartella del file.
-    fn replay(&mut self, journal: GridJournal) -> Result<(), PluginError> {
+    /// Il giornale di comandi `journal`, rifatto sulla cartella del file. Un
+    /// [`RESTORE`] in testa parte dallo stato che chiama.
+    fn replay(
+        &mut self,
+        journal: GridJournal,
+        find: &dyn Fn(&str) -> Option<Arc<Stato>>,
+    ) -> Result<(), PluginError> {
         let mut facade = Facade::new(&self.workbook);
-        facade.replay(journal.commands())?;
+        let mut rest = journal.commands();
+        if let Some(first) = rest.first().filter(|command| command.id == RESTORE) {
+            let stato = cronologia::restore_target(first)
+                .and_then(|id| find(&id))
+                .ok_or_else(cronologia::lost_state)?;
+            facade.adopt(&stato.snapshot);
+            rest = &rest[1..];
+        }
+        if rest.iter().any(|command| command.id == RESTORE) {
+            return Err(PluginError::Conflict(
+                format!("grid journal command `{RESTORE}` applies only first").into(),
+            ));
+        }
+        facade.replay(rest)?;
         self.facade = Some(facade);
         self.commanding = true;
         self.entries.clear();
@@ -1076,10 +1173,13 @@ impl Instance {
                     .unwrap_or_default(),
                 new_value(&entry.value),
             ),
-            None => (
-                self.disk_input(sheet, at),
-                model.value_ref(at).cloned().unwrap_or(GcValue::Empty),
-            ),
+            None => {
+                let value = model.value_ref(at).cloned().unwrap_or(GcValue::Empty);
+                (
+                    self.disk_input(sheet, at),
+                    circular_value(&self.circular, model, sheet, at).unwrap_or(value),
+                )
+            }
         };
         let look = display::look(workbook, sheet, model, at, cache);
         let formatted = format_value(
@@ -1146,10 +1246,54 @@ impl Instance {
         }
     }
 
+    /// Le patch della griglia: un passo della cronologia, con le celle che
+    /// hanno cambiato input.
     fn apply(&mut self, request: &GridApplyRequest) -> Result<GridCommit, PluginError> {
         if request.revision != self.revision {
             return Err(stale_revision());
         }
+        let mut seen = BTreeSet::new();
+        let before: Vec<(GridCellKey, String)> = request
+            .patches
+            .iter()
+            .filter(|patch| seen.insert(&patch.cell))
+            .map(|patch| (patch.cell.clone(), self.shown_input(&patch.cell)))
+            .collect();
+        let commit = self.write(request)?;
+        let changes: Vec<Cambio> = before
+            .into_iter()
+            .filter_map(|(cell, before)| {
+                let after = self.shown_input(&cell);
+                (after != before).then_some(Cambio {
+                    cell,
+                    before,
+                    after,
+                })
+            })
+            .collect();
+        if !changes.is_empty() {
+            self.record(Passo::Celle(changes.into()), None);
+        }
+        Ok(commit)
+    }
+
+    /// L'input che la griglia mostra nella cella `key`.
+    fn shown_input(&self, key: &GridCellKey) -> String {
+        if !self.commanding {
+            if let Some((_, after)) = self.journal.get(key) {
+                return after.to_owned();
+            }
+        }
+        match self.place(key) {
+            Some((sheet, cell)) if sheet < self.shown().sheets.len() => {
+                self.disk_input(sheet, cell)
+            }
+            _ => String::new(),
+        }
+    }
+
+    /// Scrive le patch, senza toccare la cronologia.
+    fn write(&mut self, request: &GridApplyRequest) -> Result<GridCommit, PluginError> {
         if self.commanding || self.writes_formula(request) {
             return self.apply_commands(request);
         }
@@ -1297,21 +1441,27 @@ impl Instance {
         let command = &request.command;
         let before = self.journal.to_text();
         let was = self.commanding;
-        let (ran, selection) = self.transaction(|this| {
-            let ran = match command.id.as_str() {
-                UNDO => this.undo()?,
-                REDO => this.redo()?,
+        let (ran, selection, prior) = self.transaction(|this| {
+            let (ran, prior) = match command.id.as_str() {
+                UNDO => (this.undo()?, None),
+                REDO => (this.redo()?, None),
                 _ => {
                     this.enter()?;
-                    this.give(command)?
+                    let prior = this.facade().snapshot();
+                    (this.give(command)?, Some(prior))
                 }
             };
             // Un comando che non cambia la cartella non porta la sessione
             // nella modalità a comandi.
             let keep = was || ran.changed;
-            Ok(((ran, this.selection()), keep))
+            Ok(((ran, this.selection(), prior), keep))
         })?;
         let after = self.journal.to_text();
+        if before != after {
+            if let Some(prior) = prior {
+                self.record(Passo::Comandi, Some(prior));
+            }
+        }
         let (sheets, hidden) = self.sheet_list();
         let commands = self.catalog(&selection);
         Ok(GridCommandOutcome {
@@ -1429,24 +1579,77 @@ impl Instance {
         Ok(ran)
     }
 
-    /// Annulla l'ultimo comando del giornale.
-    fn undo(&mut self) -> Result<Ran, PluginError> {
-        if !self.commanding || self.journal.commands().is_empty() {
-            return Err(bad("nothing to undo"));
+    /// Un passo nuovo nella cronologia, al giornale di adesso. `prior` è lo
+    /// stato di prima, in modalità a comandi.
+    fn record(&mut self, passo: Passo, prior: Option<Snapshot>) {
+        if let Some(prior) = prior {
+            let current = self.line.current_mut();
+            if current.stato.is_none() {
+                current.stato = Some(Stato::new(prior));
+            }
         }
-        let Instance {
-            facade,
-            workbook,
-            journal,
-            ..
-        } = self;
-        facade
-            .as_mut()
-            .expect("a command journal has its facade")
-            .undo(workbook, journal.commands())?;
-        journal.pop_command();
-        self.revision = grid_bytes_revision(&self.source, &self.journal.to_text());
-        self.count_sheets();
+        let stato = self.state_now();
+        self.line
+            .push(Punto::new(self.journal.to_text(), stato, Some(passo)));
+    }
+
+    /// Lo stato della cartella mostrata, in modalità a comandi.
+    fn state_now(&self) -> Option<Arc<Stato>> {
+        match (&self.facade, self.commanding) {
+            (Some(facade), true) => Some(Stato::new(facade.snapshot())),
+            _ => None,
+        }
+    }
+
+    /// Se la sessione sa arrivare al punto `to`, accanto a quello di adesso.
+    fn can_travel(&self, to: usize) -> bool {
+        let target = self.line.point(to);
+        target.journal.is_some()
+            || matches!(self.line.crossing(to), Some(Passo::Celle(_)))
+            || target.stato.is_some()
+                && self.blocked().is_none()
+                && !matches!(self.rewrite, Rewrite::Loses(_))
+    }
+
+    /// Annulla l'ultimo passo della cronologia.
+    fn undo(&mut self) -> Result<Ran, PluginError> {
+        let to = self
+            .line
+            .cursor()
+            .checked_sub(1)
+            .filter(|&to| self.can_travel(to))
+            .ok_or_else(|| bad("nothing to undo"))?;
+        self.travel(to)
+    }
+
+    /// Ripete l'ultimo passo annullato.
+    fn redo(&mut self) -> Result<Ran, PluginError> {
+        let to = self.line.cursor() + 1;
+        if to >= self.line.len() || !self.can_travel(to) {
+            return Err(bad("nothing to redo"));
+        }
+        self.travel(to)
+    }
+
+    /// Porta il documento al punto `to` della cronologia, accanto a quello di
+    /// adesso: con il giornale del punto, se lo si sa; se no riscrivendo le
+    /// celle del passo, o con [`RESTORE`] verso lo stato del punto.
+    fn travel(&mut self, to: usize) -> Result<Ran, PluginError> {
+        let back = to < self.line.cursor();
+        let target = self.line.point(to).clone();
+        let passo = self.line.crossing(to).cloned();
+        match (&target.journal, passo, &target.stato) {
+            (Some(journal), _, stato) => self.go(journal, stato.as_deref())?,
+            (None, Some(Passo::Celle(changes)), _) => self.rewrite_cells(&changes, back)?,
+            (None, _, Some(stato)) => self.restore_to(stato)?,
+            (None, _, None) => return Err(bad("the state of that step is no longer in memory")),
+        }
+        let stato = if target.stato.is_none() {
+            self.state_now()
+        } else {
+            None
+        };
+        self.line.moved(to, self.journal.to_text(), stato);
         Ok(Ran {
             changed: true,
             result: None,
@@ -1454,20 +1657,85 @@ impl Instance {
         })
     }
 
-    /// Ripete l'ultimo comando annullato.
-    fn redo(&mut self) -> Result<Ran, PluginError> {
-        if !self.commanding {
-            return Err(bad("nothing to redo"));
+    /// Il giornale `journal` sui byte della sessione; `stato` è la cartella
+    /// che dà, se è di comandi.
+    fn go(&mut self, journal: &str, stato: Option<&Stato>) -> Result<(), PluginError> {
+        let journal = GridJournal::parse(journal)?;
+        if journal.commands().is_empty() {
+            self.commanding = false;
+            self.facade = None;
+            self.sheets = self.base_sheets.clone();
+            self.ids = ids_of(&self.sheets);
+            return self.set_journal(journal);
         }
-        let command = self.facade().redo()?;
-        self.journal.push_command(command)?;
-        self.revision = grid_bytes_revision(&self.source, &self.journal.to_text());
-        self.count_sheets();
-        Ok(Ran {
-            changed: true,
-            result: None,
-            dialog: None,
+        let Some(stato) = stato else {
+            return self.replay(journal, &|_| None);
+        };
+        self.facade().adopt(&stato.snapshot);
+        self.enter_journal(journal);
+        Ok(())
+    }
+
+    /// Le celle del passo `changes` riscritte all'indietro (`back`) o in
+    /// avanti.
+    fn rewrite_cells(&mut self, changes: &[Cambio], back: bool) -> Result<(), PluginError> {
+        let patches = changes
+            .iter()
+            .map(|change| {
+                let (from, to) = if back {
+                    (&change.after, &change.before)
+                } else {
+                    (&change.before, &change.after)
+                };
+                GridCellPatch {
+                    cell: change.cell.clone(),
+                    before: Some(from.clone()),
+                    after: to.clone(),
+                }
+            })
+            .collect();
+        // Una cella scritta oltre la fine dei byte salvati resta della
+        // sessione.
+        for change in changes {
+            if let Some((sheet, cell)) = self.place(&change.cell) {
+                let info = &mut self.sheets[sheet];
+                info.rows = info.rows.max((cell.row + 1).min(MAX_GRID_SESSION_ROWS));
+                info.columns = info
+                    .columns
+                    .max((cell.col + 1).min(MAX_GRID_SESSION_COLUMNS));
+            }
+        }
+        self.write(&GridApplyRequest {
+            revision: self.revision.clone(),
+            patches,
         })
+        .map(|_| ())
+    }
+
+    /// Il giornale che porta la cartella allo stato `stato`: [`RESTORE`].
+    fn restore_to(&mut self, stato: &Arc<Stato>) -> Result<(), PluginError> {
+        if let Some(why) = self.blocked() {
+            return Err(bad(why));
+        }
+        if let Rewrite::Loses(why) = self.measured() {
+            return Err(loses(why.clone()));
+        }
+        let mut journal = GridJournal::new();
+        journal.push_command(stato.command())?;
+        self.facade().adopt(&stato.snapshot);
+        self.enter_journal(journal);
+        Ok(())
+    }
+
+    /// La modalità a comandi con il giornale `journal`, che dà la cartella
+    /// della facciata.
+    fn enter_journal(&mut self, journal: GridJournal) {
+        self.commanding = true;
+        self.entries.clear();
+        self.stale = Stale::None;
+        self.revision = grid_bytes_revision(&self.source, &journal.to_text());
+        self.journal = journal;
+        self.count_sheets();
     }
 
     /// Se una patch scrive una formula nuova: entra soltanto come comando, e
@@ -1776,6 +2044,25 @@ fn notices(workbook: &Workbook, report: &gridcraft_xlsx::ReadReport) -> Vec<Grid
         });
     }
     out
+}
+
+/// `#CIRC!` per una formula che il file ha salvato con `0` su un giro di
+/// riferimenti, se la cella ha ancora quella formula e quel valore: una
+/// formula riscritta, o ricalcolata dal motore, mostra il suo.
+fn circular_value(
+    circular: &HashMap<Key, String>,
+    model: &Sheet,
+    sheet: usize,
+    at: CellRef,
+) -> Option<GcValue> {
+    let text = circular.get(&(sheet, at))?;
+    let cell = model.cell(at)?;
+    let same = cell
+        .formula
+        .as_ref()
+        .is_some_and(|formula| &formula.text == text)
+        && matches!(cell.value, GcValue::Number(n) if n == 0.0);
+    same.then_some(GcValue::Error(gridcraft_core::CellError::Circ))
 }
 
 /// Le dipendenze delle formule della cartella.

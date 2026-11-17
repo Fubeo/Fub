@@ -22,8 +22,8 @@
 //   che il nucleo non legge.
 
 import { loadCanvasWasm } from "virtual:fub-canvas-wasm";
-import type { CanvasDocument } from "../model";
-import type { CanvasPatch } from "../operation";
+import type { CanvasDocument, CanvasNode } from "../model";
+import type { CanvasPatch, LayerRef } from "../operation";
 
 /** I codici d'errore del modulo, più `trap` (l'istanza è morta) e `load` (il modulo non si carica). */
 export type CanvasCoreErrorCode =
@@ -71,11 +71,85 @@ export interface CanvasSourceEdit {
   readonly text: string;
 }
 
+/** I tratti da `start` a `start + remove` di un livello sono diventati `insert`. */
+export interface CanvasStrokesChange {
+  readonly start: number;
+  readonly remove: number;
+  readonly insert: readonly unknown[];
+}
+
+/**
+ * Che cosa ha cambiato un commit di soli tratti (`canvas_commit`,
+ * `docs/reference/canvas-operations.md` § «WebAssembly»): le schede
+ * riscritte con la loro posizione in `nodes` (le schede non cambiano posto
+ * né numero), intere (`node`) o solo nella lista dei tratti del loro
+ * livello (`strokes`); le chiavi della radice riscritte intere (`root`), e
+ * il cambio della sola lista dei tratti della radice (`board`). Messo sul
+ * modello di prima dà quello di dopo.
+ */
+export interface CanvasModelChange {
+  readonly nodes: readonly (
+    | { readonly at: number; readonly node: CanvasNode }
+    | { readonly at: number; readonly id: string; readonly strokes: CanvasStrokesChange }
+  )[];
+  readonly root: Readonly<Record<string, unknown>>;
+  readonly board?: CanvasStrokesChange;
+}
+
 export interface CanvasCommitted {
   /** `prima.slice(0, start) + text + prima.slice(end)` è il sorgente nuovo. */
   readonly edit: CanvasSourceEdit;
   /** Le toppe dell'annulla, da dare a un altro `commit`. */
   readonly inverse: CanvasPatch[];
+  /** Solo per un commit di soli tratti: il modello nuovo senza rileggerlo con `model()`. */
+  readonly changed?: CanvasModelChange;
+}
+
+const INK_FIELD = "fub:ink";
+
+/** Il livello `layer` (il valore di `fub:ink`) con la lista dei tratti cambiata; `null` se non si può. */
+function splicedLayer(layer: unknown, change: CanvasStrokesChange): Record<string, unknown> | null {
+  if (typeof layer !== "object" || layer === null || Array.isArray(layer)) return null;
+  const strokes = (layer as Record<string, unknown>).strokes;
+  if (!Array.isArray(strokes) || change.start + change.remove > strokes.length) return null;
+  const next = strokes.slice(0, change.start).concat(change.insert, strokes.slice(change.start + change.remove));
+  // Lo spread tiene le chiavi nel loro ordine, `strokes` compresa.
+  return { ...(layer as Record<string, unknown>), strokes: next };
+}
+
+/**
+ * Il modello di dopo un commit di soli tratti: un oggetto nuovo, con le
+ * schede di `change` al loro posto e le chiavi della radice riscritte dove
+ * stavano; le altre schede, gli altri tratti e gli archi sono quelli di
+ * `doc`. `null` se `doc` non è il modello su cui il nucleo ha fatto il
+ * commit (un'altra scheda in quella posizione, un livello o una chiave
+ * della radice che manca): allora il modello si rilegge intero.
+ */
+export function changedModel(doc: CanvasDocument, change: CanvasModelChange): CanvasDocument | null {
+  const nodes = doc.nodes.slice();
+  for (const entry of change.nodes) {
+    const old = nodes[entry.at];
+    if ("node" in entry) {
+      if (old?.id !== entry.node.id) return null;
+      nodes[entry.at] = entry.node;
+      continue;
+    }
+    if (old?.id !== entry.id) return null;
+    const layer = splicedLayer(old[INK_FIELD], entry.strokes);
+    if (!layer) return null;
+    nodes[entry.at] = { ...old, [INK_FIELD]: layer };
+  }
+  const next: CanvasDocument = { ...doc, nodes };
+  for (const [key, value] of Object.entries(change.root)) {
+    if (!Object.prototype.hasOwnProperty.call(doc, key) || key === "nodes" || key === "edges") return null;
+    next[key] = value;
+  }
+  if (change.board) {
+    const layer = splicedLayer(doc[INK_FIELD], change.board);
+    if (!layer) return null;
+    next[INK_FIELD] = layer;
+  }
+  return next;
 }
 
 /** Un'operazione d'intento (`docs/reference/canvas-operations.md`), come JSON. */
@@ -87,6 +161,108 @@ export interface CanvasIntentOp {
 export interface CanvasCompiled {
   readonly patches: CanvasPatch[];
   readonly created: string[];
+}
+
+/** Un problema del controllo (`check`): la forma di `docs/reference/canvas-code.md`, «Il controllo». */
+export interface CanvasCheckProblem {
+  readonly code: string;
+  /** L'operazione, da zero; `null` per la lista intera (anche un testo vuoto o che non è JSON). */
+  readonly index: number | null;
+  /** Il puntatore JSON del campo (`/2/ids/0`); `""` per la lista intera. */
+  readonly path: string;
+  /** La frase fissa in inglese del nucleo, per chi indaga. */
+  readonly message: string;
+  /** Il nome o gli id più vicini, separati da «, ». */
+  readonly suggestion?: string;
+  /** L'operazione intera corretta, quando la correzione è una sola. */
+  readonly fix?: unknown;
+}
+
+/** Un avviso del controllo: le schede coinvolte, o l'operazione di una nota. */
+export interface CanvasCheckWarning {
+  readonly code: string;
+  readonly ids: readonly string[];
+  readonly estimated_height?: number;
+  readonly index?: number;
+  readonly detail?: string;
+}
+
+/** Una scheda nata o tolta, col testo accorciato se ne ha uno. */
+export interface CanvasSummaryCard {
+  readonly id: string;
+  readonly text?: string;
+}
+
+/** Un punto e una misura della lavagna, come li dice il riassunto. */
+type SummaryPlace = { readonly x: number; readonly y: number };
+type SummarySize = { readonly width: number; readonly height: number };
+
+/** Una scheda rimasta che cambia: posto, misura, altri campi. */
+export interface CanvasSummaryChange extends CanvasSummaryCard {
+  readonly moved?: { readonly from: SummaryPlace; readonly to: SummaryPlace };
+  readonly resized?: { readonly from: SummarySize; readonly to: SummarySize };
+  readonly fields?: readonly string[];
+}
+
+/** Un arco nato, tolto o cambiato. */
+export interface CanvasSummaryEdge {
+  readonly id: string;
+  readonly fromNode: string;
+  readonly toNode: string;
+  readonly fields?: readonly string[];
+}
+
+/** Un tratto nato, tolto o cambiato, col suo livello. */
+export interface CanvasSummaryStroke {
+  readonly id: string;
+  readonly layer: LayerRef;
+}
+
+/** Il riassunto di ciò che una lista cambierebbe (`summary.rs` del nucleo). */
+export interface CanvasSummary {
+  readonly cards_added: readonly CanvasSummaryCard[];
+  readonly cards_removed: readonly CanvasSummaryCard[];
+  readonly cards_changed: readonly CanvasSummaryChange[];
+  readonly edges_added: readonly CanvasSummaryEdge[];
+  readonly edges_removed: readonly CanvasSummaryEdge[];
+  readonly edges_changed: readonly CanvasSummaryEdge[];
+  readonly order_changed: boolean;
+  readonly strokes_added?: readonly CanvasSummaryStroke[];
+  readonly strokes_removed?: readonly CanvasSummaryStroke[];
+  readonly strokes_changed?: readonly CanvasSummaryStroke[];
+}
+
+/** Il rapporto del controllo: con `ok` falso ci sono solo i problemi. */
+export interface CanvasCheckReport {
+  readonly ok: boolean;
+  readonly problems: readonly CanvasCheckProblem[];
+  readonly warnings: readonly CanvasCheckWarning[];
+  readonly warnings_omitted: number;
+  readonly summary: CanvasSummary | null;
+  readonly outline_after: string | null;
+}
+
+/**
+ * Perché il nucleo non disegna un tratto di un livello valido: la prima
+ * ragione nell'ordine dei vettori (`docs/reference/canvas-ink.md`).
+ */
+export type CanvasInkSkipReason = "tool" | "anchor" | "color" | "brush" | "ink";
+
+/** Un tratto di un livello valido, come lo legge il nucleo. */
+export type CanvasInkStroke =
+  | { readonly id: string; readonly drawn: true }
+  | { readonly id: string; readonly drawn: false; readonly reason: CanvasInkSkipReason };
+
+/**
+ * Un livello d'inchiostro come lo legge il nucleo (`read_layers`), nella
+ * forma dei vettori di `canvas-ink/`: dove sta, se è valido o estraneo e,
+ * se è valido, i suoi tratti nell'ordine del file.
+ */
+export interface CanvasInkLayer {
+  readonly layer: LayerRef;
+  readonly state: "ok" | "foreign";
+  /** Vuoto se il livello è estraneo. */
+  readonly strokes: readonly CanvasInkStroke[];
 }
 
 /** Una lavagna aperta nel nucleo. */
@@ -101,8 +277,28 @@ export interface CanvasCore {
   preview(patches: readonly CanvasPatch[]): string;
   /** Compila le operazioni d'intento sul modello, senza cambiarlo. */
   compile(ops: readonly CanvasIntentOp[], seed?: number | bigint | string): CanvasCompiled;
+  /**
+   * La lavagna come codice: la lista di operazioni che la ricrea, nel testo
+   * che scrive `canvas.read` in forma `code` (JSON con i rientri). Con `ids`,
+   * solo quelle schede e gli archi fra loro, senza l'inchiostro libero.
+   */
+  describe(ids?: readonly string[]): string;
+  /**
+   * Controlla una lista sul modello, senza cambiarlo: il rapporto del nucleo
+   * (problemi, avvisi, riassunto). `ops` è un valore qualunque: una lista
+   * che non è un array è un problema del rapporto, non un errore. Lo stesso
+   * `ops` e lo stesso seme di `compile` danno gli stessi id.
+   */
+  check(ops: unknown, seed?: number | bigint | string): CanvasCheckReport;
   /** L'indice della scheda il cui oggetto contiene il byte `byte` (UTF-8, BOM compreso), o `null`. */
   nodeAt(byte: number): number | null;
+  /**
+   * I livelli d'inchiostro del testo di adesso: quelli delle schede
+   * nell'ordine di `nodes`, poi quello della radice. Il nucleo li legge una
+   * volta per testo (dopo l'apertura, `reset` o `commit`); fino al prossimo
+   * cambio la risposta è lo stesso oggetto, congelato.
+   */
+  inkLayers(): readonly CanvasInkLayer[];
   /** Chiude la lavagna. Si può chiamare più volte; dopo, ogni altra chiamata è un errore `handle`. */
   close(): void;
   readonly closed: boolean;
@@ -118,8 +314,11 @@ interface CoreExports {
   canvas_commit(handle: number, ptr: number, len: number): number;
   canvas_preview(handle: number, ptr: number, len: number): number;
   canvas_compile(handle: number, ptr: number, len: number): number;
+  canvas_describe(handle: number, ptr: number, len: number): number;
+  canvas_check(handle: number, ptr: number, len: number): number;
   canvas_model(handle: number): number;
   canvas_node_at(handle: number, byte: number): number;
+  canvas_ink_layers(handle: number): number;
   canvas_close(handle: number): number;
   result_ptr(): number;
   result_len(): number;
@@ -127,7 +326,8 @@ interface CoreExports {
 
 const FUNCTIONS = [
   "fub_alloc", "fub_free", "canvas_open", "canvas_reset", "canvas_commit", "canvas_preview",
-  "canvas_compile", "canvas_model", "canvas_node_at", "canvas_close", "result_ptr", "result_len",
+  "canvas_compile", "canvas_describe", "canvas_check", "canvas_model", "canvas_node_at", "canvas_ink_layers", "canvas_close", "result_ptr",
+  "result_len",
 ] as const;
 
 export interface CanvasCoreRuntimeOptions {
@@ -354,6 +554,25 @@ function settled(answer: Answer): Uint8Array {
   throw new CanvasCoreError("internal", `the canvas core answered with status ${answer.status}`);
 }
 
+/** `value` congelato fino in fondo: una risposta condivisa che nessuno cambia. */
+function deepFreeze<T>(value: T): T {
+  if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const item of Object.values(value)) deepFreeze(item);
+  }
+  return value;
+}
+
+/** La richiesta col seme degli id nuovi, se c'è: un numero sicuro, o le sue cifre in una stringa. */
+function withSeed<T extends object>(request: T, seed: number | bigint | string | undefined): T & { seed?: number | string } {
+  if (seed === undefined) return request;
+  if (typeof seed === "number" && !Number.isSafeInteger(seed)) {
+    // Un numero oltre 2⁵³ non è più quello scritto: il seme esatto va come stringa.
+    throw new CanvasCoreError("request", `the seed ${seed} is not a safe integer: pass it as a bigint or a string`);
+  }
+  return { ...request, seed: typeof seed === "bigint" ? seed.toString() : seed };
+}
+
 type Invoke = (target: Instance, input: Uint8Array | null, run: (ptr: number, len: number) => number) => Answer;
 
 class Core implements CanvasCore {
@@ -363,6 +582,8 @@ class Core implements CanvasCore {
   #closed = false;
   /** Il modello della risposta di apertura, consegnato al primo `model()` se niente l'ha cambiato. */
   #fresh: CanvasDocument | null;
+  /** I livelli d'inchiostro del testo di adesso; `null` finché nessuno li chiede dopo un cambio. */
+  #ink: readonly CanvasInkLayer[] | null = null;
 
   constructor(target: Instance, handle: number, canvas: CanvasDocument, invoke: Invoke) {
     this.#target = target;
@@ -389,6 +610,7 @@ class Core implements CanvasCore {
     this.#live();
     const source = encodeText(text);
     this.#fresh = null;
+    this.#ink = null;
     return (this.#json(source, (ptr, len) => this.#target.exports.canvas_reset(this.#handle, ptr, len)) as { canvas: CanvasDocument }).canvas;
   }
 
@@ -396,6 +618,7 @@ class Core implements CanvasCore {
     this.#live();
     const request = encodeJson(patches);
     this.#fresh = null;
+    this.#ink = null;
     return this.#json(request, (ptr, len) => this.#target.exports.canvas_commit(this.#handle, ptr, len)) as CanvasCommitted;
   }
 
@@ -408,15 +631,21 @@ class Core implements CanvasCore {
 
   compile(ops: readonly CanvasIntentOp[], seed?: number | bigint | string): CanvasCompiled {
     this.#live();
-    const request: { ops: readonly CanvasIntentOp[]; seed?: number | string } = { ops };
-    if (seed !== undefined) {
-      if (typeof seed === "number" && !Number.isSafeInteger(seed)) {
-        // Un numero oltre 2⁵³ non è più quello scritto: il seme esatto va come stringa.
-        throw new CanvasCoreError("request", `the seed ${seed} is not a safe integer: pass it as a bigint or a string`);
-      }
-      request.seed = typeof seed === "bigint" ? seed.toString() : seed;
-    }
+    const request = withSeed({ ops }, seed);
     return this.#json(encodeJson(request), (ptr, len) => this.#target.exports.canvas_compile(this.#handle, ptr, len)) as CanvasCompiled;
+  }
+
+  describe(ids?: readonly string[]): string {
+    this.#live();
+    const request = ids === undefined ? { form: "code" } : { form: "code", ids };
+    const answer = this.#json(encodeJson(request), (ptr, len) => this.#target.exports.canvas_describe(this.#handle, ptr, len)) as { text: string };
+    return answer.text;
+  }
+
+  check(ops: unknown, seed?: number | bigint | string): CanvasCheckReport {
+    this.#live();
+    const request = withSeed({ ops }, seed);
+    return this.#json(encodeJson(request), (ptr, len) => this.#target.exports.canvas_check(this.#handle, ptr, len)) as CanvasCheckReport;
   }
 
   nodeAt(byte: number): number | null {
@@ -431,10 +660,20 @@ class Core implements CanvasCore {
     return answer.status;
   }
 
+  inkLayers(): readonly CanvasInkLayer[] {
+    this.#live();
+    if (this.#ink) return this.#ink;
+    const answer = this.#json(null, () => this.#target.exports.canvas_ink_layers(this.#handle)) as { layers: CanvasInkLayer[] };
+    const layers = deepFreeze(answer.layers);
+    this.#ink = layers;
+    return layers;
+  }
+
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
     this.#fresh = null;
+    this.#ink = null;
     // Un'istanza morta ha già perso le sue lavagne.
     if (this.#target.dead) return;
     settled(this.#invoke(this.#target, null, () => this.#target.exports.canvas_close(this.#handle)));

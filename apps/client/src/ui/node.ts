@@ -19,6 +19,9 @@
 //   posizione, e una lista che si riordina si porta dietro focus e selezione
 //   sbagliati;
 // - un nodo che cambia **specie** si ricostruisce (non c'è niente da salvare);
+// - un sottoalbero **uguale** a quello disegnato non si tocca (`unchanged`):
+//   in WebKit anche un elemento rifatto identico invalida e ridisegna, e le
+//   view si ridisegnano a ogni salvataggio;
 // - un campo che ha il **focus** non si sovrascrive col valore del provider: chi
 //   sta scrivendo ha ragione, e il provider vedrà il valore quando l'azione
 //   scatta.
@@ -58,13 +61,16 @@ import type { ActionRef, FieldValue, UiKind, UiNode, UiOption, UiValue } from ".
 import { customRenderer, NO_RENDER_CONTEXT, type CustomRenderContext } from "./custom";
 import { setSanitizedHtml } from "./sanitize";
 import { activatable, identifier, notActivatable } from "./a11y";
-import { t } from "../i18n/strings";
+import { resolvedLanguage, t } from "../i18n/strings";
 import { errorText } from "../host/errors";
 import { notify } from "./notify";
 import { setTooltip } from "./tooltip";
 import { tabIndexForKey } from "./tab-keys";
-import { iconEl } from "./icons";
+import { iconEl, iconsRevision } from "./icons";
 import { offerNote } from "./drag-types";
+import { drawPageMark } from "./page-mark";
+import { FORMAT_ICON, formatKindOf } from "./format-kind";
+import { pageIcon, pageIconsRevision } from "../state/page-icons";
 import type { Lifetime, Teardown } from "./lifetime";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
@@ -91,10 +97,12 @@ declare const PORT: unique symbol;
 export type Port = ActionHandler & { readonly [PORT]: true };
 
 /// Ciò che la shell ricorda di un elemento che ha disegnato: il nodo da cui
-/// viene (per il confronto al giro dopo) e, se è un campo, come si legge il suo
+/// viene (per il confronto al giro dopo), con quali ingressi della shell è
+/// stato disegnato (`drawInputs`) e, se è un campo, come si legge il suo
 /// valore adesso.
 interface Rendered {
   node: UiNode;
+  inputs?: string;
   read?: () => UiValue;
 }
 
@@ -113,6 +121,19 @@ interface Mount {
 }
 
 const mounted = new WeakMap<HTMLElement, Mount>();
+
+/// Ciò che il disegno di un nodo legge **fuori** dal nodo: le icone delle
+/// pagine, il set delle figure (registrazioni e tema) e la lingua delle poche
+/// parole della shell. Un sottoalbero uguale al nodo di prima si salta solo se
+/// anche questi sono quelli con cui era stato disegnato: altrimenti si rifà,
+/// come prima del salto, e l'icona nuova di una pagina arriva al primo giro.
+function drawInputs(): string {
+  return `${pageIconsRevision()}|${iconsRevision()}|${resolvedLanguage()}`;
+}
+
+/// Gli ingressi del giro in corso: li legge una volta `mountTree` o
+/// `patchTree`, e valgono per tutto il loro giro, che è sincrono.
+let passInputs = "";
 /// Il montaggio di una porta: il disegno riceve soltanto la porta, e da lì
 /// risale al contesto senza che ogni funzione lo porti con sé.
 const mountOfPort = new WeakMap<Port, Mount>();
@@ -232,6 +253,7 @@ export function mountTree(
 ): void {
   const mount = route(container, onAction);
   mount.context = context;
+  passInputs = drawInputs();
   const previous = mount.root;
   if (previous && previous.parentElement === container) {
     mount.root = reconcile(previous, node, mount.port);
@@ -253,6 +275,7 @@ export function patchTree(container: HTMLElement, key: string, node: UiNode): bo
   if (!mount?.root) return false;
   const target = findByKey(mount.root, key);
   if (!target) return false;
+  passInputs = drawInputs();
   // La porta del contenitore, non un handler ripescato dal sottoalbero: un
   // patch arriva senza il contesto del render, e ciò che risale dall'elemento è
   // **il primo** montaggio, non l'ultimo. Riconciliare con quello riscriverebbe
@@ -310,7 +333,17 @@ function findByKey(root: HTMLElement, key: string): HTMLElement | null {
 /// Aggiorna `el` perché mostri `next`, o lo sostituisce se non è possibile.
 /// Restituisce l'elemento che ora rappresenta il nodo (lo stesso, o il nuovo).
 function reconcile(el: HTMLElement, next: UiNode, onAction: Port): HTMLElement {
-  const prev = rendered.get(el)?.node;
+  const drawn = rendered.get(el);
+  const prev = drawn?.node;
+  // Un sottoalbero uguale a quello disegnato non si tocca: né foglie rifatte
+  // né attributi riscritti. In WebKit ogni elemento sostituito invalida stile
+  // e layout, e una view lunga (i collegamenti in uscita di una nota da 5.000
+  // righe sono 33.000 elementi) ridisegnata uguale a ogni salvataggio teneva
+  // fermo il thread della finestra per 130 ms.
+  if (drawn && prev && drawn.inputs === passInputs && unchanged(prev, next)) {
+    rendered.set(el, { ...drawn, node: next });
+    return el;
+  }
   if (!prev || prev.node !== next.node) {
     const newItem = renderUiNode(next, onAction);
     unmount(el);
@@ -318,7 +351,7 @@ function reconcile(el: HTMLElement, next: UiNode, onAction: Port): HTMLElement {
     return newItem;
   }
   if (update(el, prev, next, onAction)) {
-    rendered.set(el, { ...rendered.get(el)!, node: next });
+    rendered.set(el, { ...rendered.get(el)!, node: next, inputs: passInputs });
     key(el, next);
     dragSource(el, next);
     return el;
@@ -329,13 +362,52 @@ function reconcile(el: HTMLElement, next: UiNode, onAction: Port): HTMLElement {
   return newItem;
 }
 
+/// Le specie che il confronto di `unchanged` non dà mai per uguali: un campo ha
+/// uno stato dell'utente che `applyField` rimette in riga col nodo anche quando
+/// il nodo non cambia (il valore del provider torna in un campo che ha perso
+/// il fuoco), e un nodo custom ha il suo confronto, che guarda anche dove è
+/// disegnato.
+const NEVER_UNCHANGED: ReadonlySet<string> = new Set([
+  "text_input",
+  "text_area",
+  "date_picker",
+  "number",
+  "slider",
+  "checkbox",
+  "select",
+  "radio",
+  "custom",
+]);
+
+/// Vero se `next` è lo stesso dato di `prev`, campo per campo, e nel
+/// sottoalbero non c'è una specie di `NEVER_UNCHANGED`. I nodi arrivano da un
+/// JSON: oggetti, liste e valori semplici, senza `undefined` né cicli. Il
+/// confronto costa una visita dell'albero, molto meno di un elemento rifatto.
+function unchanged(prev: unknown, next: unknown): boolean {
+  if (prev === null || next === null || typeof prev !== "object" || typeof next !== "object") return prev === next;
+  if (Array.isArray(prev) || Array.isArray(next)) {
+    if (!Array.isArray(prev) || !Array.isArray(next) || prev.length !== next.length) return false;
+    for (let i = 0; i < next.length; i++) if (!unchanged(prev[i], next[i])) return false;
+    return true;
+  }
+  const before = prev as Record<string, unknown>;
+  const after = next as Record<string, unknown>;
+  if (typeof after.node === "string" && NEVER_UNCHANGED.has(after.node)) return false;
+  const keys = Object.keys(after);
+  if (keys.length !== Object.keys(before).length) return false;
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(before, key) || !unchanged(before[key], after[key])) return false;
+  }
+  return true;
+}
+
 /// Prova ad aggiornare `el` in posto. `false` = ricostruiscilo.
 ///
 /// La divisione non è per comodità: **i campi si aggiornano** perché hanno uno
 /// stato dell'utente da non buttare via (focus, cursore, ciò che si sta
 /// scrivendo), i **contenitori** si aggiornano perché contengono campi, e le
-/// **foglie** si ricostruiscono perché non hanno niente da conservare e il
-/// confronto costerebbe più del disegno.
+/// **foglie** cambiate si ricostruiscono perché non hanno niente da
+/// conservare. Una foglia uguale non arriva qui: la salta `reconcile`.
 function update(
   el: HTMLElement,
   prev: UiNode,
@@ -353,7 +425,7 @@ function update(
     }
     case "list":
       if (prev.node !== "list") return false;
-      children(el, next.items, onAction);
+      drawListItems(el, next.items, onAction, false);
       markListItems(el);
       return true;
     case "tree":
@@ -374,18 +446,13 @@ function update(
       if (prev.node !== "tree_item") return false;
       // Lo span interno nasce col disegno (A04: vedi `draw`): un riuso da prima
       // dell'altezza minima non lo ha, e lo crea invece di riscrivere la riga.
+      // Altezza, allineamento ed ellissi li scrive la struttura
+      // (`structure.css`), non lo stile in linea: la pelle li può cambiare.
       const row = el.querySelector<HTMLElement>(":scope > .ui-tree-label");
       if (row) {
-        row.style.minHeight = "max(var(--space-9, 32px), 28px)";
-        row.style.display = "flex";
-        row.style.alignItems = "center";
         let text = row.querySelector<HTMLElement>(":scope > span");
         if (!text) {
           text = document.createElement("span");
-          text.style.minWidth = "0";
-          text.style.overflow = "hidden";
-          text.style.textOverflow = "ellipsis";
-          text.style.whiteSpace = "nowrap";
           row.replaceChildren(text);
         }
         text.textContent = next.label;
@@ -585,7 +652,7 @@ export function setNodeMotion(motion: NodeMotion | null): Teardown {
 
 /// Applica l'accoppiamento al DOM: riconcilia ciò che si reuse, disegna il
 /// resto, toglie ciò che non serve più e **sposta** invece di ricreare.
-function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
+function children(parent: HTMLElement, nodes: UiNode[], onAction: Port, end: ChildNode | null = null): void {
   const existing = Array.from(parent.children).filter(
     (c): c is HTMLElement => c instanceof HTMLElement && rendered.has(c),
   );
@@ -631,7 +698,9 @@ function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
   }
   // Rimettere in ordine: `insertBefore` di un nodo già figlio lo SPOSTA, e
   // spostarlo conserva focus, scroll e stato — che è tutto il punto.
-  let reference: ChildNode | null = null;
+  // `end` è ciò che resta in coda e non si sposta (il «mostra altre» di un
+  // elenco lungo): spostare un elemento che ha il fuoco glielo toglie.
+  let reference: ChildNode | null = end;
   for (let i = finalNodes.length - 1; i >= 0; i--) {
     const el = finalNodes[i]!;
     if (el.nextSibling !== reference || el.parentElement !== parent) {
@@ -658,7 +727,7 @@ function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
 
 function renderUiNode(node: UiNode, onAction: Port): HTMLElement {
   const el = draw(node, onAction);
-  rendered.set(el, { ...(rendered.get(el) ?? {}), node });
+  rendered.set(el, { ...(rendered.get(el) ?? {}), node, inputs: passInputs });
   key(el, node);
   dragSource(el, node);
   return el;
@@ -698,11 +767,94 @@ function dragSource(el: HTMLElement, node: UiNode): void {
   });
 }
 
+/// L'icona di una voce che nomina un documento: quella che la pagina si è
+/// data (`icon:`, un'emoji o una figura del set), o la figura del suo formato,
+/// e per ciò che non ha una specie quella della nota. È decorazione: il nome
+/// lo dice già il titolo della voce.
+function documentIcon(doc: string): HTMLElement {
+  const span = document.createElement("span");
+  span.className = "ui-list-item-icon";
+  span.setAttribute("aria-hidden", "true");
+  if (!drawPageMark(span, pageIcon(doc))) {
+    const figure = iconEl(FORMAT_ICON[formatKindOf(doc) ?? "note"]);
+    if (figure) span.appendChild(figure);
+  }
+  return span;
+}
+
 function ensureRowCell(row: HTMLTableRowElement): void {
   if (row.cells.length > 0) return;
   const td = document.createElement("td");
   td.className = "ui-empty-cell";
   row.appendChild(td);
+}
+
+/// Quante voci di un elenco si disegnano subito, e quante ne aggiunge ogni
+/// «mostra altre». Un elenco lungo costa per ogni elemento che ha nel DOM, anche
+/// quando non si vede: i collegamenti in uscita di una nota da 5.000 righe sono
+/// 4.756 voci e 33.000 elementi nel cassetto, e con loro nella pagina aprire il
+/// cassetto costava 300 ms di stile e layout più un fotogramma da 800 ms, e la
+/// barra, i menu e il binario 20–70 ms ciascuno anche a cassetto chiuso. Le voci
+/// oltre la soglia restano nel nodo, non nel DOM: si mostrano a richiesta.
+export const LIST_PAGE = 200;
+const LIST_MORE = "ui-list-more";
+
+/// Quante voci mostra adesso ogni elenco: la soglia, o di più se la persona ne
+/// ha chieste altre. Un ridisegno della view non le richiude.
+const listShown = new WeakMap<HTMLElement, number>();
+
+/// Disegna (o riconcilia) le voci visibili di un elenco e, se ne restano fuori,
+/// la riga «mostra altre» in coda. `fresh` è il primo disegno: i figli si
+/// aggiungono e basta, senza l'accoppiamento.
+function drawListItems(el: HTMLElement, items: readonly UiNode[], onAction: Port, fresh: boolean): void {
+  const limit = Math.max(LIST_PAGE, listShown.get(el) ?? 0);
+  const visible = items.length > limit ? items.slice(0, limit) : (items as UiNode[]);
+  let more = el.querySelector<HTMLElement>(`:scope > .${LIST_MORE}`);
+  if (fresh) {
+    for (const item of visible) el.appendChild(renderUiNode(item, onAction));
+  } else {
+    children(el, visible, onAction, more);
+  }
+  const rest = items.length - visible.length;
+  if (rest <= 0) {
+    more?.remove();
+    return;
+  }
+  if (!more) {
+    more = div(LIST_MORE);
+    more.setAttribute("role", "listitem");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ui-button";
+    button.addEventListener("click", () => showMoreItems(el, onAction));
+    more.appendChild(button);
+    el.appendChild(more);
+  }
+  const button = more.firstElementChild as HTMLButtonElement;
+  const label = t("views.list_more", { count: String(Math.min(LIST_PAGE, rest)), total: String(items.length) });
+  if (button.textContent !== label) button.textContent = label;
+}
+
+/// Il «mostra altre»: un'altra pagina di voci, dal nodo disegnato adesso. Il
+/// fuoco resta sul bottone; quando le voci finiscono il bottone se ne va e il
+/// fuoco passa alla prima voce nuova, invece di cadere sul corpo della pagina.
+function showMoreItems(el: HTMLElement, onAction: Port): void {
+  const node = rendered.get(el)?.node;
+  if (node?.node !== "list") return;
+  const before = Math.max(LIST_PAGE, listShown.get(el) ?? 0);
+  listShown.set(el, before + LIST_PAGE);
+  const more = el.querySelector<HTMLElement>(`:scope > .${LIST_MORE}`);
+  const hadFocus = more?.contains(document.activeElement) ?? false;
+  passInputs = drawInputs();
+  drawListItems(el, node.items, onAction, false);
+  markListItems(el);
+  if (hadFocus && !more?.isConnected) {
+    const first = el.children[before];
+    if (first instanceof HTMLElement) {
+      if (first.tabIndex < 0 && !first.hasAttribute("tabindex")) first.tabIndex = -1;
+      first.focus();
+    }
+  }
 }
 
 /// Ogni figlio di una lista è una sua voce, anche quando il provider non ci
@@ -716,6 +868,7 @@ function ensureRowCell(row: HTMLTableRowElement): void {
 function markListItems(list: HTMLElement): void {
   for (const child of list.children) {
     if (!(child instanceof HTMLElement) || child.classList.contains("ui-list-item")) continue;
+    if (child.classList.contains(LIST_MORE)) continue;
     child.setAttribute("role", "listitem");
     for (const inner of child.querySelectorAll<HTMLElement>('.ui-list-item[role="listitem"]')) {
       if (inner.parentElement?.closest('[role="list"]') !== list) continue;
@@ -755,7 +908,7 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // la guarda: il ruolo è ciò che permette a un lettore di schermo di dire
       // «lista, sei elementi» e di saltarla, invece di leggerla tutta.
       el.setAttribute("role", "list");
-      for (const item of node.items) el.appendChild(renderUiNode(item, onAction));
+      drawListItems(el, node.items, onAction, true);
       markListItems(el);
       return el;
     }
@@ -763,11 +916,8 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       const el = div("ui-list-item");
       // Stessa regola dell'albero (A04): il bersaglio è la voce intera, che può
       // ricevere il fuoco via `activatable`. Multilinea consentita: `min` e non
-      // altezza fissa.
-      el.style.minHeight = "max(var(--space-9, 32px), 28px)";
-      el.style.display = "flex";
-      el.style.flexDirection = "column";
-      el.style.justifyContent = "center";
+      // altezza fissa. La misura sta in `structure.css` (`.ui-list-item`), e
+      // non in linea, perché la pelle la possa cambiare.
       el.setAttribute("role", "listitem");
       // `selected` è uno stato del nodo (§2.1), e va detto anche a chi non
       // vede lo sfondo cambiato. `aria-current` e non `aria-selected`: il
@@ -777,6 +927,9 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       if (node.selected) el.setAttribute("aria-current", "true");
       else el.removeAttribute("aria-current");
       connect(el, node.action, onAction);
+      // Una voce che nomina una nota (`drag`) ne porta l'icona in testa, come
+      // nell'albero: quella della pagina, o la figura del formato.
+      if (node.drag?.kind === "document") el.appendChild(documentIcon(node.drag.doc));
       const title = div("ui-list-item-title");
       title.textContent = node.title;
       el.appendChild(title);
@@ -811,7 +964,10 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // Monitor montato una volta dal punto di montaggio (I08): qui solo il frame.
       const frame = document.createElement("iframe");
       frame.className = "ui-webview";
-      frame.src = node.url;
+      // Il nodo è del solo codice fidato (`UiNode::validate_untrusted`) e la
+      // CSP non apre frame; un indirizzo che non è `https:` resta comunque
+      // fuori, e il frame vuoto è `about:blank`.
+      if (/^https:\/\//i.test(node.url)) frame.src = node.url;
       frame.style.height = `${node.height}px`;
       frame.setAttribute("sandbox", "allow-scripts");
       // Un `<iframe>` senza titolo è, per chi lo incontra navigando, «frame»
@@ -889,17 +1045,12 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // (attivabile qui sotto), quindi è la riga a dover valere 32px a densità
       // normale e almeno 24px ovunque. `space-9` è 24/32/36px nelle tre
       // densità: il pavimento a 28px è la V13 per la compatta, e per G04
-      // l'accessibilità prevale sulla scala quando la scala scende sotto.
-      row.style.minHeight = "max(var(--space-9, 32px), 28px)";
-      row.style.display = "flex";
-      row.style.alignItems = "center";
+      // l'accessibilità prevale sulla scala quando la scala scende sotto. La
+      // misura la scrive `structure.css` (`.ui-tree-label`).
       // Il testo in un elemento anonimo non si restringe e l'ellissi della
-      // pelle morirebbe: sta in uno `span` che può farlo, senza classi nuove.
+      // pelle morirebbe: sta in uno `span` che può farlo, senza classi nuove
+      // (`.ui-tree-label > span` nella struttura).
       const text = document.createElement("span");
-      text.style.minWidth = "0";
-      text.style.overflow = "hidden";
-      text.style.textOverflow = "ellipsis";
-      text.style.whiteSpace = "nowrap";
       text.textContent = node.label;
       row.appendChild(text);
       connect(row, node.action, onAction);

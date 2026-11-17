@@ -13,11 +13,12 @@
 //! dice più niente su ciò che doveva provare.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::WriteBase;
-use fub_abi::event::EventKind;
+use fub_abi::event::{Event, EventKind};
 use fub_abi::model::DocId;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{
@@ -167,6 +168,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
         "fub.stats",
         "fub.sync",
         "fub.tags",
+        "fub.tasks",
         "fub.template",
         "fub.trash",
         "fub.updates",
@@ -288,9 +290,22 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
         fub_abi::command::InvokeMode::Apply,
     )
     .expect("ripristina");
-    let ws = host.debug_workspace(None).unwrap();
-    let ws = ws.read().unwrap();
-    assert_eq!(ws.read_source(&id).unwrap(), "# Nota\n\nprima\n");
+    {
+        let ws = host.debug_workspace(None).unwrap();
+        let ws = ws.read().unwrap();
+        assert_eq!(ws.read_source(&id).unwrap(), "# Nota\n\nprima\n");
+    }
+
+    // Il ripristino scrive il disco, non il buffer di un editor: Ctrl+Z nel
+    // testo non lo annulla. Ciò che c'era prima resta però una versione, e
+    // la Cronologia lo ripristina come ogni altra.
+    let restored = host.list_versions(None, &id).expect("versioning acceso");
+    assert!(
+        restored
+            .iter()
+            .any(|v| host.read_version(None, &id, v.ts).unwrap() == "# Nota\n\ndopo\n"),
+        "the text before the restore stays in the history"
+    );
 }
 
 /// **La prima fotografia è copy-on-first-write** (0154): l'apertura non
@@ -310,33 +325,18 @@ fn the_first_write_photographs_the_original() {
         v.put(&format!("Nota{n:02}.md"), &format!("# Nota {n}\n"));
     }
 
-    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::new(Collected::default());
     let host = Host::new()
         .with_watcher(Box::new(NoWatcher))
-        .with_sink(Arc::new(Collected(seen.clone())));
+        .with_sink(sink.clone());
     host.open(&v.root).expect("the vault opens");
 
     // Il ponte ha un freno (§10.2): la consegna si aspetta, e se non arriva il
-    // test fallisce sul tempo massimo invece che sul primo giro.
-    let expired = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while std::time::Instant::now() < expired {
-        let arrived = seen
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|n: &Notice| n.event.kind() == EventKind::JobProgress);
-        if arrived {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    assert!(
-        seen.lock()
-            .unwrap()
-            .iter()
-            .any(|n| n.event.kind() == EventKind::JobProgress),
-        "the first slice never announced itself"
-    );
+    // test fallisce sul tetto di sicurezza invece che sul primo giro.
+    sink.wait_until("the first slice announces itself", |seen| {
+        seen.iter()
+            .any(|n| n.event.kind() == EventKind::JobProgress)
+    });
 
     for n in 0..50 {
         let id = DocId::new(format!("Nota{n:02}.md"));
@@ -376,13 +376,43 @@ fn the_first_write_photographs_the_original() {
     );
 }
 
-/// Un sink che accumula: il posto dell'`AppHandle` di Tauri, senza Tauri.
+/// Un sink che accumula: il posto dell'`AppHandle` di Tauri, senza Tauri. Il
+/// ponte consegna da un thread suo, dopo che la chiamata dell'host è tornata:
+/// chi aspetta un evento lo aspetta con [`Collected::wait_until`].
 #[derive(Default)]
-struct Collected(Arc<Mutex<Vec<Notice>>>);
+struct Collected {
+    notices: Mutex<Vec<Notice>>,
+    arrived: Condvar,
+}
+
+impl Collected {
+    /// Aspetta che gli avvisi consegnati finora soddisfino `done`, e li rende.
+    /// Si sveglia a ogni consegna; il tetto è solo di sicurezza
+    /// ([`SAFETY_CAP`]).
+    fn wait_until(&self, what: &str, done: impl Fn(&[Notice]) -> bool) -> Vec<Notice> {
+        let deadline = Instant::now() + SAFETY_CAP;
+        let mut notices = self.notices.lock().unwrap();
+        while !done(&notices) {
+            let left = deadline.saturating_duration_since(Instant::now());
+            assert!(
+                !left.is_zero(),
+                "{what}: in {SAFETY_CAP:?} the bridge did not deliver it: {notices:?}"
+            );
+            notices = self.arrived.wait_timeout(notices, left).unwrap().0;
+        }
+        notices.clone()
+    }
+
+    /// Quanti avvisi il ponte ha consegnato finora.
+    fn len(&self) -> usize {
+        self.notices.lock().unwrap().len()
+    }
+}
 
 impl EventSink for Collected {
     fn emit(&self, notice: &Notice) -> Delivery {
-        self.0.lock().unwrap().push(notice.clone());
+        self.notices.lock().unwrap().push(notice.clone());
+        self.arrived.notify_all();
         Delivery::Done
     }
 }
@@ -392,10 +422,10 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     let v = Vault::new();
     v.put("Nota.md", "# Nota\n");
 
-    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::new(Collected::default());
     let host = Host::new()
         .with_watcher(Box::new(NoWatcher))
-        .with_sink(Arc::new(Collected(seen.clone())));
+        .with_sink(sink.clone());
     host.open(&v.root).expect("the vault opens");
     host.wait_indexed(None).expect("waits for indexing");
 
@@ -405,24 +435,14 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     // parte di ciò che si sta provando — che quegli eventi *arrivano* — e non
     // un'attesa arbitraria: se non arrivano, il test fallisce sul tempo massimo
     // invece che sul primo giro.
-    let expired = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while std::time::Instant::now() < expired {
-        let arrived = seen
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|n: &Notice| n.event.kind() == EventKind::JobDone);
-        if arrived {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    let seen = sink.wait_until("the opening job's outcome", |seen| {
+        seen.iter().any(|n| n.event.kind() == EventKind::JobDone)
+    });
 
     // **Nessun evento per documento**, che è ciò che questo presidio ha sempre
     // difeso: la scansione popola il vault, non lo cambia, e una shell che
     // ricevesse un `DocumentChanged` per nota leggerebbe l'apertura come un
     // temporale di modifiche.
-    let seen = seen.lock().unwrap().clone();
     assert!(
         !seen
             .iter()
@@ -459,6 +479,7 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
         "and an outcome comes back: whoever watches knows when it is done"
     );
 
+    let before = sink.len();
     {
         let ws = host.debug_workspace(None).unwrap();
         let mut ws = ws.write().unwrap();
@@ -466,12 +487,13 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
             .expect("writes");
     }
 
-    // Il ponte è un thread: si aspetta il primo evento, non si dorme e basta.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while seen.is_empty() && std::time::Instant::now() < deadline {
-        std::thread::yield_now();
-    }
-    assert!(!seen.is_empty(), "no event reached the sink after a write");
+    // Il ponte è un thread: si aspetta che consegni il cambio della nota,
+    // guardando il sink e non la fotografia presa prima della scrittura.
+    sink.wait_until("the write's change reaches the sink", |seen| {
+        seen[before..].iter().any(
+            |n| matches!(&n.event, Event::DocumentChanged { id, .. } if id.as_str() == "Nota.md"),
+        )
+    });
 }
 
 /// Due vault stanno aperti insieme, e il "corrente" è solo chi risponde a chi
@@ -594,8 +616,8 @@ fn close_a_vault_and_latest_round_in_which_and_again_open() {
     let v = Vault::new();
     v.put("Nota.md", "# Nota\n\nqualcosa da cercare\n");
 
-    let events = Arc::new(Mutex::new(Vec::new()));
-    let host = headless().with_sink(Arc::new(Recorder(events.clone())));
+    let events = Arc::new(Recorder::default());
+    let host = headless().with_sink(events.clone());
     host.open(&v.root).expect("the vault opens");
 
     // Una scrittura **senza watcher**, cioè senza nessuno che chiami
@@ -617,11 +639,11 @@ fn close_a_vault_and_latest_round_in_which_and_again_open() {
     let errors = host.close_vault(&v.root).expect("closes");
     assert!(errors.is_empty(), "nothing went wrong: {errors:?}");
 
-    let seen = events.lock().unwrap().clone();
-    assert!(
-        seen.iter().any(|and| and == "vault_closed"),
-        "the twin of `vault_opened` passed through the bridge: {seen:?}"
-    );
+    // Il gemello di `vault_opened` passa dal ponte. Il ponte consegna dal suo
+    // thread, e `close_vault` non lo aspetta: quando
+    // torna, `VaultClosed` è stato emesso sul bus ma può non essere ancora nel
+    // sink. Si aspetta la consegna, non un tempo (#396).
+    events.wait_for("vault_closed");
     assert!(
         manifest_of_the_index(&v.root).contains("Nuova.md"),
         "closing makes durable what the index had accepted: this is the point \
@@ -650,8 +672,35 @@ fn manifest_of_the_index(root: &Utf8Path) -> String {
 }
 
 /// Il ponte eventi ridotto a ciò che serve a un test: il nome degli eventi
-/// passati.
-struct Recorder(Arc<Mutex<Vec<String>>>);
+/// passati, e un campanello per chi ne aspetta uno.
+#[derive(Default)]
+struct Recorder {
+    names: Mutex<Vec<String>>,
+    arrived: Condvar,
+}
+
+/// Tetto di sicurezza di [`Recorder::wait_for`]. Non decide l'esito: l'attesa
+/// finisce appena l'evento arriva, di solito in pochi millisecondi. Il tetto
+/// serve solo a non restare appesi se un difetto toglie l'evento, ed è largo
+/// perché su una macchina molto carica il thread del ponte può restare fermo
+/// dei secondi.
+const SAFETY_CAP: Duration = Duration::from_secs(60);
+
+impl Recorder {
+    /// Aspetta che il ponte consegni un evento con questo nome.
+    fn wait_for(&self, name: &str) {
+        let deadline = Instant::now() + SAFETY_CAP;
+        let mut names = self.names.lock().unwrap();
+        while !names.iter().any(|seen| seen == name) {
+            let left = deadline.saturating_duration_since(Instant::now());
+            assert!(
+                !left.is_zero(),
+                "in {SAFETY_CAP:?} il ponte non ha consegnato `{name}`: {names:?}"
+            );
+            names = self.arrived.wait_timeout(names, left).unwrap().0;
+        }
+    }
+}
 
 impl EventSink for Recorder {
     fn emit(&self, notice: &Notice) -> Delivery {
@@ -659,7 +708,8 @@ impl EventSink for Recorder {
             .ok()
             .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(String::from))
             .unwrap_or_default();
-        self.0.lock().unwrap().push(name);
+        self.names.lock().unwrap().push(name);
+        self.arrived.notify_all();
         Delivery::Done
     }
 }

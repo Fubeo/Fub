@@ -11,8 +11,8 @@
 use std::f64::consts::PI;
 
 use fub_ink::{
-    CancelReason, Effect, PenCurve, PointerKind, PointerRole, PointerSample, Sample, Session,
-    SessionConfig, StabilizerConfig, Tilt, TouchPolicy, View,
+    CancelReason, Effect, MousePolicy, PenCurve, PointerKind, PointerRole, PointerSample, Sample,
+    Session, SessionConfig, StabilizerConfig, Tilt, TouchPolicy, View,
 };
 use serde_json::{json, Map, Value};
 
@@ -33,6 +33,7 @@ pub enum Step {
     Cancel,
     Destroy,
     Touch(TouchPolicy),
+    Mouse(MousePolicy),
 }
 
 /// Uno scenario.
@@ -108,6 +109,10 @@ pub fn run(script: &Script) -> Trace {
             Step::Destroy => session.destroy(),
             Step::Touch(policy) => {
                 session.set_touch_policy(*policy);
+                Vec::new()
+            }
+            Step::Mouse(policy) => {
+                session.set_mouse_policy(*policy);
                 Vec::new()
             }
         };
@@ -519,6 +524,50 @@ pub fn catalog() -> Vec<Script> {
             Step::Down(finger(52, 20.0, 0.0, 60.0)),
             moved(finger(52, 24.0, 0.0, 70.0)),
             Step::Up(finger(52, 24.0, 0.0, 80.0)),
+        ],
+    ));
+
+    // La politica del mouse `Ignore`: il tasto principale non disegna, il
+    // centrale muove la vista come sempre, la penna e il dito disegnano.
+    all.push(script_with(
+        "mouse_policy_ignore_leaves_the_mouse_alone",
+        SessionConfig {
+            mouse: MousePolicy::Ignore,
+            ..SessionConfig::default()
+        },
+        vec![
+            Step::Down(mouse(110, 0.0, 0.0, 0.0)),
+            moved(mouse(110, 4.0, 0.0, 10.0)),
+            Step::Up(mouse(110, 4.0, 0.0, 20.0)),
+            Step::Down(pressed(mouse(111, 0.0, 0.0, 30.0), 1, 4)),
+            moved(pressed(mouse(111, 5.0, 0.0, 40.0), -1, 4)),
+            Step::Up(pressed(mouse(111, 5.0, 0.0, 50.0), 1, 0)),
+            Step::Down(finger(112, 10.0, 0.0, 60.0)),
+            moved(finger(112, 14.0, 0.0, 70.0)),
+            Step::Up(finger(112, 14.0, 0.0, 80.0)),
+            Step::Down(pen(113, 20.0, 0.0, 90.0, 0.5)),
+            moved(pen(113, 24.0, 0.0, 100.0, 0.6)),
+            Step::Up(pen(113, 24.0, 0.0, 110.0, 0.0)),
+        ],
+    ));
+
+    // Cambiare la politica del mouse a metà tratto: il tratto finisce com'è,
+    // e la regola nuova vale dal prossimo appoggio.
+    all.push(script(
+        "mouse_policy_changes_from_the_next_stroke",
+        vec![
+            Step::Down(mouse(114, 0.0, 0.0, 0.0)),
+            moved(mouse(114, 4.0, 0.0, 10.0)),
+            Step::Mouse(MousePolicy::Ignore),
+            moved(mouse(114, 8.0, 0.0, 20.0)),
+            Step::Up(mouse(114, 8.0, 0.0, 30.0)),
+            Step::Down(mouse(114, 0.0, 5.0, 40.0)),
+            moved(mouse(114, 4.0, 5.0, 50.0)),
+            Step::Up(mouse(114, 4.0, 5.0, 60.0)),
+            Step::Mouse(MousePolicy::Ink),
+            Step::Down(mouse(114, 0.0, 9.0, 70.0)),
+            moved(mouse(114, 4.0, 9.0, 80.0)),
+            Step::Up(mouse(114, 4.0, 9.0, 90.0)),
         ],
     ));
 
@@ -989,12 +1038,14 @@ pub fn step_json(step: &Step) -> Value {
         Step::Cancel => json!({"op": "cancel"}),
         Step::Destroy => json!({"op": "destroy"}),
         Step::Touch(policy) => json!({"op": "touch", "policy": policy.name()}),
+        Step::Mouse(policy) => json!({"op": "mouse", "policy": policy.name()}),
     }
 }
 
 pub fn config_json(c: &SessionConfig) -> Value {
     json!({
         "touch": c.touch.name(),
+        "mouse": c.mouse.name(),
         "maxSamples": c.max_samples,
         "curve": c.curve.map(|curve| json!({"soft": curve.soft, "min": curve.min, "full": curve.full})),
         "stabilizer": {

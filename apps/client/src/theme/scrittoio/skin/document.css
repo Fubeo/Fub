@@ -16,37 +16,142 @@
    dalla stessa ascissa: cambiare modalità non sposta il testo. In Live,
    Blocchi e Sorgente la porta `.cm-content`; in Lettura il riquadro scorre a tutta
    larghezza — la barra di scorrimento resta sul bordo del foglio — e la
-   colonna la fa il padding. */
+   colonna la fa il padding, che fa cominciare il testo dove comincia in
+   Scrittura. I margini di lato sono quelli della pagina del prototipo (E1):
+   104 px a sinistra, dove stanno «+» e la maniglia del blocco, e 96 a destra.
+   La copertina della testata esce degli stessi margini, fino ai bordi
+   (più sotto, con la testata). */
 .pane-editor[data-markdown-mode="source"] .cm-content,
 .pane-editor[data-markdown-mode="live_preview"] .cm-content,
 .pane-editor[data-markdown-mode="blocks"] .cm-content {
   box-sizing: border-box;
-  max-width: calc(var(--content-width) + 2 * var(--space-9));
   margin-inline: auto;
-  padding: var(--space-9) var(--space-9) var(--space-11);
+  padding-top: var(--space-9);
+  padding-bottom: var(--space-11);
 }
 .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
   box-sizing: border-box;
   width: auto;
   margin-inline: 0;
-  padding: var(--space-9) max(var(--space-9), calc((100% - var(--content-width)) / 2)) var(--space-11);
+  padding-top: var(--space-9);
+  padding-bottom: var(--space-11);
 }
+.pane-editor[data-markdown-mode="source"] .cm-content,
+.pane-editor[data-markdown-mode="live_preview"] .cm-content,
+.pane-editor[data-markdown-mode="blocks"] .cm-content {
+  max-width: min(100%, calc(var(--content-width) + 200px));
+  padding-right: 96px;
+  padding-left: 104px;
+}
+.pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+  padding-right: max(96px, calc((100% - var(--content-width) - 200px) / 2 + 96px));
+  padding-left: max(104px, calc((100% - var(--content-width) - 200px) / 2 + 104px));
+}
+.fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+  padding-right: 96px;
+  padding-left: 104px;
+}
+/* `min(100%, …)`: CodeMirror non lascia stringere `.cm-content` (flex-shrink 0),
+   e con la misura più larga del foglio (il carattere del testo non ancora
+   arrivato fa `ch` più largo) il testo uscirebbe a destra, e chi misura il
+   margine in quel momento (il filo dei titoli) lo troverebbe chiuso. */
 /* CodeMirror rientra ogni riga di 6px: in Lettura quel rientro non c'è, e la
    pagina salterebbe di lato passando da Live a Lettura. */
 .pane-editor[data-markdown-mode="live_preview"] .cm-content > .cm-line,
 .pane-editor[data-markdown-mode="blocks"] .cm-content > .cm-line {
   padding-inline: 0;
 }
-/* Un foglio stretto (due affiancati, la finestra piccola) cede margine prima
-   di cedere testo. */
+/* La finestra stretta cede margine prima di cedere testo, come nel
+   prototipo: 64 e 48 px sotto i 940, 40 e 20 sotto i 620. Lo stesso un
+   foglio stretto in una finestra larga (due affiancati): 40 e 20 sotto i 560
+   px di foglio, 18 al telefono. */
+@media (max-width: 940px) {
+  .pane-editor[data-markdown-mode="source"] .cm-content,
+  .pane-editor[data-markdown-mode="live_preview"] .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-content {
+    max-width: min(100%, calc(var(--content-width) + 112px));
+    padding-right: 48px;
+    padding-left: 64px;
+  }
+  .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: max(48px, calc((100% - var(--content-width) - 112px) / 2 + 48px));
+    padding-left: max(64px, calc((100% - var(--content-width) - 112px) / 2 + 64px));
+  }
+  .fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: 48px;
+    padding-left: 64px;
+  }
+}
+@media (max-width: 620px) {
+  .pane-editor[data-markdown-mode="source"] .cm-content,
+  .pane-editor[data-markdown-mode="live_preview"] .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-content {
+    max-width: min(100%, calc(var(--content-width) + 60px));
+    padding-right: 20px;
+    padding-left: 40px;
+  }
+  .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: max(20px, calc((100% - var(--content-width) - 60px) / 2 + 20px));
+    padding-left: max(40px, calc((100% - var(--content-width) - 60px) / 2 + 40px));
+  }
+  .fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: 20px;
+    padding-left: 40px;
+  }
+  .pane-editor[data-markdown-mode="source"] .cm-content,
+  .pane-editor[data-markdown-mode="live_preview"] .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-content,
+  .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-10);
+  }
+}
 @container sheet (max-width: 560px) {
   .pane-editor[data-markdown-mode="source"] .cm-content,
   .pane-editor[data-markdown-mode="live_preview"] .cm-content,
   .pane-editor[data-markdown-mode="blocks"] .cm-content {
-    padding: var(--space-8) var(--space-7) var(--space-10);
+    max-width: min(100%, calc(var(--content-width) + 60px));
+    padding-right: 20px;
+    padding-left: 40px;
   }
   .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
-    padding: var(--space-8) var(--space-7) var(--space-10);
+    padding-right: max(20px, calc((100% - var(--content-width) - 60px) / 2 + 20px));
+    padding-left: max(40px, calc((100% - var(--content-width) - 60px) / 2 + 40px));
+  }
+  .fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: 20px;
+    padding-left: 40px;
+  }
+  .pane-editor[data-markdown-mode="source"] .cm-content,
+  .pane-editor[data-markdown-mode="live_preview"] .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-content,
+  .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-10);
+  }
+}
+@container sheet (max-width: 480px) {
+  .pane-editor[data-markdown-mode="source"] .cm-content,
+  .pane-editor[data-markdown-mode="live_preview"] .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-content {
+    max-width: min(100%, calc(var(--content-width) + 36px));
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+  .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: max(18px, calc((100% - var(--content-width) - 36px) / 2 + 18px));
+    padding-left: max(18px, calc((100% - var(--content-width) - 36px) / 2 + 18px));
+  }
+  .fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+  /* Al tocco, coi Blocchi, il «+» e la maniglia stanno a sinistra del
+     blocco del cursore: il margine resta quello del gradino prima (40 px),
+     sempre, così il testo non si sposta quando compaiono. */
+  .pane-editor[data-markdown-mode="live_preview"] .cm-editor.cm-fub-blocks-touch .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-editor.cm-fub-blocks-touch .cm-content {
+    padding-left: 40px;
   }
 }
 
@@ -106,6 +211,7 @@
 .markdown-rendered blockquote,
 .markdown-rendered pre,
 .markdown-rendered table,
+.markdown-rendered .markdown-table-scroll,
 .markdown-rendered hr,
 .markdown-rendered h1,
 .markdown-rendered h2,
@@ -140,13 +246,18 @@
 .cm-editor .cm-content .cm-markdown-block > :last-child {
   margin-bottom: 0;
 }
+/* Col cursore su una riga vuota dopo il widget la riga si vede, alta quanto
+   lo stacco: lo stacco le cede il posto e il testo sotto resta dov'era. */
+.cm-editor .cm-content .cm-markdown-block:has(+ .cm-markdown-gap-lead) {
+  padding-bottom: 0;
+}
 
 /* ── I titoli ────────────────────────────────────────────────────────────── */
 
 /* Misura e interlinea stanno sulla riga in Live e sull'elemento in Lettura: la
    stessa scatola, quindi la stessa altezza. La gerarchia la fanno misura e
-   stacco; il peso resta leggero finché il corpo è grande (l'asse ottico del
-   carattere fa il resto) e sale a 600 quando il titolo scende verso il testo. */
+   stacco; il titolo della nota (2,22 em, 40 px su 18) e i capitoli (1,39 em,
+   25 px) sono pieni, a 600, come i titoli minori. */
 .markdown-rendered h1,
 .markdown-rendered h2,
 .markdown-rendered h3,
@@ -189,19 +300,19 @@
 }
 .markdown-rendered h1,
 .cm-editor .cm-content .cm-fub-h1-line {
-  padding-top: calc(var(--text-reading) * 0.9);
-  font-size: 2em;
-  font-weight: var(--weight-medium);
-  letter-spacing: -0.018em;
+  padding-top: calc(var(--text-reading) * 0.5);
+  font-size: 2.22em;
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
   line-height: 1.15;
 }
 .markdown-rendered h2,
 .cm-editor .cm-content .cm-fub-h2-line {
-  padding-top: calc(var(--text-reading) * 0.7);
-  font-size: 1.5em;
-  font-weight: var(--weight-medium);
+  padding-top: calc(var(--text-reading) * 0.6);
+  font-size: 1.39em;
+  font-weight: var(--weight-bold);
   letter-spacing: -0.012em;
-  line-height: 1.2;
+  line-height: 1.28;
 }
 .markdown-rendered h3,
 .cm-editor .cm-content .cm-fub-h3-line {
@@ -249,7 +360,8 @@
 /* ── Collegamenti, etichette, evidenziati ────────────────────────────────── */
 
 /* Un `[testo](url)` e un `[[Nota]]` sono lo stesso gesto: lo stesso inchiostro
-   e lo stesso filo sottile. La regola copre ogni `<a>` reso, così il viola
+   blu e lo stesso filo sottile, a metà forza; sotto il puntatore il filo
+   prende l'inchiostro pieno. La regola copre ogni `<a>` reso, così il viola
    dello user-agent non compare mai. */
 .markdown-rendered a,
 .cm-editor .cm-content .cm-fub-link,
@@ -257,13 +369,15 @@
   color: var(--doc-link);
   cursor: pointer;
   text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--doc-link) 42%, transparent);
   text-decoration-thickness: 1px;
-  text-underline-offset: 0.2em;
+  text-underline-offset: 0.22em;
 }
 .markdown-rendered a:hover,
 .cm-editor .cm-content .cm-fub-link:hover,
 .cm-editor .cm-content .cm-fub-wikilink:hover {
   color: var(--accent-soft);
+  text-decoration-color: currentColor;
 }
 /* In Live la sintassi colora per conto suo lo span interno: qui eredita, o il
    filo sarebbero due e il passaggio non cambierebbe niente. */
@@ -390,6 +504,45 @@
 .cm-editor .cm-content .cm-fub-link-card-fetch:disabled {
   color: var(--doc-gutter-fg);
 }
+/* La scelta sotto un indirizzo incollato su una riga vuota (T25): «Link»,
+   «Scheda» e, per un sito dell'elenco chiuso, «Incorpora» (T37); pulsanti
+   piccoli nei toni del margine. Quello scelto è premuto. */
+.cm-editor .cm-content .cm-fub-address-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-1) 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.cm-editor .cm-content .cm-fub-address-choice-link,
+.cm-editor .cm-content .cm-fub-address-choice-card,
+.cm-editor .cm-content .cm-fub-address-choice-embed {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--doc-rule-soft);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--doc-gutter-fg);
+  font: inherit;
+}
+.cm-editor .cm-content .cm-fub-address-choice-link:hover,
+.cm-editor .cm-content .cm-fub-address-choice-card:hover,
+.cm-editor .cm-content .cm-fub-address-choice-embed:hover {
+  background: var(--doc-fill-soft);
+  color: var(--doc-fg);
+}
+.cm-editor .cm-content .cm-fub-address-choice-link[aria-pressed="true"],
+.cm-editor .cm-content .cm-fub-address-choice-card[aria-pressed="true"],
+.cm-editor .cm-content .cm-fub-address-choice-embed[aria-pressed="true"] {
+  color: var(--doc-fg);
+  border-color: var(--doc-fg);
+}
+.cm-editor .cm-content .cm-fub-address-choice-link:focus-visible,
+.cm-editor .cm-content .cm-fub-address-choice-card:focus-visible,
+.cm-editor .cm-content .cm-fub-address-choice-embed:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 /* Un segno che si vede ancora in Live, con «elemento» o «riga»: un passo sotto
    la sintassi della Sorgente, dentro o fuori dallo span che la colora. */
 .cm-editor .cm-content .cm-fub-near,
@@ -427,13 +580,21 @@
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
-/* I Blocchi (H3–H7): il «+» e la maniglia nel margine, la linea d'arrivo
-   del trascinamento, i blocchi selezionati. Fuori dal passaggio i pulsanti
-   del blocco del cursore restano tenui; sotto il puntatore si leggono. */
+/* I Blocchi (H3–H7, E2): il «+» e la maniglia a due occhi nel margine, i
+   blocchi selezionati. Con un puntatore i pulsanti non si vedono a riposo e
+   compaiono, nel grigio pieno della pagina (il --muted del prototipo
+   tradotto nella tavolozza del documento), sul blocco sotto il puntatore;
+   al tocco (`cm-fub-blocks-touch`, nessun puntatore che passi sopra)
+   restano sul blocco del cursore. La maniglia sotto il puntatore prende
+   l'accento e gli occhi crescono appena. */
 .cm-editor .cm-fub-block-add,
 .cm-editor .cm-fub-block-grip {
   color: var(--doc-gutter-fg);
-  opacity: 0.55;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.cm-editor:not(.cm-fub-blocks-touch) .cm-fub-block-handles:not([data-active="true"]):not(:focus-within) .cm-fub-block-add,
+.cm-editor:not(.cm-fub-blocks-touch) .cm-fub-block-handles:not([data-active="true"]):not(:focus-within) .cm-fub-block-grip {
+  opacity: 0;
 }
 .cm-editor .cm-fub-block-handles[data-active="true"] .cm-fub-block-add,
 .cm-editor .cm-fub-block-handles[data-active="true"] .cm-fub-block-grip,
@@ -442,39 +603,94 @@
 .cm-editor .cm-fub-block-grip[aria-expanded="true"] {
   opacity: 1;
 }
-.cm-editor .cm-fub-block-add:hover,
-.cm-editor .cm-fub-block-grip:hover,
-.cm-editor .cm-fub-block-grip[aria-expanded="true"] {
+.cm-editor .cm-fub-block-add:hover {
   color: var(--doc-fg);
-  background: var(--doc-fill-soft);
+  background: var(--doc-block-hover);
+}
+.cm-editor .cm-fub-block-grip:hover,
+.cm-editor .cm-fub-block-grip[data-held],
+.cm-editor .cm-fub-block-grip[aria-expanded="true"] {
+  color: var(--accent-soft);
+  background: var(--accent-veil);
+}
+.cm-editor .cm-fub-block-grip[data-held] .cm-fub-block-grip-held {
+  color: var(--accent-soft);
+}
+.cm-editor .cm-fub-block-grip-eyes svg {
+  transition: transform 0.16s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.cm-editor .cm-fub-block-grip:hover .cm-fub-block-grip-eyes svg {
+  transform: scale(1.12);
 }
 .cm-editor .cm-fub-block-add:focus-visible,
 .cm-editor .cm-fub-block-grip:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
+/* Il blocco in mano: il blocco vero sul suo foglio, con l'ombra; la
+   maniglia socchiusa resta sotto il puntatore. Le etichette: quanti blocchi
+   o che tipo (un blocco alto, tagliato) e, in un'altra sezione, dove cade. */
+.cm-editor .cm-fub-block-lift {
+  color: var(--doc-fg);
+}
+.cm-editor .cm-fub-block-lift-card,
+.cm-editor .cm-fub-block-lift-full {
+  background: var(--doc-bg);
+}
+.cm-editor .cm-fub-block-lift-card[data-clipped]::after {
+  background: linear-gradient(transparent, var(--doc-bg) 85%);
+}
+.cm-editor .cm-fub-block-lift-shade {
+  box-shadow: 0 0 0 1px var(--border-strong), var(--shadow-3);
+}
+.cm-editor .cm-fub-block-lift-grip {
+  color: var(--accent-soft);
+}
+.cm-editor .cm-fub-block-lift-tags {
+  font-family: var(--font-ui);
+}
+.cm-editor .cm-fub-block-lift-more {
+  color: var(--doc-gutter-fg);
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-fub-block-lift-to {
+  color: var(--doc-bg);
+  background: var(--accent);
+}
+/* Il cartellino (E2, «Fuori dalla colonna»): staccato dal testo il blocco in
+   mano si fa piccolo, appena trasparente, senza la maniglia. Il
+   rimpicciolimento lo anima `handles.ts` (`goFree`): dentro l'editor il moto
+   spegne le transizioni CSS. Il titolo della Struttura sotto il puntatore lo
+   accende `nodes.css`. */
+.cm-editor .cm-fub-block-lift[data-free] .cm-fub-block-lift-card,
+.cm-editor .cm-fub-block-lift[data-free] .cm-fub-block-lift-shade {
+  opacity: 0.97;
+}
+.cm-editor .cm-fub-block-lift[data-free] .cm-fub-block-lift-grip {
+  opacity: 0;
+}
+/* Il posto dove cadrà: fondo d'accento e un filo; sull'origine, grigio. */
+.cm-editor .cm-fub-block-slot {
+  background: var(--accent-veil);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.cm-editor .cm-fub-block-slot[data-home] {
+  background: var(--doc-block-hover);
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
+}
+/* «Accanto»: la barra sul bordo del vicino. */
 .cm-editor .cm-fub-block-drop {
   background: var(--doc-drop-line);
 }
 /* Il blocco vivo (N13). La selezione di blocchi è un velo sopra le righe,
-   così passa sopra il fondo del codice e la riga attiva; l'alone del blocco
-   appena posato e la passata del colore nuovo si spengono da soli; il blocco
-   sollevato galleggia sul foglio con la sua ombra. */
+   così passa sopra il fondo del codice e la riga attiva; la passata del
+   colore nuovo si spegne da sola. */
 .cm-editor .cm-fub-block-mark {
   background: var(--doc-block-selected);
   border-radius: 4px;
 }
-.cm-editor .cm-fub-block-halo {
-  background: var(--doc-block-selected);
-  box-shadow: 0 0 0 2px var(--doc-drop-line);
-}
 .cm-editor .cm-fub-block-pass {
   background: var(--doc-block-hover);
-}
-.cm-editor .cm-fub-block-lift {
-  background: var(--doc-bg);
-  border-radius: 4px;
-  box-shadow: var(--shadow-3);
 }
 /* Sul fondo della selezione l'indirizzo del link vuole l'inchiostro pieno. */
 .cm-editor .cm-content .cm-fub-block-selected .cm-fub-link-pill {
@@ -488,30 +704,1091 @@
 .cm-fub-block-menu [data-danger="true"] {
   color: var(--doc-danger);
 }
-/* La testata della pagina (H12): icona, copertina e titolo in cima ai
-   Blocchi. Il titolo è il nome del file, nel carattere del testo; gli
-   strumenti parlano con quello dell'interfaccia e si vedono al passaggio. */
-.cm-editor .cm-fub-page-cover {
-  border-radius: var(--radius-control);
-  background: var(--sheet-2);
-}
-.cm-editor .cm-fub-page-title {
+/* ── La testata della pagina (E3, H12) ──────────────────────────────────── */
+/* La stessa in Scrittura e in Lettura: copertina, icona, titolo, proprietà
+   in evidenza, poi la riga dei dati. Il titolo è il nome del file, nel
+   carattere del testo; strumenti e proprietà parlano con quello
+   dell'interfaccia. Gli strumenti si vedono al passaggio, nello spazio che
+   c'è già: comparendo non spostano niente. La densità la seguono da sé: i
+   passi `--space-*` e l'altezza `--control-h` si stringono in «Compatta». */
+/* `flow-root`: i margini dei figli (la copertina che sale nel margine di
+   cima, il filo sotto la riga dei dati) restano dentro la testata. CodeMirror
+   la misura col suo riquadro, senza margini: un margine che ne uscisse
+   farebbe cadere `posAtCoords` una riga più in là. */
+.cm-fub-page {
+  display: flow-root;
+  position: relative;
+  margin: 0;
   color: var(--doc-fg);
   font-family: var(--font-reading);
+  white-space: normal;
+  cursor: default;
 }
-.cm-editor .cm-fub-page-title::placeholder {
-  color: var(--doc-gutter-fg);
+/* La copertina esce dalla colonna fino ai bordi della pagina, come un
+   frontespizio: copre il margine di cima e quelli di lato. */
+.cm-fub-page-cover {
+  position: relative;
+  height: 112px;
+  margin: calc(-1 * var(--space-9)) -96px 0 -104px;
+  overflow: hidden;
+  background: linear-gradient(
+    118deg,
+    var(--doc-tint-green) 0%,
+    color-mix(in oklab, var(--doc-tint-green), var(--doc-tint-yellow)) 46%,
+    var(--doc-tint-yellow) 100%
+  );
 }
-.cm-editor .cm-fub-page-tool {
-  border-radius: var(--radius-control);
+/* Sotto l'immagine (che si carica, o che manca) il frontespizio del
+   prototipo: un alone d'accento in basso a destra e le righe verticali ogni
+   64 px. Una tinta scelta dall'utente resta piena. */
+.cm-fub-page-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 120% at 82% 120%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    repeating-linear-gradient(90deg, transparent 0 63px, color-mix(in srgb, var(--doc-fg) 4%, transparent) 63px 64px);
+}
+.cm-fub-page-cover[data-color] {
+  background-image: none;
+}
+.cm-fub-page-cover[data-color]::before {
+  content: none;
+}
+.cm-fub-page-cover p {
+  position: relative;
+  height: 100%;
+  margin: 0;
+}
+.cm-fub-page-cover img {
+  display: block;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  object-fit: cover;
+}
+/* Un'immagine che non si trova: il segnaposto della resa, al centro. */
+.cm-fub-page-cover .image-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
   color: var(--doc-gutter-fg);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
 }
-.cm-editor .cm-fub-page-tool:hover,
-.cm-editor .cm-fub-page-icon:hover {
-  background: var(--sheet-2);
+.cm-fub-page-cover-tools {
+  position: absolute;
+  right: var(--space-7);
+  bottom: var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  opacity: 0;
+}
+/* Al passaggio, col fuoco dentro, e la barra del riposizionamento finché si
+   riposiziona. */
+.cm-fub-page-cover:hover .cm-fub-page-cover-tools,
+.cm-fub-page-cover:focus-within .cm-fub-page-cover-tools,
+.cm-fub-page-cover-moving {
+  opacity: 1;
+}
+.cm-fub-page-cover-tool,
+.cm-fub-page-cover-hint {
+  height: 26px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--doc-bg) 86%, transparent);
   color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: 26px;
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+}
+.cm-fub-page-cover-hint {
+  color: var(--doc-gutter-fg);
+  cursor: default;
+}
+.cm-fub-page-cover-tool:hover {
+  background: var(--doc-bg);
+}
+.cm-fub-page-cover[data-reposition] {
+  cursor: grab;
+}
+.cm-fub-page-cover:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* L'icona: grande, e sopra la copertina ne prende il bordo di sotto. */
+.cm-fub-page-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-dialog);
+  background: none;
+  color: inherit;
+  font-size: 54px;
+  line-height: 1;
+}
+button.cm-fub-page-icon {
+  cursor: pointer;
+}
+.cm-fub-page-icon > svg {
+  width: 0.8em;
+  height: 0.8em;
+}
+.cm-fub-page-cover + .cm-fub-page-icon {
+  margin-top: -36px;
+}
+.cm-fub-page-cover + .cm-fub-page-tools,
+.cm-fub-page-cover + .cm-fub-page-title {
+  margin-top: var(--space-6);
+}
+/* Senza copertina la testata comincia dove comincia il testo. Una riga
+   sola di 28 px, come nel prototipo: i pulsanti che non ci stanno li nasconde
+   `fitTools` e li offre il menu «⋯». */
+.cm-fub-page-tools {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  height: 28px;
+  margin: var(--space-2) 0 2px calc(-1 * var(--space-4));
+  opacity: 0;
+}
+.cm-fub-page:hover .cm-fub-page-tools,
+.cm-fub-page:focus-within .cm-fub-page-tools {
+  opacity: 1;
+}
+/* Come nel prototipo: la figura, 5 px, il nome, a 12,5 px. */
+.cm-fub-page-tool {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: var(--leading-normal);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cm-fub-page-tool[hidden] {
+  display: none;
+}
+.cm-fub-page-tool > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.cm-fub-page-tool:hover,
+button.cm-fub-page-icon:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+/* Il titolo: in Scrittura è un campo, e un campo taglia ciò che esce dalla
+   sua scatola; l'altezza la dà la riga del titolo, non quella dei campi
+   della pelle, sennò la cima delle lettere resta fuori. */
+.cm-fub-page-title {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--doc-fg);
+  font-family: var(--font-reading);
+  /* 40 px su 46 in «Comoda», 34 su 40 in «Compatta», 46 su 52 in «Ariosa»:
+     la misura segue l'altezza dei controlli della densità (32, 28, 36). */
+  font-size: calc(var(--control-h) * 1.5 - 8px);
+  font-weight: var(--weight-bold);
+  line-height: calc(var(--control-h) * 1.5 - 2px);
+  letter-spacing: -0.012em;
+  overflow-wrap: break-word;
+}
+.cm-fub-page-title::placeholder {
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-page-title:focus-visible {
+  outline: none;
+}
+/* Le proprietà (E5, T8): la figura del tipo e il nome a sinistra, il valore
+   a destra; una riga per voce, alta quanto un controllo della densità. Le
+   misure sono quelle del prototipo (`.props`, `.pk`, `.pv`). */
+.cm-fub-page-props {
+  display: grid;
+  row-gap: 1px;
+  margin: 0 0 var(--space-2) calc(-1 * var(--space-4));
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+/* Nome e valore stanno sulla stessa linea di base: anche quando il valore va
+   a capo, o quando sul telefono il tocco lo alza a 44 px. */
+.cm-fub-page-prop {
+  display: grid;
+  grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+  /* Nome e valore partono in cima, alti 32 px tutti e due, come `.pk` e
+     `.pv` nella griglia del prototipo: una pastiglia o una persona, centrate
+     nel valore, non spostano la riga (con la linea di base la alzavano a
+     35 px). */
+  align-items: stretch;
+}
+.cm-fub-page-prop-key {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  min-width: 0;
+  height: var(--control-h);
+  margin: 0;
+  padding: 0 var(--space-4);
+  overflow: hidden;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--doc-gutter-fg);
+  font: inherit;
+  text-align: start;
+  white-space: nowrap;
+}
+.cm-fub-page-prop-key > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-page-prop-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+button.cm-fub-page-prop-key {
+  cursor: pointer;
+}
+.cm-fub-page-prop-value {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--control-h);
+  margin: 0;
+  padding: 3px var(--space-4);
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--doc-fg);
+  font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.cm-fub-page-prop-value > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--doc-gutter-fg);
+}
+button.cm-fub-page-prop-value {
+  cursor: pointer;
+}
+.cm-fub-page-prop-value[data-empty] {
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-page-props-more,
+.cm-fub-page-props-add {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-4);
+  min-height: 30px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--doc-gutter-fg);
+  font: inherit;
+  cursor: pointer;
+}
+.cm-fub-page-props-more > svg,
+.cm-fub-page-props-add > svg {
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-page-props-more[aria-expanded="false"] > svg {
+  transform: rotate(90deg);
+}
+button.cm-fub-page-prop-key:hover,
+button.cm-fub-page-prop-value:hover,
+.cm-fub-page-props-more:hover,
+.cm-fub-page-props-add:hover {
+  background: var(--doc-block-hover);
+}
+button.cm-fub-page-prop-key:focus-visible,
+button.cm-fub-page-prop-value:focus-visible,
+.cm-fub-page-props-more:focus-visible,
+.cm-fub-page-props-add:focus-visible,
+.cm-fub-page-tool:focus-visible,
+.cm-fub-page-cover-tool:focus-visible,
+button.cm-fub-page-icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* I valori secondo il tipo (T8): le voci d'un elenco e le etichette come
+   pastiglie, le persone col tondo delle iniziali, la casella. Un valore che
+   non torna col tipo dichiarato resta testo, sottolineato, e lo dice. */
+.cm-fub-prop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--doc-fill);
+  color: var(--doc-fg);
+  font-size: 12.5px;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+}
+.cm-fub-prop-tag {
+  padding: 1px 7px;
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+  line-height: 1.5;
+}
+/* Selezione e Stato: l'opzione del registro come pastiglia del suo colore
+   (`.opt` del prototipo, `--c-<colore>` → `--doc-color-*` e
+   `--doc-tint-*`); lo Stato ha il pallino (`.opt.st`). */
+.cm-fub-prop-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--doc-tint-gray);
+  color: var(--doc-color-gray);
+  font-size: 12.5px;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+}
+.cm-fub-prop-opt[data-status]::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.85;
+}
+.cm-fub-prop-opt[data-color="brown"] {
+  background: var(--doc-tint-brown);
+  color: var(--doc-color-brown);
+}
+.cm-fub-prop-opt[data-color="orange"] {
+  background: var(--doc-tint-orange);
+  color: var(--doc-color-orange);
+}
+.cm-fub-prop-opt[data-color="yellow"] {
+  background: var(--doc-tint-yellow);
+  color: var(--doc-color-yellow);
+}
+.cm-fub-prop-opt[data-color="green"] {
+  background: var(--doc-tint-green);
+  color: var(--doc-color-green);
+}
+.cm-fub-prop-opt[data-color="blue"] {
+  background: var(--doc-tint-blue);
+  color: var(--doc-color-blue);
+}
+.cm-fub-prop-opt[data-color="purple"] {
+  background: var(--doc-tint-purple);
+  color: var(--doc-color-purple);
+}
+.cm-fub-prop-opt[data-color="pink"] {
+  background: var(--doc-tint-pink);
+  color: var(--doc-color-pink);
+}
+.cm-fub-prop-opt[data-color="red"] {
+  background: var(--doc-tint-red);
+  color: var(--doc-color-red);
+}
+.cm-fub-prop-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 var(--space-4) 0 var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--doc-fill-soft);
+  box-shadow: inset 0 0 0 1px var(--doc-rule-soft);
+  color: var(--doc-fg);
+  font-size: 12.5px;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+}
+.cm-fub-prop-avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--doc-color-green);
+  color: var(--doc-bg);
+  font-size: 9.5px;
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+.cm-fub-prop-avatar[data-tone="b"] {
+  background: var(--doc-color-purple);
+}
+.cm-fub-prop-avatar[data-tone="c"] {
+  background: var(--doc-color-orange);
+}
+.cm-fub-prop-avatar[data-tone="d"] {
+  background: var(--doc-color-blue);
+}
+.cm-fub-prop-check {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-xs);
+  box-shadow: inset 0 0 0 1.5px var(--doc-rule);
+}
+.cm-fub-prop-check[data-checked="true"] {
+  background: var(--accent);
+  box-shadow: none;
+}
+.cm-fub-prop-check[data-checked="true"]::after {
+  content: "✓";
+  color: var(--accent-contrast);
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+.cm-fub-page-prop[data-mismatch] .cm-fub-page-prop-value,
+.cm-fub-page-prop[data-outside] .cm-fub-page-prop-value {
+  text-decoration: underline wavy var(--doc-wavy) 1px;
+  text-underline-offset: 3px;
+}
+/* L'indirizzo (T9): il testo è un link, che il clic apre; la matita accanto
+   lo modifica in riga. */
+.cm-fub-prop-url {
+  color: var(--doc-link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--doc-link) 42%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+}
+/* La Relazione (T35, `.lnk` del prototipo): i nomi delle note legate, color
+   inchiostro e sottolineati d'accento; il nome apre la nota, il resto del
+   valore il riquadro. Un valore che non è un link resta testo. */
+.cm-fub-prop-rels {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cm-fub-prop-rel {
+  color: var(--doc-fg);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--doc-link) 50%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.cm-fub-prop-rel:hover {
+  text-decoration-color: var(--doc-link);
+}
+.cm-fub-prop-rel-text {
+  color: var(--doc-ghost);
+}
+.cm-fub-prop-relation {
+  width: 300px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+.cm-fub-prop-relation .cm-fub-prop-note {
+  margin: var(--space-4) var(--space-5);
+}
+.cm-fub-prop-relation [role="option"] > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--doc-ghost);
+}
+.cm-fub-prop-relation .cm-fub-prop-menu-label {
+  display: grid;
+  min-width: 0;
+}
+.cm-fub-prop-relation .cm-fub-prop-menu-label > span,
+.cm-fub-prop-relation .cm-fub-prop-menu-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-fub-prop-url-cell {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+}
+.cm-fub-prop-url-cell > .cm-fub-page-prop-value {
+  flex: 1;
+}
+.cm-fub-prop-url-edit {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--doc-gutter-fg);
+  cursor: pointer;
+}
+.cm-fub-prop-url-edit > svg {
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-prop-url-edit:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+.cm-fub-prop-url-edit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* Mentre il campo è aperto la matita non serve. */
+.cm-fub-page-prop-value[data-editing] + .cm-fub-prop-url-edit {
+  display: none;
+}
+.cm-fub-prop-mismatch {
+  color: var(--doc-gutter-fg);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+/* Testo, numero e indirizzo si scrivono al posto del valore: il campo ha il
+   filo d'accento del campo della data, rosso se il valore è cambiato sotto. */
+.cm-fub-page-prop-value[data-editing] {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.cm-fub-page-prop-value[data-conflict] {
+  box-shadow: inset 0 0 0 1.5px var(--doc-danger);
+}
+/* I campi dentro una cornice (la riga, il campo della data, la ricerca): il
+   filo è della cornice, il campo non ne disegna un secondo. */
+.cm-fub-prop-input,
+.cm-fub-prop-date-field input,
+.cm-fub-prop-search input {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: none;
+  box-shadow: none;
+  color: var(--doc-fg);
+  font: inherit;
+}
+.cm-fub-prop-input:focus-visible,
+.cm-fub-prop-date-field input:focus-visible,
+.cm-fub-prop-search input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.cm-fub-page-prop[data-kind="number"] .cm-fub-prop-input {
+  flex: none;
+  width: 120px;
+}
+/* I riquadri degli editor (`.dp` del prototipo): la data, l'elenco, le
+   persone. */
+.cm-fub-prop-date,
+.cm-fub-prop-list {
+  box-sizing: border-box;
+  width: 300px;
+  padding: 10px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+.cm-fub-prop-date-field,
+.cm-fub-prop-list-input,
+.cm-fub-prop-date-time input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  height: var(--control-h);
+  margin: 0 0 var(--space-4);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--doc-rule);
+  color: var(--doc-fg);
+  font: inherit;
+}
+.cm-fub-prop-list-input {
+  width: 100%;
+  margin: 0;
+  outline: none;
+}
+.cm-fub-prop-date-field:focus-within,
+.cm-fub-prop-list-input:focus,
+.cm-fub-prop-date-time input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.cm-fub-prop-date-field > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-prop-date-field input[aria-invalid] {
+  color: var(--doc-danger);
+}
+.cm-fub-prop-date-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.cm-fub-prop-date-choice {
+  height: 24px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: var(--doc-fill);
+  color: var(--doc-fg);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.cm-fub-prop-date-choice:hover {
+  background: var(--accent-wash);
+}
+.cm-fub-prop-date-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: var(--space-1) var(--space-1) var(--space-3);
+  font-weight: var(--weight-bold);
+}
+.cm-fub-prop-date-head > span::first-letter {
+  text-transform: uppercase;
+}
+.cm-fub-prop-date-nav {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--doc-gutter-fg);
+  font: inherit;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+.cm-fub-prop-date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--space-1);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.cm-fub-prop-date-grid > span {
+  padding: var(--space-2) 0;
+  color: var(--doc-ghost);
+  font-size: 10.5px;
+  text-transform: uppercase;
+}
+.cm-fub-prop-date-day {
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--doc-fg);
+  font: inherit;
+  cursor: pointer;
+}
+.cm-fub-prop-date-day[data-outside] {
+  color: var(--doc-ghost);
+}
+.cm-fub-prop-date-day[data-today] {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.cm-fub-prop-date-day[data-selected] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: var(--weight-bold);
+}
+.cm-fub-prop-date-time {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-prop-date-time[hidden] {
+  display: none;
+}
+.cm-fub-prop-date-time input {
+  margin: 0;
+}
+.cm-fub-prop-date-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--doc-rule-soft);
+}
+.cm-fub-prop-date-action {
+  height: 26px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--doc-gutter-fg);
+  font: inherit;
+  cursor: pointer;
+}
+/* L'orologio davanti al testo di «Aggiungi l'ora»: 14 px, 4 px dal testo,
+   sulla linea di base come nel prototipo. */
+.cm-fub-prop-date-action > svg {
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-2);
+}
+.cm-fub-prop-date-nav:hover,
+.cm-fub-prop-date-day:not([data-selected]):hover,
+.cm-fub-prop-date-action:hover,
+.cm-fub-prop-chip-remove:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+.cm-fub-prop-date-choice:focus-visible,
+.cm-fub-prop-date-nav:focus-visible,
+.cm-fub-prop-date-day:focus-visible,
+.cm-fub-prop-date-action:focus-visible,
+.cm-fub-prop-chip-remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* L'elenco: cento voci scorrono dentro il riquadro, il campo resta sotto. */
+.cm-fub-prop-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  max-height: 240px;
+  margin-bottom: var(--space-4);
+  overflow: auto;
+}
+.cm-fub-prop-chips[hidden] {
+  display: none;
+}
+.cm-fub-prop-chip-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+/* Le persone: la ricerca in cima (`.m-s` del prototipo), le proposte sotto. */
+.cm-fub-prop-people,
+.cm-fub-prop-choices {
+  width: 300px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+.cm-fub-prop-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 9px var(--space-5);
+  border-bottom: 1px solid var(--doc-rule-soft);
+  color: var(--doc-ghost);
+}
+.cm-fub-prop-search > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-prop-options {
+  max-height: 280px;
+  overflow: auto;
+}
+.cm-fub-prop-note {
+  margin: var(--space-4) 0 0;
+  color: var(--doc-danger);
+  font-size: 12.5px;
+  line-height: var(--leading-normal);
+}
+.cm-fub-prop-people .cm-fub-prop-note,
+.cm-fub-prop-choices .cm-fub-prop-note {
+  margin: var(--space-4) var(--space-5);
+}
+/* Selezione e Stato (T9, `propEditor` del prototipo): i gruppi dello Stato
+   come intestazioni (`.m-h`), «Crea» col nome e, sotto, dove va (`.lb
+   small`), in fondo la riga sul registro (`.m-foot`). */
+.cm-fub-prop-group[aria-disabled="true"] {
+  min-height: 0;
+  padding: 9px var(--space-4) var(--space-2);
+  color: var(--doc-ghost);
+  font-size: 11.5px;
+  font-weight: var(--weight-bold);
+  opacity: 1;
+  cursor: default;
+}
+.cm-fub-prop-create > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-prop-create .cm-fub-prop-menu-label {
+  display: grid;
+  min-width: 0;
+}
+.cm-fub-prop-create .cm-fub-prop-menu-hint {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-fub-prop-empty {
+  margin: 0;
+  padding: 14px var(--space-5);
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-prop-empty[hidden] {
+  display: none;
+}
+.cm-fub-prop-foot {
+  margin: 0;
+  padding: 7px var(--space-5);
+  border-top: 1px solid var(--doc-rule-soft);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.cm-fub-prop-foot > svg {
+  width: 12px;
+  height: 12px;
+  margin-right: var(--space-2);
+  vertical-align: -2px;
+}
+.cm-fub-prop-note[hidden] {
+  display: none;
+}
+.cm-fub-prop-note-action {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.cm-fub-prop-note-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Il menu della proprietà: in cima il nome e il tipo (`.m-h`), il tipo di
+   adesso accanto a «Tipo». */
+.cm-fub-prop-menu .cm-fub-prop-menu-head {
+  padding: 9px var(--space-4) var(--space-2);
+  color: var(--doc-ghost);
+  font-size: 11.5px;
+  font-weight: var(--weight-bold);
+}
+.cm-fub-prop-menu [role^="menuitem"] {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.cm-fub-prop-menu [role^="menuitem"] > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-prop-menu-label {
+  flex: 1;
+}
+.cm-fub-prop-menu-hint {
+  color: var(--doc-gutter-fg);
+}
+/* Il frontmatter che YAML non legge: la testata lo dice, sopra lo YAML. */
+.cm-fub-page-unreadable {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--doc-danger);
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill-soft);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+/* Il tipo che la nota nomina non c'è, non si legge o non è un nome (E5):
+   un avviso come quello del frontmatter che non si legge, nel colore
+   dell'attenzione e non del guasto (la nota va), con i gesti che lo
+   risolvono in fondo alla riga. */
+.cm-fub-page-type-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill-soft);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+.cm-fub-page-type-notice > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--warning);
+}
+.cm-fub-page-type-text {
+  flex: 1 1 16em;
+  min-width: 0;
+}
+.cm-fub-page-type-action {
+  flex: none;
+  height: 26px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cm-fub-page-type-action:hover {
+  background: var(--doc-block-hover);
+}
+/* L'icona del tipo, al posto di quella che la nota non ha: la stessa, un
+   po' più quieta, perché non è della nota. */
+.cm-fub-page-icon[data-from-type] {
+  opacity: 0.85;
+}
+
+/* La riga dei dati chiude la testata, con un filo che la stacca dal testo.
+   Le misure di `.facts` del prototipo (12.5/1.4), nei colori della carta.
+   L'altezza non intera della riga non sposta le maniglie: CodeMirror misura
+   la testata col suo riquadro, e i margini restano dentro (`flow-root`). */
+.cm-fub-page > .note-facts {
+  gap: var(--space-2) var(--space-6);
+  padding-bottom: 18px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--doc-rule-soft);
+  color: var(--doc-gutter-fg);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+/* Ogni dato ha la misura di `.facts button` del prototipo: il margine
+   negativo rende il riquadro più largo del testo senza spostarlo. Il gruppo
+   delle etichette si scioglie, così ogni etichetta è un dato come gli altri
+   (16 px fra l'una e l'altra), e prende di `.tag` soltanto il velo, il peso e
+   l'interlinea: `.facts button` vince su `.tag`, quindi il testo è grigio. */
+.cm-fub-page > .note-facts > .note-fact,
+.cm-fub-page > .note-facts .note-tag {
+  gap: 5px;
+  margin: -2px -4px;
+  padding: 2px 4px;
+  border-radius: var(--radius-chip);
+}
+.cm-fub-page > .note-facts > .note-fact > svg {
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-page > .note-facts > .note-fact-tags {
+  display: contents;
+}
+.cm-fub-page > .note-facts .note-tag {
+  background: var(--accent-veil);
+  color: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+/* La finestra e il foglio stretti: la colonna dei nomi cede (124 px, al
+   telefono 108), la copertina segue i margini più corti e al telefono si
+   abbassa, il titolo scende a 31 px su 37. */
+@media (max-width: 940px) {
+  .cm-fub-page-cover {
+    margin-right: -48px;
+    margin-left: -64px;
+  }
+  .cm-fub-page-prop {
+    grid-template-columns: minmax(0, 124px) minmax(0, 1fr);
+  }
+}
+@media (max-width: 620px) {
+  .cm-fub-page-cover {
+    margin: calc(-1 * var(--space-8)) -20px 0 -40px;
+  }
+}
+@container sheet (max-width: 560px) {
+  .cm-fub-page-cover {
+    margin: calc(-1 * var(--space-8)) -20px 0 -40px;
+  }
+}
+@container sheet (max-width: 480px) {
+  .cm-fub-page-cover {
+    height: 110px;
+    margin-right: -18px;
+    margin-left: -18px;
+  }
+  .cm-fub-page-title {
+    font-size: 31px;
+    line-height: 37px;
+  }
+  .cm-fub-page-prop {
+    grid-template-columns: minmax(0, 108px) minmax(0, 1fr);
+  }
+  /* Il margine del tocco coi Blocchi (sopra): la copertina resta da bordo a
+     bordo. */
+  .cm-editor.cm-fub-blocks-touch .cm-fub-page-cover {
+    margin-left: -40px;
+  }
 }
 /* Il segno della scelta in vigore nel menu «…» della pagina. */
 .cm-fub-block-menu .cm-fub-page-check {
@@ -533,9 +1810,6 @@
    menu «…» scrive in `cssclasses`, sul riquadro della nota. */
 .fub-note--wide .pane-editor[data-markdown-mode] .cm-content {
   max-width: none;
-}
-.fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
-  padding-inline: var(--space-9);
 }
 .fub-note--small .markdown-rendered {
   font-size: var(--text-lg);
@@ -747,11 +2021,12 @@
 
 /* ── Citazioni e richiami ────────────────────────────────────────────────── */
 
-/* La citazione è un filo e un corsivo: nessun fondo. */
+/* La citazione è un filo e un corsivo in grafite: nessun fondo. */
 .markdown-rendered blockquote,
 .cm-editor .cm-content .cm-line.cm-fub-quote {
-  padding-left: 1.1em;
-  border-left: 2px solid var(--doc-rule);
+  padding-left: 1em;
+  border-left: 2px solid var(--border-strong);
+  color: var(--muted);
   font-style: italic;
 }
 /* Dentro un corsivo l'enfasi torna dritta, o non si vedrebbe. */
@@ -764,191 +2039,133 @@
   color: var(--doc-gutter-fg);
   font-style: normal;
 }
-/* Il richiamo è un velo del suo colore: niente bordo, il titolo lo nomina. Un
-   tipo che la pelle non conosce resta neutro — colorarlo a caso lo farebbe
-   leggere come un avviso. */
+/* Il richiamo è una scheda neutra: ogni tipo ha la stessa carta e lo stesso
+   filo, nel carattere dell'interfaccia. Il colore del tipo resta solo sul
+   cerchietto davanti al titolo (in Lettura) e sulla pastiglia del tipo (in
+   Live); il titolo in grassetto apre la riga e il testo lo segue. Un tipo che
+   la pelle non conosce ha il cerchietto dell'informazione. */
 .markdown-rendered .callout {
-  padding: var(--space-5) var(--space-6);
+  position: relative;
+  padding: var(--space-5) var(--space-7) var(--space-5) 44px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--sheet-2);
-}
-.markdown-rendered .callout-title {
-  margin-bottom: var(--space-2);
-  color: var(--doc-heading);
+  color: var(--doc-fg);
   font-family: var(--font-ui);
-  font-size: 0.82em;
+  font-size: var(--text-md);
+  line-height: 1.55;
+}
+.markdown-rendered .callout > .callout-title {
+  display: inline;
+  margin: 0 var(--space-2) 0 0;
+  color: var(--doc-heading);
+  font-size: 1em;
   font-weight: var(--weight-bold);
 }
-.markdown-rendered .callout > .callout-title:last-child {
-  margin-bottom: 0;
+.markdown-rendered .callout > .callout-title + p {
+  display: inline;
 }
-.markdown-rendered summary.callout-title {
+/* Il richiamo ripiegabile tiene il suo triangolo: il sommario resta una riga
+   a sé, e il testo comincia sotto. */
+.markdown-rendered .callout > summary.callout-title {
+  display: list-item;
   cursor: pointer;
 }
-.markdown-rendered details.callout:not([open]) > summary.callout-title {
-  margin-bottom: 0;
+.markdown-rendered .callout > summary.callout-title + p {
+  display: block;
 }
 .markdown-rendered summary.callout-title:focus-visible {
   border-radius: var(--radius-xs);
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
 }
-.markdown-rendered .callout[data-callout="note"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="note"],
-.markdown-rendered .callout[data-callout="info"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="info"],
-.markdown-rendered .callout[data-callout="abstract"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="abstract"],
-.markdown-rendered .callout[data-callout="summary"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="summary"],
-.markdown-rendered .callout[data-callout="todo"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="todo"],
-.markdown-rendered .callout[data-callout="tldr"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="tldr"] {
-  background: var(--info-wash);
+.markdown-rendered .callout > .callout-title::before {
+  content: "i";
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-pill);
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  line-height: 1;
 }
-.markdown-rendered .callout[data-callout="note"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="note"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="note"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="info"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="info"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="info"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="abstract"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="abstract"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="abstract"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="summary"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="summary"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="summary"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="todo"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="todo"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="todo"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="tldr"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="tldr"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="tldr"] .cm-fub-callout-title {
-  color: var(--info);
-}
-.markdown-rendered .callout[data-callout="tip"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="tip"],
-.markdown-rendered .callout[data-callout="hint"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="hint"],
-.markdown-rendered .callout[data-callout="success"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="success"],
-.markdown-rendered .callout[data-callout="check"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="check"],
-.markdown-rendered .callout[data-callout="done"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="done"] {
-  background: var(--success-wash);
-}
-.markdown-rendered .callout[data-callout="tip"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="tip"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="tip"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="hint"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="hint"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="hint"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="success"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="success"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="success"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="check"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="check"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="check"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="done"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="done"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="done"] .cm-fub-callout-title {
-  color: var(--success);
-}
-.markdown-rendered .callout[data-callout="warning"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="warning"],
-.markdown-rendered .callout[data-callout="caution"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="caution"],
-.markdown-rendered .callout[data-callout="attention"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="attention"],
-.markdown-rendered .callout[data-callout="important"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="important"],
-.markdown-rendered .callout[data-callout="question"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="question"],
-.markdown-rendered .callout[data-callout="help"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="help"],
-.markdown-rendered .callout[data-callout="faq"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="faq"] {
-  background: var(--warning-wash);
-}
-.markdown-rendered .callout[data-callout="warning"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="warning"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="warning"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="caution"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="caution"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="caution"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="attention"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="attention"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="attention"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="important"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="important"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="important"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="question"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="question"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="question"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="help"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="help"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="help"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="faq"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="faq"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="faq"] .cm-fub-callout-title {
+.markdown-rendered .callout[data-callout="warning"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="caution"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="important"] > .callout-title::before {
+  content: "!";
+  border-color: var(--warning);
   color: var(--warning);
 }
-.markdown-rendered .callout[data-callout="danger"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="danger"],
-.markdown-rendered .callout[data-callout="error"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="error"],
-.markdown-rendered .callout[data-callout="failure"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="failure"],
-.markdown-rendered .callout[data-callout="fail"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="fail"],
-.markdown-rendered .callout[data-callout="bug"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="bug"],
-.markdown-rendered .callout[data-callout="missing"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="missing"] {
-  background: var(--danger-wash);
-}
-.markdown-rendered .callout[data-callout="danger"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="danger"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="danger"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="error"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="error"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="error"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="failure"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="failure"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="failure"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="fail"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="fail"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="fail"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="bug"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="bug"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="bug"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="missing"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="missing"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="missing"] .cm-fub-callout-title {
+.markdown-rendered .callout[data-callout="danger"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="error"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="bug"] > .callout-title::before {
+  content: "!";
+  border-color: var(--danger);
   color: var(--danger);
 }
-.markdown-rendered .callout[data-callout="example"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="example"] {
-  background: var(--accent-wash);
+.markdown-rendered .callout[data-callout="tip"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="success"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="done"] > .callout-title::before {
+  content: "✓";
+  border-color: var(--success);
+  color: var(--success);
 }
-.markdown-rendered .callout[data-callout="example"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="example"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="example"] .cm-fub-callout-title {
+.markdown-rendered .callout kbd {
+  font-size: var(--text-sm);
+}
+/* In Live il colore del tipo sta solo sulla sua pastiglia: il titolo resta
+   neutro, come in Lettura. */
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="note"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="info"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="abstract"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="summary"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="todo"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="tldr"] .cm-fub-callout-type {
+  color: var(--info);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="tip"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="hint"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="success"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="check"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="done"] .cm-fub-callout-type {
+  color: var(--success);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="warning"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="caution"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="attention"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="important"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="question"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="help"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="faq"] .cm-fub-callout-type {
+  color: var(--warning);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="danger"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="error"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="failure"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="fail"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="bug"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="missing"] .cm-fub-callout-type {
+  color: var(--danger);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="example"] .cm-fub-callout-type {
   color: var(--accent);
 }
-.markdown-rendered .callout[data-callout="quote"] > .callout-title,
 .cm-editor .cm-content .cm-fub-callout-line[data-callout="quote"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="quote"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="cite"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="cite"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="cite"] .cm-fub-callout-title {
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="cite"] .cm-fub-callout-type {
   color: var(--doc-gutter-fg);
 }
 
 /* In Live, col cursore dentro, il callout resta un riquadro (D1): le righe
-   hanno il velo del tipo, gli angoli la prima e l'ultima; la testata è la
+   hanno la stessa carta neutra per ogni tipo, gli angoli la prima e l'ultima; la testata è la
    pastiglia del tipo e il titolo. */
 .cm-editor .cm-content .cm-line.cm-fub-callout-line {
   padding-inline: var(--space-6);
@@ -1122,9 +2339,16 @@
 
 /* Un elenco in Live è una riga per voce, senza aria in mezzo: in Lettura le
    voci (e i paragrafi che il renderer ci mette dentro) stanno a margine zero. */
-.markdown-rendered ul,
 .markdown-rendered ol {
   padding-left: 1.4em;
+}
+/* Il punto è grafite e staccato dal testo: in Lettura il rientro dell'elenco
+   puntato, in Live il margine attorno al segno che il pallino copre. */
+.markdown-rendered ul {
+  padding-left: 1.25em;
+}
+.cm-editor .cm-content .cm-fub-bullet:not(.cm-fub-bullet-task) {
+  margin-inline: 0.3em 0.35em;
 }
 .markdown-rendered li,
 .markdown-rendered li > p,
@@ -1146,6 +2370,9 @@
 .markdown-rendered li.task {
   margin-left: -1.4em;
   list-style: none;
+}
+.markdown-rendered ul > li.task {
+  margin-left: -1.25em;
 }
 /* La casella è quella dei controlli generici — una sola in tutta l'app, alta
    quanto il corpo del testo. Qui c'è solo dove sta rispetto alla riga:
@@ -1252,11 +2479,6 @@
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
-/* L'avviso sotto il diagramma che si scrive: l'ultima resa buona resta. */
-.cm-editor .cm-content .cm-fub-diagram-notice {
-  color: var(--doc-danger);
-  font-family: var(--font-ui);
-}
 /* Il riquadro della formula (C6): il TeX in carattere fisso, e sotto la resa. */
 .cm-fub-math-field {
   font-family: var(--font-mono);
@@ -1340,34 +2562,101 @@
 
 /* ── Tabelle ─────────────────────────────────────────────────────────────── */
 
-/* Una tabella è un dato: carattere dell'interfaccia, cifre incolonnate, solo
-   fili orizzontali. La griglia della Live è la stessa tabella con le maniglie
-   intorno: le celle prendono queste regole in tutte e due. */
+/* Una tabella è un dato: carattere dell'interfaccia, cifre incolonnate, una
+   griglia di fili sottili dentro una cornice arrotondata (il prototipo,
+   `.gridw`, `.gr`, `.gr-box`). La griglia della Live è la stessa tabella con
+   le maniglie intorno: le celle prendono queste regole in tutte e due, e la
+   cornice della Live sta in `skin/tabella.css`, dove la prima riga e la
+   prima colonna della tabella non sono le prime del `<table>`.
+   Dentro la pagina i colori sono quelli del documento, come il resto del
+   contenuto: i fili `--doc-rule-soft` (il `--line` del prototipo), la
+   cornice `--doc-rule` (il `--line-2`), la testata `--doc-fill-soft` (il
+   `--tray`).
+   Il corpo è tre quarti del testo (13,5 px sul testo di serie, e cresce con
+   lui). La tabella riempie la colonna del testo e le celle non vanno a capo:
+   quando il contenuto è più largo, scorre l'involucro che la Lettura le mette
+   attorno (`markdown-table-scroll`, da `markdown/mount.ts`). Dove una resa
+   non lo mette (l'anteprima del lanciatore, le schede dei link) la tabella
+   resta larga quanto il contenuto e scorre da sé.
+   I bordi sono separati, non uniti (`structure.css`, perché una pelle non
+   scrive `border-spacing`): solo così gli angoli si arrotondano. Ogni
+   cella ha il filo a destra e sotto; l'ultima colonna e l'ultima riga hanno
+   al loro posto la cornice. La testata ha il suo fondo fino al bordo: la
+   cornice lì è trasparente, come nel prototipo dove il fondo la copre. */
 .markdown-rendered table {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   overflow-x: auto;
-  border-collapse: collapse;
   font-family: var(--font-ui);
-  font-size: 0.9em;
+  font-size: 0.75em;
   font-variant-numeric: tabular-nums;
-  line-height: var(--leading-normal);
+  line-height: 1.4;
+}
+.markdown-rendered .markdown-table-scroll {
+  overflow-x: auto;
+}
+.markdown-rendered .markdown-table-scroll > table {
+  display: table;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow: visible;
 }
 .markdown-rendered th,
 .markdown-rendered td {
+  height: 34px;
   min-width: 4ch;
-  padding: var(--space-4) var(--space-5);
+  padding: 0 var(--space-5);
   border: 0;
+  border-right: 1px solid var(--doc-rule-soft);
   border-bottom: 1px solid var(--doc-rule-soft);
-  /* Una cella non spezza le parole (né i numeri) a metà: se la tabella non ci
-     sta, scorre. */
-  overflow-wrap: normal;
+  /* Una cella non va a capo, come nel prototipo (`.gr td`): se la tabella
+     non ci sta, scorre. */
+  white-space: nowrap;
   text-align: start;
-  vertical-align: top;
+  vertical-align: middle;
 }
 .markdown-rendered th {
-  background: var(--sheet-2);
+  background: var(--doc-fill-soft);
   color: var(--doc-heading);
   font-weight: var(--weight-bold);
+}
+.markdown-rendered tr > :first-child {
+  border-left: 1px solid var(--doc-rule);
+}
+.markdown-rendered tr > :last-child {
+  border-right: 1px solid var(--doc-rule);
+}
+.markdown-rendered table > :first-child > tr:first-child > * {
+  border-top: 1px solid var(--doc-rule);
+}
+.markdown-rendered table > :last-child > tr:last-child > * {
+  border-bottom: 1px solid var(--doc-rule);
+}
+.markdown-rendered tr > th:first-child {
+  border-left-color: transparent;
+}
+.markdown-rendered tr > th:last-child {
+  border-right-color: transparent;
+}
+.markdown-rendered table > :first-child > tr:first-child > th {
+  border-top-color: transparent;
+}
+.markdown-rendered table > :last-child > tr:last-child > th {
+  border-bottom-color: transparent;
+}
+.markdown-rendered table > :first-child > tr:first-child > :first-child {
+  border-top-left-radius: var(--radius-md);
+}
+.markdown-rendered table > :first-child > tr:first-child > :last-child {
+  border-top-right-radius: var(--radius-md);
+}
+.markdown-rendered table > :last-child > tr:last-child > :first-child {
+  border-bottom-left-radius: var(--radius-md);
+}
+.markdown-rendered table > :last-child > tr:last-child > :last-child {
+  border-bottom-right-radius: var(--radius-md);
 }
 .markdown-rendered table:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
@@ -1390,9 +2679,14 @@
   max-width: 100%;
   vertical-align: baseline;
 }
+/* Una formula larga scorre di lato; in verticale no: i puntelli invisibili di
+   KaTeX sotto una frazione sporgono di qualche pixel, e col solo `overflow-x`
+   il blocco scorrerebbe anche in alto e in basso, diventando una fermata del
+   Tab senza niente da leggere. */
 .markdown-rendered .math-block {
   display: block;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: var(--space-2) 0;
   text-align: center;
 }
@@ -1450,9 +2744,15 @@
    destro, la maniglia della larghezza (D9) con la misura mentre la si tira. */
 .cm-editor .cm-content .cm-fub-image.cm-fub-image-selected img:not([hidden]),
 .cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .embed,
-.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .image-missing {
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .image-missing,
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected [data-web-embed-site] {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+/* Una pagina web incorporata (T37) non ha una larghezza da tirare: il
+   segnaposto è uno solo, e la pagina si vede nel visore. */
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected:has([data-web-embed-site]) .cm-fub-image-handle {
+  display: none;
 }
 /* La selezione del testo non si stende sotto l'immagine scelta: il contorno
    dice già che è presa, come in Word. */
@@ -1558,7 +2858,8 @@
   padding-top: 0;
 }
 /* Il motivo lo scrive la shell nella lingua corrente (`data-embed-note`): un
-   ciclo e una catena troppo profonda sono due cose diverse. */
+   ciclo, una catena troppo profonda e un blocco che non c'è più sono cose
+   diverse. */
 .embed-cycle::after,
 .embed-too-deep::after {
   color: var(--muted);
@@ -1570,6 +2871,12 @@
   border-left-color: var(--doc-rule-soft);
   color: var(--muted);
 }
+/* Il blocco sincronizzato il cui blocco non c'è più: la frase, nella lingua
+   della UI, al posto del link. */
+.embed.embed-missing {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
 /* Un'immagine, un audio o un video incorporati sono il media, non una nota
    riportata: niente filo intorno. */
 .embed.embed-media {
@@ -1580,120 +2887,6 @@
 .markdown-rendered .embed[data-embed-url],
 .markdown-rendered .embed[data-embed-path] {
   min-height: var(--text-3xl);
-}
-
-/* ── Diagrammi ───────────────────────────────────────────────────────────── */
-
-/* Il renderer condiviso usa immagini SVG inerti, non SVG attivo nella shell.
-   Il diagramma è una tavola appoggiata sulla carta: fondo di un tono, niente
-   bordo. */
-.mermaid-diagram {
-  overflow: auto;
-  margin: 0;
-  padding: var(--space-4) var(--space-5) var(--space-5);
-  border-radius: var(--radius-control);
-  background: var(--sheet-2);
-  color: var(--doc-fg);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-  white-space: normal;
-}
-.mermaid-diagram figcaption {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-4);
-  margin-bottom: var(--space-4);
-  color: var(--muted);
-  font-weight: var(--weight-medium);
-}
-/* Stile, esportazione e sorgente: gesti secondari, a voce bassa finché non li
-   si cerca. */
-.mermaid-diagram .mermaid-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-1);
-}
-.mermaid-diagram .mermaid-action {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 24px;
-  padding: var(--space-1) var(--space-4);
-  border-radius: var(--radius-chip);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font: inherit;
-}
-.mermaid-diagram .mermaid-action:hover,
-.mermaid-diagram .mermaid-action:focus-visible {
-  background: var(--overlay-hover);
-  color: var(--text);
-}
-.mermaid-diagram .mermaid-action:active {
-  background: var(--overlay-active);
-}
-.mermaid-diagram .mermaid-action[aria-expanded="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-/* Tre colori dello stile attivo: lo si riconosce prima di leggerne il nome. */
-.mermaid-diagram .mermaid-swatches {
-  display: inline-flex;
-  overflow: hidden;
-  border-radius: var(--radius-xs);
-  box-shadow: 0 0 0 1px var(--doc-rule-soft);
-}
-.mermaid-diagram .mermaid-swatches span {
-  width: 6px;
-  height: 12px;
-}
-.mermaid-diagram img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin-inline: auto;
-  border-radius: 0;
-}
-/* Uno stile con la sua carta è una tavola appoggiata sulla cornice. Armonia è
-   trasparente e si fonde con la cornice. */
-.mermaid-diagram[data-diagram-style="acquerello"] img,
-.mermaid-diagram[data-diagram-style="aurora"] img,
-.mermaid-diagram[data-diagram-style="blueprint"] img,
-.mermaid-diagram[data-diagram-style="inchiostro"] img {
-  border-radius: var(--radius-chip);
-  box-shadow: var(--shadow-1);
-}
-.mermaid-diagram summary {
-  margin-top: var(--space-4);
-  color: var(--muted);
-  cursor: pointer;
-}
-.mermaid-diagram summary:hover {
-  color: var(--text);
-}
-.mermaid-diagram pre {
-  overflow: auto;
-  max-height: 24em;
-  margin: var(--space-3) 0 0;
-  padding: var(--space-4) var(--space-5);
-  background: var(--sheet);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  white-space: pre;
-}
-.mermaid-diagram[data-state="error"] {
-  background: var(--danger-wash);
-}
-.mermaid-diagram [role="status"] {
-  margin: 0;
-  color: var(--muted);
-  overflow-wrap: anywhere;
 }
 
 /* ── Proprietà, note a piè, blocchi che nessuno disegna ──────────────────── */
@@ -1771,6 +2964,16 @@
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
+}
+/* In Lettura, con le proprietà nella testata, lo YAML reso non si ripete
+   sotto (`mountReadingHeader`). */
+.markdown-rendered[data-page-props="header"] > .block-frontmatter-unparsed {
+  display: none;
+}
+/* In Lettura il primo H1 che dice il nome si ripiega nel titolo della
+   testata (`page/title.ts`): la testata lo segna, e l'H1 non si ripete. */
+.markdown-rendered > .cm-fub-page[data-title-fold] ~ h1:first-of-type {
+  display: none;
 }
 .markdown-rendered .block-frontmatter-unparsed pre {
   margin: 0;
@@ -1904,4 +3107,421 @@
   box-shadow:
     0 0 0 var(--focus-ring-width) var(--focus-ring),
     var(--shadow-3);
+}
+
+/* ── La riga dei dati, sotto il titolo ──────────────────────────────────── */
+/* Modificata, collegamenti, etichette: carattere dell'interfaccia, grafite,
+   le etichette come in testo. Non è testo della nota: non si seleziona col
+   corpo e non si scrive. */
+.note-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-7);
+  margin: 0;
+  padding: var(--space-4) 0 var(--space-6);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-tight);
+  white-space: normal;
+  user-select: none;
+}
+.note-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.note-fact > svg {
+  width: 15px;
+  height: 15px;
+}
+.note-fact-tags {
+  gap: var(--space-2);
+}
+.note-tag {
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+.markdown-rendered .tag,
+.cm-editor .cm-content .cm-fub-tag {
+  border-radius: var(--radius-chip);
+}
+
+/* I commenti: il margine, la discussione, il pannello (T22, prototipo
+   `.bub`, `.th`, `.ith`, `.icard`). Il segno sta nel margine destro della
+   pagina, all'altezza del passo; quando il margine non ha posto (la finestra
+   stretta, il telefono) sta nel testo, subito dopo il commento. I colori delle
+   persone sono quelli del prototipo, uguali nelle due luci: il pallino è
+   pieno e il testo bianco. Ogni coppia sta sopra 4,5:1 (le iniziali sono a
+   9,5 px): lo slot 3 è un poco più scuro del `#b9662e` del prototipo, che col
+   bianco dava 4,2:1. */
+.cm-fub-comment-avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #3f7d63;
+  color: #ffffff;
+  font: var(--weight-bold) 9.5px/1 var(--font-ui);
+}
+.cm-fub-comment-avatar[data-slot="0"] {
+  background: var(--border-strong);
+  color: var(--text);
+}
+:root[data-contrast="high"] .cm-fub-comment-avatar[data-slot="0"] {
+  /* Nell'alto contrasto `--border-strong` è scuro (giorno) o chiaro (notte) e
+     col testo darebbe 3,3:1 e 2,8:1: il pallino prende il fondo attivo e il
+     bordo forte resta come anello. */
+  background: var(--bg-active);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.cm-fub-comment-avatar[data-slot="2"] {
+  background: #7a5bb0;
+}
+.cm-fub-comment-avatar[data-slot="3"] {
+  background: #a85a26;
+}
+.cm-fub-comment-avatar[data-slot="4"] {
+  background: #2f6aa8;
+}
+.cm-fub-comment-margin {
+  position: absolute;
+  top: 0;
+  height: 0;
+  z-index: 2;
+}
+.pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+  position: relative;
+}
+.cm-fub-comment-bubble,
+.cm-fub-comment-sign {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px 0 3px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--sheet);
+  box-shadow: var(--shadow-raise, var(--shadow-1));
+  color: var(--muted);
+  font: var(--weight-bold) 11.5px/1 var(--font-ui);
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease), box-shadow var(--duration-fast) var(--ease);
+}
+.cm-fub-comment-bubble {
+  position: absolute;
+}
+.cm-fub-comment-bubble:hover,
+.cm-fub-comment-sign:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-pop, var(--shadow-3));
+  color: var(--text);
+}
+.cm-fub-comment-bubble[data-active],
+.cm-fub-comment-sign[data-active] {
+  box-shadow: 0 0 0 2px var(--accent), var(--shadow-raise, var(--shadow-1));
+}
+.cm-fub-comment-bubble:focus-visible,
+.cm-fub-comment-sign:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Nel testo il segno è più basso della riga: non la allarga. */
+.cm-fub-comment-sign {
+  height: 20px;
+  margin-inline: 3px 1px;
+  padding: 0 6px 0 2px;
+  vertical-align: -3px;
+  font-size: 11px;
+}
+.cm-fub-comment-sign .cm-fub-comment-avatar {
+  width: 16px;
+  height: 16px;
+  font-size: 8px;
+}
+/* Sul telefono i bottoni sono alti 44 px: il segno nel testo resta della sua
+   misura, e il tocco lo dà un `::after` trasparente, che non disegna niente
+   e non sposta la riga. */
+:root[data-client-shell="mobile"] .cm-fub-comment-sign {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+:root[data-client-shell="mobile"] .cm-fub-comment-sign::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 44px;
+  transform: translateY(-50%);
+}
+
+/* La discussione, nel popover. */
+.kit-popover.cm-fub-comment-popover {
+  padding: 0;
+  overflow: hidden auto;
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  box-shadow: var(--shadow-pop, var(--shadow-3));
+  font: var(--text-sm) / 1.4 var(--font-ui);
+}
+.cm-fub-comment-discussion {
+  width: min(340px, calc(100vw - 16px));
+}
+.cm-fub-comment-quote {
+  margin: 12px 14px 4px;
+  padding-left: 10px;
+  border-left: 3px solid var(--highlight);
+  color: var(--muted);
+  font: italic 14px/1.45 var(--font-reading);
+  overflow-wrap: anywhere;
+}
+.cm-fub-comment-quote[data-point] {
+  font-style: normal;
+}
+.cm-fub-comment-note,
+.cm-fub-comment-name-hint {
+  margin: 4px 14px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.cm-fub-comment-name {
+  margin: 10px 14px 0;
+}
+.cm-fub-comment-message {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 2px 9px;
+  padding: 10px 14px 0;
+}
+.cm-fub-comment-message .cm-fub-comment-avatar {
+  grid-row: span 2;
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+.cm-fub-comment-message b {
+  font-weight: var(--weight-bold);
+}
+.cm-fub-comment-message time {
+  margin-left: 6px;
+  color: var(--doc-gutter-fg);
+  font-size: 12px;
+  font-weight: var(--weight-regular);
+}
+.cm-fub-comment-message p {
+  margin: 0;
+  color: var(--doc-fg);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.cm-fub-comment-write {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 12px 14px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.cm-fub-comment-write:focus-within {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
+}
+.cm-fub-comment-write > .cm-fub-comment-avatar {
+  align-self: center;
+}
+.cm-fub-comment-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 20px;
+  max-height: 120px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+}
+.cm-fub-comment-send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  cursor: pointer;
+}
+.cm-fub-comment-send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.cm-fub-comment-send:focus-visible,
+.cm-fub-comment-action:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.cm-fub-comment-send svg,
+.cm-fub-comment-action svg {
+  width: 16px;
+  height: 16px;
+}
+.cm-fub-comment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+.cm-fub-comment-actions-end {
+  display: flex;
+  gap: 2px;
+}
+.cm-fub-comment-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.cm-fub-comment-action:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-fub-comment-foot code {
+  font: 11px var(--font-mono);
+}
+.cm-fub-comment-foot kbd,
+.cm-fub-comments-empty kbd {
+  padding: 3px 5px 2px;
+  border-radius: 5px;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border-strong), 0 1px 0 var(--border-strong);
+  color: var(--muted);
+  font: var(--weight-medium) 10.5px/1 var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Il pannello «Commenti» dell'ispettore. */
+.cm-fub-comments-panel {
+  font-size: var(--text-sm);
+}
+.cm-fub-comments-head {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  padding: 14px 4px 4px;
+  color: var(--doc-gutter-fg);
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cm-fub-comments-card {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: var(--shadow-raise, var(--shadow-1));
+  transition: box-shadow var(--duration-fast) var(--ease);
+}
+.cm-fub-comments-card[data-anchor] {
+  cursor: pointer;
+}
+.cm-fub-comments-card[data-anchor]:hover {
+  box-shadow: var(--shadow-pop, var(--shadow-3));
+}
+.cm-fub-comments-card[data-active] {
+  box-shadow: 0 0 0 2px var(--accent), var(--shadow-raise, var(--shadow-1));
+}
+.cm-fub-comments-card:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.cm-fub-comments-quote {
+  display: block;
+  margin-bottom: 6px;
+  padding-left: 8px;
+  border-left: 2.5px solid var(--highlight);
+  color: var(--muted);
+  font: italic 13px/1.4 var(--font-reading);
+  overflow-wrap: anywhere;
+}
+.cm-fub-comments-quote[data-point] {
+  font-style: normal;
+}
+.cm-fub-comments-who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: var(--weight-bold);
+}
+.cm-fub-comments-who time {
+  color: var(--doc-gutter-fg);
+  font-size: 12px;
+  font-weight: var(--weight-regular);
+}
+.cm-fub-comments-card p {
+  margin: 4px 0 0;
+  color: var(--doc-fg);
+  overflow-wrap: anywhere;
+}
+.cm-fub-comments-replies,
+.cm-fub-comments-card .cm-fub-comments-archived {
+  color: var(--doc-gutter-fg);
+  font-size: 12px;
+}
+.cm-fub-comments-card .cm-fub-comments-archived {
+  margin: 0;
+}
+.cm-fub-comments-note {
+  margin: 0;
+  padding: 4px;
+  color: var(--doc-gutter-fg);
+  font-size: 12px;
+}
+.cm-fub-comments-empty {
+  margin: 0;
+  padding: 14px 12px;
+  color: var(--muted);
+}
+.cm-fub-comments-clear {
+  height: 26px;
+  margin: 0 0 8px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cm-fub-comments-clear:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-fub-comments-clear:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
 }

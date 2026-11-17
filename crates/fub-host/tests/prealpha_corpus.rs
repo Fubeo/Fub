@@ -35,7 +35,7 @@ use fub_abi::grid::GridWindowRequest;
 use fub_abi::model::DocId;
 use fub_abi::{GridCellKey, GridJournal, PluginError};
 use fub_format_xlsx::grid::XLSX_GRID_SURFACE;
-use fub_host::resources::{ResourceHost, ResourceWrite};
+use fub_host::resources::{ResourceHost, ResourceReuse, ResourceWrite};
 use fub_host::{Host, OpenKey};
 use serde_json::json;
 
@@ -315,7 +315,13 @@ fn write_as_shell(
         ),
         Kind::Pdf => vault
             .host
-            .resource_write(vault.name(), &id, b"%PDF-1.7\n%%EOF\n", Some(base))
+            .resource_write(
+                vault.name(),
+                &id,
+                b"%PDF-1.7\n%%EOF\n",
+                Some(base),
+                ResourceReuse::Never,
+            )
             .map(|receipt| receipt.revision),
     }
 }
@@ -507,6 +513,7 @@ fn un_file_in_sola_lettura_rifiuta_la_scrittura_e_resta() {
         &DocId::new(name),
         &original("Documenti/Senza perdite.docx"),
         Some(opened.revision.clone()),
+        ResourceReuse::Never,
     );
     close_as_shell(&vault, name, Kind::Xlsx);
     assert_eq!(

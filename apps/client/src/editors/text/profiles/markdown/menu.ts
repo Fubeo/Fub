@@ -6,6 +6,7 @@ import { syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { scanTags } from "../../../../rules/mirrored";
+import { containerMath, isMathContainer, mathBlock } from "./render-inline";
 
 /// Un link sotto il puntatore, con il suo posto nel documento (UTF-16 del
 /// testo normalizzato).
@@ -194,6 +195,48 @@ export function codeBlockAt(state: EditorState, pos: number): {
       to: node.to,
       info: info ? { from: info.from, to: info.to } : { from: at, to: at },
     };
+  }
+  return null;
+}
+
+/// Una formula fra dollari sotto il puntatore, come la legge la resa
+/// (`containerMath`): dove sta coi suoi dollari, il TeX, e se è un blocco
+/// (`$$…$$` da solo nel suo paragrafo).
+export interface FormulaAt {
+  readonly from: number;
+  readonly to: number;
+  readonly tex: string;
+  /// Quanti dollari la aprono e la chiudono.
+  readonly dollars: 1 | 2;
+  /// Un blocco `$$`: da solo nel suo paragrafo.
+  readonly block: boolean;
+  /// Il contenitore della formula.
+  readonly container: { readonly from: number; readonly to: number };
+  /// Il contenitore è un paragrafo della nota, fuori da citazioni, elenchi e
+  /// tabelle: la formula può passare da riga a blocco e indietro.
+  readonly plain: boolean;
+}
+
+/// La formula che contiene `pos` (dollari compresi), o `null`.
+export function formulaAt(state: EditorState, pos: number): FormulaAt | null {
+  const tree = syntaxTree(state);
+  for (const side of [1, -1] as const) {
+    for (let node: SyntaxNode | null = tree.resolveInner(pos, side); node; node = node.parent) {
+      if (!isMathContainer(node.name)) continue;
+      const math = containerMath(state.sliceDoc(node.from, node.to), node);
+      const found = math.formulas.find((formula) => formula.from <= pos && pos <= formula.to);
+      if (!found) break;
+      const block = found.display && mathBlock(math) !== null;
+      return {
+        from: found.from,
+        to: found.to,
+        tex: block ? found.tex.trim() : found.tex,
+        dollars: found.display ? 2 : 1,
+        block,
+        container: { from: node.from, to: node.to },
+        plain: node.name === "Paragraph" && node.parent?.name === "Document",
+      };
+    }
   }
   return null;
 }

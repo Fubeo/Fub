@@ -16,13 +16,15 @@
 //! (`fub.search`). Il pannello non la richiede: senza di lei quella sezione
 //! dice che la ricerca manca, e il resto del pannello funziona.
 use fub_abi::command::{ParamKind, ParamSpec};
-use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::rules::path_policy::{check, Naming};
 use std::collections::{BTreeSet, HashMap};
 
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
-use fub_abi::model::{DocId, LinkTarget, PropertyScalar, PropertyValue, Span};
+use fub_abi::model::{DocId, PropertyScalar, PropertyValue};
+
+mod mentions;
+use fub_abi::options::source::PROSE;
 use fub_abi::query::{
     QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextField, TextMode, TextQuery,
 };
@@ -34,6 +36,8 @@ use fub_abi::traits::{
     ViewSurface,
 };
 use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
+use mentions::Prose;
+pub use mentions::{MentionCommands, MENTION_LINK};
 
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
 pub const BACKLINKS_ID: &str = "fub.backlinks";
@@ -291,17 +295,15 @@ impl ViewProvider for BacklinksView {
     }
 }
 
-/// Trasforma una menzione non collegata in un link al bersaglio, scritto dal
-/// formato della nota (`[[bersaglio]]` in Markdown), con
-/// `VaultWrite::apply_edit`, che `HostApi` espone via `VaultWrite` — nessuna
-/// nuova porta, nessuna scrittura fuori contratto.
+/// Trasforma una menzione non collegata in un link al bersaglio, col comando
+/// [`MENTION_LINK`]: è lui a controllare che la nota sia quella letta e che lì
+/// ci sia ancora una menzione (non un testo già collegato, non codice), e a
+/// dichiarare l'inverso, così la conversione si annulla in un passo.
 ///
 /// Il chiamante porta `doc` (la nota da modificare), `target` (il bersaglio
-/// scelto), `mention` (il testo da collegare, in byte del sorgente corrente) e
-/// `base` (la revisione su cui `mention` è stato calcolato). Il testo si
-/// rilegge dall'host e la prima occorrenza di `mention` diventa il link;
-/// assente = niente da collegare, e non è un errore. La concorrenza è quella
-/// della firma: `base` non più corrente → `Conflict`.
+/// scelto), `mention` (il testo da collegare), `start`/`end` (dove sta, in byte
+/// del sorgente letto) e `base` (la revisione letta). Un payload incompleto
+/// non collega niente, e non è un errore.
 fn convert_to_link(action: &UiAction, host: &mut dyn HostApi) -> Result<ViewUpdate, PluginError> {
     let (Some(id), Some(target), Some(mention), Some(base), Some(start), Some(end)) = (
         action.payload.get(DOC).and_then(|v| v.as_str()),
@@ -316,72 +318,19 @@ fn convert_to_link(action: &UiAction, host: &mut dyn HostApi) -> Result<ViewUpda
     if mention.is_empty() || target.is_empty() {
         return Ok(ViewUpdate::None);
     }
-    let doc = DocId::new(id);
-    // Si sostituisce una parola: ha senso solo in un sorgente in prosa. Come
-    // si scrive il link lo decide il formato della nota.
-    crate::formats::require(host, &doc, fub_abi::options::source::PROSE)?;
-    if host.document_revision(&doc)? != Revision::new(base) {
-        return Err(PluginError::Conflict(Text::key(MENTION_CHANGED)));
-    }
-    let source = host.read_document(&doc)?;
-    let span = usize::try_from(start).ok().zip(usize::try_from(end).ok());
-    let Some((start, end)) = span else {
-        return Ok(ViewUpdate::None);
-    };
-    if source.get(start..end) != Some(mention) {
-        return Err(PluginError::Conflict(Text::key(MENTION_CHANGED)));
-    }
-    // La parola resta quella che si leggeva: si collega, non si riscrive. Il
-    // riferimento è il più corto che porta davvero alla nota, e se la parola
-    // è scritta altrimenti (un alias) resta come testo del link.
-    let reference = link_reference(host, &DocId::new(target))?;
-    let link = crate::formats::link_text(
-        host,
-        &doc,
-        &crate::formats::wikilink(&reference, Some(mention), false),
-    )?;
-    host.apply_edit(
-        &doc,
-        EditRequest::new(
-            Revision::new(base),
-            vec![TextEdit::replace(Span::new(start, end), link)],
-        ),
+    // L'indice dirà che la nota è cambiata, e il pannello si ridisegna da sé.
+    host.run_command(
+        MENTION_LINK,
+        serde_json::json!({
+            mentions::A_DOC: id,
+            mentions::A_TARGET: target,
+            mentions::A_MENTION: mention,
+            mentions::A_START: start,
+            mentions::A_END: end,
+            mentions::A_REVISION: base,
+        }),
     )?;
     Ok(ViewUpdate::None)
-}
-
-/// Il testo del wikilink che porta a `target`: il nome pagina se la
-/// risoluzione del vault lo manda lì, poi il nome con la sua estensione, poi
-/// il percorso senza estensione, e solo in ultimo il percorso intero. Chiede al
-/// kernel invece di indovinare la regola: due note omonime in cartelle diverse,
-/// o nella stessa cartella con formati diversi, sono esattamente il caso in cui
-/// il nome da solo porterebbe altrove.
-fn link_reference(host: &dyn ReadApi, target: &DocId) -> Result<String, PluginError> {
-    let path = target.as_str();
-    let file_name = path.rsplit('/').next().filter(|name| *name != path);
-    let without_extension = path
-        .rsplit_once('.')
-        .map(|(stem, _)| stem)
-        .filter(|stem| !stem.is_empty() && !stem.ends_with('/'));
-    for candidate in [Some(target.page_name()), file_name, without_extension]
-        .into_iter()
-        .flatten()
-    {
-        let resolved = match host.query_index(IndexQuery::Resolve {
-            target: LinkTarget::wiki(candidate),
-            from: None,
-        }) {
-            Ok(resolved) => resolved,
-            // Un host che non sa risolvere non ferma il gesto: il percorso
-            // intero porta sempre alla nota, com'era prima.
-            Err(PluginError::Unserved(_)) => break,
-            Err(error) => return Err(error),
-        };
-        if matches!(resolved, IndexResult::Resolved(Some(ref found)) if found.doc == *target) {
-            return Ok(candidate.to_string());
-        }
-    }
-    Ok(path.to_string())
 }
 
 /// Il segnaposto (nessun backlink / nessuna nota aperta). Ora è ciò che dice di
@@ -426,8 +375,8 @@ pub fn catalog() -> Vec<StringCatalog> {
         StringCatalog::new("it")
             .with(VIEW_TITLE, "Collegamenti")
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
-            .with(INCOMING, "Entranti")
-            .with(OUTGOING, "Uscenti")
+            .with(INCOMING, "In entrata")
+            .with(OUTGOING, "In uscita")
             .with(UNLINKED, "Menzioni non collegate")
             .with(OUTBOUND_UNLINKED, "Menzioni uscenti non collegate")
             .with(
@@ -454,8 +403,8 @@ pub fn catalog() -> Vec<StringCatalog> {
                  in questo vault non è attiva.",
             )
             .with(CONVERT_LABEL, "Collega")
-            .with(INCOMING_COUNT, "Entranti · {count}")
-            .with(OUTGOING_COUNT, "Uscenti · {count}")
+            .with(INCOMING_COUNT, "In entrata · {count}")
+            .with(OUTGOING_COUNT, "In uscita · {count}")
             .with(UNLINKED_COUNT, "Menzioni non collegate · {count}")
             .with(
                 OUTBOUND_UNLINKED_COUNT,
@@ -463,7 +412,62 @@ pub fn catalog() -> Vec<StringCatalog> {
             )
             .with(FILTER_SECTION, "Filtro avanzato")
             .with(STATUS_TITLE, "Collegamenti entranti")
-            .with(STATUS_COUNT, "Entranti: {count}"),
+            .with(STATUS_COUNT, "In entrata: {count}")
+            .with(format!("{MENTION_LINK}.title"), "Collega la menzione")
+            .with(
+                format!("{MENTION_LINK}.desc"),
+                "Trasforma una menzione non collegata in un collegamento alla nota, \
+                 se il testo è ancora quello letto e non è già un collegamento o \
+                 codice.",
+            )
+            .with(format!("{MENTION_LINK}.doc.title"), "Nota")
+            .with(
+                format!("{MENTION_LINK}.doc.desc"),
+                "La nota che contiene la menzione.",
+            )
+            .with(format!("{MENTION_LINK}.target.title"), "Bersaglio")
+            .with(
+                format!("{MENTION_LINK}.target.desc"),
+                "La nota a cui porta il collegamento.",
+            )
+            .with(format!("{MENTION_LINK}.mention.title"), "Menzione")
+            .with(
+                format!("{MENTION_LINK}.mention.desc"),
+                "Le parole da collegare, come sono scritte.",
+            )
+            .with(format!("{MENTION_LINK}.start.title"), "Inizio")
+            .with(
+                format!("{MENTION_LINK}.start.desc"),
+                "Dove comincia la menzione, in byte.",
+            )
+            .with(format!("{MENTION_LINK}.end.title"), "Fine")
+            .with(
+                format!("{MENTION_LINK}.end.desc"),
+                "Dove finisce la menzione, in byte.",
+            )
+            .with(format!("{MENTION_LINK}.revision.title"), "Revisione")
+            .with(
+                format!("{MENTION_LINK}.revision.desc"),
+                "La revisione della nota che è stata letta.",
+            )
+            .with(mentions::N_LINKED, "Collegata «{mention}» in {doc}")
+            .with(mentions::P_LINK, "Collegherebbe «{mention}» in {doc}")
+            .with(mentions::U_LINK, "il collegamento di «{mention}» in {doc}")
+            .with(
+                mentions::E_CHANGED,
+                "{doc} è cambiata da quando è stata letta: non ho collegato niente. Il \
+                 pannello si aggiorna.",
+            )
+            .with(
+                mentions::E_NOT_A_MENTION,
+                "«{mention}» lì non è più una menzione da collegare (è già un \
+                 collegamento, o sta nel codice): non ho collegato niente.",
+            )
+            .with(
+                mentions::E_ARGS,
+                "Per collegare una menzione servono la nota, il bersaglio, le parole, \
+                 dove stanno e la revisione letta.",
+            ),
         StringCatalog::new("en")
             .with(STATUS_TITLE, "Incoming links")
             .with(STATUS_COUNT, "Incoming: {count}")
@@ -507,7 +511,61 @@ pub fn catalog() -> Vec<StringCatalog> {
                 OUTBOUND_UNLINKED_COUNT,
                 "Outgoing unlinked mentions · {count}",
             )
-            .with(FILTER_SECTION, "Advanced filter"),
+            .with(FILTER_SECTION, "Advanced filter")
+            .with(format!("{MENTION_LINK}.title"), "Link the mention")
+            .with(
+                format!("{MENTION_LINK}.desc"),
+                "Turns an unlinked mention into a link to the note, if the text \
+                 is still the one that was read and is not already a link or code.",
+            )
+            .with(format!("{MENTION_LINK}.doc.title"), "Note")
+            .with(
+                format!("{MENTION_LINK}.doc.desc"),
+                "The note that holds the mention.",
+            )
+            .with(format!("{MENTION_LINK}.target.title"), "Target")
+            .with(
+                format!("{MENTION_LINK}.target.desc"),
+                "The note the link points to.",
+            )
+            .with(format!("{MENTION_LINK}.mention.title"), "Mention")
+            .with(
+                format!("{MENTION_LINK}.mention.desc"),
+                "The words to link, as written.",
+            )
+            .with(format!("{MENTION_LINK}.start.title"), "Start")
+            .with(
+                format!("{MENTION_LINK}.start.desc"),
+                "Where the mention starts, in bytes.",
+            )
+            .with(format!("{MENTION_LINK}.end.title"), "End")
+            .with(
+                format!("{MENTION_LINK}.end.desc"),
+                "Where the mention ends, in bytes.",
+            )
+            .with(format!("{MENTION_LINK}.revision.title"), "Revision")
+            .with(
+                format!("{MENTION_LINK}.revision.desc"),
+                "The revision of the note that was read.",
+            )
+            .with(mentions::N_LINKED, "Linked “{mention}” in {doc}")
+            .with(mentions::P_LINK, "Would link “{mention}” in {doc}")
+            .with(mentions::U_LINK, "linking “{mention}” in {doc}")
+            .with(
+                mentions::E_CHANGED,
+                "{doc} changed since it was read: nothing was linked. The panel is \
+                 refreshing.",
+            )
+            .with(
+                mentions::E_NOT_A_MENTION,
+                "“{mention}” is no longer an unlinked mention there (it is already \
+                 a link, or it sits in code): nothing was linked.",
+            )
+            .with(
+                mentions::E_ARGS,
+                "To link a mention, Fub needs the note, the target, the words, \
+                 where they are and the revision that was read.",
+            ),
     ])
 }
 
@@ -625,7 +683,7 @@ pub fn build_outgoing_view(targets: &[(DocId, Option<String>)]) -> UiNode {
     UiNode::list(items)
 }
 /// Una parte del pannello: una sezione col numero nel titolo, chiusa quando
-/// è vuota — «Uscenti · 0» dice già tutto in una riga, e un segnaposto sotto
+/// è vuota — «In uscita · 0» dice già tutto in una riga, e un segnaposto sotto
 /// ogni titolo riempiva il pannello di niente. Se la parte non si carica il
 /// titolo resta senza numero e la sezione dice il guasto.
 fn part(name: &str, counted: &str, result: Result<(usize, UiNode), PluginError>) -> UiNode {
@@ -859,9 +917,18 @@ fn unlinked_mentions(
     linked: &BTreeSet<DocId>,
     filter: &QueryExpr,
 ) -> Result<Vec<UnlinkedMention>, PluginError> {
-    let model = host.read_model(active)?;
+    // Del documento attivo servono soltanto gli alias. Un documento che non è
+    // prosa e non si apre (un .docx vuoto o rotto) non ne ha da dire, ma il
+    // suo nome resta menzionabile dalle note: la sezione si calcola sul nome
+    // invece di diventare un guasto. Una nota che non si legge resta un
+    // errore, perché lì gli alias ci sono e mancherebbero.
+    let aliases = match host.read_model(active) {
+        Ok(model) => model.frontmatter.aliases(),
+        Err(_) if !crate::formats::understands(host, active, PROSE) => Vec::new(),
+        Err(error) => return Err(error),
+    };
     let mut names = vec![active.page_name().to_string()];
-    names.extend(model.frontmatter.aliases());
+    names.extend(aliases);
     names.retain(|name| !name.is_empty());
     names.sort();
     names.dedup();
@@ -910,6 +977,11 @@ fn unlinked_mentions(
             if hit.doc == *active || linked.contains(&hit.doc) || !seen.insert(hit.doc.clone()) {
                 continue;
             }
+            // Una menzione è una parola in prosa, e la si collega sostituendola:
+            // in un formato che non è prosa non ce ne sono.
+            if !crate::formats::understands(host, &hit.doc, PROSE) {
+                continue;
+            }
             let base = host.document_revision(&hit.doc)?;
             let source = host.read_document(&hit.doc)?;
             if source.len() > MAX_MENTION_BYTES {
@@ -917,13 +989,20 @@ fn unlinked_mentions(
                     "unlinked source exceeds 256 KiB".into(),
                 ));
             }
+            // Il modello si chiede solo se il nome c'è: dice dove il testo è
+            // prosa, fuori da link e codice.
+            if !names.iter().any(|name| source.contains(name.as_str())) {
+                continue;
+            }
+            let model = host.read_model(&hit.doc)?;
             if host.document_revision(&hit.doc)? != base {
                 return Err(PluginError::Conflict(Text::key(MENTION_CHANGED)));
             }
+            let prose = Prose::of(&model, &source);
             let mut spans = BTreeSet::new();
             for name in &names {
-                for (start, _) in source.match_indices(name.as_str()) {
-                    spans.insert((start, start + name.len(), name));
+                for (start, end) in prose.mentions(&source, name) {
+                    spans.insert((start, end, name));
                 }
             }
             for (start, end, name) in spans {
@@ -957,6 +1036,10 @@ fn outbound_unlinked_mentions(
     linked: &BTreeSet<DocId>,
     filter: &QueryExpr,
 ) -> Result<Vec<UnlinkedMention>, PluginError> {
+    // Le menzioni sono parole in prosa: una nota che non è prosa non ne ha.
+    if !crate::formats::understands(host, active, PROSE) {
+        return Ok(Vec::new());
+    }
     let base = host.document_revision(active)?;
     let source = host.read_document(active)?;
     if source.len() > MAX_MENTION_BYTES {
@@ -964,9 +1047,11 @@ fn outbound_unlinked_mentions(
             "active document exceeds 256 KiB".into(),
         ));
     }
+    let model = host.read_model(active)?;
     if host.document_revision(active)? != base {
         return Err(PluginError::Conflict(Text::key(NOTE_CHANGED)));
     }
+    let prose = Prose::of(&model, &source);
     let mut excluded = linked.iter().cloned().collect::<Vec<_>>();
     excluded.push(active.clone());
     let matching = combine_queries(
@@ -1013,8 +1098,8 @@ fn outbound_unlinked_mentions(
             }
             let mut spans = BTreeSet::new();
             for name in &names {
-                for (start, _) in source.match_indices(name.as_str()) {
-                    spans.insert((start, start + name.len(), name));
+                for (start, end) in prose.mentions(&source, name) {
+                    spans.insert((start, end, name));
                 }
             }
             for (start, end, name) in spans {
@@ -1492,36 +1577,6 @@ mod tests {
         );
     }
 
-    /// `convert_to_link` collega lo span dichiarato via `apply_edit`: il solo
-    /// canale di scrittura, con revisione e span del chiamante.
-    #[test]
-    fn convert_to_link_rewrites_the_first_mention() {
-        let mut host = MemoryHost::new().with_document("nota.md", "si parla di Mario Rossi qui");
-        let base = host
-            .document_revision(&DocId::new("nota.md"))
-            .expect("revision")
-            .as_str()
-            .to_string();
-        let action = UiAction::new(CONVERT).with_payload(serde_json::json!({
-            DOC: "nota.md",
-            TARGET: "people/Rossi.md",
-            MENTION: "Mario Rossi",
-            BASE: base,
-            START: 12,
-            END: 23,
-        }));
-        let update = BacklinksView
-            .on_action(&instance(), action, &mut host)
-            .unwrap();
-        assert_eq!(update, ViewUpdate::None);
-        // Senza chi risolve, il percorso intero; la parola scritta resta
-        // quella che si leggeva.
-        assert_eq!(
-            host.read_document(&DocId::new("nota.md")).unwrap(),
-            "si parla di [[people/Rossi.md|Mario Rossi]] qui"
-        );
-    }
-
     /// Menzione assente o vuota = niente da collegare, non un errore; payload
     /// incompleto = stessa risposta.
     #[test]
@@ -1585,7 +1640,7 @@ mod tests {
                 other => panic!("every part is a section: {other:?}"),
             })
             .collect();
-        // Entranti ha una riga ed è aperta; il filtro, senza filtro attivo,
+        // «In entrata» ha una riga ed è aperta; il filtro, senza filtro attivo,
         // sta chiuso in fondo.
         assert_eq!(sections.first(), Some(&(Some(INCOMING), false)));
         assert_eq!(sections.last(), Some(&(Some(FILTER_SECTION), true)));

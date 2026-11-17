@@ -1,4 +1,4 @@
-//! **Il secondo backend** (§16.1, [M5](../../../docs/project/m5-wasm-runtime.md)):
+//! **Il secondo backend** (§16.1, [M5](../../../docs/architecture/plugin-runtime.md)):
 //! un componente WASM che il kernel vede come qualunque altro provider.
 //!
 //! Il contratto vivo è `fub:abi@0.2.0`; le baseline congelate e il bridge
@@ -50,6 +50,16 @@ pub use component::{
     WasmViewProvider,
 };
 pub use discovery::{discover, DiscoveredPlugin};
+pub use limits::MemoryBudgetExceeded;
+
+/// I byte di memoria lineare che tutte le istanze WASM del processo tengono
+/// adesso, e il loro tetto comune.
+pub fn wasm_memory_in_use() -> (usize, usize) {
+    (
+        crate::limits::PROCESS_POOL.used(),
+        crate::limits::PROCESS_MEMORY_CEILING,
+    )
+}
 
 /// Nome del backend WASM configurato, senza creare l'engine: `native` o
 /// `pulley`. È ciò che la UI mostra come `configured:` quando l'engine non è

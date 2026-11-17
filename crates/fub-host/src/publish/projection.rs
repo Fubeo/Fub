@@ -566,6 +566,11 @@ fn inlines_into(
             Inline::Custom {
                 custom_kind: kind, ..
             } if kind == custom_kind::COMMENT => {}
+            // Così i commenti con la discussione: il passo resta testo, i due
+            // estremi e i messaggi non arrivano in rete.
+            Inline::Custom {
+                custom_kind: kind, ..
+            } if kind == custom_kind::COMMENT_RANGE || kind == custom_kind::COMMENT_MESSAGE => {}
             Inline::Custom { custom_kind, .. } => {
                 return Err(format!("the `{custom_kind}` inline has no static projection").into())
             }
@@ -727,6 +732,27 @@ mod tests {
             html,
             "<p>a <span class=\"inline-highlight\">&lt;x&gt;</span></p>\n"
         );
+    }
+
+    #[test]
+    fn a_discussion_leaves_its_passage_and_nothing_else() {
+        let html = project(vec![paragraph(vec![
+            inline(
+                custom_kind::COMMENT_RANGE,
+                json!({ "source": "{==", "edge": "start" }),
+            ),
+            Inline::Text("passo".into()),
+            inline(
+                custom_kind::COMMENT_RANGE,
+                json!({ "source": "==}", "edge": "end" }),
+            ),
+            inline(
+                custom_kind::COMMENT_MESSAGE,
+                json!({ "source": "{>>@Anna: segreto<<}", "author": "Anna", "text": "segreto", "anchored": true }),
+            ),
+        ])])
+        .unwrap();
+        assert_eq!(html, "<p>passo</p>\n");
     }
 
     /// Le due visite numerano nello stesso ordine: una definizione dentro

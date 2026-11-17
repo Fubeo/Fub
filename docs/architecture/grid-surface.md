@@ -34,25 +34,27 @@ cambiate e i comandi dati. `GridEngine`
 dichiarata con famiglia, versione e formato giusti, apre una sessione sul
 giornale e sulla revisione dei byte, e chiede soltanto le finestre che lo
 schermo mostra, al massimo 256 righe per 128 colonne l'una. Righe e colonne
-sono virtualizzate; le coordinate stabili `SheetId + RowId + ColumnId`
-vengono dalle finestre.
+sono virtualizzate; le coordinate stabili `SheetId + RowId + ColumnId` vengono
+dalle finestre.
 
 Editor in-cell e formula bar usano due istanze di `TextEngine` con
 `FormulaProfile`, e nessuna battuta attraversa IPC. Un commit scrive le voci
 nel giornale, lo pubblica subito alla sessione e lo consegna al provider, che
 controlla le preimmagini sulla revisione, rifiuta le celle bloccate e risponde
-con le celle da rileggere. Le modifiche in coda partono una dopo l'altra.
-Finché il giornale ha soltanto celle l'undo è locale alla superficie; in
-modalità a comandi annulla e ripeti sono del documento (`edit.undo`,
-`edit.redo`). Un giornale cambiato altrove (un altro
-riquadro, un salvataggio, una ricarica) riapre la sessione e chiude la
-precedente; la bozza aperta resta, con il cursore e il fuoco. Se la sua cella
-è cambiata sotto, un avviso chiede «Tieni la tua» o «Prendi quella nuova»; se
-il foglio non c'è più, la bozza si chiude e l'avviso lo dice. Se non c'è una
-superficie compatibile,
-la sessione non si apre o una finestra fallisce, la superficie dichiara
-`data-grid-protocol="unavailable"`, lo dice nell'avviso e non scrive; il
-linguaggio delle formule non si duplica in TypeScript.
+con le celle da rileggere; le modifiche in coda partono una dopo l'altra.
+Su una cartella annulla e ripeti sono del provider, celle e comandi in una pila
+anche oltre il salvataggio ([contratto](../reference/ipc-contract.md#cartelle-di-excel));
+senza provider l'undo è locale. Un giornale cambiato altrove (altro riquadro,
+salvataggio, ricarica) riapre la sessione e chiude la precedente; la bozza
+aperta resta, col cursore e il fuoco. Se la sua cella è cambiata sotto, un
+avviso chiede «Tieni la tua» o «Prendi quella nuova»; se il foglio non c'è più,
+la bozza si chiude e l'avviso lo dice. La cella aperta è testo [in
+sospeso](frontend-and-ipc.md#il-testo-in-sospeso): va nelle bozze, e si
+conferma prima di salvare, di chiudere o di un cambio da fuori (che diventa un
+conflitto). Se i byte di base del giornale non sono più sul disco, la griglia
+lo apre su quelli di adesso (come «Tieni il mio testo»). Senza superficie
+compatibile, o se sessione o finestra non si aprono, la griglia è
+`data-grid-protocol="unavailable"`, lo dice nell'avviso e non scrive.
 
 La shell non riceve DOM, callback JavaScript o oggetti CodeMirror: possiede
 rendering, input, clipboard, selezione e stato visuale, mentre il provider
@@ -60,8 +62,8 @@ possiede lettura, formule, blocchi e innesto. Limiti, coordinate, fallback e
 parità nativo/WASM sono normati in [ABI e WIT](../reference/abi-and-wit.md) e
 nel [contratto IPC](../reference/ipc-contract.md).
 
-Nei tre strati
-([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)) le
+Nei tre strati ([ADR
+0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)) le
 intestazioni di righe e colonne e la barra sono cornice, la griglia e le celle
 contenuto. La modalità `sheet` offre `file`, il predefinito, e `adattato`. In
 `file` le celle stanno sulla carta chiara del file anche di notte, con i
@@ -70,11 +72,11 @@ riempimento e testo vi si portano in coppia con `theme/adapt.ts`. Il testo
 automatico è l'inchiostro della carta, i fili della griglia sono quelli della
 carta (`--doc-rule`). `editors/grid/paint.ts` mette i colori sulla cella come
 variabili di dato (`--file-fill`, `--file-color` e le versioni `-a`), e la
-regola dell'aspetto sta in `theme/scrittoio/structure.css`. Una pelle non veste
-le celle: il gate del contenuto rifiuta `.grid-cell` e `.no-gridlines`, e i
-segni (selezione, cella attiva, valore non ricalcolato, conflitto) si scrivono
-dalla riga, `.grid-row .selected`. Gli oggetti del foglio non sono ancora sotto
-il gate.
+regola dell'aspetto sta in `theme/scrittoio/structure.css`. Una pelle non
+veste le celle: il gate del contenuto rifiuta `.grid-cell` e `.no-gridlines`,
+e i segni (selezione, cella attiva, valore non ricalcolato, conflitto) si
+scrivono dalla riga, `.grid-row .selected`. Gli oggetti del foglio non sono
+ancora sotto il gate.
 
 Il piano (`.grid-plane`) è grande quanto il foglio: testa (intestazioni,
 righe bloccate) e colonna ferma (numeri delle righe, colonne bloccate) restano
@@ -102,29 +104,28 @@ fotogramma p90 11–13, peggiore 15–17 (prima 0,4 e 28–40, 16–20 e 23–26
 
 ## Scrivere nelle celle
 
-Come in Excel e LibreOffice, una battuta apre la cella in «Inserisci»:
-Invio e Maiuscolo+Invio confermano e scendono o salgono, Tab e Maiuscolo+Tab
-confermano e vanno a destra o a sinistra, le frecce confermano e si
-spostano. Invio dopo una serie di Tab torna alla colonna da cui la serie è
-partita. F2 e il doppio clic aprono in «Modifica», dove le frecce muovono il
-cursore; F2 alterna i due modi, e la banda di stato dice il modo
-(«Pronto», «Inserisci», «Modifica»). Alt+Invio va a capo, Ctrl+Invio scrive
-la bozza in tutta la selezione, Esc annulla. Un clic su un'altra cella, o il
-fuoco che lascia l'editor, conferma; dalla cella alla barra della formula la
-bozza passa con il fuoco. Sulla selezione Invio e Tab spostano la cella
+Come in Excel e LibreOffice, una battuta apre la cella in «Inserisci»: Invio e
+Maiuscolo+Invio confermano e scendono o salgono, Tab e Maiuscolo+Tab (anche
+`Unidentified` da GTK) confermano e vanno a destra o a sinistra, le frecce
+confermano e si spostano. Invio dopo una serie di Tab torna alla colonna da
+cui la serie è partita. F2 e il doppio clic aprono in «Modifica», dove le
+frecce muovono il cursore; F2 alterna i due modi, e la banda di stato dice il
+modo («Pronto», «Inserisci», «Modifica»). Alt+Invio va a capo, Ctrl+Invio
+scrive la bozza in tutta la selezione, Esc annulla. Un clic su un'altra cella,
+o il fuoco che lascia l'editor, conferma; dalla cella alla barra della formula
+la bozza passa con il fuoco. Sulla selezione Invio e Tab spostano la cella
 attiva senza aprirla, dentro l'intervallo se è più di una cella. La regola
 pura di dove andare sta in `apps/client/src/tabella/navigation.ts`, quella
 del riempimento in `tabella/selection.ts` (`fillRange`): sono le regole di
 ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
 
-Una battuta vera (stampabile, un tasto morto o una composizione dell'IME)
-mette il fuoco nel campo della cella durante il `keydown` e non si ferma: il
-carattere lo scrive il browser, come lo manda il sistema. Una battuta
-sintetica, che il browser non scrive, apre la cella col suo carattere
-(`typingOpens`). PagSu e PagGiù scorrono di una schermata di righe vere, con
-le loro altezze, e la cella attiva resta allo stesso punto dello schermo;
-Alt+PagSu e Alt+PagGiù fanno lo stesso di lato, Ctrl+Backspace riporta in
-vista la cella attiva. Le frecce senza Maiuscolo partono dalla cella attiva.
+Una battuta vera (stampabile, un tasto morto, una composizione dell'IME) porta
+il fuoco nella cella durante il `keydown` e il carattere lo scrive il browser;
+una sintetica apre la cella col suo carattere (`typingOpens`). PagSu e PagGiù
+scorrono di una schermata di righe vere e la cella attiva resta allo stesso
+punto dello schermo; Alt+PagSu e Alt+PagGiù fanno lo stesso di lato,
+Ctrl+Backspace riporta in vista la cella attiva, da cui partono le frecce
+senza Maiuscolo.
 
 Nelle formule si punta come nei fogli di calcolo. Dove la formula aspetta un
 operando (`operandSlot` in `profiles/formula.ts`: dopo `=`, un operatore,
@@ -173,12 +174,11 @@ quadratino di riempimento non c'è.
 
 In una cartella a comandi che serve `edit.autoFill` la selezione ha il
 quadratino di riempimento nell'angolo in basso a destra. Tirato fuori dalla
-selezione mostra il bersaglio lungo l'asse su cui il puntatore è uscito di
-più e, al rilascio, dà un solo `edit.autoFill` con sorgente e bersaglio
-(con Ctrl tenuto, nel modo alternato di Excel). Il doppio clic riempie in giù
-fin dove arriva la colonna accanto, nelle righe che la griglia ha letto. Le
-serie le calcola il provider; Ctrl+D e Ctrl+R restano i riempimenti da
-tastiera.
+selezione mostra il bersaglio lungo l'asse su cui il puntatore è uscito di più
+e, al rilascio, dà un solo `edit.autoFill` con sorgente e bersaglio (con Ctrl
+tenuto, nel modo alternato di Excel). Il doppio clic riempie in giù fin dove
+arriva la colonna accanto, nelle righe che la griglia ha letto. Le serie le
+calcola il provider; Ctrl+D e Ctrl+R restano i riempimenti da tastiera.
 
 ## Gli appunti
 
@@ -228,12 +228,12 @@ e dal libro della cartella; la scheda della tabella compare con la selezione
 dentro una tabella. La tavolozza disegna i colori del tema con le sfumature
 di ECMA-376 (`palette.ts`), le gallerie gli stili di tabella e di cella.
 
-Nello stile di Fub le schede stanno in un pozzetto nella testata, e i
-comandi su un vassoio stondato, un tono sotto la carta, in foglietti
-sollevati col nome del gruppo in grigio sotto i controlli; la pelle è nei
-blocchi `.grid-ribbon-…` di `structure.css` e `skin/editors.css`, e sotto i
-900 px del foglio (`@container sheet`) testata e vassoio si stringono di un
-passo.
+La forma e la pelle della barra sono del kit: ogni pezzo porta
+`kit-ribbon-<pezzo>` accanto a `grid-ribbon-<pezzo>`, vestito da
+`structure.css` e da «Barra a schede» in `skin/kit.css` (sezioni come le
+schede dell'ispettore, vassoio `--bar-tray`), che vengono prima; ai
+`.grid-ribbon-…` restano tavolozza, gallerie, campioni, «Comandi» e i piani
+della formula e della griglia.
 
 La barra si percorre con le frecce (un solo controllo per scheda sta nel
 Tab), Esc torna alla griglia, Alt o F10 mostrano le lettere di Excel. Quando
@@ -299,10 +299,12 @@ Le finestre della cartella (`apps/client/src/editors/grid/dialogs/`, elencate
 in `catalog.ts`) si aprono da un controllo della barra, spento con il comando
 che la finestra darebbe, o dall'esito di un comando che chiede una finestra
 (`GridDialog`). Ognuna legge con le letture del provider (`cell.get`,
-`formulas.nameManager`…) e, confermata, dà un solo comando del catalogo
-(la finestra di un commento uno per ciò che è cambiato); un rifiuto resta
-scritto nella finestra aperta. Formato celle dà soltanto ciò
-che è cambiato, e l'esempio del formato lo calcola il provider con `TEXT`.
+`formulas.nameManager`…) e, confermata, dà un solo comando del catalogo (la
+finestra di un commento uno per ciò che è cambiato); un rifiuto resta scritto
+nella finestra aperta. Formato celle dà soltanto ciò che è cambiato, e
+l'esempio del formato lo calcola il provider con `TEXT`. Crea tabella dà
+l'area di dati della cella e dice che senza intestazioni i dati scendono;
+ordinare da una cella sola allarga prima la selezione a quell'area.
 
 ## I comandi nella tavolozza
 
@@ -439,9 +441,11 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 
 ## Dove si trova
 
-- `apps/client/src/editors/grid/`: `engine.ts`, `workbook.ts`, `objects.ts`,
+- `apps/client/src/editors/grid/`: `engine.ts`, `engine-geometry.ts`,
+  `engine-host.ts`, `dom-sync.ts`, `marks.ts`, `workbook.ts`, `objects.ts`,
   `comment-card.ts`, `menu-comandi.ts`, `risultato.ts`, `motivi.ts`
-- `apps/client/src/editors/grid/ribbon/`: `ribbon.ts`, `tabs.ts`
+- `apps/client/src/editors/grid/ribbon/`: `ribbon.ts`, `tabs.ts` (le schede in
+  `tabs/`)
 - `apps/client/src/editors/grid/dialogs/`: `host.ts`, `catalog.ts`, `page.ts`,
   `notes.ts`, `protect.ts`
 - `apps/client/src/editors/grid/palette/`: `commands.ts`, `form.ts`

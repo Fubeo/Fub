@@ -31,7 +31,7 @@ export const CHROME_MEASURES: readonly (readonly [token: string, loose: number, 
   ["drawer-head-h", 36, 28],
   ["sidebar-w", 264, 216],
   ["sidebar-min", 208, 176],
-  ["inspector-w", 300, 260],
+  ["inspector-w", 264, 216],
   ["inspector-min", 248, 216],
   ["status-h", 26, 20],
 ];

@@ -56,6 +56,8 @@ export const SETTINGS: PartAnatomy = {
         "settings-card",
       ],
     },
+    // Informazioni: la riga della versione col logo accanto (D26).
+    { name: "about-version", states: REST, hooks: ["about-version", "about-logo"] },
     {
       // Una riga: il nome e ciò che lo spiega, la portata, l'esito.
       // «Selezionata» qui è la riga modificata (`data-modified`).
@@ -194,6 +196,7 @@ export const SETTINGS: PartAnatomy = {
         "components-row--on",
         "components-row--off",
         "components-row--orphan",
+        "components-row--found",
         "components-icon",
         "components-text",
         "components-name",

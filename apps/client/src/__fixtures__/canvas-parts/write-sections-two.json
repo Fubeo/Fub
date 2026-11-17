@@ -1,0 +1,17 @@
+{
+  "name": "write-sections-two",
+  "description": "Due sezioni: il subpath della prima e il campo.",
+  "file": "Statistica.md",
+  "parts": {
+    "kind": "sections",
+    "sections": [
+      "Varianza",
+      "Media"
+    ]
+  },
+  "expect": {
+    "outcome": "written",
+    "subpath": "#Varianza",
+    "parts": "{\"kind\":\"sections\",\"sections\":[\"Varianza\",\"Media\"]}"
+  }
+}

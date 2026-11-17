@@ -42,6 +42,51 @@ export const SIZES = [50, 2000];
 export const OPENS = 20;
 export const COMMITS = 200;
 
+/// Quanti giri fa lo scenario L1 nella stessa WebView. Un giro solo dava il
+/// p95 di venti aperture, cioè la seconda più lenta: due intoppi del runner
+/// (un GC, un altro processo) nello stesso giro bastavano a passare la soglia
+/// della lavagna piccola, che apre in 1–4 ms (#388). Con cinque giri il
+/// referto dà la mediana dei p95: un giro storto non la sposta, un nucleo
+/// davvero più lento sposta tutti i giri e la mediana con loro.
+export const L1_ROUNDS = 5;
+
+/// La mediana di numeri già validi; `null` se non ce n'è nessuno. Con un
+/// numero pari di valori, la media dei due di mezzo.
+function median(xs) {
+  const s = xs.filter((x) => typeof x === "number" && Number.isFinite(x)).sort((a, b) => a - b);
+  if (s.length === 0) return null;
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/// I valori di L1 dai referti dei giri (`measureCanvasCore`, uno per giro,
+/// nell'ordine). La prima istanza, la prima apertura e il primo commit sono
+/// del primo giro, il solo a freddo, come li trova chi apre la prima lavagna:
+/// stanno nel referto senza soglia. L'istanza (`L1.istanza`) e i p95 di
+/// `open` e `commit` sono la mediana dei giri (`L1_ROUNDS`). Ogni giro
+/// compila davvero il modulo da capo (sul runner i giri dopo il primo costano
+/// ancora 13 ms di mediana: WebKit non riusa il codice già compilato), quindi
+/// la mediana dice quanto costa compilarlo; non dice la coda della prima
+/// compilazione nella pagina, che sul runner arriva a 90 ms in un job dove
+/// gli altri quattro giri stanno fra 13 e 24 (#434).
+export function l1Values(reports) {
+  if (reports.length === 0) throw new Error("L1 senza giri");
+  const [first] = reports;
+  const values = {
+    "L1.istanza": median(reports.map((r) => r.instanceMs)),
+    "L1.istanza.prima": first.instanceMs,
+  };
+  for (const board of first.boards) {
+    const rounds = reports.map((r) => r.boards.find((b) => b.size === board.size));
+    if (rounds.some((b) => b === undefined)) throw new Error(`un giro di L1 non ha la lavagna di ${board.size} schede`);
+    values[`L1.open.${board.size}.prima`] = board.firstOpenMs;
+    values[`L1.open.${board.size}.p95`] = median(rounds.map((b) => b.open.p95));
+    values[`L1.commit.${board.size}.primo`] = board.firstCommitMs;
+    values[`L1.commit.${board.size}.p95`] = median(rounds.map((b) => b.commit.p95));
+  }
+  return values;
+}
+
 /// Una lavagna di `count` schede di testo su una griglia di venti colonne,
 /// unite in fila da archi, scritta con le tabulazioni come la scrive
 /// Obsidian. Deterministica: stesso `count`, stessi byte.

@@ -1,15 +1,18 @@
-// Il pannello del «/»: la testata con ciò che si è scritto, le linguette
-// delle sezioni, l'elenco con la pillola che scivola fra le righe,
-// l'anteprima a destra e il piede coi tasti. Una voce con «›» apre il suo
-// passo nello stesso riquadro (`pickers/`).
+// Il pannello del «/»: una colonna sola, larga 352 px. In alto le sei tessere
+// dei blocchi più usati, sotto le righe a gruppi con la sintassi a destra (i
+// titoli dei gruppi restano in cima mentre si scorre), in fondo il disegno del
+// blocco scelto. Scrivendo, un elenco solo e in fondo «Cerca fra tutti i
+// comandi». Una voce che apre un passo lo apre nello stesso riquadro
+// (`pickers/`).
 //
 // La superficie lo posa accanto al cursore (`markdown/slash.ts`) e gli passa
-// ciò che si scrive e i tasti; il fuoco resta nell'editor, e la riga attiva si
-// dice con `aria-activedescendant`. Il pannello non conosce CodeMirror.
+// ciò che si scrive e i tasti; il fuoco resta nell'editor, e la voce attiva
+// si dice con `aria-activedescendant`. I tasti li mostra la riga dei
+// suggerimenti della banda (il contesto `slash` di `markdown/hints.ts`), non
+// il pannello. Il pannello non conosce CodeMirror.
 //
-// Il movimento passa da `moto`: l'entrata dal cursore (snap), le prime otto
-// righe sfalsate, la pillola che segue la scelta (snap), l'anteprima che
-// arriva da 4 px (soft), i passi che scorrono di lato, l'uscita in 110 ms.
+// Tessere e righe sono i pezzi del kit (`kit/tile.ts`, `kit/row.ts`,
+// `kit/group-label.ts`), gli stessi del menu e dello spazio comandi.
 import type {
   SlashMenuEntry,
   SlashPanel,
@@ -18,21 +21,21 @@ import type {
   SlashSection,
 } from "../../editors/core/editor-menu";
 import { t, type Key } from "../../i18n/strings";
-import { iconButton } from "../../kit";
-import { animate, enter, exitGhost, flip, stagger } from "../../moto";
+import { createGroupLabel, createRow, createTile, iconButton, markLit } from "../../kit";
+import { enter, exitGhost, stagger } from "../../moto";
 import { identifier } from "../../ui/a11y";
-import { iconEl } from "../../ui/icons";
+import { displayBinding } from "../../ui/commands";
 import { openLifetime } from "../../ui/lifetime";
 import { registerFormatIcons } from "../format-bar";
 import { COLOR_ENTRY, type SlashResults } from "./entries";
 import { openStep, type SlashStep, type StepDeps } from "./pickers";
-import { previewOf } from "./preview";
+import { descriptionOf, syntaxOf, thumbOf } from "./preview";
 
 /// Ciò che il pannello chiede alla shell.
 export interface SlashPanelDeps extends StepDeps {
   /// Le voci per ciò che si è scritto, dove si scrive.
   entries(query: string, place: SlashPlace): SlashResults;
-  /// La voce è fra i preferiti.
+  /// La voce è fra i preferiti (che vanno per primi fra le tessere).
   favorite(id: string): boolean;
   /// Mette o toglie la voce dai preferiti; torna il nuovo stato.
   toggleFavorite(id: string): boolean;
@@ -41,22 +44,17 @@ export interface SlashPanelDeps extends StepDeps {
   hide?(entry: SlashMenuEntry): void;
 }
 
-/// Quanto aspetta l'anteprima dopo l'ultima freccia (ms): chi scorre veloce
-/// non la ridisegna a ogni riga.
-export const PREVIEW_DELAY_MS = 40;
-/// Sotto questo spazio, dal bordo sinistro dell'editor al bordo destro della
-/// finestra, resta soltanto l'elenco: la finestra non scende sotto gli 800 px,
-/// ma il riquadro può stare a destra di una barra o di un altro riquadro.
-export const NARROW_PX = 760;
-/// Sotto questa, o con un dito, il pannello è un foglio dal basso.
+/// Sotto questa, o con un dito, il pannello è un foglio dal basso, largo
+/// quanto la finestra.
 export const SHEET_PX = 600;
 /// L'uscita, entro i 140 ms del banco del moto.
 export const CLOSE_MS = 110;
+/// Quanto resta sopra la riga scelta quando l'elenco scorre fin lì: il titolo
+/// del gruppo, che sta in cima (px).
+const SCROLL_TOP_MARGIN = 30;
+const SCROLL_BOTTOM_MARGIN = 4;
 
 const SECTION_KEYS: Readonly<Record<SlashSection, Key>> = {
-  suggested: "slash_menu.section.suggested",
-  favorites: "slash_menu.section.favorites",
-  recent: "slash_menu.section.recent",
   text: "slash_menu.section.text",
   lists: "slash_menu.section.lists",
   blocks: "slash_menu.section.blocks",
@@ -68,9 +66,43 @@ const SECTION_KEYS: Readonly<Record<SlashSection, Key>> = {
   vault: "slash_menu.section.vault",
 };
 
-/// Il nome di una sezione, nella lingua dell'interfaccia.
+/// Il nome di un gruppo, nella lingua dell'interfaccia.
 export function sectionLabel(section: SlashSection): string {
   return t(SECTION_KEYS[section]);
+}
+
+/// I nomi brevi delle tessere: sotto un quadrato da 40 sta una parola.
+const TILE_KEYS: Readonly<Record<string, Key>> = {
+  "markdown.paragraph": "slash.tile.paragraph",
+  "markdown.quote": "slash.tile.quote",
+  "markdown.list.bullet": "slash.tile.bullet",
+  "markdown.list.ordered": "slash.tile.ordered",
+  "markdown.list.task": "slash.tile.task",
+  "markdown.callout": "slash.tile.callout",
+  "markdown.details": "slash.tile.details",
+  "markdown.columns": "slash.tile.columns",
+  "markdown.table": "slash.tile.table",
+  "markdown.rule": "slash.tile.rule",
+  "markdown.codeblock": "slash.tile.code",
+  "markdown.mathblock": "slash.tile.math",
+  "markdown.diagram": "slash.tile.diagram",
+  "markdown.image": "slash.tile.image",
+  "markdown.embed": "slash.tile.embed",
+  "markdown.wikilink": "slash.tile.link",
+  "markdown.link": "slash.tile.link",
+  "markdown.mention": "slash.tile.person",
+  "markdown.date": "slash.tile.date",
+  "markdown.linkcard": "slash.tile.web",
+  "markdown.toc": "slash.tile.toc",
+};
+
+/// Il nome breve di una tessera: il Titolo 2 è «Titolo», gli altri livelli
+/// col numero; una voce senza nome breve tiene il suo.
+export function tileLabel(entry: SlashMenuEntry): string {
+  const heading = /^markdown\.heading\.([1-6])$/.exec(entry.id);
+  if (heading) return heading[1] === "2" ? t("slash.tile.heading2") : t("slash.tile.heading", { level: heading[1]! });
+  const key = TILE_KEYS[entry.id];
+  return key ? t(key) : entry.label;
 }
 
 /// La finestra è stretta, o la si tocca col dito.
@@ -79,39 +111,25 @@ function sheetWanted(): boolean {
   return coarse || window.innerWidth <= SHEET_PX;
 }
 
-/// Un tasto disegnato come un tasto.
-function keycap(text: string): HTMLElement {
-  const kbd = document.createElement("kbd");
-  kbd.textContent = text;
-  return kbd;
-}
-
-/// Un pezzo del piede: i tasti e che cosa fanno.
-function footKey(keys: readonly string[], what: string): HTMLElement {
-  const span = document.createElement("span");
-  for (const key of keys) span.append(keycap(key));
-  span.append(` ${what}`);
-  return span;
-}
-
 /// Il nome di una voce con la parte trovata in evidenza.
-function labelWithSpan(entry: SlashMenuEntry): DocumentFragment {
-  const out = document.createDocumentFragment();
+function labelWithSpan(target: HTMLElement, entry: SlashMenuEntry): void {
   const [from, to] = entry.span ?? [0, 0];
   if (to <= from) {
-    out.append(entry.label);
-    return out;
+    target.textContent = entry.label;
+    return;
   }
   const mark = document.createElement("mark");
+  mark.className = "slash-found";
   mark.textContent = entry.label.slice(from, to);
-  out.append(entry.label.slice(0, from), mark, entry.label.slice(to));
-  return out;
+  target.replaceChildren(entry.label.slice(0, from), mark, entry.label.slice(to));
 }
 
-/// Il campione di un colore: la «A» del testo, o il fondo.
-function swatchOf(entry: SlashMenuEntry): { kind: "text" | "fill"; name: string } | null {
-  const match = /^markdown\.(color|background)\.([a-z]+)$/.exec(entry.id);
-  return match ? { kind: match[1] === "color" ? "text" : "fill", name: match[2]! } : null;
+/// Una scelta del pannello: una tessera, una riga, o «Cerca fra tutti i
+/// comandi».
+interface Item {
+  readonly element: HTMLElement;
+  readonly entry: SlashMenuEntry | null;
+  readonly tile: boolean;
 }
 
 export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps): SlashPanel {
@@ -124,359 +142,285 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
   // I gesti nel pannello non portano via il fuoco dall'editor.
   life.listen(dom, "mousedown", (event) => event.preventDefault());
 
+  // La testata c'è soltanto dove ciò che si scrive non si vede nel testo:
+  // «Trasforma» (si scrive nel pannello) e i passi (il percorso).
   const head = document.createElement("div");
   head.className = "slash-head";
-  const typed = document.createElement("span");
-  typed.className = "slash-query";
+  const crumb = document.createElement("span");
+  crumb.className = "slash-crumb";
   const context = document.createElement("span");
   context.className = "slash-context";
   const count = document.createElement("span");
   count.className = "slash-count";
-  count.setAttribute("role", "status");
-  count.setAttribute("aria-live", "polite");
-  head.append(typed, context, count);
+  head.append(crumb, context, count);
+  // Il conto per chi ascolta, sempre: si legge anche senza testata.
+  const status = document.createElement("span");
+  status.className = "sr-only";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
 
-  const tabs = document.createElement("div");
-  tabs.className = "slash-tabs";
-  tabs.setAttribute("role", "group");
-  tabs.setAttribute("aria-label", t("slash.panel.sections"));
-  // Le linguette non scorrono a mano: segue la scelta (Tab, frecce), e un
-  // contenitore che scorre senza niente di raggiungibile sarebbe una tappa
-  // del Tab per Chromium e un errore per axe.
+  // Le scelte, per chi ascolta un elenco solo: le tessere e le righe.
+  const choices = document.createElement("div");
+  choices.className = "slash-choices";
+  choices.id = identifier("slash-list");
+  choices.setAttribute("role", "listbox");
+  choices.setAttribute("aria-label", t(transform ? "slash.panel.transform" : "slash.panel.label"));
+  const top = document.createElement("div");
+  top.className = "slash-top";
+  top.setAttribute("role", "group");
+  top.setAttribute("aria-label", t("slash.panel.top"));
+  const list = document.createElement("div");
+  list.className = "slash-list";
+  // Il dito lo fa scorrere il pannello, non il browser (vedi sotto).
+  list.style.touchAction = "none";
+  choices.append(top, list);
+
+  const detail = document.createElement("div");
+  detail.className = "slash-detail";
+  const thumb = document.createElement("span");
+  thumb.className = "slash-thumb";
+  thumb.setAttribute("aria-hidden", "true");
+  const detailText = document.createElement("span");
+  detailText.className = "slash-detail-text";
+  const description = document.createElement("span");
+  description.className = "slash-description";
+  description.id = identifier("slash-description");
+  const syntax = document.createElement("span");
+  syntax.className = "slash-syntax";
+  detailText.append(description, syntax);
+  const tools = document.createElement("span");
+  tools.className = "slash-tools";
+  detail.append(thumb, detailText, tools);
 
   const body = document.createElement("div");
   body.className = "slash-body";
-  const list = document.createElement("div");
-  list.className = "slash-list";
-  list.id = identifier("slash-list");
-  list.setAttribute("role", "listbox");
-  // Il fuoco resta nell'editor (`aria-activedescendant`): l'elenco che scorre
-  // non è una tappa del Tab.
-  list.tabIndex = -1;
-  // Il dito lo fa scorrere il pannello, non il browser (vedi sotto).
-  list.style.touchAction = "none";
-  list.setAttribute("aria-label", t(transform ? "slash.panel.transform" : "slash.panel.label"));
-  const pill = document.createElement("div");
-  pill.className = "slash-pill";
-  pill.setAttribute("aria-hidden", "true");
-
-  const preview = document.createElement("div");
-  preview.className = "slash-preview";
-  const previewHead = document.createElement("div");
-  previewHead.className = "slash-preview-head";
-  const previewTitle = document.createElement("span");
-  previewTitle.className = "slash-preview-title";
-  const stage = document.createElement("div");
-  stage.className = "slash-stage";
-  // L'anteprima è decorativa; la descrizione si legge.
-  stage.setAttribute("aria-hidden", "true");
-  const description = document.createElement("div");
-  description.className = "slash-description";
-  description.id = identifier("slash-description");
-  const tip = document.createElement("div");
-  tip.className = "slash-tip";
-  previewHead.append(previewTitle);
-  preview.append(previewHead, stage, description, tip);
-  body.append(list, preview);
-
-  const foot = document.createElement("div");
-  foot.className = "slash-foot";
-  const listFoot = (): void => {
-    foot.replaceChildren(
-      footKey(["↑", "↓"], t("slash.panel.keys.move")),
-      footKey(["↵"], t("slash.panel.keys.enter")),
-      footKey(["⇥"], t("slash.panel.keys.tab")),
-      ...(transform ? [] : [footKey(["⇧", "↵"], t("slash.panel.keys.below"))]),
-      footKey(["Esc"], t(transform ? "slash.panel.keys.close" : "slash.panel.keys.escape")),
-      footKey(["Ctrl", "/"], t("slash.panel.keys.all")),
-    );
-  };
-  listFoot();
-  dom.append(head, tabs, body, foot);
+  body.append(choices, detail);
+  dom.append(head, body, status);
+  head.hidden = !transform;
 
   let query = "";
   let place: SlashPlace = { line: "empty", above: null, inList: false };
-  let results: SlashResults = { entries: [], sections: [], filtering: false };
-  let rows: HTMLElement[] = [];
+  let results: SlashResults = { top: [], entries: [], sections: [], filtering: false };
+  let items: Item[] = [];
+  /// Quante delle scelte sono tessere: stanno in testa a `items`.
+  let tiles = 0;
   let selected = 0;
-  let pillTop: number | null = null;
-  let previewTimer: number | undefined;
   let step: SlashStep | null = null;
   let shown = false;
-  /// Dove il pannello sta adesso: l'uscita parte da lì anche quando l'editor
-  /// lo ha già tolto dal documento.
+  /// L'altezza del corpo all'ultima misura dell'editor (`placed`).
+  let bodyHeight = -1;
   /// Dove CodeMirror ha messo il pannello: lo toglie prima di chiuderlo, e
   /// l'uscita parte da lì, con le righe ancora in corsa.
   let home: HTMLElement | null = null;
-  life.add(() => window.clearTimeout(previewTimer));
 
-  const entryAt = (index: number): SlashMenuEntry | null => results.entries[index] ?? null;
+  const option = (element: HTMLElement, index: number): void => {
+    element.id = identifier("slash-option");
+    element.tabIndex = -1;
+    element.setAttribute("role", "option");
+    element.setAttribute("aria-selected", "false");
+    element.dataset["index"] = String(index);
+  };
 
-  /// La testata: ciò che si è scritto (o il percorso del passo), il posto e
-  /// il conto.
+  /// La testata di «Trasforma»: ciò che si è scritto e quante righe.
   const drawHead = (): void => {
-    if (step) return;
-    typed.replaceChildren();
-    if (transform) {
-      typed.className = "slash-crumb";
-      typed.textContent = query === "" ? t("slash.panel.transform") : `${t("slash.panel.transform")} · ${query}`;
-      context.textContent = t(transform.lines === 1 ? "slash.panel.place.one" : "slash.panel.place.many", { count: transform.lines });
-    } else {
-      typed.className = "slash-query";
-      const written = document.createElement("b");
-      written.textContent = query;
-      typed.append("/", written);
-      context.textContent = t(place.line === "empty" ? "slash.panel.place.empty" : "slash.panel.place.after");
-    }
+    if (step || !transform) return;
+    crumb.textContent = query === "" ? t("slash.panel.transform") : `${t("slash.panel.transform")} · ${query}`;
+    context.textContent = t(transform.lines === 1 ? "slash.panel.place.one" : "slash.panel.place.many", { count: transform.lines });
+    count.textContent = "";
+  };
+
+  const drawStatus = (): void => {
     const n = results.entries.length;
-    count.textContent = !results.filtering
+    status.textContent = !results.filtering
       ? t("slash.panel.all", { count: n })
       : n === 0 ? t("slash.panel.zero") : n === 1 ? t("slash.panel.one") : t("slash.panel.count", { count: n });
   };
 
-  const drawTabs = (): void => {
-    tabs.hidden = results.filtering || step !== null;
-    tabs.replaceChildren(...results.sections.map((section) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.tabIndex = -1;
-      button.dataset["section"] = section;
-      button.textContent = sectionLabel(section);
-      button.addEventListener("click", () => {
-        const index = results.entries.findIndex((each) => each.section === section);
-        if (index >= 0) select(index, true);
-      });
-      return button;
-    }));
-  };
-
-  /// Le righe, coi gruppi delle sezioni a menu appena aperto.
-  const drawList = (): void => {
-    list.replaceChildren(pill);
-    rows = [];
-    dom.classList.toggle("is-empty", results.entries.length === 0);
-    // Un elenco senza opzioni non è un listbox: il messaggio si legge com'è.
-    if (results.entries.length === 0) list.removeAttribute("role");
-    else list.setAttribute("role", "listbox");
-    if (results.entries.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "slash-empty";
-      const title = document.createElement("b");
-      title.textContent = t("slash.panel.none", { query });
-      const hint = document.createElement("span");
-      hint.textContent = t("slash.panel.none.hint");
-      empty.append(title, hint);
-      list.append(empty);
-      return;
+  /// Le tessere e le righe, coi gruppi a menu appena aperto.
+  const draw = (): void => {
+    items = [];
+    top.replaceChildren();
+    list.replaceChildren();
+    const quick = transform ? [] : results.top;
+    top.hidden = quick.length === 0;
+    for (const entry of quick) {
+      const tile = createTile({ label: tileLabel(entry), shape: "stack", className: "slash-tile", ...(entry.icon ? { icon: entry.icon } : {}) });
+      option(tile, items.length);
+      // Il nome breve si vede; chi ascolta sente quello intero.
+      tile.setAttribute("aria-label", entry.label);
+      tile.setAttribute("aria-describedby", description.id);
+      top.append(tile);
+      items.push({ element: tile, entry, tile: true });
+    }
+    tiles = items.length;
+    dom.classList.toggle("is-filtering", results.filtering);
+    const nothing = results.entries.length === 0;
+    if (nothing && results.filtering) {
+      const none = document.createElement("div");
+      none.className = "slash-none";
+      none.textContent = t("slash.panel.none", { query });
+      list.append(none);
+    } else if (nothing) {
+      const none = document.createElement("div");
+      none.className = "slash-none";
+      none.textContent = t("slash.panel.nothing");
+      list.append(none);
     }
     let group: HTMLElement | null = null;
-    let last: string | null = null;
-    results.entries.forEach((entry, index) => {
-      const name = entry.quick ? t("slash.panel.quick") : results.filtering ? (index === (results.entries[0]!.quick ? 1 : 0) ? t("slash.panel.results") : null) : sectionLabel(entry.section);
-      if (name !== null && name !== last) {
+    let last: SlashSection | null = null;
+    for (const entry of results.entries) {
+      if (!results.filtering && entry.section !== last) {
         group = document.createElement("div");
         group.className = "slash-group";
         group.setAttribute("role", "group");
-        const label = document.createElement("div");
-        label.className = "slash-section";
-        label.id = identifier("slash-section");
-        label.textContent = name;
-        group.setAttribute("aria-labelledby", label.id);
-        group.append(label);
+        group.append(createGroupLabel({ text: sectionLabel(entry.section), sticky: true, labels: group, className: "slash-group-label" }));
         list.append(group);
-        last = name;
+        last = entry.section;
       }
-      const row = document.createElement("div");
-      row.className = "slash-row";
-      if (entry.quick) row.classList.add("is-quick");
-      row.id = identifier("slash-option");
-      row.setAttribute("role", "option");
-      row.setAttribute("aria-selected", "false");
-      row.setAttribute("aria-describedby", description.id);
-      row.dataset["index"] = String(index);
-      const box = document.createElement("span");
-      box.className = "slash-icon";
-      box.setAttribute("aria-hidden", "true");
-      const swatch = swatchOf(entry);
-      if (swatch) {
-        box.dataset["swatch"] = swatch.kind;
-        box.dataset["color"] = swatch.name;
-        if (swatch.kind === "text") box.textContent = "A";
-      } else {
-        const figure = entry.icon ? iconEl(entry.icon) : null;
-        if (figure) box.append(figure);
+      const note = entry.hint ?? undefined;
+      const row = createRow({ label: entry.label, icon: entry.icon, holdIcon: true, className: "slash-row", parts: { note: "slash-syntax-note" }, ...(note ? { note } : {}) });
+      labelWithSpan(row.label, entry);
+      // Un colore trovato scrivendo («/blu») si vede nel suo colore.
+      const swatch = /^markdown\.(color|background)\.([a-z]+)$/.exec(entry.id);
+      if (swatch && row.icon) {
+        row.icon.replaceChildren(swatch[1] === "color" ? "A" : "");
+        row.icon.classList.add("slash-swatch");
+        row.icon.dataset[swatch[1] === "color" ? "color" : "fill"] = swatch[2]!;
       }
-      const text = document.createElement("span");
-      text.className = "slash-text";
-      const label = document.createElement("b");
-      label.append(labelWithSpan(entry));
-      text.append(label);
-      if (entry.why) {
-        const why = document.createElement("span");
-        why.textContent = t(entry.why === "forse" ? "slash.panel.maybe" : "slash.panel.initials");
-        text.append(why);
-      }
-      row.append(box, text);
-      if (entry.picker) {
-        const more = document.createElement("span");
-        more.className = "slash-more";
-        more.setAttribute("aria-hidden", "true");
-        more.textContent = "›";
-        row.append(more);
-      } else if (entry.hint) {
-        const hint = document.createElement("span");
-        hint.className = "slash-hint";
-        hint.textContent = entry.hint;
-        row.append(hint);
-      }
-      (group ?? list).append(row);
-      rows.push(row);
-    });
-  };
-
-  /// Posa la pillola sulla riga scelta: scivola da dov'era.
-  const placePill = (slide: boolean): void => {
-    const row = rows[selected];
-    if (!row) {
-      pill.hidden = true;
-      return;
+      if (entry.quick) row.element.classList.add("is-quick");
+      option(row.element, items.length);
+      row.element.setAttribute("aria-describedby", description.id);
+      (group ?? list).append(row.element);
+      items.push({ element: row.element, entry, tile: false });
     }
-    pill.hidden = false;
-    const top = row.offsetTop;
-    const move = (): void => {
-      pill.style.top = `${top}px`;
-      pill.style.height = `${row.offsetHeight}px`;
-    };
-    // Una pillola ancora in volo riparte da dove la si vede.
-    if (slide && pillTop !== null && pillTop !== top) flip([pill], move, { spring: "snap", scale: false, lifetime: life });
-    else move();
-    pillTop = top;
+    // Scrivendo, l'ultima scelta cerca fra tutti i comandi; senza risultati
+    // è l'unica, ed è accesa.
+    if (results.filtering && !transform) {
+      const all = createRow({ label: t("context.search.all", { query }), icon: "search", keys: displayBinding("Mod-/"), className: "slash-row slash-all" });
+      option(all.element, items.length);
+      list.append(all.element);
+      items.push({ element: all.element, entry: null, tile: false });
+    }
+    // Un elenco senza scelte non è un listbox: il messaggio si legge com'è.
+    if (items.length === 0) choices.removeAttribute("role");
+    else choices.setAttribute("role", "listbox");
   };
 
-  const drawPreview = (): void => {
+  const entryAt = (index: number): SlashMenuEntry | null => items[index]?.entry ?? null;
+
+  /// Il disegno della voce scelta, in fondo; niente per «Cerca fra tutti i
+  /// comandi».
+  const drawDetail = (): void => {
     const entry = entryAt(selected);
-    stage.replaceChildren();
-    previewHead.querySelector(".slash-preview-tools")?.remove();
+    detail.hidden = entry === null;
+    tools.replaceChildren();
+    detail.classList.remove("has-tools");
     if (!entry) {
-      previewTitle.textContent = "";
-      description.textContent = "";
-      tip.textContent = "";
+      thumb.replaceChildren();
+      description.replaceChildren();
+      syntax.replaceChildren();
       return;
     }
-    previewTitle.textContent = `${t(entry.quick ? "slash.panel.quick" : "slash.panel.preview")} · ${entry.label}`;
-    const shown = previewOf(entry, { outline: events.outline, transform, today: deps.today() });
-    stage.append(shown.stage);
-    description.textContent = entry.description;
-    tip.replaceChildren(...shown.tip);
-    if (entry.id !== COLOR_ENTRY && !entry.quick) {
-      const favored = deps.favorite(entry.id);
-      const star = iconButton({
-        icon: "fmt-star",
-        label: t(favored ? "slash.panel.unfavorite" : "slash.panel.favorite"),
-        pressed: favored,
+    thumb.replaceChildren(thumbOf(entry));
+    description.replaceChildren(...descriptionOf(entry.description));
+    syntax.replaceChildren(...syntaxOf(entry, transform));
+    syntax.hidden = syntax.childNodes.length === 0;
+    if (entry.id === COLOR_ENTRY || entry.quick) return;
+    const favored = deps.favorite(entry.id);
+    const star = iconButton({
+      icon: "fmt-star",
+      label: t(favored ? "slash.panel.unfavorite" : "slash.panel.favorite"),
+      pressed: favored,
+      onPress: () => {
+        deps.toggleFavorite(entry.id);
+        drawDetail();
+      },
+    });
+    star.tabIndex = -1;
+    tools.append(star);
+    detail.classList.add("has-tools");
+    if (deps.hide) {
+      const hide = iconButton({
+        icon: "fmt-hide",
+        label: t("slash.panel.hide"),
         onPress: () => {
-          deps.toggleFavorite(entry.id);
-          drawPreview();
+          const at = selected;
+          deps.hide?.(entry);
+          if (life.closed) return;
+          refresh();
+          if (items.length) select(Math.min(at, items.length - 1));
         },
       });
-      star.tabIndex = -1;
-      const tools = document.createElement("span");
-      tools.className = "slash-preview-tools";
-      tools.append(star);
-      if (deps.hide) {
-        const hide = iconButton({
-          icon: "fmt-hide",
-          label: t("slash.panel.hide"),
-          onPress: () => {
-            const at = selected;
-            deps.hide?.(entry);
-            if (life.closed) return;
-            refresh(false);
-            if (results.entries.length) select(Math.min(at, results.entries.length - 1), true, true);
-          },
-        });
-        hide.tabIndex = -1;
-        tools.append(hide);
-      }
-      previewHead.append(tools);
+      hide.tabIndex = -1;
+      tools.append(hide);
     }
   };
 
-  const schedulePreview = (now: boolean): void => {
-    window.clearTimeout(previewTimer);
-    if (now) {
-      drawPreview();
+  /// La riga scelta resta in vista sotto il titolo del suo gruppo, senza far
+  /// scorrere niente fuori dall'elenco; una tessera riporta l'elenco in cima.
+  const keepInView = (item: Item): void => {
+    if (item.tile) {
+      list.scrollTop = 0;
       return;
     }
-    previewTimer = window.setTimeout(() => {
-      if (life.closed) return;
-      drawPreview();
-      animate(stage, { from: { y: 4, opacity: 0.2 }, spring: "soft", whenReduced: "fade", lifetime: life });
-    }, PREVIEW_DELAY_MS);
+    const row = item.element;
+    const margin = results.filtering ? SCROLL_BOTTOM_MARGIN : SCROLL_TOP_MARGIN;
+    if (row.offsetTop - margin < list.scrollTop) list.scrollTop = Math.max(0, row.offsetTop - margin);
+    else if (row.offsetTop + row.offsetHeight + SCROLL_BOTTOM_MARGIN > list.scrollTop + list.clientHeight) {
+      list.scrollTop = row.offsetTop + row.offsetHeight + SCROLL_BOTTOM_MARGIN - list.clientHeight;
+    }
   };
 
-  /// Sceglie la riga `index`: pillola, attivo per il lettore di schermo,
-  /// linguetta accesa, anteprima.
-  function select(index: number, jump = false, now = false): void {
-    if (rows.length === 0) {
+  /// Sceglie la voce `index`: accesa, attiva per il lettore di schermo, in
+  /// vista, col suo disegno in fondo.
+  function select(index: number, scroll = true): void {
+    const previous = items[selected];
+    if (previous) {
+      markLit(previous.element, false);
+      previous.element.setAttribute("aria-selected", "false");
+    }
+    if (items.length === 0) {
       selected = 0;
       events.active(null);
-      placePill(false);
-      schedulePreview(true);
+      drawDetail();
       return;
     }
-    const previous = rows[selected];
-    selected = Math.max(0, Math.min(rows.length - 1, index));
-    const row = rows[selected]!;
-    if (previous && previous !== row) previous.setAttribute("aria-selected", "false");
-    previous?.classList.remove("is-selected");
-    row.classList.add("is-selected");
-    row.setAttribute("aria-selected", "true");
-    events.active(row.id);
-    placePill(!jump);
-    // La riga resta in vista, senza far scorrere niente fuori dall'elenco.
-    if (row.offsetTop < list.scrollTop) list.scrollTop = row.offsetTop - 30;
-    else if (row.offsetTop + row.offsetHeight > list.scrollTop + list.clientHeight) {
-      list.scrollTop = row.offsetTop + row.offsetHeight - list.clientHeight + 8;
-    }
-    const section = entryAt(selected)?.section;
-    for (const tab of tabs.querySelectorAll<HTMLElement>("button")) {
-      const current = tab.dataset["section"] === section;
-      tab.classList.toggle("is-current", current);
-      if (current && (tab.offsetLeft < tabs.scrollLeft || tab.offsetLeft + tab.offsetWidth > tabs.scrollLeft + tabs.clientWidth)) {
-        tabs.scrollLeft = Math.max(0, tab.offsetLeft - 16);
-      }
-    }
-    schedulePreview(now);
+    selected = Math.max(0, Math.min(items.length - 1, index));
+    const item = items[selected]!;
+    markLit(item.element, true);
+    item.element.setAttribute("aria-selected", "true");
+    events.active(item.element.id);
+    if (scroll) keepInView(item);
+    drawDetail();
   }
 
-  /// Rifà l'elenco per ciò che si è scritto.
-  const refresh = (first: boolean): void => {
+  /// Rifà le scelte per ciò che si è scritto; la prima è accesa.
+  const refresh = (): void => {
     results = deps.entries(query, place);
     if (transform) {
       // «Trasforma»: soltanto ciò che cambia le righe scelte, e i comandi.
-      results = { ...results, entries: results.entries.filter((entry) => !entry.action || transform.after(entry.id) !== null) };
-      results = { ...results, sections: results.filtering ? [] : results.sections.filter((section) => results.entries.some((entry) => entry.section === section)) };
+      const entries = results.entries.filter((entry) => !entry.action || transform.after(entry.id) !== null);
+      results = { ...results, top: [], entries, sections: results.sections.filter((section) => entries.some((entry) => entry.section === section)) };
     }
     drawHead();
-    drawTabs();
-    drawList();
-    pillTop = null;
+    drawStatus();
+    draw();
     selected = 0;
-    select(0, true, first);
+    list.scrollTop = 0;
+    select(0, false);
   };
 
-  // Le righe si scelgono passandoci sopra e si eseguono col clic. Un
+  // Le scelte si accendono passandoci sopra e si eseguono col clic. Un
   // movimento fermo (lo scorrimento sotto il puntatore) non cambia la scelta.
   let pointer: { x: number; y: number } | null = null;
-  life.listen(list, "mousemove", (event) => {
+  life.listen(choices, "mousemove", (event) => {
     if (pointer && Math.abs(pointer.x - event.clientX) < 2 && Math.abs(pointer.y - event.clientY) < 2) return;
     pointer = { x: event.clientX, y: event.clientY };
-    const row = (event.target as Element).closest<HTMLElement>(".slash-row");
-    if (row && Number(row.dataset["index"]) !== selected) select(Number(row.dataset["index"]));
+    const hit = (event.target as Element).closest<HTMLElement>("[data-index]");
+    if (hit && Number(hit.dataset["index"]) !== selected) select(Number(hit.dataset["index"]), false);
   });
-  // L'elenco non è un contenitore che scorre da sé (`overflow: hidden`): il
-  // fuoco resta nell'editor e le frecce lo fanno scorrere con la scelta, e un
+  // L'elenco non scorre da sé (`overflow: hidden`): il fuoco resta
+  // nell'editor e le frecce lo fanno scorrere con la scelta, e un
   // contenitore che scorre senza niente di raggiungibile sarebbe una tappa del
   // Tab per Chromium e un errore per axe. La rotella e il dito lo spostano qui.
   life.listen(list, "wheel", (event) => {
@@ -501,14 +445,14 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
     drag = null;
   });
   life.listen(list, "pointercancel", () => void (drag = null));
-  life.listen(list, "click", (event) => {
-    const row = (event.target as Element).closest<HTMLElement>(".slash-row");
-    if (!row || dragged) return;
-    select(Number(row.dataset["index"]), true, true);
+  life.listen(choices, "click", (event) => {
+    const hit = (event.target as Element).closest<HTMLElement>("[data-index]");
+    if (!hit || dragged) return;
+    select(Number(hit.dataset["index"]), false);
     choose(false);
   });
 
-  /// Entra nel passo di una voce con «›».
+  /// Entra nel passo di una voce che ne ha uno.
   const enterStep = (entry: SlashMenuEntry): void => {
     const opened = openStep(entry, deps, {
       done: (choice) => events.choose({ entry: choice.entry ?? entry, params: choice.params, below: false }),
@@ -517,25 +461,69 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
     if (!opened) return;
     step = opened;
     dom.classList.add("is-step");
-    typed.className = "slash-crumb";
-    typed.textContent = `${entry.label} ›`;
+    head.hidden = false;
+    crumb.textContent = `${entry.label} ›`;
     context.textContent = "";
     drawStepHead();
-    tabs.hidden = true;
     body.replaceChildren(opened.dom);
-    foot.replaceChildren(
-      footKey(["←", "→", "↑", "↓"], t("slash.panel.keys.move")),
-      footKey(["↵"], t("slash.panel.keys.enter")),
-      footKey(["⌫"], t("slash.panel.keys.back")),
-    );
+    // La scelta del passo in vista, ora che il passo ha le sue misure.
+    keepStepChoiceInView();
     enter(opened.dom, { from: { x: 14, opacity: 0 }, spring: "snap", whenReduced: "fade", lifetime: life });
   };
 
   function drawStepHead(): void {
     if (!step) return;
     count.textContent = step.hint();
+    status.textContent = step.hint();
     events.active(step.active());
+    keepStepChoiceInView();
   }
+
+  /// Il passo, come l'elenco, non scorre da sé (`overflow: hidden`): il fuoco
+  /// resta nell'editor e la scelta, mossa dalle frecce, resta in vista
+  /// facendolo scorrere qui. Un contenitore che scorre senza niente di
+  /// raggiungibile sarebbe una tappa del Tab per Chromium e un errore per axe.
+  function keepStepChoiceInView(): void {
+    if (!step || !step.dom.isConnected) return;
+    const id = step.active();
+    const choice = id ? document.getElementById(id) : null;
+    if (!choice || !step.dom.contains(choice)) return;
+    const box = step.dom.getBoundingClientRect();
+    const at = choice.getBoundingClientRect();
+    if (at.top < box.top) step.dom.scrollTop -= box.top - at.top + 8;
+    else if (at.bottom > box.bottom) step.dom.scrollTop += at.bottom - box.bottom + 8;
+  }
+
+  // La rotella e il dito fanno scorrere il passo, come l'elenco; un
+  // trascinamento non è un tocco, e il clic che lo chiude non sceglie.
+  let stepDrag: { id: number; y: number; top: number; moved: boolean } | null = null;
+  let stepDragged = false;
+  life.listen(body, "wheel", (event) => {
+    if (!step) return;
+    event.preventDefault();
+    step.dom.scrollTop += event.deltaMode === 1 ? event.deltaY * 40 : event.deltaY;
+  }, { passive: false });
+  life.listen(body, "pointerdown", (event) => {
+    if (!step) return;
+    stepDragged = false;
+    if (event.pointerType !== "mouse") stepDrag = { id: event.pointerId, y: event.clientY, top: step.dom.scrollTop, moved: false };
+  });
+  life.listen(body, "pointermove", (event) => {
+    if (!step || !stepDrag || event.pointerId !== stepDrag.id) return;
+    const dy = event.clientY - stepDrag.y;
+    if (Math.abs(dy) > 8) stepDrag.moved = true;
+    if (stepDrag.moved) step.dom.scrollTop = stepDrag.top - dy;
+  });
+  life.listen(body, "pointerup", (event) => {
+    if (stepDrag?.moved && event.pointerId === stepDrag.id) stepDragged = true;
+    stepDrag = null;
+  });
+  life.listen(body, "pointercancel", () => void (stepDrag = null));
+  life.listen(body, "click", (event) => {
+    if (!step || !stepDragged) return;
+    stepDragged = false;
+    event.stopPropagation();
+  }, { capture: true });
 
   const leaveStep = (): void => {
     if (!step) return;
@@ -545,20 +533,26 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
     step.dispose();
     step = null;
     dom.classList.remove("is-step");
-    body.replaceChildren(list, preview);
-    listFoot();
-    refresh(true);
+    head.hidden = !transform;
+    body.replaceChildren(choices, detail);
+    refresh();
     enter(body, { from: { x: -14, opacity: 0 }, spring: "snap", whenReduced: "fade", lifetime: life });
   };
 
+  /// Cerca fra tutti i comandi, con ciò che si è scritto.
+  const toPalette = (): void => {
+    events.dismiss();
+    events.palette(query);
+  };
+
   function choose(below: boolean): void {
-    const entry = entryAt(selected);
-    if (!entry) {
-      // Niente trovato: Invio cerca fra tutti i comandi.
-      events.dismiss();
-      events.palette(query);
+    const item = items[selected];
+    if (!item?.entry) {
+      // Niente trovato, o «Cerca fra tutti i comandi».
+      toPalette();
       return;
     }
+    const entry = item.entry;
     if (entry.picker) {
       enterStep(entry);
       return;
@@ -566,15 +560,33 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
     events.choose({ entry, params: entry.params, below });
   }
 
-  /// Salta alla sezione dopo (o prima) di quella della riga scelta.
-  const jumpSection = (direction: 1 | -1): void => {
-    const entries = results.entries;
-    if (entries.length === 0) return;
-    const firsts = entries.map((_, index) => index).filter((index) => index === 0 || entries[index - 1]!.section !== entries[index]!.section);
-    const here = firsts.filter((index) => index <= selected).pop() ?? 0;
-    const at = firsts.indexOf(here);
-    const next = firsts[(at + direction + firsts.length) % firsts.length]!;
-    select(next, true);
+  /// Dove comincia ogni tappa del Tab: le tessere, poi il primo di ogni
+  /// gruppo.
+  const groupStarts = (): number[] => {
+    const starts = tiles > 0 ? [0] : [];
+    for (let index = tiles; index < items.length; index++) {
+      const entry = items[index]!.entry;
+      if (index === tiles || entry?.section !== items[index - 1]!.entry?.section) starts.push(index);
+    }
+    return starts;
+  };
+
+  /// Salta al gruppo dopo (o prima) di quello della voce scelta.
+  const jumpGroup = (direction: 1 | -1): void => {
+    const starts = groupStarts();
+    if (starts.length === 0) return;
+    const here = starts.filter((index) => index <= selected).length - 1;
+    select(starts[(here + direction + starts.length) % starts.length]!);
+  };
+
+  /// ↓ e ↑ dalle tessere scendono nelle righe e ci risalgono; fra le righe
+  /// girano in tondo.
+  const step1 = (direction: 1 | -1): number => {
+    const n = items.length;
+    if (direction === 1) return selected < tiles ? (tiles < n ? tiles : 0) : (selected + 1) % n;
+    if (selected < tiles) return n - 1;
+    if (selected === tiles && tiles > 0) return 0;
+    return (selected - 1 + n) % n;
   };
 
   const printable = (event: KeyboardEvent): boolean =>
@@ -582,19 +594,18 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
 
   return {
     dom,
-    listId: list.id,
+    listId: choices.id,
     update(text, where) {
       if (life.closed) return;
       if (!transform) query = text;
       place = where;
       if (step) leaveStep();
-      else refresh(!shown);
+      else refresh();
     },
     key(event) {
       if (life.closed) return false;
       if ((event.ctrlKey || event.metaKey) && event.key === "/") {
-        events.dismiss();
-        events.palette(query);
+        toPalette();
         return true;
       }
       if (step) {
@@ -605,22 +616,30 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
         return step.key(event);
       }
       if (event.ctrlKey || event.metaKey || event.altKey) return false;
+      const n = items.length;
       switch (event.key) {
         case "ArrowDown":
-          select(rows.length === 0 ? 0 : (selected + 1) % rows.length);
+          if (n) select(step1(1));
           return true;
         case "ArrowUp":
-          select(rows.length === 0 ? 0 : (selected - 1 + rows.length) % rows.length);
+          if (n) select(step1(-1));
+          return true;
+        case "ArrowRight":
+        case "ArrowLeft":
+          // Fra le tessere le frecce di lato scorrono la fila; altrove il
+          // cursore si muove nel testo.
+          if (selected >= tiles) return false;
+          select((selected + (event.key === "ArrowRight" ? 1 : tiles - 1)) % tiles);
           return true;
         case "PageDown":
-          select(selected + 8);
+          if (n) select(Math.max(selected, tiles) + 8);
           return true;
         case "PageUp":
-          select(selected - 8);
+          if (n) select(Math.max(tiles, selected - 8));
           return true;
         case "Tab":
           if (results.filtering) select(event.shiftKey ? selected - 1 : selected + 1);
-          else jumpSection(event.shiftKey ? -1 : 1);
+          else jumpGroup(event.shiftKey ? -1 : 1);
           return true;
         case "Enter":
           choose(event.shiftKey && !transform);
@@ -633,12 +652,12 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
       if (transform) {
         if (event.key === "Backspace") {
           query = query.slice(0, -1);
-          refresh(false);
+          refresh();
           return true;
         }
         if (printable(event)) {
           query += event.key;
-          refresh(false);
+          refresh();
           return true;
         }
       }
@@ -647,6 +666,17 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
     placed(above, caretX) {
       if (life.closed) return;
       home = dom.parentElement;
+      // L'editor può accorciare il pannello dopo che la scelta è già scesa
+      // (tasti battuti subito dopo il «/»): se il corpo ha cambiato altezza,
+      // la scelta accesa, nell'elenco o nel passo, torna in vista. Solo
+      // allora, perché una misura per lo scorrere della nota non riporti
+      // indietro chi ha girato la rotella.
+      if (body.clientHeight !== bodyHeight) {
+        bodyHeight = body.clientHeight;
+        const item = items[selected];
+        if (step) keepStepChoiceInView();
+        else if (item) keepInView(item);
+      }
       // Il foglio sta in fondo alla finestra: CodeMirror riscrive `top` e
       // `left` a ogni misura, quindi li si rimette ogni volta.
       if (dom.classList.contains("is-sheet")) pinSheet(dom);
@@ -655,8 +685,6 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
       const sheet = sheetWanted();
       dom.classList.toggle("is-sheet", sheet);
       if (sheet) pinSheet(dom);
-      const room = window.innerWidth - (dom.closest(".cm-editor")?.getBoundingClientRect().left ?? 0);
-      dom.classList.toggle("is-narrow", !sheet && room < NARROW_PX);
       dom.style.transformOrigin = sheet ? "50% 100%" : `${Math.round(caretX)}px ${above ? "100%" : "0"}`;
       enter(dom, {
         from: sheet ? { y: 24, opacity: 0 } : { scale: 0.96, y: above ? 6 : -6, opacity: 0 },
@@ -664,8 +692,7 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
         whenReduced: "fade",
         lifetime: life,
       });
-      stagger(rows.slice(0, 8), (row) => enter(row, { from: { y: 6, opacity: 0 }, spring: "soft", lifetime: life }));
-      placePill(false);
+      stagger(items.slice(0, 8).map((item) => item.element), (element) => enter(element, { from: { y: 6, opacity: 0 }, spring: "soft", lifetime: life }));
     },
     close() {
       if (life.closed) return;

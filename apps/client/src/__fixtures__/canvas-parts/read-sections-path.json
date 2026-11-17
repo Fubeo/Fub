@@ -1,0 +1,15 @@
+{
+  "name": "read-sections-path",
+  "description": "Una sezione col percorso dei titoli, come Obsidian la scrive dopo il #.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Statistica.md\", \"subpath\": \"#Capitolo 2#Varianza\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"sections\", \"sections\": [\"Capitolo 2#Varianza\", \"Media\"] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "ok",
+        "parts": "{\"kind\":\"sections\",\"sections\":[\"Capitolo 2#Varianza\",\"Media\"]}",
+        "shows": "#Capitolo 2#Varianza"
+      }
+    ]
+  }
+}

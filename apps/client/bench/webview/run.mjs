@@ -1,11 +1,15 @@
-// Gli scenari di N0, S7 di N13, la memoria (R1), le tessere (T1) e
-// l'indicizzazione (I1) di K0, il nucleo della lavagna (L1) di N3 e i chunk
-// di ciascun profilo dei componenti (C1) di K2, nella WebView vera, guidati da
-// WebDriver.
+// Gli scenari di N0, S7 di N13, S8 di N4 (la penna sulla lavagna), S9 di N6
+// (la lavagna coi fogli vivi), la
+// memoria (R1), le tessere (T1) e l'indicizzazione (I1) di K0, il nucleo
+// della lavagna (L1) di N3, i chunk di ciascun profilo dei componenti (C1)
+// di K2 e i fotogrammi rispetto allo schermo (F1 rAF a vuoto, F2 quiete, F3
+// thread principale per gesto), nella WebView vera, guidati da WebDriver.
 //
 //   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3,C1]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
 //        [--budgets=ci|targets] [--out=bench/.output/webview] [--dist=dist]
+//        [--x11 | --wayland]  (con WAYLAND_DISPLAY: --x11 sotto Xvfb, --wayland sullo schermo)
+//        [--hz=N]  (la frequenza dello schermo, se il banco non la legge: `refresh.mjs`)
 //
 // Avvia `tauri-driver` con un vault e una configurazione scritti in una
 // cartella temporanea (`fixtures.mjs`): la sonda è accesa dalle impostazioni
@@ -19,16 +23,21 @@
 // macOS: nessun driver per WKWebView; la procedura a mano è in
 // `docs/development/webview-measurements.md`.
 import { spawn, execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { cpus, hostname, release, tmpdir, totalmem, type as osType } from "node:os";
+import { cpus, hostname, loadavg, release, tmpdir, totalmem, type as osType } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
-import { noteName, writeFixtures } from "./fixtures.mjs";
-import { settled } from "./memory.mjs";
-import { CANVAS_SCRIPT, COMMITS, OPENS, SIZES, builtModule } from "./canvas.mjs";
+import { GESTURE_FOLDER, INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
+import { cpuPercent, cpuTicks, descendants, pendenza, settled } from "./memory.mjs";
+import { displayRate, engineCap, hasPeriodLimits, resolveLimit } from "./refresh.mjs";
+import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
+import { CANVAS_SCRIPT, COMMITS, L1_ROUNDS, OPENS, SIZES, builtModule, l1Values } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
+import { S1_ROUNDS, S1_ROUND_GAP_MS, S1_TYPED, s1Note, s1Values } from "./typing.mjs";
+import { commandLines, gtkWatcher, openWithGtkRetry, waylandProblem, xvfbResetProblem } from "./display.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
@@ -36,10 +45,14 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1,T1,I1,L1,C1").split(","));
+const only = new Set((args.only ?? "F1,F2,F3,S1,S2,S3,S4,S5,S6,S7,S8,S9,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
+/// `--x11`: l'app va in X11 anche su una sessione Wayland (vedi `main`).
+const x11 = "x11" in args;
 const port = Number(args.port ?? 4444);
+/// WebKitWebDriver sulla porta dopo: due banchi con `--port` diversi non si pestano.
+const nativePort = port + 1;
 const base = `http://127.0.0.1:${port}`;
 
 const CTRL = "";
@@ -49,10 +62,35 @@ const SHIFT = "";
 const ALT = "";
 const ESCAPE = "";
 
+const PAGE_DOWN = "\uE00F";
+
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
 /// Il processo del driver: la memoria di R1 si legge sui suoi discendenti.
 let driverPid = null;
+/// Il driver in corso (`startDriver`) e chi aspetta le righe di GTK che non
+/// parte dal suo stderr.
+let driver = null;
+const gtkListeners = new Set();
+/// L'ambiente del driver: il vault e la configurazione del banco.
+let driverEnv = null;
+/// Il vault del banco, nella cartella temporanea: S8 legge dal disco i byte
+/// del foglio prima e dopo la penna.
+let benchVault = null;
+/// Lo schermo (`displayRate`) e il tetto del motore (`engineCap`, da F1): le
+/// soglie in periodi si risolvono con `cap.effectiveMs`.
+let display = null;
+let cap = null;
+/// `webkit://gpu` letta prima degli scenari, con l'ambiente dell'app (`webkitGpu`).
+let gpuInfo = null;
+
+/// F1: quanto dura il rAF a vuoto. F2: quanto dura la quiete.
+const IDLE_RAF_MS = 5_000;
+const QUIET_MS = 20_000;
+/// F3: i gesti, quante volte ciascuno (un numero pari: lo stato torna quello
+/// di partenza) e quanto si aspetta dopo ognuno.
+const GESTURE_REPS = { barra: 6, scheda: 8, cartella: 8 };
+const GESTURE_WAIT_MS = 700;
 
 /// Quanto si aspetta prima di leggere la memoria: che l'app abbia finito di
 /// disegnare e di indicizzare ciò che ha appena aperto.
@@ -61,11 +99,16 @@ const MEMORY_QUIET_MS = 3_000;
 /// quando si rilegge per vedere se la memoria torna col tempo.
 const R1_SETTLE_MS = 10_000;
 const R1_LATE_MS = 60_000;
-/// I giri di apri tutto e chiudi tutto dopo la prima chiusura.
-const R1_ROUNDS = 10;
+/// I giri di apri tutto e chiudi tutto dopo la prima chiusura. Trenta e non
+/// dieci: sul runner la pendenza di dieci giri andava da -25 a 70 MiB per giro
+/// sullo stesso albero (#284), con un errore di circa ±16 MiB; con trenta circa ±3.
+const R1_ROUNDS = 30;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
-/// col selettore rapido e la modalità che il referto nomina.
+/// col selettore rapido e la modalità che il referto nomina. Il lanciatore
+/// trova per nome anche PDF e immagini (launcher/sources.ts), e niente nome
+/// trovato non è una riga: un file che non c'è fa scadere l'attesa invece di
+/// aprire una nota nuova col suo nome.
 const MODES = [
   ["Lunga", "nota"],
   ["Lavagna", "lavagna"],
@@ -137,7 +180,7 @@ async function openByName(session, name, text, mark = null, timeoutMs = 60_000) 
   // L'elenco deve avere il risultato prima di Invio: si aspetta la prima voce.
   await session.waitFor(`return (document.querySelector(${JSON.stringify(PICKER_FIRST)})?.textContent ?? '').includes(arguments[0])`, [name], timeoutMs);
   if (mark) {
-    await session.execute("window.__fubWait = window.__fubProbe.waitFor(arguments[0], arguments[1], 15000, arguments[2]); return true;", [mark, ".pane.focus .cm-content", text]);
+    await session.execute("window.__fubWait = window.__fubProbe.waitFor(arguments[0], arguments[1], 15000, arguments[2]); return true;", [mark, ".pane.focus .pane-editor .cm-content", text]);
   }
   await session.keys(ENTER);
   if (mark) {
@@ -173,6 +216,316 @@ function drag({ x, y, dx, dy, ms, button = 0, pointerType = "mouse", origin = "v
 
 async function centerOf(session, css) {
   return session.execute("const r = document.querySelector(arguments[0])?.getBoundingClientRect(); return r ? { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } : null;", [css]);
+}
+
+/// S3: quando la lavagna è «ferma». Dalla prima `.canvas-node` un anello di
+/// `requestAnimationFrame` conta i fotogrammi; la lavagna è ferma al primo
+/// fotogramma che chiude `OPENING_STILL_FRAMES` intervalli di fila sotto
+/// `OPENING_GAP_MS`. Oltre `OPENING_LIMIT_MS` dalla prima scheda senza
+/// esserlo, lo scenario fallisce col buco più lungo visto: un'attesa che non
+/// finisce è un difetto da leggere nel referto, non un tempo da tacere.
+const OPENING_STILL_FRAMES = 5;
+const OPENING_GAP_MS = 100;
+const OPENING_LIMIT_MS = 15_000;
+
+/// La cronologia dell'apertura nella pagina, messa prima di aprire la
+/// lavagna: `window.__fubOpening.settled(done)` chiama `done` con
+/// `{ still, ms, longestGap }`, i ms dalla prima scheda alla lavagna ferma e
+/// il buco più lungo fra due fotogrammi dentro l'apertura. Niente timer o
+/// anelli di messaggi: affamerebbero i richiami a riposo con cui la lavagna
+/// finisce di montare.
+const OPENING_SCRIPT = `
+  const [stillFrames, gapMs, limitMs] = arguments;
+  const state = { card: null, last: null, run: 0, longestGap: 0, result: null, waiting: [] };
+  const finish = (result) => {
+    state.result = result;
+    for (const done of state.waiting.splice(0)) done(result);
+  };
+  const tick = () => {
+    const now = performance.now();
+    if (state.last !== null) {
+      const gap = now - state.last;
+      state.longestGap = Math.max(state.longestGap, gap);
+      state.run = gap < gapMs ? state.run + 1 : 0;
+    }
+    state.last = now;
+    const longestGap = Math.round(state.longestGap);
+    if (state.run >= stillFrames) finish({ still: true, ms: Math.round(now - state.card), longestGap });
+    else if (now - state.card > limitMs) finish({ still: false, ms: null, longestGap });
+    else requestAnimationFrame(tick);
+  };
+  const seen = () => {
+    if (state.card !== null || !document.querySelector(".canvas-node")) return;
+    state.card = performance.now();
+    observer.disconnect();
+    requestAnimationFrame(tick);
+  };
+  const observer = new MutationObserver(seen);
+  observer.observe(document.body, { subtree: true, childList: true });
+  seen();
+  window.__fubOpening = {
+    settled: (done) => (state.result ? done(state.result) : state.waiting.push(done)),
+  };
+  return true;
+`;
+
+/// I gesti misurati di S3, che S9 ripete uguali sulla sua lavagna: tre
+/// secondi di spostamento col pulsante di mezzo, avanti e indietro, e dieci
+/// scatti di rotella col Ctrl tenuto sul punto `at`, cinque avanti e cinque
+/// indietro. Torna `false` se il driver non ha la rotella: resta lo
+/// spostamento, e il referto lo dice.
+async function moveAndZoom(session, at) {
+  // Il pulsante di mezzo sposta la lavagna, come il trackpad e la rotella.
+  try {
+    await session.actions(drag({ ...at, dx: 400, dy: 0, ms: 3_000, button: 1 }));
+  } catch (error) {
+    // Il driver rifiuta un punto fuori dalla finestra: il referto dice dove
+    // stava il gesto e quanto è grande la pagina (`innerWidth`, `innerHeight`).
+    const page = await session.execute("return [innerWidth, innerHeight];").catch(() => null);
+    throw new Error(`lo spostamento è rifiutato (${error.message}): il punto è ${at.x}, ${at.y} e il gesto va 400 px da una parte e dall'altra; la pagina è ${JSON.stringify(page)}`);
+  }
+  await session.releaseActions();
+  let zoomed = true;
+  try {
+    await session.actions([
+      { type: "key", id: "tastiera", actions: [{ type: "keyDown", value: CTRL }, { type: "pause", duration: 0 }, ...Array(10).fill({ type: "pause", duration: 0 }), { type: "keyUp", value: CTRL }] },
+      { type: "wheel", id: "rotella", actions: [{ type: "pause", duration: 0 }, ...Array.from({ length: 10 }, (_, i) => ({ type: "scroll", x: at.x, y: at.y, deltaX: 0, deltaY: i < 5 ? -120 : 120, duration: 100, origin: "viewport" })), { type: "pause", duration: 0 }] },
+    ]);
+  } catch {
+    // Il driver senza rotella: resta lo spostamento, e il referto lo dice.
+    zoomed = false;
+  }
+  await session.releaseActions();
+  return zoomed;
+}
+
+/// S9: lo zoom in cui si misura, fra 0,4 e 0,6 come chiede il cancello di N6
+/// e sopra `LIVE_ZOOM_MIN` (0,35), sotto cui le schede restano segnaposto.
+const SHEET_ZOOM = { target: 0.5, min: 0.4, max: 0.6 };
+/// Quanto si aspetta che i fogli diventino vivi, e poi che mostrino le celle.
+const SHEET_LIVE_WAIT_MS = 60_000;
+const LIVE_SHEETS = ".pane.focus .canvas-node[data-card-kind=sheet][data-card-mode=live]";
+const SHEET_NODES = '.pane.focus .canvas-node[data-node^="conti-"]';
+
+/// S9: la lavagna ferma, con la regola dell'apertura di S3: `stillFrames`
+/// intervalli di fila sotto `gapMs`, al più `limitMs`. Torna
+/// `{ still, ms, longestGap }`.
+const STILL_SCRIPT = `
+  const [stillFrames, gapMs, limitMs] = arguments;
+  const done = arguments[arguments.length - 1];
+  const begin = performance.now();
+  let last = null, run = 0, longestGap = 0;
+  const tick = () => {
+    const now = performance.now();
+    if (last !== null) {
+      const gap = now - last;
+      longestGap = Math.max(longestGap, gap);
+      run = gap < gapMs ? run + 1 : 0;
+    }
+    last = now;
+    if (run >= stillFrames) done({ still: true, ms: Math.round(now - begin), longestGap: Math.round(longestGap) });
+    else if (now - begin > limitMs) done({ still: false, ms: null, longestGap: Math.round(longestGap) });
+    else requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+`;
+
+/// S9: dove sono i fogli sullo schermo. Il centro del blocco delle schede
+/// `conti-*`, lo zoom letto dalla larghezza della prima (240 unità nella
+/// lavagna) e il centro della vista della lavagna.
+const SHEET_GEOMETRY = `
+  const cards = [...document.querySelectorAll(arguments[0])];
+  const view = document.querySelector('.pane.focus .canvas-viewport')?.getBoundingClientRect();
+  if (cards.length === 0 || !view) return null;
+  const boxes = cards.map((card) => card.getBoundingClientRect());
+  const left = Math.min(...boxes.map((b) => b.left)), right = Math.max(...boxes.map((b) => b.right));
+  const top = Math.min(...boxes.map((b) => b.top)), bottom = Math.max(...boxes.map((b) => b.bottom));
+  return {
+    cards: cards.length,
+    zoom: boxes[0].width / arguments[1],
+    block: { x: Math.round((left + right) / 2), y: Math.round((top + bottom) / 2) },
+    view: { x: Math.round(view.left + view.width / 2), y: Math.round(view.top + view.height / 2) },
+  };
+`;
+const sheetGeometry = (session) => session.execute(SHEET_GEOMETRY, [SHEET_NODES, 240]);
+const count = (session, css) => session.execute("return document.querySelectorAll(arguments[0]).length;", [css]);
+
+/// S1: il clic che mette il cursore nel riquadro, su una riga che si vede. Il
+/// centro del `.cm-content` di una nota di 5.000 righe sta fuori dalla vista e
+/// sotto la barra della nota: `session.click` su quel centro dà «element click
+/// intercepted» (T46, due giri su tre sotto Xvfb).
+async function clickVisibleLine(session) {
+  const at = await session.execute(`
+    const top = 160, bottom = innerHeight - 40;
+    const line = [...document.querySelectorAll('.pane.focus .pane-editor .cm-content > .cm-line')].find((l) => {
+      const r = l.getBoundingClientRect();
+      return r.top >= top && r.bottom <= bottom && r.width > 0;
+    });
+    const r = line?.getBoundingClientRect();
+    return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;
+  `);
+  if (!at) throw new Error("nessuna riga della nota si vede nella finestra");
+  await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
+    { type: "pointerMove", x: at.x, y: at.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
+  ] }]);
+  await session.releaseActions();
+}
+
+/// S9, il tasto fino al fotogramma (T46): una scheda di nota della stessa
+/// lavagna, una delle venti note vive (`scheda-0`, `S2/Nota 00001.md`).
+const SHEET_NOTE_CARD = "scheda-0";
+/// Gli scatti di Ctrl+rotella che portano la scheda al centro (`panTo`): due
+/// fuori e due dentro, così la vista non scende sotto 0,35, dove i fogli
+/// tornano segnaposto e il loro lavoro entrerebbe nella misura.
+const PAN_STEPS = 2;
+/// I 200 caratteri che S1 scrive nel riquadro, qui nella scheda di nota.
+const NOTE_TYPED = "Il corso di analisi del lunedì, in aula. ".repeat(5).slice(0, 200);
+
+/// Porta la scheda `css` al centro della vista a zoom 0,5, con scatti di
+/// Ctrl+rotella mandati dalla pagina come in S9: `PAN_STEPS` scatti via da
+/// lei, col punto che la manda al centro, poi `PAN_STEPS` scatti sul centro,
+/// che la lasciano ferma. Torna dove sta dopo: lo zoom e se il suo centro è
+/// dentro la vista.
+async function panTo(session, css) {
+  const before = await session.execute(`
+    const view = document.querySelector('.pane.focus .canvas-viewport')?.getBoundingClientRect();
+    const card = document.querySelector(arguments[0])?.getBoundingClientRect();
+    if (!view || !card) return null;
+    return { view: [view.left + view.width / 2, view.top + view.height / 2], card: [card.left + card.width / 2, card.top + card.height / 2] };
+  `, [css]);
+  if (!before) throw new Error(`«${css}» non è nella lavagna`);
+  const [vx, vy] = before.view;
+  const [bx, by] = before.card;
+  // Il punto che, con lo zoom `f` di un scatto, lascia il centro della scheda
+  // (B) sul centro della vista (V): P = (V − f·B) / (1 − f).
+  const f = 1.1 ** -PAN_STEPS;
+  const px = (vx - f * bx) / (1 - f);
+  const py = (vy - f * by) / (1 - f);
+  await session.execute(`
+    const view = document.querySelector('.pane.focus .canvas-viewport');
+    if (!view) return false;
+    const [px, py, vx, vy, steps] = arguments;
+    const scatto = (x, y, deltaY) => view.dispatchEvent(new WheelEvent("wheel", { deltaY, deltaMode: 0, ctrlKey: true, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    for (let i = 0; i < steps; i++) scatto(px, py, 120);
+    for (let i = 0; i < steps; i++) scatto(vx, vy, -120);
+    return true;
+  `, [px, py, vx, vy, PAN_STEPS]);
+  return session.execute(`
+    const view = document.querySelector('.pane.focus .canvas-viewport')?.getBoundingClientRect();
+    const card = document.querySelector(arguments[0])?.getBoundingClientRect();
+    if (!view || !card) return null;
+    const x = card.left + card.width / 2, y = card.top + card.height / 2;
+    return { zoom: Math.round((card.width / 240) * 100) / 100, inside: x > view.left && x < view.right && y > view.top && y < view.bottom };
+  `, [css]);
+}
+
+/// S9: porta la scheda `css` al centro della vista a zoom 0,5. Prima, se lo
+/// zoom è un altro, gli scatti di Ctrl+rotella col punto che manda il centro
+/// della scheda sul centro della vista (come lo zoom di S9); poi `panTo`, che
+/// la centra con due scatti fuori e due dentro. Torna `panTo`.
+async function placeCard(session, css) {
+  const now = await session.execute(`
+    const view = document.querySelector('.pane.focus .canvas-viewport')?.getBoundingClientRect();
+    const card = document.querySelector(arguments[0])?.getBoundingClientRect();
+    if (!view || !card) return null;
+    return { zoom: card.width / 240, view: [view.left + view.width / 2, view.top + view.height / 2], card: [card.left + card.width / 2, card.top + card.height / 2] };
+  `, [css]);
+  if (!now) throw new Error(`«${css}» non è nella lavagna`);
+  const steps = Math.round(Math.log(SHEET_ZOOM.target / now.zoom) / Math.log(1.1));
+  if (steps !== 0) {
+    const f = 1.1 ** steps;
+    const [vx, vy] = now.view;
+    const [bx, by] = now.card;
+    const px = (vx - f * bx) / (1 - f);
+    const py = (vy - f * by) / (1 - f);
+    await session.execute(`
+      const view = document.querySelector('.pane.focus .canvas-viewport');
+      if (!view) return false;
+      const [px, py, steps] = arguments;
+      for (let i = 0; i < Math.abs(steps); i++) {
+        view.dispatchEvent(new WheelEvent("wheel", { deltaY: steps > 0 ? -120 : 120, deltaMode: 0, ctrlKey: true, clientX: px, clientY: py, bubbles: true, cancelable: true }));
+      }
+      return true;
+    `, [px, py, steps]);
+  }
+  return panTo(session, css);
+}
+
+/// S9, il tasto fino al fotogramma (T46): si entra in scrittura nella scheda
+/// di nota della lavagna con i fogli vivi (clic per sceglierla, Invio, come
+/// T41), si scrive un carattere che non si misura (il montaggio dell'editor),
+/// poi i 200 caratteri di S1 con la sonda accesa. Se un passo non riesce il
+/// referto lo dice e il valore è `null`: la misura non vale. Torna
+/// `{ p95, count, typed }`.
+///
+/// Parte in un'app nuova: il pan di mezzo di `moveAndZoom` lascia WebKitWebDriver
+/// con il pulsante di mezzo premuto (il suo rilascio non arriva), e dopo non
+/// arrivano alla lavagna né i clic né i tasti (misurato in T46: il clic arriva
+/// come `click` con `buttons` a 4, senza `pointerdown`). L'app di S9 si chiude
+/// prima, e `launch` aspetta che sia uscita.
+async function noteTyping(notes) {
+  const card = `.pane.focus .canvas-node[data-node="${SHEET_NOTE_CARD}"]`;
+  const invalid = (why) => {
+    notes.push(`S9.keyToPaint non misurato: ${why}`);
+    return { p95: null, count: 0, typed: false };
+  };
+  const session = await launch("S9");
+  try {
+    await ready(session);
+    await indexed(session);
+    await openByName(session, SHEET_BOARD.name, "Scheda 20");
+    await session.waitFor("return document.querySelectorAll(arguments[0]).length >= arguments[1]", [SHEET_NODES, SHEET_CARDS], 60_000);
+    const placed = await placeCard(session, card);
+    if (!placed?.inside || !(placed.zoom >= SHEET_ZOOM.min && placed.zoom <= SHEET_ZOOM.max)) {
+      return invalid(`la scheda non è al centro a zoom ${SHEET_ZOOM.min}–${SHEET_ZOOM.max} (zoom ${placed?.zoom ?? "—"}, dentro la vista ${placed?.inside ?? "—"})`);
+    }
+    // I fogli vivi restano vivi a questo zoom: se non arrivano tutti, il referto lo dice.
+    try {
+      await session.waitFor("return document.querySelectorAll(arguments[0]).length >= arguments[1]", [LIVE_SHEETS, SHEET_CARDS], SHEET_LIVE_WAIT_MS);
+    } catch {
+      notes.push(`S9.keyToPaint: fogli vivi a zoom ${placed.zoom} ${await count(session, LIVE_SHEETS)} su ${SHEET_CARDS}`);
+    }
+    // Clic per sceglierla, Invio per entrare in scrittura (T41).
+    const at = await centerOf(session, card);
+    await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
+      { type: "pointerMove", x: at.x, y: at.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
+    ] }]);
+    await session.releaseActions();
+    await session.keys(ENTER);
+    try {
+      await session.waitFor("const a = document.querySelector(arguments[0]); return a?.dataset.cardEditing !== undefined && !!a.querySelector('.cm-content');", [card], 15_000);
+    } catch {
+      return invalid("Invio non mette la scheda in scrittura");
+    }
+    // Il fuoco nell'editor della scheda: se non ci va da sé, un clic dentro.
+    const focused = await session.execute("const a = document.querySelector(arguments[0]); return !!a && a.contains(document.activeElement) && document.activeElement.isContentEditable === true;", [card]);
+    if (!focused) {
+      const inside = await centerOf(session, `${card} .cm-content`);
+      if (!inside) return invalid("la scheda in scrittura non ha un editor");
+      await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
+        { type: "pointerMove", x: inside.x, y: inside.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
+      ] }]);
+      await session.releaseActions();
+    }
+    await chord(session, CTRL, END);
+    // Il primo carattere è del montaggio dell'editor: si scrive a parte.
+    await session.keys("x");
+    const settle = await session.executeAsync(STILL_SCRIPT, [OPENING_STILL_FRAMES, OPENING_GAP_MS, OPENING_LIMIT_MS]);
+    if (!settle.still) notes.push(`S9.keyToPaint: la lavagna non si ferma prima dei tasti (buco più lungo ${settle.longestGap} ms)`);
+    await start(session);
+    await session.keys(NOTE_TYPED);
+    await pause(500);
+    const report = await stop(session);
+    const text = await session.execute("return document.querySelector(arguments[0] + ' .cm-content')?.textContent ?? '';", [card]);
+    if (!text.includes(NOTE_TYPED)) {
+      return invalid(`il driver non scrive nell'editor della scheda: ci sono ${text.length} caratteri, non quelli digitati`);
+    }
+    // Nessun tasto registrato: la sonda non ha visto niente, e zero non è un tempo.
+    if (report.input.key.count === 0) return invalid("la sonda non registra nessun tasto mentre si scrive");
+    return { p95: report.input.key.p95, count: report.input.key.count, typed: true };
+  } finally {
+    await session.close();
+  }
 }
 
 const stop = (session) => session.execute("return window.__fubProbe.stop();");
@@ -251,17 +604,178 @@ async function applyProfile(session, nome) {
   if (parsed.risposta !== "esito") throw new Error(`il profilo «${nome}» non si applica: ${answer.slice(0, 300)}`);
 }
 
+/// S8: dove va il tempo dei fotogrammi lunghi. Fra due fotogrammi si guarda
+/// quale evento del puntatore è arrivato per ultimo (`pointermove` mentre il
+/// tratto o la scheda si muove, `pointerup` quando il tratto si scrive o la
+/// scheda si posa, niente se il fotogramma è lungo da solo); `phases()` rende
+/// i fotogrammi oltre 33 ms per fase, col più lungo di ognuna, e ferma tutto.
+/// Conta anche D (T20d): le pressioni e le ripetizioni automatiche del tasto
+/// tenuto, che sotto Xvfb potrebbero arrivare a metà tratto. Un fotogramma
+/// dopo una ripetizione va nella fase «ripetizione di D», non in quella del
+/// tratto: non conta come movimento o rilascio.
+const PHASES_SCRIPT = `
+  const state = { last: null, gaps: [], frame: 0, stopped: false, d: { pressioni: 0, ripetizioni: 0 } };
+  const seen = (event) => { state.last = event.type; };
+  const kinds = ["pointerdown", "pointermove", "pointerup"];
+  for (const kind of kinds) document.addEventListener(kind, seen, { capture: true, passive: true });
+  const key = (event) => {
+    if (event.key !== "d" && event.key !== "D") return;
+    if (event.repeat) {
+      state.d.ripetizioni += 1;
+      state.last = "ripetizione di D";
+    } else {
+      state.d.pressioni += 1;
+    }
+  };
+  window.addEventListener("keydown", key, { capture: true, passive: true });
+  let before = performance.now();
+  const tick = (now) => {
+    if (state.stopped) return;
+    state.gaps.push([now - before, state.last ?? "nessuno"]);
+    state.last = null;
+    before = now;
+    state.frame = requestAnimationFrame(tick);
+  };
+  state.frame = requestAnimationFrame(tick);
+  window.__fubS8Phases = () => {
+    state.stopped = true;
+    cancelAnimationFrame(state.frame);
+    for (const kind of kinds) document.removeEventListener(kind, seen, { capture: true });
+    window.removeEventListener("keydown", key, { capture: true });
+    const out = { d: state.d };
+    for (const [gap, last] of state.gaps) {
+      if (gap <= 33) continue;
+      const entry = out[last] ?? (out[last] = { over33: 0, max: 0 });
+      entry.over33 += 1;
+      entry.max = Math.max(entry.max, Math.round(gap));
+    }
+    // I fotogrammi senza quelli dopo una ripetizione di D: il più lungo e il p95.
+    const kept = state.gaps.filter(([, last]) => last !== "ripetizione di D").map(([gap]) => gap).sort((a, b) => a - b);
+    out.senzaRipetizioni = kept.length === 0 ? { max: 0, p95: 0 } : { max: Math.round(kept[kept.length - 1]), p95: Math.round(kept[Math.min(kept.length - 1, Math.floor(kept.length * 0.95))]) };
+    return out;
+  };
+  return true;
+`;
+const PHASES_READ = "return window.__fubS8Phases?.() ?? null;";
+
+/// La riga di una cartella nell'albero dei file.
+const treeRow = (path) => `li[role="treeitem"][data-path="${path}"] > .tree-row`;
+
+/// F3: un gesto ripetuto `reps` volte col registratore acceso: il thread
+/// principale bloccato per ripetizione, i fotogrammi e la CPU dei processi.
+async function gesture(session, reps, act) {
+  await session.execute("window.__fubRec.start(); return true;");
+  const before = cpuTicks(driverPid);
+  const since = performance.now();
+  for (let i = 0; i < reps; i++) {
+    await session.execute("window.__fubRec.mark(); return true;");
+    await act();
+    await pause(GESTURE_WAIT_MS);
+  }
+  const cpu = cpuPercent(before, cpuTicks(driverPid), performance.now() - since);
+  const recorded = await session.execute("return window.__fubRec.stop();");
+  return {
+    mainBlocked: blockedPerRepetition(recorded),
+    frames: frameStats(recorded.frames, cap?.effectiveMs ?? display.periodMs),
+    cpu,
+    longtasks: recorded.longtasks ? recorded.tasks.map(([, duration]) => Math.round(duration)) : "non supportati",
+  };
+}
+
 const SCENARIOS = {
-  /// Scrivere 200 caratteri in una nota di 5.000 righe.
+  /// Il rAF a vuoto: 5 s su una pagina ferma, la mediana confrontata col
+  /// periodo dello schermo. Decide il tetto del motore per gli scenari dopo.
+  async F1(session) {
+    await pause(1_500);
+    const deltas = await session.executeAsync(IDLE_RAF_SCRIPT, [IDLE_RAF_MS]);
+    const frames = frameStats(deltas, display.periodMs);
+    cap = engineCap(frames?.median ?? null, display.periodMs);
+    const webview = (descendants(driverPid) ?? []).filter((proc) => proc.group === "webview" || proc.group === "gpu");
+    const gl = await session.execute(RENDERER_SCRIPT);
+    const render = renderPath({ gpu: gpuInfo, webgl: gl?.renderer ?? null, libraries: glLibraries(webview) });
+    return {
+      report: { frames, display, cap, render, vendor: gl?.vendor ?? null },
+      values: { "F1.raf.mediana": frames?.median ?? null },
+      samples: deltas.length,
+      notes: [
+        `schermo ${display.hz} Hz, P ${display.periodMs} ms (${display.source}); rAF a vuoto ${frames?.hz ?? "—"} Hz`,
+        cap.label,
+        `disegno: ${render.path}${render.renderer ? ` (${render.renderer}, da ${render.source})` : ""}${render.vblank ? `; vblank di WebKit ${render.vblank}` : ""}`,
+      ],
+    };
+  },
+  /// La quiete: 20 s senza gesti, le richieste di fotogramma della pagina e la
+  /// CPU dei processi. L'obiettivo è zero e zero.
+  async F2(session) {
+    await pause(3_000);
+    await session.execute(RAF_COUNTER_SCRIPT);
+    const before = cpuTicks(driverPid);
+    const since = performance.now();
+    await pause(QUIET_MS);
+    const cpu = cpuPercent(before, cpuTicks(driverPid), performance.now() - since);
+    const counted = await session.execute("return window.__fubRafCount.read();");
+    const values = { "F2.raf": counted.requests };
+    // La CPU si legge da `/proc`: fuori da Linux non c'è, e non è una misura che manca.
+    if (cpu) values["F2.cpu.webview"] = cpu.webview ?? 0;
+    return {
+      report: { rafRequests: counted.requests, animations: counted.animations, cpu, ms: QUIET_MS },
+      values,
+      samples: 1,
+      notes: [`CPU in quiete, % di un core: ${JSON.stringify(cpu)}`, ...(counted.animations.length ? [`animazioni che girano: ${counted.animations.join("; ")}`] : [])],
+    };
+  },
+  /// Il thread principale bloccato per gesto: la barra laterale dal comando,
+  /// il cambio scheda fra la nota lunga e una corta, una cartella aperta e
+  /// chiusa nell'albero.
+  async F3(session) {
+    await openByName(session, "Lunga", "Una nota lunga");
+    await openByName(session, noteName(1), noteMark(1));
+    if (!(await session.execute("return !!document.querySelector(arguments[0]);", [treeRow(GESTURE_FOLDER)]))) {
+      await session.click(treeRow(GESTURE_FOLDER.split("/")[0]));
+      await session.waitFor("return !!document.querySelector(arguments[0]);", [treeRow(GESTURE_FOLDER)], 15_000);
+    }
+    await session.execute(RECORDER_SCRIPT);
+    const acts = {
+      barra: () => chord2(session, CTRL, ALT, "b"),
+      scheda: () => chord(session, CTRL, PAGE_DOWN),
+      cartella: () => session.click(treeRow(GESTURE_FOLDER)),
+    };
+    const gestures = {};
+    const values = {};
+    for (const [name, act] of Object.entries(acts)) {
+      // Una volta avanti e una indietro fuori dalla misura: il primo gesto
+      // carica il codice e gli stili che servono.
+      await act();
+      await pause(GESTURE_WAIT_MS);
+      await act();
+      await pause(GESTURE_WAIT_MS);
+      gestures[name] = await gesture(session, GESTURE_REPS[name], act);
+      values[`F3.${name}.mainBlocked`] = gestures[name].mainBlocked.median;
+    }
+    const rows = Object.entries(gestures).map(([name, g]) => `${name}: bloccato ${g.mainBlocked.perRep.join("/")} ms, fotogrammi ${g.frames?.median ?? "—"}/${g.frames?.p90 ?? "—"} ms, persi ${g.frames?.lost ?? "—"}, CPU web ${g.cpu?.webview ?? "—"} %, long task ${Array.isArray(g.longtasks) ? g.longtasks.length : g.longtasks}`);
+    return { report: { gestures, timerGapMs: TIMER_GAP_MS }, values, samples: Object.values(GESTURE_REPS).reduce((a, b) => a + b, 0), notes: rows };
+  },
+  /// Scrivere 200 caratteri in una nota di 5.000 righe, `S1_ROUNDS` giri: il
+  /// valore è la mediana dei p95 dei giri (`s1Values`, #293).
   async S1(session) {
     await openByName(session, "Lunga", "Una nota lunga");
-    await session.click(".pane.focus .cm-content");
+    await clickVisibleLine(session);
     await chord(session, CTRL, END);
-    await start(session);
-    await session.keys("Il corso di analisi del lunedì, in aula. ".repeat(5).slice(0, 200));
-    await pause(500);
-    const report = await stop(session);
-    return { report, values: { "S1.keyToPaint.p95": report.input.key.p95 }, samples: report.input.key.count };
+    const rounds = [];
+    for (let round = 0; round < S1_ROUNDS; round++) {
+      if (round > 0) {
+        // Fuori dalla misura: il salvataggio del giro prima finisce, e il giro
+        // scrive su una riga nuova, così la riga non cresce di giro in giro.
+        await pause(S1_ROUND_GAP_MS);
+        await session.keys(ENTER);
+      }
+      await start(session);
+      await session.keys(S1_TYPED);
+      await pause(500);
+      rounds.push(await stop(session));
+    }
+    const samples = rounds.reduce((sum, r) => sum + r.input.key.count, 0);
+    return { report: rounds[0], rounds, values: s1Values(rounds), samples, notes: [s1Note(rounds)] };
   },
   /// Un vault di 10.000 note, venti passaggi da una nota all'altra.
   async S2(session) {
@@ -269,33 +783,131 @@ const SCENARIOS = {
     for (let i = 0; i < 20; i++) {
       // Lontane fra loro: il testo della nota prima non nomina quella dopo.
       const n = 1 + ((i * 487) % 10_000);
-      await openByName(session, noteName(n), noteName(n), "noteSwitch");
+      await openByName(session, noteName(n), noteMark(n), "noteSwitch");
     }
     const report = await stop(session);
     return { report, values: { "S2.noteSwitch.p95": report.marks.noteSwitch?.p95 ?? null }, samples: report.marks.noteSwitch?.count ?? 0 };
   },
   /// Spostare e ingrandire una lavagna di 300 schede, 20 note vive.
   async S3(session) {
+    // La lavagna si misura ferma: il primo disegno di 300 schede dura secondi
+    // sul runner, e partire alla prima scheda metteva la sua coda nel massimo
+    // dello spostamento, a seconda di quando arrivava `start`.
+    await session.execute(OPENING_SCRIPT, [OPENING_STILL_FRAMES, OPENING_GAP_MS, OPENING_LIMIT_MS]);
     await openByName(session, "Lavagna", "Scheda 20");
     await session.waitFor("return document.querySelectorAll('.canvas-node').length > 0");
+    const opening = await session.executeAsync("window.__fubOpening.settled(arguments[arguments.length - 1]);");
+    if (!opening.still) {
+      throw new Error(`la lavagna non si ferma: dopo ${OPENING_LIMIT_MS / 1000} s dalla prima scheda non ha ${OPENING_STILL_FRAMES} fotogrammi di fila sotto ${OPENING_GAP_MS} ms (buco più lungo ${opening.longestGap} ms)`);
+    }
     const at = await centerOf(session, ".pane.focus .canvas-viewport");
     await start(session);
-    // Il pulsante di mezzo sposta la lavagna, come il trackpad e la rotella.
-    await session.actions(drag({ ...at, dx: 400, dy: 0, ms: 3_000, button: 1 }));
-    await session.releaseActions();
-    let zoomed = true;
-    try {
-      await session.actions([
-        { type: "key", id: "tastiera", actions: [{ type: "keyDown", value: CTRL }, { type: "pause", duration: 0 }, ...Array(10).fill({ type: "pause", duration: 0 }), { type: "keyUp", value: CTRL }] },
-        { type: "wheel", id: "rotella", actions: [{ type: "pause", duration: 0 }, ...Array.from({ length: 10 }, (_, i) => ({ type: "scroll", x: at.x, y: at.y, deltaX: 0, deltaY: i < 5 ? -120 : 120, duration: 100, origin: "viewport" })), { type: "pause", duration: 0 }] },
-      ]);
-    } catch {
-      // Il driver senza rotella: resta lo spostamento, e il referto lo dice.
-      zoomed = false;
-    }
-    await session.releaseActions();
+    const zoomed = await moveAndZoom(session, at);
     const report = await stop(session);
-    return { report, zoomed, values: { "S3.frameGap.p95": report.frames.p95, "S3.frameGap.max": report.frames.max }, samples: report.frames.count };
+    return {
+      report,
+      zoomed,
+      opening,
+      values: {
+        "S3.frameGap.p95": report.frames.p95,
+        "S3.frameGap.max": report.frames.max,
+        "S3.apertura": opening.ms,
+        "S3.apertura.buco": opening.longestGap,
+      },
+      samples: report.frames.count,
+    };
+  },
+  /// La lavagna di S3 con venti fogli `.xlsx` vivi (il cancello di N6): la
+  /// vista va sul blocco dei fogli a zoom 0,5, si aspettano almeno venti fogli
+  /// vivi, e poi si misurano i gesti di S3.
+  async S9(session) {
+    const notes = [];
+    await openByName(session, SHEET_BOARD.name, "Scheda 20");
+    await session.waitFor("return document.querySelectorAll(arguments[0]).length >= arguments[1]", [SHEET_NODES, SHEET_CARDS], 60_000);
+    const opening = await session.executeAsync(STILL_SCRIPT, [OPENING_STILL_FRAMES, OPENING_GAP_MS, OPENING_LIMIT_MS]);
+    if (!opening.still) {
+      throw new Error(`la lavagna non si ferma: dopo ${OPENING_LIMIT_MS / 1000} s non ha ${OPENING_STILL_FRAMES} fotogrammi di fila sotto ${OPENING_GAP_MS} ms (buco più lungo ${opening.longestGap} ms)`);
+    }
+    // La vista sul blocco, con un gesto della tela e prima della sonda: gli
+    // scatti di Ctrl+rotella (1,1 ciascuno) che dalla vista intera arrivano a
+    // zoom 0,5, tutti sullo stesso punto. Lo scatto ingrandisce tenendo fermo
+    // il punto sotto il puntatore, quindi il punto è quello che manda il
+    // centro del blocco al centro della vista: P = (V − f·B) / (1 − f), con
+    // f lo zoom di tutti gli scatti, B il centro del blocco e V quello della
+    // vista. Come in S8 lo scatto è un evento `wheel` con `ctrlKey` mandato
+    // dalla pagina alla vista della lavagna, perché il Ctrl+rotella del driver
+    // non ingrandisce (il tasto non arriva alla rotella). Niente spostamento
+    // col pulsante di mezzo: il driver non consegna il suo rilascio, e la
+    // lavagna, che crede il gesto ancora in corso, non accende le schede.
+    const fitted = await sheetGeometry(session);
+    if (!fitted) throw new Error("la lavagna non mostra i fogli di S9");
+    const from = Math.round(fitted.zoom * 100) / 100;
+    const steps = Math.round(Math.log(SHEET_ZOOM.target / fitted.zoom) / Math.log(1.1));
+    if (steps <= 0) throw new Error(`la vista intera è già a zoom ${from}: non c'è niente da ingrandire`);
+    const factor = 1.1 ** steps;
+    const point = {
+      x: (fitted.view.x - factor * fitted.block.x) / (1 - factor),
+      y: (fitted.view.y - factor * fitted.block.y) / (1 - factor),
+    };
+    await session.execute(`
+      const view = document.querySelector('.pane.focus .canvas-viewport');
+      if (!view) return false;
+      const [x, y, steps] = arguments;
+      for (let i = 0; i < steps; i++) {
+        view.dispatchEvent(new WheelEvent("wheel", { deltaY: -120, deltaMode: 0, ctrlKey: true, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+      }
+      return true;
+    `, [point.x, point.y, steps]);
+    const placed = await sheetGeometry(session);
+    const zoom = Math.round(placed.zoom * 100) / 100;
+    if (!(zoom >= SHEET_ZOOM.min && zoom <= SHEET_ZOOM.max)) {
+      throw new Error(`lo zoom sul blocco dei fogli è ${zoom}, fuori da ${SHEET_ZOOM.min}–${SHEET_ZOOM.max} (dalla vista intera ${from}, ${steps} scatti)`);
+    }
+    notes.push(`la vista è sul blocco dei fogli a zoom ${zoom}: dalla vista intera (${from}) ${steps} scatti di Ctrl+rotella su ${Math.round(point.x)}, ${Math.round(point.y)}; centro del blocco a ${placed.block.x - placed.view.x}, ${placed.block.y - placed.view.y} px dal centro della vista`);
+    // Meno di venti fogli vivi: lo scenario fallisce e non misura altro.
+    try {
+      await session.waitFor("return document.querySelectorAll(arguments[0]).length >= arguments[1]", [LIVE_SHEETS, SHEET_CARDS], SHEET_LIVE_WAIT_MS);
+    } catch {
+      throw new Error(`dopo ${SHEET_LIVE_WAIT_MS / 1000} s i fogli vivi sono ${await count(session, LIVE_SHEETS)}, non ${SHEET_CARDS} (zoom ${zoom})`);
+    }
+    // I fogli vivi con le celle: se non arrivano tutti il referto dice
+    // quanti ne ha visti, e si misura lo stesso.
+    const withCells = `${LIVE_SHEETS} [data-card-state=content]`;
+    try {
+      await session.waitFor("return document.querySelectorAll(arguments[0]).length >= arguments[1]", [withCells, SHEET_CARDS], SHEET_LIVE_WAIT_MS);
+    } catch {
+      notes.push(`dopo ${SHEET_LIVE_WAIT_MS / 1000} s i fogli vivi con le celle sono ${await count(session, withCells)} su ${SHEET_CARDS}`);
+    }
+    // Si misura a lavagna ferma, come S3: il primo disegno dei fogli non entra
+    // nel massimo dello spostamento.
+    const settled = await session.executeAsync(STILL_SCRIPT, [OPENING_STILL_FRAMES, OPENING_GAP_MS, OPENING_LIMIT_MS]);
+    if (!settled.still) notes.push(`coi fogli vivi la lavagna non si ferma entro ${OPENING_LIMIT_MS / 1000} s (buco più lungo ${settled.longestGap} ms): si misura lo stesso`);
+    const liveCards = await count(session, LIVE_SHEETS);
+    const at = await centerOf(session, ".pane.focus .canvas-viewport");
+    await start(session);
+    const zoomed = await moveAndZoom(session, at);
+    const report = await stop(session);
+    notes.push(`fogli vivi dopo i gesti: ${await count(session, LIVE_SHEETS)}`);
+    // Dopo la finestra dei fotogrammi: i tasti della nota non entrano nel
+    // massimo dello spostamento, e la sonda di sopra non conta i loro. Il
+    // tasto ha un'app sua (vedi `noteTyping`): questa si chiude prima.
+    await session.close();
+    const typing = await noteTyping(notes);
+    return {
+      report,
+      zoomed,
+      zoom,
+      opening,
+      notes,
+      typing,
+      values: {
+        "S9.liveCards": liveCards,
+        "S9.frameGap.p95": report.frames.p95,
+        "S9.frameGap.max": report.frames.max,
+        "S9.keyToPaint.p95": typing.p95,
+      },
+      samples: report.frames.count,
+    };
   },
   /// Il grafo di 10.000 nodi, trascinato per tre secondi.
   async S4(session) {
@@ -331,14 +943,14 @@ const SCENARIOS = {
   /// ritorno (N13).
   async S7(session) {
     await openByName(session, "Blocchi", "Una nota a blocchi");
-    await session.click(".pane.focus .cm-content");
+    await session.click(".pane.focus .pane-editor .cm-content");
     await chord2(session, CTRL, SHIFT, "b");
-    await session.waitFor("return !!document.querySelector('.pane.focus .cm-fub-block-handles')", [], 30_000);
+    await session.waitFor("return !!document.querySelector('.pane.focus .pane-editor .cm-fub-block-handles')", [], 30_000);
     // La maniglia compare sul blocco sotto il puntatore: la riga più vicina
     // al centro della finestra fra quelle che si vedono intere. CodeMirror
     // disegna anche righe fuori vista, e un puntatore mandato lì è «move
     // target out of bounds».
-    const line = await session.execute("const mid = innerHeight / 2; const seen = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].filter((l) => l.textContent.startsWith('Blocco')).map((l) => l.getBoundingClientRect()).filter((r) => r.top >= 0 && r.bottom <= innerHeight && r.left + 40 < innerWidth); seen.sort((a, b) => Math.abs(a.top - mid) - Math.abs(b.top - mid)); const r = seen[0]; return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;");
+    const line = await session.execute("const mid = innerHeight / 2; const seen = [...document.querySelectorAll('.pane.focus .pane-editor .cm-content > .cm-line')].filter((l) => l.textContent.startsWith('Blocco')).map((l) => l.getBoundingClientRect()).filter((r) => r.top >= 0 && r.bottom <= innerHeight && r.left + 40 < innerWidth); seen.sort((a, b) => Math.abs(a.top - mid) - Math.abs(b.top - mid)); const r = seen[0]; return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;");
     if (!line) throw new Error("nessuna riga di blocco in vista");
     await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [{ type: "pointerMove", x: line.x, y: line.y, duration: 0, origin: "viewport" }] }]);
     // La maniglia sta sul blocco sotto il puntatore, o su quello del cursore
@@ -346,14 +958,14 @@ const SCENARIOS = {
     // muove (la WebKitGTK del runner sotto Xvfb): va bene tutte e due, perché
     // il trascinamento parte dalla maniglia dove si vede.
     try {
-      await session.waitFor("const h = document.querySelector('.pane.focus .cm-fub-block-handles'); return !!h && !h.hidden;", [], 10_000);
+      await session.waitFor("const h = document.querySelector('.pane.focus .pane-editor .cm-fub-block-handles'); return !!h && !h.hidden;", [], 10_000);
     } catch (error) {
       // Che cosa vedeva la pagina: senza, il referto dice soltanto che
       // l'attesa è scaduta.
-      const seen = await session.execute("const h = document.querySelector('.pane.focus .cm-fub-block-handles'); const a = document.activeElement; return JSON.stringify({ handles: !!h, hidden: h?.hidden ?? null, active: h?.dataset.active ?? null, hover: matchMedia('(hover: hover)').matches, focus: a ? a.className || a.tagName : null });");
+      const seen = await session.execute("const h = document.querySelector('.pane.focus .pane-editor .cm-fub-block-handles'); const a = document.activeElement; return JSON.stringify({ handles: !!h, hidden: h?.hidden ?? null, active: h?.dataset.active ?? null, hover: matchMedia('(hover: hover)').matches, focus: a ? a.className || a.tagName : null });");
       throw new Error(`${error.message} — ${seen}`);
     }
-    const grip = await centerOf(session, ".pane.focus .cm-fub-block-grip");
+    const grip = await centerOf(session, ".pane.focus .pane-editor .cm-fub-block-grip");
     const height = await session.execute("return innerHeight;");
     if (!grip || grip.y < 0 || grip.y > height) throw new Error(`la maniglia è fuori dalla finestra: ${JSON.stringify(grip)}`);
     // Su e giù di 160 px, o meno se la maniglia è vicina a un bordo.
@@ -369,7 +981,7 @@ const SCENARIOS = {
     await session.releaseActions();
     await pause(500);
     // Il cursore su un paragrafo in vista, non su una riga vuota.
-    const text = await session.execute("const l = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].find((l) => { const r = l.getBoundingClientRect(); return / un paragrafo /.test(l.textContent) && r.top > 100 && r.bottom < innerHeight; }); const r = l?.getBoundingClientRect(); return r ? { x: Math.round(Math.min(r.right - 8, innerWidth - 8)), y: Math.round(r.top + r.height / 2) } : null;");
+    const text = await session.execute("const l = [...document.querySelectorAll('.pane.focus .pane-editor .cm-content > .cm-line')].find((l) => { const r = l.getBoundingClientRect(); return / un paragrafo /.test(l.textContent) && r.top > 100 && r.bottom < innerHeight; }); const r = l?.getBoundingClientRect(); return r ? { x: Math.round(Math.min(r.right - 8, innerWidth - 8)), y: Math.round(r.top + r.height / 2) } : null;");
     if (!text) throw new Error("nessun paragrafo in vista");
     await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
       { type: "pointerMove", x: text.x, y: text.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
@@ -381,6 +993,210 @@ const SCENARIOS = {
     }
     const report = await stop(session);
     return { report, values: { "S7.frameGap.p95": report.frames.p95, "S7.frameGap.max": report.frames.max }, samples: report.frames.count };
+  },
+  /// La penna sulla lavagna (N4): dieci tratti da 300 ms sopra la scheda del
+  /// foglio `voti.xlsx`, viva (N6 T20), con 2000 tratti già scritti sulla
+  /// lavagna (metà sulla tabella di testo, che resta com'è), poi la scheda del
+  /// foglio spostata coi suoi tratti. T15 scriveva sulla tabella di testo, il
+  /// caso simile; T23 scrive sulle celle del foglio vero (D-7 (c)). Il foglio
+  /// `.xlsx` sulla lavagna non deve cambiare di un byte.
+  async S8(session) {
+    const sheetPath = join(benchVault, INK_BOARD.sheet);
+    const sha = () => createHash("sha256").update(readFileSync(sheetPath)).digest("hex");
+    const before = sha();
+    const notes = [];
+    /// Quanto si aspetta che la scheda del foglio diventi viva con le celle.
+    const LIVE_WAIT_MS = 60_000;
+    await openByName(session, "Lezione", "");
+    const table = `.pane.focus .canvas-node[data-node="${INK_BOARD.table.id}"]`;
+    const sheet = `.pane.focus .canvas-node[data-node="${INK_BOARD.sheetCard.id}"]`;
+    await session.waitFor("return !!document.querySelector(arguments[0])", [table], 60_000);
+    const DRY = ".pane.focus :is(.canvas-ink-card, .canvas-ink-board) path[data-ink-stroke]";
+    const dryPaths = () => session.execute("return document.querySelectorAll(arguments[0]).length;", [DRY]);
+    // L'asciutto arriva dopo le schede: si aspetta che ci siano tutti i
+    // tratti, al più 30 s, e si conta comunque quanti se ne vedono.
+    try {
+      await session.waitFor("return document.querySelectorAll(arguments[0]).length >= arguments[1]", [DRY, INK_STROKES], 30_000);
+    } catch {
+      notes.push(`l'asciutto non arriva a ${INK_STROKES} tratti entro 30 s`);
+    }
+    const dryBefore = await dryPaths();
+    // La geometria della finestra e della scheda: se il driver rifiuta un
+    // punto, l'errore la porta con sé, perché il referto non c'è.
+    const geometry = () => session.execute(`
+      const box = (css) => { const b = document.querySelector(css)?.getBoundingClientRect(); return b ? [Math.round(b.left), Math.round(b.top), Math.round(b.right), Math.round(b.bottom)] : null; };
+      return { window: [window.innerWidth, window.innerHeight], view: box('.pane.focus .canvas-viewport'), card: box(arguments[0] + ' .canvas-card-body'), handle: box(arguments[0] + ' .canvas-node-handle') };
+    `, [sheet]);
+    const checked = async (label, step) => {
+      try {
+        return await step();
+      } catch (error) {
+        throw new Error(`${label}: ${error?.message ?? error}. Geometria: ${JSON.stringify(await geometry())}`);
+      }
+    };
+    // La scheda del foglio diventa viva dallo zoom 0,35 in su (`LIVE_ZOOM_MIN`),
+    // e il fit della lavagna sta sotto (0,33 con questi dati): come chi vuole
+    // scrivere sul foglio, la si ingrandisce sul suo centro con cinque scatti
+    // di Ctrl+rotella (1,1 ciascuno, circa 0,5). Il Ctrl+rotella del driver non
+    // ingrandisce (il tasto non arriva alla rotella), quindi lo scatto è un
+    // evento `wheel` con `ctrlKey` mandato dalla pagina sulla scheda, che sale
+    // fino alla vista della lavagna. È fuori dalla misura: avviene prima della
+    // sonda. Il referto dice lo zoom che ha letto dalla scheda.
+    const liveSheet = `${sheet}[data-card-kind=sheet][data-card-mode=live] [data-card-state=content]`;
+    await session.execute(`
+      const card = document.querySelector(arguments[0]);
+      if (!card) return false;
+      const r = card.getBoundingClientRect();
+      for (let i = 0; i < arguments[1]; i++) {
+        card.dispatchEvent(new WheelEvent("wheel", { deltaY: -120, deltaMode: 0, ctrlKey: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, bubbles: true, cancelable: true }));
+      }
+      return true;
+    `, [sheet, 5]);
+    // La scheda del foglio viva con le celle (N6 T20) prima della penna. Se
+    // non diventa viva si misura lo stesso, e il referto dice che la misura
+    // non vale per D-7 (c): la penna sul segnaposto non è il foglio vero.
+    let sheetLive = true;
+    try {
+      await session.waitFor("return !!document.querySelector(arguments[0])", [liveSheet], LIVE_WAIT_MS);
+    } catch {
+      sheetLive = false;
+    }
+    const sheetState = await session.execute("return document.querySelector(arguments[0])?.dataset.cardState ?? null;", [`${sheet} [data-card-kind=sheet]`]);
+    // Lo zoom si legge dalla larghezza della scheda sullo schermo, su quella
+    // della scheda nella lavagna (640 unità per il fixture di S8).
+    const zoom = await session.execute("const r = document.querySelector(arguments[0])?.getBoundingClientRect(); return r ? Math.round((r.width / arguments[1]) * 100) / 100 : null;", [sheet, INK_BOARD.sheetCard.width]);
+    notes.push(sheetLive
+      ? `la scheda del foglio è viva e mostra le celle (zoom ${zoom}): sotto la penna c'è il foglio vero (D-7 (c))`
+      : `la scheda del foglio non è viva dopo ${LIVE_WAIT_MS / 1000} s (stato ${sheetState ?? "nessuno"}, zoom ${zoom}): la misura non vale per D-7 (c)`);
+    // Dove scrivere: la parte della scheda del foglio che si vede nel
+    // viewport, lontano dai bordi e dalla testata.
+    const area = await session.execute(`
+      const card = document.querySelector(arguments[0] + " .canvas-card-body")?.getBoundingClientRect();
+      const view = document.querySelector(".pane.focus .canvas-viewport")?.getBoundingClientRect();
+      if (!card || !view) return null;
+      const left = Math.max(card.left, view.left) + 40, right = Math.min(card.right, view.right) - 40;
+      const top = Math.max(card.top, view.top) + 40, bottom = Math.min(card.bottom, view.bottom) - 40;
+      return right - left > 80 && bottom - top > 80 ? { left, top, width: right - left, height: bottom - top } : null;
+    `, [sheet]);
+    if (!area) throw new Error(`la scheda del foglio è troppo piccola nel viewport per scriverci (zoom ${zoom})`);
+    const strokes = Array.from({ length: 10 }, (_, i) => ({
+      x: Math.round(area.left + area.width * (0.15 + 0.07 * i)),
+      y: Math.round(area.top + area.height * (0.2 + 0.06 * i)),
+      dx: Math.round(Math.min(60, area.width * 0.1)),
+      dy: Math.round(Math.min(40, area.height * 0.1)),
+      ms: 300,
+    }));
+    // La penna, se il driver la manda. Conta che scriva: WebKitWebDriver
+    // sotto Xvfb manda il `pointerdown` della penna e poi niente, né i
+    // movimenti né il rilascio, e il tratto non nasce.
+    let input = "penna";
+    let report = null;
+    /// I path asciutti dopo ogni tratto, e i fotogrammi lunghi per fase.
+    const written = [];
+    let penPhases = null;
+    /// Le ripetizioni automatiche di D viste durante i tratti del mouse.
+    let keyRepeats = 0;
+    await start(session);
+    await session.execute(PHASES_SCRIPT);
+    try {
+      for (const stroke of strokes) {
+        await session.actions(drag({ ...stroke, pointerType: "pen" }));
+        await session.releaseActions();
+      }
+      penPhases = await session.execute(PHASES_READ);
+      report = await stop(session);
+    } catch (error) {
+      await session.execute(PHASES_READ);
+      await stop(session);
+      await session.releaseActions();
+      notes.push(`il driver rifiuta la penna (${String(error?.message ?? error).slice(0, 160)})`);
+    }
+    await pause(500);
+    const dryAfterPenTry = await dryPaths();
+    if (!report || report.input.pen.count === 0 || dryAfterPenTry < dryBefore + strokes.length) {
+      // Il driver non manda una penna che scrive: il mouse con D tenuto, il
+      // tasto che fa scrivere il mouse sulla lavagna. Il tasto va al viewport.
+      if (report) notes.push(`la penna del driver non scrive (${report.input.pen.count} campioni \`pen\` visti dalla sonda, path asciutti ${dryBefore} → ${dryAfterPenTry}): i tratti misurati sono del mouse con D tenuto`);
+      input = "mouse con D";
+      const mouseStroke = async (stroke) => {
+        await session.actions([{ type: "key", id: "tastiera", actions: [{ type: "keyDown", value: "d" }] }]);
+        await session.actions(drag(stroke));
+        await session.actions([{ type: "key", id: "tastiera", actions: [{ type: "keyUp", value: "d" }] }]);
+        await session.releaseActions();
+      };
+      // Il tratto della penna che il driver ha lasciato giù tiene la lavagna
+      // («un tratto alla volta»): la finestra che perde il fuoco lo annulla,
+      // come quando chi scrive passa a un'altra finestra. Fuori dalla misura.
+      await session.execute("window.dispatchEvent(new Event('blur')); return true;");
+      await pause(300);
+      await session.execute("document.querySelector('.pane.focus .canvas-viewport')?.focus(); return true;");
+      await start(session);
+      await session.execute(PHASES_SCRIPT);
+      for (const stroke of strokes) {
+        await checked(`tratto ${JSON.stringify(stroke)}`, () => mouseStroke(stroke));
+        written.push(await dryPaths());
+      }
+      penPhases = await session.execute(PHASES_READ);
+      report = await stop(session);
+      // La ripetizione automatica di D tenuto (T20d): se c'è, i fotogrammi che
+      // la seguono non contano contro la meta del tratto.
+      const d = penPhases?.d ?? { pressioni: 0, ripetizioni: 0 };
+      keyRepeats = d.ripetizioni;
+      notes.push(keyRepeats === 0
+        ? `D: ${d.pressioni} pressioni, nessuna ripetizione automatica del tasto tenuto: i fotogrammi del tratto contano tutti`
+        : `D: ${d.pressioni} pressioni e ${keyRepeats} ripetizioni automatiche del tasto tenuto: i fotogrammi dopo una ripetizione sono nella fase «ripetizione di D» e S8.penFrameGap non li conta (${JSON.stringify(penPhases.senzaRipetizioni)} invece di max ${report.frames.max}, p95 ${report.frames.p95})`);
+    }
+    await pause(500);
+    const dryAfterPen = await dryPaths();
+    // Fuori dalla misura (la sonda è ferma): la prova che i tratti stanno sopra la scheda del foglio.
+    writeFileSync(join(out, "S8-dopo-i-tratti.png"), await session.screenshot());
+    // Lo spostamento della scheda coi suoi tratti, dalla testata: avanti e
+    // indietro per due secondi, e posata 60 px più in basso, così è uno
+    // spostamento vero che si salva.
+    const handle = await centerOf(session, `${sheet} .canvas-node-handle`);
+    if (!handle) throw new Error("la testata della scheda del foglio non c'è");
+    await start(session);
+    await session.execute(PHASES_SCRIPT);
+    // Avanti e indietro di 200 px, ma non oltre la finestra: l'onda va da
+    // -dx a +dx intorno al punto di partenza, e il driver rifiuta un punto
+    // fuori dalla finestra. Con la scheda del foglio a destra l'ampiezza si
+    // riduce al posto che c'è (il referto dà il valore usato).
+    const windowWidth = await session.execute("return window.innerWidth;");
+    const moveDx = Math.max(0, Math.min(200, Math.floor(Math.min(handle.x - 40, windowWidth - 40 - handle.x))));
+    notes.push(`spostamento: ampiezza ${moveDx} px avanti e indietro, posa 60 px più in basso`);
+    await checked(`spostamento dalla testata ${JSON.stringify(handle)}`, () => session.actions(drag({ ...handle, dx: moveDx, dy: 60, ms: 2_000 })));
+    await session.releaseActions();
+    const movePhases = await session.execute(PHASES_READ);
+    const move = await stop(session);
+    // Il salvataggio dopo lo spostamento, poi i byte del foglio dal disco.
+    await pause(3_000);
+    const dryAfterMove = await dryPaths();
+    const after = sha();
+    notes.push(`input: ${input}; path asciutti ${dryBefore} → ${dryAfterPen} dopo la penna → ${dryAfterMove} dopo lo spostamento`);
+    if (written.length > 0) notes.push(`path asciutti dopo ogni tratto: ${written.join(", ")}`);
+    notes.push(`fotogrammi oltre 33 ms per ultimo evento, a penna: ${JSON.stringify(penPhases)}; allo spostamento: ${JSON.stringify(movePhases)}`);
+    notes.push(`sha256 di ${INK_BOARD.sheet}: ${before.slice(0, 12)}… prima, ${after.slice(0, 12)}… dopo, ${before === after ? "uguale" : "DIVERSO"}`);
+    return {
+      report,
+      move,
+      input,
+      sheetLive,
+      sheetState,
+      sheetSha256: { before, after, same: before === after },
+      written,
+      phases: { pen: penPhases, move: movePhases },
+      notes,
+      values: {
+        "S8.penFrameGap.max": keyRepeats > 0 ? penPhases.senzaRipetizioni.max : report.frames.max,
+        "S8.penFrameGap.p95": keyRepeats > 0 ? penPhases.senzaRipetizioni.p95 : report.frames.p95,
+        // La latenza dei tasti (D) fino al secondo fotogramma dopo il tasto.
+        "S8.keyLatency.p50": report.input.key.p50,
+        "S8.moveFrameGap.max": move.frames.max,
+        "S8.dryPaths.prima": dryBefore,
+        "S8.dryPaths.dopo": dryAfterMove,
+      },
+      samples: input === "penna" ? report.input.pen.count : report.input.pointer.count,
+    };
   },
   /// La memoria (K0), con una procedura fissa:
   ///
@@ -398,9 +1214,9 @@ const SCENARIOS = {
   /// finestra), i processi della WebView, la rete, la GPU se c'è.
   /// Il **residuo** è quanto le schede chiuse tengono ancora: «chiuse», dopo
   /// l'attesa lunga, meno «vuota», per processo e in tutto.
-  /// La **pendenza** dei giri è la retta dei minimi quadrati sui residui dei
-  /// giri, in MiB per giro: vicina a zero se la memoria torna, positiva se
-  /// ogni giro ne lascia un po'.
+  /// La **pendenza** dei giri è la mediana delle pendenze fra ogni coppia di
+  /// giri (`pendenza` in `memory.mjs`), in MiB per giro: vicina a zero se la
+  /// memoria torna, positiva se ogni giro ne lascia un po'.
   async R1(session) {
     if (process.platform !== "linux") return { skipped: "la memoria si legge da /proc: soltanto Linux" };
     await pause(MEMORY_QUIET_MS);
@@ -412,6 +1228,9 @@ const SCENARIOS = {
     const empty = await settled(driverPid, pause);
     const steps = [];
     for (const [name, mode] of MODES) {
+      // Chi cerca per nome lo fa a indice pronto: aprire il precedente può
+      // rimettere l'indice al lavoro, e un nome cercato in quel momento manca.
+      await indexed(session);
       await openByName(session, name, "");
       await session.waitFor("return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))", [name], 60_000);
       await pause(MEMORY_QUIET_MS);
@@ -458,15 +1277,6 @@ const SCENARIOS = {
     values["R1.residuo.MiB"] = residue(late);
     for (const group of groups) values[`R1.residuo.${group}.MiB`] = residue(late, group);
     // I residui dei giri, e la loro pendenza in MiB per giro.
-    const slope = (ys) => {
-      const points = ys.map((y, x) => [x + 1, y]).filter(([, y]) => y !== null);
-      if (points.length < 2) return null;
-      const mx = points.reduce((a, [x]) => a + x, 0) / points.length;
-      const my = points.reduce((a, [, y]) => a + y, 0) / points.length;
-      const num = points.reduce((a, [x, y]) => a + (x - mx) * (y - my), 0);
-      const den = points.reduce((a, [x]) => a + (x - mx) ** 2, 0);
-      return Math.round((num / den) * 100) / 100;
-    };
     const trend = {};
     for (const group of [null, ...groups]) {
       const ys = rounds.map((r) => residue(r.closed, group));
@@ -474,7 +1284,7 @@ const SCENARIOS = {
       trend[key] = ys;
       values[`${key}.primo.MiB`] = ys[0] ?? null;
       values[`${key}.ultimo.MiB`] = ys.at(-1) ?? null;
-      values[`${key}.pendenza.MiB`] = slope(ys);
+      values[`${key}.pendenza.MiB`] = pendenza(ys);
       values[`${key}.tardi.MiB`] = residue(roundsLate, group);
     }
     return {
@@ -554,13 +1364,13 @@ const SCENARIOS = {
         await openByName(current, "Lunga", "Una nota lunga");
         await current.close();
         current = null;
-        current = await openSession(base, app);
+        current = await launch("C1");
         await current.waitFor("return !!window.__fubProbe && window.__fubProbe.stop().coldStart !== null", [], 120_000);
         const report = await stop(current);
         const startup = await current.execute(CHUNKS_SCRIPT);
         await ready(current);
         await indexed(current);
-        await openByName(current, noteName(1), noteName(1));
+        await openByName(current, noteName(1), noteMark(1));
         await pause(MEMORY_QUIET_MS);
         const after = await current.execute(CHUNKS_SCRIPT);
         const afterNote = after.filter((name) => !startup.includes(name));
@@ -584,20 +1394,23 @@ const SCENARIOS = {
     // Il nome con l'hash viene da `dist/`: deve essere la build che l'app
     // di release ha dentro.
     const { url } = builtModule(args.dist ? resolve(args.dist) : undefined);
-    const report = await session.executeAsync(CANVAS_SCRIPT, [url, SIZES, OPENS, COMMITS]);
-    const violations = (report.violations ?? []).map((v) => `${v.directive} ${v.blocked}`.trim());
-    if (report.error) {
-      throw new Error(`il nucleo della lavagna non si carica (${report.error})${violations.length > 0 ? `; violazioni della CSP: ${violations.join(", ")}` : ""}`);
+    // `L1_ROUNDS` giri nella stessa pagina, ognuno col modulo compilato da
+    // capo: l'istanza e i p95 sono la mediana dei giri (`l1Values`, #388,
+    // #434).
+    const rounds = [];
+    for (let round = 0; round < L1_ROUNDS; round++) {
+      const report = await session.executeAsync(CANVAS_SCRIPT, [url, SIZES, OPENS, COMMITS]);
+      const violations = (report.violations ?? []).map((v) => `${v.directive} ${v.blocked}`.trim());
+      if (report.error) {
+        throw new Error(`il nucleo della lavagna non si carica (${report.error})${violations.length > 0 ? `; violazioni della CSP: ${violations.join(", ")}` : ""}`);
+      }
+      if (violations.length > 0) throw new Error(`violazioni della CSP mentre il nucleo si carica: ${violations.join(", ")}`);
+      rounds.push(report);
     }
-    if (violations.length > 0) throw new Error(`violazioni della CSP mentre il nucleo si carica: ${violations.join(", ")}`);
-    const values = { "L1.istanza": report.instanceMs };
-    for (const board of report.boards) {
-      values[`L1.open.${board.size}.prima`] = board.firstOpenMs;
-      values[`L1.open.${board.size}.p95`] = board.open.p95;
-      values[`L1.commit.${board.size}.primo`] = board.firstCommitMs;
-      values[`L1.commit.${board.size}.p95`] = board.commit.p95;
-    }
-    return { report, values, samples: report.boards.reduce((n, b) => n + b.open.count + b.commit.count, 0) };
+    const values = l1Values(rounds);
+    const samples = rounds.reduce((n, r) => n + r.boards.reduce((m, b) => m + b.open.count + b.commit.count, 0), 0);
+    // `report` resta il primo giro, nella forma di prima; `rounds` li ha tutti.
+    return { report: rounds[0], rounds, values, samples };
   },
   /// Avvio a freddo fino alla prima nota visibile: l'app riapre la nota che
   /// S1 ha lasciato aperta.
@@ -635,6 +1448,77 @@ async function stopDriver(driver) {
   await Promise.race([exited, new Promise((done) => setTimeout(done, 10_000).unref())]);
 }
 
+/// Avvia `tauri-driver` e aspetta che risponda. Il suo stderr, che l'app e
+/// WebKitWebDriver ereditano, si ricopia com'è e si legge: la riga di GTK che
+/// non parte va a `launch` (`openWithGtkRetry`).
+async function startDriver() {
+  driver = spawn(args.driver ?? "tauri-driver", [
+    "--port", String(port), "--native-port", String(nativePort),
+    ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
+  ], {
+    env: driverEnv,
+    stdio: ["ignore", "inherit", "pipe"],
+    // Un gruppo di processi suo: alla fine si ferma il driver con l'app e
+    // WebKitWebDriver che ha avviato, non soltanto `tauri-driver`.
+    detached: process.platform !== "win32",
+  });
+  driverPid = driver.pid;
+  const watch = gtkWatcher((line) => {
+    for (const listener of gtkListeners) listener(line);
+  });
+  driver.stderr.on("data", (chunk) => {
+    process.stderr.write(chunk);
+    watch(chunk.toString("utf8"));
+  });
+  await waitForDriver(base);
+}
+
+/// Quanto si aspetta al più che l'app della sessione chiusa esca.
+const APP_EXIT_MS = 30_000;
+
+/// Aspetta che l'app della sessione appena chiusa e i processi della sua
+/// WebView siano usciti, guardando i discendenti del driver per PID. Fub ha
+/// un'istanza sola (plugin single-instance): un'app che parte mentre la
+/// vecchia è ancora viva le cede, e il driver aspetta una finestra che non
+/// arriva (S9 dopo S3 in T46, «UND_ERR_HEADERS_TIMEOUT»). Se dopo
+/// `APP_EXIT_MS` resta qualcosa lo dice, e si va avanti. Fuori da Linux i
+/// processi non si leggono: resta la pausa di prima.
+async function appGone(label) {
+  if (descendants(driverPid) === null) {
+    await pause(3_000);
+    return;
+  }
+  const deadline = performance.now() + APP_EXIT_MS;
+  for (;;) {
+    const left = descendants(driverPid);
+    if (left.length === 0) return;
+    if (performance.now() > deadline) {
+      console.log(`⚠ ${label}: dopo ${APP_EXIT_MS / 1000} s restano processi dell'app di prima (${left.map((p) => `${p.comm} ${p.pid}`).join(", ")}): parte lo stesso`);
+      return;
+    }
+    await pause(50);
+  }
+}
+
+/// L'app di una sessione nuova, avviata soltanto quando quella di prima è
+/// uscita (`appGone`). Se muore perché GTK non parte, un solo nuovo tentativo
+/// col driver riavviato, e lo dice (`openWithGtkRetry`, #287).
+async function launch(label) {
+  await appGone(label);
+  return openWithGtkRetry(label, {
+    open: (signal) => openSession(base, app, { signal }),
+    watch: (listener) => {
+      gtkListeners.add(listener);
+      return () => gtkListeners.delete(listener);
+    },
+    restart: async () => {
+      await stopDriver(driver);
+      await startDriver();
+    },
+    log: (text) => console.log(text),
+  });
+}
+
 function git(...command) {
   try {
     return execFileSync("git", command, { encoding: "utf8" }).trim();
@@ -650,26 +1534,42 @@ async function main() {
   mkdirSync(out, { recursive: true });
   const root = mkdtempSync(join(tmpdir(), "fub-webview-"));
   const { vault, config } = writeFixtures(root);
-  const driver = spawn(args.driver ?? "tauri-driver", [
-    "--port", String(port),
-    ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
-  ], {
-    env: { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config },
-    stdio: ["ignore", "inherit", "inherit"],
-    // Un gruppo di processi suo: alla fine si ferma il driver con l'app e
-    // WebKitWebDriver che ha avviato, non soltanto `tauri-driver`.
-    detached: process.platform !== "win32",
-  });
-  driverPid = driver.pid;
+  benchVault = vault;
+  // `--x11` toglie `WAYLAND_DISPLAY` al driver e chiede X11: la guardia in
+  // fondo al file ha già detto che cosa scegliere (`display.mjs`).
+  driverEnv = { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config };
+  if (x11) {
+    delete driverEnv.WAYLAND_DISPLAY;
+    driverEnv.GDK_BACKEND = "x11";
+  }
+  // Lo schermo dove si aprirà la finestra, con l'ambiente che avrà l'app.
+  display = displayRate({ args, env: driverEnv });
+  cap = engineCap(null, display.periodMs);
+  // Il percorso di disegno e il vblank di WebKitGTK, da una WebView a parte
+  // con lo stesso ambiente: senza PyGObject o WebKit2 resta `null`.
+  gpuInfo = webkitGpu(driverEnv);
+  if (gpuInfo) console.log(`· webkit://gpu: ${gpuInfo.renderer ?? "?"}; vblank ${gpuInfo.vblank ?? "?"}, ${gpuInfo.vblankRate ?? "?"}`);
+  console.log(`· schermo: ${display.hz} Hz, P ${display.periodMs} ms (${display.source})`);
+  for (const note of display.notes) console.log(`· schermo: ${note}`);
+  // Le soglie in periodi chiedono il tetto del motore, cioè F1, prima degli
+  // scenari che misurano.
+  if (hasPeriodLimits(limits) && !only.has("F1")) {
+    only.add("F1");
+    console.log("· F1 aggiunto: le soglie in periodi chiedono il rAF a vuoto");
+  }
+  // Un Xvfb che si rigenera fra un'app e l'altra fa cadere ogni tanto l'avvio
+  // dello scenario dopo (#287): si dice subito, prima delle misure.
+  const reset = xvfbResetProblem(driverEnv, commandLines());
+  if (reset) console.log(`⚠ ${reset}`);
   const results = {};
   let failed = 0;
   try {
-    await waitForDriver(base);
+    await startDriver();
     // Il primo avvio sul vault nuovo legge dal disco diecimila note: lo fa una
     // sessione che non misura, e aspetta che la ricerca per nome risponda. Gli
     // avvii dopo indicizzano di nuovo da capo, e ogni scenario aspetta che
     // l'indice sia pronto (`indexed`).
-    const warm = await openSession(base, app);
+    const warm = await launch("riscaldamento");
     try {
       await ready(warm);
       await openByName(warm, "Lunga", "Una nota lunga", null, 300_000);
@@ -684,17 +1584,22 @@ async function main() {
     // riscaldamento, non le schede degli altri scenari. I1 subito dopo, con
     // poche schede da riaprire. S6 dopo S1: l'avvio da misurare riapre la
     // nota che S1 ha lasciato. L1 dopo: non apre niente nel vault. C1 in
-    // fondo: cambia il profilo del vault, e lo lascia a «Tutto».
-    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1", "L1", "C1"].filter((id) => only.has(id));
+    // fondo: cambia il profilo del vault, e lo lascia a «Tutto». F1 prima di
+    // ogni scenario con una soglia in periodi: decide il tetto del motore. F2
+    // subito dopo, con poche schede riaperte; F3 dopo S8, perché apre due
+    // note che gli avvii dopo riaprono.
+    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S4", "S5", "S7", "S8", "F3", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
       // Un'app che non parte è un risultato dello scenario, non la fine del
       // banco: gli altri scenari e il referto vanno avanti.
       let session;
       try {
-        session = await openSession(base, app);
+        session = await launch(id);
       } catch (error) {
         failed++;
-        results[id] = { error: `l'app non è partita: ${String(error?.message ?? error)}` };
+        // `fetch` dice «fetch failed» e la causa (la porta, il timeout) è in `cause`.
+        const cause = error?.cause ? ` (${error.cause.code ?? error.cause.message ?? error.cause})` : "";
+        results[id] = { error: `l'app non è partita: ${String(error?.message ?? error)}${cause}` };
         console.log(`✗ ${id}: ${results[id].error}`);
         continue;
       }
@@ -702,7 +1607,16 @@ async function main() {
         if (id !== "S6") await ready(session);
         // I1 misura proprio l'indicizzazione dell'avvio: non la aspetta.
         if (id !== "S6" && id !== "I1") await indexed(session);
+        const loadBefore = loadavg()[0];
         const result = await SCENARIOS[id](session);
+        // Il carico della macchina: un numero alto dice che la misura è rumorosa.
+        result.load = { before: Math.round(loadBefore * 10) / 10, after: Math.round(loadavg()[0] * 10) / 10 };
+        // Zero campioni non è un tempo di zero: se la sonda non ha visto niente
+        // (un fotogramma che non arriva, un tasto perso) il referto non scrive
+        // un numero, e la soglia lo conta come misura che manca.
+        if (result.samples === 0 && result.values) {
+          for (const key of Object.keys(result.values)) result.values[key] = null;
+        }
         results[id] = result;
         writeFileSync(join(out, `${id}.json`), JSON.stringify(result, null, 2) + "\n");
         if (result.skipped) {
@@ -710,12 +1624,17 @@ async function main() {
           continue;
         }
         for (const [key, value] of Object.entries(result.values)) {
-          const limit = limits[key];
+          // Una soglia in periodi vale col periodo efficace: quello dello
+          // schermo, o 60 Hz finché c'è il tetto del motore (`refresh.mjs`).
+          const entry = limits[key];
+          const limit = resolveLimit(entry, cap.effectiveMs);
           const over = limit !== undefined && (value === null || value > limit);
           if (over) failed++;
-          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") || key.endsWith(".spegnibili") ? "chunk" : "ms";
-          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${unit}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
+          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") || key.endsWith(".spegnibili") ? "chunk" : key.includes(".dryPaths") ? "path" : key.endsWith(".liveCards") ? "schede" : key === "F2.raf" ? "rAF" : key.includes(".cpu.") ? "% di un core" : "ms";
+          const periods = typeof entry === "object" ? ` = ${entry.periodi} × ${cap.effectiveMs} ms${cap.capped ? ", tetto del motore" : ""}` : "";
+          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${unit}${limit !== undefined ? ` (soglia ${limit}${periods})` : ""} · ${result.samples} campioni`);
         }
+        for (const note of result.notes ?? []) console.log(`· ${id}: ${note}`);
         for (const [nome, seen] of Object.entries(result.profiles ?? {})) {
           console.log(`· ${seen.label}: all'avvio ${seen.startup.join(", ")}`);
           console.log(`· ${seen.label}: dopo una nota ${seen.afterNote.join(", ") || "niente in più"}`);
@@ -728,6 +1647,7 @@ async function main() {
         console.log(`✗ ${id}: ${results[id].error}`);
       } finally {
         // C1 chiude da sé le sessioni che apre, anche la prima.
+        // L'app dopo parte quando questa è uscita (`launch`).
         if (id !== "C1") await session.close();
       }
     }
@@ -745,9 +1665,15 @@ async function main() {
   const report = {
     commit: git("rev-parse", "HEAD"),
     machine: { host: hostname(), cpu: cpus()[0]?.model ?? null, cores: cpus().length, memoryGiB: Math.round(totalmem() / 2 ** 30) },
-    system: { os: osType(), release: release(), session: process.env.XDG_SESSION_TYPE ?? (process.env.WAYLAND_DISPLAY ? "wayland" : process.env.DISPLAY ? "x11" : null) },
+    system: { os: osType(), release: release(), session: x11 ? "x11" : process.env.XDG_SESSION_TYPE ?? (process.env.WAYLAND_DISPLAY ? "wayland" : process.env.DISPLAY ? "x11" : null) },
     webview: Object.values(results).find((r) => r.report?.userAgent)?.report.userAgent ?? null,
     budgets: budgetsKind,
+    // Lo schermo, il tetto del motore e il percorso di disegno: le soglie in
+    // periodi del referto valgono con `cap.effectiveMs`.
+    display,
+    cap,
+    render: results.F1?.report?.render ?? null,
+    load: loadavg().map((x) => Math.round(x * 10) / 10),
     results,
   };
   writeFileSync(join(out, "referto.json"), JSON.stringify(report, null, 2) + "\n");
@@ -758,4 +1684,12 @@ async function main() {
   }
 }
 
-await main();
+// Prima di tutto il resto: con `WAYLAND_DISPLAY` e senza una scelta il banco non
+// scrive fixture e non avvia il driver (`display.mjs`).
+const problem = waylandProblem(process.env, args);
+if (problem) {
+  console.error(problem);
+  process.exitCode = 2;
+} else {
+  await main();
+}

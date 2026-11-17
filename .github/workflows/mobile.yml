@@ -3,10 +3,14 @@ name: Mobile
 # Il build mobile, che il ciclo principale non fa. Android: progetto generato
 # da `cargo tauri android init --ci`, template nativi fusi da
 # `crates/fub-app/mobile/install-mobile.sh` (con la sua verifica `--check`),
-# poi un APK di debug per aarch64, caricato come artefatto. iOS: la sola
-# compilazione Rust del binario per il dispositivo, perché il progetto Xcode
-# chiede i target Share e Widget creati a mano (install-mobile.sh lo dice) e
-# una firma; nessun .ipa esce da qui.
+# poi un APK di debug per aarch64, caricato come artefatto; un secondo APK,
+# per x86_64, si apre in un emulatore del runner, che dice se Fub parte e ne
+# fotografa lo schermo (solo sulle PR pronte e su `main`).
+#
+# iOS è in pausa, come macOS (docs/decisions/0245-macos-e-ios-in-pausa.md): la
+# compilazione Rust del binario per il dispositivo, che stava qui, gira una
+# volta alla settimana in `macos-in-pausa.yml`. Quando iOS torna, il job
+# `ios` si riporta qui da quel workflow.
 #
 # Non è un controllo richiesto: gira sui cambi che toccano il mobile, su `main`
 # e a richiesta. L'APK non è firmato per la distribuzione.
@@ -15,13 +19,16 @@ on:
   push:
     branches: [main]
   pull_request:
+    # `ready_for_review`: una PR che esce dalla bozza fa partire l'emulatore,
+    # che sulle bozze non gira.
+    types: [opened, synchronize, reopened, ready_for_review]
     # Ciò che soltanto il telefono costruisce o importa: il binario e i suoi
     # template nativi, le due cartelle del telefono (la shell e la cornice di
     # Scrittoio, con il suo foglio mobile.css), l'ingresso e la sua pagina. Il
     # resto del client è comune: lo costruiscono già i job del desktop, che
     # fanno il build Vite anche di mobile.html. `Cargo.lock` sì: un
     # aggiornamento delle dipendenze (Tauri mobile compreso) può rompere solo
-    # il build Android o iOS. Le poche righe `cfg` del telefono nei crate
+    # il build Android. Le poche righe `cfg` del telefono nei crate
     # comuni (fub-host, fub-kernel, fub-wasm-host) si provano sul push in main.
     paths:
       - "Cargo.lock"
@@ -92,25 +99,167 @@ jobs:
           path: crates/fub-app/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
 
-  ios:
-    name: ios (compilazione Rust)
-    runs-on: macos-latest
+  # L'APK parte davvero: un emulatore x86_64 sul runner apre Fub, aspetta la
+  # sua finestra, controlla che il processo resti vivo e che logcat non abbia
+  # un suo crash, e fotografa lo schermo. Un APK di debug per x86_64, perché
+  # l'emulatore del runner è x86_64 (l'APK aarch64 del job `android` resta
+  # quello della release). Solo l'SDK del runner: nessuna action di terzi.
+  android-emulatore:
+    name: android (l'apk parte nell'emulatore)
+    # Sulle PR pronte e su `main`, come il ciclo completo: non sulle bozze.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      FUB_PACKAGE: dev.fub.app
+      FUB_SYSTEM_IMAGE: "system-images;android-34;google_apis;x86_64"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
         with:
-          targets: aarch64-apple-ios, wasm32-unknown-unknown
+          targets: x86_64-linux-android, wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/client/package-lock.json
-      # `generate_context!` incorpora il frontend già costruito.
-      - name: Frontend costruito
-        working-directory: apps/client
+      - name: JDK 17 e NDK del runner
         run: |
-          npm ci
-          npm run build
-      - name: fub-app per il dispositivo iOS
-        run: cargo check -p fub-app --target aarch64-apple-ios --locked
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+      - name: Installa esattamente il lockfile del frontend
+        working-directory: apps/client
+        run: npm ci
+      - name: Tauri CLI 2.11.5
+        run: cargo install tauri-cli --version "=2.11.5" --locked
+      - name: La libreria anche come cdylib e staticlib
+        run: |
+          sed -i 's/^crate-type = \["rlib"\]$/crate-type = ["staticlib", "cdylib", "rlib"]/' crates/fub-app/Cargo.toml
+          grep -q '^crate-type = \["staticlib", "cdylib", "rlib"\]$' crates/fub-app/Cargo.toml
+      - name: Progetto Android generato
+        working-directory: crates/fub-app
+        run: cargo tauri android init --ci
+      - name: Template nativi fusi e verificati
+        run: |
+          bash crates/fub-app/mobile/install-mobile.sh --gen crates/fub-app/gen
+          bash crates/fub-app/mobile/install-mobile.sh --gen crates/fub-app/gen --check
+      - name: APK di debug per x86_64
+        working-directory: crates/fub-app
+        run: cargo tauri android build --debug --apk --target x86_64
+      # Senza KVM l'emulatore x86_64 non parte in tempi utili: il job lo dice
+      # e fallisce, non salta in silenzio.
+      - name: KVM acceso
+        run: |
+          if [ ! -e /dev/kvm ]; then
+            echo "::error::il runner non ha /dev/kvm: l'emulatore non può partire"
+            exit 1
+          fi
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          # `trigger` non aspetta che la regola sia applicata: si aspetta la
+          # coda di udev, e se il permesso non è ancora arrivato lo si dà.
+          sudo udevadm settle --timeout=30 || true
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            sudo chmod a+rw /dev/kvm
+          fi
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            echo "::error::/dev/kvm c'è ma non si legge o non si scrive"
+            ls -l /dev/kvm
+            exit 1
+          fi
+          ls -l /dev/kvm
+      - name: Immagine di sistema e AVD
+        run: |
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin"
+          yes | "$sdk/sdkmanager" --licenses > /dev/null || true
+          "$sdk/sdkmanager" --install "$FUB_SYSTEM_IMAGE" emulator platform-tools > /dev/null
+          # Una cartella sola per chi crea l'AVD e per chi lo avvia: senza,
+          # `avdmanager` lo scriveva dove l'emulatore non guarda
+          # («Unknown AVD name [fub]»).
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          echo no | "$sdk/avdmanager" create avd --force -n fub -k "$FUB_SYSTEM_IMAGE" -d pixel_6
+          if ! "$ANDROID_HOME/emulator/emulator" -list-avds | grep -qx fub; then
+            echo "::error::l'AVD fub non si trova in $ANDROID_AVD_HOME"
+            ls -la "$ANDROID_AVD_HOME"
+            exit 1
+          fi
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+      # Fino a 5 minuti per l'avvio; poi il job fallisce e lo dice.
+      - name: Emulatore avviato
+        run: |
+          nohup emulator -avd fub -no-window -no-audio -no-boot-anim -no-snapshot \
+            -gpu swiftshader_indirect -memory 4096 > "$RUNNER_TEMP/emulatore.log" 2>&1 &
+          emulatore=$!
+          # Ogni attesa ha un limite, e un emulatore che muore lo dice subito:
+          # `adb wait-for-device` da solo aspettava fino alla fine del job.
+          if ! timeout 180 adb wait-for-device; then
+            echo "::error::l'emulatore non si è collegato ad adb in 3 minuti"
+            tail -n 50 "$RUNNER_TEMP/emulatore.log"
+            exit 1
+          fi
+          for i in $(seq 1 60); do
+            if ! kill -0 "$emulatore" 2> /dev/null; then
+              echo "::error::l'emulatore si è chiuso durante l'avvio"
+              tail -n 50 "$RUNNER_TEMP/emulatore.log"
+              exit 1
+            fi
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+              echo "avviato dopo circa $((i * 5)) s"
+              adb shell input keyevent 82 || true
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::l'emulatore non ha finito l'avvio in 5 minuti"
+          tail -n 50 "$RUNNER_TEMP/emulatore.log"
+          exit 1
+      - name: Fub parte, resta aperto e non si chiude da solo
+        run: |
+          apk=$(find crates/fub-app/gen/android/app/build/outputs/apk -name '*.apk' | head -n 1)
+          test -n "$apk" || { echo "::error::nessun APK costruito"; exit 1; }
+          echo "APK: $apk"
+          adb install -r "$apk"
+          adb logcat -c
+          adb shell am start -W -n "$FUB_PACKAGE/.MainActivity"
+          focused=""
+          for i in $(seq 1 30); do
+            if adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | grep -q "$FUB_PACKAGE"; then
+              focused=1
+              echo "finestra di Fub in primo piano dopo circa $((i * 2)) s"
+              break
+            fi
+            sleep 2
+          done
+          test -n "$focused" || { echo "::error::la finestra di Fub non è mai arrivata in primo piano"; adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'; exit 1; }
+          sleep 20
+          adb exec-out screencap -p > "$RUNNER_TEMP/scrivania.png"
+          adb logcat -d > "$RUNNER_TEMP/logcat.txt"
+          adb logcat -d -b crash > "$RUNNER_TEMP/logcat-crash.txt" || true
+          pid=$(adb shell pidof "$FUB_PACKAGE" | tr -d '\r')
+          test -n "$pid" || { echo "::error::il processo di Fub non c'è più dopo 20 s"; exit 1; }
+          if grep -q "$FUB_PACKAGE" "$RUNNER_TEMP/logcat-crash.txt" \
+            || grep -E "FATAL EXCEPTION|Fatal signal" "$RUNNER_TEMP/logcat.txt" | grep -q .; then
+            echo "::error::logcat ha un crash"
+            grep -E -A20 "FATAL EXCEPTION|Fatal signal" "$RUNNER_TEMP/logcat.txt" | head -n 60
+            cat "$RUNNER_TEMP/logcat-crash.txt" | head -n 60
+            exit 1
+          fi
+          adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | grep -q "$FUB_PACKAGE" \
+            || { echo "::error::dopo 20 s Fub non è più in primo piano"; exit 1; }
+          echo "Fub è vivo (pid $pid) e in primo piano dopo 20 s"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: android-emulatore-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/scrivania.png
+            ${{ runner.temp }}/logcat.txt
+            ${{ runner.temp }}/logcat-crash.txt
+            ${{ runner.temp }}/emulatore.log
+          if-no-files-found: warn

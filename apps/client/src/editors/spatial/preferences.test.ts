@@ -552,8 +552,8 @@ describe("lo spazio di lavoro del disegno", () => {
     // `draw.level` e `draw.custom` restano nel file, ma non contano più.
     expect(workspaceOf([drawEntry("draw.level", "essential"), drawEntry("draw.custom", ["pen"])])).toEqual({ workspace: "full", toolbar: [] });
     expect(workspaceOf([drawEntry("draw.workspace", "simple")])).toEqual({ workspace: "simple", toolbar: [] });
-    // Uno strumento che non c'è, o non c'è più come il Testo, non conta.
-    expect(workspaceOf([drawEntry("draw.workspace", "full"), drawEntry("draw.toolbar", ["select", "text", "domani"])])).toEqual({ workspace: "full", toolbar: ["select"] });
+    // Uno strumento che non c'è non conta; il Testo c'è di nuovo (K5).
+    expect(workspaceOf([drawEntry("draw.workspace", "full"), drawEntry("draw.toolbar", ["select", "text", "domani"])])).toEqual({ workspace: "full", toolbar: ["select", "text"] });
     // Uno spazio sconosciuto vale Completo.
     expect(workspaceOf([drawEntry("draw.workspace", "tablet")]).workspace).toBe("full");
   });

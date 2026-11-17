@@ -5,7 +5,7 @@
 // si scrive come sempre. La proiezione è quella del codec
 // (`__fixtures__/rich-closed.json`): un paragrafo aperto, uno chiuso, una
 // tabella chiusa e un altro paragrafo aperto.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Node as PmNode } from "prosemirror-model";
 import { TextSelection } from "prosemirror-state";
 import closedFixture from "../../__fixtures__/rich-closed.json";
@@ -30,11 +30,11 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function engine(source = CLOSED): { e: RichEngine; changes: EditorChange[] } {
+function engine(source = CLOSED, onClosedWrite?: () => void): { e: RichEngine; changes: EditorChange[] } {
   const parent = document.createElement("div");
   document.body.append(parent);
   const changes: EditorChange[] = [];
-  const e = new RichEngine(parent, { label: () => "documento", onChange: (c) => changes.push(c), onSelectionChange: () => {} });
+  const e = new RichEngine(parent, { label: () => "documento", onChange: (c) => changes.push(c), onSelectionChange: () => {}, onClosedWrite });
   engines.push(e);
   e.setDoc(source);
   return { e, changes };
@@ -120,6 +120,42 @@ describe("un blocco chiuso", () => {
     move(1, 3);
     expect(changes).toHaveLength(1);
     expect(e.state.doc.child(1).eq(doc.child(1))).toBe(true);
+  });
+
+  it("una battuta che non entra lo dice, e una che entra no (IMP-118)", () => {
+    const tried = vi.fn();
+    const { e, changes } = engine(CLOSED, tried);
+    const key = (init: KeyboardEventInit) => {
+      const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+      e.contentElement().dispatchEvent(event);
+      return event;
+    };
+    // Una lettera col cursore nel paragrafo chiuso: il browser la lascerebbe
+    // cadere senza transazione, e il motore la vede al tasto.
+    e.select(inside(e.state.doc, 1, "chiuso", 2));
+    expect(key({ key: "Q" }).defaultPrevented).toBe(true);
+    expect(tried).toHaveBeenCalledTimes(1);
+    // Un accordo o un tasto che non scrive non è un tentativo.
+    key({ key: "c", ctrlKey: true });
+    key({ key: "ArrowRight" });
+    expect(tried).toHaveBeenCalledTimes(1);
+    // Un a capo arriva come transazione, e il rifiuto lo dice.
+    e.dispatch(e.state.tr.split(e.state.selection.from));
+    expect(tried).toHaveBeenCalledTimes(2);
+    // Il cursore del browser nel blocco chiuso, anche dove il motore non lo
+    // ha seguito, basta.
+    e.select(inside(e.state.doc, 0, "Aperto", 2));
+    const closedText = document.querySelector(".rich-locked")!.firstChild!;
+    window.getSelection()!.collapse(closedText.nodeType === Node.TEXT_NODE ? closedText : closedText.firstChild!, 1);
+    expect(key({ key: "Q" }).defaultPrevented).toBe(true);
+    expect(tried).toHaveBeenCalledTimes(3);
+    window.getSelection()!.removeAllRanges();
+    // Nel resto del testo si scrive, senza segni.
+    e.select(inside(e.state.doc, 0, "Aperto", 2));
+    expect(key({ key: "Q" }).defaultPrevented).toBe(false);
+    e.dispatch(e.state.tr.insertText("Q"));
+    expect(tried).toHaveBeenCalledTimes(3);
+    expect(changes).toHaveLength(1);
   });
 
   it("arrivato da un altro riquadro o dal disco entra com'è", () => {

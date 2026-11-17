@@ -11,7 +11,11 @@
 //!   come `data:` URI, entro un tetto per immagine e per file;
 //! - una nota incorporata (`![[Altra nota]]`, anche una sua sezione o un suo
 //!   blocco) entra con la sua resa, fino a [`MAX_DEPTH`] livelli e senza
-//!   giri.
+//!   giri;
+//! - i messaggi dei commenti (`{==passo==}{>>messaggio<<}`), che la resa di
+//!   stampa porta in `<template class="comment-note">` inerti, escono dal
+//!   file; con l'opzione [`OPTION_COMMENTS`] diventano note a piè di pagina,
+//!   un rimando dopo il passo e i messaggi in fondo (vedi [`comment_notes`]).
 //!
 //! # Nessuna perdita silenziosa
 //!
@@ -27,6 +31,7 @@
 //! da fuori: immagini soltanto da `data:`, stili soltanto quelli scritti qui.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 
 use fub_abi::model::{DocId, LinkTarget};
 use fub_abi::render::RenderedDocument;
@@ -41,6 +46,9 @@ use fub_abi::PluginError;
 use crate::common::bad_args;
 
 pub const TARGET_HTML: &str = "importers.html";
+/// L'opzione `{"comments": true}` della richiesta: i messaggi dei commenti
+/// diventano note in fondo alla pagina. Senza, non entrano nel file.
+pub const OPTION_COMMENTS: &str = "comments";
 
 /// Quante note esporta una richiesta: ogni file sta in memoria finché la
 /// shell non lo posa.
@@ -67,6 +75,9 @@ blockquote,.embed{margin:1rem 0;padding:0 1rem;border-left:3px solid var(--rule)
 table{border-collapse:collapse}th,td{border:1px solid var(--rule);padding:.25rem .5rem}\
 .ui-slot{margin:1rem 0;padding:.5rem;border:1px dashed var(--rule);color:var(--muted);font:0.85em system-ui,sans-serif}\
 .ui-slot::before{content:attr(data-custom-kind)}\
+.comment-ref{font:0.75em system-ui,sans-serif}.comment-ref a{text-decoration:none}\
+.comment-notes{margin-top:3rem;border-top:1px solid var(--rule);font-size:0.9em}\
+.comment-notes p{margin:.25rem 0}.comment-author{font-weight:600}.comment-date{color:var(--muted)}\
 @media print{body{background:#fff;color:#000}article{padding:0}}";
 
 #[derive(Default)]
@@ -108,6 +119,7 @@ impl ExportProvider for HtmlExport {
                 "più di {MAX_DOCUMENTS} note: esportane meno alla volta"
             )));
         }
+        let with_comments = request.flag(OPTION_COMMENTS, false);
         let mut report = ExportReport::default();
         for (doc, name) in docs.iter().zip(html_names(&docs)) {
             let rendered = match host.query_index(IndexQuery::RenderPrint { doc: doc.clone() }) {
@@ -125,7 +137,7 @@ impl ExportProvider for HtmlExport {
                     continue;
                 }
             };
-            let page = page(host, doc, rendered, &mut report);
+            let page = page(host, doc, rendered, with_comments, &mut report);
             let h = out.open_artifact(&name, "text/html")?;
             out.write_artifact(h, page.as_bytes())?;
             report.artifacts.push(out.close_artifact(h)?);
@@ -151,6 +163,7 @@ fn page(
     host: &dyn ReadApi,
     doc: &DocId,
     rendered: RenderedDocument,
+    with_comments: bool,
     report: &mut ExportReport,
 ) -> String {
     let mut inliner = Inliner {
@@ -161,6 +174,7 @@ fn page(
     };
     inliner.parts(&rendered);
     let body = inliner.inline(&rendered.html, doc, 0);
+    let body = comment_notes(&body, with_comments);
     inliner.lost.into_notes(doc, report);
     let title = fub_abi::html::escape(file_stem(doc));
     format!(
@@ -352,6 +366,106 @@ impl Inliner<'_> {
     }
 }
 
+/// L'inizio del portatore di un messaggio di commento nella resa di stampa.
+const COMMENT_OPEN: &str = "<template class=\"comment-note\"";
+const COMMENT_CLOSE: &str = "</template>";
+/// Un messaggio letto dal portatore: autore, data e testo.
+type CommentMessage = (Option<String>, Option<String>, String);
+
+/// I messaggi dei commenti di `body`: tolti, o (`with`) note a piè di pagina.
+///
+/// La resa di stampa lascia ogni messaggio dove sta nel testo, in un
+/// `<template class="comment-note" data-author data-date>testo</template>`
+/// che il browser non mostra. Senza commenti i portatori escono e basta. Con i
+/// commenti, i portatori **attaccati** (i messaggi di una stessa discussione,
+/// uno dopo l'altro nel file) diventano un rimando numerato `<sup>` lì dove
+/// stavano, e una voce sola dell'elenco in fondo, un paragrafo per messaggio.
+///
+/// Il testo del messaggio si rilegge come testo e si riescapa: un renderer di
+/// terzi che imitasse il portatore con dei tag dentro non mette markup nella
+/// pagina. Un portatore non chiuso resta com'è: non è nostro.
+fn comment_notes(body: &str, with: bool) -> String {
+    let mut out = String::with_capacity(body.len());
+    let mut notes: Vec<Vec<CommentMessage>> = Vec::new();
+    let mut rest = body;
+    while let Some(at) = rest.find(COMMENT_OPEN) {
+        out.push_str(&rest[..at]);
+        rest = &rest[at..];
+        let mut thread = Vec::new();
+        while let Some((message, len)) = comment_carrier(rest) {
+            thread.push(message);
+            rest = &rest[len..];
+        }
+        if thread.is_empty() {
+            out.push_str(COMMENT_OPEN);
+            rest = &rest[COMMENT_OPEN.len()..];
+            continue;
+        }
+        if with {
+            let n = notes.len() + 1;
+            let _ = write!(
+                out,
+                "<sup class=\"comment-ref\" id=\"comment-ref-{n}\"><a href=\"#comment-{n}\">{n}</a></sup>"
+            );
+            notes.push(thread);
+        }
+    }
+    out.push_str(rest);
+    if !notes.is_empty() {
+        out.push_str("\n<section class=\"comment-notes\"><ol>\n");
+        for (i, thread) in notes.iter().enumerate() {
+            let n = i + 1;
+            let _ = write!(out, "<li id=\"comment-{n}\">");
+            for (author, date, text) in thread {
+                out.push_str("<p class=\"comment-message\">");
+                let who = author.as_deref().map(fub_abi::html::escape);
+                let when = date.as_deref().map(fub_abi::html::escape);
+                if let Some(who) = &who {
+                    let _ = write!(out, "<span class=\"comment-author\">{who}</span>");
+                }
+                if let Some(when) = &when {
+                    if who.is_some() {
+                        out.push(' ');
+                    }
+                    let _ = write!(out, "<span class=\"comment-date\">{when}</span>");
+                }
+                if who.is_some() || when.is_some() {
+                    out.push_str(": ");
+                }
+                out.push_str(&fub_abi::html::escape(text));
+                out.push_str("</p>");
+            }
+            let _ = writeln!(
+                out,
+                " <a class=\"comment-back\" href=\"#comment-ref-{n}\" aria-label=\"Torna al testo\">↩</a></li>"
+            );
+        }
+        out.push_str("</ol></section>");
+    }
+    out
+}
+
+/// Un portatore in testa a `html`: autore, data e testo del messaggio, e
+/// quanti byte occupa. `None` se `html` non comincia con un portatore intero.
+fn comment_carrier(html: &str) -> Option<(CommentMessage, usize)> {
+    let tag_rest = html.strip_prefix(COMMENT_OPEN)?;
+    let open_end = tag_rest.find('>')?;
+    let attrs = attributes(&tag_rest[..open_end])?;
+    let inner_start = COMMENT_OPEN.len() + open_end + 1;
+    let close = html[inner_start..].find(COMMENT_CLOSE)? + inner_start;
+    let field = |name: &str| {
+        attrs
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.clone())
+    };
+    let text = unescape(&html[inner_start..close]);
+    Some((
+        (field("data-author"), field("data-date"), text),
+        close + COMMENT_CLOSE.len(),
+    ))
+}
+
 /// L'inizio di un segnaposto di incorporamento, come lo scrivono i provider:
 /// è il protocollo di transclusion che la shell idrata.
 const EMBED_OPEN: &str = "<div class=\"embed\"";
@@ -492,6 +606,49 @@ mod tests {
         assert_eq!(base64(b"foo"), "Zm9v");
         assert_eq!(base64(b"foobar"), "Zm9vYmFy");
         assert_eq!(base64(&[0xff, 0xfe, 0x00]), "//4A");
+    }
+
+    const WITH_THREAD: &str = "<p>Il passo<template class=\"comment-note\" data-author=\"Anna\" \
+        data-date=\"2026-11-08 17:40\">uno &lt;b&gt; &amp; due</template><template class=\"comment-note\" \
+        data-author=\"Bruno\">ok</template> e qui<template class=\"comment-note\">punto</template>.</p>";
+
+    #[test]
+    fn without_comments_the_carriers_leave_the_page() {
+        assert_eq!(comment_notes(WITH_THREAD, false), "<p>Il passo e qui.</p>");
+    }
+
+    #[test]
+    fn with_comments_a_thread_is_one_note_at_the_bottom() {
+        let page = comment_notes(WITH_THREAD, true);
+        assert!(!page.contains("<template"), "{page}");
+        assert!(page.starts_with(
+            "<p>Il passo<sup class=\"comment-ref\" id=\"comment-ref-1\"><a href=\"#comment-1\">1</a></sup> \
+             e qui<sup class=\"comment-ref\" id=\"comment-ref-2\"><a href=\"#comment-2\">2</a></sup>.</p>"
+        ), "{page}");
+        assert!(page.contains(
+            "<li id=\"comment-1\"><p class=\"comment-message\"><span class=\"comment-author\">Anna</span> \
+             <span class=\"comment-date\">2026-11-08 17:40</span>: uno &lt;b&gt; &amp; due</p>\
+             <p class=\"comment-message\"><span class=\"comment-author\">Bruno</span>: ok</p>"
+        ), "{page}");
+        assert!(
+            page.contains("<li id=\"comment-2\"><p class=\"comment-message\">punto</p>"),
+            "{page}"
+        );
+        assert!(page.contains("href=\"#comment-ref-2\""), "{page}");
+    }
+
+    #[test]
+    fn a_forged_carrier_puts_no_markup_in_the_page() {
+        let page = comment_notes(
+            "<template class=\"comment-note\"><img src=x onerror=alert(1)></template>",
+            true,
+        );
+        assert!(!page.contains("<img"), "{page}");
+        assert!(page.contains("&lt;img"), "{page}");
+        // Un portatore non chiuso non è un portatore.
+        let open = "a<template class=\"comment-note\">b";
+        assert_eq!(comment_notes(open, true), open);
+        assert_eq!(comment_notes("niente", true), "niente");
     }
 
     #[test]

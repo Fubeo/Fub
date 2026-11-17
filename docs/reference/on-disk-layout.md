@@ -21,7 +21,7 @@ La cartella viene scelta in ordine:
 
 1. `FUB_CONFIG_DIR`;
 2. `fub-config/` accanto all'eseguibile se esiste `fub.portable`;
-3. cartella di configurazione dell'utente per il sistema operativo.
+3. cartella dell'utente per il sistema (sul telefono, [quella privata dell'app](../architecture/phone-frame.md#il-lato-rust)).
 
 | Percorso relativo | Classe | Schema | Contenuto |
 |---|---|---:|---|
@@ -156,7 +156,7 @@ nomi simili restano dati dell'utente.
 | Percorso | Classe | Schema | Proprietario |
 |---|---|---:|---|
 | `.fub/settings.json` | autorevole | 1 | kernel/host impostazioni |
-| `.fub/workspace.json` | autorevole | 1 | organizzazione |
+| `.fub/workspace.json` | autorevole | 1 | organizzazione; un'icona (`icons`) è un'emoji o `fub:<nome>`, una figura della shell (in lettura anche il nome nudo), e una versione di prima ne mostra il testo |
 | `.fub/journal.jsonl` | autorevole operativo | 1 | registro mutazioni |
 | `.fub/mounts.json` | autorevole | 1 | kernel/host mount esterni espliciti |
 | `.fub/drafts/` | autorevole | 1 | bozze non consolidate |
@@ -168,7 +168,7 @@ nomi simili restano dati dell'utente.
 | `.fub/data/plugins/fub.linkcard/cards/*.json`, `.fub/data/plugins/fub.craft/previews/*.json` | derivata | 1 | schede dei collegamenti (`fub.linkcard`), anteprime dei file Craft (`fub.craft`) |
 
 `properties.types` è un valore autorevole dentro `.fub/settings.json`. Il valore
-ha un proprio schema JSON `{ "version": 1, "types": { ... } }`: separa la
+ha uno schema JSON suo, [`{ "version": 1, "types": … }`](property-types.md): separa la
 dichiarazione per nome dai valori, che restano nel frontmatter, e dagli indici,
 che sono ricostruibili. Una versione futura o un valore illeggibile non viene
 riscritto durante la lettura; finché non è compreso, il kernel usa

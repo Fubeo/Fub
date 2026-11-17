@@ -48,13 +48,15 @@ function changeLanguage(next: string): void {
   for (const listener of [...world.languageListeners]) listener();
 }
 
-/// La pillola com'è scritta in `index.html`.
-function markup(): void {
+/// La pillola com'è scritta in `mobile.html`; con `command` com'è scritta in
+/// `index.html`, dove è il campo dei comandi.
+function markup(kind?: "command"): void {
+  const attribute = kind ? ` data-pill="${kind}"` : "";
   document.body.innerHTML = `
-    <button id="pill" type="button">
+    <button id="pill" type="button"${attribute}>
       <span id="pill-icon" aria-hidden="true"></span>
       <span id="pill-path"></span>
-      <span id="pill-title">Apri, cerca, comanda…</span>
+      <span id="pill-title">Cerca o esegui un comando…</span>
       <kbd id="pill-key" aria-hidden="true"></kbd>
     </button>`;
 }
@@ -117,7 +119,63 @@ describe("pillPath", () => {
   });
 });
 
-describe("la pillola a riposo", () => {
+describe("sul computer la pillola è il campo dei comandi", () => {
+  beforeEach(() => markup("command"));
+
+  /// Ciò che il campo dei comandi dice, qualunque documento sia a fuoco.
+  function saysCommandField(): void {
+    expect(part("pill-path").hidden).toBe(true);
+    expect(part("pill-path").textContent).toBe("");
+    expect(part("pill-title").textContent).toBe("frame.pill.empty");
+    expect(pill().hasAttribute("data-empty")).toBe(true);
+    expect(pill().getAttribute("aria-label")).toBe("frame.pill");
+  }
+
+  it("senza documento", () => {
+    mountPill(lifetime);
+    saysCommandField();
+    expect(part("pill-key").textContent).toBe("Ctrl+O");
+    expect(pill().dataset.tip).toBe("frame.pill.hint (Ctrl+O)");
+  });
+
+  it("con un documento non dice né la cartella né il nome: li dice la testata", () => {
+    state.currentDoc = "Progetti/Alpha/Nota.md";
+    mountPill(lifetime);
+    saysCommandField();
+  });
+
+  it("il documento che cambia non la cambia", () => {
+    mountPill(lifetime);
+    state.currentDoc = "Diario/Oggi.md";
+    emit("active-doc", state.currentDoc);
+    saysCommandField();
+    emit("documents");
+    emit("vault", "/vault");
+    saysCommandField();
+  });
+
+  it("i tasti seguono la scorciatoia cambiata, e la lingua il nome", () => {
+    state.currentDoc = "Nota.md";
+    mountPill(lifetime);
+    world.commands = [command(PILL_COMMAND, "Mod-K")];
+    emit("commands");
+    expect(part("pill-key").textContent).toBe("Ctrl+K");
+    expect(pill().dataset.tip).toBe("frame.pill.hint (Ctrl+K)");
+    changeLanguage("en");
+    expect(part("pill-title").textContent).toBe("frame.pill.empty (en)");
+    expect(pill().getAttribute("aria-label")).toBe("frame.pill (en)");
+  });
+
+  it("premuta apre il lanciatore, come sul telefono", () => {
+    state.vaultRoot = "/vault";
+    state.currentDoc = "Nota.md";
+    mountPill(lifetime);
+    pill().click();
+    expect(world.started).toEqual([PILL_COMMAND]);
+  });
+});
+
+describe("sul telefono la pillola a riposo", () => {
   it("senza documento resta l'invito, e i tasti sono quelli del comando che preme", () => {
     mountPill(lifetime);
     expect(part("pill-icon").querySelector("svg")?.dataset.icon).toBe("search");

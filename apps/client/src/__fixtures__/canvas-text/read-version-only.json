@@ -1,0 +1,16 @@
+{
+  "name": "read-version-only",
+  "description": "Solo la versione: tutto di serie, e il campo resta.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"t1\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": { \"v\": 1 } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "t1",
+        "state": "ok",
+        "text": "{\"v\":1}",
+        "size": "m",
+        "align": "start"
+      }
+    ]
+  }
+}

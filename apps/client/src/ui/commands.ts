@@ -337,6 +337,36 @@ export function pickDrawingImport(folder = ""): boolean {
   return true;
 }
 
+// # La porta della riga di un componente
+//
+// Una superficie che dice «questo si fa con un componente spento» porta
+// l'utente sulla riga del componente nella pagina «Componenti», col fuoco sul
+// suo interruttore: «Accendi…» del disegno. Non accende niente: accende
+// l'utente. Chi apre la riga sono le impostazioni, che registrano la porta
+// quando si montano e la tolgono quando si smontano.
+
+/// Chi apre la riga di un componente.
+export type ComponentRowOpener = (id: string) => void;
+
+let componentRowOpener: ComponentRowOpener | null = null;
+
+/// Registra chi apre la riga di un componente; restituisce chi la toglie.
+/// Vince l'ultima registrazione.
+export function registerComponentRow(open: ComponentRowOpener): () => void {
+  componentRowOpener = open;
+  return () => {
+    if (componentRowOpener === open) componentRowOpener = null;
+  };
+}
+
+/// Apre la pagina «Componenti» sulla riga `id`; falso se nessuno sa aprirla.
+/// Un `id` che la mappa non ha apre la pagina e basta.
+export function showComponent(id: string): boolean {
+  if (componentRowOpener === null) return false;
+  componentRowOpener(id);
+  return true;
+}
+
 /// Gli accordi riconfigurati, letti dalle impostazioni.
 ///
 /// La mappa è chiave d'impostazione → valore, e non id di comando → accordo:
@@ -386,15 +416,37 @@ export function commandOfKeybindingKey(key: string): string | null {
   return name === "" ? null : `${ns}:${name}`;
 }
 
+/// Le letture partite, per sapere quale è l'ultima: una lettura vecchia che
+/// risponde tardi non rimette gli accordi di prima sopra quelli nuovi.
+let overrideReads = 0;
+
+/// Chi vuole sapere quando la mappa degli accordi è stata riletta (la riga dei
+/// suggerimenti, che scrive i tasti della persona).
+const overrideListeners = new Set<() => void>();
+
+/// Avvisa dopo ogni lettura degli accordi che è arrivata in tempo, cioè quando
+/// `allCommands()` dice già i tasti nuovi. Restituisce il disabbonamento.
+export function onKeyOverridesLoaded(listener: () => void): () => void {
+  overrideListeners.add(listener);
+  return () => {
+    overrideListeners.delete(listener);
+  };
+}
+
 export async function loadKeyOverrides(): Promise<void> {
+  const read = ++overrideReads;
+  let next: Map<string, string>;
   try {
-    overrides = chordMap(await settings());
+    next = chordMap(await settings());
   } catch {
     // Un vault che non sa dire come è configurato non è un motivo per lasciare
     // la tastiera muta: restano gli accordi dichiarati, che sono quelli con cui
     // la shell è nata.
-    overrides = new Map();
+    next = new Map();
   }
+  if (read !== overrideReads) return;
+  overrides = next;
+  for (const listener of [...overrideListeners]) listener();
 }
 
 /// Le righe di impostazione che sono accordi, come mappa. Pura, per il banco.

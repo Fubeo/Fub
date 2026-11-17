@@ -1,0 +1,48 @@
+{
+  "about": "Un frammento coi tratti liberi (`fub:ink` della radice): Invalid, insert non li incolla e non li perde in silenzio.",
+  "before": {
+    "nodes": [
+      {
+        "id": "lez",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Lezione"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "insert",
+      "fragment": {
+        "version": 1,
+        "nodes": [
+          {
+            "id": "d",
+            "type": "text",
+            "x": 0,
+            "y": 0,
+            "width": 320,
+            "height": 160,
+            "text": ""
+          }
+        ],
+        "edges": [],
+        "fub:ink": {
+          "v": 1,
+          "strokes": []
+        }
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

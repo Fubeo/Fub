@@ -4,6 +4,7 @@ import { settings } from "../host/query";
 import type { SettingEntry, ThemeInfo, ThemePayload } from "../host/contract";
 import { asPluginError, errorText } from "../host/errors";
 import { onEvent } from "../state/kernel";
+import { settingTouches } from "../state/setting-change";
 import { emit, on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
 import { reportThemeTrouble } from "../ui/notify";
@@ -12,6 +13,7 @@ import {
   mountPreferences,
   mountThemeBundle,
   validateThemeBundle,
+  mountedCss,
   declareThemeProfile,
   type ThemeBundle,
   type ThemeBundleManifest,
@@ -103,6 +105,13 @@ export interface ThemeSeries {
   sheet(light: Theme, contrast: ContrastLevel): string;
   /** I token di densità, accento e cornice: ciò che è proprio della serie. */
   tokens(preferences: AppearancePreferences, light: Theme, contrast: ContrastLevel): Record<string, string>;
+  /**
+   * Completa il foglio di un tema installato con i ruoli facoltativi che la
+   * serie sa ricavare dai suoi colori (la cartella del logo, D26). Rende il
+   * foglio com'è quando non c'è niente da aggiungere. Una serie che non lo dà
+   * lascia i fogli dei temi come sono.
+   */
+  completeSheet?(sheet: string, light: Theme, contrast: ContrastLevel): string;
 }
 
 let series: ThemeSeries = SCRITTOIO_SERIES;
@@ -278,12 +287,19 @@ export function preferenceTokens(
  * con sé la pelle di serie, che resta montata sotto la sua (ADR 0240).
  * Ereditare da altro che la serie non si sa fare: il fascio parte senza
  * eredità e il cancello lo rifiuta dicendo da chi voleva ereditare.
+ *
+ * Il foglio portato dal tema passa dalla serie (`completeSheet`) prima del
+ * cancello: aggiunge i ruoli facoltativi che la serie sa ricavare dai colori
+ * del tema, come la cartella del logo (D26).
  */
 function themeBundle(payload: ThemePayload, light: Theme, contrast: ContrastLevel): ThemeBundle {
   const inherits = payload.manifest.extends === SERIES_THEME_ID;
+  const own = payload.sheet;
   return {
     manifest: payload.manifest,
-    sheet: payload.sheet ?? (inherits ? series.sheet(light, contrast) : ""),
+    sheet: own !== null && own !== undefined
+      ? series.completeSheet?.(own, light, contrast) ?? own
+      : inherits ? series.sheet(light, contrast) : "",
     skin: payload.skin ?? undefined,
     assets: payload.assets,
     ...(inherits ? { inherited: { skin: series.skin } } : {}),
@@ -398,8 +414,50 @@ async function apply(): Promise<void> {
   emit("theme");
 }
 
+/// Le chiavi che `reread` legge. Lo zoom e i frammenti CSS hanno i loro
+/// ascoltatori (`state/zoom.ts`, `snippets.ts`), e la cornice non è del tema:
+/// rimontare il tema per loro costava un rimontaggio intero a ogni gesto.
+const THEME_READS: ReadonlySet<string> = new Set([
+  THEME_KEY, THEME_ID_KEY, CONTRAST_KEY, MOTION_KEY, FRAME_RATE_KEY, DIAGRAM_STYLE_KEY,
+  CONTENT_LOOK_KEY, DENSITY_KEY, BODY_KEY, LINE_HEIGHT_KEY, MEASURE_KEY, FONT_KEY,
+  UI_FONT_KEY, MONO_FONT_KEY, ACCENT_KEY, COMPACTNESS_KEY,
+]);
+
+/// Un cambio di `key` può cambiare il tema montato? Le chiavi lette da
+/// `reread` e le scelte di un tema (`<id>:<nome>`, `options.ts`): della serie e
+/// dei temi installati, o di qualunque tema finché il catalogo non è letto.
+function themeWatchesSetting(key: string): boolean {
+  if (THEME_READS.has(key)) return true;
+  const colon = key.indexOf(":");
+  if (colon <= 0) return false;
+  const id = key.slice(0, colon);
+  return !catalogLoaded || id === SERIES_THEME_ID ||
+    installedThemes.some((installed) => installed.manifest.id === id);
+}
+
 function valueOf(entries: Awaited<ReturnType<typeof settings>>, key: string): unknown {
   return entries.find((entry) => entry.spec.key === key)?.value;
+}
+
+/// La rilettura in volo per un `setting_changed`, e se un altro è arrivato
+/// mentre volava. Un cambio di profilo manda un evento per chiave: senza
+/// questo ogni evento rimontava il tema per conto suo. Con questo le
+/// riletture sono al più due per raffica, e l'ultima parte dopo l'ultimo
+/// evento arrivato, quindi legge tutto ciò che è stato scritto.
+let rereadInFlight: Promise<void> | null = null;
+let rereadAgain = false;
+
+function rereadForSetting(): void {
+  if (rereadInFlight) {
+    rereadAgain = true;
+    return;
+  }
+  rereadInFlight = reread().finally(() => {
+    rereadInFlight = null;
+    if (!rereadAgain) return;
+    rereadAgain = false;
+    rereadForSetting();
+  });
 }
 
 async function reread(): Promise<void> {
@@ -664,7 +722,7 @@ function loadCache(): void {
 export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void): void {
   if (lifetime.closed) return;
   const hadMountedTheme =
-    document.head.querySelector<HTMLStyleElement>('style[data-fub="foglio"]') !== null;
+    mountedCss("foglio") !== null;
   lifetime.add(() => {
     applyGeneration++;
     selectionGeneration++;
@@ -690,7 +748,9 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
     const media = window.matchMedia?.(query);
     if (media) lifetime.listen(media, "change", () => void apply());
   }
-  lifetime.add(onEvent("setting_changed", () => void reread()));
+  lifetime.add(onEvent("setting_changed", ({ key }) => {
+    if (settingTouches(key, themeWatchesSetting)) rereadForSetting();
+  }));
   lifetime.add(on("vault", () => void reread()));
   themeSettled = false;
   const epoch = catalogEpoch;

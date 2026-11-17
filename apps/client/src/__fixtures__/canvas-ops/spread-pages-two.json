@@ -1,0 +1,67 @@
+{
+  "about": "«Spargi le pagine» di due pagine senza misure: 360×480, in fila a destra della scheda dal primo multiplo di 8 che lascia 24.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "spread_pages",
+      "id": "p",
+      "pages": "1-2",
+      "page_count": 12
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "p",
+          "type": "file",
+          "x": 560,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf"
+        },
+        {
+          "id": "910a2dec89025cc1",
+          "type": "file",
+          "x": 944,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=1"
+        },
+        {
+          "id": "beeb8da1658eec67",
+          "type": "file",
+          "x": 1328,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=2"
+        }
+      ],
+      "edges": []
+    },
+    "created": [
+      "910a2dec89025cc1",
+      "beeb8da1658eec67"
+    ]
+  }
+}

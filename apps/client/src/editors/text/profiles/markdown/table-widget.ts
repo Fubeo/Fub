@@ -11,7 +11,11 @@ import { Prec, type Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, WidgetType, keymap, type ViewUpdate } from "@codemirror/view";
 import { redo, undo } from "@codemirror/commands";
 import { isAllowedLink } from "../../../../ui/sanitize";
+import { withLineBreaks } from "../../line-breaks";
+import { followPath, followWikilink, textLinkGesture, type WikilinkFollow } from "./link-gesture";
+import { routeHref } from "./link-syntax";
 import { mountMathBlocks } from "./math";
+import { frontmatterLanguage } from "./proof";
 import type { MarkdownBlock } from "./render-types";
 import {
   cellAtOffset,
@@ -33,7 +37,7 @@ export interface TableGridCallbacks {
   changed(): void;
 }
 
-export interface TableWidgetCallbacks {
+export interface TableWidgetCallbacks extends WikilinkFollow {
   openWikilink(page: string, heading: string | null, block: string | null): void;
   searchTag(tag: string): void;
   readonly tableGrid?: TableGridCallbacks;
@@ -80,6 +84,7 @@ class TableController {
       cellHtml: (row, col) => this.#cellHtml(row, col),
       hydrate: (container) => mountMathBlocks(container),
       activate: (event) => this.#activate(event),
+      language: () => frontmatterLanguage(this.#view.state),
       focused: () => {
         activeGrids.set(this.#view, this.grid);
         this.#widget.callbacks.tableGrid?.active(this.grid);
@@ -110,8 +115,10 @@ class TableController {
     } catch {
       return null;
     }
+    // La sorgente va a capo con "\n", come `doc.sliceString`: la sua lunghezza
+    // è in posizioni anche in una nota CRLF.
     const source = this.#parsed.source;
-    if (this.#view.state.sliceDoc(start, start + source.length) !== source) return null;
+    if (this.#view.state.doc.sliceString(start, start + source.length) !== source) return null;
     return { from: start, to: start + source.length, parsed: this.#parsed };
   }
 
@@ -131,7 +138,7 @@ class TableController {
     const changes = tableChanges(located.parsed, next).map((change) => ({
       from: located.from + change.from,
       to: located.from + change.to,
-      insert: change.insert,
+      insert: withLineBreaks(view.state, change.insert),
     }));
     if (changes.length === 0) return true;
     pending.set(view, { from: located.from, selection, focused: this.grid.hasFocus() });
@@ -155,12 +162,12 @@ class TableController {
     if (where === "before") {
       const first = doc.lineAt(located.from);
       if (first.number > 1) view.dispatch({ selection: { anchor: doc.line(first.number - 1).to }, scrollIntoView: true });
-      else if (writable) view.dispatch({ changes: { from: first.from, insert: "\n" }, selection: { anchor: first.from }, userEvent: "input" });
+      else if (writable) view.dispatch({ changes: { from: first.from, insert: view.state.lineBreak }, selection: { anchor: first.from }, userEvent: "input" });
     } else {
       const last = doc.lineAt(located.to);
       if (last.number < doc.lines) view.dispatch({ selection: { anchor: doc.line(last.number + 1).from }, scrollIntoView: true });
       else if (writable) {
-        view.dispatch({ changes: { from: doc.length, insert: "\n" }, selection: { anchor: doc.length + 1 }, userEvent: "input" });
+        view.dispatch({ changes: { from: doc.length, insert: view.state.lineBreak }, selection: { anchor: doc.length + 1 }, userEvent: "input" });
       }
     }
     view.focus();
@@ -172,28 +179,42 @@ class TableController {
     return this.#widget.block.cells?.get(start) ?? null;
   }
 
-  /// Mod+clic su ciò che una cella rende: un link a una nota, un tag, un
-  /// indirizzo esterno che il sanificatore lascia passare.
+  /// Il clic su ciò che una cella rende, con la regola del testo che si
+  /// scrive (`link-gesture.ts`: la cella si scrive, il clic semplice la
+  /// sceglie): Mod col clic (Cmd sul Mac) segue un link a una nota come dice
+  /// `editor.link-click`, un tag, un indirizzo esterno che il sanificatore
+  /// lascia passare; Alt col clic sbircia un link a una nota.
   #activate(event: MouseEvent): boolean {
     const target = event.target instanceof Element ? event.target : null;
-    if (!target) return false;
+    const gesture = textLinkGesture(event);
+    if (!target || !gesture) return false;
     const callbacks = this.#widget.callbacks;
     const wiki = target.closest<HTMLElement>("[data-wikilink-page]");
     if (wiki) {
-      callbacks.openWikilink(
+      void followWikilink(
+        callbacks,
         wiki.dataset.wikilinkPage ?? "",
         wiki.dataset.wikilinkHeading ?? null,
         wiki.dataset.wikilinkBlock ?? null,
+        gesture,
       );
       return true;
     }
+    const anchor = target.closest<HTMLAnchorElement>("a[href]");
+    const href = anchor?.getAttribute("href") ?? "";
+    if (anchor && href !== "" && isAllowedLink(href) && callbacks.openPath) {
+      const route = routeHref(href);
+      if (route.kind === "path" && route.path !== "") {
+        void followPath(callbacks, route.path, gesture);
+        return true;
+      }
+    }
+    if (gesture === "peek") return false;
     const tag = target.closest<HTMLElement>(".tag[data-tag]");
     if (tag) {
       callbacks.searchTag(tag.dataset.tag ?? "");
       return true;
     }
-    const anchor = target.closest<HTMLAnchorElement>("a[href]");
-    const href = anchor?.getAttribute("href") ?? "";
     if (anchor && /^[a-z][\w+.-]*:/i.test(href) && isAllowedLink(href)) {
       window.open(href, "_blank", "noopener,noreferrer");
       return true;
@@ -296,9 +317,11 @@ function enter(view: EditorView, direction: 1 | -1): boolean {
 const theme = EditorView.baseTheme({
   ".tb-frame": { position: "relative", padding: "0.2em 0 0.4em" },
   ".tb-grid": { position: "relative", overflowX: "auto", outline: "none", padding: "2px" },
-  ".tb-grid table": { borderCollapse: "collapse", margin: "0" },
+  // Bordi separati: solo così la cornice della tabella arrotonda gli angoli.
+  ".tb-grid table": { borderCollapse: "separate", borderSpacing: "0", margin: "0" },
   // Le testate a riposo sono trasparenti, non nascoste: la riga delle lettere
   // resta una riga di intestazioni anche per chi legge con la sintesi.
+  // Compaiono col fuoco nella tabella, come nel prototipo (`.gr-let`).
   ".tb-grid .tb-corner, .tb-grid .tb-letter, .tb-grid .tb-rowhead": {
     opacity: "0",
     border: "none",
@@ -311,7 +334,7 @@ const theme = EditorView.baseTheme({
     userSelect: "none",
     cursor: "pointer",
   },
-  ".tb-grid:focus-within .tb-letter, .tb-grid:focus-within .tb-rowhead, .tb-grid:focus-within .tb-corner, .tb-grid:hover .tb-letter, .tb-grid:hover .tb-rowhead": {
+  ".tb-grid:focus-within .tb-letter, .tb-grid:focus-within .tb-rowhead, .tb-grid:focus-within .tb-corner": {
     opacity: "1",
   },
   ".tb-grid .tb-letter.is-selected, .tb-grid .tb-rowhead.is-selected": {

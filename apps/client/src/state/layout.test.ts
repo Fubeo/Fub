@@ -125,6 +125,27 @@ describe("l'albero dei riquadri", () => {
     expect(panes(l)).toEqual(["main"]);
   });
 
+  // Chiudere un riquadro chiude le sue schede: anche la scheda che c'era solo
+  // lì deve poter tornare con `Mod-Shift-t`, come quella chiusa con la ×.
+  it("le schede di un riquadro chiuso si riaprono, l'attiva per prima (IMP-018)", () => {
+    const drain = newItem();
+    while (reopenClosedTab(drain));
+    const l = newItem();
+    openIn("main", "index.md", l);
+    const right = split("main", "row", l)!;
+    openIn(right, "Nota A.md", l);
+    openIn(right, "Nota B.md", l);
+    activateTab(right, 0, l);
+    expect(closePane(right, l)).toBe(true);
+    expect(l.panes.main.tabs.map((tab) => tab.k === "doc" && tab.doc)).toEqual(["index.md"]);
+
+    expect(reopenClosedTab(l)).toBe(true);
+    expect(activeDoc("main", l)).toBe("Nota A.md");
+    expect(reopenClosedTab(l)).toBe(true);
+    expect(activeDoc("main", l)).toBe("Nota B.md");
+    expect(documents(l.panes.main).sort()).toEqual(["Nota A.md", "Nota B.md", "index.md"]);
+  });
+
   it("un riquadro nuovo eredita le modalità di chi lo ha generato", () => {
     const l = newItem();
     setMode("main", "text", "reading", l);

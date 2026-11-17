@@ -1,0 +1,21 @@
+{
+  "about": "La forma breve fra due schede, senza lati e senza campi: l'arco è quello della GUI, con la punta alla fine. Senza id prende il primo del seme 0.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+    ]
+  },
+  "ops": [{ "op": "connect", "from": "a", "to": "b" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+        { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+      ],
+      "edges": [{ "id": "e220a8397b1dcdaf", "fromNode": "a", "toNode": "b", "toEnd": "arrow" }]
+    },
+    "created": ["e220a8397b1dcdaf"]
+  }
+}

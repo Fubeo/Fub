@@ -136,7 +136,31 @@ fn walk_sources() -> Vec<(String, String)> {
 /// È la sesta specie del §16.7 — la *garanzia dichiarata che non è mai esistita*
 /// — presa dal verso in cui si può presidiare: una frase che rimanda a qualcosa
 /// di meccanico deve rimandare a un nome che una macchina sa cercare.
-const CONTRACT: &str = include_str!("../../fub-abi/src/traits.rs");
+///
+/// `traits.rs` è diviso in moduli (`traits/*.rs`): si leggono tutti, la radice
+/// e ogni file della cartella, così un trait spostato da un file all'altro resta
+/// trovato e uno nuovo entra senza che nessuno lo aggiunga a un elenco.
+fn contract() -> String {
+    let abi = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../fub-abi/src");
+    let mut files = vec![abi.join("traits.rs")];
+    let mut inside: Vec<_> = std::fs::read_dir(abi.join("traits"))
+        .expect("fub-abi/src/traits/ is readable")
+        .map(|and| and.expect("directory entry").path())
+        .filter(|p| p.extension().is_some_and(|e| e == "rs"))
+        .collect();
+    inside.sort();
+    assert!(
+        inside.len() > 1,
+        "fub-abi/src/traits/ holds {} files: this walk is looking at the wrong folder",
+        inside.len()
+    );
+    files.extend(inside);
+    files
+        .iter()
+        .map(|f| std::fs::read_to_string(f).unwrap_or_else(|and| panic!("{}: {and}", f.display())))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 // ---------------------------------------------------------------------------
 // Le ragioni
@@ -184,6 +208,13 @@ enum Why {
     /// negozia la superficie e mantiene l'istanza, senza un comando generico
     /// che possa invocare provider arbitrari.
     Grid,
+    /// Il disegno sul motore (K5) attraversa una porta tipata distinta, come
+    /// la griglia: la shell apre un'istanza del motore e la tiene in
+    /// sincronia con il testo, e i gesti arrivano a ogni movimento della
+    /// penna con forme e tetti propri (`fub_abi::drawing`), validati prima del
+    /// motore. Un comando generico del registro passerebbe JSON non tipato e
+    /// non saprebbe di un'istanza che vive fuori dal vault.
+    Drawing,
     /// **La capacità e la sua porta.** L'atto è già nell'elenco chiuso
     /// dell'`HostApi` (0013), e la shell **non è un plugin**: non ha un manifest
     /// a cui concederlo, quindi lo raggiunge da una porta col suo nome invece
@@ -432,6 +463,13 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("grid_bytes_commands", Why::Grid),
     ("grid_bytes_command", Why::Grid),
     ("close_grid_bytes", Why::Grid),
+    // --- il disegno sul motore (K5): istanze del motore e gesti tipati ------
+    ("open_drawing", Why::Drawing),
+    ("drawing_sync", Why::Drawing),
+    ("drawing_gesture", Why::Drawing),
+    ("drawing_commands", Why::Drawing),
+    ("drawing_command", Why::Drawing),
+    ("close_drawing", Why::Drawing),
     // --- la sessione live (0205): un servizio dell'app, con il suo canale ---
     //
     // Listener, TLS e scrittore vivono nel processo dell'app, sul runtime di
@@ -859,6 +897,7 @@ fn declared_debt_is_a_guarded_number() {
 /// l'aria di dirla giusta.
 #[test]
 fn every_named_capability_exists_in_the_contract() {
+    let contract = contract();
     for (command, why) in ALLOWLIST {
         let Why::ContractCapability(capability) = why else {
             continue;
@@ -868,7 +907,7 @@ fn every_named_capability_exists_in_the_contract() {
         });
 
         let opening = format!("pub trait {trt}");
-        let start = CONTRACT
+        let start = contract
             .lines()
             .position(|r| r.starts_with(&opening))
             .unwrap_or_else(|| {
@@ -880,7 +919,7 @@ fn every_named_capability_exists_in_the_contract() {
                 )
             });
         let sig = format!("fn {method}(");
-        let found = CONTRACT
+        let found = contract
             .lines()
             .skip(start + 1)
             .take_while(|r| !r.starts_with('}'))
@@ -1033,6 +1072,37 @@ fn grid_surface_uses_only_named_typed_ports() {
         !ipc.lines()
             .any(|line| line.contains("grid") && line.contains("invoke_command")),
         "Grid must not tunnel through the generic invoke_command bridge"
+    );
+}
+
+#[test]
+fn drawing_uses_only_named_typed_ports() {
+    const DRAWING: &[&str] = &[
+        "open_drawing",
+        "drawing_sync",
+        "drawing_gesture",
+        "drawing_commands",
+        "drawing_command",
+        "close_drawing",
+    ];
+    let app = include_str!("../src/lib.rs");
+    let ipc = include_str!("../../../apps/client/src/host/ipc.ts");
+    for command in DRAWING {
+        assert!(
+            app.contains(&format!("fn {command}(")),
+            "missing typed Tauri command `{command}`"
+        );
+        assert!(
+            ipc.contains(&format!(">(\"{command}\"")),
+            "client must invoke the typed drawing command `{command}`"
+        );
+    }
+    assert!(
+        !ipc.lines().any(|line| {
+            let line = line.to_lowercase();
+            line.contains("drawing") && line.contains("invoke_command")
+        }),
+        "the drawing must not tunnel through the generic invoke_command bridge"
     );
 }
 

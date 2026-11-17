@@ -16,8 +16,18 @@ schede **Home**, **Inserisci**, **Layout**, **Revisione** e **Visualizza**, e
 accanto alle schede. Alt o F10 mostrano le lettere di ogni scheda e di ogni
 comando, `Ctrl+F1` ritira la barra e la riapre; ritirata, una scheda scelta
 si apre per un gesto. Stretta, la barra raccoglie prima Modifica, Stili e
-Paragrafo in un pulsante ciascuno. Un comando che adesso non si dà resta al
-suo posto, spento, e il suggerimento dice perché.
+Paragrafo in un pulsante ciascuno, e per ultimo Carattere; un gruppo raccolto si apre sul posto,
+nella barra, e gli altri si raccolgono per fargli posto: Esc lo richiude e
+torna al suo pulsante. Un comando che adesso non si dà resta al suo posto,
+spento, e il suggerimento dice perché. La barra è quella dei fogli: le
+schede sono segmenti come le schede dell'ispettore, con la scelta su un
+foglietto, e i comandi stanno in foglietti su un vassoio un tono sotto la
+carta. Si muove anche come quella dei fogli: cambiando scheda il segno scorre
+e i foglietti entrano uno dopo l'altro dal lato della scheda; ritirandola la
+ricerca e la pagina salgono sul vassoio che svanisce, e riaprendola
+riscendono, senza che lo scorrimento cambi; il gruppo che si apre sul posto
+si alza, e gli altri scivolano per fargli posto. Con il moto ridotto gli
+stessi stati arrivano subito.
 
 Si modificano:
 
@@ -60,8 +70,11 @@ Si modificano:
   Tab e Maiusc+Tab vanno alla cella dopo e prima, col suo testo scelto, e
   Tab nell'ultima cella aggiunge una riga. Maiusc con una freccia alla fine
   (o all'inizio) del testo di una cella, o il trascinamento da una cella a
-  un'altra, sceglie più celle: Canc le svuota, Ctrl+C e Ctrl+X le copiano
-  come un foglio di calcolo, «Unisci celle» le unisce se stanno in una riga;
+  un'altra, sceglie più celle: Canc le svuota, Ctrl+C le copia come un foglio
+  di calcolo, Ctrl+X le segna e l'incolla le sposta, «Unisci celle» le unisce
+  se stanno in una riga; sulle celle scelte valgono i gesti dei fogli di
+  calcolo (Ctrl+Spazio, Ctrl+D, Ctrl+«+», Maiusc+F8…), descritti in
+  [Tabelle](editor-tables.md#nei-documenti);
 - le immagini e le note nuove, dalla scheda **Inserisci**:
   **Immagine** sceglie un PNG, un JPEG o un GIF del vault (fino a 16 MB) e lo
   mette al cursore, nel testo, alla sua misura (un pixel CSS è tre quarti di
@@ -77,7 +90,10 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   alla precedente. Un'occorrenza sta dentro un paragrafo e non scavalca un
   oggetto o un segno (l'inizio di un commento, un segnalibro). Il testo nuovo
   prende l'aspetto del primo carattere sostituito, e **Sostituisci tutto** è
-  una battuta sola, che si annulla in una volta;
+  una battuta sola, che si annulla in una volta. Dopo un gesto della barra,
+  o delle schede Commenti e Revisioni del pannello, `Ctrl+Z` e `Ctrl+Y`
+  annullano e ripetono nel documento anche col fuoco sul pulsante; dentro
+  una casella (Trova, Sostituisci con, il nome) restano della casella;
 - **Conteggio parole** dice parole, caratteri con e senza spazi e paragrafi
   del documento e, se c'è, della selezione: una parola è ciò che sta fra due
   spazi, un oggetto separa senza contare, il testo delle note non conta;
@@ -109,8 +125,9 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   inserito si toglie davvero, e un tratto battuto di seguito resta una
   modifica sola. Mentre si registra il formato non si cambia (aspetto, stile,
   spaziatura, tabelle), perché non ha una revisione da scrivere; commenti,
-  accettare e rifiutare restano liberi. Un `.docx` che registra già si apre
-  così, non più in sola lettura;
+  accettare e rifiutare restano liberi. Senza un autore la revisione nuova
+  si scrive come fa Word, con l'autore «Unknown». Un `.docx` che registra
+  già si apre così, non più in sola lettura;
 - **Pagina** in un `.docx` cambia la pagina della sezione dove sta il
   cursore: la dimensione della carta (quelle di Word), l'orientamento, i
   margini (già pronti o in centimetri) e le colonne. Una pagina girata tiene
@@ -131,7 +148,8 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   prende gli stili Intestazione e Piè di pagina di Word. Vuoti, la sezione
   mostra quelli della sezione prima. Quelli della prima pagina e delle pagine
   pari restano come sono, e uno con immagini, tabelle o aspetti diversi si
-  legge ma si modifica in Word. Mentre si registra non si cambiano;
+  legge ma qui non si può ancora modificare. Mentre si registra non si
+  cambiano;
 - **Sommario** in un `.docx` mette prima del paragrafo del cursore il
   sommario dei titoli fino al terzo livello, o rifà quello già messo da Fub
   con i titoli di adesso. I numeri di pagina li calcola Word aprendo il file.
@@ -167,7 +185,9 @@ Ciò che si perderebbe non chiude per forza tutto il documento:
 
 - un **paragrafo o una tabella** che la riscrittura non porterebbe intero
   resta com'è nel file, segnato, e da Fub non si cambia: lo si può spostare
-  intero, ma non scriverci dentro né toglierlo. Il chip accanto al percorso
+  intero, ma non scriverci dentro né toglierlo. Chi ci prova (una lettera,
+  un a capo, una cancellazione) lo legge in un avviso, uno solo finché
+  riprova senza fermarsi per qualche secondo. Il chip accanto al percorso
   dice quante parti restano come sono («2 parti chiuse»); il suo riquadro le
   elenca, con la pagina e un «Vai» per ciascuna, e il resto del testo si
   scrive;
@@ -182,9 +202,12 @@ Ciò che si perderebbe non chiude per forza tutto il documento:
   il modello non si rilegge uguale, o il corpo del file non si legge blocco
   per blocco come lo legge il codec.
 
-Il chip dice anche «Si scrive», quando il file si riscrive tutto, e «Sola
-lettura», con il perché nella lingua di chi scrive; il suo riquadro offre di
-cercare. Accanto al chip, «Registra» dice che le modifiche si registrano.
+Il chip dice anche «Sola lettura», con il perché nella lingua di chi scrive;
+il suo riquadro offre di cercare. Quando il file si riscrive tutto lo stato è
+normale, e lo dice la banda di stato, accanto alla modalità: «Si scrive», che
+apre la stessa spiegazione del chip (sul telefono è la prima voce di «…»).
+Accanto al chip, «Registra» dice che le modifiche si registrano; quando si
+scrive tutto, e il chip non c'è, lo dice la voce «Registra» della banda.
 
 Un salvataggio che tocca soltanto il testo è un **innesto**: il file resta
 com'era, byte per byte, tranne i paragrafi e le tabelle toccati, che arrivano
@@ -196,7 +219,9 @@ uguale a ciò che si voleva scrivere non scrive, e il testo resta nel buffer;
 lo stesso vale per un salvataggio che cambierebbe un blocco chiuso o una
 parte che l'utente non ha toccato, che duplicherebbe un'immagine o
 lascerebbe un riferimento senza relazione. Un documento cifrato o più grande
-di 256 MiB non si apre; uno molto lungo (centomila paragrafi) si apre in
+di 256 MiB non si apre, e neppure uno vuoto o rotto: la scheda lo dice in
+una frase, e i pannelli accanto restano in piedi (le statistiche dicono che
+non c'è niente da contare); uno molto lungo (centomila paragrafi) si apre in
 qualche secondo, senza fermare l'interfaccia.
 
 Limiti attuali:
@@ -256,8 +281,9 @@ Un documento si guarda in tre modi, dal selettore accanto al percorso:
 
 Mentre il documento ha il fuoco, la banda di stato dice il foglio del cursore
 («Pagina 2 di 5», in Pagina e in Lettura), le parole («12 di 418 parole» con
-una selezione), la lingua che il file dice per il testo e **Registra** quando
-le modifiche si registrano. Le parole sono quelle di Proprietà › Conteggio, e
+una selezione), la lingua che il file dice per il testo (in una finestra sotto
+gli 800 px si fa da parte: la dice già il correttore), **Si scrive** quando il
+file si riscrive tutto e **Registra** quando le modifiche si registrano. Le parole sono quelle di Proprietà › Conteggio, e
 un clic ci porta; il conteggio della nota, che la banda mostra per le altre
 note, si fa da parte.
 
@@ -269,10 +295,10 @@ Lettura la barra non c'è. F6 vale anche per gli altri fogli, che sono una zona
 sola; la scorciatoia si cambia in Preferenze come le altre.
 
 Il formato si vede prima di aprire: nell'albero, nelle schede e nel
-lanciatore un documento di Word, un OpenDocument, un foglio di calcolo e un
+lanciatore un documento .docx, un OpenDocument, un foglio di calcolo e un
 disegno hanno ciascuno la sua icona, diversa dal foglietto di una nota. Accanto
-al percorso, nella testata del foglio, un'etichetta dice **WORD**, **ODT**,
-**RTF** o **EXCEL**. La specie viene dall'estensione (`ui/format-kind.ts`);
+al percorso, nella testata del foglio, un'etichetta dice **DOCX**, **ODT**,
+**RTF** o **XLSX**. La specie viene dall'estensione (`ui/format-kind.ts`);
 quale formato apre il file lo decide sempre il backend.
 
 **Carta adattata**, nella scheda **Visualizza**, porta il documento di Pagina
@@ -282,7 +308,7 @@ il predefinito, se l'aspetto del contenuto in Preferenze › Aspetto è
 automatico. I segni di Fub (revisioni, correttore, ricerca, commenti)
 prendono i colori della carta su cui stanno.
 
-Cambiando modo, ritirando la barra o cambiando lo zoom si muove la carta, e
+Cambiando modo o cambiando lo zoom si muove la carta, e
 il testo è già al suo posto: il paragrafo in cima alla vista resta in cima, e
 lo zoom tiene fermo il centro della vista. Un foglio aperto da `Ctrl+Invio`
 esce da quello sopra; tolto il salto, la sua sagoma si dissolve. Un documento
@@ -374,7 +400,7 @@ apre.
 ## Esportare una copia
 
 **Esporta una copia** (`rich.export-copy`, dalla palette) scrive un documento
-di videoscrittura in HTML, testo semplice, LaTeX, RTF, OpenDocument o Word XML
+di videoscrittura in HTML, testo semplice, LaTeX, RTF, OpenDocument o XML
 (un `.docx` in un file XML solo, Flat OPC), con gli esportatori di WordCraft.
 Il documento non si tocca: la copia arriva nell'attività e si salva dove si
 vuole. Una copia nello stesso formato del documento (un `.rtf` in RTF, un

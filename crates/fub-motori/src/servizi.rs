@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, OnceLock};
 
-use crate::{Budget, Lavori, Tetto};
+use crate::{Budget, Caratteri, Lavori, Tetto};
 
 /// Come nascono dei [`Servizi`].
 #[derive(Debug)]
@@ -25,20 +25,21 @@ impl Default for Config {
     }
 }
 
-/// I servizi comuni dei motori: il gruppo di thread e il budget della
-/// memoria.
+/// I servizi comuni dei motori: il gruppo di thread, il budget della
+/// memoria e i caratteri dati dall'host.
 ///
 /// I campi sono privati e si raggiungono con un metodo ciascuno, così che un
-/// servizio nuovo (la scheda grafica, l'archivio dei caratteri: arrivano con
-/// il primo motore che li usa, ADR 0236) si aggiunge senza cambiare chi usa
-/// quelli che ci sono.
+/// servizio nuovo si aggiunge senza cambiare chi usa quelli che ci sono. I
+/// caratteri sono arrivati così, con il disegno (K5); la scheda grafica
+/// arriverà con il primo motore che la usa (ADR 0236).
 ///
 /// Costruirli non avvia thread e non legge file: il gruppo nasce al primo
-/// lavoro, il tetto alla prima domanda.
+/// lavoro, il tetto alla prima domanda, i caratteri quando l'host li dà.
 #[derive(Debug)]
 pub struct Servizi {
     lavori: Lavori,
     memoria: Budget,
+    caratteri: OnceLock<Arc<Caratteri>>,
 }
 
 static PROCESSO: OnceLock<Arc<Servizi>> = OnceLock::new();
@@ -55,6 +56,7 @@ impl Servizi {
         Arc::new(Servizi {
             lavori: Lavori::nuovi(config.fili),
             memoria: Budget::nuovo(config.tetto),
+            caratteri: OnceLock::new(),
         })
     }
 
@@ -66,5 +68,29 @@ impl Servizi {
     /// Il budget della memoria delle cache.
     pub fn memoria(&self) -> &Budget {
         &self.memoria
+    }
+
+    /// Dà ai motori i caratteri dell'host, una volta sola.
+    ///
+    /// I primi caratteri dati restano per tutta la vita dei servizi: una
+    /// seconda chiamata non li cambia e restituisce in `Err` ciò che ha
+    /// ricevuto, così che chi chiama sappia che non sono stati presi.
+    pub fn fornisci_caratteri(&self, caratteri: Caratteri) -> Result<(), Caratteri> {
+        let mut dati = Some(caratteri);
+        self.caratteri.get_or_init(|| {
+            // `get_or_init` chiama la chiusura al più una volta, e solo qui
+            // `dati` viene preso.
+            Arc::new(dati.take().expect("i caratteri si prendono una volta sola"))
+        });
+        match dati {
+            None => Ok(()),
+            Some(rifiutati) => Err(rifiutati),
+        }
+    }
+
+    /// I caratteri dati dall'host, o `None` se non li ha ancora dati: il
+    /// motore che li vuole risponde allora che non è pronto.
+    pub fn caratteri(&self) -> Option<Arc<Caratteri>> {
+        self.caratteri.get().map(Arc::clone)
     }
 }

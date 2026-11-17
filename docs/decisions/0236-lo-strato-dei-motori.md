@@ -11,7 +11,7 @@
 Fub porta dentro di sé motori copiati da altri progetti (GridCraft per i fogli,
 WordCraft per i documenti; PdfCraft, VectorCraft e gli altri dopo). Ognuno ha
 il suo costo: tabelle, dizionari, cache, a volte thread. Le misure di K0
-([`motori-2026-10-31-linux-ryzen.md`](../misure/motori-2026-10-31-linux-ryzen.md))
+([`2026-10-31-motori-linux-ryzen.md`](../misure/2026-10-31-motori-linux-ryzen.md))
 hanno mostrato due cose:
 
 - chiudere un documento non rende la memoria: le cache dei motori restano

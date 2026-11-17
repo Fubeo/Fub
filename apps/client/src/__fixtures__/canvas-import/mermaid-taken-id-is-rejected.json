@@ -1,0 +1,29 @@
+{
+  "about": "Un id di Mermaid già preso nella lavagna è DuplicateId: serve un `prefix`.",
+  "before": {
+    "nodes": [
+      {
+        "id": "A",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "C'era già"
+      }
+    ],
+    "edges": []
+  },
+  "op": {
+    "op": "from_mermaid",
+    "text": "graph LR\n  A --> B"
+  },
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "DuplicateId",
+      "index": 0,
+      "id": "A"
+    }
+  }
+}

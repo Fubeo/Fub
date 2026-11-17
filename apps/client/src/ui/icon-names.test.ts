@@ -15,9 +15,17 @@ import { openLifetime } from "./lifetime";
 import { THEME_ICON_LIMITS, themeIconFault } from "../rules/mirrored";
 import { mountFrameIcons } from "../shells/scrittoio/icons";
 import { ensureDrawIcons } from "../editors/spatial/icons";
+import { ensureCanvasIcons } from "../editors/canvas/chrome/icons";
 import { useRichIcons } from "../editors/rich/icons";
+import { useMediaIcons } from "../editors/media/icons";
+import { useBaseIcons } from "../editors/base/icons";
 import { useRibbonIcons } from "../editors/grid/ribbon/icons";
 import { registerFormatIcons } from "../panels/format-bar";
+import { createMiniBar } from "../panels/mini-bar";
+import { commentIcons } from "../editors/text/profiles/markdown/comments/thread";
+import { transclusionIcons } from "../editors/text/profiles/markdown/transclusion";
+import { registerMoveIcon } from "../editors/text/profiles/markdown/blocks/move-to";
+import { registerDiagramIcons } from "./diagram-menu";
 import { createColorPicker, type ColorPickerText } from "../kit/color/picker";
 
 /// I moduli che chiamano `registerIcon`, e la prova li monta tutti qui sopra.
@@ -25,10 +33,18 @@ import { createColorPicker, type ColorPickerText } from "../kit/color/picker";
 const REGISTRARS = [
   "../shells/scrittoio/icons.ts",
   "../editors/spatial/icons.ts",
+  "../editors/canvas/chrome/icons.ts",
   "../editors/rich/icons.ts",
+  "../editors/media/icons.ts",
+  "../editors/base/icons.ts",
   "../editors/grid/ribbon/icons.ts",
+  "../editors/text/profiles/markdown/comments/thread.ts",
+  "../editors/text/profiles/markdown/transclusion.ts",
+  "../editors/text/profiles/markdown/blocks/move-to.ts",
   "../panels/format-bar.ts",
+  "../panels/mini-bar.ts",
   "../kit/color/picker.ts",
+  "./diagram-menu.ts",
 ];
 
 const sources = import.meta.glob("../**/*.ts", { query: "?raw", import: "default", eager: true }) as Record<
@@ -60,9 +76,17 @@ describe("i nomi che un tema può ridisegnare", () => {
   it("sono quelli dell'elenco del kit autore, con ogni registrazione montata", () => {
     mountFrameIcons(life);
     ensureDrawIcons();
+    ensureCanvasIcons();
     life.add(useRichIcons());
+    life.add(useMediaIcons());
+    life.add(useBaseIcons());
     life.add(useRibbonIcons());
     life.add(registerFormatIcons());
+    commentIcons();
+    createMiniBar({ surface: () => null, writing: () => true, focusPane: () => {}, runCommand: () => {} }).destroy();
+    transclusionIcons();
+    registerMoveIcon();
+    registerDiagramIcons();
     createColorPicker({
       value: "#000000",
       text: TEXT,

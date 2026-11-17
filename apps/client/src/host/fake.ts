@@ -40,6 +40,7 @@
 // il posto giusto. Il mirror del contratto (`host/mirror.test.ts`) tiene ferma
 // la forma dei record; questo file non ne è un secondo, e infatti le risposte
 // che compone sono tipizzate dal contratto e non da sé.
+import { fakeNoteTypes } from "./fake-note-types";
 import type {
   BundleInfo,
   ComponentAction,
@@ -51,6 +52,11 @@ import type {
   DraftInfo,
   DocumentSource,
   DocumentWindowEvent,
+  DrawingCommandInfo,
+  DrawingCommandRequest,
+  DrawingGesture,
+  DrawingOpen,
+  DrawingOutcome,
   DocumentWindowRequest,
   GridBytesSession,
   GridBytesWindow,
@@ -68,6 +74,7 @@ import type {
   PlannedEdit,
   QueryExpr,
   ResourceDescriptor,
+  ResourceWriteReceipt,
   QueryPredicate,
   SettingEntry,
   SettingValue,
@@ -99,6 +106,7 @@ import type {
   SaveArtifactOutcome,
 } from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
+import { tryApplyOperation } from "../editors/core/text-operation";
 import {
   CRAFT_BUNDLE_NS,
   CRAFT_PHOTO_COMMAND,
@@ -215,6 +223,25 @@ interface Lease {
 
 /// Il tetto di una fetta di `resourceReadChunk`, come quello del kernel.
 const CHUNK_MAX = 64 * 1024;
+/// I limiti della domanda «lo stesso contenuto» (`fub_kernel::same_content`,
+/// A-17): al più tante voci della stessa misura e tanti byte letti; oltre, «non
+/// so», e il deposito si scrive.
+const SAME_CONTENT_MAX_CANDIDATES = 64;
+const SAME_CONTENT_MAX_BYTES = 512 * 1024 * 1024;
+
+/// Le cartelle escluse di serie, come `DEFAULT_EXCLUDED` di
+/// `crates/fub-kernel/src/ignore.rs`.
+const DEFAULT_EXCLUDED_FOLDERS = [".obsidian", ".git", "node_modules", "target", "lost+found", "System Volume Information", "$RECYCLE.BIN"];
+
+/// Il tipo di un nome per lo stesso contenuto, come `extension_of` del kernel:
+/// l'estensione dell'ultimo segmento, in minuscolo, o `null` per un nome che
+/// non ne ha (`LICENSE`) o che è solo estensione (`.gitignore`, `nota.`).
+function sameContentExtension(id: string): string | null {
+  const name = id.slice(id.lastIndexOf("/") + 1);
+  const cut = name.lastIndexOf(".");
+  if (cut <= 0 || cut === name.length - 1) return null;
+  return name.slice(cut + 1).toLowerCase();
+}
 /// I formati di `fub-format-rich` con la feature `rich` dell'host.
 const RICH_FAKE_FORMATS: ReadonlySet<string> = new Set(["docx", "odt", "rtf", "doc"]);
 /// Le estensioni delle cartelle di `fub-format-xlsx`, con la feature `xlsx`
@@ -241,6 +268,37 @@ export interface GridBytesFake {
   outcomes?: GridCommandOutcome[];
 }
 
+/// Il motore del disegno del finto (K5). Senza, come l'host senza il motore,
+/// ogni porta del disegno rifiuta con `unserved`; dato, il motore c'è: il
+/// finto tiene la copia di ogni istanza aperta (testo LF e revisione), la fa
+/// seguire ai `drawingSync` controllando che ogni differenza si applichi, e
+/// passa gesti e comandi alle risposte del banco. Le chiamate restano nel
+/// registro (`atGate("drawingGesture")`, …).
+export interface DrawingFake {
+  /// Ciò che `openDrawing` risponde; senza, un'istanza nuova alla revisione
+  /// 0 senza parti che restano come sono.
+  open?: (doc: string, text: string) => DrawingOpen;
+  /// L'esito di un gesto. Senza, un gesto lancia: il finto non sa disegnare.
+  gesto?: (gesture: DrawingGesture, copia: DrawingFakeCopy) => DrawingOutcome;
+  /// I comandi della selezione; senza, nessuno.
+  comandi?: (selection: string[], copia: DrawingFakeCopy) => DrawingCommandInfo[];
+  /// L'esito di un comando. Senza, un comando lancia.
+  comando?: (request: DrawingCommandRequest, copia: DrawingFakeCopy) => DrawingOutcome;
+  /// Il motore spento a metà sessione, letto a ogni chiamata: finché dice
+  /// `true` ogni porta del disegno rifiuta con `unserved` e le istanze aperte
+  /// se ne vanno, come l'host col motore spento nel vault (T29); riacceso,
+  /// un'apertura dà un'istanza nuova.
+  spento?: () => boolean;
+}
+
+/// La copia di un disegno aperto nel motore finto, com'è adesso.
+export interface DrawingFakeCopy {
+  readonly instance: string;
+  readonly doc: string;
+  readonly text: string;
+  readonly revision: string;
+}
+
 export interface Options {
   /// I file del vault: path → testo. Le cartelle si deducono dai path, come
   /// sul disco.
@@ -250,7 +308,9 @@ export interface Options {
   /// Con `null` l'avvio finisce sul benvenuto, mentre `root` resta il vault
   /// che i comandi servono quando lo si apre (un vault nuovo appena creato).
   initialVault?: string | null;
-  sessionNotice?: KernelNotice | null;
+  /// Gli avvisi di sessione, consegnati uno per tiraggio come fa l'host;
+  /// finiti, il tiraggio risponde `null`.
+  sessionNotice?: KernelNotice | readonly KernelNotice[] | null;
   /// La versione che `appVersion` dichiara; di serie `0.1.0`.
   appVersion?: string;
   view?: ViewSpec[];
@@ -268,6 +328,9 @@ export interface Options {
   installedPlugins?: InstalledPluginInfo[];
   installablePlugins?: Record<string, InstalledPluginInfo>;
   gridBytes?: GridBytesFake;
+  /// Il motore del disegno; senza, le porte del disegno rifiutano con
+  /// `unserved` (vedi `DrawingFake`).
+  drawing?: DrawingFake;
   /// Provider finti per le query custom, indicizzati dal namespace.
   customQueries?: Record<string, (query: unknown) => unknown>;
   /// I vault che la macchina ricorda (i recenti). `forgetVault` li toglie.
@@ -453,6 +516,9 @@ export interface FakeHost {
   /// dopo la fine. Un banco che la scrivesse proverebbe una shell per una rete
   /// che non esiste.
   liveEmit(session: string, events: LiveEvent[]): void;
+  /// La copia di un disegno aperto nel motore finto, o `undefined` se
+  /// l'istanza non c'è (mai aperta, o chiusa).
+  drawingCopy(instance: string): DrawingFakeCopy | undefined;
 }
 
 /// Una sessione live del finto: ciò che l'host vero tiene, senza la rete.
@@ -521,6 +587,12 @@ function resolveAgainst(from: string, raw: string): string | null {
 /// L'host finto, pronto a rispondere.
 export function createFakeHost(options: Options = {}): FakeHost {
   const root = options.root === undefined ? "/vault" : options.root;
+  const sessionNotices: KernelNotice[] =
+    options.sessionNotice == null
+      ? []
+      : Array.isArray(options.sessionNotice)
+        ? [...(options.sessionNotice as readonly KernelNotice[])]
+        : [options.sessionNotice as KernelNotice];
   const gridBytes = options.gridBytes;
   const gridBytesInstances = new Map<string, GridBytesSession>();
   const gridBytesKey = (revision: string, sheet: string, row: number, column: number) =>
@@ -530,6 +602,26 @@ export function createFakeHost(options: Options = {}): FakeHost {
   );
   let gridBytesCommit = 0;
   let gridBytesOutcome = 0;
+  const drawing = options.drawing;
+  const drawingCopies = new Map<string, DrawingFakeCopy>();
+  let drawingInstances = 0;
+  /// Il motore spento, come l'host senza il componente.
+  const drawingUnserved = (): PluginError => ({ kind: "unserved", message: "host fake: il motore del disegno non c'è" });
+  /// Il motore c'è adesso; spento, lancia `unserved` e chiude le istanze.
+  const drawingServed = (): void => {
+    if (!drawing) throw drawingUnserved();
+    if (drawing.spento?.() === true) {
+      drawingCopies.clear();
+      throw drawingUnserved();
+    }
+  };
+  /// La copia di un'istanza aperta, o il rifiuto dell'host per una chiusa.
+  const drawingCopyOf = (instance: string): DrawingFakeCopy => {
+    drawingServed();
+    const copy = drawingCopies.get(instance);
+    if (!copy) throw { kind: "not_found", message: `host fake: il disegno «${instance}» non è aperto` } satisfies PluginError;
+    return copy;
+  };
   const docs = new Map<string, Document>();
   let known = [...(options.knownVaults ?? [])];
   const trash = new Map<string, Trashed>();
@@ -631,6 +723,67 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// I byte di un documento come li vedrebbe il disco.
   function bytesOf(doc: Document): Uint8Array {
     return doc.bytes ?? new TextEncoder().encode(doc.text);
+  }
+
+  /// Il file finto dello stesso tipo di `target` che ha esattamente questi
+  /// byte, il primo per percorso, o `null` (nessuno, contenuto vuoto, o «non
+  /// so» oltre i limiti): la stessa domanda di `Host::same_content`
+  /// (`crates/fub-kernel/src/same_content.rs`). Il tipo è l'estensione del
+  /// nome, piegata in minuscolo e confrontata uguale (`sameContentExtension`).
+  /// Il cestino del finto non sta in `docs`; i file esclusi non sono candidati
+  /// (`excludedFromSameContent`).
+  ///
+  /// **Dove il finto è diverso.** Il budget: l'host vero spende i byte che
+  /// legge davvero (un'impronta già nota non costa niente, un candidato scelto
+  /// costa due letture, impronta e confronto) e risponde «non so» per budget
+  /// finito; il finto non tiene impronte e conta una lettura per candidato.
+  /// Con 512 MiB di budget e 64 MiB per deposito la differenza non si vede
+  /// in nessun banco, e simularla vorrebbe dire rifare l'indice nel finto.
+  function sameContent(target: string, wanted: Uint8Array): string | null {
+    if (wanted.byteLength === 0) return null;
+    if (wanted.byteLength > SAME_CONTENT_MAX_BYTES) return null;
+    const type = sameContentExtension(target);
+    const candidates = [...docs.entries()]
+      .filter(([id]) => !excludedFromSameContent(id))
+      .filter(([id]) => sameContentExtension(id) === type)
+      .map(([id, doc]) => [id, bytesOf(doc)] as const)
+      .filter(([, bytes]) => bytes.byteLength === wanted.byteLength)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    if (candidates.length > SAME_CONTENT_MAX_CANDIDATES) return null;
+    let read = 0;
+    for (const [id, bytes] of candidates) {
+      read += bytes.byteLength;
+      if (read > SAME_CONTENT_MAX_BYTES) return null;
+      if (bytes.every((byte, at) => byte === wanted[at])) return id;
+    }
+    return null;
+  }
+
+  /// Il file `id` è fuori dai candidati dello stesso contenuto, come per
+  /// `IgnorePolicy::excludes_path` del kernel? Ogni segmento si confronta con
+  /// la chiave di risoluzione (trim, NFC, minuscolo): la struttura (`.fub`,
+  /// `.trash`) sempre, i nascosti (un punto davanti, `~$…`, `…~`, `#…#`) se
+  /// `files.show-hidden` non li mostra, le cartelle di `files.excluded-folders`
+  /// (o della lista di serie) solo come cartelle. Il `.gitignore` e i
+  /// temporanei di scrittura il finto non li ha.
+  function excludedFromSameContent(id: string): boolean {
+    const key = (name: string) => name.trim().normalize("NFC").toLowerCase();
+    const setting = (name: string) => settings.find((entry) => entry.spec.key === name)?.value;
+    const shown = setting("files.show-hidden");
+    const showHidden = typeof shown === "boolean" ? shown : false;
+    const declared = setting("files.excluded-folders");
+    const folders = new Set((Array.isArray(declared) ? declared : DEFAULT_EXCLUDED_FOLDERS).map(key));
+    const segments = id.split("/");
+    return segments.some((segment, at) => {
+      const name = key(segment);
+      if (name === ".fub" || name === ".trash") return true;
+      const hidden = name.startsWith(".")
+        || (name.startsWith("~$") && name.length > 2)
+        || (name.endsWith("~") && name.length > 1)
+        || (name.length > 2 && name.startsWith("#") && name.endsWith("#"));
+      if (!showHidden && hidden) return true;
+      return at + 1 < segments.length && folders.has(name);
+    });
   }
 
   /// Il formato che il registro dei provider riconoscerebbe dall'estensione,
@@ -997,7 +1150,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
     const text = docs.get(id)?.text ?? "";
     switch (p.kind) {
       case "text": {
-        const haystack = p.case_sensitive ? `${id}\n${text}` : `${id}\n${text}`.toLowerCase();
+        // I campi come la regex: `name` è il nome (qui il path), `body` il
+        // testo; nessun campo, tutti e due. Una ricerca per nome che trovasse
+        // anche il testo metterebbe fra i nomi note che il kernel non dà.
+        const scope = p.fields.length === 0 ? `${id}\n${text}` : p.fields.flatMap((field) => (field === "name" ? [id] : field === "body" ? [text] : [])).join("\n");
+        const haystack = p.case_sensitive ? scope : scope.toLowerCase();
         const needle = p.case_sensitive ? p.text : p.text.toLowerCase();
         return p.mode === "phrase" ? haystack.includes(needle) : needle.split(/\s+/).filter(Boolean).every((term) => haystack.includes(term));
       }
@@ -1280,7 +1437,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
     return answer;
   }
 
+  /// I tipi di nota (E5): elenco, tipo di una nota, nota da un tipo, e la
+  /// proprietà scritta in un file con il suo annulla.
+  const noteTypes = fakeNoteTypes({
+    docs: () => [...docs].map(([id, doc]) => [id, { text: doc.text, revision: doc.revision }]),
+    read: (id) => docs.get(id),
+    write,
+    changed: (id) => void emit({ type: "document_changed", id }),
+  });
+
   function command(id: string, args: Record<string, unknown> | null, mode: InvokeMode) {
+    const typed = noteTypes.command(id, args);
+    if (typed !== undefined) return typed;
     switch (id) {
       case CRAFT_PHOTO_COMMAND: {
         if (!options.craft || options.craft.component === false) {
@@ -1577,7 +1745,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       initialVault: () => gate("initialVault", [], Promise.resolve(options.initialVault === undefined ? root : options.initialVault)),
       appVersion: () => gate("appVersion", [], Promise.resolve(options.appVersion ?? "0.1.0")),
       sessionNotice: () =>
-        gate("sessionNotice", [], Promise.resolve(options.sessionNotice ?? null)),
+        gate("sessionNotice", [], Promise.resolve(sessionNotices.shift() ?? null)),
       // Il vault in memoria non ha cartella di configurazione, log o dialog
       // di sistema. Non simulare un export/recovery riuscito senza disco.
       demoRoot: () => gate("demoRoot", [], Promise.resolve(null)),
@@ -1646,8 +1814,23 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return lease.url;
       },
       // `expected` null è «solo creazione», una stringa è il CAS sulla
-      // revisione: è il contratto di `resource_write`.
-      resourceWrite: (id, bytes, expected, vault) => gate("resourceWrite", [id, bytes, expected, vault], Promise.resolve().then(() => {
+      // revisione: è il contratto di `resource_write`. Con `reuse:
+      // "same-content"` un file con gli stessi byte risponde al posto della
+      // scrittura (lo scenario dell'host vero lo lega in
+      // `fake-resources.test.ts`).
+      resourceWrite: (id, bytes, expected, vault, options) => gate("resourceWrite", options === undefined ? [id, bytes, expected, vault] : [id, bytes, expected, vault, options], Promise.resolve().then((): ResourceWriteReceipt => {
+        const reuse: unknown = options?.reuse;
+        if (reuse !== undefined && reuse !== "same-content") {
+          throw { kind: "bad_args", message: `host fake: \`reuse\` sconosciuto (${String(reuse)})` } satisfies PluginError;
+        }
+        if (reuse !== undefined && expected !== null) {
+          throw { kind: "bad_args", message: `host fake: \`reuse\` con \`expected\` per «${id}»` } satisfies PluginError;
+        }
+        if (reuse !== undefined) {
+          const found = sameContent(id, bytes);
+          const there = found === null ? undefined : docs.get(found);
+          if (found !== null && there) return { id: found, revision: there.revision, reused: true };
+        }
         const before = docs.get(id);
         if (expected === null && before) {
           throw { kind: "already_exists", message: `host fake: «${id}» esiste già` } satisfies PluginError;
@@ -1658,7 +1841,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const rev = writeBytes(id, bytes, before?.bytes ? before.mime : undefined);
         const kind = entryKind(id);
         emit(kind === "document" ? { type: "document_changed", id } : { type: "entry_changed", id, kind });
-        return { id, revision: rev };
+        return { id, revision: rev, reused: false };
       })),
       viewerOpen: (url, title, policy) =>
         gate("viewerOpen", [url, title, policy], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
@@ -1752,6 +1935,61 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (!gridBytesInstances.delete(instance)) {
           throw { kind: "not_found", message: "host fake: la sessione della griglia è chiusa" } satisfies PluginError;
         }
+      })),
+      openDrawing: (doc, text, vault) => gate("openDrawing", named([doc, text], vault), Promise.resolve().then(() => {
+        drawingServed();
+        const opened = drawing!.open?.(doc, text) ?? {
+          instance: `disegno-${++drawingInstances}`,
+          revision: "0",
+          mapped: 0,
+          unmapped: 0,
+          losses: [],
+        };
+        // La copia è il testo come arriva: il contratto lo vuole LF, ed è
+        // il banco a guardarlo (`drawingCopy`), non il finto a ripararlo.
+        drawingCopies.set(opened.instance, {
+          instance: opened.instance,
+          doc,
+          text,
+          revision: opened.revision,
+        });
+        return opened;
+      })),
+      drawingSync: (instance, sync, vault) => gate("drawingSync", named([instance, sync], vault), Promise.resolve().then(() => {
+        const copy = drawingCopyOf(instance);
+        let text: string;
+        if (sync.change.kind === "text") {
+          text = sync.change.value.text;
+        } else {
+          const { edits, length_before, length_after } = sync.change.value;
+          const applied = tryApplyOperation(copy.text, { beforeLength: length_before, afterLength: length_after, edits });
+          if (applied.kind !== "applied") {
+            throw { kind: "bad_args", message: `host fake: \`change.edits\` non si applica alla copia di «${instance}»` } satisfies PluginError;
+          }
+          text = applied.text;
+        }
+        drawingCopies.set(instance, { ...copy, text, revision: sync.revision });
+        return { revision: sync.revision };
+      })),
+      drawingGesture: (instance, gesture, vault) => gate("drawingGesture", named([instance, gesture], vault), Promise.resolve().then(() => {
+        const copy = drawingCopyOf(instance);
+        if (!drawing?.gesto) throw new Error("host fake: il motore finto non ha risposte per i gesti");
+        return drawing.gesto(gesture, copy);
+      })),
+      drawingCommands: (instance, selection, vault) => gate("drawingCommands", named([instance, selection], vault), Promise.resolve().then(() => {
+        const copy = drawingCopyOf(instance);
+        return drawing?.comandi?.(selection, copy) ?? [];
+      })),
+      drawingCommand: (instance, request, vault) => gate("drawingCommand", named([instance, request], vault), Promise.resolve().then(() => {
+        const copy = drawingCopyOf(instance);
+        if (!drawing?.comando) {
+          throw { kind: "bad_args", message: `host fake: il comando \`${request.id}\` non è servito` } satisfies PluginError;
+        }
+        return drawing.comando(request, copy);
+      })),
+      closeDrawing: (instance, vault) => gate("closeDrawing", named([instance], vault), Promise.resolve().then(() => {
+        drawingCopyOf(instance);
+        drawingCopies.delete(instance);
       })),
       writeDocument: (id, source, base, vault, open) => {
         if (open !== undefined && !OPEN_KEY.test(open)) {
@@ -2296,6 +2534,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!live) throw new Error(`host fake: no live session ${JSON.stringify(session)}`);
       liveEmit(session, live, events);
     },
+    drawingCopy: (instance) => drawingCopies.get(instance),
   };
 }
 

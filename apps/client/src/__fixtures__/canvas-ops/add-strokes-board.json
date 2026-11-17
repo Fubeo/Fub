@@ -1,0 +1,18 @@
+{
+  "about": "Un tratto libero aggiunto alla radice senza livello: il livello nasce in fondo ai campi della radice, con il tratto dato.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }], "edges": [] },
+  "ops": [{ "op": "add_strokes", "layer": "board", "strokes": [
+    { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "free" }, "ink": "1 s100 cxy 4000,2500 120,40 95,-10" }
+  ] }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }],
+      "edges": [],
+      "fub:ink": { "v": 1, "strokes": [
+        { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "free" }, "ink": "1 s100 cxy 4000,2500 120,40 95,-10" }
+      ] }
+    },
+    "created": ["s1"]
+  }
+}

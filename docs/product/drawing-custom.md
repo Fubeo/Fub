@@ -9,8 +9,8 @@ di partenza, offre tutto: ogni strumento, ogni comando, ogni pannello; gli
 strumenti rari stanno nelle tendine della colonna e tutto si trova con la
 ricerca dei comandi (`Ctrl+/`). **Semplice** è per disegnare a mano o col dito:
 nella colonna, con caselle grandi da 44 px, la Selezione, la Mano, lo Zoom, la
-Penna, l'Evidenziatore, la Gomma, il Rettangolo, l'Ellisse, la Linea e la
-Freccia; poi i colori, i gesti delle dita, le immagini, il
+Penna, l'Evidenziatore, la Gomma, il Rettangolo, l'Ellisse, la Linea, la
+Freccia e il Testo; poi i colori, i gesti delle dita, le immagini, il
 pannello delle proprietà, dove sta anche il titolo, ed «Esporta». In fondo alla colonna il pulsante **Completo** riporta tutto con un
 clic. Nelle annotazioni di un PDF il Semplice ha gli strumenti di partenza
 delle annotazioni. Lo spazio filtra soltanto ciò che si offre: un disegno si
@@ -62,13 +62,14 @@ coi gesti, le immagini dal vault, il pannello delle proprietà e la finestra
 «Esporta». Ciascuna fa ciò che dice la sua sezione in [Disegni](drawing.md).
 Le parti dell'Esperto e quelle dello Standard che non sono rimaste se ne sono
 andate (decisione 0231): Lazo, Tavola, Contagocce, Sfumatura, Poligono,
-Connettore, Testo, i colori e gli stili del documento, le campiture, le guide
+Connettore, i colori e gli stili del documento, le campiture, le guide
 intelligenti, i righelli e le guide, la simmetria della penna, presentare, il
 ritaglio e le raccolte di forme.
 
 | Parte | Spazio | Che cosa porta |
 | --- | --- | --- |
 | Penna, Evidenziatore, Gomma, Rettangolo, Ellisse, Linea, Freccia | Semplice | lo strumento, col suo tasto (l'Evidenziatore con `Maiusc+P`) |
+| Testo | Semplice | lo strumento Testo (`T`), dopo le forme: un clic scrive «Testo» lì, lo sceglie e mette il fuoco nel campo «Testo» del pannello delle proprietà, dove si scrive; c'è anche senza il motore del disegno |
 | Colori personalizzati | Semplice | «Altro colore…» e l'anello del colore scelto |
 | Vista ruotata, gesti e menu radiale | Semplice | girare la vista (`4`, `6`, `5`, `Ctrl+Maiusc` con la rotella, due dita) e il pulsante dell'angolo; i tocchi di due e tre dita; il menu radiale (clic destro, tasto della penna, `Maiusc+F10`); «Penna e dita…» in «Pagina e griglia» |
 | Immagini dal vault | Semplice | «Immagine dal vault…» (`Ctrl+I`) |

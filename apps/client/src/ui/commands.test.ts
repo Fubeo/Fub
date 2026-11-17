@@ -33,7 +33,10 @@ import {
   canCreateDrawing,
   newKinds,
   newDrawing,
+  registerComponentRow,
+  showComponent,
   loadKeyOverrides,
+  onKeyOverridesLoaded,
   validateKeybinding,
   keyboardPlatform,
   type CommandEntry,
@@ -250,6 +253,31 @@ describe("la scorciatoia di un comando di shell si riconfigura", () => {
     await loadKeyOverrides();
     expect(allCommands()[0]!.binding).toBeNull();
   });
+
+  it("una lettura vecchia che arriva tardi non vince su quella nuova, e avvisa solo la nuova", async () => {
+    registerShellCommand({
+      id: "shell.switcher",
+      title: "commands.switcher",
+      description: "commands.switcher.desc",
+      layer: "global",
+      run: () => {},
+    });
+    let answerOld: (entries: SettingEntry[]) => void = () => {};
+    fromBackend.mockImplementationOnce(() => new Promise((resolve) => (answerOld = resolve)));
+    fromBackend.mockResolvedValueOnce([settingEntry("keys.shell.switcher", "Mod-Alt-p")]);
+    const loaded = vi.fn(() => allCommands()[0]!.binding);
+    const stop = onKeyOverridesLoaded(loaded);
+    const old = loadKeyOverrides();
+    await loadKeyOverrides();
+    answerOld([settingEntry("keys.shell.switcher", "Mod-Alt-v")]);
+    await old;
+    expect(allCommands()[0]!.binding).toBe("Mod-Alt-p");
+    expect(loaded).toHaveBeenCalledTimes(1);
+    expect(loaded).toHaveReturnedWith("Mod-Alt-p");
+    stop();
+    await loadKeyOverrides();
+    expect(loaded).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("i due registri sono uno solo", () => {
@@ -438,6 +466,26 @@ describe("le porte di «Nuovo disegno…»", () => {
       { id: "drawing.create", prefill: { folder: "Scienze" } },
       { id: "drawing.create", prefill: {} },
     ]);
+  });
+});
+
+describe("la porta della riga di un componente", () => {
+  it("senza registrazione non apre niente e lo dice", () => {
+    expect(showComponent("fub.motore-vettoriale")).toBe(false);
+  });
+
+  it("apre con l'ultima registrata, e togliere una vecchia non toglie la nuova", () => {
+    const first: string[] = [];
+    const second: string[] = [];
+    const stopFirst = registerComponentRow((id) => first.push(id));
+    const stopSecond = registerComponentRow((id) => second.push(id));
+    expect(showComponent("fub.motore-vettoriale")).toBe(true);
+    stopFirst();
+    expect(showComponent("fub.search")).toBe(true);
+    expect(first).toEqual([]);
+    expect(second).toEqual(["fub.motore-vettoriale", "fub.search"]);
+    stopSecond();
+    expect(showComponent("fub.search")).toBe(false);
   });
 });
 

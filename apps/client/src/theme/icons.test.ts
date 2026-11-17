@@ -96,6 +96,7 @@ function searchPath(): string | null {
 describe("il cancello legge il set di icone del fascio", () => {
   beforeEach(() => {
     document.head.innerHTML = "";
+    document.adoptedStyleSheets = [];
     expect(mountThemeBundle(SERIES_BUNDLE, "light")).toEqual({ mounted: true });
   });
 
@@ -115,8 +116,8 @@ describe("il cancello legge il set di icone del fascio", () => {
     expect(iconReasons(withSet({ search: ["M".repeat(THEME_ICON_LIMITS.icon_bytes + 1)] })).join()).toContain(
       `superano ${THEME_ICON_LIMITS.icon_bytes} byte`,
     );
-    const many = Object.fromEntries(Array.from({ length: 513 }, (_, n) => [`icona-${n}`, ["M0 0h1"]]));
-    expect(iconReasons(withSet(many)).join()).toContain("513 ridisegnate, al massimo 512");
+    const many = Object.fromEntries(Array.from({ length: 1025 }, (_, n) => [`icona-${n}`, ["M0 0h1"]]));
+    expect(iconReasons(withSet(many)).join()).toContain("1025 ridisegnate, al massimo 1024");
     expect(iconReasons(withSet(["search"])).join()).toContain("non è un oggetto");
 
     expect(iconReasons({ assets: { [ASSET]: [...new TextEncoder().encode("{ non è json")] } }).join()).toContain("non è JSON");
@@ -170,6 +171,7 @@ describe("la shell monta le icone del tema e torna alla serie", () => {
   beforeEach(async () => {
     system();
     document.head.innerHTML = "";
+    document.adoptedStyleSheets = [];
     document.body.innerHTML = `<button>${icon("search")}</button>`;
     localStorage.clear();
     await cancelThemePreview();

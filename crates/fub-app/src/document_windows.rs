@@ -178,10 +178,7 @@ fn trusted_main<R: tauri::Runtime>(
     let url = window.url().map_err(|error| {
         PluginError::Internal(format!("could not inspect main window URL: {error}").into())
     })?;
-    if !matches!(url.path(), "/" | "/index.html")
-        || url.query().is_some()
-        || url.fragment().is_some()
-    {
+    if !at_app_entry(&url) {
         return Err(permitted("main window is not at its app entry"));
     }
     let bundled = url.port().is_none()
@@ -207,6 +204,16 @@ fn trusted_main<R: tauri::Runtime>(
     } else {
         Err(permitted("main window is not on the local app origin"))
     }
+}
+
+/// The main window shows the app entry: the root or `index.html`, with no
+/// query or fragment. WebKit (Linux and macOS) reports the bundled root as
+/// `tauri://localhost`, whose path is empty for a non-special scheme, not
+/// `/`: both spell the same root.
+fn at_app_entry(url: &tauri::Url) -> bool {
+    matches!(url.path(), "" | "/" | "/index.html")
+        && url.query().is_none()
+        && url.fragment().is_none()
 }
 
 fn entry_path(request: &DocumentWindowRequest) -> String {
@@ -455,6 +462,37 @@ mod tests {
         assert!(path.starts_with("document.html?"), "{path}");
         assert!(path.contains("&profile=plain-text"), "{path}");
         assert!(path.contains("document=note%2Fa+%26+b.md"), "{path}");
+    }
+
+    fn url(text: &str) -> tauri::Url {
+        tauri::Url::parse(text).expect("test URL")
+    }
+
+    #[test]
+    fn the_bundled_root_without_a_slash_is_the_app_entry() {
+        // What WebKitGTK reports for the release build: without this the main
+        // window could never close nor open a document window.
+        assert_eq!(url("tauri://localhost").path(), "");
+        assert!(at_app_entry(&url("tauri://localhost")));
+        assert!(at_app_entry(&url("tauri://localhost/")));
+        assert!(at_app_entry(&url("tauri://localhost/index.html")));
+        assert!(at_app_entry(&url("http://tauri.localhost/")));
+        assert_eq!(
+            url("tauri://localhost")
+                .join("document.html?a=1")
+                .expect("join")
+                .as_str(),
+            "tauri://localhost/document.html?a=1"
+        );
+    }
+
+    #[test]
+    fn another_page_a_query_or_a_fragment_is_not_the_app_entry() {
+        assert!(!at_app_entry(&url("tauri://localhost/document.html")));
+        assert!(!at_app_entry(&url("tauri://localhost/?vault=x")));
+        assert!(!at_app_entry(&url("tauri://localhost#slide=2")));
+        assert!(!at_app_entry(&url("tauri://localhost/index.html#")));
+        assert!(!at_app_entry(&url("tauri://localhost/sub/index.html")));
     }
 
     #[test]

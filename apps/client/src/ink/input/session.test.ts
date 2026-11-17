@@ -124,6 +124,35 @@ describe("la sessione dell'inchiostro, da sola", () => {
     expect(hover.drawing).toBe(false);
   });
 
+  it("con la politica del mouse `ignore` il mouse non disegna, la penna sì", () => {
+    const session = new Session({ mouse: "ignore" });
+    expect(session.pointerDown(mouse(1, 0, 0, 0))).toEqual([]);
+    expect(session.roleOf(1)).toBe("ignore");
+    expect(session.pointerMove([], mouse(1, 4, 0, 8), [])).toEqual([]);
+    expect(session.pointerUp(mouse(1, 4, 0, 9))).toEqual([]);
+    const effects = [
+      ...session.pointerDown(pen(7, 0, 0, 10, 0.5)),
+      ...session.pointerUp(pen(7, 2, 0, 20, 0)),
+    ];
+    expect(ends(effects).map((done) => done.pointerType)).toEqual(["pen"]);
+  });
+
+  it("la politica del mouse cambiata a metà tratto vale dal prossimo appoggio", () => {
+    const session = new Session();
+    const effects = [
+      ...session.pointerDown(mouse(1, 0, 0, 0)),
+      ...session.pointerMove([], mouse(1, 4, 0, 8), []),
+    ];
+    session.setMousePolicy("ignore");
+    effects.push(...session.pointerMove([], mouse(1, 8, 0, 16), []), ...session.pointerUp(mouse(1, 8, 0, 24)));
+    // Il tratto cominciato finisce com'è, con tutti i suoi campioni.
+    expect(ends(effects).map((done) => done.samples.map(({ x }) => x))).toEqual([[0, 4, 8]]);
+    expect(session.pointerDown(mouse(1, 0, 5, 30))).toEqual([]);
+    expect(session.pointerUp(mouse(1, 0, 5, 40))).toEqual([]);
+    session.setMousePolicy("ink");
+    expect(session.pointerDown(mouse(1, 0, 9, 50)).map((effect) => effect.fx)).toContain("start");
+  });
+
   it("un tratto annullato non lascia niente da scrivere e il puntatore non disegna finché non si alza", () => {
     const session = new Session();
     session.pointerDown(mouse(1, 0, 0, 0));

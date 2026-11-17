@@ -4,7 +4,7 @@ import type { SourceKind } from "../../host/enums.generated";
 import type { PaneMode, SelectionSet, Span, SyntaxForm } from "../../host/contract";
 import type { DocumentUpdate, EditorChange } from "./text-operation";
 import type { SurfaceEditorActions } from "./editor-actions";
-import type { SurfaceMenu, SurfaceMiniBar } from "./editor-menu";
+import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMiniBar } from "./editor-menu";
 
 /**
  * The family of a surface: a name its registration owns, one owner at a time.
@@ -41,6 +41,24 @@ export interface SurfaceMode {
    * the theme's paper (`adattato`). Every mode declares it.
    */
   readonly looks: readonly Look[];
+  /**
+   * The figure of the mode in the mode menu and on the pane's button: a name
+   * `icon()` of `ui/icons.ts` can draw. Without it, or when the set doesn't
+   * know the name, the mode takes the figure of its role (`state/mode-menu.ts`).
+   */
+  readonly icon?: string;
+  /**
+   * One line under the label in the mode menu that says what the mode is
+   * for. Without it the menu shows the label alone.
+   */
+  readonly description?: () => string;
+  /**
+   * Ids this mode answers to besides its own: modes the surface no longer
+   * declares because they merged into this one (the Markdown `blocks`, now
+   * inside Scrittura). A saved pane or a command that names one gets this
+   * mode; the menu never lists them.
+   */
+  readonly formerIds?: readonly string[];
 }
 
 export interface SurfaceMountContext {
@@ -65,6 +83,20 @@ export interface SurfaceMountContext {
    * brings back on its tab) carries it.
    */
   readonly page?: number;
+  /**
+   * The surface is mounted inside a board card (N6 T42): it keeps only what
+   * writes the document's content (a sheet's values and formulas) and leaves
+   * out its own bars, tabs, dialogs and structure commands. Absent means
+   * `false`: a pane always mounts the whole editor.
+   */
+  readonly compact?: boolean;
+  /**
+   * Escape belongs to the host, which leaves the surface with it (a board
+   * card, compact or not): the surface keeps Escape only to close what it has
+   * open (a menu, a selection of blocks) and gives it no meaning of its own.
+   * Absent means `false`: in a pane Escape is the surface's.
+   */
+  readonly escapeLeaves?: boolean;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */
@@ -146,8 +178,13 @@ export interface SurfaceBuffer {
    * back. It reaches the recovery drafts, never the file.
    */
   pendingText?(): string | null;
-  /** Records the held-back text now, as the end of its pause would. */
-  commitPending?(): void;
+  /**
+   * Records the held-back text now, as the end of its pause would. A surface
+   * whose record reaches the document through an asynchronous step (a grid
+   * cell confirmed by its provider) returns the promise of that step: the
+   * session waits for it before it saves, reads the disk or closes.
+   */
+  commitPending?(): void | Promise<void>;
   /**
    * Calls `listener` each time the held-back text changes, with whether some
    * is left. The call does no other work: the session asks `pendingText` only
@@ -193,6 +230,134 @@ export type SurfaceAnchor =
 export interface SurfacePoint {
   readonly x: number;
   readonly y: number;
+}
+
+/** A rectangle on screen, in client coordinates. */
+export interface SurfaceRect {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+/**
+ * A place outside the document's column where something carried out of it (a
+ * block in hand) can be dropped, as the shell offers it: the editor says what
+ * the drop does there, the shell only where the place is and what it is called.
+ *
+ * - `place`: a row of a declared view that names a place of a document (a
+ *   heading of the Structure): its span, in UTF-8 bytes of the source the view
+ *   was drawn from, and the row's words.
+ * - `note`: a row that names a whole note of the same vault (a note of the
+ *   drawer's tree): dropped there, the block goes to that note («Sposta in»,
+ *   T32). The note may be the document itself.
+ */
+export type SurfaceDropOffer = SurfacePlaceOffer | SurfaceNoteOffer;
+
+/** What every offer has: where it is on screen and how it shows the pointer over it. */
+interface SurfaceDropRow {
+  /** The visible part of the row, measured when the offers were asked for. */
+  readonly rect: SurfaceRect;
+  /** The pointer, with something in hand, is over the place (or leaves it): the shell shows it. */
+  hover(on: boolean): void;
+}
+
+/** A place of the document itself: see `SurfaceDropOffer`. */
+export interface SurfacePlaceOffer extends SurfaceDropRow {
+  readonly kind: "place";
+  /** The document the place belongs to, in the vault `vault`. */
+  readonly document: SurfaceDropDocument;
+  readonly span: Span;
+  readonly title: string;
+}
+
+/** A note of the same vault: see `SurfaceDropOffer`. */
+export interface SurfaceNoteOffer extends SurfaceDropRow {
+  readonly kind: "note";
+  /** The note the row names, in the vault `vault`. */
+  readonly document: SurfaceDropDocument;
+  /** Its name as the row shows it. */
+  readonly title: string;
+}
+
+/**
+ * A document in a vault: the same path in two vaults is two documents.
+ * `vault` is the vault root the view or the surface was mounted in
+ * (`undefined`: the one open when no root is known, as `vaultArg` reads it).
+ */
+export interface SurfaceDropDocument {
+  readonly documentId: string;
+  readonly vault: string | undefined;
+}
+
+/** Who offers drop places: the shell, for the views it draws. */
+export interface SurfaceDropOffers {
+  /**
+   * The places of `document` that can be seen now, measured now. Asked when
+   * something leaves the column and again when the shell says they changed
+   * (`dropOffersChanged`) or the window scrolls; never per frame.
+   */
+  offers(document: SurfaceDropDocument): readonly SurfaceDropOffer[];
+}
+
+const dropOfferSources = new Set<SurfaceDropOffers>();
+const dropOfferWatchers = new Set<() => void>();
+
+/**
+ * Registers a source of drop places outside the document's column: the shell
+ * calls it, the editor asks `dropOffers`, and neither imports the other's DOM.
+ * The returned disposer takes the source back.
+ */
+export function offerDropTargets(source: SurfaceDropOffers): () => void {
+  dropOfferSources.add(source);
+  dropOffersChanged();
+  return () => {
+    dropOfferSources.delete(source);
+    dropOffersChanged();
+  };
+}
+
+/**
+ * The drop places every source offers for `document` now: its own places
+ * (same document, same vault) and the notes of its vault. A source that throws
+ * offers nothing: a gesture never breaks for a place it can't reach.
+ */
+export function dropOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
+  const out: SurfaceDropOffer[] = [];
+  for (const source of [...dropOfferSources]) {
+    try {
+      for (const offer of source.offers(document)) {
+        if (offer.document.vault !== document.vault) continue;
+        if (offer.kind === "note" || offer.document.documentId === document.documentId) out.push(offer);
+      }
+    } catch {
+      // Una sorgente guasta non toglie le altre.
+    }
+  }
+  return out;
+}
+
+/**
+ * The shell redrew rows that offer places (or took them away): whoever holds
+ * offers from before measures them again. Watchers run synchronously; one
+ * that throws doesn't stop the others.
+ */
+export function dropOffersChanged(): void {
+  for (const watcher of [...dropOfferWatchers]) {
+    try {
+      watcher();
+    } catch {
+      // Un osservatore guasto non toglie gli altri.
+    }
+  }
+}
+
+/** Listens for `dropOffersChanged`, while something is out of the column; the disposer stops it. */
+export function watchDropOffers(watcher: () => void): () => void {
+  dropOfferWatchers.add(watcher);
+  return () => {
+    dropOfferWatchers.delete(watcher);
+  };
 }
 
 /**
@@ -265,8 +430,53 @@ export interface SurfaceStatus {
   subscribe(listener: () => void): () => void;
 }
 
-/** How far the document can be written, as the chip by its path says it. */
-export type SurfaceStandingKind = "writes" | "closed" | "body" | "readonly";
+/**
+ * The cell a grid surface has active, as data: its A1 name and what it holds
+ * as written (the formula, or the value as typed). A host that does not show
+ * the surface's own formula bar (a board card, N6 T42) shows these instead.
+ */
+export interface SurfaceActiveCell {
+  readonly name: string;
+  readonly formula: string;
+}
+
+export interface SurfaceActiveCellSource {
+  /** The active cell now; `null` before a workbook is shown. */
+  read(): SurfaceActiveCell | null;
+  /** Called when the active cell or what it holds may have changed. */
+  subscribe(listener: () => void): () => void;
+}
+
+/**
+ * The cells a surface has selected, as it shows them: the status band sums
+ * them in the shell, with no IPC (E24). A Markdown table, a Base and a sheet
+ * card give the same port, so the same selection gives the same number.
+ */
+export interface SurfaceCellSelection {
+  /** The BCP 47 tag the shown numbers are written in: `it`, `en-US`. */
+  readonly locale: string;
+  /**
+   * Each selected cell once, header rows excluded: a number the format already
+   * types as one, or the text the cell shows. Read once per selection change,
+   * never per keystroke.
+   */
+  values(): Iterable<string | number>;
+}
+
+export interface SurfaceCellSelectionSource {
+  /** The selection now; `null` with no cells or a single cell selected. */
+  read(): SurfaceCellSelection | null;
+  /** Called when the selection or the selected values may have changed. */
+  subscribe(listener: () => void): () => void;
+}
+
+/**
+ * How far the document can be written, as the chip by its path says it.
+ * `reduced` and `stopped` say that it is written with fewer means than usual:
+ * a drawing without its engine, switched off (or not in this build) or
+ * stopped by an error, draws with the simple tools.
+ */
+export type SurfaceStandingKind = "writes" | "closed" | "body" | "readonly" | "reduced" | "stopped";
 
 /** A gesture the standing offers: going to a place, finding, recording. */
 export interface SurfaceStandingAction {
@@ -381,6 +591,12 @@ export interface EditorSurface {
    */
   zone?(step: 1 | -1): boolean;
   /**
+   * The surface keeps a history of its own places: a board's view jumps (T56).
+   * Back and Forward ask the focused surface first, and the pane's own history
+   * only when it answers `false` (nothing to go back to, or no history here).
+   */
+  readonly jumps?: { back(): boolean; forward(): boolean };
+  /**
    * The surface draws its own bar of commands (the document ribbon): the
    * shell's format bar then stays out of the way, while the selection
    * bubble and the `fub.editor.action` commands keep working.
@@ -392,6 +608,10 @@ export interface EditorSurface {
   readonly panels?: SurfacePanels;
   /** The document's entries in the status band. */
   readonly status?: SurfaceStatus;
+  /** The active cell of a grid, for a host that hides the formula bar. */
+  readonly activeCell?: SurfaceActiveCellSource;
+  /** The cells selected in a table or a Base, for the sum in the status band. */
+  readonly cellSelection?: SurfaceCellSelectionSource;
   /** How far the document can be written, by its path. */
   readonly standing?: SurfaceStanding;
   /**
@@ -468,6 +688,18 @@ export interface EditorSurface {
    */
   contextMenu?(at: SurfacePoint | null): SurfaceMenu | null;
   /**
+   * The group of the block at `at`, or under the cursor when `at` is `null`,
+   * for the format bar: its name («Compito») and the gestures of that block
+   * (a due date, the language of a code block). `null` where there is no
+   * such block: plain text, the cursor between two blocks, a selection over
+   * more than one block. The shell draws it next to the fixed buttons
+   * (`panels/format-bar.ts`), and asks again after a short pause when the
+   * actions change, never at each keystroke. The surface declares the group:
+   * no field of `CommandSpec` says it, and a plugin's command stays in the
+   * general bar.
+   */
+  blockGroup?(at: SurfacePoint | null): SurfaceBlockGroup | null;
+  /**
    * The mini toolbar for a surface with controls of its own (a Word document,
    * a sheet); without it the shell narrows the formatting bar.
    */
@@ -479,6 +711,22 @@ export interface EditorSurface {
    */
   paletteCommands?(): readonly SurfacePaletteCommand[];
   destroy(): void;
+}
+
+/**
+ * The group of a block in the format bar. `items` are entries as in the
+ * editor menu (`editor-menu.ts`): an id the shell resolves (an editor action
+ * the surface knows, a command), or an item with its own name and gesture.
+ * Items are read again when they are used, so a gesture always acts on the
+ * block where the cursor is then; the shell redraws the group only when what
+ * it shows changes. In read-only mode the surface leaves out what writes.
+ */
+export interface SurfaceBlockGroup {
+  /** The kind of block, stable: `task`, `callout`, `table`, `code`... */
+  readonly id: string;
+  /** The name the bar shows before the gestures, in the UI language. */
+  readonly label: string;
+  readonly items: readonly SurfaceMenuEntry[];
 }
 
 /** A command a surface offers to the command palette. */

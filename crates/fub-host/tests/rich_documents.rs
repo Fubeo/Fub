@@ -240,6 +240,69 @@ fn un_contenuto_rotto_è_rifiutato_con_la_sua_specie_e_il_file_resta() {
     assert_eq!(vault.on_disk(), before);
 }
 
+/// Un `.docx` vuoto o rotto non si apre, e lo dice in una frase: senza il
+/// gergo del codec («Could not find EOCD») e, passato dalla lingua di chi
+/// guarda, come testo e non come chiave. È la frase che la superficie
+/// d'errore mostra; prima arrivava alla shell come un oggetto e si leggeva
+/// «[object Object]».
+#[test]
+fn un_docx_che_non_si_apre_lo_dice_in_una_frase() {
+    let vault = Vault::with_docx(&["Intatto."]);
+    let files: [(&str, &[u8]); 2] = [
+        ("Vuoto.docx", b""),
+        ("Finto.docx", b"solo testo, non un pacchetto"),
+    ];
+    for (name, bytes) in files {
+        std::fs::write(vault.root.join(name), bytes).unwrap();
+    }
+    for (name, bytes) in files {
+        let error = vault
+            .host
+            .read_document_with_format(None, &DocId::new(name))
+            .unwrap_err();
+        let error = vault.host.localized_error(None, error);
+        let wire = serde_json::to_value(&error).unwrap();
+        let message = wire["message"].as_str().unwrap_or_else(|| panic!("{wire}"));
+        assert!(message.contains(name), "{message}");
+        assert!(
+            !message.contains("zip") && !message.contains("EOCD"),
+            "{message}"
+        );
+        assert_eq!(std::fs::read(vault.root.join(name)).unwrap(), bytes);
+    }
+}
+
+/// Con un `.docx` che non si apre in primo piano, i pannelli accanto si
+/// disegnano: le statistiche dicono che non c'è niente da contare, i
+/// collegamenti calcolano le menzioni sul nome. Prima le statistiche
+/// fallivano a ogni ridisegno (un avviso «did not redraw: parse failed: rich
+/// codec…» per documento) e le menzioni dicevano «Could not load this
+/// section.».
+#[test]
+fn un_docx_che_non_si_apre_non_rompe_i_pannelli_accanto() {
+    use fub_abi::session::ViewContext;
+    use fub_abi::traits::ViewInstance;
+    use fub_abi::ui::{UiKind, UiNode};
+    fn failed(node: &UiNode) -> bool {
+        matches!(node.kind, UiKind::Failed { .. }) || node.children().into_iter().any(failed)
+    }
+    let vault = Vault::with_docx(&["Intatto."]);
+    std::fs::write(vault.root.join("Vuoto.docx"), b"").unwrap();
+    let mut context = ViewContext::new("p1");
+    context.doc = Some(DocId::new("Vuoto.docx"));
+    vault.host.set_active_context(None, Some(context)).unwrap();
+    let stats = vault
+        .host
+        .render_view(None, &ViewInstance::only("stats"))
+        .expect("le statistiche si disegnano");
+    assert_eq!(stats.key.as_deref(), Some("unreadable"), "{stats:?}");
+    let links = vault
+        .host
+        .render_view(None, &ViewInstance::only("backlinks"))
+        .expect("i collegamenti si disegnano");
+    assert!(!failed(&links), "{links:?}");
+}
+
 #[test]
 fn una_bozza_di_uno_schema_futuro_non_si_salva_e_resta() {
     let vault = Vault::with_docx(&["Intatto."]);

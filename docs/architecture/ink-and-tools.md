@@ -43,7 +43,7 @@ e la geometria sono funzioni che il prodotto chiama.
 | nucleo, TypeScript | `apps/client/src/ink/input/` | le stesse regole, per il percorso caldo |
 | formato dei campioni | `apps/client/src/ink/sample.ts` | `fub:ink`, quantizzazione, limite dei campioni |
 | pennello | `apps/client/src/ink/brush.ts`, `pf1.ts`, `pf1-live.ts`, `nib1.ts` | `fub:brush`, contorno, contorno che cresce, punta piatta |
-| penne | `apps/client/src/ink/pens.ts` | le sette ricette del pennello con un nome, misura, opacità, fusione |
+| penne | `apps/client/src/ink/pens.ts` (fa fede), copia in `crates/fub-ink-codec/src/pens.rs` | le sette ricette del pennello con un nome, misura, opacità, fusione; la tavolozza è in `palette.ts` |
 | geometria | `apps/client/src/ink/geometry.ts` | trasformazioni dei campioni, tratto dritto |
 | strumenti | `apps/client/src/ink/tools/` | contratto, registro, penna, evidenziatore, gomma, taglio dei tratti (`split.ts`) |
 | adattatore del browser | `apps/client/src/ink/dom/` | `attachInkInput` |
@@ -83,9 +83,11 @@ Le regole che la sessione garantisce:
 - gli eventi predetti vanno solo all'anteprima, ogni volta al posto dei
   precedenti, e non entrano mai nel tratto;
 - un tratto si conclude alzando il puntatore o chiudendosi al limite dei
-  campioni; ogni altra fine lo annulla per intero, con un motivo
-  (`pointercancel`, perdita della cattura, finestra senza fuoco, pagina
-  nascosta, palmo, secondo dito, richiesta esplicita, distruzione);
+  campioni. La perdita della cattura e la finestra senza fuoco lo chiudono
+  come un rilascio, all'ultimo punto, e il tratto si salva (N6 T20a); un
+  movimento senza il tasto del tratto lo chiude allo stesso modo. Ogni altra
+  fine lo annulla per intero, con un motivo (`pointercancel`, pagina nascosta,
+  palmo, secondo dito, richiesta esplicita, distruzione);
 - una penna con pressione 0 non comincia un tratto, e una penna sospesa non
   disegna;
 - mouse e dito non hanno il canale di pressione, e il pennello la simula;
@@ -101,8 +103,13 @@ Le regole che la sessione garantisce:
 ignorato. La punta della penna disegna; la penna girata (`button` 5) e il
 tasto laterale (`button` 2) fanno anch'essi un tratto, coi ruoli `erase` e
 `barrel`, che `StrokeStart.role` porta a chi disegna. Ogni tratto vive finché
-è premuto il suo bit di `buttons` (1, 32, 2). Il mouse disegna col tasto
-principale.
+è premuto il suo bit di `buttons` (1, 32, 2). Il tasto centrale del mouse
+muove la vista; il principale segue la politica del mouse, che sceglie il
+prodotto (`mouse` nella configurazione, `setMousePolicy` mentre vive): `ink`,
+quella di serie, disegna, `ignore` lo lascia a chi sta sotto, per esempio a
+una lavagna dove il mouse seleziona. Vale dal prossimo appoggio: un tratto
+in corso finisce com'è. Un tipo di puntatore sconosciuto (`""`) segue il
+mouse: un driver che manda la penna così, con `ignore`, non scrive.
 Un dito non disegna mentre una penna tocca lo schermo o è sospesa: è il palmo, e
 un suo tratto già cominciato si annulla quando la penna arriva. Con due dita
 giù il gesto è di navigazione. Altrimenti decide la politica del tocco
@@ -150,6 +157,14 @@ interrotta.
 Dove il browser lo dà, l'adattatore ascolta anche `pointerrawupdate`, che
 arriva prima del `pointermove` del fotogramma: i suoi campioni vanno subito
 alla sessione, e il `pointermove` che segue non ripete quelli già arrivati.
+Di solito il `pointermove` li riporta con lo stesso istante, ma non è promesso:
+con l'orologio finto di Playwright (quello del banco) ogni evento prende
+l'istante del suo invio. La sessione riconosce un doppione solo dall'istante: per questo l'adattatore ricorda i campioni di `pointerrawupdate`
+finché un `pointermove` non li riporta, e scarta il campione del `pointermove`
+che ha gli stessi valori (coordinate del client, pressione, inclinazione,
+rotazione, tasti) di uno di loro, consumandolo. Un campione senza gemello entra
+come sempre; due campioni uguali in istanti diversi di una penna ferma restano
+due.
 L'anteprima resta incrementale (`pf1-live.ts`) e non usa
 `requestAnimationFrame` (DEC-26).
 
@@ -196,6 +211,16 @@ nome nel pennello come `pen=<id>`; una penna che non segue la pressione non la
 simula nemmeno col mouse. La penna dice anche quanto copre e come si fonde
 (`penLook`): l'evidenziatore moltiplica. La forma è in
 [`scene-format-pens.md`](../reference/scene-format-pens.md).
+
+`pens.ts` e `palette.ts` fanno fede. `crates/fub-ink-codec/src/pens.rs` li
+copia in Rust, per chi scrive i tratti senza la GUI: le penne, la tavolozza e
+`pen_brush`, che dà lo stesso pennello di `penBrush` dentro l'intervallo delle
+misure. Lo specchio `apps/client/src/__fixtures__/ink-pens.json` li lega:
+`crates/fub-ink-codec/tests/pens_mirror.rs` lo scrive dal Rust e
+`apps/client/src/ink/pens-mirror.test.ts` vuole le stesse risposte da
+TypeScript. Dopo un cambiamento voluto in `pens.ts`, si cambia `pens.rs` e si
+rigenera lo specchio con
+`UPDATE_MIRROR=1 cargo test -p fub-ink-codec --test pens_mirror`.
 
 La gomma precisa usa `ink/tools/split.ts`: i campioni di un tratto si tagliano
 dove il cerchio della gomma tocca l'inchiostro, e ogni pezzo resta un tratto
@@ -259,15 +284,60 @@ FubDraw è il primo consumatore e non il proprietario.
 - `tools/editor/ink-gestures.ts` (`writeInk`, `eraseAlong`) costruisce il
   tratto con `buildStroke`, lo scrive in un'unica operazione nello storico e fa
   correre la gomma con `EraseSweep` sull'indice della scena.
-- `tools/hit.ts` (`SceneIndex.along`) è la fonte della gomma e non riprova ciò
+- `tools/hit/scene-index.ts` (`SceneIndex.along`) è la fonte della gomma e non riprova ciò
   che `marked` ha già segnato. Da 256 oggetti in su (`TREE_FROM`) prova
   soltanto quelli che l'albero dei riquadri (`tools/box-tree.ts`) dà
   vicini al segmento. L'albero è un R-tree impacchettato una volta per indice,
   alla prima domanda, e dà gli oggetti che il confronto dei riquadri darebbe:
   il risultato è quello della scansione.
 - `tools/edit.ts` (`strokeElem`) scrive nel file l'opacità dello strumento.
+- `tools/editor/toolbar.ts` monta la testa del disegno, dove si sceglie
+  l'inchiostro (colore, spessore, penna, modo della gomma): veste la barra in
+  una fila del kit (`kit-bar`, `kit-bar-group`, `kit-bar-button`), e
+  `tools/editor/input.ts` le dà le frecce di `kit/toolbar-keys.ts`, con un
+  solo punto di Tab dal menu a «Esporta». La colonna degli strumenti veste
+  `kit-rail`.
 
 Restano del prodotto il livello di destinazione, gli id, gli annunci per lo screen reader, il passo di annulla e il formato della scena.
+
+### Gli strumenti sul motore
+
+La selezione (spostare, ridimensionare, ruotare, il riquadro) e le forme
+(rettangolo, ellisse, linea, freccia) passano dal motore del disegno quando
+c'è (`motore/gesti.ts`, opzione `motore` di `createDrawEditor`). L'inchiostro
+non ci passa: la penna, l'evidenziatore e la gomma restano qui, sul percorso
+di sopra, e non chiamano mai l'IPC durante il tratto; la sessione
+(`motore/sessione.ts`) porta alla copia del motore solo ciò che scrivono.
+
+- `gesture-begin.ts` chiede prima `motoreBegin`: se il motore manca (host
+  senza motore, disegno su un foglio PDF, dentro un gruppo isolato) risponde
+  `null` e lo strumento TypeScript fa da sé.
+- I campioni dell'adattatore diventano eventi `down`, `drag`, `up`; a ogni
+  fotogramma, se la richiesta di prima è tornata, parte un'anteprima con gli
+  eventi nuovi. L'esito si disegna coi segni dell'editor: la forma sullo strato
+  sopra la scena, la selezione trasformata come bozza del pittore, il
+  riquadro, le maniglie.
+- Al rilascio parte il `commit`, a pezzi di `MAX_GESTURE_EVENTS` eventi. Le
+  operazioni dell'esito passano tutte per `parseWireOp` e diventano un passo
+  di annulla; se una non vale non si scrive niente, lo si dice e lo si scrive
+  in console. Un rifiuto (`locked`, `hidden`, `empty`…) si dice con le frasi
+  dell'editor.
+- Un gesto annullato (un pizzico, `pointercancel`) manda `cancel` e rimette
+  la selezione; la cattura persa e la finestra che perde il fuoco chiudono il
+  tratto come un rilascio (`up`, N6 T20a). Il doppio clic che entra in un gruppo resta del
+  client.
+- Il motore che si sta ancora aprendo si aspetta fino a 2 s
+  (`ATTESA_APERTURA_MS`); se non arriva, il gesto non scrive niente.
+
+Il test (`motore/gesti.test.ts`) rigioca i vettori dei gesti
+(`__fixtures__/disegno-gesti/`) col motore finto dell'host, che risponde le
+loro operazioni: il testo dopo il gesto è quello del vettore, in un passo.
+
+## La lavagna
+
+La penna sulla lavagna (lo strato, l'asciutto nelle schede, il passo di
+annulla, la gomma, il dito) sta in [L'inchiostro sulla
+lavagna](ink-on-canvas.md).
 
 ## Confini e verifica
 

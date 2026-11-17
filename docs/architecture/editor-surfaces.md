@@ -31,8 +31,8 @@ segnala lo stato di cancellazione pendente; il pannello congela con
 conferma non risolve. Il fan-out continua a raggiungere le superfici congelate:
 una modifica accettata da un altro riquadro resta visibile ma non modificabile.
 
-Ogni `Pane` possiede invece una `EditorSurface`.
-`DocumentSurfaceRegistry` risolve la factory da metadati `format_id` e
+Ogni `Pane` possiede invece una `EditorSurface`, più [quelle da parte](parked-surfaces.md);
+una trasclusione ne ha una [su un tratto](range-surface.md). `DocumentSurfaceRegistry` risolve la factory da metadati `format_id` e
 `source_kind`, applicando override, formato, specie, fallback testuale, viewer
 per byte ed errore. Il registro possiede le istanze e le distrugge quando il
 riquadro o l'owner vengono smontati. Ogni famiglia dichiara anche l'insieme dei
@@ -61,7 +61,7 @@ contratto della superficie vera (`apps/client/src/editors/spatial/lazy.ts`):
 finché `import()` non risolve tiene testo, modalità, sola lettura, fuoco e un
 rimando, e li consegna nell'ordine in cui la shell li avrebbe dati. Un `reveal`
 in attesa risponde di sì; se poi la scena non ci arriva, l'avviso è quello della
-shell. Un caricamento fallito lascia il testo alla sessione. Il campo di testo del disegno è un altro pezzo pigro ([ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)). Un'apertura può chiedere una pagina (un link a `x.pdf#page=3`, `OpenOptions.page`): la riceve il montaggio che l'apertura fa nascere o riporta in primo piano (`SurfaceMountContext.page`, l'`initialPage` del visore del PDF), o `EditorSurface.showPage` se la scheda era già attiva; resta del client, senza IPC.
+shell. Un caricamento fallito lascia il testo alla sessione. Nei disegni la superficie apre anche una sessione del motore (`editors/spatial/motore/sessione.ts`): un'istanza del motore del disegno nell'host, tenuta allineata al testo della `DocumentSession`, che fa girare Selezione, forme e Testo; senza il motore gli strumenti fanno da sé ([il disegno sul motore](disegno.md)). Il campo di testo del disegno è un altro pezzo pigro ([ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)). Un'apertura può chiedere una pagina (un link a `x.pdf#page=3`, `OpenOptions.page`): la riceve il montaggio che l'apertura fa nascere o riporta in primo piano (`SurfaceMountContext.page`, l'`initialPage` del visore del PDF), o `EditorSurface.showPage` se la scheda era già attiva; resta del client, senza IPC.
 
 I comandi `shell.doc.source.open` («Apri come sorgente») e
 `shell.doc.source.close` («Chiudi la vista sorgente») impostano e tolgono la
@@ -70,10 +70,10 @@ accanto») la imposta nel riquadro nuovo di una divisione verso destra, o va al
 riquadro che la mostra già. Aprire e chiudere non sono mai disponibili
 insieme; stanno nella palette e nel menu del riquadro, senza accordo. Il
 cambio passa dalla via del cambio di scheda: il riquadro stacca e distrugge la
-superficie e ne monta un'altra sulla stessa `DocumentSession`, che restituisce
-testo e descrittore senza leggere il disco. Testo sporco, coda di salvataggio
-e bozza restano; la cronologia locale della superficie smontata si perde come
-a ogni cambio di scheda, quella degli altri riquadri no. Il fuoco va sulla
+superficie, senza metterla da parte, e ne monta un'altra sulla stessa
+`DocumentSession`, che restituisce testo e descrittore senza leggere il disco.
+Testo sporco, coda e bozza restano; la cronologia locale della superficie
+smontata si perde, quella degli altri riquadri no. Il fuoco va sulla
 superficie nuova. Se il riquadro ricorda una lettura per la famiglia della
 vista, l'apertura passa alla scrittura che sceglierebbe `Mod-E`, perché chi
 chiede il sorgente vuole il testo; accanto passa alla modalità di ruolo
@@ -122,11 +122,11 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   argomenti; `null` lascia il menu del sistema. Lo dichiarano il Markdown
   (scrittura e Lettura), i documenti di Word, i fogli, la tela, le basi e il
   visualizzatore dei media;
-- `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di
-  Word, i fogli) sopra il menu; il Markdown usa i gruppi della barra di
-  formattazione;
-- `standing`: fin dove si scrive, perché, i posti («Vai» se hanno `run`,
-  dietro `placesAsk`) e le azioni, per il chip di `panels/standing.ts` (rich);
+- `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di Word,
+  i fogli) sopra il menu; il Markdown usa i gruppi della barra di formattazione;
+- `standing`: fin dove si scrive, perché, i posti («Vai» se hanno `run`, dietro
+  `placesAsk`) e le azioni, per il chip di `panels/standing.ts` (rich, disegno). `writes`
+  («Si scrive») lo dice la banda (`standing-open`, `StandingChip.openFrom`);
 - `ownBar` dice che la superficie disegna la sua barra dei comandi (i
   documenti di Word, con la barra multifunzione del kit): la barra di
   formattazione della shell allora non si mostra, mentre la bolla della
@@ -161,7 +161,7 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   (`profiles/markdown/actions.ts`), che la sua keymap condivide; esegue come
   una battuta, con `TextEngine.runCommand`, quindi nella cronologia locale e
   nella sessione. In Lettura o in sola lettura ogni azione è spenta. Ne sono
-  clienti la barra di formattazione (`panels/format-bar.ts`) e `fub.editor.action`;
+  clienti `fub.editor.action` e la barra di formato (`panels/format-bar.ts`, in `kit-bar`);
 - `setSyntaxForms(forms)` riceve le sintassi effettive del documento, cioè
   quelle del provider più gli innesti delle `SyntaxRule` del vault. La tela le
   usa per le card di testo: il canvas dichiara con `fub:embedded-grammar`
@@ -384,7 +384,7 @@ Un editor non scrive un ruolo del tema sull'elemento: sull'elemento vanno i
 valori del file. `.github/scripts/check-inline-theme.mjs` lo controlla in
 `apps/client/src/editors/`, con l'elenco delle righe che lo fanno ancora.
 
-La finestra documento a parte (`apps/client/src/shells/document/`) non ha IPC:
+La finestra documento a parte (`apps/client/src/shells/scrittoio/document/`) non ha IPC:
 riceve dalla finestra principale il profilo di testo che il registro ha risolto
 per il documento (`DocumentWindowRequest.profile`) e lo monta su un
 `TextEngine` nudo, senza completamenti dal vault né slash palette. Un documento

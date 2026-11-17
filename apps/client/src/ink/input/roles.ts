@@ -8,8 +8,11 @@
 // - la punta della penna disegna; la gomma della penna girata fa un tratto
 //   da gomma, e il tasto laterale un tratto che gli strumenti usano come
 //   hanno scelto (radiale, lazo, gomma o niente);
-// - il mouse disegna con il tasto principale e muove la vista con quello
-//   centrale;
+// - il mouse muove la vista con il tasto centrale; con il principale decide
+//   la politica del mouse, che sceglie il prodotto: `ink` (il default)
+//   disegna, `ignore` non fa niente e lascia il tasto a chi c'è sotto (una
+//   lavagna dove il mouse seleziona). Un puntatore di tipo sconosciuto (`""`)
+//   segue il mouse;
 // - un dito non disegna mai mentre una penna tocca lo schermo o è sospesa
 //   sopra la superficie: è il palmo. Quando la penna arriva, le dita già giù
 //   diventano palmo anche loro e un loro tratto si annulla;
@@ -31,9 +34,16 @@ export type StrokeRole = "ink" | "erase" | "barrel";
 /// Che cosa fa un dito quando nessuna penna è vicina.
 export type TouchPolicy = "auto" | "ink" | "navigate";
 
+/// Che cosa fa il tasto principale del mouse: `ink` disegna, `ignore` lascia
+/// il mouse a chi sta sotto. Lo sceglie il prodotto; il tasto centrale muove
+/// la vista con tutte e due.
+export type MousePolicy = "ink" | "ignore";
+
 /// Lo stato della superficie che la decisione guarda.
 export interface RoleContext {
   readonly touch: TouchPolicy;
+  /// Che cosa fa il tasto principale del mouse.
+  readonly mouse: MousePolicy;
   /// Su questa superficie si è vista una penna, anche solo sospesa.
   readonly penSeen: boolean;
   /// Una penna tocca la superficie o è sospesa sopra di lei.
@@ -76,7 +86,9 @@ export function classifyPointer(
       return context.touch;
     default:
       // Il mouse, e un tipo che il motore non sa dire (`""`), che si comporta
-      // come lui: meglio un puntatore che disegna di uno che non fa niente.
-      return event.button === PRIMARY ? "ink" : event.button === MIDDLE ? "navigate" : "ignore";
+      // come lui, politica del mouse compresa: con `ink` meglio un puntatore
+      // che disegna di uno che non fa niente.
+      if (event.button === PRIMARY) return context.mouse;
+      return event.button === MIDDLE ? "navigate" : "ignore";
   }
 }

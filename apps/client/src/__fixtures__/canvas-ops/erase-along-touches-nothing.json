@@ -1,0 +1,134 @@
+{
+  "about": "Un cammino che non tocca nessun tratto non scrive toppe: la lavagna resta com'è.",
+  "before": {
+    "nodes": [
+      {
+        "id": "f1",
+        "type": "file",
+        "file": "schemi/foto.png",
+        "x": 0,
+        "y": 0,
+        "width": 200,
+        "height": 100,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "a",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 400,
+                "height": 200
+              },
+              "ink": "1 s100 cxypt 0,10000,128,0 5000,0,0,8 5000,0,0,8 5000,0,0,8 5000,0,0,8 5000,0,0,8 5000,0,0,8 5000,0,0,8 5000,0,0,8"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": [],
+    "fub:ink": {
+      "v": 1,
+      "strokes": [
+        {
+          "id": "b1",
+          "tool": "pen",
+          "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+          "color": "#0072b2",
+          "anchor": {
+            "kind": "free"
+          },
+          "ink": "1 s100 cxypt 0,30000,128,0 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8"
+        },
+        {
+          "id": "b3",
+          "tool": "pen",
+          "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+          "color": "#0072b2",
+          "anchor": {
+            "kind": "free"
+          },
+          "ink": "1 s100 cxypt 50000,30000,128,0 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8"
+        }
+      ]
+    }
+  },
+  "ops": [
+    {
+      "op": "erase_along",
+      "points": [
+        [
+          300,
+          0
+        ],
+        [
+          300,
+          50
+        ]
+      ],
+      "size": 6
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "f1",
+          "type": "file",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 100,
+          "file": "schemi/foto.png",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "a",
+                "tool": "pen",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 400,
+                  "height": 200
+                },
+                "ink": "1 s100 cxypt 0,10000,128,0 5000,0,0,8 5000,0,0,8 5000,0,0,8 5000,0,0,8 5000,0,0,8 5000,0,0,8 5000,0,0,8 5000,0,0,8"
+              }
+            ]
+          }
+        }
+      ],
+      "fub:ink": {
+        "v": 1,
+        "strokes": [
+          {
+            "id": "b1",
+            "tool": "pen",
+            "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+            "color": "#0072b2",
+            "anchor": {
+              "kind": "free"
+            },
+            "ink": "1 s100 cxypt 0,30000,128,0 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8"
+          },
+          {
+            "id": "b3",
+            "tool": "pen",
+            "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+            "color": "#0072b2",
+            "anchor": {
+              "kind": "free"
+            },
+            "ink": "1 s100 cxypt 50000,30000,128,0 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8"
+          }
+        ]
+      }
+    },
+    "created": []
+  }
+}

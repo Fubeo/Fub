@@ -137,9 +137,11 @@ export function savedTokens(outcome: CommandOutcome): ConnectorId[] {
   return Array.isArray(saved) ? saved.filter((id): id is ConnectorId => id === "notion" || id === "airtable") : [];
 }
 
-/// Un id di job nuovo: lettere, cifre e trattini, come vuole lo staging.
-function newJobId(): string {
-  return `shell-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+/// Un id di job nuovo: lettere, cifre e trattini, come vuole lo staging. È
+/// la chiave di `import.prepare/cancel/commit/rollback`: viene dal generatore
+/// crittografico, non da un orologio e da `Math.random`.
+export function newJobId(): string {
+  return `shell-${crypto.randomUUID()}`;
 }
 
 /// Esegue un comando di transfer e aspetta il suo job. Rifiuta con l'errore

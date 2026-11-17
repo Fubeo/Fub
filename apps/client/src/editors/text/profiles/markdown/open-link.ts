@@ -1,9 +1,7 @@
-// `Alt-Invio`: apre il link sotto il cursore, come `Mod-click` lo apre col mouse.
-//
-// Vale in Live e in Sorgente — la tastiera non ha bisogno della resa — e passa
-// dagli stessi esiti del click in Lettura: un wikilink va a `openWikilink` con
-// pagina, sezione e blocco; un `href` passa da `isAllowedLink`, la policy di
-// Lettura, e poi da `routeHref`: ancora, documento del vault o indirizzo esterno.
+// `Alt-Invio` e i clic sui link del testo che si scrive: la regola del clic
+// (`link-gesture.ts`) applicata alla Scrittura e alla Sorgente. `Alt-Invio`
+// vale in Scrittura e in Sorgente — la tastiera non ha bisogno della resa — ed
+// è la sbirciata.
 
 import { syntaxTree } from "@codemirror/language";
 import { Prec, type EditorState, type Extension } from "@codemirror/state";
@@ -16,6 +14,7 @@ import { decodeDestination, normalizeLabel, routeHref } from "./link-syntax";
 import type { LivePreviewCallbacks } from "./livepreview";
 import { isStrictlyInsideCode } from "./parser";
 import { linkReferences, renderMarkdownState } from "./render";
+import { followPath, followWikilink, textLinkGesture, type PeekLink } from "./link-gesture";
 
 export type LinkAtCursor =
   | { kind: "wikilink"; page: string; heading: string | null; block: string | null }
@@ -103,7 +102,8 @@ function followHref(view: EditorView, href: string, callbacks: LivePreviewCallba
   }
   if (route.kind === "path") {
     if (!callbacks.openPath || route.path === "") return false;
-    callbacks.openPath(route.path);
+    // Come un wikilink: Alt-Invio sbircia il documento.
+    void followPath(callbacks, route.path, "peek");
     return true;
   }
   if (route.kind === "web") openWebLink(href, false);
@@ -111,18 +111,59 @@ function followHref(view: EditorView, href: string, callbacks: LivePreviewCallba
   return true;
 }
 
+/// Il link della Scrittura sotto il puntatore (una decorazione del testo, non
+/// un blocco reso: quelli li apre la resa, `mount.ts`), letto dagli attributi
+/// che la Scrittura gli dà: un wikilink, o un link Markdown verso un documento
+/// del vault.
+function linkUnder(view: EditorView, event: MouseEvent): PeekLink | null {
+  const target = event.target instanceof Element ? event.target : null;
+  const wiki = target?.closest<HTMLElement>(".cm-fub-wikilink[data-wikilink-page]");
+  if (wiki && view.contentDOM.contains(wiki) && !wiki.closest(".cm-markdown-block")) {
+    return {
+      kind: "wiki",
+      page: wiki.dataset.wikilinkPage ?? "",
+      heading: wiki.dataset.wikilinkHeading ?? null,
+      block: wiki.dataset.wikilinkBlock ?? null,
+    };
+  }
+  const link = target?.closest<HTMLElement>(".cm-fub-link[data-fub-href]");
+  if (!link || !view.contentDOM.contains(link) || link.closest(".cm-markdown-block")) return null;
+  const href = link.getAttribute("data-fub-href") ?? "";
+  if (!isAllowedLink(href)) return null;
+  const route = routeHref(href);
+  return route.kind === "path" && route.path !== "" ? { kind: "path", path: route.path } : null;
+}
+
 export function openLinkKeymap(callbacks: LivePreviewCallbacks): Extension {
-  return Prec.high(keymap.of([{
-    key: "Alt-Enter",
-    run(view: EditorView) {
-      const main = view.state.selection.main;
-      const found = linkAt(view.state, main.head);
-      if (!found) return false;
-      if (found.kind === "wikilink") {
-        callbacks.openWikilink(found.page, found.heading, found.block);
+  return [
+    Prec.high(keymap.of([{
+      key: "Alt-Enter",
+      run(view: EditorView) {
+        const main = view.state.selection.main;
+        const found = linkAt(view.state, main.head);
+        if (!found) return false;
+        if (found.kind === "wikilink") {
+          void followWikilink(callbacks, found.page, found.heading, found.block, "peek");
+          return true;
+        }
+        return followHref(view, found.href, callbacks);
+      },
+    }])),
+    // Il `mousedown` e non il `click`: il cursore non deve spostarsi né
+    // aggiungere una seconda selezione (Ctrl col clic, in CodeMirror) sul link
+    // che si sta seguendo.
+    Prec.high(EditorView.domEventHandlers({
+      mousedown(event, view) {
+        const gesture = textLinkGesture(event);
+        if (!gesture) return false;
+        const link = linkUnder(view, event);
+        if (!link) return false;
+        if (link.kind === "path" && !callbacks.openPath) return false;
+        event.preventDefault();
+        if (link.kind === "wiki") void followWikilink(callbacks, link.page, link.heading, link.block, gesture);
+        else void followPath(callbacks, link.path, gesture);
         return true;
-      }
-      return followHref(view, found.href, callbacks);
-    },
-  }]));
+      },
+    })),
+  ];
 }

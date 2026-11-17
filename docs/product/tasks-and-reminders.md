@@ -1,0 +1,293 @@
+# Compiti
+
+Questa pagina risponde a una domanda: quali compiti aperti ci sono nel vault,
+quando scadono e come si spuntano. I compiti sono le righe di Markdown che
+iniziano con `- [ ]`, scritte come le scrive il plugin Tasks di Obsidian, e
+restano nella nota dove stanno.
+
+## Dove si vedono
+
+La vista **Compiti** sta nell'ispettore, la colonna a destra. È una scheda
+come le altre: si apre quando la si chiede, e non si apre da sola. Mostra i
+compiti aperti di **tutte** le note del vault, non solo di quella aperta.
+
+## Come sono raggruppati
+
+Ogni compito cade in uno di quattro gruppi, nell'ordine in cui compaiono:
+
+- **Scaduti**: la scadenza è prima del giorno corrente.
+- **Questa settimana**: la scadenza va dal giorno corrente all'ultimo giorno
+  della settimana.
+- **Più avanti**: la scadenza è dopo la fine di questa settimana.
+- **Senza data**: il compito non ha una scadenza, oppure la data non si legge.
+
+Il giorno corrente e la settimana sono quelli di chi guarda: seguono il fuso
+orario e il primo giorno della settimana della macchina. A mezzanotte del
+proprio fuso il giorno cambia: al disegno successivo il compito del giorno
+prima è in «Scaduti», anche se nessun file è cambiato.
+
+La scadenza è la data scritta dopo l'ultimo `📅` del testo del compito, nel
+formato `AAAA-MM-GG`. Il testo del compito è il primo paragrafo della sua voce,
+righe che lo continuano comprese, senza la sintassi: conta ciò che si legge. Il
+testo dentro un codice o un evidenziato, l'etichetta di un link e un wikilink
+con ciò che mostra (`[[Mario]]` è «Mario», un alias conta per l'alias) contano;
+l'indirizzo di un link, un'immagine, un embed, una formula, le sottovoci e i
+blocchi sotto il primo paragrafo no. Così `📅 [[2026-10-19]]`, la data collegata
+alla nota del giorno, è una scadenza. Una data che non esiste,
+come `2026-02-30`, non sparisce: il compito va in «Senza data» con l'etichetta
+«Data non leggibile». La regola è una sola, in `fub_abi::rules::tasks`, con la
+gemella TypeScript `taskDue` in `apps/client/src/rules/mirrored.ts` legata alla
+stessa fixture: la usano la ricerca (`due:`), la vista, il recinto e la
+pastiglia nel testo. Il corpus del formato Markdown tiene d'accordo le tre
+letture del testo (il modello, la Live e la Lettura) sugli stessi casi.
+
+Nella vista il testo del compito si legge senza la data, che sta sotto in una
+pastiglia accanto al nome della nota: **rossa** quando la scadenza è passata,
+**arancione** quando è vicina, con la stessa regola della pastiglia nel testo
+(vedi sotto).
+
+Un compito annidato in un'altra lista, o dentro una citazione, conta come
+qualunque altro. Un compito già fatto (`- [x]`) non compare.
+
+Un compito ricorrente (`🔁 every week`, e le altre forme del plugin Tasks)
+mostra la sua scadenza, come è scritta nella nota. Quando lo si spunta, la riga fatta resta nella
+nota e la successiva nasce sopra di lei, come fa il plugin Tasks.
+
+## Come si spunta
+
+Il riquadro accanto al testo spunta il compito. La spunta usa lo stesso comando
+di sempre, `note.task.toggle`: cambia il carattere fra le parentesi e nient'altro
+del compito. La vista passa al comando la revisione della nota che ha letto
+(l'argomento `revision`): se la nota non è più quella, il comando risponde con
+un conflitto e non scrive, e la scrittura stessa porta quella revisione, quindi
+una modifica fatta nel frattempo non viene sovrascritta.
+
+Due casi non scrivono niente e lo dicono nella vista:
+
+- **La nota è cambiata sotto la vista.** Se in quella posizione non c'è più lo
+  stesso compito, con lo stesso simbolo e lo stesso testo, o se la nota è
+  cambiata anche altrove dopo che la vista l'ha letta, la vista si ridisegna e
+  chiede di ricontrollare.
+- **La nota è in sola lettura.** Il compito resta com'è.
+
+Il nome della nota d'origine, accanto al compito, apre la nota.
+
+## Limiti
+
+- La vista tiene al più **10.000** compiti aperti e ne disegna al più **300**.
+  Il taglio viene dopo l'ordine dei gruppi: fra i compiti delle note lette
+  tiene i primi, non quelli delle prime note lette. Quando taglia lo scrive
+  sotto la lista. Per restringere si usa la ricerca.
+- A ogni ridisegno la vista legge al più **2.000** note con compiti aperti,
+  nell'ordine dell'indice: oltre, le conta e scrive in cima che i compiti delle
+  altre non ci sono. Su un vault di prova di 5.000 note e 15.000 compiti un
+  ridisegno costa così circa 70 ms invece di 180.
+- La vista legge le note con compiti aperti dall'indice di ricerca. Se il vault
+  non ha un indice attivo, la vista lo dice invece di mostrare un elenco vuoto.
+- Il `⏰` nel testo non ha una pastiglia, e i promemoria passati ad app chiusa
+  non hanno un elenco all'avvio: c'è la notifica (vedi sotto).
+
+## La scadenza nel testo
+
+Nella nota, in Live e in Lettura, il `📅` con la sua data diventa una
+pastiglia: grigia di solito; col compito aperto, **rossa** quando la scadenza
+è passata e **arancione** quando è vicina, cioè del giorno corrente o dei sei
+seguenti (la regola `due_urgency`, con la gemella `dueUrgency`: la stessa della
+pastiglia nella vista e nel recinto). Il contratto delle viste non ha un
+intento «avviso»: la vista dice la scaduta `danger` e la vicina `primary`, e la
+shell veste `primary` d'arancio nelle viste dei compiti. La
+pastiglia mostra la data com'è scritta: il file non cambia. Un compito fatto
+resta grigio. Una data che non si legge (`2026-02-30`, `📅 domani`) ha la
+pastiglia tratteggiata in rosso, e passandoci sopra dice come si scrive. In Live
+la pastiglia resta anche sulla riga del cursore: la data si scrive dentro. Una
+pastiglia non si spezza mai: se la data sta a metà di un codice, di un link o di
+un evidenziato, la pastiglia prende l'elemento intero.
+
+## I promemoria
+
+Un compito aperto suona all'ora scritta dopo `⏰`:
+
+```markdown
+- [ ] Chiamare Mario ⏰ 2026-11-13 09:30 📅 2026-11-14
+- [ ] Pagare l'affitto ⏰ 2026-12-01
+```
+
+La data è `AAAA-MM-GG`, l'ora `HH:MM` dalle `00:00` alle `23:59`; senza ora il
+promemoria suona alle **9:00**. Conta l'ultimo `⏰` del compito. L'ora è quella
+**del muro**, cioè dell'orologio di chi guarda: un promemoria delle 9:30 suona
+alle 9:30 anche dopo un volo in un altro fuso o dopo il cambio dell'ora legale.
+Il file non cambia mai: il `⏰` resta scritto com'è.
+
+- Con l'app aperta arriva una **notifica del sistema** all'ora scritta.
+  Cliccarla apre la nota sulla sezione del compito (il titolo sopra di lui).
+- Ciò che è passato mentre l'app era chiusa **non** arriva come notifica: è il
+  posto dell'elenco dei promemoria passati. Per la stessa ragione un promemoria
+  scritto per un'ora già passata non suona.
+- Quando l'orologio torna indietro (l'ora legale che finisce, un viaggio verso
+  ovest) i promemoria dell'ora ripetuta non suonano due volte. Quando salta
+  avanti (verso est, l'ora legale che inizia) suonano subito quelli del salto.
+- Più di cinque promemoria alla stessa ora diventano quattro notifiche e una
+  che dice quanti altri ce ne sono.
+- Un compito spuntato, un `⏰` cancellato o una nota cestinata non suonano più,
+  dal salvataggio della nota. Un `⏰` con una data che non esiste
+  (`⏰ 2026-02-30`) o un'ora che non si legge (`⏰ 2026-11-13 25:00`) non suona.
+
+Le notifiche hanno un interruttore: **Impostazioni → Componenti → Compiti →
+Può mostrare notifiche del sistema**. Spento, i promemoria restano nella nota e
+non arriva nessuna notifica; riacceso, non arriva la raffica di quelli suonati
+nel frattempo. Se il sistema non mostra notifiche (le ha negate a Fub, o su
+Linux non c'è un servizio di notifiche) l'app lo scrive nel log e va avanti.
+
+L'indice dei promemoria sta in memoria e si ricostruisce dalle note a ogni
+apertura del vault (`crates/fub-features/src/tasks/reminders.rs`); la notifica
+la mostra l'app (`crates/fub-app/src/promemoria.rs`), con `notify-rust`.
+Provato su Linux; macOS e Windows usano la stessa libreria, senza una prova a
+mano.
+
+## Il recinto ```` ```tasks ````
+
+Un recinto di codice con la parola `tasks` mostra, dentro la nota, i compiti
+che rispondono alle sue righe, come il plugin Tasks di Obsidian. Si vede in Live
+(fuori dal cursore) e in Lettura; il testo del recinto resta nel file com'è.
+
+```tasks
+not done
+due before tomorrow
+path includes Progetti
+tag includes #lavoro
+sort by due
+```
+
+Ogni riga restringe la lista (valgono tutte insieme). Le righe capite:
+
+| Riga | Cosa fa |
+| --- | --- |
+| `not done` | tiene i compiti aperti |
+| `done` | tiene i compiti fatti |
+| `due before <data>`, `due after <data>`, `due on <data>`, `due <data>` | tiene i compiti, aperti o fatti, con la scadenza prima, dopo o in quel giorno |
+| `path includes <testo>` | tiene i compiti delle note il cui percorso contiene il testo, letterale e senza badare alle maiuscole |
+| `tag includes <tag>` | tiene i compiti con quel tag, o con un suo figlio (`#lavoro/fub`) |
+| `sort by due`, `sort by path`, con `reverse` in fondo | mette in ordine per scadenza (i compiti senza data in fondo) o per nota |
+| `limit <n>`, `limit to <n> tasks` | tiene i primi `n`, dopo l'ordine |
+
+La data è `AAAA-MM-GG`, oppure `today`, `tomorrow`, `yesterday`. Le righe
+vuote e quelle che iniziano con `#` non contano. Senza una riga sullo stato il
+recinto mostra aperti e fatti, come il plugin. Una riga che Fub non capisce
+(`group by`, `hide`…) non ferma il recinto: è saltata, e il recinto scrive quale
+sopra la lista. Un recinto senza righe che scelgono dei compiti non mostra tutto
+il vault: dice cosa scriverci. Senza un ordine la lista va per scadenza.
+
+Il recinto lo dichiara e lo disegna il componente «Compiti»: una regola di
+sintassi riconosce il recinto (così la resa lo tratta come un blocco e non come
+codice), e la vista `tasks_query` del componente, con le righe del recinto come
+parametro, lo disegna con gli stessi nodi della vista dell'ispettore. Le righe
+diventano una ricerca nell'indice (stato, tag e scadenza), e il componente
+controlla ogni compito trovato contro tutte le righe, percorso compreso. Il
+riquadro accanto a un compito lo spunta come nella vista, con la revisione letta;
+il nome della nota apre la nota. Il recinto si ridisegna quando l'indice cambia,
+come la vista dell'ispettore: una spunta, o un'altra nota che cambia, si vede da
+sola.
+
+Un `path includes` si guarda prima di leggere la nota: una nota fuori dal
+percorso non si legge. Per i compiti fatti l'indice non tiene la scadenza (il
+predicato `task_due` della ricerca vale per le task aperte, e resta così): una
+riga `due` su un recinto che mostra anche i fatti la controlla il componente
+sulle note lette, e a restringere quelle note sono le righe `tag` e `path`.
+
+Il recinto tiene al più **10.000** compiti e ne disegna al più **100**; il
+taglio, come il `limit`, viene dopo l'ordine. Quando il vault ne ha di più lo
+scrive. La vista e il recinto leggono al più **2.000** note per ridisegno, il
+recinto contando solo quelle dentro il suo `path includes`: le altre si
+contano, e la vista lo scrive. Se il componente «Compiti» è spento il recinto non è dichiarato e resta
+un blocco di codice; spegnendolo con la nota aperta, il recinto torna codice, e
+riaccendendolo torna la vista.
+
+La lettura delle righe è in `crates/fub-features/src/tasks/query.rs`, il
+disegno in `crates/fub-features/src/tasks.rs`. Nella shell il recinto riceve il
+posto in `apps/client/src/editors/text/profiles/markdown/query-block.ts`, che
+monta la vista attraverso `apps/client/src/ui/embedded-views.ts`; la pastiglia è
+in `task-due.ts` (con `query-block.ts` per la Lettura e `livepreview.ts` per la
+Live).
+
+## La pagina del giorno
+
+In fondo alla nota del giorno, in Live, dopo l'ultima riga, Fub mostra la
+**pagina del giorno**: tre gruppi che si chiudono con un clic sul titolo.
+
+- **Compiti del giorno** (sulla giornaliera del giorno corrente il titolo lo
+  dice): i compiti aperti che scadono quel giorno, in tutto il vault, col nome
+  della nota accanto.
+- **Stesso giorno**: le note con una proprietà data di quel giorno (anche in
+  una lista di date), con accanto il nome della proprietà.
+- **Create e cambiate**: le note cambiate quel giorno, la più recente in cima,
+  con l'ora. La giornaliera stessa non c'è.
+
+Una riga apre la sua nota. Il giorno è quello del nome della nota, non il giorno
+corrente: la giornaliera di ieri mostra i compiti di ieri. Il giorno di una
+modifica e l'ora seguono il fuso e il formato dell'ora di chi guarda.
+
+La pagina **non è nel file**: non si scrive, non entra in ciò che si copia né
+nell'esportazione, e il cursore non ci entra. È la vista `day_page` del
+componente dei template (`crates/fub-features/src/template/view/day.rs`), che
+legge tutto dall'indice con `query_index`; la shell la monta in fondo alla nota
+con `apps/client/src/editors/text/profiles/markdown/day-page.ts`, attraverso
+`apps/client/src/ui/embedded-views.ts`. Si ridisegna quando l'indice cambia,
+mai a ogni tasto. Una nota è una giornaliera quando il suo percorso, tolta
+l'estensione, è quello che la cartella e il formato delle note del giorno
+scrivono per la sua data: la shell lo riconosce (`dailyDate` in
+`apps/client/src/state/dates.ts`) e il componente lo ricontrolla; una nota che
+non lo è non ha la pagina, e nemmeno una richiesta in più.
+
+Limiti:
+
+- ogni gruppo mostra al più **50** righe e scrive quante ne restano;
+- i compiti si leggono al più da **50** note con compiti di quel giorno, e la
+  pagina scrive quante altre note non ha letto;
+- i compiti vengono dall'indice di ricerca: senza un indice attivo il gruppo lo
+  dice invece di restare vuoto;
+- «Create e cambiate» guarda l'ultima modifica del file: il vault non tiene la
+  data di nascita, e una nota creata e poi ricambiata un altro giorno compare
+  in quel giorno;
+- i compiti nella pagina non si spuntano: la riga apre la nota.
+
+## La Scrivania
+
+La **Scrivania** è una pagina dell'area principale che mette insieme ciò che
+serve per cominciare la giornata. Si apre dallo spazio dei comandi
+(«Scrivania»), dal menu Vista e dal suo bottone nel binario a sinistra. È fatta
+di riquadri:
+
+- **Appuntate**: le note appuntate, nello stesso ordine della barra laterale;
+- **Recenti**: le ultime note cambiate, la più recente in cima;
+- **I compiti del giorno**: i compiti aperti la cui scadenza (`📅`, vedi «La
+  scadenza nel testo») è la data del giorno, con la nota da cui vengono. Li
+  trova la ricerca: con la ricerca spenta il riquadro lo dice, e gli altri
+  funzionano;
+- **Base**: una Base scelta dalla tendina del riquadro, mostrata intera. Se la
+  Base scelta viene spostata o cancellata, il riquadro dice quale era e ne fa
+  scegliere un'altra;
+- **Il mese**: il mese corrente, con le settimane che cominciano dal primo
+  giorno della lingua scelta. Un giorno apre la sua nota del giorno, e la crea
+  se non c'è, come il calendario.
+
+Ogni riquadro si toglie con la sua ×, e torna con i bottoni di «Rimetti:» in
+fondo alla pagina. Un riquadro si sposta trascinandolo per la maniglia (i sei
+punti in testa), oppure con **Ctrl Maiusc ↑** e **Ctrl Maiusc ↓** quando il
+fuoco è nel riquadro; al tocco, dove non si trascina, in testa ci sono le
+frecce su e giù. In una finestra stretta i riquadri stanno in colonna.
+
+L'ordine e i riquadri tolti sono un'impostazione **del vault**
+(`desk.tiles`), e così la Base scelta (`desk.base`): due vault hanno due
+Scrivanie. Si vedono anche nelle impostazioni, nel gruppo «Scrivania».
+
+La pagina è dichiarata da `crates/fub-features/src/dashboard/desk.rs`, con la
+sua prova in `crates/fub-features/tests/dashboard_e2e.rs`; la maniglia, il
+trascinamento e i tasti li disegna la shell in `apps/client/src/ui/desk.ts`.
+
+## Il componente
+
+«Compiti» è un componente di Fub, con la sua riga nella pagina **Componenti**
+delle impostazioni, dove si spegne. Nel codice è la cargo feature `tasks` di
+`fub-features`, che accende la ricerca: la vista e il recinto sono in
+`crates/fub-features/src/tasks.rs`, e la loro prova end-to-end è
+`crates/fub-features/tests/tasks_e2e.rs`.

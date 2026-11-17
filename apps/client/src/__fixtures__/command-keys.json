@@ -14,6 +14,8 @@
   "note.folder_page": null,
   "note.subpage": null,
   "note.task.toggle": null,
+  "note.block.move": null,
+  "note.block.sync": null,
   "settings.set": null,
   "settings.reset": null,
   "settings.export": null,

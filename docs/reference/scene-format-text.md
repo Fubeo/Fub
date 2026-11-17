@@ -9,11 +9,11 @@
 > e `crates/fub-scene/src/classify.rs`, che leggono allo stesso modo; i
 > valori in `scene/values.ts` e `crates/fub-scene/src/values.rs`; la
 > scrittura dei pezzi in `scene/serialize.ts` e l'operazione `text` in
-> `scene/engine.ts`, con i vettori di prova da 46 a 49 e da 60 a 64
+> `scene/engine/`, con i vettori di prova da 46 a 49 e da 60 a 64
 > ([operazioni sulla scena](scene-operations.md), §9); gli a capo che
 > l'editor scrive in `tools/wrap.ts`, con la misura dei caratteri in
 > `tools/measure.ts`; i caratteri in `crates/fub-features/src/draw/fonts.rs`
-> e `typefaces.rs`, con la stessa scelta in `fonts/faces.ts` e i vettori di
+> (con i suoi moduli in `fonts/`) e `typefaces.rs`, con la stessa scelta in `fonts/faces.ts` e i vettori di
 > `apps/client/src/__fixtures__/scene-fonts/choose.json`.
 
 Lo strumento Testo se n'è andato col livello Standard, e il testo in area

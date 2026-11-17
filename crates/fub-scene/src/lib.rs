@@ -19,9 +19,10 @@
 //! scena, e in più il documento annotato, le pagine e le note.
 //!
 //! [`Ink`] e [`InkBrush`] (`pf1` in [`Brush`], `nib1` in [`Nib1Brush`]) sono
-//! il codec di `fub:ink` e la lettura di `fub:brush`
-//! (§5): la scena li usa per dire se un tratto si ridisegna, e chi scrive un
-//! tratto li usa per quantizzarlo. [`rulers`] legge l'unità e le guide del
+//! il codec di `fub:ink` e la lettura di `fub:brush` (§5). Stanno nel crate
+//! `fub-ink-codec`, che li presta anche alla lavagna, e qui si riespongono: la
+//! scena li usa per dire se un tratto si ridisegna, e chi scrive un tratto li
+//! usa per quantizzarlo. [`rulers`] legge l'unità e le guide del
 //! documento (formato della scena, unità e guide).
 //!
 //! Il crate è puro. Non dipende dall'ABI di Fub né dal kernel, non fa I/O e
@@ -32,16 +33,19 @@ use std::fmt;
 
 use serde::Serialize;
 
+// Il codec dei tratti sta in `fub-ink-codec`, perché lo usa anche la lavagna
+// (ADR 0204): qui si riespone, e l'API del crate resta quella di prima.
+use fub_ink_codec::brush;
+pub use fub_ink_codec::ink;
+
 mod accessibility;
 mod analysis;
 mod annotation;
-mod brush;
 mod classify;
 pub mod connectors;
 mod diagnostics;
 pub mod export;
 mod geometry;
-pub mod ink;
 pub mod labels;
 pub mod parametric;
 pub mod repeat;
@@ -62,6 +66,11 @@ pub use classify::{
     Stroke, StyleFacts, StyleKind, Swatch, Tags, Tool, STYLE_GRAPHIC_POINTS,
 };
 pub use diagnostics::{Code, Diagnostic, Severity};
+/// La lettura di un attributo `d` con la grammatica di SVG 2, per chi ne
+/// rifà la geometria fuori da qui (il contorno delle linee a spessore
+/// variabile di `fub-disegno`): un lettore solo, perché due lettori dello
+/// stesso `d` possono divergere.
+pub use geometry::{parse_path, Segment as PathSegment};
 pub use ink::{Ink, InkError, Sample, Scale};
 pub use text::{LineEnding, Span};
 pub use xml::XmlErrorKind;
@@ -82,6 +91,13 @@ pub const SUPPORTED_VERSION: u32 = 1;
 /// La dimensione oltre la quale un file si apre in sola lettura e si
 /// indicizzano solo titolo e riepilogo (§11).
 pub const MAX_EDIT_BYTES: usize = 20 * 1024 * 1024;
+/// Quanti nodi XML (elementi, testi, commenti, istruzioni) può avere un
+/// disegno che si esporta. L'export legge il documento intero, anche oltre
+/// [`MAX_EDIT_BYTES`], e ogni nodo costa memoria oltre ai suoi byte: un file
+/// di elementi vuoti ne chiederebbe molta più di quanto pesa. Venti volte
+/// [`MAX_ELEMENTS`]; oltre, l'export rifiuta con
+/// [`ReadError::TooManyNodes`], mai con un disegno troncato.
+pub const MAX_EXPORT_NODES: usize = 1_000_000;
 /// Quanti elementi può avere un documento modificabile (§11).
 pub const MAX_ELEMENTS: usize = 50_000;
 /// Quanti contenitori modificabili si annidano al massimo sotto la radice: un
@@ -169,6 +185,9 @@ pub enum ReadError {
     /// È XML, ma la radice non è `<svg>` nel namespace SVG: nessun browser lo
     /// disegna come immagine.
     NotSvg { offset: usize },
+    /// Il documento ha più di [`MAX_EXPORT_NODES`] nodi, e l'export non lo
+    /// legge: `offset` è il byte dove comincia il primo di troppo.
+    TooManyNodes { offset: usize },
 }
 
 impl fmt::Display for ReadError {
@@ -180,6 +199,10 @@ impl fmt::Display for ReadError {
             ReadError::NotSvg { offset } => {
                 write!(f, "la radice al byte {offset} non è un elemento svg di SVG")
             }
+            ReadError::TooManyNodes { offset } => write!(
+                f,
+                "il disegno ha più di {MAX_EXPORT_NODES} nodi XML (il primo di troppo al byte {offset})"
+            ),
         }
     }
 }

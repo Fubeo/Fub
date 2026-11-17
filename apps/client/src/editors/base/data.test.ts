@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IndexQuery, IndexResult } from "../../host/contract";
 import {
-  allowedBaseTileUrl, baseRowsToCsv, cellText, deriveBaseRows, expectedProperty, fetchAllDocuments,
-  parseBaseEmbed, parseBaseViews, prepareBaseMutations,
-  persistBaseView, restoreBaseView, type BaseSurfaceDeps,
+  allowedBaseTileUrl, baseRowsToCsv, cellText, deriveBaseRows, expectedProperty, fetchAllDocuments, linkedNotes,
+  parseBaseEmbed, parseBaseViews, planBaseView, prepareBaseMutations,
+  persistBaseView, restoreBaseView, setBaseViewKey, writtenLines, type BaseSurfaceDeps,
 } from "./data";
 
 function deps(queryIndex: (query: IndexQuery) => Promise<IndexResult>): BaseSurfaceDeps {
@@ -24,6 +24,35 @@ describe("Base contract", () => {
     await expect(parseBaseViews(bridge, source)).rejects.toThrow("viste");
     const future = deps(async () => { throw { kind: "bad_args", message: "unsupported version" }; });
     await expect(parseBaseViews(future, "version: 999\n")).rejects.toMatchObject({ kind: "bad_args" });
+  });
+
+  it("reads the calendar and the timeline, and refuses a kind the surface does not draw", async () => {
+    const planOf = (kind: string) => deps(async () => custom({ view: "Agenda", view_type: kind, columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {}, date_key: "due", start_key: "from", end_key: null }));
+    await expect(planBaseView(planOf("gallery"), source, "Agenda")).rejects.toThrow("tipo vista sconosciuto");
+    await expect(planBaseView(planOf("calendar"), source, "Agenda")).resolves.toMatchObject({ viewType: "calendar", dateKey: "due" });
+    await expect(planBaseView(planOf("timeline"), source, "Agenda")).resolves.toMatchObject({ viewType: "timeline", startKey: "from", endKey: null });
+    const drawn = deps(async () => custom({ view: "Board", view_type: "kanban", columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {} }));
+    await expect(planBaseView(drawn, source, "Board")).resolves.toMatchObject({ viewType: "kanban" });
+  });
+
+  it("reads the day of each note in a calendar view, and refuses a malformed one", async () => {
+    const rows = [{ doc: "a.md", properties: [] }, { doc: "b.md", properties: [] }];
+    const answer = (time: unknown[]) => deps(async () => custom({ rows: [{ doc: "a.md", values: {}, time: time[0] }, { doc: "b.md", values: {}, time: time[1] }], summaries: {} }));
+    const derived = await deriveBaseRows(answer([{ day: "2026-11-14" }, { day: null }]), source, "Cal", rows);
+    expect(derived.rows.map((row) => row.day)).toEqual(["2026-11-14", null]);
+    const plain = await deriveBaseRows(answer([undefined, undefined]), source, "Cal", rows);
+    expect(plain.rows[0]).not.toHaveProperty("day");
+    await expect(deriveBaseRows(answer([{ day: "14/11/2026" }, { day: null }]), source, "Cal", rows)).rejects.toThrow("giorno malformato");
+  });
+
+  it("reads the span of each note in a timeline view, and refuses a malformed one", async () => {
+    const rows = [{ doc: "a.md", properties: [] }, { doc: "b.md", properties: [] }];
+    const answer = (time: unknown[]) => deps(async () => custom({ rows: [{ doc: "a.md", values: {}, time: time[0] }, { doc: "b.md", values: {}, time: time[1] }], summaries: {} }));
+    const derived = await deriveBaseRows(answer([{ start: "2026-11-14", end: "2026-11-10", inverted: true }, { start: "2026-11-01", end: null, inverted: false }]), source, "Lin", rows);
+    expect(derived.rows.map((row) => row.span)).toEqual([{ start: "2026-11-14", end: "2026-11-10", inverted: true }, { start: "2026-11-01", end: null, inverted: false }]);
+    expect(derived.rows[0]).not.toHaveProperty("day");
+    await expect(deriveBaseRows(answer([{ start: "2026-11-14", end: null }, undefined]), source, "Lin", rows)).rejects.toThrow("intervallo malformato");
+    await expect(deriveBaseRows(answer([{ start: "ieri", end: null, inverted: false }, undefined]), source, "Lin", rows)).rejects.toThrow("intervallo malformato");
   });
 
   it("consumes every page beyond the former 2,000-row cutoff", async () => {
@@ -118,5 +147,64 @@ describe("Base contract", () => {
     expect(allowedBaseTileUrl(template, "vector", ["tiles.example.test"], 1, 0, 0)).toBeNull();
     expect(allowedBaseTileUrl(template, "raster", ["tiles.example.test"], 1, 0, 0)).toBe("https://tiles.example.test/1/0/0.png");
     expect(allowedBaseTileUrl("https://tiles.example.test/{z}/{x}/{y}.svg", "vector", ["tiles.example.test"], 1, 1, 1)).toBe("https://tiles.example.test/1/1/1.svg");
+  });
+});
+
+describe("i gesti della barra con base.view.set", () => {
+  it("manda una sola chiave, il valore come JSON e la revisione; null toglie la chiave", async () => {
+    const invokeCommand = vi.fn(async () => ({ notify: "Ordine scritto", effect: { kind: "custom", ns: "fub.base", payload: { revision: "r2" } }, undo: { label: "Annulla l'ordine" } }));
+    expect(await setBaseViewKey({ invokeCommand }, "Opere.base", "Tabella", "sort", [{ key: "stato", descending: false }], "r1"))
+      .toEqual({ revision: "r2", notify: "Ordine scritto", undo: { label: "Annulla l'ordine" } });
+    expect(invokeCommand).toHaveBeenLastCalledWith("base.view.set", { doc: "Opere.base", view: "Tabella", key: "sort", value: '[{"key":"stato","descending":false}]', base: "r1" });
+    await setBaseViewKey({ invokeCommand }, "Opere.base", "Tabella", "filters", null, null);
+    expect(invokeCommand).toHaveBeenLastCalledWith("base.view.set", { doc: "Opere.base", view: "Tabella", key: "filters" });
+    // Niente da cambiare: nessuna revisione, nessun «Annulla».
+    invokeCommand.mockResolvedValueOnce({ notify: "Niente da cambiare", effect: { kind: "none" } as never, undo: null as never });
+    expect(await setBaseViewKey({ invokeCommand }, "Opere.base", "Tabella", "filters", null, null)).toEqual({ revision: null, notify: "Niente da cambiare", undo: null });
+  });
+
+  it("«Nel file .base» sono le righe fra quelle uguali in testa e in coda", () => {
+    const before = "views:\n  - name: Tabella\n    type: table\n  - name: Bacheca\n";
+    expect(writtenLines(before, before)).toBeNull();
+    expect(writtenLines(before, before.replace("    type: table\n", "    type: table\n    sort:\n      - key: stato\n"))).toEqual({
+      removed: [], added: ["    sort:", "      - key: stato"], line: 4,
+    });
+    expect(writtenLines("a\nb\nc\n", "a\nB\nc\n")).toEqual({ removed: ["b"], added: ["B"], line: 2 });
+  });
+});
+
+describe("le note legate dei riepiloghi di Relazione (T35)", () => {
+  const wiki = (page: string) => ({ kind: "link", value: { kind: "wiki", value: { page, heading: null, block: null } } });
+  const rows = [
+    { doc: "Letture/2025.md", properties: [{ key: "libri", value: { kind: "list", value: [wiki("Dune"), wiki("Rotto")] } }] },
+    { doc: "Letture/2026.md", properties: [{ key: "libri", value: wiki("Dune") }, { key: "altro", value: wiki("Ubik") }] },
+  ];
+
+  it("risolve ogni pagina una volta, legge le note trovate con le proprietà chieste e lascia fuori i link rotti", async () => {
+    const asked: IndexQuery[] = [];
+    const bridge = deps(async (query) => {
+      asked.push(query);
+      if (query.kind === "resolve") {
+        const page = (query.target as { value: { page: string } }).value.page;
+        return { kind: "resolved", value: page === "Dune" ? { doc: "Libri/Dune.md" } : null } as IndexResult;
+      }
+      return { kind: "documents", value: { offset: 0, total: 1, items: [{ doc: "Libri/Dune.md", properties: [{ key: "pagine", value: { kind: "number", value: 600 } }] }] } } as IndexResult;
+    });
+    const linked = await linkedNotes(bridge, { relations: ["libri"], linkedProps: ["pagine"] }, rows);
+    expect(linked).toEqual([{ target: "Dune", doc: "Libri/Dune.md", props: { pagine: { kind: "number", value: 600 } } }]);
+    expect(asked.filter((query) => query.kind === "resolve")).toHaveLength(2);
+    expect(asked.find((query) => query.kind === "resolve")).toMatchObject({ from: "Letture/2025.md" });
+  });
+
+  it("una vista senza riepiloghi di Relazione non chiede niente", async () => {
+    const queryIndex = vi.fn(async () => custom(null));
+    expect(await linkedNotes(deps(queryIndex), { relations: [], linkedProps: [] }, rows)).toEqual([]);
+    expect(queryIndex).not.toHaveBeenCalled();
+  });
+
+  it("il piano porta le Relazioni e le proprietà legate; un host che non le dice vale come vuote", async () => {
+    const raw = { view: "T", view_type: "table", columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {} };
+    await expect(planBaseView(deps(async () => custom(raw)), source, "T")).resolves.toMatchObject({ relations: [], linkedProps: [] });
+    await expect(planBaseView(deps(async () => custom({ ...raw, relations: ["libri"], linked_props: ["pagine"] })), source, "T")).resolves.toMatchObject({ relations: ["libri"], linkedProps: ["pagine"] });
   });
 });

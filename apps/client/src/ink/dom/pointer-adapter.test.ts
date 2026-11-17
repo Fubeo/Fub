@@ -150,6 +150,76 @@ describe("pipeline della penna", () => {
     expect(delivered(1)).toHaveLength(3);
   });
 
+  /// Un `pointerrawupdate` della penna.
+  function rawUpdate(init: Init): PointerEvent {
+    return pointerEvent("pointerrawupdate", { ...PEN, button: -1, buttons: 1, pressure: 0.5, ...init });
+  }
+
+  /// Un evento con i suoi coalescenti e le sue predizioni, che happy-dom non dà.
+  function withLists(event: PointerEvent, coalesced: PointerEvent[], predicted: PointerEvent[] = []): PointerEvent {
+    Object.defineProperty(event, "getCoalescedEvents", { value: () => coalesced });
+    Object.defineProperty(event, "getPredictedEvents", { value: () => predicted });
+    return event;
+  }
+
+  it("il pointermove che riporta un campione di pointerrawupdate con un altro istante non lo raddoppia", () => {
+    attach();
+    // Come Chromium con l'orologio finto di Playwright (il banco): ogni
+    // campione arriva con pointerrawupdate e torna col pointermove, che ha
+    // l'istante del suo invio, qualche ms dopo.
+    dispatch(down({ ...PEN, clientX: 10, clientY: 20, pressure: 0.4, timeStamp: 100 }));
+    dispatch(rawUpdate({ clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 104 }));
+    dispatch(move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 118 }));
+    dispatch(rawUpdate({ clientX: 16, clientY: 25, pressure: 0.7, timeStamp: 120 }));
+    dispatch(move({ ...PEN, clientX: 16, clientY: 25, pressure: 0.7, timeStamp: 134 }));
+    dispatch(up({ ...PEN, clientX: 16, clientY: 25, timeStamp: 140 }));
+    expect(delivered(1).map((sample) => sample.t)).toEqual([0, 4, 20]);
+    expect(ends()[0]!.samples.map((sample) => [sample.x, sample.y, sample.t])).toEqual([[5, 10, 0], [6, 11, 4], [8, 12.5, 20]]);
+  });
+
+  it("i coalescenti del pointermove che riportano più campioni di pointerrawupdate non entrano; uno senza gemello sì", () => {
+    attach();
+    dispatch(down({ ...PEN, clientX: 10, clientY: 20, pressure: 0.4, timeStamp: 100 }));
+    dispatch(rawUpdate({ clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 104 }));
+    dispatch(rawUpdate({ clientX: 14, clientY: 23, pressure: 0.6, timeStamp: 108 }));
+    const echoes = [
+      move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 116 }),
+      move({ ...PEN, clientX: 14, clientY: 23, pressure: 0.6, timeStamp: 118 }),
+      // Questo pointerrawupdate non è arrivato: il campione è vero e resta.
+      move({ ...PEN, clientX: 20, clientY: 30, pressure: 0.6, timeStamp: 120 }),
+    ];
+    dispatch(withLists(move({ ...PEN, clientX: 20, clientY: 30, pressure: 0.6, timeStamp: 120 }), echoes));
+    expect(delivered(1).map((sample) => [sample.x, sample.t])).toEqual([[5, 0], [6, 4], [7, 8], [10, 20]]);
+  });
+
+  it("una penna ferma: due campioni uguali in istanti diversi restano due, e il pointermove non ne aggiunge", () => {
+    attach();
+    dispatch(down({ ...PEN, clientX: 10, clientY: 20, pressure: 0.4, timeStamp: 100 }));
+    dispatch(rawUpdate({ clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 104 }));
+    dispatch(rawUpdate({ clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 112 }));
+    const echoes = [
+      move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 120 }),
+      move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 126 }),
+    ];
+    const future = [move({ ...PEN, clientX: 14, clientY: 24, pressure: 0.6, timeStamp: 134 })];
+    dispatch(withLists(move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 126 }), echoes, future));
+    expect(delivered(1).map((sample) => sample.t)).toEqual([0, 4, 12]);
+    // La predizione del pointermove arriva lo stesso.
+    expect(latest()).toEqual({ kind: "predicted", id: 1, samples: [{ x: 7, y: 12, p: 0.6, t: 34, a: 90, z: 0 }] });
+    // Un terzo campione uguale, solo nel pointermove, è un campione vero.
+    dispatch(move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 140 }));
+    expect(delivered(1).map((sample) => sample.t)).toEqual([0, 4, 12, 40]);
+  });
+
+  it("il pointermove che riporta i campioni e rilascia il tasto chiude il tratto", () => {
+    attach();
+    dispatch(down({ ...PEN, clientX: 10, clientY: 20, pressure: 0.4, timeStamp: 100 }));
+    dispatch(rawUpdate({ clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 104 }));
+    dispatch(move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, buttons: 0, timeStamp: 118 }));
+    expect(kinds()).toEqual(["start", "samples", "samples", "end"]);
+    expect(ends()[0]!.samples.map((sample) => sample.t)).toEqual([0, 4]);
+  });
+
   it("l'inclinazione vera si conserva in gradi in tutto il tratto", () => {
     attach();
     dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0, altitudeAngle: Math.PI / 4, azimuthAngle: Math.PI }));
@@ -398,24 +468,58 @@ describe("pipeline della penna", () => {
     expect(ends()).toEqual([]);
   });
 
-  it("la cattura persa, la finestra che perde il fuoco e la pagina nascosta annullano il tratto", () => {
+  it("la cattura persa chiude e salva il tratto della penna all'ultimo punto, come un rilascio, una volta sola", () => {
+    const input = attach();
+    dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0 }));
+    dispatch(move({ ...PEN, clientX: 4, clientY: 0, timeStamp: 8 }));
+    dispatch(pointerEvent("lostpointercapture", { ...PEN, clientX: 6, clientY: 0, timeStamp: 10 }));
+    expect(kinds()).toEqual(["start", "samples", "samples", "end"]);
+    // Il tratto finisce all'ultimo campione che la sessione ha avuto: il punto dove la cattura si è persa non entra.
+    expect(ends()[0]!.samples.map(({ x }) => x)).toEqual([0, 2]);
+    expect(input.drawing).toBe(false);
+    // Il puntatore resta giù ma non disegna più finché non si alza.
+    expect(input.roleOf(7)).toBe("ignore");
+    expect(surface.hasPointerCapture(7)).toBe(false);
+    const count = log.length;
+    // Il rilascio che arriva dopo, e una seconda cattura persa, non fanno niente.
+    dispatch(up({ ...PEN, clientX: 9, clientY: 0, timeStamp: 12 }));
+    dispatch(pointerEvent("lostpointercapture", { ...PEN, clientX: 9, clientY: 0, timeStamp: 14 }));
+    expect(log).toHaveLength(count);
+  });
+
+  it("la cattura persa di un puntatore senza tratto non chiude niente", () => {
+    attach();
+    dispatch(pointerEvent("lostpointercapture", { ...MOUSE, timeStamp: 4 }));
+    expect(log).toEqual([]);
+  });
+
+  it("la finestra che perde il fuoco chiude e salva il tratto della penna all'ultimo punto, e il resto si annulla", () => {
+    const input = attach();
+    dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0 }));
+    dispatch(move({ ...PEN, clientX: 4, clientY: 0, timeStamp: 8 }));
+    window.dispatchEvent(new Event("blur"));
+    expect(kinds()).toEqual(["start", "samples", "samples", "end"]);
+    // Il blur non ha un punto nuovo: l'ultimo campione è quello del movimento.
+    expect(ends()[0]!.samples.map(({ x }) => x)).toEqual([0, 2]);
+    expect(input.drawing).toBe(false);
+    const count = log.length;
+    // Un secondo blur, e il rilascio dopo, non fanno niente.
+    window.dispatchEvent(new Event("blur"));
+    dispatch(up({ ...PEN, clientX: 4, clientY: 0, timeStamp: 12 }));
+    expect(log).toHaveLength(count);
+  });
+
+  it("un movimento senza il tasto della penna chiude e salva il tratto, anche se il rilascio non arriva", () => {
+    attach();
+    dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0 }));
+    dispatch(move({ ...PEN, buttons: 0, pressure: 0, clientX: 4, clientY: 0, timeStamp: 8 }));
+    expect(kinds()).toEqual(["start", "samples", "end"]);
+    expect(ends()[0]!.samples.map(({ x }) => x)).toEqual([0]);
+  });
+
+  it("la pagina nascosta annulla il tratto, con o senza cattura persa, e non lo salva", () => {
     const input = attach();
     dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));
-    dispatch(pointerEvent("lostpointercapture", { ...MOUSE, timeStamp: 4 }));
-    expect(latest()).toEqual({ kind: "cancel", id: 1, reason: "lostcapture" });
-    // Il puntatore resta giù ma non disegna più finché non si alza.
-    expect(input.roleOf(1)).toBe("ignore");
-    dispatch(move({ ...MOUSE, clientX: 9, clientY: 9, timeStamp: 8 }));
-    dispatch(up({ ...MOUSE, clientX: 9, clientY: 9, timeStamp: 9 }));
-    expect(ends()).toEqual([]);
-
-    dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 10 }));
-    window.dispatchEvent(new Event("blur"));
-    expect(latest()).toEqual({ kind: "cancel", id: 2, reason: "blur" });
-    expect(input.roleOf(1)).toBeNull();
-    dispatch(up({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 12 }));
-
-    dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 20 }));
     // Visibile: niente da annullare.
     document.dispatchEvent(new Event("visibilitychange"));
     expect(input.drawing).toBe(true);
@@ -425,7 +529,7 @@ describe("pipeline della penna", () => {
     } finally {
       delete (document as { visibilityState?: unknown }).visibilityState;
     }
-    expect(latest()).toEqual({ kind: "cancel", id: 3, reason: "hidden" });
+    expect(latest()).toEqual({ kind: "cancel", id: 1, reason: "hidden" });
     expect(ends()).toEqual([]);
   });
 
@@ -530,6 +634,44 @@ describe("pipeline della penna", () => {
       samples: [{ x: 0, y: 0, t: 0 }, { x: 3, y: 1, t: 8 }, { x: 4, y: 1, t: 10 }],
     });
     for (const sample of ends()[0]!.samples) expect(Object.keys(sample)).toEqual(["x", "y", "t"]);
+  });
+
+  it("con `mouse: \"ignore\"` il mouse non disegna e non si cattura; penna e dito sì", () => {
+    const input = attach({ mouse: "ignore" });
+    dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));
+    expect(input.roleOf(1)).toBe("ignore");
+    dispatch(move({ ...MOUSE, clientX: 6, clientY: 0, timeStamp: 8 }));
+    dispatch(up({ ...MOUSE, clientX: 6, clientY: 0, timeStamp: 16 }));
+    // Un driver che manda la penna come tipo sconosciuto segue il mouse.
+    dispatch(down({ pointerId: 3, pointerType: "", clientX: 0, clientY: 0, timeStamp: 20 }));
+    expect(input.roleOf(3)).toBe("ignore");
+    dispatch(up({ pointerId: 3, pointerType: "", clientX: 0, clientY: 0, timeStamp: 24 }));
+    // Il tasto centrale muove la vista come sempre.
+    dispatch(down({ ...MOUSE, button: 1, buttons: 4, clientX: 0, clientY: 0, timeStamp: 30 }));
+    expect(input.roleOf(1)).toBe("navigate");
+    dispatch(up({ ...MOUSE, button: 1, clientX: 0, clientY: 0, timeStamp: 32 }));
+    expect(log).toEqual([]);
+    dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 40 }));
+    dispatch(up({ ...PEN, clientX: 4, clientY: 0, timeStamp: 50, pressure: 0 }));
+    expect(ends().map((done) => done.pointerType)).toEqual(["pen"]);
+  });
+
+  it("la politica del mouse si cambia mentre la superficie vive, dal prossimo appoggio", () => {
+    const input = attach();
+    dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));
+    input.setMousePolicy("ignore");
+    dispatch(move({ ...MOUSE, clientX: 4, clientY: 0, timeStamp: 8 }));
+    dispatch(up({ ...MOUSE, clientX: 4, clientY: 0, timeStamp: 16 }));
+    // Il tratto cominciato finisce com'è.
+    expect(kinds()).toEqual(["start", "samples", "samples", "end"]);
+    expect(ends()[0]!.samples.map(({ x }) => x)).toEqual([0, 2]);
+    dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 20 }));
+    expect(input.roleOf(1)).toBe("ignore");
+    dispatch(up({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 24 }));
+    input.setMousePolicy("ink");
+    dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 30 }));
+    expect(input.roleOf(1)).toBe("ink");
+    expect(kinds()).toEqual(["start", "samples", "samples", "end", "start", "samples"]);
   });
 
   it("il tasto principale rilasciato con un altro ancora giù chiude il tratto", () => {

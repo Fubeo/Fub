@@ -40,7 +40,7 @@ export function viewerSite(url: string): string | null {
   if (!authority || authority.includes("@") || authority.startsWith("[")) return null;
   const [host, port, ...rest] = authority.split(":");
   if (rest.length > 0 || !host || (port !== undefined && port !== "443")) return null;
-  if (/[\s\\%]/.test(host)) return null;
+  if (/[\s\p{Cc}\\%]/u.test(host)) return null;
   return host.toLowerCase();
 }
 
@@ -60,23 +60,43 @@ export interface WebViewer {
   /// Un link web di una nota: nel visore se la preferenza lo vuole o se lo
   /// chiede l'Alt, altrimenti nel browser di sistema.
   openLink(url: string, viaViewer: boolean): void;
+  /// Una pagina incorporata in una nota (T37): soltanto nel visore, col
+  /// consenso di sempre; mai il browser di sistema.
+  openEmbed(url: string): Promise<EmbedOpening>;
 }
+
+/// Com'è andata l'apertura di una pagina incorporata: aperta, rifiutata dalla
+/// persona alla domanda del consenso, o il visore che non la apre (non https,
+/// finestra assente o guasta: il guasto lo dice già il visore).
+export type EmbedOpening = "opened" | "refused" | "unavailable";
 
 /// Il visore della finestra, finché è montato.
 let declared: WebViewer | null = null;
 
+/// Un indirizzo che il ripiego del browser di sistema può aprire: http(s).
+/// Un disegno o una nota possono portare qualunque schema.
+const webAddress = (url: string): boolean => /^https?:\/\//i.test(url);
+
 /// Apre una pagina nel visore della finestra; senza visore montato, nel
-/// browser di sistema.
+/// browser di sistema, e soltanto se è http(s).
 export function openWebPage(url: string): Promise<boolean> {
   if (declared) return declared.open(url);
+  if (!webAddress(url)) return Promise.resolve(false);
   window.open(url, "_blank", "noopener,noreferrer");
   return Promise.resolve(true);
+}
+
+/// Una pagina incorporata in una nota (T37): la apre soltanto il visore
+/// della finestra. Senza visore montato non si apre niente: il browser di
+/// sistema non è il visore isolato che il segnaposto promette.
+export function openWebEmbed(url: string): Promise<EmbedOpening> {
+  return declared ? declared.openEmbed(url) : Promise.resolve("unavailable");
 }
 
 /// Un link web cliccato in una nota. `viaViewer` è l'Alt del clic.
 export function openWebLink(url: string, viaViewer: boolean): void {
   if (declared) declared.openLink(url, viaViewer);
-  else window.open(url, "_blank", "noopener,noreferrer");
+  else if (webAddress(url)) window.open(url, "_blank", "noopener,noreferrer");
 }
 
 const listOf = (value: SettingValue | undefined): string[] =>
@@ -163,22 +183,42 @@ export function mountWebViewer(life: Lifetime, parent: HTMLElement, ports: WebVi
     return asking;
   }
 
-  async function open(url: string, leaving = false): Promise<boolean> {
-    const site = viewerSite(url);
-    if (!site) {
-      ports.openExternal(url);
-      return false;
-    }
+  /// Il browser di sistema riceve soltanto http(s): `openExternal` non
+  /// guarda lo schema, e un disegno o una nota possono portarne qualunque.
+  function external(url: string): void {
+    if (webAddress(url)) ports.openExternal(url);
+  }
+
+  /// Apre `url` di `site` nel visore, dopo il consenso.
+  async function attempt(url: string, site: string, leaving: boolean): Promise<EmbedOpening> {
     await reread();
-    if (life.closed || !(await consent(site, url, leaving)) || life.closed) return false;
+    if (life.closed) return "unavailable";
+    if (!(await consent(site, url, leaving))) return "refused";
+    if (life.closed) return "unavailable";
     try {
       await api.viewerOpen(url, site, { allowRemote: true, allowlist: sites });
     } catch (error) {
       if (!life.closed) ports.notify(t("document.viewer_unavailable", { reason: errorText(error) }), "guasto");
-      return false;
+      return "unavailable";
     }
     if (!life.closed) showAt(url);
-    return true;
+    return "opened";
+  }
+
+  async function open(url: string, leaving = false): Promise<boolean> {
+    const site = viewerSite(url);
+    if (!site) {
+      external(url);
+      return false;
+    }
+    return (await attempt(url, site, leaving)) === "opened";
+  }
+
+  /// Un embed non ripiega sul browser di sistema: ciò che il visore non apre
+  /// resta chiuso.
+  function openEmbed(url: string): Promise<EmbedOpening> {
+    const site = viewerSite(url);
+    return site ? attempt(url, site, false) : Promise.resolve("unavailable");
   }
 
   async function save(): Promise<void> {
@@ -232,8 +272,9 @@ export function mountWebViewer(life: Lifetime, parent: HTMLElement, ports: WebVi
     open: (url) => open(url),
     openLink: (url, viaViewer) => {
       if ((viaViewer || linksInViewer) && viewerSite(url)) void open(url);
-      else ports.openExternal(url);
+      else external(url);
     },
+    openEmbed,
   };
   declared = viewer;
   life.add(() => {

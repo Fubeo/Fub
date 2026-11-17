@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LiveEvent, LiveShellMessage } from "./host/contract";
 import type { FakeHost, LiveNetwork } from "./host/fake";
 import { mountedTextEditors } from "./editors/text/test-support";
+import { FIRST_IMPORT_MS, waiter } from "./test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -103,20 +104,14 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 2000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(2000);
 
 async function open(doc: string): Promise<void> {
   const { openDocument } = await import("./panels/document");
   await openDocument(doc);
   await settle();
-  await waitFor("il documento si carica", () => document.querySelector(".vector-pending") === null);
+  // Il codice del disegno arriva con un `import()` la prima volta.
+  await waitFor("il documento si carica", () => document.querySelector(".vector-pending") === null, FIRST_IMPORT_MS);
 }
 
 async function offered(id: string): Promise<boolean> {

@@ -203,6 +203,63 @@ Il solo parser precompilato di Mermaid ha un limite di 700.000 byte e non
 può appartenere alle dipendenze statiche degli ingressi applicativi.
 Il controllo misura il codice finale, dopo la riscrittura degli import di
 Vite, e interrompe la build in caso di superamento.
+Il limite non si alza per far passare un chunk: si toglie dal chunk ciò che
+non serve al suo primo uso.
+
+Il ponte dei documenti (`document-bridge`) e il chunk condiviso `search` si
+caricano all'avvio, e dentro hanno solo ciò che serve per aprire e scrivere
+una nota. Le parti che servono a un gesto arrivano con un `import()` dal
+loro modulo d'ingresso, che dà il nome al chunk:
+
+- il riquadro delle formule (`math-editing`) e le frasi dei loro errori
+  (`math-errors`, dopo KaTeX);
+- i campi e il menu delle proprietà (`property-actions`);
+- il menu dei diagrammi (`diagram-menu`), con le tavolozze
+  (`mermaid-styles`, che arrivano anche col primo diagramma da disegnare);
+- la lightbox (`lightbox`);
+- la modifica di un brano incluso (`range-surface`);
+- il visore dei PDF (`pdf-view`);
+- il registratore (`recorder-part`), le slide (`slides`) e la stampa
+  (`print-view`).
+
+Le carica
+[`ui/lazy-part.ts`](../../apps/client/src/ui/lazy-part.ts) (`lazyPart`):
+
+- `warm()` chiede il codice a thread libero (`requestIdleCallback`) appena
+  la superficie che lo userà monta;
+- il puntatore o il fuoco sopra l'elemento lo chiedono prima del gesto;
+- un gesto che arriva prima del codice va in coda e si fa appena il codice
+  arriva, se chi l'ha chiesto c'è ancora;
+- un `import()` che non riesce lo dice con una nota, e il gesto dopo riprova.
+
+Nessuna di queste parti è un chunk che si carica all'avvio: l'elenco di
+quelli che ogni pagina carica sta in `dist/startup-chunks.json`. Le prove che guardano un gesto col codice già lì
+aspettano `loadLazyParts()`; quelle del gesto che arriva prima stanno in
+`ui/lazy-part.test.ts` e in `markdown/math-live-lazy.dom.test.ts`.
+La pelle composta dello Scrittoio entra come testo (`?raw`, chunk
+`theme-skin`), che Vite non minimizza: nella build
+[`build/skin-minify.mjs`](../../apps/client/build/skin-minify.mjs) le toglie
+commenti, rientri e spazi che non contano, lasciando intatte stringhe, escape
+e `url(…)`. Il suo test confronta, sulla pelle vera, l'albero di postcss prima
+e dopo regola per regola e la fa passare dal cancello del tema; in sviluppo e
+al banco la pelle resta quella scritta.
+Rollup non divide un modulo: [`build/skin-split.mjs`](../../apps/client/build/skin-split.mjs)
+taglia la pelle ai confini fra i pezzi di `skin/order.ts` in gruppi di circa
+300 000 byte (`theme-skin`, `theme-skin-2`, …), che il modulo della pelle
+importa staticamente e rimette insieme: al tema arriva, byte per byte, la
+pelle minimizzata intera (la build si ferma se no), all'avvio come prima.
+Niente pelle a pezzi con la sua superficie: cascata, momento delle regole e
+temi d'autore non cambiano, e non c'è lampo senza stile da prevenire.
+Il chunk condiviso della shell (`search`) lascia le discussioni dei commenti
+della Live a `markdown-comments`; la build si ferma se questo fa un ciclo.
+
+L'audit npm della supply chain
+([`npm-audit.mjs`](../../.github/scripts/npm-audit.mjs)) è rosso per ogni
+avviso alto o critico, salvo un'eccezione in
+[`npm-audit-eccezioni.json`](../../.github/npm-audit-eccezioni.json), come
+`ignore` in `deny.toml`. Un'eccezione nomina l'avviso e il pacchetto, dice
+perché e quando scade; vale solo se il pacchetto non entra nell'app
+(`npm ls --omit=dev`), e diventa rossa quando scade o quando non serve più.
 
 Il [guard delle copie npm](../../.github/scripts/check-npm-copies.mjs)
 mantiene uniche le dipendenze che condividono identità applicativa.
@@ -210,81 +267,43 @@ Le eccezioni per i motori privati di Mermaid e gli strumenti Node sono
 limitate alle versioni verificate: una versione diversa o una copia
 aggiuntiva richiede una nuova valutazione, non un override fra major.
 
+## Banchi
+
+Tutti i comandi girano da `apps/client/`; gli script sorgente sono in
+`apps/client/package.json` e in `bench/`:
+
+| Comando | Che cosa misura |
+|---|---|
+| `npm run bench:verify` | le scene del banco visivo contro le baseline Linux |
+| `npm run bench:update` | rigenera le baseline (solo dal runner Linux) |
+| `npm run bench:a11y` | accessibilità della pagina resa (`-- --scene=a,b` per alcune scene, `-- --light=dark` per una luce) |
+| `npm run bench:motion` | le coreografie del moto dello Scrittoio |
+| `npm run bench:lampo` | lo strato d'avvio prima di ogni modulo |
+| `npm run bench:conformita` | gli stili calcolati dell'app contro quelli del prototipo del piano (`-- --light=dark` per una luce, vedi [la conformità al prototipo](visual-bench.md)) |
+| `npm run bench:interaction` | il budget d'interazione (menu, palette, nota) |
+| `npm run bench:ink` | l'inchiostro in TypeScript e in WebAssembly, fianco a fianco |
+| `npm run bench:fidelity` | la fedeltà pixel dei disegni (foglio, PNG, Lettura) |
+| `npm run bench:grid` | i gesti della griglia con mouse e tastiera veri |
+| `npm run bench:graph-scale` | il grafo a 2k/10k nodi: tempi, heap, soak |
+| `npm run bench:large` | i disegni grandi (da 200 a 49 900 elementi) nell'app vera |
+| `npm run bench:webview` | le misure nella WebView vera (vedi [webview-measurements.md](webview-measurements.md)) |
+
+Varianti usate dalle prove di accettazione della Graph View e dei disegni
+grandi:
+
+```bash
+cd apps/client
+npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
+npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
+npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
+npm run bench:large -- --elements 30000   # da 200 a 49 900 elementi, senza soglie
+npm run bench:large -- --cpu 4            # la pagina quattro volte più lenta
+```
+
 ## Visuale e accessibilità
 
-Il banco visuale usa scene deterministiche e baseline del runner Linux. In caso
-di differenza, la CI conserva immagini attuali, diff e foglio di contatto.
-
-Le baseline coprono le scene in
-[`bench/scene.mjs`](../../apps/client/bench/scene.mjs), in luce scura e chiara.
-L'ambiente di riferimento usa Ubuntu, Node 22, Chromium della revisione
-Playwright fissata dal lockfile e i font del runner, inclusi DejaVu Sans Mono.
-Prima di usare un ambiente Ubuntu ricostruito, eseguire il banco sul commit
-di riferimento con le baseline invariate: tutte le scene devono passare.
-Questa prova separa una differenza dell'ambiente da una modifica della UI.
-
-La soglia colore resta `0.01` e una foto passa soltanto con al massimo lo
-`0.1%` di pixel diversi. Una diversa rasterizzazione del sistema non è
-una motivazione per alzare questi limiti.
-
-Un confronto locale fuori da questo ambiente può superare il limite per
-rasterizzazione di testo o canvas pur senza una regressione applicativa. Va
-esaminato il diff; non va promosso a baseline. Un cambiamento intenzionale
-richiede invece revisione del foglio, spiegazione delle scene coinvolte e
-rigenerazione nell'ambiente Ubuntu validato.
-
-Lo strato d'avvio ha quattro scene: `avvio-attesa` (il marchio e la riga del
-vault che si apre), `avvio-lento` («Ci vuole più del solito.», a 10 s),
-`avvio-guasto` (il motivo, col fuoco su Riprova) e `avvio-telefono` (l'attesa
-su `mobile.html`). Il fake del banco ferma l'avvio dalla query: `avvio=attesa`
-trattiene `openVault`, `avvio=guasto` fa cadere `initialVault`. Una scena che
-non arriva a `data-bench="ready"` dichiara la sua condizione d'arrivo
-(`ready`), e il palco ferma la scia (`.avvio-scia`) prima dello scatto.
-
-La guardia del lampo (`npm run bench:lampo`, `-- --port <n> --strictPort` per
-un'altra porta) trattiene il modulo d'ingresso di `index.html` e di
-`mobile.html` e guarda la pagina com'è prima di ogni modulo, in luce scura,
-chiara e con una cache `fub.avvio` chiara su un sistema scuro: il fondo di
-`<html>` è pieno e della luce attesa, `.avvio` copre la finestra (nove punti
-cadono dentro di lui), `#app` è `inert` e nessun bottone dell'app si vede con
-l'aspetto nativo. Poi rilascia il modulo e, ad avvio finito, verifica che non
-restino `.avvio`, `#avvio-stile`, `data-avvio-*` né `--avvio-*` e che `#app`
-sia vivo. Esce diverso da zero nominando la pagina, il caso e il controllo
-caduto: senza il foglio dello strato in una pagina cade. In CI gira nel job
-del banco visivo, dopo le scene.
-
-Il banco del moto (`npm run bench:motion`) misura le coreografie dello
-Scrittoio nel browser: lo stato d'arrivo coincide con quello a moto ridotto,
-non resta nessuna animazione viva, i fotogrammi chiave toccano soltanto
-`transform` e `opacity`, un gesto invertito a metà torna allo stato di
-partenza senza salti (ogni riquadro in corsa prosegue da dov'era, lui o la
-sua immagine che esce, e il referto dice com'era e com'è il riquadro che
-salta), e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
-finisce entro 140 ms. Ogni file della shell e del kit che fa partire una corsa
-ha la sua coreografia. Anche il budget d'interazione (`npm run bench:interaction`) apre
-la pagina col movimento acceso e l'ora vera: misura in quanti millisecondi un
-menu, la palette e una nota arrivano al primo fotogramma e alla fine del moto,
-contro i budget del [budget prestazionale](../product/performance-budget.md#il-budget-dinterazione).
-Nessuno dei due vede la webview del sistema: per quella c'è la [prova manuale
-del moto](motion-smoke-test.md).
-
-L'accessibilità verifica la pagina resa, non soltanto una tabella teorica di
-colori. La carta dei fogli è uno pseudo-elemento, che axe non sa leggere dietro
-il testo: per la sola misura, a scena ferma, il banco la porta sui fratelli che
-le stanno sopra, col suo colore, e il contrasto del testo sul foglio diventa un
-esito invece di un «da verificare».
-Il catalogo contiene i campioni posizionati dentro i rispettivi riquadri;
-le regioni che scorrono hanno nome accessibile e ingresso da tastiera.
-Il controllo del focus distingue i discendenti di un `details` chiuso
-dagli elementi realmente visibili e raggiungibili.
-
-Regole:
-
-- controllare luce chiara e scura;
-- non aggiornare baseline da un ambiente non validato sul riferimento;
-- spiegare ogni cambiamento intenzionale;
-- usare moto ridotto nelle scene pertinenti;
-- non mascherare una regressione alzando la soglia.
+Scene, baseline, soglie, palco e banco dell'accessibilità stanno in
+[banco visivo e accessibilità](visual-bench.md).
 
 ## Runtime WASM
 
@@ -309,7 +328,7 @@ I guard documentali controllano:
 - raggiungibilità delle pagine;
 - dimensioni;
 - struttura Markdown;
-- blocchi Mermaid;
+- blocchi Mermaid, resi in Chromium con la sandbox accesa;
 - tabelle;
 - riferimenti legacy e cronaca vietata;
 - allineamento del ciclo locale.
@@ -321,19 +340,97 @@ attributi sopra il doc, niente intestazioni di sezione spezzate. Gli attributi
 stanno fra il doc e l'item: uno sopra il doc passa all'item di un altro doc
 appena qualcuno inserisce un item nel mezzo.
 
+## La CI in breve
+
+- Una PR **bozza** riceve la CI corta: solo Linux, senza banchi. Pronta per
+  la revisione gira la CI completa, Windows compreso; su `main` gira sempre
+  tutto.
+- macOS e iOS sono in pausa
+  ([ADR 0245](../decisions/0245-macos-e-ios-in-pausa.md)): nessuna PR li
+  aspetta. [`macos-in-pausa.yml`](../../.github/workflows/macos-in-pausa.yml)
+  prova ogni domenica (e a mano) i test del workspace su macOS e la
+  compilazione di `fub-app` per iOS; non è un controllo richiesto, e un job
+  rosso si corregge con una PR normale.
+- I test del workspace girano con `cargo nextest run --workspace --profile ci`
+  più `cargo test --workspace --doc`; i fuzzer del Markdown girano a 2000 casi
+  (20000 nella corsa settimanale e con `fuzz_completo`). Su Windows si
+  dividono in tre job, `build + test (windows-latest, 1/3)` e seguenti: ognuno
+  compila tutto e fa girare un terzo dei test (`--partition hash:<parte>/3`),
+  e i doctest girano nella prima parte. Il numero delle parti sta in
+  `PARTI_WINDOWS` di
+  [`baseline-dal-runner.mjs`](../../.github/scripts/baseline-dal-runner.mjs),
+  che la sua autoprova confronta con la matrice.
+- I test dei workspace in `vendor/` (WordCraft, GridCraft, VectorCraft) sono
+  un job loro, `motori in vendor`: su una PR girano solo se tocca `vendor/`,
+  `.cargo/`, una `rust-toolchain` o `ci.yml`, perché leggono soltanto quelli;
+  su `main` sempre. I test del workspace non hanno un filtro così: leggono
+  anche `apps/client/` e `docs/`.
+- La WebView vera gira in due job: R1 (la memoria) da sola, e gli altri
+  scenari insieme.
+- La cache Rust salva solo da `main` (budget di 10 GB); i job che possono
+  riutilizzarla leggono la test cache di Linux con `shared-key: test` e non la
+  risalvano.
+- Il job supply chain scrive la SBOM Rust con `.github/scripts/sbom.mjs`, da
+  `cargo metadata`, e fallisce se non corrisponde a `Cargo.lock`.
+- `motori-provenienza.yml` riscarica ogni copia di `vendor/` ogni settimana e
+  sulle PR che toccano `vendor/` o `tools/vendor-craft/`, con strumento e
+  upstream della base: i motori di `motori.mjs` (`vendor.mjs verify-upstream`)
+  e i dati di `dati.mjs` (`provenienza.mjs verify-upstream`, sha256 dell'URL
+  contro il checkout); una cartella non dichiarata è rossa.
+- Il gate di release è `.github/scripts/check-release-gate.mjs`: aggiungere o
+  rinominare un job richiede di aggiornarlo.
+- Un push fa girare la CI solo su `main`; una PR la fa girare a ogni push, e un
+  push più recente annulla la corsa precedente.
+- Un test noto come instabile ha un'issue aperta: rilancia una volta i job
+  falliti; se un job resta rosso, indaga prima di dirlo instabile.
+- Per leggere una corsa: `gh run view <corsa> --json jobs`; il log di un job:
+  `gh api repos/Fubeo/Fub/actions/jobs/<job>/logs`; un artefatto:
+  `gh api repos/Fubeo/Fub/actions/artifacts/<id>/zip`, perché `gh run
+  download` ne rifiuta alcuni.
+
+### Le baseline dal runner
+
+Quando la CI di una PR pronta cade **soltanto** sul banco visivo,
+[`baseline.yml`](../../.github/workflows/baseline.yml) committa sul ramo, come
+`github-actions[bot]`, le foto del runner nuove e cambiate (mai cancellazioni),
+poi rilancia `npm-supply-chain.yml` e `ci.yml` con `riuso_di=<corsa>` (senza,
+se il ramo è partito prima di questo input). Non agisce su un fork, sul ramo
+predefinito, se il ramo è andato avanti o se la PR ha l'etichetta
+`baseline-a-mano`; non esegue codice della PR e convalida l'artefatto prima di
+scrivere un file. Le regole e le loro prove stanno in
+[`baseline-dal-runner.mjs`](../../.github/scripts/baseline-dal-runner.mjs).
+
+Nella corsa rilanciata il job `cosa cambia` decide il **riuso**: se il commit
+ha per unico genitore la testa della corsa `riuso_di`, cambia solo
+`apps/client/bench/baseline/*.png` e in quella corsa ogni job tranne il banco
+visivo era verde o saltato, con i test su Linux e Windows, gli altri job si
+saltano e contano come in quella corsa; gira soltanto il banco visivo. Il
+riepilogo della corsa dice quali job riusa, o perché gira tutto. Il riuso non
+vale per il cancello del rilascio, che vuole ogni job verde.
+
+Il banco visivo della corsa rilanciata fotografa la testa del ramo, non il
+merge di prova con `main`: se `main` nel frattempo ha cambiato la grafica può
+cadere, e le baseline si sistemano a mano. Le foto del commit del bot si
+guardano comunque, nel foglio di contatto dell'artefatto, prima di unire.
+
 ## Matrice per modifica
 
 | Modifica | Test necessari |
 |---|---|
 | helper puro | unit test |
 | provider | unit test e `MemoryHost` |
-| mount o sessione | integrazione `fub-testkit` |
+| kernel, mount o sessione | test del crate e integrazione `fub-testkit` |
 | storage | integrazione, corruzione e interruzione |
 | IPC | mirror, fixture e test shell |
 | UI | Vitest, type-check, build, accessibilità |
+| menu o voci di un menu | `src/ui/menu-budget.test.ts` (nove voci e quattro gruppi al primo livello, niente tasti per muoversi scritti nel menu) |
+| azioni di un blocco, maniglia, barra di formato, pulsanti sul foglio | `src/editors/text/profiles/markdown/three-doors.test.ts` (le stesse azioni da ogni porta, nessun pulsante a riposo) |
 | resa | banco visuale |
+| grafica portata da un prototipo | i pezzi nella mappa di `bench/conformita/` e `npm run bench:conformita` verde |
 | WIT | conformità, additività e componente reale |
+| runtime WASM | componente reale, casi positivi e negativi di limiti e ciclo di vita |
 | docs | tutti i guard documentali |
+| trasversale | il ciclo Rust e frontend pertinente e i guard di `CONTRIBUTING.md` |
 
 ## Qualità della prova
 

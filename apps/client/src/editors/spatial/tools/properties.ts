@@ -80,7 +80,7 @@ export type ChoiceId = "dash" | "preset" | "family" | "weight" | "pagePreset" | 
 /// I campi a menu: le punte delle linee, all'inizio e alla fine.
 export type MenuId = "tipStart" | "tipEnd";
 export type SwitchId = "grid" | "snap" | "bar";
-export type FieldId = NumberId | PaintId | ChoiceId | MenuId | SwitchId | "ratio" | "emphasis" | "anchor" | "pageOrientation" | "desc";
+export type FieldId = NumberId | PaintId | ChoiceId | MenuId | SwitchId | "ratio" | "emphasis" | "anchor" | "pageOrientation" | "desc" | "content";
 
 export type ActionId =
   | "align-left"
@@ -305,6 +305,10 @@ export interface Properties {
   focus(): void;
   /// Apre la sezione `id` e le dà il fuoco. Falso se la sezione non c'è.
   focusSection(id: SectionId): boolean;
+  /// Apre la sezione del campo `id` e dà il fuoco al campo, col suo testo
+  /// scelto se si scrive: chi scrive lo sostituisce. Falso se il campo non
+  /// c'è.
+  focusField(id: FieldId): boolean;
   /// Chiude le sezioni `ids` e apre le altre, come le ricorda l'editor,
   /// senza dirglielo.
   setClosed(ids: readonly SectionId[]): void;
@@ -339,6 +343,8 @@ const SPECS: readonly Spec[] = [
   { id: "dash", kind: "choice", section: "stroke", column: "all" },
   { id: "tipStart", kind: "menu", section: "stroke", column: "all" },
   { id: "tipEnd", kind: "menu", section: "stroke", column: "all" },
+  // Le parole di un testo libero, prima del suo aspetto.
+  { id: "content", kind: "text", section: "text", column: "all" },
   { id: "preset", kind: "choice", section: "text", column: "all" },
   { id: "family", kind: "choice", section: "text", column: "all" },
   { id: "size", kind: "number", section: "text", column: "1" },
@@ -1696,6 +1702,16 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       setOpen(section, true);
       section.root.scrollIntoView?.({ block: "nearest" });
       (firstIn(section) ?? section.toggle).focus({ preventScroll: true });
+      return true;
+    },
+    focusField(id) {
+      const line = lines.get(id);
+      const section = line === undefined ? undefined : sections.get(line.spec.section);
+      if (line === undefined || section === undefined || section.root.hidden || line.root.hidden) return false;
+      setOpen(section, true);
+      line.root.scrollIntoView?.({ block: "nearest" });
+      line.control.focus({ preventScroll: true });
+      if (line.control instanceof HTMLTextAreaElement || line.control instanceof HTMLInputElement) line.control.select();
       return true;
     },
     setClosed(ids) {

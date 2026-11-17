@@ -132,12 +132,13 @@ impl PreparedIndexQuery {
         mut self,
         core: &dyn plan::QueryCore,
         query: IndexQuery,
-    ) -> Result<CompletedIndexQuery, PluginError> {
+    ) -> Result<CompletedIndexQuery, plan::QueryFailure> {
         let outcome = plan::run_detached(&self, core, query);
         let providers = std::mem::take(&mut self.providers);
         let released = release_handles(providers);
         match (outcome, released) {
-            (_, Err(error)) | (Err(error), Ok(())) => Err(error),
+            (_, Err(error)) => Err(plan::QueryFailure { owner: None, error }),
+            (Err(failure), Ok(())) => Err(failure),
             (Ok(result), Ok(())) => Ok(CompletedIndexQuery {
                 result,
                 routing_generation: self.routing_generation,
@@ -444,7 +445,7 @@ impl Indexes {
     }
 
     /// Interroga: il **percorso unico** di dispatch (vedi [`plan`]).
-    pub(crate) fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
+    pub(crate) fn query(&self, query: IndexQuery) -> Result<IndexResult, plan::QueryFailure> {
         plan::run(self, query)
     }
 

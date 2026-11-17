@@ -62,6 +62,7 @@ use fub_abi::{
 use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
 use fub_kernel::host::authorize_path;
 use fub_kernel::os_trash::{FallbackReason, OsTrashBackend, OsTrashReceipt, TrashVia};
+use fub_kernel::same_content::SameContent;
 use fub_kernel::{
     Capability, Guard, JournalRead, MachineSettings, MountRegistry, MountRoute, ReadOnly,
     Subscription, SystemLocale, ViewStates, Workspace,
@@ -1123,6 +1124,10 @@ pub struct Host {
     /// forma di `Custodia::denuncia` serve a chi deve rispondere a ogni
     /// chiamata, non a chi risponde alla prima.
     session_notice: Mutex<Option<String>>,
+    /// Gli altri avvisi nati prima della shell, in coda dopo la diagnosi del
+    /// log: oggi il percorso di disegno della webview che `fub_app::run`
+    /// sceglie prima di GTK. Stessa forma di consegna, un tiraggio per volta.
+    startup_notices: Mutex<std::collections::VecDeque<Notice>>,
     /// I `fub://` che il sistema ha consegnato e la shell non ha ancora
     /// preso: la coda è della macchina, come l'app che li riceve.
     uris: crate::uri_inbox::UriInbox,
@@ -1169,6 +1174,9 @@ pub struct Host {
     /// della stessa radice in questo host condividono lo stesso lease invece
     /// di escludersi a vicenda.
     writers: Mutex<BTreeMap<Utf8PathBuf, std::sync::Weak<VaultWriterLock>>>,
+    /// **I disegni aperti nel motore del disegno**, per vault
+    /// ([`crate::drawing`]): la chiusura di un vault chiude i suoi.
+    pub(crate) drawings: crate::drawing::Drawings,
 }
 
 impl Default for Host {
@@ -1265,6 +1273,7 @@ impl Host {
             format_source: None,
             startup_source: None,
             session_notice: Mutex::new(None),
+            startup_notices: Mutex::new(std::collections::VecDeque::new()),
             uris: Default::default(),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
@@ -1274,6 +1283,7 @@ impl Host {
             system_locale: Arc::new(SystemLocale::default()),
             levels: Arc::new(fub_kernel::log::Levels::default()),
             writers: Mutex::new(BTreeMap::new()),
+            drawings: crate::drawing::Drawings::default(),
         }
     }
 
@@ -1555,6 +1565,19 @@ impl Host {
             .session_notice
             .lock()
             .unwrap_or_else(|and| and.into_inner()) = warning;
+        self
+    }
+
+    /// Mette in coda un avviso nato prima della shell, dopo la diagnosi del
+    /// log: [`Self::session_notice`] li consegna uno per chiamata, nell'ordine.
+    /// Lo chiama `fub_app::run` con l'esito del percorso di disegno
+    /// (`disegno.rs`), che esiste prima di GTK e quindi prima di ogni
+    /// ascoltatore.
+    pub fn with_startup_notice(self, notice: Notice) -> Self {
+        self.startup_notices
+            .lock()
+            .unwrap_or_else(|and| and.into_inner())
+            .push_back(notice);
         self
     }
 
@@ -3064,6 +3087,36 @@ impl Host {
         query_workspace(&self.session_workspace(vault)?, query)
     }
 
+    /// Il `Guard` di un componente concede questa famiglia, **adesso**?
+    ///
+    /// È per chi agisce a nome di un componente fuori dal kernel, con una
+    /// capacità che nessun metodo dell'host esercita: il notificatore dei
+    /// promemoria dell'app, che mostra una notifica a nome di `fub.tasks` solo
+    /// se il permesso `fub:notifications` è dichiarato e non spento. La politica
+    /// si legge a ogni chiamata, come la legge il cancello: un interruttore
+    /// spento vale dalla notifica dopo. Un componente spento o sconosciuto
+    /// non è dichiarato, e la risposta è no.
+    pub fn component_allows(
+        &self,
+        vault: Option<&str>,
+        component: &str,
+        capability: Capability,
+    ) -> Result<bool, PluginError> {
+        let workspace = self.session_workspace(vault)?;
+        let ws = workspace.read()?;
+        Ok(fub_kernel::Policy::denies(&ws.granted_policy(component), capability).is_none())
+    }
+
+    /// L'orologio e il locale del vault, dalla stessa fotografia: i
+    /// millisecondi UTC e la lingua e il fuso con cui li legge chi guarda.
+    /// Sono quelli che l'`HostEnv` dà ai componenti, così l'ora del muro del
+    /// notificatore è la stessa che leggerebbe un provider.
+    pub fn vault_clock(&self, vault: Option<&str>) -> Result<(u64, fub_abi::Locale), PluginError> {
+        let workspace = self.session_workspace(vault)?;
+        let ws = workspace.read()?;
+        Ok((ws.now_unix_millis(), ws.locale()))
+    }
+
     /// Questa scrittura riguarda una chiave che **un vault non le serve**, e
     /// vault aperti non ce ne sono?
     ///
@@ -3112,12 +3165,22 @@ impl Host {
     /// consuma una volta. L'origine è `Kernel` (0012): la diagnosi non è di
     /// nessun altro — non l'ha chiesta la persona e non l'ha prodotta un
     /// plugin.
+    ///
+    /// Dopo la diagnosi vengono gli avvisi di [`Self::with_startup_notice`],
+    /// uno per chiamata: la shell tira finché la risposta è `None`.
     pub fn session_notice(&self) -> Option<Notice> {
         let warning = self
             .session_notice
             .lock()
             .unwrap_or_else(|and| and.into_inner())
-            .take()?;
+            .take();
+        let Some(warning) = warning else {
+            return self
+                .startup_notices
+                .lock()
+                .unwrap_or_else(|and| and.into_inner())
+                .pop_front();
+        };
         Some(Notice::new(
             fub_abi::Event::Trouble {
                 severity: fub_abi::event::Severity::Warning,
@@ -3169,9 +3232,11 @@ impl Host {
     /// decidere se una domanda si può servire senza vault.
     /// Un `fub://` che il sistema ha consegnato all'app: resta in coda finché
     /// la shell non lo prende con `uri.pending`, anche se arriva prima che
-    /// la shell esista. `false` se la coda è piena e l'URI resta fuori.
+    /// la shell esista. `false` se la coda è piena e l'URI resta fuori. Un
+    /// nuovo tentativo di una cattura già in coda o già scritta (stesso
+    /// `nonce`) non si accoda di nuovo, e non è un rifiuto: dà `true`.
     pub fn receive_uri(&self, raw: &str) -> bool {
-        self.uris.push(raw)
+        self.uris.push(raw) != crate::uri_inbox::Received::Refused
     }
 
     pub fn has_current_vault(&self) -> bool {
@@ -3239,6 +3304,9 @@ impl Host {
                 SessionSlot::Applying(_) => return Err(applying_conflict(&root)),
             }
         };
+        // I disegni del vault cadono con lui, fuori dal lock delle sessioni;
+        // un gesto in corso tiene il suo finché non finisce.
+        self.drawings.forget_vault(&session.root);
         // Il claim conserva il marker, ma non la guardia della mappa: watcher,
         // runner e provider terminano tutti fuori dal lock delle sessioni.
         Ok(CloseClaim {
@@ -3296,6 +3364,7 @@ impl Host {
                 session: Some(session),
             })
             .collect();
+        self.drawings.forget_all();
         // Costruire prima tutti i claim è parte della garanzia di unwind: se
         // una chiusura panica, gli elementi non ancora visitati vengono
         // comunque lasciati cadere e ritirano ciascuno il proprio marker.
@@ -3967,6 +4036,80 @@ impl Host {
     ) -> Result<Revision, PluginError> {
         let workspace = self.with_session(vault, |session| session.workspace.clone())?;
         Self::write_bytes_in(&workspace, id, bytes, expected)
+    }
+
+    /// Cerca fra i file del vault (`None`: il vault corrente) quello che ha
+    /// questi byte e lo stesso tipo di `target`, il nome che si vorrebbe
+    /// scrivere, anche con un altro nome: vedi [`SameContent`].
+    ///
+    /// Il vault si risolve **una volta**: la domanda e le impronte imparate
+    /// rispondendo vanno alla stessa custodia anche se nel frattempo il vault
+    /// corrente cambia. I candidati vengono dall'indice vivo, presi sotto la
+    /// custodia per un attimo; il confronto si fa fuori da essa, sui byte già
+    /// in memoria. Nessuna chiamata a un provider col lucchetto preso, e
+    /// nessuna scrittura di `entries.json` fuori dall'anagrafe.
+    ///
+    /// Un «non so» per budget finito ([`UnknownReason::BudgetExhausted`]) non è
+    /// stabile come gli altri: le impronte che quel giro ha imparato rendono il
+    /// giro dopo più economico, e il giro dopo può arrivare a un candidato che
+    /// il primo non ha letto. Allora, e solo se il primo giro ha davvero
+    /// insegnato qualcosa all'indice, si fa **un** secondo giro, qui dentro:
+    /// chi chiede fa sempre una domanda sola, e nessuna per nome occupato.
+    ///
+    /// [`UnknownReason::BudgetExhausted`]: fub_kernel::same_content::UnknownReason::BudgetExhausted
+    pub fn same_content(
+        &self,
+        vault: Option<&str>,
+        target: &DocId,
+        bytes: &[u8],
+    ) -> Result<SameContent, PluginError> {
+        let workspace = self.session_workspace(vault)?;
+        let (answer, kept) = Self::same_content_round(&workspace, target, bytes)?;
+        let exhausted = matches!(
+            answer,
+            SameContent::Unknown {
+                reason: fub_kernel::same_content::UnknownReason::BudgetExhausted
+            }
+        );
+        if exhausted && kept > 0 {
+            return Ok(Self::same_content_round(&workspace, target, bytes)?.0);
+        }
+        Ok(answer)
+    }
+
+    /// Un giro della domanda di [`same_content`](Self::same_content): la
+    /// risposta, e quante impronte imparate l'indice ha tenuto.
+    ///
+    /// Le impronte tornano all'indice con [`Custody::write`], che **prende il
+    /// turno di scrittura** prima del lucchetto (la presa lo porta con sé fino
+    /// al rilascio): se un altro writer ha il turno aperto attraverso il codice
+    /// di un provider (decisione 0120), la consegna aspetta che lo chiuda e non
+    /// entra a metà del suo lavoro. Non si drenano eventi: imparare
+    /// un'impronta non ne produce, e l'indice non ha un lucchetto suo fuori dal
+    /// workspace. L'indice le ricontrolla contro l'anagrafe; un'impronta che
+    /// non si riesce a riportare costa solo una rilettura la prossima volta.
+    fn same_content_round(
+        workspace: &Custody<Workspace>,
+        target: &DocId,
+        bytes: &[u8],
+    ) -> Result<(SameContent, usize), PluginError> {
+        let prepared = workspace
+            .read()?
+            .prepare_same_content(target, bytes.len() as u64);
+        let fub_kernel::same_content::SameContentOutcome { answer, learned } =
+            prepared.invoke(bytes);
+        let mut kept = 0;
+        if !learned.is_empty() {
+            match workspace.write() {
+                Ok(mut workspace) => {
+                    kept = workspace.learn_fingerprints(learned);
+                }
+                Err(and) => {
+                    tracing::warn!(target: "fub.host", "impronte non riportate nell'indice: {and}");
+                }
+            }
+        }
+        Ok((answer, kept))
     }
 
     /// Scrive la proiezione `source` di un documento di videoscrittura.
@@ -5010,8 +5153,18 @@ impl crate::resources::ResourceWrite for Host {
         id: &DocId,
         bytes: &[u8],
         expected: Option<Revision>,
+        reuse: crate::resources::ResourceReuse,
     ) -> Result<crate::resources::ResourceWriteReceipt, PluginError> {
         let id = doc_id(id.as_str())?;
+        let reuse_same = reuse == crate::resources::ResourceReuse::SameContent;
+        // Riusare un file che c'è e ricoprirne uno alla sua revisione sono due
+        // domande diverse: insieme non hanno un senso da indovinare.
+        if reuse_same && expected.is_some() {
+            return Err(PluginError::BadArgs(Text::message(
+                "host.resource.reuse_with_expected",
+                vec![Arg::text("doc", id.as_str())],
+            )));
+        }
         // La shell scrive una cartella di Excel soltanto creandola: coprirne
         // una con dei byte suoi aggirerebbe la sola lettura.
         if expected.is_some() {
@@ -5020,8 +5173,57 @@ impl crate::resources::ResourceWrite for Host {
                 return Err(crate::workbook::read_only(&id));
             }
         }
+        if reuse_same {
+            if let Some(receipt) = self.reused_resource(vault, &id, bytes) {
+                return Ok(receipt);
+            }
+        }
         let revision = self.write_document_bytes(vault, &id, bytes, expected)?;
-        Ok(crate::resources::ResourceWriteReceipt { id, revision })
+        Ok(crate::resources::ResourceWriteReceipt {
+            id,
+            revision,
+            reused: false,
+        })
+    }
+}
+
+impl Host {
+    /// La ricevuta del file che il vault ha già con questi byte, o `None`:
+    /// allora si scrive. `None` vale anche per «non so» (limiti, indice non
+    /// ancora pronto) e per una domanda che fallisce: nel dubbio si deposita,
+    /// mai si perde un deposito.
+    ///
+    /// Il confronto è quello di [`Host::same_content`] (candidati dello stesso
+    /// tipo di `target` presi dall'indice vivo sotto la custodia, byte
+    /// confrontati fuori). Prima di rispondere si ricontrolla, coi soli
+    /// metadati e fuori dalla custodia, che il file trovato ci sia ancora e
+    /// abbia ancora questa misura: un file sparito fra il confronto e la
+    /// risposta non si nomina, si scrive.
+    fn reused_resource(
+        &self,
+        vault: Option<&str>,
+        target: &DocId,
+        bytes: &[u8],
+    ) -> Option<crate::resources::ResourceWriteReceipt> {
+        let SameContent::Found { id } = self.same_content(vault, target, bytes).ok()? else {
+            return None;
+        };
+        let prepared = self
+            .read_workspace(vault, |workspace| {
+                workspace
+                    .prepare_resource_open(&id)
+                    .map_err(PluginError::from)
+            })
+            .ok()?;
+        let lease = prepared.invoke().ok()?;
+        let still_there = lease.stat.is_file() && lease.stat.size == bytes.len() as u64;
+        still_there.then(|| crate::resources::ResourceWriteReceipt {
+            id,
+            // I byte trovati sono questi, confrontati uno per uno: la loro
+            // revisione è quella dei byte che arrivano.
+            revision: Revision::of_bytes(bytes),
+            reused: true,
+        })
     }
 }
 

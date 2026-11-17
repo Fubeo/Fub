@@ -1,0 +1,16 @@
+{
+  "about": "Sopra «a», a 24: y = 100 − 24 − 160 = −84, con la larghezza di «a» (400), come sotto.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" }] },
+  "ops": [{ "op": "add_card", "id": "b", "text": "Sopra", "near": "a", "side": "top" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" },
+        { "id": "b", "type": "text", "x": 100, "y": -84, "width": 400, "height": 160, "text": "Sopra" }
+      ],
+      "edges": []
+    },
+    "created": ["b"]
+  }
+}

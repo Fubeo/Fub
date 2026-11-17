@@ -1,0 +1,13 @@
+{
+  "about": "Una riga di quaranta caratteri è più larga di trentasei: la scheda nasce di 480, e sta in una riga sola (160 di altezza).",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "w", "text": "abcdefghijklmnopqrstuvwxyzabcdefghijklmn" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "w", "type": "text", "x": 0, "y": 0, "width": 480, "height": 160, "text": "abcdefghijklmnopqrstuvwxyzabcdefghijklmn" }],
+      "edges": []
+    },
+    "created": ["w"]
+  }
+}

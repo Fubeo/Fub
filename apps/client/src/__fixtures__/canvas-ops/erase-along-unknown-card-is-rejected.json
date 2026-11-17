@@ -1,0 +1,42 @@
+{
+  "about": "on con un id che non è una scheda.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "t",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "fub:ink": {
+          "v": 2,
+          "strokes": []
+        }
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "erase_along",
+      "on": "manca",
+      "points": [
+        [
+          0,
+          0
+        ]
+      ],
+      "size": 8
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "UnknownNode",
+      "index": 0,
+      "id": "manca"
+    }
+  }
+}

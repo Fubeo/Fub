@@ -268,6 +268,27 @@ export async function notesInFolder(folder: string, text: string, count = MAX_NA
   return page.items.map((m) => m.doc);
 }
 
+/// Le note che hanno la proprietà `key` e il cui nome combacia con `text`
+/// (con `text` vuoto, le prime), ognuna col valore indicizzato di `key`. È la
+/// domanda dell'editor della Relazione ristretta a un tipo (T35): chi chiede
+/// sceglie fra queste con la regola del core, senza rifarla.
+export async function notesWithProperty(key: string, text: string, count: number): Promise<{ doc: string; value: unknown }[]> {
+  const written = text.trim();
+  const has = { negated: false, predicate: { kind: "property" as const, filter: { key, test: { op: "exists" } } } };
+  const matching: QueryExpr = written
+    ? { any: nameQuery(written).any.map((clause) => ({ all: [...clause.all, has] })) }
+    : { any: [{ all: [has] }] };
+  const page = await runQuery({
+    kind: "documents",
+    matching,
+    sort: null,
+    select: { kind: "keys", keys: [key] },
+    page: { offset: 0, limit: count },
+    excerpts: "omit",
+  });
+  return page.items.map((m) => ({ doc: m.doc, value: m.properties?.find((p) => p.key === key)?.value }));
+}
+
 /// Le note di [`notesByName`], ognuna con i suoi alias del frontmatter.
 ///
 /// L'indice cerca il nome **e** gli alias nello stesso campo, quindi una nota
@@ -333,6 +354,55 @@ export async function vaultTags(window: PageWindow): Promise<TagCount[]> {
     page: pageOf(window),
   };
   return runQuery(query).then((page) => page.items);
+}
+
+/// Quante etichette di una nota sola si leggono al più: una nota con più di
+/// così ne mostra le prime, e la riga dei dati non diventa un elenco.
+const NOTE_TAGS_PAGE: Page = { offset: 0, limit: 200 };
+
+/// Le etichette di una nota, coi nomi come li dà l'indice (senza `#`): la
+/// stessa domanda di [`vaultTags`], ristretta a quel documento. Un id che non
+/// è nell'indice risponde con l'elenco vuoto.
+export async function noteTags(doc: string): Promise<string[]> {
+  const query: Extract<IndexQuery, { kind: "tags" }> = {
+    kind: "tags",
+    matching: theseDocuments([doc]),
+    page: NOTE_TAGS_PAGE,
+  };
+  return runQuery(query).then((page) => page.items.map((tag) => tag.name));
+}
+
+/// Quante note citano `doc`: il `total` dei backlink, chiedendone uno solo.
+/// Dice quante, non quali: l'elenco è della scheda Collegamenti.
+export async function backlinkCount(doc: string): Promise<number> {
+  return runQuery({ kind: "backlinks", target: doc, page: { offset: 0, limit: 1 } }).then((page) => page.total);
+}
+
+/// Quante note citano `doc` e, se sono al più `limit` citazioni, quali
+/// (`null` se la finestra non le ha prese tutte). Una domanda sola, come
+/// [`backlinkCount`]: la usa la testata della lavagna per sapere quali conti
+/// un cambio di link può toccare.
+export async function backlinkSources(doc: string, limit: number): Promise<{ total: number; sources: string[] | null }> {
+  const page = await runQuery({ kind: "backlinks", target: doc, page: { offset: 0, limit } });
+  const sources = page.items.length >= page.total ? page.items.map((ref) => ref.source) : null;
+  return { total: page.total, sources };
+}
+
+/// I documenti di `among` che `doc` cita adesso (i suoi link uscenti), in una
+/// domanda sola. L'indice risponde solo per i documenti che conosce: chi deve
+/// sapere degli altri li chiede a [`existingDocuments`].
+export async function linkedFrom(doc: string, among: string[]): Promise<Set<string>> {
+  if (among.length === 0) return new Set();
+  const matching: QueryExpr = {
+    any: [{
+      all: [
+        { negated: false, predicate: { kind: "linked", doc, direction: "outbound" } },
+        { negated: false, predicate: { kind: "docs", docs: among } },
+      ],
+    }],
+  };
+  const page = await matchingDocuments(matching, WITHOUT_PAGE, "omit");
+  return new Set(page.items.map((match) => match.doc));
 }
 
 // `archiDelVault` stava qui: gli archi del grafo in una domanda sola, senza

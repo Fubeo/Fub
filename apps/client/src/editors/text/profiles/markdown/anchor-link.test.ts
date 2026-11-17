@@ -37,6 +37,25 @@ describe("anchorAtCursor", () => {
     expect(next.doc.toString()).toBe("- voce uno\n- voce due ^ssssss  \n");
   });
 
+  it("in una nota CRLF l'id va in coda al paragrafo di più righe, come in LF (#394)", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      for (const [doc, expected] of [
+        ["uno\ndue\n\nTre", "uno\ndue ^ssssss\n\nTre"],
+        ["uno\ndue", "uno\ndue ^ssssss"],
+      ]) {
+        const s = EditorState.create({
+          doc: doc!.replace(/\n/g, nl),
+          selection: { anchor: 1 },
+          extensions: [markdown({ base: markdownGrammar }), ...(nl === "\n" ? [] : [EditorState.lineSeparator.of(nl)])],
+        });
+        ensureSyntaxTree(s, s.doc.length, 5000);
+        let next = s;
+        writeAnchor(anchorAtCursor(s, fixed)!)({ state: s, dispatch: (tr) => { next = tr.state; } });
+        expect(next.sliceDoc()).toBe(expected!.replace(/\n/g, nl));
+      }
+    }
+  });
+
   it("non riusa un id che il documento ha già", () => {
     let calls = 0;
     const random = () => (calls++ < 6 ? 0.5 : 0);

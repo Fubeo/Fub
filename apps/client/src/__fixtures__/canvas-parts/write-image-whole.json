@@ -1,0 +1,20 @@
+{
+  "name": "write-image-whole",
+  "description": "L'immagine intera e dritta è l'immagine: niente subpath e niente campo.",
+  "file": "foto.png",
+  "parts": {
+    "kind": "image",
+    "rect": [
+      0,
+      0,
+      1,
+      1
+    ],
+    "rotate": 0
+  },
+  "expect": {
+    "outcome": "written",
+    "subpath": null,
+    "parts": null
+  }
+}

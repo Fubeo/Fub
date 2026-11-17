@@ -1,0 +1,20 @@
+{
+  "name": "write-region",
+  "description": "Un rettangolo: il subpath della sua pagina e il campo, sempre.",
+  "file": "Libro.pdf",
+  "parts": {
+    "kind": "region",
+    "page": 7,
+    "rect": [
+      0.1,
+      0.306,
+      0.8,
+      0.141
+    ]
+  },
+  "expect": {
+    "outcome": "written",
+    "subpath": "#page=7",
+    "parts": "{\"kind\":\"region\",\"page\":7,\"rect\":[0.1,0.306,0.8,0.141]}"
+  }
+}

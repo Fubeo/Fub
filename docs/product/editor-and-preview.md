@@ -4,39 +4,44 @@
 > **Risultato:** capire la sessione documento, il buffer condiviso, il
 > salvataggio e le responsabilità locali.
 
+## La testata del foglio
+
+Dice dove sei e se è salvato: la cartella disegnata, il vault (il nome scelto o la cartella) e le
+cartelle, che si aprono nell'esplora, il nome, che si rinomina col doppio clic o F2, poi «Salvato» con la
+spunta e «…». Il formato lo dice la figura della linguetta, col nome per il lettore di schermo. Uno stato
+da notare («Sola lettura») è un chip accanto al percorso; «Si scrive», lo stato normale, lo dice la
+banda, sul telefono «…». Sul telefono resta il nome; in piedi il foglio è largo quanto lo schermo e
+«Salvato» è la spunta (il punto se in sospeso; errore e conflitto restano parole rosse). Sotto il titolo di una nota c'è la [riga dei dati](editor-note-facts.md): modifica, collegamenti, etichette.
+
 ## Modalità
 
-Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
-
-- **sorgente**, con la sintassi esplicita;
-- **live preview**, che mantiene l'editing e riduce il rumore della sintassi;
-- **[blocchi](editor-blocks.md)**, la Live con maniglie, menu e spostamenti per blocco;
-- **lettura**, che mostra la resa senza cursore di testo.
-
-La superficie plain text offre soltanto **sorgente**. Un file `.svg` si apre
+Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre
+**Scrittura** (con i [blocchi](editor-blocks.md) dentro), **Sorgente** e
+**Lettura**: sono descritte in [Scrittura](editor-writing.md), coi livelli di
+presenza degli elementi sul foglio. Dove questa pagina dice «Live» intende
+Scrittura, la modalità `live_preview`. La superficie plain text offre soltanto **sorgente**. Un file `.svg` si apre
 come testo in **Sorgente**, **Diviso** (predefinita, con l'anteprima accanto
 o sotto) e **Anteprima**, o come [disegno](drawing.md) con la feature `draw`
-dell'host. L'anteprima si ridisegna
-dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
+dell'host. L'anteprima si ridisegna dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
 l'ultima buona, attenuata, sotto il motivo con riga e colonna. I documenti
-`.xlsx` usano invece la famiglia Grid. Il commutatore nella barra di
-ciascun riquadro legge la dichiarazione della propria superficie; con una sola
-modalità non mostra un selettore né offre i comandi di modalità, che trovano la
-modalità per ruolo (Live, sulla tela, riporta alle carte). Il riquadro ricorda
+`.xlsx` usano invece la famiglia Grid. Il commutatore è la voce in fondo alla
+banda di stato, [sul telefono un tondo](../architecture/shell-behaviours.md);
+con una sola modalità non c'è, né i comandi di modalità, che trovano la
+modalità per ruolo (Scrittura, sulla tela, riporta alle carte). Il riquadro ricorda
 la modalità scelta per ogni famiglia di superfici: una nota in Sorgente non fa
 aprire la tela seguente come JSON, e la tela non cambia la modalità in cui si
 riapre la nota. Le scorciatoie seguono il riquadro attivo. In un campo in cui
 si scrive, un accordo senza Ctrl e senza ⌘ resta del campo: Alt+← muove il
-cursore lì e torna indietro fuori. Una scorciatoia scrive `Mod` per ⌘ sul Mac
-e Ctrl altrove, e `Ctrl` per Control anche sul Mac: il giro delle schede in
-ordine d'uso è `Ctrl-Tab`, perché ⌘-Tab è del sistema. Fuori dal Mac `Ctrl-k`
-e `Mod-k` sono lo stesso tasto, e le impostazioni li segnalano come
-conflitto. Le impostazioni dicono anche quando un accordo lo prende il sistema
-(⌘-Tab sul Mac, Alt-F4 altrove): si salva lo stesso, ma lì non arriva. Sul Mac
-PgDn e PgUp si leggono `Fn↓` e `Fn↑`, come si premono. La modalità delle
-note in una finestra nuova viene da `editor.default-mode`; un riquadro diviso
-eredita quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano,
-si spostano con le frecce e tornano a parti uguali con un doppio clic; le
+cursore lì e torna indietro fuori. Una scorciatoia scrive `Mod` per ⌘ sul Mac e
+Ctrl altrove, e `Ctrl` per Control anche sul Mac: il giro delle schede in
+ordine d'uso è `Ctrl-Tab`, perché ⌘-Tab è del sistema. Fuori dal Mac `Ctrl-k` e
+`Mod-k` sono lo stesso tasto, e le impostazioni li segnalano come conflitto. Le
+impostazioni dicono anche quando un accordo lo prende il sistema (⌘-Tab sul
+Mac, Alt-F4 altrove): si salva lo stesso, ma lì non arriva. Sul Mac PgDn e PgUp
+si leggono `Fn↓` e `Fn↑`, come si premono. La modalità delle note in una
+finestra nuova viene da `editor.default-mode`; un riquadro diviso eredita
+quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano, si
+spostano con le frecce e tornano a parti uguali con un doppio clic; le
 proporzioni restano nel layout finché la fila non cambia. **Affianca la
 Lettura** apre la Lettura in un riquadro collegato che scorre con la sorgente.
 
@@ -96,13 +101,13 @@ luce del tema: **Armonia** (predefinito, derivato dai token del tema),
 **Acquerello** (pastelli su carta calda), **Aurora** (colori vivi e profondi),
 **Blueprint** (tavola tecnica su griglia) e **Inchiostro** (tratto sottile su
 avorio, una nota rossa). Lo stile generale è l'impostazione di macchina
-`appearance.diagram-style` e si cambia anche dal menu dello stile nella barra
-del diagramma. In Live lo stesso menu scrive o toglie in cima al recinto il
-commento Mermaid `%% stile: <stile>`, che vale soltanto per quel diagramma e
-che GitHub ignora; a mano vale anche `style:` con `harmony`, `watercolor` o
-`ink`. I font dello stile sono incorporati nell'SVG, perché un'immagine non vede
-i webfont della pagina. La barra offre anche **Esporta** (SVG copiato o
-salvato, PNG a risoluzione doppia) e **Schermo intero**, nella lightbox. Una
+`appearance.diagram-style`. Il diagramma non ha barra né pulsanti: stile,
+orientamento, sorgente, schermo intero, copia ed esportazione stanno nel menu
+del tasto destro, descritto in [I diagrammi](editor-diagrams.md). Il commento
+Mermaid `%% stile: <stile>` in cima al recinto (dopo l'eventuale frontmatter)
+vale soltanto per quel diagramma, e GitHub lo ignora; a mano vale anche
+`style:` con `harmony`, `watercolor` o `ink`. I font dello stile sono
+incorporati nell'SVG, perché un'immagine non vede i webfont della pagina. Una
 resa con lo stesso sorgente, stile e luce si riusa senza ridisegnare.
 
 Dentro un recinto `mermaid` ancora vuoto (righe vuote e commenti `%%` non
@@ -137,11 +142,11 @@ di espansione e dimensione mostra un errore leggibile e conserva il testo.
 
 ## Sintassi estesa e viste strutturali
 
-La resa condivisa supporta task, highlight, callout annidati e ripiegabili,
-wikilink con alias, heading e block id, tabelle, note a piè di pagina etichettate
-e inline. Nelle immagini Markdown il suffisso dell'alt `|larghezza` o
-`|larghezzaxaltezza` è una dimensione, non testo alternativo. I commenti `%%…%%`
-restano nel file, non nella resa; in Live sono attenuati sulla riga del cursore.
+La resa condivisa supporta task, highlight, callout annidati e ripiegabili, wikilink con alias,
+heading e block id, tabelle, note a piè di pagina etichettate e inline. Nelle immagini Markdown il
+suffisso dell'alt `|larghezza` o `|larghezzaxaltezza` è una dimensione, non testo alternativo. I
+commenti `%%…%%` restano nel file, non nella resa; in Live sono attenuati sulla riga del cursore. Dei
+[commenti con la discussione](../reference/note-conventions.md) la resa mostra il passo, non i messaggi.
 Evidenziati e commenti non attraversano link, wikilink, tag, codice, enfasi,
 formule o note in riga; una nota attraversata si perde.
 
@@ -157,8 +162,11 @@ attenuati. `~x~` è pedice (ADR 0228); un rimando `[^nota]` definito è un apice
 definizione ha un ↩. La guida (`editor.live-guide`) dà lo stile al testo dopo un segno
 aperto a mano e mostra in grigio la chiusura: → o Tab la scrivono, Esc la spegne, lo
 spazio chiude apice e pedice e Backspace lo annulla; un segno lasciato aperto è
-ondulato. Il titolo del cursore ha «H2» nel margine, che apre i livelli; la riga vuota
-un segnaposto. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
+ondulato. Senza i blocchi il titolo del cursore ha «H2» nel margine, che apre i livelli
+(coi blocchi quel margine è della maniglia, [Scrittura](editor-writing.md)); la riga
+vuota un segnaposto. Le righe vuote dopo un blocco reso (tabella, richiamo, embed) sono
+alte zero, e lo stacco è del blocco; col cursore su una di loro la riga si vede e prende
+lo stacco, così il testo sotto non si sposta. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
 
 Immagini e media del vault si risolvono con la regola dei link del kernel:
 un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`
@@ -181,14 +189,15 @@ Lettura e nell'export. `data:` resta sorgente; una remota è un
 [segnaposto](../reference/permissions-and-security.md#immagini-remote).
 
 In Live un callout col cursore dentro resta un riquadro: la pastiglia del tipo
-apre i tipi, la freccia scambia `+` e `-`. Le voci d'elenco vanno a capo sotto
-il testo; cancellare o spostare righe rinumera le seguenti. L'HTML ammesso
+apre i tipi, la freccia scambia `+` e `-`. Le voci d'elenco (e le righe che
+ne continuano il paragrafo) vanno a capo sotto il testo; cancellare o spostare righe rinumera le seguenti. L'HTML ammesso
 (`<kbd>`, `<u>`, i [colori](editor-blocks.md#i-colori)) si vede senza tag. I
 recinti con info string dichiarata (Mermaid, formule) tornano sorgente col
-cursore dentro, con la resa sotto. Con `mai` una formula in riga resta resa: un
-clic, o → e ← che ci entrano, aprono il riquadro col TeX e l'anteprima, e Invio
-o Esc lo chiudono. Con `elemento` torna la sorgente, con l'anteprima sopra la
-riga, o sotto per `$$`. L'ID di blocco finale è nascosto.
+cursore dentro, con la resa sotto. Con `mai` una formula si modifica
+toccandola, senza vedere il LaTeX ([Formule in Live](editor-math.md)); con
+«Mostra il LaTeX delle formule», o con Vim, un clic o le frecce aprono invece il
+riquadro col TeX e l'anteprima. Con `elemento` torna la sorgente, con
+l'anteprima sopra la riga, o sotto per `$$`. L'ID di blocco finale è nascosto.
 
 La vista Struttura può spostare una sezione fra fratelli adiacenti con una
 singola modifica protetta dalla revisione osservata. La vista Note a piè di
@@ -224,13 +233,14 @@ buffer e, allo stesso tempo, evita che il cursore di un riquadro muova quello
 dell'altro. Il pannello collega e scollega le superfici visibili, ma non
 coordina il buffer, il salvataggio o il fan-out delle modifiche.
 
-## Offset e terminatori
-
-Il contratto Rust usa span in byte UTF-8. CodeMirror usa offset JavaScript. Il
-ponte di conversione è una responsabilità esplicita e coperta da test.
-
-La sorgente conserva i terminatori di riga. Caricare o sincronizzare un
-documento non deve normalizzare CRLF involontariamente.
+Una nota che va a capo tutta CRLF (scritta su Windows, per esempio) resta
+tutta CRLF: l'editor la apre con quel separatore, e ogni a capo che scrive
+(Invio, le azioni della barra e del «/», le proprietà, la griglia delle
+tabelle, il completamento, l'incolla e il trascinamento) prende quello della
+nota. Una nota già mista si normalizza a LF, com'è sempre stato. Chi compone
+un inserimento lo fa con `"\n"` e conta le posizioni lì, perché un a capo vale
+una posizione qualunque sia il separatore; il testo prende gli a capo della
+nota solo all'ultimo (`editors/text/line-breaks.ts`).
 
 ## Undo, redo e selezione
 
@@ -342,6 +352,12 @@ sorgente, e la selezione va in coda a un template che non la colloca; le
 statistiche contano anche lingue senza spazi con aggiornamenti incrementali.
 Contano il sorgente di una nota in prosa, e di un formato strutturato (canvas,
 base) il testo del modello; la view `stats.document` li dà a `fub-cli wordcount`.
+Un file che nessun formato rivendica si conta sul sorgente se è testo UTF-8;
+se non lo è (un PDF, un'immagine) il pannello dice che non ci sono parole da
+contare, senza errore: un MIME binario noto dall'estensione basta a deciderlo
+senza aprire il file, altrimenti decide la decodifica dei byte. Allo stesso
+modo il pannello proprietà, su un file senza formato, dice che non ha
+proprietà da mostrare, e `fub-cli wordcount` rifiuta il file come argomento.
 
 ## Barra di formattazione
 
@@ -352,7 +368,9 @@ apice, pedice, evidenziato, codice e formula in riga, commento `%%`, cancella
 formattazione, link, link a una nota, immagine, nota a piè di pagina, elenchi
 puntati, numerati e di attività, rientro, citazione, riquadro `> [!note]`,
 blocchi di codice e di formula, separatore e tabella, con un menu per righe,
-colonne e ordinamento. In Lettura la barra non c'è.
+colonne e ordinamento. Dove si scrive col dito, col cursore in una tabella la
+barra apre in testa Tab, Invio e «+ riga» ([Tabelle](editor-tables.md)). In
+Lettura la barra non c'è.
 
 Un pulsante agisce sulla selezione, o sulla parola sotto il cursore, come la
 scorciatoia corrispondente, e la modifica entra nella cronologia locale del
@@ -361,11 +379,11 @@ grassetto, lo stile dice «Titolo 2» su un titolo di secondo livello, la tabell
 è spenta fuori da una tabella e il formato in riga dentro il codice; in sola
 lettura tutto è spento. Il tasto destro toglie una nota e i suoi richiami.
 
-La barra sta su una riga: i gruppi che non entrano scendono nel menu «altri
-strumenti». La tastiera la raggiunge con un solo arresto di tabulazione:
-dall'editor, dove Tab rientra, Escape e poi Maiusc+Tab risalgono fino a lei. Le frecce,
-Home ed End si muovono fra i pulsanti ed Escape torna al testo; il
-suggerimento di ogni pulsante dice la scorciatoia dell'editor quando c'è.
+La barra è la fila di serie, in un vassoio un tono sotto la carta coi gruppi
+come foglietti (al telefono una fila piatta); ciò che non entra va in «…». Un
+solo arresto di tabulazione: dall'editor, dove Tab rientra, Escape e poi
+Maiusc+Tab risalgono. Le frecce girano ai capi, Home ed End vanno al primo e
+all'ultimo pulsante acceso, Escape torna al testo; il suggerimento dice il tasto.
 
 La barra è il plugin ufficiale `fub.formatting` («Formatting bar»): si spegne e
 si riaccende dal pannello dei componenti, e ogni suo pulsante è anche un
@@ -378,43 +396,9 @@ Il tasto destro, la mini-barra e il menu «/» nel testo sono descritti in
 
 ## Tabelle in Live
 
-In Live ogni tabella è una griglia da foglio di calcolo, anche col cursore
-dentro; la sorgente con le pipe resta della modalità Sorgente, e Lettura la
-mostra resa. Sulla griglia compaiono le lettere delle colonne e i numeri
-delle righe; la prima riga è l'intestazione della tabella. La griglia non è una
-fermata del Tab: ci si entra dal testo con le frecce, come in una riga.
-
-- Le frecce muovono la cella attiva, Maiusc allarga la selezione, Mod le porta
-  al bordo, Home ed End ai capi della riga; Tab e Maiusc+Tab avanzano lungo le
-  righe, e Tab dall'ultima cella aggiunge una riga. Un clic sceglie una cella,
-  il trascinamento o Maiusc+clic un rettangolo, la lettera una colonna, il
-  numero una riga, l'angolo tutta la tabella.
-- Un carattere riscrive la cella da capo; Invio, F2 o il doppio clic la
-  modificano col suo testo. Dentro la cella Invio conferma e scende, Tab
-  conferma e avanza, Escape annulla; le frecce laterali confermano quando la
-  modifica è cominciata con un carattere e muovono il cursore quando è
-  cominciata con Invio. Una pipe scritta in una cella diventa `\|` nel file.
-- Canc svuota le celle selezionate; Mod+C, Mod+X e Mod+V usano il TSV dei fogli
-  di calcolo (e una tabella HTML), dove una cella su più righe resta una cella;
-  incollare oltre il bordo allarga la tabella, e un valore incollato riempie le
-  celle scelte. Il quadratino nell'angolo della selezione continua la serie.
-  Mod+B, Mod+I e Mod+Maiusc+X mettono grassetto, corsivo e barrato.
-- Il menu contestuale (tasto destro, tasto menu o Maiusc+F10) inserisce,
-  sposta ed elimina righe e colonne, ordina secondo la colonna attiva,
-  allinea a sinistra, al centro o a destra, copia, taglia e svuota. I
-  pulsanti «+ Riga» e «+ Colonna» sotto la tabella aggiungono in fondo.
-- Freccia su dalla prima riga, freccia giù dall'ultima ed Escape tornano al
-  testo; freccia giù dalla riga sopra la tabella, e su da quella sotto, vi
-  entrano. Mod+Z e Mod+Y annullano e ripetono come nel resto della nota.
-
-Ogni gesto è una modifica del testo nella cronologia del riquadro. Cambiare
-il contenuto di una cella tocca soltanto quella cella, spazi compresi;
-aggiungere, togliere, spostare, ordinare o allineare riscrive la tabella in
-forma canonica. Le celle mostrano la resa in riga (grassetto, codice, link,
-formule); Mod+clic segue un link o un tag. Con la griglia a fuoco la barra di
-formattazione agisce sulle celle selezionate: formattazione in riga e
-operazioni sulla tabella; titoli, elenchi e blocchi sono spenti. In sola
-lettura la griglia si seleziona e si copia, ma non si scrive.
+In Live ogni tabella è una griglia da foglio di calcolo, coi gesti della
+Tabella condivisi con i documenti e i fogli: sono descritti in
+[Tabelle](editor-tables.md).
 
 ## La griglia
 
@@ -439,7 +423,7 @@ WIT](../reference/abi-and-wit.md).
 - `apps/client/src/editors/text/profiles/svg.ts` e `apps/client/src/editors/media/`
 - `apps/client/src/ui/mermaid.ts`, `mermaid-styles.ts`, `lightbox.ts` e `theme/diagram-style.ts`
 - `apps/client/src/panels/document.ts`
-- `apps/client/src/panels/format-bar.ts`
+- `apps/client/src/panels/format-bar.ts` e `apps/client/src/kit/toolbar-keys.ts`
 - `apps/client/src/state/`
 - `crates/fub-features/src/formatting.rs`
 - `crates/fub-abi/src/edit.rs`

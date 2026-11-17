@@ -454,11 +454,56 @@ fn the_component_names_are_those_of_the_plan() {
         ("component.dizionari.name", "Dizionari"),
         ("component.motore-documenti.name", "Motore dei documenti"),
         ("component.motore-fogli.name", "Motore dei fogli"),
+        ("component.motore-vettoriale.name", "Motore del disegno"),
     ] {
         assert_eq!(
             it.entries.get(key).map(String::as_str),
             Some(name),
             "«{key}»"
+        );
+    }
+}
+
+/// Il Motore del disegno con le parole del prototipo (T25), nelle due lingue:
+/// il nome e la frase che dice che cosa succede spento. Il catalogo è uno
+/// solo, quindi le chiavi ci sono anche nelle build senza il motore.
+#[test]
+fn the_drawing_engine_speaks_as_the_prototype() {
+    let catalogs = fub_features::componenti::catalog();
+    let lingua = |locale: &str| {
+        catalogs
+            .iter()
+            .find(|c| c.locale == locale)
+            .unwrap_or_else(|| panic!("il catalogo «{locale}»"))
+    };
+    for (locale, nome, descrizione) in [
+        (
+            "it",
+            "Motore del disegno",
+            "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+        ),
+        (
+            "en",
+            "Drawing engine",
+            "Draws, moves and reshapes the shapes in drawings. When off, drawings use the simple tools.",
+        ),
+    ] {
+        let catalog = lingua(locale);
+        assert_eq!(
+            catalog
+                .entries
+                .get("component.motore-vettoriale.name")
+                .map(String::as_str),
+            Some(nome),
+            "il nome in «{locale}»"
+        );
+        assert_eq!(
+            catalog
+                .entries
+                .get("component.motore-vettoriale.description")
+                .map(String::as_str),
+            Some(descrizione),
+            "la descrizione in «{locale}»"
         );
     }
 }

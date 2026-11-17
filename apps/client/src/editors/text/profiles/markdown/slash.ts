@@ -6,8 +6,9 @@
 // Il pannello è della shell (`panels/slash/panel.ts`), disegnato coi pezzi
 // del kit; qui stanno il riconoscimento del contesto, puro sul testo, e lo
 // stato: uno `StateField` con dove sta il «/» e ciò che si è scritto dopo. Il
-// campo dà un tooltip di CodeMirror (`showTooltip`) che posa il pannello sotto
-// la riga, o sopra se sotto non c'è posto, e un keymap a precedenza alta passa
+// campo dà un tooltip di CodeMirror (`showTooltip`) che posa il pannello dove
+// dice `slashPlacement` (sotto la riga, accorciato; sopra solo se sotto non
+// c'è il minimo, e mai fuori dall'area del documento), e un keymap a precedenza alta passa
 // al pannello i tasti mentre è aperto. Restano qui anche i completamenti che
 // una voce riapre dopo di sé quando la si esegue senza il suo passo: il tipo
 // di riquadro e il linguaggio di un blocco di codice.
@@ -27,6 +28,9 @@ import {
 import { EditorView, keymap, showTooltip, ViewPlugin, type Tooltip, type TooltipView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import type { SlashChoice, SlashPanel, SlashPanelEvents, SlashPlace } from "../../../core/editor-menu";
+import { errorText } from "../../../../host/errors";
+import { pageName } from "../../../../rules/mirrored";
+import { liveStrings } from "./strings";
 
 /// Ciò che il pannello dice all'editor; il resto glielo aggiunge la superficie.
 export type SlashPanelCore = Pick<SlashPanelEvents, "choose" | "dismiss" | "active">;
@@ -149,8 +153,48 @@ export function slashPlace(state: EditorState, from: number, to: number): SlashP
   return { line: rest.trim() === "" ? "empty" : "after-text", above, inList: LIST_MARK.test(line.text) };
 }
 
+// Il lato lo sceglie `slashPlacement`, non CodeMirror: la sua regola apre
+// sopra appena sotto non c'è l'altezza intera, anche fino in cima alla
+// finestra. Qui il tooltip resta sempre sotto, e il pannello si sposta dopo.
 function tooltipAt(from: number): Tooltip {
-  return { pos: from, above: false, strictSide: false, create: (view) => slashTooltip(view) };
+  return { pos: from, above: false, strictSide: true, create: (view) => slashTooltip(view) };
+}
+
+/// Quanto può accorciarsi il pannello prima di aprirsi sopra la riga (px):
+/// le tessere, il titolo di un gruppo, tre righe e il disegno in fondo.
+export const SLASH_MIN_HEIGHT = 300;
+/// Lo stacco fra la riga e il pannello (px), sopra come sotto.
+export const SLASH_GAP = 8;
+
+/// Dove sta il pannello del «/», in coordinate della finestra.
+export interface SlashPlacement {
+  readonly above: boolean;
+  readonly top: number;
+  readonly height: number;
+}
+
+/// La regola di posizione del pannello: sotto la riga, accorciato se serve
+/// (l'elenco scorre dentro) fino a `min`. Soltanto se sotto non c'è neanche
+/// `min` si apre sopra, e sopra non va mai oltre `bounds.top`, il bordo alto
+/// dell'area del documento: testata, barra degli strumenti e barra della
+/// finestra restano scoperte. Se nessuno dei due lati ha `min`, prende il
+/// lato più alto e ci sta dentro.
+export function slashPlacement(
+  caret: { readonly top: number; readonly bottom: number },
+  natural: number,
+  bounds: { readonly top: number; readonly bottom: number },
+  min = SLASH_MIN_HEIGHT,
+  gap = SLASH_GAP,
+): SlashPlacement {
+  const want = Math.max(0, natural);
+  const below = Math.max(0, bounds.bottom - (caret.bottom + gap));
+  const above = Math.max(0, caret.top - gap - bounds.top);
+  const floor = Math.min(min, want);
+  const goAbove = below < floor && above > below;
+  const height = Math.min(want, goAbove ? above : below);
+  return goAbove
+    ? { above: true, top: caret.top - gap - height, height }
+    : { above: false, top: caret.bottom + gap, height };
 }
 
 /// La selezione che «Trasforma» guarda, finché resta quella.
@@ -223,6 +267,12 @@ function slashTooltip(view: EditorView): TooltipView {
   void loadDiagramTemplates();
   const current = () => view.state.field(slashField, false)?.open ?? null;
   let placed = false;
+  // L'altezza del pannello secondo il CSS, prima che `positioned` lo accorci.
+  let natural = 0;
+  // L'ultimo `top` scritto da CodeMirror: il pannello a `caret.bottom +
+  // SLASH_GAP`, nella sua unità (fixed o absolute). Non si ricava dal
+  // rettangolo del pannello, che l'entrata e l'uscita trasformano.
+  let cmTop = NaN;
   const events: SlashPanelCore = {
     choose(choice) {
       const open = current();
@@ -259,7 +309,9 @@ function slashTooltip(view: EditorView): TooltipView {
   };
   return {
     dom: panel.dom,
-    offset: { x: -16, y: 8 },
+    offset: { x: -16, y: SLASH_GAP },
+    // L'altezza la decide `slashPlacement`: CodeMirror non la tocca.
+    resize: false,
     mount() {
       panels.set(view, panel);
       view.contentDOM.setAttribute("aria-controls", panel.listId);
@@ -269,17 +321,54 @@ function slashTooltip(view: EditorView): TooltipView {
       if (update.docChanged || update.selectionSet) refresh();
     },
     positioned() {
-      // Qui CodeMirror sta scrivendo la sua misura e non lascia leggere il
-      // layout: la posizione del «/» si legge nella misura che segue.
-      const open = placed ? null : current();
+      // Qui CodeMirror sta scrivendo la sua misura (il pannello sotto la
+      // riga, alto quanto il CSS) e non lascia leggere il layout: la riga e
+      // l'area del documento si leggono nella misura che segue, che sposta e
+      // accorcia il pannello secondo `slashPlacement`. Le due misure possono
+      // finire nello stesso giro di CodeMirror, in un ordine o nell'altro:
+      // la nostra non conta su ciò che l'altra ha appena scritto.
+      const open = current();
+      const first = !placed;
       placed = true;
+      cmTop = parseFloat(panel.dom.style.top);
       view.requestMeasure({
         key: panel,
         read: () => {
+          const dom = panel.dom;
           const caret = open ? view.coordsAtPos(open.from) : null;
-          return caret ? caret.left - panel.dom.getBoundingClientRect().left : 0;
+          if (!caret || dom.classList.contains("is-sheet")) return { caret: null, caretX: 0, bounds: null };
+          const area = view.scrollDOM.getBoundingClientRect();
+          // L'altezza naturale è quella del CSS, letta solo quando nessuno
+          // l'ha accorciata qui: un'altezza scritta da noi non è naturale.
+          if (!dom.style.height) natural = parseFloat(getComputedStyle(dom).height) || natural;
+          return {
+            caret,
+            caretX: first ? caret.left - dom.getBoundingClientRect().left : 0,
+            // Uno stacco anche dai bordi dell'area, come dalla riga.
+            bounds: { top: Math.max(area.top, 0) + SLASH_GAP, bottom: Math.min(area.bottom, window.innerHeight) - SLASH_GAP },
+          };
         },
-        write: (caretX) => panel.placed(panel.dom.classList.contains("cm-tooltip-above"), caretX),
+        write: ({ caret, caretX, bounds }) => {
+          const dom = panel.dom;
+          let above = dom.classList.contains("cm-tooltip-above");
+          // CodeMirror nasconde il pannello quando la riga esce dall'area
+          // (lo manda a -10000 px): resta nascosto finché non la rimisura.
+          const hidden = parseFloat(dom.style.top) <= -10000;
+          if (caret && bounds && !hidden) {
+            const place = slashPlacement(caret, natural, bounds);
+            // Si parte dal `top` di CodeMirror, non da quello che c'è: se è
+            // già il nostro, spostarlo di nuovo lo sposterebbe due volte.
+            if (Number.isFinite(cmTop)) dom.style.top = `${cmTop + (place.top - (caret.bottom + SLASH_GAP)) / view.scaleY}px`;
+            dom.style.height = place.height < natural ? `${place.height / view.scaleY}px` : "";
+            dom.classList.toggle("cm-tooltip-above", place.above);
+            dom.classList.toggle("cm-tooltip-below", !place.above);
+            above = place.above;
+          }
+          panel.placed(above, caretX);
+          // Il foglio del dito (lo decide `placed` la prima volta) sta in
+          // fondo alla finestra con l'altezza del suo CSS.
+          if (dom.classList.contains("is-sheet")) dom.style.removeProperty("height");
+        },
       });
     },
     destroy() {
@@ -380,7 +469,8 @@ function onNewLineBelow(command: StateCommand): StateCommand {
     const tail = /\s*$/.exec(line.text)![0].length;
     const split = state.update({
       changes: { from: line.to - tail, to: line.to, insert: state.lineBreak },
-      selection: EditorSelection.cursor(line.to - tail + state.lineBreak.length),
+      // Un a capo vale una posizione, qualunque sia il separatore.
+      selection: EditorSelection.cursor(line.to - tail + 1),
     });
     let next: Transaction | null = null;
     if (!command({ state: split.state, dispatch: (tr) => { next = tr; } }) || !next) return false;
@@ -441,6 +531,246 @@ export function runSlashAction(
   }
   startCompletion(view);
   return true;
+}
+
+// ── La Base dal «/» ──────────────────────────────────────────────────────────
+//
+// «Base» (E12) crea `Nome.base` accanto alla nota, con una vista Tabella
+// sulle note della cartella, e scrive `![[Nome.base#Tabella]]` al posto della
+// riga del «/». Il file nasce prima: se non nasce, la nota non cambia, e il
+// «/base» resta dov'era. Poi l'embed entra in una transazione sola, che un
+// Annulla toglie lasciando il file, come un allegato.
+
+/// L'azione «Base» del «/»: lo stesso id di `BASE_ENTRY` in
+/// `panels/slash/entries.ts`, che la mette nel menu.
+export const BASE_ACTION = "markdown.base";
+
+/// L'azione «Blocco di un'altra nota» del «/» (E14, T30): sceglie una nota e
+/// un suo blocco, gli dà l'id se manca e scrive qui la sua trasclusione, il
+/// blocco sincronizzato (`blocks/sync-to.ts`). Lo stesso id di
+/// `SYNC_BLOCK_ENTRY` in `panels/slash/entries.ts`.
+export const SYNC_BLOCK_ACTION = "markdown.syncblock";
+
+/// Quanti nomi si provano, al più, per trovarne uno libero.
+const BASE_NAME_TRIES = 100;
+
+/// Un nome di file non supera 255 byte, `.base` compreso.
+const BASE_FILE_BYTES = 255;
+
+/// Ciò che serve per creare la Base: la superficie lo dà con l'host, i test
+/// con un finto.
+export interface NewBasePort {
+  /// La nota: la Base nasce nella sua cartella, col suo titolo di serie.
+  readonly note: string;
+  /// Un file con questo nome (`Nome.base`) c'è già nel vault: un link per
+  /// nome troverebbe quello invece del nuovo.
+  taken(file: string): Promise<boolean>;
+  /// Chiede il nome, con `proposal` già scritto; `taken` è il nome appena
+  /// rifiutato perché c'era già. `null` se l'utente rinuncia.
+  ask(proposal: string, taken: string | null): Promise<string | null>;
+  /// Crea il file soltanto se non c'è: altrimenti rifiuta con
+  /// `already_exists`, e non scrive niente.
+  create(id: string, text: string): Promise<void>;
+  /// La nota si può ancora scrivere (aperta, non in sola lettura).
+  writable(): boolean;
+  /// Dice all'utente che cosa non è andato.
+  notify(message: string): void;
+}
+
+/// Il nome di una Base come lo scrive l'utente, pulito: senza `.base` e
+/// senza i caratteri che romperebbero il link (`# | ^ [ ]`) o il nome del
+/// file su un sistema (`/ \ : * ? " < >`). Vuoto se non resta niente.
+export function baseStem(name: string): string {
+  return name
+    .replace(/\.base\s*$/i, "")
+    .replace(/[\\/#|^[\]:*?"<>\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s.]+|[\s.]+$/g, "");
+}
+
+/// Il nome numero `n` per `stem`: `stem` per il primo, poi «stem 2»,
+/// «stem 3»…, accorciato perché il file stia in 255 byte.
+export function baseName(stem: string, n = 1): string {
+  const suffix = n <= 1 ? "" : ` ${n}`;
+  const encoder = new TextEncoder();
+  const room = BASE_FILE_BYTES - encoder.encode(`${suffix}.base`).byteLength;
+  let kept = "";
+  let used = 0;
+  for (const char of stem) {
+    const width = encoder.encode(char).byteLength;
+    if (used + width > room) break;
+    used += width;
+    kept += char;
+  }
+  return `${kept.trimEnd()}${suffix}`;
+}
+
+/// Il testo del file: una vista Tabella sulle note della cartella della nota
+/// (e delle sue sottocartelle), nella forma che `fub-format-base` legge e
+/// scrive. Una nota nella radice guarda tutto il vault, e il filtro non serve.
+export function baseFileText(folder: string, view: string): string {
+  const filter = folder === ""
+    ? ""
+    : `filters:\n  condition:\n    file: path\n    op: in_folder\n    value: ${JSON.stringify(folder)}\n`;
+  return `${filter}views:\n  - name: ${JSON.stringify(view)}\n    type: table\n`;
+}
+
+/// L'embed della vista `view` della Base `name`.
+export function baseEmbed(name: string, view: string): string {
+  return `![[${name}.base#${view}]]`;
+}
+
+/// Dove va l'embed, e dove il cursore, togliendo `from..to` (il «/query»,
+/// vuoto se la Base arriva da un menu): da solo sulla riga, se la riga ha
+/// soltanto il «/»; altrimenti in un paragrafo nuovo sotto. Sempre staccato
+/// da una riga vuota dal testo intorno, perché sia un blocco suo. Il cursore
+/// va oltre la Base, perché in Live la si veda e non il suo sorgente: al
+/// testo che segue o, in fondo alla nota, su una riga nuova dove scrivere.
+export function baseInsertion(state: EditorState, from: number, to: number, embed: string): { from: number; to: number; insert: string; cursor: number } {
+  const line = state.doc.lineAt(from);
+  const end = Math.max(to, from);
+  const rest = state.sliceDoc(line.from, from) + state.sliceDoc(end, line.to);
+  const br = state.lineBreak;
+  // Le righe vuote dopo la riga diventano una sola, quella che stacca la Base.
+  let until = line.to;
+  for (let n = line.number + 1; n <= state.doc.lines; n++) {
+    const next = state.doc.line(n);
+    if (next.text.trim() !== "") break;
+    until = next.to;
+  }
+  const last = until === state.doc.length;
+  const prev = line.number > 1 ? state.doc.line(line.number - 1).text : null;
+  const kept = rest.trim() === "" ? "" : rest.replace(/\s+$/, "");
+  const head = kept !== "" ? `${kept}${br}${br}` : prev !== null && prev.trim() !== "" ? br : "";
+  // In fondo alla nota la riga dove scrivere; altrimenti la riga vuota prima
+  // del testo che segue, che resta dov'è.
+  const insert = `${head}${embed}${br}${last ? br : ""}`;
+  return { from: line.from, to: until, insert, cursor: line.from + insert.length + (last ? 0 : br.length) };
+}
+
+/// Le Basi in attesa del nome o del file: dove sta il loro «/query», seguito
+/// attraverso le modifiche che arrivano nel frattempo.
+const trackBase = StateEffect.define<{ readonly id: number; readonly from: number; readonly to: number } | { readonly id: number; readonly drop: true }>();
+const pendingBases = StateField.define<ReadonlyMap<number, { readonly from: number; readonly to: number }>>({
+  create: () => new Map(),
+  update(value, tr) {
+    let next = value;
+    if (tr.docChanged && value.size > 0) {
+      next = new Map([...value].map(([id, range]) => {
+        const from = tr.changes.mapPos(range.from, 1);
+        return [id, { from, to: Math.max(from, tr.changes.mapPos(range.to, -1)) }];
+      }));
+    }
+    for (const effect of tr.effects) {
+      if (!effect.is(trackBase)) continue;
+      const copy = new Map(next);
+      if ("drop" in effect.value) copy.delete(effect.value.id);
+      else copy.set(effect.value.id, { from: effect.value.from, to: effect.value.to });
+      next = copy;
+    }
+    return next;
+  },
+});
+
+let baseIds = 0;
+
+/// Un «/query» seguito mentre un gesto del «/» aspetta l'host (la Base, il
+/// blocco di un'altra nota): `range` dice dove sta adesso, `drop` smette di
+/// seguirlo. Su un editor chiuso CodeMirror aggiorna soltanto lo stato.
+export interface TrackedSlash {
+  range(): { readonly from: number; readonly to: number } | null;
+  drop(): void;
+}
+
+export function trackSlashRange(view: EditorView, from: number, to: number): TrackedSlash {
+  const id = ++baseIds;
+  if (view.state.field(pendingBases, false) === undefined) {
+    view.dispatch({ effects: StateEffect.appendConfig.of(pendingBases) });
+  }
+  view.dispatch({ effects: trackBase.of({ id, from, to }) });
+  return {
+    range: () => view.state.field(pendingBases, false)?.get(id) ?? null,
+    drop: () => view.dispatch({ effects: trackBase.of({ id, drop: true }) }),
+  };
+}
+
+function alreadyExists(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "kind" in error && (error as { kind: unknown }).kind === "already_exists";
+}
+
+/// Il primo nome libero da `stem` in su: «stem», o «stem 2», «stem 3»…
+/// Un nome che finisce già con un numero continua da lì.
+async function freeBaseName(port: NewBasePort, stem: string, skip: boolean): Promise<string> {
+  const numbered = /^(.*\S) (\d{1,6})$/.exec(stem);
+  const root = numbered ? numbered[1]! : stem;
+  const first = numbered ? Number(numbered[2]) : 1;
+  let candidate = baseName(root, first);
+  for (let n = first + (skip ? 1 : 0), tries = 0; tries < BASE_NAME_TRIES; n++, tries++) {
+    candidate = baseName(root, n);
+    if (!(await port.taken(`${candidate}.base`))) return candidate;
+  }
+  return candidate;
+}
+
+/// Crea la Base dal «/» (o da un menu, con `from === to` sul cursore): chiede
+/// il nome, crea il file e scrive l'embed al posto di `from..to`. `true` se
+/// l'embed è entrato nella nota. Non tiene ferma la finestra: aspetta il nome
+/// e l'host, e intanto la nota resta scrivibile.
+export async function createBaseHere(view: EditorView, from: number, to: number, port: NewBasePort): Promise<boolean> {
+  const viewName = liveStrings.t("base.new.view");
+  const id = ++baseIds;
+  if (view.state.field(pendingBases, false) === undefined) {
+    view.dispatch({ effects: StateEffect.appendConfig.of(pendingBases) });
+  }
+  view.dispatch({ effects: trackBase.of({ id, from, to }) });
+  try {
+    const cut = port.note.lastIndexOf("/");
+    const folder = cut < 0 ? "" : port.note.slice(0, cut);
+    const title = baseStem(pageName(port.note)) || viewName;
+    let proposal = await freeBaseName(port, title, false);
+    let taken: string | null = null;
+    for (;;) {
+      const answer = await port.ask(proposal, taken);
+      if (answer === null || !port.writable()) return false;
+      const name = baseName(baseStem(answer) || proposal);
+      // Un nome cambiato a mano si controlla di nuovo: quello proposto lo è già.
+      if (name !== proposal && (await port.taken(`${name}.base`))) {
+        taken = name;
+        proposal = await freeBaseName(port, name, true);
+        continue;
+      }
+      if (!port.writable()) return false;
+      try {
+        await port.create(folder === "" ? `${name}.base` : `${folder}/${name}.base`, baseFileText(folder, viewName));
+      } catch (error) {
+        if (!alreadyExists(error)) {
+          port.notify(liveStrings.t("base.new.failed", { name, reason: errorText(error) }));
+          return false;
+        }
+        // Nato nel frattempo, o non ancora nell'indice: il nome dopo.
+        taken = name;
+        proposal = await freeBaseName(port, name, true);
+        continue;
+      }
+      const range = view.state.field(pendingBases, false)?.get(id);
+      if (!range || !port.writable()) {
+        port.notify(liveStrings.t("base.new.orphan", { name }));
+        return false;
+      }
+      const at = baseInsertion(view.state, range.from, range.to, baseEmbed(name, viewName));
+      view.dispatch({
+        changes: { from: at.from, to: at.to, insert: at.insert },
+        selection: EditorSelection.cursor(at.cursor),
+        scrollIntoView: true,
+        userEvent: "input.complete",
+      });
+      view.focus();
+      return true;
+    }
+  } finally {
+    // Anche su un editor già chiuso: CodeMirror allora aggiorna solo lo stato.
+    view.dispatch({ effects: trackBase.of({ id, drop: true }) });
+  }
 }
 
 // ── I completamenti che una voce riapre ──────────────────────────────────────

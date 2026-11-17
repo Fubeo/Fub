@@ -1,0 +1,9 @@
+{
+  "about": "align con un lato che non esiste (centre, non center): le operazioni non si leggono. Il controllo dà bad_value col nome vicino.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+    { "id": "b", "type": "text", "x": 200, "y": 100, "width": 100, "height": 60, "text": "b" }
+  ] },
+  "ops": [{ "op": "align", "ids": ["a", "b"], "to": "centre" }],
+  "expect": { "outcome": "malformed" }
+}

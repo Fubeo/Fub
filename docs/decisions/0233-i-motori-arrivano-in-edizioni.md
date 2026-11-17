@@ -19,8 +19,8 @@ Il piano dei componenti ha tre livelli di consegna: dati scaricabili
 feature Cargo diverse) e librerie a runtime (ogni motore in una libreria
 dinamica, caricata quando serve). K0 doveva decidere il terzo coi numeri.
 
-I numeri sono in [I sei motori da soli](../misure/motori-2026-10-31-linux-ryzen.md)
-e in [Le librerie a runtime](../misure/librerie-runtime-2026-10-31.md):
+I numeri sono in [I sei motori da soli](../misure/2026-10-31-motori-linux-ryzen.md)
+e in [Le librerie a runtime](../misure/2026-10-31-librerie-runtime.md):
 
 - un motore pesa fra 6,5 MiB (GridCraft) e 64,6 MiB (VectorCraft), senza
   simboli; è il codice che un'edizione toglie a chi non lo usa;

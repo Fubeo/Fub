@@ -41,6 +41,15 @@ pub const HEARTBEAT: Duration = Duration::from_secs(10);
 pub const HEARTBEAT_MISSES: u32 = 2;
 /// La validità del segreto di abbinamento.
 pub const PAIRING_TTL: Duration = Duration::from_secs(5 * 60);
+/// I segreti sbagliati che un QR sopporta prima di non valere più.
+///
+/// Arrivare al segreto vuol dire avere già l'id di sessione, che sta solo nel
+/// QR: chi sbaglia il segreto ha visto il QR, o uno vecchio della stessa
+/// sessione. Un lettore di QR non sbaglia una lettera, e un tablet con il QR
+/// di prima riceve 4004 e non ritenta da sé: cinque errori sono già un
+/// tentativo, e il QR si brucia invece di restare a disposizione per tutti i
+/// suoi cinque minuti.
+pub const MAX_SECRET_FAILURES: u32 = 5;
 /// La finestra della ripresa, contata dalla caduta.
 pub const RESUME_WINDOW: Duration = Duration::from_secs(2 * 60);
 /// L'attesa dopo una chiusura 4006 prima di riprovare.

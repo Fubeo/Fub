@@ -97,6 +97,28 @@ del tratto) e lo provano i test.
 La riga 6 è la più utile a chi scrive con la mano appoggiata: se il palmo lascia
 un segno prima che la penna tocchi, il ruolo è stato deciso troppo tardi.
 
+## La lavagna
+
+Apri un file `.canvas` con una scheda di testo. Strumenti: la penna, la gomma
+(il retro della penna), il tasto D, il menu della penna (nella riga delle
+opzioni, con la Penna scelta nella colonna) e il pulsante «Scrivi col mouse»,
+in testa alla barra di sotto.
+
+| N. | Gesto | Atteso |
+|---|---|---|
+| 1 | Penna sopra una scheda, poi sul vuoto | il tratto resta alla scheda e la segue quando la sposti; sul vuoto è libero |
+| 2 | Gomma sopra un tratto | il tratto sbiadisce mentre passi e sparisce quando alzi |
+| 3 | Mouse, trascina tenendo D; poi senza | con D scrive (cursore a croce), senza seleziona come prima |
+| 4 | «Scrivi col mouse», poi trascina | il pulsante ha il fondo dell'accento e il mouse scrive; D lasciato non lo spegne; di nuovo il pulsante, e torna a selezionare |
+| 5 | Chiudi e riapri la lavagna | l'interruttore è spento; con «Ricorda se scrivi col mouse» acceso in Impostazioni, com'era |
+| 6 | Un dito, poi due | uno sposta la lavagna, due la ingrandiscono; il palmo mentre scrivi non fa niente |
+| 7 | `Ctrl+Z` dopo ciascuno | torna un tratto o una passata di gomma per volta |
+| 8 | Menu della penna: Stilografica, Vermiglio, 8 px; poi un tratto | il pulsante dice «Penna: Stilografica, Vermiglio, 8 px» e il tratto dopo è così; un tratto già giù resta com'era |
+| 9 | Evidenziatore, tratto sopra il testo di una scheda | giallo a metà, il testo si legge sotto |
+| 10 | Gomma, «Solo il pezzo»; punta o mouse sopra un tratto | cursore a cella; si toglie solo il pezzo strofinato |
+| 11 | Il menu con la tastiera: Tab, frecce, Esc | Tab salta fra i gruppi, le frecce scelgono, Esc chiude e torna al pulsante |
+| 12 | Chiudi e riapri la lavagna | la penna scelta è ancora quella |
+
 ## Tratti molto lunghi e cambi di dispositivo
 
 1. **Tratto lunghissimo.** Con la penna, disegna una spirale continua per circa
@@ -115,6 +137,49 @@ un segno prima che la penna tocchi, il ruolo è stato deciso troppo tardi.
    oggetto, scorri la vista con la rotella o il trackpad fin oltre l'oggetto,
    poi alza senza muovere: l'oggetto resta. Con la penna lo stesso gesto non
    lascia una coda dritta.
+
+## Le schede vive
+
+Questa prova copre il cancello di N6 sui file che arrivano dal sistema: un
+`.xlsx` vero trascinato dal file manager sulla lavagna, una penna sopra la
+scheda di foglio, poi chiudi e riapri. Il file del computer non deve cambiare, e
+nel vault non deve comparire nient'altro. La fanno anche chi cambia
+`state/canvas-intake.ts`, `editors/media/attachment-target.ts` o la scelta
+«Dove vanno i file trascinati». Il vault è una cartella di prova, mai quello di
+lavoro: il `.xlsx` sta fuori dal vault, per esempio sul desktop.
+
+Prima della prova, in un terminale (Linux):
+
+```bash
+VAULT=$(mktemp -d)                                  # il vault di prova
+printf '{"nodes":[],"edges":[]}\n' > "$VAULT/lavagna.canvas"
+sha256sum ~/Scrivania/prova.xlsx                    # prima: annota l'impronta
+```
+
+Apri `$VAULT` nell'app (il comando è quello della Preparazione) e segui la
+tabella.
+
+| N. | Gesto | Atteso |
+|---|---|---|
+| 1 | Apri `lavagna.canvas` dall'albero | la lavagna vuota |
+| 2 | Trascina `prova.xlsx` dal file manager su uno spazio vuoto della lavagna e rilascia | nasce una scheda di foglio nel punto del rilascio; la notifica dice «Copiati in attachments/», con «Cambia cartella» |
+| 3 | Con la penna (o col mouse, con «Scrivi col mouse» acceso), un tratto sopra la scheda di foglio | il tratto resta sulla scheda e la segue quando la sposti |
+| 4 | Chiudi la lavagna, chiudi l'app, riaprila e riapri il vault | foglio e tratto al loro posto; niente altra copia |
+| 5 | Trascina di nuovo `prova.xlsx` sulla lavagna | nessun file nuovo in `attachments/`; la notifica dice «Già nel vault come attachments/prova.xlsx, uso quello», con «Fanne una copia» |
+| 6 | Nel terminale: `mv "$VAULT/attachments/prova.xlsx" "$VAULT/attachments/bilancio.xlsx"`, poi trascina `prova.xlsx` ancora | la notifica trova `attachments/bilancio.xlsx`; ancora nessun file nuovo |
+| 7 | Guarda le celle del foglio nella scheda | le celle del `.xlsx` vero, come nel file. È l'unica parte che la prova automatica non fa: il finto non apre i fogli |
+
+Alla fine, nel terminale, le impronte e i file del vault:
+
+```bash
+sha256sum ~/Scrivania/prova.xlsx "$VAULT"/attachments/*.xlsx   # dopo: uguali a prima
+find "$VAULT" -type f -not -path "*/.fub/*"                    # solo la lavagna e la copia
+```
+
+Su Windows e su macOS la prova la fa l'utente con gli stessi passi, e
+l'impronta si calcola con `certutil -hashfile <file> SHA256` e con
+`shasum -a 256 <file>`. Annota il commit (`git rev-parse --short HEAD`), il
+sistema e la webview, come nelle altre sezioni.
 
 ## Che cosa annotare
 

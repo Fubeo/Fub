@@ -6,6 +6,10 @@ import { gergoIn } from "../../../i18n/gergo";
 import { catalogFor as shellCatalogFor } from "../../../i18n/strings";
 import { CATALOG_COMMANDS } from "./commands";
 import { fogliStrings, t } from "./strings";
+import { COMMANDS_IT } from "./strings/commands";
+import { FIELDS_IT } from "./strings/fields";
+import { PALETTE_IT } from "./strings/palette";
+import { RESULT_IT } from "./strings/result";
 
 const IT = fogliStrings.catalogFor("it");
 const EN = fogliStrings.catalogFor("en");
@@ -53,6 +57,14 @@ describe("il catalogo dei comandi dei fogli", () => {
       expect(gergoIn(text).map((voce) => voce.parola.source), `«${key}»: ${text}`).toEqual([]);
       expect(/craft/i.test(text) || /craft/i.test(EN[key]!), `«${key}» nomina un altro programma`).toBe(false);
     }
+  });
+
+  it("non ripete una chiave in due aree di `strings/`", () => {
+    // Nel letterale unico il compilatore rifiutava una chiave doppia; con le
+    // aree ricomposte per spread l'ultima vincerebbe in silenzio.
+    const areas = [PALETTE_IT, COMMANDS_IT, FIELDS_IT, RESULT_IT];
+    const count = areas.reduce((sum, area) => sum + Object.keys(area).length, 0);
+    expect(count).toBe(Object.keys(IT).length);
   });
 
   it("risponde con `t`", () => {

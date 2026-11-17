@@ -147,12 +147,19 @@ for (const block of allBlocks) {
   }
 }
 
+// Il render apre i diagrammi dei documenti, che su una PR vengono da chiunque,
+// in un Chromium **con la sandbox**: niente `--no-sandbox` né
+// `--disable-setuid-sandbox` (audit del 2026-10-30, B19). Dove AppArmor chiude
+// gli user namespace (Ubuntu 24.04) Chromium parte soltanto se un profilo
+// glieli concede: la CI passa il Chrome del runner, coperto dal profilo
+// `chrome` di AppArmor, con `PUPPETEER_EXECUTABLE_PATH`. Senza sandbox il
+// render fallisce e lo dice: non si ripiega su un Chromium senza.
 function render(diagrams) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "fub-mermaid-"));
   const input = path.join(temp, "all.md");
   const output = path.join(temp, "rendered.md");
   const config = path.join(temp, "puppeteer.json");
-  fs.writeFileSync(config, JSON.stringify({ args: ["--no-sandbox", "--disable-setuid-sandbox"] }));
+  fs.writeFileSync(config, JSON.stringify({}));
   fs.writeFileSync(
     input,
     diagrams.map((diagram, index) =>

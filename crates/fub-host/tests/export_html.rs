@@ -10,6 +10,10 @@ use fub_host::Host;
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\nfinto";
 
 fn export(files: &[(&str, &[u8])], doc: &str) -> ExportReport {
+    export_with(files, doc, serde_json::Value::Null)
+}
+
+fn export_with(files: &[(&str, &[u8])], doc: &str, options: serde_json::Value) -> ExportReport {
     let dir = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
     for (path, bytes) in files {
@@ -23,7 +27,8 @@ fn export(files: &[(&str, &[u8])], doc: &str) -> ExportReport {
     let request = ExportRequest::new(
         "importers.html",
         ExportSelection::Documents(vec![DocId::new(doc)]),
-    );
+    )
+    .with_options(options);
     let report = host
         .invoke_job(
             None,
@@ -132,4 +137,41 @@ fn a_diagram_is_named_in_the_file_and_in_the_report() {
         // che l'autore ha scritto: niente da dichiarare.
         assert!(html.contains("graph TD;"), "{html}");
     }
+}
+
+/// I commenti con la discussione (`{==passo==}{>>messaggio<<}`): senza
+/// l'opzione escono dal file, il passo resta testo; con `{"comments": true}`
+/// diventano un rimando dopo il passo e una nota in fondo.
+#[test]
+fn comments_leave_the_file_or_become_notes_at_the_bottom() {
+    let note: &[u8] = "Il {==passo letto==}{>>@Anna Bianchi 2026-11-08 17:40: \
+        da rivedere<<}{>>@Bruno: va bene<<} e la fine.\n"
+        .as_bytes();
+    let files = [("Bozza.md", note)];
+
+    let html = page(&export(&files, "Bozza.md"));
+    assert!(html.contains("Il passo letto e la fine."), "{html}");
+    for gone in ["da rivedere", "Anna", "{==", "<template", "<section"] {
+        assert!(!html.contains(gone), "`{gone}` è rimasto nel file: {html}");
+    }
+
+    let html = page(&export_with(
+        &files,
+        "Bozza.md",
+        serde_json::json!({"comments": true}),
+    ));
+    assert!(
+        html.contains("Il passo letto<sup class=\"comment-ref\" id=\"comment-ref-1\">"),
+        "{html}"
+    );
+    assert!(
+        html.contains(
+            "<li id=\"comment-1\"><p class=\"comment-message\">\
+             <span class=\"comment-author\">Anna Bianchi</span> \
+             <span class=\"comment-date\">2026-11-08 17:40</span>: da rivedere</p>\
+             <p class=\"comment-message\"><span class=\"comment-author\">Bruno</span>: va bene</p>"
+        ),
+        "i due messaggi della discussione sono una nota sola: {html}"
+    );
+    assert!(!html.contains("<template"), "{html}");
 }

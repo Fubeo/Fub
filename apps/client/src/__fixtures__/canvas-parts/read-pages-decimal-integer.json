@@ -1,0 +1,16 @@
+{
+  "name": "read-pages-decimal-integer",
+  "description": "Una pagina scritta 3.0 è intera, come per JavaScript; riscritta è 3.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Libro.pdf\", \"subpath\": \"#page=3\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"pages\", \"pages\": [3.0, 4], \"layout\": \"column\" } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "ok",
+        "parts": "{\"kind\":\"pages\",\"pages\":[3,4],\"layout\":\"column\"}",
+        "shows": "#page=3",
+        "layout": "column"
+      }
+    ]
+  }
+}

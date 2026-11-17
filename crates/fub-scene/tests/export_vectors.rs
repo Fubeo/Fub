@@ -97,6 +97,7 @@ fn read_kind(error: ReadError) -> &'static str {
     match error {
         ReadError::Malformed { .. } => "malformed",
         ReadError::NotSvg { .. } => "not-svg",
+        ReadError::TooManyNodes { .. } => "too-many-nodes",
     }
 }
 

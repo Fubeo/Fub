@@ -13,6 +13,8 @@ import {
   numberStep,
   sectionAnchor,
   searchTerms,
+  shownChoice,
+  visibleChoices,
 } from "./settings-model";
 
 function entry(
@@ -70,6 +72,35 @@ describe("il controllo si sceglie dalla forma del dato", () => {
   it("un valore fuori dalle scelte resta visibile in una tendina", () => {
     const options = [{ value: "compact", label: "Compatta" }, { value: "relaxed", label: "Rilassata" }];
     expect(controlFor(entry({ kind: "choice", default: "compact", options }, "enorme")).kind).toBe("select");
+  });
+
+  // La modalità iniziale com'è dichiarata in `crates/fub-host/src/settings.rs`:
+  // `blocks`, scelto da un Fub che aveva i Blocchi, resta valido in fondo con
+  // l'etichetta di Scrittura (T4).
+  const modes = [
+    { value: "live_preview", label: "Scrittura" },
+    { value: "source", label: "Sorgente" },
+    { value: "reading", label: "Lettura" },
+    { value: "blocks", label: "Scrittura" },
+  ];
+  const initialMode = (value: string) =>
+    entry({ kind: "choice", default: "live_preview", options: modes }, value, { key: "editor.default-mode" }, "machine");
+
+  it("due scelte con la stessa etichetta sono una: si mostra la prima", () => {
+    expect(visibleChoices(modes).map((option) => option.value)).toEqual(["live_preview", "source", "reading"]);
+    expect(controlFor(initialMode("source"))).toEqual({ kind: "segmented", options: modes.slice(0, 3) });
+  });
+
+  it("il valore di prima accende la scelta con la sua etichetta, e il valore resta quello scritto", () => {
+    const blocks = initialMode("blocks");
+    expect(shownChoice(blocks)).toBe("live_preview");
+    expect(controlFor(blocks)).toEqual({ kind: "segmented", options: modes.slice(0, 3) });
+    expect(blocks.value).toBe("blocks");
+    expect(isModified(blocks), "la scelta resta della persona").toBe(true);
+    expect(shownChoice(initialMode("reading"))).toBe("reading");
+    // Un valore che non è fra le scelte resta com'è, in una tendina.
+    expect(shownChoice(initialMode("pagine"))).toBe("pagine");
+    expect(controlFor(initialMode("pagine")).kind).toBe("select");
   });
 
   it("un'opzione senza etichetta non rende lungo il segmentato: conta il ripiego", () => {

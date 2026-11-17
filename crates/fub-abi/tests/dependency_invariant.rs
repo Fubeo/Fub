@@ -19,8 +19,9 @@
 //!    prefisso non vedrebbe un parser markdown con un nome nuovo; un elenco
 //!    chiuso vede tutto ciò che compare, chiamato come vuole.
 //! 4. **Il diagramma dei componenti** — il grafo disegnato in
-//!    `../../../docs/architecture/overview.md` deve dire le stesse dipendenze che
-//!    dice `cargo metadata`, nei due versi.
+//!    `../../../docs/architecture/overview.md` (e, per il motore del disegno, in
+//!    `../../../docs/architecture/disegno.md`) deve dire le stesse dipendenze
+//!    che dice `cargo metadata`, nei due versi.
 //!
 //! Le maglie sono diverse di proposito: la seconda intercetta il gesto (`cargo
 //! add`), la prima il contrabbando, la terza l'ignoto. Sul kernel — che ha una
@@ -585,12 +586,13 @@ const SCENE_FORBIDDEN: &[&str] = &["fub-abi", "fub-kernel", "tauri", "wasmtime"]
 /// Le dipendenze normali che `fub-scene` può dichiarare. Elenco chiuso, come
 /// quello di `fub-abi` e `fub-kernel`.
 ///
-/// `fub-ink` è il nucleo dell'inchiostro: il campione del tratto che il codec
-/// di `fub:ink` quantizza è un tipo suo. È puro e senza dipendenze
-/// (`the_ink_core_stands_alone`), quindi un componente `wasm32-wasip2` che
-/// prenda `fub-scene` via Git prende anche lui dalla stessa `rev`, e non porta
-/// con sé il contratto né il kernel.
-const SCENE_ALLOWED_DIRECT: &[&str] = &["fub-ink", "quick-xml", "serde"];
+/// `fub-ink-codec` è il codec di `fub:ink` e la grammatica di `fub:brush`, che
+/// stanno fuori dal lettore perché li usa anche la lavagna; dipende soltanto
+/// dal nucleo dell'inchiostro (`the_ink_codec_stands_alone`), che non dipende
+/// da niente (`the_ink_core_stands_alone`). Un componente `wasm32-wasip2` che
+/// prenda `fub-scene` via Git prende i due crate dalla stessa `rev`, e non
+/// porta con sé il contratto né il kernel.
+const SCENE_ALLOWED_DIRECT: &[&str] = &["fub-ink-codec", "quick-xml", "serde"];
 
 /// Il lettore delle scene sta da solo.
 ///
@@ -680,8 +682,78 @@ fn the_ink_core_stands_alone() {
     );
 }
 
-/// Chi può dipendere dal nucleo dell'inchiostro. Elenco chiuso.
-const INK_ALLOWED_DEPENDENTS: &[&str] = &["fub-scene", "fub-format-rich"];
+/// Chi può dipendere dal nucleo dell'inchiostro. Elenco chiuso: il codec dei
+/// tratti, che ne quantizza il campione, e i documenti, che ne scrivono
+/// l'InkML (ADR 0226). `fub-scene` prende il campione dal codec.
+const INK_ALLOWED_DEPENDENTS: &[&str] = &["fub-ink-codec", "fub-format-rich"];
+
+/// Il codec dei tratti sta da solo.
+///
+/// `fub-ink-codec` è il codec di `fub:ink` e la grammatica di `fub:brush` (§5
+/// del formato della scena). Li usano due lettori che non devono conoscersi:
+/// i disegni (`fub-scene`) e il nucleo della lavagna, che scrive gli stessi
+/// tratti in una `.canvas` e compila per `wasm32-unknown-unknown`. Per questo
+/// il codec non è in `fub-scene`, che porta con sé il lettore XML, e dipende
+/// soltanto dal nucleo dell'inchiostro, di cui quantizza il campione: se
+/// prendesse un'altra dipendenza, la pagherebbero in byte la WebView e il
+/// plugin `wasm32-wasip2` che prende `fub-scene` via Git.
+///
+/// Le dipendenze di sviluppo sono fuori: non finiscono in nessun binario.
+#[test]
+fn the_ink_codec_stands_alone() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    let direct = graph.direct("fub-ink-codec");
+    let expected: BTreeSet<&str> = INK_CODEC_ALLOWED_DIRECT.iter().copied().collect();
+    assert!(
+        direct.iter().all(|d| expected.contains(d)),
+        "`fub-ink-codec` dichiara {direct:?} fra le dipendenze normali, ma può\n\
+         dipendere soltanto da {INK_CODEC_ALLOWED_DIRECT:?}. Il codec dei tratti\n\
+         lo usano i disegni e la lavagna, che compila per la WebView: se serve un\n\
+         tipo, va nel nucleo dell'inchiostro. Vedi il punto 2 di\n\
+         docs/decisions/0204-nucleo-inchiostro.md."
+    );
+
+    // Il nucleo non dipende da niente: la chiusura intera del codec è il
+    // nucleo e basta, e un crate arrivato per via transitiva si vede qui.
+    let trespassers: Vec<&str> = graph
+        .closure("fub-ink-codec")
+        .into_iter()
+        .filter(|n| !expected.contains(n))
+        .collect();
+    assert!(
+        trespassers.is_empty(),
+        "`fub-ink-codec` raggiunge {trespassers:?} fra le dipendenze normali. Il\n\
+         codec dei tratti non vede il contratto, il kernel, un formato, un\n\
+         lettore XML né altro oltre al nucleo dell'inchiostro. Vedi il punto 2\n\
+         di docs/decisions/0204-nucleo-inchiostro.md."
+    );
+
+    let members = graph.members();
+
+    let dependents: Vec<&str> = members
+        .iter()
+        .copied()
+        .filter(|m| *m != "fub-ink-codec" && graph.direct(m).contains("fub-ink-codec"))
+        .collect();
+    assert!(
+        dependents
+            .iter()
+            .all(|m| INK_CODEC_ALLOWED_DEPENDENTS.contains(m)),
+        "{dependents:?} dipendono da `fub-ink-codec`, ma solo\n\
+         {INK_CODEC_ALLOWED_DEPENDENTS:?} possono. Aggiungere un cliente del codec\n\
+         dei tratti è una decisione: scrivila nel punto 2 di\n\
+         docs/decisions/0204-nucleo-inchiostro.md e poi qui."
+    );
+}
+
+/// La sola dipendenza normale del codec dei tratti: il nucleo dell'inchiostro.
+const INK_CODEC_ALLOWED_DIRECT: &[&str] = &["fub-ink"];
+
+/// Chi può dipendere dal codec dei tratti. Elenco chiuso: i disegni e il
+/// nucleo della lavagna, per l'inchiostro delle schede di una `.canvas`.
+const INK_CODEC_ALLOWED_DEPENDENTS: &[&str] = &["fub-scene", "fub-canvas-core"];
 
 /// Il nucleo della lavagna sta da solo.
 ///
@@ -691,8 +763,12 @@ const INK_ALLOWED_DEPENDENTS: &[&str] = &["fub-scene", "fub-format-rich"];
 /// che detta la forma: un modulo `wasm32-unknown-unknown` non può portarsi
 /// dietro il contratto, il Markdown, il kernel o un toolkit, e ogni byte in più
 /// lo paga chi apre una lavagna. Per questo le dirette sono un elenco chiuso
-/// (`serde`, `serde_json`, `thiserror`) e la chiusura non contiene nessun
-/// membro del workspace né una famiglia proibita. Il giro completo di
+/// (`serde`, `serde_json`, `thiserror` e il codec dei tratti `fub-ink-codec`,
+/// per l'inchiostro `fub:ink` delle schede) e la chiusura non contiene una
+/// famiglia proibita né un membro del workspace, salvo i due nominati in
+/// [`CANVAS_CORE_ALLOWED_MEMBERS`]: il codec e il nucleo dell'inchiostro che
+/// lui prende, puri e già controllati da `the_ink_codec_stands_alone` e
+/// `the_ink_core_stands_alone`. Il giro completo di
 /// `scripts/check.sh` lo compila per quel bersaglio; questa rete dice il
 /// perché prima del linker.
 ///
@@ -721,13 +797,16 @@ fn the_canvas_core_stands_alone() {
     let trespassers: Vec<&str> = graph
         .closure("fub-canvas-core")
         .into_iter()
-        .filter(|n| members.contains(n) || forbidden(n))
+        .filter(|n| {
+            forbidden(n) || (members.contains(n) && !CANVAS_CORE_ALLOWED_MEMBERS.contains(n))
+        })
         .collect();
     assert!(
         trespassers.is_empty(),
         "`fub-canvas-core` raggiunge {trespassers:?} fra le dipendenze normali.\n\
          Il nucleo della lavagna non vede il contratto, il Markdown, il kernel,\n\
-         il toolkit dell'app né un altro membro del workspace."
+         il toolkit dell'app né un altro membro del workspace, salvo\n\
+         {CANVAS_CORE_ALLOWED_MEMBERS:?} (l'inchiostro delle schede)."
     );
 
     let dependents: Vec<&str> = members
@@ -747,7 +826,15 @@ fn the_canvas_core_stands_alone() {
 }
 
 /// Le sole dipendenze normali dirette del nucleo della lavagna. Elenco chiuso.
-const CANVAS_CORE_ALLOWED_DIRECT: &[&str] = &["serde", "serde_json", "thiserror"];
+const CANVAS_CORE_ALLOWED_DIRECT: &[&str] = &["fub-ink-codec", "serde", "serde_json", "thiserror"];
+
+/// L'eccezione nominata nella chiusura del nucleo della lavagna: i soli membri
+/// del workspace che può raggiungere. Il codec dei tratti legge e controlla
+/// l'inchiostro `fub:ink` delle schede, e prende con sé il nucleo
+/// dell'inchiostro, di cui quantizza il campione. Tutti e due sono puri e
+/// compilano per `wasm32-unknown-unknown` (punto 2 di
+/// docs/decisions/0204-nucleo-inchiostro.md).
+const CANVAS_CORE_ALLOWED_MEMBERS: &[&str] = &["fub-ink-codec", "fub-ink"];
 
 /// Chi può dipendere dal nucleo della lavagna. Elenco chiuso: il formato, i
 /// comandi della lavagna e la facciata WebAssembly.
@@ -762,8 +849,10 @@ const CANVAS_CORE_ALLOWED_DEPENDENTS: &[&str] =
 /// (`wasm-bindgen` e simili) è proprio ciò che la decisione D-1 (a) del piano
 /// N3 ha escluso. Per questo le dirette sono un elenco chiuso (il nucleo,
 /// `serde`, `serde_json`), la chiusura non contiene altri membri del
-/// workspace che il nucleo né una famiglia proibita, e nessun membro dipende
-/// dalla facciata: la caricano la shell e i suoi test, non un crate.
+/// workspace che il nucleo e quelli che il nucleo stesso può vedere
+/// (`CANVAS_CORE_ALLOWED_MEMBERS`, l'inchiostro delle schede) né una famiglia
+/// proibita, e nessun membro dipende dalla facciata: la caricano la shell e i
+/// suoi test, non un crate.
 #[test]
 fn the_canvas_wasm_facade_stays_thin() {
     let metadata = metadata();
@@ -789,15 +878,18 @@ fn the_canvas_wasm_facade_stays_thin() {
         .closure("fub-canvas-wasm")
         .into_iter()
         .filter(|n| {
-            (members.contains(n) && !matches!(*n, "fub-canvas-wasm" | "fub-canvas-core"))
+            (members.contains(n)
+                && !matches!(*n, "fub-canvas-wasm" | "fub-canvas-core")
+                && !CANVAS_CORE_ALLOWED_MEMBERS.contains(n))
                 || forbidden(n)
         })
         .collect();
     assert!(
         trespassers.is_empty(),
         "`fub-canvas-wasm` raggiunge {trespassers:?} fra le dipendenze normali.\n\
-         La facciata vede solo il nucleo della lavagna\n\
-         (docs/reference/canvas-operations.md § «WebAssembly»)."
+         La facciata vede solo il nucleo della lavagna e ciò che il nucleo vede\n\
+         ({CANVAS_CORE_ALLOWED_MEMBERS:?}; docs/reference/canvas-operations.md\n\
+         § «WebAssembly»)."
     );
 
     let dependents: Vec<&str> = members
@@ -873,8 +965,19 @@ fn the_live_session_stays_outside_the_core() {
 // La quarta rete: il diagramma dei componenti.
 // ---------------------------------------------------------------------------
 
-/// Il documento che contiene il grafo, relativo alla radice del repo.
-const DIAGRAM_DOC: &str = "../../../docs/architecture/overview.md";
+/// I documenti che contengono il grafo, come li nominano i messaggi.
+const DIAGRAM_DOC: &str =
+    "../../../docs/architecture/overview.md (e ../../../docs/architecture/disegno.md)";
+
+/// Gli stessi documenti, relativi alla radice del repo. La panoramica tiene il
+/// grafo di Fub; la pagina del disegno il seguito con `fub-disegno` e i crate
+/// di VectorCraft, che nella panoramica non stanno sotto la soglia di righe di
+/// una pagina (`.github/scripts/check-doc-size.mjs`). I blocchi marcati di
+/// tutti e due sono un grafo solo.
+const DIAGRAM_DOCS: &[&str] = &[
+    "docs/architecture/overview.md",
+    "docs/architecture/disegno.md",
+];
 
 /// Il commento Mermaid che marca *quale* blocco è il grafo delle dipendenze.
 /// Serve perché quel documento ne contiene più d'uno, e il primo è disposto a
@@ -1023,12 +1126,14 @@ fn the_diagram_declares_the_real_dependencies() {
     let graph = Graph::new(&metadata);
     let members = graph.local();
 
-    let doc = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../docs/architecture/overview.md"
-    );
-    let source = std::fs::read_to_string(doc)
-        .unwrap_or_else(|and| panic!("{DIAGRAM_DOC} non si legge: {and}"));
+    let source: String = DIAGRAM_DOCS
+        .iter()
+        .map(|doc| {
+            let path = format!("{}/../../{doc}", env!("CARGO_MANIFEST_DIR"));
+            std::fs::read_to_string(&path).unwrap_or_else(|and| panic!("{doc} non si legge: {and}"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     let drawn = read_diagram(&source);
 
     // 1. I riquadri sono i crate della repository, tutti e soli: i membri e i
@@ -1265,6 +1370,21 @@ const GRIDCRAFT_OWNERS: &[(&str, &str, Option<&str>)] = &[
 /// I crate che non devono vedere GridCraft nemmeno attraverso qualcun altro.
 const GRIDCRAFT_FREE: &[&str] = &["fub-abi", "fub-kernel", "fub-sdk"];
 
+/// Chi può dichiarare un crate di VectorCraft, come [`GRIDCRAFT_OWNERS`]: il
+/// motore del disegno entra da un adattatore soltanto, `fub-disegno` (vedi
+/// ../../../docs/decisions/0239-il-disegno-sul-motore-vettoriale.md).
+const VECTORCRAFT_OWNERS: &[(&str, &str, Option<&str>)] = &[
+    ("fub-disegno", "vectorcraft-doc", None),
+    ("fub-disegno", "vectorcraft-engine", None),
+    ("fub-disegno", "vectorcraft-geom", None),
+    ("fub-disegno", "vectorcraft-svg", None),
+    ("fub-disegno", "vectorcraft-text", None),
+    ("fub-disegno", "vectorcraft-tools", None),
+];
+
+/// I crate che non devono vedere VectorCraft nemmeno attraverso qualcun altro.
+const VECTORCRAFT_FREE: &[&str] = &["fub-abi", "fub-kernel", "fub-sdk"];
+
 /// I crate di un motore (`family`) fra le dipendenze dichiarate di un membro,
 /// con il genere e se sono opzionali.
 fn engine_declared<'a>(
@@ -1387,6 +1507,23 @@ fn the_core_does_not_reach_gridcraft() {
         GRIDCRAFT_FREE,
         "il motore del foglio di calcolo",
     );
+}
+
+/// I proprietari di VectorCraft: lo stesso confine, per il disegno.
+#[test]
+fn only_the_adapter_names_vectorcraft() {
+    only_owners_name(
+        "vectorcraft",
+        VECTORCRAFT_OWNERS,
+        "Il motore del disegno entra soltanto da `fub-disegno`. Un altro crate\n\
+         passa da quell'adattatore; se davvero serve, è una decisione da\n\
+         prendere aggiornando `VECTORCRAFT_OWNERS` qui e l'ADR 0239.",
+    );
+}
+
+#[test]
+fn the_core_does_not_reach_vectorcraft() {
+    the_core_does_not_reach("vectorcraft", VECTORCRAFT_FREE, "il motore del disegno");
 }
 
 /// Le cartelle di Excel restano una feature dell'host: una build di `fub-host`

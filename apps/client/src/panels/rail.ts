@@ -26,7 +26,7 @@
 // cosa c'è e aggiunge i bottoni.
 import { $ } from "../ui/dom";
 import { iconEl } from "../ui/icons";
-import { lastShownPanel, showPanel } from "./sidebar";
+import { enterPanel, lastShownPanel, showPanel } from "./sidebar";
 import { t, onLanguage } from "../i18n/strings";
 import type { Teardown } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
@@ -39,7 +39,7 @@ import { Race } from "../ui/race";
 import { notify } from "../ui/notify";
 import type { SettingEntry } from "../host/contract";
 import { onEvent } from "../state/kernel";
-import { revealSidePanel, sidePanelVisible, toggleSidePanel } from "../ui/side-panels";
+import { sidePanelVisible, toggleSidePanel } from "../ui/side-panels";
 import { allCommands, ariaBinding, displayBinding } from "../ui/commands";
 import { openPrimaryView, opensWithoutParams, primaryViews } from "../ui/primary-views";
 
@@ -52,13 +52,14 @@ const RAIL_COMMANDS: Record<string, string> = {
 
 /// Il clic su un'icona della rail: mostra il pannello, e se è già quello
 /// davanti chiude la barra — come in ogni editor con una barra di attività.
+/// Aprendo fa la strada del comando che il suggerimento promette: per la
+/// ricerca e i file il fuoco entra nel pannello, come con la scorciatoia.
 function railClick(panel: string): void {
   if (sidePanelVisible("sidebar") && lastShownPanel() === panel) {
     toggleSidePanel("sidebar");
     return;
   }
-  revealSidePanel("sidebar");
-  showPanel(panel);
+  enterPanel(panel);
 }
 
 const CHROME_VERSION = "chrome.schema";

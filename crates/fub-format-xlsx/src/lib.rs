@@ -38,7 +38,9 @@ use gridcraft_model::Workbook;
 use gridcraft_xlsx::{Format, ReadReport};
 
 pub mod catalogo;
+mod circular;
 mod commands;
+mod cronologia;
 pub mod export;
 // Le cartelle di prova dei test d'integrazione, anche per quelli interni.
 #[cfg(test)]
@@ -204,7 +206,7 @@ impl FormatProvider for XlsxProvider {
     fn descriptor(&self) -> FormatDescriptor {
         FormatDescriptor {
             id: FORMAT_ID.to_string(),
-            name: "Excel".to_string(),
+            name: "XLSX".to_string(),
             extensions: EXTENSIONS.iter().map(|e| e.to_string()).collect(),
             source: SourceKind::Bytes,
         }

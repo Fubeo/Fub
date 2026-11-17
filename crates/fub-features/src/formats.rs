@@ -11,7 +11,7 @@ use fub_abi::error::PluginError;
 use fub_abi::format::LinkInsert;
 use fub_abi::model::{DocId, LinkTarget};
 use fub_abi::text::{Arg, StringCatalog, Text};
-use fub_abi::traits::VaultRead;
+use fub_abi::traits::{IndexQuery, IndexResult, ReadApi, VaultRead};
 
 /// La chiave dell'errore «questo formato non lo supporta». Ogni feature che
 /// usa questo modulo la porta nel proprio catalogo con [`speaking`].
@@ -186,4 +186,41 @@ pub(crate) fn keeping_extension(
         Some(ext) => with_extension(host, name, ext),
         None => name.to_string(),
     }
+}
+
+/// Il testo del wikilink che porta a `target`: il nome pagina se la
+/// risoluzione del vault lo manda lì, poi il nome con la sua estensione, poi
+/// il percorso senza estensione, e solo in ultimo il percorso intero. Chiede al
+/// kernel invece di indovinare la regola: due note omonime in cartelle diverse,
+/// o nella stessa cartella con formati diversi, sono esattamente il caso in cui
+/// il nome da solo porterebbe altrove.
+pub(crate) fn link_reference(
+    host: &(impl ReadApi + ?Sized),
+    target: &DocId,
+) -> Result<String, PluginError> {
+    let path = target.as_str();
+    let file_name = path.rsplit('/').next().filter(|name| *name != path);
+    let without_extension = path
+        .rsplit_once('.')
+        .map(|(stem, _)| stem)
+        .filter(|stem| !stem.is_empty() && !stem.ends_with('/'));
+    for candidate in [Some(target.page_name()), file_name, without_extension]
+        .into_iter()
+        .flatten()
+    {
+        let resolved = match host.query_index(IndexQuery::Resolve {
+            target: LinkTarget::wiki(candidate),
+            from: None,
+        }) {
+            Ok(resolved) => resolved,
+            // Un host che non sa risolvere non ferma il gesto: il percorso
+            // intero porta sempre alla nota, com'era prima.
+            Err(PluginError::Unserved(_)) => break,
+            Err(error) => return Err(error),
+        };
+        if matches!(resolved, IndexResult::Resolved(Some(ref found)) if found.doc == *target) {
+            return Ok(candidate.to_string());
+        }
+    }
+    Ok(path.to_string())
 }

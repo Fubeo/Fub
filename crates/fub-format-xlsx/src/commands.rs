@@ -116,10 +116,6 @@ const NOT_SERVED: &[(&str, &str)] = &[
 /// nella cartella, e l'anteprima di stampa e il PDF senza percorso leggono la
 /// cartella com'è adesso senza cambiarla né scrivere sul disco.
 const SERVED_ANYWAY: &[&str] = &["file.properties", "file.printPreview", "file.exportPdf"];
-/// Gli stati di prima che si tengono: oltre, annullare rifà il giornale
-/// dalla base.
-const UNDO_SNAPSHOTS: usize = 100;
-
 /// Se Fub serve il comando `id` della facciata.
 pub(crate) fn served(id: &str) -> bool {
     if id == UNDO || id == REDO || COMPOSED.iter().any(|(composed, ..)| *composed == id) {
@@ -312,9 +308,9 @@ fn params_of(command: &GridCommand) -> Result<Json, PluginError> {
 
 /// Lo stato della facciata in un punto del giornale.
 #[derive(Clone)]
-struct Snapshot {
-    workbook: Arc<Workbook>,
-    selection: Selection,
+pub(crate) struct Snapshot {
+    pub workbook: Arc<Workbook>,
+    pub selection: Selection,
     given: BTreeSet<u32>,
 }
 
@@ -334,11 +330,6 @@ pub(crate) struct Facade {
     ready: bool,
     /// I `sheetId` dati: quelli del file e quelli dei fogli nuovi.
     given: BTreeSet<u32>,
-    /// Per ogni comando del giornale, lo stato di prima; `None` oltre
-    /// [`UNDO_SNAPSHOTS`].
-    undo: Vec<Option<Snapshot>>,
-    /// I comandi annullati, con lo stato di dopo.
-    redo: Vec<(GridCommand, Snapshot)>,
 }
 
 impl Facade {
@@ -377,8 +368,6 @@ impl Facade {
             session,
             ready: false,
             given,
-            undo: Vec::new(),
-            redo: Vec::new(),
         }
     }
 
@@ -413,12 +402,8 @@ impl Facade {
             .position(|sheet| sheet.file_id == number)
     }
 
-    /// I comandi del giornale che si possono annullare e ripetere.
-    pub fn can_redo(&self) -> bool {
-        !self.redo.is_empty()
-    }
-
-    fn snapshot(&self) -> Snapshot {
+    /// Lo stato di adesso, per la cronologia ([`crate::cronologia`]).
+    pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             workbook: self.doc().wb.clone(),
             selection: self.doc().selection.clone(),
@@ -426,7 +411,8 @@ impl Facade {
         }
     }
 
-    fn restore(&mut self, snapshot: Snapshot) {
+    /// Torna allo stato `snapshot` della stessa facciata.
+    pub fn restore(&mut self, snapshot: Snapshot) {
         let ready = self.ready;
         let doc = self.doc_mut();
         let same = Arc::ptr_eq(&doc.wb, &snapshot.workbook);
@@ -438,6 +424,15 @@ impl Facade {
             doc.calc.rebuild(&doc.wb);
         }
         self.given = snapshot.given;
+    }
+
+    /// Porta la facciata sulla cartella del file allo stato `snapshot`,
+    /// tenuto da un'altra facciata (prima di un salvataggio): i `sheetId`
+    /// dati sono i suoi e quelli del file di adesso.
+    pub fn adopt(&mut self, snapshot: &Snapshot) {
+        let base = std::mem::take(&mut self.given);
+        self.restore(snapshot.clone());
+        self.given.extend(base);
     }
 
     /// Porta la facciata sul foglio e sulla selezione del comando.
@@ -477,12 +472,6 @@ impl Facade {
             && !same_content(&previous.workbook, &self.doc().wb);
         if changed {
             self.give_sheet_ids(&previous.workbook);
-            self.undo.push(Some(previous));
-            let kept = self.undo.len().saturating_sub(UNDO_SNAPSHOTS);
-            for old in &mut self.undo[..kept] {
-                *old = None;
-            }
-            self.redo.clear();
         }
         self.fill_dialogs(&mut requests);
         Ok(Ran {
@@ -625,39 +614,6 @@ impl Facade {
         }
     }
 
-    /// Annulla l'ultimo comando di `journal`, che resta con gli altri. Senza
-    /// lo stato di prima, rifà gli altri dalla `base`.
-    pub fn undo(&mut self, base: &Workbook, journal: &[GridCommand]) -> Result<(), PluginError> {
-        let Some((last, rest)) = journal.split_last() else {
-            return Err(PluginError::BadArgs("nothing to undo".into()));
-        };
-        let after = self.snapshot();
-        match self.undo.pop().flatten() {
-            Some(before) => self.restore(before),
-            None => {
-                let redo = std::mem::take(&mut self.redo);
-                let mut fresh = Facade::new(base);
-                fresh.replay(rest)?;
-                *self = fresh;
-                self.redo = redo;
-            }
-        }
-        self.redo.push((last.clone(), after));
-        Ok(())
-    }
-
-    /// Ripete l'ultimo comando annullato, e lo dà per il giornale.
-    pub fn redo(&mut self) -> Result<GridCommand, PluginError> {
-        let (command, after) = self
-            .redo
-            .pop()
-            .ok_or_else(|| PluginError::BadArgs("nothing to redo".into()))?;
-        let before = self.snapshot();
-        self.restore(after);
-        self.undo.push(Some(before));
-        Ok(command)
-    }
-
     /// Rifà i comandi di un giornale. Ognuno deve cambiare la cartella come
     /// la prima volta.
     pub fn replay(&mut self, commands: &[GridCommand]) -> Result<(), PluginError> {
@@ -686,14 +642,15 @@ impl Facade {
 
     /// Il catalogo sulla selezione `at`. `edits` spegne, con il suo perché,
     /// i comandi che cambiano la cartella tranne l'input delle celle, e
-    /// `input` spegne anche quello; `undo` dice se il giornale ha un comando
-    /// da annullare.
+    /// `input` spegne anche quello; `undo` e `redo` dicono se la cronologia
+    /// del documento ha un passo da annullare e uno da ripetere.
     pub fn catalog(
         &mut self,
         at: &GridSelection,
         edits: Option<&str>,
         input: Option<&str>,
         undo: bool,
+        redo: bool,
     ) -> Vec<GridCommandState> {
         // Una selezione che il foglio non ha dà il catalogo su quella di
         // prima.
@@ -710,10 +667,7 @@ impl Facade {
             };
             let (enabled, reason) = match (spec.id, blocked) {
                 (UNDO, _) => (undo, (!undo).then(|| "nothing to undo".to_owned())),
-                (REDO, _) => {
-                    let redo = self.can_redo();
-                    (redo, (!redo).then(|| "nothing to redo".to_owned()))
-                }
+                (REDO, _) => (redo, (!redo).then(|| "nothing to redo".to_owned())),
                 (_, Some(why)) => (false, Some(why.to_owned())),
                 _ => {
                     let info = spec.info(&self.session);
@@ -744,27 +698,14 @@ impl Facade {
     }
 
     /// Il punto a cui [`Facade::rollback`] torna.
-    pub fn checkpoint(&self) -> Checkpoint {
-        Checkpoint {
-            snapshot: self.snapshot(),
-            undo: self.undo.len(),
-            redo: self.redo.clone(),
-        }
+    pub fn checkpoint(&self) -> Snapshot {
+        self.snapshot()
     }
 
     /// Torna al punto `checkpoint`, togliendo i comandi dati dopo.
-    pub fn rollback(&mut self, checkpoint: Checkpoint) {
-        self.restore(checkpoint.snapshot);
-        self.undo.truncate(checkpoint.undo);
-        self.redo = checkpoint.redo;
+    pub fn rollback(&mut self, checkpoint: Snapshot) {
+        self.restore(checkpoint);
     }
-}
-
-/// Lo stato della facciata prima di un gruppo di comandi.
-pub(crate) struct Checkpoint {
-    snapshot: Snapshot,
-    undo: usize,
-    redo: Vec<(GridCommand, Snapshot)>,
 }
 
 /// Il comando con cui l'input `value` entra nella cella `cell`.

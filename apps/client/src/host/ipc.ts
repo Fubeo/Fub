@@ -22,6 +22,13 @@ import type {
   DocumentWindowEvent,
   DocumentWindowRequest,
   FieldValue,
+  DrawingCommandInfo,
+  DrawingCommandRequest,
+  DrawingGesture,
+  DrawingOpen,
+  DrawingOutcome,
+  DrawingSync,
+  DrawingSynced,
   GridApplyRequest,
   GridBytesSession,
   GridBytesWindow,
@@ -37,6 +44,7 @@ import type {
   InvokeMode,
   KernelNotice,
   ResourceDescriptor,
+  ResourceWriteOptions,
   Locale,
   PluginError,
   SettingValue,
@@ -63,7 +71,7 @@ import type {
   SettingScope,
   CatalogEntry,
 } from "./contract";
-import { openViewer, saveViewer, writeResource } from "../editors/media/transport";
+import { openViewer, ReuseSupport, saveViewer, writeResource } from "../editors/media/transport";
 import { readCraftPreview, type CraftPreview, type CraftPreviewSize } from "./craft";
 import { createMobileBridge } from "../shells/mobile/bridge";
 import type { MobileBridge } from "../shells/mobile/bridge";
@@ -85,6 +93,10 @@ const mediaInvoke = <T>(
 ): Promise<T> => options?.headers
   ? invoke<T>(cmd, args, { headers: options.headers })
   : invoke<T>(cmd, args);
+
+// Se l'host di questa seduta ha già rifiutato `reuse` (un host di prima): i
+// depositi dopo vanno subito senza (T32b). Uno per finestra, quanto l'host.
+const reuseSupport = new ReuseSupport();
 
 
 // Mirror esatto dei record serde in fub-host::support e fub-app::support.
@@ -242,8 +254,11 @@ export const api = {
   /// e la sa soltanto Tauri: costruirla a mano rompeva le immagini delle note
   /// su Windows. L'handle è un numero: niente percorso, niente query.
   assetUrl: (handle: string) => convertFileSrc(handle, "fub-asset"),
-  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string | null) =>
-    writeResource(mediaInvoke, id, bytes, expected, vault ?? undefined),
+  /// Deposita byte grezzi: `expected` null crea soltanto, una stringa è il CAS.
+  /// `options.reuse: "same-content"` non scrive se il vault ha già questi byte
+  /// (vedi `writeResource` e la sezione «Depositare un file» del contratto).
+  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string | null, options?: ResourceWriteOptions) =>
+    writeResource(mediaInvoke, id, bytes, expected, vault ?? undefined, options, reuseSupport),
   viewerOpen: (url: string, title: string, policy: { allowRemote: boolean; allowlist: readonly string[] }) =>
     openViewer(mediaInvoke, url, title, policy),
   viewerSave: (url: string, title: string, allowlist: readonly string[], attachmentFolder: string, vault?: string) =>
@@ -296,6 +311,23 @@ export const api = {
     invoke<GridCommandOutcome>("grid_bytes_command", { surface, instance, request }),
   closeGridBytes: (surface: string, instance: string) =>
     invoke<void>("close_grid_bytes", { surface, instance }),
+  // Il disegno sul motore (K5): il motore tiene una copia del disegno che
+  // segue il testo della `DocumentSession` e risponde ai gesti con operazioni
+  // di scena che il client applica (`editors/spatial/motore/sessione.ts`).
+  // Sei porte tipate con il vault in coda; senza il motore in questa build
+  // l'host rifiuta con `unserved` e la sessione dà il motore spento.
+  openDrawing: (doc: string, text: string, vault?: string | null) =>
+    invoke<DrawingOpen>("open_drawing", toVault({ doc, text }, vault)),
+  drawingSync: (instance: string, sync: DrawingSync, vault?: string | null) =>
+    invoke<DrawingSynced>("drawing_sync", toVault({ instance, sync }, vault)),
+  drawingGesture: (instance: string, gesture: DrawingGesture, vault?: string | null) =>
+    invoke<DrawingOutcome>("drawing_gesture", toVault({ instance, gesture }, vault)),
+  drawingCommands: (instance: string, selection: string[], vault?: string | null) =>
+    invoke<DrawingCommandInfo[]>("drawing_commands", toVault({ instance, selection }, vault)),
+  drawingCommand: (instance: string, request: DrawingCommandRequest, vault?: string | null) =>
+    invoke<DrawingOutcome>("drawing_command", toVault({ instance, request }, vault)),
+  closeDrawing: (instance: string, vault?: string | null) =>
+    invoke<void>("close_drawing", toVault({ instance }, vault)),
   // `base` dice **da cosa si parte**, e non ha un default (§23.11, decisione
   // 0092): `descends_from` = «scrivi solo se il file è ancora quello», e un
   // `PluginError` di specie `conflict` vuol dire che non lo era e che **non è

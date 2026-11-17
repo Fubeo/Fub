@@ -152,6 +152,8 @@ function lazily(
   const panelReveals = new Set<(id: string) => void>();
   /// Chi segue la banda di stato, allo stesso modo.
   const statusListeners = new Set<() => void>();
+  /// Chi segue il chip dello stato del documento, allo stesso modo.
+  const standingListeners = new Set<() => void>();
   let stopPanels: (() => void) | null = null;
 
   const settle = (mount: () => EditorSurface): void => {
@@ -169,10 +171,14 @@ function lazily(
     const unsubscribeStatus = mounted.status?.subscribe(() => {
       for (const listener of [...statusListeners]) listener();
     });
+    const unsubscribeStanding = mounted.standing?.subscribe(() => {
+      for (const listener of [...standingListeners]) listener();
+    });
     stopPanels = () => {
       unsubscribeList?.();
       offShow?.();
       unsubscribeStatus?.();
+      unsubscribeStanding?.();
     };
     if (text !== null) mounted.buffer?.setDoc(text);
     if (mode !== "draw") mounted.setMode(mode);
@@ -180,6 +186,7 @@ function lazily(
     if (focused) mounted.focus?.();
     for (const listener of [...panelListeners]) listener();
     for (const listener of [...statusListeners]) listener();
+    for (const listener of [...standingListeners]) listener();
     if (reveal !== null && !mounted.reveal?.(reveal)) {
       // La shell ha già avuto il suo sì: il no lo dice la superficie, con le
       // stesse parole.
@@ -262,6 +269,15 @@ function lazily(
         return () => statusListeners.delete(listener);
       },
     },
+    // Il chip dello stato del documento, quando la superficie ne ha uno: prima,
+    // niente da dire.
+    standing: {
+      current: () => surface?.standing?.current() ?? null,
+      subscribe(listener) {
+        standingListeners.add(listener);
+        return () => standingListeners.delete(listener);
+      },
+    },
     selections: (): EditorSelections | undefined => surface?.selections?.(),
     selectedText: (): SelectedText | null => surface?.selectedText?.() ?? null,
     setReadOnly: (next) => {
@@ -276,6 +292,7 @@ function lazily(
       panelListeners.clear();
       panelReveals.clear();
       statusListeners.clear();
+      standingListeners.clear();
       surface?.destroy();
       surface = null;
       pending.remove();

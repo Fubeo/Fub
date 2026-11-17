@@ -1,0 +1,28 @@
+[package]
+name = "vectorcraft-effects"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "VectorCraft live effects evaluated to geometry"
+
+[lints]
+workspace = true
+
+[dependencies]
+vectorcraft-geom = { workspace = true }
+vectorcraft-three-d = { workspace = true }
+vectorcraft-doc = { workspace = true }
+vectorcraft-pathops = { workspace = true }
+vectorcraft-text = { workspace = true }
+vectorcraft-plugins = { workspace = true, optional = true }
+image = { workspace = true }
+kurbo = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+# Plug-in effects (`plugin.<id>`), run by an installed WebAssembly plug-in. Off, the catalogue has
+# only the built-in effects and the build carries no WebAssembly interpreter.
+plugins = ["dep:vectorcraft-plugins"]
+
+[dev-dependencies]
+vectorcraft-color = { workspace = true }

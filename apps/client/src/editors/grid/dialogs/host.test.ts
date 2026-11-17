@@ -166,6 +166,44 @@ describe("le finestre dei fogli", () => {
     expect(dialogs.current()).toBeNull();
   });
 
+  // IMP-032: con una cella sola, la tabella prende la sua area di dati e la
+  // finestra chiede delle intestazioni prima di spostare qualcosa.
+  it("Crea tabella propone l'area di dati della cella e dice che senza intestazioni i dati scendono", async () => {
+    const state = fake();
+    state.engine.selectionRefs = () => ({ sheet: "Foglio1", range: "A1", active: "A1" });
+    state.answers["selection.currentRegion"] = { selection: "A1:B3" };
+    state.answers["cell.get"] = { type: "number" };
+    const dialogs = mount(state);
+    dialogs.open({ id: "createTable", params: "{}" });
+    await settle();
+    await settle();
+    expect(control<HTMLInputElement>(dialogs, "range").value).toBe("A1:B3");
+    const header = control<HTMLInputElement>(dialogs, "header");
+    expect(header.checked).toBe(false);
+    expect(dialogs.current()?.textContent).toContain(t("grid.dialog.create_table.no_header"));
+    expect(state.runs).toEqual([]);
+    press(dialogs, "ok");
+    await settle();
+    expect(state.runs).toEqual([["insert.table", { range: "A1:B3", header: false }]]);
+  });
+
+  it("Crea tabella spunta le intestazioni quando la prima riga è di testo, e allora non dice niente", async () => {
+    const state = fake();
+    state.answers["cell.get"] = { type: "text" };
+    const dialogs = mount(state);
+    dialogs.open({ id: "createTable", params: "{}" });
+    await settle();
+    await settle();
+    // Più celle scelte: l'intervallo è quello, senza chiedere l'area.
+    expect(state.queries.some(([id]) => id === "selection.currentRegion")).toBe(false);
+    expect(control<HTMLInputElement>(dialogs, "range").value).toBe("B2:D10");
+    expect(control<HTMLInputElement>(dialogs, "header").checked).toBe(true);
+    expect(dialogs.current()?.textContent).not.toContain(t("grid.dialog.create_table.no_header"));
+    press(dialogs, "ok");
+    await settle();
+    expect(state.runs).toEqual([["insert.table", { range: "B2:D10", header: true }]]);
+  });
+
   it("Formato celle dà soltanto ciò che è cambiato", async () => {
     const state = fake();
     state.answers["cell.get"] = {

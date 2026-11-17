@@ -17,16 +17,26 @@ import { pickVaultLocation } from "./platform/vault-picker";
 import { api, window as nativeWindow } from "./host/ipc";
 import { resolvedReference, settings } from "./host/query";
 import { forwardNotice, onEvent, startKernelRouter } from "./state/kernel";
+import { settingTouches } from "./state/setting-change";
 import { mountLocale } from "./state/locale";
-import { emit, on, state } from "./state/store";
+import { emit, on, setVaultName, state } from "./state/store";
 import { loadLayout, layout as paneLayout, split as splitPane, closePane } from "./state/layout";
 import { loadCommandSpecs } from "./state/vault";
 import { $ } from "./ui/dom";
 import { takeNoticeAfterReload } from "./ui/intents";
 import { mountLinkPreview } from "./ui/link-preview";
-import { FORMATBAR_EVENT } from "./panels/selection-bubble";
+import {
+  currentToolbarForm,
+  DEFAULT_TOOLBAR_FORM,
+  FORMATBAR_EVENT,
+  TOOLBAR_SETTING,
+  toggledToolbarForm,
+  toolbarFormOf,
+  type ToolbarForm,
+} from "./panels/format-bar";
 import { MINIBAR_SETTING, miniBarModeOf } from "./panels/mini-bar";
 import { listenForFailures, mountNotifications, notify, setWatcherOff } from "./ui/notify";
+import { listenForRenderingNotices } from "./ui/rendering-notice";
 import { writeClipboardText } from "./platform/clipboard";
 import { closeCommandPalette, openCommandPalette, startCommand } from "./ui/palette";
 import {
@@ -65,7 +75,7 @@ import { askVaultProfile, isNewVault, mountOnboarding, type VaultProfileHooks } 
 import { mountIncomingLinks, URI_ALLOWED } from "./ui/incoming-links";
 import { mountWebViewer } from "./ui/web-viewer";
 import { confirm } from "./platform/confirm";
-import { registerBaseRenderer } from "./editors/base/surface";
+import { registerBaseRenderer } from "./editors/base/renderer";
 import { applyRailMachineSettings, mountRail, refreshRailShortcuts, syncRail } from "./panels/rail";
 import { applySlashSettings } from "./panels/slash/prefs";
 import { mountStrings, onLanguage, resolvedLanguage, t, type Key } from "./i18n/strings";
@@ -75,7 +85,8 @@ import { mountSettings, openSettingsAt } from "./panels/settings";
 import { currentTheme, mountTheme } from "./theme/theme";
 import { fallito, fase, pronta } from "./avvio/consegna";
 import { onContentLookChange } from "./theme/content-look";
-import { focusedContextMode, focusedModeId } from "./state/document-controller";
+import { focusedContextMode, focusEditor, openingsSoFar } from "./state/document-controller";
+import { escapeLeavesConcentration, setConcentrating } from "./state/concentration";
 import { reducedMotion } from "./theme/reduced-motion";
 import {
   mountDocument,
@@ -86,13 +97,14 @@ import {
   setEditorTheme,
   synchronize,
 } from "./panels/document";
-import { flushPendingSave } from "./state/document-session";
+import { expectDocumentWrite, flushPendingSave } from "./state/document-session";
 import { drainDocumentWindows, openCurrentInNewWindow } from "./state/document-windows";
 import { mountExplorer } from "./panels/explorer";
 import { mountPageIcons } from "./state/page-icons";
 import { mountPeople } from "./state/people";
 import { mountExternalEditors } from "./state/external-editors";
 import { mountDates } from "./state/dates";
+import { mountBlocksPreference } from "./state/editor-blocks";
 import { mountLinkCards } from "./state/link-cards";
 import { mountCraftPreviews } from "./state/craft-previews";
 import { mountCraftPhotos } from "./state/craft-photos";
@@ -127,6 +139,10 @@ import { mountWheelTextSize, zoomBy } from "./state/zoom";
 /// chiavi `localStorage` dove stavano prima (si adottano una volta).
 const SIDE_SETTING = { sidebar: "chrome.sidebar.visible", inspector: "chrome.inspector.visible" } as const;
 const LEGACY_SIDE = { sidebar: "fub.layout.sidebar", inspector: "fub.layout.inspector" } as const;
+const SIDE_KEYS: ReadonlySet<string> = new Set(Object.values(SIDE_SETTING));
+/// Quanti avvisi di sessione si tirano al più: la diagnosi del log più quelli
+/// del percorso di disegno sono tre; il resto è margine.
+const SESSION_NOTICE_PULLS = 8;
 
 /** Apply machine chrome at boot and after external profile/setting changes.
  * A frame change is intentionally NOT live: native decorations are chosen
@@ -156,14 +172,10 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
     document.getElementById("app")?.toggleAttribute("data-status-off", valid && values.get("chrome.status.visible") === false);
     toolbarVisible = !valid || values.get("chrome.toolbar.visible") !== false;
     applyToolbar();
-    // La barra di formattazione spenta lascia i suoi gesti alla bolla di
-    // selezione: lo dice l'attributo (per la resa) e l'evento (per la bolla).
-    const formatbarOff = valid && values.get("chrome.formatbar.visible") === false;
+    // La forma della barra di formato (`editor.toolbar`, o la barra spenta
+    // di un Fub di prima).
+    applyToolbarForm(toolbarFormOf(entries));
     const app = document.getElementById("app");
-    if (app && app.hasAttribute("data-formatbar-off") !== formatbarOff) {
-      app.toggleAttribute("data-formatbar-off", formatbarOff);
-      window.dispatchEvent(new CustomEvent(FORMATBAR_EVENT));
-    }
     // Il menu «/» nel testo: spento, il «/» è testo.
     if (app) app.dataset["slash"] = values.get("editor.slash") === false ? "off" : "on";
     // La mini-barra: quando c'è, col tasto destro e sul testo scelto.
@@ -188,11 +200,41 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
       if (current === generation && !lifetime.closed) notify(t("shell.chrome_failed", { reason: errorText(error) }), "guasto");
     }
   };
+  // I due pannelli laterali hanno il loro ascoltatore nella shell adattiva:
+  // `apply` non li legge, e rileggere qui a ogni apertura della barra era un
+  // giro sul canale dati in più per ogni gesto.
   lifetime.add(onEvent("setting_changed", ({ key }) => {
-    if (key.startsWith("chrome.") || key === MINIBAR_SETTING || key.startsWith("editor.slash")) void reread();
+    if (settingTouches(key, (changed) => (changed.startsWith("chrome.") && !SIDE_KEYS.has(changed))
+      || changed === MINIBAR_SETTING || changed === TOOLBAR_SETTING || changed.startsWith("editor.slash"))) void reread();
   }));
   await reread();
 }
+/// L'ultima forma visibile della barra di formato: dove la riporta il comando
+/// del menu Vista quando è nascosta.
+let lastVisibleToolbar: ToolbarForm = DEFAULT_TOOLBAR_FORM;
+
+/// Mette la forma della barra sulla finestra: `data-toolbar` per le barre dei
+/// riquadri e per la bolla della selezione (`bubbleWanted`), `data-formatbar-off`
+/// per la resa. L'evento lo dice a tutte, una volta.
+function applyToolbarForm(form: ToolbarForm): void {
+  const app = document.getElementById("app");
+  if (!app) return;
+  if (form !== "nascosta") lastVisibleToolbar = form;
+  if (app.dataset["toolbar"] === form) return;
+  app.dataset["toolbar"] = form;
+  app.toggleAttribute("data-formatbar-off", form === "nascosta");
+  window.dispatchEvent(new CustomEvent(FORMATBAR_EVENT));
+}
+
+/// Il comando del menu Vista: la barra cambia subito, e la scelta si scrive
+/// in `editor.toolbar`. Non riuscita la scrittura, la barra resta com'è ora e
+/// lo si dice: alla prossima lettura torna quella scritta.
+function toggleToolbar(): void {
+  const next = toggledToolbarForm(currentToolbarForm(), lastVisibleToolbar);
+  applyToolbarForm(next);
+  void writeChrome(TOOLBAR_SETTING, next).catch(() => notify(t("commands.toolbar.not_remembered"), "info"));
+}
+
 /// Schermata senza vault e layout adattivo: la shell possiede l'apertura,
 /// l'onboarding possiede demo, supporto e recupero. Le due vite si chiudono
 /// insieme; il picker di cartella resta registrato soltanto qui.
@@ -287,7 +329,7 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
   });
   life.add(() => sideReads.cancel());
   life.add(onEvent("setting_changed", ({ key }) => {
-    if (key === "chrome.schema" || key === SIDE_SETTING.sidebar || key === SIDE_SETTING.inspector) {
+    if (settingTouches(key, (changed) => changed === "chrome.schema" || SIDE_KEYS.has(changed))) {
       void readSidePreferences();
     }
   }));
@@ -305,8 +347,37 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
       panel.querySelector<HTMLElement>("input:not([disabled]), [tabindex='0'], button:not([disabled])")?.focus();
     }
   };
+  /// Il cassetto aperto, se c'è.
+  const openDrawerSide = (): SidePanel | null =>
+    layout.classList.contains("drawer-sidebar-open")
+      ? "sidebar"
+      : layout.classList.contains("drawer-inspector-open") ? "inspector" : null;
+  // Il velo è modale: la tastiera non arriva a ciò che copre. Quando il fuoco
+  // entra in qualcosa sotto il velo — l'editor di un documento appena scelto
+  // nel cassetto, una voce dello schema che porta al suo titolo, il Tab che
+  // esce dal cassetto — il cassetto si chiude, con lo stesso moto di Esc, e il
+  // fuoco resta dove è andato: non torna al lanciatore. Così, finché il
+  // cassetto è aperto, il fuoco sta nel cassetto o sopra il velo (rail,
+  // barra, menu, dialoghi), mai nel foglio coperto.
+  pageWindowLifetime.listen(document, "focusin", (event: FocusEvent) => {
+    const side = openDrawerSide();
+    const target = event.target;
+    if (!side || !(target instanceof Node) || !layout.contains(target)) return;
+    const panel = side === "sidebar" ? sidebar : inspector;
+    const divider = side === "sidebar" ? divSidebar : divInspector;
+    if (panel.contains(target) || divider?.contains(target)) return;
+    closeDrawers(false);
+    applyAdaptive();
+  });
   life.add(setSidePanelController({
     visible: (side) => !(side === "sidebar" ? sidebar : inspector).hidden,
+    dismiss: (side) => {
+      // Chi ha scelto nel cassetto porta il fuoco dove ha scelto: il
+      // lanciatore non lo riprende.
+      if (openDrawerSide() !== side) return;
+      closeDrawers(false);
+      applyAdaptive();
+    },
     reveal: (side) => {
       if (isDrawer(side)) {
         if (!layout.classList.contains(`drawer-${side}-open`)) openDrawer(side);
@@ -547,7 +618,10 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
   };
   pageWindowLifetime.listen(globalThis.window, "resize", applyAdaptive);
   pageWindowLifetime.listen(document, "keydown", (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
+    // Un Esc già gestito (il menu o il dialogo sopra il cassetto, che lo
+    // chiudono in cattura con `preventDefault`) chiude solo loro: il cassetto
+    // aspetta il prossimo.
+    if (e.key === "Escape" && !e.defaultPrevented) {
       if (
         layout.classList.contains("drawer-sidebar-open") ||
         layout.classList.contains("drawer-inspector-open")
@@ -698,10 +772,6 @@ const MODE_COMMANDS: Partial<Record<string, PaneMode>> = {
   "shell.mode.reading": "reading",
 };
 
-/// Il nome con cui si riconosce il vault aperto: quello scelto nel registro dei
-/// vault, altrimenti la cartella. Il percorso intero resta nel suggerimento.
-let vaultName = "";
-
 function folderName(root: string): string {
   return root.split(/[\\/]/).filter(Boolean).pop() ?? root;
 }
@@ -715,9 +785,14 @@ function showVaultIcon(icon: string): void {
 
 /// La barra del titolo mostrava il percorso assoluto, che in una finestra
 /// stretta si taglia proprio dove sta il nome.
+///
+/// Il nome con cui si riconosce il vault aperto — quello scelto nel registro
+/// dei vault, altrimenti la cartella — va nello store (`state.vaultName`), che
+/// lo annuncia: la testata dei fogli lo porta in testa al percorso. Il percorso
+/// intero resta nel suggerimento.
 function showVaultName(root: string): void {
-  vaultName = root ? folderName(root) : "";
-  vaultPathEl.textContent = vaultName;
+  setVaultName(root ? folderName(root) : "");
+  vaultPathEl.textContent = state.vaultName;
   showVaultIcon("");
   setTooltip(vaultPathEl, root);
   drawWindowTitle();
@@ -725,8 +800,8 @@ function showVaultName(root: string): void {
   void api.knownVaults().then((known) => {
     if (state.vaultRoot !== root) return;
     const entry = known.find((vault) => vault.root === root);
-    if (entry?.name) vaultName = entry.name;
-    vaultPathEl.textContent = vaultName;
+    if (entry?.name) setVaultName(entry.name);
+    vaultPathEl.textContent = state.vaultName;
     showVaultIcon(entry?.icon ?? "");
     drawWindowTitle();
   }).catch(() => {});
@@ -737,7 +812,7 @@ function showVaultName(root: string): void {
 function drawWindowTitle(): void {
   const doc = state.currentDoc;
   const note = doc ? pageName(doc) : null;
-  const title = [note, vaultName || null, "Fub"].filter((part): part is string => !!part).join(" — ");
+  const title = [note, state.vaultName || null, "Fub"].filter((part): part is string => !!part).join(" — ");
   if (document.title === title) return;
   document.title = title;
   // Dentro una promessa: il titolo nativo non deve poter interrompere chi
@@ -827,7 +902,9 @@ async function init(): Promise<Teardown> {
   // perché l'avvio a freddo si misura fino alla prima nota.
   mountPerfProbe(pageWindowLifetime);
   registerMermaidRenderer();
-  registerBaseRenderer((doc) => openDocument(doc));
+  // Una Base da file incorporata scrive il suo `.base` come una aperta:
+  // salva prima e annuncia la scrittura.
+  registerBaseRenderer((doc) => openDocument(doc), { flush: flushPendingSave, expect: expectDocumentWrite });
   // I tre collegamenti iniettati, e la ragione per cui lo sono: il pannello del
   // documento mostra l'anteprima (in Lettura) e l'anteprima apre i documenti;
   // il pannello del documento manda a cercare un tag e la ricerca apre i
@@ -873,6 +950,8 @@ async function init(): Promise<Teardown> {
   mountPageIcons(pageWindowLifetime);
   mountPeople(pageWindowLifetime);
   mountDates(pageWindowLifetime);
+  // `editor.blocks` prima della prima nota: si monta già nello stato giusto.
+  mountBlocksPreference(pageWindowLifetime);
   mountLinkCards(pageWindowLifetime);
   mountCraftPreviews(pageWindowLifetime);
   // Le app Craft installate, per il sottomenu «Apri con un'altra app».
@@ -1036,6 +1115,14 @@ async function init(): Promise<Teardown> {
     layer: "global",
     run: () => toggleFocusMode(),
   });
+  registerShellCommand({
+    id: "shell.toolbar.toggle",
+    title: "commands.toolbar.toggle",
+    description: "commands.toolbar.toggle.desc",
+    layer: "global",
+    run: () => toggleToolbar(),
+  });
+  mountConcentration(pageWindowLifetime);
 
   // La menubar applicativa (§Fase 2): cinque voci che invocano i comandi
   // di shell già registrati. Il menu non registra niente: legge il
@@ -1048,16 +1135,10 @@ async function init(): Promise<Teardown> {
     },
     has: (id) => allCommands().some((e) => e.id === id),
     // Le tre modalità sono una scelta: si spunta quella del foglio a fuoco.
-    // I Blocchi hanno il ruolo della Live: le due voci si distinguono per id.
     choice: (id) => {
-      if (id === "shell.mode.blocks") {
-        const mode = focusedModeId();
-        return mode ? { choice: "radio", checked: mode === "blocks" } : undefined;
-      }
       const context = MODE_COMMANDS[id];
       const current = context ? focusedContextMode() : undefined;
-      const blocks = focusedModeId() === "blocks";
-      return context && current ? { choice: "radio", checked: current === context && !(blocks && context === "live_preview") } : undefined;
+      return context && current ? { choice: "radio", checked: current === context } : undefined;
     },
     // «Cambia luce» dice verso quale luce si va.
     label: (id) =>
@@ -1141,6 +1222,7 @@ async function init(): Promise<Teardown> {
   );
 
   listenForFailures(pageWindowLifetime);
+  listenForRenderingNotices(pageWindowLifetime);
   // Un rifiuto che nessuno ha raccolto è un guasto che nessuno vedrebbe: la
   // console della webview in un'app impacchettata non si apre.
   pageWindowLifetime.listen(window, "unhandledrejection", (event: PromiseRejectionEvent) => {
@@ -1160,9 +1242,17 @@ async function init(): Promise<Teardown> {
   // router in piedi, e si consegna come un evento qualunque: l'ordine dell'IPC
   // garantisce che `listenForFailures` — iscritta prima del router — sia già
   // lì a riceverlo.
-  const notice = await api.sessionNotice();
-  if (!alive()) return teardown;
-  if (notice) forwardNotice(notice);
+  //
+  // Dopo la diagnosi vengono gli altri avvisi nati prima della shell (il
+  // percorso di disegno, `ui/rendering-notice.ts`), uno per tiraggio: si tira
+  // finché la risposta è vuota, con un tetto per non girare all'infinito su
+  // un host che sbaglia.
+  for (let pulls = 0; pulls < SESSION_NOTICE_PULLS; pulls += 1) {
+    const notice = await api.sessionNotice();
+    if (!alive()) return teardown;
+    if (!notice) break;
+    forwardNotice(notice);
+  }
 
   // Il locale del sistema (§12.3), **prima** di aprire il vault: da qui in poi
   // ogni `render_view` lo trova già pubblicato, invece di disegnare il primo
@@ -1273,6 +1363,9 @@ async function openInitialVault(path: string, alive: () => boolean): Promise<voi
 /// Apre ciò che `files.startup` chiede, se il comando è nel registro: senza la
 /// feature dei modelli la nota del giorno non c'è, e resta la sessione.
 async function openAtStartup(alive: () => boolean): Promise<void> {
+  // Un documento aperto mentre si legge la scelta è più nuovo di lei: la nota
+  // d'avvio non lo scavalca.
+  const decided = openingsSoFar();
   const entries = await settings();
   if (!alive()) return;
   const choice = entries.find((entry) => entry.spec.key === FILES_STARTUP)?.value;
@@ -1283,7 +1376,7 @@ async function openAtStartup(alive: () => boolean): Promise<void> {
     try {
       await api.readDocument(note);
       if (!alive()) return;
-      await openDocument(note);
+      await openDocument(note, { unlessOpenedSince: decided });
     } catch (error) {
       if (alive()) notify(t("app.startup_note_failed", { path: note, reason: errorText(error) }), "guasto");
     }
@@ -1318,17 +1411,60 @@ export function vaultGestures(): { label: string; run(): void }[] {
 /// stessa istruzione.
 let focusHinted = false;
 
-/// La scrittura senza cornice: rail, barra laterale, ispettore e divisori
-/// escono di scena; lo stesso comando (o Esc) li rimette.
+/// La scrittura senza cornice: rail, cassetti, ispettore, linguette e barra di
+/// formato escono di scena, la barra del titolo si attenua e torna al
+/// passaggio; lo stesso comando, Esc o «Esci dalla concentrazione» nella banda
+/// li rimettono. Lo stato lo legge anche chi sta sotto la shell
+/// (`state/concentration.ts`); la pelle legge `data-focus-mode`.
 function toggleFocusMode(force?: boolean): void {
   const app = document.getElementById("app");
   if (!app) return;
   const on = force ?? !app.hasAttribute("data-focus-mode");
   app.toggleAttribute("data-focus-mode", on);
+  setConcentrating(on);
+  const exit = document.getElementById(FOCUS_EXIT_ID);
+  if (exit) {
+    // Il bottone che sparisce non si porta via il fuoco: torna al testo.
+    if (!on && exit === document.activeElement) focusEditor();
+    exit.hidden = !on;
+  }
   if (on && !focusHinted) {
     focusHinted = true;
     notify(t("shell.focus_on"), "info");
   }
+}
+
+const FOCUS_EXIT_ID = "status-focus-exit";
+
+/// «Esci dalla concentrazione», in testa alla parte destra della banda, e Esc.
+/// Esc esce soltanto se nessuno l'ha già preso: un menu, un dialogo, la
+/// sbirciata, un completamento o il «/» lo chiudono in cattura o nell'editor
+/// con `preventDefault`, e la concentrazione aspetta il prossimo. Con Vim
+/// acceso Esc resta di Vim, che lo prende sempre. Il tasto Esc dei Blocchi
+/// in concentrazione non seleziona il blocco (`blocks/selection.ts`).
+function mountConcentration(lifetime: Lifetime): void {
+  const end = document.getElementById("status-end");
+  if (end) {
+    const exit = document.createElement("button");
+    exit.type = "button";
+    exit.id = FOCUS_EXIT_ID;
+    exit.className = "status-item status-item--button status-focus-exit";
+    exit.hidden = !document.getElementById("app")?.hasAttribute("data-focus-mode");
+    const label = (): void => {
+      exit.textContent = t("shell.focus_exit");
+    };
+    label();
+    lifetime.add(onLanguage(label));
+    lifetime.listen(exit, "click", () => toggleFocusMode(false));
+    end.prepend(exit);
+    lifetime.add(() => exit.remove());
+  }
+  lifetime.listen(document, "keydown", (event: KeyboardEvent) => {
+    if (!escapeLeavesConcentration(event)) return;
+    event.preventDefault();
+    toggleFocusMode(false);
+  });
+  lifetime.add(() => setConcentrating(false));
 }
 
 async function pickVault(): Promise<void> {

@@ -8,12 +8,12 @@ import CONTRACT_RS from "../../../../crates/fub-format-craft/src/contract.rs?raw
 describe("la specie di un documento", () => {
   it("viene dall'estensione, in qualunque maiuscola, e un file sconosciuto non ne ha", () => {
     const cases: [string, string | null, string | null][] = [
-      ["Documenti/Prova.docx", "word", "WORD"],
-      ["Vecchio.DOC", "word", "WORD 97"],
+      ["Documenti/Prova.docx", "word", "DOCX"],
+      ["Vecchio.DOC", "word", "DOC 97"],
       ["lettera.rtf", "word", "RTF"],
       ["Verbale.odt", "odt", "ODT"],
-      ["conti/Bilancio.xlsx", "sheet", "EXCEL"],
-      ["modello.xltm", "sheet", "EXCEL"],
+      ["conti/Bilancio.xlsx", "sheet", "XLSX"],
+      ["modello.xltm", "sheet", "XLTM"],
       ["Lavagna.canvas", "drawing", null],
       ["schizzo.svg", "drawing", "SVG"],
       ["Disegni/logo.vectorcraft", "drawing", "VECTORCRAFT"],

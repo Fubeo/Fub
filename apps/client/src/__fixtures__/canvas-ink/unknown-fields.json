@@ -1,0 +1,21 @@
+{
+  "name": "unknown-fields",
+  "description": "I campi sconosciuti del livello, del tratto e dell'ancora si conservano e non cambiano niente; un fub:ink dentro un tratto è un campo come gli altri.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"text\", \"text\": \"x\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 200,\n      \"fub:ink\": { \"v\": 1, \"author\": \"Ada\", \"strokes\": [\n        { \"id\": \"s-1\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"card\", \"width\": 300, \"height\": 200, \"origin\": \"top-left\" }, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\", \"pressureCurve\": [0, 0.5, 1], \"fub:ink\": { \"v\": 9 } }\n      ], \"x-app\": { \"zoom\": 2 } } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "layers": [
+      {
+        "layer": {
+          "node": "n1"
+        },
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-1",
+            "drawn": true
+          }
+        ]
+      }
+    ]
+  }
+}

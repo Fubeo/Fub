@@ -41,8 +41,21 @@ const JOB_OWNER: &str = "test.turn.job";
 const JOB: &str = "reads-then-goes-on";
 
 const NOTE: &str = "nota.md";
-/// Quanto può metterci un salvataggio mentre una lettura è ferma: largo.
-const SAVE_LIMIT: Duration = Duration::from_secs(1);
+/// Quanto può metterci un salvataggio mentre una lettura è ferma.
+///
+/// Tetto di sicurezza, non misura: il salvataggio corretto risponde appena ha
+/// finito, e la prova va avanti subito. Con un secondo, su una macchina molto
+/// carica, il salvataggio vero (disco, indice, eventi) non faceva in tempo e la
+/// prova accusava un turno che la lettura non teneva (#396). Una lettura che
+/// tiene il turno davvero lo lascia solo quando il cancello si apre, e il
+/// cancello resta chiuso per tutto [`GATE_LIMIT`]: il tetto largo boccia il
+/// difetto lo stesso, ci mette solo di più a dirlo.
+const SAVE_LIMIT: Duration = Duration::from_secs(30);
+/// Quanto un comando aspetta al cancello prima di arrendersi. Deve superare
+/// [`SAVE_LIMIT`]: un cancello che si aprisse da sé prima libererebbe il
+/// turno che un difetto tiene, e il salvataggio da bocciare passerebbe. Nel
+/// caso buono il test lo apre subito.
+const GATE_LIMIT: Duration = Duration::from_secs(60);
 /// Quanto si aspetta un fatto che deve accadere: largo, solo per non appendersi.
 const WATCHDOG: Duration = Duration::from_secs(10);
 
@@ -74,7 +87,7 @@ impl Gate {
         let open = self.open.lock().unwrap();
         let (open, timeout) = self
             .opened
-            .wait_timeout_while(open, WATCHDOG, |open| !*open)
+            .wait_timeout_while(open, GATE_LIMIT, |open| !*open)
             .unwrap();
         if timeout.timed_out() && !*open {
             return Err(PluginError::Internal("the gate never opened".into()));

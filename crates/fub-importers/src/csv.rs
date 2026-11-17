@@ -28,8 +28,8 @@ use fub_abi::transfer::{
 use fub_abi::PluginError;
 
 use crate::common::{
-    bad_args, content_hash_hex, is_cancelled, resolve_destination, sanitize_component, write_doc,
-    MAX_CSV_ROWS, MAX_DOCS_PER_IMPORT,
+    bad_args, content_hash_hex, is_cancelled, is_ident, resolve_destination, sanitize_component,
+    write_doc, MAX_CSV_ROWS, MAX_DOCS_PER_IMPORT,
 };
 
 pub const IMPORT_CSV_NOTE: &str = "csv import";
@@ -119,16 +119,6 @@ fn parse_records(text: &str, delim: u8) -> Result<Vec<(usize, Vec<String>)>, Plu
         out.push((start_line, row));
     }
     Ok(out)
-}
-
-fn is_ident(s: &str) -> bool {
-    !s.is_empty()
-        && s.len() <= 64
-        && s.chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-        && s.chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
 }
 
 fn infer_scalar(raw: &str) -> (String, bool) {

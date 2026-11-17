@@ -19,6 +19,9 @@ const world = vi.hoisted(() => ({
   signals: new Map<string, Set<Listener>>(),
   languages: new Set<() => void>(),
   confirm: null as null | ((message: string, options: unknown) => Promise<boolean>),
+  /// Il suggerimento di ogni elemento, e ogni sua scrittura in ordine.
+  tips: new Map<HTMLElement, string>(),
+  tipWrites: [] as string[],
 }));
 
 function subscribe<K>(map: Map<K, Set<Listener>>, key: K, listener: Listener): () => void {
@@ -63,7 +66,17 @@ vi.mock("../../../i18n/strings", () => ({
   },
   resolvedLanguage: () => "it",
 }));
-vi.mock("../../../ui/tooltip", () => ({ setTooltip: () => {}, attachTooltip: () => () => {}, dismissTooltip: () => {} }));
+vi.mock("../../../ui/tooltip", () => ({
+  setTooltip: (target: HTMLElement, text: string) => {
+    world.tipWrites.push(text);
+    world.tips.set(target, text);
+  },
+  attachTooltip: (target: HTMLElement, text: string) => {
+    world.tips.set(target, text);
+    return () => void world.tips.delete(target);
+  },
+  dismissTooltip: () => {},
+}));
 vi.mock("../../../ui/icons", () => ({ iconEl: () => null }));
 
 import { mountSaveState } from "./save-state";
@@ -122,6 +135,8 @@ beforeEach(() => {
   world.doc = "Guida/Nota.md";
   world.base = { kind: "descends_from", value: "8842117" };
   world.confirm = null;
+  world.tips.clear();
+  world.tipWrites = [];
   commandsOf("shell.doc.save", "shell.doc.conflict.mine", "shell.doc.conflict.theirs");
   document.body.innerHTML =
     '<div id="panes"><section class="pane" data-pane="main"><div class="pane-toolbar"><span class="pane-status-slot">' +
@@ -167,6 +182,27 @@ describe("lo stato di salvataggio come bottone", () => {
     await settled();
     expect(button().dataset.state).toBe("fallito");
     expect(button().getAttribute("aria-label")).toBe("sheet.save.button Salvataggio fallito");
+  });
+
+  it("il suggerimento ridice la parola dello stato, scritto solo quando cambia", async () => {
+    mountSaveState(lifetime);
+    expect(world.tips.get(button())).toBe("Salvato");
+    drawSave("in_corso");
+    await settled();
+    expect(world.tips.get(button())).toBe("Salvataggio…");
+    drawSave("fallito");
+    await settled();
+    expect(world.tips.get(button())).toBe("Salvataggio fallito");
+    // La stessa parola riscritta dalla vista non riscrive il suggerimento.
+    const writes = world.tipWrites.length;
+    live.textContent = "Salvataggio fallito";
+    await settled();
+    expect(world.tipWrites.length).toBe(writes);
+    expect(world.tipWrites).toEqual(["Salvato", "Salvataggio…", "Salvataggio fallito"]);
+    // Smontato, il suggerimento se ne va col bottone.
+    const gone = button();
+    lifetime.close();
+    expect(world.tips.has(gone)).toBe(false);
   });
 
   it("senza stato non c'è bottone da premere", async () => {

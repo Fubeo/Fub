@@ -9,85 +9,385 @@
    colonna resta a filo del testo, come in Lettura, e le maniglie compaiono
    accanto senza spostarla. Anche le lettere delle colonne stanno fuori:
    la riga che le porta sale nello spazio sopra la tabella, così la prima
-   riga resta dove la mette la Lettura. Sotto i «+» c'è almeno mezza riga
-   d'aria prima del testo che segue. */
+   riga resta dove la mette la Lettura. Come in Lettura la tabella riempie
+   la colonna del testo (il prototipo, `.gr{width:100%}`): le celle sono
+   larghe quanto la cornice, la colonna dei numeri sta nel margine, e la
+   griglia scorre quando il contenuto non ci sta. I «+» del prototipo
+   (`.tg-add`) stanno sul bordo destro della cornice e sotto, e sotto la
+   barra della riga resta mezza riga d'aria prima del testo che segue. */
 .cm-editor .cm-content .tb-frame {
-  padding: 0 0 calc(var(--text-reading) * var(--leading-relaxed) / 2);
+  padding: 0 0 calc(19px + var(--text-reading) * var(--leading-relaxed) / 2);
+}
+/* Col cursore sulla riga vuota dopo la tabella la riga si vede: prende la
+   mezza riga d'aria e sale fin sotto la barra «Aggiungi una riga», così il
+   testo che segue non si sposta. */
+.cm-editor .cm-content .tb-frame:has(+ .cm-markdown-gap-lead) {
+  padding-bottom: calc(19px - var(--text-reading) * var(--leading-relaxed) / 2);
 }
 .cm-editor .cm-content .tb-grid {
-  margin-top: calc(-1 * var(--text-xs) * var(--leading-relaxed));
+  margin-top: -15px;
   margin-left: calc(-1 * var(--space-7));
   padding: 0;
 }
 .cm-editor .cm-content .tb-grid table {
   display: table;
+  width: 100%;
+  max-width: none;
   margin: 0;
   overflow: visible;
 }
+/* La cornice della tabella attorno alle celle soltanto: nella Live la prima
+   riga è dopo quella delle lettere e la prima colonna dopo quella dei
+   numeri. */
+.cm-editor .cm-content .tb-grid .tb-rowhead + .tb-cell {
+  border-left: 1px solid var(--doc-rule);
+}
+.cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-cell {
+  border-top: 1px solid var(--doc-rule);
+}
+.cm-editor .cm-content .tb-grid .tb-rowhead + .tb-head {
+  border-left-color: transparent;
+}
+.cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-head {
+  border-top-color: transparent;
+}
+.cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-rowhead + .tb-cell {
+  border-top-left-radius: var(--radius-md);
+}
+.cm-editor .cm-content .tb-grid tbody > tr:first-child > .tb-cell:last-child {
+  border-top-right-radius: var(--radius-md);
+}
+.cm-editor .cm-content .tb-grid tbody > tr:last-child > .tb-rowhead + .tb-cell {
+  border-bottom-left-radius: var(--radius-md);
+}
+/* Le lettere e i numeri del prototipo (`.gr-let`, `.gr-num`): 10,5 px in
+   peso pieno, a voce bassa. La lettera sta in una striscia di 13 px, 2 px
+   sopra la tabella; il numero in una colonna di 16 px, 4 px prima della
+   tabella. */
 .cm-editor .cm-content .tb-grid .tb-corner,
 .cm-editor .cm-content .tb-grid .tb-letter,
 .cm-editor .cm-content .tb-grid .tb-rowhead {
+  box-sizing: border-box;
   min-width: 0;
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--doc-gutter-fg);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  line-height: var(--leading-relaxed);
-  height: calc(var(--text-xs) * var(--leading-relaxed));
+  font-size: 10.5px;
+  font-weight: var(--weight-bold);
+  line-height: 1;
   text-align: center;
   vertical-align: middle;
+}
+.cm-editor .cm-content .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-grid .tb-letter {
+  height: 15px;
+  padding-bottom: 2px;
+  /* La riga del testo è la striscia intera (il prototipo, `.tg .gr-let span`:
+     13 px d'altezza e d'interlinea): 15 px meno i 2 px d'aria sotto. */
+  line-height: 13px;
 }
 .cm-editor .cm-content .tb-grid .tb-corner,
 .cm-editor .cm-content .tb-grid .tb-rowhead {
   width: var(--space-7);
   min-width: var(--space-7);
 }
-.cm-editor .cm-content .tb-grid .tb-letter.is-selected,
-.cm-editor .cm-content .tb-grid .tb-rowhead.is-selected {
-  color: var(--accent);
-  font-weight: var(--weight-bold);
+.cm-editor .cm-content .tb-grid .tb-rowhead {
+  padding-right: var(--space-2);
 }
-.cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-selected {
-  background: var(--accent-veil);
+/* Le intestazioni si cliccano: la lettera sceglie la colonna, il numero la
+   riga. Il puntatore sopra e la scelta danno un fondo arrotondato, disegnato
+   dentro la cella (le celle di una tabella a bordi uniti non si
+   arrotondano). */
+.cm-editor .cm-content .tb-grid .tb-letter,
+.cm-editor .cm-content .tb-grid .tb-rowhead {
+  position: relative;
+  z-index: 0;
+  cursor: pointer;
 }
-/* La testata scelta tiene il suo fondo sotto il velo, o sparirebbe la riga
-   d'intestazione proprio mentre la si seleziona. */
-.cm-editor .cm-content .tb-grid:focus-within .tb-head.is-selected {
-  background: linear-gradient(var(--accent-veil), var(--accent-veil)), var(--sheet-2);
+.cm-editor .cm-content .tb-grid .tb-letter::before,
+.cm-editor .cm-content .tb-grid .tb-rowhead::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: var(--radius-xs);
 }
-.cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-active {
-  border-radius: 2px;
-  box-shadow: inset 0 0 0 2px var(--accent);
+.cm-editor .cm-content .tb-grid .tb-letter::before {
+  inset: 0 0 2px;
 }
-.cm-editor .cm-content .tb-add {
-  padding: var(--space-1) var(--space-4);
-  border-radius: var(--radius-chip);
-  color: var(--muted);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
+.cm-editor .cm-content .tb-grid .tb-rowhead::before {
+  inset: 0 var(--space-2) 0 0;
 }
-.cm-editor .cm-content .tb-add:hover {
-  background: var(--sheet-2);
+.cm-editor .cm-content .tb-grid .tb-letter:hover,
+.cm-editor .cm-content .tb-grid .tb-rowhead:hover {
   color: var(--text);
 }
-.cm-editor .cm-content .tb-add:active {
+.cm-editor .cm-content .tb-grid .tb-letter:hover::before,
+.cm-editor .cm-content .tb-grid .tb-rowhead:hover::before {
+  background: var(--bg-hover);
+}
+.cm-editor .cm-content .tb-grid .tb-letter.is-selected,
+.cm-editor .cm-content .tb-grid .tb-rowhead.is-selected {
+  color: var(--accent-soft);
+}
+.cm-editor .cm-content .tb-grid .tb-letter.is-selected::before,
+.cm-editor .cm-content .tb-grid .tb-rowhead.is-selected::before {
   background: var(--accent-wash);
-  color: var(--accent);
 }
-.cm-editor .cm-content .tb-adders {
-  gap: var(--space-2);
-  min-height: calc(var(--text-reading) * var(--leading-relaxed));
-  padding-left: var(--space-7);
-  align-items: center;
+/* Una tabella più larga della colonna scorre di lato dentro la griglia: le
+   lettere scorrono con le loro colonne, i numeri delle righe (e l'angolo)
+   restano fermi nel margine e coprono le celle che ci passano sotto, che si
+   tagliano lì come in Lettura al bordo dell'involucro. A riposo i numeri si
+   nascondono col colore, non con l'opacità della `table-widget.ts` che
+   svuoterebbe anche il fondo che copre. */
+.cm-editor .cm-content .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-grid .tb-rowhead {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  opacity: 1;
 }
-/* La maniglia di riempimento all'angolo della selezione, e le celle che il
-   riempimento raggiungerà mentre la si tira. */
-.cm-editor .cm-content .tb-grid .tb-fill {
-  border-color: var(--doc-bg);
+/* Per coprire serve il fondo del foglio, ma solo con la griglia scorsa
+   (`data-scrolled`, dalla cornice): a inizio corsa sotto non passa niente, e
+   i numeri restano trasparenti come nel prototipo. */
+.cm-editor .cm-content .tb-grid[data-scrolled] .tb-corner,
+.cm-editor .cm-content .tb-grid[data-scrolled] .tb-rowhead {
+  background: var(--doc-bg);
+}
+/* Il fondo che copre è squadrato: l'angolo arrotondato che `document.css`
+   dà alla prima cella della prima e dell'ultima riga della tabella qui
+   lascerebbe vedere un filo della cella che passa sotto. */
+.cm-editor .cm-content .tb-frame .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-frame .tb-grid .tb-rowhead {
+  border-radius: 0;
+}
+/* A riposo, senza fuoco nella griglia: il numero e il suo fondo arrotondato
+   non si vedono, ma il fondo del foglio della griglia scorsa resta a coprire. */
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-corner,
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-rowhead {
+  color: transparent;
+}
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-rowhead::before {
+  visibility: hidden;
+}
+/* Mentre si trascinano le intestazioni scelte il puntatore dice che si
+   sposta qualcosa, e una linea d'accento segna dove arriverà. */
+.cm-editor .cm-content .tb-grid.is-moving-lines,
+.cm-editor .cm-content .tb-grid.is-moving-lines .tb-letter,
+.cm-editor .cm-content .tb-grid.is-moving-lines .tb-rowhead,
+.cm-editor .cm-content .tb-grid.is-moving-lines .tb-cell {
+  cursor: grabbing;
+}
+.cm-editor .cm-content .tb-grid .tb-drop {
+  position: absolute;
+  z-index: 4;
+  width: 2px;
+  height: 2px;
+  margin: -1px 0 0 -1px;
   border-radius: 1px;
   background: var(--accent);
+  pointer-events: none;
+}
+.cm-editor .cm-content .tb-grid .tb-drop[data-axis="column"] {
+  margin-top: 0;
+}
+.cm-editor .cm-content .tb-grid .tb-drop[data-axis="row"] {
+  margin-left: 0;
+}
+.cm-editor .cm-content .tb-grid .tb-drop[hidden] {
+  display: none;
+}
+/* Il campo della cella aperta non è un controllo dei moduli: niente anello
+   né angoli suoi, il segno è l'anello della cella attiva. */
+.cm-editor .cm-content .tb-grid .tb-input,
+.cm-editor .cm-content .tb-grid .tb-input:focus-visible {
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+}
+/* Il completamento dalla colonna: il resto proposto è scelto, col fondo
+   lavato d'accento invece della selezione piena, finché la proposta è lì
+   (`is-proposal`); il testo scelto a mano ha la selezione di sempre.
+   CodeMirror dà al campo a fuoco dentro il suo contenuto la selezione di
+   sistema con `!important` (`hideNativeSelection`): soltanto un
+   `!important` più specifico la batte. */
+.cm-editor .cm-content .tb-grid .tb-input.is-proposal::selection {
+  background: var(--accent-wash) !important;
+}
+/* Il puntatore sulle celle resta la freccia: la tabella non è un foglio di
+   calcolo che chiede una croce. */
+.cm-editor .cm-content .tb-grid .tb-cell {
+  cursor: default;
+}
+/* La selezione, la cella attiva e il taglio sono riquadri sopra le celle
+   (`tb-sel`, `tb-act`, `tb-cut`), che scivolano al posto nuovo: le celle non
+   si colorano da sole. La testata scelta tiene il suo fondo sotto il velo. */
+.cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-selected {
+  background: transparent;
+}
+.cm-editor .cm-content .tb-grid:focus-within .tb-head.is-selected {
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-active {
+  box-shadow: none;
+}
+.cm-editor .cm-content .tb-grid .tb-sel,
+.cm-editor .cm-content .tb-grid .tb-act,
+.cm-editor .cm-content .tb-grid .tb-cut {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  border-radius: 3px;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+/* Più celle scelte, o più intervalli: il velo d'accento con un filo. Una
+   cella sola ha soltanto l'anello della cella attiva. */
+.cm-editor .cm-content .tb-grid .tb-sel.is-multi {
+  background: var(--accent-veil);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.cm-editor .cm-content .tb-grid .tb-act {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-sel,
+.cm-editor .cm-content .tb-grid:not(:focus-within) .tb-act {
+  visibility: hidden;
+}
+/* Il segno del taglio: le celle tagliate restano tratteggiate finché non si
+   incolla, anche quando la tabella perde il fuoco. Il tratteggio è quello
+   del prototipo (`.tg-cut`): quattro bordi di 1,5 px, 4 px pieni e 4 vuoti,
+   che girano attorno alle celle come formiche in fila (`tg-ants`).
+   È l'unica eccezione al foglio fermo (`skin/motion.css` spegne ogni moto
+   dentro l'editor): il giro dice che il taglio aspetta ancora di essere
+   incollato, e finisce con lui — col taglio chiuso il riquadro è `hidden`.
+   Per questo la regola scrive `!important` con più peso di quella di
+   `motion.css`, e `theme/motion.test.ts` la nomina come sola eccezione.
+   Col moto ridotto, del sistema o di Fub, il tratteggio sta fermo. */
+.cm-editor .cm-content .tb-grid .tb-cut {
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(90deg, var(--accent) 50%, transparent 0) 0 0 / 8px 1.5px repeat-x,
+    linear-gradient(90deg, var(--accent) 50%, transparent 0) 0 100% / 8px 1.5px repeat-x,
+    linear-gradient(0deg, var(--accent) 50%, transparent 0) 0 0 / 1.5px 8px repeat-y,
+    linear-gradient(0deg, var(--accent) 50%, transparent 0) 100% 0 / 1.5px 8px repeat-y;
+  animation: tb-ants 0.6s linear infinite !important;
+}
+@keyframes tb-ants {
+  to {
+    background-position: 8px 0, -8px 100%, 0 -8px, 100% 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cm-editor .cm-content .tb-grid .tb-cut {
+    animation: none !important;
+  }
+}
+:root[data-motion="reduced"] .cm-editor .cm-content .tb-grid .tb-cut {
+  animation: none !important;
+}
+/* Le maniglie del tocco agli angoli della selezione: si tirano per
+   allargarla. Soltanto dove il puntatore è un dito. */
+.cm-editor .cm-content .tb-grid .tb-handle {
+  display: none;
+}
+@media (hover: none) and (pointer: coarse) {
+  .cm-editor .cm-content .tb-grid .tb-handle:not([hidden]) {
+    position: absolute;
+    z-index: 3;
+    display: block;
+    left: 0;
+    top: 0;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border: 2px solid var(--doc-bg);
+    border-radius: 50%;
+    background: var(--accent);
+  }
+}
+/* «Aggiungi una riga» e «Aggiungi una colonna» (il prototipo, `.tg-add`):
+   due barre di 15 px con un «+», 4 px sotto la tabella e 4 px alla sua
+   destra, che compaiono col puntatore sopra la tabella o col fuoco dentro.
+   Il riquadro che le porta copre le celle (la cornice meno i 19 px della
+   barra e la mezza riga d'aria sotto), e non prende il puntatore: lo
+   prendono soltanto le barre. */
+.cm-editor .cm-content .tb-adders {
+  position: absolute;
+  inset: 0 0 calc(19px + var(--text-reading) * var(--leading-relaxed) / 2);
+  display: block;
+  min-height: 0;
+  padding: 0;
+  pointer-events: none;
+}
+.cm-editor .cm-content .tb-frame:has(+ .cm-markdown-gap-lead) .tb-adders {
+  bottom: calc(19px - var(--text-reading) * var(--leading-relaxed) / 2);
+}
+/* Col puntatore sulla tabella la barra «Aggiungi una riga» compare sopra
+   quella riga: il segnaposto le lascia il posto. */
+.cm-editor .cm-content .tb-frame:hover + .cm-markdown-gap-lead .cm-fub-placeholder {
+  visibility: hidden;
+}
+.cm-editor .cm-content .tb-add {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--doc-gutter-fg);
+  pointer-events: auto;
+}
+.cm-editor .cm-content .tb-add[data-add="row"] {
+  left: 0;
+  right: 0;
+  bottom: -19px;
+  height: 15px;
+}
+.cm-editor .cm-content .tb-add[data-add="column"] {
+  top: 0;
+  bottom: 0;
+  right: -19px;
+  width: 15px;
+}
+.cm-editor .cm-content .tb-add svg {
+  width: 14px;
+  height: 14px;
+}
+.cm-editor .cm-content .tb-add:hover,
+.cm-editor .cm-content .tb-add:active {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+/* Al telefono la barra della colonna uscirebbe dal margine: resta la riga,
+   e la colonna si aggiunge dal menu. */
+@media (max-width: 620px) {
+  .cm-editor .cm-content .tb-add[data-add="column"] {
+    display: none;
+  }
+}
+/* La maniglia di riempimento all'angolo della selezione (il prototipo,
+   `.tg-fill`: 9 px, raggio 2, un anello del colore del foglio), e le celle
+   che il riempimento raggiungerà mentre la si tira. */
+.cm-editor .cm-content .tb-grid .tb-fill {
+  z-index: 3;
+  left: 0;
+  top: 0;
+  width: 9px;
+  height: 9px;
+  margin: -4px 0 0 -4px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--doc-bg);
 }
 .cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-fill {
   box-shadow: inset 0 0 0 1px var(--accent);
@@ -101,4 +401,10 @@
 }
 .has-cell-selection ::selection {
   background: transparent;
+}
+/* Le celle tagliate di una tabella del documento: tratteggiate finché non si
+   incolla, come il segno del taglio della cornice. */
+.is-cell-cut {
+  outline: 1.5px dashed var(--accent);
+  outline-offset: -2px;
 }

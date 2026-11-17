@@ -2,10 +2,13 @@
 // source coordinates, native selections and the existing inline decorations.
 import { StateEffect, type EditorState, type Extension, type Range, type Text, type Transaction } from "@codemirror/state";
 import {
+  CharCategory,
   EditorSelection,
+  Facet,
   findClusterBreak,
   Prec,
-  type RangeSet,
+  RangeSet,
+  RangeValue,
   type SelectionRange,
   StateField,
   type TransactionSpec,
@@ -19,13 +22,15 @@ import {
   type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
-import { syntaxTree } from "@codemirror/language";
-import type { SyntaxNode } from "@lezer/common";
+import { ensureSyntaxTree, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
+import type { SyntaxNode, Tree } from "@lezer/common";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
 import { t } from "../../../../i18n/strings";
+import { dueLook, liveProjection, liveTaskEnd, localDay, projectedDue } from "./task-due";
 import { isAllowedLink } from "../../../../ui/sanitize";
+import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
 import {
   inlineDelimiters,
@@ -38,14 +43,22 @@ import {
 } from "../../../../rules/syntax";
 import {
   blockOrigin,
+  blocksAround,
   findTrailingAnchor,
   frontmatterRange,
   linkReferences,
+  movedBlock,
   paragraphMathBlock,
   renderMarkdownState,
+  renderMarkdownStatePrefix,
+  renderPatch,
 } from "./render";
-import { decodeDestination, normalizeLabel } from "./link-syntax";
+import { decodeDestination, normalizeLabel, routeHref } from "./link-syntax";
+import { followPath, followWikilink, linkModifier, textLinkGesture, type PeekLink } from "./link-gesture";
 import { FOOTNOTE_DEFINITION } from "./grammar";
+import { commentCopy } from "./comments/copy";
+import { commentDecorations, commentEditing } from "./comments/mask";
+import { threadCuts } from "./comments/syntax";
 import { emptyPairsExtension } from "./empty-pair";
 import { edgeSpaces } from "./edge-space";
 import { keepMarks } from "./keep-marks";
@@ -58,6 +71,8 @@ import {
   containerMath,
   embedHtml,
   figureHtml,
+  commentsDeclared,
+  containerComments,
   embedSizeOf,
   footnoteStands,
   FOOTNOTE_REFERENCE,
@@ -68,6 +83,7 @@ import {
   nativeCuts,
   nativeInlines,
   scanInlineFootnotes,
+  writtenLink,
   type DollarMath,
   type NativeInline,
 } from "./render-inline";
@@ -75,21 +91,35 @@ import { mediaKindOfId } from "../../../media/media-types";
 import { TableWidget, tableGrids, tableOfBlock, type TableGridCallbacks } from "./table-widget";
 import { propertiesExtension } from "./properties";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
+import { withLineBreaks } from "../../line-breaks";
 import { pendingGuide } from "./pending";
 import { liveHints } from "./hints";
-import { DiagramLiveWidget, fenceBody } from "./diagram-live";
+import { choosingBlocks, DiagramLiveWidget, diagramBlockKeys, diagramSourceLines, fenceBody } from "./diagram-live";
+import { dayPage, type DayPageSource } from "./day-page";
+import { typePage, type TypePageSource } from "./type-page";
 import { calloutGestures, CalloutTypeWidget } from "./callout";
 import { detailsLive } from "./details-live";
 import { blockGesture } from "./block-gesture";
 import { calloutHead } from "./callout-head";
 import { hangingIndent } from "./hanging";
-import { blockTex, MathBlockLiveWidget, mathPopovers, type LiveFormula } from "./math-live";
+import { blockTex, blockTexRange, MathBlockEditWidget, MathBlockLiveWidget, mathPopovers, mathTouchable, type LiveFormula } from "./math-live";
 import { imageGestures } from "./image-live";
 import { CodeHeaderWidget, codeBlocks, codeWrapChanged, codeWraps } from "./code-block";
 import { blockPrefixes } from "./block-prefix";
 import { linkDialogOpener } from "./link-dialog";
 import { liveStrings } from "./strings";
-import { bareUrl, linkCardGestures, linkCardsChanged, LinkCardWidget, type LinkCardSource } from "./link-card";
+import { topChanges } from "./top-changes";
+import {
+  bareUrl,
+  bareWikilink,
+  linkCardGestures,
+  linkCardsChanged,
+  LinkCardWidget,
+  noteCardGestures,
+  NoteCardWidget,
+  type LinkCardSource,
+} from "./link-card";
+import { markPresence } from "../../../core/presence";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
 /// lo stato — chi monta l'editor inietta cosa succede al click.
@@ -103,6 +133,12 @@ export interface LivePreviewCallbacks {
   /// Lettura arrivava alla sezione — due risposte per lo stesso link, che è la
   /// §4.4 nella sua forma più piccola.
   openWikilink(page: string, heading: string | null, block: string | null): void;
+  /// Alt col clic, o Alt-Invio, su un link a un documento del vault: la
+  /// sbirciata (E11, T20). Senza, quei gesti aprono il documento.
+  peekLink?(link: PeekLink): void;
+  /// Che cosa fa il clic che apre un link (`editor.link-click`): `apri`, di
+  /// serie, o `sbircia`. Senza, apre.
+  linkClick?(): "apri" | "sbircia";
   /// Click semplice su un tag: riceve il nome senza `#` (es. "area/lavoro").
   searchTag(tag: string): void;
   /// `Alt-Invio` su un link relativo: il percorso, ancora codificato come
@@ -122,9 +158,26 @@ export interface LivePreviewCallbacks {
   /// una pastiglia. Quando la cartella cambia arriva [`pageIconsChanged`].
   isPerson?(page: string): boolean;
   /// Le schede dei collegamenti (K8, `state/link-cards.ts`): senza, un URL da
-  /// solo resta un link. Quando cambiano arriva [`linkCardsChanged`].
+  /// solo resta un link. Quando cambiano arriva [`linkCardsChanged`]. Con
+  /// `note`, anche un wikilink da solo in un paragrafo è una scheda (E11).
   readonly linkCard?: LinkCardSource;
+  /// La giornaliera aperta, per la pagina del giorno dopo l'ultima riga
+  /// (E17, `./day-page`). Assente, o `null`, la pagina non c'è.
+  readonly dayPage?: DayPageSource;
+  /// La nota del tipo aperta, per la pagina del tipo dopo l'ultima riga (E5,
+  /// `./type-page`). Assente, o `null`, la pagina non c'è.
+  readonly typePage?: TypePageSource;
 }
+
+/// Il paragrafo che è soltanto un collegamento, e quindi una scheda: un
+/// indirizzo web (K8) o un wikilink (E11).
+/// Quanto aspettano le schede tenute a ricontarsi dopo che i candidati sono
+/// cambiati: una volta per pausa, non a ogni battuta.
+const NOTE_HOLD_DELAY_MS = 250;
+
+type CardTarget =
+  | { readonly kind: "web"; readonly url: string }
+  | { readonly kind: "note"; readonly page: string; readonly heading: string | null; readonly block: string | null; readonly alias: string | null };
 
 /// Le icone delle pagine sono cambiate: i wikilink si ridecorano.
 export const pageIconsChanged = StateEffect.define<null>();
@@ -159,8 +212,15 @@ export type LiveDecoKind =
   | "link"
   | "wikilink"
   | "highlight"
+  // il testo di un commento CriticMarkup (`comments/mask.ts`): `data` "on"
+  // col cursore dentro
+  | "comment-range"
   | "tag"
   | "done"
+  // la scadenza `📅 AAAA-MM-GG` di un compito: una pastiglia, rossa quando è
+  // passata (`data` "overdue"), arancio quando è vicina (`data` "near"),
+  // segnata quando la data non si legge (`data` "bad"), grigia altrimenti
+  | "task-due"
   | "quote-mark"
   | "sup"
   | "sub"
@@ -397,6 +457,12 @@ export function computeDecorations(
   // Dedupe delle decorazioni di riga: blocchi annidati (citazione dentro
   // citazione) non devono impilare due volte la stessa classe.
   const quoteRows = new Set<number>();
+  // Il giorno di chi guarda, per dire se una scadenza è vicina, e le
+  // pastiglie delle scadenze, che si posano per ultime (`wholePill`).
+  const today = localDay();
+  // Le pastiglie, ognuna col tratto del suo compito: la riga della casella e
+  // quelle che la continuano.
+  const pills: { pill: LiveDeco; from: number; to: number }[] = [];
 
   // Le formule fra dollari si leggono per contenitore con la regola della
   // Lettura (`containerMath`): un `$` aperto su una riga può chiudere sulla
@@ -409,11 +475,11 @@ export function computeDecorations(
   // Le formule del contenitore in cui sta l'iterazione: i contenitori non si
   // annidano, e ogni nodo in riga sta nell'ultimo aperto.
   let around: readonly DollarMath[] = [];
-  const collectFormulas = (container: SyntaxNode) => {
+  const collectFormulas = (container: SyntaxNode): string => {
     const text = doc.sliceString(container.from, container.to);
     const found = containerMath(text, container);
     around = found.formulas;
-    if (found.formulas.length === 0) return;
+    if (found.formulas.length === 0) return text;
     const block = container.name === "Paragraph" && container.parent?.name === "Document"
       && paragraphMathBlock(found, text) !== null;
     for (const math of found.formulas) {
@@ -426,6 +492,7 @@ export function computeDecorations(
         else formulasByRow.set(n, [entry]);
       }
     }
+    return text;
   };
 
   // Gli inline che il modello del provider ha come nodi, raccolti per
@@ -435,16 +502,12 @@ export function computeDecorations(
   // un link conta soltanto se ha la destinazione scritta.
   const natives: NativeInline[] = [];
   const opaqueBlocks: { from: number; to: number }[] = [];
-  const liveLink = (link: SyntaxNode): NativeInline | null => {
-    if (link.name === "Link" && FOOTNOTE_REFERENCE.test(doc.sliceString(link.from, link.to))) {
-      return { from: link.from, to: link.to };
-    }
-    const marks = link.getChildren("LinkMark");
-    const closer = marks.find((mark) => doc.sliceString(mark.from, mark.from + 1) === "]");
-    if (!marks.length || !closer || !link.getChild("URL")) return null;
-    if (link.name === "Image") return { from: link.from, to: link.to };
-    return { from: link.from, to: link.to, content: { from: marks[0].to, to: closer.from } };
-  };
+  // I commenti CriticMarkup (`comments/`), con la sintassi `fub:comments`
+  // accesa: i loro messaggi, dove l'albero non si decora.
+  const commentsOn = commentsDeclared(forms);
+  const messages: { from: number; to: number }[] = [];
+  const sliceDoc = (from: number, to: number) => doc.sliceString(from, to);
+  const liveLink = (link: SyntaxNode): NativeInline | null => writtenLink(sliceDoc, link);
 
   // Decorazione di riga per ogni riga del nodo, clampata a [from, to]:
   // due range visibili che toccano lo stesso blocco non devono duplicare.
@@ -525,9 +588,26 @@ export function computeDecorations(
     from,
     to,
     enter(node) {
+      // Ciò che sta dentro un messaggio di un commento non è testo della nota:
+      // né enfasi né link né codice, e sparisce col messaggio.
+      if (messages.length > 0 && node.from < node.to
+        && messages.some((message) => message.from <= node.from && node.to <= message.to)) return false;
       if (isMathContainer(node.name)) {
-        collectFormulas(node.node);
-        natives.push(...nativeInlines(node.node, node.from, node.to, liveLink, around));
+        const text = collectFormulas(node.node);
+        const found = nativeInlines(node.node, node.from, node.to, liveLink, around);
+        natives.push(...found);
+        // I commenti del contenitore: i segni e i messaggi tagliano il testo
+        // per evidenziati, `%%`, wikilink e tag, e si disegnano qui.
+        if (commentsOn) {
+          for (const thread of containerComments(text, node.node, found, around)) {
+            for (const cut of threadCuts(thread)) {
+              natives.push(cut);
+              exclusions.push(cut);
+            }
+            messages.push(...thread.messages);
+            out.push(...commentDecorations(thread, reveal, doc));
+          }
+        }
       }
       // Ciò che sta in una formula non è sintassi, e un nodo che ne attraversa
       // una senza contenerla il provider non lo legge: come in Lettura non si
@@ -982,12 +1062,113 @@ export function computeDecorations(
       if (checked && paragraphEnd + 1 < row.to) {
         out.push({ from: paragraphEnd + 1, to: row.to, kind: "done" });
       }
+      // La scadenza è una pastiglia anche sulla riga attiva: un segno sul
+      // testo, che resta com'è e si scrive dentro la pastiglia. La regola
+      // legge il testo del compito — il primo paragrafo, righe che lo
+      // continuano comprese — senza la sintassi (`task-due.ts`), come la
+      // ricerca e la vista: una data dentro un codice conta, un indirizzo no.
+      const tree = syntaxTree(state);
+      const taskEnd = liveTaskEnd(tree, boxFrom, row.to);
+      const source = taskEnd > row.to ? doc.sliceString(row.from, taskEnd) : text;
+      const due = projectedDue(liveProjection(tree, source, row.from, paragraphEnd, taskEnd));
+      if (due) {
+        const look = dueLook(due, checked, today);
+        pills.push({
+          pill: { from: due.source[0], to: due.source[1], kind: "task-due", data: look === "plain" ? undefined : look },
+          from: row.from,
+          to: Math.max(taskEnd, row.to),
+        });
+      }
     }
   }
 
   keepPunctuation(doc, out);
-  out.sort((a, b) => a.from - b.from || a.to - b.to);
+  out.push(...wholePills(pills, out));
+  // A pari tratto la pastiglia viene prima, cioè fuori: CodeMirror annida per
+  // primo il segno che trova per primo.
+  out.sort((a, b) => a.from - b.from || a.to - b.to || Number(b.kind === "task-due") - Number(a.kind === "task-due"));
   return out;
+}
+
+/// Le decorazioni che una pastiglia può attraversare: quelle di riga, e il
+/// barrato della voce fatta, che finisce col fine riga (dove la pastiglia, se
+/// continua, va comunque a capo).
+const LINE_KINDS: ReadonlySet<LiveDecoKind> = new Set(["quote-line", "codeblock-line", "callout-line", "done"]);
+
+/// La pastiglia della scadenza, allargata finché non taglia più niente.
+///
+/// Un segno che ne attraversa il bordo — il codice in cui sta la data, il
+/// wikilink che la porta, i suoi segni nascosti, un evidenziato — spezzerebbe
+/// la pastiglia in due toppe: CodeMirror chiude e riapre il segno che finisce
+/// prima. Così la pastiglia prende per intero l'elemento che tocca, come in
+/// Lettura (`markTaskDues`): sta dentro un elemento che la contiene o
+/// contiene quelli che tocca, mai a cavallo.
+///
+/// E un elemento di cui la pastiglia copre tutto ciò che si vede (il codice
+/// `` `📅 2026-11-16` `` fuori dalla riga del cursore) sta dentro di lei, coi
+/// suoi segni nascosti: intorno, il suo fondo farebbe una toppa sulla toppa.
+export function wholePill(pill: LiveDeco, others: readonly LiveDeco[]): LiveDeco {
+  let { from, to } = pill;
+  const marks = others.filter((d) => d !== pill && !LINE_KINDS.has(d.kind) && d.from < d.to);
+  const hides = marks.filter((d) => d.kind === "hide");
+  const hidden = (a: number, b: number) => {
+    for (let at = a; at < b; at++) {
+      if (!hides.some((d) => d.from <= at && at < d.to)) return false;
+    }
+    return true;
+  };
+  const grow = () => {
+    for (let grown = true; grown; ) {
+      grown = false;
+      for (const other of marks) {
+        const inside = other.from <= from && to <= other.to;
+        const around = from <= other.from && other.to <= to;
+        if (other.to <= from || to <= other.from || inside || around) continue;
+        from = Math.min(from, other.from);
+        to = Math.max(to, other.to);
+        grown = true;
+      }
+    }
+  };
+  grow();
+  const covered = marks.some((other) => other.kind !== "hide" && other.from <= from && to <= other.to
+    && hidden(other.from, from) && hidden(to, other.to));
+  if (covered) {
+    for (let moved = true; moved; ) {
+      moved = false;
+      for (const hide of hides) {
+        if (hide.to === from) { from = hide.from; moved = true; }
+        if (hide.from === to) { to = hide.to; moved = true; }
+      }
+    }
+    grow();
+  }
+  return { ...pill, from, to };
+}
+
+/// Le pastiglie intere (`wholePill`), guardando per ognuna soltanto i segni
+/// del suo compito: un segno in riga non esce dal paragrafo, e il paragrafo
+/// di un compito comincia alla riga della casella. I segni si ordinano una
+/// volta, e ogni pastiglia ne legge solo il tratto suo: nella battuta da 4 ms
+/// non si scorre tutto il viewport per ogni compito.
+export function wholePills(
+  pills: readonly { pill: LiveDeco; from: number; to: number }[],
+  decos: readonly LiveDeco[],
+): LiveDeco[] {
+  if (pills.length === 0) return [];
+  const sorted = decos.filter((d) => d.from < d.to && !LINE_KINDS.has(d.kind)).sort((a, b) => a.from - b.from);
+  return pills.map(({ pill, from, to }) => {
+    let low = 0;
+    let high = sorted.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (sorted[middle]!.from < from) low = middle + 1;
+      else high = middle;
+    }
+    const near: LiveDeco[] = [];
+    for (let at = low; at < sorted.length && sorted[at]!.from <= to; at++) near.push(sorted[at]!);
+    return wholePill(pill, near);
+  });
 }
 
 const REPLACED: ReadonlySet<LiveDecoKind> = new Set(["hide", "math", "image", "link-pill", "footnote-back"]);
@@ -1091,6 +1272,72 @@ export function hiddenDeletion(
     return { changes: { from, to }, range: EditorSelection.cursor(from) };
   });
   if (!special || blocked) return null;
+  return { ...result, scrollIntoView: true, userEvent: forward ? "delete.forward" : "delete.backward" };
+}
+
+/// La cancellazione di una parola (Mod-Backspace, Mod-Canc) con la politica
+/// `mai`, accanto ai segni nascosti (`hidden`): il cursore salta i segni e
+/// cancella la parola che si vede dopo di loro, come `deleteGroupBackward` e
+/// `deleteGroupForward` di CodeMirror, senza entrare nel segno che viene dopo.
+/// Senza questo la parola si fermava al segno: un segno nascosto è atomico, e
+/// un segno di commento non si cancella da solo (`comments/mask.ts`), quindi
+/// il gesto non faceva niente. `null` se nessun cursore sta accanto a un
+/// segno, o c'è una selezione: vale il tasto di sempre.
+export function hiddenGroupDeletion(
+  state: EditorState,
+  hidden: RangeSet<Decoration>,
+  forward: boolean,
+): TransactionSpec | null {
+  if (state.selection.ranges.some((range) => !range.empty)) return null;
+  const hiddenEdge = (pos: number): boolean => {
+    let found = false;
+    hidden.between(pos, pos, (from, to) => {
+      if ((!forward && to === pos && from < pos) || (forward && from === pos && to > pos)) found = true;
+    });
+    return found;
+  };
+  let special = false;
+  const result = state.changeByRange((range) => {
+    let start = range.head;
+    let skipped = false;
+    for (;;) {
+      let next = -1;
+      hidden.between(start, start, (from, to) => {
+        if (!forward && to === start && from < start) next = from;
+        if (forward && from === start && to > start) next = to;
+      });
+      if (next < 0) break;
+      start = next;
+      skipped = true;
+    }
+    if (skipped) special = true;
+    const line = state.doc.lineAt(start);
+    const categorize = state.charCategorizer(start);
+    let pos = start;
+    for (let category: CharCategory | null = null; ;) {
+      if (pos === (forward ? line.to : line.from)) {
+        if (pos === start && !skipped && line.number !== (forward ? state.doc.lines : 1)) pos += forward ? 1 : -1;
+        break;
+      }
+      if (pos !== start && hiddenEdge(pos)) break;
+      const next = findClusterBreak(line.text, pos - line.from, forward) + line.from;
+      const char = line.text.slice(Math.min(pos, next) - line.from, Math.max(pos, next) - line.from);
+      const nextCategory = categorize(char);
+      if (category !== null && nextCategory !== category) break;
+      if (char !== " " || pos !== start) category = nextCategory;
+      pos = next;
+    }
+    if (pos === start) return { range };
+    const from = Math.min(pos, start);
+    const to = Math.max(pos, start);
+    // La parola che è tutto il contenuto del suo elemento porta via anche i
+    // segni, come l'ultima lettera: nel file non resta un `****`.
+    let element = skipped ? elementOfContent(state, from, to) : null;
+    for (let outer = element; outer; outer = elementOfContent(state, outer.from, outer.to)) element = outer;
+    if (element) return { changes: { from: element.from, to: element.to }, range: EditorSelection.cursor(element.from) };
+    return { changes: { from, to }, range: EditorSelection.cursor(from) };
+  });
+  if (!special) return null;
   return { ...result, scrollIntoView: true, userEvent: forward ? "delete.forward" : "delete.backward" };
 }
 
@@ -1228,6 +1475,7 @@ class InlineImageWidget extends WidgetType {
     root.addEventListener("markdown-resize", measure);
     const handle = document.createElement("span");
     handle.className = "cm-fub-image-handle";
+    markPresence(handle, "request");
     handle.setAttribute("aria-hidden", "true");
     handle.title = liveStrings.t("live.image.handle");
     root.append(handle);
@@ -1379,6 +1627,11 @@ function calloutLine(type: string): Decoration {
   return line;
 }
 const bulletMark = Decoration.mark({ class: "cm-fub-bullet" });
+const commentRange = Decoration.mark({ class: "cm-fub-comment-range" });
+const commentRangeOn = Decoration.mark({ class: "cm-fub-comment-range cm-fub-comment-range-on" });
+const dueMark = Decoration.mark({ class: "cm-fub-due" });
+const dueNearMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-near" });
+const dueOverdueMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-overdue" });
 const taskMark = Decoration.mark({ class: "cm-fub-bullet cm-fub-bullet-task" });
 const marksMap: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
   (["h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "strike", "sup", "sub", "code", "link", "highlight", "done", "quote-mark", "near", "nobreak", "footnote-label"] as const).map(
@@ -1438,25 +1691,38 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
       return d.data
         ? Decoration.mark({ class: `cm-fub-${d.data}` })
         : marksMap[d.kind]!;
+    case "comment-range":
+      return d.data === "on" ? commentRangeOn : commentRange;
     case "wikilink": {
       // Il bersaglio anche nel contratto che la resa dà alla shell
       // (`data-wikilink-*`, come in Lettura): chi guarda il link sotto il
       // puntatore, come l'anteprima al passaggio, non conosce la grammatica
       // di questo profilo.
       const target = parseWikilinkInner(d.data ?? "");
-      const icon = target.page ? callbacks.pageIcon?.(target.page) ?? null : null;
+      // Un'emoji si scrive col `::before`; una figura del set ha la sua
+      // maschera (`data-page-figure`); un `fub:` sconosciuto non si mostra.
+      const mark = readPageMark(target.page ? callbacks.pageIcon?.(target.page) ?? null : null);
       const person = target.page !== "" && callbacks.isPerson?.(target.page) === true;
       return Decoration.mark({
         class: person ? "cm-fub-wikilink cm-fub-person" : "cm-fub-wikilink",
         attributes: {
           [ATTR_WIKILINK]: d.data ?? "",
           "data-wikilink-page": target.page,
-          ...(icon ? { "data-page-icon": icon } : {}),
+          ...(mark?.kind === "text" ? { "data-page-icon": mark.text } : {}),
+          ...(mark?.kind === "figure" ? { "data-page-figure": mark.name } : {}),
           ...(target.heading ? { "data-wikilink-heading": target.heading } : {}),
           ...(target.block ? { "data-wikilink-block": target.block } : {}),
         },
       });
     }
+    case "task-due":
+      if (d.data === "near") return dueNearMark;
+      if (d.data === "overdue") return dueOverdueMark;
+      // Il titolo dice perché, nella lingua dell'interfaccia di adesso.
+      if (d.data === "bad") {
+        return Decoration.mark({ class: "cm-fub-due cm-fub-due-bad", attributes: { title: liveStrings.t("tasks.due.unreadable") } });
+      }
+      return dueMark;
     case "tag":
       return Decoration.mark({
         class: "cm-fub-tag",
@@ -1502,27 +1768,36 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
 
   if (e.type === "click") return false;
 
+  // Il clic che apre un link nel testo (Ctrl, Cmd sul Mac) e Alt col clic:
+  // la regola di `open-link.ts`, la stessa della Lettura e delle schede.
+  const gesture = textLinkGesture(e);
   const wikilink = target.closest<HTMLElement>(".cm-fub-wikilink");
-  if (wikilink && (e.ctrlKey || e.metaKey)) {
+  if (wikilink && gesture) {
     // L'attributo porta il bersaglio come sta scritto nella sorgente: qui lo
     // si ripassa dalla stessa grammatica di prima, invece di ri-serializzarlo.
     const labelledBy = parseWikilinkInner(wikilink.getAttribute(ATTR_WIKILINK) ?? "");
-    cb.openWikilink(labelledBy.page, labelledBy.heading, labelledBy.block);
+    void followWikilink(cb, labelledBy.page, labelledBy.heading, labelledBy.block, gesture);
     e.preventDefault();
     return true;
   }
 
   const link = target.closest<HTMLElement>(".cm-fub-link");
-  if (link && (e.ctrlKey || e.metaKey)) {
+  if (link && gesture) {
     const href = link.getAttribute(ATTR_HREF);
     // Naviga solo ciò che il sanitizzatore lascia passare (stessa policy di
     // Lettura): `javascript:…`, `data:…` e i protocol-relative restano fermi.
-    if (href && isAllowedLink(href)) {
-      window.open(href, "_blank", "noopener,noreferrer");
+    if (!href || !isAllowedLink(href)) return false;
+    const route = routeHref(href);
+    if (route.kind === "path") {
+      if (!cb.openPath || route.path === "") return false;
+      void followPath(cb, route.path, gesture);
       e.preventDefault();
       return true;
     }
-    return false;
+    if (gesture === "peek") return false;
+    window.open(href, "_blank", "noopener,noreferrer");
+    e.preventDefault();
+    return true;
   }
 
   const tag = target.closest<HTMLElement>(".cm-fub-tag");
@@ -1729,10 +2004,15 @@ function realignMounted(view: EditorView, root: HTMLElement): void {
 
 function interactiveTarget(target: Element | null, event: MouseEvent): boolean {
   if (!target) return false;
-  if (target.closest("button, input, select, textarea, summary, [data-ui-slot], .tag[data-tag]")) return true;
+  // L'editor di una trasclusione viva (`transclusion.ts`) ha cursore e
+  // selezione suoi: la nota che ospita non sposta il suo. Il testo di un
+  // blocco sincronizzato (T30) apre quell'editor al clic.
+  if (target.closest("button, input, select, textarea, summary, [data-ui-slot], [data-transclusion-editing], [data-transclusion-direct] > .transclusion-body, .tag[data-tag]")) return true;
   // Mod-clic segue un link e apre un'immagine del vault a tutta finestra: il
   // gesto lo gestisce la resa (`mount.ts`), l'editor non sposta il cursore.
-  return !!target.closest("a, img[data-vault-id]") && (event.ctrlKey || event.metaKey);
+  // Alt col clic su un wikilink è la sbirciata (T20): niente cursore in più.
+  if (event.altKey && !event.ctrlKey && !event.metaKey && target.closest("a[data-wikilink-page], a.internal-path")) return true;
+  return !!target.closest("a, img[data-vault-id]") && linkModifier(event);
 }
 /// La riga sorgente del blocco sotto il punto, senza leggere l'editor.
 ///
@@ -1935,7 +2215,8 @@ class MarkdownWidget extends WidgetType {
         const start = opener.to + 1;
         if (edit.from < 0 || edit.to < edit.from || edit.to > body.length
           || doc.sliceString(start, start + body.length) !== body) return;
-        view.dispatch({ changes: { from: start + edit.from, to: start + edit.to, insert: edit.insert }, userEvent: "input" });
+        // `body` e la modifica vanno a capo con "\n": nella nota entrano con i suoi a capo.
+        view.dispatch({ changes: { from: start + edit.from, to: start + edit.to, insert: withLineBreaks(view.state, edit.insert) }, userEvent: "input" });
       },
     };
     const unmount = this.callbacks.mountRendered
@@ -1983,6 +2264,11 @@ class MarkdownWidget extends WidgetType {
 }
 
 const GAP = Decoration.line({ class: "cm-markdown-gap" });
+/// La prima riga dopo un blocco reso quando il cursore sta su una delle sue
+/// righe vuote: la riga del cursore si vede, e lo stacco sotto il blocco (il
+/// suo padding, `cm-markdown-block` e `tb-frame` nella pelle) le cede il
+/// posto, così il testo che segue non si sposta (#411, A-01).
+const GAP_LEAD = Decoration.line({ class: "cm-markdown-gap-lead" });
 
 /// Se `position` cade in uno degli intervalli, ordinati e disgiunti, che un
 /// blocco reso copre.
@@ -1998,61 +2284,337 @@ function insideReplaced(replaced: readonly { from: number; to: number }[], posit
   return range !== undefined && range.from <= position && position < range.to;
 }
 
+/// Gli intervalli che i blocchi resi coprono dentro `ranges`, in ordine e
+/// disgiunti: fra le decorazioni dei blocchi soltanto i blocchi resi hanno
+/// una lunghezza.
+function replacedIn(decorations: DecorationSet, ranges: readonly { from: number; to: number }[]): { from: number; to: number }[] {
+  const found: { from: number; to: number }[] = [];
+  for (const range of ranges) {
+    decorations.between(range.from, range.to, (from, to) => {
+      if (to > from && (found.length === 0 || from >= found[found.length - 1]!.to)) found.push({ from, to });
+    });
+  }
+  return found;
+}
+
+/// Un blocco che il cursore lontano lascia reso, fra i candidati della Live:
+/// l'intervallo va dall'inizio della sua prima riga a quello del blocco dopo.
+class CandidateMark extends RangeValue {
+  constructor(
+    /// Il blocco, con le posizioni di quando il candidato è nato.
+    readonly block: MarkdownBlock,
+    /// Quanto il blocco comincia dopo l'inizio del candidato.
+    readonly offset: number,
+    readonly length: number,
+    /// Una tabella che la griglia sa leggere: resta griglia anche col cursore
+    /// dentro, perché la griglia è il modo di scriverla.
+    readonly grid: boolean,
+    /// Un paragrafo che è soltanto un indirizzo o un wikilink: la sua scheda
+    /// (K8, E11).
+    readonly linkCard: CardTarget | undefined,
+    /// La scelta che la selezione ha dettato: blocco reso o sorgente, righe
+    /// vuote dopo nascoste o no. Uguale, il candidato resta quello di prima.
+    readonly decision: string,
+  ) {
+    super();
+  }
+  decided(decision: string): CandidateMark {
+    return new CandidateMark(this.block, this.offset, this.length, this.grid, this.linkCard, decision);
+  }
+}
+
+/// Il campo dei blocchi resi di una Live, per chi conta il suo lavoro.
+interface LiveBlocksValue {
+  readonly visited: number;
+  readonly gaps: DecorationSet;
+}
+const liveBlocksField = Facet.define<StateField<LiveBlocksValue>, StateField<LiveBlocksValue> | undefined>({
+  combine: (fields) => fields[0],
+});
+
+/// Le righe vuote che la Live nasconde dopo i blocchi resi, in tutto il
+/// documento: la vista ne disegna soltanto quelle del suo tratto. Per i test.
+export function liveGapLines(state: EditorState): DecorationSet | null {
+  const field = state.facet(liveBlocksField);
+  return field ? state.field(field, false)?.gaps ?? null : null;
+}
+
+/// Le righe nascoste del tratto della vista. Fuori dal tratto non si
+/// disegnano, e una decorazione di riga non cambia le altezze che la vista
+/// stima: così il confronto delle decorazioni a ogni aggiornamento resta
+/// proporzionale al tratto, non a tutte le righe nascoste della nota.
+const gapLines = ViewPlugin.fromClass(class {
+  decorations: DecorationSet = Decoration.none;
+  private source: DecorationSet | null = null;
+  constructor(view: EditorView) {
+    this.build(view);
+  }
+  update(update: ViewUpdate): void {
+    if (update.viewportChanged || liveGapLines(update.state) !== this.source) this.build(update.view);
+  }
+  private build(view: EditorView): void {
+    const source = liveGapLines(view.state);
+    this.source = source;
+    if (!source) {
+      this.decorations = Decoration.none;
+      return;
+    }
+    const { from, to } = view.viewport;
+    const ranges: Range<Decoration>[] = [];
+    source.between(from, to, (start, _end, value) => {
+      ranges.push(value.range(start));
+    });
+    this.decorations = Decoration.set(ranges);
+  }
+}, { decorations: (value) => value.decorations });
+
+/// Quanti blocchi l'ultimo aggiornamento della Live ha guardato: tutti quando
+/// si rifà da capo, quelli vicini alla modifica e alla selezione per una
+/// battuta. `null` senza Live. Per i test, che contano il lavoro di una battuta.
+export function liveBlocksVisited(state: EditorState): number | null {
+  const field = state.facet(liveBlocksField);
+  return field ? state.field(field, false)?.visited ?? null : null;
+}
+
+/// Le figure del set accanto ai wikilink: una regola per figura, con la sua
+/// maschera. Si fanno quando si monta un editor e non al caricamento del
+/// modulo, perché una figura può essere registrata da un modulo che si monta
+/// dopo (la stella della cornice); si rifanno solo se le figure disegnate sono
+/// cambiate. Una figura che nessuno disegna non ha regola, e non mostra niente.
+let figureMarks: { key: string; theme: Extension } | null = null;
+
+function figureTheme(): Extension {
+  const masks = PAGE_FIGURES.map((name) => [name, figureMask(name)] as const).filter(([, mask]) => mask !== "");
+  const key = masks.map(([name, mask]) => `${name}=${mask}`).join(" ");
+  if (figureMarks?.key === key) return figureMarks.theme;
+  const theme = EditorView.baseTheme(Object.fromEntries(masks.map(([name, mask]) => [
+    // La forma dalla maschera, il colore dal testo del link, grande quanto
+    // una lettera.
+    `.cm-fub-wikilink[data-page-figure="${name}"]::before`,
+    {
+      content: "\"\"",
+      width: "1em",
+      height: "1em",
+      marginInlineEnd: "0.2em",
+      display: "inline-block",
+      verticalAlign: "-0.15em",
+      backgroundColor: "currentColor",
+      maskImage: mask,
+      maskRepeat: "no-repeat",
+      maskSize: "100% 100%",
+      WebkitMaskImage: mask,
+      WebkitMaskRepeat: "no-repeat",
+      WebkitMaskSize: "100% 100%",
+    },
+  ])));
+  figureMarks = { key, theme };
+  return theme;
+}
+
+/// Quanto lavora il parser in ogni pezzo del resto di un documento grande, in
+/// millisecondi: con la resa che ne segue sta dentro un fotogramma.
+const PARSE_SLICE_MS = 8;
+
+/// Il parser è arrivato in fondo al documento: la resa a metà si completa
+/// anche se l'albero dello stato era già quello.
+const restParsed = StateEffect.define<null>();
+
+/// `run` quando la pagina è libera: `requestIdleCallback` dove c'è, e non
+/// oltre 100 ms; altrimenti il prossimo giro del ciclo degli eventi. Torna
+/// la funzione che lo annulla.
+function whenIdle(run: () => void): () => void {
+  if (typeof requestIdleCallback === "function") {
+    const handle = requestIdleCallback(run, { timeout: 100 });
+    return () => cancelIdleCallback(handle);
+  }
+  const handle = setTimeout(run, 0);
+  return () => clearTimeout(handle);
+}
+
+/// Le decorazioni in riga raccolte da `collectInline`.
+interface InlineRanges {
+  readonly decorations: Range<Decoration>[];
+  readonly atomic: Range<Decoration>[];
+  readonly hidden: Range<Decoration>[];
+  readonly seen: Set<string>;
+  /// Quante righe `computeDecorations` ha letto.
+  lines: number;
+}
+
+/// Da che cosa vengono le decorazioni in riga della Live.
+interface InlineBasis {
+  readonly visible: readonly { from: number; to: number }[];
+  readonly ranges: readonly SelectionRange[];
+  readonly replaced: readonly { from: number; to: number }[];
+}
+
+/// Quante righe l'ultimo aggiornamento delle decorazioni in riga ha letto, per
+/// vista. Per i test, che contano il lavoro di una battuta.
+const inlineVisited = new WeakMap<EditorView, number>();
+
+/// Quante righe l'ultimo aggiornamento delle decorazioni in riga della Live ha
+/// letto con `computeDecorations`.
+export function liveInlineVisited(view: EditorView): number | null {
+  return inlineVisited.get(view) ?? null;
+}
+
+/// I nodi di primo livello che toccano le righe da `from` a `to`, interi:
+/// dall'inizio del primo a quello del nodo dopo l'ultimo (o alla fine del
+/// testo). Le decorazioni in riga di un nodo dipendono soltanto da lui e
+/// dalle sue righe attive.
+function topCover(tree: Tree, doc: Text, from: number, to: number): { from: number; to: number } {
+  const start = doc.lineAt(from).from;
+  const end = doc.lineAt(to).to;
+  const first = tree.topNode.childBefore(start);
+  let next = tree.topNode.childAfter(end);
+  while (next && next.from <= end) next = next.nextSibling;
+  return { from: first ? Math.min(first.from, start) : 0, to: next ? next.from : tree.length };
+}
+
+/// I tratti coperti da uno dei due elenchi e non dall'altro.
+function symmetricDifference(
+  a: readonly { from: number; to: number }[],
+  b: readonly { from: number; to: number }[],
+): { from: number; to: number }[] {
+  const out: { from: number; to: number }[] = [];
+  const key = (range: { from: number; to: number }) => `${range.from}:${range.to}`;
+  const inB = new Set(b.map(key));
+  const inA = new Set(a.map(key));
+  for (const range of a) if (!inB.has(key(range))) out.push(range);
+  for (const range of b) if (!inA.has(key(range))) out.push(range);
+  return out;
+}
+
+/// I tratti dove uno dei due elenchi copre il testo e l'altro no, coi punti
+/// dove la copertura cambia in uno solo dei due: anche un bordo che si sposta
+/// conta.
+function uncovered(
+  a: readonly { from: number; to: number }[],
+  b: readonly { from: number; to: number }[],
+): { from: number; to: number }[] {
+  const edges = (list: readonly { from: number; to: number }[]) => new Set(list.flatMap((range) => [range.from, range.to]));
+  const inA = edges(a);
+  const inB = edges(b);
+  const covers = (list: readonly { from: number; to: number }[], pos: number) => list.some((range) => range.from <= pos && pos < range.to);
+  const points = [...new Set([...inA, ...inB])].sort((x, y) => x - y);
+  const out: { from: number; to: number }[] = [];
+  for (let index = 0; index < points.length; index++) {
+    const at = points[index]!;
+    // Un bordo di uno soltanto: il nodo che lo tiene cambia taglio.
+    if (inA.has(at) !== inB.has(at)) out.push({ from: at, to: at });
+    const next = points[index + 1];
+    if (next !== undefined && covers(a, at) !== covers(b, at)) out.push({ from: at, to: next });
+  }
+  return out;
+}
+
+/// I tratti in ordine, uniti quando si toccano.
+function mergeRanges(ranges: { from: number; to: number }[]): { from: number; to: number }[] {
+  ranges.sort((x, y) => x.from - y.from);
+  const out: { from: number; to: number }[] = [];
+  for (const range of ranges) {
+    const last = out[out.length - 1];
+    if (last && range.from <= last.to) last.to = Math.max(last.to, range.to);
+    else out.push({ from: range.from, to: range.to });
+  }
+  return out;
+}
+
 export function livePreview(
   callbacks: LivePreviewCallbacks,
   forms?: readonly SyntaxForm[],
 ): Extension {
-  /// Un blocco che il cursore lontano lascia reso: `from` è l'inizio della
-  /// sua prima riga, `next` quello del blocco dopo.
-  interface Candidate {
-    block: MarkdownBlock;
-    from: number;
-    to: number;
-    next: number;
-    /// Una tabella che la griglia sa leggere: resta griglia anche col cursore
-    /// dentro, perché la griglia è il modo di scriverla.
-    grid: boolean;
-    /// Un paragrafo che è soltanto un indirizzo: la sua scheda (K8).
-    linkCard?: string;
-  }
   interface RenderState {
     document: MarkdownDocument;
-    /// I blocchi rendibili, ricavati una volta per documento: una selezione
-    /// che si muove ripassa solo questi, non tutto il documento.
-    candidates: readonly Candidate[];
-    /// Le scelte che la selezione ha dettato: blocco reso o sorgente, riga
-    /// vuota nascosta o no. Uguali, lo stato resta quello di prima.
-    decisions: string;
+    /// I blocchi rendibili, ognuno dall'inizio della sua prima riga a quello
+    /// del blocco dopo, con la scelta che la selezione ha dettato. Una
+    /// modifica li sposta tutti senza guardarli, e se ne rifanno soltanto
+    /// quelli che la modifica o la selezione toccano.
+    candidates: RangeSet<CandidateMark>;
     decorations: DecorationSet;
-    replaced: readonly { from: number; to: number }[];
+    /// Le righe vuote nascoste dopo i blocchi resi (`cm-markdown-gap`). Non
+    /// stanno con i blocchi: CodeMirror confronta a ogni aggiornamento, punto
+    /// per punto, tutte le decorazioni del campo, e queste righe la vista le
+    /// prende soltanto nel suo tratto (`gapLines`).
+    gaps: DecorationSet;
+    /// `false`: la resa di un documento grande appena aperto, fin dove il
+    /// parser è arrivato (`renderMarkdownStatePrefix`); `parseRest` la
+    /// completa senza fermare la pagina.
+    complete: boolean;
+    /// Quanti blocchi l'ultimo aggiornamento ha guardato (`liveBlocksVisited`).
+    visited: number;
   }
   const touched = (state: EditorState, from: number, to: number) =>
     state.selection.ranges.some((range) => range.from <= to && range.to >= from);
   const anchorsOf = (state: EditorState): ReadonlyMap<string, number> => state.field(blocks).document.anchors;
   const blocks = StateField.define<RenderState>({
     create(state) {
-      const document = renderMarkdownState(state, forms);
-      return buildBlocks(state, document, candidatesOf(document, state.facet(liveReveal)));
+      const { document, complete } = renderMarkdownStatePrefix(state, forms);
+      return buildAll(state, document, complete);
     },
     update(value, transaction) {
+      const { state } = transaction;
       const changed = transaction.docChanged;
-      const readOnlyChanged = transaction.startState.readOnly !== transaction.state.readOnly;
-      const policy = transaction.state.facet(liveReveal);
-      if (policy !== transaction.startState.facet(liveReveal)) {
-        return buildBlocks(transaction.state, value.document, candidatesOf(value.document, policy));
+      const readOnlyChanged = transaction.startState.readOnly !== state.readOnly;
+      if (state.facet(liveReveal) !== transaction.startState.facet(liveReveal)) {
+        return buildAll(state, value.document, value.complete);
       }
       if (transaction.effects.some((effect) => effect.is(linkCardsChanged)) && !changed) {
-        return buildBlocks(transaction.state, value.document, value.candidates);
+        return buildAll(state, value.document, value.complete);
+      }
+      // La resa a metà di un documento grande si rifà a ogni modifica, fin
+      // dove l'albero arriva, e quando l'albero arriva in fondo: gli alberi
+      // intermedi del lavoratore del parser la rifarebbero tutta ogni volta.
+      const treeDone = !changed && syntaxTreeAvailable(state) && (
+        syntaxTree(transaction.startState) !== syntaxTree(state)
+        || transaction.effects.some((effect) => effect.is(restParsed)));
+      if (!value.complete && (changed || treeDone)) {
+        const previous = { document: value.document, changes: transaction.changes };
+        const { document, complete } = renderMarkdownStatePrefix(state, forms, previous);
+        return buildAll(state, document, complete);
       }
       if (!changed && !transaction.selection && !readOnlyChanged) return value;
       if (!changed) {
-        const next = buildBlocks(transaction.state, value.document, value.candidates);
-        return next.decisions === value.decisions && !readOnlyChanged ? value : next;
+        if (readOnlyChanged) return buildAll(state, value.document, value.complete);
+        return patchBlocks(value, transaction, value.document) ?? buildAll(state, value.document, value.complete);
       }
-      const document = renderMarkdownState(transaction.state, forms, { document: value.document, changes: transaction.changes });
-      return buildBlocks(transaction.state, document, candidatesOf(document, policy));
+      const document = renderMarkdownState(state, forms, { document: value.document, changes: transaction.changes });
+      // Ogni widget confronta la sola lettura e le definizioni, e una scheda
+      // nuova può cambiare tipo: allora si rifanno tutti.
+      if (readOnlyChanged || document.dependencies !== value.document.dependencies
+        || transaction.effects.some((effect) => effect.is(linkCardsChanged))) {
+        return buildAll(state, document, true);
+      }
+      return patchBlocks(value, transaction, document) ?? buildAll(state, document, true);
     },
-    provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+    provide: (field) => [EditorView.decorations.from(field, (value) => value.decorations), liveBlocksField.of(field)],
+  });
+  // Il resto di un documento grande: il parser di CodeMirror ci arriva a
+  // pezzi brevi, quando la pagina è libera, e quando è in fondo una
+  // transazione (`restParsed`) porta l'albero nello stato e la resa si completa. Il
+  // lavoratore del parser, da solo, si ferma poco oltre la vista.
+  const parseRest = ViewPlugin.fromClass(class {
+    private cancel: (() => void) | null = null;
+    constructor(private readonly view: EditorView) {
+      this.schedule();
+    }
+    update(): void {
+      this.schedule();
+    }
+    private schedule(): void {
+      if (this.cancel || this.view.state.field(blocks).complete) return;
+      this.cancel = whenIdle(() => {
+        this.cancel = null;
+        const { state } = this.view;
+        if (state.field(blocks).complete) return;
+        if (ensureSyntaxTree(state, state.doc.length, PARSE_SLICE_MS)) this.view.dispatch({ effects: restParsed.of(null) });
+        else this.schedule();
+      });
+    }
+    destroy(): void {
+      this.cancel?.();
+      this.cancel = null;
+    }
   });
   // Le tabelle sono griglie (`table-widget.ts`), anche col cursore dentro: si
   // scrivono cella per cella, e la sorgente con le pipe è della modalità
@@ -2098,38 +2660,6 @@ export function livePreview(
   // documento: cercare un a capo costa meno che scendere nell'albero delle
   // righe di CodeMirror, e lo si fa per ogni blocco a ogni battuta.
   const lineStart = (source: string, position: number): number => source.lastIndexOf("\n", position - 1) + 1;
-  function candidatesOf(document: MarkdownDocument, policy: RevealPolicy): Candidate[] {
-    const { source } = document;
-    const candidates: Candidate[] = [];
-    for (let index = 0; index < document.blocks.length; index++) {
-      const block = document.blocks[index]!;
-      if (INLINE_KINDS.has(block.kind) && block.kind !== "paragraph") continue;
-      const { rendered, grid } = shapeOf(block);
-      const following = document.blocks[index + 1];
-      const url = !rendered && callbacks.linkCard && block.kind === "paragraph" ? bareUrl(block.source) : null;
-      if (url) {
-        candidates.push({
-          block,
-          from: lineStart(source, block.from),
-          to: block.to,
-          next: following ? lineStart(source, following.from) : source.length,
-          grid: false,
-          linkCard: url,
-        });
-        continue;
-      }
-      if (!rendered) continue;
-      if (policy !== "riga" && block.kind === "paragraph" && onlyImages(block.source)) continue;
-      candidates.push({
-        block,
-        from: lineStart(source, block.from),
-        to: block.to,
-        next: following ? lineStart(source, following.from) : source.length,
-        grid,
-      });
-    }
-    return candidates;
-  }
   // La decorazione di un blocco reso torna la stessa finché il blocco viene
   // dalla stessa resa e niente di ciò che il widget confronta cambia: per
   // CodeMirror è la decorazione di prima, spostata, e non va confrontata.
@@ -2152,118 +2682,364 @@ export function livePreview(
     widgets.set(origin, { offset, dependencies, readOnly, grid, decoration });
     return decoration;
   }
-  function buildBlocks(state: EditorState, document: MarkdownDocument, candidates: readonly Candidate[]): RenderState {
-    const ranges: Range<Decoration>[] = [];
-    const replaced: { from: number; to: number }[] = [];
-    let decisions = "";
-    for (const { block, from, to, next, grid, linkCard } of candidates) {
-      if (linkCard !== undefined) {
-        // Col cursore dentro, l'indirizzo si scrive com'è.
-        if (touched(state, from, to) || !callbacks.linkCard) {
-          decisions += "s";
-          continue;
-        }
-        const card = callbacks.linkCard.view(linkCard);
-        decisions += `k${card.kind}`;
-        ranges.push(Decoration.replace({ block: true, widget: new LinkCardWidget(linkCard, card) }).range(from, to));
-        replaced.push({ from, to });
-        continue;
-      }
-      if (!grid && touched(state, from, to)) {
-        decisions += "s";
-        // Un diagramma toccato si scrive come codice, e il disegno resta
-        // sotto (C5).
-        if (block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source)) {
-          ranges.push(Decoration.widget({ block: true, side: 1, widget: new DiagramLiveWidget(fenceBody(block.source)) }).range(to));
-        } else if (block.kind === "math") {
-          // Così anche un blocco `$$` (C6).
-          ranges.push(Decoration.widget({ block: true, side: 1, widget: new MathBlockLiveWidget(blockTex(block.source)) }).range(to));
-        }
-        continue;
-      }
-      decisions += grid ? "t" : "r";
-      ranges.push(widgetOf(block, from, document.dependencies, state.readOnly, grid).range(from, to));
-      replaced.push({ from, to });
-      // Le righe dopo il blocco, fino al prossimo: dalla riga di `to` se
-      // comincia lì, altrimenti dalla seguente.
-      const { source } = document;
-      const after = source.indexOf("\n", to);
-      let lineFrom = lineStart(source, to) === to ? to : after === -1 ? -1 : after + 1;
-      while (lineFrom !== -1 && lineFrom < next) {
-        const end = source.indexOf("\n", lineFrom);
-        const lineTo = end === -1 ? source.length : end;
-        if (!/\S/.test(source.slice(lineFrom, lineTo)) && !touched(state, lineFrom, lineTo)) {
-          ranges.push(GAP.range(lineFrom));
-          decisions += "g";
-        } else {
-          decisions += "-";
-        }
-        if (end === -1) break;
-        lineFrom = end + 1;
-      }
+  /// Il candidato di un blocco, se il blocco si può rendere: dall'inizio della
+  /// sua prima riga all'inizio della riga del blocco dopo. La scelta è ancora
+  /// da fare.
+  function candidateOf(
+    block: MarkdownBlock,
+    following: MarkdownBlock | null,
+    source: string,
+    policy: RevealPolicy,
+  ): Range<CandidateMark> | null {
+    if (INLINE_KINDS.has(block.kind) && block.kind !== "paragraph") return null;
+    const { rendered, grid } = shapeOf(block);
+    const url = !rendered && callbacks.linkCard && block.kind === "paragraph" ? bareUrl(block.source) : null;
+    const note = !rendered && !url && callbacks.linkCard?.note && block.kind === "paragraph" ? bareWikilink(block.source) : null;
+    const card: CardTarget | undefined = url ? { kind: "web", url } : note ? { kind: "note", ...note } : undefined;
+    if (!card) {
+      if (!rendered) return null;
+      if (policy !== "riga" && block.kind === "paragraph" && onlyImages(block.source)) return null;
     }
-    return { document, candidates, decisions, decorations: Decoration.set(ranges, true), replaced };
+    const from = lineStart(source, block.from);
+    const next = following ? lineStart(source, following.from) : source.length;
+    const mark = new CandidateMark(block, block.from - from, block.to - block.from, card ? false : grid, card, "");
+    return mark.range(from, Math.max(next, block.to));
   }
-  const buildInline = (view: EditorView, held: readonly SelectionRange[] | null): [DecorationSet, DecorationSet, DecorationSet] => {
-    const active = revealOf(view.state, view.state.facet(liveReveal), held ?? view.state.selection.ranges);
-    const replaced = view.state.field(blocks).replaced;
+  /// La scelta di un candidato per la selezione di adesso, con le sue
+  /// decorazioni: blocco reso o sorgente, righe vuote dopo nascoste o no.
+  function decide(
+    state: EditorState,
+    document: MarkdownDocument,
+    from: number,
+    next: number,
+    mark: CandidateMark,
+  ): { decision: string; ranges: Range<Decoration>[] } {
+    const ranges: Range<Decoration>[] = [];
+    const to = from + mark.offset + mark.length;
+    const { linkCard, grid } = mark;
+    if (linkCard !== undefined) {
+      // Col cursore dentro, l'indirizzo (o il wikilink) si scrive com'è.
+      if (touched(state, from, to) || !callbacks.linkCard) return { decision: "s", ranges };
+      if (linkCard.kind === "note") {
+        // Finché la nota non è nota (la domanda in corso, un link che non
+        // porta a niente) il paragrafo resta il suo link.
+        const seen = callbacks.linkCard.note?.(linkCard.page) ?? { kind: "missing" as const };
+        if (seen.kind !== "card") return { decision: `n${seen.kind}`, ranges };
+        const widget = new NoteCardWidget(linkCard.page, linkCard.heading, linkCard.block, linkCard.alias, seen.card);
+        ranges.push(Decoration.replace({ block: true, widget }).range(from, to));
+        return { decision: "ncard", ranges };
+      }
+      const card = callbacks.linkCard.view(linkCard.url);
+      ranges.push(Decoration.replace({ block: true, widget: new LinkCardWidget(linkCard.url, card) }).range(from, to));
+      return { decision: `k${card.kind}`, ranges };
+    }
+    const block = movedBlock(mark.block, from + mark.offset);
+    if (!grid && block.kind === "math" && touched(state, from, to) && mathTouchable(state) && blockTexRange(state, from)) {
+      // Un blocco `$$` toccato si modifica sul posto, senza il suo LaTeX (T60).
+      ranges.push(Decoration.replace({ block: true, widget: new MathBlockEditWidget(from, blockTex(block.source)) }).range(from, to));
+      return { decision: "mx", ranges };
+    }
+    const mermaid = block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source);
+    // Un diagramma scelto coi Blocchi si vede disegnato: si sceglie, non si
+    // scrive (E26).
+    if (!grid && touched(state, from, to) && !(mermaid && choosingBlocks(state))) {
+      // Un diagramma toccato si scrive come codice, e il disegno gli sta
+      // accanto (C5, E26).
+      if (mermaid) {
+        ranges.push(...diagramSourceLines(state, from, to));
+        ranges.push(Decoration.widget({ block: true, side: 1, widget: new DiagramLiveWidget(fenceBody(block.source)) }).range(to));
+      } else if (block.kind === "math") {
+        // Così anche un blocco `$$` (C6).
+        ranges.push(Decoration.widget({ block: true, side: 1, widget: new MathBlockLiveWidget(blockTex(block.source)) }).range(to));
+      }
+      return { decision: "s", ranges };
+    }
+    let decision = grid ? "t" : "r";
+    ranges.push(widgetOf(block, from, document.dependencies, state.readOnly, grid).range(from, to));
+    // Le righe dopo il blocco, fino al prossimo: dalla riga di `to` se
+    // comincia lì, altrimenti dalla seguente.
+    const { source } = document;
+    const after = source.indexOf("\n", to);
+    let lineFrom = lineStart(source, to) === to ? to : after === -1 ? -1 : after + 1;
+    const first = lineFrom;
+    let open = false;
+    while (lineFrom !== -1 && lineFrom < next) {
+      const end = source.indexOf("\n", lineFrom);
+      const lineTo = end === -1 ? source.length : end;
+      const blank = !/\S/.test(source.slice(lineFrom, lineTo));
+      if (blank && !touched(state, lineFrom, lineTo)) {
+        ranges.push(GAP.range(lineFrom));
+        decision += "g";
+      } else {
+        // Una riga vuota col cursore si vede e prende lo stacco del blocco.
+        if (blank) open = true;
+        decision += blank ? "o" : "-";
+      }
+      if (end === -1) break;
+      lineFrom = end + 1;
+    }
+    if (open) ranges.push(GAP_LEAD.range(first));
+    return { decision, ranges };
+  }
+  /// Candidati e decorazioni di tutto il documento: quando la Live parte, e
+  /// quando una modifica cambia ciò che ogni blocco reso confronta.
+  function buildAll(state: EditorState, document: MarkdownDocument, complete: boolean): RenderState {
+    const policy = state.facet(liveReveal);
+    const { source, blocks: all } = document;
+    const marks: Range<CandidateMark>[] = [];
+    const ranges: Range<Decoration>[] = [];
+    const gaps: Range<Decoration>[] = [];
+    for (let index = 0; index < all.length; index++) {
+      const candidate = candidateOf(all[index]!, all[index + 1] ?? null, source, policy);
+      if (!candidate) continue;
+      const { decision, ranges: own } = decide(state, document, candidate.from, candidate.to, candidate.value);
+      marks.push(candidate.value.decided(decision).range(candidate.from, candidate.to));
+      for (const range of own) (range.value === GAP ? gaps : ranges).push(range);
+    }
+    return {
+      document, candidates: RangeSet.of(marks), decorations: Decoration.set(ranges, true), gaps: Decoration.set(gaps, true),
+      complete, visited: all.length,
+    };
+  }
+  /// L'aggiornamento di una battuta o di un cursore che si muove: candidati e
+  /// decorazioni di prima, spostati dalla modifica, e rifatti soltanto dove
+  /// la resa ha lavorato (`renderPatch`) e dove la selezione, di prima o di
+  /// adesso, tocca un candidato. `null` quando la resa è stata rifatta da capo.
+  function patchBlocks(value: RenderState, transaction: Transaction, document: MarkdownDocument): RenderState | null {
+    const { state } = transaction;
+    const changed = transaction.docChanged;
+    let { candidates, decorations, gaps } = value;
+    const added: Range<CandidateMark>[] = [];
+    const dropped = new Set<CandidateMark>();
+    const ranges: Range<Decoration>[] = [];
+    const gapRanges: Range<Decoration>[] = [];
+    const cleared: { from: number; to: number }[] = [];
+    let visited = 0;
+    if (changed) {
+      const span = renderPatch(document);
+      if (!span) return null;
+      candidates = candidates.map(transaction.changes);
+      decorations = decorations.map(transaction.changes);
+      gaps = gaps.map(transaction.changes);
+      const { source } = document;
+      const policy = state.facet(liveReveal);
+      const { blocks: near, following } = blocksAround(document, span.from, span.to);
+      const from = near.length > 0 ? lineStart(source, near[0]!.from) : span.from;
+      const to = following ? Math.max(from, lineStart(source, following.from)) : source.length;
+      candidates.between(from, to, (start, _end, mark) => {
+        if (start >= from && start < to) dropped.add(mark);
+      });
+      for (let index = 0; index < near.length; index++) {
+        visited++;
+        const candidate = candidateOf(near[index]!, near[index + 1] ?? following, source, policy);
+        if (!candidate) continue;
+        const { decision, ranges: own } = decide(state, document, candidate.from, candidate.to, candidate.value);
+        added.push(candidate.value.decided(decision).range(candidate.from, candidate.to));
+        for (const range of own) (range.value === GAP ? gapRanges : ranges).push(range);
+      }
+      cleared.push({ from, to });
+    }
+    // La selezione di prima, portata dalla modifica, e quella di adesso: i
+    // candidati che toccano rifanno la scelta, e cambiano se è diversa.
+    const spans: { from: number; to: number }[] = [];
+    for (const range of transaction.startState.selection.ranges) {
+      spans.push(changed
+        ? { from: transaction.changes.mapPos(range.from, -1), to: transaction.changes.mapPos(range.to, 1) }
+        : range);
+    }
+    for (const range of state.selection.ranges) spans.push(range);
+    const seen = new Set<CandidateMark>();
+    for (const span of spans) {
+      candidates.between(span.from, span.to, (from, to, mark) => {
+        if (dropped.has(mark) || seen.has(mark)) return;
+        seen.add(mark);
+        visited++;
+        const { decision, ranges: own } = decide(state, document, from, to, mark);
+        if (decision === mark.decision) return;
+        dropped.add(mark);
+        added.push(mark.decided(decision).range(from, to));
+        for (const range of own) (range.value === GAP ? gapRanges : ranges).push(range);
+        cleared.push({ from, to });
+      });
+    }
+    if (!changed && cleared.length === 0) return value;
+    for (const { from, to } of cleared) {
+      candidates = candidates.update({ filterFrom: from, filterTo: to, filter: (_from, _to, mark) => !dropped.has(mark) });
+      decorations = decorations.update({ filterFrom: from, filterTo: to, filter: (start) => start < from || start >= to });
+      gaps = gaps.update({ filterFrom: from, filterTo: to, filter: (start) => start < from || start >= to });
+    }
+    candidates = candidates.update({ add: added, sort: true });
+    decorations = decorations.update({ add: ranges, sort: true });
+    gaps = gaps.update({ add: gapRanges, sort: true });
+    return { document, candidates, decorations, gaps, complete: value.complete, visited };
+  }
+  /// Le decorazioni in riga dei tratti `ranges` (i visibili, o i loro pezzi
+  /// da rifare): quelle che `computeDecorations` vi trova, fuori dai blocchi
+  /// resi e dal frontmatter, e con `keep` soltanto quelle che vi cominciano.
+  const collectInline = (
+    state: EditorState,
+    active: Reveal,
+    replaced: readonly { from: number; to: number }[],
+    ranges: readonly { from: number; to: number }[],
+    keep: { from: number; to: number } | null,
+    out: InlineRanges,
+  ): void => {
     // Dentro il frontmatter non c'è Markdown: né riga orizzontale né titolo.
-    const yaml = frontmatterRange(view.state.doc);
-    const decorations: Range<Decoration>[] = [];
-    const atomic: Range<Decoration>[] = [];
-    const hidden: Range<Decoration>[] = [];
-    const seen = new Set<string>();
-    for (const visible of view.visibleRanges) {
-      for (const item of computeDecorations(view.state, active, visible.from, visible.to, forms)) {
+    const yaml = frontmatterRange(state.doc);
+    for (const visible of ranges) {
+      out.lines += state.doc.lineAt(visible.to).number - state.doc.lineAt(visible.from).number + 1;
+      for (const item of computeDecorations(state, active, visible.from, visible.to, forms)) {
+        if (keep && (item.from < keep.from || item.from >= keep.to)) continue;
         if (insideReplaced(replaced, item.from)) continue;
         if (yaml && item.from < yaml.to) continue;
         const key = `${item.from}:${item.to}:${item.kind}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
+        if (out.seen.has(key)) continue;
+        out.seen.add(key);
         // «A capo» è della superficie: la testata lo legge dallo stato.
-        const decoration = item.kind === "code-header" && !codeWraps(view.state, item.from)
+        const decoration = item.kind === "code-header" && !codeWraps(state, item.from)
           ? Decoration.replace({ widget: new CodeHeaderWidget(item.data ?? "", false) })
           : inDecoration(item, callbacks);
         // Un titolo porta anche la sua riga: lo stesso respiro verticale della
         // Lettura, così cambiare modalità non fa saltare la pagina.
         const level = HEADING_LINES[item.kind];
         if (level) {
-          const lineStart = view.state.doc.lineAt(item.from).from;
+          const lineStart = state.doc.lineAt(item.from).from;
           const lineKey = `line:${lineStart}`;
-          if (!seen.has(lineKey)) {
-            seen.add(lineKey);
-            decorations.push(level.range(lineStart));
+          if (!out.seen.has(lineKey)) {
+            out.seen.add(lineKey);
+            out.decorations.push(level.range(lineStart));
           }
         }
         if (item.kind === "quote-line" || item.kind === "codeblock-line" || item.kind === "callout-line") {
-          decorations.push(decoration.range(item.from));
+          out.decorations.push(decoration.range(item.from));
         } else {
           const range = decoration.range(item.from, item.to);
-          decorations.push(range);
+          out.decorations.push(range);
           if (item.kind === "hide" || item.kind === "hr" || item.kind === "checkbox" || item.kind === "math"
             || item.kind === "image" || item.kind === "link-pill" || item.kind === "footnote-back"
-            || item.kind === "code-header" || item.kind === "fence-close" || item.kind === "callout-type" || item.kind === "column-label") atomic.push(range);
+            || item.kind === "code-header" || item.kind === "fence-close" || item.kind === "callout-type" || item.kind === "column-label") out.atomic.push(range);
           // Le righe dei recinti nascosti: la testata, e la chiusura raccolta.
-          if (item.kind === "code-header") decorations.push(codeHeaderLine.range(view.state.doc.lineAt(item.from).from));
-          if (item.kind === "fence-close") decorations.push(fenceCloseLine.range(item.from));
-          if (item.kind === "hide") hidden.push(range);
+          if (item.kind === "code-header") out.decorations.push(codeHeaderLine.range(state.doc.lineAt(item.from).from));
+          if (item.kind === "fence-close") out.decorations.push(fenceCloseLine.range(item.from));
+          if (item.kind === "hide") out.hidden.push(range);
         }
       }
     }
-    return [Decoration.set(decorations, true), Decoration.set(atomic, true), Decoration.set(hidden, true)];
   };
   const plugin = ViewPlugin.fromClass(class {
-    decorations: DecorationSet;
-    atomicRanges: DecorationSet;
+    decorations: DecorationSet = Decoration.none;
+    atomicRanges: DecorationSet = Decoration.none;
     /// I segni nascosti, che Backspace e Canc saltano.
-    hidden: DecorationSet;
+    hidden: DecorationSet = Decoration.none;
     /// Le selezioni da cui si decide la rivelazione durante una composizione:
     /// quelle di quando è cominciata, portate avanti dalle modifiche. Fino a
     /// `compositionend` niente si rivela né si nasconde sotto le dita.
     held: readonly SelectionRange[] | null = null;
     endDrag: (() => void) | undefined;
+    /// Da che cosa vengono le decorazioni: i tratti visibili, le selezioni
+    /// che decidevano la rivelazione e i blocchi resi che coprivano il testo.
+    /// Un aggiornamento rifà soltanto i nodi di primo livello dove uno di
+    /// questi, o il testo, cambia.
+    built: InlineBasis;
     constructor(view: EditorView) {
-      [this.decorations, this.atomicRanges, this.hidden] = buildInline(view, null);
+      this.built = this.rebuild(view);
+    }
+    private basis(view: EditorView, ranges: readonly SelectionRange[]): InlineBasis {
+      return {
+        visible: view.visibleRanges.map(({ from, to }) => ({ from, to })),
+        ranges,
+        replaced: replacedIn(view.state.field(blocks).decorations, view.visibleRanges),
+      };
+    }
+    private rebuild(view: EditorView): InlineBasis {
+      const ranges = this.held ?? view.state.selection.ranges;
+      const basis = this.basis(view, ranges);
+      const out: InlineRanges = { decorations: [], atomic: [], hidden: [], seen: new Set(), lines: 0 };
+      collectInline(view.state, revealOf(view.state, view.state.facet(liveReveal), ranges), basis.replaced, basis.visible, null, out);
+      this.decorations = Decoration.set(out.decorations, true);
+      this.atomicRanges = Decoration.set(out.atomic, true);
+      this.hidden = Decoration.set(out.hidden, true);
+      inlineVisited.set(view, out.lines);
+      return basis;
+    }
+    /// Le decorazioni rifatte soltanto nei nodi di primo livello che la
+    /// modifica cambia (`topChanges`), in quelli che la selezione di prima o
+    /// di adesso tocca, dove un blocco reso compare o sparisce e dove il
+    /// tratto visibile si sposta; le altre restano, spostate. `false` quando
+    /// qualcosa che vale per tutto il testo cambia: allora si rifà tutto.
+    private patch(update: ViewUpdate): boolean {
+      const { state, startState, changes, view } = update;
+      const tree = syntaxTree(state);
+      if (tree.length !== state.doc.length) return false;
+      const before = startState.field(blocks);
+      const after = state.field(blocks);
+      if (before.document.dependencies !== after.document.dependencies || before.complete !== after.complete) return false;
+      if (startState.readOnly !== state.readOnly) return false;
+      const dirty: { from: number; to: number }[] = [];
+      if (update.docChanged) {
+        if (update.transactions.length !== 1) return false;
+        const transaction = update.transactions[0]!;
+        if (touchesFootnoteLine(transaction)) return false;
+        const yamlBefore = frontmatterRange(startState.doc);
+        const yamlAfter = frontmatterRange(state.doc);
+        if ((yamlBefore || yamlAfter) && (!yamlBefore || !yamlAfter || changes.mapPos(yamlBefore.to) !== yamlAfter.to
+          || changes.touchesRange(0, yamlBefore.to))) return false;
+        const changed = topChanges(transaction, syntaxTree(startState));
+        if (!changed) return false;
+        dirty.push({ from: changed.start, to: changed.resync === null ? state.doc.length : changed.resync + changed.delta });
+        // E il testo cambiato, anche fra due nodi: le decorazioni di prima vi
+        // finiscono spostate.
+        changes.iterChangedRanges((_fromA, _toA, fromB, toB) => dirty.push(topCover(tree, state.doc, fromB, toB)));
+      } else if (syntaxTree(startState) !== tree) {
+        return false;
+      }
+      const ranges = this.held ?? state.selection.ranges;
+      const basis = this.basis(view, ranges);
+      const old = this.built;
+      // Le selezioni di prima e di adesso, e quelle che decidevano.
+      const spans = [
+        ...startState.selection.ranges, ...old.ranges,
+      ].map((range) => ({ from: changes.mapPos(range.from, -1), to: changes.mapPos(range.to, 1) }));
+      spans.push(...state.selection.ranges, ...ranges);
+      for (const span of spans) dirty.push(topCover(tree, state.doc, span.from, span.to));
+      // I blocchi resi che compaiono o spariscono.
+      const mappedReplaced = old.replaced.map((range) => ({ from: changes.mapPos(range.from, 1), to: changes.mapPos(range.to, -1) }));
+      for (const range of symmetricDifference(mappedReplaced, basis.replaced)) dirty.push(topCover(tree, state.doc, range.from, range.to));
+      // Il tratto visibile che si sposta: i nodi ai suoi bordi, di prima e di
+      // adesso, e quelli che entrano o escono.
+      const mappedVisible = old.visible.map((range) => ({ from: changes.mapPos(range.from, -1), to: changes.mapPos(range.to, 1) }));
+      for (const range of uncovered(mappedVisible, basis.visible)) dirty.push(topCover(tree, state.doc, range.from, range.to));
+      // Da inizio riga: un nodo rientrato comincia dopo il rientro, e le
+      // decorazioni di riga del suo inizio stanno prima.
+      const doc = state.doc;
+      const merged = mergeRanges(dirty.map(({ from, to }) => ({
+        from: doc.lineAt(from).from,
+        to: to >= doc.length ? doc.length : doc.lineAt(to).from,
+      })));
+      const active = revealOf(state, state.facet(liveReveal), ranges);
+      const out: InlineRanges = { decorations: [], atomic: [], hidden: [], seen: new Set(), lines: 0 };
+      let decorations = this.decorations.map(changes);
+      let atomic = this.atomicRanges.map(changes);
+      let hidden = this.hidden.map(changes);
+      for (const span of merged) {
+        const drop = (from: number) => from < span.from || from >= span.to;
+        decorations = decorations.update({ filterFrom: span.from, filterTo: span.to, filter: drop });
+        atomic = atomic.update({ filterFrom: span.from, filterTo: span.to, filter: drop });
+        hidden = hidden.update({ filterFrom: span.from, filterTo: span.to, filter: drop });
+        const pieces: { from: number; to: number }[] = [];
+        for (const visible of basis.visible) {
+          const from = Math.max(visible.from, span.from);
+          const to = Math.min(visible.to, span.to);
+          if (from <= to) pieces.push({ from, to });
+        }
+        collectInline(state, active, basis.replaced, pieces, span, out);
+      }
+      this.decorations = decorations.update({ add: out.decorations, sort: true });
+      this.atomicRanges = atomic.update({ add: out.atomic, sort: true });
+      this.hidden = hidden.update({ add: out.hidden, sort: true });
+      this.built = basis;
+      inlineVisited.set(view, out.lines);
+      return true;
     }
     update(update: ViewUpdate) {
       const composing = update.view.compositionStarted;
@@ -2273,13 +3049,14 @@ export function livePreview(
       } else {
         this.held = null;
       }
-      if (released || update.docChanged || update.selectionSet || update.viewportChanged
+      const whole = released
         || update.startState.facet(liveReveal) !== update.state.facet(liveReveal)
-        || syntaxTree(update.startState) !== syntaxTree(update.state)
-        || update.startState.field(blocks) !== update.state.field(blocks)
         || codeWrapChanged(update)
-        || update.transactions.some((tr) => tr.effects.some((effect) => effect.is(pageIconsChanged)))) {
-        [this.decorations, this.atomicRanges, this.hidden] = buildInline(update.view, this.held);
+        || update.transactions.some((tr) => tr.effects.some((effect) => effect.is(pageIconsChanged)));
+      if (whole || update.docChanged || update.selectionSet || update.viewportChanged
+        || syntaxTree(update.startState) !== syntaxTree(update.state)
+        || update.startState.field(blocks) !== update.state.field(blocks)) {
+        if (whole || !this.patch(update)) this.built = this.rebuild(update.view);
       }
     }
     destroy() { this.endDrag?.(); }
@@ -2379,10 +3156,63 @@ export function livePreview(
     view.dispatch(plan);
     return true;
   };
+  // La parola intera (Mod-Backspace, Mod-Canc; Alt su macOS, come in
+  // `defaultKeymap`) salta i segni nello stesso modo, fino alla parola che si
+  // vede.
+  const deleteWordNear = (forward: boolean) => (view: EditorView): boolean => {
+    if (view.state.facet(liveReveal) !== "mai" || view.state.readOnly) return false;
+    const hidden = view.plugin(plugin)?.hidden;
+    if (!hidden) return false;
+    const plan = hiddenGroupDeletion(view.state, hidden, forward);
+    if (!plan) return false;
+    view.dispatch(plan);
+    return true;
+  };
   const deleteKeys = Prec.high(keymap.of([
     { key: "Backspace", run: deleteNear(false) },
     { key: "Delete", run: deleteNear(true) },
+    { key: "Mod-Backspace", mac: "Alt-Backspace", run: deleteWordNear(false) },
+    { key: "Mod-Delete", mac: "Alt-Delete", run: deleteWordNear(true) },
   ]));
+  // Le schede delle note che il testo ha (anche quelle ancora link, la nota
+  // che non c'è o la domanda in corso): l'editor le tiene finché le ha, e chi
+  // le possiede richiede soltanto quelle tenute (`state/note-cards.ts`). Si
+  // ricontano poco dopo che i candidati cambiano, non a ogni battuta.
+  const linkSource = callbacks.linkCard;
+  const noteHolds = linkSource?.holdNote ? ViewPlugin.fromClass(class {
+    held = new Map<string, () => void>();
+    timer: ReturnType<typeof setTimeout> | null = null;
+    candidates: RangeSet<CandidateMark> | null = null;
+    constructor(readonly view: EditorView) { this.count(); }
+    update(update: ViewUpdate): void {
+      if (update.state.field(blocks, false)?.candidates === this.candidates || this.timer !== null) return;
+      this.timer = setTimeout(() => {
+        this.timer = null;
+        this.count();
+      }, NOTE_HOLD_DELAY_MS);
+    }
+    count(): void {
+      const value = this.view.state.field(blocks, false);
+      this.candidates = value?.candidates ?? null;
+      const pages = new Set<string>();
+      value?.candidates.between(0, this.view.state.doc.length, (_from, _to, mark) => {
+        if (mark.linkCard?.kind === "note") pages.add(mark.linkCard.page);
+      });
+      for (const [page, release] of this.held) {
+        if (pages.has(page)) continue;
+        this.held.delete(page);
+        release();
+      }
+      for (const page of pages) {
+        if (!this.held.has(page)) this.held.set(page, linkSource.holdNote!(page));
+      }
+    }
+    destroy(): void {
+      if (this.timer !== null) clearTimeout(this.timer);
+      for (const release of this.held.values()) release();
+      this.held.clear();
+    }
+  }) : [];
   // Dopo che la vista ha posato il DOM: i blocchi resi che una modifica ha
   // spostato rimettono a posto le loro coordinate.
   // Un widget tenuto da una resa di prima può nascere dopo, quando scorre nella
@@ -2395,8 +3225,14 @@ export function livePreview(
     }
   });
   return [
-    theme, footnoteLabelsField, blocks, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), edgeSpaces(), keepMarks(), signsOnFirstLetter(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
+    theme, figureTheme(), footnoteLabelsField, blocks, gapLines, parseRest, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), edgeSpaces(), keepMarks(), signsOnFirstLetter(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
     propertiesExtension(),
     callbacks.linkCard ? linkCardGestures(callbacks.linkCard) : [],
+    commentEditing(forms), commentCopy(forms),
+    callbacks.linkCard?.note ? noteCardGestures(callbacks) : [],
+    noteHolds,
+    diagramBlockKeys,
+    callbacks.dayPage ? dayPage(callbacks.dayPage) : [],
+    callbacks.typePage ? typePage(callbacks.typePage) : [],
   ];
 }

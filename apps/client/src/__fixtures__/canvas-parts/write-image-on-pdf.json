@@ -1,0 +1,18 @@
+{
+  "name": "write-image-on-pdf",
+  "description": "La specie image su un PDF non si scrive.",
+  "file": "Libro.pdf",
+  "parts": {
+    "kind": "image",
+    "rect": [
+      0,
+      0,
+      1,
+      0.5
+    ]
+  },
+  "expect": {
+    "outcome": "refused",
+    "reason": "file"
+  }
+}

@@ -203,11 +203,20 @@ pub(crate) fn extension(raw: &str) -> Option<String> {
 
 /// Un documento con questa estensione ha un provider attivo in questo vault:
 /// un formato registrato e, per una cartella di Excel, la superficie della
-/// griglia del suo bundle, che si spegne con il plugin.
+/// griglia del suo bundle, che si spegne con il plugin; per un disegno, il
+/// Motore del disegno acceso nella pagina Componenti.
 pub(crate) fn serves(workspace: &Workspace, extension: &str) -> bool {
     let probe = DocId::new(format!("fub-warm.{extension}"));
     let format: Option<DocumentFormat> = workspace.format_of(&probe);
     if format.is_none() {
+        return false;
+    }
+    // Il motore del disegno si spegne nel vault con la sua riga dei
+    // Componenti (o con i disegni): spento, non si scalda per questo vault.
+    #[cfg(feature = "engine-drawing")]
+    if fub_disegno::motore::ESTENSIONI.contains(&extension)
+        && crate::componenti::motore_disegno_spento(|key| workspace.setting(key).ok())
+    {
         return false;
     }
     if !crate::workbook::is_workbook(format.as_ref()) {

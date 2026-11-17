@@ -13,6 +13,8 @@ import type { FakeHost } from "./host/fake";
 import { checkAccessibility, formatIssues } from "./ui/a11y-check";
 import { mountedTextEditors } from "./editors/text/test-support";
 import { DEFAULT_CURVE } from "./ink/input/pressure";
+import { FIRST_IMPORT_MS, waiter } from "./test-wait";
+import { NOTE_TYPE_READS } from "./state/note-type-commands";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -96,14 +98,7 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 2000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(2000);
 
 async function open(doc: string): Promise<void> {
   const { openDocument } = await import("./panels/document");
@@ -112,11 +107,10 @@ async function open(doc: string): Promise<void> {
   await loaded();
 }
 
-/// Il codice del disegno arriva dopo il montaggio: si aspetta che arrivi.
-/// La prima volta lo si trasforma tutto, e con la suite intera che gira
-/// accanto ci vuole più dei due secondi degli altri.
+/// Il codice del disegno arriva dopo il montaggio: si aspetta che arrivi
+/// (vedi [`FIRST_IMPORT_MS`]).
 async function loaded(): Promise<void> {
-  await waitFor("il disegno si carica", () => document.querySelector(".vector-pending") === null, 15_000);
+  await waitFor("il disegno si carica", () => document.querySelector(".vector-pending") === null, FIRST_IMPORT_MS);
 }
 
 const MODE_COMMANDS = ["shell.mode.reading", "shell.mode.live", "shell.mode.source"];
@@ -225,7 +219,7 @@ function drawWorkspace(value: string, source: "default" | "vault" = "vault"): Se
 
 /// Gli strumenti della colonna, coi primi delle tendine: il Completo e il
 /// Semplice hanno la stessa colonna, e cambiano i comandi.
-const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect"];
+const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
 
 /// Lo spazio di lavoro del disegno nel riquadro attivo.
 const workspace = (): string | undefined => focusedPane().querySelector<HTMLElement>(".draw-editor")?.dataset.workspace;
@@ -690,7 +684,7 @@ describe("«Esporta…» su un disegno", () => {
       { target: "draw.png", selection: { kind: "documents", value: ["casa.svg"] }, options: { background: "paper", scope: "drawing", scale: 2 } },
     ]);
     const saved = host.calls.findIndex((call) => call.gate === "writeDocument" && call.args[0] === "casa.svg");
-    const asked = host.calls.findIndex((call) => call.gate === "invokeCommand");
+    const asked = host.calls.findIndex((call) => call.gate === "invokeCommand" && !NOTE_TYPE_READS.has(String(call.args[0])));
     expect(saved).toBeGreaterThanOrEqual(0);
     expect(asked).toBeGreaterThan(saved);
     expect(written(host, "casa.svg")[0]!.match(/<rect /g)).toHaveLength(2);

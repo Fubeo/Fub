@@ -51,6 +51,9 @@ use fub_abi::{FormatProvider, PluginError};
 use fub_kernel::{FormatRegistry, Trust, Workspace};
 
 pub mod format;
+/// L'oracolo a pixel dei disegni, dietro la feature `pixel`: vedi il modulo.
+#[cfg(feature = "pixel")]
+pub mod pixel;
 
 pub use format::{SampleExtractor, SampleText};
 

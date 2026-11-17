@@ -103,6 +103,8 @@ pub mod craft;
 /// L'anteprima di un file Craft fatta dalla CLI dell'app, dopo un gesto.
 pub mod craft_render;
 mod custody;
+/// I disegni aperti nel motore del disegno e le sei porte lato host (K5).
+mod drawing;
 mod engines;
 mod export_folder;
 pub mod format_source;
@@ -126,6 +128,7 @@ pub mod publish;
 mod query;
 pub mod records;
 pub mod registry;
+pub mod regular_file;
 #[cfg(feature = "http-client")]
 pub mod remote;
 pub mod resources;
@@ -166,6 +169,19 @@ pub use watcher::{NoWatcher, VaultWatcher, WatcherFactory};
 mod legacy_tests;
 #[cfg(test)]
 mod quiet_panic;
+
+/// I promemoria dei compiti per chi li notifica fuori dal kernel, cioè l'app:
+/// la domanda e la risposta della rotta, la regola di quando suonano e le
+/// parole della notifica. Passano di qui perché chi monta è il solo che
+/// raggiunge le feature ufficiali (`the_glue_does_not_bypass_the_mounter`).
+#[cfg(feature = "tasks")]
+pub mod reminders {
+    pub use fub_features::tasks::reminders::{
+        notification_more, notification_words, NotificationWords, ReminderEntry, ReminderList,
+        ReminderWatch, RemindersQuery, WatchStep,
+    };
+    pub use fub_features::TASKS_ID;
+}
 
 pub use config::{config_dir, install_logging, log_path};
 pub use format_source::{FormatSource, PreparedFormatSource};

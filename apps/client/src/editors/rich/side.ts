@@ -26,6 +26,7 @@ import { authorClass, authorSlot, authorSlots } from "./authors";
 import { addComment, canComment, commentThreads, deleteComment, goToComment, replyComment, resolveComment, type Thread } from "./comments";
 import type { RichEngine } from "./engine";
 import { check, labelled, remark } from "./form";
+import { documentHistoryKeys } from "./history-keys";
 import type { RichMedia } from "./panels";
 import { mountProperties } from "./properties";
 import { changeText, goToChange, resolveAll, resolveChange, revisions, type Change } from "./review";
@@ -566,7 +567,12 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       mounted.get(id)?.close();
       const made = MOUNTS[id](host);
       mounted.set(id, made);
+      // Accetta, Rifiuta, Risolvi lasciano il fuoco sul pulsante: Ctrl+Z
+      // annulla nel documento anche da lì (`history-keys.ts`).
+      const keys = openLifetime();
+      documentHistoryKeys(host, engine, keys);
       return () => {
+        keys.close();
         made.close();
         if (mounted.get(id) === made) mounted.delete(id);
       };

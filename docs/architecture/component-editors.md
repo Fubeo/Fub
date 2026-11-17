@@ -26,6 +26,11 @@ dalla registrazione, e chiede il codice con `import()` solo quando un documento
 lo apre (`load`, `isLoaded`). Il plugin di `apps/client/vite.config.ts` scrive
 i chunk che ogni pagina carica all'avvio e ferma la build se fra questi c'è il
 codice di un pezzo spegnibile (pdf.js, lavagna, disegni, documenti, fogli).
+La Base è del nucleo e non si spegne, ma si carica allo stesso modo: la
+registrazione usa i nomi di `apps/client/src/editors/base/ids.ts`, la
+superficie arriva con `import()` al primo `.base` aperto, e la resa delle Basi
+incorporate in una nota (`apps/client/src/editors/base/renderer.ts`) la carica
+col primo blocco da disegnare.
 
 Un file il cui pezzo è spento si apre «solo come file»: la famiglia
 `file-only` di `apps/client/src/state/document-controller.ts` non viene dal
@@ -35,6 +40,14 @@ ciò che la sessione ha in sospeso, poi passa a «solo come file». Se il
 salvataggio non riesce, l'editor resta registrato con l'errore della sessione
 finché le modifiche non sono al sicuro. Quando il componente torna, il riquadro
 si rimonta nel suo editor.
+
+Una superficie che deve portare l'utente all'interruttore di un componente
+(«Accendi…» del disegno) chiama `showComponent(id)` di
+`apps/client/src/ui/commands.ts`. La porta la registrano le impostazioni:
+aprono la scheda «Componenti», portano in vista la riga con il fuoco sul suo
+interruttore e la segnano finché l'utente non fa altro. Non accendono niente:
+accende l'utente. Senza impostazioni montate `showComponent` dà falso; un id che
+la mappa non ha apre la scheda e basta.
 
 ## Dove si trova
 

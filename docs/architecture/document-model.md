@@ -75,6 +75,12 @@ La sorgente è la stringa decodificata integralmente:
 `Span` usa intervalli `[start, end)` in byte UTF-8. Nel codice nativo gli offset
 sono `usize`; nel WIT sono `u64` per avere larghezza fissa.
 
+Il contratto Rust usa span in byte UTF-8. CodeMirror usa offset JavaScript. Il
+ponte di conversione è una responsabilità esplicita e coperta da test.
+
+La sorgente conserva i terminatori di riga. Caricare o sincronizzare un
+documento non deve normalizzare CRLF involontariamente.
+
 Un edit calcolato su un modello vale per la revisione da cui quel modello
 proviene. Il kernel non applica la posizione a un testo diverso senza rilevare
 il conflitto.
@@ -238,7 +244,30 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   buffer: per la sessione è un cambio da fuori come un altro. Il testo della
   persona resta, la nota dice che il file è cambiato sul disco, e il
   salvataggio successivo va in conflitto invece di coprire la versione
-  ripristinata.
+  ripristinata. Il ripristino scrive il disco dal kernel, non il buffer di un
+  editor: Ctrl+Z nel testo non lo annulla. Il testo di prima resta però una
+  versione (la fotografia prima della scrittura), e la Cronologia lo rimette
+  come ogni altra.
+- **Una rinomina, da questa finestra o da fuori.** La sessione cambia nome e
+  tiene buffer, bozza e salvataggio in attesa. Un riquadro che mostra il
+  documento con una superficie di testo (Markdown o testo semplice) che regge
+  il nome nuovo (stessa estensione, nessun componente) non la rimonta:
+  `followRenameInPanes` in `state/document-controller.ts` passa la superficie
+  alla scheda col nome nuovo e la riattacca alla sessione, così fuoco,
+  cursore, annulla e scorrimento restano. Le altre superfici si rimontano.
+- **Una cancellazione da fuori con testo non salvato.** La sessione si chiude,
+  il testo va in bozza e il riquadro offre «Ricrea la nota». Ricreata la nota
+  col testo, la bozza se ne va (`discardRemovedDraft`, dopo che la sua
+  scrittura è finita): alla riapertura non c'è un conflitto con un disco che
+  le è uguale. Se la scrittura del file fallisce, la bozza resta.
+- **La scrittura annunciata di un comando.** Chi lancia un comando che
+  riscrive un documento aperto (un gesto della barra di una Base con
+  `base.view.set`) lo annuncia prima con `expectWrite(id)`, e ritira
+  l'annuncio se il comando non scrive. Il primo evento dell'utente su quel
+  documento (non l'eco di un salvataggio in volo) lo consuma: a buffer pulito
+  la sessione ricarica e l'esito è `reloaded` con `quiet`, che il controller
+  non dice; a buffer sporco vale la regola di sempre. Un evento di un'altra
+  app o del kernel non lo consuma, e l'annuncio scade dopo dieci secondi.
 - **La ricarica forzata.** `forceReload()` scarta il buffer per il disco solo
   dopo averlo messo in bozza: se la bozza non si scrive restituisce
   `unavailable` e lascia testo e stato com'erano. Nessun gesto la usa.

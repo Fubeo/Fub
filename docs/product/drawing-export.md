@@ -92,8 +92,11 @@ PDF.
   che nessuno usa, i numeri con più cifre del necessario. Le immagini del
   vault ci entrano coi loro byte, perché fuori dal vault il loro percorso non
   porta a niente, finché l'export resta entro 32 MiB: quelle di troppo
-  tengono il percorso, e il log lo dice. Si apre in ogni programma di
-  grafica, e si vede come il disegno.
+  tengono il percorso, e il log lo dice. Non porta contenuto attivo, perché
+  un browser lo eseguirebbe: gli script, i gestori `on…`, i collegamenti
+  `javascript:` e, dentro un `foreignObject`, i riquadri che caricano altre
+  pagine (`iframe`, `object`, `embed`) se ne vanno. Si apre in ogni
+  programma di grafica, e si vede come il disegno.
 - **PDF:** vettoriale, le forme e i tratti restano curve, nitide a ogni
   ingrandimento, e il testo resta testo, che si seleziona; le fusioni
   restano vettoriali, e gli [effetti](drawing-effects.md#in-lettura-e-nellexport),

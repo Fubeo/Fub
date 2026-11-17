@@ -1,0 +1,10 @@
+{
+  "about": "Un id ripetuto nella lista di erase_strokes è DuplicateId, come in move e remove.",
+  "before": {
+    "fub:ink": { "v": 1, "strokes": [
+      { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "free" }, "ink": "1 s100 cxy 100,100 10,0" }
+    ] }
+  },
+  "ops": [{ "op": "erase_strokes", "layer": "board", "ids": ["s1", "s1"] }],
+  "expect": { "outcome": "rejected", "error": { "kind": "DuplicateId", "index": 0, "id": "s1" } }
+}

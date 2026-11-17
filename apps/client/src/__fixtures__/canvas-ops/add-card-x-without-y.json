@@ -1,0 +1,6 @@
+{
+  "about": "Una `x` senza `y` non è un posto: è Invalid.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "a", "text": "a", "x": 10 }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

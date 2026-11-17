@@ -35,10 +35,10 @@ L'interfaccia (`ui-egui`) e il server MCP (`mcp`) non sono copiati.
 | `crates/numfmt/` | `crates/numfmt/` | nessuna |
 | `crates/model/` | `crates/model/` | `0005` (`src/sheet.rs`, `src/preserved.rs`); `0007` (`src/cell.rs`, `src/lib.rs`, `src/preserved.rs`, `src/sheet.rs`, `src/style.rs`) |
 | `crates/calc/` | `crates/calc/` | nessuna |
-| `crates/xlsx/` | `crates/xlsx/` | `0001` (`src/package.rs`, `src/ods.rs` e nove file di `src/tests/`); `0003` (`src/sheet_read.rs`); `0005` (`src/read.rs`, `src/passthrough.rs`, `src/write.rs`); `0006` (`src/array_formula.rs`, `src/fmla.rs`, `src/read.rs`, `src/sheet_write.rs`); `0007` (`src/array_formula.rs`, `src/csv.rs`, `src/drawing.rs`, `src/passthrough.rs`, `src/read.rs`, `src/sheet_read.rs`, `src/sheet_write.rs`, `src/styles.rs`, `src/write.rs`, `src/xls/mod.rs`, `src/xml.rs`); `0008` (`src/passthrough.rs`, `src/sheet_write.rs`); i test di `src/tests/` di ciascuna |
+| `crates/xlsx/` | `crates/xlsx/` | `0001` (`src/package.rs`, `src/ods.rs` e nove file di `src/tests/`); `0003` (`src/sheet_read.rs`); `0005` (`src/read.rs`, `src/passthrough.rs`, `src/write.rs`); `0006` (`src/array_formula.rs`, `src/fmla.rs`, `src/read.rs`, `src/sheet_write.rs`); `0007` (`src/array_formula.rs`, `src/csv.rs`, `src/drawing.rs`, `src/passthrough.rs`, `src/read.rs`, `src/sheet_read.rs`, `src/sheet_write.rs`, `src/styles.rs`, `src/write.rs`, `src/xls/mod.rs`, `src/xml.rs`); `0008` (`src/passthrough.rs`, `src/sheet_write.rs`); `0012` (`src/csv.rs`, `src/lib.rs`); i test di `src/tests/` di ciascuna |
 | `crates/chart/` | `crates/chart/` | nessuna |
 | `crates/pdf/` | `crates/pdf/` | nessuna |
-| `crates/engine/` | `crates/engine/` | `0001` (`tests/chart_workbook_names.rs`); `0004` (`src/lib.rs`); `0007` (`src/cmd/` analysis, edit, extra, forecast, format, insert, solver e whatif, `src/fill.rs`, `src/io.rs`, `src/pivot.rs`); `0009` (`src/lib.rs`, `src/chart_svg.rs`); `0010` (`src/cmd/insert.rs`); `0011` (`src/cmd/spelling.rs`, `src/display.rs`, con i loro test); `src/tests.rs` per `0004`, `0006`, `0007` e `0010` |
+| `crates/engine/` | `crates/engine/` | `0001` (`tests/chart_workbook_names.rs`); `0004` (`src/lib.rs`); `0007` (`src/cmd/` analysis, edit, extra, forecast, format, insert, solver e whatif, `src/fill.rs`, `src/io.rs`, `src/pivot.rs`); `0009` (`src/lib.rs`, `src/chart_svg.rs`); `0010` (`src/cmd/insert.rs`); `0011` (`src/cmd/spelling.rs`, `src/display.rs`, con i loro test); `0012` (`src/display.rs`); `src/tests.rs` per `0004`, `0006`, `0007`, `0010` e `0012` |
 | `rustfmt.toml` | `rustfmt.toml` | nessuna |
 | `NOTICE` | `NOTICE` | nessuna |
 
@@ -166,6 +166,22 @@ Le patch di `patches/`, una per ragione:
   fattore di carico di 7/8) e la capacità di ogni stringa, non l'overhead
   dell'allocatore. La cache per thread di `numfmt` (64 voci) resta com'è.
   Ogni file ha i suoi test.
+- `0012-formule-come-testo`: il salvataggio come CSV o TSV e il testo degli
+  appunti scrivevano così com'era un testo che comincia con `=`, `+`, `-` o
+  `@` (`=HYPERLINK(…)`, `=cmd|' /C calc'!A0`), e il foglio di calcolo che apre
+  il file, o in cui lo si incolla, lo eseguiva come formula (CSV injection,
+  OWASP; voce M15 dell'audit di sicurezza del 2026-10-30). In
+  `xlsx/src/csv.rs` `defuse_formula` antepone un apostrofo a un campo che
+  comincia con uno di quei caratteri, anche dopo spazi, o con una
+  tabulazione o un ritorno a capo; un numero con il segno (`-12`,
+  `-1,234.50`, `-12%`, `-1.5E+10`) resta com'è, così i valori negativi
+  restano numeri. `write_csv_limited` lo applica a ogni campo e il tetto
+  conta l'apostrofo; in `engine/src/display.rs` `range_text`, il testo degli
+  appunti, fa lo stesso, e incollato di nuovo in GridCraft torna il testo di
+  prima, perché l'apostrofo davanti vuol dire testo. L'HTML degli appunti non
+  cambia. Il CSV dell'export di Fub (`fub-importers/src/csv.rs`) segue la
+  stessa regola. In `xlsx/src/tests/csv_tests.rs` e `engine/src/tests.rs` i
+  test lo dicono.
 
 ### Le patch per tipo
 
@@ -194,6 +210,7 @@ Ogni patch ha un tipo, che dice quando può uscire dalla pila:
 | `0009-svg-degli-oggetti` | UPSTREAM-API | `objects.rs` chiama `chart_svg` e `prims_svg` | da proporre: `chart_svg` pubblico | quando il modulo è pubblico |
 | `0010-modifica-di-note-e-commenti` | UPSTREAM-BUGFIX | `commands.rs`: `modificare_un_commento_tiene_le_risposte` | da proporre | quando «Modifica commento» tiene il thread |
 | `0011-cache-liberabili` | UPSTREAM-API | la pressione di memoria di Fub: `fub-format-xlsx/src/motore.rs` chiama `release_spelling_dictionary` e `clear_number_format_cache`, e `fub-format-xlsx/tests/motore.rs` lo prova; poi i test della patch in `spelling.rs` e `display.rs` | da proporre: il testo qui sotto | quando l'upstream ha un modo di liberare le due cache |
+| `0012-formule-come-testo` | UPSTREAM-BUGFIX | `commands.rs`: `negli_appunti_un_testo_che_sembra_una_formula_resta_testo` (`fub.copyHtml`); il salvataggio CSV non è servito da Fub | da proporre | quando l'upstream scrive come testo i campi che sembrano formule |
 
 Senza `0005` o `0009` `fub-format-xlsx` non compila, e senza `0008` o
 `0010` il test della tabella fallisce: lo si è provato togliendo ciascuna

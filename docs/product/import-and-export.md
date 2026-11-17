@@ -156,6 +156,12 @@ destinazione **nuova**, fuori dal vault, col dialogo di sistema.
   (il documento unico Markdown, un PDF unico) lo mette dentro quella cartella.
 - Una cartella che esiste già non si sovrascrive mai, e una destinazione dentro
   il vault si rifiuta.
+- La cartella scelta si apre una volta e ogni file si crea, si rinomina e si
+  toglie attraverso le sue sottocartelle aperte (`fub_kernel::transfer::DirectorySink`):
+  un collegamento che porta fuori dalla cartella scelta si rifiuta, anche se
+  compare a export in corso al posto di una sottocartella. Su Windows
+  cap-std ricostruisce il percorso dall'handle per rinominare e togliere: lì
+  resta una finestra stretta fino all'operazione.
 - Una cartella del vault che non c'è, o che non contiene niente che il formato
   sappia scrivere, è un errore e non un export vuoto riuscito. Se l'export
   fallisce a metà, la cartella creata per lui si toglie.
@@ -178,7 +184,10 @@ al centro attività, da cui lo si salva dove si vuole.
   entrano nel file come `data:` URI (fino a 16 MiB l'una, 64 MiB per file), e
   le note incorporate entrano con la loro resa, fino a quattro livelli e senza
   giri. Il file porta una Content-Security-Policy che non esegue script e non
-  carica niente da fuori.
+  carica niente da fuori. I messaggi dei commenti
+  (`{==passo==}{>>messaggio<<}`) non entrano; con l'opzione
+  `{"comments": true}` ogni discussione diventa un rimando numerato dopo il
+  passo e una nota in fondo alla pagina.
 - **PDF** (`importers.pdf.single`): il testo della nota in un PDF statico, col
   nome della nota. Per diagrammi, formule e immagini c'è «Stampa», che il
   sistema salva anche in PDF.

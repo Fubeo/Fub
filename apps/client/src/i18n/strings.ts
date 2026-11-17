@@ -47,8 +47,10 @@
 import { EN, IT, type Key } from "./catalog";
 import { settings } from "../host/query";
 import { onEvent } from "../state/kernel";
+import { settingTouches } from "../state/setting-change";
 import { on } from "../state/store";
 import type { SettingEntry } from "../host/contract";
+import { setErrorKindTranslator } from "../host/errors";
 import type { Teardown } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
 
@@ -259,6 +261,10 @@ export function t<K extends Key>(key: K, ...[args = {}]: ArgsFor<K>): string {
   return expand(template, args);
 }
 
+// La frase della specie di un errore arrivato senza la sua (vedi
+// `errorText`): nella lingua di chi guarda, come ogni altra.
+setErrorKindTranslator((key) => t(key));
+
 /// Il catalogo di una parte del client che arriva quando serve.
 ///
 /// Questo catalogo si scarica all'avvio, con la shell. Una parte grande che
@@ -402,8 +408,10 @@ export function mountStrings(onChange: () => void): Teardown {
   }
   applyStrings();
   const stopLanguage = onLanguage(onChange);
-  const stopSetting = onEvent("setting_changed", () => {
-    if (owner.active) void reread(owner);
+  // Solo la lingua: rileggere tutte le impostazioni a ogni chiave scritta era
+  // un giro sul canale dati per ogni gesto che ricorda qualcosa.
+  const stopSetting = onEvent("setting_changed", ({ key }) => {
+    if (owner.active && settingTouches(key, (changed) => changed === LANGUAGE_KEY)) void reread(owner);
   });
   const stopVault = on("vault", () => {
     if (owner.active) void reread(owner);

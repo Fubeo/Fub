@@ -20,8 +20,10 @@
 // fanno posto.
 //
 // Come il resto del kit non ha testo suo: le etichette e le frasi arrivano da
-// chi la monta, e le classi portano il suo prefisso (`grid-ribbon-…`), perché
-// le pelli che lo vestono restino le sue.
+// chi la monta. Ogni pezzo porta due classi: quella col prefisso di chi la
+// monta (`grid-ribbon-…`), per le parti solo sue, e quella del kit
+// (`kit-ribbon-…`), che dà a ogni barra a schede la stessa forma e la stessa
+// pelle.
 import { labelButton, setPressed, type ButtonChord } from "../button";
 import { openPopover, type PopoverHandle } from "../popover";
 import { pressable } from "../press";
@@ -50,6 +52,34 @@ import {
   type SplitControl,
   type Text,
 } from "./types";
+
+/// La classe della forma comune: la radice porta `kit-ribbon`, ogni pezzo
+/// `kit-ribbon-<pezzo>` accanto alla classe col prefisso. La forma e la pelle
+/// di serie stanno su queste (`structure.css`, `skin/kit.css`); a chi monta la
+/// barra restano le regole delle parti solo sue.
+const KIT = "kit-ribbon";
+
+/// I pezzi della forma comune. Un controllo disegnato da chi monta la barra
+/// (`RibbonOptions.extra`) che ne mette uno col prefisso, a mano, prende
+/// anche la classe del kit: il pulsante del colore dei fogli è un pulsante
+/// diviso come gli altri.
+const KIT_PARTS: ReadonlySet<string> = new Set([
+  "arrow",
+  "button",
+  "check",
+  "chevron",
+  "color-bar",
+  "field",
+  "glyph",
+  "input",
+  "item",
+  "label",
+  "large",
+  "select",
+  "small",
+  "split",
+  "split-large",
+]);
 
 /// Lo stato di un comando del catalogo: se c'è, è servito.
 export interface RibbonCommandState {
@@ -217,12 +247,19 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   const host = options.host;
   const root = host.parentElement ?? host;
   const { strings, t } = options;
-  const cls = (name: string): string => `${options.prefix}-${name}`;
+  /// La classe `name` col prefisso della barra: quella con cui si cerca un
+  /// pezzo, e quella che vestono le regole di chi la monta.
+  const own = (name: string): string => `${options.prefix}-${name}`;
+  /// Le classi di un pezzo: quella del prefisso e `kit-ribbon-<name>`, che
+  /// porta la forma e la pelle comuni a ogni barra a schede. Si mettono, non
+  /// si cercano: per cercare c'è `own`.
+  const cls = (name: string): string => `${own(name)} ${KIT}-${name}`;
+  const mark = (el: Element, name: string): void => el.classList.add(own(name), `${KIT}-${name}`);
   const inPlace = options.openInPlace === true;
   const text = (value: Text<K>): string => (typeof value === "string" ? t(value) : value.raw);
 
   const element = document.createElement("div");
-  element.className = options.prefix;
+  element.className = `${options.prefix} ${KIT}`;
   const head = document.createElement("div");
   head.className = cls("head");
   const tablist = document.createElement("div");
@@ -549,6 +586,20 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     return el;
   }
 
+  /// Dà la classe del kit ai pezzi che un controllo di chi monta la barra ha
+  /// messo a mano col prefisso (`KIT_PARTS`): la forma comune li veste come
+  /// quelli del kit.
+  function adopt(top: Element): void {
+    const stem = `${options.prefix}-`;
+    for (const el of [top, ...top.querySelectorAll("*")]) {
+      for (const name of [...el.classList]) {
+        if (!name.startsWith(stem)) continue;
+        const part = name.slice(stem.length);
+        if (KIT_PARTS.has(part)) el.classList.add(`${KIT}-${part}`);
+      }
+    }
+  }
+
   /// La freccia di un pulsante diviso, che apre un menu o un riquadro.
   function arrowButton(popup: "menu" | "dialog"): HTMLButtonElement {
     const arrow = document.createElement("button");
@@ -597,7 +648,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
 
   function splitItem(control: SplitControl<V, K>, group: RibbonGroup<C, K>): Item {
     const el = wrap(control);
-    el.classList.add(cls("split"));
+    mark(el, "split");
     let last: Params | undefined = control.params;
     let view: V | null = null;
     const main = button(
@@ -619,7 +670,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     const open = () => openMenu(arrow, control.menu(view ?? options.view()), remember);
     life.listen(arrow, "click", open);
     el.append(main, arrow);
-    if (control.size === "large") el.classList.add(cls("split-large"));
+    if (control.size === "large") mark(el, "split-large");
     return {
       control,
       group,
@@ -704,7 +755,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
 
   function selectItem(control: SelectControl<V, K>, group: RibbonGroup<C, K>): Item {
     const el = wrap(control);
-    el.classList.add(cls("field"));
+    mark(el, "field");
     const select = document.createElement("select");
     select.className = cls("select");
     select.id = identifier(options.prefix);
@@ -807,7 +858,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
 
   function fieldItem(control: FieldControl<V, K>, group: RibbonGroup<C, K>): Item {
     const el = wrap(control);
-    el.classList.add(cls("field"));
+    mark(el, "field");
     const caption = document.createElement("label");
     caption.className = cls("field-label");
     const input = document.createElement("input");
@@ -868,7 +919,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
 
   const parts: RibbonParts<V, K> = {
     life,
-    cls,
+    cls: own,
     id: () => identifier(options.prefix),
     t,
     wrap: (control) => wrap(control as C),
@@ -902,7 +953,9 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
         return fieldItem(kit, group);
       default: {
         if (!options.extra) throw new Error(`controllo senza disegno: ${(control as X).kind}`);
-        return options.extra(control as X, group, parts);
+        const item = options.extra(control as X, group, parts);
+        adopt(item.wrap);
+        return item;
       }
     }
   }
@@ -1182,7 +1235,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
         !hiddenWithin(control, container) &&
         // L'immagine di un foglietto che esce non è un posto del Tab.
         control.closest("[inert]") === null &&
-        control.closest(`[data-collapsed="true"] > .${cls("group-body")}`) === null,
+        control.closest(`[data-collapsed="true"] > .${own("group-body")}`) === null,
     );
   }
 
@@ -1207,7 +1260,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     lifetime.listen(container, "keydown", (event) => {
       const target = event.target as HTMLElement;
       if (event.key === "Escape") {
-        if (container.classList.contains(cls("popup-group"))) return;
+        if (container.classList.contains(own("popup-group"))) return;
         event.preventDefault();
         // Il primo Esc richiude il gruppo aperto sul posto, il secondo torna
         // all'editor.
@@ -1217,7 +1270,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
         return;
       }
       if (target instanceof HTMLInputElement && target.type === "text") return;
-      if (event.key === "ArrowDown" && (target.getAttribute("aria-haspopup") || (inPlace && target.classList.contains(cls("group-toggle"))))) {
+      if (event.key === "ArrowDown" && (target.getAttribute("aria-haspopup") || (inPlace && target.classList.contains(own("group-toggle"))))) {
         event.preventDefault();
         target.click();
         return;
@@ -1283,7 +1336,12 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
       const button = tabsHandle.tab(tab.spec.id);
       if (!button) continue;
       button.dataset.keytip = tab.spec.keytip;
-      if (tab.spec.contextual) button.classList.add(cls("contextual"));
+      // Il nome ripetuto per la pelle: un doppio invisibile in grassetto
+      // tiene la larghezza della scelta, e il cambio di peso non sposta le
+      // vicine.
+      const label = button.querySelector<HTMLElement>(".kit-tab-label");
+      if (label) label.dataset.label = label.textContent ?? "";
+      if (tab.spec.contextual) mark(button, "contextual");
       // Una sezione che compare dopo il primo montaggio (la tabella, per la
       // selezione) entra; al primo montaggio c'era già.
       if (before && !before.has(tab.spec.id)) motion.appear([button]);

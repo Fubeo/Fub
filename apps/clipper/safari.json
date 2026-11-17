@@ -5,7 +5,7 @@
   "permissionMapping": {
     "activeTab": "supported via converter",
     "scripting": "supported on Safari 15.4+; verify executeScript on the target version",
-    "storage": "supported (storage.local)",
+    "storage": "supported (storage.local; storage.session from Safari 16.4, needed to keep the assistant key for the session only)",
     "downloads": "NOT supported in Safari: channel.js returns a manual-save result; the popup instructs Copy file JSON + `fub-cli capture --file <it>`",
     "contextMenus": "supported as contextMenus; verify menu labels on target version",
     "nativeMessaging": "verify converter output: Safari maps to nativeMessaging in the containing app entitlements; NM host manifest installed by `fub-cli native-install` outside the browser",

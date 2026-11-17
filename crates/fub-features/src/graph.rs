@@ -578,9 +578,11 @@ impl LocalSelection {
             .and_then(|v| v.as_str().map(str::to_string))
             .as_deref()
         {
+            // Di partenza i due versi: il grafo di una nota mostra anche chi la
+            // nomina, o una nota senza collegamenti propri resterebbe sola.
+            Some("outbound") => LinkDirection::Outbound,
             Some("inbound") => LinkDirection::Inbound,
-            Some("both") => LinkDirection::Both,
-            _ => LinkDirection::Outbound,
+            _ => LinkDirection::Both,
         };
         Ok(LocalSelection {
             seed,
@@ -1424,7 +1426,32 @@ mod tests {
         let selection = LocalSelection::of(&host).unwrap();
         assert!(selection.seed.is_none());
         assert_eq!(selection.depth, 1);
-        assert!(matches!(selection.direction, LinkDirection::Outbound));
+        assert!(matches!(selection.direction, LinkDirection::Both));
+    }
+
+    /// Senza una scelta salvata il grafo locale segue i due versi; la scelta
+    /// salvata resta quella.
+    #[test]
+    fn local_direction_defaults_to_both() {
+        let host = MemoryHost::new().with_instance("uno");
+        assert!(matches!(
+            LocalSelection::of(&host).unwrap().direction,
+            LinkDirection::Both
+        ));
+        for (saved, expected) in [
+            ("outbound", LinkDirection::Outbound),
+            ("inbound", LinkDirection::Inbound),
+            ("both", LinkDirection::Both),
+        ] {
+            let mut host = MemoryHost::new().with_instance("uno");
+            host.set_view_state(DIRECTION_STATE, Some(serde_json::json!(saved)))
+                .unwrap();
+            assert_eq!(
+                std::mem::discriminant(&LocalSelection::of(&host).unwrap().direction),
+                std::mem::discriminant(&expected),
+                "{saved}"
+            );
+        }
     }
 
     /// Il click su un nodo tag cerca il tag, e un nome con spazi va fra

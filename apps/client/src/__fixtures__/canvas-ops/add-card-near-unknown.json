@@ -1,0 +1,6 @@
+{
+  "about": "Accanto a una scheda che non c'è è UnknownNode, con l'id cercato: non esce nessuna toppa.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" }] },
+  "ops": [{ "op": "add_card", "id": "b", "text": "Perduta", "near": "nessuna" }],
+  "expect": { "outcome": "rejected", "error": { "kind": "UnknownNode", "index": 0, "id": "nessuna" } }
+}

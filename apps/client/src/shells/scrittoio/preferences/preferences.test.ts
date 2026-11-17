@@ -40,7 +40,7 @@ vi.mock("../../../state/kernel", () => ({
     };
   },
 }));
-vi.mock("../../../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id }));
+vi.mock("../../../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id, registerComponentRow: () => () => {} }));
 vi.mock("../../../ui/permissions", () => ({ TRUST_LABELS: {}, isPermissionKey: () => false, rows: () => [] }));
 vi.mock("../../../ui/a11y", () => ({ trapFocus: () => () => {} }));
 vi.mock("../../../ui/motion", () => ({
@@ -272,19 +272,38 @@ describe("lo spazio dell'interfaccia", () => {
     expect(step(0).disabled).toBe(false);
   });
 
-  it("mentre la scrittura è in volo i passi sono spenti, e poi tornano", async () => {
+  it("mentre la scrittura è in volo i passi restano accesi col fuoco, e l'ultimo passo vince", async () => {
     await openPanel();
-    let release: () => void = () => {};
-    fake.setSetting.mockImplementationOnce(() => new Promise<void>((resolve) => {
-      release = resolve;
+    const releases: (() => void)[] = [];
+    fake.setSetting.mockImplementation((key: string, value: unknown) => new Promise<void>((resolve) => {
+      releases.push(() => {
+        const found = fake.entries.find((candidate) => candidate.spec.key === key)!;
+        found.value = value as SettingEntry["value"];
+        found.source = "machine";
+        resolve();
+      });
     }));
-    step(1).click();
+    step(0).focus();
+    press(step(0), "ArrowRight");
     await settled();
     expect(row(SPACE).getAttribute("aria-busy")).toBe("true");
-    expect([0, 1, 2, 3, 4].every((n) => step(n).disabled)).toBe(true);
-    release();
-    await settled();
     expect([0, 1, 2, 3, 4].some((n) => step(n).disabled)).toBe(false);
+    expect(document.activeElement).toBe(step(1));
+    // Altri due passi mentre il primo è in volo: aspettano, e parte solo l'ultimo.
+    press(step(1), "ArrowRight");
+    press(step(2), "ArrowRight");
+    await settled();
+    expect(document.activeElement).toBe(step(3));
+    expect(fake.setSetting.mock.calls.map(([, value]) => value)).toEqual([1]);
+    releases[0]!();
+    await settled();
+    expect(fake.setSetting.mock.calls.map(([, value]) => value)).toEqual([1, 3]);
+    expect(checkedIn(".prefs-space")).toEqual(["prefs-space-step-3"]);
+    releases[1]!();
+    await settled();
+    expect(row(SPACE).getAttribute("aria-busy")).toBeNull();
+    expect(checkedIn(".prefs-space")).toEqual(["prefs-space-step-3"]);
+    expect(document.activeElement).toBe(step(3));
   });
 
   it("un clic sul nome della riga porta al passo scelto", async () => {
@@ -403,6 +422,41 @@ describe("l'accento", () => {
     expect(fake.setSetting).toHaveBeenCalledWith(ACCENT, 200);
     expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-custom"]);
     expect(document.activeElement).toBe(slider);
+  });
+
+  it("il cursore non perde mai il fuoco: né mentre scrive, né quando la riga si aggiorna", async () => {
+    await openPanel();
+    let release: () => void = () => {};
+    fake.setSetting.mockImplementationOnce((key: string, value: unknown) => new Promise<void>((resolve) => {
+      release = () => {
+        const found = fake.entries.find((candidate) => candidate.spec.key === key)!;
+        found.value = value as SettingEntry["value"];
+        found.source = "machine";
+        resolve();
+      };
+    }));
+    swatch("custom").click();
+    await settled();
+    const slider = document.getElementById("prefs-accent-hue") as HTMLInputElement;
+    const rowBefore = row(ACCENT);
+    slider.focus();
+    let blurs = 0;
+    slider.addEventListener("blur", () => blurs++);
+    slider.value = "200";
+    slider.dispatchEvent(new Event("change", { bubbles: true }));
+    await settled();
+    expect(row(ACCENT).getAttribute("aria-busy")).toBe("true");
+    expect(slider.disabled).toBe(false);
+    expect(document.activeElement).toBe(slider);
+    release();
+    await settled();
+    // La riga aggiornata sul posto: lo stesso nodo, la veste mai staccata.
+    expect(row(ACCENT)).toBe(rowBefore);
+    expect(row(ACCENT).getAttribute("aria-busy")).toBeNull();
+    expect(native(ACCENT).value).toBe("200");
+    expect(slider.value).toBe("200");
+    expect(document.activeElement).toBe(slider);
+    expect(blurs).toBe(0);
   });
 
   it("su misura resta tale anche sulla tinta di un campione, finché le preferenze restano aperte", async () => {

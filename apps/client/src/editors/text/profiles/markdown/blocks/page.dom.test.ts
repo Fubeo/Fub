@@ -58,9 +58,14 @@ describe("le proprietà che la testata scrive", () => {
     expect(apply("Testo", "icon", "🌱")).toBe("---\nicon: 🌱\n---\nTesto");
   });
 
-  it("sostituisce la voce che c'era, con tutte le sue righe", () => {
+  it("sostituisce la voce che c'era, con tutte le sue righe, e tiene la forma dell'elenco", () => {
     expect(apply("---\ncssclasses:\n  - wide\n  - serif\ntags: a\n---\nX", "cssclasses", ["wide"]))
-      .toBe("---\ncssclasses: [wide]\ntags: a\n---\nX");
+      .toBe("---\ncssclasses:\n  - wide\ntags: a\n---\nX");
+    expect(apply("---\ncssclasses: [wide, serif]\n---\nX", "cssclasses", ["wide"]))
+      .toBe("---\ncssclasses: [wide]\n---\nX");
+    // Senza voci un elenco a righe non sa più dire d'essere un elenco: `[]`.
+    expect(apply("---\ncssclasses:\n- wide\n---\nX", "cssclasses", []))
+      .toBe("---\ncssclasses: []\n---\nX");
   });
 
   it("aggiunge la voce prima della riga di chiusura, e la toglie con null", () => {
@@ -173,6 +178,28 @@ describe("la testata della pagina", () => {
     expect(propertyList(view.state, "cssclasses")).toEqual(["mia", "wide", "mono"]);
     undo(view);
     expect(propertyList(view.state, "cssclasses")).toEqual(["mia", "wide"]);
+  });
+
+  it("una figura del set si disegna, si sceglie e si scrive `icon: fub:<nome>` (Scrittoio 2)", () => {
+    const view = mount("---\nicon: fub:book\n---\nTesto");
+    const icon = view.dom.querySelector<HTMLButtonElement>(".cm-fub-page-icon")!;
+    expect(icon.querySelector("svg")?.getAttribute("data-icon")).toBe("book");
+    expect(icon.textContent).toBe("");
+    expect(icon.getAttribute("aria-label")).toContain("Libro");
+    icon.click();
+    const figure = document.querySelector<HTMLButtonElement>('.cm-fub-page-popover [data-icon="fub:heart"]')!;
+    expect(figure.querySelector("svg")).not.toBeNull();
+    figure.click();
+    expect(view.state.doc.toString()).toBe("---\nicon: fub:heart\n---\nTesto");
+  });
+
+  it("un `fub:` sconosciuto o un indirizzo non si mostrano, e si può scegliere un'icona", () => {
+    for (const value of ["fub:astronave", "https://notion.so/icon.png"]) {
+      const view = mount(`---\nicon: ${value}\n---\nTesto`);
+      expect(view.dom.querySelector(".cm-fub-page-icon")).toBeNull();
+      const tools = [...view.dom.querySelectorAll<HTMLButtonElement>(".cm-fub-page-tool")].map((button) => button.textContent);
+      expect(tools).toContain("Aggiungi un'icona");
+    }
   });
 
   it("la copertina si scrive dal suo riquadro e si toglie", () => {
