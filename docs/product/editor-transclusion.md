@@ -47,8 +47,8 @@ sincronizzato, qui sotto: le regole del salvataggio sono le stesse.
 Lo stesso blocco in più note: nel file è l'embed del blocco col suo id,
 `![[Nota#^id]]`, che Obsidian legge uguale. Non c'è un formato in più.
 
-- **Sincronizza in un'altra nota…** nel menu del blocco (un blocco solo, non
-  le proprietà): si sceglie la nota, e il comando `note.block.sync` dà al
+- **Blocco sincronizzato…** nel menu del blocco (un blocco solo, non le
+  proprietà): si sceglie la nota («Sincronizza in un'altra nota»), e il comando `note.block.sync` dà al
   blocco un id se non ce l'ha (`^a1b2c3`, a fine riga; su una riga sua dopo
   un recinto o una tabella) e scrive l'embed in fondo all'altra nota. Le due
   scritture sono un piano solo: tutte e due o nessuna, con un **Annulla** che
