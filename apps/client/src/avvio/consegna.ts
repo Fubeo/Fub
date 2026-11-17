@@ -99,11 +99,18 @@ const INERTI = ["#app", ".skip-link", "#document-window"];
 /// durante l'avvio su un `#app` inerte si sono perse. Nell'ordine: ciò che si
 /// scrive nel foglio attivo, o nella finestra di un documento, il primo bottone
 /// della scelta del vault, i fogli.
-const FUOCO = [
-  ".pane.focus [contenteditable='true']",
-  "#document-window [contenteditable='true']",
-  "#onboarding:not([hidden]) button:not([hidden])",
-  "#panes",
+///
+/// `#panes` è una regione e non un controllo: ci si parcheggia il fuoco perché
+/// il primo Tab parta dai fogli, ma nessuno l'ha chiesto con un tasto. L'anello
+/// lì, all'avvio, è un contorno senza un perché, e copriva il bordo della
+/// colonna accanto (IMP-005): ci va senza anello (`focusVisible: false`). Un
+/// campo o un bottone invece l'anello lo tengono, perché dicono dove si scrive
+/// o che cosa preme Invio.
+const FUOCO: readonly (readonly [selettore: string, anello: boolean])[] = [
+  [".pane.focus [contenteditable='true']", true],
+  ["#document-window [contenteditable='true']", true],
+  ["#onboarding:not([hidden]) button:not([hidden])", true],
+  ["#panes", false],
 ];
 
 /// I colori dello strato, con la variabile del tema da cui si leggono.
@@ -263,10 +270,13 @@ function vivifica(el: HTMLElement): void {
   }
   const attivo = document.activeElement;
   if (attivo && attivo !== document.body && !el.contains(attivo)) return;
-  for (const selettore of FUOCO) {
+  for (const [selettore, anello] of FUOCO) {
     const bersaglio = document.querySelector<HTMLElement>(selettore);
     if (!bersaglio) continue;
-    bersaglio.focus({ preventScroll: true });
+    // `focusVisible` non è ancora nei tipi della DOM di TypeScript; WebKitGTK
+    // e Chromium lo onorano, un motore che non lo conosce lo ignora.
+    const opzioni: FocusOptions & { focusVisible?: boolean } = anello ? { preventScroll: true } : { preventScroll: true, focusVisible: false };
+    bersaglio.focus(opzioni);
     if (document.activeElement === bersaglio) return;
   }
 }
