@@ -731,7 +731,7 @@ con `Partial`: lo dice la pagina), un parametro `number` passato come testo.
 Fatto quando: `cargo test -p fub-features --test recipes_e2e --test command_conformance`
 verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 90b332a24…2d050e6c2 (recipes/run.rs, RecipeCommand::new(recipe, &registry)) · check --rapido 24/25, unico rosso «numeri della prosa» corretto in 2d050e6c2 (check-prose verde). Differenze: il comando prende il registro per spec(); passi di sola lettura senza annullamento non tolgono l annullamento; nella prova un passo dopo il primo che non si prova ferma il piano con il motivo. Rischio per T9: montare il bundle recipe.<id> col catalogo recipes::catalog().
 
 ## T8 · Le forme condivise: il tipo `recipe` e il registro delle ricette adottate
 
