@@ -201,6 +201,7 @@ export type PropertyType =
   | "select"
   | "status"
   | "url"
+  | "relation"
 ;
 
 export type RenderTarget = "screen" | "print" | "pdf" | "static_site";

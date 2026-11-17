@@ -714,7 +714,7 @@ pub use link::{parse_wikilink_inner, LinkTarget, ParsedWikilink};
 pub use property::{
     valid_civil_date, DateFormats, DateOrder, OptionMatch, PropertyColor, PropertyDate,
     PropertyOption, PropertyScalar, PropertyTime, PropertyType, PropertyTypes, PropertyValue,
-    StatusGroup,
+    RelationTarget, StatusGroup,
 };
 
 /// Un link estratto, piatto, con lo span nella sorgente e un po' di contesto
