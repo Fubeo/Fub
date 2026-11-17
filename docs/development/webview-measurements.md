@@ -32,7 +32,7 @@ ascolta niente e non chiede fotogrammi.
 
 | Scenario | Gesto | Valore |
 |---|---|---|
-| S1 | 200 caratteri in fondo a una nota di 5.000 righe | p95 tasto → fotogramma |
+| S1 | 200 caratteri in fondo a una nota di 5.000 righe, cinque giri | p95 tasto → fotogramma, mediana dei giri |
 | S2 | venti passaggi fra note di un vault di 10.000 | p95 gesto → nota visibile |
 | S3 | spostamento e zoom di una lavagna di 300 schede, 20 note vive, partiti quando la lavagna è ferma | p95 e massimo fra fotogrammi; l'apertura in ms, solo referto |
 | S4 | trascinamento del grafo di 10.000 nodi | p95 e massimo fra fotogrammi |
@@ -49,6 +49,10 @@ ascolta niente e non chiede fotogrammi.
 | F1 | rAF a vuoto: 5 s di `requestAnimationFrame` sulla shell ferma, a indice pronto | mediana fra fotogrammi confrontata col periodo dello schermo; tetto del motore; percorso di disegno |
 | F2 | quiete: 20 s senza gesti | richieste di fotogramma della pagina; CPU dei processi della WebView, in % di un core |
 | F3 | thread principale per gesto: la barra laterale dal comando (Ctrl+Alt+B, sei volte), il cambio scheda fra la nota lunga e una corta (Ctrl+PagGiù, otto volte), una cartella di trenta note aperta e chiusa nell'albero (otto volte) | per gesto, la mediana delle ripetizioni del tempo di thread principale bloccato; fotogrammi persi e CPU nel referto |
+
+S1 scrive i 200 caratteri in cinque giri (`S1_ROUNDS` in `typing.mjs`), ognuno
+su una riga nuova, e dà la mediana dei p95 dei giri, come L1
+([misura](../misure/2026-11-17-banco-webview-s1-l1-runner.md), #293).
 
 S9 misura anche il tasto fino al fotogramma in una scheda di nota della stessa
 lavagna (`S9.keyToPaint`, obiettivo 2 periodi dello schermo): la scheda va a zoom 0,5 al centro
@@ -236,7 +240,9 @@ tiene i giri in `rounds`, con compilare e istanziare separati (`compileMs`,
 `instantiateMs`). Le soglie della CI vengono da 192 job del runner
 ([misura](../misure/2026-11-15-lavagna-wasm-runner.md), #388); quella
 dell'istanza da 105 job coi cinque giri
-([misura](../misure/2026-11-17-lavagna-wasm-istanza-runner.md), #434). La stessa misura
+([misura](../misure/2026-11-17-lavagna-wasm-istanza-runner.md), #434), quella
+di `L1.open.50.p95` da 128
+([misura](../misure/2026-11-17-banco-webview-s1-l1-runner.md), #388). La stessa misura
 gira in Node, senza app:
 `node bench/webview/canvas.mjs` da `apps/client/`, dopo `npm run build`.
 
@@ -409,7 +415,7 @@ LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe \
 xvfb-run -a -s "-screen 0 1280x800x24 -noreset" npm run bench:webview -- --only=S1 --native-driver=/usr/bin/WebKitWebDriver
 ```
 
-Così S1 scende a una ventina di campioni, come in CI: la sonda misura un
+Così S1 scende a una ventina di campioni per giro, come in CI: la sonda misura un
 tasto alla volta, e quando un fotogramma è lento i tasti di WebDriver vi si
 accodano. Pochi campioni insieme a un p95 alto vogliono dire fotogrammi lenti
 da dipingere. Un confronto fra due versioni si fa alternando le corse.
