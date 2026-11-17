@@ -165,6 +165,10 @@ export const RICH_CHORDS: Readonly<Record<string, string>> = {
   "markdown.table.column.delete": "Mod-Alt-Shift-Backspace",
 };
 
+/// Dopo quanto silenzio (ms) un altro tentativo in un blocco chiuso torna a
+/// dirlo.
+export const CLOSED_QUIET_MS = 4000;
+
 /// L'immagine più pesante che un documento accoglie, come il codec.
 export const RICH_IMAGE_LIMIT = 16 * 1024 * 1024;
 
@@ -269,6 +273,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         onChange: (change) => callbacks.onChange(context.paneId, change),
         onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
         proof: callbacks.proof,
+        onClosedWrite: warnClosed,
       });
       const ribbonHost = document.createElement("div");
       ribbonHost.className = "rich-ribbon-host";
@@ -397,6 +402,16 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   };
 
   const tell = (message: string) => callbacks.proof?.notify?.(message);
+
+  // Una battuta in un blocco chiuso non entra (`closed.ts`): lo si dice con
+  // un avviso, uno solo finché chi scrive ci riprova senza fermarsi.
+  let closedTriedAt = Number.NEGATIVE_INFINITY;
+  function warnClosed(): void {
+    const now = Date.now();
+    const quiet = now - closedTriedAt > CLOSED_QUIET_MS;
+    closedTriedAt = now;
+    if (quiet) tell(t("rich.locked.refused"));
+  }
 
   /// Una voce per un'azione del motore, col nome della striscia: le azioni
   /// `rich.*` non le dichiara un comando, e la striscia le mostra comunque.
