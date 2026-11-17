@@ -767,6 +767,9 @@ export const SCENE = onPage("shell", [
       await openRibbon(page, 700);
       await page.click('.pane.focus .grid-ribbon [data-group="number"] .grid-ribbon-group-toggle');
       await page.waitForSelector('.pane.focus .grid-ribbon [data-group="number"][data-open="true"]');
+      // Il puntatore lascia l'interruttore: il suo tooltip arriva dopo 500 ms
+      // di timer vero, e la foto lo prenderebbe o no (#459).
+      await page.mouse.move(0, 0);
     },
   },
   {
@@ -1150,6 +1153,30 @@ export const SCENE = onPage("shell", [
     query: "live=pagina",
     prepare: (page) => writingAtRest(page),
   },
+  // La riga dei suggerimenti (T14): al centro della banda, i tasti per ciò che
+  // si sta facendo. Una parola scelta a 1280 px; un blocco scelto nella
+  // finestra minima, dove la riga toglie dalla fine le voci che non ci stanno.
+  // La riga cambia dopo una pausa: il banco aspetta il contesto, non un tempo.
+  ...[
+    ["riga-dei-suggerimenti", "La riga dei suggerimenti con una parola scelta: grassetto, corsivo, collega", "selection"],
+    ["riga-dei-suggerimenti-stretta", "La riga dei suggerimenti coi blocchi scelti, nella finestra minima: le voci che non ci stanno se ne vanno intere", "blocks", NOTE_NARROW],
+  ].map(([id, title, context, viewport]) => ({
+    id,
+    title,
+    query: "live=riga-attiva",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForSelector('#status-hints[data-context="text"]');
+      if (context === "selection") {
+        for (let i = 0; i < 5; i++) await page.keyboard.press("Shift+ArrowRight");
+      } else {
+        await page.keyboard.press("Escape");
+        await page.waitForSelector(".pane.focus .cm-fub-block-selected");
+      }
+      await page.waitForSelector(`#status-hints[data-context="${context}"] .status-hints-item`);
+    },
+  })),
   // La testata in Scrittura e in Lettura (T6, E3, riga «La testata» del
   // prototipo): copertina, icona, titolo, quattro proprietà in evidenza,
   // «Altre 2», «Aggiungi una proprietà» e la riga dei dati; la stessa in
@@ -1222,6 +1249,24 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles[data-active=\"true\"]");
       },
     } : {}),
+  })),
+  // I commenti (T22): il segno nel margine con le iniziali e il numero dei
+  // messaggi, la discussione aperta, il primo messaggio che chiede il nome, il
+  // segno nel testo nella finestra minima, la Lettura e il pannello «Commenti».
+  ...[
+    ["commenti-01-margine", "commenti", "I commenti in Scrittura: il segno nel margine, l'archivio in fondo non si vede", "live_preview"],
+    ["commenti-02-discussione", "commenti", "La discussione aperta dal segno: citazione, messaggi, risposta, Risolvi, Elimina", "live_preview", null, "open"],
+    ["commenti-03-primo", "commenti-scelta", "Il primo messaggio: la citazione, il nome che si chiede e l'avviso che finisce nel file", "live_preview", null, "compose"],
+    ["commenti-04-stretta", "commenti", "Nella finestra minima, 800 px (il foglio di 700 del prototipo): il segno sta nel testo", "live_preview", NOTE_NARROW],
+    ["commenti-05-stretta-discussione", "commenti", "Nella finestra minima la discussione aperta dal segno nel testo", "live_preview", NOTE_NARROW, "open"],
+    ["commenti-06-lettura", "commenti", "I commenti in Lettura: il segno nel margine, l'archivio non occupa posto", "reading"],
+    ["commenti-07-pannello", "commenti", "Il pannello «Commenti»: gli aperti, poi i risolti con «Svuota i risolti»", "live_preview", null, "panel"],
+  ].map(([id, live, title, mode, viewport, gesture]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: (page) => openComments(page, mode, gesture),
   })),
   // Il menu «/» (N12) su una riga vuota della Live, coi comandi veri di
   // `fub.formatting`: aperto, filtrato, un comando rapido, niente trovato, i
@@ -1597,6 +1642,22 @@ export const SCENE = onPage("shell", [
       viewport: PHONE,
       prepare: (page) => openHeader(page, "live_preview"),
     },
+    // I commenti (T22) sul telefono: il segno sta nel testo, e la discussione
+    // si apre larga quanto la vista.
+    {
+      id: "mobile-commenti",
+      title: "Il telefono: i commenti con il segno nel testo",
+      query: "live=commenti",
+      viewport: PHONE,
+      prepare: (page) => openComments(page, "live_preview"),
+    },
+    {
+      id: "mobile-commenti-discussione",
+      title: "Il telefono: la discussione di un commento",
+      query: "live=commenti",
+      viewport: PHONE,
+      prepare: (page) => openComments(page, "live_preview", "open"),
+    },
     {
       id: "mobile-startup",
       title: "Il telefono: il foglio, la barra del titolo ridotta, la barra inferiore",
@@ -1745,6 +1806,10 @@ export const SCENE = onPage("shell", [
           const offset = parseFloat(style.outlineOffset);
           return style.outlineStyle !== "none" && width > 0 && offset < 0 && -offset >= width;
         }, null, { timeout: 5_000 });
+        // Col fuoco della tastiera la didascalia del bottone arriva dopo 500 ms
+        // di timer vero (`ui/tooltip.ts`): la si aspetta, perché è lo stato
+        // vero del fuoco e una foto scattata prima la prenderebbe o no (#461).
+        await page.waitForSelector(".shell-tooltip:not([hidden])");
       },
     },
     {
@@ -1786,6 +1851,9 @@ export const SCENE = onPage("shell", [
         await openRibbon(page, "phone");
         await page.click('.pane.focus .grid-ribbon [data-group="alignment"] .grid-ribbon-group-toggle');
         await page.waitForSelector('.pane.focus .grid-ribbon [data-group="alignment"][data-open="true"]');
+        // Il puntatore lascia l'interruttore: il suo tooltip arriva dopo 500 ms
+        // di timer vero, e la foto lo prenderebbe o no (#459).
+        await page.mouse.move(0, 0);
       },
     },
     {
@@ -2061,6 +2129,39 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
   await settleLive(page, scroll === "bottom");
 }
 
+/// La nota dei commenti (T22) in `mode`, poi il gesto: `open` apre la
+/// discussione del primo segno, `compose` il primo messaggio sulla selezione
+/// del caso (Ctrl Alt M), `panel` il pannello «Commenti» dell'ispettore.
+async function openComments(page, mode, gesture) {
+  const compose = gesture === "compose";
+  await openLive(page, [], "top", mode === "reading" ? "live_preview" : mode);
+  if (mode === "reading") await chooseMode(page, "reading");
+  const where = mode === "reading" ? '.pane.focus[data-mode="reading"] .markdown-rendered' : ".pane.focus .cm-editor";
+  if (!compose) {
+    await page.waitForSelector(`${where} :is(.cm-fub-comment-bubble, .cm-fub-comment-sign)`);
+    await page.waitForFunction(() => document.getAnimations().length === 0);
+  }
+  if (gesture === "open") {
+    await page.click(`${where} :is(.cm-fub-comment-bubble, .cm-fub-comment-sign) >> nth=0`);
+    await page.waitForSelector(".cm-fub-comment-popover .cm-fub-comment-message");
+  } else if (compose) {
+    await page.keyboard.press("Control+Alt+m");
+    await page.waitForSelector(".cm-fub-comment-popover .cm-fub-comment-composer");
+  } else if (gesture === "panel") {
+    const panel = '.surface-panel[data-view-id="markdown.comments"]';
+    await page.waitForSelector(panel, { state: "attached" });
+    if (!(await page.isVisible(panel))) {
+      await page.evaluate(async () => {
+        const { selectInspectorTab } = await import("/src/ui/views.ts");
+        selectInspectorTab("markdown.comments");
+      });
+    }
+    await page.waitForSelector(`${panel} .cm-fub-comments-card`);
+  }
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 /// La testata (T6) a riposo, in `mode`: la nota dall'alto, nessun fuoco, il
 /// puntatore fuori. `more` apre prima «Altre N proprietà».
 async function openHeader(page, mode, gesture) {
@@ -2129,9 +2230,11 @@ async function writingAtRest(page) {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     document.querySelector(".pane.focus .pane-editor .cm-scroller").scrollTop = 0;
   });
-  // Una funzione sola, che il browser esegue per aspettare e poi per dire
-  // che cosa resta: Playwright ne manda il testo.
-  const seen = function visibleAtRest() {
+  // Una funzione sola, che il browser esegue per aspettare (`empty`) e poi per
+  // dire che cosa resta. Si passa come funzione, non come testo: un predicato
+  // scritto come stringa Playwright lo valuta con `eval`, e la CSP del banco
+  // (quella dell'app, senza `'unsafe-eval'`) lo rifiuta.
+  const seen = function visibleAtRest(empty) {
     const shown = (el) => {
       for (let node = el; node && node !== document.body; node = node.parentElement) {
         if (node.hidden) return false;
@@ -2147,15 +2250,16 @@ async function writingAtRest(page) {
     // della pagina, la riga dei dati e la testata di un blocco di codice
     // (lingua, «A capo», «Copia»).
     const content = ".cm-fub-page-icon, .cm-fub-page-props button, .cm-fub-page-props button *, .note-facts *, .cm-fub-code-header button";
-    return [
+    const left = [
       ...[...sheet.querySelectorAll("[data-presence]")].filter(shown).map((el) => `${name(el)}[${el.dataset.presence}]`),
       ...[...sheet.querySelectorAll("button, [role=button]")].filter((el) => !el.closest("[data-presence]") && !el.matches(content) && shown(el)).map(name),
     ];
+    return empty ? left.length === 0 : left;
   };
   try {
-    await page.waitForFunction(`(${seen})().length === 0`, null, { timeout: 5_000 });
+    await page.waitForFunction(seen, true, { timeout: 5_000 });
   } catch {
-    const left = await page.evaluate(seen);
+    const left = await page.evaluate(seen, false);
     throw new Error(`a riposo si vede ancora: ${left.join(", ")}`);
   }
   await frames();

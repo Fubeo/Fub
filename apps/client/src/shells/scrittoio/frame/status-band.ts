@@ -15,6 +15,9 @@
 // la superficie a fuoco dà le celle (`EditorSurface.cellSelection`), il conto
 // si fa qui.
 //
+// Al centro la riga dei suggerimenti (`hints-row.ts`): i tasti utili per ciò
+// che fa chi ha il fuoco.
+//
 // «Si scrive», lo stato normale del documento a fuoco, lo dice la banda a voce
 // bassa, subito prima della modalità; premuto apre la spiegazione del chip
 // della testata (`panels/standing.ts`). Gli altri stati restano nel chip.
@@ -35,6 +38,7 @@ import { Race } from "../../../ui/race";
 import { setTooltip } from "../../../ui/tooltip";
 import { animate, DURATION, prepareExit } from "../../../moto";
 import { byId, follow } from "./dom";
+import { mountHintsRow } from "./hints-row";
 import { BandSum, summarizeSelection } from "./selection-sum";
 
 /// Da quanto piccolo entra un segno che si accende: la molla elastica lo porta
@@ -320,6 +324,9 @@ export function mountStatusBand(lifetime: Lifetime): void {
   if (declared?.parentElement === band) declared.after(sum.element);
   else band.append(sum.element);
   sum.element.after(sum.voice);
+  // La riga dei suggerimenti, al centro, fra la somma e il lato destro
+  // (`hints-row.ts`): prende lo spazio che resta, e cede alla somma.
+  mountHintsRow(lifetime, band, byId("status-end"));
   let counted: SurfaceCellSelectionSource | null = null;
   let stopCounting: (() => void) | null = null;
   lifetime.add(() => stopCounting?.());

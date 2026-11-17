@@ -96,6 +96,8 @@ const ALLOWED_ATTRIBUTES: Record<string, Set<string>> = {
 /// provider markdown emette per le colonne di una tabella. Uno `style` libero è
 /// un varco (`background: url(…)` che chiama casa, `position: fixed` sopra la
 /// UI), ed è la differenza fra ammettere un attributo e ammettere *quel valore*.
+/// Nel documento lo si rimette con `element.style`, non come attributo: la CSP
+/// dell'app rifiuta ogni `style` scritto come markup.
 const ALLOWED_STYLE = /^text-align:\s*(left|center|right);?$/;
 
 /// Gli schemi che possono comparire in un legame.
@@ -382,7 +384,14 @@ function sanitizeNode(node: Node): Node | null {
   for (const attr of Array.from(el.attributes)) {
     const name = attr.name.toLowerCase();
     if (!allowedAttribute(tag, name)) continue;
-    if (name === "style" && !isAllowedStyle(attr.value)) continue;
+    if (name === "style") {
+      // L'allineamento ammesso passa da CSSOM: la CSP rifiuta un `style`
+      // scritto come attributo (`style-src-attr 'none'`), non uno stile
+      // scritto da uno script. Il valore resta quello dell'allowlist.
+      const align = ALLOWED_STYLE.exec(attr.value.trim())?.[1];
+      if (align !== undefined) newItem.style.textAlign = align;
+      continue;
+    }
     if (name === "href" && !isAllowedLink(attr.value)) continue;
     if (name === "src" && !isAllowedResource(attr.value)) {
       // Un'immagine remota non parte, ma non sparisce in silenzio: l'indirizzo

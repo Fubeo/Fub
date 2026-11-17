@@ -15,7 +15,17 @@ import sheetLight from "./scrittoio/sheet-light.css?raw";
 import sheetDark from "./scrittoio/sheet-dark.css?raw";
 import sheetDarkHigh from "./scrittoio/sheet-dark-high.css?raw";
 import seriesSkin from "./scrittoio/skin.css?raw";
-import { count, mountThemeBundle, validateThemeBundle, type ThemeBundleManifest } from "./loader";
+import {
+  count,
+  mountedCss,
+  mountedLayers,
+  mountPreferences,
+  mountThemeBundle,
+  mountUserSnippets,
+  validateThemeBundle,
+  type Layer,
+  type ThemeBundleManifest,
+} from "./loader";
 import { SCRITTOIO_SERIES } from "./scrittoio/series";
 
 const box = vi.hoisted(() => ({ api: null as unknown }));
@@ -94,13 +104,11 @@ function system(light: "light" | "dark" = "light"): void {
 }
 
 function text(layer: string): string | null {
-  return document.head.querySelector(`style[data-fub="${layer}"]`)?.textContent ?? null;
+  return mountedCss(layer as Layer);
 }
 
 function layers(): string[] {
-  return [...document.head.querySelectorAll<HTMLStyleElement>("style[data-fub]")].map(
-    (element) => element.dataset.fub ?? "",
-  );
+  return mountedLayers();
 }
 
 const SERIES_MANIFEST: ThemeBundleManifest = SCRITTOIO_SERIES.manifest;
@@ -109,6 +117,7 @@ const INHERITING_MANIFEST: ThemeBundleManifest = cartaManifest;
 describe("il caricatore monta la pelle del tema sopra quella di serie", () => {
   beforeEach(() => {
     document.head.innerHTML = "";
+    document.adoptedStyleSheets = [];
     document.body.innerHTML = "";
   });
 
@@ -153,11 +162,8 @@ describe("il caricatore monta la pelle del tema sopra quella di serie", () => {
   });
 
   it("le preferenze e i frammenti restano dopo ogni pelle", () => {
-    const preferences = document.createElement("style");
-    preferences.dataset.fub = "preferenze";
-    const snippets = document.createElement("style");
-    snippets.dataset.fub = "snippets";
-    document.head.append(preferences, snippets);
+    mountPreferences({});
+    mountUserSnippets("");
 
     mountThemeBundle(
       { manifest: INHERITING_MANIFEST, sheet: sheetLight, skin: THEME_SKIN, assets: {}, inherited: { skin: seriesSkin } },
@@ -165,7 +171,9 @@ describe("il caricatore monta la pelle del tema sopra quella di serie", () => {
     );
     expect(layers()).toEqual(["foglio", "pelle", "pelle-tema", "preferenze", "snippets"]);
 
-    preferences.remove();
+    // Le preferenze tolte da sotto: il tema si rimonta senza di loro.
+    const at = layers().indexOf("preferenze");
+    document.adoptedStyleSheets = document.adoptedStyleSheets.filter((_, index) => index !== at);
     mountThemeBundle(
       { manifest: INHERITING_MANIFEST, sheet: sheetLight, skin: THEME_SKIN, assets: {}, inherited: { skin: seriesSkin } },
       "light",
@@ -176,6 +184,7 @@ describe("il caricatore monta la pelle del tema sopra quella di serie", () => {
   it("per un tema che eredita una pelle assente o vuota è il caso normale", () => {
     for (const skin of [undefined, "", "  \n"]) {
       document.head.innerHTML = "";
+      document.adoptedStyleSheets = [];
       const bundle = { manifest: INHERITING_MANIFEST, sheet: sheetLight, skin, assets: {}, inherited: { skin: seriesSkin } };
       expect(validateThemeBundle(bundle, "light")).toEqual([]);
       expect(mountThemeBundle(bundle, "light").mounted).toBe(true);
@@ -259,6 +268,7 @@ describe("la shell compone il tema che eredita e non lascia resti", () => {
     contrast.high = false;
     system("light");
     document.head.innerHTML = "";
+    document.adoptedStyleSheets = [];
     localStorage.clear();
     await cancelThemePreview();
     await selectTheme(SERIES_THEME_ID, "light");

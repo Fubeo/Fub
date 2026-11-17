@@ -27,6 +27,16 @@ richiede invece revisione del foglio, spiegazione delle scene coinvolte e
 rigenerazione nell'ambiente Ubuntu validato: sulle PR la fa la CI
 ([le baseline dal runner](testing-and-quality.md#le-baseline-dal-runner)).
 
+Oltre a ora, fuso, lingua, moto e finestra, il palco (`bench/stage.mjs`) tiene
+fermi due casi che la pagina non dichiara da sé. `Math.random` è a seme fisso:
+CodeMirror lo usa per cercare la posizione sotto un punto, e col caso vero una
+selezione di poche lettere si dipingeva a volte come una riga intera. E un
+elemento che sta per riscriversi da sé porta `data-pending` (la riga dei
+suggerimenti durante la sua pausa): `prepareScene` e `stillShot` aspettano che
+nella pagina non ce ne sia più nessuno, e dopo 5 s falliscono nominando
+l'elemento. Un componente con un timer che cambia ciò che si vede usa lo stesso
+attributo invece di chiedere al banco un'attesa a tempo.
+
 Lo strato d'avvio ha quattro scene: `avvio-attesa` (il marchio e la riga del
 vault che si apre), `avvio-lento` («Ci vuole più del solito.», a 10 s),
 `avvio-guasto` (il motivo, col fuoco su Riprova) e `avvio-telefono` (l'attesa
@@ -58,15 +68,31 @@ del banco visivo, dopo le scene.
 Il banco del moto (`npm run bench:motion`) misura le coreografie dello
 Scrittoio nel browser: lo stato d'arrivo coincide con quello a moto ridotto,
 non resta nessuna animazione viva, i fotogrammi chiave toccano soltanto
-`transform` e `opacity`, un gesto invertito a metà torna allo stato di
+`transform` e `opacity` (e così lo stile in linea riscritto a ogni
+fotogramma, anche durante un trascinamento, dove il puntatore avanza di un
+passo per fotogramma e una proprietà estranea cambiata in due fotogrammi di
+fila è un errore; mentre passa soltanto il tempo lo è anche una proprietà
+scritta in tre fotogrammi con tre valori diversi, di fila o no), un gesto invertito a metà torna allo stato di
 partenza senza salti (ogni riquadro in corsa prosegue da dov'era, lui o la
 sua immagine che esce, e il referto dice com'era e com'è il riquadro che
-salta), e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
+salta; il «dopo» si legge al primo fotogramma che il gesto contrario dipinge,
+dopo le sue richiamate di `requestAnimationFrame` e prima del disegno, non
+appena torna il clic), e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
 finisce entro 140 ms. Ogni file della shell e del kit che fa partire una corsa
-ha la sua coreografia. I confronti restano al pixel, e per questo il banco apre
+ha la sua coreografia, e ogni gesto del trascinamento dei
+[Blocchi](../product/editor-blocks.md) la sua (`blocchi-*`: la presa di un
+blocco basso e di uno alto, il passaggio oltre un blocco alto, «Accanto»,
+annidare e staccare, il cartellino, lo scorrimento al bordo, il rilascio, Esc,
+Mod+Maiusc+↑/↓); i loro casi ai bordi hanno un test ciascuno in
+`blocks/blocks.dom.test.ts`. I confronti restano al pixel, e per questo il banco apre
 Chromium con `--disable-partial-raster` (`BROWSER_ARGS` in
 `bench/motion-rules.mjs`): col raster parziale lo stesso stato raggiunto per
-due strade dava ogni tanto un pixel di antialiasing diverso. Anche il budget d'interazione (`npm run bench:interaction`) apre
+due strade dava ogni tanto un pixel di antialiasing diverso. Per la stessa
+ragione ogni pagina del banco del moto parte senza lavoro a riposo in
+sospeso: dopo la scena aspetta che la coda dei riscaldamenti
+(`ui/warmup.ts`, `warmups.pending()`) sia vuota, perché un carattere caricato
+mentre si scatta lascia sotto il blocco in mano livelli diversi di un'unità
+da quelli della stessa pagina a caricamento finito. Anche il budget d'interazione (`npm run bench:interaction`) apre
 la pagina col movimento acceso e l'ora vera: misura in quanti millisecondi un
 menu, la palette e una nota arrivano al primo fotogramma e alla fine del moto,
 contro i budget del [budget prestazionale](../product/performance-budget.md#il-budget-dinterazione).

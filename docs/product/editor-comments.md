@@ -1,8 +1,8 @@
 # I commenti nel testo
 
 > **Per chi:** chi scrive nelle note e chi lavora sul loro editor.
-> **Risultato:** sapere come si vede, si scrive, si cancella e si copia un
-> commento in Scrittura, in Lettura e in Sorgente.
+> **Risultato:** sapere come si scrive, si discute, si risolve, si cancella e
+> si copia un commento in Scrittura, in Lettura e in Sorgente.
 
 ## Che cosa sono
 
@@ -29,8 +29,67 @@ leggono con la sintassi `fub:comments` accesa, la stessa dei commenti
 - **Sorgente**: si vede tutto, e ogni commento, dal primo segno all'ultimo
   messaggio, ha un colore suo.
 
-La discussione a margine, le risposte e «Risolvi» non stanno qui: sono del
-pannello dei commenti.
+## Il segno e la discussione
+
+- Accanto al passo, nel margine destro del foglio, un segno dice chi ha
+  cominciato (le iniziali in un pallino colorato) e quanti messaggi ha la
+  discussione. Due segni vicini non si coprono: il secondo scende. Quando il
+  margine non ha posto (a 700 px, sul telefono, con la pagina larga) il segno
+  sta nel testo, subito dopo il passo, più piccolo della riga. Lo stesso in
+  Lettura. Un commento su un punto non ha segno: sta nel pannello.
+- Un clic sul segno (o Invio quando ha il fuoco) apre la discussione: la
+  citazione del passo, i messaggi con chi e quando («ieri 17:40», il giorno del mese,
+  l'anno se è un altro), il campo per rispondere (Ctrl Invio, ⌘ Invio su macOS, invia),
+  poi «Risolvi» ed «Elimina». Un messaggio senza autore si legge «Senza
+  nome», col pallino grigio. Esc chiude, e il fuoco torna dove stava.
+- Se la nota cambia mentre la discussione è aperta, la discussione segue il
+  suo passo; se il commento non c'è più (cancellato, o cambiato sul disco),
+  si chiude e un avviso lo dice.
+
+## Scrivere un commento
+
+- Si seleziona del testo e si preme Ctrl Alt M (⌘ ⌥ M su macOS); lo stesso
+  gesto è l'azione dell'editor `markdown.comment.add`, per la barra di
+  formato e i menu. Si apre il primo
+  messaggio, con la citazione e, in fondo, ciò che finirà nel file
+  (`{==…==}{>>…<<}`). Senza selezione il commento va sul punto del cursore.
+- Una selezione su più blocchi diventa un commento sul primo blocco, e il
+  primo messaggio lo dice. Nel codice e nelle formule un commento non sta: va
+  su un punto, subito dopo il blocco, e il primo messaggio lo dice.
+- La firma viene da Impostazioni › Profilo (`profile.name`, di questa
+  macchina). Al primo commento, se manca, il primo messaggio la chiede, con
+  l'avviso che il nome finisce nel file. Ogni vault sceglie come firmare
+  (`comments.author`): il nome, le iniziali o nessuna firma; senza firma il
+  messaggio ha solo la data.
+- In una nota in sola lettura i commenti si leggono: la discussione non ha il
+  campo né i pulsanti, e Ctrl Alt M lo dice con un avviso.
+
+## Risolvi, Elimina e i risolti
+
+- **Risolvi** toglie i segni (il passo resta testo della nota) e archivia la
+  discussione in fondo alla nota, in commenti `%%` che la Scrittura e la
+  Lettura non mostrano: il formato è in
+  [Convenzioni delle note](../reference/note-conventions.md#larchivio-dei-risolti).
+  In Scrittura l'archivio torna a vista quando il cursore ci entra; in
+  Sorgente si vede sempre.
+- **Elimina** toglie tutto: segni e messaggi.
+- Ogni gesto (scrivere, rispondere, risolvere, eliminare, svuotare) è un passo
+  d'annullamento solo. Dopo Risolvi, Elimina e Svuota un avviso offre
+  «Annulla»; se nel frattempo la nota è cambiata, «Annulla» rimette ciò che
+  il gesto ha tolto senza toccare il resto.
+- Risolvere dopo un cambio esterno lavora sul testo di adesso: la
+  discussione che si risolve è quella che la nota ha in quel momento.
+
+## Il pannello «Commenti»
+
+Nell'ispettore, accanto agli altri pannelli della nota. Elenca prima i
+commenti aperti, in ordine di testo, con la citazione, chi e quando, il primo
+messaggio e il numero delle risposte; poi «Risolti», le discussioni
+dell'archivio, con la citazione e il numero dei messaggi. Un clic (o Invio)
+su un aperto porta al passo e apre la discussione. «Svuota i risolti»
+toglie l'archivio, ed è un passo d'annullamento. Il pannello legge il testo
+della nota che si sta scrivendo, senza passare dal kernel, e si aggiorna poco
+dopo l'ultima battuta.
 
 ## Scrivere e cancellare
 
@@ -103,17 +162,30 @@ la cancellazione e l'avviso stanno in `comments/mask.ts`, la copia e il taglio
 che porta il commento in `comments/copy.ts` (l'incolla in `paste.ts`, i gesti
 del menu in `surface.ts`), la Sorgente in `comments/source.ts`, la Lettura in
 `render-inline.ts`, l'allargamento dei gesti di formato in `format-toggle.ts`.
-Il numero di parole della nota (la banda, il pannello delle statistiche,
+Il segno, la discussione e il pannello stanno in `comments/`: `model.ts`
+(leggere le discussioni, la firma, dove va un commento nuovo), `resolve.ts`
+(Risolvi, Elimina, l'archivio), `margin.ts` (il margine, il segno nel testo,
+l'archivio nascosto), `thread.ts` (il riquadro della discussione e del primo
+messaggio), `discussions.ts` (i gesti, l'annullamento, gli avvisi),
+`inspector.ts` (il pannello) e `author.ts` (la firma dalle impostazioni);
+`surface.ts` li monta. Le impostazioni `profile.name` e `comments.author` sono
+in `crates/fub-host/src/settings.rs`. Il numero di parole della nota (la banda, il pannello delle statistiche,
 `fub-cli wordcount`) lo conta il kernel in `crates/fub-features/src/stats.rs`,
 sul sorgente senza i segni e i messaggi dei commenti; allo stesso modo la riga
 «Selezione» del pannello, sul testo selezionato che la shell gli passa com'è
 scritto. I colori sono della
-pelle (`skin/editors.css`, componente `note-comments` dell'anatomia).
+pelle (`skin/editors.css`, componente `note-comments` dell'anatomia; il segno,
+la discussione e il pannello in `skin/document.css`, componenti
+`document-comment-margin`, `document-comment-discussion` e
+`document-comments-panel`).
 
 ## Limiti
 
 - Con modifiche non ancora salvate la riga «Selezione» del pannello delle
   statistiche toglie solo i commenti che il file salvato ha già: un commento
   appena scritto si conta coi suoi segni fino al salvataggio.
+- In Lettura un commento su un punto non ha segno: si apre dal pannello.
+- Una riga che ha la forma dell'archivio dentro un blocco di codice si legge
+  come archivio nel pannello.
 - In Vim `l` e `h` attraversano un segno nascosto un carattere alla volta (una
   coda lunga chiede decine di battute), come gli indirizzi nascosti dei link.

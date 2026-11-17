@@ -358,6 +358,8 @@
     "status-sum-part",
     "status-sum-value",
     "status-sum-dot",
+    "status-hints",
+    "status-hints-key",
     "views-status",
     "files-panel",
     "plain-list",
@@ -545,6 +547,7 @@
     "cm-fub-note-card-cover",
     "cm-line",
     "cm-markdown-block",
+    "markdown-table-scroll",
     "cm-fub-heading-line",
     "cm-fub-h1",
     "cm-fub-h2",
@@ -716,6 +719,34 @@
     "note-fact",
     "note-fact-tags",
     "note-tag",
+    "cm-fub-comment-margin",
+    "cm-fub-comment-bubble",
+    "cm-fub-comment-sign",
+    "cm-fub-comment-avatar",
+    "cm-fub-comment-popover",
+    "cm-fub-comment-discussion",
+    "cm-fub-comment-quote",
+    "cm-fub-comment-note",
+    "cm-fub-comment-name",
+    "cm-fub-comment-name-hint",
+    "cm-fub-comment-message",
+    "cm-fub-comment-write",
+    "cm-fub-comment-input",
+    "cm-fub-comment-send",
+    "cm-fub-comment-actions",
+    "cm-fub-comment-actions-end",
+    "cm-fub-comment-action",
+    "cm-fub-comment-foot",
+    "cm-fub-comments-panel",
+    "cm-fub-comments-head",
+    "cm-fub-comments-card",
+    "cm-fub-comments-quote",
+    "cm-fub-comments-who",
+    "cm-fub-comments-replies",
+    "cm-fub-comments-archived",
+    "cm-fub-comments-note",
+    "cm-fub-comments-empty",
+    "cm-fub-comments-clear",
     "cm-fub-frontmatter",
     "block-frontmatter-unparsed",
     "block-footnote-definition",
@@ -1530,6 +1561,7 @@
     "ui-submit",
     "ui-list",
     "ui-list-item-icon",
+    "ui-list-more",
     "ui-tree",
     "ui-tree-item",
     "ui-tree-label",
@@ -1602,9 +1634,13 @@
     "menu-group",
     "menu-group-label",
     "menu-empty",
+    "menu-title",
     "menu-head",
     "menu-head-kind",
     "menu-head-name",
+    "menu-field",
+    "menu-field-input",
+    "menu-field-pointer",
     "menu-clipboard",
     "menu-clipboard-glide",
     "menu-quick",
@@ -1619,6 +1655,8 @@
     "menu-foot-caret",
     "menu-finding",
     "menu-path",
+    "menu-foot-keys",
+    "menu-foot-key",
     "context-submenu",
     "menu-more",
     "context-strip",
@@ -2265,6 +2303,8 @@
     "status-sum-part": "cornice",
     "status-sum-value": "cornice",
     "status-sum-dot": "cornice",
+    "status-hints": "cornice",
+    "status-hints-key": "cornice",
     "views-status": "cornice",
     "files-panel": "cornice",
     "plain-list": "cornice",
@@ -2452,6 +2492,7 @@
     "cm-fub-note-card-cover": "cornice",
     "cm-line": "contenuto",
     "cm-markdown-block": "contenuto",
+    "markdown-table-scroll": "contenuto",
     "cm-fub-heading-line": "contenuto",
     "cm-fub-h1": "contenuto",
     "cm-fub-h2": "contenuto",
@@ -2623,6 +2664,34 @@
     "note-fact": "contenuto",
     "note-fact-tags": "contenuto",
     "note-tag": "contenuto",
+    "cm-fub-comment-margin": "segno",
+    "cm-fub-comment-bubble": "segno",
+    "cm-fub-comment-sign": "segno",
+    "cm-fub-comment-avatar": "segno",
+    "cm-fub-comment-popover": "cornice",
+    "cm-fub-comment-discussion": "cornice",
+    "cm-fub-comment-quote": "cornice",
+    "cm-fub-comment-note": "cornice",
+    "cm-fub-comment-name": "cornice",
+    "cm-fub-comment-name-hint": "cornice",
+    "cm-fub-comment-message": "cornice",
+    "cm-fub-comment-write": "cornice",
+    "cm-fub-comment-input": "cornice",
+    "cm-fub-comment-send": "cornice",
+    "cm-fub-comment-actions": "cornice",
+    "cm-fub-comment-actions-end": "cornice",
+    "cm-fub-comment-action": "cornice",
+    "cm-fub-comment-foot": "cornice",
+    "cm-fub-comments-panel": "cornice",
+    "cm-fub-comments-head": "cornice",
+    "cm-fub-comments-card": "cornice",
+    "cm-fub-comments-quote": "cornice",
+    "cm-fub-comments-who": "cornice",
+    "cm-fub-comments-replies": "cornice",
+    "cm-fub-comments-archived": "cornice",
+    "cm-fub-comments-note": "cornice",
+    "cm-fub-comments-empty": "cornice",
+    "cm-fub-comments-clear": "cornice",
     "cm-fub-frontmatter": "contenuto",
     "block-frontmatter-unparsed": "contenuto",
     "block-footnote-definition": "contenuto",
@@ -3437,6 +3506,7 @@
     "ui-submit": "cornice",
     "ui-list": "cornice",
     "ui-list-item-icon": "cornice",
+    "ui-list-more": "cornice",
     "ui-tree": "cornice",
     "ui-tree-item": "cornice",
     "ui-tree-label": "cornice",
@@ -3509,9 +3579,13 @@
     "menu-group": "cornice",
     "menu-group-label": "cornice",
     "menu-empty": "cornice",
+    "menu-title": "cornice",
     "menu-head": "cornice",
     "menu-head-kind": "cornice",
     "menu-head-name": "cornice",
+    "menu-field": "cornice",
+    "menu-field-input": "cornice",
+    "menu-field-pointer": "cornice",
     "menu-clipboard": "cornice",
     "menu-clipboard-glide": "cornice",
     "menu-quick": "cornice",
@@ -3526,6 +3600,8 @@
     "menu-foot-caret": "cornice",
     "menu-finding": "cornice",
     "menu-path": "cornice",
+    "menu-foot-keys": "cornice",
+    "menu-foot-key": "cornice",
     "context-submenu": "cornice",
     "menu-more": "cornice",
     "context-strip": "cornice",
@@ -4745,6 +4821,8 @@
         "status-sum-part",
         "status-sum-value",
         "status-sum-dot",
+        "status-hints",
+        "status-hints-key",
         "views-status"
       ],
       "states": [
@@ -5386,7 +5464,8 @@
         "cm-editor",
         "cm-content",
         "cm-line",
-        "cm-markdown-block"
+        "cm-markdown-block",
+        "markdown-table-scroll"
       ],
       "states": [
         "rest",
@@ -5793,6 +5872,71 @@
       "states": [
         "rest",
         "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-comment-margin",
+      "part": "document",
+      "hooks": [
+        "cm-fub-comment-margin",
+        "cm-fub-comment-bubble",
+        "cm-fub-comment-sign",
+        "cm-fub-comment-avatar"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-comment-discussion",
+      "part": "document",
+      "hooks": [
+        "kit-popover",
+        "cm-fub-comment-popover",
+        "cm-fub-comment-discussion",
+        "cm-fub-comment-quote",
+        "cm-fub-comment-note",
+        "cm-fub-comment-name",
+        "cm-fub-comment-name-hint",
+        "cm-fub-comment-message",
+        "cm-fub-comment-write",
+        "cm-fub-comment-input",
+        "cm-fub-comment-send",
+        "cm-fub-comment-actions",
+        "cm-fub-comment-actions-end",
+        "cm-fub-comment-action",
+        "cm-fub-comment-foot"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "document-comments-panel",
+      "part": "document",
+      "hooks": [
+        "cm-fub-comments-panel",
+        "cm-fub-comments-head",
+        "cm-fub-comments-card",
+        "cm-fub-comments-quote",
+        "cm-fub-comments-who",
+        "cm-fub-comments-replies",
+        "cm-fub-comments-archived",
+        "cm-fub-comments-note",
+        "cm-fub-comments-empty",
+        "cm-fub-comments-clear"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "selected",
         "focused"
       ]
     },
@@ -7571,6 +7715,7 @@
         "ui-list-item-icon",
         "ui-list-item-title",
         "ui-list-item-subtitle",
+        "ui-list-more",
         "ui-tree",
         "ui-tree-item",
         "ui-tree-label",
@@ -7787,7 +7932,8 @@
         "menu-separator",
         "menu-group",
         "menu-group-label",
-        "menu-empty"
+        "menu-empty",
+        "menu-title"
       ],
       "states": [
         "rest"
@@ -7803,6 +7949,19 @@
       ],
       "states": [
         "rest"
+      ]
+    },
+    {
+      "name": "menu-field",
+      "part": "menus",
+      "hooks": [
+        "menu-field",
+        "menu-field-input",
+        "menu-field-pointer"
+      ],
+      "states": [
+        "rest",
+        "focused"
       ]
     },
     {
@@ -7846,7 +8005,9 @@
         "menu-foot-query",
         "menu-foot-caret",
         "menu-finding",
-        "menu-path"
+        "menu-path",
+        "menu-foot-keys",
+        "menu-foot-key"
       ],
       "states": [
         "rest"
@@ -10201,10 +10362,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1905,
+    "hooks": 1943,
     "state_names": 7,
-    "assigned_states": 888,
-    "components": 260,
+    "assigned_states": 902,
+    "components": 264,
     "preference_tokens": 191
   }
 }

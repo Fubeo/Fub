@@ -237,15 +237,14 @@ scrive a mano.
 Una WebView che non conosce `'wasm-unsafe-eval'` non compila il modulo: la
 lavagna non si cambia, e non c'è un ripiego in TypeScript.
 
-`style-src` è `'self' 'unsafe-inline'`: i moduli della shell, CodeMirror per
-primo, aggiungono elementi `<style>` a pagina avviata. Per questo
-`index.html`, `mobile.html` e `document.html` non hanno un `<style>`: Tauri
-metterebbe un nonce a ognuno e lo aggiungerebbe a `style-src`, e con un nonce
-la WebView ignora `'unsafe-inline'` e rifiuta gli stili aggiunti dopo (gli
-editor restano senza stile). Lo stile che serve prima dei moduli, quello dello
-strato d'avvio, è un file in `public/avvio/`. `src/avvio/pagine.test.ts` tiene
-le tre pagine senza `<style>` né script in linea; nella WebView vera la stessa
-caduta la vede lo scenario S7 di `bench:webview`.
+### Gli stili
+
+`style-src` è `'self'` e `style-src-attr` è `'none'`: nessuno stile in linea.
+Un `<style>` o un attributo `style` che arriva con il markup di un documento,
+di un tema o di un plugin la WebView lo rifiuta, in silenzio. La shell mette i
+suoi stili con file, fogli costruiti, CSSOM e il nonce della pagina; le
+quattro strade, quello che resta fuori e i presidi sono in
+[Gli stili e la CSP](styles-and-csp.md).
 
 ### Immagini remote
 

@@ -322,7 +322,9 @@ describe("i comandi che lo aprono", () => {
     showContextMenu(new MouseEvent("contextmenu", { clientX: 10, clientY: 10 }), [{ label: "Apri", run: () => {} }], { pointer: false });
     for (const ch of "zz") document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true, cancelable: true }));
     const offer = document.querySelector<HTMLButtonElement>("#context-menu .menu-items [role=menuitem]")!;
-    expect(offer.querySelector(".menu-hint")?.textContent).toBe("Ctrl+Shift+P");
+    // Nel menu i tasti si scrivono come nel prototipo, separati da uno spazio
+    // (il nome di Maiusc è la sua chiave, perché `t` è finta).
+    expect(offer.querySelector(".menu-hint")?.textContent).toBe("Ctrl context.key.shift P");
     offer.click();
     expect(selectedMode()).toContain("launcher.mode.commands");
     expect(world.asked[world.asked.length - 1]).toEqual(["commands", "zz"]);
@@ -465,6 +467,21 @@ describe("il campo è un combobox, l'elenco un listbox", () => {
     type("xy");
     expect(counted()).toBe('launcher.status.count_of {"count":2,"total":40}');
     expect(said()).toBe("");
+  });
+
+  it("aprendosi mette il fuoco nel campo una volta sola", () => {
+    // In WebKit ogni `focus()` ricalcola lo stile e la ricerca del primo
+    // elemento raggiungibile (`offsetParent`) forza il layout: la trappola li
+    // faceva entrambi prima che il campo prendesse il fuoco per conto suo.
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      launcher.open("all");
+      expect(document.activeElement).toBe(field());
+      expect(focus.mock.contexts).toEqual([field()]);
+    } finally {
+      focus.mockRestore();
+      launcher.close();
+    }
   });
 
   it("la superficie è un dialogo con un nome, e la pillola dice che è aperto", () => {

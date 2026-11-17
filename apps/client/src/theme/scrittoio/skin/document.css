@@ -204,6 +204,7 @@
 .markdown-rendered blockquote,
 .markdown-rendered pre,
 .markdown-rendered table,
+.markdown-rendered .markdown-table-scroll,
 .markdown-rendered hr,
 .markdown-rendered h1,
 .markdown-rendered h2,
@@ -563,13 +564,13 @@
 }
 /* I Blocchi (H3–H7, E2): il «+» e la maniglia a due occhi nel margine, i
    blocchi selezionati. Con un puntatore i pulsanti non si vedono a riposo e
-   compaiono tenui sul blocco sotto il puntatore; senza passaggio restano
-   tenui sul blocco del cursore. La maniglia sotto il puntatore prende
-   l'accento e gli occhi crescono appena. */
+   compaiono, nel grigio pieno della pagina (il --muted del prototipo
+   tradotto nella tavolozza del documento), sul blocco sotto il puntatore;
+   senza passaggio restano sul blocco del cursore. La maniglia sotto il
+   puntatore prende l'accento e gli occhi crescono appena. */
 .cm-editor .cm-fub-block-add,
 .cm-editor .cm-fub-block-grip {
   color: var(--doc-gutter-fg);
-  opacity: 0.55;
   transition: opacity 0.12s, background 0.12s, color 0.12s;
 }
 @media (hover: hover) {
@@ -1805,34 +1806,101 @@ button.cm-fub-page-icon:focus-visible {
 
 /* ── Tabelle ─────────────────────────────────────────────────────────────── */
 
-/* Una tabella è un dato: carattere dell'interfaccia, cifre incolonnate, solo
-   fili orizzontali. La griglia della Live è la stessa tabella con le maniglie
-   intorno: le celle prendono queste regole in tutte e due. */
+/* Una tabella è un dato: carattere dell'interfaccia, cifre incolonnate, una
+   griglia di fili sottili dentro una cornice arrotondata (il prototipo,
+   `.gridw`, `.gr`, `.gr-box`). La griglia della Live è la stessa tabella con
+   le maniglie intorno: le celle prendono queste regole in tutte e due, e la
+   cornice della Live sta in `skin/tabella.css`, dove la prima riga e la
+   prima colonna della tabella non sono le prime del `<table>`.
+   Dentro la pagina i colori sono quelli del documento, come il resto del
+   contenuto: i fili `--doc-rule-soft` (il `--line` del prototipo), la
+   cornice `--doc-rule` (il `--line-2`), la testata `--doc-fill-soft` (il
+   `--tray`).
+   Il corpo è tre quarti del testo (13,5 px sul testo di serie, e cresce con
+   lui). La tabella riempie la colonna del testo e le celle non vanno a capo:
+   quando il contenuto è più largo, scorre l'involucro che la Lettura le mette
+   attorno (`markdown-table-scroll`, da `markdown/mount.ts`). Dove una resa
+   non lo mette (l'anteprima del lanciatore, le schede dei link) la tabella
+   resta larga quanto il contenuto e scorre da sé.
+   I bordi sono separati, non uniti (`structure.css`, perché una pelle non
+   scrive `border-spacing`): solo così gli angoli si arrotondano. Ogni
+   cella ha il filo a destra e sotto; l'ultima colonna e l'ultima riga hanno
+   al loro posto la cornice. La testata ha il suo fondo fino al bordo: la
+   cornice lì è trasparente, come nel prototipo dove il fondo la copre. */
 .markdown-rendered table {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   overflow-x: auto;
-  border-collapse: collapse;
   font-family: var(--font-ui);
-  font-size: 0.9em;
+  font-size: 0.75em;
   font-variant-numeric: tabular-nums;
-  line-height: var(--leading-normal);
+  line-height: 1.4;
+}
+.markdown-rendered .markdown-table-scroll {
+  overflow-x: auto;
+}
+.markdown-rendered .markdown-table-scroll > table {
+  display: table;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow: visible;
 }
 .markdown-rendered th,
 .markdown-rendered td {
+  height: 34px;
   min-width: 4ch;
-  padding: var(--space-4) var(--space-5);
+  padding: 0 var(--space-5);
   border: 0;
+  border-right: 1px solid var(--doc-rule-soft);
   border-bottom: 1px solid var(--doc-rule-soft);
-  /* Una cella non spezza le parole (né i numeri) a metà: se la tabella non ci
-     sta, scorre. */
-  overflow-wrap: normal;
+  /* Una cella non va a capo, come nel prototipo (`.gr td`): se la tabella
+     non ci sta, scorre. */
+  white-space: nowrap;
   text-align: start;
-  vertical-align: top;
+  vertical-align: middle;
 }
 .markdown-rendered th {
-  background: var(--sheet-2);
+  background: var(--doc-fill-soft);
   color: var(--doc-heading);
   font-weight: var(--weight-bold);
+}
+.markdown-rendered tr > :first-child {
+  border-left: 1px solid var(--doc-rule);
+}
+.markdown-rendered tr > :last-child {
+  border-right: 1px solid var(--doc-rule);
+}
+.markdown-rendered table > :first-child > tr:first-child > * {
+  border-top: 1px solid var(--doc-rule);
+}
+.markdown-rendered table > :last-child > tr:last-child > * {
+  border-bottom: 1px solid var(--doc-rule);
+}
+.markdown-rendered tr > th:first-child {
+  border-left-color: transparent;
+}
+.markdown-rendered tr > th:last-child {
+  border-right-color: transparent;
+}
+.markdown-rendered table > :first-child > tr:first-child > th {
+  border-top-color: transparent;
+}
+.markdown-rendered table > :last-child > tr:last-child > th {
+  border-bottom-color: transparent;
+}
+.markdown-rendered table > :first-child > tr:first-child > :first-child {
+  border-top-left-radius: var(--radius-md);
+}
+.markdown-rendered table > :first-child > tr:first-child > :last-child {
+  border-top-right-radius: var(--radius-md);
+}
+.markdown-rendered table > :last-child > tr:last-child > :first-child {
+  border-bottom-left-radius: var(--radius-md);
+}
+.markdown-rendered table > :last-child > tr:last-child > :last-child {
+  border-bottom-right-radius: var(--radius-md);
 }
 .markdown-rendered table:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
@@ -2417,4 +2485,378 @@ button.cm-fub-page-icon:focus-visible {
 .markdown-rendered .tag,
 .cm-editor .cm-content .cm-fub-tag {
   border-radius: var(--radius-chip);
+}
+
+/* I commenti: il margine, la discussione, il pannello (T22, prototipo
+   `.bub`, `.th`, `.ith`, `.icard`). Il segno sta nel margine destro della
+   pagina, all'altezza del passo; quando il margine non ha posto (la finestra
+   stretta, il telefono) sta nel testo, subito dopo il commento. I colori delle
+   persone sono quelli del prototipo, uguali nelle due luci: il pallino è
+   pieno e il testo bianco. Ogni coppia sta sopra 4,5:1 (le iniziali sono a
+   9,5 px): lo slot 3 è un poco più scuro del `#b9662e` del prototipo, che col
+   bianco dava 4,2:1. */
+.cm-fub-comment-avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #3f7d63;
+  color: #ffffff;
+  font: var(--weight-bold) 9.5px/1 var(--font-ui);
+}
+.cm-fub-comment-avatar[data-slot="0"] {
+  background: var(--border-strong);
+  color: var(--text);
+}
+:root[data-contrast="high"] .cm-fub-comment-avatar[data-slot="0"] {
+  /* Nell'alto contrasto `--border-strong` è scuro (giorno) o chiaro (notte) e
+     col testo darebbe 3,3:1 e 2,8:1: il pallino prende il fondo attivo e il
+     bordo forte resta come anello. */
+  background: var(--bg-active);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.cm-fub-comment-avatar[data-slot="2"] {
+  background: #7a5bb0;
+}
+.cm-fub-comment-avatar[data-slot="3"] {
+  background: #a85a26;
+}
+.cm-fub-comment-avatar[data-slot="4"] {
+  background: #2f6aa8;
+}
+.cm-fub-comment-margin {
+  position: absolute;
+  top: 0;
+  height: 0;
+  z-index: 2;
+}
+.pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+  position: relative;
+}
+.cm-fub-comment-bubble,
+.cm-fub-comment-sign {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px 0 3px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--sheet);
+  box-shadow: var(--shadow-raise, var(--shadow-1));
+  color: var(--muted);
+  font: var(--weight-bold) 11.5px/1 var(--font-ui);
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease), box-shadow var(--duration-fast) var(--ease);
+}
+.cm-fub-comment-bubble {
+  position: absolute;
+}
+.cm-fub-comment-bubble:hover,
+.cm-fub-comment-sign:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-pop, var(--shadow-3));
+  color: var(--text);
+}
+.cm-fub-comment-bubble[data-active],
+.cm-fub-comment-sign[data-active] {
+  box-shadow: 0 0 0 2px var(--accent), var(--shadow-raise, var(--shadow-1));
+}
+.cm-fub-comment-bubble:focus-visible,
+.cm-fub-comment-sign:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Nel testo il segno è più basso della riga: non la allarga. */
+.cm-fub-comment-sign {
+  height: 20px;
+  margin-inline: 3px 1px;
+  padding: 0 6px 0 2px;
+  vertical-align: -3px;
+  font-size: 11px;
+}
+.cm-fub-comment-sign .cm-fub-comment-avatar {
+  width: 16px;
+  height: 16px;
+  font-size: 8px;
+}
+/* Sul telefono i bottoni sono alti 44 px: il segno nel testo resta della sua
+   misura, e il tocco lo dà un `::after` trasparente, che non disegna niente
+   e non sposta la riga. */
+:root[data-client-shell="mobile"] .cm-fub-comment-sign {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+:root[data-client-shell="mobile"] .cm-fub-comment-sign::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 44px;
+  transform: translateY(-50%);
+}
+
+/* La discussione, nel popover. */
+.kit-popover.cm-fub-comment-popover {
+  padding: 0;
+  overflow: hidden auto;
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  box-shadow: var(--shadow-pop, var(--shadow-3));
+  font: var(--text-sm) / 1.4 var(--font-ui);
+}
+.cm-fub-comment-discussion {
+  width: min(340px, calc(100vw - 16px));
+}
+.cm-fub-comment-quote {
+  margin: 12px 14px 4px;
+  padding-left: 10px;
+  border-left: 3px solid var(--highlight);
+  color: var(--muted);
+  font: italic 14px/1.45 var(--font-reading);
+  overflow-wrap: anywhere;
+}
+.cm-fub-comment-quote[data-point] {
+  font-style: normal;
+}
+.cm-fub-comment-note,
+.cm-fub-comment-name-hint {
+  margin: 4px 14px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.cm-fub-comment-name {
+  margin: 10px 14px 0;
+}
+.cm-fub-comment-message {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 2px 9px;
+  padding: 10px 14px 0;
+}
+.cm-fub-comment-message .cm-fub-comment-avatar {
+  grid-row: span 2;
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+.cm-fub-comment-message b {
+  font-weight: var(--weight-bold);
+}
+.cm-fub-comment-message time {
+  margin-left: 6px;
+  color: var(--doc-gutter-fg);
+  font-size: 12px;
+  font-weight: var(--weight-regular);
+}
+.cm-fub-comment-message p {
+  margin: 0;
+  color: var(--doc-fg);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.cm-fub-comment-write {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 12px 14px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.cm-fub-comment-write:focus-within {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
+}
+.cm-fub-comment-write > .cm-fub-comment-avatar {
+  align-self: center;
+}
+.cm-fub-comment-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 20px;
+  max-height: 120px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+}
+.cm-fub-comment-send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  cursor: pointer;
+}
+.cm-fub-comment-send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.cm-fub-comment-send:focus-visible,
+.cm-fub-comment-action:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.cm-fub-comment-send svg,
+.cm-fub-comment-action svg {
+  width: 16px;
+  height: 16px;
+}
+.cm-fub-comment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+.cm-fub-comment-actions-end {
+  display: flex;
+  gap: 2px;
+}
+.cm-fub-comment-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.cm-fub-comment-action:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-fub-comment-foot code {
+  font: 11px var(--font-mono);
+}
+.cm-fub-comment-foot kbd,
+.cm-fub-comments-empty kbd {
+  padding: 3px 5px 2px;
+  border-radius: 5px;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border-strong), 0 1px 0 var(--border-strong);
+  color: var(--muted);
+  font: var(--weight-medium) 10.5px/1 var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Il pannello «Commenti» dell'ispettore. */
+.cm-fub-comments-panel {
+  font-size: var(--text-sm);
+}
+.cm-fub-comments-head {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  padding: 14px 4px 4px;
+  color: var(--doc-gutter-fg);
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cm-fub-comments-card {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: var(--shadow-raise, var(--shadow-1));
+  transition: box-shadow var(--duration-fast) var(--ease);
+}
+.cm-fub-comments-card[data-anchor] {
+  cursor: pointer;
+}
+.cm-fub-comments-card[data-anchor]:hover {
+  box-shadow: var(--shadow-pop, var(--shadow-3));
+}
+.cm-fub-comments-card[data-active] {
+  box-shadow: 0 0 0 2px var(--accent), var(--shadow-raise, var(--shadow-1));
+}
+.cm-fub-comments-card:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.cm-fub-comments-quote {
+  display: block;
+  margin-bottom: 6px;
+  padding-left: 8px;
+  border-left: 2.5px solid var(--highlight);
+  color: var(--muted);
+  font: italic 13px/1.4 var(--font-reading);
+  overflow-wrap: anywhere;
+}
+.cm-fub-comments-quote[data-point] {
+  font-style: normal;
+}
+.cm-fub-comments-who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: var(--weight-bold);
+}
+.cm-fub-comments-who time {
+  color: var(--doc-gutter-fg);
+  font-size: 12px;
+  font-weight: var(--weight-regular);
+}
+.cm-fub-comments-card p {
+  margin: 4px 0 0;
+  color: var(--doc-fg);
+  overflow-wrap: anywhere;
+}
+.cm-fub-comments-replies,
+.cm-fub-comments-card .cm-fub-comments-archived {
+  color: var(--doc-gutter-fg);
+  font-size: 12px;
+}
+.cm-fub-comments-card .cm-fub-comments-archived {
+  margin: 0;
+}
+.cm-fub-comments-note {
+  margin: 0;
+  padding: 4px;
+  color: var(--doc-gutter-fg);
+  font-size: 12px;
+}
+.cm-fub-comments-empty {
+  margin: 0;
+  padding: 14px 12px;
+  color: var(--muted);
+}
+.cm-fub-comments-clear {
+  height: 26px;
+  margin: 0 0 8px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cm-fub-comments-clear:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-fub-comments-clear:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
 }

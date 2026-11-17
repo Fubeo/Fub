@@ -203,6 +203,37 @@ h6.ui-heading {
   color: var(--muted);
   font-size: var(--text-sm);
 }
+/* La riga in coda a un elenco lungo: le voci oltre la soglia si chiedono da
+   qui (`ui/node.ts`, `LIST_PAGE`). È un «di più», non un'azione: niente fondo
+   a riposo, inchiostro sommesso e il triangolo in giù delle sezioni, sulla
+   verticale delle icone delle voci (il «Altre N proprietà» del prototipo). */
+.ui-list-more {
+  display: flex;
+  padding-top: var(--space-1);
+}
+.ui-list-more > .ui-button {
+  justify-content: flex-start;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  background: transparent;
+  color: var(--muted);
+}
+.ui-list-more > .ui-button::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  clip-path: polygon(25% 8%, 85% 50%, 25% 92%);
+  transform: rotate(90deg);
+}
+.ui-list-more > .ui-button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.ui-list-more > .ui-button:active {
+  background: var(--overlay-active);
+}
 
 .ui-tree-label {
   gap: var(--space-3);

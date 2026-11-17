@@ -118,6 +118,24 @@
   display: none !important;
 }
 
+/* Il grafo che si scalda a riposo (`graph/warmup.ts`): dentro la pagina perché
+ * il canvas si dipinga davvero, ma trasparente, sotto tutto e senza puntatore.
+ * Qui e non in linea: lo stile in linea di un elemento non porta `opacity`. */
+.graph-warmup {
+  position: fixed;
+  inset: 0 auto auto 0;
+  width: 200px;
+  height: 200px;
+  opacity: 0;
+  pointer-events: none;
+  contain: strict;
+  z-index: -1;
+}
+.graph-warmup-stage {
+  width: 100%;
+  height: 100%;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -4819,6 +4837,15 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 .base-table {
   width: 100%;
   border-collapse: collapse;
+}
+
+/* Le tabelle Markdown, in Lettura e nella griglia della Live, hanno i bordi
+   separati e accostati: è il modello in cui la loro cornice
+   (`skin/document.css`, `skin/tabella.css`) arrotonda gli angoli, e una
+   pelle non può scrivere `border-spacing`. */
+.markdown-rendered table {
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 /* L'intestazione resta in vista mentre la tabella scorre. */

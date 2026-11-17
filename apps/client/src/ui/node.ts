@@ -425,7 +425,7 @@ function update(
     }
     case "list":
       if (prev.node !== "list") return false;
-      children(el, next.items, onAction);
+      drawListItems(el, next.items, onAction, false);
       markListItems(el);
       return true;
     case "tree":
@@ -652,7 +652,7 @@ export function setNodeMotion(motion: NodeMotion | null): Teardown {
 
 /// Applica l'accoppiamento al DOM: riconcilia ciò che si reuse, disegna il
 /// resto, toglie ciò che non serve più e **sposta** invece di ricreare.
-function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
+function children(parent: HTMLElement, nodes: UiNode[], onAction: Port, end: ChildNode | null = null): void {
   const existing = Array.from(parent.children).filter(
     (c): c is HTMLElement => c instanceof HTMLElement && rendered.has(c),
   );
@@ -698,7 +698,9 @@ function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
   }
   // Rimettere in ordine: `insertBefore` di un nodo già figlio lo SPOSTA, e
   // spostarlo conserva focus, scroll e stato — che è tutto il punto.
-  let reference: ChildNode | null = null;
+  // `end` è ciò che resta in coda e non si sposta (il «mostra altre» di un
+  // elenco lungo): spostare un elemento che ha il fuoco glielo toglie.
+  let reference: ChildNode | null = end;
   for (let i = finalNodes.length - 1; i >= 0; i--) {
     const el = finalNodes[i]!;
     if (el.nextSibling !== reference || el.parentElement !== parent) {
@@ -787,6 +789,74 @@ function ensureRowCell(row: HTMLTableRowElement): void {
   row.appendChild(td);
 }
 
+/// Quante voci di un elenco si disegnano subito, e quante ne aggiunge ogni
+/// «mostra altre». Un elenco lungo costa per ogni elemento che ha nel DOM, anche
+/// quando non si vede: i collegamenti in uscita di una nota da 5.000 righe sono
+/// 4.756 voci e 33.000 elementi nel cassetto, e con loro nella pagina aprire il
+/// cassetto costava 300 ms di stile e layout più un fotogramma da 800 ms, e la
+/// barra, i menu e il binario 20–70 ms ciascuno anche a cassetto chiuso. Le voci
+/// oltre la soglia restano nel nodo, non nel DOM: si mostrano a richiesta.
+export const LIST_PAGE = 200;
+const LIST_MORE = "ui-list-more";
+
+/// Quante voci mostra adesso ogni elenco: la soglia, o di più se la persona ne
+/// ha chieste altre. Un ridisegno della view non le richiude.
+const listShown = new WeakMap<HTMLElement, number>();
+
+/// Disegna (o riconcilia) le voci visibili di un elenco e, se ne restano fuori,
+/// la riga «mostra altre» in coda. `fresh` è il primo disegno: i figli si
+/// aggiungono e basta, senza l'accoppiamento.
+function drawListItems(el: HTMLElement, items: readonly UiNode[], onAction: Port, fresh: boolean): void {
+  const limit = Math.max(LIST_PAGE, listShown.get(el) ?? 0);
+  const visible = items.length > limit ? items.slice(0, limit) : (items as UiNode[]);
+  let more = el.querySelector<HTMLElement>(`:scope > .${LIST_MORE}`);
+  if (fresh) {
+    for (const item of visible) el.appendChild(renderUiNode(item, onAction));
+  } else {
+    children(el, visible, onAction, more);
+  }
+  const rest = items.length - visible.length;
+  if (rest <= 0) {
+    more?.remove();
+    return;
+  }
+  if (!more) {
+    more = div(LIST_MORE);
+    more.setAttribute("role", "listitem");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ui-button";
+    button.addEventListener("click", () => showMoreItems(el, onAction));
+    more.appendChild(button);
+    el.appendChild(more);
+  }
+  const button = more.firstElementChild as HTMLButtonElement;
+  const label = t("views.list_more", { count: String(Math.min(LIST_PAGE, rest)), total: String(items.length) });
+  if (button.textContent !== label) button.textContent = label;
+}
+
+/// Il «mostra altre»: un'altra pagina di voci, dal nodo disegnato adesso. Il
+/// fuoco resta sul bottone; quando le voci finiscono il bottone se ne va e il
+/// fuoco passa alla prima voce nuova, invece di cadere sul corpo della pagina.
+function showMoreItems(el: HTMLElement, onAction: Port): void {
+  const node = rendered.get(el)?.node;
+  if (node?.node !== "list") return;
+  const before = Math.max(LIST_PAGE, listShown.get(el) ?? 0);
+  listShown.set(el, before + LIST_PAGE);
+  const more = el.querySelector<HTMLElement>(`:scope > .${LIST_MORE}`);
+  const hadFocus = more?.contains(document.activeElement) ?? false;
+  passInputs = drawInputs();
+  drawListItems(el, node.items, onAction, false);
+  markListItems(el);
+  if (hadFocus && !more?.isConnected) {
+    const first = el.children[before];
+    if (first instanceof HTMLElement) {
+      if (first.tabIndex < 0 && !first.hasAttribute("tabindex")) first.tabIndex = -1;
+      first.focus();
+    }
+  }
+}
+
 /// Ogni figlio di una lista è una sua voce, anche quando il provider non ci
 /// mette un `list_item` ma una riga — una voce con un bottone accanto, come le
 /// menzioni da collegare. Senza, il bottone risultava figlio diretto della
@@ -798,6 +868,7 @@ function ensureRowCell(row: HTMLTableRowElement): void {
 function markListItems(list: HTMLElement): void {
   for (const child of list.children) {
     if (!(child instanceof HTMLElement) || child.classList.contains("ui-list-item")) continue;
+    if (child.classList.contains(LIST_MORE)) continue;
     child.setAttribute("role", "listitem");
     for (const inner of child.querySelectorAll<HTMLElement>('.ui-list-item[role="listitem"]')) {
       if (inner.parentElement?.closest('[role="list"]') !== list) continue;
@@ -837,7 +908,7 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // la guarda: il ruolo è ciò che permette a un lettore di schermo di dire
       // «lista, sei elementi» e di saltarla, invece di leggerla tutta.
       el.setAttribute("role", "list");
-      for (const item of node.items) el.appendChild(renderUiNode(item, onAction));
+      drawListItems(el, node.items, onAction, true);
       markListItems(el);
       return el;
     }

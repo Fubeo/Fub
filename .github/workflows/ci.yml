@@ -550,6 +550,10 @@ jobs:
         run: |
           node .github/scripts/check-inline-theme.mjs --self-test
           node .github/scripts/check-inline-theme.mjs
+      - name: nessuno stile in linea (CSP senza 'unsafe-inline')
+        run: |
+          node .github/scripts/check-inline-styles.mjs --self-test
+          node .github/scripts/check-inline-styles.mjs
       - name: ogni ascoltatore globale della shell ha una Vita
         run: node .github/scripts/check-listeners.mjs
       - name: dentro un giro non si aspetta di nascosto

@@ -76,6 +76,7 @@ import { declaredLanguage, frontmatterRange, renderMarkdown } from "./render";
 import { addProperty, clearProperties } from "./properties";
 import { clipboardHtml } from "./copy-html";
 import { commentCut, copiedSelection, FUB_MARKDOWN_TYPE, rememberCut, type CarriedCut } from "./comments/copy";
+import { COMMENT_ACTION, COMMENT_CHORD, markdownComments } from "./comments/discussions";
 import type { ProofPorts } from "../../../core/proof-ports";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../../../core/editor-menu";
 import { forEachDiagnostic, type Diagnostic } from "@codemirror/lint";
@@ -97,6 +98,9 @@ import { openImageAt, parseImage, rewriteImage, widthWritable, type ImageSource 
 import { canPreviewLink, previewLink } from "../../../../ui/link-preview";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { pngOf } from "../../../core/png";
+
+/// Quanti caratteri del paragrafo dice la testata del menu.
+const EXCERPT_CHARS = 34;
 
 /// I linguaggi che «Linguaggio ▸» offre, col loro nome nel menu: gli altri
 /// si scrivono con «Altro…».
@@ -616,6 +620,27 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   };
   presentation(mode);
 
+  // I commenti (T22): il margine, la discussione, il pannello. Leggono e
+  // scrivono il buffer della vista; la Lettura li rimonta a ogni resa.
+  const comments = markdownComments({
+    forms: () => forms,
+    mode: () => mode,
+    readOnly: () => readOnly,
+    withView: (run) => {
+      let out: ReturnType<typeof run> | null = null;
+      engine.runViewCommand((view) => {
+        out = run(view);
+        return true;
+      });
+      return out;
+    },
+    reading: () => reading,
+    focus: () => {
+      if (mode === "reading") reading.focus();
+      else engine.focus();
+    },
+  });
+
   const engine = createTextEngine(parent, {
     onChange: (change) => {
       closeSlashPalette(parent);
@@ -630,7 +655,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       actionsChanged();
     },
     theme: getCurrentTheme(),
-    extensions: () => profile.extensions(),
+    extensions: () => [profile.extensions(), comments.extension()],
   });
   if (opts.linkCards) {
     life.add(opts.linkCards.watch(() => {
@@ -946,7 +971,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       renderedOptions(readOnly ? undefined : toggleTaskAt),
     );
     mountReadingPage();
+    const unmountComments = comments.readingRendered();
     unmountReading = () => {
+      unmountComments();
       unmountReadingPage?.();
       unmountReadingPage = null;
       unmountBody();
@@ -1040,7 +1067,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   }
   const editable = () => !readOnly && mode !== "reading" && !life.closed;
   const editorActions: SurfaceEditorActions = {
-    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id),
+    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION,
     editable,
     state(id): EditorActionState {
       if (!editable()) return ACTION_UNAVAILABLE;
@@ -1049,6 +1076,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         const depth = engine.historyDepth();
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
       }
+      if (id === COMMENT_ACTION) return { enabled: comments.canComment(), active: null };
       if (tableGrid) return tableGrid.actionState(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return ACTION_UNAVAILABLE;
@@ -1061,6 +1089,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (id === "text.redo") return engine.redo();
       const fold = FOLDS.get(id);
       if (fold) return engine.runViewCommand(fold);
+      if (id === COMMENT_ACTION) return comments.comment();
       if (tableGrid) return tableGrid.runAction(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return false;
@@ -1072,6 +1101,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     chord(id) {
       if (id === "text.undo") return "Mod-z";
       if (id === "text.redo") return "Mod-y";
+      if (id === COMMENT_ACTION) return COMMENT_CHORD;
       return MARKDOWN_ACTIONS.get(id)?.chord ?? null;
     },
     subscribe(listener) {
@@ -1131,6 +1161,24 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     const html = renderMarkdown(normalizeLineBreaks(markdown), forms).html;
     const parsed = new DOMParser().parseFromString(html, "text/html");
     return (parsed.body.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
+  };
+
+  /// Le prime parole del paragrafo sotto `pos`, senza i segni, per la
+  /// testata del menu («Paragrafo · La mostra apre il 20 marzo nella…»): al
+  /// più 34 caratteri, come nel prototipo; «vuoto» per una riga vuota.
+  const paragraphExcerpt = (pos: number): string => {
+    const raw = engine.readState((state) => {
+      let line = state.doc.lineAt(Math.min(pos, state.doc.length));
+      while (line.number > 1 && line.text.trim() !== "") {
+        const before = state.doc.line(line.number - 1);
+        if (before.text.trim() === "") break;
+        line = before;
+      }
+      return line.text;
+    });
+    const text = raw.trim() === "" ? "" : plainText(raw).replace(/\s+/g, " ");
+    if (text === "") return t("editor_menu.head.empty");
+    return text.length > EXCERPT_CHARS ? `${text.slice(0, EXCERPT_CHARS - 1).trimEnd()}…` : text;
   };
 
   /// Incolla dagli appunti: tutti i tipi, o soltanto il testo.
@@ -1198,7 +1246,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   };
 
   /// «Incolla» come voce del posto, dove gli appunti non fanno una riga.
-  const pasteItem = (): SurfaceMenuItem => ({ id: "markdown.paste", label: t("editor_menu.paste"), chord: "Mod-v", run: () => pasteFromClipboard(false) });
+  const pasteItem = (): SurfaceMenuItem => ({ id: "markdown.paste", label: t("editor_menu.paste"), icon: "template", chord: "Mod-v", run: () => pasteFromClipboard(false) });
 
   /// «Inserisci un blocco…»: il «/» sotto il blocco del cursore, come il «+»
   /// della maniglia.
@@ -1208,8 +1256,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       id: "markdown.insert_block",
       label: t("editor_menu.insert_block"),
       description: undefined,
-      chord: null,
-      icon: undefined,
+      // Il tasto che lo fa da solo, su una riga vuota.
+      chord: "/",
+      icon: "plus",
       run: () => void engine.runViewCommand((view) => {
         const line = view.state.doc.lineAt(Math.min(pos, view.state.doc.length));
         const blank = line.text.trim() === "";
@@ -1247,7 +1296,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
 
   /// «Copia il link a questo punto», o il nome che il posto gli dà.
   const anchorItem = (label = t("editor_menu.anchor_here")): SurfaceMenuItem =>
-    ({ id: "markdown.anchor", label, command: "shell.doc.copy_anchor_link" });
+    ({ id: "markdown.anchor", label, icon: "fmt-link", command: "shell.doc.copy_anchor_link" });
 
   /// Il riquadro «Collegamento» sulla tratta `from`–`to`, dove la vista lo ha
   /// (Live e Blocchi).
@@ -1273,6 +1322,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     const remove: SurfaceMenuEntry[] = link.embed || !writable ? [] : [MENU_RULE, {
       id: "markdown.link.remove",
       label: t("editor_menu.link.remove"),
+      icon: "fmt-clear",
       run: () => void engine.applyUserEdit(link.from, link.to, link.text),
     }];
     const edit = writable && !link.embed ? linkDialogItem(t("editor_menu.link.edit"), link.from, link.to) : [];
@@ -1284,15 +1334,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         target: { kind: "wikilink", name: link.text },
         context: [
           ...(opts.onPeekLink
-            ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), chord: "Alt-Enter", run: () => void opts.onPeekLink!({ kind: "wiki", page, heading: link.heading, block: link.block }, docId()) }]
+            ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), icon: "eye", chord: "Alt-Enter", run: () => void opts.onPeekLink!({ kind: "wiki", page, heading: link.heading, block: link.block }, docId()) }]
             : []),
           { id: "markdown.link.open", label: t("editor_menu.link.open_note"), ...(opts.onPeekLink ? {} : { chord: "Alt-Enter" }), run: () => void openWikilink(page, link.heading, link.block) },
           ...(opts.onOpenWikilinkBeside
-            ? [{ id: "markdown.link.beside", label: t("editor_menu.link.beside"), run: () => void opts.onOpenWikilinkBeside!(page, link.heading, link.block, docId()) }]
+            ? [{ id: "markdown.link.beside", label: t("editor_menu.link.beside"), icon: "panel-right", run: () => void opts.onOpenWikilinkBeside!(page, link.heading, link.block, docId()) }]
             : []),
           ...(shown && canPreviewLink() ? [{ id: "markdown.link.preview", label: t("editor_menu.link.preview"), run: () => void previewLink(shown) }] : []),
           MENU_RULE,
-          { id: "markdown.link.copy", label: t("editor_menu.link.copy"), run: () => copyText(`[[${target}]]`, t("editor_menu.copied")) },
+          { id: "markdown.link.copy", label: t("editor_menu.link.copy"), icon: "copy", run: () => copyText(`[[${target}]]`, t("editor_menu.copied")) },
           ...edit,
           ...remove,
         ],
@@ -1313,11 +1363,11 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           ? [{ id: "markdown.link.web", label: t("editor_menu.link.browser"), chord: "Alt-Enter", run: () => openWebLink(link.url, false) }]
           : [
             ...(opts.onPeekLink
-              ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), chord: "Alt-Enter", run: () => void opts.onPeekLink!({ kind: "path", path: decodeURI(link.url) }, docId()) }]
+              ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), icon: "eye", chord: "Alt-Enter", run: () => void opts.onPeekLink!({ kind: "path", path: decodeURI(link.url) }, docId()) }]
               : []),
             { id: "markdown.link.open", label: t("editor_menu.link.open_note"), ...(opts.onPeekLink ? {} : { chord: "Alt-Enter" }), run: () => void Promise.resolve(opts.onOpenPath(decodeURI(link.url), docId())).catch(() => {}) },
           ]),
-        { id: "markdown.link.copy", label: t(external ? "editor_menu.link.copy_url" : "editor_menu.link.copy"), run: () => copyText(link.url, t("editor_menu.copied")) },
+        { id: "markdown.link.copy", label: t(external ? "editor_menu.link.copy_url" : "editor_menu.link.copy"), icon: "copy", run: () => copyText(link.url, t("editor_menu.copied")) },
         ...edit,
         ...remove,
       ],
@@ -1432,7 +1482,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     return {
       target: { kind: "code", name: code.language || undefined },
       context: [
-        { id: "markdown.code.copy", label: t("editor_menu.code.copy"), run: () => copyText(code.code, t("editor_menu.copied")) },
+        { id: "markdown.code.copy", label: t("editor_menu.code.copy"), icon: "copy", run: () => copyText(code.code, t("editor_menu.copied")) },
         ...(writable ? [{
           id: "markdown.code.language",
           label: t("editor_menu.code.language"),
@@ -1450,6 +1500,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         ...(writable ? [{
           id: "markdown.code.unwrap",
           label: t("editor_menu.code.unwrap"),
+          icon: "trash",
           run: () => void engine.applyUserEdit(code.from, code.to, code.code.replace(/\n$/, "")),
         }] : []),
       ],
@@ -1564,23 +1615,29 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         ...common,
         target: { kind: "selection", name: t(words === 1 ? "editor_menu.words.one" : "editor_menu.words.many", { count: words }) },
         clipboard: writingClipboard({ cut: writable, copy: true, paste: writable, "paste-plain": writable, "select-all": true }, true),
+        // Come nel prototipo: «Collega a una nota…» e «Copia come ▸» (che la
+        // composizione mette in coda a questo gruppo), poi «Estrai». «Cerca
+        // nel vault» non ruba un posto: si trova scrivendo.
         context: [
           ...(writable
             ? live
-              ? linkDialogItem(t("editor_menu.link.to_note"), range.from, range.to, "Mod-k")
-              : [actionItem("markdown.wikilink", t("editor_menu.link.to_note"))]
+              ? linkDialogItem(t("editor_menu.link.to_note"), range.from, range.to, "Mod-k").map((item) => ({ ...item, icon: "fmt-link" }))
+              : [actionItem("markdown.wikilink", t("editor_menu.link.to_note"), { icon: "fmt-link" })]
             : []),
-          ...(writable ? [{ id: "markdown.extract", label: t("editor_menu.extract"), slash: "note.extract" }] : []),
-          { id: "markdown.search.vault", label: t("editor_menu.search_vault"), find: { where: "vault" as const, query: plainText(text) } },
+          MENU_RULE,
+          ...(writable ? [{ id: "markdown.extract", label: t("editor_menu.extract"), icon: "notes", slash: "note.extract" }] : []),
           ...footnoteItem,
+        ],
+        searchable: [
+          { id: "markdown.search.vault", label: t("editor_menu.search_vault"), icon: "search", find: { where: "vault" as const, query: plainText(text) } },
         ],
       };
     }
     const task = engine.readState((state) => taskAt(state, pos));
     const item = engine.readState((state) => listItemAt(state, pos));
     const indents: SurfaceMenuEntry[] = item === null || !writable ? [] : [
-      ...(item.indent ? [actionItem("markdown.list.indent", t("editor_menu.list.indent"), { chord: "Tab" })] : []),
-      ...(item.dedent ? [actionItem("markdown.list.dedent", t("editor_menu.list.dedent"), { chord: "Shift-Tab" })] : []),
+      ...(item.indent ? [actionItem("markdown.list.indent", t("editor_menu.list.indent"), { chord: "Tab", icon: "fmt-indent" })] : []),
+      ...(item.dedent ? [actionItem("markdown.list.dedent", t("editor_menu.list.dedent"), { chord: "Shift-Tab", icon: "fmt-outdent" })] : []),
     ];
     const paste: SurfaceMenuEntry[] = writable ? [pasteItem()] : [];
     if (task) {
@@ -1591,6 +1648,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           ...(writable ? [{
             id: "markdown.task.toggle",
             label: t(task.checked ? "editor_menu.task.undone" : "editor_menu.task.done"),
+            icon: "check",
             chord: "Mod-Enter",
             run: () => void engine.applyUserEdit(task.symbol, task.symbol + 1, task.checked ? " " : "x"),
           }] : []),
@@ -1612,6 +1670,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           ...(writable ? [{
             id: "markdown.list.kind",
             label: t("editor_menu.list.kind"),
+            icon: "sync",
             items: [
               radio("markdown.list.bullet", t("editor_menu.list.bullet")),
               radio("markdown.list.ordered", t("editor_menu.list.ordered")),
@@ -1638,6 +1697,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           {
             id: "markdown.heading.fold",
             label: t("editor_menu.heading.fold"),
+            icon: "fmt-details",
             run: () => void engine.runViewCommand((view) => {
               const line = view.state.doc.lineAt(pos);
               const span = foldable(view.state, line.from, line.to);
@@ -1647,6 +1707,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           ...(writable && section ? [{
             id: "markdown.heading.extract",
             label: t("editor_menu.heading.extract"),
+            icon: "notes",
             slash: "note.extract",
             run: () => void engine.runViewCommand((view) => {
               view.dispatch({ selection: { anchor: section.from, head: section.to } });
@@ -1657,6 +1718,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           ...(writable ? [{
             id: "markdown.heading.level",
             label: t("editor_menu.heading.level"),
+            icon: "sync",
             items: [radio("markdown.paragraph", t("editor_menu.block.text")), ...[1, 2, 3, 4, 5, 6].map(heading)],
           }] : []),
           MENU_RULE,
@@ -1667,11 +1729,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     }
     return {
       ...common,
-      target: { kind: "text" },
+      // La testata dice il paragrafo con le sue prime parole, come la
+      // maniglia; il menu, come nel prototipo: Incolla, poi «Trasforma il
+      // blocco ▸» e «Inserisci un blocco… /», poi il link.
+      target: { kind: "text", name: paragraphExcerpt(pos) },
       clipboard: writingClipboard({ paste: writable, "paste-plain": writable, "select-all": true }),
       context: [
+        ...(writable ? [{ id: "markdown.transform", label: t("editor_menu.transform_block"), icon: "sync", items: transformItems() }] : []),
         ...(writable ? insertBlockItem(pos) : []),
-        ...(writable ? [{ id: "markdown.transform", label: t("editor_menu.transform_block"), items: transformItems() }] : []),
         MENU_RULE,
         anchorItem(),
         ...footnoteItem,
@@ -1790,6 +1855,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       profile.setSyntaxForms(next);
       engine.reconfigure();
       syncReading();
+      comments.formsChanged();
     },
     undo: () => engine.undo(),
     redo: () => engine.redo(),
@@ -1842,6 +1908,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     },
     setTheme: (theme) => engine.setTheme(theme),
     editorActions,
+    panels: comments.panels,
     contextMenu: (at) => {
       if (life.closed) return null;
       return mode === "reading" ? readingMenu(at) : writingMenu(at);
@@ -1864,6 +1931,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       cellListeners.clear();
       closeSlashPalette(parent);
       cancelReadingSync();
+      comments.destroy();
       life.close();
       unmountReading?.();
       unmountReading = null;

@@ -157,6 +157,17 @@ describe("montaggio Markdown condiviso", () => {
     expect(embedded).not.toHaveBeenCalled();
   });
 
+  it("ogni tabella sta in un involucro che scorre, ed è focalizzabile per farlo scorrere", () => {
+    const element = mount(renderMarkdown("| A | B |\n| - | - |\n| 1 | 2 |\n\n| C |\n| - |\n| 3 |\n").html);
+    const tables = [...element.querySelectorAll("table")];
+    expect(tables).toHaveLength(2);
+    for (const table of tables) {
+      expect(table.parentElement?.className).toBe("markdown-table-scroll");
+      expect(table.parentElement?.children).toHaveLength(1);
+      expect(table.tabIndex).toBe(0);
+    }
+    expect(element.querySelectorAll(".markdown-table-scroll")).toHaveLength(2);
+  });
   it("un clic su un'immagine del vault la apre nella lightbox, non la segue", () => {
     setReducedMotionPreference(true);
     try {

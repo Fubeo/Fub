@@ -1,8 +1,8 @@
 # Il disegno nella WebView
 
 > **Ambito:** quanto costa a WebKit, nell'app vera, disegnare una battuta
-> nelle note Markdown: le regole che tengono il lavoro dentro il foglio e le
-> misure prima e dopo. Il lavoro di CodeMirror fino al layout sta in
+> nelle note Markdown e gli elenchi lunghi delle viste: le regole che tengono
+> il lavoro dentro il foglio e fuori dal DOM, e le misure prima e dopo. Il lavoro di CodeMirror fino al layout sta in
 > [La battuta](performance-budget.md#la-battuta).
 
 Il [banco della battuta](performance-budget.md#la-battuta) misura il lavoro
@@ -45,9 +45,14 @@ alto:
 | lunga | Live | 30 · 50, 35 · 47 (10–16) | 30 · 43, 26 · 51 (3–20) |
 | lunga | Blocchi | 48 · 80, 34 · 53 (9–12) | 29 · 41, 27 · 41 (7–12) |
 
-WebKitGTK disegna a 60 Hz anche su schermi più veloci, quindi un fotogramma
-dura almeno 16,7 ms. La prima marcatura del correttore (`proof.ts`) nel tratto
-appena visibile costa ancora un fotogramma da circa 60 ms.
+Lo schermo di questa misura va a 60 Hz, quindi un fotogramma dura almeno
+16,7 ms. Su NVIDIA anche uno schermo più veloce non accorcia molto il
+fotogramma: col vblank emulato il rAF segue lo schermo, ma WebKitGTK di
+Debian passa i fotogrammi in memoria condivisa e ne consegna al più 54 al
+secondo ([perché](../architecture/desktop-webview.md#il-tetto-dei-60-hz-di-webkitgtk),
+[misure](../misure/2026-11-17-linux-vblank-emulato.md)). La prima marcatura
+del correttore (`proof.ts`) nel tratto appena visibile costa ancora un
+fotogramma da circa 60 ms.
 
 ## Dopo il salvataggio
 
@@ -90,6 +95,107 @@ thread e fotogramma più lungo in ms, carico medio a un minuto fra parentesi:
 
 «Prima» è `2352d9b61`. Un blocco è un giro di `setTimeout(0)` in ritardo di
 oltre 40 ms; dopo il salvataggio non ne resta nessuno. La view dei
-collegamenti resta grande da disegnare la prima volta (una riga per rimando, in
-`crates/fub-features/src/backlinks.rs`): costa all'apertura, non a ogni
-salvataggio.
+collegamenti resta grande da calcolare e da mandare (una riga per rimando, in
+`crates/fub-features/src/backlinks.rs`); il disegno si ferma alle prime 200
+voci (vedi [Gli elenchi lunghi nelle viste](#gli-elenchi-lunghi-nelle-viste)).
+
+## Gli elenchi lunghi nelle viste
+
+Un elemento nel DOM costa anche quando non si vede: ogni ricalcolo di stile,
+ogni fuoco spostato e ogni misura lo attraversano. Sulla nota lunga del banco
+la view dei collegamenti in uscita ha 4756 voci, circa 33 000 elementi nel
+cassetto destro, e la view resta montata anche a cassetto chiuso. Con quella
+nota aperta aprire il cassetto costava circa 300 ms di lavoro sincrono più un
+fotogramma da 800 ms, chiuderlo un blocco da 600 ms, e la barra laterale, il
+menu contestuale e il binario 20–80 ms per gesto invece di 2–6.
+
+La regola: **un `list` di una view disegna al più 200 voci** (`LIST_PAGE` in
+`ui/node.ts`). Le altre restano nel nodo e non entrano nel DOM; in coda
+all'elenco una riga «Mostra altre N · T in tutto» (`.ui-list-more`, una voce
+dell'elenco per le tecnologie assistive) ne aggiunge altre 200 per clic. Le
+voci chieste restano mostrate quando la view si ridisegna (un salvataggio), la
+riga non si sposta e tiene il fuoco; quando le voci finiscono il fuoco passa
+alla prima voce nuova. La guardia è `node.test.ts` («un elenco lungo mostra
+una pagina di voci»). Il provider continua a mandare l'elenco intero: la
+soglia è del disegno, non del contratto.
+
+Misura con la sonda sull'ispettore remoto di WebKit nell'app vera,
+pc-debian-di-fub, 17 novembre 2026, «prima» = `c9a346bae`; nota lunga aperta
+(5000 righe con rimandi), finestra stretta (il cassetto destro è un
+cassetto); fotogramma più lungo e blocco massimo del thread in ms, carico
+medio a un minuto fra parentesi. La serie completa a giri alternati sta nella
+ricetta del ramo.
+
+| Gesto | Prima: fotogramma · blocco | Dopo: fotogramma · blocco |
+|---|---:|---:|
+| cassetto destro, tre aperture e chiusure | 835 · 651 (2,0) | 44 · 73 (3,5) |
+| cassetto destro, un'apertura e chiusura | 33 · 561 (2,1) | 42 · 53 (3,3) |
+| barra laterale ×6 | 82 · 75 (2,1) | 25 · 26 (3,1) |
+| menu contestuale ×5 | 84 · 81 (2,0) | 44 · 27 (3,5) |
+| binario, sei pannelli ×2 | 79 · 98 (2,0) | 22 · 21 (3,6) |
+
+WebKitGTK disegna a 60 Hz anche su uno schermo a 180 Hz, quindi un
+fotogramma dura almeno 16,7 ms. La prima apertura del grafo, del
+lanciatore e di un menu sono in [Le prime volte](#le-prime-volte); resta un
+fotogramma da 30–40 ms a ogni cambio di zoom o di accento, che ricalcolano lo
+stile di tutta la pagina.
+
+## Le prime volte
+
+Certe superfici costavano care solo la prima volta in una sessione, per ragioni
+che non erano di chi le apre. Tre regole le tolgono dal fotogramma del gesto:
+
+- **il fuoco si sposta una volta sola**: in WebKit ogni `focus()` ricalcola lo
+  stile della pagina, e cercare il primo elemento raggiungibile ne forza il
+  layout (`offsetParent`). `trapFocus` (`ui/a11y.ts`) metteva il fuoco sul
+  primo elemento e subito dopo il menu o il lanciatore lo rimettevano dove
+  volevano loro. Chi sa già dove va il fuoco passa `{ moveFocus: false }` e lo
+  mette lui, dentro la superficie: il menu contestuale e i suoi sottomenu, il
+  selettore di icona, il lanciatore. La trappola resta la stessa (Tab che non
+  esce, Escape, fuoco restituito alla chiusura). Le guardie sono `a11y.test.ts`,
+  `menu.test.ts` («aprendosi sposta il fuoco una volta sola») e
+  `launcher.test.ts` («aprendosi mette il fuoco nel campo una volta sola»);
+- **il lavoro che si può fare prima si fa a riposo**: `ui/warmup.ts` tiene una
+  coda di compiti che la shell fa partire a consegna finita
+  (`shells/scrittoio/bootstrap.ts`). Il primo aspetta 2 s, ogni passo aspetta
+  che puntatore, tastiera e rotella stiano fermi da 600 ms e poi un
+  fotogramma; uno alla volta, un errore non ferma gli altri, e la vita della
+  shell la chiude. `warmups.pending()` dice se c'è ancora un compito in coda o
+  in corso: il banco del moto lo aspetta vuoto prima di ogni coreografia. I
+  compiti sono due:
+  - i **caratteri** (`theme/font-warmup.ts`): le facce con
+    `font-display: swap` ancora da caricare si caricano una per passo. Prima il
+    Plex Mono degli accordi arrivava nel fotogramma in cui si apriva il primo
+    menu o il lanciatore, e la WebView ricalcolava lo stile di tutta la pagina;
+  - il **grafo** (`graph/warmup.ts`, registrato da `mountGraph`): l'atlas dei
+    nodi con i colori del tema, poi un grafico minuscolo montato per tre
+    fotogrammi su un host invisibile (`inert`, `aria-hidden`, opacità 0, senza
+    puntatore), che non salva niente. La WebView compila lì le sue procedure di
+    disegno del canvas (gradienti, `drawImage` dall'atlas, curve, testo), che
+    alla prima apertura vera costavano un fotogramma da ~50 ms di script e uno
+    da ~90 di pittura. Se la persona ha già aperto il grafo (lo segna il
+    pannello, `noteGraphOpened`), il passo che resta non si fa: le prime volte
+    sono pagate, e scaldare ruberebbe fotogrammi al grafo aperto;
+- **l'atlas si cuoce una volta per colori**: `atlasFor` (`graph/render/atlas.ts`)
+  tiene l'ultimo atlas e il pittore lo riprende se i colori sono gli stessi; un
+  tema nuovo lo rifà. La guardia è `atlas.test.ts` («il secondo pittore con gli
+  stessi colori riprende l'atlas del primo»).
+
+Misura con una sonda sull'ispettore remoto di WebKit nell'app vera,
+pc-debian-di-fub, 17 novembre 2026, vault del banco; tempo sincrono del gesto
+(per il grafo il blocco più lungo del thread) in ms, carico medio a un minuto
+fra parentesi:
+
+| Gesto | Prima | Dopo |
+|---|---:|---:|
+| Prima apertura del grafo dalla rail (blocco) | 138–145 (0,5–1) | 50–52, preceduto da uno di 23–24 (1,1–2,3) |
+| Primo menu contestuale | 24–32 (0,2–0,3) | 11–21 (0,3) |
+| Secondo menu contestuale | 20–21 | 9–14 |
+| Primo lanciatore (Ctrl O) | 39–49 | 22–23 |
+| Secondo lanciatore | 10–16 | 5–9 |
+
+«Prima» è `a32ce1f6a`. Il riscaldamento costa, una volta per sessione e a
+riposo, tre blocchi di fila di 38–42, 55–57 e 30–32 ms (il grafo) e poi
+blocchi di 10–22 ms (i caratteri). Il menu e il lanciatore aperti prima che i
+caratteri siano caricati costano come prima per la parte dei caratteri, meno il
+fuoco doppio (primo menu 19).

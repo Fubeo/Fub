@@ -221,6 +221,10 @@ pub const EDITOR_SLASH_HIDDEN: &str = "editor.slash.hidden";
 /// L'ordine delle sezioni del menu «/», dopo Suggeriti, Preferiti e Recenti.
 /// Le sezioni non dette seguono nel loro ordine, gli id sconosciuti non contano.
 pub const EDITOR_SLASH_SECTIONS: &str = "editor.slash.sections";
+/// La riga dei suggerimenti al centro della banda: i tasti utili per ciò che
+/// si sta facendo, letti dalle scorciatoie della persona. Accesa di serie;
+/// non c'è al telefono né sotto i 620 px.
+pub const EDITOR_HINTS: &str = "editor.hints";
 /// In che modalità si apre un riquadro nuovo: `live_preview` (Scrittura),
 /// `source` o `reading`, gli id delle modalità della superficie testuale.
 /// `blocks`, scritto da un Fub che aveva la modalità Blocchi, resta un valore
@@ -242,6 +246,19 @@ pub const EDITOR_LIVE_GUIDE: &str = "editor.live-guide";
 /// (Mod+A il corpo della nota, Mod+D la prossima occorrenza). La testata della
 /// pagina resta in tutti e due i casi. Cambia senza riaprire la nota.
 pub const EDITOR_BLOCKS: &str = "editor.blocks";
+/// Il nome di chi scrive su questa macchina (Impostazioni › Profilo): firma i
+/// commenti delle note (`{>>@Nome 2026-11-08 17:40: …<<}`). Vuoto finché la
+/// persona non lo sceglie; il primo commento lo chiede, con l'avviso che il
+/// nome finisce nel file della nota. È della macchina perché dice chi siede
+/// davanti allo schermo, non di che cosa parla il vault.
+pub const PROFILE_NAME: &str = "profile.name";
+/// Come firma i commenti questo vault: col nome di [`PROFILE_NAME`], con le
+/// sue iniziali o senza firma. È del vault perché la scelta segue le note: il
+/// nome nel vault del lavoro, niente in quello personale. Un commento senza
+/// firma si legge «Senza nome», come quelli scritti da un altro programma.
+pub const COMMENTS_AUTHOR: &str = "comments.author";
+/// Le firme che [`COMMENTS_AUTHOR`] offre, la predefinita per prima.
+pub const COMMENTS_AUTHOR_CHOICES: [&str; 3] = ["nome", "iniziali", "niente"];
 /// Le animazioni della shell: `""` segue il sistema, `calm` toglie rimbalzi e
 /// scene, `reduced` le spegne anche quando il sistema non lo chiede. Nessun
 /// valore scavalca la richiesta di moto ridotto del sistema.
@@ -529,6 +546,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     let mut settings = appearance_settings();
     settings.extend(chrome_settings());
     settings.extend(editor_settings());
+    settings.extend(profile_settings());
     settings.push(
         SettingSpec::new(
             ATTACHMENT_FOLDER,
@@ -741,6 +759,39 @@ pub fn core_machine_settings() -> Vec<SettingSpec> {
         .collect()
 }
 
+/// Chi scrive (D11 A): il nome della persona, di macchina, e la firma dei
+/// commenti scelta per il vault. Nessuna delle due è `program_writable`: il
+/// nome che finisce nei file lo sceglie la persona, dalla shell.
+fn profile_settings() -> Vec<SettingSpec> {
+    let [name_choice, initials_choice, none_choice] = COMMENTS_AUTHOR_CHOICES;
+    vec![
+        SettingSpec::new(
+            PROFILE_NAME,
+            Text::key(C_PROFILE_NAME),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(C_PROFILE_NAME_DESC))
+        .grouped(Text::key(C_GROUP_PROFILE))
+        .for_machine(),
+        SettingSpec::new(
+            COMMENTS_AUTHOR,
+            Text::key(C_COMMENTS_AUTHOR),
+            SettingKind::Choice {
+                default: name_choice.into(),
+                options: vec![
+                    UiOption::new(name_choice, Text::key(C_COMMENTS_AUTHOR_NAME)),
+                    UiOption::new(initials_choice, Text::key(C_COMMENTS_AUTHOR_INITIALS)),
+                    UiOption::new(none_choice, Text::key(C_COMMENTS_AUTHOR_NONE)),
+                ],
+            },
+        )
+        .describing(Text::key(C_COMMENTS_AUTHOR_DESC))
+        .grouped(Text::key(C_GROUP_PROFILE)),
+    ]
+}
+
 fn editor_settings() -> Vec<SettingSpec> {
     let choice = |key, label, description, default: &str, options: Vec<UiOption>| {
         SettingSpec::new(
@@ -931,6 +982,12 @@ fn editor_settings() -> Vec<SettingSpec> {
     settings.push(
         SettingSpec::toggle(EDITOR_SLASH, Text::key(C_EDITOR_SLASH), true)
             .describing(Text::key(C_EDITOR_SLASH_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
+    settings.push(
+        SettingSpec::toggle(EDITOR_HINTS, Text::key(C_EDITOR_HINTS), true)
+            .describing(Text::key(C_EDITOR_HINTS_DESC))
             .grouped(Text::key(C_GROUP_EDITOR))
             .for_machine(),
     );
@@ -1663,6 +1720,14 @@ const C_FILES_PEOPLE_FOLDER_DESC: &str = "core.files_people_folder.desc";
 
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
 const C_GROUP_EDITOR: &str = "core.group.editor";
+const C_GROUP_PROFILE: &str = "core.group.profile";
+const C_PROFILE_NAME: &str = "core.profile.name";
+const C_PROFILE_NAME_DESC: &str = "core.profile.name.desc";
+const C_COMMENTS_AUTHOR: &str = "core.comments.author";
+const C_COMMENTS_AUTHOR_DESC: &str = "core.comments.author.desc";
+const C_COMMENTS_AUTHOR_NAME: &str = "core.comments.author.name";
+const C_COMMENTS_AUTHOR_INITIALS: &str = "core.comments.author.initials";
+const C_COMMENTS_AUTHOR_NONE: &str = "core.comments.author.none";
 const C_EDITOR_SPELLCHECK: &str = "core.editor.spellcheck";
 const C_EDITOR_SPELLCHECK_DESC: &str = "core.editor.spellcheck.desc";
 const C_EDITOR_VIM: &str = "core.editor.vim";
@@ -1713,6 +1778,8 @@ const C_EDITOR_LINK_CLICK_OPEN: &str = "core.editor.link_click.open";
 const C_EDITOR_LINK_CLICK_PEEK: &str = "core.editor.link_click.peek";
 const C_EDITOR_SLASH: &str = "core.editor.slash";
 const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
+const C_EDITOR_HINTS: &str = "core.editor.hints";
+const C_EDITOR_HINTS_DESC: &str = "core.editor.hints.desc";
 const C_EDITOR_SLASH_HIDDEN: &str = "core.editor.slash.hidden";
 const C_EDITOR_SLASH_HIDDEN_DESC: &str = "core.editor.slash.hidden.desc";
 const C_EDITOR_SLASH_SECTIONS: &str = "core.editor.slash.sections";
@@ -2309,6 +2376,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_CHROME_FRAME_DESC, "Il cambio di cornice richiede la riapertura e dipende dalle capacità del sistema.")
         .with(C_FRAME_SYSTEM, "Del sistema")
         .with(C_FRAME_CUSTOM, "Personalizzata")
+        .with(C_GROUP_PROFILE, "Profilo")
+        .with(C_PROFILE_NAME, "Il tuo nome")
+        .with(
+            C_PROFILE_NAME_DESC,
+            "Firma i commenti che scrivi nelle note. Il nome finisce nel file della nota: chi lo apre, anche con un altro programma, lo legge. Cambiarlo vale per i commenti nuovi.",
+        )
+        .with(C_COMMENTS_AUTHOR, "Firma dei commenti in questo vault")
+        .with(
+            C_COMMENTS_AUTHOR_DESC,
+            "Che cosa scrive Fub accanto a ogni commento nuovo di questo vault. Senza firma il commento si legge «Senza nome».",
+        )
+        .with(C_COMMENTS_AUTHOR_NAME, "Il nome")
+        .with(C_COMMENTS_AUTHOR_INITIALS, "Le iniziali")
+        .with(C_COMMENTS_AUTHOR_NONE, "Nessuna firma")
         .with(C_GROUP_EDITOR, "Editor")
         .with(C_EDITOR_SPELLCHECK, "Controllo ortografico")
         .with(C_EDITOR_SPELLCHECK_DESC, "Usa il controllo ortografico del sistema mentre scrivi.")
@@ -2360,6 +2441,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LINK_CLICK_PEEK, "Sbircia la nota")
         .with(C_EDITOR_SLASH, "Menu «/» nel testo")
         .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
+        .with(C_EDITOR_HINTS, "Riga dei suggerimenti")
+        .with(C_EDITOR_HINTS_DESC, "Al centro della banda in basso, i tasti utili per ciò che stai facendo, con le tue scorciatoie. Non c'è al telefono né in una finestra più stretta di 620 px.")
         .with(C_EDITOR_SLASH_HIDDEN, "Voci nascoste dal menu «/»")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "Gli id dei comandi che il menu «/» non mostra. Restano nella palette e da tastiera.")
         .with(C_EDITOR_SLASH_SECTIONS, "Ordine delle sezioni del menu «/»")
@@ -2954,6 +3037,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "@ in a note offers the notes in this folder and writes the link to the person; a new person is created here. Empty, @ offers no people.",
         )
         .with(C_GROUP_APPEARANCE, "Appearance")
+        .with(C_GROUP_PROFILE, "Profile")
+        .with(C_PROFILE_NAME, "Your name")
+        .with(
+            C_PROFILE_NAME_DESC,
+            "Signs the comments you write in notes. The name ends up in the note's file: anyone who opens it, even with another program, reads it. Changing it applies to new comments.",
+        )
+        .with(C_COMMENTS_AUTHOR, "Comment signature in this vault")
+        .with(
+            C_COMMENTS_AUTHOR_DESC,
+            "What Fub writes next to every new comment in this vault. Without a signature the comment reads “No name”.",
+        )
+        .with(C_COMMENTS_AUTHOR_NAME, "The name")
+        .with(C_COMMENTS_AUTHOR_INITIALS, "The initials")
+        .with(C_COMMENTS_AUTHOR_NONE, "No signature")
         .with(C_GROUP_EDITOR, "Editor")
         .with(C_EDITOR_SPELLCHECK, "Spellcheck")
         .with(C_EDITOR_SPELLCHECK_DESC, "Use the system spellchecker while editing.")
@@ -3005,6 +3102,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LINK_CLICK_PEEK, "Peeks at the note")
         .with(C_EDITOR_SLASH, "«/» menu in the text")
         .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
+        .with(C_EDITOR_HINTS, "Hints row")
+        .with(C_EDITOR_HINTS_DESC, "In the middle of the bottom band, the keys useful for what you are doing, with your shortcuts. Not on the phone nor in a window narrower than 620 px.")
         .with(C_EDITOR_SLASH_HIDDEN, "Items hidden from the «/» menu")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "The ids of the commands the «/» menu leaves out. They stay in the palette and on the keyboard.")
         .with(C_EDITOR_SLASH_SECTIONS, "Order of the «/» menu sections")
@@ -3660,6 +3759,61 @@ mod tests {
         assert_eq!(spec.group, Text::key(C_GROUP_EDITOR));
         assert_eq!(spec.label, Text::key(C_EDITOR_BLOCKS));
         assert!(!spec.program_writable);
+    }
+
+    /// Chi firma i commenti (D11 A): il nome è della macchina, vuoto finché la
+    /// persona non lo sceglie; la firma è del vault, col nome di serie e le
+    /// iniziali o niente come scelte. Un programma non le cambia, e tutte e
+    /// due stanno nel gruppo «Profilo», con le parole nelle due lingue.
+    #[test]
+    fn the_comment_signature_is_a_machine_name_and_a_vault_choice() {
+        let all = core_settings();
+        let spec = |key: &str| {
+            all.iter()
+                .find(|spec| spec.key == key)
+                .unwrap_or_else(|| panic!("{key} fra le impostazioni"))
+        };
+        let name = spec(PROFILE_NAME);
+        assert_eq!(name.scope, fub_abi::settings::SettingScope::Machine);
+        assert!(matches!(&name.kind, SettingKind::Text { default } if default.is_empty()));
+        assert_eq!(name.group, Text::key(C_GROUP_PROFILE));
+        assert!(!name.program_writable);
+        assert!(core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == PROFILE_NAME));
+
+        let author = spec(COMMENTS_AUTHOR);
+        assert_eq!(author.scope, fub_abi::settings::SettingScope::Vault);
+        let SettingKind::Choice { default, options } = &author.kind else {
+            panic!("la firma è una scelta");
+        };
+        assert_eq!(default, "nome");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, COMMENTS_AUTHOR_CHOICES);
+        assert_eq!(author.group, Text::key(C_GROUP_PROFILE));
+        assert!(!author.program_writable);
+        assert!(!core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == COMMENTS_AUTHOR));
+
+        for catalog in core_catalog() {
+            for key in [
+                C_GROUP_PROFILE,
+                C_PROFILE_NAME,
+                C_PROFILE_NAME_DESC,
+                C_COMMENTS_AUTHOR,
+                C_COMMENTS_AUTHOR_DESC,
+                C_COMMENTS_AUTHOR_NAME,
+                C_COMMENTS_AUTHOR_INITIALS,
+                C_COMMENTS_AUTHOR_NONE,
+            ] {
+                assert!(
+                    catalog.entries.contains_key(key),
+                    "{key} in {}",
+                    catalog.locale
+                );
+            }
+        }
     }
 
     /// Le scelte della modalità iniziale sono Scrittura, Sorgente e Lettura;
