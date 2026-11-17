@@ -3,12 +3,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createMermaidView,
   diagramFence,
+  diagramProblem,
   diagramTitle,
   flowDirectionEdit,
   flowLine,
   forgetMermaidRenders,
+  mermaidLineOrigins,
   mountMermaidBlocks,
+  problemSentence,
   registerMermaidRenderer,
+  titleEdit,
+  withoutTitle,
   type MermaidView,
   type MermaidViewOptions,
 } from "./mermaid";
@@ -239,7 +244,7 @@ describe("Mermaid lifecycle", () => {
   });
 
   it("preserves invalid source and allows the next diagram to render", async () => {
-    renderer.render.mockRejectedValueOnce(new Error("Parse error at line 2"));
+    renderer.render.mockRejectedValueOnce(new Error("Parse error on line 2:\n...LR\nA[unfinished\n-------------^\nExpecting 'SQE', got 'EOF'"));
     renderer.render.mockResolvedValueOnce({ svg });
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:valid");
     const invalid = view("flowchart LR\nA[unfinished");
@@ -248,7 +253,9 @@ describe("Mermaid lifecycle", () => {
     expect(invalid.element.dataset.state).toBe("error");
     expect(invalid.element.querySelector("details")!.open).toBe(true);
     expect(invalid.element.querySelector("code")!.textContent).toBe("flowchart LR\nA[unfinished");
-    expect(invalid.element.querySelector('[role="status"]')!.textContent).toContain("line 2");
+    // Dove, in parole semplici: mai il messaggio grezzo di Mermaid.
+    expect(invalid.element.querySelector('[role="status"]')!.textContent).toMatch(/^Riga 2: /);
+    expect(invalid.element.querySelector('[role="status"]')!.textContent).not.toContain("Expecting");
     expect(valid.element.querySelector("img")!.alt).toBe("Flusso di lavoro");
     expect(valid.element.querySelector("svg")).toBeNull();
   });
@@ -323,7 +330,9 @@ describe("gli stili dei diagrammi", () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:riposo");
     const diagram = view("flowchart LR; A-->B");
     await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
-    expect(diagram.element.querySelector("button, figcaption")).toBeNull();
+    expect(diagram.element.querySelector("button")).toBeNull();
+    // Senza `title` la didascalia è vuota: il foglio la nasconde.
+    expect(diagram.element.querySelector("figcaption")!.textContent).toBe("");
     // Il sorgente compare soltanto quando il disegno non c'è.
     expect(diagram.element.querySelector("details")!.hidden).toBe(true);
   });
@@ -445,6 +454,32 @@ describe("il menu del tasto destro (E26)", () => {
     await vi.waitFor(() => expect(diagramStylePreference()).toBe("armonia"));
   });
 
+  it("la didascalia: il titolo sotto il disegno; Invio lo scrive nel sorgente, Esc lo rimette", async () => {
+    renderer.render.mockResolvedValue({ svg });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:didascalia");
+    const edits: unknown[] = [];
+    const source = "---\ntitle: Il flusso\n---\nflowchart LR; A-->B";
+    const diagram = mountedView(source, { editSource: (edit) => edits.push(edit) });
+    await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
+    const caption = diagram.element.querySelector<HTMLElement>("figcaption.mermaid-diagram-caption")!;
+    expect(caption).toBe(diagram.caption);
+    expect(caption.textContent).toBe("Il flusso");
+    // Mermaid non lo disegna dentro: sta qui, nei caratteri della nota.
+    expect(renderer.render.mock.calls[renderer.render.mock.calls.length - 1]![1]).not.toContain("title");
+    expect(caption.getAttribute("role")).toBe("textbox");
+    caption.focus();
+    caption.textContent = "Altro";
+    caption.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(caption.textContent).toBe("Il flusso");
+    expect(edits).toEqual([]);
+    caption.focus();
+    caption.textContent = "Il percorso: #2";
+    caption.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(edits).toEqual([{ from: 4, to: 20, insert: "title: \"Il percorso: #2\"" }]);
+    // Il disegno non scende sotto il 72% della sua misura: oltre, la tavola scorre.
+    expect(diagram.element.querySelector("img")!.style.getPropertyValue("--diagram-min-width")).toMatch(/^\d+px$/);
+  });
+
   it("«Questo» scrive la direttiva dopo il frontmatter; «Tutti» la toglie e sceglie per tutti", async () => {
     renderer.render.mockResolvedValue({ svg });
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:questo");
@@ -532,7 +567,11 @@ describe("il menu del tasto destro (E26)", () => {
     const box = document.querySelector<HTMLElement>(".lightbox")!;
     expect(box.getAttribute("aria-label")).toBe("Flusso di lavoro");
     expect(box.querySelector(".lightbox-caption")!.textContent).toBe("Mermaid · flowchart");
-    closeLightbox();
+    // Sul fondo dello stile, con in fondo come si usa; Spazio chiude, come Esc.
+    expect(box.classList.contains("lightbox-diagram")).toBe(true);
+    expect(box.querySelector(".lightbox-diagram-hint")!.textContent).toContain("Esc");
+    box.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
+    expect(document.querySelector(".lightbox")).toBeNull();
     // Anche un clic sul disegno lo ingrandisce.
     diagram.element.querySelector<HTMLImageElement>("img")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     expect(document.querySelector(".lightbox")).not.toBeNull();
@@ -600,6 +639,56 @@ describe("il sorgente che il menu legge", () => {
     expect(diagramTitle("---\ntitle: \"Il flusso\"\n---\ngraph TD")).toBe("Il flusso");
     expect(diagramTitle("---\nconfig: {}\n---\ngraph TD")).toBeNull();
     expect(diagramTitle("graph TD")).toBeNull();
+  });
+
+  it("il titolo con caratteri speciali, le virgolette e i commenti di YAML", () => {
+    expect(diagramTitle("---\ntitle: 'L''inizio: # uno'\n---\ngraph TD")).toBe("L'inizio: # uno");
+    expect(diagramTitle("---\ntitle: Piano # bozza\n---\ngraph TD")).toBe("Piano");
+    expect(diagramTitle("---\ntitle: \"A \\\"B\\\"\"\n---\ngraph TD")).toBe("A \"B\"");
+  });
+
+  it("la didascalia si scrive nel frontmatter: aggiunge, riscrive, toglie", () => {
+    const apply = (source: string, title: string) => {
+      const edit = titleEdit(source, title);
+      return edit ? source.slice(0, edit.from) + edit.insert + source.slice(edit.to) : source;
+    };
+    expect(apply("graph TD\nA-->B", "Il flusso")).toBe("---\ntitle: Il flusso\n---\ngraph TD\nA-->B");
+    expect(apply("---\ntitle: Vecchio\n---\ngraph TD", "Nuovo")).toBe("---\ntitle: Nuovo\n---\ngraph TD");
+    // Con altro nel frontmatter, il titolo si aggiunge e si toglie da solo.
+    expect(apply("---\nconfig: {}\n---\ngraph TD", "T")).toBe("---\ntitle: T\nconfig: {}\n---\ngraph TD");
+    expect(apply("---\ntitle: T\nconfig: {}\n---\ngraph TD", "")).toBe("---\nconfig: {}\n---\ngraph TD");
+    // Un frontmatter che resta vuoto se ne va.
+    expect(apply("---\ntitle: T\n---\ngraph TD", "  ")).toBe("graph TD");
+    // Caratteri che YAML leggerebbe in un altro modo, e gli a capo: mai una riga rotta.
+    const tricky = apply("graph TD", "Fase: #1 «prova»\nseconda");
+    expect(tricky).toBe("---\ntitle: \"Fase: #1 «prova» seconda\"\n---\ngraph TD");
+    expect(diagramTitle(tricky)).toBe("Fase: #1 «prova» seconda");
+    expect(titleEdit("---\ntitle: Uguale\n---\ngraph TD", "Uguale")).toBeNull();
+    // Mermaid non lo disegna dentro: la didascalia sta sotto, nei caratteri della nota.
+    expect(withoutTitle("---\ntitle: T\nconfig: {}\n---\ngraph TD")).not.toContain("title");
+  });
+
+  it("le righe dell'errore contano il sorgente scritto, non quello pulito da Mermaid", () => {
+    const source = "---\ntitle: T\n---\n%% stile: aurora\nflowchart TD\n  A --> B\n  A --> --> C";
+    expect(mermaidLineOrigins(source).length).toBeGreaterThan(0);
+    // Mermaid toglie frontmatter e commenti: la sua riga 3 è la 7 del recinto.
+    expect(diagramProblem(new Error("Parse error on line 3:\n...\nExpecting 'AMP', got 'LINK'"), source).line).toBe(7);
+  });
+
+  it("l'errore in parole semplici, con la riga o senza", () => {
+    const flow = diagramProblem(new Error("Parse error on line 2:\n...\nExpecting 'SQE', got 'LINK'"), "flowchart TD\nA --> --> B");
+    expect(problemSentence(flow)).toBe("Riga 2: questa riga non è un nodo né un collegamento.");
+    // La fine inattesa sta sull'ultima riga scritta, non dopo.
+    const eof = diagramProblem(new Error("Parse error on line 3:\n...\nExpecting 'SQE', got 'EOF'"), "flowchart TD\nA[uno\n");
+    expect(eof.line).toBe(2);
+    expect(problemSentence(eof)).toMatch(/^Riga 2: /);
+    // Un errore senza riga: una frase sola, mai il messaggio grezzo.
+    const none = diagramProblem(new Error("Cannot read properties of undefined"), "flowchart TD\nA-->B");
+    expect(none.line).toBeNull();
+    expect(problemSentence(none)).not.toContain("undefined");
+    // Un tipo che Mermaid non conosce lo dice per nome.
+    const kind = diagramProblem(new Error("No diagram type detected matching given configuration for text: grafo"), "grafo\nA-->B");
+    expect(problemSentence(kind)).toContain("grafo");
   });
 
   it("la direzione del flusso cambia una parola sola", () => {

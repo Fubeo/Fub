@@ -647,7 +647,6 @@
     "cm-fub-code-header",
     "cm-fub-code-lang",
     "cm-fub-code-wrap",
-    "cm-fub-diagram-notice",
     "cm-fub-math-field",
     "cm-fub-math-popover-preview",
     "cm-fub-hr",
@@ -1724,6 +1723,15 @@
     "is-today",
     "is-empty",
     "mermaid-diagram-view",
+    "is-stale",
+    "mermaid-diagram-caption",
+    "cm-fub-diagram-live",
+    "cm-fub-diagram-src",
+    "cm-fub-diagram-notice",
+    "cm-fub-diagram-rest",
+    "cm-fub-code-done",
+    "lightbox-diagram",
+    "lightbox-diagram-hint",
     "diagram-menu",
     "diagram-menu-label",
     "diagram-menu-styles",
@@ -2599,7 +2607,6 @@
     "cm-fub-code-header": "contenuto",
     "cm-fub-code-lang": "contenuto",
     "cm-fub-code-wrap": "contenuto",
-    "cm-fub-diagram-notice": "contenuto",
     "cm-fub-math-field": "contenuto",
     "cm-fub-math-popover-preview": "contenuto",
     "cm-fub-hr": "contenuto",
@@ -3676,6 +3683,15 @@
     "is-today": "cornice",
     "is-empty": "cornice",
     "mermaid-diagram-view": "contenuto",
+    "is-stale": "contenuto",
+    "mermaid-diagram-caption": "contenuto",
+    "cm-fub-diagram-live": "contenuto",
+    "cm-fub-diagram-src": "contenuto",
+    "cm-fub-diagram-notice": "contenuto",
+    "cm-fub-diagram-rest": "contenuto",
+    "cm-fub-code-done": "contenuto",
+    "lightbox-diagram": "cornice",
+    "lightbox-diagram-hint": "cornice",
     "diagram-menu": "cornice",
     "diagram-menu-label": "cornice",
     "diagram-menu-styles": "cornice",
@@ -5733,7 +5749,6 @@
         "cm-fub-code-header",
         "cm-fub-code-lang",
         "cm-fub-code-wrap",
-        "cm-fub-diagram-notice",
         "cm-fub-math-field",
         "cm-fub-math-popover-preview"
       ],
@@ -8169,11 +8184,57 @@
       "part": "diagrams",
       "hooks": [
         "mermaid-diagram",
-        "mermaid-diagram-view"
+        "mermaid-diagram-view",
+        "is-stale"
       ],
       "states": [
         "rest",
         "hover"
+      ]
+    },
+    {
+      "name": "diagram-caption",
+      "part": "diagrams",
+      "hooks": [
+        "mermaid-diagram-caption"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "diagram-source",
+      "part": "diagrams",
+      "hooks": [
+        "cm-fub-diagram-live",
+        "cm-fub-diagram-src",
+        "cm-fub-diagram-notice",
+        "cm-fub-diagram-rest",
+        "cm-fub-code-done",
+        "cm-fub-code-header",
+        "cm-editor",
+        "cm-content",
+        "cm-line"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "diagram-full",
+      "part": "diagrams",
+      "hooks": [
+        "lightbox",
+        "lightbox-diagram",
+        "lightbox-diagram-hint",
+        "zoom-content",
+        "modale"
+      ],
+      "states": [
+        "rest"
       ]
     },
     {
@@ -10400,10 +10461,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1950,
+    "hooks": 1958,
     "state_names": 7,
-    "assigned_states": 904,
-    "components": 265,
+    "assigned_states": 910,
+    "components": 268,
     "preference_tokens": 191
   }
 }

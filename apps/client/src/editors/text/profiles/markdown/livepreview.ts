@@ -94,7 +94,7 @@ import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { withLineBreaks } from "../../line-breaks";
 import { pendingGuide } from "./pending";
 import { liveHints } from "./hints";
-import { DiagramLiveWidget, diagramBlockKeys, fenceBody } from "./diagram-live";
+import { choosingBlocks, DiagramLiveWidget, diagramBlockKeys, diagramSourceLines, fenceBody } from "./diagram-live";
 import { calloutGestures, CalloutTypeWidget } from "./callout";
 import { detailsLive } from "./details-live";
 import { blockGesture } from "./block-gesture";
@@ -2718,10 +2718,14 @@ export function livePreview(
       return { decision: `k${card.kind}`, ranges };
     }
     const block = movedBlock(mark.block, from + mark.offset);
-    if (!grid && touched(state, from, to)) {
-      // Un diagramma toccato si scrive come codice, e il disegno resta
-      // sotto (C5).
-      if (block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source)) {
+    const mermaid = block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source);
+    // Un diagramma scelto coi Blocchi si vede disegnato: si sceglie, non si
+    // scrive (E26).
+    if (!grid && touched(state, from, to) && !(mermaid && choosingBlocks(state))) {
+      // Un diagramma toccato si scrive come codice, e il disegno gli sta
+      // accanto (C5, E26).
+      if (mermaid) {
+        ranges.push(...diagramSourceLines(state, from, to));
         ranges.push(Decoration.widget({ block: true, side: 1, widget: new DiagramLiveWidget(fenceBody(block.source)) }).range(to));
       } else if (block.kind === "math") {
         // Così anche un blocco `$$` (C6).
