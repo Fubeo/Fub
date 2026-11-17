@@ -657,6 +657,33 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
     } finally { done(); }
   });
 
+  it("Ctrl+Z fuori da un campo chiede l'Annulla del vault; dentro un campo resta al campo; Ctrl+Y e la sola lettura non chiedono nulla", async () => {
+    const { host, surface, invokeCommand, done } = mount({});
+    try {
+      await ready(host);
+      const press = (target: Element, init: KeyboardEventInit): KeyboardEvent => {
+        const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+        target.dispatchEvent(event);
+        return event;
+      };
+      const viewport = host.querySelector<HTMLElement>(".base-table-viewport")!;
+      // Fuori da un campo il tasto è della Base, anche senza niente da disfare.
+      expect(press(viewport, { key: "z", ctrlKey: true }).defaultPrevented).toBe(true);
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("vault.undo"));
+      invokeCommand.mockClear();
+      // Dentro il campo di ricerca Ctrl+Z è del campo: il vault non si tocca.
+      expect(press(host.querySelector<HTMLInputElement>(".base-search")!, { key: "z", ctrlKey: true }).defaultPrevented).toBe(false);
+      // Nessun «rifai» nel vault: Ctrl+Y e Ctrl+Maiusc+Z non si prendono.
+      expect(press(viewport, { key: "y", ctrlKey: true }).defaultPrevented).toBe(false);
+      expect(press(viewport, { key: "z", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+      expect(invokeCommand).not.toHaveBeenCalled();
+      // In sola lettura la Base non annulla il vault per conto suo.
+      surface.setReadOnly(true);
+      expect(press(viewport, { key: "z", ctrlKey: true }).defaultPrevented).toBe(false);
+      expect(invokeCommand).not.toHaveBeenCalled();
+    } finally { done(); }
+  });
+
   it("un gesto che non scrive ritira l'annuncio, e uno col .base non salvato non parte", async () => {
     const withdraw = vi.fn();
     let unsaved: string[] = [];
