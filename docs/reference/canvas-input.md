@@ -33,17 +33,8 @@ volta. Lo decide la tela (`engine.ts`); il renderer risponde con `enter`,
   macOS) su un link lo segue subito, nella scheda attiva o no (D-18 (c));
   fuori da un link aggiunge la scheda alla scelta, o la toglie, come
   Maiuscolo; Ctrl con uno spostamento sposta la lavagna, come prima. Un
-  pulsante della vista («Apri») risponde a un clic anche fuori. Il clic che
-  sceglie, o che cade su un filo o nel vuoto, riporta il fuoco sulla lavagna
-  quando era fuori (un pulsante della colonna, della riga delle opzioni):
-  Canc e Ctrl+Z valgono subito (IMP-040). Una scheda tolta col fuoco lo
-  lascia alla vista.
-- **Spostare.** Il trascinamento dalla testata sposta sempre la scheda; dal
-  corpo la sposta finché la scheda non è attiva né in scrittura, e non parte
-  da un controllo del contenuto (un pulsante, un campo). Lo spostamento non
-  fa entrare la scheda col clic che segue il rilascio (IMP-041). Un gruppo si
-  sposta anche dalla sua etichetta. L'aggancio vale al rilascio
-  ([La griglia e le guide](canvas-view.md#la-griglia-e-le-guide)).
+  pulsante della vista («Apri») risponde a un clic anche fuori. Il clic che sceglie, o che cade su un filo o nel vuoto, riporta il fuoco sulla lavagna quando era fuori (un pulsante della colonna o della riga): Canc e Ctrl+Z valgono subito (IMP-040). Una scheda tolta col fuoco lo lascia alla vista.
+- **Spostare.** Dalla testata sempre; dal corpo finché la scheda non è attiva né in scrittura e il gesto non parte da un controllo del contenuto; un gruppo anche dall'etichetta. Il clic che segue il rilascio non entra (IMP-041). L'aggancio vale al rilascio ([La griglia e le guide](canvas-view.md#la-griglia-e-le-guide)).
 - **Entrare.** Un clic dentro una scheda che era già la sola scelta, Invio
   con una scheda scelta che non è di testo, o il doppio clic su una nota, un
   documento o un foglio chiamano `enter()`. Una scheda ferma prima si
@@ -160,20 +151,10 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
 - **Ctrl+Invio** registra, chiude e apre in scrittura una scheda di testo larga
   uguale 24 px sotto (**Ctrl+Maiusc+Invio**: a destra, con un filo); su un'altra
   scheda, gruppi esclusi, scende sotto di lei al più 20 volte, poi resta sopra.
-- **Una scheda nuova lasciata vuota** (dal Testo, da Ctrl+Invio, da
-  «Aggiungi testo») se ne va uscendo, anche con Esc, coi suoi passi
-  d'annulla; una che c'era già resta.
-- **«Aggiungi testo»** (`canvas.add.text`: la riga delle opzioni, il menu del
-  tasto destro, Ctrl+/) apre la scheda già in scrittura. Senza un punto (la
-  riga, Ctrl+/) nasce nel primo posto libero vicino al centro della vista
-  (`free-spot.ts`: anelli di 40 unità attorno al centro, 16 di margine, i
-  gruppi non contano); dal menu, nel punto del clic. Il fuoco va nel testo.
-- **Solo il testo.** Il Live di una scheda si monta `pageless`: niente titolo
-  della pagina, proprietà, icona, copertina né sottopagina (IMP-044).
-- **I tasti della shell.** Mentre si scrive, un tasto con Ctrl (Cmd) che
-  l'editor non usa sale alla shell, e la tela non ne fa un suo comando:
-  Ctrl+W chiude la linguetta come fuori dalla scrittura. Restano al campo
-  Invio, Esc e i tasti che scrivono (Ctrl+A, C, V, X, Y, Z).
+- **Una scheda nuova lasciata vuota** (dal Testo, da Ctrl+Invio, da «Aggiungi testo») se ne va uscendo, anche con Esc, coi suoi passi d'annulla; una che c'era già resta.
+- **«Aggiungi testo»** (`canvas.add.text`: la riga delle opzioni, il menu, Ctrl+/) apre la scheda già in scrittura, col fuoco nel testo: dal menu nel punto del clic, se no nel primo posto libero vicino al centro della vista (`free-spot.ts`: anelli di 40 unità, 16 di margine, i gruppi non contano).
+- **Solo il testo.** Il Live di una scheda si monta `pageless`: niente titolo della pagina, proprietà, icona, copertina né sottopagina (IMP-044).
+- **I tasti della shell.** Un tasto con Ctrl (Cmd) che l'editor non usa sale alla shell, e la tela non ne fa un suo comando: Ctrl+W chiude la linguetta. Restano al campo Invio, Esc e Ctrl+A, C, V, X, Y, Z.
 
 ## La rotella
 
@@ -517,13 +498,7 @@ lavagna. Ogni pulsante è un comando del catalogo, col nome, il tasto e il
 perché quando è spento (`aria-disabled`); in sola lettura restano accesi solo
 quelli che non cambiano il file (Apri). I fili scelti da soli non la mostrano.
 
-- **Quando.** Compare a fine gesto (il rilascio del clic, un tasto): un
-  `pointerdown` nella vista la toglie, e non torna mentre si spostano o si
-  ridimensionano schede, si sceglie col rettangolo o col lazo, la penna è giù
-  (torna quando si alza) o si scrive in una scheda (il campo del testo, una
-  scheda attiva, una barra data con `setCardOptions`). La camera che si muove
-  senza puntatore giù (la rotella, lo zoom dai tasti, un volo) non la toglie:
-  la barra segue le schede a ogni passo, senza rifare i pulsanti (#411 C-06).
+- **Quando.** Compare a fine gesto (il rilascio del clic, un tasto): un `pointerdown` nella vista la toglie, e non torna mentre si spostano o si ridimensionano schede, si sceglie col rettangolo o col lazo, la penna è giù (torna quando si alza) o si scrive in una scheda (il campo del testo, una scheda attiva, una barra data con `setCardOptions`). La camera che si muove senza puntatore giù (la rotella, lo zoom dai tasti, un volo) non la toglie: la barra segue le schede a ogni passo, senza rifare i pulsanti (#411 C-06).
 - **Dove.** Sopra il riquadro delle schede scelte, centrata, a 26 px dalle
   schede per lasciare il titolo (T39); al bordo alto va sotto; dentro la vista
   ai lati (`bubblePlace` della bolla del testo). Con le schede tutte fuori
