@@ -47,6 +47,7 @@ import { edgeDepth, edgeScroll, type EdgeScroll } from "./autoscroll";
 import type { Teardown } from "../../../../../ui/lifetime";
 import type { PropertyType } from "../../../../../host/enums.generated";
 import type { PropertyTypes } from "../page/properties/kind";
+import type { NoteType, NoteTypeList, NoteTypeState } from "../../../../../state/note-types";
 
 export interface BlocksOptions {
   /// La nota e il suo vault: i posti fuori dalla colonna (i titoli della sua
@@ -83,6 +84,13 @@ export interface BlocksOptions {
   readonly setPropertyType?: (key: string, type: PropertyType) => Promise<string | null>;
   /// Le persone il cui nome combacia col testo, per l'editor delle persone.
   readonly searchPeople?: (text: string) => Promise<string[]>;
+  /// Il tipo della nota (E5) e i suoi gesti, come in `PageOptions`
+  /// (`../page/header.ts`): il tipo che `tipo` nomina, i tipi del vault per
+  /// «Scegli il tipo», la nota di un tipo da aprire, «In evidenza» nel tipo.
+  readonly noteType?: (raw: string) => NoteTypeState | null;
+  readonly listTypes?: () => Promise<NoteTypeList>;
+  readonly openType?: (doc: string) => void;
+  readonly featureInType?: (type: NoteType, key: string, on: boolean) => void;
   /// Esc è di chi ospita l'editor, che con lui ne esce (una scheda della
   /// lavagna): sul testo Esc non seleziona il blocco del cursore e passa
   /// all'ospite; una selezione di blocchi già fatta la chiude ancora.

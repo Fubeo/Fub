@@ -35,6 +35,10 @@ import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
 import { resolvedReference, settings } from "../../../../host/query";
 import { onEvent } from "../../../../state/kernel";
 import { openVaultRoot } from "../../../../state/store";
+import { featureInType, listNoteTypes, noteTypeOf, type NoteType, type NoteTypeState } from "../../../../state/note-types";
+import { undoLastOperation } from "../../../../state/vault";
+import { isErrorKind } from "../../../../host/errors";
+import { noteTypeSource } from "./page/note-type";
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { notify } from "../../../../ui/notify";
 import { errorText } from "../../../../host/errors";
@@ -670,6 +674,53 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // impostazioni di questa superficie, e ogni suo cambio rifà la testata.
   let propertyTypes: PropertyTypes = NO_TYPES;
   let propertyTypesRaw: unknown = undefined;
+  // Il tipo della nota (E5): lo dice il core quando il valore di `tipo`
+  // cambia, e la testata si rifà quando la risposta arriva.
+  const noteTypes = noteTypeSource({
+    lookup: (raw) => noteTypeOf(raw),
+    changed: () => redrawPageHeader(),
+    lifetime: life,
+  });
+  /// L'ultimo tipo saputo, per sapere quali file lo cambiano.
+  let lastNoteType: NoteTypeState | null = null;
+  // Un tipo cambiato su disco (le sue proprietà in evidenza, un tipo che
+  // arriva o se ne va) si richiede, raccolto dopo una pausa: mai per battuta.
+  let typeTimer: ReturnType<typeof setTimeout> | null = null;
+  const typeTouched = (...docs: string[]): void => {
+    const known = lastNoteType;
+    if (known === null) return;
+    if (known.state === "typed" && !docs.includes(known.type.doc)) return;
+    if (typeTimer !== null) clearTimeout(typeTimer);
+    typeTimer = setTimeout(() => {
+      typeTimer = null;
+      noteTypes.refresh();
+    }, 250);
+  };
+  life.add(() => {
+    if (typeTimer !== null) clearTimeout(typeTimer);
+  });
+  life.add(onEvent("document_changed", (event) => typeTouched(event.id)));
+  life.add(onEvent("document_removed", (event) => typeTouched(event.id)));
+  life.add(onEvent("document_renamed", (event) => typeTouched(event.from, event.to)));
+  /// «In evidenza» in una nota con un tipo: scrive nel file del tipo, con la
+  /// revisione letta; dice com'è andata, con «Annulla».
+  const featureTyped = async (type: NoteType, key: string, on: boolean): Promise<void> => {
+    try {
+      await featureInType(type, key, on);
+      notify(liveStrings.t(on ? "page.type.featured" : "page.type.unfeatured", { key, type: type.name }), "info", {
+        label: t("app.undo"),
+        run: () => void undoLastOperation().catch((error: unknown) => notify(errorText(error), "guasto")),
+      });
+    } catch (error) {
+      const message = isErrorKind(error, "conflict")
+        ? liveStrings.t("page.type.feature.changed", { type: type.name })
+        : isErrorKind(error, "permission_denied")
+          ? liveStrings.t("page.type.feature.denied", { type: type.name })
+          : liveStrings.t("page.type.feature.failed", { type: type.name, reason: errorText(error) });
+      notify(message, "guasto");
+    }
+    noteTypes.refresh();
+  };
   const pageOptions: PageOptions = {
     page: () => pageName(resources?.documentId ?? documentId),
     notify: (message, tone) => notify(message, tone),
@@ -696,6 +747,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
       : undefined,
     propertyTypes: () => propertyTypes,
+    noteType: (raw) => {
+      const known = noteTypes.stateFor(raw);
+      lastNoteType = known;
+      return known;
+    },
+    listTypes: () => listNoteTypes(),
+    openType: (doc) => void Promise.resolve(opts.onOpenPath(doc, linkSource())).catch((error: unknown) => notify(errorText(error), "guasto")),
+    featureInType: (type, key, on) => void featureTyped(type, key, on),
     // «Tipo» nel menu di una proprietà: vale per tutto il vault, ed è il
     // comando del registro (`property.type.set`) a scriverlo.
     setPropertyType: async (key, type) => {
@@ -815,6 +874,13 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   let readingPageTags = false;
   function readingFactTags(): boolean {
     return opts.noteFacts !== undefined && (noteFactsLabels(facts)?.tags.length ?? 0) > 0;
+  }
+  /// Rifà la testata in Scrittura e in Lettura: è cambiato qualcosa che il
+  /// testo non dice (il tipo della nota).
+  function redrawPageHeader(): void {
+    if (life.closed) return;
+    engine.runViewCommand((view) => refreshPageHeader(view));
+    if (mode === "reading" && unmountReadingPage) mountReadingPage();
   }
   function mountReadingPage(): void {
     unmountReadingPage?.();

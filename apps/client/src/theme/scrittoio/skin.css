@@ -3950,6 +3950,100 @@ kbd,
   text-decoration: underline;
 }
 
+/* **«Nuova nota di tipo»** (E5, prototipo `newNote()`): il menu sotto
+   «Nuova nota», e lo stesso per «Scegli il tipo» della testata. Il foglio del
+   prototipo (`.pop`, 13 px, angoli da 14), una testata in grigio
+   (`.m-h`), le voci con il tassello dell'icona (`.m-i .ic.tile`, 34 px) e
+   sotto il nome che cosa porta il tipo (`small`), e il piede che dice dove
+   stanno i tipi (`.m-foot`). */
+.kit-popover.note-type-popover {
+  min-width: 220px;
+  max-width: min(380px, calc(100vw - 16px));
+  padding: 0;
+  border-radius: calc(var(--radius-menu) + var(--space-2));
+  background: var(--sheet);
+  box-shadow: var(--shadow-pop, 0 0 0 1px color-mix(in oklab, var(--text) 8%, transparent), var(--shadow-3));
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+}
+.note-type-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.note-type-menu-head {
+  margin: 0 var(--space-3);
+  padding: 9px 8px 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: var(--weight-bold);
+}
+.note-type-menu-list {
+  position: relative;
+  max-height: min(360px, calc(100vh - 120px));
+  padding: var(--space-1) var(--space-3) var(--space-3);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.note-type-menu-head + .note-type-menu-list {
+  padding-top: 0;
+}
+.note-type-menu-item {
+  gap: 10px;
+  min-height: 34px;
+  padding: 4px 10px 4px 6px;
+  border-radius: var(--radius-control);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+.note-type-menu-tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+}
+.note-type-menu-tile > svg {
+  width: 16px;
+  height: 16px;
+}
+.note-type-menu-item[data-active] .note-type-menu-tile {
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+}
+.note-type-menu-label {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.note-type-menu-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-type-menu-sub {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-type-menu-foot {
+  margin: 0;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
 /* ── skin/tree.css ──────────────────────────────────────────────────────── */
 
 /* L'albero dei file. */
@@ -7598,6 +7692,56 @@ button.cm-fub-page-icon:focus-visible {
   font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
+/* Il tipo che la nota nomina non c'è, non si legge o non è un nome (E5):
+   un avviso come quello del frontmatter che non si legge, nel colore
+   dell'attenzione e non del guasto (la nota va), con i gesti che lo
+   risolvono in fondo alla riga. */
+.cm-fub-page-type-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill-soft);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+.cm-fub-page-type-notice > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--warning);
+}
+.cm-fub-page-type-text {
+  flex: 1 1 16em;
+  min-width: 0;
+}
+.cm-fub-page-type-action {
+  flex: none;
+  height: 26px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cm-fub-page-type-action:hover {
+  background: var(--doc-block-hover);
+}
+/* L'icona del tipo, al posto di quella che la nota non ha: la stessa, un
+   po' più quieta, perché non è della nota. */
+.cm-fub-page-icon[data-from-type] {
+  opacity: 0.85;
+}
+
 /* La riga dei dati chiude la testata, con un filo che la stacca dal testo.
    Le misure di `.facts` del prototipo (12.5/1.4), nei colori della carta.
    L'altezza non intera della riga non sposta le maniglie: CodeMirror misura

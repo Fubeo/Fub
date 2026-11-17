@@ -394,6 +394,16 @@
     "palette-row",
     "palette-title",
     "palette-desc",
+    "note-type-popover",
+    "note-type-menu",
+    "note-type-menu-head",
+    "note-type-menu-list",
+    "note-type-menu-item",
+    "note-type-menu-tile",
+    "note-type-menu-label",
+    "note-type-menu-name",
+    "note-type-menu-sub",
+    "note-type-menu-foot",
     "icon-picker",
     "icon-picker-title",
     "icon-grid",
@@ -706,6 +716,9 @@
     "fub-note--serif",
     "fub-note--sans",
     "fub-note--mono",
+    "cm-fub-page-type-notice",
+    "cm-fub-page-type-text",
+    "cm-fub-page-type-action",
     "cm-fub-page-props",
     "cm-fub-page-prop",
     "cm-fub-page-prop-key",
@@ -2493,6 +2506,16 @@
     "palette-row": "cornice",
     "palette-title": "cornice",
     "palette-desc": "cornice",
+    "note-type-popover": "cornice",
+    "note-type-menu": "cornice",
+    "note-type-menu-head": "cornice",
+    "note-type-menu-list": "cornice",
+    "note-type-menu-item": "cornice",
+    "note-type-menu-tile": "cornice",
+    "note-type-menu-label": "cornice",
+    "note-type-menu-name": "cornice",
+    "note-type-menu-sub": "cornice",
+    "note-type-menu-foot": "cornice",
     "icon-picker": "cornice",
     "icon-picker-title": "cornice",
     "icon-grid": "cornice",
@@ -2805,6 +2828,9 @@
     "fub-note--serif": "contenuto",
     "fub-note--sans": "contenuto",
     "fub-note--mono": "contenuto",
+    "cm-fub-page-type-notice": "contenuto",
+    "cm-fub-page-type-text": "contenuto",
+    "cm-fub-page-type-action": "contenuto",
     "cm-fub-page-props": "contenuto",
     "cm-fub-page-prop": "contenuto",
     "cm-fub-page-prop-key": "contenuto",
@@ -5250,6 +5276,30 @@
       ]
     },
     {
+      "name": "note-type-menu",
+      "part": "drawers",
+      "hooks": [
+        "kit-popover",
+        "note-type-popover",
+        "note-type-menu",
+        "note-type-menu-head",
+        "note-type-menu-list",
+        "note-type-menu-item",
+        "note-type-menu-tile",
+        "note-type-menu-label",
+        "note-type-menu-name",
+        "note-type-menu-sub",
+        "note-type-menu-foot"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
       "name": "icon-picker",
       "part": "drawers",
       "hooks": [
@@ -6128,6 +6178,21 @@
         "fub-note--serif",
         "fub-note--sans",
         "fub-note--mono"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-page-type",
+      "part": "document",
+      "hooks": [
+        "cm-fub-page-type-notice",
+        "cm-fub-page-type-text",
+        "cm-fub-page-type-action",
+        "cm-fub-page-icon"
       ],
       "states": [
         "rest",
@@ -11060,10 +11125,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 2097,
+    "hooks": 2110,
     "state_names": 7,
-    "assigned_states": 959,
-    "components": 281,
+    "assigned_states": 967,
+    "components": 283,
     "preference_tokens": 191
   }
 }

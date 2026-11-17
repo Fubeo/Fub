@@ -40,6 +40,7 @@
 // il posto giusto. Il mirror del contratto (`host/mirror.test.ts`) tiene ferma
 // la forma dei record; questo file non ne è un secondo, e infatti le risposte
 // che compone sono tipizzate dal contratto e non da sé.
+import { fakeNoteTypes } from "./fake-note-types";
 import type {
   BundleInfo,
   ComponentAction,
@@ -1436,7 +1437,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
     return answer;
   }
 
+  /// I tipi di nota (E5): elenco, tipo di una nota, nota da un tipo, e la
+  /// proprietà scritta in un file con il suo annulla.
+  const noteTypes = fakeNoteTypes({
+    docs: () => [...docs].map(([id, doc]) => [id, { text: doc.text, revision: doc.revision }]),
+    read: (id) => docs.get(id),
+    write,
+    changed: (id) => void emit({ type: "document_changed", id }),
+  });
+
   function command(id: string, args: Record<string, unknown> | null, mode: InvokeMode) {
+    const typed = noteTypes.command(id, args);
+    if (typed !== undefined) return typed;
     switch (id) {
       case CRAFT_PHOTO_COMMAND: {
         if (!options.craft || options.craft.component === false) {

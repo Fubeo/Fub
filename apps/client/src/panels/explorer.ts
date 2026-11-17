@@ -22,7 +22,7 @@ import {
   setSpace,
 } from "../state/organization";
 import { on, saveActiveSpace, saveExpanded, saveExplorerSort, state } from "../state/store";
-import { createFolder, createNote, duplicateNote, handToSystem, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation, useAsFolderPage } from "../state/vault";
+import { createFolder, duplicateNote, handToSystem, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation, useAsFolderPage } from "../state/vault";
 import { carriesFiles, offerOutside, pickedFiles, readDropped, type Dropped } from "../ui/vault-transfer";
 import { confirm } from "../platform/confirm";
 import {
@@ -69,7 +69,9 @@ import { writeClipboardText } from "../platform/clipboard";
 import { searchFor } from "../state/search-port";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
 import { onComponents } from "../state/components";
-import { canShowFile, copyNoteLinks, focusEditor, openDocument, openDocumentBeside } from "../state/document-controller";
+import { canShowFile, copyNoteLinks, openDocument, openDocumentBeside } from "../state/document-controller";
+import { newNoteInActiveSpace } from "../state/new-note";
+import { mountExplorerTypes, type ExplorerTypes } from "./explorer-types";
 import { addBookmark, loadBookmarks, type BookmarkTarget } from "../state/bookmarks";
 import { openCurrentInNewWindow } from "../state/document-windows";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
@@ -356,6 +358,14 @@ export function mountExplorer(lifetime: Lifetime): void {
     open: openFiltered,
   });
   lifetime.add(() => (filter = null));
+  // I tipi di nota (E5) fra le appuntate e «Tutte le note».
+  types = mountExplorerTypes({
+    lifetime,
+    after: pinnedListEl,
+    covered: () => filter?.active() === true,
+    open: (doc) => void openDocument(doc, { gesture: true }),
+  });
+  lifetime.add(() => (types = null));
   lifetime.add(on("documents", () => filter?.stale()));
   lifetime.add(on("vault", () => filter?.hide()));
   // L'organizzazione cambiata ridisegna la stessa vista senza richiederla:
@@ -1625,6 +1635,8 @@ async function followActive(): Promise<void> {
 
 /// Il filtro per percorso sopra l'albero, finché l'esplora è montata.
 let filter: ExplorerFilter | null = null;
+/// La sezione «Tipi», finché l'esplora è montata.
+let types: ExplorerTypes | null = null;
 
 /// Ogni voce e cartella dello spazio corrente, per il filtro: due domande sole
 /// a tutto lo spazio, fatte una volta per filtro.
@@ -1752,6 +1764,7 @@ function renderPinned(): void {
   const hidePinned = pinned.length === 0 || filter?.active() === true;
   pinnedTitleEl.hidden = hidePinned;
   pinnedListEl.hidden = hidePinned;
+  types?.render();
   pinnedListEl.innerHTML = "";
   for (const id of pinned) {
     const li = document.createElement("li");
@@ -2054,19 +2067,18 @@ function searchInFolder(path: string): void {
 }
 
 async function newNote(folder: string | null = state.activeSpace): Promise<void> {
-  try {
-    const created = await createNote(undefined, folder ?? undefined);
-    if (created) {
+  // Il gesto è quello di ogni shell (`state/new-note.ts`): coi tipi nel vault
+  // chiede prima il tipo, nel menu sotto «Nuova nota» (E5).
+  await newNoteInActiveSpace({
+    anchor: newNoteEl,
+    folder,
+    beforeOpen: () => {
       if (folder && !state.expanded.has(folder)) {
         state.expanded.add(folder);
         saveExpanded();
       }
-      await openDocument(created);
-    }
-    focusEditor();
-  } catch (error) {
-    notify(t("explorer.create_failed", { reason: errorText(error) }), "guasto");
-  }
+    },
+  });
 }
 
 /// Una cartella nuova dentro `parent` ("" è la radice): un campo in cima al

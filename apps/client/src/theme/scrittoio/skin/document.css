@@ -1499,6 +1499,56 @@ button.cm-fub-page-icon:focus-visible {
   font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
+/* Il tipo che la nota nomina non c'è, non si legge o non è un nome (E5):
+   un avviso come quello del frontmatter che non si legge, nel colore
+   dell'attenzione e non del guasto (la nota va), con i gesti che lo
+   risolvono in fondo alla riga. */
+.cm-fub-page-type-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill-soft);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+.cm-fub-page-type-notice > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--warning);
+}
+.cm-fub-page-type-text {
+  flex: 1 1 16em;
+  min-width: 0;
+}
+.cm-fub-page-type-action {
+  flex: none;
+  height: 26px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cm-fub-page-type-action:hover {
+  background: var(--doc-block-hover);
+}
+/* L'icona del tipo, al posto di quella che la nota non ha: la stessa, un
+   po' più quieta, perché non è della nota. */
+.cm-fub-page-icon[data-from-type] {
+  opacity: 0.85;
+}
+
 /* La riga dei dati chiude la testata, con un filo che la stacca dal testo.
    Le misure di `.facts` del prototipo (12.5/1.4), nei colori della carta.
    L'altezza non intera della riga non sposta le maniglie: CodeMirror misura
