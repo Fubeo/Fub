@@ -229,6 +229,7 @@ Tutti i comandi girano da `apps/client/`; gli script sorgente sono in
 | `npm run bench:a11y` | accessibilità della pagina resa (`-- --scene=a,b` per alcune scene, `-- --light=dark` per una luce) |
 | `npm run bench:motion` | le coreografie del moto dello Scrittoio |
 | `npm run bench:lampo` | lo strato d'avvio prima di ogni modulo |
+| `npm run bench:conformita` | gli stili calcolati dell'app contro quelli del prototipo del piano (`-- --light=dark` per una luce, vedi [la conformità al prototipo](visual-bench.md)) |
 | `npm run bench:interaction` | il budget d'interazione (menu, palette, nota) |
 | `npm run bench:ink` | l'inchiostro in TypeScript e in WebAssembly, fianco a fianco |
 | `npm run bench:fidelity` | la fedeltà pixel dei disegni (foglio, PNG, Lettura) |
@@ -302,7 +303,20 @@ appena qualcuno inserisce un item nel mezzo.
   rosso si corregge con una PR normale.
 - I test del workspace girano con `cargo nextest run --workspace --profile ci`
   più `cargo test --workspace --doc`; i fuzzer del Markdown girano a 2000 casi
-  (20000 nella corsa settimanale e con `fuzz_completo`).
+  (20000 nella corsa settimanale e con `fuzz_completo`). Su Windows si
+  dividono in tre job, `build + test (windows-latest, 1/3)` e seguenti: ognuno
+  compila tutto e fa girare un terzo dei test (`--partition hash:<parte>/3`),
+  e i doctest girano nella prima parte. Il numero delle parti sta in
+  `PARTI_WINDOWS` di
+  [`baseline-dal-runner.mjs`](../../.github/scripts/baseline-dal-runner.mjs),
+  che la sua autoprova confronta con la matrice.
+- I test dei workspace in `vendor/` (WordCraft, GridCraft, VectorCraft) sono
+  un job loro, `motori in vendor`: su una PR girano solo se tocca `vendor/`,
+  `.cargo/`, una `rust-toolchain` o `ci.yml`, perché leggono soltanto quelli;
+  su `main` sempre. I test del workspace non hanno un filtro così: leggono
+  anche `apps/client/` e `docs/`.
+- La WebView vera gira in due job: R1 (la memoria) da sola, e gli altri
+  scenari insieme.
 - La cache Rust salva solo da `main` (budget di 10 GB); i job che possono
   riutilizzarla leggono la test cache di Linux con `shared-key: test` e non la
   risalvano.
@@ -362,6 +376,7 @@ guardano comunque, nel foglio di contatto dell'artefatto, prima di unire.
 | menu o voci di un menu | `src/ui/menu-budget.test.ts` (nove voci e quattro gruppi al primo livello, niente tasti per muoversi scritti nel menu) |
 | azioni di un blocco, maniglia, barra di formato, pulsanti sul foglio | `src/editors/text/profiles/markdown/three-doors.test.ts` (le stesse azioni da ogni porta, nessun pulsante a riposo) |
 | resa | banco visuale |
+| grafica portata da un prototipo | i pezzi nella mappa di `bench/conformita/` e `npm run bench:conformita` verde |
 | WIT | conformità, additività e componente reale |
 | runtime WASM | componente reale, casi positivi e negativi di limiti e ciclo di vita |
 | docs | tutti i guard documentali |

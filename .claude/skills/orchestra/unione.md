@@ -11,7 +11,9 @@ Read this when a coder reports `FATTO`.
 - Read the diff of the non-test code. Skim the tests only to confirm they prove
   the task's `Fatto quando`, and that none was deleted, skipped or weakened.
 - Graphic task: open the screenshots named under `FOTO` and compare them with
-  the prototype, both lights and the narrow width.
+  the prototype, both lights and the narrow width. Its pieces are in the map of
+  `apps/client/bench/conformita/` and `npm run bench:conformita` is green; every
+  new entry in `eccezioni-<prototipo>.json` cites DECISIONS or the plan.
 - Check the `CLAUDE.md` closing gate against what you read: owner of the rule,
   generated files from their source, docs updated, no new dependency nobody
   asked for.

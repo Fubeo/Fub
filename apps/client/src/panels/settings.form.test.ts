@@ -46,6 +46,9 @@ vi.mock("../ui/motion", () => ({
 vi.mock("../ui/tooltip", () => ({ setTooltip: () => {} }));
 vi.mock("../ui/notify", () => ({ notify: vi.fn() }));
 
+import { onEvent } from "../state/kernel";
+import { THEME_KEY } from "../theme/theme";
+import { CSS_SNIPPETS_KEY } from "../theme/snippets";
 import { mountSettings } from "./settings";
 
 function entry(
@@ -142,6 +145,18 @@ beforeEach(() => {
     found.source = "default";
   });
 });
+
+/// L'osservatore `setting_changed` dell'ultimo pannello montato: la via del
+/// backend vero.
+function settingChanged(key: string): void {
+  const call = [...vi.mocked(onEvent).mock.calls].reverse().find(([name]) => name === "setting_changed");
+  expect(call, "il pannello ascolta setting_changed").toBeDefined();
+  (call![1] as (event: { type: "setting_changed"; key: string; scope: "machine" }) => void)({
+    type: "setting_changed",
+    key,
+    scope: "machine",
+  });
+}
 
 describe("il form generico", () => {
   it("non mostra le chiavi che hanno un gesto loro altrove", async () => {
@@ -463,21 +478,28 @@ describe("la cornice della finestra", () => {
     expect(document.querySelector('[data-setting-key="chrome.frame"]')!.textContent).toContain("prossima apertura");
   });
 
-  it("un ridisegno a scrittura in volo non riaccende le scelte della cornice", async () => {
+  it("una scelta della cornice in volo resta usabile, e un ridisegno intero non la riporta indietro", async () => {
     let finish!: () => void;
     fake.setSetting.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    fake.frameCapabilities.mockResolvedValue({ system: false, custom: true });
     await openPanel([frame("custom"), toggle("editor.spellcheck", true)]);
+    fake.frameCapabilities.mockResolvedValue({ system: true, custom: true });
+    // Riletto con le capacità di adesso, prima della scelta.
+    settingChanged("");
+    await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('#setting-chrome\\.frame [data-choice="system"]')!.disabled).toBe(false));
+    const rowBefore = document.querySelector('[data-setting-key="chrome.frame"]');
     document.querySelector<HTMLButtonElement>('#setting-chrome\\.frame [data-choice="system"]')!.click();
     await vi.waitFor(() => expect(document.querySelector('[data-setting-key="chrome.frame"]')?.getAttribute("aria-busy")).toBe("true"));
-    // Un'altra riga scrive e ridisegna tutto mentre la cornice è in volo.
-    const other = document.getElementById("setting-editor.spellcheck") as HTMLInputElement;
-    other.checked = false;
-    other.dispatchEvent(new Event("change", { bubbles: true }));
-    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith("editor.spellcheck", false));
-    await vi.waitFor(() => expect((document.getElementById("setting-editor.spellcheck") as HTMLInputElement).checked).toBe(false));
+    // Un ridisegno intero mentre la cornice è in volo: la riga in volo passa
+    // com'è, con la scelta della persona, e resta usabile.
+    settingChanged("");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(document.querySelector('[data-setting-key="chrome.frame"]')).toBe(rowBefore);
     const radios = [...document.querySelectorAll<HTMLButtonElement>('#setting-chrome\\.frame [role="radio"]')];
-    expect(radios.map((radio) => radio.disabled)).toEqual([true, true]);
+    expect(radios.map((radio) => radio.disabled)).toEqual([false, false]);
+    expect(radios.find((radio) => radio.dataset.choice === "system")!.getAttribute("aria-checked")).toBe("true");
     finish();
+    await vi.waitFor(() => expect(document.querySelector('[data-setting-key="chrome.frame"]')?.getAttribute("aria-busy")).toBeNull());
   });
 
   it("se le capacità non si leggono, la scelta si ferma e lo dice", async () => {
@@ -487,6 +509,294 @@ describe("la cornice della finestra", () => {
     expect(group.getAttribute("aria-disabled")).toBe("true");
     expect([...group.querySelectorAll("button")].every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
     expect(document.querySelector('[data-setting-key="chrome.frame"]')!.textContent).toContain("finestra senza cornice nativa");
+  });
+});
+
+describe("un setting_changed con il pannello aperto rifà solo la riga che cambia", () => {
+  const rowOf = (key: string) => document.querySelector<HTMLElement>(`#settings-body [data-setting-key="${key}"]`)!;
+  const stored = (key: string) => fake.entries.find((candidate) => candidate.spec.key === key)!;
+  const rows = () => [
+    toggle("editor.spellcheck", true, "default", "Editor"),
+    toggle("editor.vim", false, "machine", "Editor"),
+    toggle("history.enabled", true, "default", "Privacy"),
+  ];
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+  /// Quante volte la riga di `key` è stata ridisegnata da quando la si guarda:
+  /// sostituita intera, o aggiornata sul posto (il suo testo rifatto).
+  function countReplacements(key: string): () => number {
+    let count = 0;
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.removedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          const whole = node.dataset.settingKey === key || node.querySelector(`[data-setting-key="${key}"]`) !== null;
+          const text = node.classList.contains("setting-text") &&
+            (record.target as HTMLElement).dataset?.settingKey === key;
+          if (whole || text) count++;
+        }
+      }
+    });
+    observer.observe(document.getElementById("settings-body")!, { childList: true, subtree: true });
+    return () => {
+      observer.takeRecords();
+      return count;
+    };
+  }
+
+  it("cambia solo la riga della chiave: le altre righe, le sezioni e l'indice restano gli stessi nodi", async () => {
+    await openFullPanel(rows());
+    const before = rowOf("editor.spellcheck");
+    const control = document.getElementById("setting-editor.spellcheck");
+    const vim = rowOf("editor.vim");
+    const history = rowOf("history.enabled");
+    const sections = [...document.querySelectorAll("#settings-body > .settings-section")];
+    const links = [...document.querySelectorAll("#settings-toc-list li")];
+    stored("editor.spellcheck").value = false;
+    stored("editor.spellcheck").source = "machine";
+    settingChanged("editor.spellcheck");
+    await vi.waitFor(() => expect(document.getElementById("setting-editor.spellcheck")).not.toBe(control));
+    expect((document.getElementById("setting-editor.spellcheck") as HTMLInputElement).checked).toBe(false);
+    // La riga si aggiorna sul posto: è lo stesso nodo, col campo nuovo.
+    expect(rowOf("editor.spellcheck")).toBe(before);
+    expect(before.dataset.modified).toBe("true");
+    expect(rowOf("editor.vim")).toBe(vim);
+    expect(rowOf("history.enabled")).toBe(history);
+    expect([...document.querySelectorAll("#settings-body > .settings-section")]).toEqual(sections);
+    // Solo la voce dell'indice della sezione toccata si rifà.
+    const linksAfter = [...document.querySelectorAll("#settings-toc-list li")];
+    expect(linksAfter[1]).toBe(links[1]);
+    expect(linksAfter[2]).toBe(links[2]);
+  });
+
+  it("una chiave che non cambia niente di ciò che si vede non tocca il corpo", async () => {
+    await openFullPanel(rows());
+    const replaced = countReplacements("editor.vim");
+    const reads = fake.readSettings.mock.calls.length;
+    settingChanged("editor.vim");
+    await vi.waitFor(() => expect(fake.readSettings.mock.calls.length).toBe(reads + 1));
+    await settle();
+    expect(replaced()).toBe(0);
+  });
+
+  it("un evento senza chiave ridisegna tutto", async () => {
+    await openFullPanel(rows());
+    const vim = rowOf("editor.vim");
+    settingChanged("");
+    await vi.waitFor(() => expect(rowOf("editor.vim")).not.toBe(vim));
+  });
+
+  it("uno schema cambiato (una riga comparsa) ridisegna tutto", async () => {
+    await openFullPanel(rows());
+    const vim = rowOf("editor.vim");
+    fake.entries = [...fake.entries, toggle("editor.minimap", true, "default", "Editor")];
+    stored("editor.spellcheck").value = false;
+    settingChanged("editor.spellcheck");
+    await vi.waitFor(() => expect(rowOf("editor.minimap")).not.toBeNull());
+    expect(rowOf("editor.vim")).not.toBe(vim);
+  });
+
+  for (const key of [THEME_KEY, CSS_SNIPPETS_KEY, "chrome.frame"]) {
+    it(`${key} ridisegna tutto`, async () => {
+      await openFullPanel(rows());
+      const vim = rowOf("editor.vim");
+      settingChanged(key);
+      await vi.waitFor(() => expect(rowOf("editor.vim")).not.toBe(vim));
+    });
+  }
+
+  it("la cornice cambiata da fuori ridisegna tutto anche quando l'evento è di un'altra chiave", async () => {
+    const frame = entry(
+      "chrome.frame",
+      { kind: "choice", default: "custom", options: [{ value: "system", label: "Del sistema" }, { value: "custom", label: "Personalizzata" }] },
+      "custom",
+      "default",
+      "Interfaccia",
+    );
+    await openFullPanel([...rows(), frame]);
+    const vim = rowOf("editor.vim");
+    stored("chrome.frame").value = "system";
+    stored("editor.spellcheck").value = false;
+    settingChanged("editor.spellcheck");
+    await vi.waitFor(() => expect(rowOf("editor.vim")).not.toBe(vim));
+  });
+
+  it("il conto delle modificate, «Ripristina gruppo» e il numero dell'indice seguono la riga", async () => {
+    await openFullPanel(rows());
+    const editor = document.querySelector<HTMLElement>("#settings-body > .settings-section")!;
+    const head = editor.querySelector(".settings-section-head")!;
+    const badge = () => document.querySelector("#settings-toc-list button[data-target] .settings-toc-badge")?.textContent ?? null;
+    expect(head.querySelector(".settings-section-meta")?.textContent).toBe("1 modificata");
+    expect(badge()).toBe("1");
+
+    stored("editor.spellcheck").value = false;
+    stored("editor.spellcheck").source = "machine";
+    settingChanged("editor.spellcheck");
+    await vi.waitFor(() => expect(head.querySelector(".settings-section-meta")?.textContent).toBe("2 modificate"));
+    expect(editor.dataset.modifiedCount).toBe("2");
+    expect(badge()).toBe("2");
+    expect(head.querySelectorAll(".settings-section-reset")).toHaveLength(1);
+    // Il ripristino del gruppo azzera le righe modificate di adesso, non quelle
+    // del disegno di prima.
+    head.querySelector<HTMLButtonElement>(".settings-section-reset")!.click();
+    await vi.waitFor(() => expect(fake.resetSetting).toHaveBeenCalledTimes(2));
+    expect(fake.resetSetting.mock.calls.map(([key]) => key)).toEqual(["editor.spellcheck", "editor.vim"]);
+    await vi.waitFor(() => expect(document.querySelector("#settings-body .settings-section-reset")).toBeNull());
+
+    // Di nuovo una riga diversa dal predefinito, e poi nessuna: conto, pulsante
+    // e numero spariscono con l'ultima.
+    stored("editor.vim").value = true;
+    stored("editor.vim").source = "machine";
+    settingChanged("editor.vim");
+    const section = () => document.querySelector<HTMLElement>("#settings-body > .settings-section")!;
+    await vi.waitFor(() => expect(section().querySelector(".settings-section-meta")?.textContent).toBe("1 modificata"));
+    expect(badge()).toBe("1");
+    stored("editor.vim").value = false;
+    stored("editor.vim").source = "default";
+    settingChanged("editor.vim");
+    await vi.waitFor(() => expect(section().querySelector(".settings-section-meta")).toBeNull());
+    expect(section().dataset.modifiedCount).toBeUndefined();
+    expect(section().querySelector(".settings-section-reset")).toBeNull();
+    expect(badge()).toBeNull();
+  });
+
+  it("una scrittura da riga produce un solo aggiornamento, anche col suo setting_changed in mezzo", async () => {
+    await openFullPanel(rows());
+    // Come l'host vero: la scrittura emette l'evento della sua chiave.
+    fake.setSetting.mockImplementation(async (key: string, value: unknown) => {
+      stored(key).value = value as SettingEntry["value"];
+      stored(key).source = "machine";
+      settingChanged(key);
+    });
+    const replaced = countReplacements("editor.spellcheck");
+    const vim = rowOf("editor.vim");
+    const reads = fake.readSettings.mock.calls.length;
+    const input = document.getElementById("setting-editor.spellcheck") as HTMLInputElement;
+    input.checked = false;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => expect(rowOf("editor.spellcheck").getAttribute("aria-busy")).toBeNull());
+    await vi.waitFor(() => expect((document.getElementById("setting-editor.spellcheck") as HTMLInputElement).checked).toBe(false));
+    await settle();
+    expect(fake.readSettings.mock.calls.length).toBe(reads + 1);
+    expect(replaced()).toBe(1);
+    expect(rowOf("editor.vim")).toBe(vim);
+    // L'evento che arriva dopo l'esito (l'ordine non è garantito) rilegge, ma
+    // non trova niente da rifare.
+    settingChanged("editor.spellcheck");
+    await vi.waitFor(() => expect(fake.readSettings.mock.calls.length).toBe(reads + 2));
+    await settle();
+    expect(replaced()).toBe(1);
+  });
+});
+
+describe("una riga in volo resta usabile, e l'ultima scrittura vince (A03)", () => {
+  const SIZE = "editor.size";
+  const size = (value: number) => entry(SIZE, { kind: "number", default: 16, min: 10, max: 30 }, value);
+  const field = () => document.getElementById(`setting-${SIZE}`) as HTMLInputElement;
+  const rowOf = (key: string) => document.querySelector<HTMLElement>(`#settings-body [data-setting-key="${key}"]`)!;
+  const stored = (key: string) => fake.entries.find((candidate) => candidate.spec.key === key)!;
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+  function writeNumber(value: number): void {
+    const input = field();
+    input.value = String(value);
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  /// Le scritture che l'host riceve, ciascuna da sbloccare a mano.
+  function heldWrites(): { calls: unknown[]; release: (index: number, error?: Error) => void } {
+    const pending: { resolve: () => void; reject: (e: Error) => void }[] = [];
+    const calls: unknown[] = [];
+    fake.setSetting.mockImplementation((key: string, value: unknown) => {
+      calls.push(value);
+      return new Promise<void>((resolve, reject) => {
+        pending.push({
+          resolve: () => {
+            stored(key).value = value as SettingEntry["value"];
+            stored(key).source = "machine";
+            resolve();
+          },
+          reject,
+        });
+      });
+    });
+    return {
+      calls,
+      release: (index, error) => (error ? pending[index]!.reject(error) : pending[index]!.resolve()),
+    };
+  }
+
+  it("il controllo col fuoco resta acceso e col fuoco mentre la scrittura è in volo", async () => {
+    await openPanel([toggle("editor.spellcheck", true)]);
+    const writes = heldWrites();
+    const input = document.getElementById("setting-editor.spellcheck") as HTMLInputElement;
+    input.focus();
+    input.click();
+    await vi.waitFor(() => expect(rowOf("editor.spellcheck").getAttribute("aria-busy")).toBe("true"));
+    expect(rowOf("editor.spellcheck").querySelector('[role="status"]')?.textContent).toBeTruthy();
+    expect(input.disabled).toBe(false);
+    expect(document.activeElement).toBe(input);
+    writes.release(0);
+    await vi.waitFor(() => expect(rowOf("editor.spellcheck").getAttribute("aria-busy")).toBeNull());
+    expect((document.getElementById("setting-editor.spellcheck") as HTMLInputElement).checked).toBe(false);
+    expect(document.activeElement).toBe(document.getElementById("setting-editor.spellcheck"));
+  });
+
+  it("due scritture rapide mentre una è in volo: parte solo l'ultima, dopo, e vince", async () => {
+    await openPanel([size(16)]);
+    const writes = heldWrites();
+    writeNumber(20);
+    await vi.waitFor(() => expect(writes.calls).toEqual([20]));
+    writeNumber(21);
+    writeNumber(22);
+    await settle();
+    // In fila, non insieme: la seconda aspetta la prima.
+    expect(writes.calls).toEqual([20]);
+    writes.release(0);
+    await vi.waitFor(() => expect(writes.calls).toEqual([20, 22]));
+    expect(rowOf(SIZE).getAttribute("aria-busy")).toBe("true");
+    writes.release(1);
+    await vi.waitFor(() => expect(rowOf(SIZE).getAttribute("aria-busy")).toBeNull());
+    expect(stored(SIZE).value).toBe(22);
+    expect(field().value).toBe("22");
+    expect(rowOf(SIZE).querySelector(".setting-error")).toBeNull();
+  });
+
+  it("se l'ultima della fila non va, torna il valore salvato e la riga lo dice", async () => {
+    await openPanel([size(16)]);
+    const writes = heldWrites();
+    writeNumber(20);
+    await vi.waitFor(() => expect(writes.calls).toEqual([20]));
+    writeNumber(22);
+    await settle();
+    // La seconda aspetta la prima: non c'è una scrittura vecchia che arrivi
+    // dopo quella nuova.
+    expect(writes.calls).toEqual([20]);
+    writes.release(0);
+    await vi.waitFor(() => expect(writes.calls).toEqual([20, 22]));
+    writes.release(1, new Error("disco pieno"));
+    await vi.waitFor(() => expect(rowOf(SIZE).querySelector(".setting-error")).not.toBeNull());
+    const error = rowOf(SIZE).querySelector(".setting-error")!;
+    expect(error.getAttribute("role")).toBe("alert");
+    expect(error.textContent).toContain("disco pieno");
+    expect(error.querySelector(".setting-attempted")?.textContent).toBe("22");
+    // Il valore autorevole: quello della scrittura che è andata.
+    expect(field().value).toBe("20");
+    expect(rowOf(SIZE).getAttribute("aria-busy")).toBeNull();
+  });
+
+  it("una scrittura superata che non va non conta: vale l'esito dell'ultima", async () => {
+    await openPanel([size(16)]);
+    const writes = heldWrites();
+    writeNumber(20);
+    await vi.waitFor(() => expect(writes.calls).toEqual([20]));
+    writeNumber(22);
+    writes.release(0, new Error("disco pieno"));
+    await vi.waitFor(() => expect(writes.calls).toEqual([20, 22]));
+    writes.release(1);
+    await vi.waitFor(() => expect(rowOf(SIZE).getAttribute("aria-busy")).toBeNull());
+    expect(rowOf(SIZE).querySelector(".setting-error")).toBeNull();
+    expect(field().value).toBe("22");
   });
 });
 
@@ -522,6 +832,24 @@ describe("il perché delle animazioni ridotte di partenza", () => {
   it("la nota resta anche dopo una scelta, perché spiega il valore di partenza", async () => {
     await openPanel([motion("reduced", "", "machine")]);
     expect(rowOf().textContent).toContain(why);
+  });
+
+  it("la nota resta quando la riga si aggiorna sul posto a un setting_changed", async () => {
+    await openFullPanel([motion("reduced", "reduced"), toggle("editor.vim", false, "default", "Editor")]);
+    const before = rowOf();
+    const control = document.getElementById("setting-appearance.motion");
+    const stored = fake.entries.find((candidate) => candidate.spec.key === "appearance.motion")!;
+    stored.value = "calm";
+    stored.source = "machine";
+    settingChanged("appearance.motion");
+    await vi.waitFor(() => expect(document.getElementById("setting-appearance.motion")).not.toBe(control));
+    // La via per riga, non il ridisegno intero: la riga è lo stesso nodo.
+    expect(rowOf()).toBe(before);
+    const note = document.getElementById("setting-appearance.motion-default-why")!;
+    expect(note.textContent).toContain(why);
+    expect(rowOf().contains(note)).toBe(true);
+    const fresh = document.getElementById("setting-appearance.motion")!;
+    expect(fresh.getAttribute("aria-describedby")!.split(" ")).toContain(note.id);
   });
 
   it("dove si parte dal sistema la nota non c'è", async () => {

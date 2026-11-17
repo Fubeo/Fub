@@ -29,6 +29,10 @@ file in `src/` knows the bench exists, so keep it that way.
   and Enter can't accept a completion: pass `{ clock: false }` for that.
 - Don't edit files under `apps/client` while a bench runs: Vite reloads the
   page and the bench dies.
+- A UI ported from a plan prototype is also checked by numbers:
+  `npm run bench:conformita` compares computed styles with the prototype's,
+  piece by piece, through the map in `bench/conformita/` (how to add pieces and
+  regenerate the expected values: `docs/development/visual-bench.md`).
 
 Probes:
 
