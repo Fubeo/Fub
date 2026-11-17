@@ -2997,7 +2997,7 @@ veloce con l'IME.
 Fatto quando: ogni tasto della tabella col suo annulla; le tre misure.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
-Stato: [~] in corso (coder, da 0f4a7c9a1 di T62, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (00b4d01ab, 2026-11-17), PR bozza #472. Nuovo facet `mathClassic`: con Vim resta il riquadro di prima, `mathSource` è il campo nel riquadro nuovo. «Posto» (In riga/A blocco) non è nei puntini: è di T65. La tavolozza dei Discreti si apre a richiesta («Simboli» o Alt+↓). Col campo, dopo l'ultimo spazio vuoto, il Tab va ai puntini e poi esce.
 
 ## T64 · Formule: gli errori in chiaro con la correzione
 
