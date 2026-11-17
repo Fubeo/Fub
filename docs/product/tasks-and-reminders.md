@@ -172,16 +172,16 @@ Live).
 In fondo alla nota del giorno, in Live, dopo l'ultima riga, Fub mostra la
 **pagina del giorno**: tre gruppi che si chiudono con un clic sul titolo.
 
-- **Compiti di oggi** (o «Compiti del giorno» per una giornaliera di un altro
-  giorno): i compiti aperti che scadono quel giorno, in tutto il vault, col
-  nome della nota accanto.
+- **Compiti del giorno** (sulla giornaliera del giorno corrente il titolo lo
+  dice): i compiti aperti che scadono quel giorno, in tutto il vault, col nome
+  della nota accanto.
 - **Stesso giorno**: le note con una proprietà data di quel giorno (anche in
   una lista di date), con accanto il nome della proprietà.
 - **Create e cambiate**: le note cambiate quel giorno, la più recente in cima,
   con l'ora. La giornaliera stessa non c'è.
 
-Una riga apre la sua nota. Il giorno è quello del nome della nota, non quello
-di oggi: la giornaliera di ieri mostra i compiti di ieri. Il giorno di una
+Una riga apre la sua nota. Il giorno è quello del nome della nota, non il giorno
+corrente: la giornaliera di ieri mostra i compiti di ieri. Il giorno di una
 modifica e l'ora seguono il fuso e il formato dell'ora di chi guarda.
 
 La pagina **non è nel file**: non si scrive, non entra in ciò che si copia né
