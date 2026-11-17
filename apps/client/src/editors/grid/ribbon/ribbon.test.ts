@@ -142,6 +142,22 @@ describe("la barra multifunzione", () => {
     expect(bold.getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("annulla e ripete col fuoco su un pulsante della barra, non in un suo campo (IMP-035)", () => {
+    const press = (target: HTMLElement, name: string, shiftKey = false) =>
+      target.dispatchEvent(new KeyboardEvent("keydown", { key: name, ctrlKey: true, shiftKey, bubbles: true, cancelable: true }));
+    const bold = control("Grassetto");
+    press(bold, "z");
+    press(bold, "y");
+    press(bold, "Z", true);
+    expect(f.calls).toEqual([["edit.undo", {}], ["edit.redo", {}], ["edit.redo", {}]]);
+    const field = f.root.querySelector<HTMLInputElement>(".grid-ribbon input")!;
+    expect(press(field, "z")).toBe(true);
+    expect(f.calls).toHaveLength(3);
+    ribbon.destroy();
+    press(bold, "z");
+    expect(f.calls).toHaveLength(3);
+  });
+
   it("spegne un comando spento e toglie quello che il catalogo non serve", () => {
     f.commands = f.commands
       .filter((command) => command.id !== "home.italic")
