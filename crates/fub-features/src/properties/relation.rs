@@ -125,10 +125,10 @@ fn resolve(
         from: Some(from.clone()),
     })? {
         IndexResult::Resolved(found) => Ok(found.map(|found| found.doc)),
-        other => Err(PluginError::Internal(Text::from(format!(
-            "relazione inversa: risposta inattesa {}",
-            other.kind_name()
-        )))),
+        other => Err(PluginError::Internal(Text::message(
+            E_LINKED_FROM,
+            vec![Arg::text("kind", other.kind_name())],
+        ))),
     }
 }
 

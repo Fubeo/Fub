@@ -79,6 +79,7 @@ const P_TARGET_SAME: &str = "p_target_same";
 const U_TARGET: &str = "u_target";
 const E_NOT_RELATION: &str = "e_not_relation";
 const E_TARGET: &str = "e_target";
+const E_LINKED_FROM: &str = "e_linked_from";
 
 /// Chiavi del core: il formato di data e il registro dei tipi del vault.
 const DATE_FORMAT_KEY: &str = "properties.date-format";

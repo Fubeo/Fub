@@ -498,6 +498,10 @@ fn options_it(catalog: StringCatalog) -> StringCatalog {
             E_TARGET,
             "«{value}» non è un bersaglio: scrivi un tipo come [[Tipi/Libro]] o una cartella del vault come Libri.",
         )
+        .with(
+            E_LINKED_FROM,
+            "Non ho potuto leggere le note che legano questa: l'indice ha dato una risposta inattesa ({kind}). Riprova; se succede ancora, ricostruisci l'indice.",
+        )
         .with("property.target.set.title", "Scegli il bersaglio di una Relazione")
         .with(
             "property.target.set.desc",
@@ -602,6 +606,10 @@ fn options_en(catalog: StringCatalog) -> StringCatalog {
         .with(
             E_TARGET,
             "«{value}» is not a target: write a type like [[Types/Book]] or a vault folder like Books.",
+        )
+        .with(
+            E_LINKED_FROM,
+            "Could not read the notes that link here: the index gave an unexpected answer ({kind}). Try again; if it happens again, rebuild the index.",
         )
         .with("property.target.set.title", "Choose the target of a Relation")
         .with(
