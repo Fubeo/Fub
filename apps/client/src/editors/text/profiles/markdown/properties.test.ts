@@ -4,7 +4,7 @@ import { EditorSelection, EditorState, type Transaction } from "@codemirror/stat
 import { EditorView } from "@codemirror/view";
 import { propertiesDisplay, propertiesDisplayOf, type PropertiesDisplay } from "../../properties-display";
 import readability from "../../../../__fixtures__/frontmatter-readability.json";
-import { addProperty, clearProperties, moveProperty, propertiesExtension, propertyBlock, propertyValue, setProperty } from "./properties";
+import { addProperty, clearProperties, hasAnchors, moveProperty, propertiesExtension, propertyBlock, propertyValue, setProperty } from "./properties";
 
 // `|` è il cursore, come in `actions.test.ts`.
 function mk(spec: string, display: PropertiesDisplay = "source", readOnly = false): EditorState {
@@ -97,6 +97,31 @@ describe("le voci del frontmatter", () => {
   it("un valore con un a capo si scrive fra virgolette, con le sequenze di YAML", () => {
     const change = setProperty(mk("---\n---\n"), "titolo", "uno\ndue\tfine")!;
     expect(change.insert).toBe("titolo: \"uno\\ndue\\tfine\"\n");
+  });
+
+  it("un testo che YAML leggerebbe come un altro tipo si scrive fra virgolette (revisione #421)", () => {
+    const write = (value: string) => setProperty(mk("---\n---\n"), "a", value)!.insert;
+    for (const value of ["1e3", "1E-3", ".5", "-.5", "0x1F", "0o17", "0b101", "017", "1_000", ".inf", "-.INF", ".NaN", "~", "null", "Null", "NULL",
+      "true", "TRUE", "False", "yes", "YES", "No", "y", "N", "on", "OFF", "2026-03-20", "2026-03-20T10:30:45+01:00", "2026-03-20 10:30", "12:30:00"]) {
+      expect(write(value), value).toBe(`a: \"${value}\"\n`);
+    }
+    for (const value of ["Torino", "1a", "v1.2", "x.inf", "nullo", "sì"]) expect(write(value), value).toBe(`a: ${value}\n`);
+  });
+
+  it("una data scritta come data resta nuda, perché YAML la legga data", () => {
+    const write = (date: string) => setProperty(mk("---\n---\n"), "d", { date })!.insert;
+    expect(write("2026-03-20")).toBe("d: 2026-03-20\n");
+    expect(write("2026-03-20T10:30:45+01:00")).toBe("d: 2026-03-20T10:30:45+01:00\n");
+    expect(write("non una data")).toBe("d: non una data\n");
+    expect(write("")).toBe("d:\n");
+  });
+
+  it("le ancore e gli alias del frontmatter si riconoscono", () => {
+    const has = (doc: string) => hasAnchors(mk(doc), propertyBlock(mk(doc))!);
+    expect(has("---\nbase: &b x\naltro: *b\n---\n")).toBe(true);
+    expect(has("---\nl:\n  - &a uno\n---\n")).toBe(true);
+    expect(has("---\nl: [*a, b]\n---\n")).toBe(true);
+    expect(has("---\nt: a & b\nu: 2 * 3\nv: \"&x\"\n---\n")).toBe(false);
   });
 
   it("senza frontmatter non c'è niente", () => {

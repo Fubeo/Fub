@@ -6801,9 +6801,32 @@ kbd,
   height: 112px;
   margin: calc(-1 * var(--space-9)) -96px 0 -104px;
   overflow: hidden;
-  background: var(--doc-fill-soft);
+  background: linear-gradient(
+    118deg,
+    var(--doc-tint-green) 0%,
+    color-mix(in oklab, var(--doc-tint-green), var(--doc-tint-yellow)) 46%,
+    var(--doc-tint-yellow) 100%
+  );
+}
+/* Sotto l'immagine (che si carica, o che manca) il frontespizio del
+   prototipo: un alone d'accento in basso a destra e le righe verticali ogni
+   64 px. Una tinta scelta dall'utente resta piena. */
+.cm-fub-page-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 120% at 82% 120%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    repeating-linear-gradient(90deg, transparent 0 63px, color-mix(in srgb, var(--doc-fg) 4%, transparent) 63px 64px);
+}
+.cm-fub-page-cover[data-color] {
+  background-image: none;
+}
+.cm-fub-page-cover[data-color]::before {
+  content: none;
 }
 .cm-fub-page-cover p {
+  position: relative;
   height: 100%;
   margin: 0;
 }
@@ -6907,7 +6930,7 @@ button.cm-fub-page-icon {
   flex-wrap: nowrap;
   gap: 2px;
   height: 28px;
-  margin: var(--space-2) 0 2px calc(-1 * var(--space-3));
+  margin: var(--space-2) 0 2px calc(-1 * var(--space-4));
   opacity: 0;
 }
 .cm-fub-page:hover .cm-fub-page-tools,
@@ -6928,6 +6951,7 @@ button.cm-fub-page-icon {
   color: var(--doc-gutter-fg);
   font-family: var(--font-ui);
   font-size: 12.5px;
+  line-height: var(--leading-normal);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -6972,49 +6996,81 @@ button.cm-fub-page-icon:hover {
 .cm-fub-page-title:focus-visible {
   outline: none;
 }
-/* Le proprietà: il nome a sinistra, il valore a destra; una riga per voce,
-   alta quanto un controllo della densità. */
+/* Le proprietà (E5, T8): la figura del tipo e il nome a sinistra, il valore
+   a destra; una riga per voce, alta quanto un controllo della densità. Le
+   misure sono quelle del prototipo (`.props`, `.pk`, `.pv`). */
 .cm-fub-page-props {
   display: grid;
   row-gap: 1px;
-  margin: 0 0 var(--space-2) calc(-1 * var(--space-3));
+  margin: 0 0 var(--space-2) calc(-1 * var(--space-4));
   font-family: var(--font-ui);
-  font-size: var(--text-md);
-  line-height: var(--leading-normal);
+  font-size: 13.5px;
+  line-height: 1.4;
 }
 /* Nome e valore stanno sulla stessa linea di base: anche quando il valore va
    a capo, o quando sul telefono il tocco lo alza a 44 px. */
 .cm-fub-page-prop {
   display: grid;
   grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
-  align-items: baseline;
+  /* Nome e valore partono in cima, alti 32 px tutti e due, come `.pk` e
+     `.pv` nella griglia del prototipo: una pastiglia o una persona, centrate
+     nel valore, non spostano la riga (con la linea di base la alzavano a
+     35 px). */
+  align-items: stretch;
 }
 .cm-fub-page-prop-key {
-  display: block;
-  min-height: var(--control-h);
-  padding: 0 var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  min-width: 0;
+  height: var(--control-h);
+  margin: 0;
+  padding: 0 var(--space-4);
   overflow: hidden;
-  border-radius: var(--radius-control);
+  border: 0;
+  border-radius: 7px;
+  background: none;
   color: var(--doc-gutter-fg);
-  line-height: var(--control-h);
+  font: inherit;
+  text-align: start;
   white-space: nowrap;
+}
+.cm-fub-page-prop-key > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-page-prop-name {
+  overflow: hidden;
   text-overflow: ellipsis;
+}
+button.cm-fub-page-prop-key {
+  cursor: pointer;
 }
 .cm-fub-page-prop-value {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   box-sizing: border-box;
   min-width: 0;
   min-height: var(--control-h);
   margin: 0;
-  padding: var(--space-1) var(--space-3);
+  padding: 3px var(--space-4);
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: 7px;
   background: none;
   color: var(--doc-fg);
   font: inherit;
   text-align: start;
   overflow-wrap: anywhere;
+}
+.cm-fub-page-prop-value > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--doc-gutter-fg);
 }
 button.cm-fub-page-prop-value {
   cursor: pointer;
@@ -7027,11 +7083,11 @@ button.cm-fub-page-prop-value {
   display: inline-flex;
   align-items: center;
   justify-self: start;
-  gap: var(--space-3);
-  min-height: var(--row-h);
-  padding: 0 var(--space-3);
+  gap: var(--space-4);
+  min-height: 30px;
+  padding: 0 var(--space-4);
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: 7px;
   background: none;
   color: var(--doc-gutter-fg);
   font: inherit;
@@ -7045,12 +7101,13 @@ button.cm-fub-page-prop-value {
 .cm-fub-page-props-more[aria-expanded="false"] > svg {
   transform: rotate(90deg);
 }
+button.cm-fub-page-prop-key:hover,
 button.cm-fub-page-prop-value:hover,
 .cm-fub-page-props-more:hover,
 .cm-fub-page-props-add:hover {
   background: var(--doc-block-hover);
-  color: var(--doc-fg);
 }
+button.cm-fub-page-prop-key:focus-visible,
 button.cm-fub-page-prop-value:focus-visible,
 .cm-fub-page-props-more:focus-visible,
 .cm-fub-page-props-add:focus-visible,
@@ -7059,6 +7116,457 @@ button.cm-fub-page-prop-value:focus-visible,
 button.cm-fub-page-icon:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+/* I valori secondo il tipo (T8): le voci d'un elenco e le etichette come
+   pastiglie, le persone col tondo delle iniziali, la casella. Un valore che
+   non torna col tipo dichiarato resta testo, sottolineato, e lo dice. */
+.cm-fub-prop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--doc-fill);
+  color: var(--doc-fg);
+  font-size: 12.5px;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+}
+.cm-fub-prop-tag {
+  padding: 1px 7px;
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+  line-height: 1.5;
+}
+/* Selezione e Stato: l'opzione del registro come pastiglia del suo colore
+   (`.opt` del prototipo, `--c-<colore>` → `--doc-color-*` e
+   `--doc-tint-*`); lo Stato ha il pallino (`.opt.st`). */
+.cm-fub-prop-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--doc-tint-gray);
+  color: var(--doc-color-gray);
+  font-size: 12.5px;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+}
+.cm-fub-prop-opt[data-status]::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.85;
+}
+.cm-fub-prop-opt[data-color="brown"] {
+  background: var(--doc-tint-brown);
+  color: var(--doc-color-brown);
+}
+.cm-fub-prop-opt[data-color="orange"] {
+  background: var(--doc-tint-orange);
+  color: var(--doc-color-orange);
+}
+.cm-fub-prop-opt[data-color="yellow"] {
+  background: var(--doc-tint-yellow);
+  color: var(--doc-color-yellow);
+}
+.cm-fub-prop-opt[data-color="green"] {
+  background: var(--doc-tint-green);
+  color: var(--doc-color-green);
+}
+.cm-fub-prop-opt[data-color="blue"] {
+  background: var(--doc-tint-blue);
+  color: var(--doc-color-blue);
+}
+.cm-fub-prop-opt[data-color="purple"] {
+  background: var(--doc-tint-purple);
+  color: var(--doc-color-purple);
+}
+.cm-fub-prop-opt[data-color="pink"] {
+  background: var(--doc-tint-pink);
+  color: var(--doc-color-pink);
+}
+.cm-fub-prop-opt[data-color="red"] {
+  background: var(--doc-tint-red);
+  color: var(--doc-color-red);
+}
+.cm-fub-prop-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 var(--space-4) 0 var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--doc-fill-soft);
+  box-shadow: inset 0 0 0 1px var(--doc-rule-soft);
+  color: var(--doc-fg);
+  font-size: 12.5px;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+}
+.cm-fub-prop-avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--doc-color-green);
+  color: var(--doc-bg);
+  font-size: 9.5px;
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+.cm-fub-prop-avatar[data-tone="b"] {
+  background: var(--doc-color-purple);
+}
+.cm-fub-prop-avatar[data-tone="c"] {
+  background: var(--doc-color-orange);
+}
+.cm-fub-prop-avatar[data-tone="d"] {
+  background: var(--doc-color-blue);
+}
+.cm-fub-prop-check {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-xs);
+  box-shadow: inset 0 0 0 1.5px var(--doc-rule);
+}
+.cm-fub-prop-check[data-checked="true"] {
+  background: var(--accent);
+  box-shadow: none;
+}
+.cm-fub-prop-check[data-checked="true"]::after {
+  content: "✓";
+  color: var(--accent-contrast);
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+.cm-fub-page-prop[data-mismatch] .cm-fub-page-prop-value {
+  text-decoration: underline wavy var(--doc-wavy) 1px;
+  text-underline-offset: 3px;
+}
+.cm-fub-prop-mismatch {
+  color: var(--doc-gutter-fg);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+/* Testo, numero e indirizzo si scrivono al posto del valore: il campo ha il
+   filo d'accento del campo della data, rosso se il valore è cambiato sotto. */
+.cm-fub-page-prop-value[data-editing] {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.cm-fub-page-prop-value[data-conflict] {
+  box-shadow: inset 0 0 0 1.5px var(--doc-danger);
+}
+/* I campi dentro una cornice (la riga, il campo della data, la ricerca): il
+   filo è della cornice, il campo non ne disegna un secondo. */
+.cm-fub-prop-input,
+.cm-fub-prop-date-field input,
+.cm-fub-prop-search input {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: none;
+  box-shadow: none;
+  color: var(--doc-fg);
+  font: inherit;
+}
+.cm-fub-prop-input:focus-visible,
+.cm-fub-prop-date-field input:focus-visible,
+.cm-fub-prop-search input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.cm-fub-page-prop[data-kind="number"] .cm-fub-prop-input {
+  flex: none;
+  width: 120px;
+}
+/* I riquadri degli editor (`.dp` del prototipo): la data, l'elenco, le
+   persone. */
+.cm-fub-prop-date,
+.cm-fub-prop-list {
+  box-sizing: border-box;
+  width: 300px;
+  padding: 10px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+.cm-fub-prop-date-field,
+.cm-fub-prop-list-input,
+.cm-fub-prop-date-time input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  height: var(--control-h);
+  margin: 0 0 var(--space-4);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--doc-rule);
+  color: var(--doc-fg);
+  font: inherit;
+}
+.cm-fub-prop-list-input {
+  width: 100%;
+  margin: 0;
+  outline: none;
+}
+.cm-fub-prop-date-field:focus-within,
+.cm-fub-prop-list-input:focus,
+.cm-fub-prop-date-time input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.cm-fub-prop-date-field > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-prop-date-field input[aria-invalid] {
+  color: var(--doc-danger);
+}
+.cm-fub-prop-date-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.cm-fub-prop-date-choice {
+  height: 24px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: var(--doc-fill);
+  color: var(--doc-fg);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.cm-fub-prop-date-choice:hover {
+  background: var(--accent-wash);
+}
+.cm-fub-prop-date-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: var(--space-1) var(--space-1) var(--space-3);
+  font-weight: var(--weight-bold);
+}
+.cm-fub-prop-date-head > span::first-letter {
+  text-transform: uppercase;
+}
+.cm-fub-prop-date-nav {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--doc-gutter-fg);
+  font: inherit;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+.cm-fub-prop-date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--space-1);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.cm-fub-prop-date-grid > span {
+  padding: var(--space-2) 0;
+  color: var(--doc-ghost);
+  font-size: 10.5px;
+  text-transform: uppercase;
+}
+.cm-fub-prop-date-day {
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--doc-fg);
+  font: inherit;
+  cursor: pointer;
+}
+.cm-fub-prop-date-day[data-outside] {
+  color: var(--doc-ghost);
+}
+.cm-fub-prop-date-day[data-today] {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.cm-fub-prop-date-day[data-selected] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: var(--weight-bold);
+}
+.cm-fub-prop-date-time {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-prop-date-time[hidden] {
+  display: none;
+}
+.cm-fub-prop-date-time input {
+  margin: 0;
+}
+.cm-fub-prop-date-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--doc-rule-soft);
+}
+.cm-fub-prop-date-action {
+  height: 26px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--doc-gutter-fg);
+  font: inherit;
+  cursor: pointer;
+}
+.cm-fub-prop-date-nav:hover,
+.cm-fub-prop-date-day:not([data-selected]):hover,
+.cm-fub-prop-date-action:hover,
+.cm-fub-prop-chip-remove:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+.cm-fub-prop-date-choice:focus-visible,
+.cm-fub-prop-date-nav:focus-visible,
+.cm-fub-prop-date-day:focus-visible,
+.cm-fub-prop-date-action:focus-visible,
+.cm-fub-prop-chip-remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* L'elenco: cento voci scorrono dentro il riquadro, il campo resta sotto. */
+.cm-fub-prop-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  max-height: 240px;
+  margin-bottom: var(--space-4);
+  overflow: auto;
+}
+.cm-fub-prop-chips[hidden] {
+  display: none;
+}
+.cm-fub-prop-chip-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+/* Le persone: la ricerca in cima (`.m-s` del prototipo), le proposte sotto. */
+.cm-fub-prop-people {
+  width: 300px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+.cm-fub-prop-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 9px var(--space-5);
+  border-bottom: 1px solid var(--doc-rule-soft);
+  color: var(--doc-ghost);
+}
+.cm-fub-prop-search > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-prop-options {
+  max-height: 280px;
+  overflow: auto;
+}
+.cm-fub-prop-note {
+  margin: var(--space-4) 0 0;
+  color: var(--doc-danger);
+  font-size: 12.5px;
+  line-height: var(--leading-normal);
+}
+.cm-fub-prop-people .cm-fub-prop-note {
+  margin: var(--space-4) var(--space-5);
+}
+.cm-fub-prop-note[hidden] {
+  display: none;
+}
+.cm-fub-prop-note-action {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.cm-fub-prop-note-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Il menu della proprietà: in cima il nome e il tipo (`.m-h`), il tipo di
+   adesso accanto a «Tipo». */
+.cm-fub-prop-menu .cm-fub-prop-menu-head {
+  padding: 9px var(--space-4) var(--space-2);
+  color: var(--doc-ghost);
+  font-size: 11.5px;
+  font-weight: var(--weight-bold);
+}
+.cm-fub-prop-menu [role^="menuitem"] {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.cm-fub-prop-menu [role^="menuitem"] > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-prop-menu-label {
+  flex: 1;
+}
+.cm-fub-prop-menu-hint {
+  color: var(--doc-gutter-fg);
 }
 /* Il frontmatter che YAML non legge: la testata lo dice, sopra lo YAML. */
 .cm-fub-page-unreadable {
@@ -7073,12 +7581,42 @@ button.cm-fub-page-icon:focus-visible {
   line-height: var(--leading-normal);
 }
 /* La riga dei dati chiude la testata, con un filo che la stacca dal testo.
-   Interlinea intera e dispari: le icone di 15 px e le etichette cadono su
-   pixel interi, e il testo sotto la testata non parte da mezzo pixel. */
+   Le misure di `.facts` del prototipo (12.5/1.4), nei colori della carta.
+   L'altezza non intera della riga non sposta le maniglie: CodeMirror misura
+   la testata col suo riquadro, e i margini restano dentro (`flow-root`). */
 .cm-fub-page > .note-facts {
-  line-height: 19px;
-  margin-bottom: var(--space-8);
+  gap: var(--space-2) var(--space-6);
+  padding-bottom: 18px;
+  margin-bottom: 22px;
   border-bottom: 1px solid var(--doc-rule-soft);
+  color: var(--doc-gutter-fg);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+/* Ogni dato ha la misura di `.facts button` del prototipo: il margine
+   negativo rende il riquadro più largo del testo senza spostarlo. Il gruppo
+   delle etichette si scioglie, così ogni etichetta è un dato come gli altri
+   (16 px fra l'una e l'altra), e prende di `.tag` soltanto il velo, il peso e
+   l'interlinea: `.facts button` vince su `.tag`, quindi il testo è grigio. */
+.cm-fub-page > .note-facts > .note-fact,
+.cm-fub-page > .note-facts .note-tag {
+  gap: 5px;
+  margin: -2px -4px;
+  padding: 2px 4px;
+  border-radius: var(--radius-chip);
+}
+.cm-fub-page > .note-facts > .note-fact > svg {
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-page > .note-facts > .note-fact-tags {
+  display: contents;
+}
+.cm-fub-page > .note-facts .note-tag {
+  background: var(--accent-veil);
+  color: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 /* La finestra e il foglio stretti: la colonna dei nomi cede (124 px, al
    telefono 108), la copertina segue i margini più corti e al telefono si
@@ -8395,6 +8933,11 @@ button.cm-fub-page-icon:focus-visible {
 /* In Lettura, con le proprietà nella testata, lo YAML reso non si ripete
    sotto (`mountReadingHeader`). */
 .markdown-rendered[data-page-props="header"] > .block-frontmatter-unparsed {
+  display: none;
+}
+/* In Lettura il primo H1 che dice il nome si ripiega nel titolo della
+   testata (`page/title.ts`): la testata lo segna, e l'H1 non si ripete. */
+.markdown-rendered > .cm-fub-page[data-title-fold] ~ h1:first-of-type {
   display: none;
 }
 .markdown-rendered .block-frontmatter-unparsed pre {

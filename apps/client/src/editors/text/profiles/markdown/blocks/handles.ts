@@ -45,6 +45,8 @@ import { dropOffers, type SurfaceDropDocument, watchDropOffers } from "../../../
 import { type DropTarget, placeTargets, targetAt } from "./drop-targets";
 import { edgeDepth, edgeScroll, type EdgeScroll } from "./autoscroll";
 import type { Teardown } from "../../../../../ui/lifetime";
+import type { PropertyType } from "../../../../../host/enums.generated";
+import type { PropertyTypes } from "../page/properties/kind";
 
 export interface BlocksOptions {
   /// La nota e il suo vault: i posti fuori dalla colonna (i titoli della sua
@@ -61,6 +63,10 @@ export interface BlocksOptions {
   /// Rinomina la pagina col titolo scritto nella testata: `null` se è andata,
   /// altrimenti la frase che dice perché no. Senza, il titolo non si modifica.
   readonly rename?: (name: string) => Promise<string | null>;
+  /// Il nome che la pagina prende rinominata col titolo `name`
+  /// (`Archivio/Nuova` → `Nuova`): l'H1 ripiegato lo segue. Senza, il titolo
+  /// scritto.
+  readonly renamedPage?: (name: string) => string;
   /// Monta un'immagine (l'HTML della resa) nella copertina, e ne dà lo
   /// smontaggio: la stessa resa delle immagini della Live.
   readonly mountImage?: (root: HTMLElement, html: string) => () => void;
@@ -68,6 +74,15 @@ export interface BlocksOptions {
   /// lo è già, e lì nasce `name`. `null` se è andata, altrimenti la frase che
   /// dice perché no. Senza, la testata non la offre.
   readonly subpage?: (name: string) => Promise<string | null>;
+  /// Il registro dei tipi delle proprietà del vault, per gli editor della
+  /// testata (`page/properties/`).
+  readonly propertyTypes?: () => PropertyTypes;
+  /// Dichiara il tipo di una proprietà per il vault (`property.type.set`):
+  /// `null` se è andata, altrimenti il perché no. Senza, il menu della
+  /// proprietà non offre «Tipo».
+  readonly setPropertyType?: (key: string, type: PropertyType) => Promise<string | null>;
+  /// Le persone il cui nome combacia col testo, per l'editor delle persone.
+  readonly searchPeople?: (text: string) => Promise<string[]>;
   /// Esc è di chi ospita l'editor, che con lui ne esce (una scheda della
   /// lavagna): sul testo Esc non seleziona il blocco del cursore e passa
   /// all'ospite; una selezione di blocchi già fatta la chiude ancora.

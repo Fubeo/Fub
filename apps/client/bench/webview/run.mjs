@@ -29,7 +29,7 @@ import { cpus, hostname, loadavg, release, tmpdir, totalmem, type as osType } fr
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
-import { GESTURE_FOLDER, INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteName, writeFixtures } from "./fixtures.mjs";
+import { GESTURE_FOLDER, INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
 import { cpuPercent, cpuTicks, descendants, pendenza, settled } from "./memory.mjs";
 import { displayRate, engineCap, hasPeriodLimits, resolveLimit } from "./refresh.mjs";
 import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
@@ -729,7 +729,7 @@ const SCENARIOS = {
   /// chiusa nell'albero.
   async F3(session) {
     await openByName(session, "Lunga", "Una nota lunga");
-    await openByName(session, noteName(1), noteName(1));
+    await openByName(session, noteName(1), noteMark(1));
     if (!(await session.execute("return !!document.querySelector(arguments[0]);", [treeRow(GESTURE_FOLDER)]))) {
       await session.click(treeRow(GESTURE_FOLDER.split("/")[0]));
       await session.waitFor("return !!document.querySelector(arguments[0]);", [treeRow(GESTURE_FOLDER)], 15_000);
@@ -783,7 +783,7 @@ const SCENARIOS = {
     for (let i = 0; i < 20; i++) {
       // Lontane fra loro: il testo della nota prima non nomina quella dopo.
       const n = 1 + ((i * 487) % 10_000);
-      await openByName(session, noteName(n), noteName(n), "noteSwitch");
+      await openByName(session, noteName(n), noteMark(n), "noteSwitch");
     }
     const report = await stop(session);
     return { report, values: { "S2.noteSwitch.p95": report.marks.noteSwitch?.p95 ?? null }, samples: report.marks.noteSwitch?.count ?? 0 };
@@ -1370,7 +1370,7 @@ const SCENARIOS = {
         const startup = await current.execute(CHUNKS_SCRIPT);
         await ready(current);
         await indexed(current);
-        await openByName(current, noteName(1), noteName(1));
+        await openByName(current, noteName(1), noteMark(1));
         await pause(MEMORY_QUIET_MS);
         const after = await current.execute(CHUNKS_SCRIPT);
         const afterNote = after.filter((name) => !startup.includes(name));

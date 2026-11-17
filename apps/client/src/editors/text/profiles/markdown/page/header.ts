@@ -22,9 +22,13 @@ import { drawPageMark, figureLabel, figureValue, PAGE_FIGURES, pageMarkLabel, pa
 import { markPresence } from "../../../../core/presence";
 import type { PropertiesDisplay } from "../../../properties-display";
 import { matchEmoji } from "../completions";
-import { lastEntry, listItems, propertyBlock, type PropertyBlock } from "../properties";
+import { lastEntry, listItems, propertyBlock, type PropertyBlock, type PropertyEntry, type PropertyWrite } from "../properties";
+import type { PropertyType } from "../../../../../host/enums.generated";
+import { NO_TYPES, type PropertyTypes } from "./properties/kind";
+import type { WriteOutcome } from "./properties/row";
 import { liveStrings } from "../strings";
 import { coverElement, coverYOf } from "./cover";
+import { foldedHeading } from "./title";
 import { featuredProperties, propertiesElement, samePageProperties, type PageProperties } from "./featured";
 
 export type { PageProperties } from "./featured";
@@ -44,10 +48,21 @@ export interface PageOptions {
   readonly folderPage?: () => boolean;
   /// Rinomina la pagina: `null` se è andata, altrimenti il perché no.
   readonly rename?: (name: string) => Promise<string | null>;
+  /// Il nome che la pagina prende rinominata col titolo `name`
+  /// (`Archivio/Nuova` → `Nuova`).
+  readonly renamedPage?: (name: string) => string;
   /// Monta un'immagine (l'HTML della resa) e ne dà lo smontaggio.
   readonly mountImage?: (root: HTMLElement, html: string) => () => void;
   /// «Nuova sottopagina»: `null` se è andata, altrimenti il perché no.
   readonly subpage?: (name: string) => Promise<string | null>;
+  /// Il registro dei tipi delle proprietà del vault (`properties.types`).
+  readonly propertyTypes?: () => PropertyTypes;
+  /// Dichiara il tipo di una proprietà nel registro del vault
+  /// (`property.type.set`): `null` se è andata, altrimenti il perché no.
+  readonly setPropertyType?: (key: string, type: PropertyType) => Promise<string | null>;
+  /// Le persone il cui nome combacia con il testo, per l'editor delle
+  /// persone.
+  readonly searchPeople?: (text: string) => Promise<string[]>;
 }
 
 /// Ciò che la testata mostra, letto dallo stato e dalle opzioni.
@@ -106,6 +121,7 @@ export function pageData(
       rest: split.rest,
       unreadable,
       open,
+      types: options.propertyTypes?.() ?? NO_TYPES,
     },
   };
 }
@@ -141,7 +157,20 @@ export interface PageHost {
   readonly mountImage?: (root: HTMLElement, html: string) => () => void;
   /// Scrive (o toglie, con `null`) una proprietà della pagina, con un passo
   /// d'annullamento suo.
-  writeProperty(key: string, value: string | number | readonly string[] | null): void;
+  writeProperty(key: string, value: PropertyWrite | null): void;
+  /// Lo stesso, da un editor delle proprietà: scrive solo se la voce vale
+  /// ancora `expected` (`entryStamp`), se no dice `conflict` (T8).
+  writePropertyChecked(key: string, value: PropertyWrite | null, expected: string | null): WriteOutcome;
+  /// La voce di `key` adesso.
+  currentProperty(key: string): PropertyEntry | undefined;
+  /// Rinomina la chiave nella nota: `null` se è andata, se no il perché no.
+  renameProperty(key: string, name: string): string | null;
+  /// «Metti in evidenza» o «Togli dall'evidenza».
+  featureProperty(key: string, on: boolean): void;
+  /// Dichiara il tipo nel registro del vault.
+  setPropertyType?(key: string, type: PropertyType): Promise<string | null>;
+  /// Le persone per l'editor delle persone.
+  searchPeople?(text: string): Promise<string[]>;
   /// Le classi della pagina adesso, per il menu «…».
   classes(): readonly string[];
   /// Rinomina col titolo scritto; `null` se è andata.
@@ -274,10 +303,19 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
   if (data.properties) {
     const section = propertiesElement(data.properties, {
       editable: writable,
+      types: data.properties.types,
       open: (at) => host.openProperty(at),
       add: () => host.addProperty(),
       more: host.more,
       measure: () => host.measure(),
+      write: (key, value, expected) => host.writePropertyChecked(key, value, expected),
+      current: (key) => host.currentProperty(key),
+      renameKey: (key, name) => host.renameProperty(key, name),
+      feature: (key, on) => host.featureProperty(key, on),
+      setType: host.setPropertyType ? (key, type) => host.setPropertyType!(key, type) : undefined,
+      searchPeople: host.searchPeople ? (text) => host.searchPeople!(text) : undefined,
+      notify: host.notify ? (message, tone) => host.notify!(message, tone) : undefined,
+      editing: (open) => host.popover?.(open),
     }, life);
     if (section) root.append(section);
   }
@@ -722,6 +760,10 @@ export function mountReadingHeader(
     writing: false,
     mountImage: options.mountImage,
     writeProperty: noop,
+    writePropertyChecked: () => "refused",
+    currentProperty: (key) => lastEntry(block?.entries ?? [], key),
+    renameProperty: () => null,
+    featureProperty: noop,
     classes: () => data.classes,
     openProperty: noop,
     addProperty: noop,
@@ -733,6 +775,10 @@ export function mountReadingHeader(
     more,
   }, life);
   root.dataset.mdPinned = "";
+  // Il primo H1 che dice il nome si ripiega nel titolo (T7): la pelle lo
+  // nasconde nella resa finché la testata lo dice. La testata resta in cima
+  // anche quando la resa si rifà da sé, e il segno con lei.
+  if (foldedHeading(state.doc, block ? Math.min(state.doc.length, block.to + 1) : 0, data.title)) root.dataset.titleFold = "";
   reading.prepend(root);
   if (block && data.properties && !block.unreadable) reading.dataset.pageProps = "header";
   return () => {
