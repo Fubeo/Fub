@@ -49,6 +49,8 @@ pub(in crate::template) const DAY_SAME: &str = "day.same";
 pub(in crate::template) const DAY_SAME_NONE: &str = "day.same.none";
 pub(in crate::template) const DAY_CHANGED: &str = "day.changed";
 pub(in crate::template) const DAY_CHANGED_NONE: &str = "day.changed.none";
+pub(in crate::template) const DAY_CHANGED_BARE: &str = "day.changed.bare";
+pub(in crate::template) const DAY_CHANGED_FAILED: &str = "day.changed.failed";
 pub(in crate::template) const DAY_CHANGED_AT: &str = "day.changed.at";
 pub(in crate::template) const DAY_MORE: &str = "day.more";
 pub(in crate::template) const DAY_DOC: &str = "day.doc";
@@ -404,14 +406,14 @@ fn changed_group(host: &dyn ReadApi, doc: &DocId, date: &str) -> Result<UiNode, 
         page: None,
     })? {
         IndexResult::Entries(entries) => entries,
-        other => {
-            return Err(PluginError::Internal(
-                format!(
-                    "risposta fuori tema: attesa l'anagrafe, arrivato {}",
-                    other.kind_name()
-                )
-                .into(),
-            ))
+        // Una risposta d'altra specie è un guasto dell'host: resta nel gruppo,
+        // come quello dei compiti, e gli altri due si vedono.
+        _ => {
+            return Ok(group(
+                KEY_CHANGED,
+                Text::key(DAY_CHANGED_BARE),
+                vec![UiNode::text(Text::key(DAY_CHANGED_FAILED))],
+            ));
         }
     };
     let year: i64 = date[..4].parse().unwrap_or_default();
@@ -494,6 +496,11 @@ pub(in crate::template) fn day_strings_it(catalog: StringCatalog) -> StringCatal
         .with(DAY_SAME_NONE, "Nessuna nota ha questa data in una proprietà.")
         .with(DAY_CHANGED, "Create e cambiate · {count}")
         .with(DAY_CHANGED_NONE, "Nessuna nota è stata cambiata in questo giorno.")
+        .with(DAY_CHANGED_BARE, "Create e cambiate")
+        .with(
+            DAY_CHANGED_FAILED,
+            "Le note cambiate non si sono lette: l'indice ha risposto male. Riprovo al prossimo salvataggio.",
+        )
         .with(DAY_CHANGED_AT, "Cambiata alle {time}")
         .with(DAY_MORE, "E altre {count} note.")
 }
@@ -526,6 +533,11 @@ pub(in crate::template) fn day_strings_en(catalog: StringCatalog) -> StringCatal
         .with(DAY_SAME_NONE, "No note has this date in a property.")
         .with(DAY_CHANGED, "Created and changed · {count}")
         .with(DAY_CHANGED_NONE, "No note was changed on this day.")
+        .with(DAY_CHANGED_BARE, "Created and changed")
+        .with(
+            DAY_CHANGED_FAILED,
+            "The changed notes could not be read: the index answered wrongly. I'll retry at the next save.",
+        )
         .with(DAY_CHANGED_AT, "Changed at {time}")
         .with(DAY_MORE, "And {count} more notes.")
 }
