@@ -20,6 +20,8 @@ export const MEDIA: PartAnatomy = {
     { name: "photo-data", layer: "cornice", states: INTERACTIVE, hooks: ["photo-data", "photo-data-line", "photo-data-tags", "photo-data-open"] },
     { name: "media-recorder", layer: "cornice", states: INTERACTIVE, hooks: ["media-recorder"] },
     { name: "web-viewer-bar", layer: "cornice", states: INTERACTIVE, hooks: ["web-viewer-bar", "web-viewer-address"] },
+    // La pagina web incorporata in una nota (T37): il segnaposto «Carica».
+    { name: "web-embed", states: INTERACTIVE, hooks: ["web-embed", "web-embed-icon", "web-embed-text", "web-embed-name", "web-embed-detail", "web-embed-load"] },
     { name: "slide-deck", layers: { "slide-status": "cornice", "slide-controls": "cornice", "block-frontmatter-unparsed": "contenuto" }, states: INTERACTIVE, hooks: ["slide-deck", "slide-status", "slide-stage", "slide", "slide-controls", "block-frontmatter-unparsed"] },
   ],
 };

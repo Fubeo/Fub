@@ -60,7 +60,15 @@ export interface WebViewer {
   /// Un link web di una nota: nel visore se la preferenza lo vuole o se lo
   /// chiede l'Alt, altrimenti nel browser di sistema.
   openLink(url: string, viaViewer: boolean): void;
+  /// Una pagina incorporata in una nota (T37): soltanto nel visore, col
+  /// consenso di sempre; mai il browser di sistema.
+  openEmbed(url: string): Promise<EmbedOpening>;
 }
+
+/// Com'è andata l'apertura di una pagina incorporata: aperta, rifiutata dalla
+/// persona alla domanda del consenso, o il visore che non la apre (non https,
+/// finestra assente o guasta: il guasto lo dice già il visore).
+export type EmbedOpening = "opened" | "refused" | "unavailable";
 
 /// Il visore della finestra, finché è montato.
 let declared: WebViewer | null = null;
@@ -76,6 +84,13 @@ export function openWebPage(url: string): Promise<boolean> {
   if (!webAddress(url)) return Promise.resolve(false);
   window.open(url, "_blank", "noopener,noreferrer");
   return Promise.resolve(true);
+}
+
+/// Una pagina incorporata in una nota (T37): la apre soltanto il visore
+/// della finestra. Senza visore montato non si apre niente: il browser di
+/// sistema non è il visore isolato che il segnaposto promette.
+export function openWebEmbed(url: string): Promise<EmbedOpening> {
+  return declared ? declared.openEmbed(url) : Promise.resolve("unavailable");
 }
 
 /// Un link web cliccato in una nota. `viaViewer` è l'Alt del clic.
@@ -174,22 +189,36 @@ export function mountWebViewer(life: Lifetime, parent: HTMLElement, ports: WebVi
     if (webAddress(url)) ports.openExternal(url);
   }
 
+  /// Apre `url` di `site` nel visore, dopo il consenso.
+  async function attempt(url: string, site: string, leaving: boolean): Promise<EmbedOpening> {
+    await reread();
+    if (life.closed) return "unavailable";
+    if (!(await consent(site, url, leaving))) return "refused";
+    if (life.closed) return "unavailable";
+    try {
+      await api.viewerOpen(url, site, { allowRemote: true, allowlist: sites });
+    } catch (error) {
+      if (!life.closed) ports.notify(t("document.viewer_unavailable", { reason: errorText(error) }), "guasto");
+      return "unavailable";
+    }
+    if (!life.closed) showAt(url);
+    return "opened";
+  }
+
   async function open(url: string, leaving = false): Promise<boolean> {
     const site = viewerSite(url);
     if (!site) {
       external(url);
       return false;
     }
-    await reread();
-    if (life.closed || !(await consent(site, url, leaving)) || life.closed) return false;
-    try {
-      await api.viewerOpen(url, site, { allowRemote: true, allowlist: sites });
-    } catch (error) {
-      if (!life.closed) ports.notify(t("document.viewer_unavailable", { reason: errorText(error) }), "guasto");
-      return false;
-    }
-    if (!life.closed) showAt(url);
-    return true;
+    return (await attempt(url, site, leaving)) === "opened";
+  }
+
+  /// Un embed non ripiega sul browser di sistema: ciò che il visore non apre
+  /// resta chiuso.
+  function openEmbed(url: string): Promise<EmbedOpening> {
+    const site = viewerSite(url);
+    return site ? attempt(url, site, false) : Promise.resolve("unavailable");
   }
 
   async function save(): Promise<void> {
@@ -245,6 +274,7 @@ export function mountWebViewer(life: Lifetime, parent: HTMLElement, ports: WebVi
       if ((viaViewer || linksInViewer) && viewerSite(url)) void open(url);
       else external(url);
     },
+    openEmbed,
   };
   declared = viewer;
   life.add(() => {

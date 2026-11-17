@@ -6491,17 +6491,20 @@ kbd,
 .cm-editor .cm-content .cm-fub-link-card-fetch:disabled {
   color: var(--doc-gutter-fg);
 }
-/* La scelta sotto un indirizzo incollato su una riga vuota (T25): «Link» e
-   «Scheda», due pulsanti piccoli nei toni del margine. Quello scelto è premuto. */
+/* La scelta sotto un indirizzo incollato su una riga vuota (T25): «Link»,
+   «Scheda» e, per un sito dell'elenco chiuso, «Incorpora» (T37); pulsanti
+   piccoli nei toni del margine. Quello scelto è premuto. */
 .cm-editor .cm-content .cm-fub-address-choice {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   margin: var(--space-1) 0;
   font-family: var(--font-ui);
   font-size: var(--text-sm);
 }
 .cm-editor .cm-content .cm-fub-address-choice-link,
-.cm-editor .cm-content .cm-fub-address-choice-card {
+.cm-editor .cm-content .cm-fub-address-choice-card,
+.cm-editor .cm-content .cm-fub-address-choice-embed {
   padding: var(--space-1) var(--space-3);
   border: 1px solid var(--doc-rule-soft);
   border-radius: var(--radius-control);
@@ -6510,17 +6513,20 @@ kbd,
   font: inherit;
 }
 .cm-editor .cm-content .cm-fub-address-choice-link:hover,
-.cm-editor .cm-content .cm-fub-address-choice-card:hover {
+.cm-editor .cm-content .cm-fub-address-choice-card:hover,
+.cm-editor .cm-content .cm-fub-address-choice-embed:hover {
   background: var(--doc-fill-soft);
   color: var(--doc-fg);
 }
 .cm-editor .cm-content .cm-fub-address-choice-link[aria-pressed="true"],
-.cm-editor .cm-content .cm-fub-address-choice-card[aria-pressed="true"] {
+.cm-editor .cm-content .cm-fub-address-choice-card[aria-pressed="true"],
+.cm-editor .cm-content .cm-fub-address-choice-embed[aria-pressed="true"] {
   color: var(--doc-fg);
   border-color: var(--doc-fg);
 }
 .cm-editor .cm-content .cm-fub-address-choice-link:focus-visible,
-.cm-editor .cm-content .cm-fub-address-choice-card:focus-visible {
+.cm-editor .cm-content .cm-fub-address-choice-card:focus-visible,
+.cm-editor .cm-content .cm-fub-address-choice-embed:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
@@ -7915,9 +7921,15 @@ button.cm-fub-page-icon:focus-visible {
    destro, la maniglia della larghezza (D9) con la misura mentre la si tira. */
 .cm-editor .cm-content .cm-fub-image.cm-fub-image-selected img:not([hidden]),
 .cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .embed,
-.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .image-missing {
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .image-missing,
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected [data-web-embed-site] {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+/* Una pagina web incorporata (T37) non ha una larghezza da tirare: il
+   segnaposto è uno solo, e la pagina si vede nel visore. */
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected:has([data-web-embed-site]) .cm-fub-image-handle {
+  display: none;
 }
 /* La selezione del testo non si stende sotto l'immagine scelta: il contorno
    dice già che è presa, come in Word. */
@@ -15701,6 +15713,93 @@ button.draw-isolation-crumb:hover {
   padding: 0 var(--space-3);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* ── La pagina web incorporata ───────────────────────────────────────────── */
+
+/*
+   Un video, una mappa o un disegno di un sito dell'elenco chiuso (T37): il
+   segnaposto dell'immagine remota, un poco più largo, con l'icona della specie
+   su un cartoncino, il nome del sito e «Carica», la stessa pillola di
+   «Scarica nel vault». Nessuna anteprima e nessuna icona del sito: aprire la
+   nota non chiede niente alla rete. La pagina si apre nel visore.
+*/
+.web-embed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  width: 28rem;
+  max-width: 100%;
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: left;
+  vertical-align: middle;
+}
+.web-embed-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.web-embed-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.web-embed-name {
+  color: var(--text);
+  font-weight: 600;
+}
+.web-embed-detail {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* In Lettura la figura è larga quanto il segnaposto, come in Scrittura: la
+   didascalia sta sotto di lui, non al centro della colonna. */
+.markdown-rendered figure:has(.web-embed) {
+  width: fit-content;
+  max-width: 100%;
+}
+/* Rifiutata o senza visore la riga dice che cosa è successo: va a capo. */
+.web-embed[data-state="refused"] .web-embed-detail,
+.web-embed[data-state="unavailable"] .web-embed-detail {
+  white-space: normal;
+}
+.web-embed-load {
+  flex: none;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.web-embed-load:hover,
+.web-embed-load:focus-visible {
+  color: var(--accent);
+}
+.web-embed-load:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.web-embed-load:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 /* ── skin/nodes.css ─────────────────────────────────────────────────────── */

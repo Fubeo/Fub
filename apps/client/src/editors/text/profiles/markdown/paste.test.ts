@@ -113,6 +113,32 @@ describe("Markdown clipboard paste", () => {
     host.remove();
   });
 
+  it("un sito dell'elenco chiuso offre anche Incorpora, che scrive `![](https://…)` senza tracciamento (T37)", () => {
+    const address = "http://youtu.be/abc?si=TRACCIA";
+    const { engine, view, host } = paste("", address, "", EditorSelection.single(6), true, BLANK);
+    const buttons = [...host.querySelectorAll<HTMLElement>(".cm-fub-address-choice [data-choice]")];
+    expect(buttons.map((button) => button.textContent)).toEqual(["Link", "Scheda", "Incorpora"]);
+    expect(buttons.map((button) => button.tabIndex)).toEqual([0, -1, -1]);
+    // Le frecce arrivano fino a Incorpora, e Invio la sceglie.
+    expect(key(view.contentDOM, "Tab").defaultPrevented).toBe(true);
+    key(buttons[0]!, "ArrowRight");
+    key(buttons[1]!, "ArrowRight");
+    expect(document.activeElement).toBe(buttons[2]);
+    expect(key(buttons[2]!, "Enter").defaultPrevented).toBe(true);
+    const embed = "![](https://youtu.be/abc)";
+    expect(engine.getDoc()).toBe(`prima\r\n${embed}\r\nfine`);
+    expect(host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(view.state.selection.main.head).toBe(6 + embed.length);
+    engine.destroy();
+    host.remove();
+    // Un sito fuori dall'elenco resta Link o Scheda.
+    const other = paste("", "https://example.org/video", "", EditorSelection.single(6), true, BLANK);
+    expect([...other.host.querySelectorAll(".cm-fub-address-choice [data-choice]")].map((button) => button.textContent))
+      .toEqual(["Link", "Scheda"]);
+    other.engine.destroy();
+    other.host.remove();
+  });
+
   it("la scelta Link, Invio o un'altra battuta tengono il link, e il cursore che esce chiude la scelta", () => {
     const link = "[https://example.org/a](https://example.org/a)";
     // Link: il link resta, la scelta si chiude.

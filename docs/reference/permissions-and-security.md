@@ -294,6 +294,13 @@ va al browser di sistema; ogni altro schema non si apre, con o senza visore
 montato (`apps/client/src/ui/web-viewer.ts`). Un nodo `web_view` di una vista
 incornicia soltanto un indirizzo `https:`.
 
+Una pagina incorporata in una nota (`![](https://…)` di un sito dell'elenco
+chiuso, `WEB_EMBED_SITES` in
+`apps/client/src/editors/text/profiles/markdown/web-embed.ts`) è un segnaposto
+che non chiede niente alla rete. «Carica» la apre soltanto nel visore, con lo
+stesso consenso; senza visore, o per un indirizzo che il visore non apre, non
+va al browser di sistema. Nessun iframe entra nella shell.
+
 Le letture del client con `fetch` (asset del vault, file dell'app, tessere
 della mappa) non seguono redirect e non portano credenziali né referrer:
 passano da `LOCAL_FETCH` in `apps/client/src/editors/core/local-fetch.ts`, e un
