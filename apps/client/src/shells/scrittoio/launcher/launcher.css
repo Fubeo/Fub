@@ -7,9 +7,10 @@
  * suo posto.
  */
 
-/* Intrappola il fuoco, quindi sta su `--z-modal`. Si posa sotto la barra del
-   titolo, dove stanno anche il modulo e il piano di un comando: cresce dalla
-   pillola e ci arriva. */
+/* Intrappola il fuoco, quindi sta su `--z-modal`. Si apre nello stesso punto
+   della pillola, non arriva da un'altra parte: la testa, alta 54, copre la
+   pillola (alta 30, a 5 dal bordo della barra) e il campo prende il suo posto.
+   È la regola del prototipo, «8 px, o la pillola meno 6». */
 .launcher-layer {
   position: fixed;
   inset: 0;
@@ -18,7 +19,27 @@
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding: calc(var(--titlebar-h, 40px) + 8px) 16px 16px;
+  padding: max(8px, env(safe-area-inset-top, 0px)) 16px 16px;
+}
+
+/* La pillola che si è allargata non resta sotto, a far da doppione: torna
+   quando il lanciatore si chiude (`aria-expanded` lo scrive chi lo apre). */
+#pill[aria-expanded="true"] {
+  visibility: hidden;
+}
+
+/* I tasti stanno nella banda, non nel pannello: mentre il lanciatore è aperto
+   la banda sale sopra il velo con i soli suggerimenti, e gli altri pezzi
+   restano al loro posto, invisibili. La riga si vede solo quando dice il
+   contesto del lanciatore: prima, per la sua pausa, direbbe ancora i tasti
+   dell'editor sotto il velo. */
+#status-band[data-launcher] {
+  position: relative;
+  z-index: calc(var(--z-modal, 90) + 1);
+}
+#status-band[data-launcher] > :not(.status-hints),
+#status-band[data-launcher] > .status-hints:not([data-context="launcher"]) {
+  visibility: hidden;
 }
 
 /* Il velo e la superficie portano il piano anche da soli: la loro immagine in
@@ -179,6 +200,26 @@
 .launcher-preview[hidden] {
   display: none;
 }
+/* Il quadro di ciò che non è una nota: il quadratino, il nome e che cosa fa,
+   uno sotto l'altro, allineati a sinistra. */
+.launcher-preview-card {
+  flex: none;
+  display: grid;
+  justify-items: start;
+  min-width: 0;
+}
+.launcher-preview-card[hidden] {
+  display: none;
+}
+.launcher-preview-tile {
+  display: grid;
+  place-items: center;
+}
+.launcher-preview-title,
+.launcher-preview-text {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
 .launcher-preview-page {
   overflow-wrap: anywhere;
 }
@@ -220,70 +261,66 @@
   place-items: center;
 }
 
-/* Il rientro di un'intestazione: un passo per livello sotto il primo. */
+/* L'intestazione di un gruppo resta in cima mentre il gruppo scorre, sopra
+   le righe e sopra l'evidenziatore che scivola sotto di loro. */
+.launcher-list > .launcher-group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* Una riga sola: il nome prende il posto che c'è e si tronca, ciò che sta a
+   destra tiene al più poco meno di metà riga. Il rientro di
+   un'intestazione: un passo per livello sotto il primo. */
 .launcher-row-main {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   padding-inline-start: calc(var(--launcher-indent, 0) * 14px);
 }
-.launcher-row-title,
-.launcher-row-detail {
+.launcher-row-title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .launcher-row-meta {
-  flex: none;
-  max-width: 50%;
-  display: flex;
-  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 46%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 /* La frase del vuoto ripete la domanda: una parola lunghissima va a capo
-   invece di uscire dalla superficie. */
+   invece di uscire dalla superficie. Sotto, al centro, «Crea la nota». */
 .launcher-note {
   overflow-wrap: anywhere;
 }
+.launcher-results > .launcher-create {
+  align-self: center;
+}
 
+/* Il piede c'è solo al telefono: lì porta i controlli di chi tocca e non ha
+   i tasti («Azioni», «Apri nel pannello»). Sul computer i tasti stanno nella
+   banda, e il pannello finisce con l'elenco. */
 .launcher-foot {
   flex: none;
-  display: flex;
+  display: none;
   align-items: center;
-  min-width: 0;
-}
-/* Il conto resta intero e tiene la sinistra; se lo spazio manca sono i tasti
-   a cedere, dal fondo. */
-.launcher-status {
-  flex: none;
-  max-width: 60%;
-  margin-inline-end: auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* Un tasto che non entra intero va a capo, e a capo non si vede: l'altezza
-   di una riga sola la dà la pelle, con quella dei tasti. Così non resta mai
-   un tasto senza la sua parola. */
-.launcher-hints {
-  flex: 0 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
   justify-content: flex-end;
-  overflow: hidden;
-  white-space: nowrap;
+  min-width: 0;
 }
-.launcher-hint {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
+:root[data-client-shell="mobile"] .launcher-foot {
+  display: flex;
 }
-/* Il controllo del piede non cede mai il posto: è l'unico che si preme. */
+/* Niente da premere: niente piede (lo scrive `launcher.ts` in `data-empty`). */
+:root[data-client-shell="mobile"] .launcher-foot[data-empty] {
+  display: none;
+}
+/* Un controllo non cede mai il posto: è l'unica cosa che si preme. */
 .launcher-panel {
   flex: none;
   display: inline-flex;

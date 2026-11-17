@@ -19,16 +19,17 @@ export const LAUNCHER: PartAnatomy = {
     { name: "dialog-actions", states: INTERACTIVE, hooks: ["palette-actions", "primary", "danger"] },
     { name: "compare", states: REST, hooks: ["compare-box", "compare-lines", "compare-line"] },
     // Il lanciatore unificato (`shells/scrittoio/launcher/`): velo e superficie,
-    // testa col campo, fila dei modi, esiti, frase del vuoto, anteprima della
-    // nota attiva, piede col controllo che porta la domanda nel pannello Cerca.
+    // testa col campo, fila dei modi, esiti coi titoli dei gruppi, frase del
+    // vuoto, anteprima della riga attiva (il foglio di una nota, il quadro di
+    // ciò che non lo è), piede coi controlli di chi tocca (solo al telefono).
     { name: "unified-surface", states: REST, hooks: ["launcher-veil", "launcher"] },
     { name: "unified-head", states: [S("rest"), S("focused")], hooks: ["launcher-head", "launcher-lens", "launcher-input", "launcher-wait"] },
     // «Esc» in fondo al campo: chiude anche col puntatore.
     { name: "unified-close", states: [S("rest"), S("hover")], hooks: ["launcher-close"] },
     { name: "unified-modes", states: SELECTABLE, hooks: ["launcher-modes", "launcher-mode", "launcher-mode-tile"] },
-    { name: "unified-rows", states: SELECTABLE, hooks: ["launcher-list", "launcher-highlight", "launcher-row", "launcher-row-icon", "launcher-row-title", "launcher-row-detail", "launcher-row-meta", "launcher-note"] },
-    { name: "unified-preview", states: REST, hooks: ["launcher-preview", "launcher-preview-sheet", "launcher-preview-page", "launcher-preview-meta", "launcher-preview-fact", "launcher-preview-note"] },
-    { name: "unified-foot", states: REST, hooks: ["launcher-foot", "launcher-status", "launcher-hints", "launcher-hint", "launcher-key"] },
+    { name: "unified-rows", states: SELECTABLE, hooks: ["launcher-list", "launcher-highlight", "launcher-group", "launcher-row", "launcher-row-icon", "launcher-row-title", "launcher-row-meta", "launcher-note"] },
+    { name: "unified-preview", states: REST, hooks: ["launcher-preview", "launcher-preview-sheet", "launcher-preview-page", "launcher-preview-meta", "launcher-preview-fact", "launcher-preview-note", "launcher-preview-card", "launcher-preview-tile", "launcher-preview-title", "launcher-preview-text", "launcher-preview-key"] },
+    { name: "unified-foot", states: REST, hooks: ["launcher-foot"] },
     { name: "unified-panel", states: INTERACTIVE, hooks: ["launcher-panel"] },
   ],
 };

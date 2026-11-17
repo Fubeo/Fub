@@ -235,12 +235,6 @@
     display: block;
   }
 
-  /* Nel piede del lanciatore gli accordi sono di chi ha una tastiera fisica:
-     sul telefono resta il conto dei risultati. */
-  :root[data-client-shell="mobile"] .launcher-hints {
-    display: none;
-  }
-
   /* I sette modi non stanno in una riga, e una fila che scorre qui non ha
      niente che prenda il fuoco (nessuna linguetta è una fermata del Tab): axe
      la rifiuta (`scrollable-region-focusable`). Vanno a capo; il modo scelto
@@ -275,10 +269,8 @@
     transform: translate(-50%, -50%);
   }
 
-  /* Niente tasti sul telefono: i bottoni del piede («Azioni», «Crea la nota»,
-     «Apri nel pannello») dicono solo la parola. «Apri nel pannello» sparisce
-     quando non c'è una domanda da portare, così non sembra un comando spento. */
-  :root[data-client-shell="mobile"] .launcher-panel .launcher-key,
+  /* «Apri nel pannello», nel piede, sparisce quando non c'è una domanda da
+     portare, così non sembra un comando spento. */
   :root[data-client-shell="mobile"] .launcher-panel:disabled {
     display: none;
   }
