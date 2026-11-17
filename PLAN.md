@@ -1995,7 +1995,7 @@ Fatto quando: un test DOM del trascinamento che rilegge le date dal file;
 le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/base
-Stato: [~] in corso (coder, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (a45975091, 2026-11-17), PR bozza #472
 
 ## T35a · La Relazione nel contratto e i riepiloghi nel core
 
@@ -2847,7 +2847,7 @@ Fatto quando: test della riga dell'errore e della didascalia scritta nel
 sorgente; scene col sorgente con errore e ingrandito.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/diagram-live.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da `integra/editor-1`, 2026-11-17)
 
 ## T59 · Diagramma: tracciato e punte per ogni stile, orientamento
 
