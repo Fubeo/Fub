@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
@@ -14,6 +14,7 @@ import type { BlocksOptions } from "../blocks/handles";
 import { refreshPageHeader } from "../blocks/page";
 import type { NoteType, NoteTypeList, NoteTypeState } from "../../../../../state/note-types";
 import { noteTypeSource, typedChanges } from "./note-type";
+import { loadLazyParts } from "../../../../../ui/lazy-part";
 
 // Il tipo della nota nella testata (E5): le proprietà in evidenza del tipo,
 // la sua icona, l'avviso di un tipo guasto con «Scegli il tipo», e «In
@@ -38,6 +39,9 @@ const LIBRO: NoteType = {
 const TYPES: NoteTypeList = { folder: "Tipi", types: [LIBRO] };
 
 const views: EditorView[] = [];
+// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
+// come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(loadLazyParts);
 beforeEach(() => vi.stubGlobal("navigator", { language: "it" }));
 afterEach(() => {
   for (const view of views.splice(0)) view.destroy();
