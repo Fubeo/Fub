@@ -17,6 +17,7 @@ import { linkDialog } from "./link-dialog";
 import { livePreview, type LivePreviewCallbacks } from "./livepreview";
 import { cursorElements } from "./cursor-elements";
 import { markdownPaste } from "./paste";
+import { formulaPaste } from "./math/paste";
 import { openLinkKeymap } from "./open-link";
 import { markdownGrammar } from "./grammar";
 import { frontmatterRange } from "./render";
@@ -192,6 +193,9 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
         monospaceCode,
         frontmatter,
         markdownEditingExtensions(),
+        // Le formule incollate coi loro delimitatori (T65), prima dell'incolla
+        // del Markdown.
+        formulaPaste,
         markdownPaste,
         quotes,
         openLinkKeymap(options.callbacks),

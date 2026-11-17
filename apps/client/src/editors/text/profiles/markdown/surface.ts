@@ -105,8 +105,14 @@ import {
   tableRowAt,
   tagAt,
   taskAt,
+  formulaAt,
+  type FormulaAt,
   type MarkdownLinkAt,
 } from "./menu";
+import { loadKatex, readOptions } from "./math";
+import { editFormulaAt, placeFormulaAt } from "./math-live";
+import { mathmlHtml, wordMathml } from "./math/paste";
+import { toBlock, toInline } from "./math/place";
 import { MENU_RULE, type SurfaceMenuClipboard } from "../../../core/editor-menu";
 import { linkDialogOpener } from "./link-dialog";
 import { openImageAt, parseImage, rewriteImage, widthWritable, type ImageSource } from "./image-live";
@@ -1824,6 +1830,62 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     };
   };
 
+  /// Le voci di una formula (T65): Modifica, le tre copie, il posto. Al
+  /// passaggio del puntatore non compare niente: soltanto il tasto destro.
+  const mathMenu = (formula: FormulaAt, pos: number, element: Element | null): SurfaceMenu => {
+    const writable = editable();
+    const s = liveStrings.t.bind(liveStrings);
+    // `$$` in mezzo a una frase resta in riga, ma si disegna come un blocco.
+    const display = formula.dollars === 2;
+    const source = engine.readState((state) => state.sliceDoc(formula.from, formula.to));
+    const failed = (error: unknown) => notify(s("live.math.menu.copy_failed", { reason: errorText(error) }), "guasto");
+    const copyImage = (): void => {
+      // I colori e la misura della formula dove sta nella nota.
+      const host = element?.closest(".cm-fub-math, .math-block, .cm-fub-mx-block") ?? parent.querySelector(".cm-content") ?? parent;
+      const png = import("./math/image").then(({ formulaPng, lookOf }) => formulaPng(formula.tex, display, lookOf(host)));
+      png.catch(() => undefined);
+      // La promessa dei byte entra negli appunti dentro il gesto; col PNG il
+      // sorgente, che incollato in una nota torna formula.
+      void writeClipboardData({ "image/png": png, "text/plain": new Blob([source], { type: "text/plain" }) }).then(
+        () => notify(s("live.math.menu.copied_image"), "info"),
+        failed,
+      );
+    };
+    const copyWord = (): void => {
+      const mathml = loadKatex().then((library) => {
+        const made = wordMathml(library.renderToString(formula.tex, { ...readOptions(display, formula.tex), output: "mathml" }));
+        if (made === null) throw new Error(s("live.math.menu.copy_failed", { reason: "MathML" }));
+        return made;
+      });
+      mathml.catch(() => undefined);
+      const done = clipboardSupports("text/html")
+        ? writeClipboardData({
+          "text/plain": mathml.then((made) => new Blob([made], { type: "text/plain" })),
+          "text/html": mathml.then((made) => new Blob([mathmlHtml(made)], { type: "text/html" })),
+        })
+        : mathml.then(writeClipboardText);
+      void done.then(() => notify(s("live.math.menu.copied_word"), "info"), failed);
+    };
+    const toPlace = formula.block ? toInline(formula) : engine.readState((state) => toBlock(state, formula));
+    return {
+      target: { kind: "block", label: s("blocks.kind.math"), name: formula.tex.length > 60 ? `${formula.tex.slice(0, 59)}…` : formula.tex },
+      context: [
+        ...(writable ? [{ id: "markdown.math.edit", label: s("live.math.menu.edit"), icon: "pen", run: () => void engine.runViewCommand((view) => editFormulaAt(view, pos)) }] : []),
+        MENU_RULE,
+        ...(clipboardSupports("image/png") ? [{ id: "markdown.math.copy_image", label: s("live.math.menu.image"), icon: "image", run: copyImage }] : []),
+        { id: "markdown.math.copy_word", label: s("live.math.menu.word"), run: copyWord },
+        { id: "markdown.math.copy_latex", label: s("live.math.menu.latex"), icon: "copy", run: () => copyText(formula.tex, s("live.math.menu.copied_latex")) },
+        MENU_RULE,
+        ...(writable && toPlace !== null ? [{
+          id: formula.block ? "markdown.math.to_inline" : "markdown.math.to_block",
+          label: s(formula.block ? "live.math.menu.to_inline" : "live.math.menu.to_block"),
+          run: () => void engine.runViewCommand((view) => placeFormulaAt(view, pos, !formula.block)),
+        }] : []),
+      ],
+      note: { kind: "note", id: docId() },
+    };
+  };
+
   /// Il menu dove si scrive: Sorgente e Live.
   function writingMenu(at: SurfacePoint | null): SurfaceMenu | null {
     let pos = engine.readState((state) => state.selection.main.head);
@@ -1838,7 +1900,17 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         const menu = imageMenu(picture);
         if (menu) return menu;
       }
-      const point = engine.posAtPoint(at.x, at.y);
+      // Una formula resa (T65) non ha testo sotto il puntatore, e il punto
+      // dello schermo può cadere fuori da lei: vale la sua posizione nel DOM.
+      const formulaHost = mode === "live_preview" ? element.closest(".cm-fub-math, .math-block, .cm-fub-mx-block") : null;
+      let hostAt: number | null = null;
+      if (formulaHost) {
+        engine.runViewCommand((view) => {
+          hostAt = view.posAtDOM(formulaHost);
+          return true;
+        });
+      }
+      const point = hostAt ?? engine.posAtPoint(at.x, at.y);
       if (point !== null) {
         // Il tasto destro dentro la selezione la lascia com'è; fuori porta il
         // cursore lì, come il clic, perché le voci parlino di quel punto.
@@ -1846,7 +1918,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         // In Live un link resta com'è: il cursore dentro ne mostrerebbe la
         // sintassi, e il testo salterebbe proprio mentre il menu si apre.
         const onLink = mode === "live_preview" && engine.readState((state) => linkAt(state, point)) !== null;
-        if (!inside && !onLink) engine.placeCursor(point);
+        // Lo stesso per una formula resa: il cursore sul blocco lo aprirebbe.
+        const onFormula = formulaHost !== null;
+        if (!inside && !onLink && !onFormula) engine.placeCursor(point);
         pos = inside ? pos : point;
       }
     }
@@ -1898,6 +1972,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     }
     const code = engine.readState((state) => codeBlockAt(state, pos));
     if (code) return codeMenu(code);
+    const formula = hasSelection ? null : engine.readState((state) => formulaAt(state, pos));
+    if (formula) return mathMenu(formula, pos, element);
     if (mode === "source" && engine.readState((state) => tableRowAt(state, pos))) {
       return {
         ...common,
