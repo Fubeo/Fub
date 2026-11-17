@@ -120,6 +120,9 @@ pub mod template;
 pub mod trash;
 #[cfg(feature = "versioning")]
 pub mod versioning;
+/// Le date e le ore dei segnaposto `{{…}}`, condivise da template e ricette.
+#[cfg(any(feature = "template", feature = "recipes"))]
+pub mod vocabulary;
 
 #[cfg(feature = "backlinks")]
 pub use backlinks::{

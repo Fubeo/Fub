@@ -6,10 +6,19 @@
 //! codice `fub-recipe` dentro: si legge, si copia e si manda a un amico come
 //! ogni nota. Il contratto del blocco sta in `docs/reference/ricette.md`.
 //!
-//! Questo modulo, per ora, dà alle ricette il loro componente (si spegne e si
-//! vede nella mappa), l'impostazione della cartella e il punto di partenza
-//! per chi non usa un'AI: `recipes.new`, che scrive una ricetta d'esempio.
-//! Il formato, i controlli e l'esecuzione arrivano dopo, qui accanto.
+//! Questo modulo dà alle ricette il loro componente (si spegne e si vede
+//! nella mappa), l'impostazione della cartella, il punto di partenza per chi
+//! non usa un'AI (`recipes.new`, che scrive una ricetta d'esempio) e, nel
+//! sottomodulo `format`, la lettura e i controlli del blocco. L'esecuzione
+//! arriva dopo, qui accanto.
+
+mod format;
+
+pub use format::{
+    check_against, check_unique, command_id, expand, fingerprint, parse, spec, Problem,
+    ProblemCode, Recipe, RecipeParam, RecipeParamKind, RecipeStep, FORMAT_VERSION, RECIPES_MAX,
+    RECIPE_NS, STEPS_MAX,
+};
 
 use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
@@ -119,7 +128,219 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ),
     (P_NEW, "Crea la ricetta {doc}", "Create the recipe {doc}"),
     (D_NEW, "Ricetta creata: {doc}", "Recipe created: {doc}"),
-    (U_NEW, "Creazione della ricetta {doc}", "Creation of the recipe {doc}"),
+    (U_NEW, "Creazione della ricetta {doc}", "Creation of the recipe {doc}"),    (
+        crate::vocabulary::E_BAD_ZONE,
+        "Fuso orario «{zone}» non riconosciuto: scegli un nome IANA valido.",
+        "Unknown time zone «{zone}»: choose a valid IANA name.",
+    ),
+    (
+        crate::vocabulary::E_BAD_INSTANT,
+        "L'istante dell'orologio non è rappresentabile nel fuso orario.",
+        "The clock instant cannot be represented in this time zone.",
+    ),
+    (
+        "recipes.param.selection",
+        "Selezione",
+        "Selection",
+    ),
+    (
+        "recipes.param.selection.desc",
+        "Il testo selezionato su cui lavora la ricetta.",
+        "The selected text the recipe works on.",
+    ),
+    (
+        "recipes.param.doc",
+        "Nota",
+        "Note",
+    ),
+    (
+        "recipes.param.doc.desc",
+        "La nota su cui si usa la ricetta.",
+        "The note the recipe is used on.",
+    ),
+    // I problemi di una ricetta: una frase per codice, e per
+    // `valore-non-valido` e `yaml` una per motivo. Il codice resta
+    // stabile, le frasi si possono migliorare.
+    (
+        "recipes.problem.blocco-assente",
+        "La nota non ha un blocco fub-recipe: non è una ricetta.",
+        "The note has no fub-recipe block: it is not a recipe.",
+    ),
+    (
+        "recipes.problem.blocchi-doppi",
+        "La nota ha {count} blocchi fub-recipe: una ricetta ne ha uno solo. Tieni quello giusto e togli gli altri.",
+        "The note has {count} fub-recipe blocks: a recipe has only one. Keep the right one and remove the others.",
+    ),
+    (
+        "recipes.problem.yaml",
+        "Il blocco non si legge come YAML: {value}",
+        "The block cannot be read as YAML: {value}",
+    ),
+    (
+        "recipes.problem.yaml-map",
+        "Il blocco deve essere un elenco di campi «nome: valore», come fub-recipe: 1.",
+        "The block must be a list of “name: value” fields, such as fub-recipe: 1.",
+    ),
+    (
+        "recipes.problem.yaml-keys",
+        "Il nome di ogni campo del blocco è un testo: un numero, un elenco o una mappa non possono esserlo.",
+        "Every field name in the block is text: a number, a list or a map cannot be one.",
+    ),
+    (
+        "recipes.problem.campo-sconosciuto",
+        "«{field}» non è un campo delle ricette: toglilo o correggine il nome.",
+        "“{field}” is not a recipe field: remove it or fix its name.",
+    ),
+    (
+        "recipes.problem.campo-mancante",
+        "Manca il campo «{field}».",
+        "The field “{field}” is missing.",
+    ),
+    (
+        "recipes.problem.versione-futura",
+        "Questa ricetta è scritta per la versione {value} del formato, più nuova di questo Fub: aggiorna Fub per usarla.",
+        "This recipe is written for version {value} of the format, newer than this Fub: update Fub to use it.",
+    ),
+    (
+        "recipes.problem.version",
+        "«fub-recipe» è il numero della versione del formato: scrivi 1.",
+        "“fub-recipe” is the format version number: write 1.",
+    ),
+    (
+        "recipes.problem.wants-text",
+        "«{field}» vuole del testo.",
+        "“{field}” wants text.",
+    ),
+    (
+        "recipes.problem.wants-list",
+        "«{field}» vuole un elenco, una voce per riga che comincia con «- ».",
+        "“{field}” wants a list, one item per line starting with “- ”.",
+    ),
+    (
+        "recipes.problem.wants-map",
+        "«{field}» vuole dei campi «nome: valore».",
+        "“{field}” wants “name: value” fields.",
+    ),
+    (
+        "recipes.problem.wants-bool",
+        "«{field}» vuole true o false.",
+        "“{field}” wants true or false.",
+    ),
+    (
+        "recipes.problem.empty",
+        "«{field}» è vuoto: scrivi qualcosa o togli il campo.",
+        "“{field}” is empty: write something or remove the field.",
+    ),
+    (
+        "recipes.problem.id",
+        "L'id «{value}» non va: da 1 a 48 caratteri fra minuscole latine, cifre e «-».",
+        "The id “{value}” is not valid: 1 to 48 characters among lowercase Latin letters, digits and “-”.",
+    ),
+    (
+        "recipes.problem.steps-count",
+        "Una ricetta ha da 1 a 20 passi: questa ne ha {count}.",
+        "A recipe has 1 to 20 steps: this one has {count}.",
+    ),
+    (
+        "recipes.problem.keybinding",
+        "«{value}» non è una scorciatoia che Fub sa premere: scrivila come Mod-Alt-a.",
+        "“{value}” is not a shortcut Fub can press: write it like Mod-Alt-a.",
+    ),
+    (
+        "recipes.problem.surface",
+        "«{value}» non è un posto in cui offrire la ricetta: slash, slash_selection o toolbar.",
+        "“{value}” is not a place to offer the recipe: slash, slash_selection or toolbar.",
+    ),
+    (
+        "recipes.problem.kind",
+        "«{value}» non è un tipo di parametro: text, number, bool, document o choice.",
+        "“{value}” is not a parameter kind: text, number, bool, document or choice.",
+    ),
+    (
+        "recipes.problem.choice-empty",
+        "Il parametro «{value}» è una scelta senza opzioni: aggiungile in «options».",
+        "The parameter “{value}” is a choice without options: add them under “options”.",
+    ),
+    (
+        "recipes.problem.options-not-choice",
+        "Il parametro «{value}» ha delle opzioni ma non è una scelta: scrivi kind: choice o togli le opzioni.",
+        "The parameter “{value}” has options but is not a choice: write kind: choice or remove the options.",
+    ),
+    (
+        "recipes.problem.option-twice",
+        "L'opzione «{value}» è scritta due volte.",
+        "The option “{value}” is written twice.",
+    ),
+    (
+        "recipes.problem.param-name",
+        "«{value}» non può essere il nome di un parametro: minuscole latine, cifre e «_», cominciando con una lettera.",
+        "“{value}” cannot be a parameter name: lowercase Latin letters, digits and “_”, starting with a letter.",
+    ),
+    (
+        "recipes.problem.param-reserved",
+        "«{value}» è un parametro che Fub dà da sé: chiama il tuo in un altro modo.",
+        "“{value}” is a parameter Fub provides by itself: name yours differently.",
+    ),
+    (
+        "recipes.problem.param-twice",
+        "Due parametri si chiamano «{value}».",
+        "Two parameters are called “{value}”.",
+    ),
+    (
+        "recipes.problem.placeholder",
+        "«{value}» non è un segnaposto delle ricette: usa doc, title, folder, selection, le date (date, time…) o param.<nome>.",
+        "“{value}” is not a recipe placeholder: use doc, title, folder, selection, the dates (date, time…) or param.<name>.",
+    ),
+    (
+        "recipes.problem.placeholder-param",
+        "«{value}» cita un parametro che la ricetta non dichiara in «params».",
+        "“{value}” names a parameter the recipe does not declare under “params”.",
+    ),
+    (
+        "recipes.problem.placeholder-random",
+        "«{value}» non si usa nelle ricette: la prova deve mostrare ciò che succederà davvero.",
+        "“{value}” cannot be used in recipes: the preview must show what will really happen.",
+    ),
+    (
+        "recipes.problem.comando-sconosciuto",
+        "Il comando «{value}» non c'è: controlla l'id nella palette, o accendi il componente che lo porta.",
+        "The command “{value}” does not exist: check its id in the palette, or turn on the component that provides it.",
+    ),
+    (
+        "recipes.problem.comando-ricetta",
+        "Un passo non può lanciare un'altra ricetta («{value}»): copia qui i suoi passi.",
+        "A step cannot run another recipe (“{value}”): copy its steps here.",
+    ),
+    (
+        "recipes.problem.non-si-annulla",
+        "Il comando «{value}» non si annulla, e una ricetta fa soltanto ciò che si può annullare.",
+        "The command “{value}” cannot be undone, and a recipe only does what can be undone.",
+    ),
+    (
+        "recipes.problem.impostazioni",
+        "Il comando «{value}» cambia le impostazioni: una ricetta lavora sulle note, non sulle impostazioni.",
+        "The command “{value}” changes the settings: a recipe works on notes, not on settings.",
+    ),
+    (
+        "recipes.problem.argomenti",
+        "Gli argomenti di «{value}» non vanno: {detail}",
+        "The arguments of “{value}” are not valid: {detail}",
+    ),
+    (
+        "recipes.problem.id-ripetuto",
+        "Un'altra ricetta ha lo stesso id «{value}»: nessuna delle due si accende finché una non lo cambia.",
+        "Another recipe has the same id “{value}”: neither turns on until one of them changes it.",
+    ),
+    (
+        "recipes.problem.id-occupato",
+        "L'id «{value}» è già usato da un comando che non è questa ricetta: scegline un altro.",
+        "The id “{value}” is already used by a command that is not this recipe: choose another one.",
+    ),
+    (
+        "recipes.problem.troppe",
+        "Il vault ha più di {count} ricette: Fub legge soltanto le prime {count}, in ordine di percorso.",
+        "The vault has more than {count} recipes: Fub reads only the first {count}, in path order.",
+    ),
 ];
 
 pub struct RecipesCommands;
