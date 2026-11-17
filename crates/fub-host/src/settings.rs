@@ -207,8 +207,8 @@ pub const EDITOR_INDENT: &str = "editor.indent";
 /// YAML. Il default è quello di prima che fosse una scelta.
 pub const EDITOR_PROPERTIES: &str = "editor.properties";
 /// Quando compare la mini-barra di formattazione accanto al puntatore:
-/// `auto` col tasto destro e, a barra del foglio spenta, sul testo scelto;
-/// `always` anche sul testo scelto a barra accesa; `menu` soltanto col tasto
+/// `auto` col tasto destro e sul testo scelto, tranne con la barra `completa`;
+/// `always` anche sul testo scelto con la barra completa; `menu` soltanto col tasto
 /// destro; `off` mai.
 pub const EDITOR_MINIBAR: &str = "editor.minibar";
 /// La forma della barra di formato del foglio: `compatta` (poche cose fisse,
@@ -2520,7 +2520,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
         .with(C_EDITOR_MINIBAR, "Mini-barra di formattazione")
         .with(C_EDITOR_MINIBAR_DESC, "I gesti di formattazione accanto al puntatore: sopra il menu del tasto destro e, se si vuole, sul testo scelto.")
-        .with(C_EDITOR_MINIBAR_AUTO, "Col tasto destro, e sul testo scelto a barra spenta")
+        .with(C_EDITOR_MINIBAR_AUTO, "Col tasto destro, e sul testo scelto se la barra non è completa")
         .with(C_EDITOR_MINIBAR_ALWAYS, "Col tasto destro e su ogni testo scelto")
         .with(C_EDITOR_MINIBAR_MENU, "Soltanto col tasto destro")
         .with(C_EDITOR_MINIBAR_OFF, "Mai")
@@ -3197,7 +3197,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
         .with(C_EDITOR_MINIBAR, "Formatting mini toolbar")
         .with(C_EDITOR_MINIBAR_DESC, "Formatting gestures next to the pointer: above the right-click menu and, if you like, on selected text.")
-        .with(C_EDITOR_MINIBAR_AUTO, "On right-click, and on selected text with the bar off")
+        .with(C_EDITOR_MINIBAR_AUTO, "On right-click, and on selected text unless the bar is full")
         .with(C_EDITOR_MINIBAR_ALWAYS, "On right-click and on any selected text")
         .with(C_EDITOR_MINIBAR_MENU, "Only on right-click")
         .with(C_EDITOR_MINIBAR_OFF, "Never")

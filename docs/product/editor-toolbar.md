@@ -46,7 +46,8 @@ il gruppo del blocco lascia il posto ai fissi.
 
 L'impostazione `editor.toolbar` sceglie la forma: `compatta` (di serie),
 `completa` (tutti i pulsanti, la fila della pre-alpha) o `nascosta` (resta
-la mini-barra sul testo scelto). Il comando «Mostra o nascondi la barra di
+la mini-barra sul testo scelto, che di serie compare anche con la barra
+compatta e non con quella completa). Il comando «Mostra o nascondi la barra di
 formato», nel menu Vista, alterna `nascosta` e l'ultima forma visibile. Una
 sola fonte: `chrome.formatbar.visible` spento da un Fub di prima vale
 `nascosta` finché `editor.toolbar` non c'è, e non si riscrive mai. La

@@ -1,10 +1,8 @@
 // La bolla di selezione: la mini-barra (`mini-bar.ts`) accanto al testo
-// scelto, quando la barra del foglio è spenta (`editor.toolbar` su `nascosta`)
-// o l'impostazione `editor.minibar` la vuole sempre.
-//
-// Con la barra accesa, di norma, la bolla non c'è: due copie degli stessi
-// pulsanti sullo stesso foglio sarebbero rumore, a meno che chi scrive non la
-// chieda (`editor.minibar` = `always`). La tastiera resta quella della barra:
+// scelto. Con `editor.minibar` = `auto` c'è sempre tranne con la barra del
+// foglio `completa` (`editor.toolbar`), che ha già tutti i pulsanti: due copie
+// sullo stesso foglio sarebbero rumore; `always` la vuole comunque, `menu` e
+// `off` mai (`bubbleWanted`). La tastiera resta quella della barra:
 // un solo punto di tabulazione, le frecce, Escape che riporta al testo.
 //
 // Dove sta il testo lo dice la superficie (`selectionBox`), mai l'editor: qui
@@ -34,8 +32,8 @@ export interface SelectionBubble {
 }
 
 export interface BubbleHost extends MiniBarHost {
-  /// La bolla è voluta adesso: barra del foglio spenta, o `editor.minibar`
-  /// che la chiede sempre (`bubbleWanted`).
+  /// La bolla è voluta adesso, secondo `editor.minibar` e la forma della
+  /// barra del foglio (`bubbleWanted`).
   wanted(): boolean;
   /// Il riquadro ha il fuoco (o la bolla ce l'ha): un riquadro che non si sta
   /// usando non mostra una bolla per una selezione di prima.

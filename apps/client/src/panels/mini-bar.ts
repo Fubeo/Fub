@@ -32,7 +32,7 @@ import { openLifetime } from "../ui/lifetime";
 import { closeContextMenu, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
 import { attachTooltip } from "../ui/tooltip";
 import { identifier } from "../ui/a11y";
-import { canTransform, transformItems, transformOffered, type FormatBarHost } from "./format-bar";
+import { canTransform, transformItems, transformOffered, type FormatBarHost, type ToolbarForm } from "./format-bar";
 
 export type MiniBarMode = "auto" | "always" | "menu" | "off";
 
@@ -107,9 +107,16 @@ export function miniBarMode(): MiniBarMode {
   return miniBarModeOf(document.getElementById("app")?.dataset["minibar"]);
 }
 
-/// La bolla sul testo scelto: con `auto` soltanto a barra del foglio spenta.
-export function bubbleWanted(mode: MiniBarMode, barOff: boolean): boolean {
-  return mode === "always" || (mode === "auto" && barOff);
+/// La bolla sul testo scelto, data la forma della barra del foglio: con `auto`
+/// sempre tranne con la barra `completa`, che ha già tutti i pulsanti (come il
+/// prototipo, dove la barra compatta e la mini-barra convivono); con `always`
+/// sempre; con `menu` e `off` mai. Una superficie con la sua barra intera
+/// (`ownBar`, la barra multifunzione di un documento) vale come la barra
+/// completa: con `auto` la bolla c'è solo a barra nascosta.
+export function bubbleWanted(mode: MiniBarMode, form: ToolbarForm, ownBar = false): boolean {
+  if (mode === "always") return true;
+  if (mode !== "auto") return false;
+  return ownBar ? form === "nascosta" : form !== "completa";
 }
 
 /// Ciò di cui la mini-barra ha bisogno da chi la ospita: la stessa porta della

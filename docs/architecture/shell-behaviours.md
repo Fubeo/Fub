@@ -28,8 +28,8 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   `compatta`, `completa`, `nascosta`; `chrome.formatbar.visible` spento da
   un Fub di prima vale `nascosta` finché quella non c'è). La shell la mette
   su `#app[data-toolbar]` e, nascosta, `data-formatbar-off`; il comando
-  `shell.toolbar.toggle` alterna `nascosta` e l'ultima forma visibile. Con la
-  barra nascosta compare la mini-barra sulla selezione;
+  `shell.toolbar.toggle` alterna `nascosta` e l'ultima forma visibile. Sul testo
+  scelto compare la mini-barra, tranne con la barra `completa`;
   l'impostazione `editor.minibar` (`auto`, `always`, `menu`, `off`) dice se
   compare anche col tasto destro e su ogni selezione. Il «/» a inizio riga o
   dopo uno spazio apre nella nota il menu dei blocchi e dei comandi, filtrato

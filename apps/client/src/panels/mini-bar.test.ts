@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommandSpec } from "../host/contract";
 import type { EditorSurface } from "../editors/core/registry";
 import type { EditorActionState, SurfaceEditorActions } from "../editors/core/editor-actions";
-import { registerFormatIcons } from "./format-bar";
+import { registerFormatIcons, type ToolbarForm } from "./format-bar";
 import {
   bubbleWanted,
   COMMENT_ACTION,
@@ -112,13 +112,20 @@ describe("quando c'è la mini-barra", () => {
     expect(miniBarModeOf("altro")).toBe("auto");
   });
 
-  it("sul testo scelto: auto solo a barra spenta, always sempre, menu e off mai", () => {
-    const cases: [MiniBarMode, boolean, boolean][] = [
-      ["auto", true, true], ["auto", false, false],
-      ["always", false, true], ["always", true, true],
-      ["menu", true, false], ["off", true, false],
+  it("sul testo scelto: auto tranne con la barra completa, always sempre, menu e off mai", () => {
+    const cases: [MiniBarMode, ToolbarForm, boolean][] = [
+      // Come il prototipo: la barra compatta e la mini-barra convivono.
+      ["auto", "compatta", true], ["auto", "nascosta", true], ["auto", "completa", false],
+      ["always", "completa", true], ["always", "compatta", true],
+      ["menu", "nascosta", false], ["off", "compatta", false],
     ];
-    for (const [mode, barOff, shown] of cases) expect(bubbleWanted(mode, barOff)).toBe(shown);
+    for (const [mode, form, shown] of cases) expect(bubbleWanted(mode, form), `${mode} + ${form}`).toBe(shown);
+  });
+
+  it("una superficie con la sua barra intera (la multifunzione) vale come la barra completa", () => {
+    expect(bubbleWanted("auto", "compatta", true)).toBe(false);
+    expect(bubbleWanted("auto", "nascosta", true)).toBe(true);
+    expect(bubbleWanted("always", "compatta", true)).toBe(true);
   });
 });
 

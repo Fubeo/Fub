@@ -154,13 +154,14 @@ spenti. Il puntatore non prende il fuoco, che resta al testo con la sua
 selezione; da tastiera la fila è un punto di tabulazione con le frecce, ed
 Escape torna al testo.
 
-Sul testo scelto compare da sola quando la barra di formattazione è
-nascosta, sopra la selezione (sotto se sopra non c'è posto) e senza uscire
+Sul testo scelto compare da sola, con la barra di formattazione compatta o
+nascosta: sopra la selezione (sotto se sopra non c'è posto) e senza uscire
 dalla finestra; mentre il suo menu Trasforma o Colore è aperto resta ferma.
-Se si apre il menu del tasto destro, la mini-barra ne prende la testa (E29).
-L'impostazione «Mini-barra di formattazione» (`editor.minibar`) sceglie fra
-`auto` (così), `always` (anche su ogni selezione con la barra accesa),
-`menu` (solo col tasto destro) e `off`. Le scene `mini-barra-*` del banco la
+Con la barra completa, che ha già tutti i pulsanti, no. Se si apre il menu
+del tasto destro, la mini-barra ne prende la testa (E29). L'impostazione
+«Mini-barra di formattazione» (`editor.minibar`) sceglie fra `auto` (così),
+`always` (su ogni selezione, anche con la barra completa), `menu` (solo col
+tasto destro) e `off`. Le scene `mini-barra-*` del banco la
 fotografano.
 
 ## Il «/» nel testo

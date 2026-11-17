@@ -546,7 +546,7 @@ function createPane(id: string): PaneElements {
   const formatBar = createFormatBar({ ...barHost, blocks: true, form: currentToolbarForm });
   const selectionBubble: SelectionBubble = createSelectionBubble({
     ...barHost,
-    wanted: () => bubbleWanted(miniBarMode(), document.getElementById("app")?.hasAttribute("data-formatbar-off") === true),
+    wanted: () => bubbleWanted(miniBarMode(), currentToolbarForm(), barHost.surface()?.ownBar === true),
     active: () => root.contains(document.activeElement) || selectionBubble.element.contains(document.activeElement),
   });
   const modeCurrent = createModeCurrent(id);

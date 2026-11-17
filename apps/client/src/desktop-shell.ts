@@ -214,8 +214,8 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
 let lastVisibleToolbar: ToolbarForm = DEFAULT_TOOLBAR_FORM;
 
 /// Mette la forma della barra sulla finestra: `data-toolbar` per le barre dei
-/// riquadri, `data-formatbar-off` per la resa e per la bolla della selezione,
-/// che a barra nascosta prende i gesti. L'evento lo dice a tutte, una volta.
+/// riquadri e per la bolla della selezione (`bubbleWanted`), `data-formatbar-off`
+/// per la resa. L'evento lo dice a tutte, una volta.
 function applyToolbarForm(form: ToolbarForm): void {
   const app = document.getElementById("app");
   if (!app) return;
