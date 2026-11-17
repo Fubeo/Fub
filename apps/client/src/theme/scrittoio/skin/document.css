@@ -2764,10 +2764,9 @@ button.cm-fub-page-icon:focus-visible {
   border-left-color: var(--doc-rule-soft);
   color: var(--muted);
 }
-/* Il segnaposto di un blocco sparito è vuoto: la frase è tutto quello che
-   c'è, senza parentesi. */
-.embed-missing::after {
-  content: attr(data-embed-note);
+/* Il blocco sincronizzato il cui blocco non c'è più: la frase, nella lingua
+   della UI, al posto del link. */
+.embed.embed-missing {
   font-family: var(--font-ui);
   font-size: var(--text-sm);
 }

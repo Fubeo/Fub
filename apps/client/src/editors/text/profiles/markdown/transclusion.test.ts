@@ -524,7 +524,7 @@ describe("la resa che ospita", () => {
     const slot = container.querySelector<HTMLElement>(".embed")!;
     await vi.waitFor(() => expect(slot.classList.contains("unresolved")).toBe(true));
     expect(slot.classList.contains("embed-missing")).toBe(true);
-    expect(slot.dataset.embedNote).toBe("Blocco non trovato");
+    expect(slot.textContent).toBe("Blocco non trovato");
     expect(transclude).not.toHaveBeenCalled();
     dispose();
   });

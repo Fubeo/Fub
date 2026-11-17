@@ -5667,3 +5667,7 @@ input.canvas-toolbar-item {
   background: transparent;
   box-shadow: inset 2px 0 0 var(--accent);
 }
+/* Il testo non si sposta quando l'editor prende il posto della resa. */
+.pane-editor[data-markdown-mode] .transclusion-synced .transclusion-editor .cm-content {
+  padding: 0;
+}

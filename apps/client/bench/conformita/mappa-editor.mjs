@@ -685,6 +685,15 @@ export const PEZZI = [
     proprieta: [...BASE, "min-width"],
   },
   {
+    // La riga piccola sotto una voce (T30: «lo stesso blocco in più note»
+    // sotto «Sincronizza in un'altra nota…»).
+    id: "menu.voce-descrizione",
+    vista: "menu-blocco",
+    prototipo: ".m-i small",
+    app: ".context-menu .menu-description",
+    proprieta: ["font", "color", "margin", "white-space"],
+  },
+  {
     id: "menu.campo",
     vista: "menu-blocco",
     prototipo: ".m-s",

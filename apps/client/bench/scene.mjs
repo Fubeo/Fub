@@ -86,6 +86,8 @@ const SHEET_FULL = { width: 1308, height: 800 };
 const NOTE_NARROW = { width: 800, height: 800 };
 /// La testata della trasclusione viva nel riquadro col fuoco.
 const TRANSCLUSION_HEAD = ".pane.focus .pane-editor .transclusion .transclusion-head";
+/// Il blocco sincronizzato nel riquadro col fuoco.
+const SYNCED_BLOCK = ".pane.focus .pane-editor .transclusion-synced";
 /// Una finestra documento appena aperta.
 const DOCUMENT_WINDOW = { width: 900, height: 700 };
 
@@ -1484,6 +1486,34 @@ export const SCENE = touchLast(onPage("shell", [
     // Il passaggio è l'ultimo gesto, dopo che il palco ha portato via il
     // puntatore.
     ...(writing ? {} : { hover: (page) => page.hover(TRANSCLUSION_HEAD) }),
+  })),
+  // Il blocco sincronizzato (T30): un blocco della nota col filo discreto a
+  // sinistra; al passaggio la targhetta «Sincronizzato con …»; un clic lo
+  // scrive dove sta. Sotto, un blocco d'origine cancellato: «Blocco non
+  // trovato».
+  ...[
+    ["blocco-sincronizzato-01-passaggio", "Il blocco sincronizzato al passaggio: «Sincronizzato con …» e «Apri»; sotto, «Blocco non trovato»", false],
+    ["blocco-sincronizzato-02-scrive", "Un clic sul blocco sincronizzato: si scrive dove sta, senza fascia", true],
+    ["blocco-sincronizzato-03-stretta", "Il blocco sincronizzato al passaggio nella finestra stretta, 800 px", false, NOTE_NARROW],
+  ].map(([id, title, writing, viewport]) => ({
+    id,
+    title,
+    query: "live=sincronizzato",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForSelector(`${SYNCED_BLOCK} .transclusion-body p`);
+      await page.waitForSelector(".pane.focus .pane-editor .embed-missing");
+      if (!writing) return;
+      await page.click(`${SYNCED_BLOCK} .transclusion-body p`);
+      await page.waitForSelector(`${SYNCED_BLOCK}.transclusion-editing .transclusion-editor .cm-content:focus`);
+    },
+    ...(writing ? {} : {
+      hover: async (page) => {
+        await page.hover(`${SYNCED_BLOCK} .transclusion-body`);
+        await page.waitForFunction((selector) => getComputedStyle(document.querySelector(selector)).opacity === "1", `${SYNCED_BLOCK} > .transclusion-head`);
+      },
+    }),
   })),
   // La riga dei suggerimenti (T14): al centro della banda, i tasti per ciò che
   // si sta facendo. Una parola scelta a 1280 px; un blocco scelto nella
