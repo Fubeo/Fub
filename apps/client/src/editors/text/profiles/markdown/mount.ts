@@ -82,7 +82,30 @@ export interface MarkdownMountOptions {
    * nota ferma della lavagna). Senza, la chiusura svuota il contenitore.
    */
   readonly keepOnTeardown?: boolean;
+  /**
+   * La trasclusione viva (E14, `transclusion.ts`): riceve ogni nota riportata
+   * al primo livello appena resa nel suo posto, con la vita della resa e
+   * `hold`, che rimanda le rese nuove finché chi la tiene non la lascia (una
+   * persona sta scrivendo lì dentro). Le note riportate dentro una nota
+   * riportata non la ricevono: si scrive un livello solo.
+   */
+  readonly transclude?: TranscludeSlot;
 }
+
+/// Una nota riportata, come la trasclusione viva la riceve: il documento che
+/// la resa ha risolto e il riferimento scritto nella nota.
+export interface TranscludedEmbed {
+  readonly doc: string;
+  readonly page: string;
+  readonly heading: string | null;
+  readonly block: string | null;
+}
+
+/// Rimanda le rese nuove della nota che ospita la trasclusione finché il
+/// disposer non è chiamato; una resa rimandata si fa allora.
+export type HoldRender = () => () => void;
+
+export type TranscludeSlot = (slot: HTMLElement, embed: TranscludedEmbed, life: Lifetime, hold: HoldRender) => void;
 
 const MAX_EMBED_DEPTH = 5;
 const mounts = new WeakMap<HTMLElement, Teardown>();
@@ -450,7 +473,7 @@ export function mountRenderedDocument(
   const documentId = options.documentId;
   const ready = documentId
     ? race.last((expected) => Promise.all([
-      hydrateEmbeds(container, new Set([JSON.stringify([documentId, null, null])]), new Map(), expected, mountOptions, life),
+      hydrateEmbeds(container, new Set([JSON.stringify([documentId, null, null])]), new Map(), expected, mountOptions, life, null),
       hydrateVaultMedia(container, documentId, expected, life),
     ])).then(() => undefined, () => undefined)
     : Promise.resolve();
@@ -471,6 +494,7 @@ async function hydrateEmbeds(
   expected: Expected,
   options: MarkdownMountOptions,
   life: Lifetime,
+  hold: HoldRender | null,
 ): Promise<void> {
   await Promise.all(Array.from(container.querySelectorAll<HTMLElement>(".embed[data-embed-page]")).map(async (slot) => {
     const page = slot.dataset.embedPage || options.documentId;
@@ -529,14 +553,23 @@ async function hydrateEmbeds(
       editFence: undefined,
       importRemoteImage: undefined,
       navigateFragment: undefined,
+      // Si scrive un livello solo: una nota riportata dentro questa resta da leggere.
+      transclude: undefined,
       openWikilink: (page, heading, block) => options.openWikilink?.(page || content.doc_id, heading, block),
       openPath: (path, from = content.doc_id) => options.openPath?.(path, from),
     };
     mountContent(slot, content, embeddedOptions, life);
     slot.classList.add("embed-loaded");
+    if (options.transclude && hold) {
+      try {
+        options.transclude(slot, { doc: content.doc_id, page, heading, block }, life, hold);
+      } catch (error) {
+        console.error(error);
+      }
+    }
     container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
     await Promise.all([
-      hydrateEmbeds(slot, new Set([...chain, identity]), memo, expected, embeddedOptions, life),
+      hydrateEmbeds(slot, new Set([...chain, identity]), memo, expected, embeddedOptions, life, null),
       hydrateVaultMedia(slot, content.doc_id, expected, life, undefined, opener(embeddedOptions, life)),
     ]);
   }));
@@ -567,6 +600,10 @@ export function mountMarkdown(
   let firstFrom: number | null = null;
   let nativeUses: NativeMarkdownContent[] = [];
   let hasEmbeds = false;
+  /// Le trasclusioni in cui si scrive tengono ferma la resa di adesso: una
+  /// resa nuova le smonterebbe sotto le dita. Quella rimandata si fa quando
+  /// l'ultima lascia.
+  let gate = { holds: 0, stale: false };
   const dispose = () => {
     contentRace?.cancel();
     contentLife?.close();
@@ -585,6 +622,23 @@ export function mountMarkdown(
     contentLife?.close();
     const mountedLife = contentLife = openLifetime();
     const mountedRace = contentRace = new Race();
+    const mountedGate = gate = { holds: 0, stale: false };
+    const hold: HoldRender = () => {
+      if (mountedLife.closed) return () => {};
+      mountedGate.holds += 1;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        mountedGate.holds -= 1;
+        if (mountedGate.holds > 0 || !mountedGate.stale) return;
+        mountedGate.stale = false;
+        // Fuori dal disposer che lascia: chi lascia può farlo mentre smonta.
+        queueMicrotask(() => {
+          if (!life.closed && !mountedLife.closed && gate === mountedGate && mountedGate.holds === 0) render();
+        });
+      };
+    };
     // Chi ospita la resa ci mette in cima cose sue (la testata della Lettura,
     // `data-md-pinned`): una resa rifatta da sé le rimette dov'erano, con i
     // loro ascoltatori. Non sono della resa, e i passi qui sotto non le vedono.
@@ -632,7 +686,7 @@ export function mountMarkdown(
       void mountedRace.last((expected) => Promise.all([
         ...(documentId && (hasEmbeds || hasImages)
           ? [
-            hydrateEmbeds(container, new Set([JSON.stringify([documentId, null, null])]), new Map(), expected, options, mountedLife),
+            hydrateEmbeds(container, new Set([JSON.stringify([documentId, null, null])]), new Map(), expected, options, mountedLife, hold),
             hydrateVaultMedia(container, documentId, expected, mountedLife, undefined, opener(options, mountedLife)),
           ]
           : []),
@@ -660,7 +714,10 @@ export function mountMarkdown(
       }
       const same = projected.length === nativeUses.length
         && projected.every((rendered, index) => rendered === nativeUses[index]);
-      if (!same || (change === "embeds" && hasEmbeds)) render();
+      if (!same || (change === "embeds" && hasEmbeds)) {
+        if (gate.holds > 0) gate.stale = true;
+        else render();
+      }
     }));
   }
   return dispose;

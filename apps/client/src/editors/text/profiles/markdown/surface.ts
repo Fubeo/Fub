@@ -58,6 +58,7 @@ import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";
 
 export { cursorIsLiteral };
 import { createMarkdownProfile } from "./profile";
+import { Transclusions, type TransclusionDeps } from "./transclusion";
 import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
 import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState, relinkImage } from "./actions";
@@ -191,6 +192,10 @@ export interface MarkdownSurfaceOptions {
   /// chi la legge, perché l'editor non chiama l'host da sé. Senza, la riga
   /// non c'è.
   noteFacts?: NoteFactsSource;
+  /// La trasclusione viva (E14): le sessioni della finestra e le regole di
+  /// un riquadro, per scrivere dentro `![[Nota#^id]]`. Senza, le note
+  /// riportate si leggono soltanto.
+  transclusion?: TransclusionDeps;
   /// Sorgenti per i completamenti del profilo Markdown.
   completions: CompletionSources;
   /// La slash palette è disponibile solo se la shell ne fornisce le capacità.
@@ -393,6 +398,35 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     openLinks: () => opts.noteFacts?.openLinks(),
     searchTag: (tag: string) => opts.onSearchTag(tag),
   };
+  /// Le trasclusioni vive della nota (E14): l'editor del tratto è la
+  /// Scrittura delle note sul documento d'origine, senza trasclusione viva
+  /// (si scrive un livello solo) e senza i Blocchi.
+  let currentTheme: Theme = getCurrentTheme();
+  const transclusions = new Transclusions({
+    deps: opts.transclusion ?? null,
+    hostDoc: linkSource,
+    editable: () => editable(),
+    open: (page, heading, block) => void openWikilink(page, heading, block),
+    theme: () => currentTheme,
+    extensions: (doc) => createMarkdownProfile({
+      callbacks: {
+        openWikilink: (page, heading, block) => void opts.onOpenWikilink(page, heading, block, doc),
+        searchTag: opts.onSearchTag,
+        openPath: (path) => void Promise.resolve(opts.onOpenPath(path, doc)).catch(() => {}),
+        pageIcon: opts.pageIcons?.icon,
+        isPerson: opts.pageIcons?.isPerson,
+        mountRendered: (container, html, actions) => mountMarkdown(container, html, {
+          ...actions,
+          documentId: doc,
+          openWikilink: (page, heading, block) => opts.onOpenWikilink(page, heading ?? null, block ?? null, doc),
+          openPath: (path) => opts.onOpenPath(path, doc),
+          openFigure: opts.onOpenFigure,
+          searchTag: opts.onSearchTag,
+        }),
+      },
+      completions: { searchNotes: opts.completions.searchNotes, listTags: opts.completions.listTags },
+    }).extensions(),
+  });
   const profile = createMarkdownProfile({
     ...(opts.noteFacts ? { noteFacts: noteFactsExtensions({ current: () => facts, actions: factsActions }) } : {}),
     callbacks: {
@@ -446,6 +480,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         toggleTask: readOnly ? undefined : actions.toggleTask,
         editFence: readOnly ? undefined : actions.editFence,
         importRemoteImage: readOnly ? undefined : importRemoteImage,
+        transclude: readOnly ? undefined : transclusions.mount,
       }),
     },
     completions: slashMenu ? { ...opts.completions, slash: slashMenu } : opts.completions,
@@ -502,8 +537,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     copied = null;
     carried = null;
     if (mode === "reading" || !(event.target instanceof Element) || !event.target.closest(".cm-content")) return;
-    // La griglia di una tabella copia le sue celle da sé.
-    if (event.target.closest(".tb-frame")) return;
+    // La griglia di una tabella copia le sue celle da sé, e l'editor di una
+    // trasclusione viva il suo testo.
+    if (event.target.closest(".tb-frame, [data-transclusion-editing]")) return;
     copied = engine.readState(selectionSource);
     // Tagliare tutto il testo di un passo porta il commento negli appunti di
     // Fub (`comments/copy.ts`); qualunque altra copia lo dimentica.
@@ -529,8 +565,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       !slash || event.key !== "/" || event.defaultPrevented || event.isComposing ||
       event.altKey || event.ctrlKey || event.metaKey || readOnly || mode === "reading" ||
       !(event.target instanceof Element) || !event.target.closest(".cm-content") ||
-      // Una griglia di tabella scrive le sue celle: il `/` è testo.
-      event.target.closest(".tb-frame")
+      // Una griglia di tabella scrive le sue celle, una trasclusione viva il
+      // suo tratto: il `/` è testo.
+      event.target.closest(".tb-frame, [data-transclusion-editing]")
     ) return;
     if (slash.currentDoc() !== documentId) return;
     // «e/o», 24/09, URL, path e codice restano testo: la palette si apre su
@@ -653,7 +690,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       actionsChanged();
     },
     theme: getCurrentTheme(),
-    extensions: () => [profile.extensions(), comments.extension()],
+    extensions: () => [profile.extensions(), comments.extension(), transclusions.keys()],
   });
   if (opts.linkCards) {
     life.add(opts.linkCards.watch(() => {
@@ -1904,7 +1941,11 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       syncReading();
       actionsChanged();
     },
-    setTheme: (theme) => engine.setTheme(theme),
+    setTheme: (theme) => {
+      currentTheme = theme;
+      engine.setTheme(theme);
+      transclusions.setTheme(theme);
+    },
     editorActions,
     panels: comments.panels,
     contextMenu: (at) => {
@@ -1929,6 +1970,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         editable,
         copy: (text) => copyText(text, t("editor_menu.copied")),
         openLink: (page, heading, block) => void openWikilink(page, heading, block),
+        editHere: (start) => engine.runViewCommand((view) => transclusions.editAt(view, start)),
       }, pos);
     },
     find: () => !life.closed && mode !== "reading" && engine.openFind(),
