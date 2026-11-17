@@ -98,7 +98,7 @@ pub use host::{
     authorize_query, filter_query_result, Capability, CapabilitySet, Granted, Guard, Policy,
     ReadOnly,
 };
-pub use index::plan::{PlanStep, QueryPlan};
+pub use index::plan::{PlanStep, QueryFailure, QueryPlan};
 pub use index::{RouteConflict, CORE_ID};
 pub use journal::{journal_path, JournalOp, JournalRead, JournalRecord};
 pub use locale::SystemLocale;

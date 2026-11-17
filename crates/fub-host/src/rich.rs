@@ -200,7 +200,20 @@ pub(crate) fn open(
         };
         opened
             .map(|opened| opened.projection)
-            .map_err(|error| plugin_error(doc, error))
+            .map_err(|error| match error {
+                // Il codec che rifiuta i byte all'apertura dice il perché in
+                // inglese tecnico («Could not find EOCD»): è una diagnosi per
+                // chi indaga, e va nel log. Chi apre il file legge che cosa
+                // ha il file e che non si apre.
+                fub_format_rich::RichError::Codec(why) => {
+                    tracing::warn!(target: "fub.host", doc = %doc.as_str(), %why, "documento illeggibile");
+                    PluginError::Internal(Text::message(
+                        "host.rich.unreadable",
+                        vec![Arg::text("doc", doc.as_str())],
+                    ))
+                }
+                other => plugin_error(doc, other),
+            })
     }
     #[cfg(not(feature = "rich"))]
     {

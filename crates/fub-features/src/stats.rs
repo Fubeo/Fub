@@ -268,8 +268,15 @@ impl ViewProvider for StatsView {
         // Un PDF, un'immagine: un file che non è testo non ha parole, e lo si
         // dice. Restituire l'errore della lettura farebbe fallire il pannello a
         // ogni ridisegno, cioè un avviso a ogni movimento del cursore.
-        let Some(counted) = counted_text(host, doc)? else {
-            return Ok(not_text());
+        //
+        // Lo stesso per un documento che non si apre (un .docx vuoto, rotto o
+        // cifrato): il perché lo dice la sua scheda, che è dove lo si guarda;
+        // qui è uno stato del pannello, non un guasto da notificare a ogni
+        // apertura con il gergo del codec.
+        let counted = match counted_text(host, doc) {
+            Ok(Some(counted)) => counted,
+            Ok(None) => return Ok(not_text()),
+            Err(_) => return Ok(row(Text::key(UNREADABLE)).with_key(UNREADABLE)),
         };
         Ok(build_stats_view(
             count(&counted.text),
@@ -691,6 +698,9 @@ const NO_DOC: &str = "no_doc";
 /// Il file non è testo (un PDF, un'immagine): non ci sono parole da contare.
 /// È anche la chiave con cui `fub-cli wordcount` riconosce la risposta.
 const NOT_TEXT: &str = "not_text";
+/// Il documento aperto non si legge (vuoto, rovinato, cifrato): le parole non
+/// si contano, e non è un guasto del pannello.
+const UNREADABLE: &str = "unreadable";
 /// `stats.document` chiamata senza la nota da contare.
 const E_DOC_PARAM: &str = "e_doc_param";
 /// I conteggi del documento, e quelli della selezione: due chiavi e non una con
@@ -731,6 +741,10 @@ pub fn catalog() -> Vec<StringCatalog> {
                 NOT_TEXT,
                 "Questo file non è testo: non ci sono parole da contare.",
             )
+            .with(
+                UNREADABLE,
+                "Questo documento non si apre: non ci sono parole da contare.",
+            )
             .with(E_DOC_PARAM, "Manca la nota da contare.")
             .with(DOC_PARAM, "Documento")
             .with(WORDS_TITLE, "Parole")
@@ -753,6 +767,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 NOT_TEXT,
                 "This file is not text: there are no words to count.",
+            )
+            .with(
+                UNREADABLE,
+                "This document does not open: there are no words to count.",
             )
             .with(E_DOC_PARAM, "The note to count is missing.")
             .with(DOC_PARAM, "Document")
@@ -1169,6 +1187,35 @@ mod tests {
                     .unwrap()
             ),
             vec!["Nessuna nota aperta.".to_string()]
+        );
+    }
+
+    /// Un documento di un formato che non si apre (un .docx vuoto o rotto: il
+    /// suo modello non si legge). Il pannello si disegna e lo dice, invece di
+    /// fallire a ogni ridisegno con un avviso nel gergo del codec.
+    #[test]
+    fn a_document_that_does_not_open_is_a_state_and_not_a_failure() {
+        let host = MemoryHost::new()
+            .with_format(
+                "docx",
+                fub_abi::format::DocumentFormat {
+                    descriptor: fub_abi::format::FormatDescriptor::text(
+                        "docx",
+                        "Documento",
+                        &["docx"],
+                    ),
+                    capabilities: fub_abi::format::FormatCapabilities::of(&[]),
+                },
+            )
+            .with_document("Vuoto.docx", "");
+        host.set_active(Some("Vuoto.docx"));
+        let tree = StatsView
+            .render_view(&ViewInstance::only(STATS_VIEW), &host)
+            .expect("drawn, not failed");
+        assert_eq!(tree.key.as_deref(), Some(UNREADABLE));
+        assert_eq!(
+            rows(&tree, "en"),
+            vec!["This document does not open: there are no words to count.".to_string()]
         );
     }
 

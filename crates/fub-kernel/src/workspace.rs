@@ -4424,6 +4424,20 @@ impl Workspace {
         and
     }
 
+    /// L'errore di una domanda al canale dati, nel catalogo dell'indice che
+    /// l'ha prodotto (§12.2): la stessa via d'uscita di [`localized`], per la
+    /// domanda che il pianificatore ha girato a un indice. Vale anche per la
+    /// domanda staccata ([`PreparedIndexQuery::invoke`]), che fallisce senza
+    /// il prestito del workspace e torna qui per le parole.
+    ///
+    /// [`localized`]: Workspace::localized
+    pub fn localized_query_failure(&self, failure: crate::index::plan::QueryFailure) -> PluginError {
+        match failure.owner {
+            Some(owner) => self.localized(&owner, failure.error),
+            None => failure.error,
+        }
+    }
+
     /// Il locale di sistema condiviso: chi monta lo passa alla shell perché ci
     /// scriva ciò che il sistema dice.
     pub fn system_locale(&self) -> Arc<SystemLocale> {
@@ -10927,7 +10941,10 @@ impl Workspace {
             }
             other => {
                 let needles = occurrences::wanted(&other);
-                let result = self.indexes.query(other)?;
+                let result = self
+                    .indexes
+                    .query(other)
+                    .map_err(|failure| self.localized_query_failure(failure))?;
                 match result {
                     IndexResult::Documents(page) if !needles.is_empty() => {
                         Ok(IndexResult::Documents(self.locate(page, &needles)))

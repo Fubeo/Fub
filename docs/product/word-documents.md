@@ -122,8 +122,9 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   inserito si toglie davvero, e un tratto battuto di seguito resta una
   modifica sola. Mentre si registra il formato non si cambia (aspetto, stile,
   spaziatura, tabelle), perché non ha una revisione da scrivere; commenti,
-  accettare e rifiutare restano liberi. Un `.docx` che registra già si apre
-  così, non più in sola lettura;
+  accettare e rifiutare restano liberi. Senza un autore la revisione nuova
+  si scrive come fa Word, con l'autore «Unknown». Un `.docx` che registra
+  già si apre così, non più in sola lettura;
 - **Pagina** in un `.docx` cambia la pagina della sezione dove sta il
   cursore: la dimensione della carta (quelle di Word), l'orientamento, i
   margini (già pronti o in centimetri) e le colonne. Una pagina girata tiene
@@ -213,7 +214,9 @@ uguale a ciò che si voleva scrivere non scrive, e il testo resta nel buffer;
 lo stesso vale per un salvataggio che cambierebbe un blocco chiuso o una
 parte che l'utente non ha toccato, che duplicherebbe un'immagine o
 lascerebbe un riferimento senza relazione. Un documento cifrato o più grande
-di 256 MiB non si apre; uno molto lungo (centomila paragrafi) si apre in
+di 256 MiB non si apre, e neppure uno vuoto o rotto: la scheda lo dice in
+una frase, e i pannelli accanto restano in piedi (le statistiche dicono che
+non c'è niente da contare); uno molto lungo (centomila paragrafi) si apre in
 qualche secondo, senza fermare l'interfaccia.
 
 Limiti attuali:
