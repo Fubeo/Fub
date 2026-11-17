@@ -227,6 +227,7 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   panoramica: { text: NOTE, cursor: null },
   "riga-attiva": inNote("Il **treno**", 6),
   "titolo-attivo": inNote("## Cose da fare", 8),
+  "compito-attivo": inNote("- [ ] Prenotare", 15),
   "codice-attivo": inNote("const giorni", 6),
   "callout-attivo": inNote("> Il tram 28", 6),
   "elenco-attivo": inNote("1. Primo giorno", 5),
