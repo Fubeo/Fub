@@ -44,7 +44,7 @@ export const FORMATTING: readonly (readonly [string, string])[] = [
 /// Le descrizioni italiane di `fub.formatting` (`crates/fub-features/src/formatting.rs`):
 /// il disegno in fondo al «/» le mostra, e il banco le fotografa.
 export const DESCRIPTIONS: Readonly<Record<string, string>> = {
-  "markdown.paragraph": "markdown.heading.2",
+  "markdown.paragraph": "Toglie il titolo dalle righe selezionate.",
   "markdown.heading.1": "Fa delle righe selezionate un titolo di primo livello.",
   "markdown.heading.2": "Fa delle righe selezionate un titolo di secondo livello.",
   "markdown.heading.3": "Fa delle righe selezionate un titolo di terzo livello.",
