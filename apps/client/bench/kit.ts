@@ -115,7 +115,9 @@ function twin(rules: CSSRuleList): void {
 const twinned = new WeakSet<CSSStyleSheet>();
 
 function twinSheets(): void {
-  for (const sheet of Array.from(document.styleSheets)) {
+  // I fogli dei file e quelli costruiti: il tema è un foglio costruito
+  // (`theme/loader.ts`, per la CSP), e non sta in `document.styleSheets`.
+  for (const sheet of [...Array.from(document.styleSheets), ...document.adoptedStyleSheets]) {
     if (twinned.has(sheet)) continue;
     twinned.add(sheet);
     try {
@@ -133,6 +135,24 @@ twinSheets();
 const remounted = new MutationObserver(twinSheets);
 remounted.observe(document.head, { childList: true, subtree: true, characterData: true });
 lifetime.add(() => remounted.disconnect());
+// Un foglio costruito si monta assegnando `adoptedStyleSheets`, e nessun
+// osservatore lo vede: qui, solo nel banco, l'assegnazione passa da un setter
+// che rifà i gemelli.
+const adopted = Object.getOwnPropertyDescriptor(Document.prototype, "adoptedStyleSheets");
+if (adopted?.get && adopted.set) {
+  const { get, set } = adopted;
+  Object.defineProperty(document, "adoptedStyleSheets", {
+    configurable: true,
+    get(this: Document) {
+      return get.call(this);
+    },
+    set(this: Document, sheets: CSSStyleSheet[]) {
+      set.call(this, sheets);
+      twinSheets();
+    },
+  });
+  lifetime.add(() => delete (document as { adoptedStyleSheets?: unknown }).adoptedStyleSheets);
+}
 
 function force<T extends HTMLElement>(node: T, ...states: Force[]): T {
   node.dataset.force = states.join(" ");

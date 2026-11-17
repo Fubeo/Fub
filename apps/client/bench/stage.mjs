@@ -198,6 +198,7 @@ export async function openPage(browser, light, { clock = true } = {}) {
     reducedMotion: "reduce",
     colorScheme: light,
   });
+  await watchCsp(context);
   const page = await context.newPage();
   // Prima di ogni navigazione: si installa come script d'avvio, quindi la
   // pagina nasce già con l'ora ferma. Dopo il `goto` sarebbe tardi — chi legge
@@ -218,6 +219,65 @@ export async function openPage(browser, light, { clock = true } = {}) {
     });
   }
   return page;
+}
+
+/// **Le violazioni della CSP**, raccolte dal primo istante di ogni documento.
+///
+/// Il server del banco manda la CSP dell'app vera (`vite.bench.config.ts`):
+/// un `<style>` senza il nonce della pagina, o un attributo `style` scritto
+/// come markup, lì è rifiutato in silenzio — la pagina resta in piedi, e la
+/// foto mostra al più un pezzo senza stile che nessuno nota. Qui lo si rende
+/// rumoroso: ogni `securitypolicyviolation` del documento finisce in
+/// `window.__fubCsp`, e `prepareScene` fallisce se ce n'è anche una.
+///
+/// Si ascolta su `window` in cattura: l'evento nasce sull'elemento rifiutato (o
+/// sul documento, se l'elemento non è montato) e risale fin lì.
+///
+/// Conta soltanto ciò che si vede: una violazione su un elemento montato
+/// nella pagina (`inPage`). Il browser segnala anche lo `style` di un markup
+/// parsato in un documento inerte — il `DOMParser` del sanitizzatore legge
+/// l'HTML di una nota con le sue celle allineate — e quella segnalazione arriva
+/// sul documento: lì nessuno stile si applica, il sanitizzatore lo riscrive
+/// via CSSOM sull'elemento vero, e nella pagina non manca niente. Si tiene,
+/// per chi la vuole leggere, ma non ferma la scena.
+export async function watchCsp(context) {
+  await context.addInitScript(() => {
+    const found = [];
+    Object.defineProperty(window, "__fubCsp", { value: found });
+    window.addEventListener(
+      "securitypolicyviolation",
+      (event) => {
+        found.push({
+          directive: event.effectiveDirective,
+          blocked: event.blockedURI,
+          source: event.sourceFile,
+          line: event.lineNumber,
+          column: event.columnNumber,
+          sample: event.sample,
+          inPage: event.target instanceof Node && event.target !== document && event.target.isConnected,
+        });
+      },
+      true,
+    );
+  });
+}
+
+/// Le violazioni del documento aperto. `null` se la pagina non le raccoglie:
+/// chi la apre senza `watchCsp` lo deve sapere, non leggere «nessuna».
+export async function cspViolations(page) {
+  return page.evaluate(() => (Array.isArray(window.__fubCsp) ? [...window.__fubCsp] : null));
+}
+
+/// Fallisce se la pagina ha violato la CSP su un elemento montato, nominando
+/// ogni violazione.
+export async function assertCsp(page) {
+  const all = await cspViolations(page);
+  if (all === null) throw new Error("la pagina non raccoglie le violazioni della CSP: apri il contesto con watchCsp");
+  const found = all.filter((violation) => violation.inPage);
+  if (found.length === 0) return;
+  const lines = found.map(({ directive, blocked, source, line, column, sample }) =>
+    `${directive} · ${blocked || "-"} · ${source || "-"}:${line}:${column}${sample ? ` · «${sample}»` : ""}`);
+  throw new Error(`${found.length} violazioni della CSP:\n  ${lines.join("\n  ")}`);
 }
 
 /// Porta la pagina allo stato di una scena, e la lascia ferma.
@@ -257,7 +317,14 @@ export async function prepareScene(page, scene, light, base, url) {
   await page.evaluate(() =>
     Promise.all([...document.images].map((img) => (img.complete ? null : img.decode().catch(() => null)))),
   );
-  await page.addStyleTag({ content: QUIET });
+  // Un foglio costruito e non `addStyleTag`: un `<style>` senza il nonce della
+  // pagina la CSP lo rifiuta, come rifiuterebbe quello di un modulo dell'app.
+  await page.evaluate((css) => {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(css);
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  }, QUIET);
+  await assertCsp(page);
   // Un fotogramma dopo l'ultimo gesto: il layout è già calcolato, ma ciò che è
   // stato scritto adesso deve ancora essere dipinto.
   await page.evaluate(

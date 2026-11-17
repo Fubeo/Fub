@@ -295,7 +295,7 @@ describe("document-window protocol", () => {
     emit("theme");
     await settle();
     expect(themes).toHaveLength(2);
-    for (const el of document.head.querySelectorAll("style[data-fub]")) el.remove();
+    document.adoptedStyleSheets = [];
   });
 
   // #237 R01: la finestra di un documento che si chiude rilascia la sessione
