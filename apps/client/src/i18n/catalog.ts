@@ -1606,6 +1606,8 @@ export const IT = { // --- la scocca -------------------------------------------
 "permission.read-session": "Può sapere quale nota stai guardando, e in che modalità.",
 "permission.read-selection": "Può leggere il testo che selezioni, mentre lo selezioni.",
 "permission.read-drafts": "Può leggere ciò che stai scrivendo e non hai ancora salvato.",
+"permission.notifications":
+  "Può mostrare notifiche del sistema, anche quando Fub non è in primo piano.",
 "permission.unknown":
   "Questa versione di Fub non conosce questo permesso: non concede niente, e non c'è niente da negare.",
 // La differenza fra le due è la differenza fra un componente che parla con un
@@ -5569,6 +5571,8 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "permission.read-session": "It can know which note you are looking at, and in which mode.",
 "permission.read-selection": "It can read the text you select, while you select it.",
 "permission.read-drafts": "It can read what you are writing and have not saved yet.",
+"permission.notifications":
+  "It can show system notifications, even when Fub is not in the foreground.",
 "permission.unknown":
   "This version of Fub does not know this permission: it grants nothing, and there is nothing to deny.",
 "permission.network.anywhere": "to any address",

@@ -326,6 +326,67 @@ fn a_permission_denied_survives_to_the_shutdown_and_to_the_reopening() {
     assert!(granted(&host, "fub.stats", permission::READ_VAULT));
 }
 
+/// Le notifiche dei promemoria sono un permesso del componente dei compiti,
+/// stretto come gli altri: lo ha solo lui, si spegne con il suo interruttore,
+/// e spento i promemoria restano leggibili (la nota e l'elenco all'avvio).
+#[test]
+fn the_reminder_notifications_are_a_permission_of_the_tasks_alone() {
+    use fub_abi::options::permission;
+    use fub_abi::settings::permission_key;
+    use fub_features::tasks::reminders::{ReminderList, RemindersQuery};
+    use fub_features::TASKS_ID;
+    use fub_kernel::Capability;
+
+    let v = Vault::new();
+    std::fs::write(
+        v.root.join("Compiti.md"),
+        "- [ ] Chiamare Mario ⏰ 2026-11-13 09:30\n",
+    )
+    .unwrap();
+    let host = headless();
+    host.open(&v.root).expect("opens");
+    let allows = |plugin: &str| {
+        host.component_allows(None, plugin, Capability::Notifications)
+            .expect("open")
+    };
+    assert!(allows(TASKS_ID), "declared by the tasks, on by default");
+    assert!(!allows("fub.stats"), "no other component has it");
+    assert!(!allows("fub.core"), "not even the core");
+
+    host.with_session(None, |s| {
+        s.workspace()
+            .write()
+            .unwrap()
+            .set_setting(
+                &permission_key(TASKS_ID, permission::NOTIFICATIONS),
+                SettingValue::Toggle(false),
+            )
+            .expect("the switch is declared")
+    })
+    .expect("open");
+    assert!(!allows(TASKS_ID), "switched off, no notification");
+
+    let reminders = host
+        .query_index(None, RemindersQuery::between(None, None).to_index_query())
+        .map(ReminderList::from_index_result)
+        .expect("the route answers")
+        .expect("reads");
+    assert_eq!(
+        reminders
+            .reminders
+            .iter()
+            .map(|r| (r.doc.as_str(), r.when.as_str(), r.text.as_str()))
+            .collect::<Vec<_>>(),
+        vec![("Compiti.md", "2026-11-13 09:30", "Chiamare Mario")],
+        "the reminders stay in the index for the list at startup"
+    );
+
+    // Un componente spento non è dichiarato, e non notifica.
+    host.set_plugin_enabled(None, TASKS_ID, false)
+        .expect("disables");
+    assert!(!allows(TASKS_ID));
+}
+
 /// Questo componente ha ancora questa famiglia? Si chiede alla **politica**, che
 /// è ciò che il cancello legge davvero — non alla mappa del manifest, che non
 /// cambia mai.

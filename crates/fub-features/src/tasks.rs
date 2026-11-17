@@ -74,6 +74,7 @@
 //! legge.
 
 mod query;
+pub mod reminders;
 
 use fub_abi::command::{ParamKind, ParamSpec};
 use fub_abi::custom::{
@@ -230,6 +231,20 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 FENCE_NOTES_MANY,
                 "Ho letto le prime {read} note su {total} che possono rispondere: restringi con le righe del recinto.",
+            )
+            .with(reminders::REMINDER_TITLE, "Promemoria")
+            .with(reminders::REMINDER_OPEN, "Apri la nota")
+            .with(
+                reminders::REMINDER_MORE,
+                "Altri {count} promemoria: sono nella vista dei compiti.",
+            )
+            .with(
+                reminders::REMINDER_MANY,
+                "Più di {count} altri promemoria: sono nella vista dei compiti.",
+            )
+            .with(
+                reminders::E_QUERY,
+                "La domanda dei promemoria non ha la forma giusta: {detail}.",
             ),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Tasks")
@@ -281,6 +296,20 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 FENCE_NOTES_MANY,
                 "Read the first {read} notes out of {total} that may match: narrow it down with the block's lines.",
+            )
+            .with(reminders::REMINDER_TITLE, "Reminder")
+            .with(reminders::REMINDER_OPEN, "Open the note")
+            .with(
+                reminders::REMINDER_MORE,
+                "{count} more reminders: they are in the tasks view.",
+            )
+            .with(
+                reminders::REMINDER_MANY,
+                "More than {count} other reminders: they are in the tasks view.",
+            )
+            .with(
+                reminders::E_QUERY,
+                "The reminders question does not have the right shape: {detail}.",
             ),
     ]
 }
