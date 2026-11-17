@@ -450,19 +450,13 @@ pub(crate) fn resolve(types: &[TypeRef], folder: Option<&str>, wanted: &str) -> 
     }
     if let Some(folder) = folder {
         let inside = format!("{}/{wanted}", key(folder));
-        let hits: Vec<&TypeRef> = types
-            .iter()
-            .filter(|t| key(&t.link) == inside)
-            .collect();
+        let hits: Vec<&TypeRef> = types.iter().filter(|t| key(&t.link) == inside).collect();
         if let Some(found) = pick(hits) {
             return found;
         }
     }
     if !wanted.contains('/') {
-        let hits: Vec<&TypeRef> = types
-            .iter()
-            .filter(|t| key(&t.name) == wanted)
-            .collect();
+        let hits: Vec<&TypeRef> = types.iter().filter(|t| key(&t.name) == wanted).collect();
         if let Some(found) = pick(hits) {
             return found;
         }

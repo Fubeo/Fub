@@ -20,6 +20,7 @@ impl TemplateCommands {
                 .with_param(parameter(NOTES_FROM_TEMPLATE, FOLDER, ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
             command(NOTES_FROM_TYPE)
+                .offered_in(CommandSurface::Slash)
                 .with_param(parameter(NOTES_FROM_TYPE, TYPE, ParamKind::Text).required())
                 .with_param(parameter(NOTES_FROM_TYPE, NAME, ParamKind::Text))
                 .with_param(parameter(NOTES_FROM_TYPE, FOLDER, ParamKind::Text))
