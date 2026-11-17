@@ -118,11 +118,12 @@ export function accentControl(lifetime: Lifetime, panel: HTMLElement): Dress {
     if (panel.hidden) customOpen = false;
   }, { attributes: ["hidden"] });
 
-  // Il cursore segue la riga solo quando la riga è un'altra (la vista l'ha
-  // riscritta: c'è un valore riletto) o la luce è cambiata. Fra una riscrittura
-  // e l'altra è della mano che lo trascina: ogni passo cambia il testo accanto,
-  // il corpo se ne accorge, e riallinearlo lì lo riporterebbe indietro.
-  let shownRow: HTMLElement | null = null;
+  // Il cursore segue la riga solo quando la vista ne ha riscritto il campo (c'è
+  // un valore riletto) o la luce è cambiata. Fra una riscrittura e l'altra è
+  // della mano che lo trascina: ogni passo cambia il testo accanto, il corpo se
+  // ne accorge, e riallinearlo lì lo riporterebbe indietro. La riga resta lo
+  // stesso nodo da un aggiornamento all'altro; il campo no.
+  let shownField: HTMLInputElement | null = null;
 
   // I colori dei campioni cambiano con la luce e col contrasto, non con la riga.
   let painted = "";
@@ -131,7 +132,7 @@ export function accentControl(lifetime: Lifetime, panel: HTMLElement): Dress {
     const level = currentContrast();
     if (painted === `${light}:${level}`) return;
     painted = `${light}:${level}`;
-    shownRow = null;
+    shownField = null;
     radios.forEach((radio, index) => {
       const entry = ACCENT_SWATCHES[index];
       if (!entry) return;
@@ -196,8 +197,8 @@ export function accentControl(lifetime: Lifetime, panel: HTMLElement): Dress {
       setAttr(swatches, "aria-disabled", field.disabled ? "true" : null);
       setText(hueLabel, t("prefs.accent.hue"));
       if (custom.hidden === customOpen) custom.hidden = !customOpen;
-      if (shownRow !== row) {
-        shownRow = row;
+      if (shownField !== field) {
+        shownField = field;
         showHue(hue);
       }
       // Il predefinito, detto col nome del suo campione e non col numero.
