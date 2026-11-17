@@ -95,6 +95,15 @@ impl CommandProvider for PropertiesCommands {
                 ))
                 .with_param(parameter(PROPERTY_OPTION_SET, EXPECTED, ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Settings)),
+            command(NOTES_TYPE_SET)
+                .with_param(parameter(NOTES_TYPE_SET, DOC, ParamKind::Document))
+                .with_param(parameter(NOTES_TYPE_SET, types::TYPE, ParamKind::Text).required())
+                .with_param(parameter(
+                    NOTES_TYPE_SET,
+                    types::EXPECTED_REVISION,
+                    ParamKind::Text,
+                ))
+                .with_scope(CommandScope::writing(CommandReach::Document)),
             command(PROPERTY_TYPES_RESTORE)
                 .with_param(parameter(PROPERTY_TYPES_RESTORE, VALUE, ParamKind::Text).required())
                 .with_param(parameter(PROPERTY_TYPES_RESTORE, EXPECTED, ParamKind::Text).required())
@@ -129,6 +138,7 @@ impl CommandProvider for PropertiesCommands {
             NOTES_PROPERTIES_CLEAR => clear_properties(Args::new(&args), mode, host),
             PROPERTY_OPTION_SET => set_property_option(Args::new(&args), mode, host),
             PROPERTY_TYPES_RESTORE => restore_property_types(Args::new(&args), mode, host),
+            NOTES_TYPE_SET => types::set_note_type(Args::new(&args), mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
@@ -146,7 +156,7 @@ fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
 
 /// Il documento su cui scrivere, e solo se il suo formato ha un frontmatter:
 /// scriverne uno davanti a un `.base` o a un canvas lo corrompe.
-fn doc_from(args: Args<'_>, host: &dyn HostApi) -> Result<DocId, PluginError> {
+pub(super) fn doc_from(args: Args<'_>, host: &dyn HostApi) -> Result<DocId, PluginError> {
     let doc = args
         .document(DOC)
         .or_else(|| host.active_context().and_then(|c| c.doc))

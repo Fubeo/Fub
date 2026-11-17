@@ -79,6 +79,34 @@ pub(super) fn catalog_it() -> StringCatalog {
             "note.from_template.folder.desc",
             "Cartella di destinazione. Assente: la stessa del `name`.",
         )
+        .with(P_FROM_TYPE, "Nuova nota di tipo «{type}»")
+        .with(D_FROM_TYPE, "Creata {doc} di tipo «{type}»")
+        .with(U_FROM_TYPE, "Annulla: crea {doc} di tipo «{type}»")
+        .with("note.from_type.title", "Nuova nota di un tipo")
+        .with(
+            "note.from_type.desc",
+            "Crea una nota con le proprietà e il modello di un tipo di nota, nella sua cartella.",
+        )
+        .with("note.from_type.type.title", "Tipo")
+        .with(
+            "note.from_type.type.desc",
+            "Il tipo: un link come [[Tipi/Libro]], un percorso o un nome.",
+        )
+        .with("note.from_type.name.title", "Nome")
+        .with(
+            "note.from_type.name.desc",
+            "Nome della nota nuova. Assente: «Senza titolo».",
+        )
+        .with("note.from_type.folder.title", "Cartella")
+        .with(
+            "note.from_type.folder.desc",
+            "Cartella della nota nuova. Assente: quella del tipo, o la radice.",
+        )
+        .with("note.from_type.expected_revision.title", "Revisione del tipo")
+        .with(
+            "note.from_type.expected_revision.desc",
+            "La revisione del tipo letta: se il tipo è cambiato, la nota non si crea.",
+        )
         .with("note.daily.title", "Nota di oggi")
         .with(
             "note.daily.desc",
@@ -323,6 +351,34 @@ pub(super) fn catalog_en() -> StringCatalog {
         .with(
             "note.from_template.folder.desc",
             "Destination folder. Absent: the same as `name`.",
+        )
+        .with(P_FROM_TYPE, "New note of type «{type}»")
+        .with(D_FROM_TYPE, "Created {doc} of type «{type}»")
+        .with(U_FROM_TYPE, "Undo: create {doc} of type «{type}»")
+        .with("note.from_type.title", "New note of a type")
+        .with(
+            "note.from_type.desc",
+            "Creates a note with the properties and the template of a note type, in its folder.",
+        )
+        .with("note.from_type.type.title", "Type")
+        .with(
+            "note.from_type.type.desc",
+            "The type: a link like [[Tipi/Libro]], a path or a name.",
+        )
+        .with("note.from_type.name.title", "Name")
+        .with(
+            "note.from_type.name.desc",
+            "Name of the new note. Absent: «Untitled».",
+        )
+        .with("note.from_type.folder.title", "Folder")
+        .with(
+            "note.from_type.folder.desc",
+            "Folder of the new note. Absent: the type's folder, or the root.",
+        )
+        .with("note.from_type.expected_revision.title", "Type revision")
+        .with(
+            "note.from_type.expected_revision.desc",
+            "The revision of the type that was read: if the type changed, no note is created.",
         )
         .with("note.daily.title", "Today's note")
         .with(

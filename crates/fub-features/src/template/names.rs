@@ -98,7 +98,7 @@ pub(super) fn unique(
 /// i moduli di feature non si nominano fra loro.
 pub(super) const N_UNTITLED: &str = "note.unique.untitled";
 
-fn untitled(host: &dyn HostApi) -> String {
+pub(super) fn untitled(host: &dyn HostApi) -> String {
     Strings::new(&catalog(), "it", &host.user_locale()).render(&Text::key(N_UNTITLED))
 }
 

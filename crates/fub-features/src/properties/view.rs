@@ -274,6 +274,9 @@ fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError
         return Ok(UiNode::column(1, children));
     }
     let model = host.read_model(&doc)?;
+    // Ciò che non va nel tipo è un avviso in più: se l'indice non risponde,
+    // le proprietà si mostrano lo stesso invece di spegnere il pannello.
+    children.extend(super::types::type_notices(host, &doc, &model).unwrap_or_default());
     let types = property_types(host);
     let props = model
         .frontmatter

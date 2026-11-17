@@ -77,10 +77,14 @@ const ROOT: &[&str] = &["lib.rs", "inventory.rs"];
 ///   Non appartiene a nessuna feature e non ne nomina nessuna; uno split lo
 ///   porterebbe in un crate di appoggio da cui dipendono le feature che
 ///   scrivono sorgente.
+/// - `note_types` sono i tipi di nota (E5): com'è fatto un tipo, quale tipo ha
+///   una nota, quante note ha ogni tipo. Lo usano i modelli (creare una nota
+///   da un tipo) e le proprietà (cambiare tipo, dire che il tipo manca): una
+///   regola sola, che nessuna delle due possiede da sola.
 ///
 /// Un modulo condiviso resta sotto la stessa domanda degli altri: se nominasse
 /// una feature, l'accoppiamento passerebbe da lui.
-const SHARED: &[&str] = &["formats"];
+const SHARED: &[&str] = &["formats", "note_types"];
 
 /// La riga senza i nomi dei moduli condivisi, che sono vocabolario dichiarato.
 fn without_shared(row: &str) -> String {

@@ -96,6 +96,11 @@ pub mod graph;
 pub mod inventory;
 #[cfg(feature = "lavagna")]
 pub mod lavagna;
+// I tipi di nota: i modelli ne creano le note, le proprietà ne cambiano il
+// tipo e dicono quando manca. Ognuna ne usa una parte.
+#[cfg(any(feature = "template", feature = "properties"))]
+#[allow(dead_code)]
+mod note_types;
 #[cfg(feature = "outline")]
 pub mod outline;
 #[cfg(feature = "proof")]
@@ -171,9 +176,10 @@ pub use proof::{ProofCommands, ProofIndex, PROOF_ID, WORDS_KEY, WORD_ADD, WORD_R
 #[cfg(feature = "properties")]
 pub use properties::{
     PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
-    NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
-    PROPERTIES_STATUS_VIEW, PROPERTIES_VIEW, PROPERTY_KEYS_MIGRATE, PROPERTY_KEY_DELETE,
-    PROPERTY_KEY_RENAME, PROPERTY_OPTION_SET, PROPERTY_TYPES_RESTORE, PROPERTY_TYPE_SET,
+    NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, NOTES_TYPE_SET,
+    PROPERTIES_ID, PROPERTIES_STATUS_VIEW, PROPERTIES_VIEW, PROPERTY_KEYS_MIGRATE,
+    PROPERTY_KEY_DELETE, PROPERTY_KEY_RENAME, PROPERTY_OPTION_SET, PROPERTY_TYPES_RESTORE,
+    PROPERTY_TYPE_SET,
 };
 #[cfg(feature = "queries")]
 pub use queries::{
@@ -195,8 +201,8 @@ pub use tasks::{TasksView, TASKS_ID, TASKS_QUERY_VIEW, TASKS_VIEW};
 pub use template::{
     TemplateCommands, TemplateView, CLOCK_12, CLOCK_24, CLOCK_DATETIME, CLOCK_TIME,
     DAILY_FOLDER_KEY, DAILY_TEMPLATE_KEY, DATE_FORMAT_KEY, ISO_DATE, NOTES_DAILY, NOTES_EXTRACT,
-    NOTES_FROM_TEMPLATE, NOTES_INSERT_DATETIME, NOTES_INSERT_TEMPLATE, NOTES_MERGE, NOTES_RANDOM,
-    NOTES_UNIQUE, TEMPLATE_ID, TEMPLATE_VIEW, TIME_FORMAT_KEY,
+    NOTES_FROM_TEMPLATE, NOTES_FROM_TYPE, NOTES_INSERT_DATETIME, NOTES_INSERT_TEMPLATE,
+    NOTES_MERGE, NOTES_RANDOM, NOTES_UNIQUE, TEMPLATE_ID, TEMPLATE_VIEW, TIME_FORMAT_KEY,
 };
 #[cfg(feature = "trash")]
 pub use trash::{TrashView, TRASH_ID, TRASH_VIEW};
