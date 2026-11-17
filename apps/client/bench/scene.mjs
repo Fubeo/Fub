@@ -502,15 +502,17 @@ export const SCENE = onPage("shell", [
     },
     hover: (page) => page.mouse.move(8, 400),
   },
-  // **La macchina da scrivere** (T24): accesa dal menu «…» del riquadro, il
+  // **La macchina da scrivere** (T24): accesa nelle Impostazioni › Editor, il
   // cursore sceso con le frecce resta a metà altezza del foglio.
   {
     id: "typewriter",
     title: "La macchina da scrivere: la riga del cursore a metà del foglio",
     prepare: async (page) => {
+      await page.click("#open-settings");
+      await page.click('#settings-body .setting-row[data-setting-key="editor.typewriter"] input[role=switch]');
+      await page.waitForSelector('#settings-body .setting-row[data-setting-key="editor.typewriter"] input[role=switch]:checked');
+      await page.click("#settings-close");
       await openNote(page, "Guida/Sintassi di Fub.md");
-      await page.click(".pane.focus [data-pane-menu]");
-      await page.click('#context-menu [role=menuitemcheckbox]:has-text("Macchina da scrivere")');
       await page.waitForSelector(".pane.focus .pane-editor .cm-editor.cm-fub-typewriter");
       await page.click(".pane.focus .pane-editor .cm-content > .cm-line:has-text('Prosa normale')");
       for (let step = 0; step < 12; step += 1) await page.keyboard.press("ArrowDown");

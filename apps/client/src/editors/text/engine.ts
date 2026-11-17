@@ -78,7 +78,6 @@ import { softCursor } from "./soft-cursor";
 import { typewriter } from "./typewriter";
 import { cursorBlock, refreshCursorBlock } from "./cursor-block";
 import { concentrating, onConcentration } from "../../state/concentration";
-import { EDITOR_TYPEWRITER_KEY, rememberTypewriter } from "../../state/editor-typewriter";
 import { pageNonce } from "../../ui/stylesheets";
 import {
   operationFromText,
@@ -135,7 +134,7 @@ export const EDITOR_PASTE_HTML_KEY = "editor.paste-html";
 export const EDITOR_INDENT_GUIDES_KEY = "editor.indent-guides";
 export const EDITOR_CURSOR_BLINK_KEY = "editor.cursor-blink";
 export const EDITOR_SOFT_CURSOR_KEY = "editor.soft-cursor";
-export { EDITOR_TYPEWRITER_KEY };
+export const EDITOR_TYPEWRITER_KEY = "editor.typewriter";
 export const EDITOR_RTL_KEY = "editor.rtl";
 export const EDITOR_PROPERTIES_KEY = "editor.properties";
 export const EDITOR_LIVE_REVEAL_KEY = "editor.live-reveal";
@@ -680,7 +679,6 @@ export class TextEngine {
       this.setVim(value(EDITOR_VIM_KEY) === true);
       const indent = value(EDITOR_INDENT_KEY);
       const typewriterOn = value(EDITOR_TYPEWRITER_KEY) === true;
-      rememberTypewriter(typewriterOn);
       this.setLayout({
         lineNumbers: value(EDITOR_LINE_NUMBERS_KEY) !== false,
         lineWrap: value(EDITOR_LINE_WRAP_KEY) !== false,

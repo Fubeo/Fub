@@ -355,8 +355,7 @@ lascia il foglio e poco altro:
 ## La macchina da scrivere
 
 La preferenza della macchina `editor.typewriter` («Macchina da scrivere»,
-gruppo Editor delle Impostazioni; spenta di fabbrica, la spunta anche nel menu
-«…» del riquadro di una nota) tiene la riga del cursore a metà altezza del
+gruppo Editor delle Impostazioni; spenta di fabbrica) tiene la riga del cursore a metà altezza del
 foglio, in ogni editor di testo che non sia un campo:
 
 - scrivendo, con le frecce, con annulla e rifai la riga torna a metà; il clic,
@@ -408,8 +407,8 @@ foglio, in ogni editor di testo che non sia un campo:
   `apps/client/src/theme/scrittoio/structure.css`: che cosa si ritira e che
   cosa si attenua;
 - `apps/client/src/editors/text/typewriter.ts`: la macchina da scrivere (la
-  faccetta `typewriter`); `apps/client/src/state/editor-typewriter.ts` e
-  `crates/fub-host/src/settings.rs`: `editor.typewriter`;
+  faccetta `typewriter`); `apps/client/src/editors/text/engine.ts` la legge
+  da `editor.typewriter` (`crates/fub-host/src/settings.rs`);
 - `apps/client/bench/scene.mjs`: le scene `scrittura-a-riposo`,
   `riga-dei-suggerimenti`, `concentration`, `concentration-writing` e
   `typewriter`.

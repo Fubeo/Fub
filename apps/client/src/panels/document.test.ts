@@ -1112,7 +1112,6 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     expect([...document.querySelectorAll("#context-menu .menu-label")].map((l) => l.textContent)).toEqual([
       t("pane.menu.blocks"),
       t("pane.menu.focus"),
-      t("pane.menu.typewriter"),
       t("pane.menu.split_right"),
       t("pane.menu.split_down"),
       t("pane.print"),

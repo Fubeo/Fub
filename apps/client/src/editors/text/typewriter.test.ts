@@ -7,7 +7,6 @@ import { settings } from "../../host/query";
 import { forwardNotice } from "../../state/kernel";
 import { createTextEngine, EDITOR_TYPEWRITER_KEY } from "./engine";
 import { typewriter } from "./typewriter";
-import { typewriterPreferred } from "../../state/editor-typewriter";
 
 vi.mock("../../host/query", () => ({ settings: vi.fn() }));
 
@@ -108,7 +107,7 @@ function entry(key: string, value: boolean): SettingEntry {
 }
 
 describe("editor.typewriter nel motore", () => {
-  it("si accende e si spegne sulla stessa vista, e il menu ne sa l'ultimo valore", async () => {
+  it("si accende e si spegne sulla stessa vista", async () => {
     const read = vi.mocked(settings);
     read.mockResolvedValue([entry(EDITOR_TYPEWRITER_KEY, true)]);
     const host = document.createElement("div");
@@ -118,14 +117,12 @@ describe("editor.typewriter nel motore", () => {
     engine.setDoc(DOC);
     await vi.waitFor(() => expect(view.dom.classList.contains("cm-fub-typewriter")).toBe(true));
     expect(view.state.facet(typewriter)).toBe(true);
-    expect(typewriterPreferred()).toBe(true);
     read.mockResolvedValue([entry(EDITOR_TYPEWRITER_KEY, false)]);
     forwardNotice({
       event: { type: "setting_changed", key: EDITOR_TYPEWRITER_KEY, scope: "machine" },
       origin: { actor: { kind: "user" }, batch: null },
     });
     await vi.waitFor(() => expect(view.dom.classList.contains("cm-fub-typewriter")).toBe(false));
-    expect(typewriterPreferred()).toBe(false);
     expect(engine.getDoc()).toBe(DOC);
     engine.destroy();
     host.remove();
