@@ -50,6 +50,10 @@ fub-kernel = { workspace = true }
 # tradurla — ed è ciò che `features = [...]` qui sopra fa adesso.
 # `features = [...]` above does now.
 fub-host = { workspace = true, features = ["official-features"] }
+# I tipi della rotta dei promemoria e la regola di quando suonano
+# (`fub_features::tasks::reminders`), per il notificatore (`promemoria.rs`).
+# Solo la cargo feature dei compiti: le altre le chiede `fub-host`.
+fub-features = { workspace = true, features = ["tasks"] }
 fub-wasm-host = { workspace = true }
 # La sessione live (ADR 0205): l'app la compone sul runtime di Tauri, che è lo
 # stesso `tokio`, e la affaccia alla shell con i comandi `live_*`. `rt` serve a
@@ -72,6 +76,9 @@ tauri-plugin-deep-link = "2"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# Le notifiche dei promemoria (`promemoria.rs`): il clic sulla notifica apre
+# la nota sul compito, e un rifiuto del sistema torna come errore.
+notify-rust = "4.18.2"
 
 # Il limite a 60 Hz di WebKit su macOS si spegne da `frame_rate.rs`; è la
 # stessa versione che Tauri e wry già portano.

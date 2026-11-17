@@ -70,6 +70,8 @@ mod frame_rate;
 mod live;
 mod mobile;
 mod print;
+#[cfg(not(mobile))]
+mod promemoria;
 mod resources;
 mod reveal;
 mod support;
@@ -3259,6 +3261,8 @@ pub fn run() {
             }
             #[cfg(not(mobile))]
             start_control(app);
+            #[cfg(not(mobile))]
+            promemoria::start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

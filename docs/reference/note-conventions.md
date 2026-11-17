@@ -2,11 +2,12 @@
 
 > **Ambito:** le forme che Fub legge e riscrive dentro il testo di una nota
 > Markdown, oltre a CommonMark e alle estensioni di Obsidian: i commenti con
-> la discussione e l'archivio dei risolti.
+> la discussione, l'archivio dei risolti e il promemoria di un compito.
 > **Fonti autorevoli:** `crates/fub-format-markdown/src/parse/comments.rs`,
 > `crates/fub-abi/src/model.rs` (`custom_kind::COMMENT_RANGE`,
 > `custom_kind::COMMENT_MESSAGE`), i casi «discussione» di
-> `crates/fub-format-markdown/tests/corpus/mod.rs`.
+> `crates/fub-format-markdown/tests/corpus/mod.rs`; per il promemoria
+> `crates/fub-abi/src/rules/tasks.rs` (`task_reminder`).
 
 Una convenzione di questa pagina è testo semplice nel file: un'altra app la
 mostra così com'è, e Fub la rilegge e la riscrive byte per byte. Nessuna
@@ -105,3 +106,25 @@ riga, com'era scritto.
 
 Le modifiche suggerite di CriticMarkup (`{++ ++}`, `{-- --}`, `{~~ ~> ~~}`)
 non sono una convenzione di Fub: restano testo.
+
+## Il promemoria di un compito
+
+Accanto alla scadenza `📅` del plugin Tasks di Obsidian, un compito può
+portare un promemoria: `⏰`, poi la data e, se si vuole, l'ora.
+
+```markdown
+- [ ] Chiamare Mario ⏰ 2026-11-13 09:30 📅 2026-11-14
+- [ ] Pagare l'affitto ⏰ 2026-12-01
+```
+
+- La data è `AAAA-MM-GG` e deve esistere; l'ora è `HH:MM` dalle `00:00` alle
+  `23:59`, separata dalla data da spazi. Senza ora suona alle **9:00**.
+- Conta l'ultimo `⏰` del testo del compito. Una data o un'ora che non si
+  leggono (`⏰ 2026-02-30`, `⏰ 2026-11-13 25:00`) fanno un promemoria che non
+  suona.
+- L'ora non ha fuso: è l'ora dell'orologio di chi legge la nota, quando la
+  legge.
+- È testo semplice, come la scadenza: il parser Markdown non lo tocca, Obsidian
+  lo mostra così com'è, e Fub non riscrive mai la riga per suonarlo. La regola
+  che lo legge è una sola, nel contratto (`task_reminder`), e cosa succede
+  quando suona sta in [Compiti](../product/tasks-and-reminders.md#i-promemoria).
