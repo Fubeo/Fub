@@ -222,7 +222,8 @@ const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
     },
     ...(writable && host.editHere && (block.heading !== null || block.block !== null) ? [{
       id: "markdown.transclusion.edit",
-      label: liveStrings.t("blockgroup.transclusion.edit"),
+      // Il blocco sincronizzato (T30) si scrive dove sta: niente «Modifica qui».
+      label: liveStrings.t(block.block !== null ? "blockgroup.synced.edit" : "blockgroup.transclusion.edit"),
       run: () => void host.editHere?.(block.start),
     }] : []),
   ],
@@ -309,5 +310,7 @@ export function markdownBlockGroup(host: BlockGroupHost, pos: number | null): Su
   const build = GROUPS[block.kind] as Build<typeof block.kind>;
   const items = build(block as never, host, host.editable());
   if (items.length === 0) return null;
-  return { id: block.kind, label: liveStrings.t(LABELS[block.kind]), items };
+  // La trasclusione di un blocco è il blocco sincronizzato (T30).
+  const label = block.kind === "transclusion" && block.block !== null ? "blockgroup.synced" : LABELS[block.kind];
+  return { id: block.kind, label: liveStrings.t(label), items };
 }

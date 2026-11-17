@@ -61,7 +61,8 @@ Lo stesso blocco in più note: nel file è l'embed del blocco col suo id,
 - Nella nota che lo ospita il blocco sincronizzato sta come un blocco suo:
   niente vassoio né «Modifica qui», un filo d'accento discreto a sinistra e,
   al passaggio o col fuoco, la targhetta **Sincronizzato con …** con **Apri**.
-  Un clic sul testo (Invio sul blocco scelto) apre la superficie ristretta
+  Un clic sul testo (Invio sul blocco scelto, «Scrivi qui» nel gruppo «Blocco
+  sincronizzato» della barra) apre la superficie ristretta
   sul blocco, col cursore dove si è cliccato, senza fascia; **Esc**, o il
   fuoco che va altrove, salva ed esce.
 - Salvataggio, conflitto, sola lettura e nota rinominata sono quelli della

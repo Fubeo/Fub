@@ -119,7 +119,8 @@ describe("i gruppi", () => {
     const { host, opened } = hostOf("![[Riunioni/2026-11-04#^decisioni]]\n", 3);
     const group = markdownBlockGroup(host, null);
     expect(group?.id).toBe("transclusion");
-    expect(group?.label).toBe("Trasclusione");
+    // Il blocco di un'altra nota è il blocco sincronizzato (T30).
+    expect(group?.label).toBe("Blocco sincronizzato");
     item(group, "markdown.link.open").run?.();
     expect(opened).toEqual([["Riunioni/2026-11-04", null, "decisioni"]]);
     // Un PDF incorporato non è una trasclusione.
@@ -138,10 +139,14 @@ describe("i gruppi", () => {
     };
     const group = markdownBlockGroup(withEdit("testo\n\n![[Riunioni/2026-11-04#^decisioni]]\n"), "testo\n\n".length + 2);
     expect(ids(group)).toEqual(["markdown.link.open", "markdown.transclusion.edit"]);
-    expect(item(group, "markdown.transclusion.edit").label).toBe("Modifica qui");
+    // Il blocco è un blocco sincronizzato (T30): si scrive dove sta.
+    expect(group?.label).toBe("Blocco sincronizzato");
+    expect(item(group, "markdown.transclusion.edit").label).toBe("Scrivi qui");
     item(group, "markdown.transclusion.edit").run?.();
     expect(edited).toEqual(["testo\n\n".length]);
-    expect(ids(markdownBlockGroup(withEdit("![[Diario#Riunione]]\n"), null))).toContain("markdown.transclusion.edit");
+    const section = markdownBlockGroup(withEdit("![[Diario#Riunione]]\n"), null);
+    expect(section?.label).toBe("Trasclusione");
+    expect(item(section, "markdown.transclusion.edit").label).toBe("Modifica qui");
     // La nota intera si apre e basta; in sola lettura non si scrive niente.
     expect(ids(markdownBlockGroup(withEdit("![[Diario]]\n"), null))).toEqual(["markdown.link.open"]);
     expect(ids(markdownBlockGroup(withEdit("![[Diario#^a1]]\n", false), null))).toEqual(["markdown.link.open"]);
