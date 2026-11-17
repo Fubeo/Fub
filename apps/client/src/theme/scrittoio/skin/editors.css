@@ -4169,7 +4169,11 @@ input.canvas-toolbar-item {
   cursor: grab;
 }
 .base-cal-event[data-dragging="true"] {
-  opacity: 0.4;
+  /* Il posto lasciato dalla nota presa: un contorno tratteggiato col nome
+     ancora leggibile. Un'opacità lo porterebbe sotto 4,5:1. */
+  outline: 1px dashed var(--doc-color-green);
+  outline-offset: -1px;
+  background: transparent;
 }
 .base-cal-more {
   color: var(--muted);

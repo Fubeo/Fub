@@ -198,7 +198,10 @@ export function renderCalendar(input: CalendarInput): HTMLElement {
   // La testa: il mese, i due passi e «Oggi»; a destra le note senza data.
   const head = document.createElement("div");
   head.className = "base-cal-head";
-  const title = document.createElement("h3");
+  // Un `h2`: il titolo che lo precede nella pagina cambia con la larghezza
+  // (a finestra stretta e al telefono il cassetto delle note, col suo `h2`,
+  // non c'è), e un `h3` lì salterebbe un livello.
+  const title = document.createElement("h2");
   title.className = "base-cal-title";
   title.textContent = monthTitle;
   title.id = `base-cal-title-${++titles}`;
