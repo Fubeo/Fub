@@ -79,7 +79,11 @@ export interface MoveChoice {
 
 /// La prima domanda: la nota. `null` se l'utente ha chiuso.
 export async function chooseNote(port: MoveBlockPort, current: string): Promise<MoveNote | null> {
-  const notes = await port.notes();
+  // Per nome, come le cerca chi scrive; la nota stessa per ultima, perché
+  // è la scelta meno frequente (spostare sotto un altro titolo).
+  const byName = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+  const notes = [...await port.notes()].sort((a, b) =>
+    Number(a.id === current) - Number(b.id === current) || byName.compare(a.title, b.title) || byName.compare(a.id, b.id));
   return pickFromList({
     title: liveStrings.t("blocks.move.title"),
     placeholder: liveStrings.t("blocks.move.search"),
@@ -91,11 +95,6 @@ export async function chooseNote(port: MoveBlockPort, current: string): Promise<
   });
 }
 
-/// La seconda domanda, su una finestra sola: dove (in fondo alla nota, o in
-/// fondo alla sezione di un titolo) e che cosa resta al posto del blocco. I
-/// valori di partenza sono il gesto del prototipo — in fondo, col link — così
-/// Invio sposta subito. Nella stessa nota non resta niente, e la domanda non
-/// c'è; la trasclusione porta un blocco solo.
 function option(text: string, value: string): HTMLOptionElement {
   const node = document.createElement("option");
   node.value = value;
@@ -103,6 +102,11 @@ function option(text: string, value: string): HTMLOptionElement {
   return node;
 }
 
+/// La seconda domanda, su una finestra sola: dove (in fondo alla nota, o in
+/// fondo alla sezione di un titolo) e che cosa resta al posto del blocco. I
+/// valori di partenza sono il gesto del prototipo — in fondo, col link — così
+/// Invio sposta subito. Nella stessa nota non resta niente, e la domanda non
+/// c'è; la trasclusione porta un blocco solo.
 export function chooseWhere(note: MoveNote, headings: readonly MoveHeading[], options: { same: boolean; single: boolean }): Promise<MoveChoice | null> {
   return new Promise((resolve) => {
     let settled = false;

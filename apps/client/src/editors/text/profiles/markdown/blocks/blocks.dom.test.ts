@@ -975,7 +975,7 @@ describe("«Sposta in…» (E13)", () => {
 
   function port() {
     return {
-      notes: vi.fn(async () => [{ id: "Progetto.md", title: "Progetto" }, { id: "nota.md", title: "nota" }]),
+      notes: vi.fn(async () => [{ id: "nota.md", title: "nota" }, { id: "Progetto.md", title: "Progetto" }]),
       headings: vi.fn(async (doc: string) => doc === "Progetto.md"
         ? [{ slug: "idee", text: "Idee", level: 2, start: 10 }]
         : [{ slug: "i-conti", text: "I conti", level: 2, start: 5 }]),
@@ -1079,7 +1079,7 @@ describe("«Sposta in…» (E13)", () => {
     expect(dialog.querySelector(".palette-heading")?.textContent).toBe("Sposta in…");
     expect(dialog.querySelector<HTMLInputElement>(".palette-input")?.placeholder).toBe("Cerca una nota…");
     const options = [...dialog.querySelectorAll<HTMLElement>("[role=option]")];
-    expect(options.map((option) => option.textContent)).toEqual(["ProgettoProgetto.md", "notaquesta nota · nota.md"]);
+    expect(options.map((option) => option.textContent), "la nota stessa per ultima").toEqual(["ProgettoProgetto.md", "notaquesta nota · nota.md"]);
     options[0]!.click();
     await settle();
     // Dove e che cosa resta: in fondo e il link sono già scelti.

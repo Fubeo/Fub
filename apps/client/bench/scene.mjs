@@ -1442,6 +1442,12 @@ export const SCENE = onPage("shell", [
     ["blocchi-05-pagina", "pagina", "I Blocchi con la testata della pagina: icona, copertina, titolo e proprietà", "page"],
     ["blocchi-06-pagina-larga", "pagina-larga", "I Blocchi con la pagina a tutta larghezza, a 900 px", "page", { width: 900, height: 800 }],
     ["blocchi-07-pagina-larga-stretta", "pagina-larga", "I Blocchi con la pagina a tutta larghezza, a 800 px", "page", { width: 800, height: 800 }],
+    // «Sposta in…» (E13): la nota, poi dove e che cosa resta; e il blocco
+    // in mano sopra una nota del cassetto.
+    ["blocchi-08-sposta-nota", "titolo-attivo", "«Sposta in…» dal menu del blocco: la scelta della nota", "move-note"],
+    ["blocchi-09-sposta-dove", "titolo-attivo", "«Sposta in…»: dove va il blocco e che cosa resta al suo posto", "move-where"],
+    ["blocchi-10-sposta-dove-stretta", "titolo-attivo", "«Sposta in…»: dove e che cosa resta, nella finestra minima", "move-where", { width: 800, height: 800 }],
+    ["blocchi-11-sposta-cassetto", "riga-attiva", "Un blocco in mano sopra una nota del cassetto: «Sposta in «…»»", "move-drawer", { width: 1280, height: 800 }],
   ].map(([id, live, title, gesture, viewport]) => ({
     id,
     title,
@@ -1461,7 +1467,7 @@ export const SCENE = onPage("shell", [
       await page.waitForFunction(() => document.getAnimations().length === 0);
       await page.evaluate(() => { document.querySelector(".pane.focus .pane-editor .cm-scroller").scrollTop = 0; });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      if (gesture === "hover") return;
+      if (gesture === "hover" || gesture === "move-drawer") return;
       if (gesture === "page") {
         if (live === "pagina-larga") await page.waitForSelector(".pane.focus.fub-note--wide");
         await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -1475,6 +1481,17 @@ export const SCENE = onPage("shell", [
         await page.click(".pane.focus .pane-editor .cm-fub-block-grip");
         await page.waitForSelector("#context-menu");
       }
+      if (gesture === "move-note" || gesture === "move-where") {
+        await page.click("#context-menu [role^=menuitem]:has(.menu-label:text-is('Sposta in…'))");
+        await page.waitForSelector(".modale [role=option]");
+        if (gesture === "move-where") {
+          // Una nota coi suoi titoli, perché «Dove» li mostri rientrati.
+          await page.keyboard.type("Sintassi");
+          await page.keyboard.press("Enter");
+          await page.waitForSelector(".modale .palette-form select[name=where]");
+        }
+        await page.waitForFunction(() => document.getAnimations().length === 0);
+      }
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     },
     // Il puntatore è l'ultimo gesto: `prepareScene` lo porta via prima.
@@ -1482,6 +1499,24 @@ export const SCENE = onPage("shell", [
       hover: async (page) => {
         await page.hover(".pane.focus .pane-editor .cm-content .cm-line:has-text('Cose da fare')");
         await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles[data-active=\"true\"]");
+      },
+    } : {}),
+    // Il blocco preso per la maniglia e tenuto sulla prima nota del cassetto
+    // che non è quella aperta: il puntatore è il gesto, e resta giù.
+    ...(gesture === "move-drawer" ? {
+      hover: async (page) => {
+        await page.hover(".pane.focus .pane-editor .cm-content .cm-line:has-text('Cose da fare')");
+        await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles[data-active=\"true\"]");
+        const grip = await page.locator(".pane.focus .pane-editor .cm-fub-block-handles[data-active=\"true\"] .cm-fub-block-grip").boundingBox();
+        const row = await page.locator("#file-list .tree-row.note[data-path$='.md']:not([aria-current]):visible").first().boundingBox();
+        if (!grip || !row) throw new Error("manca la maniglia o una nota nel cassetto");
+        await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 + 12, { steps: 4 });
+        await page.mouse.move(row.x + row.width / 2, row.y + row.height / 2, { steps: 16 });
+        await page.waitForSelector(".cm-fub-block-lift[data-free=\"true\"]");
+        await page.waitForSelector("#file-list .tree-row[data-drop-hot]");
+        await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"));
       },
     } : {}),
   })),
