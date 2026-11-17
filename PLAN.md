@@ -626,7 +626,7 @@ verdi; un test e2e in `recipes.rs` (con `fub_kernel::Workspace` e
 la nota e che l'annullamento la toglie; `cargo check -p fub-features --no-default-features --all-targets`
 verde.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 7f21cdbbd (merge di main), 4b49fbba0, 48140bf0e, daef39329 · check --rapido 39/40: rosso solo Vitest per il carico (71 tempi scaduti con carico 64–85), verdi rilanciati da soli. Il test e2e sta in tests/recipes_e2e.rs (independent_modules vieta crate::commands nel modulo); id dalla heading_slug
 
 ## T5 · Il formato e i controlli delle ricette
 
