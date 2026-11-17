@@ -211,6 +211,52 @@ describe("il primo messaggio", () => {
     expect(dated(view.state.doc.toString())).toBe("```js\nlet a = 1;\n```\n\n{>>@Anna Bianchi DATA: Perché 1?<<}\n");
   });
 
+  it("il Tab va dal nome al commento all'invio, e il fuoco portato fuori resta dove va", async () => {
+    store.name = "";
+    const { view, comments } = mount("Un paragrafo.\n", 3, 12);
+    const elsewhere = document.createElement("button");
+    elsewhere.textContent = "Altrove";
+    document.body.append(elsewhere);
+    comments.comment();
+    await settle();
+    const surface = popover()!;
+    const name = surface.querySelector<HTMLInputElement>(".kit-field-input")!;
+    const input = surface.querySelector<HTMLTextAreaElement>(".cm-fub-comment-input")!;
+    const send = surface.querySelector<HTMLButtonElement>(".cm-fub-comment-send")!;
+    input.value = "Ok";
+    input.dispatchEvent(new Event("input"));
+    const stops = [...surface.querySelectorAll<HTMLElement>("input, textarea, button")]
+      .filter((each) => each.tabIndex >= 0 && !(each as HTMLButtonElement).disabled);
+    expect(stops).toEqual([name, input, send]);
+    // Il fuoco va su un altro controllo: il riquadro si chiude e il fuoco
+    // resta lì, non torna nel testo.
+    name.focus();
+    elsewhere.focus();
+    await settle();
+    expect(popover()).toBeNull();
+    expect(document.activeElement).toBe(elsewhere);
+    expect(view.hasFocus).toBe(false);
+  });
+
+  it("il fuoco tolto al riquadro (sul documento) non torna nel testo", async () => {
+    store.name = "";
+    const { view, comments } = mount("Un paragrafo.\n", 3, 12);
+    comments.comment();
+    await settle();
+    const name = popover()!.querySelector<HTMLInputElement>(".kit-field-input")!;
+    expect(document.activeElement).toBe(name);
+    // Come fa chi riparte col Tab dall'inizio della pagina: il fuoco esce
+    // senza destinazione e arriva poi sul `body`.
+    name.blur();
+    document.body.tabIndex = -1;
+    document.body.focus();
+    document.body.removeAttribute("tabindex");
+    await settle();
+    expect(popover()).toBeNull();
+    expect(view.hasFocus).toBe(false);
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it("chiuso senza inviare non scrive niente", async () => {
     const doc = "Un paragrafo.\n";
     const { view, comments } = mount(doc, 3, 12);

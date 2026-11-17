@@ -409,12 +409,16 @@ export function markdownComments(host: CommentsHost): MarkdownComments {
         className: "cm-fub-comment-popover",
         lifetime: own,
         autoFocus: false,
-        onClose: () => {
+        onClose: (reason) => {
           own.close();
           trackers.delete(tracker);
           if (composing?.handle === handle) composing = null;
           if (!life.closed) host.withView((each) => each.dispatch({ effects: setLit.of(null) }));
-          if (!sent) host.focus();
+          // Esc, il Tab oltre il bordo e la chiusura dal codice riportano il
+          // fuoco nel testo. Se il fuoco è andato altrove (un clic, un altro
+          // controllo, il fuoco tolto e dato al documento) resta dov'è:
+          // riprenderlo strapperebbe il Tab a chi sta già navigando.
+          if (!sent && reason !== "outside") host.focus();
         },
       });
       composing = { handle, life: own };
