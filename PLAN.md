@@ -1837,7 +1837,7 @@ Fatto quando: un test del completamento con l'id che c'è e con quello che
 manca; un test del conflitto.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/completions.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder feat/cerca-blocchi da 6d36cfc71, 2026-11-17)
 
 ## T32a · Un piano su più documenti, tutto o niente
 
