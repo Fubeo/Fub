@@ -872,6 +872,9 @@
     "cm-fub-mx-option-name",
     "cm-fub-mx-segments",
     "cm-fub-mx-segment",
+    "cm-fub-mx-error",
+    "cm-fub-mx-error-text",
+    "cm-fub-mx-error-fix",
     "cm-focused",
     "cm-scroller",
     "cm-activeLine",
@@ -2997,6 +3000,9 @@
     "cm-fub-mx-option-name": "cornice",
     "cm-fub-mx-segments": "cornice",
     "cm-fub-mx-segment": "cornice",
+    "cm-fub-mx-error": "cornice",
+    "cm-fub-mx-error-text": "cornice",
+    "cm-fub-mx-error-fix": "cornice",
     "cm-focused": "contenuto",
     "cm-scroller": "contenuto",
     "cm-activeLine": "segno",
@@ -6559,6 +6565,20 @@
         "rest",
         "hover",
         "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "math-error",
+      "part": "math",
+      "hooks": [
+        "cm-fub-mx-error",
+        "cm-fub-mx-error-text",
+        "cm-fub-mx-error-fix"
+      ],
+      "states": [
+        "rest",
+        "hover",
         "focused"
       ]
     },
@@ -11163,10 +11183,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 2123,
+    "hooks": 2126,
     "state_names": 7,
-    "assigned_states": 968,
-    "components": 283,
+    "assigned_states": 971,
+    "components": 284,
     "preference_tokens": 191
   }
 }

@@ -261,6 +261,27 @@ export const VISTE = {
     },
     app: { scena: "formula-12-latex-opzioni" },
   },
+  /// Gli errori in chiaro (T64): un nome che non c'è nel campo del LaTeX,
+  /// dopo la pausa la frase e «Usa \alpha». Il prototipo al passo «Il LaTeX,
+  /// per chi lo vuole», col campo riempito com'è (senza la scrittura veloce);
+  /// l'app dalla scena del banco.
+  "formula-latex-errore": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il LaTeX, per chi lo vuole");
+        await page.waitForSelector("#win .mx .mx-tex");
+        await page.evaluate(() => {
+          const field = document.querySelector("#win .mx .mx-tex");
+          field.value = "v + \\alfa";
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        await page.waitForSelector("#win .mx .mx-err:not([hidden]) button");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "formula-16-latex-errore" },
+  },
   /// Le maniglie accanto a un blocco: «+» e la presa con gli occhi, col
   /// puntatore sul blocco e non sulle maniglie.
   maniglie: {
@@ -910,6 +931,28 @@ export const PEZZI = [
     vista: "formula-latex-opzioni",
     prototipo: '.mx .mx-opts .seg2 button[aria-pressed="false"]',
     app: '.cm-fub-mx-popover .cm-fub-mx-segment[aria-pressed="false"]',
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background"],
+  },
+  // ── gli errori in chiaro (T64) ────────────────────────────────────────────
+  {
+    id: "formula.errore",
+    vista: "formula-latex-errore",
+    prototipo: ".mx .mx-err",
+    app: ".cm-fub-mx-popover .cm-fub-mx-error",
+    proprieta: ["margin", "padding", "gap", "border-radius", "background", "font", "color", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.errore-codice",
+    vista: "formula-latex-errore",
+    prototipo: ".mx .mx-err code",
+    app: ".cm-fub-mx-popover .cm-fub-mx-error code",
+    proprieta: ["font", "background", "padding"],
+  },
+  {
+    id: "formula.errore-correzione",
+    vista: "formula-latex-errore",
+    prototipo: ".mx .mx-err button",
+    app: ".cm-fub-mx-popover .cm-fub-mx-error-fix",
     proprieta: ["height", "padding", "border-radius", "font", "color", "background"],
   },
   // Le maniglie: «+» e la presa a due occhi.

@@ -16,6 +16,10 @@
 // LaTeX, in un campo a vista con la resa sopra: lì le regole del tocco non
 // valgono, perché partono da una formula buona, e nemmeno gli aiuti.
 //
+// Nel campo, quando il LaTeX non si legge, dopo 450 ms di pausa compare sotto
+// che cosa non va, in chiaro, con la correzione se è una sola (`errors.ts`,
+// T64); la correzione entra soltanto col gesto della persona.
+//
 // Il disegno si rifà a ogni TeX nuovo, una volta per fotogramma; spostare il
 // cursore non ridisegna, sposta soltanto il segno acceso.
 import type katex from "katex";
@@ -28,6 +32,7 @@ import { liveStrings } from "../strings";
 import { editOptions, instrument, instrumentHoles, markerElement, markersIn, nearestPoint, verticalPoint } from "./caret";
 import * as rules from "./edit";
 import type { MathState, Outcome, QuickUndo, QuickWrite } from "./edit";
+import { diagnose, explain, type MathFix } from "./errors";
 import { holesOf, mapFormula, placeAt, snap, type Place } from "./points";
 import { commandName, propose, proposalsAddNothing, SYMBOLS, symbolName, type MathSymbol } from "./symbols";
 
@@ -73,6 +78,9 @@ export interface MathEditorOptions {
 export type MathMode = "visual" | "source" | "latex";
 
 const HISTORY_LIMIT = 200;
+/// Quanto si aspetta, dopo l'ultimo tasto, prima di dire che cosa non va:
+/// mentre si scrive niente lampeggia (E27).
+export const PROBLEM_DELAY = 450;
 const CARET_CLASS = "cm-fub-mx-caret";
 /// Gli id delle proposte: uno per riquadro, perché il campo li nomina.
 let lists = 0;
@@ -94,6 +102,14 @@ export class MathEditor {
   private readonly settings: HTMLElement;
   private readonly note: HTMLElement;
   private readonly status: HTMLElement;
+  /// Che cosa non va nel LaTeX, in chiaro, con la correzione se è una sola
+  /// (T64).
+  private readonly problem: HTMLElement;
+  private problemTimer: ReturnType<typeof setTimeout> | null = null;
+  /// La correzione che si vede, e il TeX per cui vale.
+  private shownFix: { readonly tex: string; readonly fix: MathFix } | null = null;
+  /// L'ultimo disegno è riuscito: il TeX di adesso si legge.
+  private reading = true;
   /// Le proposte dei simboli per il nome scritto dopo `\` (T61).
   private readonly list: HTMLElement;
   private proposals: readonly MathSymbol[] = [];
@@ -190,10 +206,16 @@ export class MathEditor {
     this.list.setAttribute("aria-label", t("live.math.symbols"));
     this.input.setAttribute("aria-controls", this.list.id);
 
-    this.element.append(this.surface, this.row, this.settings, this.list, this.note, this.status);
+    this.problem = document.createElement("div");
+    this.problem.className = "cm-fub-mx-error";
+    this.problem.hidden = true;
+    this.problem.setAttribute("role", "status");
+
+    this.element.append(this.surface, this.row, this.settings, this.list, this.note, this.status, this.problem);
     this.applyMode();
     this.listen();
     this.life.add(() => cancelAnimationFrame(this.frame));
+    this.life.add(() => this.cancelProblem());
 
     void loadKatex().then((library) => {
       if (this.life.closed) return;
@@ -292,7 +314,7 @@ export class MathEditor {
     const t = liveStrings.t.bind(liveStrings);
     const mode = this.mode;
     this.element.dataset.mode = mode;
-    this.note.hidden = mode !== "latex";
+    this.syncNote();
     if (mode === "visual") {
       this.input.className = "cm-fub-mx-input";
       this.input.value = "";
@@ -381,11 +403,22 @@ export class MathEditor {
         library.render(instrumentHoles(tex, rules.sourceHoles(tex)), staging, editOptions(this.options.display));
       }
     } catch {
-      // L'ultima resa buona resta, attenuata; senza, il riquadro si toglie
-      // finché il LaTeX non si legge.
-      this.surface.dataset.state = this.surface.childElementCount > 0 ? "stale" : "empty";
+      // Senza una resa buona il riquadro si toglie finché il LaTeX non si
+      // legge. Con una, resta com'è mentre si scrive; dopo una pausa si
+      // attenua, e sotto il campo compare che cosa non va (T64).
+      if (this.surface.childElementCount === 0) this.surface.dataset.state = "empty";
+      this.reading = false;
+      // La formula com'era nel file non si sta scrivendo: si dice subito.
+      if (tex === this.options.tex) {
+        this.cancelProblem();
+        this.showProblem();
+      } else {
+        this.scheduleProblem();
+      }
       return;
     }
+    this.reading = true;
+    this.clearProblem();
     const nodes: Node[] = [...staging.childNodes];
     if (tex.trim() === "" && this.mode !== "latex") {
       const placeholder = document.createElement("span");
@@ -421,6 +454,111 @@ export class MathEditor {
     for (const lit of this.surface.querySelectorAll(`.${CARET_CLASS}`)) lit.classList.remove(CARET_CLASS);
     if (this.mode === "latex") return;
     markerElement(this.surface, this.state.caret)?.classList.add(CARET_CLASS);
+  }
+
+  // ── Gli errori in chiaro (T64) ─────────────────────────────────────────────
+
+  /// Il LaTeX non si legge: la frase arriva dopo una pausa. Ogni tasto la
+  /// rimanda; quella che si vede resta finché non arriva la nuova.
+  private scheduleProblem(): void {
+    this.cancelProblem();
+    this.problemTimer = setTimeout(() => {
+      this.problemTimer = null;
+      this.showProblem();
+    }, PROBLEM_DELAY);
+  }
+
+  private cancelProblem(): void {
+    if (this.problemTimer === null) return;
+    clearTimeout(this.problemTimer);
+    this.problemTimer = null;
+  }
+
+  /// Dice che cosa non va nel TeX di adesso. Si chiede a KaTeX il TeX com'è
+  /// nel file, senza i segni degli spazi vuoti, così le posizioni sono quelle
+  /// del campo.
+  private showProblem(): void {
+    const library = this.library;
+    if (!library || this.life.closed) return;
+    const tex = this.state.tex;
+    let failure: unknown = null;
+    try {
+      library.renderToString(tex, readOptions(this.options.display));
+    } catch (error) {
+      failure = error;
+    }
+    if (failure === null) {
+      this.clearProblem();
+      return;
+    }
+    if (this.surface.childElementCount > 0) this.surface.dataset.state = "stale";
+    // Nella formula che si tocca il TeX resta sempre leggibile: la frase è
+    // del campo del LaTeX.
+    if (this.mode === "visual") return;
+    const diagnosis = diagnose(failure, tex);
+    const text = explain(diagnosis);
+    const sentence = document.createElement("span");
+    sentence.className = "cm-fub-mx-error-text";
+    for (const part of text.parts) {
+      if ("code" in part) {
+        const code = document.createElement("code");
+        code.textContent = part.code;
+        sentence.append(code);
+      } else {
+        sentence.append(part.text);
+      }
+    }
+    const nodes: Node[] = [sentence];
+    this.shownFix = diagnosis.fix && text.fix ? { tex, fix: diagnosis.fix } : null;
+    if (this.shownFix && text.fix) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "cm-fub-mx-error-fix";
+      button.textContent = text.fix;
+      nodes.push(button);
+    }
+    const focused = this.problem.contains(document.activeElement);
+    this.problem.replaceChildren(...nodes);
+    this.problem.hidden = false;
+    this.syncNote();
+    // Il fuoco che stava sul pulsante di prima resta nella formula.
+    if (focused) (this.problem.querySelector<HTMLElement>(".cm-fub-mx-error-fix") ?? this.input).focus({ preventScroll: true });
+  }
+
+  /// Il LaTeX si legge: la frase se ne va subito.
+  private clearProblem(): void {
+    this.cancelProblem();
+    if (this.surface.dataset.state === "stale") this.surface.dataset.state = "ready";
+    this.shownFix = null;
+    if (!this.problem.hidden) {
+      const focused = this.problem.contains(document.activeElement);
+      this.problem.hidden = true;
+      this.problem.replaceChildren();
+      if (focused) this.focus();
+    }
+    this.syncNote();
+  }
+
+  /// La correzione scelta dalla persona: il TeX cambia adesso, in un passo
+  /// solo dell'annulla. Se intanto il TeX è cambiato la correzione è vecchia:
+  /// non si applica, e la frase si rifà sul TeX di adesso.
+  private applyFix(): void {
+    const shown = this.shownFix;
+    if (!shown || this.mode === "visual" || this.life.closed) return;
+    if (shown.tex !== this.state.tex) {
+      this.cancelProblem();
+      this.showProblem();
+      return;
+    }
+    this.quickUndo = null;
+    this.writeField({ tex: shown.fix.tex, caret: Math.min(shown.fix.caret, shown.fix.tex.length) });
+    this.focus();
+  }
+
+  /// La nota del LaTeX di una formula che non si legge lascia il posto alla
+  /// frase che dice che cosa non va, e se ne va quando la formula si legge.
+  private syncNote(): void {
+    this.note.hidden = this.mode !== "latex" || this.reading || !this.problem.hidden;
   }
 
   // ── Lo stato ───────────────────────────────────────────────────────────────
@@ -592,8 +730,9 @@ export class MathEditor {
       case "Tab": {
         const outcome = rules.sourceTab(here, event.shiftKey);
         // Dopo l'ultimo spazio vuoto il Tab segue la pagina: i tre puntini,
-        // la tavolozza, poi fuori dal riquadro, come dalla tavolozza.
-        if (outcome.kind === "leave" && this.more) return;
+        // la tavolozza, poi fuori dal riquadro, come dalla tavolozza. Lo
+        // stesso con una correzione da scegliere (T64).
+        if (outcome.kind === "leave" && (this.more || this.shownFix)) return;
         handled();
         if (outcome.kind === "move") {
           this.input.setSelectionRange(outcome.caret, outcome.caret);
@@ -796,11 +935,27 @@ export class MathEditor {
       event.preventDefault();
       event.stopPropagation();
     });
+    on(this.problem, "mousedown", (event) => {
+      // La correzione non ruba il fuoco al campo, e la frase non chiude il
+      // riquadro.
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    on(this.problem, "keydown", (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.focus();
+    });
     on(this.element, "click", (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
       if (this.more && target.closest(".cm-fub-mx-more") === this.more) {
         this.toggleOptions(undefined, event.detail === 0);
+        return;
+      }
+      if (target.closest(".cm-fub-mx-error-fix")) {
+        this.applyFix();
         return;
       }
       if (target.closest(".cm-fub-mx-palette-toggle")) {
