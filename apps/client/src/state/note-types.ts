@@ -14,11 +14,9 @@ import type { CommandOutcome } from "../host/contract";
 import { isErrorKind } from "../host/errors";
 import { openVaultRoot } from "./store";
 
-export const NOTE_TYPES_NS = "fub.note_types";
-export const NOTE_TYPE_LIST = "note.type.list";
-export const NOTE_TYPE_GET = "note.type.get";
-export const NOTE_FROM_TYPE = "note.from_type";
-export const NOTE_TYPE_SET = "note.type.set";
+import { NOTE_FROM_TYPE, NOTE_TYPE_GET, NOTE_TYPE_LIST, NOTE_TYPE_SET, NOTE_TYPES_NS } from "./note-type-commands";
+
+export { NOTE_FROM_TYPE, NOTE_TYPE_GET, NOTE_TYPE_LIST, NOTE_TYPE_SET, NOTE_TYPES_NS } from "./note-type-commands";
 /// La chiave con cui una nota dice il suo tipo, e quella delle proprietà in
 /// evidenza nel frontmatter di un tipo.
 export const TYPE_KEY = "tipo";

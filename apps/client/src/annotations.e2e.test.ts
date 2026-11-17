@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommandSpec } from "./host/contract";
 import type { FakeHost } from "./host/fake";
 import { FIRST_IMPORT_MS, waiter } from "./test-wait";
+import { withoutTypeReads } from "./state/note-type-commands";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -179,7 +180,7 @@ describe("«Annota» dal visore del PDF", () => {
     expect(annotateButton()!.textContent).toBe("Annota");
     annotateButton()!.click();
     await waitFor("le annotazioni si aprono", () => focusedPane().querySelector(".pdf-surface .draw-editor") !== null);
-    expect(host.atGate("invokeCommand").map((call) => call.args)).toEqual([["pdf.annotate", { pdf: PDF }, "apply"]]);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args)).toEqual([["pdf.annotate", { pdf: PDF }, "apply"]]);
     expect(host.files()[NOTES]).toBe(
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:annotates="Bando%20di%20gara.pdf">\n  <title>Bando di gara.pdf</title>\n</svg>\n',
     );
@@ -246,8 +247,8 @@ describe("«Esporta…» sulle annotazioni", () => {
       t("pdf.export.redacted"),
     ]);
     choices()[1]!.click();
-    await waitFor("l'export è chiesto", () => host.atGate("invokeCommand").length === 2);
-    const [, call] = host.atGate("invokeCommand");
+    await waitFor("l'export è chiesto", () => withoutTypeReads(host.atGate("invokeCommand")).length === 2);
+    const [, call] = withoutTypeReads(host.atGate("invokeCommand"));
     expect(call!.args[0]).toBe("export.run");
     expect(JSON.parse(String((call!.args[1] as { request_json: string }).request_json))).toEqual({
       target: "draw.redacted-pdf",

@@ -24,6 +24,7 @@ import type { SettingEntry } from "./host/contract";
 import type { FakeHost, FakeResource } from "./host/fake";
 import { t } from "./i18n/strings";
 import { waiter } from "./test-wait";
+import { NOTE_TYPE_READS } from "./state/note-type-commands";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -228,6 +229,8 @@ const VAULT_WRITES: ReadonlySet<string> = new Set(["writeDocument", "resourceWri
 function vaultWrites(host: FakeHost): string[] {
   const seen = host.calls
     .filter((call) => VAULT_WRITES.has(call.gate))
+    // Il cassetto rilegge i tipi quando il vault cambia: una lettura.
+    .filter((call) => call.gate !== "invokeCommand" || !NOTE_TYPE_READS.has(String(call.args[0])))
     .map((call) => `${call.gate}:${String(call.args[0])}`);
   return [...new Set(seen)].sort();
 }
