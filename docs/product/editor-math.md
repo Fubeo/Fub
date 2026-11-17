@@ -156,7 +156,10 @@ nel campo del LaTeX, e in una formula già rotta nel file. Mentre si scrive non
 lampeggia niente: l'ultima resa buona resta com'è. Dopo 450 ms dall'ultimo
 tasto la resa si attenua e sotto il campo compare una frase in chiaro, nella
 lingua dell'interfaccia; una formula rotta nel file la mostra subito, perché
-nessuno sta scrivendo. Il messaggio grezzo di KaTeX non si vede mai.
+nessuno sta scrivendo. Il messaggio grezzo di KaTeX non si vede mai. La stessa
+frase, senza pulsante, è il suggerimento di una formula rotta anche in lettura
+e nell'anteprima del riquadro classico di Vim (e il nome, per il lettore di
+schermo).
 
 Quando la correzione è una sola, accanto alla frase c'è il suo pulsante:
 
