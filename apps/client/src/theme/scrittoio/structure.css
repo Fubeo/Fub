@@ -845,7 +845,7 @@ body {
   scrollbar-width: none;
   /* Portata a vista, una linguetta non finisce sotto l'elenco né nella
      sfumatura: da una parte e dall'altra resta lo spazio del suo raccordo. */
-  scroll-padding: 0 calc(24px + var(--tab-fillet) + var(--space-6, 16px)) 0 calc(var(--space-8, 24px) + var(--tab-fillet));
+  scroll-padding: 0 calc(54px + var(--space-2, 4px) + 2 * var(--tab-fillet) + var(--space-6, 16px)) 0 calc(var(--space-8, 24px) + var(--tab-fillet));
   position: relative;
   z-index: 1;
 }
@@ -946,12 +946,22 @@ body {
 }
 
 /* Il «+» segue l'ultima linguetta, a un raccordo di distanza; l'elenco sta in
-   fondo e resta a vista anche quando la striscia scorre. Tutti e due sono
+   fondo. Quando la striscia scorre restano a vista tutti e due: il «+» si
+   ferma accanto all'elenco e le linguette passano sotto, così non finisce
+   sotto l'elenco né oltre il bordo del foglio (IMP-014). Tutti e due sono
    centrati sulle linguette, non sulla striscia, che sopra ha la sua aria. */
 .pane-tabs > .tab-new {
   flex: 0 0 auto;
   align-self: flex-end;
   margin: 0 var(--space-2, 4px) calc((var(--tab-h) - var(--tab-air) - 24px) / 2) calc(var(--tab-fillet) + 2px);
+  position: sticky;
+  right: calc(24px + var(--space-2, 4px));
+  z-index: 1;
+}
+
+/* Con una scheda sola l'elenco non c'è, e il «+» si ferma sul bordo. */
+.pane-tabs:has(> [data-tab-menu][hidden]) > .tab-new {
+  right: 0;
 }
 
 .pane-tabs > [data-tab-menu] {
