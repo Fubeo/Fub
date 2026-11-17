@@ -384,13 +384,13 @@ wikilink.
 
 ## Le date
 
-`@` propone anche i giorni: il giorno stesso, «domani», «ieri», un giorno della
-settimana («venerdì», il prossimo con quel nome), «prossimo venerdì» (quello
-della settimana dopo, che comincia dal giorno scelto in
-`locale.first-day-of-week` o da quello del sistema), «4 novembre», «nov 4» e
-`2026-11-04`, in italiano e in inglese. Una parola a metà basta. Il giorno
-diventa il link alla sua giornaliera, nella cartella e col formato di
-`daily.folder` e `daily.format`, con il giorno per esteso come testo:
+`@` propone anche i giorni: il giorno stesso, «domani», «ieri», «venerdì»
+(il prossimo), «prossimo venerdì» (nella settimana dopo, dal giorno di
+`locale.first-day-of-week` o del sistema), «4 novembre», «nov 4», `2026-11-04`
+e, con la regola del campo della data nelle proprietà (`saidDay`), «fra due
+settimane» e «3/4»; in italiano e in inglese, e una parola a metà basta. Il
+giorno diventa il link alla sua giornaliera (`daily.folder`, `daily.format`),
+col giorno per esteso come testo:
 
 ```markdown
 Consegna [[Daily/2026-11-04|4 novembre 2026]].

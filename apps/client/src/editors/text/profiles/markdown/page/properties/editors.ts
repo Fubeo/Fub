@@ -7,11 +7,14 @@
 // frattempo il valore è cambiato (un altro riquadro, il file da fuori) non si
 // scrive, l'editor resta aperto con ciò che si stava scrivendo e lo dice; una
 // seconda conferma scrive.
+import type { PropertyType } from "../../../../../../host/enums.generated";
 import { createList, openPopover, type PopoverHandle } from "../../../../../../kit";
 import { resolvedLanguage } from "../../../../../../i18n/strings";
 import { iconEl } from "../../../../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../../../../ui/lifetime";
 import type { PropertyEntry, PropertyWrite } from "../../properties";
+import { saidDay } from "../../dates";
+import { firstWeekday } from "../../../../../../state/dates";
 import { liveStrings } from "../../strings";
 import { freeColor, KIND_ICONS, linkName, linkTo, OPTION_GROUPS, optionsOf, parseNumber, validDate, type OptionGroup, type PropertyOption, type RowKind } from "./kind";
 import { entryStamp, longDate, optionElement, personElement, type PropertyRowHost, type WriteOutcome } from "./values";
@@ -68,7 +71,7 @@ export function openEditor(entry: PropertyEntry, kind: RowKind, value: HTMLButto
   switch (kind.kind) {
     case "date":
     case "date_time":
-      openDateEditor(entry, kind.kind, value, host, life);
+      openDateEditor(entry, kind.kind, value, host, life, kind.declared);
       return;
     case "list":
     case "tags":
@@ -235,41 +238,47 @@ function addMonths(iso: string, months: number): string {
   return isoOf(new Date(first.getFullYear(), first.getMonth(), Math.min(day, last)));
 }
 
-/// Il prossimo venerdì dopo oggi (oggi venerdì: fra una settimana).
-function nextFriday(today: string): string {
-  const day = dateOf(today).getDay();
-  return addDays(today, ((5 - day + 7) % 7) || 7);
-}
-
-/// Una data scritta: `2026-03-20`, con l'ora `2026-03-20T10:30` o
-/// `2026-03-20 10:30`, oppure `20/3/2026`, `20.3.2026`, `20-3-26`. `null` se
-/// non è una data del calendario.
-export function parseDateInput(text: string): { date: string; time: string | null } | null {
+/// Una data scritta nel campo, con la regola di `@` (`saidDay`): «venerdì»,
+/// «fra due settimane», «20 marzo», «3/4», `2026-03-20`, `20/3/2026`. Dopo,
+/// un'ora facoltativa: «venerdì 18:30», «domani alle 9», `2026-03-20T10:30`.
+/// `null` se non è un giorno del calendario o l'ora non è un'ora: niente si
+/// indovina.
+export function parseDateInput(text: string, today: Date = new Date(), firstDay = 1, locale = "it"): { date: string; time: string | null } | null {
   const value = text.trim();
-  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{1,2}):(\d{2}))?$/.exec(value);
-  const local = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/.exec(value);
-  const parts = iso ? [iso[1]!, iso[2]!, iso[3]!, iso[4], iso[5]] : local ? [local[3]!.length === 2 ? `20${local[3]}` : local[3]!, local[2]!, local[1]!, local[4], local[5]] : null;
-  if (!parts) return null;
-  const date = `${parts[0]}-${parts[1]!.padStart(2, "0")}-${parts[2]!.padStart(2, "0")}`;
-  if (!validDate(date)) return null;
-  if (parts[3] === undefined) return { date, time: null };
-  const hours = Number(parts[3]);
-  const minutes = Number(parts[4]);
-  if (hours > 23 || minutes > 59) return null;
-  return { date, time: `${String(hours).padStart(2, "0")}:${parts[4]}` };
+  const date = saidDay(value, today, firstDay, locale);
+  if (date !== null) return { date, time: null };
+  const clock = /^(.+?)(?:T|\s+(?:alle ore|alle|ore|at)\s+|\s+)(\d{1,2}):(\d{2})$/iu.exec(value)
+    ?? /^(.+?)\s+(?:alle ore|alle|ore|at)\s+(\d{1,2})(?:\.(\d{2}))?$/iu.exec(value);
+  if (!clock) return null;
+  const day = saidDay(clock[1]!, today, firstDay, locale);
+  const hours = Number(clock[2]);
+  const minutes = Number(clock[3] ?? "0");
+  if (day === null || hours > 23 || minutes > 59) return null;
+  return { date: day, time: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}` };
 }
 
 /// Data, e Data e ora: il campo per scriverla, i giorni vicini, il mese da
 /// sfogliare. Nella griglia ← → cambiano giorno, ↑ ↓ settimana, Pagina su e
-/// giù mese, Inizio e Fine vanno ai capi della settimana; Invio sceglie.
-export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time", anchor: HTMLButtonElement, host: PropertyRowHost, life: Lifetime): PopoverHandle {
+/// giù mese, Inizio e Fine vanno ai capi della settimana; Invio sceglie. Il
+/// campo capisce le parole come `@` (`parseDateInput`): ciò che capisce si
+/// vede subito nel mese; ciò che non capisce resta scritto, lo dice, e il
+/// valore non cambia. Il file riceve sempre `AAAA-MM-GG` (con l'ora,
+/// `AAAA-MM-GGTHH:MM`). «Aggiungi l'ora» su una proprietà dichiarata Data la
+/// dichiara Data e ora (`declared`): ogni data di prima ci sta ancora.
+export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time", anchor: HTMLButtonElement, host: PropertyRowHost, life: Lifetime, declared: PropertyType | null = null): PopoverHandle {
   const state = session(entry, host);
   const own = openLifetime();
   const language = resolvedLanguage();
   const raw = entry.value.trim();
-  const today = isoOf(new Date());
-  let selected = validDate(raw.slice(0, 10)) ? raw.slice(0, 10) : null;
+  const now = new Date();
+  const today = isoOf(now);
+  const firstDay = firstWeekday();
+  const original = validDate(raw.slice(0, 10)) ? raw.slice(0, 10) : null;
+  let selected = original;
   let withTime = kind === "date_time";
+  // Una Data dichiarata passa a Data e ora solo se il registro si può
+  // scrivere; altrimenti l'ora non si offre.
+  const timeAllowed = declared !== "date" || host.setType !== undefined;
   // L'ora com'era scritta: il separatore, e ciò che segue `HH:MM` (secondi,
   // fuso) resta finché l'ora non cambia.
   const stamp = /^\d{4}-\d{2}-\d{2}([T ])(\d{2}:\d{2})(.*)$/.exec(raw);
@@ -297,7 +306,8 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
     ["page.properties.date.today", today],
     ["page.properties.date.tomorrow", addDays(today, 1)],
     ["page.properties.date.week", addDays(today, 7)],
-    ["page.properties.date.friday", nextFriday(today)],
+    // Il venerdì che viene, con la regola delle parole: mai oggi.
+    ["page.properties.date.friday", saidDay("venerdì", now, firstDay, language) ?? addDays(today, 7)],
   ] as const) {
     const choice = button("cm-fub-prop-date-choice", liveStrings.t(label));
     choice.dataset.quick = day;
@@ -374,6 +384,7 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
 
   const drawTime = () => {
     timeRow.hidden = !withTime;
+    timeToggle.hidden = !withTime && !timeAllowed;
     timeToggle.textContent = liveStrings.t(withTime ? "page.properties.date.remove_time" : "page.properties.date.add_time");
   };
 
@@ -390,7 +401,19 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
       return;
     }
     popover.close();
+    if (withTime && date !== "" && declared === "date") void promote();
   };
+  /// La proprietà dichiarata Data diventa Data e ora nel registro, come
+  /// «Tipo» del menu, e lo dice: le date senza ora delle altre note ci
+  /// stanno ancora. Se il registro non si scrive, il valore scritto resta e
+  /// la riga lo segna fuori dal tipo.
+  const promote = async (): Promise<void> => {
+    if (!host.setType) return;
+    const problem = await host.setType(entry.key, "date_time").catch((error: unknown) => error instanceof Error ? error.message : String(error));
+    if (problem === null) host.notify?.(liveStrings.t("page.properties.date.with_time", { key: entry.key }), "info");
+    else host.notify?.(liveStrings.t("page.properties.type.failed", { key: entry.key, reason: problem }), "guasto");
+  };
+  const understood = () => parseDateInput(input.value, new Date(), firstDay, language);
   const choose = (day: string) => write(day);
 
   own.listen(grid, "click", (event) => {
@@ -423,20 +446,36 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
     cursor = addMonths(cursor, 1);
     drawGrid(false);
   });
+  // Mentre si scrive, il giorno capito si vede scelto nel suo mese; il
+  // campo vuoto torna al valore di prima. La frase sotto parlava del testo
+  // di prima: si toglie.
   own.listen(input, "input", () => {
-    const parsed = parseDateInput(input.value);
-    input.toggleAttribute("aria-invalid", input.value.trim() !== "" && !parsed);
-    if (parsed) {
-      cursor = parsed.date;
+    const parsed = understood();
+    const empty = input.value.trim() === "";
+    input.toggleAttribute("aria-invalid", !empty && !parsed);
+    say(note, null);
+    if (parsed || empty) {
+      selected = parsed?.date ?? original;
+      cursor = selected ?? today;
       drawGrid(false);
     }
   });
   own.listen(input, "keydown", (event) => {
     if (event.key !== "Enter" || event.isComposing) return;
     event.preventDefault();
-    const parsed = parseDateInput(input.value);
+    if (input.value.trim() === "") return;
+    const parsed = understood();
     if (!parsed) {
-      say(note, liveStrings.t("page.properties.date.invalid"));
+      // Il mese torna sul valore di prima, che è quello che resta: mentre
+      // si scriveva poteva mostrare il giorno di un testo capito a metà.
+      selected = original;
+      cursor = selected ?? today;
+      drawGrid(false);
+      say(note, liveStrings.t("page.properties.date.invalid", { text: input.value.trim() }));
+      return;
+    }
+    if (parsed.time && !timeAllowed) {
+      say(note, liveStrings.t("page.properties.date.no_time", { key: entry.key }));
       return;
     }
     if (parsed.time) {
