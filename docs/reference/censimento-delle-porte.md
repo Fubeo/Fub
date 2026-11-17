@@ -77,6 +77,7 @@ compila soltanto se la sua cargo feature è dichiarata in `[features]` di
 | `fub.backlinks` | `backlinks` | vista | sì |
 | `fub.outline` | `outline` | vista, comandi | sì |
 | `fub.tags` | `tags` | vista, comandi | sì |
+| `fub.tasks` | `tasks` | vista, sintassi, renderer | solo nativa |
 | `fub.properties` | `properties` | vista, comandi | sì |
 | `fub.template` | `template` | vista, comandi, impostazioni | sì |
 | `fub.queries` | `queries` | vista, comandi | sì |
@@ -87,13 +88,16 @@ compila soltanto se la sua cargo feature è dichiarata in `[features]` di
 | `fub.graph` | `graph` | vista, comandi | sì |
 | `fub.commands` | `commands` | comandi | sì |
 | `fub.blocks` | `blocks` | sintassi, renderer | solo nativa |
-| `fub.base` | `base` | indice, sintassi, renderer | solo nativa |
+| `fub.base` | `base` | comandi, indice, sintassi, renderer | solo nativa |
 | `fub.formatting` | `formatting` | comandi | sì |
 | `fub.proof` | `proof` | comandi, impostazioni, collegamento:machine-dictionaries | solo host |
 | `fub.draw` | `draw` | comandi, indice, export, impostazioni | solo nativa |
+| `fub.motore-vettoriale` | `engine-drawing` | — | solo host |
+| `fub.craft` | `craft` | — | solo host |
 | `fub.rich` | `rich` | — | solo host |
 | `fub.xlsx` | `xlsx` | — | solo host |
-| `fub.lavagna` | — | — | client |
+| `fub.lavagna` | `lavagna` | comandi, impostazioni | sì |
+| `fub.pdf` | — | — | client |
 | `fub.penna` | — | — | solo host |
 | `fub.dizionari` | — | — | solo host |
 | `fub.motore-documenti` | `engine-documents` | — | solo host |
