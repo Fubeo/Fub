@@ -2536,7 +2536,10 @@ mod tests {
         assert_eq!(written["mutations"][0]["key"], "prop.stato");
         assert_eq!(written["mutations"][0]["command"], "note.property.set");
         assert_eq!(written["mutations"][0]["args"]["key"], "stato");
-        assert_eq!(edit("valore").unwrap()["mutations"][0]["args"]["key"], "valore");
+        assert_eq!(
+            edit("valore").unwrap()["mutations"][0]["args"]["key"],
+            "valore"
+        );
         assert!(edit("prop.altro").is_err());
     }
 
