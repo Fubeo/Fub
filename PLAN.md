@@ -778,7 +778,7 @@ Fatto quando: test degli editor da tastiera; un test della Base prova le
 corsie e lo spostamento che scrive lo stato; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/page src/editors/base
-Stato: [~] in corso (coder, da 09e8d7045 di `integra/editor-1`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (1dedb60d8, 2026-11-17), PR bozza #472. Anche la Selezione ha le corsie nell'ordine delle opzioni. Sulle corsie delle opzioni non c'è «Rinomina»: un'opzione si rinomina nel registro. Da tastiera si sposta con Alt ← e Alt →. La Base riusa la pastiglia `cm-fub-prop-opt`. Restano da fare: la pastiglia dello stato nella Tabella della Base (nota T15), i colori del calendario (nota T17) e il segno a vista delle corsie fuori dalle opzioni (`data-outside`, serve CSS in editors.css).
 
 ## T9a · Selezione, Stato e Url nel contratto
 
