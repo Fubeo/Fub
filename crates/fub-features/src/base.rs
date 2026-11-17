@@ -1198,6 +1198,11 @@ fn respond(query: Value) -> Result<Value, PluginError> {
                 return Err(bad("base: troppe mutazioni"));
             }
             let writable_columns = columns(&plan);
+            // La data del calendario (e inizio e fine della linea del tempo)
+            // si scrive anche se non è una colonna: trascinare una nota su un
+            // giorno riscrive quella proprietà.
+            let (date, start, end) = time_keys(plan.view);
+            let time_keys = [date, start, end];
             let mut mutations = Vec::with_capacity(request.edits.len());
             for edit in request.edits {
                 if edit.doc.is_empty()
@@ -1205,7 +1210,8 @@ fn respond(query: Value) -> Result<Value, PluginError> {
                     || edit.key.starts_with("file.")
                     || edit.key.starts_with("formula.")
                     || (!writable_columns.contains(&edit.key)
-                        && plan.view.group.as_ref().is_none_or(|g| g.key != edit.key))
+                        && plan.view.group.as_ref().is_none_or(|g| g.key != edit.key)
+                        && !time_keys.contains(&Some(edit.key.as_str())))
                 {
                     return Err(bad("base: colonna non scrivibile"));
                 }
@@ -2331,6 +2337,26 @@ mod tests {
             derived["rows"][3]["time"],
             json!({"start":null,"end":"2026-11-10","inverted":false})
         );
+    }
+
+    /// Trascinare una nota su un giorno riscrive la data del calendario, che
+    /// non è una colonna della vista; un'altra proprietà resta non scrivibile.
+    #[test]
+    fn il_calendario_scrive_la_sua_data_anche_se_non_e_una_colonna() {
+        let edit = |key: &str| {
+            respond(json!({"version":1,"op":"mutate","source":TIME_SOURCE,"view":"Cal","edits":[
+                {"doc":"a.md","key":key,"expected":{"kind":"absent"},"value":"2026-11-15"}
+            ]}))
+        };
+        let written = edit("scadenza").unwrap();
+        assert_eq!(written["mutations"][0]["command"], "note.property.set");
+        assert_eq!(written["mutations"][0]["args"]["key"], "scadenza");
+        assert!(edit("altro").is_err());
+        // La linea del tempo: inizio e fine.
+        let timeline = respond(json!({"version":1,"op":"mutate","source":TIME_SOURCE,"view":"Lin","edits":[
+            {"doc":"a.md","key":"fine","expected":{"kind":"absent"},"value":"2026-11-15"}
+        ]}));
+        assert!(timeline.is_ok());
     }
 
     /// Le viste che non sono di tempo non portano il campo `time`.

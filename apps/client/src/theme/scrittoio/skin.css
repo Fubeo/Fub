@@ -12726,6 +12726,202 @@ input.canvas-toolbar-item {
   flex: none;
   width: 12rem;
 }
+/* Il calendario (T17): il mese del prototipo (`.cal`, `.dow`, `.out`, `.d`,
+   `.today`, `.over`, `.ev`), fino ai bordi della scatola. Sopra, la testa
+   col mese, i due passi e «Oggi»; la griglia scorre di lato sotto i 560 px
+   del prototipo, la testa no. */
+.base-body:has(> .base-calendar) {
+  padding: 0;
+}
+.base-cal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 40px;
+  padding: 6px 10px 6px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.base-cal-title {
+  margin: 0;
+  padding: 0 var(--space-2);
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+}
+.base-cal-nav {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 var(--space-3);
+  border-radius: 7px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.base-cal-prev > svg {
+  transform: scaleX(-1);
+}
+.base-cal-today {
+  margin-left: var(--space-2);
+}
+.base-cal-nav:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.base-cal-undated {
+  margin-left: auto;
+  padding-left: var(--space-4);
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.base-cal-scroll {
+  overflow-x: auto;
+}
+.base-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(72px, 1fr));
+  min-width: 560px;
+}
+.base-cal-week {
+  display: contents;
+}
+.base-cal-dow,
+.base-cal-day {
+  min-width: 0;
+  min-height: 76px;
+  padding: 4px 5px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  transition: background-color var(--duration-fast);
+}
+.base-cal-week > :last-child {
+  border-right: 0;
+}
+.base-cal-dow {
+  min-height: 0;
+  padding: 6px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.base-cal-day:focus-visible {
+  outline-offset: -2px;
+}
+.base-cal-day[data-out="true"] {
+  background: color-mix(in srgb, var(--sheet-2) 70%, transparent);
+  color: var(--muted);
+}
+.base-cal-num {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.base-cal-day[data-today="true"] .base-cal-num {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: var(--weight-bold);
+}
+/* Il giorno della settimana accanto al numero si vede solo al telefono,
+   dove i giorni stanno in colonna senza la riga dei nomi. */
+.base-cal-weekday {
+  display: none;
+}
+.base-cal-day[data-over="true"] {
+  background: var(--accent-veil);
+}
+.base-cal-event,
+.base-cal-more {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  padding: 2px 6px;
+  overflow: hidden;
+  border-radius: 5px;
+  font-weight: var(--weight-medium);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.base-cal-event {
+  background: var(--doc-tint-green);
+  color: var(--doc-color-green);
+  cursor: pointer;
+}
+.base-cal-event[draggable="true"] {
+  cursor: grab;
+}
+.base-cal-event[data-dragging="true"] {
+  opacity: 0.4;
+}
+.base-cal-more {
+  color: var(--muted);
+}
+.base-cal-more:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+/* Il piede della vista sta sotto la griglia, col filo dell'ultima settimana
+   a dividerli. */
+.base-calendar ~ .base-summaries:not(:empty) {
+  margin-top: 0;
+  padding: var(--space-4) var(--space-7);
+  border-top: 0;
+}
+/* Il calendario senza la sua proprietà data. */
+.base-cal-empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: var(--space-7);
+  color: var(--muted);
+}
+.base-cal-empty > p {
+  margin: 0;
+}
+.base-cal-empty > p:first-child {
+  color: var(--text);
+}
+/* Al telefono il mese è una colonna di giorni: niente riga dei nomi né giorni
+   degli altri mesi, e accanto al numero il nome del giorno. */
+@container sheet (max-width: 560px) {
+  .base-cal-grid {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+  }
+  .base-cal-week:first-child,
+  .base-cal-day[data-out="true"] {
+    display: none;
+  }
+  .base-cal-day {
+    min-height: 0;
+    padding: 6px 10px;
+    border-right: 0;
+  }
+  .base-cal-weekday {
+    display: inline;
+    margin-left: var(--space-2);
+    color: var(--muted);
+    font-weight: var(--weight-bold);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .base-cal-undated {
+    display: none;
+  }
+}
 .base-map-atlas {
   margin-block: var(--space-4);
   border-radius: var(--radius-control);

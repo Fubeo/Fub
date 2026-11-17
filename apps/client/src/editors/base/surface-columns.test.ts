@@ -214,7 +214,7 @@ describe("«+»: una vista nuova", () => {
       expect(plus.disabled).toBe(false);
       plus.click();
       expect(document.querySelector("#context-menu .menu-head-kind")!.textContent).toBe("Nuova vista");
-      expect([...document.querySelectorAll("#context-menu .menu-label")].map((each) => each.textContent)).toEqual(["Tabella", "Schede", "Elenco", "Bacheca", "Mappa"]);
+      expect([...document.querySelectorAll("#context-menu .menu-label")].map((each) => each.textContent)).toEqual(["Tabella", "Schede", "Elenco", "Bacheca", "Mappa", "Calendario"]);
       pick("Bacheca");
       await vi.waitFor(() => expect(host.querySelector('.base-tab[aria-pressed="true"]')?.getAttribute("data-view")).toBe("Bacheca"));
       await settled(host);
@@ -241,6 +241,10 @@ describe("«+»: una vista nuova", () => {
       const map = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")].find((each) => each.querySelector(".menu-label")?.textContent === "Mappa")!;
       expect(map.getAttribute("aria-disabled") === "true" || map.disabled).toBe(true);
       expect(map.querySelector(".menu-description")!.textContent).toContain("lat");
+      // Le note di prova non hanno date: anche il calendario è spento col perché.
+      const calendar = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")].find((each) => each.querySelector(".menu-label")?.textContent === "Calendario")!;
+      expect(calendar.getAttribute("aria-disabled") === "true" || calendar.disabled).toBe(true);
+      expect(calendar.querySelector(".menu-description")!.textContent).toBe("Serve una proprietà data nelle note.");
       pick("Tabella");
       await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("base.view.add", expect.objectContaining({ name: "Tabella 2", type: "table" })));
       await settled(host);
