@@ -95,6 +95,11 @@ impl CommandProvider for PropertiesCommands {
                 ))
                 .with_param(parameter(PROPERTY_OPTION_SET, EXPECTED, ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Settings)),
+            command(PROPERTY_TARGET_SET)
+                .with_param(parameter(PROPERTY_TARGET_SET, KEY, ParamKind::Text).required())
+                .with_param(parameter(PROPERTY_TARGET_SET, TARGET, ParamKind::Text))
+                .with_param(parameter(PROPERTY_TARGET_SET, EXPECTED, ParamKind::Text))
+                .with_scope(CommandScope::writing(CommandReach::Settings)),
             command(PROPERTY_TYPES_RESTORE)
                 .with_param(parameter(PROPERTY_TYPES_RESTORE, VALUE, ParamKind::Text).required())
                 .with_param(parameter(PROPERTY_TYPES_RESTORE, EXPECTED, ParamKind::Text).required())
@@ -128,6 +133,7 @@ impl CommandProvider for PropertiesCommands {
             NOTES_ALIAS_ADD => add_alias(Args::new(&args), mode, host),
             NOTES_PROPERTIES_CLEAR => clear_properties(Args::new(&args), mode, host),
             PROPERTY_OPTION_SET => set_property_option(Args::new(&args), mode, host),
+            PROPERTY_TARGET_SET => set_relation_target(Args::new(&args), mode, host),
             PROPERTY_TYPES_RESTORE => restore_property_types(Args::new(&args), mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
@@ -550,6 +556,86 @@ fn set_property_option(
         .with_effect(CommandEffect::Done))
 }
 
+/// Dice, o toglie, il bersaglio di una Relazione.
+///
+/// `target` è un tipo (`[[Tipi/Libro]]`) o una cartella del vault; vuoto o
+/// assente toglie il bersaglio, e la scelta torna fra tutte le note. Si
+/// scrive la forma letta ([`RelationTarget::as_key`]): `/Libri/` diventa
+/// `Libri`. Le note non cambiano: un link già scritto fuori dal bersaglio
+/// resta un link. Il registro si legge con la regola di
+/// [`writable_property_types`] e l'annullo è `property.types.restore`, come
+/// per le opzioni.
+fn set_relation_target(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let key = key_from(args)?;
+    let raw = args.text(TARGET).unwrap_or("").trim();
+    let target = match raw {
+        "" => None,
+        raw => Some(RelationTarget::parse(raw).ok_or_else(|| {
+            PluginError::BadArgs(Text::message(E_TARGET, vec![Arg::text(VALUE, raw)]))
+        })?),
+    };
+    let before = property_types_raw(host)?;
+    check_types_unchanged(&before, args.text(EXPECTED))?;
+    let mut types = writable_property_types(host).map_err(|_| {
+        PluginError::BadArgs(Text::message(
+            E_TYPES_UNREADABLE,
+            vec![Arg::text(KEY, TYPES_KEY)],
+        ))
+    })?;
+    if types.resolve(&key) != Some(PropertyType::Relation) {
+        return Err(PluginError::BadArgs(Text::message(
+            E_NOT_RELATION,
+            vec![Arg::text(KEY, &key)],
+        )));
+    }
+    let summary = match &target {
+        Some(target) => {
+            let written = target.as_key();
+            types.targets.insert(key.clone(), written.clone());
+            Text::message(
+                P_TARGET_SET,
+                vec![Arg::text(KEY, &key), Arg::text(TARGET, written)],
+            )
+        }
+        None => {
+            types.targets.remove(&key);
+            Text::message(P_TARGET_CLEAR, vec![Arg::text(KEY, &key)])
+        }
+    };
+    let after = serde_json::to_string(&types).map_err(|e| {
+        PluginError::Internal(Text::message(
+            E_TYPES_SERIALIZE,
+            vec![Arg::text("reason", e.to_string())],
+        ))
+    })?;
+    if after == before {
+        return Ok(CommandOutcome::notify(Text::message(
+            P_TARGET_SAME,
+            vec![Arg::text(KEY, &key)],
+        )));
+    }
+    if mode.is_dry_run() {
+        return Ok(
+            CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan {
+                summary,
+                ..CommandPlan::default()
+            })),
+        );
+    }
+    host.set_setting(TYPES_KEY, SettingValue::Text(after.clone()))?;
+    Ok(CommandOutcome::notify(summary)
+        .undoable(Undo::by_command(
+            Text::message(U_TARGET, vec![Arg::text(KEY, &key)]),
+            PROPERTY_TYPES_RESTORE,
+            serde_json::json!({ VALUE: before, EXPECTED: after }),
+        ))
+        .with_effect(CommandEffect::Done))
+}
+
 /// Rimette nel registro il testo `value`, solo se adesso vale `expected`.
 ///
 /// È l'annullo di [`set_property_option`]: il testo di prima torna byte per
@@ -626,6 +712,11 @@ fn rename_property_key(
                 // opzioni. Quelle che la chiave nuova ha già restano sue.
                 if let Some(options) = types.options.get(old).cloned() {
                     types.options.entry(new.to_string()).or_insert(options);
+                }
+                // Il bersaglio di una Relazione segue il tipo allo stesso
+                // modo: quello che la chiave nuova ha già resta suo.
+                if let Some(target) = types.targets.get(old).cloned() {
+                    types.targets.entry(new.to_string()).or_insert(target);
                 }
                 Some(
                     serde_json::to_string(&types)

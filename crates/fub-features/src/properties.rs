@@ -13,7 +13,8 @@ use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
 use fub_abi::model::{
     DateFormats, DateOrder, DocId, DocumentModel, LinkTarget, OptionMatch, PropertyColor,
-    PropertyOption, PropertyScalar, PropertyType, PropertyTypes, PropertyValue, Span, StatusGroup,
+    PropertyOption, PropertyScalar, PropertyType, PropertyTypes, PropertyValue, RelationTarget,
+    Span, StatusGroup,
 };
 use fub_abi::query::{QueryExpr, QueryPredicate};
 use fub_abi::session::{ContextKind, ContextMask};
@@ -27,10 +28,12 @@ use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, UiOption, ViewUpd
 
 mod catalog;
 mod commands;
+mod relation;
 mod view;
 
 pub use catalog::catalog;
 pub use commands::PropertiesCommands;
+pub use relation::{linked_from, LinkedFrom};
 pub use view::PropertiesView;
 use view::{date_formats, frontmatter_span, property_types, show_date, show_link, show_list};
 
@@ -63,8 +66,19 @@ pub const PROPERTY_KEYS_MIGRATE: &str = "property.keys.migrate";
 /// nel registro dei tipi del vault.
 pub const PROPERTY_OPTION_SET: &str = "property.option.set";
 /// Rimette il registro dei tipi com'era, se nessuno l'ha cambiato nel
-/// frattempo: è l'annullo di [`PROPERTY_OPTION_SET`].
+/// frattempo: è l'annullo di [`PROPERTY_OPTION_SET`] e di
+/// [`PROPERTY_TARGET_SET`].
 pub const PROPERTY_TYPES_RESTORE: &str = "property.types.restore";
+/// Dice, o toglie, il bersaglio di una Relazione nel registro dei tipi: un
+/// tipo (`[[Tipi/Libro]]`) o una cartella.
+pub const PROPERTY_TARGET_SET: &str = "property.target.set";
+const TARGET: &str = "target";
+const P_TARGET_SET: &str = "p_target_set";
+const P_TARGET_CLEAR: &str = "p_target_clear";
+const P_TARGET_SAME: &str = "p_target_same";
+const U_TARGET: &str = "u_target";
+const E_NOT_RELATION: &str = "e_not_relation";
+const E_TARGET: &str = "e_target";
 
 /// Chiavi del core: il formato di data e il registro dei tipi del vault.
 const DATE_FORMAT_KEY: &str = "properties.date-format";

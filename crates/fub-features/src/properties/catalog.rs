@@ -143,7 +143,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("property.type.set.type.title", "Tipo")
             .with(
                 "property.type.set.type.desc",
-                "text, list, number, checkbox, date, date_time, tags, select, status o url.",
+                "text, list, number, checkbox, date, date_time, tags, select, status, url o relation.",
             )
             .with("property.key.rename.title", "Rinomina proprietà nel vault")
             .with(
@@ -323,7 +323,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("property.type.set.type.title", "Type")
             .with(
                 "property.type.set.type.desc",
-                "text, list, number, checkbox, date, date_time, tags, select, status or url.",
+                "text, list, number, checkbox, date, date_time, tags, select, status, url or relation.",
             )
             .with("property.key.rename.title", "Rename vault property")
             .with(
@@ -486,6 +486,38 @@ fn options_it(catalog: StringCatalog) -> StringCatalog {
             "property.types.restore.expected.desc",
             "Il testo che il registro deve avere perché si rimetta quello di prima.",
         )
+        .with(P_TARGET_SET, "Le note di «{key}» si scelgono fra «{target}»")
+        .with(P_TARGET_CLEAR, "Le note di «{key}» si scelgono fra tutte")
+        .with(P_TARGET_SAME, "Il bersaglio di «{key}» è già così")
+        .with(U_TARGET, "Annulla il cambio del bersaglio di «{key}»")
+        .with(
+            E_NOT_RELATION,
+            "«{key}» non è una Relazione: il bersaglio vale solo per le Relazioni.",
+        )
+        .with(
+            E_TARGET,
+            "«{value}» non è un bersaglio: scrivi un tipo come [[Tipi/Libro]] o una cartella del vault come Libri.",
+        )
+        .with("property.target.set.title", "Scegli il bersaglio di una Relazione")
+        .with(
+            "property.target.set.desc",
+            "Dice fra quali note si sceglie il valore di una Relazione: le note di un tipo o di una cartella. Senza bersaglio, tutte. Le note non cambiano.",
+        )
+        .with("property.target.set.key.title", "Proprietà")
+        .with(
+            "property.target.set.key.desc",
+            "La chiave dichiarata Relazione.",
+        )
+        .with("property.target.set.target.title", "Bersaglio")
+        .with(
+            "property.target.set.target.desc",
+            "Un tipo, come [[Tipi/Libro]], o una cartella, come Libri. Vuoto o assente toglie il bersaglio.",
+        )
+        .with("property.target.set.expected.title", "Registro letto")
+        .with(
+            "property.target.set.expected.desc",
+            "Il testo del registro che si è letto: se nel frattempo è cambiato, non si scrive.",
+        )
 }
 
 fn options_en(catalog: StringCatalog) -> StringCatalog {
@@ -558,5 +590,37 @@ fn options_en(catalog: StringCatalog) -> StringCatalog {
         .with(
             "property.types.restore.expected.desc",
             "The text the registry must have for the earlier one to be put back.",
+        )
+        .with(P_TARGET_SET, "Notes for «{key}» are picked from «{target}»")
+        .with(P_TARGET_CLEAR, "Notes for «{key}» are picked from all notes")
+        .with(P_TARGET_SAME, "The target of «{key}» is already like that")
+        .with(U_TARGET, "Undo the change to the target of «{key}»")
+        .with(
+            E_NOT_RELATION,
+            "«{key}» is not a Relation: a target only applies to Relations.",
+        )
+        .with(
+            E_TARGET,
+            "«{value}» is not a target: write a type like [[Types/Book]] or a vault folder like Books.",
+        )
+        .with("property.target.set.title", "Choose the target of a Relation")
+        .with(
+            "property.target.set.desc",
+            "Says which notes a Relation picks its value from: the notes of a type or of a folder. Without a target, all of them. Notes do not change.",
+        )
+        .with("property.target.set.key.title", "Property")
+        .with(
+            "property.target.set.key.desc",
+            "The key declared as a Relation.",
+        )
+        .with("property.target.set.target.title", "Target")
+        .with(
+            "property.target.set.target.desc",
+            "A type, like [[Types/Book]], or a folder, like Books. Empty or missing removes the target.",
+        )
+        .with("property.target.set.expected.title", "Registry read")
+        .with(
+            "property.target.set.expected.desc",
+            "The registry text that was read: if it changed in the meantime, nothing is written.",
         )
 }
