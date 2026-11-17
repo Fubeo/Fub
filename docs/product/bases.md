@@ -36,7 +36,8 @@ Ogni voce di `views` ha una chiave `name` (obbligatoria, unica nel file) e una
 chiave `type`, che è una fra `table`, `cards`, `list`, `kanban`, `map`,
 `calendar` e `timeline`. Un `type` che Fub non conosce rende il file illeggibile
 come Base. La Base disegna le prime sei: una vista `timeline` si mostra come
-un tipo che la Base non disegna (un errore sulla vista, con «Riprova»). Le altre chiavi sono facoltative:
+un tipo che la Base non disegna (un errore sulla vista, con «Riprova»). Le
+altre chiavi sono facoltative:
 
 | Chiave | A che serve |
 |---|---|
@@ -52,11 +53,13 @@ un tipo che la Base non disegna (un errore sulla vista, con «Riprova»). Le alt
 
 ## Calendario e linea del tempo
 
-Il calendario mostra le note nel giorno di una proprietà data (vedi «Il
-calendario», più sotto). La linea del tempo mostrerà ogni nota come una barra
-fra la proprietà d'inizio e quella di fine, o come un punto se manca la fine:
-il file la legge e la scrive, e la valutazione dà i giorni di ogni nota, ma la
-superficie non la disegna ancora (il task T34 del piano dell'editor). Tutte e due leggono le proprietà delle note, e le chiavi che dicono quali sono
+Il calendario mostra le note nel giorno di una proprietà data, e si sposta
+una nota trascinandola su un altro giorno ([Il calendario della
+Base](bases-calendar.md)). La linea del tempo mostrerà ogni nota come una
+barra fra la proprietà d'inizio e quella di fine, o come un punto se manca la
+fine: il file la legge e la scrive, ma la superficie non la disegna ancora (il
+task T34 del piano dell'editor). Tutte e due leggono le proprietà delle note,
+e le chiavi che dicono quali sono
 stanno nel blocco `fub:` della vista:
 
 | Chiave in `fub` | Vista | A che serve |
@@ -345,15 +348,14 @@ modello li legge; l'elenco delle viste (`op: "parse"`) porta il tipo di ognuna
 ### Una vista nuova
 
 «+» apre il menu «Nuova vista»: Tabella, Schede, Elenco, Bacheca, Mappa,
-Calendario. La
-vista nuova prende il primo nome libero del tipo («Tabella», «Tabella 2»…) e
+Calendario. La vista nuova prende il primo nome libero del tipo («Tabella», «Tabella 2»…) e
 **eredita il filtro e le colonne** della vista aperta; una bacheca prende come
 corsie il raggruppamento della vista aperta o la sua prima colonna che è una
 proprietà, una mappa le coordinate della vista aperta o le proprietà `lat` e
 `lon` (`latitude`/`longitude`) delle righe, un calendario la data della vista
 aperta o la prima proprietà delle righe che ha per valori delle date. Senza
-corsie, senza coordinate o senza date la voce è spenta e dice perché. Sono più scritture, una chiave per volta come ogni
-gesto: `base.view.add` aggiunge la vista in fondo al file, poi `base.view.set`
+corsie, senza coordinate o senza date la voce è spenta e dice perché. Sono
+più scritture, una chiave per volta come ogni gesto: `base.view.add` aggiunge la vista in fondo al file, poi `base.view.set`
 scrive `filters`, `order` e, se servono, `group`, `map` o `date`, ognuna con la
 revisione. Un filtro che la Base non sa ridire (un valore lista, per esempio)
 si copia com'è scritto. Alla fine la vista si apre, e l'avviso ha «Annulla»,
@@ -433,46 +435,6 @@ riepilogo in errore dice «errore» col perché nel titolo. Con la ricerca della
 barra il conteggio dice quante delle note della vista si vedono («3 di 50
 note»), e i riepiloghi, che restano su tutte le note della vista, si vedono più
 tenui e lo dicono («su tutte le 50 note della vista»).
-
-### Il calendario
-
-Il calendario mostra un mese, con ogni nota nel giorno della sua proprietà
-data (`date` nel blocco `fub:`): il giorno è quello scritto, e l'ora non lo
-sposta. La settimana comincia dal giorno della lingua dell'interfaccia (il
-lunedì in italiano, la domenica in inglese americano); i giorni del mese prima
-e del mese dopo che completano le settimane sono più tenui, con le loro note.
-Oggi ha il numero nel cerchio dell'accento. Sopra la griglia, il mese coi due
-passi («Mese prima», «Mese dopo») e «Oggi»; a destra quante note non hanno la
-data. Un giorno mostra al massimo tre note: le altre sono «+N», che apre il
-giorno, e «Meno» lo richiude. Il calendario mostra tutte le note della vista,
-senza «Mostra altre». Il piede è quello delle altre viste.
-
-**Spostare una nota.** Trascinare una nota su un altro giorno riscrive la sua
-data nella nota con `note.property.set`, una sola proprietà, col valore letto
-come confronto: se la nota è cambiata mentre la si trascinava non si scrive
-niente, sotto la barra resta il perché, e il calendario la rilegge com'è. La
-data resta della sua specie: una data sola resta una data sola, una data con
-l'ora tiene l'ora, i minuti, i secondi e il fuso (`2026-08-20T10:30` portata
-al 22 diventa `2026-08-22T10:30`). Il valore si scrive come tutte le proprietà
-cambiate da Fub, in ISO e tra virgolette: una data scritta in un altro ordine
-(`20/08/2026`, letta con l'ordine del vault) torna ISO. L'avviso dice dove è
-andata la nota e ha «Annulla», l'annulla del vault. Non si spostano le note in
-sola lettura, quelle che non sono Markdown, le date che sono `file.*` o
-formule, e i valori che non sono date.
-
-**Dalla tastiera.** Le frecce vanno fra i giorni (anche nel mese prima o
-dopo, che si apre), Tab fra le note del giorno col fuoco, Invio apre la prima
-nota del giorno (o quella col fuoco). Maiusc con le frecce sposta la nota col
-fuoco, o la prima del giorno, di un giorno o di una settimana; il fuoco la
-segue nel giorno nuovo.
-
-**Senza la data.** Un calendario che non dice la sua proprietà data lo scrive
-al posto della griglia e offre le proprietà data delle note: sceglierne una
-scrive `date` con `base.view.set`. In sola lettura e in una Base dentro una
-nota la scelta non c'è.
-
-**Al telefono** il mese è una colonna di giorni, senza la riga dei nomi e
-senza i giorni degli altri mesi: accanto al numero c'è il nome del giorno.
 
 ## Dove si vede una Base
 
