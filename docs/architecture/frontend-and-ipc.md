@@ -154,16 +154,15 @@ salvataggio resta un debounce sulla pausa.
 Una superficie può tenere testo che non è ancora nel buffer della sessione,
 come il campo di una scheda della lavagna o la cella aperta di un foglio. Lo
 dichiara con una porta facoltativa del `SurfaceBuffer`: `watchPending` avvisa
-a ogni cambio del testo in sospeso, `pendingText` dà il documento con quel
-testo dentro, senza registrarlo (per la lavagna una `preview` del nucleo, per
-il foglio il giornale con la cella), e `commitPending` lo registra, con la
-promessa del passo se passa dal provider (la conferma di una cella). La prima
-battuta arma la bozza come un buffer sporco, e la bozza scrive `pendingText`.
-Prima di ogni passo che legge o sostituisce il buffer (flush, chiusura,
-rilascio, ricarica, cambio da fuori, conflitto, recupero, rinomina,
+a ogni suo cambio, `pendingText` dà il documento con quel testo dentro (per la
+lavagna una `preview` del nucleo, per il foglio il giornale con la cella), e
+`commitPending` lo registra, con la promessa del passo se passa dal provider.
+La prima battuta arma la bozza come un buffer sporco, e la bozza scrive
+`pendingText`. Prima di ogni passo che legge o sostituisce il buffer (flush,
+chiusura, rilascio, ricarica, cambio da fuori, conflitto, recupero, rinomina,
 cancellazione) la sessione chiede `commitPending`, e nei passi asincroni ne
 aspetta la promessa (`settled`); il controller lo chiede prima di staccare una
-superficie. Se l'anteprima non riesce (una formula, un foglio a comandi), la
+superficie. Se l'anteprima non riesce (una formula, un foglio a comandi) la
 bozza tiene l'ultimo testo accettato.
 
 Ogni sessione fissa alla nascita il vault in cui il documento è stato letto e lo

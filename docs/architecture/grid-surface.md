@@ -41,21 +41,21 @@ Editor in-cell e formula bar usano due istanze di `TextEngine` con
 `FormulaProfile`, e nessuna battuta attraversa IPC. Un commit scrive le voci
 nel giornale, lo pubblica subito alla sessione e lo consegna al provider, che
 controlla le preimmagini sulla revisione, rifiuta le celle bloccate e risponde
-con le celle da rileggere. Le modifiche in coda partono una dopo l'altra.
+con le celle da rileggere; le modifiche in coda partono una dopo l'altra.
 Finché il giornale ha soltanto celle l'undo è locale alla superficie; in
 modalità a comandi annulla e ripeti sono del documento (`edit.undo`,
 `edit.redo`) e, dopo il salvataggio, le celle scritte si annullano con le loro
-patch. Un giornale cambiato altrove (un altro riquadro, un salvataggio, una
-ricarica) riapre la sessione e chiude la precedente; la bozza aperta resta,
-con il cursore e il fuoco. Se la sua cella è cambiata sotto, un avviso chiede
-«Tieni la tua» o «Prendi quella nuova»; se il foglio non c'è più, la bozza si
-chiude e l'avviso lo dice. La cella aperta è [testo in
+patch. Un giornale cambiato altrove (altro riquadro, salvataggio, ricarica)
+riapre la sessione e chiude la precedente; la bozza aperta resta, col cursore
+e il fuoco. Se la sua cella è cambiata sotto, un avviso chiede «Tieni la tua»
+o «Prendi quella nuova»; se il foglio non c'è più, la bozza si chiude e
+l'avviso lo dice. La cella aperta è testo [in
 sospeso](frontend-and-ipc.md#il-testo-in-sospeso): va nelle bozze, e si
 conferma prima di salvare, di chiudere o di un cambio da fuori (che diventa un
-conflitto). Se i byte da cui il giornale discende non sono più sul disco, la
-griglia lo apre su quelli di adesso, come li scriverebbe «Tieni il mio testo».
-Senza superficie compatibile, o se la sessione o una finestra non si aprono,
-vale `data-grid-protocol="unavailable"`: l'avviso lo dice e non si scrive.
+conflitto). Se i byte di base del giornale non sono più sul disco, la griglia
+lo apre su quelli di adesso (come «Tieni il mio testo»). Senza superficie
+compatibile, o se sessione o finestra non si aprono, la griglia è
+`data-grid-protocol="unavailable"`, lo dice nell'avviso e non scrive.
 
 La shell non riceve DOM, callback JavaScript o oggetti CodeMirror: possiede
 rendering, input, clipboard, selezione e stato visuale, mentre il provider
@@ -117,9 +117,8 @@ del suo intervallo sulla griglia; un riferimento a un altro foglio si
 contorna solo su quel foglio. Puntare celle di un altro foglio non c'è
 ancora: il riferimento si scrive a mano.
 
-Il disegno riusa gli elementi che non cambiano (`#reconcile`), così il
-doppio clic arriva e l'editor aperto non perde il fuoco; lo scorrimento
-disegna al più una volta per fotogramma.
+Il disegno riusa i nodi che non cambiano (`#reconcile`): il doppio clic
+arriva, l'editor tiene il fuoco, e si disegna al più una volta per fotogramma.
 
 La riga delle intestazioni, l'angolo, i numeri delle righe e le righe
 bloccate stanno fermi con `position: sticky`: sono nel flusso del riquadro,
