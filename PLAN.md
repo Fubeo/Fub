@@ -363,7 +363,7 @@ Fatto quando: ogni voce dell'elenco di E2 ha il suo test e la sua scena;
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks && FUB_BENCH_PORT=1460 npm run
 bench:motion
-Stato: [ ] da fare
+Stato: [~] in corso (coder, `test/gesti-ai-bordi`, 2026-11-17)
 
 ## T2a · La maniglia a due occhi e il blocco in mano
 
@@ -1021,7 +1021,7 @@ scorciatoia cambiata; un test del vault d'esempio in `support.rs`; la scena
 del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/frame; cargo nextest run -p fub-host support
-Stato: [~] PR #383 (feat/riga-dei-suggerimenti @ a90cd4752): la riga porta `data-pending` mentre sta per riscriversi, il banco lo aspetta e semina `Math.random` (difetto di CodeMirror nella selezione: issue #399); 4 baseline dal runner allineate a main; aspetta CI e le baseline `live-*` dal runner
+Stato: [~] PR #383 (feat/riga-dei-suggerimenti @ ed7cc6e83, in locale, con main dentro): la riga sotto il controllo di conformità (`suggerimenti.riga`, `suggerimenti.tasto`) e corretta regola per regola dal prototipo; a 700 px toglie le voci intere invece di tagliare con «…» e scrive «Ctrl+O» (da `displayBinding`, fuori perimetro); si spinge dopo #431, poi baseline `live-*` dal runner
 
 ## T15a · Le toppe mirate del `.base`
 
@@ -1119,7 +1119,7 @@ Fatto quando: un test per voce del menu che scrive la chiave giusta; il
 piede in un test DOM; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/base
-Stato: [~] PR #389 (feat/base-viste-colonne @ 984cd9461), revisione fatta e corretta, tabella col CSS del prototipo; aspetta CI e 8+12 baseline dal runner
+Stato: [x] PR #389 unita in main (cff98cb8f, 2026-11-16), CI completa verde, baseline dal runner guardate
 
 ## T17a · Calendario e linea del tempo nel modello del `.base`
 
@@ -1180,7 +1180,7 @@ Fatto quando: un test DOM del trascinamento che rilegge la data dal file;
 le foto del banco nelle due luci.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/base
-Stato: [ ] da fare
+Stato: [~] fatto in locale (worktree-agent-a3965cc791f53e6de @ 74a1d9ab4, 2026-11-17), da spingere dopo le PR grafiche in coda; 5 scene nuove (baseline dal runner); scostamenti in DECISIONS (2026-11-17)
 
 ## T18 · La Base nella nota dal «/»
 
@@ -1407,7 +1407,7 @@ budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/comments
 src/editors/text/profiles/markdown/corpus.test.ts
-Stato: [~] PR #384 (feat/commenti-nell-editor @ d193575c7, con main dopo #380; `comments/syntax.ts` nel chunk `markdown-render`); aspetta CI e baseline
+Stato: [x] PR #384 unita in main (d68a267ef, 2026-11-16), CI completa verde
 
 ## T22 · Commenti: margine, discussione, Risolvi
 
@@ -1457,7 +1457,7 @@ nelle due luci, a 700 px e al telefono; la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/comments; cargo nextest run -p fub-host
 settings
-Stato: [ ] da fare
+Stato: [~] fatto in locale (worktree-agent-afe98aa1044704bbe @ ce2fda552, 2026-11-17), da spingere dopo #431 (tocca anche `surface.ts` e `skin/document.css`); 18 scene nuove (baseline dal runner); scostamenti in DECISIONS (2026-11-17)
 
 ## T23 · La battuta nei 4 ms
 
@@ -2148,7 +2148,7 @@ Fatto quando: test dell'elenco e del segnaposto; un test che nessun iframe
 entra nella shell; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/web-embed.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder, `feat/pagine-web-incorporate`, 2026-11-17)
 
 ## T38 · La tipografia italiana
 
