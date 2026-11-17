@@ -211,6 +211,14 @@ e `url(…)`. Il suo test confronta, sulla pelle vera, l'albero di postcss prima
 e dopo regola per regola e la fa passare dal cancello del tema; in sviluppo e
 al banco la pelle resta quella scritta.
 
+L'audit npm della supply chain
+([`npm-audit.mjs`](../../.github/scripts/npm-audit.mjs)) è rosso per ogni
+avviso alto o critico, salvo un'eccezione in
+[`npm-audit-eccezioni.json`](../../.github/npm-audit-eccezioni.json), come
+`ignore` in `deny.toml`. Un'eccezione nomina l'avviso e il pacchetto, dice
+perché e quando scade; vale solo se il pacchetto non entra nell'app
+(`npm ls --omit=dev`), e diventa rossa quando scade o quando non serve più.
+
 Il [guard delle copie npm](../../.github/scripts/check-npm-copies.mjs)
 mantiene uniche le dipendenze che condividono identità applicativa.
 Le eccezioni per i motori privati di Mermaid e gli strumenti Node sono
