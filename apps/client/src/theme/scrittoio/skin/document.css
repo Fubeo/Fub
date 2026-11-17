@@ -2751,7 +2751,8 @@ button.cm-fub-page-icon:focus-visible {
   padding-top: 0;
 }
 /* Il motivo lo scrive la shell nella lingua corrente (`data-embed-note`): un
-   ciclo e una catena troppo profonda sono due cose diverse. */
+   ciclo, una catena troppo profonda e un blocco che non c'è più sono cose
+   diverse. */
 .embed-cycle::after,
 .embed-too-deep::after {
   color: var(--muted);
@@ -2762,6 +2763,13 @@ button.cm-fub-page-icon:focus-visible {
 .embed.unresolved {
   border-left-color: var(--doc-rule-soft);
   color: var(--muted);
+}
+/* Il segnaposto di un blocco sparito è vuoto: la frase è tutto quello che
+   c'è, senza parentesi. */
+.embed-missing::after {
+  content: attr(data-embed-note);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
 }
 /* Un'immagine, un audio o un video incorporati sono il media, non una nota
    riportata: niente filo intorno. */

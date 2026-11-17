@@ -24,6 +24,7 @@ import { api } from "../../../../host/ipc";
 import { keepTitle, retitleIn, retitleWaiting } from "./page/title";
 import { selectBlockThenAll, selectBody } from "./blocks/keys";
 import type { MoveBlockPort } from "./blocks/move-to";
+import type { SyncBlockPort } from "./blocks/sync-to";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { mountReadingHeader, type PageOptions } from "./page/header";
 import { propertiesDisplay } from "../../properties-display";
@@ -58,7 +59,7 @@ import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine } from "../../engine";
 import { withLineBreaks } from "../../line-breaks";
 import type { CompletionSources } from "./completions";
-import { BASE_ACTION, createBaseHere, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
+import { BASE_ACTION, SYNC_BLOCK_ACTION, createBaseHere, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
 import { promptText } from "../../../../ui/dialogs";
 import { dailyLink } from "./completions";
 import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";
@@ -193,6 +194,9 @@ export interface MarkdownSurfaceOptions {
   /// «Sposta in…» (T32): le note, i loro titoli e il comando che sposta il
   /// blocco. Senza, il menu del blocco non lo offre.
   moveBlock?: MoveBlockPort;
+  /// Il blocco sincronizzato (T30): «Sincronizza in un'altra nota» nel menu
+  /// del blocco e «Blocco di un'altra nota» nel «/». Senza, non ci sono.
+  syncBlock?: SyncBlockPort;
   /// Le icone delle pagine (`icon:`) per i wikilink della Live (K9): la
   /// lettura per nome, e chi avvisa quando cambiano.
   pageIcons?: PageIcons;
@@ -392,6 +396,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (entry.id === BASE_ACTION && !transform) {
         // Il «/base» resta finché il file non c'è: lo toglie l'embed.
         startBase(view, from, to);
+      } else if (entry.id === SYNC_BLOCK_ACTION && !transform) {
+        // Come la Base: il «/» resta finché la trasclusione non c'è.
+        startSync(view, from, to);
       } else if (entry.action && transform) {
         const action = MARKDOWN_ACTIONS.get(entry.id);
         const command = action && (Object.keys(params).length > 0 ? action.withParams?.(params) : action.run);
@@ -431,6 +438,25 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     void createBaseHere(view, from, to, port)
       .catch((error: unknown) => port.notify(errorText(error)))
       .finally(() => { creatingBase = false; });
+  };
+  /// «Blocco di un'altra nota» dal «/» (T30): la nota, il blocco, l'id, poi
+  /// la trasclusione qui. Una alla volta; il resto si carica al primo uso.
+  let syncing = false;
+  const startSync = (view: EditorView, from: number, to: number): void => {
+    const port = opts.syncBlock;
+    if (syncing || !port) return;
+    syncing = true;
+    const say = (message: string) => {
+      if (!life.closed) notify(message, "guasto");
+    };
+    void import("./blocks/sync-to")
+      .then((sync) => sync.syncedBlockHere(view, from, to, port, {
+        doc: linkSource(),
+        writable: () => editable() && !tableGrid,
+        notify: say,
+      }))
+      .catch((error: unknown) => say(errorText(error)))
+      .finally(() => { syncing = false; });
   };
   /// Gli argomenti di un'azione come li vuole il profilo: la data detta
   /// diventa il link alla sua giornaliera, che sa dove sta soltanto la shell.
@@ -736,6 +762,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // Blocchi, la testata non li usa.
     document: () => ({ documentId: resources?.documentId ?? documentId, vault }),
     ...(opts.moveBlock ? { move: opts.moveBlock } : {}),
+    ...(opts.syncBlock ? { sync: opts.syncBlock } : {}),
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,
   };
@@ -1222,12 +1249,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const linkDialogHere = (): boolean => engine.readState((state) => state.facet(linkDialogOpener) !== null);
   const editorActions: SurfaceEditorActions = {
     has: (id) =>
-      MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION || id === BASE_ACTION || id === LINK_EDIT_ACTION,
+      MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION || id === BASE_ACTION || id === LINK_EDIT_ACTION ||
+      (id === SYNC_BLOCK_ACTION && opts.syncBlock !== undefined),
     editable,
     state(id): EditorActionState {
       if (!editable()) return ACTION_UNAVAILABLE;
       if (FOLDS.has(id)) return { enabled: true, active: null };
       if (id === BASE_ACTION) return { enabled: !tableGrid && !creatingBase, active: null };
+      if (id === SYNC_BLOCK_ACTION) return { enabled: !tableGrid && !syncing && opts.syncBlock !== undefined, active: null };
       if (id === "text.undo" || id === "text.redo") {
         const depth = engine.historyDepth();
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
@@ -1253,6 +1282,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         return engine.runViewCommand((view) => {
           const at = view.state.selection.main.head;
           startBase(view, at, at);
+          return true;
+        });
+      }
+      if (id === SYNC_BLOCK_ACTION) {
+        // Da un menu, al cursore: senza «/» da togliere.
+        if (tableGrid || syncing || !opts.syncBlock) return false;
+        return engine.runViewCommand((view) => {
+          const at = view.state.selection.main.head;
+          startSync(view, at, at);
           return true;
         });
       }

@@ -2001,8 +2001,9 @@ function realignMounted(view: EditorView, root: HTMLElement): void {
 function interactiveTarget(target: Element | null, event: MouseEvent): boolean {
   if (!target) return false;
   // L'editor di una trasclusione viva (`transclusion.ts`) ha cursore e
-  // selezione suoi: la nota che ospita non sposta il suo.
-  if (target.closest("button, input, select, textarea, summary, [data-ui-slot], [data-transclusion-editing], .tag[data-tag]")) return true;
+  // selezione suoi: la nota che ospita non sposta il suo. Il testo di un
+  // blocco sincronizzato (T30) apre quell'editor al clic.
+  if (target.closest("button, input, select, textarea, summary, [data-ui-slot], [data-transclusion-editing], [data-transclusion-direct] > .transclusion-body, .tag[data-tag]")) return true;
   // Mod-clic segue un link e apre un'immagine del vault a tutta finestra: il
   // gesto lo gestisce la resa (`mount.ts`), l'editor non sposta il cursore.
   // Alt col clic su un wikilink è la sbirciata (T20): niente cursore in più.

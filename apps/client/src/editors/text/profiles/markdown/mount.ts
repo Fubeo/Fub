@@ -519,6 +519,11 @@ async function hydrateEmbeds(
     const content = await expected(requested.catch(() => null));
     if (!content) {
       slot.classList.add("unresolved");
+      // Un blocco sincronizzato il cui blocco non c'è più (T30): lo dice.
+      if (block) {
+        slot.classList.add("embed-missing");
+        slot.dataset.embedNote = t("markdown.embed_block_missing");
+      }
       return;
     }
     const identity = JSON.stringify([content.doc_id, heading, block]);

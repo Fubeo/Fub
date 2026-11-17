@@ -50,6 +50,9 @@ export const LEXICON: readonly LexiconEntry[] = [
   // La trasclusione viva (T29): la sezione di un'altra nota che si scrive dove
   // è riportata. «Modifica qui» è il gesto, «Apri» porta all'origine.
   { say: "Trasclusione viva", instead: ["Embed modificabile", "Incorporamento modificabile", "Blocco collegato"], why: "La parola della barra («Trasclusione») e il fatto che si scrive: il testo resta nella nota d'origine, che si salva con la sua revisione" },
+  // Il blocco sincronizzato (T30): lo stesso blocco in più note, cioè la
+  // trasclusione viva di un blocco mostrata come blocco della nota.
+  { say: "Blocco sincronizzato", instead: ["Blocco condiviso", "Blocco replicato", "Blocco specchio"], why: "È il nome che chi viene da Notion conosce, e dice che cambia ovunque quando cambia" },
 ];
 
 /// Le varianti, tutte: nessuna voce di menu le contiene. «Arancio» è anche
