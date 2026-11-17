@@ -2195,27 +2195,42 @@ describe("una sessione e le sue superfici", () => {
       expect(undoDepth(parked.state)).toBe(0);
     });
 
-    it("una rinomina o uno spostamento smontano la superficie da parte, e la scheda rimonta col testo", async () => {
+    it("una rinomina o uno spostamento lasciano la superficie da parte, e la scheda torna con lei", async () => {
+      // La scheda è la stessa, cambia solo il nome: la superficie la segue
+      // col cursore e la cronologia locale (IMP-046, come per quella davanti).
       const host = await start({ ...VAULT });
       const parked = await parkSpesa();
       host.renameFromOutside("note/Spesa.md", "note/Lista.md");
       await waitFor("la scheda segue la rinomina", () => !!tabOf(panes()[0]!, "Lista"));
-      await waitFor("la superficie da parte se ne va", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
-      expect(destroyed(parked)).toBe(true);
+      await settle();
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(1);
+      expect(destroyed(parked)).toBe(false);
 
       tabOf(panes()[0]!, "Lista").click();
-      await waitFor("Lista si monta", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
-      const lista = viewIn(panes()[0]!)!;
+      await waitFor("Lista torna davanti", () => viewIn(panes()[0]!) === parked);
       tabOf(panes()[0]!, "Benvenuto").click();
       await waitFor("Lista va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
 
       host.renameFromOutside("note/Lista.md", "Archivio/Lista.md");
-      await waitFor("la superficie da parte se ne va dopo lo spostamento", () =>
-        panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
-      expect(destroyed(lista)).toBe(true);
+      await waitFor("la scheda segue lo spostamento", () => !!tabOf(panes()[0]!, "Lista"));
+      await settle();
+      expect(destroyed(parked)).toBe(false);
       tabOf(panes()[0]!, "Lista").click();
-      await waitFor("Lista si monta dalla cartella nuova", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      await waitFor("Lista torna dalla cartella nuova", () => viewIn(panes()[0]!) === parked);
+      expect(parked.state.doc.toString()).toContain("pane, latte");
       expect(editorViews()).toHaveLength(1);
+
+      // La battuta va alla sessione col nome nuovo.
+      parked.dispatch({ changes: { from: 0, insert: "X " }, userEvent: "input.type" });
+      await waitFor("il salvataggio va al path nuovo", () => host.files()["Archivio/Lista.md"]?.startsWith("X ") === true);
+    });
+
+    it("cambiata l'estensione, la superficie da parte si smonta e la scheda rimonta", async () => {
+      const host = await start({ ...VAULT });
+      const parked = await parkSpesa();
+      host.renameFromOutside("note/Spesa.md", "note/Spesa.txt");
+      await waitFor("la superficie da parte se ne va", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
+      expect(destroyed(parked)).toBe(true);
     });
 
     it("un salvataggio in volo quando la scheda va da parte arriva al disco, e la superficie torna intatta", async () => {
@@ -4008,6 +4023,62 @@ describe("una rinomina che questa finestra non ha chiesto", () => {
     // E il path vecchio **non** rinasce: era il difetto gemello, e sarebbe
     // passato per una nota duplicata invece che per una battuta persa.
     expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+  });
+
+  it("lascia l'editor dov'era: stesso editor, stesso fuoco, stesso cursore (IMP-046)", async () => {
+    // La scheda segue il nome nuovo, ma rimontare la superficie buttava via il
+    // fuoco: le battute dopo un `mv` da fuori finivano sul body, perse.
+    const host = await start(VAULT);
+    const before = editorViews()[0]!;
+    before.focus();
+    before.dispatch({ selection: { anchor: 3 } });
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+
+    host.renameFromOutside("Benvenuto.md", "Fuori.md");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Fuori"));
+    await settle();
+
+    const after = editorViews();
+    expect(after).toHaveLength(1);
+    expect(after[0]).toBe(before);
+    expect(before.dom.isConnected).toBe(true);
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+    expect(before.state.selection.main.head).toBe(3);
+
+    // La battuta dopo la rinomina va alla sessione col nome nuovo, e da lì sul disco.
+    before.dispatch({ changes: { from: 3, insert: "dopo" }, userEvent: "input.type" });
+    await waitFor("il salvataggio parte col nome nuovo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Fuori.md" && String(w.args[1]).includes("dopo")));
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+  });
+});
+
+describe("una nota cancellata da fuori con testo non salvato", () => {
+  it("«Ricrea la nota» riscrive il testo e toglie la bozza che lo teneva (IMP-047)", async () => {
+    // La bozza scritta alla cancellazione ha come base la revisione del file
+    // sparito: lasciata lì dopo la ricreazione, alla riapertura dava un
+    // conflitto con un disco uguale a lei.
+    const host = await start(VAULT);
+    const unlock = host.throttle("saveDraft");
+    typeInEditor(" e il testo non salvato");
+    expect(host.emit({ type: "document_removed", id: "Benvenuto.md" })).toBe(true);
+    await waitFor("la bozza parte", () => host.atGate("saveDraft").some((call) => call.args[0] === "Benvenuto.md"));
+
+    await waitFor("il riquadro offre di ricrearla", () =>
+      !!document.querySelector('.sheet-notice[data-notice="removed"]'));
+    const notice = document.querySelector<HTMLElement>('.sheet-notice[data-notice="removed"]')!;
+    const action = [...notice.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Ricrea la nota");
+    expect(action).toBeDefined();
+    action!.click();
+    await waitFor("il file torna col testo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Benvenuto.md" && String(w.args[1]).includes("il testo non salvato")));
+    await settle();
+    // La bozza è ancora in scrittura: scartarla prima la lascerebbe dopo.
+    expect(host.atGate("discardDraft")).toHaveLength(0);
+
+    unlock();
+    await waitFor("la bozza se ne va", () => host.atGate("discardDraft").some((call) => call.args[0] === "Benvenuto.md"));
   });
 });
 

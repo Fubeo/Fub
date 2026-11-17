@@ -1616,8 +1616,17 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   // `recreate` riceve il vault **in cui la rimozione è stata vista**: l'utente
   // può cliccare «ricrea» dopo aver aperto un altro vault, e la nota deve
   // tornare dove è sparita, non in un omonimo del vault nuovo (FUB-001).
-  const removed = (id: string, recreate: (text: string, vault: string | undefined) => Promise<unknown>): void => {
+  const removed = (id: string, write: (text: string, vault: string | undefined) => Promise<unknown>): void => {
     const vault = openVaultRoot();
+    // Riscritto il file, la bozza che teneva lo stesso testo se ne va: alla
+    // riapertura non resta un conflitto con un disco che le è uguale (IMP-047).
+    // Una scrittura fallita la lascia, col testo ancora da recuperare.
+    const recreate = async (text: string, at: string | undefined): Promise<void> => {
+      await write(text, at);
+      // La nota è tornata: uno scarto non riuscito non la fa sembrare persa,
+      // e alla riapertura il confronto mostra due testi uguali.
+      await documentSessions.discardRemovedDraft(id, at).catch((error: unknown) => console.error(error));
+    };
     const shownIn = panesWithDoc(id);
     const outcome = documentSessions.handleExternalRemoval(id);
     clearSheetNotices(id);
@@ -1657,6 +1666,10 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       // The layout still names the old path until `rename` below runs. Keep
       // those editors read-only across that tiny migration window.
       setReadOnlyForDocument(from, documentSessions.isDeletionPending(to) || lendHeld(to));
+      // Prima del layout: il giro di disegno che `rename` annuncia trova le
+      // superfici che reggono il nome nuovo già sulla scheda nuova, e non le
+      // rimonta (fuoco, cursore, annulla e scorrimento restano).
+      followRenameInPanes(from, to);
       rename(from, to);
     }
   };
@@ -3429,6 +3442,58 @@ function unparkSurface(r: Pane, tab: Extract<Tab, { k: "doc" }>, entry: ParkedSu
   refreshNoteClasses(r, tab.doc);
   mountDocumentAttachments(r, tab.doc);
   return true;
+}
+
+// --- la rinomina sotto una superficie montata --------------------------------
+
+/// Una superficie di testo (Markdown o testo semplice) che segue la sessione
+/// anche quando il file cambia nome: la sessione è la stessa (`rename`) e la
+/// superficie legge l'identità da lei. Un cambio di estensione può chiedere
+/// un'altra superficie, e un file di un componente segue i componenti: in quei
+/// casi il riquadro rimonta come prima.
+function surfaceFollowsRename(surface: EditorSurface, from: string, to: string): boolean {
+  if (surface.family !== "text" || (surface.profile !== "markdown" && surface.profile !== "plain-text")) return false;
+  if (uisForFile(from).length > 0 || uisForFile(to).length > 0) return false;
+  return extensionOf(from) === extensionOf(to);
+}
+
+function extensionOf(doc: string): string {
+  const base = doc.split("/").pop() ?? "";
+  const point = base.lastIndexOf(".");
+  return point > 0 ? base.slice(point + 1).toLowerCase() : "";
+}
+
+/// Il file mostrato ha cambiato nome (da questa finestra o da fuori): la scheda
+/// è la stessa, solo il nome cambia. Le superfici che reggono il nome nuovo
+/// passano alla scheda nuova **senza rimontarsi**: rimontarle buttava via il
+/// fuoco (le battute dopo una rinomina da fuori finivano sul body, IMP-046),
+/// il cursore, la cronologia locale e lo scorrimento. La registrazione nella
+/// sessione si rifà col nome nuovo, perché gli aggiornamenti e le battute
+/// cercano la sessione per nome. Lo stesso per le superfici da parte.
+function followRenameInPanes(from: string, to: string): void {
+  for (const r of panes.values()) {
+    const shown = r.shown;
+    const surface = r.surface;
+    if (shown?.k === "doc" && shown.doc === from && surface && r.disposeSurface && !r.bytes
+      && surfaceFollowsRename(surface, from, to)) {
+      // La scheda prima, poi lo stacco: il testo che la superficie registra
+      // staccandosi va alla sessione col nome nuovo, l'unico che c'è ancora.
+      r.shown = { ...shown, doc: to };
+      detachSurface(r);
+      // Gli allegati e il registratore scrivono nel documento per nome.
+      r.disposeAttachments?.();
+      r.disposeAttachments = null;
+      r.disposeRecorder?.();
+      r.disposeRecorder = null;
+      attachSurface(r, to);
+      refreshNoteClasses(r, to);
+      mountDocumentAttachments(r, to);
+    }
+    r.parked = r.parked.map((entry) =>
+      entry.tab.doc === from && surfaceFollowsRename(entry.surface, from, to)
+        ? { ...entry, tab: { ...entry.tab, doc: to } }
+        : entry);
+  }
 }
 
 /// La stessa scheda di una superficie da parte: lo stesso documento con la
