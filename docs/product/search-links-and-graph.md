@@ -116,9 +116,11 @@ riscrive solo i wikilink che nominavano la nota, e l'estensione se era scritta.
 Il pannello mostra incoming, outgoing con contesto, menzioni non collegate nei
 due versi con filtro, e la conversione esplicita in wikilink. Una menzione è il
 nome o un alias, parola intera in prosa: non in un link, nel codice, in un tag,
-in una formula o nel frontmatter. La converte `mention.link`: rilegge la nota alla
-revisione e allo span dichiarati, rifiuta se il testo è cambiato o non è più una
-menzione, e si annulla in un passo con «Annulla l'ultima operazione». Il
+in una formula o nel frontmatter. Solo un formato di prosa ha menzioni: un
+disegno, un foglio o le annotazioni di un PDF non ne offrono, né col titolo né
+coi testi, e il loro markup non compare mai come contesto. La converte
+`mention.link`: rilegge la nota alla revisione e allo span dichiarati, rifiuta
+se il testo è cambiato o non è più una menzione, e si annulla in un passo con «Annulla l'ultima operazione». Il
 riferimento scritto è il più corto che la risoluzione manda davvero alla nota
 (nome, nome con estensione, percorso senza estensione, percorso intero); una
 parola scritta altrimenti, come un alias, resta testo del link (`[[Rossi|Mario]]`).
