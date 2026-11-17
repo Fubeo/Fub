@@ -195,6 +195,38 @@ describe("la scheda Revisioni", () => {
     expect(pressed(host, t("rich.rev.accept_all.short")).hidden).toBe(true);
   });
 
+  it("dopo Accetta, Ctrl+Z col fuoco sul pulsante annulla nel documento; nel campo del nome resta del campo (IMP-120)", () => {
+    const e = engine(tracked());
+    const { side: panel, host, unmount } = side(e);
+    panel.show("revisions");
+    const items = () => [...host.querySelectorAll<HTMLElement>(".rich-side-change")];
+    const accept = pressed(items()[0]!, t("rich.rev.accept.one"));
+    accept.focus();
+    accept.click();
+    expect(items()).toHaveLength(1);
+    const key = (target: HTMLElement, init: KeyboardEventInit) => {
+      const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ctrlKey: true, ...init });
+      target.dispatchEvent(event);
+      return event;
+    };
+    // Il pulsante è uscito con la sua voce: il tasto arriva da dove sta il
+    // fuoco adesso, dentro la scheda.
+    const all = pressed(host, t("rich.rev.accept_all.short"));
+    expect(key(all, { key: "z" }).defaultPrevented).toBe(true);
+    expect(items().map((el) => el.dataset.kind)).toEqual(["ins", "del"]);
+    key(all, { key: "Z", shiftKey: true });
+    expect(items().map((el) => el.dataset.kind)).toEqual(["del"]);
+    // Nel campo di chi firma il tasto è del campo.
+    const name = field(host, t("rich.comment.author"));
+    expect(key(name, { key: "z" }).defaultPrevented).toBe(false);
+    expect(items().map((el) => el.dataset.kind)).toEqual(["del"]);
+    // Smontata la scheda, il contenitore della shell non tiene il tasto.
+    unmount(RICH_SIDE_VIEWS.revisions);
+    expect(key(host, { key: "z" }).defaultPrevented).toBe(false);
+    expect(items()).toHaveLength(0);
+    expect(e.state.doc.textContent).toBe("resta nuovo e vecchio");
+  });
+
   it("accettando, la voce esce come immagine entro 140 ms e l'altra sale; una battuta non muove niente", async () => {
     const driver = createManualDriver();
     setMotionDriver(driver);

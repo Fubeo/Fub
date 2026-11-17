@@ -19,6 +19,7 @@ import { imageMime } from "./schema";
 import { check, choice, labelled, remark } from "./form";
 import { formatLength, parseLength } from "./page";
 import { findMatches, nextMatch, replaceAll, replaceMatch, type FindQuery } from "./review";
+import { documentHistoryKeys } from "./history-keys";
 
 /// Ciò che la barra chiede alla shell.
 export interface RichMedia {
@@ -378,6 +379,9 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
         replaceOne.click();
       }
     });
+    // Dopo Sostituisci il fuoco resta sul pulsante: Ctrl+Z annulla nel
+    // documento, e nelle due caselle resta delle caselle.
+    documentHistoryKeys(findBar, engine, own, refind);
     bar = { what, replacing, life: own };
     findBar.hidden = false;
     changed();

@@ -18,7 +18,7 @@
 // ascoltatore. `defaultPrevented` è il loro verdetto osservabile: nessun elenco
 // di collisioni cablato nella shell e nessun listener globale nei renderer.
 import { t } from "../i18n/strings";
-import { fieldHistoryStep, isPlainTextField, runFieldHistory } from "./field-history";
+import { TEXT_INPUT_TYPES, fieldHistoryStep, isPlainTextField, runFieldHistory } from "./field-history";
 import type { Lifetime } from "./lifetime";
 import {
   WAIT_MS,
@@ -72,10 +72,8 @@ export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry)
   });
 }
 
-/// I tipi di `input` in cui si scrive: lì un tasto muove il cursore o cancella.
-/// Una casella, un bottone o un cursore a scorrimento non hanno un tasto di
-/// testo da perdere.
-const TEXT_INPUTS = new Set(["", "text", "search", "email", "url", "tel", "password", "number", "date", "time"]);
+/// I tipi di `input` in cui si scrive (`ui/field-history.ts`).
+const TEXT_INPUTS = TEXT_INPUT_TYPES;
 
 /// Un campo in cui si scrive: `input` di testo, `textarea`, `contenteditable`
 /// (CodeMirror compreso).

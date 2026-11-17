@@ -90,7 +90,10 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   alla precedente. Un'occorrenza sta dentro un paragrafo e non scavalca un
   oggetto o un segno (l'inizio di un commento, un segnalibro). Il testo nuovo
   prende l'aspetto del primo carattere sostituito, e **Sostituisci tutto** è
-  una battuta sola, che si annulla in una volta;
+  una battuta sola, che si annulla in una volta. Dopo un gesto della barra,
+  o delle schede Commenti e Revisioni del pannello, `Ctrl+Z` e `Ctrl+Y`
+  annullano e ripetono nel documento anche col fuoco sul pulsante; dentro
+  una casella (Trova, Sostituisci con, il nome) restano della casella;
 - **Conteggio parole** dice parole, caratteri con e senza spazi e paragrafi
   del documento e, se c'è, della selezione: una parola è ciò che sta fra due
   spazi, un oggetto separa senza contare, il testo delle note non conta;
@@ -182,7 +185,9 @@ Ciò che si perderebbe non chiude per forza tutto il documento:
 
 - un **paragrafo o una tabella** che la riscrittura non porterebbe intero
   resta com'è nel file, segnato, e da Fub non si cambia: lo si può spostare
-  intero, ma non scriverci dentro né toglierlo. Il chip accanto al percorso
+  intero, ma non scriverci dentro né toglierlo. Chi ci prova (una lettera,
+  un a capo, una cancellazione) lo legge in un avviso, uno solo finché
+  riprova senza fermarsi per qualche secondo. Il chip accanto al percorso
   dice quante parti restano come sono («2 parti chiuse»); il suo riquadro le
   elenca, con la pagina e un «Vai» per ciascuna, e il resto del testo si
   scrive;

@@ -129,6 +129,45 @@ describe("la barra", () => {
     expect(findKey.getState(e.state)?.decorations.find().length).toBe(0);
   });
 
+  it("dopo Sostituisci tutto, Ctrl+Z col fuoco sul pulsante annulla nel documento; nelle caselle resta delle caselle (IMP-119)", () => {
+    const e = engine([para([{ t: "text", x: "voce e voce" }])]);
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element, ribbon.findBar);
+    expect(e.run("rich.find")).toBe(true);
+    const field = (label: string) =>
+      document.getElementById([...document.querySelectorAll("form label")].find((l) => l.textContent === label)!.getAttribute("for")!) as HTMLInputElement;
+    const text = field(t("rich.find.text"));
+    text.value = "voce";
+    text.dispatchEvent(new Event("input"));
+    field(t("rich.find.replace")).value = "VOCE-X";
+    const every = [...ribbon.findBar.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === t("rich.find.replace_all"))!;
+    every.focus();
+    every.click();
+    expect(texts(e)).toEqual([{ t: "text", x: "VOCE-X e VOCE-X" }]);
+    const key = (target: HTMLElement, init: KeyboardEventInit) => {
+      const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ctrlKey: true, ...init });
+      target.dispatchEvent(event);
+      return event;
+    };
+    // Nella casella il tasto è della casella: il documento non cambia.
+    expect(key(text, { key: "z" }).defaultPrevented).toBe(false);
+    expect(texts(e)).toEqual([{ t: "text", x: "VOCE-X e VOCE-X" }]);
+    // Sul pulsante annulla la sostituzione, e ripete con Ctrl+Y.
+    expect(key(every, { key: "z" }).defaultPrevented).toBe(true);
+    expect(texts(e)).toEqual([{ t: "text", x: "voce e voce" }]);
+    // La barra torna a contare ciò che il documento ha di nuovo.
+    expect(ribbon.findBar.querySelector("[role=status]")!.textContent).toBe(t("rich.find.count", { current: "1", total: "2" }));
+    key(every, { key: "y" });
+    expect(texts(e)).toEqual([{ t: "text", x: "VOCE-X e VOCE-X" }]);
+    key(every, { key: "Z", shiftKey: true });
+    expect(texts(e)).toEqual([{ t: "text", x: "VOCE-X e VOCE-X" }]);
+    key(every, { key: "z" });
+    expect(texts(e)).toEqual([{ t: "text", x: "voce e voce" }]);
+    // Il fuoco resta nella barra.
+    expect(ribbon.findBar.hidden).toBe(false);
+    ribbon.destroy();
+  });
+
   it("il conteggio dice parole, caratteri e paragrafi del documento e della selezione", () => {
     const e = engine([para([{ t: "text", x: "Una  frase\tbreve." }]), para([]), para([{ t: "text", x: "Due" }])]);
     const host = document.createElement("div");

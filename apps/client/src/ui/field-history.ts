@@ -11,7 +11,10 @@
 // dell'app lo ha preso.
 //
 // CodeMirror e gli editor ricchi (`contenteditable`) hanno la loro pila e i
-// loro tasti, e non passano di qui.
+// loro tasti, e non passano di qui. I pannelli di un documento che agiscono
+// su di lui (Sostituisci, Revisioni) usano lo stesso riconoscimento per dare
+// il tasto alla pila del documento quando il fuoco non è in un campo
+// (`editors/rich/history-keys.ts`).
 import type { KeyboardPlatform } from "./commands";
 
 export type FieldHistoryStep = "undo" | "redo";
@@ -34,6 +37,11 @@ export function fieldHistoryStep(
   if (key === "y" && !mac && !e.shiftKey) return "redo";
   return null;
 }
+
+/// I tipi di `input` in cui si scrive: lì un tasto muove il cursore o cancella.
+/// Una casella, un bottone o un cursore a scorrimento non hanno un tasto di
+/// testo da perdere.
+export const TEXT_INPUT_TYPES: ReadonlySet<string> = new Set(["", "text", "search", "email", "url", "tel", "password", "number", "date", "time"]);
 
 /// Vero per un campo di testo semplice in cui si può scrivere: `input` di
 /// testo e `textarea`, non un `contenteditable`.
