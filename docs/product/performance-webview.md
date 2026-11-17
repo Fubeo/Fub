@@ -45,9 +45,14 @@ alto:
 | lunga | Live | 30 · 50, 35 · 47 (10–16) | 30 · 43, 26 · 51 (3–20) |
 | lunga | Blocchi | 48 · 80, 34 · 53 (9–12) | 29 · 41, 27 · 41 (7–12) |
 
-WebKitGTK disegna a 60 Hz anche su schermi più veloci, quindi un fotogramma
-dura almeno 16,7 ms. La prima marcatura del correttore (`proof.ts`) nel tratto
-appena visibile costa ancora un fotogramma da circa 60 ms.
+Lo schermo di questa misura va a 60 Hz, quindi un fotogramma dura almeno
+16,7 ms. Su NVIDIA anche uno schermo più veloce non accorcia molto il
+fotogramma: col vblank emulato il rAF segue lo schermo, ma WebKitGTK di
+Debian passa i fotogrammi in memoria condivisa e ne consegna al più 54 al
+secondo ([perché](../architecture/desktop-webview.md#il-tetto-dei-60-hz-di-webkitgtk),
+[misure](../misure/2026-11-17-linux-vblank-emulato.md)). La prima marcatura
+del correttore (`proof.ts`) nel tratto appena visibile costa ancora un
+fotogramma da circa 60 ms.
 
 ## Dopo il salvataggio
 
