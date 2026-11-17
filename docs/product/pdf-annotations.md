@@ -86,8 +86,9 @@ i [Disegni](drawing.md). Il formato del file è nel
 
 - **Annota**, la predefinita: la barra degli strumenti, la pagina e la barra
   delle pagine. Proietta sul ruolo `live_preview`.
-- **Lettura**: la stessa pagina senza strumenti, con accanto l'elenco delle
-  annotazioni. Proietta su `reading`, e `Mod-E` passa dall'una all'altra.
+- **Lettura**: la stessa pagina senza strumenti, con la barra delle pagine e
+  accanto l'elenco delle annotazioni. Proietta su `reading`, e `Mod-E` passa
+  dall'una all'altra.
 
 Le due modalità hanno gli id di quelle del disegno, così il riquadro le
 ricorda allo stesso modo.
@@ -114,14 +115,16 @@ Le annotazioni si aprono nello spazio Completo, con l'evidenziatore in mano.
 Ogni strumento ha un tasto, che vale col fuoco sul foglio:
 
 - **Selezione** (`V`), **Penna** (`P`) e **Gomma** (`E`), come nel disegno;
-- **Evidenziatore** (`H`): un tratto giallo largo e semitrasparente; con
-  `Maiusc` il tratto è dritto;
+- **Mano** (`H`) e, nella sua tendina, **Zoom** (`Z`), che muovono la vista
+  come nel disegno;
+- **Evidenziatore** (`Maiusc+P`): un tratto giallo largo e semitrasparente;
+  con `Maiusc` tenuto durante il tratto, il tratto è dritto;
 - **Nota** (`N`): toccare la pagina apre un dialogo con il corpo della nota e
   un'etichetta di una riga, che sulla pagina si legge; senza etichetta vale
   l'inizio del corpo. Una nota si cambia toccandola con lo strumento Nota,
   o con la Selezione col doppio clic oppure scegliendola e premendo Invio;
 - **Rettangolo** (`R`), **Ellisse** (`O`), **Linea** (`L`) e **Freccia**
-  (`A`), come nel disegno;
+  (`Maiusc+L`), come nel disegno;
 - **Copertura** (`C`): un rettangolo pieno e opaco che nasconde una zona
   della pagina.
 
