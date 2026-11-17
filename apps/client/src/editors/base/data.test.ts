@@ -26,13 +26,11 @@ describe("Base contract", () => {
     await expect(parseBaseViews(future, "version: 999\n")).rejects.toMatchObject({ kind: "bad_args" });
   });
 
-  // T34 toglie `timeline` da qui quando la superficie la disegna.
-  it("reads the calendar and refuses the timeline until the surface draws it, as an unknown kind", async () => {
-    const planOf = (kind: string) => deps(async () => custom({ view: "Agenda", view_type: kind, columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {}, date_key: "due", start_key: null, end_key: null }));
-    for (const kind of ["timeline", "gallery"]) {
-      await expect(planBaseView(planOf(kind), source, "Agenda")).rejects.toThrow("tipo vista sconosciuto");
-    }
+  it("reads the calendar and the timeline, and refuses a kind the surface does not draw", async () => {
+    const planOf = (kind: string) => deps(async () => custom({ view: "Agenda", view_type: kind, columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {}, date_key: "due", start_key: "from", end_key: null }));
+    await expect(planBaseView(planOf("gallery"), source, "Agenda")).rejects.toThrow("tipo vista sconosciuto");
     await expect(planBaseView(planOf("calendar"), source, "Agenda")).resolves.toMatchObject({ viewType: "calendar", dateKey: "due" });
+    await expect(planBaseView(planOf("timeline"), source, "Agenda")).resolves.toMatchObject({ viewType: "timeline", startKey: "from", endKey: null });
     const drawn = deps(async () => custom({ view: "Board", view_type: "kanban", columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {} }));
     await expect(planBaseView(drawn, source, "Board")).resolves.toMatchObject({ viewType: "kanban" });
   });
@@ -45,6 +43,16 @@ describe("Base contract", () => {
     const plain = await deriveBaseRows(answer([undefined, undefined]), source, "Cal", rows);
     expect(plain.rows[0]).not.toHaveProperty("day");
     await expect(deriveBaseRows(answer([{ day: "14/11/2026" }, { day: null }]), source, "Cal", rows)).rejects.toThrow("giorno malformato");
+  });
+
+  it("reads the span of each note in a timeline view, and refuses a malformed one", async () => {
+    const rows = [{ doc: "a.md", properties: [] }, { doc: "b.md", properties: [] }];
+    const answer = (time: unknown[]) => deps(async () => custom({ rows: [{ doc: "a.md", values: {}, time: time[0] }, { doc: "b.md", values: {}, time: time[1] }], summaries: {} }));
+    const derived = await deriveBaseRows(answer([{ start: "2026-11-14", end: "2026-11-10", inverted: true }, { start: "2026-11-01", end: null, inverted: false }]), source, "Lin", rows);
+    expect(derived.rows.map((row) => row.span)).toEqual([{ start: "2026-11-14", end: "2026-11-10", inverted: true }, { start: "2026-11-01", end: null, inverted: false }]);
+    expect(derived.rows[0]).not.toHaveProperty("day");
+    await expect(deriveBaseRows(answer([{ start: "2026-11-14", end: null }, undefined]), source, "Lin", rows)).rejects.toThrow("intervallo malformato");
+    await expect(deriveBaseRows(answer([{ start: "ieri", end: null, inverted: false }, undefined]), source, "Lin", rows)).rejects.toThrow("intervallo malformato");
   });
 
   it("consumes every page beyond the former 2,000-row cutoff", async () => {

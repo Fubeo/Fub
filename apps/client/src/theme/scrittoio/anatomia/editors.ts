@@ -42,6 +42,10 @@ export const EDITORS: PartAnatomy = {
     // Il calendario (T17): la testa col mese e i passi, la griglia dei
     // giorni, le note che si trascinano e «+N»; il vuoto senza la data.
     { name: "base-calendar", layer: "contenuto", states: DRAGGABLE, hooks: ["base-calendar", "base-cal-head", "base-cal-title", "base-cal-nav", "base-cal-prev", "base-cal-today", "base-cal-undated", "base-cal-scroll", "base-cal-grid", "base-cal-week", "base-cal-dow", "base-cal-day", "base-cal-num", "base-cal-weekday", "base-cal-event", "base-cal-more", "base-cal-empty"] },
+    // La linea del tempo (T34): la testa con i passi e la scala, la riga dei
+    // nomi delle colonne, le righe con le barre, i punti, i bordi che si
+    // prendono e le date fuori dai giorni mostrati; il vuoto senza l'inizio.
+    { name: "base-timeline", layer: "contenuto", states: DRAGGABLE, hooks: ["base-timeline", "base-tl-head", "base-tl-title", "base-tl-nav", "base-tl-prev", "base-tl-today", "base-tl-zoom", "base-tl-zoom-option", "base-tl-undated", "base-tl-scroll", "base-tl", "base-tl-axis", "base-tl-axis-label", "base-tl-scale", "base-tl-tick", "base-tl-now", "base-tl-row", "base-tl-name", "base-tl-track", "base-tl-bar", "base-tl-edge", "base-tl-point", "base-tl-off", "base-tl-none", "base-tl-empty"] },
     { name: "base-map", layer: "contenuto", layers: { "base-map-attribution": "cornice" }, states: [S("rest"), S("focused")], hooks: ["base-map-atlas", "base-map-attribution", "base-map-marker"] },
     // La griglia e le guide (T71) sono segni di Fub sulla vista, non contenuto.
     { name: "canvas-surface", layers: { "canvas-viewport": "contenuto", "canvas-source": "contenuto", "canvas-grid": "segno", "canvas-guide": "segno" }, states: INTERACTIVE, hooks: ["canvas-surface", "canvas-toolbar", "canvas-toolbar-item", "kit-options-row", "canvas-intake-error", "canvas-viewport", "canvas-large-fallback", "canvas-source", "canvas-grid", "canvas-guide"] },

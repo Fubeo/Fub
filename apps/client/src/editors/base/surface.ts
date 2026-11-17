@@ -21,14 +21,15 @@ import {
   addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty, groupBaseRows,
   fetchAllDocuments, listBaseViews, parseBaseEmbed, persistBaseView,
   planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, setBaseViewKey, writtenLines,
-  type BaseCellValue, type BaseDocumentWrites, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
+  type BaseCellValue, type BaseDocumentWrites, type BaseExpected, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
 } from "./data";
 import { decimalOf, filterValue, isOpaque, propertyKind, propertyValues, type ValueKind } from "./filter";
 import { mountBaseToolbar } from "./toolbar";
 import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSurfaceItems, renamedInView, valueShape, type ColumnEntry } from "./column-menu";
 import { listFooter, shownText, tableFooter } from "./footer";
 import { columnIcon, viewIcon } from "./icons";
-import { calendarState, localDay, movedDateValue, renderCalendar, type CalendarState, type IsoDay } from "./calendar";
+import { calendarState, firstWeekday, localDay, movedDateValue, renderCalendar, type CalendarState, type IsoDay } from "./calendar";
+import { renderTimeline, timelineState, type TimelineRow, type TimelineState } from "./timeline";
 import { sameKey, sortedBy } from "./sort";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
 import { notify } from "../../ui/notify";
@@ -727,10 +728,19 @@ export function mountBaseSurface(
   // La data di un calendario nuovo: quella della vista aperta, o la prima
   // proprietà data delle righe.
   const calendarDate = (): string | null => plan?.dateKey ?? dateProperties()[0] ?? null;
+  // Inizio e fine di una linea del tempo nuova: quelli della vista aperta, o
+  // le prime due proprietà data delle righe (con una sola, ogni nota è un
+  // punto).
+  const timelineDates = (): { start: string; end: string | null } | null => {
+    const start = plan?.startKey ?? calendarDate();
+    if (start === null) return null;
+    const end = plan?.startKey ? plan.endKey : dateProperties().find((key) => key !== start) ?? null;
+    return { start, end };
+  };
   const newViewItems = (): MenuItem[] => NEW_VIEW_KINDS.map((type): MenuItem => {
     const missing = type === "kanban" && lanes() === null ? t("base.view.needs_lanes")
       : type === "map" && coordinates() === null ? t("base.view.needs_coordinates")
-        : type === "calendar" && calendarDate() === null ? t("base.view.needs_date") : null;
+        : (type === "calendar" || type === "timeline") && calendarDate() === null ? t("base.view.needs_date") : null;
     return {
       label: t(`base.view.kind.${type}`), icon: viewIcon(type),
       ...(missing === null ? { run: () => void addView(type) } : { disabled: true, description: missing }),
@@ -753,6 +763,10 @@ export function mountBaseSurface(
     if (type === "kanban") { const key = lanes(); if (key) keys.push(["group", { key }]); }
     if (type === "map") { const map = coordinates(); if (map) keys.push(["map", map]); }
     if (type === "calendar") { const date = calendarDate(); if (date) keys.push(["date", date]); }
+    if (type === "timeline") {
+      const dates = timelineDates();
+      if (dates) { keys.push(["start", dates.start]); if (dates.end) keys.push(["end", dates.end]); }
+    }
     const start = source;
     sequencing++;
     try {
@@ -1538,10 +1552,16 @@ export function mountBaseSurface(
       if (!destroyed) await reload(false);
     }
   };
-  const undoNoteMove = async (): Promise<void> => {
+  // «Annulla» di uno spostamento: l'annulla del vault, una volta per ogni
+  // proprietà scritta (le due date di una barra sono due scritture).
+  const undoNoteMove = async (count = 1, quiet = false): Promise<void> => {
     try {
-      const outcome = await deps.invokeCommand(COMMANDS.undo);
-      if (outcome?.notify) notify(outcome.notify, "info");
+      let said: string | null = null;
+      for (let index = 0; index < count; index++) {
+        const outcome = await deps.invokeCommand(COMMANDS.undo);
+        if (typeof outcome?.notify === "string" && outcome.notify !== "") said = outcome.notify;
+      }
+      if (said && !quiet) notify(said, "info");
     } catch (failure) {
       notify(t("commands.undo_failed", { reason: errorText(failure) }), "guasto");
     }
@@ -1563,6 +1583,92 @@ export function mountBaseSurface(
       redraw: () => draw(),
     }));
   };
+  // ---- La linea del tempo -----------------------------------------------
+  // La scala, i giorni mostrati e la riga col fuoco restano fra un ridisegno
+  // e l'altro; nascono col primo disegno, con oggi nella seconda colonna.
+  let timeline: TimelineState | null = null;
+  // Le date di una barra spostata: una `note.property.set` per proprietà,
+  // ognuna col valore letto come confronto e la data nella sua forma. Se la
+  // seconda non passa, la prima si disfa: la barra non resta a metà. Una
+  // sola «Annulla» disfa tutte e due.
+  const moveSpan = async (row: TimelineRow, dates: { start?: IsoDay; end?: IsoDay }): Promise<void> => {
+    if (!plan || readOnly || moving || destroyed) return;
+    const keys = { start: plan.startKey, end: plan.endKey };
+    const edits: { doc: string; key: string; expected: BaseExpected; value: string }[] = [];
+    for (const edge of ["start", "end"] as const) {
+      const day = dates[edge];
+      const key = keys[edge];
+      if (day === undefined) continue;
+      if (!key) return;
+      // Inizio e fine sulla stessa proprietà: una data sola.
+      if (edits.some((edit) => edit.key === key)) continue;
+      const value = movedDateValue(row.properties[key], day);
+      if (value === null) return;
+      edits.push({ doc: row.doc, key, expected: expectedProperty(row, key), value: JSON.stringify(value) });
+    }
+    if (edits.length === 0) return;
+    const view = plan.view;
+    const definition = source;
+    const name = noteTitle(row.doc);
+    const both = row.span.start !== null && row.span.end !== null;
+    const start = dates.start ?? row.span.start, end = dates.end ?? row.span.end;
+    const said = !both ? t("base.timeline.moved_point", { note: name, date: dateFormat((dates.start ?? dates.end)!) })
+      : dates.start !== undefined && dates.end !== undefined ? t("base.timeline.moved_span", { note: name, start: dateFormat(start!), end: dateFormat(end!) })
+        : dates.start !== undefined ? t("base.timeline.moved_start", { note: name, date: dateFormat(start!) })
+          : t("base.timeline.moved_end", { note: name, date: dateFormat(end!) });
+    moving = true;
+    notice = null;
+    draw();
+    let written = 0;
+    let undoable = true;
+    let hint: string | undefined;
+    try {
+      const mutations = await prepareBaseMutations(deps, definition, view, edits);
+      for (const mutation of mutations) {
+        if (destroyed || readOnly || source !== definition || plan?.view !== view) break;
+        const outcome = await deps.invokeCommand(mutation.command, mutation.args);
+        written++;
+        if (!outcome?.undo) undoable = false;
+        else if (typeof outcome.undo.label === "string") hint ??= outcome.undo.label;
+      }
+      if (destroyed || written === 0) return;
+      // La vista è cambiata fra le due scritture: la barra non resta a metà.
+      if (written < mutations.length) { await undoNoteMove(written, true); return; }
+      const count = written;
+      notify(said, "info", undoable
+        ? { label: t("app.undo"), hint, run: () => void undoNoteMove(count) }
+        : undefined);
+    } catch (failure) {
+      if (destroyed) return;
+      // Ciò che è già scritto si disfa, perché la barra non resti a metà;
+      // poi la linea del tempo rilegge la nota com'è.
+      if (written > 0) await undoNoteMove(written, true);
+      notice = isErrorKind(failure, "conflict") ? t("base.timeline.conflict", { note: name }) : t("base.timeline.failed", { note: name, reason: errorText(failure) });
+    } finally {
+      moving = false;
+      if (!destroyed) await reload(false);
+    }
+  };
+  const drawTimeline = (page: BaseRow[], undated: number): void => {
+    const today = localDay();
+    timeline ??= timelineState(today, firstWeekday(resolvedLanguage()));
+    const startKey = plan?.startKey ?? null, endKey = plan?.endKey ?? null;
+    const writableKey = (key: string | null): key is string => key !== null && !key.startsWith("file.") && !key.startsWith("formula.");
+    body.append(renderTimeline({
+      rows: page, undated, state: timeline, locale: resolvedLanguage(), today, startKey, endKey,
+      title: noteTitle,
+      writable: (row, edge) => {
+        const key = edge === "start" ? startKey : endKey;
+        return writableKey(key) && !readOnly && /\.md$/i.test(row.doc) && movedDateValue(row.properties[key], today) !== null;
+      },
+      busy: moving || busy,
+      dateChoices: lock() === null ? dateProperties() : null,
+      chooseStartKey: (key) => void writeView("start", key),
+      open,
+      move: (row, dates) => void moveSpan(row, dates),
+      redraw: () => draw(),
+    }));
+  };
   // Un piano diverso (un'altra vista, o il file cambiato) chiude i menu
   // aperti su quello di prima; lo stesso piano riletto no.
   let drawnPlan = "";
@@ -1578,6 +1684,11 @@ export function mountBaseSurface(
       const note = active.closest<HTMLElement>(".base-cal-event")?.dataset.doc;
       if (note !== undefined) calendar.chosen = note;
       calendar.refocus ??= note !== undefined ? "note" : "day";
+    }
+    // E nella linea del tempo, sulla riga.
+    if (timeline && active instanceof HTMLElement && body.querySelector(".base-timeline")?.contains(active)) {
+      const doc = active.closest<HTMLElement>(".base-tl-row")?.dataset.doc;
+      if (doc !== undefined) { timeline.focus = doc; timeline.refocus = true; }
     }
     const shown = body.querySelector<HTMLElement>(".base-table-viewport");
     if (scrollReset) tableScroll = { top: 0, left: 0 };
@@ -1605,15 +1716,19 @@ export function mountBaseSurface(
     // La tabella ha la sua finestra di righe e il calendario mostra un mese:
     // tutte e due prendono tutte le righe, le altre viste cento per volta.
     const whole = plan?.viewType === "table" || plan?.viewType === "calendar";
-    const page = whole ? matches : matches.slice(0, displayed);
+    // La linea del tempo mostra cento note con le date per volta; quelle
+    // senza date le conta in testa.
+    const pool = plan?.viewType === "timeline" ? matches.filter((row) => row.span && (row.span.start !== null || row.span.end !== null)) : matches;
+    const page = whole ? pool : pool.slice(0, displayed);
     try {
       if (plan?.viewType === "table") drawTable(page);
       else if (plan?.viewType === "calendar") drawCalendar(page);
+      else if (plan?.viewType === "timeline") drawTimeline(page, matches.length - pool.length);
       else if (plan?.viewType === "cards") drawCards(page, false);
       else if (plan?.viewType === "list") drawCards(page, true);
       else if (plan?.viewType === "kanban") drawKanban(page);
       else if (plan?.viewType === "map") drawMap(page);
-      if (!whole && displayed < matches.length) body.append(button(t("search.more", { shown: Math.min(displayed, matches.length), total: matches.length }), () => { displayed += VISIBLE_STEP; draw(); }));
+      if (!whole && displayed < pool.length) body.append(button(t("search.more", { shown: Math.min(displayed, pool.length), total: pool.length }), () => { displayed += VISIBLE_STEP; draw(); }));
       if (plan && plan.viewType !== "table") {
         body.append(listFooter({ columns: plan.columns, summaries: plan.summaries, values: summaries, count: matches.length, total: rows.length, searching: search.value.trim() !== "", locale: resolvedLanguage(), labelOf }));
       }

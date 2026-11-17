@@ -698,6 +698,57 @@ export const SCENE = onPage("shell", [
       await page.waitForFunction(() => document.activeElement?.matches('.base-cal-day[data-day="2026-08-13"]'));
     },
   },
+  // **La linea del tempo** (T34), su `?base=tempo`: otto settimane dal 10
+  // agosto 2026 (oggi il 19), le opere dalla richiesta alla consegna: una
+  // tagliata a sinistra, una rovesciata, un punto, una con l'ora, una oltre i
+  // giorni mostrati e una senza date.
+  {
+    id: "base-tempo",
+    title: "Base: la linea del tempo, le opere dalla richiesta alla consegna",
+    query: "base=tempo",
+    prepare: openTimeline,
+  },
+  {
+    id: "base-tempo-stretto",
+    title: "Base: la linea del tempo nella finestra minima, 800 px",
+    query: "base=tempo",
+    viewport: NOTE_NARROW,
+    prepare: openTimeline,
+  },
+  {
+    id: "base-tempo-trascina",
+    title: "Base: una barra presa e trascinata di tre giorni, prima del rilascio",
+    query: "base=tempo",
+    prepare: openTimeline,
+    // Il puntatore vero, fermo a metà: la barra segue a giorni interi e la
+    // scritta dice le date nuove; niente è ancora scritto. È l'ultimo gesto
+    // (`hover`), dopo che il banco ha portato il puntatore nell'angolo.
+    hover: async (page) => {
+      const bar = page.locator('.pane.focus .base-tl-row[data-doc="Opere/Ritratto di signora.md"] .base-tl-bar');
+      const box = await bar.boundingBox();
+      const track = await page.locator('.pane.focus .base-tl-row[data-doc="Opere/Ritratto di signora.md"] .base-tl-track').boundingBox();
+      const day = track.width / 56;
+      const x = box.x + box.width / 2, y = box.y + box.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + day, y);
+      await page.mouse.move(x + day * 3, y);
+      await page.waitForSelector('.pane.focus .base-tl-bar[data-dragging="true"]');
+    },
+  },
+  {
+    id: "base-tempo-mesi",
+    title: "Base: la linea del tempo per mesi, col fuoco su una riga dalla tastiera",
+    query: "base=tempo",
+    prepare: async (page) => {
+      await openTimeline(page);
+      await page.focus('.pane.focus .base-tl-row[data-doc="Opere/Annunciazione.md"] .base-tl-track');
+      await page.keyboard.press("-");
+      await page.waitForSelector('.pane.focus .base-tl-zoom-option[aria-pressed="true"]:text-is("Mesi")');
+      await page.keyboard.press("ArrowDown");
+      await page.waitForFunction(() => document.activeElement?.closest(".base-tl-row")?.getAttribute("data-doc") === "Opere/Il concerto.md");
+    },
+  },
   {
     id: "grid-workbook",
     title: "Grid v2: una cartella di Excel sui suoi byte",
@@ -1981,6 +2032,14 @@ export const SCENE = onPage("shell", [
       viewport: PHONE,
       prepare: openCalendar,
     },
+    // La linea del tempo della Base in piedi (T34): il nome sopra la barra.
+    {
+      id: "mobile-base-tempo",
+      title: "Il telefono: la linea del tempo della Base, il nome sopra la barra",
+      query: "base=tempo",
+      viewport: PHONE,
+      prepare: openTimeline,
+    },
     // La barra dei fogli in piedi: la Home in tre colonne di due foglietti
     // chiusi, e uno di loro aperto sul posto.
     {
@@ -2687,6 +2746,20 @@ async function openCalendar(page) {
   await page.waitForFunction(() => {
     const pane = document.querySelector(".pane.focus");
     return (pane?.querySelectorAll(".base-cal-event").length ?? 0) > 0
+      && pane?.querySelector(".base-tab[aria-pressed='true']") !== null
+      && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
+  });
+}
+
+/// Apre la linea del tempo di `?base=tempo` e aspetta le sue barre.
+async function openTimeline(page) {
+  await page.evaluate(async () => {
+    const { openDocument } = await import("/src/state/document-controller.ts");
+    await openDocument("Opere.base");
+  });
+  await page.waitForFunction(() => {
+    const pane = document.querySelector(".pane.focus");
+    return (pane?.querySelectorAll(".base-tl-bar").length ?? 0) > 0
       && pane?.querySelector(".base-tab[aria-pressed='true']") !== null
       && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
   });
