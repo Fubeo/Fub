@@ -26,14 +26,25 @@ describe("Base contract", () => {
     await expect(parseBaseViews(future, "version: 999\n")).rejects.toMatchObject({ kind: "bad_args" });
   });
 
-  // T17 toglie questo test insieme alla riga che rifiuta i due tipi in data.ts.
-  it("refuses the calendar and timeline kinds until the surface draws them, as an unknown kind", async () => {
+  // T34 toglie `timeline` da qui quando la superficie la disegna.
+  it("reads the calendar and refuses the timeline until the surface draws it, as an unknown kind", async () => {
     const planOf = (kind: string) => deps(async () => custom({ view: "Agenda", view_type: kind, columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {}, date_key: "due", start_key: null, end_key: null }));
-    for (const kind of ["calendar", "timeline", "gallery"]) {
+    for (const kind of ["timeline", "gallery"]) {
       await expect(planBaseView(planOf(kind), source, "Agenda")).rejects.toThrow("tipo vista sconosciuto");
     }
+    await expect(planBaseView(planOf("calendar"), source, "Agenda")).resolves.toMatchObject({ viewType: "calendar", dateKey: "due" });
     const drawn = deps(async () => custom({ view: "Board", view_type: "kanban", columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {} }));
     await expect(planBaseView(drawn, source, "Board")).resolves.toMatchObject({ viewType: "kanban" });
+  });
+
+  it("reads the day of each note in a calendar view, and refuses a malformed one", async () => {
+    const rows = [{ doc: "a.md", properties: [] }, { doc: "b.md", properties: [] }];
+    const answer = (time: unknown[]) => deps(async () => custom({ rows: [{ doc: "a.md", values: {}, time: time[0] }, { doc: "b.md", values: {}, time: time[1] }], summaries: {} }));
+    const derived = await deriveBaseRows(answer([{ day: "2026-11-14" }, { day: null }]), source, "Cal", rows);
+    expect(derived.rows.map((row) => row.day)).toEqual(["2026-11-14", null]);
+    const plain = await deriveBaseRows(answer([undefined, undefined]), source, "Cal", rows);
+    expect(plain.rows[0]).not.toHaveProperty("day");
+    await expect(deriveBaseRows(answer([{ day: "14/11/2026" }, { day: null }]), source, "Cal", rows)).rejects.toThrow("giorno malformato");
   });
 
   it("consumes every page beyond the former 2,000-row cutoff", async () => {

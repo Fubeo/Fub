@@ -294,6 +294,30 @@ describe("il menu della maniglia", () => {
     expect(grip.getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("seleziona la tratta dopo che il menu è al suo posto e ha il fuoco", () => {
+    // Selezionare prima riscriveva l'editor e `placeBeside` ne forzava il
+    // layout dentro il gesto (17–18 ms sulla WebView, giro 5 della fluidità).
+    const { view, handles } = open("Uno\n\nDue", 1);
+    const seen: { menu: boolean; field: boolean }[] = [];
+    const dispatch = view.dispatch.bind(view);
+    const spy = vi.spyOn(view, "dispatch").mockImplementation(((...args: Parameters<EditorView["dispatch"]>) => {
+      const menu = document.querySelector("#context-menu");
+      seen.push({ menu: menu !== null, field: menu !== null && menu.contains(document.activeElement) });
+      dispatch(...args);
+    }) as EditorView["dispatch"]);
+    handles.openMenu();
+    spy.mockRestore();
+    expect(seen, "una sola transazione: la selezione").toEqual([{ menu: true, field: true }]);
+    const blocks = view.state.field(blockModel).blocks;
+    expect(view.state.field(blockSelection)?.anchor, "la tratta è selezionata quando il menu è aperto").toBe(blocks[1]!.from);
+    // Riaperto sulla stessa tratta, la selezione c'è già: nessuna transazione.
+    closeContextMenu();
+    const again = vi.spyOn(view, "dispatch");
+    handles.openMenu();
+    expect(again).not.toHaveBeenCalled();
+    again.mockRestore();
+  });
+
   it("il frontmatter resta il primo: il testo sotto non offre «Sposta su», lui non offre «Sposta giù»", () => {
     const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
     const text = open(doc, 1);

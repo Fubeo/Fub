@@ -28,6 +28,7 @@ import { mountBaseToolbar } from "./toolbar";
 import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSurfaceItems, renamedInView, valueShape, type ColumnEntry } from "./column-menu";
 import { listFooter, shownText, tableFooter } from "./footer";
 import { columnIcon, viewIcon } from "./icons";
+import { calendarState, localDay, movedDateValue, renderCalendar, type CalendarState, type IsoDay } from "./calendar";
 import { sameKey, sortedBy } from "./sort";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
 import { notify } from "../../ui/notify";
@@ -721,9 +722,15 @@ export function mountBaseSurface(
   // Le corsie di una bacheca nuova: il gruppo della vista aperta, o la prima
   // colonna che è una proprietà.
   const lanes = (): string | null => grouping() ?? plan?.group ?? plan?.columns.find((column) => columnProperty(column) !== null) ?? null;
+  // Le proprietà delle righe i cui valori sono date: la data di un calendario.
+  const dateProperties = (): string[] => rowProperties().filter((key) => kinds(key) === "date");
+  // La data di un calendario nuovo: quella della vista aperta, o la prima
+  // proprietà data delle righe.
+  const calendarDate = (): string | null => plan?.dateKey ?? dateProperties()[0] ?? null;
   const newViewItems = (): MenuItem[] => NEW_VIEW_KINDS.map((type): MenuItem => {
     const missing = type === "kanban" && lanes() === null ? t("base.view.needs_lanes")
-      : type === "map" && coordinates() === null ? t("base.view.needs_coordinates") : null;
+      : type === "map" && coordinates() === null ? t("base.view.needs_coordinates")
+        : type === "calendar" && calendarDate() === null ? t("base.view.needs_date") : null;
     return {
       label: t(`base.view.kind.${type}`), icon: viewIcon(type),
       ...(missing === null ? { run: () => void addView(type) } : { disabled: true, description: missing }),
@@ -745,6 +752,7 @@ export function mountBaseSurface(
     if (columns.length) keys.push(["order", [...columns]]);
     if (type === "kanban") { const key = lanes(); if (key) keys.push(["group", { key }]); }
     if (type === "map") { const map = coordinates(); if (map) keys.push(["map", map]); }
+    if (type === "calendar") { const date = calendarDate(); if (date) keys.push(["date", date]); }
     const start = source;
     sequencing++;
     try {
@@ -1486,6 +1494,75 @@ export function mountBaseSurface(
     wrapper.append(zoomIn, zoomOut, atlas, attribution);
     body.append(wrapper);
   };
+  // ---- Il calendario ----------------------------------------------------
+  // Il mese mostrato, il fuoco e i giorni aperti restano fra un ridisegno e
+  // l'altro; nascono col primo calendario disegnato, sul mese di oggi.
+  let calendar: CalendarState | null = null;
+  // Una nota in viaggio verso un altro giorno: niente altri gesti finché la
+  // sua scrittura non è finita.
+  let moving = false;
+  const dateFormat = (day: IsoDay): string => new Intl.DateTimeFormat(resolvedLanguage(), { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })
+    .format(new Date(`${day}T00:00:00Z`));
+  // La data di una nota spostata su un altro giorno, con `note.property.set`:
+  // il valore letto fa da confronto (una nota cambiata nel frattempo non si
+  // sovrascrive), la data resta nella sua forma (l'ora resta), e l'avviso
+  // offre l'annulla del vault.
+  const moveNote = async (row: BaseRow, day: IsoDay): Promise<void> => {
+    const key = plan?.dateKey;
+    if (!plan || !key || readOnly || moving || destroyed) return;
+    const value = movedDateValue(row.properties[key], day);
+    if (value === null) return;
+    const view = plan.view;
+    const definition = source;
+    const name = noteTitle(row.doc);
+    moving = true;
+    notice = null;
+    draw();
+    try {
+      const [mutation] = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key, expected: expectedProperty(row, key), value: JSON.stringify(value) }]);
+      if (destroyed || readOnly || !mutation || source !== definition || plan?.view !== view) return;
+      const outcome = await deps.invokeCommand(mutation.command, mutation.args);
+      if (destroyed) return;
+      const undo = outcome?.undo;
+      notify(t("base.calendar.moved", { note: name, date: dateFormat(day) }), "info", undo
+        ? { label: t("app.undo"), hint: typeof undo.label === "string" ? undo.label : undefined, run: () => void undoNoteMove() }
+        : undefined);
+    } catch (failure) {
+      if (destroyed) return;
+      // Niente è stato scritto: la nota resta dov'era, e il calendario la
+      // rilegge com'è ora.
+      notice = isErrorKind(failure, "conflict") ? t("base.calendar.conflict", { note: name }) : t("base.calendar.failed", { note: name, reason: errorText(failure) });
+      if (calendar && row.day) calendar.focus = row.day;
+    } finally {
+      moving = false;
+      if (!destroyed) await reload(false);
+    }
+  };
+  const undoNoteMove = async (): Promise<void> => {
+    try {
+      const outcome = await deps.invokeCommand(COMMANDS.undo);
+      if (outcome?.notify) notify(outcome.notify, "info");
+    } catch (failure) {
+      notify(t("commands.undo_failed", { reason: errorText(failure) }), "guasto");
+    }
+  };
+  const drawCalendar = (page: BaseRow[]): void => {
+    const today = localDay();
+    calendar ??= calendarState(today);
+    const key = plan?.dateKey ?? null;
+    const writableKey = key !== null && !key.startsWith("file.") && !key.startsWith("formula.");
+    body.append(renderCalendar({
+      rows: page, state: calendar, locale: resolvedLanguage(), today, dateKey: key,
+      title: noteTitle,
+      movable: (row) => writableKey && !readOnly && /\.md$/i.test(row.doc) && movedDateValue(row.properties[key!], row.day ?? today) !== null,
+      busy: moving || busy,
+      dateChoices: lock() === null ? dateProperties() : null,
+      chooseDateKey: (date) => void writeView("date", date),
+      open,
+      move: (row, day) => void moveNote(row, day),
+      redraw: () => draw(),
+    }));
+  };
   // Un piano diverso (un'altra vista, o il file cambiato) chiude i menu
   // aperti su quello di prima; lo stesso piano riletto no.
   let drawnPlan = "";
@@ -1494,6 +1571,14 @@ export function mountBaseSurface(
     if (drawing !== drawnPlan) { closeMenus(); drawnPlan = drawing; }
     tileCleanup?.();
     tileCleanup = null;
+    // Il fuoco dentro il calendario torna dov'era dopo il ridisegno: sul
+    // giorno, o sulla nota se aveva quella.
+    const active = document.activeElement;
+    if (calendar && active instanceof HTMLElement && body.querySelector(".base-calendar")?.contains(active)) {
+      const note = active.closest<HTMLElement>(".base-cal-event")?.dataset.doc;
+      if (note !== undefined) calendar.chosen = note;
+      calendar.refocus ??= note !== undefined ? "note" : "day";
+    }
     const shown = body.querySelector<HTMLElement>(".base-table-viewport");
     if (scrollReset) tableScroll = { top: 0, left: 0 };
     else if (shown) tableScroll = { top: shown.scrollTop, left: shown.scrollLeft };
@@ -1517,14 +1602,18 @@ export function mountBaseSurface(
   const drawView = (): void => {
     if (error) { body.append(button(labels().retry, () => void reload(true))); return; }
     const matches = filteredRows();
-    const page = plan?.viewType === "table" ? matches : matches.slice(0, displayed);
+    // La tabella ha la sua finestra di righe e il calendario mostra un mese:
+    // tutte e due prendono tutte le righe, le altre viste cento per volta.
+    const whole = plan?.viewType === "table" || plan?.viewType === "calendar";
+    const page = whole ? matches : matches.slice(0, displayed);
     try {
       if (plan?.viewType === "table") drawTable(page);
+      else if (plan?.viewType === "calendar") drawCalendar(page);
       else if (plan?.viewType === "cards") drawCards(page, false);
       else if (plan?.viewType === "list") drawCards(page, true);
       else if (plan?.viewType === "kanban") drawKanban(page);
       else if (plan?.viewType === "map") drawMap(page);
-      if (plan?.viewType !== "table" && displayed < matches.length) body.append(button(t("search.more", { shown: Math.min(displayed, matches.length), total: matches.length }), () => { displayed += VISIBLE_STEP; draw(); }));
+      if (!whole && displayed < matches.length) body.append(button(t("search.more", { shown: Math.min(displayed, matches.length), total: matches.length }), () => { displayed += VISIBLE_STEP; draw(); }));
       if (plan && plan.viewType !== "table") {
         body.append(listFooter({ columns: plan.columns, summaries: plan.summaries, values: summaries, count: matches.length, total: rows.length, searching: search.value.trim() !== "", locale: resolvedLanguage(), labelOf }));
       }

@@ -705,7 +705,7 @@ class HandlesView {
     if (index < 0) return;
     const run = runFor(view.state, blocks, index);
     const value = view.state.field(blockSelection, false);
-    if (!value || runOfSelection(blocks, value)?.first !== run.first) view.dispatch(selectBlocks(view.state, blocks, run.first, run.last));
+    const select = !value || runOfSelection(blocks, value)?.first !== run.first;
     this.pinned = keyOf(blocks[index]!);
     const key = this.pinned;
     const act = (run: () => void) => () => {
@@ -730,6 +730,13 @@ class HandlesView {
         this.schedule();
       },
     });
+    // La tratta si seleziona dopo che il menu è al suo posto e ha il fuoco.
+    // Prima, `placeBeside` misurava la maniglia su un editor appena riscritto
+    // dalla selezione e la WebView ne rifaceva il layout dentro il gesto; e
+    // con il fuoco nell'editor CodeMirror riscriveva anche la selezione del
+    // documento. Le voci ritrovano il blocco dalla chiave (`withRun`), non
+    // dalla selezione (`docs/product/performance-webview.md`).
+    if (select && view.state.field(blockModel, false)?.blocks === blocks) view.dispatch(selectBlocks(view.state, blocks, run.first, run.last));
   }
 
   /// Ritrova il blocco e la sua tratta al momento dell'azione: il testo può
