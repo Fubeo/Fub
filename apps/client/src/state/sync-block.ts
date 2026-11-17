@@ -8,7 +8,7 @@
 // sessioni aperte, così la ricarica che ne viene non si dice, e l'esito si
 // racconta con «Annulla».
 import { COMMANDS } from "../host/contract";
-import { errorText } from "../host/errors";
+import { errorText, isErrorKind } from "../host/errors";
 import { api } from "../host/ipc";
 import { t } from "../i18n/strings";
 import { notify } from "../ui/notify";
@@ -26,11 +26,12 @@ async function settled(): Promise<string | null> {
 }
 
 /// Invoca il comando sulle note `docs`, annunciandone le scritture: `null`
-/// se è andata, altrimenti il perché no (e le note sono com'erano). `told`
-/// dice se l'esito buono si racconta, col suo «Annulla».
-async function invokeOn(args: Record<string, unknown>, docs: readonly string[], told: boolean): Promise<string | null> {
+/// se è andata, altrimenti il perché no: la frase, e l'errore del comando se
+/// è stato lui (le note sono com'erano). `told` dice se l'esito buono si
+/// racconta, col suo «Annulla».
+async function invokeOn(args: Record<string, unknown>, docs: readonly string[], told: boolean): Promise<Refused | null> {
   const unsaved = await settled();
-  if (unsaved !== null) return unsaved;
+  if (unsaved !== null) return { reason: unsaved, error: null };
   const withdraw = docs.map((doc) => expectDocumentWrite(doc));
   try {
     const outcome = await api.invokeCommand(COMMANDS.syncBlock, args, undefined, openVaultRoot());
@@ -55,24 +56,39 @@ async function invokeOn(args: Record<string, unknown>, docs: readonly string[], 
     return null;
   } catch (error) {
     for (const each of withdraw) each();
-    return errorText(error);
+    return { reason: errorText(error), error };
   }
+}
+
+/// Il perché no di `invokeOn`.
+interface Refused {
+  readonly reason: string;
+  readonly error: unknown;
 }
 
 /// «Sincronizza in un'altra nota»: l'id al blocco se manca e la trasclusione
 /// in fondo a `to`.
-export function syncBlock(request: SyncRequest): Promise<string | null> {
-  return invokeOn(
+export async function syncBlock(request: SyncRequest): Promise<string | null> {
+  const refused = await invokeOn(
     { doc: request.doc, at: [...request.at], text: request.text, to: request.to },
     [request.doc, request.to],
     true,
   );
+  return refused?.reason ?? null;
 }
 
 /// L'id `id` al blocco, se non ce l'ha: chi chiama scrive poi il riferimento
 /// nel proprio testo. In silenzio: ciò che si vede è il riferimento.
-export function giveBlockId(request: BlockIdRequest): Promise<string | null> {
-  return invokeOn({ doc: request.doc, at: [...request.at], text: request.text, id: request.id }, [request.doc], false);
+export async function giveBlockId(request: BlockIdRequest): Promise<string | null> {
+  return (await giveBlockIdTold(request))?.reason ?? null;
+}
+
+/// Come `giveBlockId`, e dice anche se la nota del blocco si legge soltanto
+/// (il comando non ha potuto scriverla): `[[^^` allora offre il link alla
+/// sezione (T31).
+export async function giveBlockIdTold(request: BlockIdRequest): Promise<{ reason: string; readOnly: boolean } | null> {
+  const refused = await invokeOn({ doc: request.doc, at: [...request.at], text: request.text, id: request.id }, [request.doc], false);
+  return refused === null ? null : { reason: refused.reason, readOnly: isErrorKind(refused.error, "permission_denied") };
 }
 
 /// Il testo di una nota com'è sul disco, dopo aver messo in salvo quello non

@@ -69,6 +69,7 @@ import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-cac
 import { newSubpage, renamePage } from "./page-rename";
 import { moveBlock, moveHeadings, moveNotes } from "./move-block";
 import { syncBlockPort } from "./sync-block";
+import { vaultBlockPort } from "./vault-blocks";
 import { linkedPageIcon } from "./page-icons";
 import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./people";
 import { dailyDate, dailyPath, firstWeekday } from "./dates";
@@ -1504,6 +1505,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       headingsOf: (page: string) => noteHeadings(page).catch(() => []),
       searchHeadings: (text: string) => vaultHeadings(text).catch(() => []),
       blocksOf: (page: string) => noteBlocks(page).catch(() => []),
+      vaultBlocks: vaultBlockPort,
       people: { folder: peopleFolder, search: searchPeople, create: createPerson },
       dates: { dailyPath, dailyDate, firstDay: firstWeekday },
     },

@@ -18,12 +18,17 @@ import {
   tagContext,
   tagSource,
   tagSegment,
+  vaultBlockContext,
+  vaultBlockQuery,
+  vaultBlockSource,
+  VAULT_BLOCKS_MAX,
   vaultHeadingContext,
   vaultHeadingSource,
   wikilinkContext,
   wikilinkInsertText,
   wikilinkSource,
 } from "./completions";
+import type { VaultBlockNote, VaultBlockPort } from "./blocks/vault-blocks";
 
 // Niente `EditorView` qui (vitest gira in node, senza DOM): le sorgenti CM6 si
 // esercitano headless con un `CompletionContext` costruito su un
@@ -514,5 +519,87 @@ describe("le emoji (H14)", () => {
     expect(emojiSource()(ctxAt(doc, doc.indexOf("co") + 2))).toBeNull();
     const inline = "`a :fuoco`";
     expect(emojiSource()(ctxAt(inline, inline.length - 1))).toBeNull();
+  });
+});
+
+// `[[^^parole` (E13, T31): il contesto, la riga per l'indice e la sorgente,
+// che cerca una volta per pausa. La scelta (l'id, il conflitto) la provano
+// `completions.dom.test.ts` e `blocks/vault-blocks.test.ts`, con una vista.
+describe("i blocchi del vault (T31)", () => {
+  const RIUNIONE = "# Riunione\n\nLe chiavi le tiene Sara.\n\n- Chiavi di riserva ^riserva\n- Altro\n";
+
+  function port(notes: (words: string) => Promise<readonly VaultBlockNote[]>): VaultBlockPort {
+    return { notes, current: () => null, source: async () => "", giveId: async () => null, notify: () => {} };
+  }
+
+  it("[[^^ seguito da parole è il suo contesto; chiuso, con # o | no", () => {
+    expect(vaultBlockContext("vedi [[^^chiavi Sa")).toEqual({ from: 7, query: "chiavi Sa" });
+    expect(vaultBlockContext("[[^^")).toEqual({ from: 2, query: "" });
+    expect(vaultBlockContext("[[^^chiavi]] e")).toBeNull();
+    expect(vaultBlockContext("[[^^a#b")).toBeNull();
+    expect(vaultBlockContext("[[^^a|b")).toBeNull();
+    expect(vaultBlockContext("[[Nota#^id")).toBeNull();
+    expect(vaultBlockContext("[[^id")).toBeNull();
+  });
+
+  it("la riga dell'indice: tutte le parole nello stesso blocco, senza i segni della sintassi", () => {
+    expect(vaultBlockQuery("chiavi")).toBe("block:(chiavi)");
+    expect(vaultBlockQuery(" rosa (spina) \"x\" ")).toBe("block:(rosa spina x)");
+    expect(vaultBlockQuery("  ")).toBeNull();
+    expect(vaultBlockQuery("()")).toBeNull();
+    expect(vaultBlockQuery("a".repeat(500))!.length).toBeLessThan(220);
+  });
+
+  it("[[^^ non chiede le note per nome", async () => {
+    let asked = false;
+    const source = wikilinkSource(async () => { asked = true; return []; });
+    expect(await source(ctxAt("[[^^chiavi", 10))).toBeNull();
+    expect(asked).toBe(false);
+  });
+
+  it("cerca dopo la pausa, una volta: la risposta superata non arriva", async () => {
+    const asked: string[] = [];
+    const source = vaultBlockSource(port(async (words) => {
+      asked.push(words);
+      return [{ doc: "Riunioni/Riunione.md", text: RIUNIONE }];
+    }), 20);
+    const first = source(ctxAt("vedi [[^^ch", 11));
+    const second = source(ctxAt("vedi [[^^chiavi", 15));
+    expect(await first).toBeNull();
+    const result = (await second) as CompletionResult;
+    expect(asked).toEqual(["chiavi"]);
+    expect(result.from).toBe(7);
+    expect(result.filter).toBe(false);
+    // Il testo del blocco e la nota; l'id non si mostra.
+    expect(result.options.map((o) => [o.label, o.detail])).toEqual([
+      ["Le chiavi le tiene Sara.", "Riunione"],
+      ["Chiavi di riserva", "Riunione"],
+    ]);
+  });
+
+  it("niente parole, niente ricerca; nel codice nemmeno", async () => {
+    let asked = false;
+    const source = vaultBlockSource(port(async () => { asked = true; return []; }), 0);
+    expect(await source(ctxAt("[[^^ ", 5))).toBeNull();
+    expect(await source(ctxAt("`[[^^chiavi`", 11))).toBeNull();
+    expect(asked).toBe(false);
+  });
+
+  it("una nota che non si legge non rompe il menu; due note omonime col percorso", async () => {
+    const failing = vaultBlockSource(port(async () => { throw new Error("indice"); }), 0);
+    expect(await failing(ctxAt("[[^^chiavi", 10))).toBeNull();
+    const twins = vaultBlockSource(port(async () => [
+      { doc: "a/Riunione.md", text: "Chiavi qui.\n" },
+      { doc: "b/Riunione.md", text: "Chiavi là.\n" },
+    ]), 0);
+    const result = (await twins(ctxAt("[[^^chiavi", 10))) as CompletionResult;
+    expect(result.options.map((o) => o.detail)).toEqual(["a/Riunione", "b/Riunione"]);
+  });
+
+  it("diecimila blocchi trovati: ne arriva al menu un tetto", async () => {
+    const many = Array.from({ length: 10_000 }, (_, n) => `- chiave ${n}`).join("\n");
+    const source = vaultBlockSource(port(async () => [{ doc: "Tante.md", text: many }]), 0);
+    const result = (await source(ctxAt("[[^^chiave", 10))) as CompletionResult;
+    expect(result.options).toHaveLength(VAULT_BLOCKS_MAX);
   });
 });
