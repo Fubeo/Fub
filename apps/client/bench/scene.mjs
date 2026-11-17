@@ -1444,6 +1444,10 @@ export const SCENE = touchLast(onPage("shell", [
     ["formula-16-latex-errore", "formula-toccata&mathsource=1", "Un nome che non c'è: «Non conosco \\alfa. Forse volevi \\alpha?» e «Usa \\alpha»", "source-unknown"],
     ["formula-17-latex-graffa", "formula-toccata&mathsource=1&mathhelp=spente", "Una graffa aperta con gli aiuti spenti: «Manca una } di chiusura» e «Chiudi»", "source-brace"],
     ["formula-18-latex-piu-correzioni", "formula-toccata&mathsource=1&mathhelp=spente", "Un nome con più simboli vicini: la frase li elenca, senza pulsante", "source-guesses"],
+    // Il tasto destro e Invio a blocco (T65): il menu della formula, con le
+    // copie e il posto; Invio nel blocco va a capo e allinea gli uguali.
+    ["formula-19-menu", "formula-toccata", "Il tasto destro su una formula: Modifica, le tre copie e «Da riga a blocco»", "menu"],
+    ["formula-20-allinea", "formula-toccata", "Invio in un blocco $$: un aligned con gli uguali allineati e la riga nuova", "align"],
   ].map(([id, live, title, gesture]) => ({
     id,
     title,
@@ -2867,6 +2871,39 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
 async function touchFormula(page, gesture) {
   const ready = ".cm-fub-mx-surface[data-state=\"ready\"]";
   const said = () => page.evaluate(() => document.querySelector(".cm-fub-mx [role=status]")?.textContent ?? "");
+  if (gesture === "menu") {
+    // Il menu della formula (T65): il tasto destro sulla formula in riga, la
+    // nota ferma; le voci si contano, se no la scena è rossa.
+    await openLive(page, [], "top");
+    await page.click(".cm-content .cm-fub-math", { button: "right" });
+    await page.waitForSelector("#context-menu .menu-head");
+    const items = await page.locator("#context-menu [role=menuitem]").allTextContents();
+    for (const label of ["Modifica", "Copia come immagine", "Copia per Word", "Copia il LaTeX", "Da riga a blocco"]) {
+      if (!items.some((item) => item.includes(label))) throw new Error(`nel menu della formula manca «${label}»: ${items.join(" · ")}`);
+    }
+    await page.mouse.move(0, 0);
+    return;
+  }
+  if (gesture === "align") {
+    // Invio nel blocco (T65): la formula in un aligned, il cursore sulla riga
+    // nuova, e ciò che si scrive ci entra.
+    await openLive(page, [], "top");
+    const box = await page.locator(".cm-content .math-block").first().boundingBox();
+    if (!box) throw new Error("manca il blocco $$");
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("y");
+    const doc = await page.evaluate(async () => {
+      const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+      return findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement).state.doc.toString();
+    });
+    if (!/\\begin\{aligned\}[\s\S]*&=\s*y\s*\\end\{aligned\}/.test(doc)) throw new Error(`Invio nel blocco non allinea: ${doc}`);
+    await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+    await page.mouse.move(0, 0);
+    return;
+  }
   if (gesture.startsWith("source")) {
     // Il campo del LaTeX (T63). La scena prova che il campo c'è, che la
     // scrittura veloce trasforma e che gli aiuti fanno quello che dicono; se
@@ -2895,6 +2932,8 @@ async function touchFormula(page, gesture) {
     } else if (gesture === "source-options") {
       await page.click(".cm-fub-mx-row .cm-fub-mx-more");
       await page.waitForSelector(".cm-fub-mx-options:not([hidden]) [data-help=\"piene\"][aria-pressed=\"true\"]");
+      // «Posto» (T65): la formula in riga in un paragrafo può farsi blocco.
+      await page.waitForSelector(".cm-fub-mx-options [data-place=\"inline\"][aria-pressed=\"true\"]");
     } else if (gesture === "source-discrete") {
       await page.keyboard.type("+a/b");
       if (!(await value()).endsWith("+a/b")) throw new Error(`coi discreti «a/b» si trasforma: ${await value()}`);

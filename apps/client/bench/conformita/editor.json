@@ -1,8 +1,8 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit c98e1093958bc88a06e9c2ba87ff22f171c9784d.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit 5e56845e803a816aa55a33849a5c298b85d596f4.",
   "prototipo": "editor",
   "ramo": "piano/editor-completo",
-  "commit": "c98e1093958bc88a06e9c2ba87ff22f171c9784d",
+  "commit": "5e56845e803a816aa55a33849a5c298b85d596f4",
   "file": "PLAN-ui/editor.html",
   "sha256": "36be544b4bd1827e97eaeb3fbf606f6ff2ea697dafc409e1e9b6b60ee40ea188",
   "traduzioni": {
@@ -9153,6 +9153,226 @@
         "fub": {
           "color": [
             "var(--muted)"
+          ]
+        }
+      }
+    },
+    "formula.posto": {
+      "chiaro-1280": {
+        "prototipo": ".mx .mx-opts > div:last-child",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12.5px",
+          "font-weight": "400",
+          "line-height": "17.5px",
+          "letter-spacing": "normal",
+          "color": "rgb(93, 105, 98)",
+          "row-gap": "8px",
+          "column-gap": "8px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "normal"
+        },
+        "fub": {
+          "color": [
+            "var(--muted)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".mx .mx-opts > div:last-child",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12.5px",
+          "font-weight": "400",
+          "line-height": "17.5px",
+          "letter-spacing": "normal",
+          "color": "rgb(160, 170, 164)",
+          "row-gap": "8px",
+          "column-gap": "8px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "normal"
+        },
+        "fub": {
+          "color": [
+            "var(--muted)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".mx .mx-opts > div:last-child",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12.5px",
+          "font-weight": "400",
+          "line-height": "17.5px",
+          "letter-spacing": "normal",
+          "color": "rgb(93, 105, 98)",
+          "row-gap": "8px",
+          "column-gap": "8px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "normal"
+        },
+        "fub": {
+          "color": [
+            "var(--muted)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".mx .mx-opts > div:last-child",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12.5px",
+          "font-weight": "400",
+          "line-height": "17.5px",
+          "letter-spacing": "normal",
+          "color": "rgb(160, 170, 164)",
+          "row-gap": "8px",
+          "column-gap": "8px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "normal"
+        },
+        "fub": {
+          "color": [
+            "var(--muted)"
+          ]
+        }
+      }
+    },
+    "formula.posto-scelto": {
+      "chiaro-1280": {
+        "prototipo": ".mx .mx-opts [data-disp=\"0\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "height": "24px",
+          "padding-top": "0px",
+          "padding-right": "9px",
+          "padding-bottom": "0px",
+          "padding-left": "9px",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12px",
+          "font-weight": "400",
+          "line-height": "16.8px",
+          "letter-spacing": "normal",
+          "color": "rgb(24, 35, 28)",
+          "background-color": "rgb(252, 254, 253)",
+          "background-image": "none",
+          "box-shadow": "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ],
+          "background-color": [
+            "var(--sheet)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".mx .mx-opts [data-disp=\"0\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "height": "24px",
+          "padding-top": "0px",
+          "padding-right": "9px",
+          "padding-bottom": "0px",
+          "padding-left": "9px",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12px",
+          "font-weight": "400",
+          "line-height": "16.8px",
+          "letter-spacing": "normal",
+          "color": "rgb(228, 234, 230)",
+          "background-color": "rgb(19, 28, 22)",
+          "background-image": "none",
+          "box-shadow": "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ],
+          "background-color": [
+            "var(--sheet)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".mx .mx-opts [data-disp=\"0\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "height": "24px",
+          "padding-top": "0px",
+          "padding-right": "9px",
+          "padding-bottom": "0px",
+          "padding-left": "9px",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12px",
+          "font-weight": "400",
+          "line-height": "16.8px",
+          "letter-spacing": "normal",
+          "color": "rgb(24, 35, 28)",
+          "background-color": "rgb(252, 254, 253)",
+          "background-image": "none",
+          "box-shadow": "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ],
+          "background-color": [
+            "var(--sheet)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".mx .mx-opts [data-disp=\"0\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "height": "24px",
+          "padding-top": "0px",
+          "padding-right": "9px",
+          "padding-bottom": "0px",
+          "padding-left": "9px",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12px",
+          "font-weight": "400",
+          "line-height": "16.8px",
+          "letter-spacing": "normal",
+          "color": "rgb(228, 234, 230)",
+          "background-color": "rgb(19, 28, 22)",
+          "background-image": "none",
+          "box-shadow": "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ],
+          "background-color": [
+            "var(--sheet)"
           ]
         }
       }
