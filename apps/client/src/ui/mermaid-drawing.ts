@@ -248,9 +248,15 @@ export function themeCssFor(style: DiagramStyleId, p: DiagramPalette): string {
     `.node rect,.node polygon,.node circle,.node ellipse,.node path{stroke-width:${s}px;}`,
     `.node rect{rx:${r}px;ry:${r}px;}`,
     `.cluster rect{rx:${r + 2}px;ry:${r + 2}px;stroke-width:${s}px;}`,
-    `.flowchart-link,.edgePath .path,.transition,.relation,.messageLine0,.messageLine1{stroke-width:${s}px;stroke-linecap:round;stroke-linejoin:round;}`,
+    // Il tracciato (E26, `.dg-e` del prototipo): uno spessore per tutti gli
+    // stili, capi e gomiti tondi; il tratteggio a passi di 4, che i capi tondi
+    // non chiudono. Le etichette dei collegamenti stanno su un ritaglio pieno
+    // della carta (`.lbg`), nel colore attenuato (`.lt`).
+    `.flowchart-link,.edgePath .path,.transition,.relation,.messageLine0,.messageLine1{stroke-width:${p.edge}px;stroke-linecap:round;stroke-linejoin:round;}`,
+    `.flowchart-link.edge-pattern-dotted,.flowchart-link.edge-pattern-dashed,.messageLine1{stroke-dasharray:4 4;}`,
     `.edgeLabel,.edgeLabel p,.labelBkg{background-color:${p.paper ?? p.ground};}`,
-    `.edgeLabel rect{fill:${p.paper ?? p.ground};}`,
+    `.edgeLabel rect{fill:${p.paper ?? p.ground};opacity:1;rx:5px;ry:5px;}`,
+    `.edgeLabel .label text,.edgeLabel .label tspan{fill:${p.muted};}`,
     `.actor,.note,.labelBox,rect.task,rect.section{rx:${Math.min(r, 8)}px;ry:${Math.min(r, 8)}px;}`,
     `.titleText,.pieTitleText,.cluster-label .nodeLabel{font-weight:600;}`,
     `.actor-man circle,.actor-man line{stroke:${p.primary.border};fill:${p.primary.fill};}`,
@@ -276,7 +282,6 @@ export function themeCssFor(style: DiagramStyleId, p: DiagramPalette): string {
     case "aurora":
       rules.push(
         `.node rect,.node polygon,.node circle,.node ellipse,.actor,.note,.cluster rect{filter:drop-shadow(0 2px 5px ${p.dark ? "rgba(0,0,0,0.45)" : "rgba(76,29,149,0.16)"});}`,
-        `.flowchart-link,.edgePath .path{stroke-width:${s + 0.25}px;}`,
       );
       break;
     case "blueprint":
@@ -289,7 +294,6 @@ export function themeCssFor(style: DiagramStyleId, p: DiagramPalette): string {
     case "inchiostro":
       rules.push(
         `.cluster rect{stroke-dasharray:1 3;stroke-linecap:round;}`,
-        `.marker,marker path{stroke-width:1px;}`,
       );
       break;
     case "acquerello":
@@ -321,6 +325,12 @@ function nodeHueRules(p: DiagramPalette): string[] {
   return rules;
 }
 
+/// Le distanze del prototipo per un flusso dall'alto in basso (`gapR` e
+/// `gapN` di `dgSvg`): valgono anche da sinistra a destra, perché la
+/// configurazione non conosce l'orientamento del sorgente.
+export const FLOW_RANK_SPACING = 58;
+export const FLOW_NODE_SPACING = 34;
+
 /// La configurazione di Mermaid per uno stile: tema `base`, variabili, CSS.
 export function mermaidStyleConfig(style: DiagramStyleId, p: DiagramPalette): Record<string, unknown> {
   return {
@@ -329,7 +339,12 @@ export function mermaidStyleConfig(style: DiagramStyleId, p: DiagramPalette): Re
     themeCSS: themeCssFor(style, p),
     fontFamily: DIAGRAM_FONTS[p.font].stack,
     look: "classic",
-    flowchart: { curve: style === "blueprint" ? "linear" : "basis", padding: 14 },
+    // Il tracciato di E26 con ciò che Mermaid permette: tratti dritti coi
+    // gomiti arrotondati (`rounded`, raggio fisso di 5 px), uguale in ogni
+    // stile, e le distanze del prototipo fra un livello e l'altro e fra due
+    // nodi vicini. Il percorso lo sceglie dagre: ciò che non si ottiene è in
+    // «I collegamenti» di `docs/product/editor-diagrams.md`.
+    flowchart: { curve: "rounded", padding: 14, rankSpacing: FLOW_RANK_SPACING, nodeSpacing: FLOW_NODE_SPACING },
     sankey: { linkColor: mix(p.line, p.ground, 0.45), showValues: true },
     // Il Gantt misura il contenitore della resa, che è fuori pagina: senza una
     // larghezza propria si disegna a 1200 e poi si rimpicciolisce illeggibile.
@@ -368,14 +383,67 @@ function sliceLabels(root: Element, p: DiagramPalette): void {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Le punte.
+// ---------------------------------------------------------------------------
+
+/// La punta del prototipo (`#dg-arr`): sottile, con l'incavo, nella scatola
+/// 10 × 10, la cima a 9.6 sull'asse. Quella d'inizio è la stessa, girata.
+const ARROW_END = "M0.6 1.4L9.6 5 0.6 8.6 2.6 5z";
+const ARROW_START = "M9.4 1.4L0.4 5 9.4 8.6 7.4 5z";
+/// La grandezza della punta in unità del disegno (`markerWidth` del prototipo).
+const ARROW_SIZE = 9;
+/// Mermaid accorcia di 4 un collegamento con la punta (`arrow_point`): la
+/// cima, che prima toccava il nodo, si ferma a 1.8 dal bordo, dove il
+/// prototipo la ferma (`GAP` 2, meno lo sbalzo della sua cima).
+const POINT_OFFSET = 4;
+const ARROW_GAP = 1.8;
+/// Dove cade la fine del tratto nella scatola della punta: dentro il pieno,
+/// fra l'incavo e la cima, così il capo tondo non si vede.
+const ARROW_REF_END = 9.6 - ((POINT_OFFSET - ARROW_GAP) * 10) / ARROW_SIZE;
+const ARROW_REF_START = 0.4 + ((POINT_OFFSET - ARROW_GAP) * 10) / ARROW_SIZE;
+/// La punta delle sequenze, in unità del disegno: la stessa forma, con la
+/// cima dove Mermaid la mette (10, sulla linea della vita).
+const SEQUENCE_ARROW = "M1.9 1.76L10 5 1.9 8.24 3.7 5z";
+
+/// Le punte piene e larghe di Mermaid diventano quelle sottili del prototipo:
+/// i marcatori `point` dei flussi (fine e inizio) e la freccia delle
+/// sequenze. Solo i marcatori nelle `defs`, che tutti i collegamenti
+/// condividono: il costo non cresce con gli archi. Le altre punte (classi,
+/// entità, stati, croci, cerchi) dicono qualcosa con la forma, e restano.
+function thinArrows(root: Element): void {
+  const shape = (marker: Element, d: string, refX: number | null, size: number | null) => {
+    const path = marker.querySelector(":scope > path");
+    if (!path) return;
+    path.setAttribute("d", d);
+    // Solo il pieno, nel colore del tratto: il bordo la ingrosserebbe. Lo
+    // stile in linea vince sulle regole di Mermaid che la dipingono.
+    path.setAttribute("style", "stroke:none");
+    if (refX !== null) marker.setAttribute("refX", refX.toFixed(3));
+    if (size !== null) {
+      marker.setAttribute("markerWidth", String(size));
+      marker.setAttribute("markerHeight", String(size));
+    }
+  };
+  for (const marker of root.querySelectorAll("marker")) {
+    const id = marker.getAttribute("id") ?? "";
+    const box = marker.getAttribute("viewBox")?.trim();
+    if (id.endsWith("-pointEnd") && box === "0 0 10 10") shape(marker, ARROW_END, ARROW_REF_END, ARROW_SIZE);
+    else if (id.endsWith("-pointStart") && box === "0 0 10 10") shape(marker, ARROW_START, ARROW_REF_START, ARROW_SIZE);
+    else if (id.endsWith("-arrowhead") && box === undefined) shape(marker, SEQUENCE_ARROW, null, null);
+  }
+}
+
 /// Mette carta e carattere dentro l'SVG di Mermaid: il margine, la trama sotto
-/// il disegno, la regola `@font-face` in testa; e dà alle etichette delle
-/// fette un colore leggibile. Restituisce la larghezza naturale nuova, o
-/// `null` se non cambia (niente carta, o un viewBox illeggibile).
+/// il disegno, la regola `@font-face` in testa; dà alle etichette delle fette
+/// un colore leggibile, e ai collegamenti le punte sottili. Restituisce la
+/// larghezza naturale nuova, o `null` se non cambia (niente carta, o un
+/// viewBox illeggibile).
 export function decorateSvg(doc: Document, p: DiagramPalette, fontCss: string | null): number | null {
   const root = doc.documentElement;
   if (root.localName !== "svg" || root.namespaceURI !== SVG_NS) return null;
   sliceLabels(root, p);
+  thinArrows(root);
   if (fontCss) {
     const style = svgElement(doc, "style", {});
     style.textContent = fontCss;

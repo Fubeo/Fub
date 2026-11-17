@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { DIAGRAM_STYLE_IDS } from "../theme/diagram-style";
 import {
   decorateSvg,
+  FLOW_NODE_SPACING,
+  FLOW_RANK_SPACING,
   fontFaceCss,
   mermaidStyleConfig,
   PAPER_MARGIN,
@@ -17,6 +19,7 @@ import {
   type DiagramContrast,
   type DiagramLight,
   type DiagramPalette,
+  EDGE_STROKE,
   mix,
   paletteFor,
   parseHex,
@@ -168,10 +171,33 @@ describe("la configurazione di Mermaid", () => {
     const config = mermaidStyleConfig("blueprint", p);
     expect(config.theme).toBe("base");
     expect(String(config.fontFamily)).toContain("JetBrains Mono");
-    expect(config.flowchart).toMatchObject({ curve: "linear" });
-    expect(mermaidStyleConfig("aurora", paletteFor("aurora", "light")).flowchart).toMatchObject({ curve: "basis" });
     expect(String(config.themeCSS)).toContain("stroke-dasharray:6 4");
     expect(themeCssFor("armonia", paletteFor("armonia", "light"))).toContain("rx:10px");
+  });
+
+  it("il tracciato è uno solo: gomiti arrotondati e le distanze del prototipo, in ogni stile", () => {
+    for (const { style, light, level } of CASES) {
+      expect(mermaidStyleConfig(style, paletteFor(style, light, level)).flowchart, `${style} ${light} ${level}`)
+        .toMatchObject({ curve: "rounded", rankSpacing: FLOW_RANK_SPACING, nodeSpacing: FLOW_NODE_SPACING });
+    }
+    expect([FLOW_RANK_SPACING, FLOW_NODE_SPACING]).toEqual([58, 34]);
+  });
+
+  it("i collegamenti hanno lo spessore del prototipo in ogni stile, più netto nell'alto contrasto", () => {
+    for (const { style, light, level } of CASES) {
+      const p = paletteFor(style, light, level);
+      expect(p.edge, `${style} ${light} ${level}`).toBe(level === "high" ? EDGE_STROKE + 0.6 : EDGE_STROKE);
+      const css = themeCssFor(style, p);
+      expect(css).toContain(`.messageLine1{stroke-width:${p.edge}px;stroke-linecap:round;stroke-linejoin:round;}`);
+      // Nessuno stile lo cambia dopo: lo spessore dei collegamenti compare una volta.
+      expect(css.match(/\.flowchart-link[^{]*\{stroke-width/g), style).toHaveLength(1);
+      // Il tratteggio non si chiude sotto i capi tondi.
+      expect(css).toContain(".flowchart-link.edge-pattern-dotted,.flowchart-link.edge-pattern-dashed,.messageLine1{stroke-dasharray:4 4;}");
+      // L'etichetta su un ritaglio pieno della carta, nel colore attenuato.
+      expect(css).toContain(`.edgeLabel rect{fill:${p.paper ?? p.ground};opacity:1;rx:5px;ry:5px;}`);
+      expect(css).toContain(`.edgeLabel .label text,.edgeLabel .label tspan{fill:${p.muted};}`);
+      expect(contrast(p.muted, p.paper ?? p.ground), `${style} ${light} ${level}`).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it("i nodi tinti portano la loro etichetta leggibile, e solo negli stili a colori", () => {
@@ -241,6 +267,61 @@ describe("la tavola", () => {
     expect(decorateSvg(doc, paletteFor("armonia", "dark"), null)).toBeNull();
     expect(doc.documentElement.getAttribute("viewBox")).toBe("0 0 200 100");
     expect(doc.querySelector("rect.fub-paper")).toBeNull();
+  });
+
+  // I marcatori come li scrive Mermaid 11: le punte dei flussi, la freccia
+  // delle sequenze, e punte che dicono qualcosa con la forma.
+  const MARKERS = [
+    `<marker id="d1_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker>`,
+    `<marker id="d1_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1;"/></marker>`,
+    `<marker id="d1_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z"/></marker>`,
+    `<marker id="d1-arrowhead" refX="7.9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M -1 0 L 10 5 L 0 10 z"/></marker>`,
+    `<marker id="d1_stateDiagram-barbEnd" refX="19" refY="7" markerWidth="20" markerHeight="14"><path d="M 19,7 L9,13 L14,7 L9,1 Z"/></marker>`,
+    `<marker id="d1_classDiagram-extensionEnd" viewBox="0 0 10 10" refX="18" refY="7"><path d="M 1,1 V 13 L18,7 Z"/></marker>`,
+  ].join("");
+  const edges = (n: number) => Array.from({ length: n }, (_, i) =>
+    `<path class="flowchart-link" d="M0 ${i}L10 ${i}" marker-end="url(#d1_flowchart-v2-pointEnd)"/>`).join("");
+
+  it("le punte dei flussi e delle sequenze sono quelle sottili del prototipo, a un soffio dal nodo", () => {
+    for (const style of DIAGRAM_STYLE_IDS) {
+      const doc = svg(`<defs>${MARKERS}</defs>${edges(3)}`);
+      decorateSvg(doc, paletteFor(style, "light"), null);
+      const marker = (id: string) => doc.getElementById(id)!;
+      const path = (id: string) => marker(id).querySelector("path")!;
+
+      const end = marker("d1_flowchart-v2-pointEnd");
+      expect(path(end.id).getAttribute("d")).toBe("M0.6 1.4L9.6 5 0.6 8.6 2.6 5z");
+      expect(path(end.id).getAttribute("style")).toBe("stroke:none");
+      expect(end.getAttribute("markerWidth")).toBe("9");
+      // Mermaid ferma il tratto a 4 dal bordo: la cima arriva a 1.8 dal bordo,
+      // e la fine del tratto cade nel pieno, fra l'incavo (2.6) e la cima.
+      const refX = Number(end.getAttribute("refX"));
+      expect((9.6 - refX) * 0.9).toBeCloseTo(4 - 1.8, 2);
+      expect(refX).toBeGreaterThan(2.6);
+      const start = marker("d1_flowchart-v2-pointStart");
+      expect(path(start.id).getAttribute("d")).toBe("M9.4 1.4L0.4 5 9.4 8.6 7.4 5z");
+      expect((Number(start.getAttribute("refX")) - 0.4) * 0.9).toBeCloseTo(4 - 1.8, 2);
+      expect(Number(start.getAttribute("refX"))).toBeLessThan(7.4);
+      // La freccia delle sequenze ha la stessa forma, con la cima dove era.
+      const head = marker("d1-arrowhead");
+      expect(path(head.id).getAttribute("d")).toBe("M1.9 1.76L10 5 1.9 8.24 3.7 5z");
+      expect(head.getAttribute("refX")).toBe("7.9");
+      // Le altre restano come Mermaid le disegna.
+      expect(path("d1_flowchart-v2-pointEnd-margin").getAttribute("d")).toBe("M 0 0 L 11.5 7 L 0 14 z");
+      expect(path("d1_stateDiagram-barbEnd").getAttribute("d")).toBe("M 19,7 L9,13 L14,7 L9,1 Z");
+      expect(path("d1_classDiagram-extensionEnd").getAttribute("d")).toBe("M 1,1 V 13 L18,7 Z");
+    }
+  });
+
+  it("con 500 archi si toccano solo i marcatori condivisi, non i collegamenti", () => {
+    const doc = svg(`<defs>${MARKERS}</defs>${edges(500)}`);
+    const before = [...doc.querySelectorAll("path.flowchart-link")].map((edge) => edge.outerHTML);
+    decorateSvg(doc, paletteFor("armonia", "dark"), null);
+    const after = [...doc.querySelectorAll("path.flowchart-link")].map((edge) => edge.outerHTML);
+    expect(after).toEqual(before);
+    expect(doc.querySelectorAll("marker")).toHaveLength(6);
+    expect(doc.getElementById("d1_flowchart-v2-pointEnd")!.querySelector("path")!.getAttribute("d"))
+      .toBe("M0.6 1.4L9.6 5 0.6 8.6 2.6 5z");
   });
 
   it("ogni percentuale della torta si legge sulla sua fetta", () => {

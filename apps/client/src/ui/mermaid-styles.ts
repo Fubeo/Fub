@@ -55,6 +55,9 @@ export interface DiagramPalette {
   /// Raggio degli angoli e spessore dei tratti, in px.
   readonly radius: number;
   readonly stroke: number;
+  /// Lo spessore dei collegamenti, in px: uno per tutti gli stili (E26,
+  /// `.dg-e` del prototipo); è il bordo dei nodi a cambiare con lo stile.
+  readonly edge: number;
   /// Il disegno della carta: tinta unita, griglia tecnica, alone, vignetta.
   readonly texture: "none" | "grid" | "glow" | "paper";
   /// Il colore della griglia o dell'alone.
@@ -130,7 +133,10 @@ function fill(fillColor: string, border: string, text: string): DiagramFill {
   return { fill: fillColor, border, text };
 }
 
-type Written = Omit<DiagramPalette, "ground" | "nodeHues"> & { paper: string };
+type Written = Omit<DiagramPalette, "ground" | "nodeHues" | "edge"> & { paper: string };
+
+/// Lo spessore dei collegamenti in ogni stile (`.dg-e`: 1.4px).
+export const EDGE_STROKE = 1.4;
 
 /// Gli stili a colori alternano quattro tinte sui nodi; Blueprint e
 /// Inchiostro restano monocromi, e il colore resta alle serie dei grafici.
@@ -419,6 +425,7 @@ function armonia(light: DiagramLight, read: TokenReader): DiagramPalette {
     font: "inter",
     radius: 10,
     stroke: 1.5,
+    edge: EDGE_STROKE,
     texture: "none",
   };
 }
@@ -453,6 +460,7 @@ function sharpened(p: DiagramPalette): DiagramPalette {
     note: firm(p.note),
     cluster: firm(p.cluster),
     stroke: p.stroke + 0.75,
+    edge: p.edge + 0.6,
   };
 }
 
@@ -464,7 +472,7 @@ export function paletteFor(
 ): DiagramPalette {
   const base: DiagramPalette = style === "armonia"
     ? armonia(light, read)
-    : { ...WRITTEN[style][light], ground: WRITTEN[style][light].paper, nodeHues: NODE_HUES[style] };
+    : { ...WRITTEN[style][light], ground: WRITTEN[style][light].paper, nodeHues: NODE_HUES[style], edge: EDGE_STROKE };
   return level === "high" ? sharpened(base) : base;
 }
 
