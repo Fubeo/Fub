@@ -183,6 +183,22 @@ export const VISTE = {
     },
     app: { scena: "menu-selezione" },
   },
+  /// Le proposte dei simboli (T61): la formula in riga aperta, in fondo `+`
+  /// e `\fr`. Il prototipo al passo «La formula si tocca», che apre la terza
+  /// formula della nota; l'app dalla scena del banco.
+  "formula-simboli": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La formula si tocca");
+        await page.waitForSelector("#win .mx");
+        await page.keyboard.press("End");
+        await page.keyboard.type("+\\fr");
+        await page.waitForSelector("#win .mx-ac:not([hidden]) button.act");
+      },
+    },
+    app: { scena: "formula-04-simboli" },
+  },
   /// Le maniglie accanto a un blocco: «+» e la presa con gli occhi, col
   /// puntatore sul blocco e non sulle maniglie.
   maniglie: {
@@ -628,6 +644,37 @@ export const PEZZI = [
     prototipo: ".m-foot kbd",
     app: ".context-menu .menu-foot-keys kbd",
     proprieta: BASE,
+  },
+  // ── le proposte dei simboli della formula (T61) ───────────────────────────
+  {
+    id: "formula.proposte",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac",
+    app: ".cm-fub-mx-popover .cm-fub-mx-symbols",
+    // La larghezza è quella del riquadro (T60): il prototipo lo stringe a 380 px
+    // col `max-width` di `.pop`, l'app lo tiene a 392 come il piano.
+    proprieta: BASE,
+  },
+  {
+    id: "formula.proposta-scelta",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac button.act",
+    app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="true"]',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.proposta",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac button:not(.act)",
+    app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="false"]',
+    proprieta: ["padding", "gap", "font", "color", "background", "height"],
+  },
+  {
+    id: "formula.proposta-disegno",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac button.act .g",
+    app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="true"] .cm-fub-mx-symbol-glyph',
+    proprieta: ["width", "font", "color", ...ALLINEAMENTO],
   },
   // Le maniglie: «+» e la presa a due occhi.
   {

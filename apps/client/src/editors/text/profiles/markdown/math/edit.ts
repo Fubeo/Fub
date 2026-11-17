@@ -299,6 +299,48 @@ export function pendingName(state: MathState, from: number): string | null {
   return /^\\[a-zA-Z]*$/.test(text) ? text.slice(1) : null;
 }
 
+/// Mette un simbolo del catalogo (`symbols.ts`) al posto di `[from, caret)`,
+/// il nome scritto dopo `\` (o niente, `from` uguale al cursore), coi suoi
+/// spazi vuoti: il cursore va su `§`, o nel primo spazio vuoto, o dopo. Un
+/// esponente o un pedice (`^{}`, `^\circ`) su un pezzo che ne ha già uno
+/// entra su una base vuota, perché due di fila non si leggono; in una riga
+/// di tabella `|` diventa `\vert`, che non chiude la cella. Se la formula non
+/// si leggerebbe più, niente.
+export function insertSymbol(
+  state: MathState,
+  template: string,
+  from: number,
+  renders: (tex: string) => boolean,
+  options: TypeOptions = {},
+): Outcome {
+  if (from > state.caret) return NONE;
+  if (placeAt(mapFormula(state.tex), from).role === "text") return NONE;
+  const before = state.tex.slice(0, from);
+  const after = state.tex.slice(state.caret);
+  if (template === "^{}" || template === "_{}") {
+    // Come il tasto: su un pezzo che ne ha già uno ci si entra.
+    const outcome = typeChar({ tex: before + after, caret: from }, template[0]!, options);
+    if (outcome.kind === "edit") return renders(outcome.state.tex) ? outcome : NONE;
+    if (from === state.caret) return outcome;
+    // Il nome scritto se ne va comunque; il cursore va dove l'avrebbe messo il tasto.
+    return edit(before + after, outcome.kind === "move" ? outcome.caret : from);
+  }
+  const body = options.inTable ? template.replace(/\|/g, "\\vert ") : template;
+  const mark = body.indexOf("§");
+  const clean = body.replace("§", "");
+  const hole = clean.indexOf("{}");
+  const target = mark >= 0 ? mark : hole >= 0 ? hole + 1 : clean.length;
+  const candidates = /^[\^_]/.test(clean) ? [clean, `{}${clean}`] : [clean];
+  for (const candidate of candidates) {
+    const joined = join(before, candidate, after);
+    if (!renders(joined.tex)) continue;
+    const shift = candidate.length - clean.length;
+    const at = mark < 0 && hole < 0 ? joined.caret : before.length + joined.lead + shift + target;
+    return edit(joined.tex, at);
+  }
+  return NONE;
+}
+
 /// Finisce il comando che comincia in `from` (la sua `\`) e arriva al cursore:
 /// con gli spazi vuoti dei suoi argomenti (`\frac` diventa `\frac{}{}`, il
 /// cursore nel primo). `renders` dice se una formula si legge. Un comando che

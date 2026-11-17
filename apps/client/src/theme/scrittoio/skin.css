@@ -9357,6 +9357,58 @@ button.cm-fub-page-icon:focus-visible {
   font-style: italic;
 }
 
+/* Le proposte dei simboli (T61; il prototipo `.mx-ac`): `\` e le prime
+   lettere mostrano sotto la formula al più cinque simboli, disegnati, col
+   nome nella lingua di chi scrive; il comando non si vede. ↑ ↓ scelgono,
+   Invio, Tab o lo spazio mettono. */
+.cm-fub-mx-symbols {
+  margin: 0 8px 8px;
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px var(--border);
+  overflow: hidden;
+}
+.cm-fub-mx-symbols[hidden] {
+  display: none;
+}
+.cm-fub-mx-symbol {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 10px;
+  color: var(--text);
+  cursor: pointer;
+}
+.cm-fub-mx-symbol-glyph {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  color: var(--text);
+  font-size: 13px;
+}
+.cm-fub-mx-symbol-glyph .katex {
+  font-size: 1em;
+}
+.cm-fub-mx-symbol-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-fub-mx-symbol[aria-selected="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+/* Nel blocco le proposte stanno sotto la formula, larghe come il riquadro
+   della formula in riga. */
+.cm-fub-mx-block .cm-fub-mx-symbols {
+  width: min(392px, 100%);
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
 /* Il campo che prende i tasti: dentro la formula, invisibile, perché l'IME
    e il lettore di schermo abbiano un campo vero. */
 .cm-fub-mx-input {
@@ -9442,6 +9494,10 @@ button.cm-fub-page-icon:focus-visible {
   .cm-fub-mx:focus-within .cm-fub-mx-surface,
   .cm-fub-mx-block .cm-fub-mx-surface {
     outline: 1px solid Highlight;
+  }
+  .cm-fub-mx-symbol[aria-selected="true"] {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
   }
 }
 
