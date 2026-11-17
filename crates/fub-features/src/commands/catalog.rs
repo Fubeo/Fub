@@ -480,6 +480,19 @@ fn catalog_it() -> StringCatalog {
              {attempted} · Fermato da: {failed}",
         )
         .with(D_NOTHING_TO_UNDO, "Niente da annullare")
+        // Il rifiuto lo scrive il kernel (`fub_kernel::UNDO_STALE_ONE`/`_MANY`)
+        // quando un file è cambiato dopo l'operazione: niente è stato toccato.
+        .with(
+            "vault.undo.stale_one",
+            "Annullamento non fatto: «{doc}» è cambiato dopo l'operazione, e \
+             tornare indietro cancellerebbe quelle modifiche.",
+        )
+        .with(
+            "vault.undo.stale_many",
+            "Annullamento non fatto: questi file sono cambiati dopo \
+             l'operazione, e tornare indietro cancellerebbe quelle modifiche: \
+             {docs}.",
+        )
         .with(U_WIKILINK, "il riferimento a «{text}»")
         .with(U_WIKILINK_MANY, "i {count} riferimenti")
         .with(
@@ -942,6 +955,16 @@ fn catalog_en() -> StringCatalog {
              Stopped by: {failed}",
         )
         .with(D_NOTHING_TO_UNDO, "Nothing to undo")
+        .with(
+            "vault.undo.stale_one",
+            "Nothing was undone: “{doc}” changed after the operation, and going \
+             back would erase those changes.",
+        )
+        .with(
+            "vault.undo.stale_many",
+            "Nothing was undone: these files changed after the operation, and \
+             going back would erase those changes: {docs}.",
+        )
         .with(U_WIKILINK, "the reference to “{text}”")
         .with(U_WIKILINK_MANY, "the {count} references")
         .with(

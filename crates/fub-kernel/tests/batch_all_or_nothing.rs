@@ -23,9 +23,12 @@ use fub_abi::error::PluginError;
 use fub_abi::event::{Actor, Event, EventKind};
 use fub_abi::model::{DocId, Span};
 use fub_abi::rules::plan::{PlanFailure, UNRESTORED_DIR};
+use fub_abi::text::Text;
 use fub_abi::traits::{CommandProvider, HostApi};
 use fub_kernel::storage::{ConditionalWrite, DirEntry, Merge, Stat};
-use fub_kernel::{FormatRegistry, MachineSettings, MemStorage, VaultStorage, Workspace};
+use fub_kernel::{
+    FormatRegistry, MachineSettings, MemStorage, VaultStorage, Workspace, UNDO_STALE_ONE,
+};
 use fub_testkit::SampleText;
 
 // ---------------------------------------------------------------------------
@@ -540,14 +543,23 @@ fn batch_undo_after_a_file_changed_touches_nothing_and_says_so() {
         .unwrap();
 
     let error = bench.run("test.undo").expect_err("a file changed after");
-
-    let PluginError::Conflict(message) = &error else {
-        panic!("a changed file is a conflict: {error:?}")
-    };
-    let message = message.as_literal().unwrap_or_default().to_string();
     assert!(
-        message.contains(A),
-        "the undo names the changed file: {message}"
+        matches!(error, PluginError::Conflict(_)),
+        "a changed file is a conflict: {error:?}"
+    );
+
+    // Il perché, prima che il catalogo di chi annulla lo traduca: una chiave
+    // (la frase sta accanto a `vault.undo`), col file come argomento.
+    let replay = bench.ws.prepare_undo_replay().expect("the entry is back");
+    let deferred = bench.ws.finish_undo_replay_deferred(replay);
+    let Err(PluginError::Conflict(Text::Message(message))) = bench.ws.finish_undo_replay(deferred)
+    else {
+        panic!("the refusal is a catalog sentence, not a literal")
+    };
+    assert_eq!(message.key, UNDO_STALE_ONE);
+    assert!(
+        format!("{:?}", message.arg("doc")).contains(A),
+        "the undo names the changed file: {message:?}"
     );
     assert_eq!(
         bench.text(B).as_deref(),

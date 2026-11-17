@@ -90,7 +90,7 @@ use fub_abi::session::ViewContext;
 use fub_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
-use fub_abi::text::{Localize, Strings, Text};
+use fub_abi::text::{Arg, Localize, Strings, Text};
 use fub_abi::traits::{
     BacklinkRef, CivilTime, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler,
     HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress,
@@ -2432,6 +2432,13 @@ impl PreparedMaintenanceRebuild {
         self.mode
     }
 }
+
+/// La chiave del rifiuto di un annullamento quando **un** file è cambiato
+/// dopo l'operazione (argomento `doc`). Il testo sta nel catalogo dei comandi
+/// del core, accanto a `vault.undo`.
+pub const UNDO_STALE_ONE: &str = "vault.undo.stale_one";
+/// Come [`UNDO_STALE_ONE`], per più file (argomento `docs`, separati da virgole).
+pub const UNDO_STALE_MANY: &str = "vault.undo.stale_many";
 
 /// Stato owned di un annullamento fra un passo e il successivo.
 ///
@@ -12376,23 +12383,23 @@ impl Workspace {
             }
         }
         let first = stale.first()?.clone();
-        let names = stale
-            .iter()
-            .map(|doc| format!("«{doc}»"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let verb = if stale.len() == 1 {
-            "è cambiato"
-        } else {
-            "sono cambiati"
-        };
-        Some(Failure::of(
-            first,
-            PluginError::Conflict(
-                format!("l'annullamento non ha toccato niente: {names} {verb} dopo l'operazione")
-                    .into(),
+        // La frase è una chiave del catalogo di chi annulla: la scrive
+        // `vault.undo` (fub-features), che è il comando da cui passa l'utente.
+        // Due chiavi e non una, perché il catalogo non sceglie il plurale.
+        let text = match stale.as_slice() {
+            [one] => Text::message(UNDO_STALE_ONE, vec![Arg::text("doc", one.as_str())]),
+            many => Text::message(
+                UNDO_STALE_MANY,
+                vec![Arg::text(
+                    "docs",
+                    many.iter()
+                        .map(DocId::as_str)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                )],
             ),
-        ))
+        };
+        Some(Failure::of(first, PluginError::Conflict(text)))
     }
 
     /// Chiude il batch senza chiamare handler. Replay resta attivo nel token:
