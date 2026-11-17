@@ -14,6 +14,7 @@ import { promptText } from "../ui/dialogs";
 import { openCompare } from "../ui/compare";
 import { pageIcon } from "../state/page-icons";
 import { readPageMark } from "../ui/page-mark";
+import { primaryClicksOnly } from "../ui/primary-clicks";
 import { modeIcon, openModeMenu } from "../state/mode-menu";
 import type { SurfaceMode } from "../editors/core/registry";
 import { FORMAT_ICON, formatKindOf, formatNameOf } from "../ui/format-kind";
@@ -362,14 +363,27 @@ function focusedTab(): { pane: string; index: number } | null {
 /// e si riappendono, i contenitori delle divisioni si rifanno.
 function layoutTree(tree: LayoutNode): void {
   const onboarding = document.getElementById("onboarding");
-  panesEl.replaceChildren(node(tree));
+  // I divisori si rifanno a ogni cambio dell'albero, anche quando cambiano solo
+  // le proporzioni: quello mosso con le frecce perdeva il fuoco alla prima, e
+  // la seconda non lo spostava più (IMP-016). Il fuoco passa al divisore nuovo
+  // nello stesso posto dell'albero.
+  const focused = document.activeElement;
+  const divider = focused instanceof HTMLElement && focused.matches(".pane-divider") && panesEl.contains(focused)
+    ? focused.dataset.divider
+    : undefined;
+  panesEl.replaceChildren(node(tree, "0"));
+  if (divider !== undefined) {
+    panesEl.querySelector<HTMLElement>(`.pane-divider[data-divider="${CSS.escape(divider)}"]`)?.focus({ preventScroll: true });
+  }
   // La schermata senza vault vive nell'HTML statico dentro #panes: il layout
   // la spazzerebbe via a ogni synchronize, quindi la si rimette in fondo —
   // `hidden` resta padrone della visibilità (A01, syncOnboarding in shell).
   if (onboarding) panesEl.append(onboarding);
 }
 
-function node(n: LayoutNode): HTMLElement {
+/// `path` è il posto del nodo nell'albero (gli indici dei figli dalla radice):
+/// nomina i divisori fra un disegno e l'altro.
+function node(n: LayoutNode, path: string): HTMLElement {
   if (n.k === "leaf") {
     // Un riquadro riusato può venire da una divisione: fuori da lì la sua
     // frazione non vale più, e un `flex-grow` rimasto lo stringerebbe.
@@ -379,11 +393,15 @@ function node(n: LayoutNode): HTMLElement {
   }
   const el = document.createElement("div");
   el.className = `pane-split ${n.dir}`;
-  const items = n.children.map(node);
+  const items = n.children.map((child, index) => node(child, `${path}.${index}`));
   const sizes = n.sizes ?? items.map(() => 1 / items.length);
   items.forEach((item, index) => {
     item.style.flexGrow = String(sizes[index]);
-    if (index > 0) el.append(splitDivider(n, index, el, items));
+    if (index > 0) {
+      const handle = splitDivider(n, index, el, items);
+      handle.dataset.divider = `${path}:${index}`;
+      el.append(handle);
+    }
     el.append(item);
   });
   return el;
@@ -493,6 +511,13 @@ function createPane(id: string): PaneElements {
     })));
   });
   tabsShell.append(tabMenuEl);
+  // Il tasto centrale chiude la scheda sotto il puntatore, sulla linguetta come
+  // sulla ×, come nei browser; non la attiva mai (IMP-012). La striscia resta
+  // la stessa per tutta la vita del riquadro: si ascolta una volta.
+  primaryClicksOnly(tabsShell, {
+    onMiddle: (target) => target.closest(".tab-entry")?.querySelector<HTMLElement>(".tab-close")?.click(),
+  });
+  sameControlForClickRuns(tabsShell);
 
   const contentEl = document.createElement("div");
   contentEl.setAttribute("role", "tabpanel");
@@ -613,6 +638,33 @@ function createPane(id: string): PaneElements {
   };
   frames.set(id, r);
   return { root, editorEl, viewEl };
+}
+
+/// Il secondo clic di un doppio clic vale solo sul controllo del primo (IMP-013).
+///
+/// Chiusa una scheda con la ×, la vicina (o il «+») scorre sotto il puntatore
+/// prima del secondo clic: il doppio clic sulla × attivava la vicina, o creava
+/// una nota. Un clic che continua una serie (`detail` > 1) e cade su un
+/// controllo diverso da quello della prima pressione non arriva a nessuno, e
+/// nemmeno il suo `dblclick`. Il vuoto della striscia è un controllo anche lui:
+/// il doppio clic lì crea una nota (`tab-strip.ts`), ma solo se ci comincia.
+function sameControlForClickRuns(strip: HTMLElement): void {
+  const controlOf = (target: EventTarget | null): Element =>
+    (target instanceof Element ? target.closest(".tab, .tab-close, .tab-new, [data-tab-menu]") : null) ?? strip;
+  let first: Element = strip;
+  strip.addEventListener("mousedown", (event) => {
+    if (event.detail <= 1) first = controlOf(event.target);
+    // La seconda pressione su un altro controllo non sceglie nemmeno la
+    // parola che le capita sotto.
+    else if (controlOf(event.target) !== first) event.preventDefault();
+  }, { capture: true });
+  const guard = (event: MouseEvent): void => {
+    if (event.detail <= 1 || controlOf(event.target) === first) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  strip.addEventListener("click", guard, { capture: true });
+  strip.addEventListener("dblclick", guard, { capture: true });
 }
 
 function panePanelId(id: string): string {
@@ -790,16 +842,6 @@ function buildTab(r: PaneFrame, target: Tab, index: number): HTMLElement {
   close.addEventListener("click", (event) => {
     event.stopPropagation();
     event.preventDefault();
-    remove();
-  });
-  // Il clic centrale chiude la tab, come nei browser.
-  tab.addEventListener("mousedown", (event) => {
-    if (event.button === 1) event.preventDefault();
-  });
-  tab.addEventListener("auxclick", (event) => {
-    if (event.button !== 1) return;
-    event.preventDefault();
-    event.stopPropagation();
     remove();
   });
   // Invio/Spazio sul Chiudi non devono anche attivare la tab: l'attivazione

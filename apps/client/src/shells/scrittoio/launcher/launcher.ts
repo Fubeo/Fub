@@ -28,7 +28,7 @@ import { scopeLabel } from "../../../ui/palette";
 import { highlighted, markedTerms } from "../../../ui/highlight";
 import { FORMAT_ICON, formatKindOf } from "../../../ui/format-kind";
 import { iconEl } from "../../../ui/icons";
-import { registerMenuSearch } from "../../../ui/menu";
+import { closeContextMenu, registerMenuSearch } from "../../../ui/menu";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { notify } from "../../../ui/notify";
 import { markdownHint } from "../../../panels/slash/entries";
@@ -295,6 +295,11 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
   let switchOpen: ((mode: Mode, text?: string) => void) | null = null;
 
   const build = (first: Mode, text: string | undefined): void => {
+    // Un menu aperto (l'elenco delle schede, un contestuale) è del gesto di
+    // prima: il lanciatore non gli si apre sopra, e il suo primo Esc non lo
+    // lascia lì sotto col fuoco (IMP-015). Chiuso, il menu rende il fuoco a chi
+    // lo aveva aperto, ed è lì che il lanciatore lo riporta.
+    closeContextMenu();
     const origin = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
       ? document.activeElement
       : null;

@@ -5402,12 +5402,21 @@ kbd,
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
-/* Dove la striscia continua sotto l'elenco, le linguette ci arrivano sfumando;
-   a destra l'elenco copre anche il margine della striscia, dove altrimenti
-   spunterebbe un pezzo del «+». */
+/* Dove la striscia continua sotto il «+» e l'elenco, le linguette ci arrivano
+   sfumando: la sfumatura è del «+», che sta a sinistra e copre anche il
+   passo fino all'elenco; l'elenco copre a destra il margine della striscia. */
+.pane-tabs[data-scrolled="end"] > .tab-new,
+.pane-tabs[data-scrolled="both"] > .tab-new {
+  background: var(--bg);
+  box-shadow: calc(-1 * var(--space-4)) 0 var(--space-4) var(--bg), var(--space-2) 0 0 var(--bg);
+}
+.pane-tabs[data-scrolled="end"] > .tab-new:hover,
+.pane-tabs[data-scrolled="both"] > .tab-new:hover {
+  background: var(--bg-hover);
+}
 .pane-tabs[data-scrolled="end"] > [data-tab-menu],
 .pane-tabs[data-scrolled="both"] > [data-tab-menu] {
-  box-shadow: calc(-1 * var(--space-4)) 0 var(--space-4) var(--bg), var(--space-2) 0 0 var(--bg);
+  box-shadow: var(--space-2) 0 0 var(--bg);
 }
 
 /* ── La testata: solo il percorso, «Salvato» e «…» ──────────────────────── */
@@ -7668,6 +7677,13 @@ button.cm-fub-page-icon:focus-visible {
   color: var(--doc-gutter-fg);
   font: inherit;
   cursor: pointer;
+}
+/* L'orologio davanti al testo di «Aggiungi l'ora»: 14 px, 4 px dal testo,
+   sulla linea di base come nel prototipo. */
+.cm-fub-prop-date-action > svg {
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-2);
 }
 .cm-fub-prop-date-nav:hover,
 .cm-fub-prop-date-day:not([data-selected]):hover,

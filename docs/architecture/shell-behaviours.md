@@ -103,8 +103,17 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   `platformSupports("multipleWindows")` e dove il motore consegna `dragend`
   fuori finestra. Ogni gesto ha il suo comando nel menu della linguetta.
   Una linguetta non scende sotto `--tab-min` (132 px, una decina di lettere
-  oltre figura e chiusura): quelle che non ci stanno scorrono, e l'elenco in
-  fondo alla striscia le nomina tutte. Un nome troppo lungo si taglia alla
+  oltre figura e chiusura): quelle che non ci stanno scorrono sotto il «+»,
+  che si ferma accanto all'elenco e resta sempre a vista, e l'elenco in
+  fondo alla striscia le nomina tutte. Il tasto centrale chiude la scheda,
+  sulla linguetta come sulla ×, e non la attiva; gli altri tasti che non sono
+  il sinistro non fanno niente (`ui/primary-clicks.ts`, lo stesso aiuto
+  dell'albero: WebKitGTK manda un `click` anche dopo il centrale). Il secondo
+  clic di un doppio clic vale solo sul controllo del primo: la vicina che
+  scorre sotto la × appena premuta non si attiva, e il «+» non crea una nota.
+  Chiudere un riquadro chiude le sue schede, e Ctrl+Maiusc+T le riapre nel
+  riquadro col fuoco, prima quella che si guardava; il testo non salvato va
+  sul disco prima che la sessione si chiuda, o si chiede. Un nome troppo lungo si taglia alla
   fine; se due nomi della striscia cominciano uguali (le note del diario,
   due omonime con la cartella in coda) la vista lo divide in testa e coda
   (`panels/tab-names.ts`) e a cedere con l'ellissi è la testa, così resta a
@@ -116,6 +125,16 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   ridotto il passo è uno scatto unico (`shells/scrittoio/sheets/tab-strip.ts`).
   Le prime schede di un foglio nuovo arrivano col foglio, e lì non scorre
   niente.
+- **Fuoco dopo un ridisegno.** Se un giro di disegno dei riquadri toglie o
+  riappende ciò che aveva il fuoco (la superficie della scheda chiusa con la
+  ×, l'editor che una divisione sposta), il fuoco torna nel riquadro col
+  fuoco: all'elemento di prima se è ancora lì, altrimenti all'editor, alla
+  linguetta attiva o al riquadro vuoto (`keepFocusInPanes` in
+  `state/document-controller.ts`). Un fuoco andato altrove intanto non si
+  tocca. Il divisore fra riquadri mosso con le frecce si rifà a ogni passo e
+  il fuoco passa a quello nuovo nello stesso posto (`layoutTree`). Il
+  lanciatore, aprendosi, chiude il menu aperto sotto: un Esc lo chiude, e il
+  fuoco torna a chi aveva aperto il menu.
 - **Fuoco dopo un'apertura.** Quando `openDocument` finisce, il fuoco va
   all'editor del documento aperto, ma solo se nel frattempo nessuno l'ha
   portato altrove: se sta ancora dov'era al gesto, da nessuna parte o in un

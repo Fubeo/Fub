@@ -992,6 +992,21 @@ export const PEZZI = [
     app: '.cm-fub-mx-popover .cm-fub-mx-segment[aria-pressed="false"]',
     proprieta: ["height", "padding", "border-radius", "font", "color", "background"],
   },
+  // ── il posto della formula nei tre puntini (T65) ─────────────────────────
+  {
+    id: "formula.posto",
+    vista: "formula-latex-opzioni",
+    prototipo: ".mx .mx-opts > div:last-child",
+    app: ".cm-fub-mx-popover .cm-fub-mx-option:last-child",
+    proprieta: ["font", "color", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.posto-scelto",
+    vista: "formula-latex-opzioni",
+    prototipo: '.mx .mx-opts [data-disp="0"]',
+    app: '.cm-fub-mx-popover [data-place="inline"]',
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background", "box-shadow"],
+  },
   // ── gli errori in chiaro (T64) ────────────────────────────────────────────
   {
     id: "formula.errore",

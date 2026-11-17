@@ -13,6 +13,9 @@
 // prima: il riquadro col TeX e l'anteprima, il blocco `$$` che torna sorgente
 // con la resa sotto. Con `elemento` la sorgente si vede col cursore dentro e
 // l'anteprima sta in un riquadro sopra la riga, senza prendere il fuoco.
+//
+// «Posto» nei tre puntini e il tasto destro (T65) passano una formula da riga
+// a blocco e indietro (`math/place.ts`), e la riaprono nel posto nuovo.
 import { syntaxTree } from "@codemirror/language";
 import { Annotation, type ChangeDesc, type EditorState, type Extension, Facet, Prec } from "@codemirror/state";
 import { EditorView, keymap, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
@@ -25,6 +28,9 @@ import { liveReveal, MATH_HELP_SETTING, MATH_SOURCE_SETTING, mathClassic, mathHe
 import { lazyPart } from "../../../../ui/lazy-part";
 import { mountMathBlocks } from "./math";
 import type { LeaveReason, MathEditor, MathEditorOptions, MathPreferences, MathStart } from "./math/editor";
+import { unwrapFormula } from "./math/paste";
+import { toBlock, toInline } from "./math/place";
+import { formulaAt } from "./menu";
 import { liveStrings } from "./strings";
 
 /// Il riquadro che modifica una formula, con la tavolozza: arriva con un
@@ -180,6 +186,15 @@ function editSource(view: EditorView, formula: LiveFormula, anchor: Element, own
   });
   field.input.classList.add("cm-fub-math-field");
   field.input.spellcheck = false;
+  // Una formula incollata coi suoi delimitatori entra senza (T65).
+  life.listen(field.input, "paste", (event) => {
+    const unwrapped = unwrapFormula(event.clipboardData?.getData("text/plain") ?? "");
+    if (!unwrapped || field.input.readOnly) return;
+    event.preventDefault();
+    const input = field.input;
+    input.setRangeText(unwrapped.tex, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, "end");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
   if (view.state.readOnly) field.input.readOnly = true;
   shown.show(formula.tex);
   content.append(field.element, shown.element);
@@ -268,6 +283,7 @@ function editInline(parts: MathEditing, view: EditorView, plugin: MathPlugin, fo
     start,
     inTable: inTableRow(view.state, formula.from),
     ...plugin.editorOptions(),
+    ...(formulaAt(view.state, formula.from)?.plain ? { onPlace: () => void plugin.place(from, true) } : {}),
     onChange: write,
     onLeave: leave,
     lifetime: life,
@@ -371,6 +387,7 @@ export class MathBlockEditWidget extends WidgetType {
     // messa da fuori, a nota ferma, non lo ruba.
     const start = plugin.takeEntry(this.from);
     const focus = view.hasFocus || plugin.entryFocus;
+    const placeable = formulaAt(view.state, this.from)?.plain === true;
     plugin.entryFocus = false;
     const mount = (parts: MathEditing, tex: string): void => {
       const editor = new parts.MathEditor({
@@ -378,6 +395,7 @@ export class MathBlockEditWidget extends WidgetType {
         display: true,
         start,
         ...plugin.editorOptions(),
+        ...(placeable ? { onPlace: () => void (root.isConnected && plugin.place(view.posAtDOM(root), false)) } : {}),
         onChange: (next) => plugin.writeBlock(root, next),
         onLeave: (reason) => plugin.leaveBlock(root, reason),
         lifetime: life,
@@ -612,10 +630,83 @@ class MathPlugin {
     view.focus();
   }
 
+  /// «Posto»: la formula in `at` passa da riga a blocco o indietro, con un
+  /// passo d'annullamento, e si riapre nel posto nuovo.
+  place(at: number, display: boolean): boolean {
+    const view = this.view;
+    if (view.state.readOnly || this.life.closed) return false;
+    const formula = formulaAt(view.state, at);
+    if (!formula) return false;
+    const change = display ? toBlock(view.state, formula) : toInline(formula);
+    if (!change) return false;
+    this.editing?.close();
+    this.editing = null;
+    this.inline = null;
+    if (display) {
+      // Il blocco si apre toccandolo: il cursore va al suo inizio, e la
+      // formula prende il fuoco.
+      this.entryFocus = true;
+      this.click = null;
+      view.dispatch({ changes: change.changes, selection: { anchor: change.at }, scrollIntoView: true, userEvent: "input" });
+      return true;
+    }
+    const end = change.at + change.changes.insert.length;
+    view.dispatch({ changes: change.changes, selection: { anchor: end }, scrollIntoView: true, userEvent: "input" });
+    view.focus();
+    queueMicrotask(() => {
+      if (this.life.closed) return;
+      const formula = this.view.state.facet(formulaLookup)?.(this.view, change.at, 1);
+      if (formula && formula.from === change.at) this.open(formula, null, "end");
+    });
+    return true;
+  }
+
   destroy(): void { this.life.close(); }
 }
 
 const mathPlugin = ViewPlugin.fromClass(MathPlugin);
+
+/// «Modifica» dal tasto destro: la formula in `pos` si apre come se la si
+/// toccasse. Dove non si tocca (Sorgente, le altre rivelazioni) il suo TeX si
+/// sceglie nella nota.
+export function editFormulaAt(view: EditorView, pos: number): boolean {
+  const formula = formulaAt(view.state, pos);
+  if (!formula) return false;
+  const plugin = view.plugin(mathPlugin);
+  if (plugin && formula.block && mathTouchable(view.state) && blockTexRange(view.state, formula.container.from)) {
+    plugin.entryFocus = true;
+    view.dispatch({ selection: { anchor: formula.container.from }, scrollIntoView: true, userEvent: "select" });
+    return true;
+  }
+  if (plugin && !formula.block && view.state.facet(liveReveal) === "mai") {
+    const live = view.state.facet(formulaLookup)?.(view, formula.from, 1);
+    if (live && live.from === formula.from) {
+      plugin.open(live, null, "end");
+      return true;
+    }
+  }
+  view.dispatch({
+    selection: { anchor: formula.from + formula.dollars, head: formula.to - formula.dollars },
+    scrollIntoView: true,
+    userEvent: "select",
+  });
+  view.focus();
+  return true;
+}
+
+/// «Da riga a blocco» e «Da blocco a riga» dal tasto destro. Nella Live la
+/// formula si riapre nel posto nuovo; in Sorgente cambia soltanto il testo.
+export function placeFormulaAt(view: EditorView, pos: number, display: boolean): boolean {
+  const plugin = view.plugin(mathPlugin);
+  if (plugin && view.state.facet(liveReveal) === "mai") return plugin.place(pos, display);
+  if (view.state.readOnly) return false;
+  const formula = formulaAt(view.state, pos);
+  const change = formula ? (display ? toBlock(view.state, formula) : toInline(formula)) : null;
+  if (!change) return false;
+  view.dispatch({ changes: change.changes, selection: { anchor: change.at }, scrollIntoView: true, userEvent: "input" });
+  view.focus();
+  return true;
+}
 
 /// Il clic su una formula. Prima degli altri gestori della Live: il clic su un
 /// blocco reso altrimenti lo sceglie, e il cursore della formula non saprebbe

@@ -96,6 +96,7 @@ import { pendingGuide } from "./pending";
 import { liveHints } from "./hints";
 import { choosingBlocks, DiagramLiveWidget, diagramBlockKeys, diagramSourceLines, fenceBody } from "./diagram-live";
 import { dayPage, type DayPageSource } from "./day-page";
+import { typePage, type TypePageSource } from "./type-page";
 import { calloutGestures, CalloutTypeWidget } from "./callout";
 import { detailsLive } from "./details-live";
 import { blockGesture } from "./block-gesture";
@@ -163,6 +164,9 @@ export interface LivePreviewCallbacks {
   /// La giornaliera aperta, per la pagina del giorno dopo l'ultima riga
   /// (E17, `./day-page`). Assente, o `null`, la pagina non c'è.
   readonly dayPage?: DayPageSource;
+  /// La nota del tipo aperta, per la pagina del tipo dopo l'ultima riga (E5,
+  /// `./type-page`). Assente, o `null`, la pagina non c'è.
+  readonly typePage?: TypePageSource;
 }
 
 /// Il paragrafo che è soltanto un collegamento, e quindi una scheda: un
@@ -3218,5 +3222,6 @@ export function livePreview(
     noteHolds,
     diagramBlockKeys,
     callbacks.dayPage ? dayPage(callbacks.dayPage) : [],
+    callbacks.typePage ? typePage(callbacks.typePage) : [],
   ];
 }

@@ -20,10 +20,11 @@ export const HOLE_ATTRIBUTE = "data-fubhole";
 export const PENDING_ATTRIBUTE = "data-fubcmd";
 
 /// Le regole di KaTeX del riquadro di modifica: quelle della lettura, con la
-/// fiducia ai soli segni del cursore.
-export function editOptions(display: boolean): KatexOptions {
+/// fiducia ai soli segni del cursore. `tex` è la formula, per le macro che
+/// dichiara da sé (`readOptions`).
+export function editOptions(display: boolean, tex?: string): KatexOptions {
   return {
-    ...readOptions(display),
+    ...readOptions(display, tex),
     strict: (code: string) => (code === "htmlExtension" ? "ignore" : "error"),
     trust: (context) => context.command === "\\htmlData"
       && Object.keys(context.attributes).every((name) => name.startsWith("data-fub")),

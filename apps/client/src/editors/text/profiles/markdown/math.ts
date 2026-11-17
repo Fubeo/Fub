@@ -12,14 +12,55 @@ import { attachTooltip, setTooltip } from "../../../../ui/tooltip";
 const mathErrors = lazyPart(() => import("./math-errors"));
 
 const MAX_SOURCE_LENGTH = 20_000;
+/// Quanto la prima formula aspetta le macro del vault prima di disegnarsi
+/// senza: arrivate dopo, le formule si ridisegnano.
+const MACROS_WAIT = 400;
 let library: Promise<{ default: typeof katex }> | undefined;
 let styles: Promise<unknown> | undefined;
+let macros: Promise<void> | undefined;
+
+/// Le macro di KaTeX, per nome (`\\R`): le definizioni come KaTeX le legge.
+export type MathMacros = Readonly<NonNullable<KatexOptions["macros"]>>;
+
+/// La premessa di ogni formula: le macro del vault (`math/macros.ts`, T65).
+let preamble: MathMacros | null = null;
+const preambleListeners = new Set<() => void>();
+
+/// Le macro del vault cambiano: le formule già disegnate si rifanno.
+export function setPreamble(next: MathMacros): void {
+  const empty = Object.keys(next).length === 0;
+  if (empty && preamble === null) return;
+  preamble = empty ? null : next;
+  for (const listener of [...preambleListeners]) listener();
+}
+
+/// Ascolta i cambi della premessa; restituisce lo smontaggio.
+export function onPreamble(listener: () => void): Teardown {
+  preambleListeners.add(listener);
+  return () => preambleListeners.delete(listener);
+}
+
+const DEFINES = /\\(?:(?:re|provide)?newcommand\*?\s*\{?\s*|[gex]?def\s*|let\s*)(\\[A-Za-z]+|\\.)/g;
+
+/// Le macro per una formula: una copia della premessa, perché un `\\gdef`
+/// della formula non la cambi per le altre, senza i nomi che la formula
+/// stessa dichiara (KaTeX rifiuta un `\\newcommand` di un nome che c'è già).
+function macrosFor(tex: string | undefined): NonNullable<KatexOptions["macros"]> | null {
+  if (preamble === null) return null;
+  const copy: NonNullable<KatexOptions["macros"]> = { ...preamble };
+  if (tex !== undefined && /\\(?:newcommand|renewcommand|providecommand|[gex]?def|let)/.test(tex)) {
+    for (const match of tex.matchAll(DEFINES)) delete copy[match[1]!];
+  }
+  return copy;
+}
 
 /// Le regole di KaTeX della resa di lettura: severo, senza fiducia (niente
-/// `\\htmlData` né collegamenti), con i limiti di espansione e di misura. Il
-/// riquadro di modifica (`math/caret.ts`) parte da qui e fida soltanto i suoi
-/// segni.
-export function readOptions(display: boolean): KatexOptions {
+/// `\\htmlData` né collegamenti), con i limiti di espansione e di misura, e
+/// le macro del vault come premessa. Il riquadro di modifica
+/// (`math/caret.ts`) parte da qui e fida soltanto i suoi segni. `tex`, se
+/// c'è, è la formula: i nomi che dichiara da sé restano suoi.
+export function readOptions(display: boolean, tex?: string): KatexOptions {
+  const macros = macrosFor(tex);
   return {
     displayMode: display,
     output: "htmlAndMathml",
@@ -28,10 +69,13 @@ export function readOptions(display: boolean): KatexOptions {
     trust: false,
     maxExpand: 1_000,
     maxSize: 20,
+    ...(macros ? { macros } : {}),
   };
 }
 
 /// KaTeX e il suo foglio di stile, caricati una volta, alla prima formula.
+/// Con KaTeX arrivano le macro del vault: la prima formula le aspetta un
+/// poco, poi si disegna lo stesso.
 export function loadKatex(): Promise<typeof katex> {
   return Promise.all([
     library ??= import("katex").catch((error) => {
@@ -42,7 +86,16 @@ export function loadKatex(): Promise<typeof katex> {
       styles = undefined;
       throw error;
     }),
-  ]).then(([module]) => module.default);
+  ]).then(([module]) => {
+    const loaded = module.default;
+    macros ??= import("./math/macros").then((vault) => vault.watchVaultMacros(loaded)).catch(() => undefined);
+    let wait: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([macros, new Promise<void>((resolve) => { wait = setTimeout(resolve, MACROS_WAIT); })])
+      .then(() => {
+        clearTimeout(wait);
+        return loaded;
+      });
+  });
 }
 
 /** Hydrates inert TeX placeholders with KaTeX. The library and its stylesheet
@@ -85,10 +138,11 @@ export function mountMathBlocks(container: HTMLElement): Teardown {
       fail(() => t("math.too_large", { limit: MAX_SOURCE_LENGTH }));
       continue;
     }
-    void loadKatex().then((library) => {
+    const render = () => void loadKatex().then((library) => {
       if (life.closed) return;
-      const staging = document.createElement(element.classList.contains("math-block") ? "div" : "span");
-      library.render(source, staging, readOptions(element.classList.contains("math-block")));
+      const display = element.classList.contains("math-block");
+      const staging = document.createElement(display ? "div" : "span");
+      library.render(source, staging, readOptions(display, source));
       if (life.closed) return;
       element.replaceChildren(...staging.childNodes);
       phase = "ready";
@@ -100,6 +154,9 @@ export function mountMathBlocks(container: HTMLElement): Teardown {
       const diagnosis = diagnose(error, source);
       fail(() => problemSentence(explain(diagnosis)));
     }, (missing: unknown) => fail(() => t("app.part_failed", { reason: errorText(missing) }))));
+    render();
+    // Le macro del vault sono cambiate: la formula si rifà con le nuove.
+    life.add(onPreamble(render));
   }
   return () => life.close();
 }

@@ -2367,6 +2367,7 @@ async function render(): Promise<void> {
   // La mappa dei componenti si legge insieme al resto, non in coda: un file
   // di un componente la aspetta (`show`), una nota no.
   if (openVaultRoot() !== undefined) void componentsReady().catch((error: unknown) => console.error(error));
+  const held = focusInPanes();
   buildStructure();
   const active = activeDoc();
   let failure: { error: unknown } | null = null;
@@ -2391,11 +2392,50 @@ async function render(): Promise<void> {
   }
   view.drawSave();
   linkScrolls();
+  keepFocusInPanes(held);
   if (state.currentDoc !== active) {
     state.currentDoc = active;
     emit("active-doc", active);
   }
   if (failure) throw failure.error;
+}
+
+/// L'elemento col fuoco, se sta dentro un riquadro.
+function focusInPanes(): HTMLElement | null {
+  const focused = document.activeElement;
+  if (!(focused instanceof HTMLElement)) return null;
+  for (const r of panes.values()) if (r.root.contains(focused)) return focused;
+  return null;
+}
+
+/// Un giro di disegno non lascia il fuoco sul `body` (IMP-011, Ctrl+\).
+///
+/// Il giro toglie o sposta ciò che aveva il fuoco: la superficie della scheda
+/// chiusa con la ×, l'editor che una divisione riappende in un contenitore
+/// nuovo (staccare un nodo dal documento gli toglie il fuoco anche se torna
+/// subito). Se il fuoco era in un riquadro e il giro lo ha fatto cadere, torna
+/// nel riquadro col fuoco: all'elemento di prima se è ancora lì e si vede,
+/// altrimenti all'editor (alla linguetta attiva in Lettura e nelle viste, al
+/// riquadro se è vuoto). Un fuoco che intanto è andato altrove (il lanciatore,
+/// un dialogo, l'albero) non si tocca. Il divisore mosso con le frecce lo
+/// tiene la vista (`layoutTree`).
+function keepFocusInPanes(held: HTMLElement | null): void {
+  if (!held) return;
+  const now = document.activeElement;
+  if (now instanceof HTMLElement && now !== document.body && now.isConnected && !now.closest("[hidden]")) return;
+  const r = panes.get(layout.focus);
+  if (!r) return;
+  if (held.isConnected && r.root.contains(held) && !held.closest("[hidden]")) {
+    held.focus({ preventScroll: true });
+    return;
+  }
+  if (r.surface?.focus && selectedMode(r)?.presentation !== "rendered") {
+    r.surface.focus();
+    if (r.root.contains(document.activeElement)) return;
+  }
+  const active = paneState(r.id)?.active ?? -1;
+  if (active >= 0) view.focusTab(r, active);
+  else r.root.focus({ preventScroll: true });
 }
 
 /// Ricostruisce l'albero di contenitori, ma **solo se è cambiato**.

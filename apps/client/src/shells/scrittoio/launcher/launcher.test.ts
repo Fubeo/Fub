@@ -329,6 +329,24 @@ describe("i comandi che lo aprono", () => {
     expect(common.palette).not.toHaveBeenCalled();
   });
 
+  it("apre chiudendo il menu aperto, e il primo Esc rende il fuoco a chi aveva aperto il menu (IMP-015)", () => {
+    const trigger = document.createElement("button");
+    document.body.append(trigger);
+    trigger.focus();
+    const chosen = vi.fn();
+    showContextMenu(trigger, [{ label: "Nota B", run: chosen }]);
+    const inMenu = (): boolean => document.querySelector("#context-menu")?.contains(document.activeElement) ?? false;
+    expect(inMenu()).toBe(true);
+    run("shell.switcher");
+    expect(surface()).not.toBeNull();
+    expect(inMenu()).toBe(false);
+    document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(launcher.isOpen).toBe(false);
+    expect(document.activeElement).toBe(trigger);
+    expect(chosen).not.toHaveBeenCalled();
+    trigger.remove();
+  });
+
   it("dai menu contestuali «Cerca fra tutti i comandi» apre i comandi con ciò che si è scritto, e smontato non risponde più", () => {
     showContextMenu(new MouseEvent("contextmenu", { clientX: 10, clientY: 10 }), [{ label: "Apri", run: () => {} }], { pointer: false });
     for (const ch of "zz") document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true, cancelable: true }));

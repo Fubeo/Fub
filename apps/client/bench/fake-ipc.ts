@@ -438,6 +438,9 @@ const TRASH_FULL = params.get("cestino") === "3";
 /// La pagina del giorno (T39): `?giorno=1` dichiara la view `day_page` e la
 /// cartella delle giornaliere del componente dei template (`daily.folder`).
 const DAY_PAGE = params.get("giorno") === "1";
+/// La pagina del tipo (T33): `?live=tipo-pagina` dichiara la view
+/// `note_type_page` del componente delle proprietà.
+const TYPE_PAGE = params.get("live") === "tipo-pagina";
 
 /// Il cestino pieno nella forma del provider `trash` (fub-features,
 /// `trash.rs`): una colonna con l'elenco, ogni voce una riga col nome, quando
@@ -642,6 +645,8 @@ const VIEWS: ViewSpec[] = [
   // La pagina del giorno (T39), con la cartella del diario del componente
   // dei template: solo nelle sue scene, perché le altre non cambino.
   ...(DAY_PAGE ? [view("day_page", "La pagina del giorno", "main", "calendar", 1)] : []),
+  // La pagina del tipo (T33): solo nella sua scena.
+  ...(TYPE_PAGE ? [view("note_type_page", "Le note del tipo", "main", "template", 1)] : []),
 ];
 
 /// Un `CommandSpec` di lettura, che è la forma della gran parte.
@@ -1942,6 +1947,23 @@ const TREES: Record<string, UiNode> = {
       ],
     },
     fallback: [{ node: "text", content: "Il grafo, per chi non sa disegnarlo." }],
+  },
+  // La pagina del tipo (T33) in fondo a `Tipi/Libro.md`: la forma è quella
+  // di `fub_features::properties` (`note_type_page`), un gruppo col conto e
+  // le proprietà in evidenza del tipo. Solo nella scena `?live=tipo-pagina`.
+  note_type_page: {
+    node: "stack",
+    dir: "column",
+    gap: 0,
+    children: [{
+      node: "section", title: "Note di tipo Libro · 2", collapsed: false, key: "type-notes", children: [{
+        node: "list",
+        items: [
+          { node: "list_item", title: "Dune", subtitle: "Frank Herbert", action: { action: "note_type.page.open", payload: { doc: "Biblioteca/Dune.md" } }, selected: false, key: "Biblioteca/Dune.md" },
+          { node: "list_item", title: "Live", subtitle: "Frank Herbert · letto", action: { action: "note_type.page.open", payload: { doc: "Guida/Live.md" } }, selected: false, key: "Guida/Live.md" },
+        ],
+      }],
+    }],
   },
   // La pagina del giorno (T39) in fondo a `Diario/2026-08-19.md`: la forma è
   // quella di `fub_features::template` (`day_page`), i tre gruppi col conto.

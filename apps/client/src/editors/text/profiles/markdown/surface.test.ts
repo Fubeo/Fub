@@ -6,6 +6,7 @@ import { createTextEngine } from "../../engine";
 import { createMarkdownProfile } from "./profile";
 import { cursorIsLiteral, mountMarkdownSurface, type EditorSlashHost, type MarkdownSurface } from "./surface";
 import { api } from "../../../../host/ipc";
+import { NOTE_TYPE_READS, withoutTypeReads } from "../../../../state/note-type-commands";
 import { state } from "../../../../state/store";
 import { closeCommandPalette } from "../../../../ui/palette";
 import { declareClipboard } from "../../../../platform/clipboard";
@@ -246,7 +247,10 @@ describe("la superficie Markdown", () => {
       },
     ];
     const list = vi.spyOn(api, "listCommands").mockResolvedValue(specs);
-    const invoke = vi.spyOn(api, "invokeCommand").mockImplementation(async () => {
+    const invoke = vi.spyOn(api, "invokeCommand").mockImplementation(async (id) => {
+      // La superficie chiede all'apertura se la nota è un tipo (la pagina del
+      // tipo): è una lettura, non il comando dello slash.
+      if (NOTE_TYPE_READS.has(id)) throw new Error("nessun tipo nel test");
       sequence.push("invoke");
       return { notify: null, effect: { kind: "done" }, undo: null, partial: null };
     });
@@ -278,8 +282,9 @@ describe("la superficie Markdown", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }));
       expect(document.querySelectorAll("#command-palette [role=option]")).toHaveLength(1);
       input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-      await vi.waitFor(() => expect(invoke).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(sequence).toContain("invoke"));
       expect(sequence).toEqual(["flush", "context", "invoke"]);
+      expect(withoutTypeReads(invoke.mock.calls.map((args) => ({ args })))).toHaveLength(1);
       expect(invoke).toHaveBeenCalledWith(
         "selection.wrap", { doc: "notes/current.md", text: "needle" }, "apply",
       );
