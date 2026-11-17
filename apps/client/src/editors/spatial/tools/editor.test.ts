@@ -860,10 +860,10 @@ describe("disporre, nel Completo", () => {
     named("Ordine").click();
     expect(named("Ordine").getAttribute("aria-expanded")).toBe("true");
     expect(menu().map((entry) => [entry.querySelector(".menu-label")!.textContent, entry.querySelector(".menu-hint")!.textContent, entry.getAttribute("aria-disabled")])).toEqual([
-      ["Porta in primo piano", "Ctrl+Shift+]", "true"],
-      ["Porta avanti", "Ctrl+]", "true"],
-      ["Porta indietro", "Ctrl+[", null],
-      ["Porta in secondo piano", "Ctrl+Shift+[", null],
+      ["Porta in primo piano", "Ctrl Maiusc ]", "true"],
+      ["Porta avanti", "Ctrl ]", "true"],
+      ["Porta indietro", "Ctrl [", null],
+      ["Porta in secondo piano", "Ctrl Maiusc [", null],
     ]);
     item("Porta in secondo piano").click();
     expect(order()).toEqual([C, A, B]);

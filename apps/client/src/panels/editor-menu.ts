@@ -40,7 +40,7 @@ const UTILITIES = ["shell.doc.copy_anchor_link", "shell.doc.search"] as const;
 
 /// L'icona della testata per ciò che sta sotto il puntatore.
 const HEAD_ICONS: Partial<Record<SurfaceMenuTargetKind, string>> = {
-  text: "notes", selection: "notes", page: "notes", link: "publish", wikilink: "backlinks", tag: "tag",
+  text: "fmt-text", selection: "fmt-text", page: "notes", link: "publish", wikilink: "backlinks", tag: "tag",
   heading: "fmt-h2", list: "fmt-bullets", task: "fmt-tasks", code: "fmt-codeblock", table: "fmt-table",
   image: "fmt-image", properties: "properties", block: "outline", cell: "format-sheet", row: "format-sheet",
   column: "format-sheet", corner: "format-sheet", sheet: "format-sheet", node: "format-drawing",
@@ -127,12 +127,22 @@ export function composeEditorMenu(menu: SurfaceMenu, host: EditorMenuHost): Comp
     ? { label: t("editor_menu.paste_plain"), hint: displayBinding("Mod-Shift-v") || undefined, run: () => menu.clipboard!.run("paste-plain") }
     : null;
   const row = quick.length >= 2 ? quick : [];
-  // Senza la riga, un gesto è una voce come le altre: senza icona.
-  const loose: MenuItem[] = row.length > 0 ? [] : [...quick.map(({ icon: _icon, ...item }) => item), ...(plain ? [plain] : [])];
-  if (row.length > 0 && plain) searchable.push(plain);
-  const copyAs = resolve(menu.clipboard?.copyAs);
-  if (copyAs.length > 0) loose.push({ label: t("editor_menu.copy_as"), items: copyAs });
+  // Senza la riga, un gesto è una voce come le altre, con la sua icona.
+  // «Incolla senza formattazione» non ruba un posto: si trova scrivendo, e
+  // ha la sua scorciatoia.
+  const loose: MenuItem[] = row.length > 0 ? [] : [...quick];
+  if (plain) searchable.push(plain);
   if (loose.length > 0) groups.push(loose);
+  // «Copia come ▸» chiude il primo gruppo delle voci del posto, dopo i gesti
+  // sul testo scelto («Collega a una nota…»), come nel prototipo.
+  const copyAs = resolve(menu.clipboard?.copyAs);
+  const copyAsItem: MenuItem | null = copyAs.length > 0 ? { label: t("editor_menu.copy_as"), icon: "copy", items: copyAs } : null;
+  const placeCopyAs = (): void => {
+    if (copyAsItem === null) return;
+    const first = groups.length > (loose.length > 0 ? 1 : 0) ? groups[loose.length > 0 ? 1 : 0]! : null;
+    if (first !== null) first.push(copyAsItem);
+    else groups.push([copyAsItem]);
+  };
 
   // Le voci del posto, nei gruppi della superficie.
   let group: MenuItem[] = [];
@@ -146,6 +156,7 @@ export function composeEditorMenu(menu: SurfaceMenu, host: EditorMenuHost): Comp
     if (item) group.push(item);
   }
   if (group.length > 0) groups.push(group);
+  placeCopyAs();
 
   // Il formato: con la mini-barra si trova scrivendo, senza è un sottomenu.
   const format = resolve(menu.format);
