@@ -39,6 +39,9 @@ export const EDITORS: PartAnatomy = {
     { name: "base-table", layer: "contenuto", states: [S("rest"), S("hover"), S("focused")], hooks: ["base-table", "base-table-viewport", "base-cell", "base-cell-error", "base-head", "base-head-icon", "base-head-label", "base-head-sort", "base-title", "base-add-row", "base-add-row-button", "base-foot-count", "base-foot-summary", "base-foot-value", "base-foot-error", "base-foot-dimmed"] },
     { name: "base-cards", layer: "contenuto", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["base-cards", "base-list", "base-card", "base-field"] },
     { name: "base-kanban", layer: "contenuto", states: DRAGGABLE, hooks: ["base-kanban", "base-kanban-column", "base-kanban-card"] },
+    // Il calendario (T17): la testa col mese e i passi, la griglia dei
+    // giorni, le note che si trascinano e «+N»; il vuoto senza la data.
+    { name: "base-calendar", layer: "contenuto", states: DRAGGABLE, hooks: ["base-calendar", "base-cal-head", "base-cal-title", "base-cal-nav", "base-cal-prev", "base-cal-today", "base-cal-undated", "base-cal-scroll", "base-cal-grid", "base-cal-week", "base-cal-dow", "base-cal-day", "base-cal-num", "base-cal-weekday", "base-cal-event", "base-cal-more", "base-cal-empty"] },
     { name: "base-map", layer: "contenuto", layers: { "base-map-attribution": "cornice" }, states: [S("rest"), S("focused")], hooks: ["base-map-atlas", "base-map-attribution", "base-map-marker"] },
     // La griglia e le guide (T71) sono segni di Fub sulla vista, non contenuto.
     { name: "canvas-surface", layers: { "canvas-viewport": "contenuto", "canvas-source": "contenuto", "canvas-grid": "segno", "canvas-guide": "segno" }, states: INTERACTIVE, hooks: ["canvas-surface", "canvas-toolbar", "canvas-toolbar-item", "kit-options-row", "canvas-intake-error", "canvas-viewport", "canvas-large-fallback", "canvas-source", "canvas-grid", "canvas-guide"] },

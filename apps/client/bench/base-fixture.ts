@@ -3,6 +3,10 @@
 // della Base (T15): le linguette, Filtro, Ordina, Proprietà, le etichette del
 // filtro e «Nel file .base»; e (T16) «+», il menu della colonna e il piede coi
 // riepiloghi. `?base=venti` ha venti viste, per le linguette che non stanno.
+// `?base=calendario` (T17) apre il calendario di agosto 2026, il mese
+// dell'orologio fermo del banco: cinque consegne in un giorno («+2»), una con
+// l'ora, una nei giorni di settembre in fondo al mese, una senza data; e
+// `note.property.set`, perché trascinare una nota ne riscrive la data.
 //
 // Il finto non ha `fub-format-base`: questa scenografia ne fa le veci per le
 // quattro domande che la superficie fa (`parse`, `plan`, `derive`) e per i
@@ -24,13 +28,14 @@ const FOLDER = "Opere/";
 
 type Json = null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
 
-/// Una nota dell'elenco, con le sue proprietà.
+/// Una nota dell'elenco, con le sue proprietà. La consegna si sposta col
+/// calendario; vuota, la nota non ha la proprietà.
 interface Work {
   readonly name: string;
   readonly stato: string;
   readonly museo: string;
   readonly valore: number;
-  readonly consegna: string;
+  consegna: string;
 }
 
 const WORKS: readonly Work[] = [
@@ -42,6 +47,21 @@ const WORKS: readonly Work[] = [
   { name: "Paesaggio con mulino", stato: "Arrivata", museo: "Brera", valore: 3100, consegna: "2026-02-27" },
   { name: "San Girolamo", stato: "Prenotata", museo: "Capodimonte", valore: 15500, consegna: "2026-04-02" },
   { name: "Il concerto", stato: "In viaggio", museo: "Correr", valore: 5200, consegna: "2026-03-23" },
+];
+
+/// Le opere del calendario: agosto 2026, il mese del banco (oggi è il 19).
+const CALENDAR_WORKS: readonly Work[] = [
+  { name: "Annunciazione", stato: "Arrivata", museo: "Uffizi", valore: 12000, consegna: "2026-07-29" },
+  { name: "Ritratto di signora", stato: "In viaggio", museo: "Brera", valore: 4800, consegna: "2026-08-04" },
+  { name: "Natura morta con limoni", stato: "Arrivata", museo: "Capodimonte", valore: 2600, consegna: "2026-08-12" },
+  { name: "Veduta del porto", stato: "Prenotata", museo: "Correr", valore: 900, consegna: "2026-08-12" },
+  { name: "La lettrice", stato: "In viaggio", museo: "Uffizi", valore: 7300, consegna: "2026-08-12" },
+  { name: "Paesaggio con mulino", stato: "Arrivata", museo: "Brera", valore: 3100, consegna: "2026-08-12" },
+  { name: "San Girolamo", stato: "Prenotata", museo: "Capodimonte", valore: 15500, consegna: "2026-08-12" },
+  { name: "Il concerto", stato: "In viaggio", museo: "Correr", valore: 5200, consegna: "2026-08-20T10:30" },
+  { name: "Madonna del cardellino", stato: "Prenotata", museo: "Uffizi", valore: 21000, consegna: "2026-08-26" },
+  { name: "Giuditta", stato: "In viaggio", museo: "Capodimonte", valore: 9400, consegna: "2026-09-03" },
+  { name: "Ritratto di giovane", stato: "Prenotata", museo: "Brera", valore: 3900, consegna: "" },
 ];
 
 const docOf = (work: Work): string => `${FOLDER}${work.name}.md`;
@@ -56,6 +76,14 @@ function view(entries: readonly (readonly [string, Json])[]): View {
 /// Le viste di partenza: la tabella col suo filtro, il suo ordinamento e le
 /// sue colonne; la bacheca per stato; le schede.
 function initialViews(variant: BaseVariant): View[] {
+  if (variant === "calendario") {
+    // Il calendario nella forma che il modello scrive su disco: `type: table`
+    // per chi non conosce il calendario, e la vista vera sotto `fub`.
+    return [
+      view([["name", "Calendario"], ["type", "table"], ["fub", { view: "calendar", date: "consegna" }]]),
+      view([["name", "Tabella"], ["type", "table"], ["order", ["file.name", "stato", "museo", "valore", "consegna"]]]),
+    ];
+  }
   if (variant === "venti") {
     const types = ["table", "cards", "list", "kanban", "map"];
     return Array.from({ length: 20 }, (_, index) => view([
@@ -140,7 +168,7 @@ function aggregate(summary: Summary, works: readonly Work[]): Json {
   const values = works.map((work) => valueOf(work, key));
   const filled = values.filter((value) => value !== null && value !== "");
   const numbers = filled.filter((value): value is number => typeof value === "number");
-  const dates = key === "consegna" ? filled.map((value) => Date.parse(`${value}T00:00:00Z`)) : [];
+  const dates = key === "consegna" ? filled.map((value) => instant(String(value))) : [];
   const number = (value: number | undefined): Json => (value === undefined || !Number.isFinite(value) ? { kind: "empty" } : { kind: "number", value });
   const date = (value: number | undefined): Json => (value === undefined ? { kind: "empty" } : { kind: "date", value });
   switch (summary.aggregate) {
@@ -210,7 +238,7 @@ function holds(filter: Json, work: Work): boolean {
   const key = typeof condition.property === "string" ? condition.property.replace(/^prop\./, "") : "";
   const raw = valueOf(work, key);
   // Una data della nota vale come istante, come la cella che la mostra.
-  const actual = key === "consegna" && typeof raw === "string" ? Date.parse(`${raw}T00:00:00Z`) : raw;
+  const actual = key === "consegna" && typeof raw === "string" && raw !== "" ? instant(raw) : raw;
   const wanted = aligned(key, actual, condition.value);
   const text = (value: Json | string | number | null) => String(value ?? "").toLowerCase();
   const numbers = typeof actual === "number" && typeof wanted === "number";
@@ -229,10 +257,37 @@ function holds(filter: Json, work: Work): boolean {
   }
 }
 
+/// Una consegna come istante, con o senza l'ora.
+function instant(value: string): number {
+  return Date.parse(value.length > 10 ? `${value}:00Z` : `${value}T00:00:00Z`);
+}
+
+/// Il tipo di vista che la superficie disegna: quello sotto `fub` (il
+/// calendario), o `type`.
+function viewTypeOf(entries: View): Json {
+  const fub = entries.get("fub");
+  return fub !== null && typeof fub === "object" && !Array.isArray(fub) && typeof (fub as Record<string, Json>).view === "string" ? (fub as Record<string, Json>).view! : entries.get("type") ?? null;
+}
+
+/// La proprietà data del calendario (`fub.date`).
+function dateKeyOf(entries: View): string | null {
+  const fub = entries.get("fub");
+  const date = fub !== null && typeof fub === "object" && !Array.isArray(fub) ? (fub as Record<string, Json>).date : undefined;
+  return typeof date === "string" ? date.replace(/^prop\./, "") : null;
+}
+
+/// Una consegna come `PropertyValue` del contratto.
+function dateValue(value: string): Json {
+  const [day, time] = value.split("T");
+  const [year, month, date] = day!.split("-").map(Number);
+  const [hour, minute] = time === undefined ? [] : time.split(":").map(Number);
+  return { kind: "date", value: { year: year!, month: month!, day: date!, time: time === undefined ? null : { hour: hour!, minute: minute!, second: 0, offset_minutes: null } } };
+}
+
 function cell(work: Work, key: string): Json {
   const value = valueOf(work, key);
-  if (value === null) return { kind: "empty" };
-  if (key === "consegna") return { kind: "date", value: Date.parse(`${value}T00:00:00Z`) };
+  if (value === null || value === "") return { kind: "empty" };
+  if (key === "consegna") return { kind: "date", value: instant(String(value)) };
   return typeof value === "number" ? { kind: "number", value } : { kind: "text", value };
 }
 
@@ -257,42 +312,44 @@ export interface BaseFixtureHost {
   readonly writeByCommand: (doc: string, text: string) => Promise<void>;
 }
 
-/// Quale Base: le tre viste delle scene (`1`), o venti viste (`venti`).
-export type BaseVariant = "1" | "venti";
+/// Quale Base: le tre viste delle scene (`1`), venti viste (`venti`), o il
+/// calendario di agosto (`calendario`).
+export type BaseVariant = "1" | "venti" | "calendario";
 
 export function baseFixture(host: () => BaseFixtureHost, variant: BaseVariant = "1"): BaseFixture {
   const views = initialViews(variant);
   const files: Record<string, string> = { [BASE_DOC]: serialize(views) };
-  for (const work of WORKS) {
-    files[docOf(work)] = `---\nstato: ${work.stato}\nmuseo: ${work.museo}\nvalore: ${work.valore}\nconsegna: ${work.consegna}\n---\n# ${work.name}\n`;
-  }
+  // Copie: il calendario sposta le consegne.
+  const list: Work[] = (variant === "calendario" ? CALENDAR_WORKS : WORKS).map((work) => ({ ...work }));
+  const noteText = (work: Work): string =>
+    `---\nstato: ${work.stato}\nmuseo: ${work.museo}\nvalore: ${work.valore}\n${work.consegna === "" ? "" : `consegna: ${work.consegna}\n`}---\n# ${work.name}\n`;
+  for (const work of list) files[docOf(work)] = noteText(work);
   const named = (name: unknown): View | undefined =>
     typeof name === "string" ? views.find((entries) => entries.get("name") === name) : views[0];
-  const works = new Map(WORKS.map((work) => [docOf(work), work]));
+  const works = new Map(list.map((work) => [docOf(work), work]));
+  const propertiesOf = (work: Work): { key: string; value: Json }[] => [
+    { key: "stato", value: { kind: "text", value: work.stato } },
+    { key: "museo", value: { kind: "text", value: work.museo } },
+    { key: "valore", value: { kind: "number", value: work.valore } },
+    ...(work.consegna === "" ? [] : [{ key: "consegna", value: dateValue(work.consegna) }]),
+  ];
   return {
     files,
     properties: (doc) => {
       const work = works.get(doc);
-      if (!work) return null;
-      const [year, month, day] = work.consegna.split("-").map(Number);
-      return [
-        { key: "stato", value: { kind: "text", value: work.stato } },
-        { key: "museo", value: { kind: "text", value: work.museo } },
-        { key: "valore", value: { kind: "number", value: work.valore } },
-        { key: "consegna", value: { kind: "date", value: { year: year!, month: month!, day: day!, time: null } } },
-      ];
+      return work ? propertiesOf(work) : null;
     },
     query: (raw) => {
       const query = raw as { op?: unknown; view?: unknown; rows?: unknown };
       switch (query.op) {
         case "parse":
-          return { views: views.map((entries) => entries.get("name")), types: views.map((entries) => entries.get("type")) };
+          return { views: views.map((entries) => entries.get("name")), types: views.map(viewTypeOf) };
         case "plan": {
           const entries = named(query.view) ?? views[0]!;
           const columns = columnsOf(entries);
-          const type = entries.get("type");
+          const type = viewTypeOf(entries);
           return {
-            view: entries.get("name"), view_type: type, columns,
+            view: entries.get("name"), view_type: type, columns, date_key: dateKeyOf(entries), start_key: null, end_key: null,
             column_labels: Object.fromEntries(columns.filter((key) => key in LABELS).map((key) => [key, LABELS[key]!])),
             required_props: ["stato", "museo", "valore", "consegna"], all_properties: false,
             group: groupOf(entries), limit: null, map: null, create_defaults: {},
@@ -306,7 +363,7 @@ export function baseFixture(host: () => BaseFixtureHost, variant: BaseVariant = 
           const filter = entries.get("filters") ?? "all";
           const sort = (entries.get("sort") ?? []) as readonly { key: string; descending?: boolean }[];
           const keys = ["file.name", "stato", "museo", "valore", "consegna"];
-          const chosen = WORKS.filter((work) => asked.has(docOf(work)) && holds(filter, work));
+          const chosen = list.filter((work) => asked.has(docOf(work)) && holds(filter, work));
           chosen.sort((a, b) => {
             for (const { key, descending } of sort) {
               const left = valueOf(a, key), right = valueOf(b, key);
@@ -316,15 +373,40 @@ export function baseFixture(host: () => BaseFixtureHost, variant: BaseVariant = 
             return a.name.localeCompare(b.name);
           });
           return {
-            rows: chosen.map((work) => ({ doc: docOf(work), values: Object.fromEntries(keys.map((key) => [key, cell(work, key)])) })),
+            rows: chosen.map((work) => ({
+              doc: docOf(work), values: Object.fromEntries(keys.map((key) => [key, cell(work, key)])),
+              // Il giorno civile della data del calendario: l'ora non lo sposta.
+              ...(viewTypeOf(entries) === "calendar" ? { time: { day: dateKeyOf(entries) === "consegna" && work.consegna !== "" ? work.consegna.slice(0, 10) : null } } : {}),
+            })),
             summaries: Object.fromEntries(summariesOf(entries).map((summary) => [summary.label, aggregate(summary, chosen)])),
           };
+        }
+        case "mutate": {
+          // La mutazione di una cella o di una data: il comando che la
+          // superficie poi manda, con il valore letto come confronto.
+          const edits = (query as { edits?: { doc: string; key: string; expected: Json; value?: string | null }[] }).edits ?? [];
+          return { mutations: edits.map((edit) => ({
+            doc: edit.doc, key: edit.key, command: edit.value == null ? "note.property.remove" : "note.property.set",
+            args: { doc: edit.doc, key: edit.key, expected: JSON.stringify(edit.expected), ...(edit.value == null ? {} : { value: edit.value }) },
+          })) };
         }
         default:
           throw { kind: "bad_args", message: `base finta: «${String(query.op)}» non c'è` };
       }
     },
     invoke: (id, raw) => {
+      if (id === "note.property.set" && variant === "calendario") return (async () => {
+        // La consegna spostata dal calendario: il valore letto deve essere
+        // quello della nota, come il confronto del core.
+        const args = raw as { doc?: unknown; key?: unknown; expected?: unknown; value?: unknown };
+        const work = typeof args.doc === "string" ? works.get(args.doc) : undefined;
+        if (!work || args.key !== "consegna" || typeof args.value !== "string" || typeof args.expected !== "string") throw { kind: "bad_args", message: "base finta: proprietà sconosciuta" };
+        const now = JSON.stringify(work.consegna === "" ? { kind: "absent" } : { kind: "value", value: dateValue(work.consegna) });
+        if (JSON.stringify(JSON.parse(args.expected)) !== now) throw { kind: "conflict", message: `conflict: «${args.doc as string}» è cambiata sotto` };
+        work.consegna = String(JSON.parse(args.value));
+        await host().writeByCommand(docOf(work), noteText(work));
+        return { notify: null, effect: { kind: "none" }, undo: null, partial: null };
+      })();
       if (id !== "base.view.set" && id !== "base.view.add" && id !== "base.view.remove") return null;
       return (async () => {
         const args = raw as { doc?: unknown; view?: unknown; key?: unknown; value?: unknown; name?: unknown; type?: unknown; base?: unknown };
