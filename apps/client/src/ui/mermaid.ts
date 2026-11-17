@@ -22,24 +22,21 @@ import {
 } from "../theme/diagram-style";
 import { identifier } from "./a11y";
 import { displayBinding } from "./commands";
-import {
-  openDiagramMenu,
-  type DiagramDirection,
-  type DiagramMenuModel,
-  type DiagramScope,
-  type DiagramSwatchColors,
+import type {
+  DiagramDirection,
+  DiagramMenuModel,
+  DiagramScope,
+  DiagramSwatchColors,
 } from "./diagram-menu";
-import { openLightbox, svgSource } from "./lightbox";
+import { lazyPart } from "./lazy-part";
 import { openLifetime, type Teardown } from "./lifetime";
 import { registerCustomRenderer } from "./custom";
 import { closeContextMenu, showContextMenu, type MenuPoint } from "./menu";
-import {
-  DIAGRAM_FONTS,
-  paletteFor,
-  type DiagramContrast,
-  type DiagramFont,
-  type DiagramLight,
-  type TokenReader,
+import type {
+  DiagramContrast,
+  DiagramFont,
+  DiagramLight,
+  TokenReader,
 } from "./mermaid-styles";
 import { notify } from "./notify";
 import { withPageNonce } from "./stylesheets";
@@ -117,6 +114,17 @@ let library: Promise<{ default: Mermaid }> | undefined;
 // Variabili, CSS e tavola degli stili servono solo a disegnare: arrivano con
 // Mermaid, non col documento.
 let drawing: Promise<typeof import("./mermaid-drawing")> | undefined;
+/// Le tavolozze degli stili e i loro caratteri (`mermaid-styles.ts`): le
+/// leggono il disegno e le miniature del menu, non il documento. Arrivano
+/// con l'uno o con l'altro, fuori dal ponte dei documenti.
+let styles: Promise<MermaidStyles> | undefined;
+type MermaidStyles = typeof import("./mermaid-styles");
+function loadStyles(): Promise<MermaidStyles> {
+  return styles ??= import("./mermaid-styles").catch((error) => {
+    styles = undefined;
+    throw error;
+  });
+}
 
 // ---------------------------------------------------------------------------
 // L'aspetto di un diagramma: stile, luce, contrasto e — per Armonia — i token
@@ -252,11 +260,11 @@ function base64Of(bytes: Uint8Array): string {
 /// Il carattere dello stile in base64, letto una volta. `null` dove non ci sono
 /// caratteri da caricare (i test) o se il file non arriva: l'SVG ricade allora
 /// sui caratteri di sistema della pila.
-function embeddedFont(font: DiagramFont): Promise<string | null> {
+function embeddedFont(font: DiagramFont, file: string): Promise<string | null> {
   if (typeof document.fonts?.load !== "function" || typeof fetch !== "function") return Promise.resolve(null);
   let pending = fontData.get(font);
   if (!pending) {
-    pending = fetchLocal(DIAGRAM_FONTS[font].file)
+    pending = fetchLocal(file)
       .then((response) => response.ok ? response.arrayBuffer() : Promise.reject(new Error(String(response.status))))
       .then((buffer) => base64Of(new Uint8Array(buffer)))
       .catch(() => {
@@ -270,8 +278,7 @@ function embeddedFont(font: DiagramFont): Promise<string | null> {
 
 /// Mermaid misura le etichette nella pagina: il carattere deve esserci già,
 /// o le misure sarebbero quelle del ripiego e le etichette uscirebbero.
-async function fontReady(font: DiagramFont): Promise<void> {
-  const { size, stack } = DIAGRAM_FONTS[font];
+async function fontReady({ size, stack }: { readonly size: number; readonly stack: string }): Promise<void> {
   try {
     await document.fonts?.load?.(`${size}px ${stack}`);
     await document.fonts?.load?.(`600 ${size}px ${stack}`);
@@ -730,7 +737,7 @@ export interface DiagramMenuInput {
 }
 
 /// I colori della miniatura di uno stile, presi dalla tavolozza che lo disegna.
-function swatchColors(style: DiagramStyleId, input: DiagramMenuInput): DiagramSwatchColors {
+function swatchColors(style: DiagramStyleId, input: DiagramMenuInput, paletteFor: MermaidStyles["paletteFor"]): DiagramSwatchColors {
   const palette = paletteFor(style, input.light, input.contrast, style === "armonia" ? input.read : undefined);
   return {
     paper: palette.paper ?? palette.ground,
@@ -745,7 +752,8 @@ function swatchColors(style: DiagramStyleId, input: DiagramMenuInput): DiagramSw
 }
 
 /// Che cosa offre il tasto destro su un diagramma (E26).
-export function diagramMenuModel(input: DiagramMenuInput): DiagramMenuModel {
+/// `paletteFor` viene da `mermaid-styles.ts`, che arriva col menu.
+export function diagramMenuModel(input: DiagramMenuInput, paletteFor: MermaidStyles["paletteFor"]): DiagramMenuModel {
   const written = styleDirective(input.source);
   const own = written?.style ?? null;
   const unknown = written && !own ? written.name : null;
@@ -767,7 +775,7 @@ export function diagramMenuModel(input: DiagramMenuInput): DiagramMenuModel {
     styles: DIAGRAM_STYLE_IDS.map((id) => ({
       id,
       label: t(`mermaid.style.${id}`),
-      colors: swatchColors(id, input),
+      colors: swatchColors(id, input, paletteFor),
       checked: id === input.style,
     })),
     notice,
@@ -837,6 +845,17 @@ export interface MermaidViewOptions {
   noteLinks?: boolean;
 }
 
+/// Il menu del tasto destro (`diagram-menu.ts`): arriva con un `import()`,
+/// fuori dal ponte dei documenti, chiesto a thread libero dal primo diagramma
+/// che si disegna.
+/// Con lui le tavolozze, che disegnano le miniature degli stili.
+const diagramMenu = lazyPart(() => Promise.all([import("./diagram-menu"), loadStyles()])
+  .then(([menu, { paletteFor }]) => ({ ...menu, paletteFor })));
+type DiagramMenuPart = typeof import("./diagram-menu") & Pick<MermaidStyles, "paletteFor">;
+/// Il diagramma a tutta finestra (`lightbox.ts`): arriva con un `import()`,
+/// chiesto come il menu.
+const lightbox = lazyPart(() => import("./lightbox"));
+
 /** A diagram is an image, never active SVG/HTML in the shell. The source is
  * always available, including syntax errors and unavailable lazy chunks.
  *
@@ -844,6 +863,8 @@ export interface MermaidViewOptions {
  * pulsanti. Le azioni stanno nel menu del tasto destro (`menu`) e nei tasti
  * del blocco scelto, che chiamano `enlarge` e `copy`. */
 export function createMermaidView(source: string, options: MermaidViewOptions = {}): MermaidView {
+  diagramMenu.warm();
+  lightbox.warm();
   const life = openLifetime();
   const element = document.createElement("figure");
   element.className = "mermaid-diagram";
@@ -931,6 +952,10 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   const enlarge = (): boolean => {
     const rendered = shown;
     if (!rendered) return false;
+    lightbox.run((parts) => showLarge(parts, rendered), () => !life.closed);
+    return true;
+  };
+  const showLarge = ({ openLightbox, svgSource }: typeof import("./lightbox"), rendered: NonNullable<typeof shown>): void => {
     const box = openLightbox({
       source: svgSource(rendered.svg),
       label: accessibleDescription || t("mermaid.diagram"),
@@ -958,7 +983,6 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
       event.stopPropagation();
       box.close();
     }, { capture: true });
-    return true;
   };
   life.listen(image, "click", (event) => {
     if (event.button !== 0) return;
@@ -1068,7 +1092,7 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     }
     const task = rendering.then(async () => {
       if (!current()) return;
-      const [{ default: mermaid }, { decorateSvg, fontFaceCss, mermaidStyleConfig }] = await Promise.all([
+      const [{ default: mermaid }, { decorateSvg, fontFaceCss, mermaidStyleConfig }, { DIAGRAM_FONTS, paletteFor }] = await Promise.all([
         library ??= import("mermaid").catch((error) => {
           library = undefined;
           throw error;
@@ -1077,13 +1101,15 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
           drawing = undefined;
           throw error;
         }),
+        loadStyles(),
       ]).catch(() => {
         // Un pezzo dell'app che non arriva non è un errore del sorgente.
         throw new DiagramFailure({ line: null, text: t("mermaid.problem.unavailable") });
       });
       if (!current()) return;
       const palette = paletteFor(wanted.style, wanted.light, wanted.contrast, wanted.read);
-      const [font] = await Promise.all([embeddedFont(palette.font), fontReady(palette.font)]);
+      const face = DIAGRAM_FONTS[palette.font];
+      const [font] = await Promise.all([embeddedFont(palette.font, face.file), fontReady(face)]);
       if (!current()) return;
       mermaid.initialize({
         startOnLoad: false,
@@ -1254,9 +1280,24 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     notify(t("mermaid.style.for_all", { name: t(`mermaid.style.${style}`) }), "info");
   };
 
+  // Il menu arriva con un `import()`: si chiede quando il puntatore entra
+  // nel diagramma, e il tasto destro che arriva prima aspetta lui.
+  let menuAsks = 0;
   const openMenu = (at: MenuPoint, pointer: boolean): void => {
     menu?.close("manual");
     closeContextMenu();
+    const asked = ++menuAsks;
+    diagramMenu.run((parts) => {
+      if (asked === menuAsks) showMenu(parts, at, pointer);
+    }, () => !life.closed);
+  };
+  life.listen(element, "pointerenter", () => {
+    void diagramMenu.load().catch(() => {});
+    void lightbox.load().catch(() => {});
+  });
+
+  const showMenu = (parts: DiagramMenuPart, at: MenuPoint, pointer: boolean): void => {
+    menu?.close("manual");
     const base = lookOf(source, options.appearance, null);
     const model = diagramMenuModel({
       source,
@@ -1267,8 +1308,8 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
       editable: options.editSource !== undefined,
       revealable: options.revealSource !== undefined,
       ready: shown !== null,
-    });
-    menu = openDiagramMenu(at, model, {
+    }, parts.paletteFor);
+    menu = parts.openDiagramMenu(at, model, {
       preview: setPreview,
       choose,
       orient: (direction) => {

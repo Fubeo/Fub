@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, Prec } from "@codemirror/state";
@@ -10,6 +10,11 @@ import { liveReveal, mathClassic, type RevealPolicy } from "../../../live-reveal
 import { CORPUS, LONG_FORMULA } from "./corpus";
 import { MathEditor } from "./editor";
 import { openLifetime } from "../../../../../ui/lifetime";
+import { loadLazyParts } from "../../../../../ui/lazy-part";
+
+// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
+// come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(loadLazyParts);
 
 // La formula che si modifica toccandola (T60, E27), dentro la nota: con KaTeX
 // vero, perché i segni del cursore sono suoi. La geometria (il clic su

@@ -10,7 +10,7 @@ import { mountMathBlocks } from "./math";
 import { claimQueryBlocks, embedTasksBlocks, fillQueryBlock, markTaskDues } from "./query-block";
 import { craftPlaceholder, showEmbeddedCraft } from "../../../craft/figure";
 import { hydrateVaultMedia, scenePlaceholder, showEmbeddedDrawing, showRemoteImages, vaultImageSource } from "./media";
-import { openLightbox } from "../../../../ui/lightbox";
+import { lazyPart } from "../../../../ui/lazy-part";
 import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
 import type { MarkdownResources, NativeMarkdownContent } from "../../../../ui/markdown-resources";
 import type { FenceEdit } from "./render-types";
@@ -254,6 +254,13 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
       tag.click();
     });
   }
+  // La lightbox arriva con un `import()`: il puntatore su un'immagine del
+  // vault la chiede, prima del clic.
+  life.listen(container, "pointerover", (event) => {
+    if (!lightbox.current() && event.target instanceof Element && event.target.closest("img[data-vault-id]")) {
+      void lightbox.load().catch(() => {});
+    }
+  });
   life.listen(container, "click", (event) => {
     if (event.defaultPrevented || event.button !== 0) return;
     const target = event.target instanceof Element ? event.target : null;
@@ -270,13 +277,14 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
     if (picture) {
       event.preventDefault();
       const id = picture.dataset.vaultId!;
-      openLightbox({
+      const label = picture.alt || id;
+      lightbox.run(({ openLightbox }) => openLightbox({
         source: vaultImageSource(id),
-        label: picture.alt || id,
+        label,
         caption: id,
         backdrop: "checker",
         vector: mimeOfId(id) === "image/svg+xml",
-      });
+      }), () => !life.closed);
       return;
     }
     if (!link) return;
@@ -461,6 +469,11 @@ export interface RenderedDocumentMount {
 /// diagrammi, le formule, le note trascluse e i media del vault, ognuno col
 /// suo lease. Niente di interattivo: chi la usa (la stampa) non ha un buffer
 /// in cui scrivere.
+/// L'immagine a tutta finestra (`ui/lightbox.ts`): arriva con un `import()`
+/// al primo passaggio del puntatore su un'immagine, fuori dal ponte dei
+/// documenti.
+const lightbox = lazyPart(() => import("../../../../ui/lightbox"));
+
 export function mountRenderedDocument(
   container: HTMLElement,
   rendered: RenderedDocument,

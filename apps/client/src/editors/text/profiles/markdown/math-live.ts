@@ -22,10 +22,17 @@ import { openPopover, type PopoverHandle, textField, type VirtualAnchor } from "
 import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifetime";
 import { notify } from "../../../../ui/notify";
 import { liveReveal, MATH_HELP_SETTING, MATH_SOURCE_SETTING, mathClassic, mathHelp, mathSource } from "../../live-reveal";
+import { lazyPart } from "../../../../ui/lazy-part";
 import { mountMathBlocks } from "./math";
-import { MathEditor, type LeaveReason, type MathEditorOptions, type MathPreferences, type MathStart } from "./math/editor";
-import { attachPalette } from "./math/palette";
+import type { LeaveReason, MathEditor, MathEditorOptions, MathPreferences, MathStart } from "./math/editor";
 import { liveStrings } from "./strings";
+
+/// Il riquadro che modifica una formula, con la tavolozza: arriva con un
+/// `import()` (`math-editing.ts`), fuori dal ponte dei documenti. La Live lo
+/// chiede a thread libero appena monta, e al passaggio del puntatore su una
+/// formula; un gesto che arriva prima aspetta il modulo e non si perde.
+export const mathEditing = lazyPart(() => import("./math-editing"));
+type MathEditing = typeof import("./math-editing");
 
 /// Una formula in riga come la mostra la Live: dove sta, quanto sono lunghi i
 /// suoi dollari, e il TeX.
@@ -208,7 +215,7 @@ interface InlineSession {
   mark(): void;
 }
 
-function editInline(view: EditorView, plugin: MathPlugin, formula: LiveFormula, start: MathStart, owner: Lifetime): InlineSession {
+function editInline(parts: MathEditing, view: EditorView, plugin: MathPlugin, formula: LiveFormula, start: MathStart, owner: Lifetime): InlineSession {
   const life = openLifetime();
   const dollars = dollarsOf(view.state, formula);
   const marks = "$".repeat(dollars);
@@ -255,7 +262,7 @@ function editInline(view: EditorView, plugin: MathPlugin, formula: LiveFormula, 
     view.dispatch({ selection: { anchor: at }, scrollIntoView: true, userEvent: "select" });
     view.focus();
   };
-  const editor = new MathEditor({
+  const editor = new parts.MathEditor({
     tex: formula.tex,
     display: false,
     start,
@@ -266,7 +273,7 @@ function editInline(view: EditorView, plugin: MathPlugin, formula: LiveFormula, 
     lifetime: life,
   });
   plugin.adopt(editor, life);
-  attachPalette(editor, life);
+  parts.attachPalette(editor, life);
   const popover = openPopover({
     anchor,
     content: editor.element,
@@ -358,26 +365,47 @@ export class MathBlockEditWidget extends WidgetType {
     const life = openLifetime();
     blockMounts.set(root, () => life.close());
     if (!plugin) return root;
-    const editor = new MathEditor({
-      tex: this.tex,
-      display: true,
-      start: plugin.takeEntry(this.from),
-      ...plugin.editorOptions(),
-      onChange: (tex) => plugin.writeBlock(root, tex),
-      onLeave: (reason) => plugin.leaveBlock(root, reason),
-      lifetime: life,
-    });
-    plugin.adopt(editor, life);
-    attachPalette(editor, life);
-    root.append(editor.element);
-    // Il fuoco va nella formula quando ci arriva dalla nota (un clic, le
-    // frecce); una selezione messa da fuori, a nota ferma, non lo ruba.
-    if (view.hasFocus || plugin.entryFocus) {
-      plugin.entryFocus = false;
-      queueMicrotask(() => {
-        if (!life.closed && root.isConnected) editor.focus();
+    // Da dove si entra, e se il fuoco va nella formula: si decide adesso,
+    // anche per un riquadro che aspetta il suo codice. Il fuoco va nella
+    // formula quando ci arriva dalla nota (un clic, le frecce); una selezione
+    // messa da fuori, a nota ferma, non lo ruba.
+    const start = plugin.takeEntry(this.from);
+    const focus = view.hasFocus || plugin.entryFocus;
+    plugin.entryFocus = false;
+    const mount = (parts: MathEditing, tex: string): void => {
+      const editor = new parts.MathEditor({
+        tex,
+        display: true,
+        start,
+        ...plugin.editorOptions(),
+        onChange: (next) => plugin.writeBlock(root, next),
+        onLeave: (reason) => plugin.leaveBlock(root, reason),
+        lifetime: life,
       });
+      plugin.adopt(editor, life);
+      parts.attachPalette(editor, life);
+      root.replaceChildren(editor.element);
+      if (focus) {
+        queueMicrotask(() => {
+          if (!life.closed && root.isConnected) editor.focus();
+        });
+      }
+    };
+    const parts = mathEditing.current();
+    if (parts) {
+      mount(parts, this.tex);
+      return root;
     }
+    // Il codice del riquadro non è ancora arrivato: intanto, al suo posto,
+    // la formula resa com'era, e il riquadro appena arriva, col TeX di allora.
+    const shown = preview(this.tex, true);
+    root.append(shown.element);
+    life.add(shown.teardown);
+    mathEditing.run((loaded) => {
+      shown.teardown();
+      const range = root.isConnected ? blockTexRange(view.state, view.posAtDOM(root)) : null;
+      mount(loaded, range ? view.state.sliceDoc(range.from, range.to) : this.tex);
+    }, () => !life.closed && root.isConnected);
     return root;
   }
   destroy(root: HTMLElement): void {
@@ -408,10 +436,14 @@ class MathPlugin {
   /// L'ultima scrittura dai tre puntini: una risposta vecchia non disfa una
   /// scelta nuova.
   private writes = 0;
+  /// Una formula in riga toccata prima che il codice del riquadro arrivasse:
+  /// si apre appena arriva, se il cursore non è andato altrove.
+  private queued: { from: number; readonly start: MathStart } | null = null;
 
   constructor(readonly view: EditorView) {
     this.lastHead = view.state.selection.main.head;
     this.preferences = preferencesOf(view.state);
+    if (mathTouchable(view.state)) mathEditing.warm();
   }
 
   /// Le opzioni comuni delle formule aperte in questa vista.
@@ -454,8 +486,14 @@ class MathPlugin {
     const before = preferencesOf(update.startState);
     const after = preferencesOf(update.state);
     if (before.source !== after.source || before.help !== after.help) this.apply(after);
+    if (mathTouchable(update.state)) mathEditing.warm();
     for (const transaction of update.transactions) {
       if (transaction.docChanged && !transaction.annotation(ownEdit)) this.inline?.map(transaction.changes);
+      if (this.queued) {
+        // Il cursore spostato da chi scrive vale più del tocco di prima.
+        if (transaction.isUserEvent("select")) this.queued = null;
+        else if (transaction.docChanged) this.queued.from = transaction.changes.mapPos(this.queued.from, 1);
+      }
     }
     if (update.selectionSet) this.lastHead = update.startState.selection.main.head;
     if (update.docChanged || update.selectionSet || update.focusChanged) {
@@ -508,9 +546,15 @@ class MathPlugin {
   open(formula: LiveFormula, anchor: Element | null, start: MathStart): void {
     this.editing?.close();
     this.inline = null;
+    this.queued = null;
     const view = this.view;
     if (mathTouchable(view.state)) {
-      const session = editInline(view, this, formula, start, this.life);
+      const parts = mathEditing.current();
+      if (!parts) {
+        this.wait(formula, start);
+        return;
+      }
+      const session = editInline(parts, view, this, formula, start, this.life);
       this.inline = session;
       this.editing = session.popover;
       return;
@@ -521,6 +565,19 @@ class MathPlugin {
     })();
     if (!target) return;
     this.editing = editSource(view, formula, target, this.life);
+  }
+
+  /// Il tocco su una formula in riga quando il codice del riquadro non c'è
+  /// ancora: la formula si apre appena arriva, ritrovata dov'è adesso.
+  private wait(formula: LiveFormula, start: MathStart): void {
+    const queued = { from: formula.from, start };
+    this.queued = queued;
+    mathEditing.run(() => {
+      if (this.queued !== queued) return;
+      this.queued = null;
+      const found = this.view.state.facet(formulaLookup)?.(this.view, queued.from, 1);
+      if (found && found.from === queued.from) this.open(found, null, queued.start);
+    }, () => !this.life.closed);
   }
 
   /// Il TeX nuovo di un blocco aperto: soltanto i byte fra i dollari.
@@ -564,6 +621,14 @@ const mathPlugin = ViewPlugin.fromClass(MathPlugin);
 /// blocco reso altrimenti lo sceglie, e il cursore della formula non saprebbe
 /// dov'è caduto.
 const mathClicks = Prec.highest(EditorView.domEventHandlers({
+  // Il puntatore su una formula: il riquadro che la modifica, se non è già
+  // arrivato, si chiede adesso, prima del clic.
+  pointerover(event) {
+    if (!mathEditing.current() && event.target instanceof Element && event.target.closest(".cm-fub-math, .math-block")) {
+      void mathEditing.load().catch(() => {});
+    }
+    return false;
+  },
   mousedown(event, view) {
     const plugin = view.plugin(mathPlugin);
     if (!plugin || view.state.facet(liveReveal) !== "mai" || event.button !== 0) return false;

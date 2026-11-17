@@ -1,7 +1,12 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
 import { MathEditor } from "./editor";
+import { loadLazyParts } from "../../../../../ui/lazy-part";
+
+// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
+// come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(loadLazyParts);
 
 // Le proposte dei simboli nella formula toccata (T61, E27): `\` e le prime
 // lettere mostrano i simboli disegnati, col nome; Invio, Tab o lo spazio
