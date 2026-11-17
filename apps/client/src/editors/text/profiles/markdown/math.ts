@@ -1,9 +1,15 @@
 import type katex from "katex";
 import type { KatexOptions } from "katex";
+import { errorText } from "../../../../host/errors";
 import { onLanguage, t } from "../../../../i18n/strings";
+import { lazyPart } from "../../../../ui/lazy-part";
 import { openLifetime, type Teardown } from "../../../../ui/lifetime";
 import { attachTooltip, setTooltip } from "../../../../ui/tooltip";
-import { diagnose, explain, problemSentence } from "./math/errors";
+
+/// Le frasi degli errori delle formule (`math-errors.ts`, coi nomi dei
+/// simboli): servono soltanto a una formula sbagliata, e arrivano con un
+/// `import()` dopo KaTeX, fuori dal ponte dei documenti.
+const mathErrors = lazyPart(() => import("./math-errors"));
 
 const MAX_SOURCE_LENGTH = 20_000;
 let library: Promise<{ default: typeof katex }> | undefined;
@@ -88,12 +94,12 @@ export function mountMathBlocks(container: HTMLElement): Teardown {
       phase = "ready";
       labels();
       container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
-    }).catch((error: unknown) => {
+    }).catch((error: unknown) => mathErrors.load().then(({ diagnose, explain, problemSentence }) => {
       // `diagnose` legge l'errore una volta sola; `explain` scrive la frase nella
       // lingua di adesso, ogni volta che `labels` la chiede.
       const diagnosis = diagnose(error, source);
       fail(() => problemSentence(explain(diagnosis)));
-    });
+    }, (missing: unknown) => fail(() => t("app.part_failed", { reason: errorText(missing) }))));
   }
   return () => life.close();
 }
