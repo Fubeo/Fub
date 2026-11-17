@@ -1812,7 +1812,7 @@ nell'altra; l'annulla rimette tutti e due i file; la battuta resta nel
 budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/transclusion.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da 3332a59b3 di `integra/editor-1`, 2026-11-17)
 
 ## T31 · `[[^^` cerca i blocchi del vault
 
@@ -3017,7 +3017,7 @@ KaTeX non spiega (una frase generica col punto); la lingua inglese.
 Fatto quando: un test per messaggio noto di KaTeX.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
-Stato: [~] in corso (coder, da de29166be di `integra/editor-1`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (3332a59b3, 2026-11-17), PR bozza #472. `math/errors.ts` dà un tipo chiuso e lo scrive in parole, con 39 casi presi da KaTeX vero. Oltre al prototipo ci sono correzioni uniche per `\left`/`\right`, `\begin`/`\end`, `$ # %`, `\( \[` incollati e lettere accentate. Una formula rotta già nel file mostra la frase subito. Il campo LaTeX sta in `math/editor.ts`, e `math-live.ts` non è cambiato. Restano col messaggio grezzo di KaTeX il suggerimento `math.error` della lettura e il riquadro classico di Vim. Le baseline di formula-03 e delle scene 16–18 vengono dal runner.
 
 ## T65 · Formule: copia e incolla, Invio che allinea, le macro del vault
 
