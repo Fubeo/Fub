@@ -256,3 +256,30 @@ describe("la scheda nuova lasciata vuota se ne va (IMP-043)", () => {
     engine.destroy();
   });
 });
+
+describe("i tasti della shell mentre si scrive in una scheda di testo (dubbia del collaudo)", () => {
+  it("Ctrl+W sale alla shell, che chiude la linguetta come fuori dalla scrittura; la tela non ne fa un suo comando", () => {
+    const { engine, host, changes } = mounted(ONE);
+    host.querySelector<HTMLButtonElement>('[data-canvas-action="add-text"]')!.click();
+    const field = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor")!;
+    const reached: string[] = [];
+    const listen = (event: KeyboardEvent) => reached.push(`${event.ctrlKey ? "Ctrl+" : ""}${event.key}`);
+    document.addEventListener("keydown", listen);
+    try {
+      const count = changes.length;
+      key(field, { key: "w", ctrlKey: true });
+      // Ctrl+D fuori dal campo duplica la scelta: dentro sale alla shell, e la tela non duplica.
+      key(field, { key: "d", ctrlKey: true });
+      // I tasti che scrivono restano al campo.
+      key(field, { key: "z", ctrlKey: true });
+      key(field, { key: "a", ctrlKey: true });
+      key(field, { key: "q" });
+      expect(reached).toEqual(["Ctrl+w", "Ctrl+d"]);
+      expect(changes.length).toBe(count);
+      expect(host.querySelector(".canvas-text-editor")).toBe(field);
+    } finally {
+      document.removeEventListener("keydown", listen);
+    }
+    engine.destroy();
+  });
+});

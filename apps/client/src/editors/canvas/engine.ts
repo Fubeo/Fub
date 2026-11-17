@@ -1651,6 +1651,12 @@ export class CanvasEngine {
    * `click` che segue ci entra. Un clic che la sceglie soltanto non entra.
    */
   #pressedSelected: string | null = null;
+  /**
+   * I tasti con Ctrl (Cmd) che il campo di una scheda non ha usato e che
+   * salgono alla shell (Ctrl+W chiude la linguetta come fuori dalla scrittura):
+   * la tela li lascia passare senza farne un suo comando.
+   */
+  readonly #shellKeys = new WeakSet<Event>();
   /** Il gesto della rotella finisce `WHEEL_SETTLE_MS` dopo l'ultimo scatto. */
   #wheelTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   /**
@@ -11502,7 +11508,7 @@ export class CanvasEngine {
   }
 
   #keydown(event: KeyboardEvent): void {
-    if (!this.#doc || event.defaultPrevented) return;
+    if (!this.#doc || event.defaultPrevented || this.#shellKeys.has(event)) return;
     // Col ritaglio aperto Invio lo scrive ed Esc lo chiude, da ogni punto della lavagna (T78).
     if (this.#crop?.editor?.key(event)) {
       event.preventDefault();
@@ -13099,8 +13105,10 @@ export class CanvasEngine {
     input.addEventListener("compositionend", () => this.#fieldComposed(editor, node, input.value), { signal });
     input.addEventListener("keydown", (event) => {
       if (!(event instanceof KeyboardEvent)) return;
-      // Col campo aperto i tasti, Ctrl+Z compreso, sono del campo.
-      event.stopPropagation();
+      // Col campo aperto i tasti, Ctrl+Z compreso, sono del campo; un tasto
+      // della shell che il campo non usa (Ctrl+W) sale, la tela no.
+      if (passesToShell(event)) this.#shellKeys.add(event);
+      else event.stopPropagation();
       editor.recordOnInput = false;
       if (event.isComposing || editor.composing) return;
       if (isCommandSearchKey(event)) {
@@ -13360,8 +13368,11 @@ export class CanvasEngine {
       }
     }, { signal, capture: true });
     host.addEventListener("keydown", (event) => {
-      // I tasti sono dell'editor, Ctrl+Z compreso: la tela non li vede.
-      event.stopPropagation();
+      // I tasti sono dell'editor, Ctrl+Z compreso: la tela non li vede. Un
+      // tasto della shell che l'editor non ha usato (Ctrl+W) sale fino a lei,
+      // e la tela lo lascia passare.
+      if (event instanceof KeyboardEvent && passesToShell(event)) this.#shellKeys.add(event);
+      else event.stopPropagation();
       if (!(event instanceof KeyboardEvent) || event.isComposing || editor.composing) return;
       if (event.key === "Escape" && !escapeForEditor) {
         event.preventDefault();
@@ -13473,6 +13484,21 @@ function isHighSurrogate(unit: number): boolean {
 
 function isLowSurrogate(unit: number): boolean {
   return unit >= 0xdc00 && unit <= 0xdfff;
+}
+
+/** I tasti con Ctrl (Cmd) che scrivono in un campo: restano sempre al campo. */
+const FIELD_CHORDS: ReadonlySet<string> = new Set(["a", "c", "v", "x", "y", "z"]);
+
+/**
+ * Un tasto premuto nel campo di una scheda che sale alla shell: ha Ctrl (o
+ * Cmd), il campo non l'ha usato (`defaultPrevented`), non è Invio (la scheda
+ * dopo, T44) né un tasto che scrive (scegli tutto, copia, incolla, taglia,
+ * annulla, ripeti). Ctrl+W chiude la linguetta anche mentre si scrive.
+ */
+function passesToShell(event: KeyboardEvent): boolean {
+  if (!(event.ctrlKey || event.metaKey) || event.defaultPrevented || event.isComposing) return false;
+  if (event.key === "Enter" || event.key === "Escape") return false;
+  return !FIELD_CHORDS.has(event.key.toLowerCase());
 }
 
 /** Una trappola o un'istanza persa: il nucleo va riaperto. */
