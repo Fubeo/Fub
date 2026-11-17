@@ -2847,7 +2847,7 @@ Fatto quando: test della riga dell'errore e della didascalia scritta nel
 sorgente; scene col sorgente con errore e ingrandito.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/diagram-live.test.ts
-Stato: [~] in corso (coder, da `integra/editor-1`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (5095c4130, 2026-11-17), PR bozza #472; il sorgente nelle righe di CodeMirror strette a metà, «accanto» da 941 px di foglio; Esc o «Fatto» chiudono; il titolo non è più dentro l’SVG; resta: le voci della mappa di conformità; con un sorgente lunghissimo il disegno può non essere montato finché non ci si scorre
 
 ## T59 · Diagramma: tracciato e punte per ogni stile, orientamento
 
@@ -2969,7 +2969,7 @@ Casi limite: una ricerca senza risultati; la finestra stretta; al telefono
 Fatto quando: test della ricerca; le scene nelle due luci.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da ba1bd3b80, 2026-11-17)
 
 ## T63 · Formule: «Mostra il LaTeX», la scrittura veloce, le tre misure di aiuto
 
