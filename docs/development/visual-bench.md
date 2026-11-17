@@ -61,7 +61,8 @@ non resta nessuna animazione viva, i fotogrammi chiave toccano soltanto
 `transform` e `opacity` (e così lo stile in linea riscritto a ogni
 fotogramma, anche durante un trascinamento, dove il puntatore avanza di un
 passo per fotogramma e una proprietà estranea cambiata in due fotogrammi di
-fila è un errore), un gesto invertito a metà torna allo stato di
+fila è un errore; mentre passa soltanto il tempo lo è anche una proprietà
+scritta in tre fotogrammi con tre valori diversi, di fila o no), un gesto invertito a metà torna allo stato di
 partenza senza salti (ogni riquadro in corsa prosegue da dov'era, lui o la
 sua immagine che esce, e il referto dice com'era e com'è il riquadro che
 salta; il «dopo» si legge al primo fotogramma che il gesto contrario dipinge,

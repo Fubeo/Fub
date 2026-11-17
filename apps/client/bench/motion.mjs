@@ -269,8 +269,9 @@ async function TOOLS() {
 
   /// Le file di fotogrammi: per ogni proprietà in linea di ogni elemento,
   /// quanti fotogrammi di fila l'hanno cambiata (`run`) e la fila più lunga
-  /// (`best`). Un cambio di stato è una fila di uno; ciò che un ciclo scrive
-  /// a ogni fotogramma fa file di due e più. Un elemento nuovo nasce col suo
+  /// (`best`), quanti in tutto (`total`) e con quali valori (`values`). Un
+  /// cambio di stato è una fila di uno; ciò che un ciclo scrive a ogni
+  /// fotogramma fa file di due e più. Un elemento nuovo nasce col suo
   /// stile: non è una riscrittura.
   const tally = (into, before, after) => {
     const touched = new Set();
@@ -282,8 +283,10 @@ async function TOOLS() {
       for (const name of new Set([...old.keys(), ...fresh.keys()])) {
         if (old.get(name) === fresh.get(name)) continue;
         const names = into.get(el) ?? new Map();
-        const entry = names.get(name) ?? { run: 0, best: 0 };
+        const entry = names.get(name) ?? { run: 0, best: 0, total: 0, values: new Set() };
         entry.run += 1;
+        entry.total += 1;
+        entry.values.add(fresh.get(name) ?? "");
         entry.best = Math.max(entry.best, entry.run);
         names.set(name, entry);
         into.set(el, names);
@@ -443,7 +446,12 @@ async function TOOLS() {
         for (const [property, entry] of names) {
           // Una fila di uno è un cambio di stato caduto in quel fotogramma
           // (un ciclo che si spegne e toglie il suo strato, `will-change`).
-          if (entry.best >= 2) rewritten.push({ target: path(el), property, frames: entry.best });
+          // Senza file, tre scritture con tre valori diversi sono un ciclo che
+          // scrive un fotogramma sì e uno no (30 Hz): conta. Un interruttore
+          // acceso e spento a ogni corsa ha due valori soli, e non conta.
+          if (entry.best >= 2 || (entry.total >= 3 && entry.values.size >= 3)) {
+            rewritten.push({ target: path(el), property, frames: entry.total });
+          }
         }
       }
       const framed = [];
