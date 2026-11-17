@@ -427,6 +427,15 @@ describe("le miniature", () => {
   });
 });
 
+/// Le regole della vista dei contorni montate nel documento: un foglio
+/// costruito (`adoptedStyleSheets`), non un `<style>`, per la CSP.
+function outlineRules(): string {
+  return document.adoptedStyleSheets
+    .flatMap((sheet) => Array.from(sheet.cssRules, (rule) => rule.cssText))
+    .filter((text) => text.includes("[data-outline]"))
+    .join("\n");
+}
+
 describe("la vista dei contorni", () => {
   it("accende un foglio sugli strati vivi e lo mette dentro gli strati immagine, e spenta li toglie", async () => {
     const painter = createSvgPainter(host, owner);
@@ -436,15 +445,22 @@ describe("la vista dei contorni", () => {
     painter.setOutline(true);
     await decoded();
     expect(root.hasAttribute("data-outline")).toBe(true);
-    const sheet = root.querySelector("style")!.textContent!;
-    expect(sheet).toContain(".spatial-painter[data-outline] svg *{fill:none!important");
-    expect(sheet).toContain("vector-effect:non-scaling-stroke!important");
+    expect(root.querySelector("style"), "niente <style> nella radice: la CSP lo rifiuterebbe").toBeNull();
+    const sheet = outlineRules();
+    expect(sheet).toContain(".spatial-painter[data-outline] svg *");
+    expect(sheet).toMatch(/fill:\s*none\s*!important/);
+    expect(sheet).toMatch(/vector-effect:\s*non-scaling-stroke\s*!important/);
     // L'estraneo, uno strato immagine, si ridisegna col foglio dentro.
     const img = host.querySelector("img")!;
     expect(await blobs.get(img.getAttribute("src")!)!.text()).toContain("svg *{fill:none!important");
     painter.setOutline(false);
     expect(root.hasAttribute("data-outline")).toBe(false);
-    expect(root.querySelector("style")).toBeNull();
+    expect(outlineRules()).toBe("");
+    // Riaccesa e poi smontato il painter, il foglio se ne va con lui.
+    painter.setOutline(true);
+    expect(outlineRules()).not.toBe("");
+    painter.dispose();
+    expect(outlineRules()).toBe("");
   });
 });
 

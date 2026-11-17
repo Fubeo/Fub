@@ -48,6 +48,7 @@ afterEach(() => lifetime?.close());
 
 beforeEach(() => {
   document.head.innerHTML = "";
+  document.adoptedStyleSheets = [];
   localStorage.clear();
   vi.clearAllMocks();
   box.handlers.length = 0;
@@ -78,7 +79,15 @@ function fire(key?: string): void {
   for (const handler of box.handlers) handler({ type: "setting_changed", key, scope: "machine" });
 }
 
-const foglio = () => document.head.querySelector('style[data-fub="foglio"]');
+/// Il foglio costruito del canale `foglio`: lo riconosce la mappa dei fogli del
+/// tema, che `loader.ts` tiene sul registro globale perché sopravviva a
+/// `vi.resetModules`. Un tema riapplicato ne costruisce uno nuovo.
+const owned = () =>
+  (globalThis as { [key: symbol]: WeakMap<CSSStyleSheet, { layer: string }> | undefined })[
+    Symbol.for("fub.theme.sheets")
+  ];
+const foglio = () =>
+  document.adoptedStyleSheets.find((sheet) => owned()?.get(sheet)?.layer === "foglio") ?? null;
 const themeSignals = () => box.emit.mock.calls.filter(([name]) => name === "theme").length;
 
 describe("il tema e `setting_changed`", () => {

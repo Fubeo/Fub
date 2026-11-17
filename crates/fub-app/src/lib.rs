@@ -79,6 +79,11 @@ pub use live::{LiveAddress, LiveStart, LiveStarted};
 pub use support::DemoClosed;
 /// Adattatore OS per `fub://` (P13): thin sopra `fub_host::automation`.
 pub mod uri;
+/// Il vblank emulato di WebKitGTK (ADR 0246): il `drmWaitVBlank` che
+/// l'eseguibile esporta (`main.rs`) chiama [`vblank::drm_wait_vblank`].
+#[cfg(target_os = "linux")]
+#[doc(hidden)]
+pub mod vblank;
 
 /// I vault aperti e quale è il corrente (§9.6): rispecchiato da `OpenVaults` in
 /// `apps/client/src/host/contract.ts`.
@@ -2981,10 +2986,22 @@ pub fn run() {
     // webview: il livello macchina riceve lo schema, e con lui il default delle
     // animazioni che il percorso di disegno legge, quando lo si apre.
     let webview = declare_the_webview();
+    // Il vblank emulato si decide anche lui prima che parta GTK: WebKit crea
+    // il suo monitor del vblank dopo, e la decisione non cambia più.
+    #[cfg(target_os = "linux")]
+    let vblank = vblank::prepara(
+        webview
+            .as_ref()
+            .and_then(|letta| letta.as_ref().ok())
+            .map(String::as_str),
+        std::env::var_os(vblank::INTERRUTTORE).as_deref(),
+    );
     #[cfg(target_os = "linux")]
     let percorso = percorso_di_disegno(config_dir.as_deref());
     let (levels, warning) = fub_host::install_logging(config_dir.as_deref());
     log_the_webview(webview);
+    #[cfg(target_os = "linux")]
+    vblank::scrivi_nel_log(&vblank);
     let installed_availability = match config_dir.as_deref() {
         Some(dir) => {
             tracing::info!(

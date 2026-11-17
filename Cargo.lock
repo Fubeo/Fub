@@ -2044,6 +2044,7 @@ dependencies = [
  "fub-live",
  "fub-wasm-host",
  "gethostname",
+ "libc",
  "objc2",
  "parking_lot",
  "serde",

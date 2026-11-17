@@ -74,6 +74,7 @@ afterEach(() => lifetime?.close());
 
 beforeEach(() => {
   document.head.innerHTML = "";
+  document.adoptedStyleSheets = [];
   localStorage.clear();
   vi.clearAllMocks();
   box.handlers.length = 0;
@@ -107,14 +108,28 @@ function fire(key: string): void {
   for (const handler of box.handlers) handler({ type: "setting_changed", key, scope: "machine" });
 }
 
-const layer = (name: string) => document.head.querySelector<HTMLStyleElement>(`style[data-fub="${name}"]`);
+/// Il foglio costruito di un canale del tema e il testo che ci ha montato il
+/// caricatore: lo dice la mappa dei fogli del tema, che `loader.ts` tiene sul
+/// registro globale perché sopravviva a `vi.resetModules`.
+const owned = () =>
+  (globalThis as { [key: symbol]: WeakMap<CSSStyleSheet, { layer: string; text: string }> | undefined })[
+    Symbol.for("fub.theme.sheets")
+  ];
+const layer = (name: string) =>
+  document.adoptedStyleSheets.find((sheet) => owned()?.get(sheet)?.layer === name) ?? null;
+const text = (name: string) => {
+  const sheet = layer(name);
+  return sheet === null ? null : owned()!.get(sheet)!.text;
+};
 
 describe("il fascio del tema si rimonta solo se cambia", () => {
   it("cambiare `appearance.accent` non rivalida il fascio, e l'accento arriva lo stesso", async () => {
     await fresh();
     const foglio = layer("foglio");
+    expect(foglio).not.toBeNull();
     const pelle = layer("pelle");
-    const before = layer("preferenze")!.textContent;
+    expect(pelle).not.toBeNull();
+    const before = text("preferenze");
     box.violations.mockClear();
     state.accent = 30;
     fire("appearance.accent");
@@ -122,19 +137,20 @@ describe("il fascio del tema si rimonta solo se cambia", () => {
     expect(box.violations).not.toHaveBeenCalled();
     expect(layer("foglio")).toBe(foglio);
     expect(layer("pelle")).toBe(pelle);
-    expect(layer("preferenze")!.textContent).not.toBe(before);
+    expect(text("preferenze")).not.toBe(before);
   });
 
   it("cambiare la luce sì: è un altro foglio", async () => {
     await fresh();
     const foglio = layer("foglio");
+    expect(foglio).not.toBeNull();
     box.violations.mockClear();
     state.light = "dark";
     fire("appearance.theme");
     await idle();
     expect(box.violations).toHaveBeenCalled();
     expect(layer("foglio")).not.toBe(foglio);
-    expect(layer("foglio")!.textContent).toBe(sheetDark);
+    expect(text("foglio")).toBe(sheetDark);
   });
 
   it("lo stesso id con un contenuto diverso sì: il confronto è sul contenuto, non sul nome", async () => {
@@ -144,7 +160,7 @@ describe("il fascio del tema si rimonta solo se cambia", () => {
     box.readTheme.mockImplementation(async () => ({ manifest, light: "light", sheet, skin, assets: {} }));
     state.themeId = "acme.paper";
     const theme = await fresh();
-    expect(layer("foglio")!.textContent).toBe(paperSheet);
+    expect(text("foglio")).toBe(paperSheet);
 
     // Il file è cambiato su disco, l'id e la versione no: lo stesso modulo
     // (quindi lo stesso ricordo del fascio montato) rilegge e rivalida.
@@ -152,11 +168,12 @@ describe("il fascio del tema si rimonta solo se cambia", () => {
     box.violations.mockClear();
     await mountOn(theme);
     expect(box.violations.mock.calls.some(([css]) => String(css).includes("--tinta-prova"))).toBe(true);
-    expect(layer("foglio")!.textContent).toContain("--tinta-prova");
+    expect(text("foglio")).toContain("--tinta-prova");
 
     // Poi l'accento non lo rifà: il fascio nuovo è quello ricordato.
     box.violations.mockClear();
     const foglio = layer("foglio");
+    expect(foglio).not.toBeNull();
     state.accent = 90;
     fire("appearance.accent");
     await idle();
@@ -178,6 +195,7 @@ describe("mountThemeBundle tiene il contenuto, non il nome", () => {
     const { mountThemeBundle } = await loader();
     expect(mountThemeBundle(bundle(), "light")).toEqual({ mounted: true });
     const foglio = layer("foglio");
+    expect(foglio).not.toBeNull();
     box.violations.mockClear();
     // Un oggetto nuovo con lo stesso contenuto: vale il contenuto.
     expect(mountThemeBundle(bundle({ manifest: { ...manifest } }), "light")).toEqual({ mounted: true });
@@ -204,13 +222,14 @@ describe("mountThemeBundle tiene il contenuto, non il nome", () => {
     mount("/* altro */", "foglio");
     mountThemeBundle(bundle({ assets: { [asset]: bytes }, manifest: { ...manifest, version: "1.0.1" } }), "light");
     expect(box.violations).toHaveBeenCalled();
-    expect(layer("foglio")!.textContent).toBe(paperSheet);
+    expect(text("foglio")).toBe(paperSheet);
   });
 
   it("un fascio rifiutato non tocca il ricordo di quello montato", async () => {
     const { mountThemeBundle } = await loader();
     mountThemeBundle(bundle(), "light");
     const foglio = layer("foglio");
+    expect(foglio).not.toBeNull();
     const rejected = mountThemeBundle(bundle({ sheet: "" }), "light", () => {});
     expect(rejected.mounted).toBe(false);
     box.violations.mockClear();

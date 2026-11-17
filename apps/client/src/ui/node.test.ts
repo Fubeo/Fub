@@ -18,7 +18,7 @@ vi.mock("../state/page-icons", () => ({
   pageIconsRevision: () => pageIcons.revision,
 }));
 import type { ActionRef, FieldValue, UiNode } from "../host/contract";
-import { pair, activeFields, mountTree, patchTree, setNodeMotion, unmountTree, type NodeMotion } from "./node";
+import { pair, activeFields, LIST_PAGE, mountTree, patchTree, setNodeMotion, unmountTree, type NodeMotion } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
 import { registerIcon } from "./icons";
 
@@ -1549,5 +1549,87 @@ describe("il frame di un web_view", () => {
     for (const url of ["javascript:alert(1)", "data:text/html,<script>x</script>", "about:blank", "http://esempio.it/", "fub-asset://localhost/a.html"]) {
       expect(frameFor(url).hasAttribute("src")).toBe(false);
     }
+  });
+});
+
+describe("un elenco lungo mostra una pagina di voci", () => {
+  const item = (i: number): UiNode =>
+    ({
+      node: "list_item",
+      key: `Nota ${i}.md#${i}`,
+      title: `Nota ${i}`,
+      subtitle: `Riga ${i}: un contesto`,
+      action: { action: "open", payload: { i } },
+      selected: false,
+    }) as unknown as UiNode;
+  const list = (count: number, from = 0): UiNode =>
+    ({ node: "list", items: Array.from({ length: count }, (_, i) => item(from + i)) }) as unknown as UiNode;
+
+  let host: HTMLElement;
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.appendChild(host);
+  });
+  afterEach(() => {
+    unmountTree(host);
+    host.remove();
+  });
+
+  const voices = () => host.querySelectorAll(".ui-list > .ui-list-item");
+  const more = () => host.querySelector<HTMLElement>(".ui-list > .ui-list-more");
+
+  it("oltre la soglia le voci restano nel nodo e una riga in coda offre le altre", () => {
+    // È la regola che toglie i 33.000 elementi dei collegamenti in uscita di
+    // una nota lunga: senza, ogni voce sta nel DOM anche a cassetto chiuso.
+    mountTree(host, list(LIST_PAGE * 2 + 50), async () => {});
+    expect(voices()).toHaveLength(LIST_PAGE);
+    const row = more();
+    expect(row).not.toBeNull();
+    expect(row!.getAttribute("role")).toBe("listitem");
+    expect(row!.parentElement!.lastElementChild).toBe(row);
+    expect(row!.querySelector("button")!.textContent).toContain(String(LIST_PAGE * 2 + 50));
+  });
+
+  it("sotto la soglia l'elenco è intero e non ha la riga", () => {
+    mountTree(host, list(LIST_PAGE), async () => {});
+    expect(voices()).toHaveLength(LIST_PAGE);
+    expect(more()).toBeNull();
+  });
+
+  it("«mostra altre» aggiunge una pagina e, finite le voci, passa il fuoco alla prima nuova", () => {
+    mountTree(host, list(LIST_PAGE * 2 + 50), async () => {});
+    const button = more()!.querySelector("button")!;
+    button.focus();
+    button.click();
+    expect(voices()).toHaveLength(LIST_PAGE * 2);
+    // Il bottone non si sposta: resta lui, in coda, col fuoco.
+    expect(more()!.querySelector("button")).toBe(button);
+    expect(document.activeElement).toBe(button);
+    expect(button.textContent).toContain("50");
+    button.click();
+    expect(voices()).toHaveLength(LIST_PAGE * 2 + 50);
+    expect(more()).toBeNull();
+    expect(document.activeElement).toBe(voices()[LIST_PAGE * 2]);
+  });
+
+  it("un ridisegno della view tiene le voci già chieste e non sposta la riga", () => {
+    mountTree(host, list(LIST_PAGE * 3), async () => {});
+    const row = more()!;
+    row.querySelector("button")!.click();
+    expect(voices()).toHaveLength(LIST_PAGE * 2);
+    // Un salvataggio ridisegna la view con una voce in più in testa.
+    mountTree(host, { node: "list", items: [item(-1), ...(list(LIST_PAGE * 3) as { items: UiNode[] }).items] } as unknown as UiNode, async () => {});
+    expect(voices()).toHaveLength(LIST_PAGE * 2);
+    expect(voices()[0]!.textContent).toContain("Nota -1");
+    expect(more()).toBe(row);
+    expect(row.parentElement!.lastElementChild).toBe(row);
+  });
+
+  it("un elenco che si accorcia sotto la soglia perde la riga", () => {
+    mountTree(host, list(LIST_PAGE + 10), async () => {});
+    expect(more()).not.toBeNull();
+    mountTree(host, list(5), async () => {});
+    expect(voices()).toHaveLength(5);
+    expect(more()).toBeNull();
   });
 });

@@ -3,6 +3,7 @@
 // camera e l'anteprima degli strumenti (`../svg-dom.ts`).
 
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
+import { adoptSheet, type AdoptedSheet } from "../../../../ui/stylesheets";
 import { compose, invert, type Matrix } from "../../scene/matrix";
 import type { Elem } from "../../scene/serialize";
 import { toScene, viewMatrix, viewTransform } from "../../view";
@@ -787,18 +788,17 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   // La vista dei contorni: un foglio per gli strati vivi, che la radice
   // accende, e lo stesso dentro ogni strato immagine, ridisegnato.
   let outline = false;
-  let outlineStyle: HTMLStyleElement | null = null;
+  // Un foglio costruito e non un `<style>` nella radice: la CSP non ammette
+  // stili in linea (`ui/stylesheets.ts`). Vale per i soli `svg` sotto la radice
+  // accesa, e se ne va con la vista o col painter.
+  let outlineStyle: AdoptedSheet | null = null;
   const setOutline = (on: boolean): void => {
     if (disposed || on === outline) return;
     outline = on;
     root.toggleAttribute("data-outline", on);
-    outlineStyle?.remove();
+    outlineStyle?.dispose();
     outlineStyle = null;
-    if (on) {
-      outlineStyle = document.createElement("style");
-      outlineStyle.textContent = outlineSheet(".spatial-painter[data-outline] ");
-      root.prepend(outlineStyle);
-    }
+    if (on) outlineStyle = adoptSheet(outlineSheet(".spatial-painter[data-outline] "), root.ownerDocument);
     for (const record of layers) if (record.kind === "image") render(record);
   };
 
@@ -1111,6 +1111,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     layers = [];
     if (defs !== null) disposeDefs(defs);
     defs = null;
+    outlineStyle?.dispose();
+    outlineStyle = null;
     root.remove();
     life.close();
   };
