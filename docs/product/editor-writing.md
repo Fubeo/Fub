@@ -333,6 +333,40 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
   l'indice cambia si richiedono solo le schede tenute, e la Scrittura ridisegna
   soltanto quelle davvero cambiate.
 
+## La concentrazione
+
+La concentrazione (`shell.focus.toggle`, «Modalità concentrazione» nel menu
+Vista e in Ctrl O, «Concentrazione» nel menu «…» del riquadro di una nota)
+lascia il foglio e poco altro:
+
+- cassetti, linguette dei riquadri e barra di formato si ritirano; la barra del
+  titolo si attenua e torna piena al passaggio del puntatore o col fuoco;
+- nel foglio che ha il fuoco resta acceso il blocco del cursore (le righe fino
+  alla riga vuota prima e dopo, o tutte quelle che una scelta attraversa) e gli
+  altri si attenuano; la riga sotto il puntatore si riaccende. Vale in ogni
+  modalità e in ogni linguaggio, e segna soltanto le righe montate;
+- la banda resta, con «Esci dalla concentrazione»; la riga dei suggerimenti
+  dice che Esc esce;
+- Esc esce quando nessuno lo prende prima: un menu, un dialogo o la sbirciata
+  aperti si chiudono e basta; una selezione di blocchi si lascia, e il blocco
+  non si seleziona. Con Vim acceso Esc resta di Vim anche in modo normale, e si
+  esce con «Esci» o col comando.
+
+## La macchina da scrivere
+
+La preferenza della macchina `editor.typewriter` («Macchina da scrivere»,
+gruppo Editor delle Impostazioni; spenta di fabbrica) tiene la riga del cursore a metà altezza del
+foglio, in ogni editor di testo che non sia un campo:
+
+- scrivendo, con le frecce, con annulla e rifai la riga torna a metà; il clic,
+  il trascinamento e i cambi arrivati da un altro riquadro non fanno scorrere;
+- in cima a una nota corta il testo non scende oltre l'inizio; sotto l'ultima
+  riga c'è mezzo foglio vuoto, perché anche l'ultima possa stare a metà;
+- non costa niente per battuta: dove CodeMirror porterebbe già il cursore in
+  vista lo porta a metà, nello stesso passo di misura, e soltanto se il testo è
+  cambiato o il cursore si è mosso. Scrivere dentro una riga che sta già a metà
+  non fa scorrere.
+
 ## Dove sta nel codice
 
 - `apps/client/src/editors/text/profiles/markdown/surface.ts`: le tre modalità
@@ -366,5 +400,15 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
 - `apps/client/src/editors/text/profiles/markdown/link-card.ts`
   (`NoteCardWidget`) e `apps/client/src/state/note-cards.ts`: la scheda della
   nota e le sue proprietà;
-- `apps/client/bench/scene.mjs`: le scene `scrittura-a-riposo` e
-  `riga-dei-suggerimenti`.
+- `apps/client/src/desktop-shell.ts`: la concentrazione (`toggleFocusMode`,
+  «Esci» nella banda, Esc); `apps/client/src/state/concentration.ts`: lo stato
+  per chi sta sotto la shell e la regola di Esc;
+  `apps/client/src/editors/text/cursor-block.ts`: il blocco del cursore;
+  `apps/client/src/theme/scrittoio/structure.css`: che cosa si ritira e che
+  cosa si attenua;
+- `apps/client/src/editors/text/typewriter.ts`: la macchina da scrivere (la
+  faccetta `typewriter`); `apps/client/src/editors/text/engine.ts` la legge
+  da `editor.typewriter` (`crates/fub-host/src/settings.rs`);
+- `apps/client/bench/scene.mjs`: le scene `scrittura-a-riposo`,
+  `riga-dei-suggerimenti`, `concentration`, `concentration-writing` e
+  `typewriter`.

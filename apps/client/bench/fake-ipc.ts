@@ -1041,6 +1041,22 @@ const SETTINGS: SettingEntry[] = [
     value: true,
     source: "default",
   },
+  // `editor.typewriter` di `crates/fub-host/src/settings.rs` (T24): la voce
+  // «Macchina da scrivere» del menu «…» la scrive, e gli editor la rileggono.
+  {
+    spec: {
+      key: "editor.typewriter",
+      label: "Macchina da scrivere",
+      description:
+        "La riga del cursore resta a metà altezza del foglio e il testo le scorre sotto, come il foglio in una macchina da scrivere. In cima a una nota corta il testo non scende oltre l'inizio.",
+      group: "Editor",
+      scope: "machine",
+      kind: { kind: "toggle", default: false },
+      program_writable: false,
+    },
+    value: false,
+    source: "default",
+  },
   {
     spec: {
       key: "editor.line_numbers",

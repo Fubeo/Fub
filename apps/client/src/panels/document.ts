@@ -1402,6 +1402,21 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
   // Le scelte di Scrittura, sulle note: per prima i blocchi (`editor.blocks`),
   // la stessa chiave delle Impostazioni, che cambia senza riaprire la nota.
   const blocksOn = blocksPreferred();
+  // Poi la concentrazione: il comando della shell, lo stesso del menu Vista e
+  // di Ctrl O. La macchina da scrivere del prototipo non entra: il menu sta
+  // nel bilancio di nove voci (`shell.e2e.test.ts`), e la preferenza
+  // `editor.typewriter` sta nelle Impostazioni › Editor.
+  const focusCommand = command("shell.focus.toggle");
+  const writingRest: MenuItem[] = [
+    ...(focusCommand ? [{
+      label: t("pane.menu.focus"),
+      description: t("pane.menu.focus.desc"),
+      hint: chord("shell.focus.toggle"),
+      icon: "eye",
+      group: t("pane.menu.writing"),
+      run: () => runCommand("shell.focus.toggle"),
+    }] : []),
+  ];
   const writing: MenuItem[] = doc && surface?.family === "text" && surface.profile === "markdown" ? [{
     label: t("pane.menu.blocks"),
     description: t(blocksOn ? "pane.menu.blocks.on" : "pane.menu.blocks.off", { chord: displayBinding("Mod-a") }),
@@ -1415,7 +1430,7 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
         (error: unknown) => notify(t("pane.menu.blocks.failed", { reason: errorText(error) }), "guasto"),
       );
     },
-  }] : [];
+  }, ...writingRest] : [];
   const items: MenuItem[] = [
     ...writing,
     ...offered("shell.pane.split.right", t("pane.menu.split_right")),

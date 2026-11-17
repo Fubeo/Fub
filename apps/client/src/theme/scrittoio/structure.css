@@ -671,11 +671,16 @@ body {
   padding-right: var(--reach-r);
 }
 
-/* Il benvenuto non ha fogli, la modalità concentrata non ha vicini: niente
-   fascia. Senza la banda di stato, sotto c'è il bordo della finestra. */
+/* Il benvenuto non ha fogli, la modalità concentrata non ha vicini ai lati:
+   niente fascia. Sotto, in concentrazione, resta la banda (con «Esci dalla
+   concentrazione»): l'ombra la raggiunge come sempre, della stessa misura. */
 #app[data-welcome] #panes,
 #app[data-focus-mode] #panes {
   --sheet-reach: 0px;
+}
+
+#app[data-focus-mode] #panes {
+  --reach-b: 20px;
 }
 
 #app[data-status-off] #panes {
@@ -1527,14 +1532,31 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   }
 }
 
-/* La concentrazione: restano il foglio e la barra del titolo. */
+/* La concentrazione: cassetti, linguette e barra di formato si ritirano;
+   restano il foglio, la barra del titolo attenuata e la banda, dove sta
+   «Esci dalla concentrazione». */
 #app[data-focus-mode] #rail,
 #app[data-focus-mode] #sidebar,
 #app[data-focus-mode] #right-pane,
-#app[data-focus-mode] #status-band,
 #app[data-focus-mode] .layout-divider,
-#app[data-focus-mode] .drawer-scrim {
+#app[data-focus-mode] .drawer-scrim,
+#app[data-focus-mode] .pane > .pane-tabs,
+#app[data-focus-mode] .pane > .format-bar {
   display: none !important;
+}
+
+/* La cornice si attenua e torna al passaggio, o quando il fuoco ci entra da
+   tastiera. Si muove la sola opacità; la durata è della pelle. */
+#app[data-focus-mode] #topbar:not(:hover):not(:focus-within) {
+  opacity: 0.3;
+}
+
+/* Il blocco del cursore resta acceso, gli altri si attenuano: nel foglio che
+   ha il fuoco, mentre si scrive. Il blocco (le righe fino alla riga vuota
+   prima e dopo, o quelle della scelta) lo segna l'editor
+   (`editors/text/cursor-block.ts`); la riga sotto il puntatore si riaccende. */
+#app[data-focus-mode] .pane-editor .cm-editor.cm-focused .cm-content > :not(.cm-fub-cursor-block):not(:hover) {
+  opacity: 0.3;
 }
 
 /* Il bottone dell'ispettore esce con lui: premuto qui cambierebbe una

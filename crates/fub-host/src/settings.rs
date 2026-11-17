@@ -191,6 +191,9 @@ pub const EDITOR_CURSOR_BLINK: &str = "editor.cursor-blink";
 /// Nei Blocchi il cursore scivola fra due posizioni invece di saltare (N13).
 /// Di serie salta.
 pub const EDITOR_SOFT_CURSOR: &str = "editor.soft-cursor";
+/// La macchina da scrivere: la riga del cursore resta a metà altezza del
+/// foglio e il testo le scorre sotto. Di serie spenta.
+pub const EDITOR_TYPEWRITER: &str = "editor.typewriter";
 /// Il testo dell'editor e della Lettura va da destra a sinistra (arabo, ebraico).
 pub const EDITOR_RTL: &str = "editor.rtl";
 /// L'anteprima di un link al passaggio vuole sempre Ctrl/Cmd, anche in Lettura.
@@ -911,6 +914,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 EDITOR_SOFT_CURSOR,
                 C_EDITOR_SOFT_CURSOR,
                 C_EDITOR_SOFT_CURSOR_DESC,
+                false,
+            ),
+            (
+                EDITOR_TYPEWRITER,
+                C_EDITOR_TYPEWRITER,
+                C_EDITOR_TYPEWRITER_DESC,
                 false,
             ),
             (
@@ -1750,6 +1759,8 @@ const C_EDITOR_CURSOR_BLINK: &str = "core.editor.cursor_blink";
 const C_EDITOR_CURSOR_BLINK_DESC: &str = "core.editor.cursor_blink.desc";
 const C_EDITOR_SOFT_CURSOR: &str = "core.editor.soft_cursor";
 const C_EDITOR_SOFT_CURSOR_DESC: &str = "core.editor.soft_cursor.desc";
+const C_EDITOR_TYPEWRITER: &str = "core.editor.typewriter";
+const C_EDITOR_TYPEWRITER_DESC: &str = "core.editor.typewriter.desc";
 const C_EDITOR_PREVIEW_MODIFIER: &str = "core.editor.preview_modifier";
 const C_EDITOR_PREVIEW_MODIFIER_DESC: &str = "core.editor.preview_modifier.desc";
 const C_EDITOR_PASTE_HTML: &str = "core.editor.paste_html";
@@ -2413,6 +2424,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_CURSOR_BLINK_DESC, "Il cursore dell'editor si accende e si spegne. Di serie sta fermo, per non distrarre mentre si legge.")
         .with(C_EDITOR_SOFT_CURSOR, "Cursore morbido")
         .with(C_EDITOR_SOFT_CURSOR_DESC, "Nei Blocchi il cursore scivola fino al punto nuovo invece di saltarci. Mai mentre scrivi, e mai col movimento ridotto.")
+        .with(C_EDITOR_TYPEWRITER, "Macchina da scrivere")
+        .with(C_EDITOR_TYPEWRITER_DESC, "La riga del cursore resta a metà altezza del foglio e il testo le scorre sotto, come il foglio in una macchina da scrivere. In cima a una nota corta il testo non scende oltre l'inizio.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Anteprima dei link solo con Ctrl")
         .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Passando sopra un link, l'anteprima della nota si apre solo tenendo premuto Ctrl (Cmd sul Mac), anche in Lettura. Mentre si scrive serve sempre.")
         .with(C_EDITOR_PASTE_HTML, "Converti l'HTML incollato")
@@ -3074,6 +3087,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_CURSOR_BLINK_DESC, "The editor cursor turns on and off. By default it stays still, so it does not distract while reading.")
         .with(C_EDITOR_SOFT_CURSOR, "Soft cursor")
         .with(C_EDITOR_SOFT_CURSOR_DESC, "In Blocks the cursor glides to its new place instead of jumping there. Never while you type, and never with reduced motion.")
+        .with(C_EDITOR_TYPEWRITER, "Typewriter")
+        .with(C_EDITOR_TYPEWRITER_DESC, "The cursor line stays at half the height of the sheet and the text scrolls under it, like paper in a typewriter. At the top of a short note the text does not move past the start.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Link preview only with Ctrl")
         .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Hovering a link opens the note preview only while Ctrl (Cmd on Mac) is held, in Reading too. While writing it is always needed.")
         .with(C_EDITOR_PASTE_HTML, "Convert pasted HTML")

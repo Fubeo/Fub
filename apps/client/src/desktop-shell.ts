@@ -77,7 +77,8 @@ import { mountSettings, openSettingsAt } from "./panels/settings";
 import { currentTheme, mountTheme } from "./theme/theme";
 import { fallito, fase, pronta } from "./avvio/consegna";
 import { onContentLookChange } from "./theme/content-look";
-import { focusedContextMode, openingsSoFar } from "./state/document-controller";
+import { focusedContextMode, focusEditor, openingsSoFar } from "./state/document-controller";
+import { escapeLeavesConcentration, setConcentrating } from "./state/concentration";
 import { reducedMotion } from "./theme/reduced-motion";
 import {
   mountDocument,
@@ -1084,6 +1085,7 @@ async function init(): Promise<Teardown> {
     layer: "global",
     run: () => toggleFocusMode(),
   });
+  mountConcentration(pageWindowLifetime);
 
   // La menubar applicativa (§Fase 2): cinque voci che invocano i comandi
   // di shell già registrati. Il menu non registra niente: legge il
@@ -1372,17 +1374,60 @@ export function vaultGestures(): { label: string; run(): void }[] {
 /// stessa istruzione.
 let focusHinted = false;
 
-/// La scrittura senza cornice: rail, barra laterale, ispettore e divisori
-/// escono di scena; lo stesso comando (o Esc) li rimette.
+/// La scrittura senza cornice: rail, cassetti, ispettore, linguette e barra di
+/// formato escono di scena, la barra del titolo si attenua e torna al
+/// passaggio; lo stesso comando, Esc o «Esci dalla concentrazione» nella banda
+/// li rimettono. Lo stato lo legge anche chi sta sotto la shell
+/// (`state/concentration.ts`); la pelle legge `data-focus-mode`.
 function toggleFocusMode(force?: boolean): void {
   const app = document.getElementById("app");
   if (!app) return;
   const on = force ?? !app.hasAttribute("data-focus-mode");
   app.toggleAttribute("data-focus-mode", on);
+  setConcentrating(on);
+  const exit = document.getElementById(FOCUS_EXIT_ID);
+  if (exit) {
+    // Il bottone che sparisce non si porta via il fuoco: torna al testo.
+    if (!on && exit === document.activeElement) focusEditor();
+    exit.hidden = !on;
+  }
   if (on && !focusHinted) {
     focusHinted = true;
     notify(t("shell.focus_on"), "info");
   }
+}
+
+const FOCUS_EXIT_ID = "status-focus-exit";
+
+/// «Esci dalla concentrazione», in testa alla parte destra della banda, e Esc.
+/// Esc esce soltanto se nessuno l'ha già preso: un menu, un dialogo, la
+/// sbirciata, un completamento o il «/» lo chiudono in cattura o nell'editor
+/// con `preventDefault`, e la concentrazione aspetta il prossimo. Con Vim
+/// acceso Esc resta di Vim, che lo prende sempre. Il tasto Esc dei Blocchi
+/// in concentrazione non seleziona il blocco (`blocks/selection.ts`).
+function mountConcentration(lifetime: Lifetime): void {
+  const end = document.getElementById("status-end");
+  if (end) {
+    const exit = document.createElement("button");
+    exit.type = "button";
+    exit.id = FOCUS_EXIT_ID;
+    exit.className = "status-item status-item--button status-focus-exit";
+    exit.hidden = !document.getElementById("app")?.hasAttribute("data-focus-mode");
+    const label = (): void => {
+      exit.textContent = t("shell.focus_exit");
+    };
+    label();
+    lifetime.add(onLanguage(label));
+    lifetime.listen(exit, "click", () => toggleFocusMode(false));
+    end.prepend(exit);
+    lifetime.add(() => exit.remove());
+  }
+  lifetime.listen(document, "keydown", (event: KeyboardEvent) => {
+    if (!escapeLeavesConcentration(event)) return;
+    event.preventDefault();
+    toggleFocusMode(false);
+  });
+  lifetime.add(() => setConcentrating(false));
 }
 
 async function pickVault(): Promise<void> {
