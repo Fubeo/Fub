@@ -138,7 +138,8 @@ Note di lettura.
   `etichette`, `selezione`, `stato`, `url`, o con l'id del registro, `number`,
   `checkbox`, `date_time`); anche soltanto i nomi, `properties: [autore, anno]`.
   Una parola che Fub non conosce lascia la proprietà senza tipo.
-- `featured`: le proprietà da tenere in vista; `icon`: l'icona del tipo;
+- `featured`: le proprietà da tenere in vista; `icon`: l'icona del tipo, un'emoji
+  o una figura (`book` o `fub:book`), letta come l'icona di una pagina;
   `folder`: dove nascono le note del tipo (un percorso del vault, senza `..`).
   Tutti i campi sono facoltativi.
 - Il registro dei tipi di proprietà resta uno per vault: se il registro dice

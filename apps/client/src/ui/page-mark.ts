@@ -5,10 +5,16 @@
 // (`.fub/workspace.json`, campo `icons`) o nel frontmatter (`icon:`):
 //
 // - `fub:<nome>`, con un nome di `PAGE_FIGURES`, è una figura monocroma del
-//   set, disegnata con `icon(nome)`: prende il colore del testo;
-// - `fub:` con un nome che questa versione non conosce (scritto a mano, o da
-//   una versione futura) non si disegna, e non è un errore;
-// - ogni altro testo breve è un'emoji o una lettera, che si mostra com'è.
+//   set, disegnata con `icon(nome)`: prende il colore del testo. È la forma
+//   che il selettore scrive;
+// - il nome nudo (`book`, la forma delle convenzioni dei tipi) è la stessa
+//   figura: si accetta in lettura, nessuno lo riscrive;
+// - un nome, nudo o dopo `fub:`, che questa versione non conosce (scritto a
+//   mano, o da una versione futura) non si disegna, e non è un errore;
+// - un carattere solo (un'emoji, anche composta, o una lettera) si mostra
+//   com'è;
+// - ogni altro testo (una parola, una frase) non si disegna: un segno è una
+//   figura o un carattere, mai una parola che va a capo nella testata.
 //
 // Una versione di Fub di prima di questa forma mostra il testo `fub:book`: è
 // il prezzo, accettato, di non cambiare il contratto.
@@ -45,6 +51,9 @@ export type PageFigure = (typeof PAGE_FIGURES)[number];
 
 /// La forma di un nome dopo `fub:`: un id minuscolo, come i nomi delle icone.
 const FIGURE_NAME = /^[a-z][a-z0-9-]*$/;
+/// La forma di un nome nudo: lo stesso id, ma di almeno due caratteri, così
+/// una lettera sola resta una lettera.
+const BARE_FIGURE_NAME = /^[a-z][a-z0-9-]+$/;
 
 /// Ciò che un valore d'icona vuol dire.
 export type PageMark =
@@ -82,8 +91,21 @@ function knownFigure(name: string): PageFigure | null {
   return icon(name) === "" ? null : (name as PageFigure);
 }
 
-/// Il valore letto: una figura nota, un testo da mostrare, o `null` (nessun
-/// valore, o un `fub:` che questa versione non sa disegnare).
+/// `true` se il testo è un carattere solo come lo vede chi legge: una
+/// lettera, un'emoji, anche composta (una bandiera, una famiglia).
+function isSingleGrapheme(text: string): boolean {
+  if (typeof Intl.Segmenter === "function") {
+    const segments = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text);
+    let count = 0;
+    for (const _ of segments) if (++count > 1) return false;
+    return count === 1;
+  }
+  return [...text].length === 1;
+}
+
+/// Il valore letto: una figura nota, un carattere da mostrare, o `null`
+/// (nessun valore, un nome che questa versione non sa disegnare, o un testo
+/// che non è un segno).
 export function readPageMark(value: string | null | undefined): PageMark | null {
   const written = value?.trim();
   if (!written) return null;
@@ -91,7 +113,11 @@ export function readPageMark(value: string | null | undefined): PageMark | null 
     const name = knownFigure(written.slice(FIGURE_PREFIX.length));
     return name ? { kind: "figure", name } : null;
   }
-  return { kind: "text", text: written };
+  if (BARE_FIGURE_NAME.test(written)) {
+    const name = knownFigure(written);
+    return name ? { kind: "figure", name } : null;
+  }
+  return isSingleGrapheme(written) ? { kind: "text", text: written } : null;
 }
 
 /// La voce del catalogo col nome di ogni figura: una figura nuova senza il

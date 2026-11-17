@@ -275,8 +275,8 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
     }, life));
   }
 
-  // Un `fub:` che questa versione non sa disegnare non si mostra, e torna
-  // «Aggiungi un'icona» per sceglierne un'altra.
+  // Un valore che questa versione non sa disegnare (un nome sconosciuto, una
+  // parola) non si mostra, e torna «Aggiungi un'icona» per sceglierne un'altra.
   const label = pageMarkLabel(data.icon);
   const typed = data.noteType?.state === "typed" ? data.noteType.type : null;
   // Senza un'icona sua la nota mostra quella del suo tipo; sceglierne una la

@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 //
 // Il segno di una cartella o di una nota (Scrittoio 2, D7): un valore solo,
-// la stessa stringa di sempre, che è un'emoji o una figura `fub:<nome>`.
+// la stessa stringa di sempre, che è un'emoji o una figura (`fub:<nome>`, o
+// il nome nudo in lettura).
 import { describe, expect, it } from "vitest";
 
 import {
@@ -60,6 +61,34 @@ describe("che cosa vuol dire un valore d'icona", () => {
     expect(readPageMark("fub:star")).toBeNull();
   });
 
+  it("il nome nudo di una figura nota è la figura, non la parola", () => {
+    expect(readPageMark("book")).toEqual({ kind: "figure", name: "book" });
+    expect(readPageMark(" calendar ")).toEqual({ kind: "figure", name: "calendar" });
+    for (const name of DRAWN) expect(readPageMark(name)).toEqual({ kind: "figure", name });
+    expect(pageMarkText("book")).toBeNull();
+    expect(pageMarkLabel("book")).toBe(figureLabel("book"));
+  });
+
+  it("un nome nudo sconosciuto non si disegna, e nemmeno come testo", () => {
+    expect(readPageMark("astronave")).toBeNull();
+    // Un nome della serie che non è una figura da scegliere.
+    expect(readPageMark("trash")).toBeNull();
+    expect(readPageMark("Book")).toBeNull();
+    expect(pageMarkContent("astronave")).toBeNull();
+    // Una lettera sola resta una lettera.
+    expect(readPageMark("a")).toEqual({ kind: "text", text: "a" });
+  });
+
+  it("un testo lungo non è un segno: niente parola in grande", () => {
+    expect(readPageMark("Libro di lettura")).toBeNull();
+    expect(readPageMark("ok!")).toBeNull();
+    expect(readPageMark("🌱🌱")).toBeNull();
+    expect(readPageMark("x".repeat(200))).toBeNull();
+    const host = document.createElement("span");
+    expect(drawPageMark(host, "Libro di lettura")).toBe(false);
+    expect(host.textContent).toBe("");
+  });
+
   it("niente valore, niente segno", () => {
     expect(readPageMark(null)).toBeNull();
     expect(readPageMark(undefined)).toBeNull();
@@ -92,6 +121,12 @@ describe("dove si mette", () => {
     expect(figure.querySelector("svg")?.getAttribute("data-icon")).toBe("book");
     expect(figure.dataset.pageFigure).toBe("book");
     expect(figure.textContent).toBe("");
+
+    const bare = document.createElement("span");
+    expect(drawPageMark(bare, "book")).toBe(true);
+    expect(bare.querySelector("svg")?.getAttribute("data-icon")).toBe("book");
+    expect(bare.dataset.pageFigure).toBe("book");
+    expect(bare.textContent).toBe("");
 
     const emoji = document.createElement("span");
     expect(drawPageMark(emoji, "🌱")).toBe(true);
