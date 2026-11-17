@@ -701,6 +701,34 @@ describe("decisioni del ciclo di vita della sessione", () => {
     expect(sessions.get("sparita.md")).toBeUndefined();
   });
 
+  it("ricreata la nota, la bozza della rimozione si scarta dopo la sua scrittura (IMP-047)", async () => {
+    let finishDraft!: () => void;
+    vi.mocked(api.saveDraft).mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishDraft = resolve;
+    }));
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("sparita.md");
+    acceptText(sessions, "sparita.md", "lavoro ricreato");
+    sessions.handleExternalRemoval("sparita.md");
+
+    const discarding = sessions.discardRemovedDraft("sparita.md", undefined);
+    await Promise.resolve();
+    expect(vi.mocked(api.discardDraft)).not.toHaveBeenCalled();
+    finishDraft();
+    await discarding;
+    expect(vi.mocked(api.discardDraft)).toHaveBeenCalledWith("sparita.md");
+  });
+
+  it("una sessione riaperta sull'id tiene la sua bozza", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("sparita.md");
+    acceptText(sessions, "sparita.md", "lavoro ricreato");
+    sessions.handleExternalRemoval("sparita.md");
+    await sessions.read("sparita.md");
+
+    await sessions.discardRemovedDraft("sparita.md", undefined);
+    expect(vi.mocked(api.discardDraft)).not.toHaveBeenCalled();
+  });
 
   it("riserva l'identità durante la cancellazione e non ricrea il buffer", async () => {
     let startDelete!: () => void;

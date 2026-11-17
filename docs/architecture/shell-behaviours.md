@@ -204,4 +204,5 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   (`state/sheet-notices.ts`) che restano finché non si chiudono, e un
   salvataggio riuscito toglie «cambiato su disco» ma non la bozza. Una nota
   rimossa da fuori chiude la sua linguetta: l'avviso resta sul riquadro che la
-  mostrava, con «Ricrea» se c'era testo non salvato, finché non si chiude.
+  mostrava, con «Ricrea» se c'era testo non salvato, finché non si chiude;
+  ricreata la nota, la bozza di quel testo se ne va.

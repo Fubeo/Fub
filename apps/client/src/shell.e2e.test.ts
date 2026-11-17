@@ -2195,27 +2195,42 @@ describe("una sessione e le sue superfici", () => {
       expect(undoDepth(parked.state)).toBe(0);
     });
 
-    it("una rinomina o uno spostamento smontano la superficie da parte, e la scheda rimonta col testo", async () => {
+    it("una rinomina o uno spostamento lasciano la superficie da parte, e la scheda torna con lei", async () => {
+      // La scheda è la stessa, cambia solo il nome: la superficie la segue
+      // col cursore e la cronologia locale (IMP-046, come per quella davanti).
       const host = await start({ ...VAULT });
       const parked = await parkSpesa();
       host.renameFromOutside("note/Spesa.md", "note/Lista.md");
       await waitFor("la scheda segue la rinomina", () => !!tabOf(panes()[0]!, "Lista"));
-      await waitFor("la superficie da parte se ne va", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
-      expect(destroyed(parked)).toBe(true);
+      await settle();
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(1);
+      expect(destroyed(parked)).toBe(false);
 
       tabOf(panes()[0]!, "Lista").click();
-      await waitFor("Lista si monta", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
-      const lista = viewIn(panes()[0]!)!;
+      await waitFor("Lista torna davanti", () => viewIn(panes()[0]!) === parked);
       tabOf(panes()[0]!, "Benvenuto").click();
       await waitFor("Lista va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
 
       host.renameFromOutside("note/Lista.md", "Archivio/Lista.md");
-      await waitFor("la superficie da parte se ne va dopo lo spostamento", () =>
-        panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
-      expect(destroyed(lista)).toBe(true);
+      await waitFor("la scheda segue lo spostamento", () => !!tabOf(panes()[0]!, "Lista"));
+      await settle();
+      expect(destroyed(parked)).toBe(false);
       tabOf(panes()[0]!, "Lista").click();
-      await waitFor("Lista si monta dalla cartella nuova", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      await waitFor("Lista torna dalla cartella nuova", () => viewIn(panes()[0]!) === parked);
+      expect(parked.state.doc.toString()).toContain("pane, latte");
       expect(editorViews()).toHaveLength(1);
+
+      // La battuta va alla sessione col nome nuovo.
+      parked.dispatch({ changes: { from: 0, insert: "X " }, userEvent: "input.type" });
+      await waitFor("il salvataggio va al path nuovo", () => host.files()["Archivio/Lista.md"]?.startsWith("X ") === true);
+    });
+
+    it("cambiata l'estensione, la superficie da parte si smonta e la scheda rimonta", async () => {
+      const host = await start({ ...VAULT });
+      const parked = await parkSpesa();
+      host.renameFromOutside("note/Spesa.md", "note/Spesa.txt");
+      await waitFor("la superficie da parte se ne va", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
+      expect(destroyed(parked)).toBe(true);
     });
 
     it("un salvataggio in volo quando la scheda va da parte arriva al disco, e la superficie torna intatta", async () => {
