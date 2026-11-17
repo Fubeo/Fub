@@ -2737,7 +2737,7 @@ fn a_linked_id_equal_to_an_installed_theme_is_refused() {
 }
 
 /// I rifiuti delle porte dell'installazione valgono anche per collegare: una
-/// cartella senza manifest, e un link simbolico dentro la cartella.
+/// cartella senza manifest non si collega.
 #[test]
 fn a_folder_that_is_not_a_theme_is_not_linked() {
     let (_config_dir, config) = folders();
@@ -2754,6 +2754,17 @@ fn a_folder_that_is_not_a_theme_is_not_linked() {
         ),
         other => panic!("{other:?}"),
     }
+    assert!(host.theme_link().is_none());
+}
+
+/// Un link simbolico dentro la cartella è un'uscita: collegare si rifiuta,
+/// come all'installazione.
+#[cfg(unix)]
+#[test]
+fn a_folder_with_a_symlink_inside_is_not_linked() {
+    let (_config_dir, config) = folders();
+    let (_source_dir, source) = folders();
+    let host = developer(&config, true);
     let linked = source.join("con-link");
     write_theme(&linked, "acme.link", "theme-2", "");
     std::fs::remove_file(linked.join("skin.css")).unwrap();
