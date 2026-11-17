@@ -265,10 +265,5 @@ Quello che resta non è di chi apre il gesto, o non vale il rischio:
   abbassa; un'apertura e chiusura vera a riposo sì (9 ms invece di 25), ma
   toccherebbe fuoco, pillola e memoria dei modi, e non si fa;
 - **la prima apertura del grafo** resta un fotogramma da ~50 ms
-  (`graph/chart.ts`): non toccata in questo giro.
-
-Il «blocco dopo la chiusura del secondo menu» delle misure precedenti non
-esiste: era il blocco del primo lanciatore attribuito al gesto prima, perché la
-sonda segna l'inizio di un blocco all'ultimo giro di `setTimeout(0)`, qualche
-ms prima del gesto che lo causa. La sonda adesso attribuisce un blocco al
-gesto il cui inizio cade dentro il blocco.
+  (`graph/chart.ts`), che si potrebbe dividere separando il montaggio dal
+  primo `tick`.
