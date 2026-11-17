@@ -387,6 +387,30 @@ fn highlights_land_on_the_right_bytes_in_accented_text() {
     assert!(!snippet.contains('<'), "lo snippet è testo, non markup");
 }
 
+/// Mentre si scrive l'ultimo termine è un prefisso, cioè una regex sul
+/// dizionario dei termini: un'emoji o un simbolo che il tokenizer tiene non
+/// devono diventare una fuga che la sintassi rifiuta («è 🗺» falliva tutta).
+#[test]
+fn an_emoji_being_typed_is_searched_and_not_a_regex_error() {
+    let v = Vault::new();
+    v.put("Mappa.md", "La mappa è qui 🗺 e <ancora>.\n");
+    let ws = v.open();
+
+    for typed in ["è 🗺", "🗺", "è", "<anc", "a.c", "(mappa"] {
+        let answer = ws.query_index(IndexQuery::Documents {
+            matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms(typed).while_typing())),
+            sort: None,
+            select: PropertySelect::None,
+            page: Some(Page::first(20)),
+            excerpts: Excerpts::Omit,
+        });
+        assert!(
+            matches!(answer, Ok(IndexResult::Documents(_))),
+            "«{typed}»: {answer:?}"
+        );
+    }
+}
+
 #[test]
 fn editing_a_notes_updates_what_is_findable() {
     let v = Vault::new();
