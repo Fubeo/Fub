@@ -13471,6 +13471,25 @@ input.canvas-toolbar-item {
   margin: 0;
   color: var(--text);
 }
+/* La scheda piccola (IMP-045): il messaggio e i pulsanti più stretti, così
+   stanno tutti e due dentro i 100 px di una scheda di serie. */
+@container (max-height: 120px) {
+  .canvas-card-missing {
+    gap: var(--space-3);
+  }
+  .canvas-card-missing > .canvas-media-placeholder {
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-xs);
+  }
+  .canvas-card-missing-actions {
+    gap: var(--space-2);
+  }
+  .canvas-card-missing-actions > button {
+    min-height: calc(var(--control-h) - var(--space-3));
+    padding: 0 var(--space-4);
+    font-size: var(--text-xs);
+  }
+}
 /* Il fantasma del rilascio (T15): dove andranno i file, prima di lasciarli. */
 .canvas-drop-ghost {
   border: calc(1.5px / var(--canvas-zoom, 1)) dashed var(--accent);

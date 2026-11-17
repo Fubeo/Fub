@@ -12816,6 +12816,8 @@ export class CanvasEngine {
     const message = document.createElement("span");
     message.className = "canvas-media-placeholder";
     message.textContent = t("canvas.card.missing", { path });
+    // Su una scheda piccola il messaggio sta su una riga, tagliato: intero qui (IMP-045).
+    message.title = message.textContent;
     missing.append(message);
     body.append(missing);
     life.add(cards.watch(path, () => this.#fileBack(id)));
@@ -12831,6 +12833,7 @@ export class CanvasEngine {
       relink.dataset.kind = "primary";
       relink.dataset.cardAction = "relink";
       relink.textContent = t("canvas.card.relink");
+    relink.title = relink.textContent;
       life.listen(relink, "click", (event) => {
         event.stopPropagation();
         this.#relink(id);
@@ -12843,6 +12846,7 @@ export class CanvasEngine {
     remove.dataset.kind = "normal";
     remove.dataset.cardAction = "remove";
     remove.textContent = t("canvas.card.remove");
+    remove.title = remove.textContent;
     life.listen(remove, "click", (event) => {
       event.stopPropagation();
       this.#removeCard(id);

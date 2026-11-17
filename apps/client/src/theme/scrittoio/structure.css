@@ -4136,19 +4136,44 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 }
 
 /* «File mancante» (T16, prototipo T25): il messaggio e i due pulsanti al
-   centro della scheda. */
+   centro della scheda. Ciò che non ci sta esce in basso, mai in alto
+   (`safe`), e la scheda lo taglia; è un contenitore, così una scheda piccola
+   stringe il messaggio e i pulsanti su una riga sola (IMP-045). */
 .canvas-card-missing {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  justify-content: center;
+  justify-content: safe center;
   box-sizing: border-box;
   height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  container-type: size;
 }
 .canvas-card-missing-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3, 6px);
+}
+/* La scheda piccola (la misura di serie di un file è 200×100): il messaggio
+   su una riga, col nome intero nel suggerimento, e i due pulsanti accanto,
+   che si stringono col nome tagliato invece di andare a capo. */
+@container (max-height: 120px) {
+  .canvas-card-missing > .canvas-media-placeholder {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .canvas-card-missing-actions {
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+  .canvas-card-missing-actions > button {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 /* Scrivere nelle celle di un foglio (N6 T42, prototipo T27). La griglia del

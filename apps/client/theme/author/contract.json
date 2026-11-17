@@ -1322,6 +1322,7 @@
     "canvas-card-pdf-next",
     "canvas-card-pdf-status",
     "canvas-card-missing",
+    "canvas-card-missing-actions",
     "rich-ribbon-bold",
     "rich-ribbon-color-bar",
     "rich-ribbon-field-label",
@@ -3479,6 +3480,7 @@
     "canvas-card-pdf-next": "contenuto",
     "canvas-card-pdf-status": "contenuto",
     "canvas-card-missing": "contenuto",
+    "canvas-card-missing-actions": "contenuto",
     "rich-ribbon-bold": "cornice",
     "rich-ribbon-color-bar": "cornice",
     "rich-ribbon-field-label": "cornice",
@@ -7559,7 +7561,8 @@
         "canvas-card-pdf-previous",
         "canvas-card-pdf-next",
         "canvas-card-pdf-status",
-        "canvas-card-missing"
+        "canvas-card-missing",
+        "canvas-card-missing-actions"
       ],
       "states": [
         "rest",
@@ -11326,7 +11329,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2155,
+    "hooks": 2156,
     "state_names": 7,
     "assigned_states": 981,
     "components": 288,
