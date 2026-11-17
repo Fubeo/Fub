@@ -1938,7 +1938,7 @@ Fatto quando: test con `MemoryHost`: creare, cambiare tipo, tipo guasto,
 cartella cambiata.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 template properties; cargo nextest run -p fub-host settings
-Stato: [~] fatto dal coder (dfe3d15d6, 2026-11-17), in coda per `integra/editor-1`
+Stato: [~] integrato in `integra/editor-1` (b8d38c508, 2026-11-17), PR bozza #472
 
 ## T33 · I tipi di nota nell'editor
 
