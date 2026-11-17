@@ -219,6 +219,19 @@ describe("il gesto", () => {
     expect(handle.hasAttribute("data-dragging")).toBe(false);
   });
 
+  // WebKitGTK comincia una selezione anche premendo su un elemento che non si
+  // sceglie, e il trascinamento la allargava al testo accanto (IMP-017).
+  it("la pressione non comincia una selezione di testo", () => {
+    mount();
+    const down = pointer("pointerdown", { clientX: 500 });
+    handle.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    const middle = pointer("pointerdown", { clientX: 500, button: 1 });
+    handle.dispatchEvent(middle);
+    expect(middle.defaultPrevented).toBe(false);
+    send("pointerup", 500);
+  });
+
   it("propone la misura mentre dura, la segna sulla maniglia e la consegna alla fine", () => {
     mount();
     send("pointerdown", 500);

@@ -12,7 +12,11 @@
 // che rifarebbe il layout di tutto ciò che il divisore governa.
 //
 // Due cose restano al foglio di stile della maniglia, come per ogni gesto di
-// `moto`: `touch-action: none` e `user-select: none`. Le mette `kit.css`.
+// `moto`: `touch-action: none` e `user-select: none`. Le mette `kit.css`. Il
+// foglio non basta a WebKitGTK: lì premere su una maniglia che non si sceglie
+// comincia lo stesso una selezione, che il trascinamento allarga ai titoli
+// accanto (IMP-017). La pressione quindi non fa il suo lavoro di sempre
+// (scegliere il testo, dare il fuoco): la maniglia prende il fuoco dal Tab.
 import { animate, drag, motionLevel, type Motion } from "../moto";
 import type { Lifetime } from "../ui/lifetime";
 
@@ -110,6 +114,9 @@ export function mountSplitter(options: SplitterOptions): SplitterHandle {
   const along = (info: { dx: number; dy: number }): number =>
     origin + sign * (vertical ? info.dx : info.dy);
 
+  lifetime.listen(handle, "pointerdown", (event) => {
+    if (event.isPrimary && event.button === 0) event.preventDefault();
+  });
   drag(handle, {
     onStart() {
       stopBack();
