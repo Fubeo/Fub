@@ -32,22 +32,16 @@ export function warmupData(): GraphData {
 export const WARMUP_FRAMES = 3;
 
 /// L'host fuori vista: dentro la pagina perché il canvas si dipinga davvero
-/// (un canvas staccato non compila niente), ma invisibile e irraggiungibile.
+/// (un canvas staccato non compila niente), ma invisibile (`.graph-warmup`) e
+/// irraggiungibile.
 export function warmupHost(): HTMLElement {
   const host = document.createElement("div");
   host.className = "graph-warmup";
   host.setAttribute("aria-hidden", "true");
   host.inert = true;
-  const style = host.style;
-  style.position = "fixed";
-  style.left = "0";
-  style.top = "0";
-  style.width = "200px";
-  style.height = "200px";
-  style.opacity = "0";
-  style.pointerEvents = "none";
-  style.contain = "strict";
-  style.zIndex = "-1";
+  // Dove sta e che non si vede lo dice `.graph-warmup` in
+  // `theme/scrittoio/structure.css`, una garanzia che nessun tema revoca: in
+  // linea, un `opacity` è una proprietà del moto lasciata sull'elemento.
   return host;
 }
 
@@ -76,7 +70,12 @@ export async function warmGraph(next: () => Promise<void>, options: WarmGraphOpt
     await next();
     const chart = createChart({ data: warmupData(), config: loadConfig() });
     try {
-      chart.mount(host);
+      // Il grafico scrive il suo `position` sull'elemento dove si monta: si
+      // monta in un figlio, e l'host resta com'è (fisso, senza stile in linea).
+      const stage = document.createElement("div");
+      stage.className = "graph-warmup-stage";
+      host.append(stage);
+      chart.mount(stage);
       for (let i = 0; i < WARMUP_FRAMES; i++) await new Promise<void>((resolve) => frame(resolve));
     } finally {
       if (pendingFrame !== null) cancelAnimationFrame(pendingFrame);

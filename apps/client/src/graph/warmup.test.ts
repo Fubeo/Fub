@@ -4,6 +4,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RADIUS_BUCKETS, atlasFor, readTints } from "./render/atlas";
 import { warmGraph } from "./warmup";
+import structure from "../theme/scrittoio/structure.css?raw";
 
 const frame = (run: () => void): void => void setTimeout(run, 0);
 
@@ -45,8 +46,11 @@ describe("warmGraph", () => {
     expect(host).not.toBeNull();
     expect(host!.getAttribute("aria-hidden")).toBe("true");
     expect(host!.inert).toBe(true);
-    expect(host!.style.opacity).toBe("0");
-    expect(host!.style.pointerEvents).toBe("none");
+    expect(host!.className).toBe("graph-warmup");
+    expect(host!.getAttribute("style"), "niente stile in linea: lo dà la struttura").toBeNull();
+    const rule = structure.match(/\.graph-warmup \{([^}]*)\}/)?.[1] ?? "";
+    expect(rule).toContain("opacity: 0;");
+    expect(rule).toContain("pointer-events: none;");
   });
 
   it("un passo che rifiuta lascia la pagina com'era", async () => {
