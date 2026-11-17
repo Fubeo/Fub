@@ -50,6 +50,7 @@ import { onEvent } from "../state/kernel";
 import { settingTouches } from "../state/setting-change";
 import { on } from "../state/store";
 import type { SettingEntry } from "../host/contract";
+import { setErrorKindTranslator } from "../host/errors";
 import type { Teardown } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
 
@@ -259,6 +260,10 @@ export function t<K extends Key>(key: K, ...[args = {}]: ArgsFor<K>): string {
   const template = catalogFor(languageCurrent())[key] ?? IT[key] ?? key;
   return expand(template, args);
 }
+
+// La frase della specie di un errore arrivato senza la sua (vedi
+// `errorText`): nella lingua di chi guarda, come ogni altra.
+setErrorKindTranslator((key) => t(key));
 
 /// Il catalogo di una parte del client che arriva quando serve.
 ///

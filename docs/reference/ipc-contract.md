@@ -214,8 +214,11 @@ una chiave del catalogo, perché chi lo riceve in Rust lo riconosce da quella.
 I comandi e le view escono già localizzati. Un comando IPC che porta alla shell
 l'errore di una chiamata dell'host lo passa da `Host::localized_error`
 (`for_the_shell` in `fub-app`): una chiave non risolta sul filo è un oggetto,
-non una frase. Un errore nuovo destinato all'utente usa una chiave del
-catalogo invece di un letterale. Il guard `check-error-literals.mjs` conta i
+non una frase. L'errore di un indice esterno lo risolve il kernel col
+catalogo di chi l'ha scritto (`QueryFailure`), anche nella domanda staccata.
+Se una chiave sfugge lo stesso, `errorText` nel client mostra la frase della
+specie (`error.kind.*`), mai «[object Object]». Un errore nuovo destinato
+all'utente usa una chiave del catalogo invece di un letterale. Il guard `check-error-literals.mjs` conta i
 letterali per crate e ne impedisce la crescita.
 
 Un errore Rust non attraversa il confine come debug string o stack trace.

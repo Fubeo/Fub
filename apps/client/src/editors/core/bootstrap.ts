@@ -299,10 +299,14 @@ function staticSurface(
   const redraw = () => {
     if (!active) return;
     const message = t(messageKey);
-    element.textContent = family === "error" && context.errorReason
-      ? `${message}: ${context.errorReason}`
-      : message;
-    element.setAttribute("aria-label", message);
+    // Con un perché, la superficie d'errore dice che il documento non si
+    // mostra e perché; «nessuna superficie disponibile» è il gergo del
+    // registro, e resta solo per chi non ne ha uno.
+    const failed = family === "error" && context.errorReason
+      ? `${t("surface.failed")}: ${context.errorReason}`
+      : null;
+    element.textContent = failed ?? message;
+    element.setAttribute("aria-label", failed ?? message);
   };
   redraw();
   const stopLanguage = onLanguage(redraw);
