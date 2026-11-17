@@ -27,7 +27,9 @@ vede: le voci visibili entrano una dopo l'altra e le righe sotto scivolano.
 Alla chiusura i figli sbiadiscono e le righe sotto risalgono in 140 ms,
 partendo piano (`ease-in-out`), dal bordo se prima non si vedevano. Un clic
 chiude il suggerimento della riga, come quello di ogni controllo, e non torna
-finché il puntatore resta fermo: non copre le voci appena aperte.
+finché il puntatore resta fermo: non copre le voci appena aperte. Righe e
+appuntate rispondono soltanto al tasto sinistro: il centrale non apre né chiude
+una cartella e non apre una nota.
 Dal menu contestuale un allegato si rinomina, conservando l'estensione, e si
 cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e
 il ripristino lo rimette dov'era, byte per byte.

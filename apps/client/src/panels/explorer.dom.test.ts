@@ -205,6 +205,32 @@ describe("«Tutte le note» sopra l'albero", () => {
   });
 });
 
+describe("i tasti del mouse sulle righe", () => {
+  /// Un clic vero: la pressione col suo tasto, poi il `click`. WebKitGTK manda
+  /// il `click` anche dopo il centrale, col `button` del sinistro.
+  const press = (target: HTMLElement, button: number): void => {
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button }));
+    target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button }));
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+  };
+  const expanded = (path: string) =>
+    document.querySelector(`#file-list li[data-path="${CSS.escape(path)}"]`)!.getAttribute("aria-expanded");
+
+  it("il tasto centrale non apre né chiude una cartella; il sinistro sì (IMP-002)", async () => {
+    await start();
+    expect(expanded("Guida")).toBe("false");
+    press(row("Guida")!.querySelector<HTMLElement>(".row-name")!, 1);
+    await quiet();
+    expect(expanded("Guida")).toBe("false");
+    press(row("Guida")!.querySelector<HTMLElement>(".row-name")!, 0);
+    await waitFor("la cartella aperta", () => expanded("Guida") === "true");
+    // Dopo un centrale, Invio sulla riga (un clic senza tasti) la chiude ancora.
+    press(row("Guida")!.querySelector<HTMLElement>(".row-name")!, 1);
+    row("Guida")!.click();
+    await waitFor("la cartella chiusa", () => expanded("Guida") === "false");
+  });
+});
+
 describe("le appuntate", () => {
   it("una nota appuntata dal menu compare subito fra le appuntate (IMP-009)", async () => {
     await start();
