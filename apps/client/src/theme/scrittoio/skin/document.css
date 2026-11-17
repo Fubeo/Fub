@@ -246,6 +246,11 @@
 .cm-editor .cm-content .cm-markdown-block > :last-child {
   margin-bottom: 0;
 }
+/* Col cursore su una riga vuota dopo il widget la riga si vede, alta quanto
+   lo stacco: lo stacco le cede il posto e il testo sotto resta dov'era. */
+.cm-editor .cm-content .cm-markdown-block:has(+ .cm-markdown-gap-lead) {
+  padding-bottom: 0;
+}
 
 /* ── I titoli ────────────────────────────────────────────────────────────── */
 

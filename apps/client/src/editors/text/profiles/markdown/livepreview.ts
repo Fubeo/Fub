@@ -2264,6 +2264,11 @@ class MarkdownWidget extends WidgetType {
 }
 
 const GAP = Decoration.line({ class: "cm-markdown-gap" });
+/// La prima riga dopo un blocco reso quando il cursore sta su una delle sue
+/// righe vuote: la riga del cursore si vede, e lo stacco sotto il blocco (il
+/// suo padding, `cm-markdown-block` e `tb-frame` nella pelle) le cede il
+/// posto, così il testo che segue non si sposta (#411, A-01).
+const GAP_LEAD = Decoration.line({ class: "cm-markdown-gap-lead" });
 
 /// Se `position` cade in uno degli intervalli, ordinati e disgiunti, che un
 /// blocco reso copre.
@@ -2756,18 +2761,24 @@ export function livePreview(
     const { source } = document;
     const after = source.indexOf("\n", to);
     let lineFrom = lineStart(source, to) === to ? to : after === -1 ? -1 : after + 1;
+    const first = lineFrom;
+    let open = false;
     while (lineFrom !== -1 && lineFrom < next) {
       const end = source.indexOf("\n", lineFrom);
       const lineTo = end === -1 ? source.length : end;
-      if (!/\S/.test(source.slice(lineFrom, lineTo)) && !touched(state, lineFrom, lineTo)) {
+      const blank = !/\S/.test(source.slice(lineFrom, lineTo));
+      if (blank && !touched(state, lineFrom, lineTo)) {
         ranges.push(GAP.range(lineFrom));
         decision += "g";
       } else {
-        decision += "-";
+        // Una riga vuota col cursore si vede e prende lo stacco del blocco.
+        if (blank) open = true;
+        decision += blank ? "o" : "-";
       }
       if (end === -1) break;
       lineFrom = end + 1;
     }
+    if (open) ranges.push(GAP_LEAD.range(first));
     return { decision, ranges };
   }
   /// Candidati e decorazioni di tutto il documento: quando la Live parte, e
