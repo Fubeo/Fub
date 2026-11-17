@@ -243,6 +243,15 @@ commenti, rientri e spazi che non contano, lasciando intatte stringhe, escape
 e `url(…)`. Il suo test confronta, sulla pelle vera, l'albero di postcss prima
 e dopo regola per regola e la fa passare dal cancello del tema; in sviluppo e
 al banco la pelle resta quella scritta.
+Rollup non divide un modulo: [`build/skin-split.mjs`](../../apps/client/build/skin-split.mjs)
+taglia la pelle ai confini fra i pezzi di `skin/order.ts` in gruppi di circa
+300 000 byte (`theme-skin`, `theme-skin-2`, …), che il modulo della pelle
+importa staticamente e rimette insieme: al tema arriva, byte per byte, la
+pelle minimizzata intera (la build si ferma se no), all'avvio come prima.
+Niente pelle a pezzi con la sua superficie: cascata, momento delle regole e
+temi d'autore non cambiano, e non c'è lampo senza stile da prevenire.
+Il chunk condiviso della shell (`search`) lascia le discussioni dei commenti
+della Live a `markdown-comments`; la build si ferma se questo fa un ciclo.
 
 L'audit npm della supply chain
 ([`npm-audit.mjs`](../../.github/scripts/npm-audit.mjs)) è rosso per ogni
