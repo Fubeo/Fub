@@ -1504,6 +1504,53 @@ export const SCENE = onPage("shell", [
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     },
   })),
+  // La Base nella nota (T18, E12, E19): incorporata, si allarga oltre la
+  // colonna del testo fino al margine; nella finestra stretta resta nella
+  // colonna. Poi «/base»: il nome chiesto, e la Base nata al posto della riga.
+  ...[
+    ["base-nota", "La Base incorporata in una nota: oltre la colonna del testo fino al margine", "base-incorporata"],
+    ["base-nota-stretta", "La Base incorporata nella finestra minima: resta nella colonna", "base-incorporata", { width: 800, height: 800 }],
+  ].map(([id, title, live, viewport]) => ({
+    id,
+    title,
+    query: `live=${live}&base=nota`,
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await waitForEmbeddedBase(page);
+    },
+  })),
+  {
+    id: "base-slash-nome",
+    title: "«/base»: il nome della Base, di serie il titolo della nota",
+    query: "live=base-slash&base=nota&slash=1",
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      await page.keyboard.type("/base");
+      await page.waitForSelector(".slash-panel");
+      await page.keyboard.press("Enter");
+      await page.waitForSelector(".palette-form input");
+      await page.mouse.move(0, 0);
+    },
+  },
+  {
+    id: "base-slash-creata",
+    title: "«/base» confermato: il file accanto alla nota e la Base al posto della riga",
+    query: "live=base-slash&base=nota&slash=1",
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      await page.keyboard.type("/base");
+      await page.waitForSelector(".slash-panel");
+      await page.keyboard.press("Enter");
+      await page.waitForSelector(".palette-form input");
+      await page.keyboard.press("Enter");
+      await page.waitForSelector(".palette-form", { state: "detached" });
+      await waitForEmbeddedBase(page);
+      await page.mouse.move(0, 0);
+    },
+  },
   {
     id: "compact",
     title: "Lo spazio dell'interfaccia al passo più stretto: le barre si ritirano, il foglio no",
@@ -2831,6 +2878,15 @@ async function openBase(page) {
     return (pane?.querySelectorAll(".base-table tbody tr").length ?? 0) > 0
       && pane?.querySelector(".base-tab[aria-pressed='true']") !== null
       && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
+  });
+}
+
+/// Aspetta la Base incorporata nella nota della Live, con le sue righe.
+async function waitForEmbeddedBase(page) {
+  await page.waitForFunction(() => {
+    const base = document.querySelector('.pane.focus .base-surface[data-embedded="true"]');
+    return (base?.querySelectorAll(".base-table tbody tr").length ?? 0) > 0
+      && base?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
   });
 }
 

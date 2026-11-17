@@ -1,8 +1,8 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit 685c838192907051e74b974dca4ad8e387a28e6e.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit 46d06d044a51fd857a011ec0b4af804def9d24cd.",
   "prototipo": "editor",
   "ramo": "piano/editor-completo",
-  "commit": "685c838192907051e74b974dca4ad8e387a28e6e",
+  "commit": "46d06d044a51fd857a011ec0b4af804def9d24cd",
   "file": "PLAN-ui/editor.html",
   "sha256": "36be544b4bd1827e97eaeb3fbf606f6ff2ea697dafc409e1e9b6b60ee40ea188",
   "traduzioni": {
@@ -14483,6 +14483,40 @@
             "var(--muted)"
           ]
         }
+      }
+    },
+    "base.incorporata": {
+      "chiaro-1280": {
+        "prototipo": ".blk[data-t=\"base\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "margin-right": "-64px"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": ".blk[data-t=\"base\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "margin-right": "-64px"
+        },
+        "fub": {}
+      },
+      "chiaro-700": {
+        "prototipo": ".blk[data-t=\"base\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "margin-right": "0px"
+        },
+        "fub": {}
+      },
+      "scuro-700": {
+        "prototipo": ".blk[data-t=\"base\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "margin-right": "0px"
+        },
+        "fub": {}
       }
     }
   }

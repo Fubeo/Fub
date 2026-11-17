@@ -295,6 +295,19 @@ export const VISTE = {
     },
     app: { scena: "slash-01-aperto" },
   },
+  /// La Base incorporata nella nota (T18, E12, E19): il prototipo al passo
+  /// «La Base si costruisce a vista», l'app dalla scena con
+  /// `![[Opere.base#Tabella]]` nella nota della Live.
+  "base-nota": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La Base si costruisce a vista");
+        await page.waitForSelector('#win .blk[data-t="base"]');
+      },
+    },
+    app: { scena: "base-nota" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -1074,6 +1087,15 @@ export const PEZZI = [
     prototipo: ".sl-tx .y",
     app: ".slash-syntax",
     proprieta: ["font", "color", "margin", "white-space", "text-overflow"],
+  },
+  // ── la Base nella nota (T18) ────────────────────────────────────────────
+  // Oltre la colonna fino al margine a tutta larghezza, nella colonna a 700.
+  {
+    id: "base.incorporata",
+    vista: "base-nota",
+    prototipo: '.blk[data-t="base"]',
+    app: '.pane.focus .base-surface[data-embedded="true"]',
+    proprieta: ["margin-right"],
   },
 ];
 

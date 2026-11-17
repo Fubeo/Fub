@@ -211,6 +211,13 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     "Vedi [[Itinerario dettagliato#Giorno 2|il secondo giorno]] domani, §ok.\n\nVedi [[Itinerario dettagliato#Giorno 2|il secondo giorno]] domani.",
   ),
   "riga-vuota": at("# Nota nuova\n\n§"),
+  // La Base nella nota (T18, con `?base=nota`): una riga vuota fra due
+  // paragrafi per «/base», e la Base già incorporata, larga fino al margine.
+  "base-slash": at("# Letture\n\nI libri dell'anno, in una tabella.\n\n§\n\nSotto, il testo che segue."),
+  "base-incorporata": {
+    text: "# Letture\n\nI libri dell'anno, in una tabella.\n\n![[Opere.base#Tabella]]\n\nSotto, il testo che segue.",
+    cursor: null,
+  },
   // La formula che si modifica toccandola (T60): una in riga col cursore
   // davanti, un blocco `$$` da cliccare; poi una formula con un errore.
   "formula-toccata": at(
