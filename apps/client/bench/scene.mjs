@@ -1105,6 +1105,30 @@ export const SCENE = onPage("shell", [
     query: "live=pagina",
     prepare: (page) => writingAtRest(page),
   },
+  // La riga dei suggerimenti (T14): al centro della banda, i tasti per ciò che
+  // si sta facendo. Una parola scelta a 1280 px; un blocco scelto nella
+  // finestra minima, dove la riga toglie dalla fine le voci che non ci stanno.
+  // La riga cambia dopo una pausa: il banco aspetta il contesto, non un tempo.
+  ...[
+    ["riga-dei-suggerimenti", "La riga dei suggerimenti con una parola scelta: grassetto, corsivo, collega", "selection"],
+    ["riga-dei-suggerimenti-stretta", "La riga dei suggerimenti coi blocchi scelti, nella finestra minima: le voci che non ci stanno se ne vanno intere", "blocks", NOTE_NARROW],
+  ].map(([id, title, context, viewport]) => ({
+    id,
+    title,
+    query: "live=riga-attiva",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForSelector('#status-hints[data-context="text"]');
+      if (context === "selection") {
+        for (let i = 0; i < 5; i++) await page.keyboard.press("Shift+ArrowRight");
+      } else {
+        await page.keyboard.press("Escape");
+        await page.waitForSelector(".pane.focus .cm-fub-block-selected");
+      }
+      await page.waitForSelector(`#status-hints[data-context="${context}"] .status-hints-item`);
+    },
+  })),
   // La testata in Scrittura e in Lettura (T6, E3, riga «La testata» del
   // prototipo): copertina, icona, titolo, quattro proprietà in evidenza,
   // «Altre 2», «Aggiungi una proprietà» e la riga dei dati; la stessa in
@@ -1700,6 +1724,10 @@ export const SCENE = onPage("shell", [
           const offset = parseFloat(style.outlineOffset);
           return style.outlineStyle !== "none" && width > 0 && offset < 0 && -offset >= width;
         }, null, { timeout: 5_000 });
+        // Col fuoco della tastiera la didascalia del bottone arriva dopo 500 ms
+        // di timer vero (`ui/tooltip.ts`): la si aspetta, perché è lo stato
+        // vero del fuoco e una foto scattata prima la prenderebbe o no (#461).
+        await page.waitForSelector(".shell-tooltip:not([hidden])");
       },
     },
     {

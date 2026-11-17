@@ -234,6 +234,20 @@ export const VISTE = {
     prototipo: { prepara: (page) => passo(page, "A riposo") },
     app: { scena: "proprieta-01-righe" },
   },
+  /// La riga dei suggerimenti al centro della banda, con dei tasti scritti:
+  /// il prototipo al primo passo, «A riposo» (i tasti della riga
+  /// qualunque), l'app con una parola scelta (grassetto, corsivo, collega).
+  /// Il contesto cambia le parole, non gli stili che si leggono.
+  suggerimenti: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "A riposo");
+        await page.waitForSelector("#win #hint kbd");
+      },
+    },
+    app: { scena: "riga-dei-suggerimenti" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -802,6 +816,22 @@ export const PEZZI = [
     prototipo: ".props .more",
     app: ".cm-fub-page-props-more",
     proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+
+  // ── la riga dei suggerimenti (T14): #383 ─────────────────────────────────
+  {
+    id: "suggerimenti.riga",
+    vista: "suggerimenti",
+    prototipo: ".hint",
+    app: "#status-hints",
+    proprieta: [...BASE, ...ALLINEAMENTO, "text-align", "white-space", "overflow-x", "text-overflow", "flex-grow", "flex-shrink", "flex-basis", "min-width"],
+  },
+  {
+    id: "suggerimenti.tasto",
+    vista: "suggerimenti",
+    prototipo: ".hint kbd",
+    app: "#status-hints .status-hints-key",
+    proprieta: [...BASE, "white-space"],
   },
 ];
 

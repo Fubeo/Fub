@@ -221,6 +221,10 @@ pub const EDITOR_SLASH_HIDDEN: &str = "editor.slash.hidden";
 /// L'ordine delle sezioni del menu «/», dopo Suggeriti, Preferiti e Recenti.
 /// Le sezioni non dette seguono nel loro ordine, gli id sconosciuti non contano.
 pub const EDITOR_SLASH_SECTIONS: &str = "editor.slash.sections";
+/// La riga dei suggerimenti al centro della banda: i tasti utili per ciò che
+/// si sta facendo, letti dalle scorciatoie della persona. Accesa di serie;
+/// non c'è al telefono né sotto i 620 px.
+pub const EDITOR_HINTS: &str = "editor.hints";
 /// In che modalità si apre un riquadro nuovo: `live_preview` (Scrittura),
 /// `source` o `reading`, gli id delle modalità della superficie testuale.
 /// `blocks`, scritto da un Fub che aveva la modalità Blocchi, resta un valore
@@ -931,6 +935,12 @@ fn editor_settings() -> Vec<SettingSpec> {
     settings.push(
         SettingSpec::toggle(EDITOR_SLASH, Text::key(C_EDITOR_SLASH), true)
             .describing(Text::key(C_EDITOR_SLASH_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
+    settings.push(
+        SettingSpec::toggle(EDITOR_HINTS, Text::key(C_EDITOR_HINTS), true)
+            .describing(Text::key(C_EDITOR_HINTS_DESC))
             .grouped(Text::key(C_GROUP_EDITOR))
             .for_machine(),
     );
@@ -1713,6 +1723,8 @@ const C_EDITOR_LINK_CLICK_OPEN: &str = "core.editor.link_click.open";
 const C_EDITOR_LINK_CLICK_PEEK: &str = "core.editor.link_click.peek";
 const C_EDITOR_SLASH: &str = "core.editor.slash";
 const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
+const C_EDITOR_HINTS: &str = "core.editor.hints";
+const C_EDITOR_HINTS_DESC: &str = "core.editor.hints.desc";
 const C_EDITOR_SLASH_HIDDEN: &str = "core.editor.slash.hidden";
 const C_EDITOR_SLASH_HIDDEN_DESC: &str = "core.editor.slash.hidden.desc";
 const C_EDITOR_SLASH_SECTIONS: &str = "core.editor.slash.sections";
@@ -2360,6 +2372,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LINK_CLICK_PEEK, "Sbircia la nota")
         .with(C_EDITOR_SLASH, "Menu «/» nel testo")
         .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
+        .with(C_EDITOR_HINTS, "Riga dei suggerimenti")
+        .with(C_EDITOR_HINTS_DESC, "Al centro della banda in basso, i tasti utili per ciò che stai facendo, con le tue scorciatoie. Non c'è al telefono né in una finestra più stretta di 620 px.")
         .with(C_EDITOR_SLASH_HIDDEN, "Voci nascoste dal menu «/»")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "Gli id dei comandi che il menu «/» non mostra. Restano nella palette e da tastiera.")
         .with(C_EDITOR_SLASH_SECTIONS, "Ordine delle sezioni del menu «/»")
@@ -3005,6 +3019,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LINK_CLICK_PEEK, "Peeks at the note")
         .with(C_EDITOR_SLASH, "«/» menu in the text")
         .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
+        .with(C_EDITOR_HINTS, "Hints row")
+        .with(C_EDITOR_HINTS_DESC, "In the middle of the bottom band, the keys useful for what you are doing, with your shortcuts. Not on the phone nor in a window narrower than 620 px.")
         .with(C_EDITOR_SLASH_HIDDEN, "Items hidden from the «/» menu")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "The ids of the commands the «/» menu leaves out. They stay in the palette and on the keyboard.")
         .with(C_EDITOR_SLASH_SECTIONS, "Order of the «/» menu sections")
