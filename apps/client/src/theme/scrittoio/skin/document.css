@@ -1425,14 +1425,12 @@ button.cm-fub-page-icon:focus-visible {
   font: inherit;
   cursor: pointer;
 }
-/* L'orologio davanti al testo di «Aggiungi l'ora»: 14 px come nel prototipo,
-   4 px dal testo, e abbassato di 2 px: sulla linea di base del prototipo sta
-   2,5 px sopra il centro del testo. Come `.cm-fub-prop-foot > svg`. */
+/* L'orologio davanti al testo di «Aggiungi l'ora»: 14 px, 4 px dal testo,
+   sulla linea di base come nel prototipo. */
 .cm-fub-prop-date-action > svg {
   width: 14px;
   height: 14px;
   margin-right: var(--space-2);
-  vertical-align: -2px;
 }
 .cm-fub-prop-date-nav:hover,
 .cm-fub-prop-date-day:not([data-selected]):hover,
