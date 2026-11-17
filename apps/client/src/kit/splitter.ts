@@ -18,7 +18,7 @@
 // accanto (IMP-017). La pressione quindi non fa il suo lavoro di sempre
 // (scegliere il testo, dare il fuoco): la maniglia prende il fuoco dal Tab.
 import { animate, drag, motionLevel, type Motion } from "../moto";
-import type { Lifetime } from "../ui/lifetime";
+import { openLifetime, type Lifetime } from "../ui/lifetime";
 
 export interface SplitterOptions {
   handle: HTMLElement;
@@ -119,27 +119,19 @@ export function mountSplitter(options: SplitterOptions): SplitterHandle {
   // Annullare la pressione non basta da solo: la selezione nasce dal
   // `mousedown`, e finché il tasto è giù ogni `selectstart` del documento
   // viene fermato.
-  let pressed: (() => void) | null = null;
+  let pressed: Lifetime | null = null;
   const release = (): void => {
-    pressed?.();
+    pressed?.close();
     pressed = null;
   };
   const press = (event: PointerEvent | MouseEvent): void => {
     if (event.button !== 0 || ("isPrimary" in event && !event.isPrimary)) return;
     event.preventDefault();
-    if (pressed) return;
-    const stop = (e: Event): void => e.preventDefault();
-    const end = (): void => release();
-    document.addEventListener("selectstart", stop, true);
-    document.addEventListener("pointerup", end, true);
-    document.addEventListener("pointercancel", end, true);
-    document.addEventListener("mouseup", end, true);
-    pressed = () => {
-      document.removeEventListener("selectstart", stop, true);
-      document.removeEventListener("pointerup", end, true);
-      document.removeEventListener("pointercancel", end, true);
-      document.removeEventListener("mouseup", end, true);
-    };
+    if (pressed || lifetime.closed) return;
+    pressed = openLifetime();
+    const capture = { capture: true };
+    pressed.listen(document, "selectstart", (e: Event) => e.preventDefault(), capture);
+    for (const type of ["pointerup", "pointercancel", "mouseup"]) pressed.listen(document, type, release, capture);
   };
   lifetime.listen(handle, "pointerdown", press);
   lifetime.listen(handle, "mousedown", press);
