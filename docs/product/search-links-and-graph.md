@@ -109,19 +109,19 @@ nudo porta prima al formato che dichiara un sorgente di prosa
 (`fub:prose-source`), e l'estensione scritta sceglie l'altro. Un nome o un
 path che finisce con l'estensione di un allegato noto (`[[Bando.pdf]]`) nomina
 quel file, mai un documento con un'estensione in più come `Bando.pdf.fubann`.
-Heading e blocchi condividono slug e ancore
-canoniche; un punto rinominato apre la nota senza inventare una destinazione.
-Completamento e cambio rapido propongono nomi per pertinenza senza riordinare
-nella shell, e la rinomina riscrive soltanto i wikilink che nominavano la nota,
-conservando l'estensione se l'autore l'aveva scritta.
-Il pannello mostra incoming, outgoing con contesto per riferimento, menzioni
-non collegate in entrata e in uscita con filtro, e la conversione esplicita
-della menzione in wikilink con revisione e span dichiarati. Il riferimento
-scritto è il più corto che la risoluzione del vault manda davvero alla nota
-(il nome, poi il nome con l'estensione, poi il percorso senza estensione, poi
-il percorso intero); se la
-parola trovata è scritta altrimenti, per esempio un alias, resta come testo del
-link (`[[Rossi|Mario]]`).
+Heading e blocchi condividono slug e ancore canoniche; un punto rinominato apre
+la nota senza inventare una destinazione. Completamento e cambio rapido
+propongono nomi per pertinenza senza riordinare nella shell, e la rinomina
+riscrive solo i wikilink che nominavano la nota, e l'estensione se era scritta.
+Il pannello mostra incoming, outgoing con contesto, menzioni non collegate nei
+due versi con filtro, e la conversione esplicita in wikilink. Una menzione è il
+nome o un alias, parola intera in prosa: non in un link, nel codice, in un tag,
+in una formula o nel frontmatter. La converte `mention.link`: rilegge la nota alla
+revisione e allo span dichiarati, rifiuta se il testo è cambiato o non è più una
+menzione, e si annulla in un passo con «Annulla l'ultima operazione». Il
+riferimento scritto è il più corto che la risoluzione manda davvero alla nota
+(nome, nome con estensione, percorso senza estensione, percorso intero); una
+parola scritta altrimenti, come un alias, resta testo del link (`[[Rossi|Mario]]`).
 Il pannello tag mostra gerarchia piatta o ad albero, ordinamento per nome o
 conteggio e selezione multipla per esemplare; click e selezione lanciano
 tramite RunSearch la stessa ricerca che si scriverebbe nella barra

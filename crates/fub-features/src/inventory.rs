@@ -88,7 +88,7 @@ use fub_abi::traits::{CommandProvider, IndexProvider, ViewProvider};
 use fub_abi::transfer::ExportProvider;
 
 #[cfg(feature = "backlinks")]
-use crate::backlinks::{self, BacklinksView, BACKLINKS_ID};
+use crate::backlinks::{self, BacklinksView, MentionCommands, BACKLINKS_ID};
 #[cfg(feature = "backup")]
 use crate::backup::{self, BackupCommands, BackupView, BACKUP_ID};
 #[cfg(feature = "base")]
@@ -296,7 +296,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         name: "Backlinks",
         catalog: backlinks::catalog,
         view: Some(|| Box::new(BacklinksView)),
-        commands: None,
+        commands: Some(|| Box::new(MentionCommands)),
         index: None,
         syntax: None,
         renderers: None,

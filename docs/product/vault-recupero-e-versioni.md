@@ -166,7 +166,12 @@ Questo flusso è distinto da `fub.versioning`:
 transazione dell'intero vault. È distinto anche dal drill backup/restore offline
 dell'issue [#7](https://github.com/Fubeo/Fub/issues/7), che conserva il proprio
 fixture e manifesto indipendente. La feature `fub.backup` resta invece uno
-snapshot namespaced delle sole note nello stesso vault. Gli snapshot prendono il
+snapshot namespaced dei documenti nello stesso vault. Copia i byte, mai il
+testo: un `.docx`, un PDF o una nota con un encoding suo entrano e tornano
+byte per byte, e il ripristino scrive soltanto dove il nome è ancora libero.
+Un file che non si legge non ferma il backup: lo snapshot nasce con il resto,
+l'esito è parziale e il pannello nomina ogni file saltato con il perché; uno
+snapshot parziale non fa ruotare via i precedenti. Gli snapshot prendono il
 nome dal giorno, e un secondo backup nello stesso giorno sostituisce il
 precedente soltanto a copia finita. La copia nuova si scrive nell'altra cartella
 del giorno (`<data>.1/`), il manifest `snapshots.json` passa a lei e solo allora
