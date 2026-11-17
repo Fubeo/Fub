@@ -211,7 +211,8 @@ caricano all'avvio, e dentro hanno solo ciò che serve per aprire e scrivere
 una nota. Le parti che servono a un gesto arrivano con un `import()` dal
 loro modulo d'ingresso, che dà il nome al chunk:
 
-- il riquadro delle formule (`math-editing`);
+- il riquadro delle formule (`math-editing`) e le frasi dei loro errori
+  (`math-errors`, dopo KaTeX);
 - i campi e il menu delle proprietà (`property-actions`);
 - il menu dei diagrammi (`diagram-menu`), con le tavolozze
   (`mermaid-styles`, che arrivano anche col primo diagramma da disegnare);
