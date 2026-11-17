@@ -1,5 +1,5 @@
 // Le impostazioni della lavagna come le legge il client, senza la lavagna: il
-// nome del bundle `fub.lavagna`, le chiavi delle tredici impostazioni del gruppo
+// nome del bundle `fub.lavagna`, le chiavi delle quattordici impostazioni del gruppo
 // «Lavagna» (`crates/fub-features/src/lavagna.rs`), le loro scelte, i valori di
 // serie e la lettura pura delle righe (`preferencesOf`): un valore che non regge
 // la sua specie vale il suo di serie.
@@ -46,6 +46,9 @@ export const GRID_KEY = "canvas.grid";
 /// L'impostazione «Aggancia le schede».
 export const SNAP_KEY = "canvas.snap";
 
+/// L'impostazione «Passo della griglia» (#411 C-05).
+export const SNAP_STEP_KEY = "canvas.snap_step";
+
 /// L'impostazione «Scegli le parti di una nota».
 export const PARTS_PICKER_KEY = "canvas.parts_picker";
 
@@ -61,6 +64,8 @@ export const WHEEL_VALUES = ["pan", "zoom"] as const;
 export const DRAG_EMPTY_VALUES = ["select", "pan"] as const;
 export const WORKSPACE_VALUES = ["auto", "full", "simple"] as const;
 export const DROP_FOLDER_VALUES = ["notes", "board", "folder"] as const;
+/// I passi della griglia in unità della lavagna; `none` aggancia solo alle schede vicine.
+export const SNAP_STEP_VALUES = ["8", "16", "32", "none"] as const;
 
 /// Il valore di serie di «Cartella dei file trascinati».
 export const DROP_FOLDER_PATH_DEFAULT = "Allegati";
@@ -71,6 +76,12 @@ export type WheelAction = (typeof WHEEL_VALUES)[number];
 export type DragEmptyAction = (typeof DRAG_EMPTY_VALUES)[number];
 export type WorkspaceMode = (typeof WORKSPACE_VALUES)[number];
 export type DropFolderTarget = (typeof DROP_FOLDER_VALUES)[number];
+export type SnapStep = (typeof SNAP_STEP_VALUES)[number];
+
+/// Il passo della griglia in unità della lavagna; `null` senza griglia.
+export function snapStepOf(step: SnapStep): number | null {
+  return step === "none" ? null : Number(step);
+}
 
 /// Le impostazioni della lavagna, come le dice la macchina.
 export interface CanvasPreferences {
@@ -95,6 +106,8 @@ export interface CanvasPreferences {
   readonly grid: boolean;
   /// I bordi di una scheda che si sposta si agganciano alle schede vicine e alla griglia.
   readonly snap: boolean;
+  /// Il passo della griglia a cui si aggancia una scheda lasciata, o `none`.
+  readonly snapStep: SnapStep;
   /// Una nota con titoli, portata sulla lavagna, apre l'elenco delle sue parti.
   readonly partsPicker: boolean;
   /// Dove si copiano i file portati sulla lavagna.
@@ -115,6 +128,7 @@ export const DEFAULT_PREFERENCES: CanvasPreferences = Object.freeze<CanvasPrefer
   toolbar: Object.freeze<string[]>([]),
   grid: true,
   snap: true,
+  snapStep: "8",
   partsPicker: true,
   dropFolder: "notes",
   dropFolderPath: DROP_FOLDER_PATH_DEFAULT,
@@ -146,6 +160,7 @@ export function preferencesOf(entries: readonly SettingEntry[]): CanvasPreferenc
     toolbar: Array.isArray(toolbar) ? toolbar.filter((tool): tool is string => typeof tool === "string") : [],
     grid: flag(GRID_KEY, DEFAULT_PREFERENCES.grid),
     snap: flag(SNAP_KEY, DEFAULT_PREFERENCES.snap),
+    snapStep: choice(SNAP_STEP_KEY, SNAP_STEP_VALUES, DEFAULT_PREFERENCES.snapStep),
     partsPicker: flag(PARTS_PICKER_KEY, DEFAULT_PREFERENCES.partsPicker),
     dropFolder: choice(DROP_FOLDER_KEY, DROP_FOLDER_VALUES, DEFAULT_PREFERENCES.dropFolder),
     dropFolderPath: dropFolderPathOf(valueOf(DROP_FOLDER_PATH_KEY)),

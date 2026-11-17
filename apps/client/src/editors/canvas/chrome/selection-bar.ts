@@ -5,9 +5,11 @@
 // schede).
 //
 // - **Quando c'è.** Lo dice una regola pura, `selectionBarWanted`: delle schede
-//   scelte, nessun gesto in corso (il puntatore giù, la rotella, un volo), la
-//   penna su e nessuno che scrive dentro una scheda. La tela la chiede a fine
-//   gesto, mai durante: durante, la barra non c'è.
+//   scelte, nessun gesto sulle schede in corso (spostare, ridimensionare, il
+//   rettangolo, il lazo; e il puntatore giù sulla vista), la penna su e nessuno
+//   che scrive dentro una scheda. La camera che si muove senza puntatore giù
+//   (la rotella, lo zoom dai tasti, un volo) non la toglie: la barra segue le
+//   schede a ogni passo (`follow`, #411 C-06), senza rifare i pulsanti.
 // - **Dove sta.** `selectionBarPlace`: sopra il riquadro delle schede scelte,
 //   centrata, dentro la vista, con lo spazio del titolo sopra la scheda (T39);
 //   al bordo alto va sotto. È `bubblePlace` della bolla del testo. Con le
@@ -47,7 +49,7 @@ import { INK_WIDTH_RANGES, type InkStrokeTool } from "../ink-record";
 export interface SelectionBarMoment {
   /// Quante schede e quanti tratti sono scelti (i fili da soli non contano).
   readonly chosen: number;
-  /// Un gesto in corso: il puntatore giù, la rotella che gira, un volo.
+  /// Un gesto sulle schede in corso (spostare, ridimensionare, il rettangolo, il lazo).
   readonly gesture: boolean;
   /// Una penna è giù.
   readonly pen: boolean;
@@ -201,6 +203,11 @@ export interface CanvasSelectionBar {
   /// Mostra la barra per queste schede, al suo posto; se le schede sono fuori
   /// dalla vista la nasconde.
   show(what: SelectionBarShow): void;
+  /// Sposta la barra già mostrata col riquadro delle schede: a ogni passo
+  /// della camera (lo zoom, lo spostamento della vista) la barra segue le
+  /// schede, con gli stessi pulsanti e la misura di quando si è mostrata
+  /// (#411 C-06). Se le schede escono dalla vista la nasconde; nascosta non fa niente.
+  follow(where: Pick<SelectionBarShow, "box" | "view" | "offset">): void;
   /// Nasconde la barra.
   hide(): void;
   /// Ridice nomi, perché e colore (la lingua, la sola lettura, il colore).
@@ -540,6 +547,8 @@ export function createCanvasSelectionBar(ctx: CanvasSelectionBarContext): Canvas
   };
 
   let shown = false;
+  /// La misura della barra all'ultimo `show`: `follow` non la rimisura.
+  let size = { width: 0, height: 0 };
   const hide = (): void => {
     if (!shown && element.hidden) return;
     shown = false;
@@ -562,14 +571,19 @@ export function createCanvasSelectionBar(ctx: CanvasSelectionBarContext): Canvas
     // Nascosta non ha misura: si mostra prima, poi si misura e si mette.
     element.hidden = false;
     relabel();
-    const size = { width: element.offsetWidth, height: element.offsetHeight };
-    const at = selectionBarPlace(what.box, size, what.view);
+    size = { width: element.offsetWidth, height: element.offsetHeight };
+    shown = true;
+    follow(what);
+  };
+
+  const follow = (where: Pick<SelectionBarShow, "box" | "view" | "offset">): void => {
+    if (!shown || lifetime.closed) return;
+    const at = selectionBarPlace(where.box, size, where.view);
     if (!at) {
       hide();
       return;
     }
-    shown = true;
-    const offset = what.offset ?? { left: 0, top: 0 };
+    const offset = where.offset ?? { left: 0, top: 0 };
     element.style.left = `${at.left + offset.left}px`;
     element.style.top = `${at.top + offset.top}px`;
   };
@@ -581,6 +595,7 @@ export function createCanvasSelectionBar(ctx: CanvasSelectionBarContext): Canvas
       return shown;
     },
     show,
+    follow,
     hide,
     relabel,
   };

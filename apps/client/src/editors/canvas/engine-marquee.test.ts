@@ -260,7 +260,8 @@ describe("il rettangolo del trascinamento nel vuoto con la Selezione (N6 T20b)",
     expect(cameraOf(host)).toEqual(start);
     expect(engine.selection().nodes).toEqual(["a"]);
     pointer(viewport, "pointerup", { pointerId: 1, button: 0, buttons: 0, ...at(300, 200) });
-    expect(changes).toEqual([]);
+    // Il corpo sposta la scheda (IMP-041): un passo, la sua `move`.
+    expect(changes).toHaveLength(1);
     engine.destroy();
   });
 

@@ -1,4 +1,5 @@
 import type { Theme } from "../../theme/theme";
+import { nearFreeSpot } from "./free-spot";
 import type { SyntaxForm } from "../../host/contract";
 import { t, onLanguage, plural, type Key } from "../../i18n/strings";
 import { MENU_RULE, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
@@ -111,6 +112,7 @@ import {
   selectionBarWanted,
   type CanvasSelectionBar,
   type SelectionBarRestyle,
+  type SelectionBarShow,
   type SelectionBarStrokes,
 } from "./chrome/selection-bar";
 import { Lasso, LASSO_MIN_STEP, extendLasso, lassoPath, type LassoPoint } from "./lasso";
@@ -155,7 +157,7 @@ import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHe
 import { noteHeadingOf } from "./cards/note";
 import { excerptSourcePath, noteExcerptOf, noteSectionsText, sectionHeading, syncExcerptHead } from "./excerpt";
 import { READER_TAP_MS, READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
-import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type DragEmptyAction, type PenButtonAction, type WheelAction } from "./preferences";
+import { DEFAULT_PREFERENCES, currentPreferences, snapStepOf, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type DragEmptyAction, type PenButtonAction, type WheelAction } from "./preferences";
 import { TAP_MAX_MS, TAP_SLOP_PX, isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import { fit, stepCamera, zoomAtPoint, type Camera, type MotionState, type ScaleLimits } from "../../spatial/camera";
 import { onReducedMotionChange, reducedMotion } from "../../theme/reduced-motion";
@@ -497,8 +499,15 @@ interface CardDrag {
   readonly ids: readonly string[];
   readonly origin: Map<string, { x: number; y: number }>;
   moved: boolean;
+  /** Lo spostamento di adesso, in unità intere: la scheda segue il puntatore 1:1. */
   dx: number;
   dy: number;
+  /**
+   * Dove andrà lasciandola (#411 C-05): la guida che vince o la griglia di
+   * `canvas.snap_step`. Uguale a `dx`/`dy` con Alt o con l'aggancio spento.
+   */
+  aimDx: number;
+  aimDy: number;
 }
 
 /**
@@ -1168,6 +1177,17 @@ function snap(value: number): number {
   return Math.round(value / CANVAS_SNAP) * CANVAS_SNAP;
 }
 
+/** `value` al multiplo di `step` più vicino (`canvas.snap_step`, #411 C-05). */
+function snapTo(value: number, step: number): number {
+  return Math.round(value / step) * step;
+}
+
+/**
+ * Quanto dura la scheda che scivola al suo posto agganciato quando la si
+ * lascia (#411 C-05); col movimento ridotto ci va subito.
+ */
+const SETTLE_MS = 120;
+
 /** Spostando una scheda o una selezione, tutti e tre i punti di ogni asse si agganciano (T71). */
 const MOVE_SIDES: readonly GuideSide[] = ["start", "center", "end"];
 
@@ -1223,8 +1243,13 @@ export interface ResizeOptions {
   readonly keepRatio: boolean;
   /** Alt: il centro resta fermo e la misura cambia dai due lati. */
   readonly fromCenter: boolean;
-  /** L'aggancio delle misure a `CANVAS_SNAP` (A-23); con le proporzioni tenute non c'è. */
+  /** L'aggancio delle misure alla griglia (A-23); con le proporzioni tenute non c'è. */
   readonly snap: boolean;
+  /**
+   * Il passo della griglia (`canvas.snap_step`, #411 C-05): di serie
+   * `CANVAS_SNAP`; `null` senza griglia, e la misura si aggancia solo alle guide.
+   */
+  readonly step?: number | null;
   /** Gli assi che una guida ha già messo (T71): su quelli la misura non si aggancia alla griglia. */
   readonly guided?: { readonly x: boolean; readonly y: boolean };
   readonly minWidth: number;
@@ -1252,9 +1277,10 @@ export function resizeBox(start: ResizeBox, corner: ResizeCorner, dx: number, dy
     );
     width = start.width * scale;
     height = start.height * scale;
-  } else if (options.snap) {
-    if (!options.guided?.x) width = snap(width);
-    if (!options.guided?.y) height = snap(height);
+  } else if (options.snap && options.step !== null) {
+    const step = options.step ?? CANVAS_SNAP;
+    if (!options.guided?.x) width = snapTo(width, step);
+    if (!options.guided?.y) height = snapTo(height, step);
   }
   width = Math.round(Math.max(options.minWidth, Number.isFinite(width) ? width : start.width));
   height = Math.round(Math.max(options.minHeight, Number.isFinite(height) ? height : start.height));
@@ -1650,6 +1676,12 @@ export class CanvasEngine {
    * `click` che segue ci entra. Un clic che la sceglie soltanto non entra.
    */
   #pressedSelected: string | null = null;
+  /**
+   * I tasti con Ctrl (Cmd) che il campo di una scheda non ha usato e che
+   * salgono alla shell (Ctrl+W chiude la linguetta come fuori dalla scrittura):
+   * la tela li lascia passare senza farne un suo comando.
+   */
+  readonly #shellKeys = new WeakSet<Event>();
   /** Il gesto della rotella finisce `WHEEL_SETTLE_MS` dopo l'ultimo scatto. */
   #wheelTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   /**
@@ -1695,6 +1727,8 @@ export class CanvasEngine {
   /** `canvas.grid` e `canvas.snap` (impostazioni del vault), dal vivo. */
   #gridSetting = DEFAULT_PREFERENCES.grid;
   #snapSetting = DEFAULT_PREFERENCES.snap;
+  /** `canvas.snap_step` (#411 C-05): il passo della griglia dell'aggancio; `null` senza griglia. */
+  #snapStep: number | null = snapStepOf(DEFAULT_PREFERENCES.snapStep);
   /** Ctrl+' per questa lavagna (T71): `null` segue `canvas.grid`; si ricorda con la vista. */
   #gridOverride: boolean | null = null;
   /** Il trascinamento delle schede in corso (`CardDrag`). */
@@ -2112,6 +2146,7 @@ export class CanvasEngine {
       this.#partsPickerSetting = preferences.partsPicker;
       this.#gridSetting = preferences.grid;
       this.#snapSetting = preferences.snap;
+      this.#snapStep = snapStepOf(preferences.snapStep);
       this.#fingerWritesSetting = preferences.fingerWrites;
       this.#paintGrid();
       this.#rail.setToolbar(preferences.toolbar);
@@ -5276,8 +5311,10 @@ export class CanvasEngine {
     this.#markAllHandles();
     // Il selettore delle sezioni resta attaccato alla sua scheda (T74).
     this.#partsPicker?.handle.reposition();
-    // E la barra del ritaglio alla sua (T78).
+    // E la barra del ritaglio alla sua (T78), e quella della selezione alle
+    // schede scelte, anche durante lo zoom (#411 C-06).
     this.#placeCropBar();
+    this.#followSelectionBar();
     // Anche la resa passa di qui: la scelta cambiata si ricorda con la camera.
     this.#viewMemo?.changed();
     // Ogni cambio di zoom passa di qui (bottoni, tasti, menu, `fitCamera`): la
@@ -5974,7 +6011,8 @@ export class CanvasEngine {
       bar.append(button);
       return button;
     };
-    mk("add-text", t("canvas.add_text"), () => this.#addNode("text"));
+    // La scheda nasce in scrittura (IMP-042): il fuoco va nel suo testo, non sulla vista.
+    mk("add-text", t("canvas.add_text"), () => this.#placeText(), false, true, false);
     if (this.#options.onPickFile) {
       mk("add-file", t("canvas.add_file"), () => {
         void this.#addFileNode().catch((error: unknown) => this.#showIntakeError(error));
@@ -7833,8 +7871,10 @@ export class CanvasEngine {
    * con la stessa firma di prima non avvisa.
    */
   #statusSettle(): void {
-    // La barra della selezione si rilegge anche lei qui: dentro un gesto sparisce.
-    this.#syncSelectionBar();
+    // La barra della selezione si rilegge anche lei qui: dentro un gesto sulle
+    // schede sparisce. Dentro un gesto della camera (la rotella, il volo) la
+    // segue già `#followSelectionBar`, senza rifarla a ogni passo (#411 C-06).
+    if (!this.#gestureActive() || this.#cardGestureActive()) this.#syncSelectionBar();
     if (this.#destroyed || !this.#doc || this.#gestureActive()) return;
     // Il navigatore si rilegge con la banda, a fine gesto e al cambio del documento (T55).
     this.#navigator.settle();
@@ -8175,7 +8215,12 @@ export class CanvasEngine {
       case "canvas.commands":
         return { disabled: () => null, run: () => this.#openCommandSearch() };
       case "canvas.add.text":
-        return add("text");
+        // Nasce in scrittura, dove dice il menu o in un posto libero vicino al
+        // centro (IMP-042); lasciata vuota se ne va (T44).
+        return {
+          ...add("text"),
+          run: (args) => (args?.at ? this.#placeText(args.at.x, args.at.y) : this.#placeText()),
+        };
       case "canvas.add.link":
         return add("link");
       case "canvas.add.group":
@@ -8550,9 +8595,12 @@ export class CanvasEngine {
 
   /**
    * Mostra la barra della selezione sopra le schede scelte, o la toglie: la
-   * toglie durante un gesto, con la penna giù e mentre si scrive in una scheda
-   * (`selectionBarWanted`), e quando le schede sono tutte fuori dalla vista.
-   * Con la penna giù torna quando si alza (il silenzio della penna).
+   * toglie durante un gesto sulle schede (spostare, ridimensionare, scegliere
+   * col rettangolo o col lazo), con la penna giù e mentre si scrive in una
+   * scheda (`selectionBarWanted`), e quando le schede sono tutte fuori dalla
+   * vista. Con la penna giù torna quando si alza (il silenzio della penna).
+   * Lo zoom e lo spostamento della vista non la tolgono: la barra segue le
+   * schede a ogni passo della camera (`#followSelectionBar`, #411 C-06).
    */
   #syncSelectionBar(): void {
     const bar = this.#selectionBar as CanvasSelectionBar | undefined;
@@ -8568,11 +8616,38 @@ export class CanvasEngine {
     const writing = this.#editor !== null || this.#activeId !== null || this.#canvasOptions.mode === "writing" || this.#crop !== null;
     // La vista ha cambiato misura, o la scheda: la barra del ritaglio si riposa.
     this.#placeCropBar();
-    if (!selectionBarWanted({ chosen, gesture: this.#gestureActive(), pen, writing })) {
+    if (!selectionBarWanted({ chosen, gesture: this.#cardGestureActive(), pen, writing })) {
       bar.hide();
       if (pen && chosen > 0 && this.#quiet.active) this.#quiet.defer("selection-bar", () => this.#syncSelectionBar());
       return;
     }
+    const one = nodes.length === 1 ? nodes[0]! : null;
+    const open = one?.type === "file" && one.file ? "canvas.open" : one?.type === "link" ? "canvas.open_url" : null;
+    bar.show({
+      chosen: nodes.length,
+      open,
+      crop: one !== null && !this.#readOnly && this.#cropImage(one) && this.#cropRenderer(),
+      strokes: this.#strokesShown(units),
+      ...this.#selectionBarWhere(nodes, units),
+    });
+  }
+
+  /**
+   * La barra della selezione già mostrata segue le schede scelte alla camera
+   * di adesso (#411 C-06): solo il posto, senza rifare i pulsanti, così
+   * regge un passo di zoom a ogni fotogramma.
+   */
+  #followSelectionBar(): void {
+    const bar = this.#selectionBar as CanvasSelectionBar | undefined;
+    if (!bar?.shown) return;
+    bar.follow(this.#selectionBarWhere(this.#selectedNodes(), this.#chosenStrokes()));
+  }
+
+  /** Dove sta la barra della selezione: il riquadro delle schede e dei tratti scelti sullo schermo, e la vista. */
+  #selectionBarWhere(
+    nodes: readonly CanvasNode[],
+    units: readonly { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number }[],
+  ): Pick<SelectionBarShow, "box" | "view" | "offset"> {
     const zoom = this.#camera.zoom;
     let left = Infinity;
     let top = Infinity;
@@ -8597,17 +8672,11 @@ export class CanvasEngine {
       bottom: bottom * zoom + this.#camera.y,
     };
     const rect = this.#viewport.getBoundingClientRect();
-    const one = nodes.length === 1 ? nodes[0]! : null;
-    const open = one?.type === "file" && one.file ? "canvas.open" : one?.type === "link" ? "canvas.open_url" : null;
-    bar.show({
-      chosen: nodes.length,
-      open,
-      crop: one !== null && !this.#readOnly && this.#cropImage(one) && this.#cropRenderer(),
-      strokes: this.#strokesShown(units),
+    return {
       box,
       view: { width: rect.width || 800, height: rect.height || 600 },
       offset: { left: this.#viewport.offsetLeft, top: this.#viewport.offsetTop },
-    });
+    };
   }
 
   /**
@@ -9419,7 +9488,8 @@ export class CanvasEngine {
           label: t("canvas_menu.add_here"),
           enabled: writable,
           items: [
-            entry("canvas.add.text", here),
+            // La scheda nasce in scrittura (IMP-042): il fuoco resta nel suo testo.
+            entry("canvas.add.text", here, false),
             ...(this.#options.onPickFile ? [entry("canvas.add.file", here, false)] : []),
             entry("canvas.add.link", here),
             entry("canvas.add.group", here),
@@ -9689,18 +9759,23 @@ export class CanvasEngine {
     const wire = this.#wireAt(target, event.clientX, event.clientY);
     if (wire) {
       this.#selectEdge(wire);
+      this.#claimFocus(null);
       return;
     }
     if (nodeId) {
       this.#selectNode(nodeId, event.shiftKey);
       this.#keepContentFocus(event, nodeId);
-      if (this.#readOnly || !this.#doc || !(target instanceof Element && target.closest(".canvas-node-handle"))) return;
+      // Il fuoco rimasto su un pulsante della colonna o della riga torna alla
+      // lavagna: Canc, Ctrl+Z e lo zoom valgono per la scheda appena scelta (IMP-040).
+      this.#claimFocus(this.#cards.get(nodeId)?.article ?? null);
+      if (this.#readOnly || !this.#doc || !this.#dragsCard(target, nodeId)) return;
       this.#beginDrag(event);
       return;
     }
     const edgeId = this.#edgeAt(target);
     if (edgeId) {
       this.#selectEdge(edgeId);
+      this.#claimFocus(null);
       return;
     }
     // Testo: un clic sul vuoto mette lì una scheda di testo, col campo aperto,
@@ -9719,7 +9794,36 @@ export class CanvasEngine {
       return;
     }
     if (!event.shiftKey) this.#clearSelection();
+    this.#claimFocus(null);
     this.#beginPan(event.pointerId, event.clientX, event.clientY);
+  }
+
+  /**
+   * Il fuoco fuori dalla lavagna (un pulsante della colonna, della riga delle
+   * opzioni o della barra dei comandi appena cliccato) va su `card`, o sulla
+   * vista: i tasti della lavagna arrivano di nuovo (IMP-040). Il fuoco già
+   * dentro la vista resta dov'è (una scheda, il campo che scrive).
+   */
+  #claimFocus(card: HTMLElement | null): void {
+    if (this.#viewport.contains(document.activeElement)) return;
+    (card?.isConnected ? card : this.#viewport).focus({ preventScroll: true });
+  }
+
+  /**
+   * Il mouse giù su `target` sposta la scheda `id` (IMP-041): dalla testata
+   * sempre; dal corpo se la scheda non è attiva né in scrittura (allora il
+   * corpo è del contenuto) e se sotto il puntatore non c'è un controllo della
+   * vista (un pulsante, un campo), che tiene il suo clic. Un clic fermo resta
+   * un clic: lo spostamento comincia oltre i 3 px.
+   */
+  #dragsCard(target: EventTarget | null, id: string): boolean {
+    if (!(target instanceof Element)) return false;
+    if (target.closest(".canvas-node-handle")) return true;
+    if (this.#activeId === id || this.#editor?.id === id) return false;
+    const entry = this.#cards.get(id);
+    if (!entry || !entry.article.contains(target)) return false;
+    const control = target.closest("button, input, textarea, select, [contenteditable=''], [contenteditable='true']");
+    return control === null || !entry.article.contains(control);
   }
 
   /**
@@ -9899,7 +10003,7 @@ export class CanvasEngine {
    * alla Selezione, salvo con `keepTool` (il doppio tocco, T63).
    */
   #placeText(clientX?: number, clientY?: number, link?: CardLink, keepTool = false): void {
-    const at = clientX === undefined || clientY === undefined ? undefined : this.#screenToWorld(clientX, clientY);
+    const at = clientX === undefined || clientY === undefined ? this.#freeTextSpot() : this.#screenToWorld(clientX, clientY);
     const placed = this.#addNode("text", undefined, at, link);
     if (!placed) return;
     // Il passo che l'ha messa: lasciata vuota, se ne va con lui (T44).
@@ -9908,6 +10012,20 @@ export class CanvasEngine {
     if (!keepTool) this.#pickTool("select");
     this.#render();
     this.#beginCardEdit(placed, born);
+  }
+
+  /**
+   * L'angolo in alto a sinistra di una scheda di testo nuova senza un punto
+   * scelto («Aggiungi testo», «Scrivi una scheda»): al centro della vista, o
+   * al posto libero più vicino, così non copre un'altra scheda (IMP-042).
+   */
+  #freeTextSpot(): { x: number; y: number } | undefined {
+    const doc = this.#doc;
+    if (!doc) return undefined;
+    const rect = this.#viewport.getBoundingClientRect();
+    const center = this.#screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
+    const spot = nearFreeSpot(doc.nodes, { x: snap(center.x - 160), y: snap(center.y - 80), width: 320, height: TEXT_CARD_HEIGHT });
+    return { x: spot.x, y: spot.y };
   }
 
   /** La lavagna vuota (T62): le righe e i pulsanti, se la lavagna è vuota e si può scrivere. */
@@ -9981,7 +10099,7 @@ export class CanvasEngine {
       }
     }
     const ids = this.#selection.filter((id) => origin.has(id));
-    this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, ids, origin, moved: false, dx: 0, dy: 0 };
+    this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, ids, origin, moved: false, dx: 0, dy: 0, aimDx: 0, aimDy: 0 };
     this.#viewport.setPointerCapture?.(event.pointerId);
     event.preventDefault();
   }
@@ -10657,6 +10775,7 @@ export class CanvasEngine {
       keepRatio: event.shiftKey,
       fromCenter: event.altKey,
       snap: single && this.#snapSetting && !event.altKey,
+      step: this.#snapStep,
       guided,
       minWidth,
       minHeight,
@@ -10832,11 +10951,13 @@ export class CanvasEngine {
       drag.moved = true;
     }
     const byId = new Map(doc.nodes.map((node) => [node.id, node] as const));
-    // Alt tenuto, o `canvas.snap` spento: le schede vanno dove le porta il
-    // puntatore, in unità intere. Altrimenti le guide (T71) vincono sulla
-    // griglia, su ogni asse. Lo spostamento è uno per tutte (una `move`, T24):
-    // la griglia aggancia l'angolo in alto a sinistra del loro riquadro, come
-    // le guide, e le schede tengono le loro distanze.
+    // Le schede seguono il puntatore 1:1, in unità intere (#411 C-05): niente
+    // salti sotto la mano. L'aggancio è la mira, che vale al rilascio
+    // (`#settleDrag`): le guide (T71), che si vedono già, vincono sulla
+    // griglia di `canvas.snap_step`, su ogni asse. Alt tenuto, o `canvas.snap`
+    // spento: la mira è dove sta la scheda. Lo spostamento è uno per tutte
+    // (una `move`, T24): la griglia aggancia l'angolo in alto a sinistra del
+    // loro riquadro, come le guide, e le schede tengono le loro distanze.
     const free = at.altKey || !this.#snapSetting;
     const guide = drag.moved && !free ? this.#dragGuide(drag.origin, byId, dx, dy) : null;
     if (guide === null) this.#hideGuides();
@@ -10847,10 +10968,14 @@ export class CanvasEngine {
       top = Math.min(top, origin.y);
     }
     if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+    const step = this.#snapStep;
     const along = (start: number, delta: number, guided: boolean, pull: number): number =>
-      free || guided ? Math.round(delta + pull) : snap(start + delta) - start;
-    drag.dx = along(left, dx, guide?.guidedX ?? false, guide?.dx ?? 0);
-    drag.dy = along(top, dy, guide?.guidedY ?? false, guide?.dy ?? 0);
+      free || (!guided && step === null) ? Math.round(delta)
+        : guided ? Math.round(delta + pull) : snapTo(start + delta, step!) - start;
+    drag.dx = Math.round(dx);
+    drag.dy = Math.round(dy);
+    drag.aimDx = along(left, dx, guide?.guidedX ?? false, guide?.dx ?? 0);
+    drag.aimDy = along(top, dy, guide?.guidedY ?? false, guide?.dy ?? 0);
     for (const [id, origin] of drag.origin) {
       const node = byId.get(id);
       if (!node) continue;
@@ -10858,6 +10983,40 @@ export class CanvasEngine {
       node.y = origin.y + drag.dy;
     }
     this.#renderLive();
+  }
+
+  /**
+   * Il rilascio di uno spostamento agganciato (#411 C-05): le schede vanno
+   * dalla posizione sotto il puntatore a quella della mira, scivolando in
+   * `SETTLE_MS` (col movimento ridotto subito). Lo stato e i fili sono subito
+   * quelli finali: la scivolata è solo dell'aspetto della scheda.
+   */
+  #settleDrag(drag: CardDrag): void {
+    const fromDx = drag.dx;
+    const fromDy = drag.dy;
+    if (drag.aimDx === fromDx && drag.aimDy === fromDy) return;
+    drag.dx = drag.aimDx;
+    drag.dy = drag.aimDy;
+    const byId = new Map((this.#doc?.nodes ?? []).map((node) => [node.id, node] as const));
+    for (const [id, origin] of drag.origin) {
+      const node = byId.get(id);
+      if (!node) continue;
+      node.x = origin.x + drag.dx;
+      node.y = origin.y + drag.dy;
+    }
+    this.#renderLive();
+    if (this.#reducedMotion) return;
+    for (const [id, origin] of drag.origin) {
+      const article = this.#cards.get(id)?.article;
+      if (typeof article?.animate !== "function") continue;
+      article.animate(
+        [
+          { transform: `translate(${origin.x + fromDx}px, ${origin.y + fromDy}px)` },
+          { transform: `translate(${origin.x + drag.dx}px, ${origin.y + drag.dy}px)` },
+        ],
+        { duration: SETTLE_MS, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+      );
+    }
   }
 
   /**
@@ -10962,6 +11121,10 @@ export class CanvasEngine {
       const drag = this.#drag;
       this.#drag = null;
       this.#hideGuides();
+      // Una scheda spostata dal corpo non ci entra col clic che segue il rilascio.
+      if (drag.moved) this.#pressedSelected = null;
+      // L'aggancio vale qui (#411 C-05), se Alt non è tenuto al rilascio.
+      if (drag.moved && !event.altKey && this.#snapSetting) this.#settleDrag(drag);
       if (drag.moved) this.#writeGesture(this.#dragOps(drag));
       return;
     }
@@ -11444,7 +11607,7 @@ export class CanvasEngine {
   }
 
   #keydown(event: KeyboardEvent): void {
-    if (!this.#doc || event.defaultPrevented) return;
+    if (!this.#doc || event.defaultPrevented || this.#shellKeys.has(event)) return;
     // Col ritaglio aperto Invio lo scrive ed Esc lo chiude, da ogni punto della lavagna (T78).
     if (this.#crop?.editor?.key(event)) {
       event.preventDefault();
@@ -11642,6 +11805,17 @@ export class CanvasEngine {
   #gestureMoving(): boolean {
     return this.#drag !== null || this.#resize !== null || this.#pan !== null || this.#pinch !== null
       || this.#lasso !== null || this.#strokeDrag !== null || this.#marquee?.moved === true;
+  }
+
+  /**
+   * Un gesto sulle schede o sui tratti (spostare, ridimensionare, il
+   * rettangolo, il lazo): la barra della selezione si toglie. La camera che
+   * si muove (lo zoom, lo spostamento della vista, il volo) non lo è: la barra
+   * la segue (#411 C-06).
+   */
+  #cardGestureActive(): boolean {
+    return this.#drag !== null || this.#resize !== null || this.#lasso !== null
+      || this.#strokeDrag !== null || this.#marquee?.moved === true;
   }
 
   /** Un gesto in corso, rotella, volo e inerzia compresi (T53): nessuna scheda cambia modo. */
@@ -12394,9 +12568,13 @@ export class CanvasEngine {
     }
     for (const [id, entry] of this.#cards) {
       if (present.has(id) || entry === kept) continue;
+      // La scheda col fuoco che se ne va (Canc, un annulla) lo lascia alla
+      // vista: il tasto dopo (Ctrl+Z) arriva ancora alla lavagna (IMP-040).
+      const hadFocus = entry.article.contains(document.activeElement);
       this.#cards.delete(id);
       this.#releaseBody(entry);
       entry.article.remove();
+      if (hadFocus && !this.#destroyed) this.#viewport.focus({ preventScroll: true });
     }
     // Ciò che sulla scena non è una scheda (il messaggio della scena troppo
     // grande) va via; l'inchiostro libero resta, `#paintInk` lo rimette in cima,
@@ -12754,6 +12932,8 @@ export class CanvasEngine {
     const message = document.createElement("span");
     message.className = "canvas-media-placeholder";
     message.textContent = t("canvas.card.missing", { path });
+    // Su una scheda piccola il messaggio sta su una riga, tagliato: intero qui (IMP-045).
+    message.title = message.textContent;
     missing.append(message);
     body.append(missing);
     life.add(cards.watch(path, () => this.#fileBack(id)));
@@ -12769,6 +12949,7 @@ export class CanvasEngine {
       relink.dataset.kind = "primary";
       relink.dataset.cardAction = "relink";
       relink.textContent = t("canvas.card.relink");
+    relink.title = relink.textContent;
       life.listen(relink, "click", (event) => {
         event.stopPropagation();
         this.#relink(id);
@@ -12781,6 +12962,7 @@ export class CanvasEngine {
     remove.dataset.kind = "normal";
     remove.dataset.cardAction = "remove";
     remove.textContent = t("canvas.card.remove");
+    remove.title = remove.textContent;
     life.listen(remove, "click", (event) => {
       event.stopPropagation();
       this.#removeCard(id);
@@ -13033,8 +13215,10 @@ export class CanvasEngine {
     input.addEventListener("compositionend", () => this.#fieldComposed(editor, node, input.value), { signal });
     input.addEventListener("keydown", (event) => {
       if (!(event instanceof KeyboardEvent)) return;
-      // Col campo aperto i tasti, Ctrl+Z compreso, sono del campo.
-      event.stopPropagation();
+      // Col campo aperto i tasti, Ctrl+Z compreso, sono del campo; un tasto
+      // della shell che il campo non usa (Ctrl+W) sale, la tela no.
+      if (passesToShell(event)) this.#shellKeys.add(event);
+      else event.stopPropagation();
       editor.recordOnInput = false;
       if (event.isComposing || editor.composing) return;
       if (isCommandSearchKey(event)) {
@@ -13294,8 +13478,11 @@ export class CanvasEngine {
       }
     }, { signal, capture: true });
     host.addEventListener("keydown", (event) => {
-      // I tasti sono dell'editor, Ctrl+Z compreso: la tela non li vede.
-      event.stopPropagation();
+      // I tasti sono dell'editor, Ctrl+Z compreso: la tela non li vede. Un
+      // tasto della shell che l'editor non ha usato (Ctrl+W) sale fino a lei,
+      // e la tela lo lascia passare.
+      if (event instanceof KeyboardEvent && passesToShell(event)) this.#shellKeys.add(event);
+      else event.stopPropagation();
       if (!(event instanceof KeyboardEvent) || event.isComposing || editor.composing) return;
       if (event.key === "Escape" && !escapeForEditor) {
         event.preventDefault();
@@ -13407,6 +13594,21 @@ function isHighSurrogate(unit: number): boolean {
 
 function isLowSurrogate(unit: number): boolean {
   return unit >= 0xdc00 && unit <= 0xdfff;
+}
+
+/** I tasti con Ctrl (Cmd) che scrivono in un campo: restano sempre al campo. */
+const FIELD_CHORDS: ReadonlySet<string> = new Set(["a", "c", "v", "x", "y", "z"]);
+
+/**
+ * Un tasto premuto nel campo di una scheda che sale alla shell: ha Ctrl (o
+ * Cmd), il campo non l'ha usato (`defaultPrevented`), non è Invio (la scheda
+ * dopo, T44) né un tasto che scrive (scegli tutto, copia, incolla, taglia,
+ * annulla, ripeti). Ctrl+W chiude la linguetta anche mentre si scrive.
+ */
+function passesToShell(event: KeyboardEvent): boolean {
+  if (!(event.ctrlKey || event.metaKey) || event.defaultPrevented || event.isComposing) return false;
+  if (event.key === "Enter" || event.key === "Escape") return false;
+  return !FIELD_CHORDS.has(event.key.toLowerCase());
 }
 
 /** Una trappola o un'istanza persa: il nucleo va riaperto. */
