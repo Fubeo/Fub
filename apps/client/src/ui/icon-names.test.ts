@@ -22,6 +22,7 @@ import { useBaseIcons } from "../editors/base/icons";
 import { useRibbonIcons } from "../editors/grid/ribbon/icons";
 import { registerFormatIcons } from "../panels/format-bar";
 import { commentIcons } from "../editors/text/profiles/markdown/comments/thread";
+import { registerMoveIcon } from "../editors/text/profiles/markdown/blocks/move-to";
 import { registerDiagramIcons } from "./diagram-menu";
 import { createColorPicker, type ColorPickerText } from "../kit/color/picker";
 
@@ -36,6 +37,7 @@ const REGISTRARS = [
   "../editors/base/icons.ts",
   "../editors/grid/ribbon/icons.ts",
   "../editors/text/profiles/markdown/comments/thread.ts",
+  "../editors/text/profiles/markdown/blocks/move-to.ts",
   "../panels/format-bar.ts",
   "../kit/color/picker.ts",
   "./diagram-menu.ts",
@@ -77,6 +79,7 @@ describe("i nomi che un tema può ridisegnare", () => {
     life.add(useRibbonIcons());
     life.add(registerFormatIcons());
     commentIcons();
+    registerMoveIcon();
     registerDiagramIcons();
     createColorPicker({
       value: "#000000",

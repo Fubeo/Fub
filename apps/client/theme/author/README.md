@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 509 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 510 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup base-board base-cards base-chevron-down
@@ -118,19 +118,20 @@ gr-text-columns gr-theme gr-ungroup gr-unlock gr-unmerge gr-validation gr-view-n
 gr-wrap gr-zoom gr-zoom-100 gr-zoom-selection graph grip-eyes grip-eyes-held hash heading heart help
 history home image inbox info keyboard kit-eyedropper line-number media-dark-pages media-fit-width
 media-page-next media-page-previous media-show-annotations media-thumbnails media-two-pages minus
-monitor moon more music notes outline palette panel-left panel-right pen people pin plus properties
-publish query rc-align-center rc-align-justify rc-align-left rc-align-right rc-break-column
-rc-break-page rc-bullets rc-chevron-down rc-chevron-up rc-clear rc-column-after rc-column-before
-rc-column-delete rc-column-left rc-column-right rc-columns rc-comment-new rc-comments rc-count
-rc-drawing rc-drawing-edit rc-find rc-footer rc-header rc-image rc-indent-less rc-indent-more
-rc-ink-eraser rc-ink-highlighter rc-ink-lasso rc-ink-medium rc-ink-pen rc-ink-pen-only rc-ink-select
-rc-ink-stroke rc-ink-thick rc-ink-thin rc-link rc-look-adapted rc-margins rc-merge rc-mode-page
-rc-mode-reading rc-mode-writing rc-note rc-numbers rc-orientation rc-page rc-painter rc-paper-size
-rc-quote rc-redo rc-replace rc-rev-accept rc-rev-accept-all rc-rev-next rc-rev-previous
-rc-rev-reject rc-rev-reject-all rc-row-after rc-row-before rc-row-delete rc-row-down rc-row-up
-rc-spacing rc-split rc-styles rc-table rc-toc rc-track rc-undo rc-wrap rc-wrap-behind rc-wrap-front
-rc-wrap-inline rc-wrap-square rc-zoom-in rc-zoom-out rc-zoom-reset restore ring search settings sort
-split square star stats sun sync tag tasks template trash vault view warning
+monitor moon more move music notes outline palette panel-left panel-right pen people pin plus
+properties publish query rc-align-center rc-align-justify rc-align-left rc-align-right
+rc-break-column rc-break-page rc-bullets rc-chevron-down rc-chevron-up rc-clear rc-column-after
+rc-column-before rc-column-delete rc-column-left rc-column-right rc-columns rc-comment-new
+rc-comments rc-count rc-drawing rc-drawing-edit rc-find rc-footer rc-header rc-image rc-indent-less
+rc-indent-more rc-ink-eraser rc-ink-highlighter rc-ink-lasso rc-ink-medium rc-ink-pen
+rc-ink-pen-only rc-ink-select rc-ink-stroke rc-ink-thick rc-ink-thin rc-link rc-look-adapted
+rc-margins rc-merge rc-mode-page rc-mode-reading rc-mode-writing rc-note rc-numbers rc-orientation
+rc-page rc-painter rc-paper-size rc-quote rc-redo rc-replace rc-rev-accept rc-rev-accept-all
+rc-rev-next rc-rev-previous rc-rev-reject rc-rev-reject-all rc-row-after rc-row-before rc-row-delete
+rc-row-down rc-row-up rc-spacing rc-split rc-styles rc-table rc-toc rc-track rc-undo rc-wrap
+rc-wrap-behind rc-wrap-front rc-wrap-inline rc-wrap-square rc-zoom-in rc-zoom-out rc-zoom-reset
+restore ring search settings sort split square star stats sun sync tag tasks template trash vault
+view warning
 ```
 
 ## Limiti e pubblicazione

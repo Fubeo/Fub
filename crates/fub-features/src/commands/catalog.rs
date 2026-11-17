@@ -593,6 +593,10 @@ fn catalog_it() -> StringCatalog {
             "«{value}» non è una scelta: al posto del blocco resta «link», \
              «embed» o «none».",
         )
+        .with(
+            move_block::E_BLOCK_NO_ID,
+            "Non si è trovato un id libero per il blocco: riprova.",
+        )
         .with(move_block::P_BLOCK_MOVE, "Sposta il blocco in «{to}»")
         .with(move_block::U_BLOCK_MOVE, "lo spostamento del blocco in «{to}»")
         .with(
@@ -1177,6 +1181,10 @@ fn catalog_en() -> StringCatalog {
             move_block::E_BLOCK_LEAVE,
             "“{value}” is not a choice: the block leaves “link”, “embed” or \
              “none”.",
+        )
+        .with(
+            move_block::E_BLOCK_NO_ID,
+            "No free id was found for the block: try again.",
         )
         .with(move_block::P_BLOCK_MOVE, "Move the block to “{to}”")
         .with(move_block::U_BLOCK_MOVE, "moving the block to “{to}”")

@@ -68,6 +68,7 @@ pub(super) const E_BLOCK_INSIDE: &str = "err.block_move.inside";
 pub(super) const E_BLOCK_THERE: &str = "err.block_move.there";
 pub(super) const E_BLOCK_EMBED_MANY: &str = "err.block_move.embed_many";
 pub(super) const E_BLOCK_LEAVE: &str = "err.block_move.leave";
+pub(super) const E_BLOCK_NO_ID: &str = "err.block_move.no_id";
 pub(super) const P_BLOCK_MOVE: &str = "plan.block_move";
 pub(super) const U_BLOCK_MOVE: &str = "undo.block_move";
 /// `done.block_move.<dove>.<che cosa resta>`: `end` o `under`, e `none`,
@@ -674,9 +675,7 @@ fn fresh_id(host: &dyn HostApi, sources: &[&str]) -> Result<String, PluginError>
             return Ok(id);
         }
     }
-    Err(PluginError::Internal(
-        "nessun id libero per il blocco".into(),
-    ))
+    Err(PluginError::Internal(Text::key(E_BLOCK_NO_ID)))
 }
 
 fn base36(mut n: u64) -> String {
