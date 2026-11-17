@@ -697,6 +697,32 @@ const FORMAT_COMMANDS: CommandSpec[] = (
 /// le sue foto sono fatte coi soli comandi del banco.
 const SLASH_COMMANDS: readonly CommandSpec[] = params.get("slash") === "1" ? SLASH_SPECS : [];
 
+/// `?toolbar=nascosta`: la forma della barra di formato scelta (`editor.toolbar`
+/// di `crates/fub-host/src/settings.rs`), per le scene della mini-barra (T12).
+/// Senza, l'impostazione non c'è e la barra ha la forma di serie.
+const TOOLBAR_FORM = params.get("toolbar");
+const TOOLBAR_SETTING_ROW: readonly SettingEntry[] = TOOLBAR_FORM === null ? [] : [{
+  spec: {
+    key: "editor.toolbar",
+    label: "Barra di formato",
+    description: "La barra sopra il foglio: compatta, completa o nascosta (resta la mini-barra sul testo scelto).",
+    group: "Editor",
+    scope: "machine",
+    kind: {
+      kind: "choice",
+      default: "compatta",
+      options: [
+        { value: "compatta", label: "Compatta" },
+        { value: "completa", label: "Completa" },
+        { value: "nascosta", label: "Nascosta" },
+      ],
+    },
+    program_writable: false,
+  },
+  value: TOOLBAR_FORM,
+  source: "machine",
+}];
+
 /// Le settings: una per **ogni** specie di `SettingKind`, perché il pannello
 /// disegna un controllo diverso per ciascuna e una scena che ne mostrasse solo
 /// due fotograferebbe metà del form.
@@ -1843,7 +1869,7 @@ const options: Options = {
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
   ],
-  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...TOOLBAR_SETTING_ROW],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {

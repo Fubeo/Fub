@@ -1270,6 +1270,43 @@ export const SCENE = onPage("shell", [
       await page.mouse.move(0, 0);
     },
   },
+  // **La mini-barra** (T12, E8 del prototipo dell'editor): sul testo scelto
+  // a barra del foglio nascosta, nella finestra larga e nella minima; poi il
+  // pannello «Colore»; infine in testa al menu del tasto destro (E29), con la
+  // barra compatta.
+  ...[
+    ["mini-barra-selezione", "La mini-barra sul testo scelto, a barra del foglio nascosta", null, false],
+    ["mini-barra-stretta", "La mini-barra sul testo scelto nella finestra minima (800 px)", { width: 800, height: 800 }, false],
+    ["mini-barra-colore", "La mini-barra: «Colore» apre le due righe dei nove colori, testo e sfondo", null, true],
+  ].map(([id, title, viewport, colors]) => ({
+    id,
+    title,
+    // `toolbar=nascosta`: la barra del foglio spenta, la mini-barra sul testo.
+    query: "formatbar=1&slash=1&toolbar=nascosta",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await selectWords(page, "Questa è la nota");
+      await page.waitForSelector(".selection-bubble:not([hidden]) .mini-bar [data-command='markdown.bold']");
+      if (colors) {
+        await page.click(".selection-bubble .mini-bar [data-command='mini-bar.color']");
+        await page.waitForSelector(".mini-bar-colors .mini-bar-swatch");
+      }
+      await settleBar(page);
+    },
+  })),
+  {
+    id: "mini-barra-menu",
+    title: "La mini-barra in testa al menu del tasto destro, sul testo scelto",
+    query: "formatbar=1&slash=1",
+    prepare: async (page) => {
+      await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
+      await selectWords(page, "Questa è la nota");
+      const box = await page.locator(".pane.focus .cm-selectionBackground").first().boundingBox();
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "right" });
+      await page.waitForSelector(".context-strip.context-strip-mini .mini-bar [data-command='markdown.bold']");
+      await page.mouse.move(0, 0);
+    },
+  },
   ...[
     ["icone-figure", "Il selettore dell'icona su una cartella: le figure del vault", ""],
     ["icone-emoji", "Il selettore dell'icona su una cartella, col vault delle emoji", "icone=emoji"],
@@ -2437,6 +2474,15 @@ async function placeCursorOn(page, text) {
   await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
   await page.click(`.pane.focus .pane-editor .cm-content .cm-line:has-text(${JSON.stringify(text)})`);
   await page.keyboard.press("End");
+}
+
+/// Sceglie tre parole nella riga che comincia con `line`, come la tastiera:
+/// il cursore a inizio riga, tre parole avanti, tre scelte con Maiusc.
+async function selectWords(page, line) {
+  await page.click(`.pane.focus .pane-editor .cm-content .cm-line:has-text(${JSON.stringify(line)})`);
+  await page.keyboard.press("Home");
+  for (let step = 0; step < 3; step++) await page.keyboard.press("Control+ArrowRight");
+  for (let step = 0; step < 3; step++) await page.keyboard.press("Control+Shift+ArrowRight");
 }
 
 /// La barra misurata (il «…» deciso al fotogramma) e il puntatore lontano,
