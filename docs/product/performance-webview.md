@@ -46,7 +46,7 @@ alto:
 | lunga | Blocchi | 48 · 80, 34 · 53 (9–12) | 29 · 41, 27 · 41 (7–12) |
 
 WebKitGTK disegna a 60 Hz anche su schermi più veloci, quindi un fotogramma
-dura almeno 16,7 ms. La prima marcatura del correttore (`proof.ts`) nel tratto
+dura almeno 16,7 ms ([perché](../architecture/desktop-webview.md#il-tetto-dei-60-hz-di-webkitgtk)). La prima marcatura del correttore (`proof.ts`) nel tratto
 appena visibile costa ancora un fotogramma da circa 60 ms.
 
 ## Dopo il salvataggio

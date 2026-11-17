@@ -115,9 +115,56 @@ serie). I simboli si cercano a runtime con `dlsym`: un WebKitGTK più
 vecchio fa partire l'app lo stesso, e il log lo dice (`SenzaApi`). Il tipo
 della webview viene dal crate `webkit2gtk` nella versione che wry già porta.
 
-Conta solo dove WebKit si aggancia al vblank DRM del kernel. Dove il vblank
-non risponde (`nvidia-drm` 550, e sotto Xvfb) WebKit ripiega su un timer
-fisso a 60 Hz e il tetto resta quello.
+### Il tetto dei 60 Hz di WebKitGTK
+
+In WebKitGTK il ritmo della pagina lo dà un *display link* nel processo
+dell'app: i `requestAnimationFrame`, gli aggiornamenti di rendering e la
+composizione delle animazioni CSS partono tutti dai suoi tick. Su GTK il
+display link ha solo due sorgenti (WebKitGTK 2.54,
+`Source/WebKit/UIProcess/glib/DisplayVBlankMonitor.cpp`, righe 65–70):
+
+- **DRM**: `drmWaitVBlank` sul nodo primario della scheda
+  (`/dev/dri/card*`), con la frequenza del monitor GTK
+  (`DisplayVBlankMonitorDRM.cpp`, righe 92 e 236–242);
+- **timer**, se il DRM fallisce: `FullSpeedFramesPerSecond`, cioè 60, e un
+  sonno intero di `1000 / 60` = 16 ms (`DisplayVBlankMonitorTimer.cpp`,
+  righe 41 e 47). Il rAF va quindi a 62,5 Hz e non è agganciato allo
+  schermo.
+
+Nessuna sorgente legge i frame callback di Wayland né `wp_presentation`.
+`nvidia-drm` (550 e 595) risponde `EOPNOTSUPP` a `drmWaitVBlank` su ogni
+CRTC, e sotto Xvfb non c'è una scheda: lì WebKit usa sempre il timer. Il
+journal dice «drmWaitVBlank failed: Operation not permitted», ma il testo è
+sbagliato: WebKit stampa `strerror(-ret)` e libdrm restituisce sempre -1.
+
+Con il timer la frequenza nominale dello schermo per la pagina vale 60
+(`DisplayLinkGLib.cpp`, righe 47–48), e con 60
+`preferredFramesPerSecond` restituisce 60 senza guardare la preferenza
+(`Source/WebCore/platform/graphics/AnimationFrameRate.cpp`, righe 52–57).
+Quindi, su NVIDIA e sotto Xvfb, spegnere `PreferPageRenderingUpdatesNear60FPS`
+non cambia niente. Conta dove il DRM risponde (AMD e Intel col modesetting
+del kernel), e solo se la frequenza intera dello schermo è un multiplo della
+scelta: accesa, porta 180 Hz a 60 e 144 Hz a 72. WebKit tronca i millihertz
+di GTK, quindi uno schermo a 179,96 Hz vale 179; la preferenza sceglie 59 e
+179 / 59 non è intero, così `DisplayUpdate::relevantForUpdateFrequency`
+(`Source/WebCore/platform/graphics/DisplayUpdate.cpp`, righe 35–43) lascia
+passare ogni tick e la pagina va a 179 Hz anche con la preferenza accesa.
+
+Fub non ha una leva sicura per alzare il tetto:
+
+- `WEBKIT_FORCE_VBLANK_TIMER` può solo forzare il timer;
+- `WEBKIT_DISPLAY_REFRESH_THROTTLE_FPS` può solo abbassare la frequenza, e
+  deve esserne un divisore;
+- fra le 538 feature di `webkit_settings_get_all_features` nessun'altra
+  tocca il display link;
+- `WEBKIT_DISABLE_DMABUF_RENDERER`, `WEBKIT_DISABLE_COMPOSITING_MODE` e X11
+  non cambiano la sorgente.
+
+La correzione sta in WebKit: la
+[PR 78603](https://github.com/WebKit/WebKit/pull/78603) fa andare il timer
+alla frequenza del monitor GTK, con scadenze assolute. Le misure e la prova
+con una sorgente di vblank emulata stanno in
+[Il tetto dei 60 Hz su NVIDIA](../misure/2026-11-17-linux-webkitgtk-tetto-60hz.md).
 
 ## Come si verifica
 
@@ -126,7 +173,11 @@ fisso a 60 Hz e il tetto resta quello.
 - La riga `WebKitGTK 60 fps preference` dice se la feature è stata trovata e
   applicata.
 - `webkit://gpu` in una finestra di WebKitGTK mostra renderer, DMABuf e
-  vblank. Con il driver disallineato il renderer è llvmpipe.
+  vblank. Con il driver disallineato il renderer è llvmpipe. «VBlank type:
+  Timer» e «60Hz» vogliono dire il tetto dei 60 Hz; «DRM» con la frequenza
+  del monitor vuol dire che la pagina può seguire lo schermo. La pagina
+  descrive il monitor dove sta la finestra di prova: con più schermi va
+  spostata su quello veloce.
 - I test unitari di `disegno.rs` coprono la tabella con `/proc` e `/sys`
   finti: driver disallineato, 550, 555, 560, nessuna GPU, VM, portatile
   ibrido e variabili dell'utente.
