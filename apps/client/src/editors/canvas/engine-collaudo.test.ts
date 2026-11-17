@@ -166,9 +166,93 @@ describe("lo spostamento dal corpo di una scheda (IMP-041)", () => {
     engine.destroy();
   });
 
-  it("un preferences test di controllo: le impostazioni si applicano", () => {
-    const { engine } = mounted(BOARD);
-    setPreferences({});
+});
+
+// Una scheda sola: la vista si apre centrata su di lei.
+const ONE = JSON.stringify({
+  nodes: [{ id: "c", type: "text", x: 0, y: 0, width: 320, height: 160, text: "centro" }],
+  edges: [],
+});
+
+function overlaps(a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+/** Le schede nate dopo `before`, come stanno nel documento. */
+function bornAfter(engine: CanvasEngine, before: readonly string[]) {
+  return (JSON.parse(engine.getDoc()).nodes as Array<{ id: string; x: number; y: number; width: number; height: number; text?: string }>)
+    .filter((node) => !before.includes(node.id));
+}
+
+const undoOf = (engine: CanvasEngine) => engine.commands().find((command) => command.id === "canvas.undo")!;
+
+describe("«Aggiungi testo» apre la scheda in scrittura, in un posto libero (IMP-042)", () => {
+  it("dalla barra dei comandi la scheda nasce accanto a quella al centro, senza coprirla, col fuoco nel testo", () => {
+    const { engine, host } = mounted(ONE);
+    host.querySelector<HTMLButtonElement>('[data-canvas-action="add-text"]')!.click();
+    const born = bornAfter(engine, ["c"]);
+    expect(born).toHaveLength(1);
+    expect(overlaps(born[0]!, nodeOf(engine, "c")!)).toBe(false);
+    const editor = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor");
+    expect(editor).not.toBeNull();
+    expect(document.activeElement).toBe(editor);
+    expect(cardOf(host, born[0]!.id).contains(editor)).toBe(true);
+    engine.destroy();
+  });
+
+  it("dal comando (la ricerca, il menu) fa lo stesso", () => {
+    const { engine, host } = mounted(ONE);
+    engine.commands().find((command) => command.id === "canvas.add.text")!.run();
+    const born = bornAfter(engine, ["c"]);
+    expect(born).toHaveLength(1);
+    expect(overlaps(born[0]!, nodeOf(engine, "c")!)).toBe(false);
+    expect(document.activeElement).toBe(host.querySelector(".canvas-text-editor"));
+    engine.destroy();
+  });
+});
+
+describe("«Aggiungi qui › Testo» del tasto destro", () => {
+  it("la scheda nasce dove dice il menu, in scrittura: il menu non le toglie il fuoco", () => {
+    const { engine, host } = mounted(ONE);
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(viewportOf(host));
+    const at = screenOf(host, 1000, 1000);
+    const menu = engine.contextMenu({ x: at.clientX, y: at.clientY })!;
+    pointing.mockRestore();
+    const add = (menu.context as ReadonlyArray<{ id?: string; items?: ReadonlyArray<{ id?: string; run?: () => void }> }>)
+      .find((item) => item.id === "canvas.add")!;
+    add.items!.find((item) => item.id === "canvas.add.text")!.run!();
+    const born = bornAfter(engine, ["c"]);
+    expect(born).toHaveLength(1);
+    expect(born[0]).toMatchObject({ x: 1000, y: 1000 });
+    expect(document.activeElement).toBe(host.querySelector(".canvas-text-editor"));
+    engine.destroy();
+  });
+});
+
+describe("la scheda nuova lasciata vuota se ne va (IMP-043)", () => {
+  it("«Aggiungi testo» e poi Esc senza scrivere: la scheda non resta, il testo torna quello di prima e non resta niente da annullare", () => {
+    const { engine, host } = mounted(ONE);
+    const before = engine.getDoc();
+    host.querySelector<HTMLButtonElement>('[data-canvas-action="add-text"]')!.click();
+    expect(bornAfter(engine, ["c"])).toHaveLength(1);
+    key(host.querySelector(".canvas-text-editor"), { key: "Escape" });
+    expect(bornAfter(engine, ["c"])).toEqual([]);
+    expect(engine.getDoc()).toBe(before);
+    expect(undoOf(engine).disabled()).not.toBeNull();
+    engine.destroy();
+  });
+
+  it("con del testo scritto la scheda resta, e un annulla la toglie", async () => {
+    const { engine, host } = mounted(ONE);
+    host.querySelector<HTMLButtonElement>('[data-canvas-action="add-text"]')!.click();
+    const field = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor")!;
+    field.value = "prova A";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    key(field, { key: "Escape" });
+    const born = bornAfter(engine, ["c"]);
+    expect(born).toHaveLength(1);
+    expect(born[0]!.text).toBe("prova A");
+    expect(undoOf(engine).disabled()).toBeNull();
     engine.destroy();
   });
 });

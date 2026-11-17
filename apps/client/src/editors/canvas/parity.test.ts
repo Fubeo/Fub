@@ -8,6 +8,7 @@
 // gli appunti. Le regole R1–R6
 // stanno in `crates/fub-canvas-core/tests/parity.rs`; come si aggiunge un
 // gesto, in `docs/development/canvas-parity.md`.
+import { nearFreeSpot, type SpotObstacle } from "./free-spot";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenu, SurfaceMenuEntry } from "../core/editor-menu";
 import { CardCache } from "./card-cache";
@@ -791,8 +792,13 @@ const SETUP: Readonly<Record<string, R8Setup>> = {
   "main.card.add_text": [
     {
       ...runCommand("canvas.add.text"),
-      ops: ({ host }) => [{ op: "add_card", text: "", ...bornAtCenter(host, 320, 160) }],
-      why: "la scheda nasce vuota al centro della vista, con la misura di sempre della GUI; il testo si scrive dopo",
+      // Al centro della vista, o al posto libero più vicino (IMP-042).
+      ops: ({ engine, host }) => [{
+        op: "add_card",
+        text: "",
+        ...nearFreeSpot((JSON.parse(engine.getDoc()) as { nodes: SpotObstacle[] }).nodes, bornAtCenter(host, 320, 160)),
+      }],
+      why: "la scheda nasce vuota al centro della vista, o al posto libero più vicino, con la misura di sempre della GUI; il testo si scrive dopo",
     },
     {
       via: "dblclick-empty",

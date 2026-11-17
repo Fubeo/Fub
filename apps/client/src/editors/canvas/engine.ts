@@ -1,4 +1,5 @@
 import type { Theme } from "../../theme/theme";
+import { nearFreeSpot } from "./free-spot";
 import type { SyntaxForm } from "../../host/contract";
 import { t, onLanguage, plural, type Key } from "../../i18n/strings";
 import { MENU_RULE, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
@@ -5974,7 +5975,8 @@ export class CanvasEngine {
       bar.append(button);
       return button;
     };
-    mk("add-text", t("canvas.add_text"), () => this.#addNode("text"));
+    // La scheda nasce in scrittura (IMP-042): il fuoco va nel suo testo, non sulla vista.
+    mk("add-text", t("canvas.add_text"), () => this.#placeText(), false, true, false);
     if (this.#options.onPickFile) {
       mk("add-file", t("canvas.add_file"), () => {
         void this.#addFileNode().catch((error: unknown) => this.#showIntakeError(error));
@@ -8175,7 +8177,12 @@ export class CanvasEngine {
       case "canvas.commands":
         return { disabled: () => null, run: () => this.#openCommandSearch() };
       case "canvas.add.text":
-        return add("text");
+        // Nasce in scrittura, dove dice il menu o in un posto libero vicino al
+        // centro (IMP-042); lasciata vuota se ne va (T44).
+        return {
+          ...add("text"),
+          run: (args) => (args?.at ? this.#placeText(args.at.x, args.at.y) : this.#placeText()),
+        };
       case "canvas.add.link":
         return add("link");
       case "canvas.add.group":
@@ -9419,7 +9426,8 @@ export class CanvasEngine {
           label: t("canvas_menu.add_here"),
           enabled: writable,
           items: [
-            entry("canvas.add.text", here),
+            // La scheda nasce in scrittura (IMP-042): il fuoco resta nel suo testo.
+            entry("canvas.add.text", here, false),
             ...(this.#options.onPickFile ? [entry("canvas.add.file", here, false)] : []),
             entry("canvas.add.link", here),
             entry("canvas.add.group", here),
@@ -9933,7 +9941,7 @@ export class CanvasEngine {
    * alla Selezione, salvo con `keepTool` (il doppio tocco, T63).
    */
   #placeText(clientX?: number, clientY?: number, link?: CardLink, keepTool = false): void {
-    const at = clientX === undefined || clientY === undefined ? undefined : this.#screenToWorld(clientX, clientY);
+    const at = clientX === undefined || clientY === undefined ? this.#freeTextSpot() : this.#screenToWorld(clientX, clientY);
     const placed = this.#addNode("text", undefined, at, link);
     if (!placed) return;
     // Il passo che l'ha messa: lasciata vuota, se ne va con lui (T44).
@@ -9942,6 +9950,20 @@ export class CanvasEngine {
     if (!keepTool) this.#pickTool("select");
     this.#render();
     this.#beginCardEdit(placed, born);
+  }
+
+  /**
+   * L'angolo in alto a sinistra di una scheda di testo nuova senza un punto
+   * scelto («Aggiungi testo», «Scrivi una scheda»): al centro della vista, o
+   * al posto libero più vicino, così non copre un'altra scheda (IMP-042).
+   */
+  #freeTextSpot(): { x: number; y: number } | undefined {
+    const doc = this.#doc;
+    if (!doc) return undefined;
+    const rect = this.#viewport.getBoundingClientRect();
+    const center = this.#screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
+    const spot = nearFreeSpot(doc.nodes, { x: snap(center.x - 160), y: snap(center.y - 80), width: 320, height: TEXT_CARD_HEIGHT });
+    return { x: spot.x, y: spot.y };
   }
 
   /** La lavagna vuota (T62): le righe e i pulsanti, se la lavagna è vuota e si può scrivere. */
