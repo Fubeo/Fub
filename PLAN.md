@@ -3046,7 +3046,7 @@ formula.
 Fatto quando: test dell'incolla e delle macro; un test della copia per Word.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
-Stato: [ ] da fare
+Stato: [~] integrato in `integra/editor-1` (6edf2ae1c, 2026-11-17), PR bozza #472. Le voci del tasto destro le costruisce `surface.ts` (mathMenu); sulla formula resa la posizione si prende dal DOM. La nota delle macro è fissa in `Formule/Macro.md`. Dopo Invio il testo entra davanti a `\end{aligned}`. Le macro sono quelle del vault aperto. Decisione dell'utente dopo l'integrazione: «Copia per Word» diventa «Copia come equazione» (92ad809f8), e la copia della formula prende la forma di «Copia come» del testo (coder fix/formula-copia-come).
 
 ## T66 · Formule: scegliere un pezzo, le celle delle matrici, il tocco
 
