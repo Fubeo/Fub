@@ -174,7 +174,7 @@ Le scene `testata-*` e `mobile-testata` del banco la fotografano.
 Chi scrive non deve ricordarsi dove sta una funzione: ognuna si raggiunge dal
 «/» nel testo, dalla palette dei comandi e dal tasto destro o da un menu,
 con la scorciatoia scritta accanto quando c'è. Le funzioni dei blocchi hanno
-anche «+ Inserisci» nella barra di formato. Una funzione nuova del foglio entra
+anche «+ Inserisci» nella [barra di formato](editor-toolbar.md). Una funzione nuova del foglio entra
 da tutte e tre le porte; i menu sono descritti in
 [Tasto destro, mini-barra e «/»](editor-menus.md).
 

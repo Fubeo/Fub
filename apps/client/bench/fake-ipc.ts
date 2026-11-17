@@ -1835,7 +1835,11 @@ const options: Options = {
   root: ROOT,
   view: VIEWS,
   commands: [
-    ...(ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS]),
+    // Con la barra e il «/» insieme («+ Inserisci» della barra) le voci del
+    // «/» si aggiungono a quelle della barra, senza ripeterne gli id.
+    ...(ON_MOBILE
+      ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS, ...SLASH_COMMANDS.filter((spec) => !FORMAT_COMMANDS.some((format) => format.id === spec.id))]
+      : [...BENCH_COMMANDS, ...SLASH_COMMANDS]),
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
   ],

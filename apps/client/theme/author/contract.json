@@ -1699,6 +1699,15 @@
     "context-submenu",
     "menu-more",
     "context-strip",
+    "format-bar-follow",
+    "format-bar-labelled",
+    "format-bar-text",
+    "format-bar-caret",
+    "format-bar-context",
+    "format-bar-context-name",
+    "format-bar-overflow",
+    "format-bar-insert-group",
+    "format-bar-insert",
     "menu-label",
     "menu-hint",
     "menu-description",
@@ -3692,6 +3701,15 @@
     "context-submenu": "cornice",
     "menu-more": "cornice",
     "context-strip": "cornice",
+    "format-bar-follow": "cornice",
+    "format-bar-labelled": "cornice",
+    "format-bar-text": "cornice",
+    "format-bar-caret": "cornice",
+    "format-bar-context": "cornice",
+    "format-bar-context-name": "cornice",
+    "format-bar-overflow": "cornice",
+    "format-bar-insert-group": "cornice",
+    "format-bar-insert": "cornice",
     "menu-label": "cornice",
     "menu-hint": "cornice",
     "menu-description": "cornice",
@@ -8218,6 +8236,32 @@
       ]
     },
     {
+      "name": "format-bar-follow",
+      "part": "menus",
+      "hooks": [
+        "format-bar-follow",
+        "kit-bar",
+        "kit-bar-group",
+        "kit-bar-button",
+        "format-bar-labelled",
+        "format-bar-text",
+        "format-bar-caret",
+        "format-bar-style",
+        "format-bar-context",
+        "format-bar-context-name",
+        "format-bar-overflow",
+        "format-bar-insert-group",
+        "format-bar-insert"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "pressed",
+        "disabled"
+      ]
+    },
+    {
       "name": "menu-item",
       "part": "menus",
       "hooks": [
@@ -10583,10 +10627,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1991,
+    "hooks": 2000,
     "state_names": 7,
-    "assigned_states": 918,
-    "components": 269,
+    "assigned_states": 923,
+    "components": 270,
     "preference_tokens": 191
   }
 }

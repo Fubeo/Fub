@@ -25,7 +25,15 @@ import { loadCommandSpecs } from "./state/vault";
 import { $ } from "./ui/dom";
 import { takeNoticeAfterReload } from "./ui/intents";
 import { mountLinkPreview } from "./ui/link-preview";
-import { FORMATBAR_EVENT } from "./panels/selection-bubble";
+import {
+  currentToolbarForm,
+  DEFAULT_TOOLBAR_FORM,
+  FORMATBAR_EVENT,
+  TOOLBAR_SETTING,
+  toggledToolbarForm,
+  toolbarFormOf,
+  type ToolbarForm,
+} from "./panels/format-bar";
 import { MINIBAR_SETTING, miniBarModeOf } from "./panels/mini-bar";
 import { listenForFailures, mountNotifications, notify, setWatcherOff } from "./ui/notify";
 import { listenForRenderingNotices } from "./ui/rendering-notice";
@@ -164,14 +172,10 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
     document.getElementById("app")?.toggleAttribute("data-status-off", valid && values.get("chrome.status.visible") === false);
     toolbarVisible = !valid || values.get("chrome.toolbar.visible") !== false;
     applyToolbar();
-    // La barra di formattazione spenta lascia i suoi gesti alla bolla di
-    // selezione: lo dice l'attributo (per la resa) e l'evento (per la bolla).
-    const formatbarOff = valid && values.get("chrome.formatbar.visible") === false;
+    // La forma della barra di formato (`editor.toolbar`, o la barra spenta
+    // di un Fub di prima).
+    applyToolbarForm(toolbarFormOf(entries));
     const app = document.getElementById("app");
-    if (app && app.hasAttribute("data-formatbar-off") !== formatbarOff) {
-      app.toggleAttribute("data-formatbar-off", formatbarOff);
-      window.dispatchEvent(new CustomEvent(FORMATBAR_EVENT));
-    }
     // Il menu «/» nel testo: spento, il «/» è testo.
     if (app) app.dataset["slash"] = values.get("editor.slash") === false ? "off" : "on";
     // La mini-barra: quando c'è, col tasto destro e sul testo scelto.
@@ -201,10 +205,36 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
   // giro sul canale dati in più per ogni gesto.
   lifetime.add(onEvent("setting_changed", ({ key }) => {
     if (settingTouches(key, (changed) => (changed.startsWith("chrome.") && !SIDE_KEYS.has(changed))
-      || changed === MINIBAR_SETTING || changed.startsWith("editor.slash"))) void reread();
+      || changed === MINIBAR_SETTING || changed === TOOLBAR_SETTING || changed.startsWith("editor.slash"))) void reread();
   }));
   await reread();
 }
+/// L'ultima forma visibile della barra di formato: dove la riporta il comando
+/// del menu Vista quando è nascosta.
+let lastVisibleToolbar: ToolbarForm = DEFAULT_TOOLBAR_FORM;
+
+/// Mette la forma della barra sulla finestra: `data-toolbar` per le barre dei
+/// riquadri, `data-formatbar-off` per la resa e per la bolla della selezione,
+/// che a barra nascosta prende i gesti. L'evento lo dice a tutte, una volta.
+function applyToolbarForm(form: ToolbarForm): void {
+  const app = document.getElementById("app");
+  if (!app) return;
+  if (form !== "nascosta") lastVisibleToolbar = form;
+  if (app.dataset["toolbar"] === form) return;
+  app.dataset["toolbar"] = form;
+  app.toggleAttribute("data-formatbar-off", form === "nascosta");
+  window.dispatchEvent(new CustomEvent(FORMATBAR_EVENT));
+}
+
+/// Il comando del menu Vista: la barra cambia subito, e la scelta si scrive
+/// in `editor.toolbar`. Non riuscita la scrittura, la barra resta com'è ora e
+/// lo si dice: alla prossima lettura torna quella scritta.
+function toggleToolbar(): void {
+  const next = toggledToolbarForm(currentToolbarForm(), lastVisibleToolbar);
+  applyToolbarForm(next);
+  void writeChrome(TOOLBAR_SETTING, next).catch(() => notify(t("commands.toolbar.not_remembered"), "info"));
+}
+
 /// Schermata senza vault e layout adattivo: la shell possiede l'apertura,
 /// l'onboarding possiede demo, supporto e recupero. Le due vite si chiudono
 /// insieme; il picker di cartella resta registrato soltanto qui.
@@ -1084,6 +1114,13 @@ async function init(): Promise<Teardown> {
     description: "commands.focus.toggle.desc",
     layer: "global",
     run: () => toggleFocusMode(),
+  });
+  registerShellCommand({
+    id: "shell.toolbar.toggle",
+    title: "commands.toolbar.toggle",
+    description: "commands.toolbar.toggle.desc",
+    layer: "global",
+    run: () => toggleToolbar(),
   });
   mountConcentration(pageWindowLifetime);
 

@@ -106,6 +106,7 @@ export const SHELL_KEYS = {
   "shell.zoom.out": "Mod--",
   "shell.zoom.reset": "Mod-0",
   "shell.focus.toggle": null,
+  "shell.toolbar.toggle": null,
   "shell.chrome.compact.more": null,
   "shell.chrome.compact.less": null,
   "shell.chrome.compact.reset": null,

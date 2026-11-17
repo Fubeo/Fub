@@ -98,23 +98,10 @@ import { openImageAt, parseImage, rewriteImage, widthWritable, type ImageSource 
 import { canPreviewLink, previewLink } from "../../../../ui/link-preview";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { pngOf } from "../../../core/png";
+import { IMAGE_WIDTHS, MENU_CODE_LANGUAGES as CODE_LANGUAGES, markdownBlockGroup } from "./block-groups";
 
 /// Quanti caratteri del paragrafo dice la testata del menu.
 const EXCERPT_CHARS = 34;
-
-/// I linguaggi che «Linguaggio ▸» offre, col loro nome nel menu: gli altri
-/// si scrivono con «Altro…».
-const CODE_LANGUAGES: readonly (readonly [string, string])[] = [
-  ["python", "Python"],
-  ["rust", "Rust"],
-  ["typescript", "TypeScript"],
-  ["json", "JSON"],
-  ["bash", "Bash"],
-];
-
-/// Le larghezze di «Larghezza ▸», in pixel CSS; «Piena» è la colonna del
-/// testo, «Originale» toglie la misura.
-const IMAGE_WIDTHS = { small: 240, medium: 480 } as const;
 
 /// Le tre viste esclusive sullo stesso buffer (D1 A, E1). `live_preview` è
 /// **Scrittura**: la resa viva con dentro i Blocchi (maniglie, testata,
@@ -1923,6 +1910,26 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     contextMenu: (at) => {
       if (life.closed) return null;
       return mode === "reading" ? readingMenu(at) : writingMenu(at);
+    },
+    // Il gruppo del blocco nella barra di formato: si scrive soltanto, e la
+    // barra la chiede dopo una pausa, non a ogni battuta (`block-groups.ts`).
+    blockGroup: (at) => {
+      if (life.closed || mode === "reading") return null;
+      const pos = at ? engine.posAtPoint(at.x, at.y) : null;
+      if (at && pos === null) return null;
+      return markdownBlockGroup({
+        read: (read) => engine.readState(read),
+        write: (change) => editable() && engine.runViewCommand((view) => {
+          const spec = change(view.state);
+          if (!spec) return false;
+          view.dispatch(spec);
+          return true;
+        }),
+        view: (gesture) => engine.runViewCommand(gesture),
+        editable,
+        copy: (text) => copyText(text, t("editor_menu.copied")),
+        openLink: (page, heading, block) => void openWikilink(page, heading, block),
+      }, pos);
     },
     find: () => !life.closed && mode !== "reading" && engine.openFind(),
     anchorHere: () => {

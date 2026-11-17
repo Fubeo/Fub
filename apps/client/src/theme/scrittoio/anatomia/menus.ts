@@ -13,6 +13,13 @@ export const MENUS: PartAnatomy = {
     { name: "menu-foot", states: [S("rest")], hooks: ["menu-foot", "menu-foot-text", "menu-foot-query", "menu-foot-caret", "menu-finding", "menu-path", "menu-foot-keys", "menu-foot-key"] },
     { name: "context-submenu", states: [S("rest")], hooks: ["context-submenu", "menu-more"] },
     { name: "context-strip", states: [S("rest")], hooks: ["context-strip", "format-bar"] },
+    // La barra che segue il blocco (E8): lo stile, il gruppo del blocco,
+    // «+ Inserisci».
+    {
+      name: "format-bar-follow",
+      states: [S("rest"), S("hover"), S("focused"), S("pressed"), S("disabled")],
+      hooks: ["format-bar-follow", "kit-bar", "kit-bar-group", "kit-bar-button", "format-bar-labelled", "format-bar-text", "format-bar-caret", "format-bar-style", "format-bar-context", "format-bar-context-name", "format-bar-overflow", "format-bar-insert-group", "format-bar-insert"],
+    },
     {
       name: "menu-item",
       states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")],

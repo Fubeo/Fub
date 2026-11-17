@@ -81,6 +81,7 @@
 - Quali modalità ha una nota, e quando compare ciò che sta sul foglio? → [product/editor-writing.md](../product/editor-writing.md)
 - Come funzionano i blocchi di Scrittura? → [product/editor-blocks.md](../product/editor-blocks.md)
 - Come funzionano tasto destro, mini-barra e comando «/»? → [product/editor-menus.md](../product/editor-menus.md)
+- Che cosa mostra la barra di formato e come si sceglie la sua forma? → [product/editor-toolbar.md](../product/editor-toolbar.md)
 - Come lavora il correttore mentre si scrive? → [product/proofing.md](../product/proofing.md)
 - Come si scrivono i documenti di Word nel vault? → [product/word-documents.md](../product/word-documents.md)
 - Come si annotano i PDF del vault? → [product/pdf-annotations.md](../product/pdf-annotations.md)
