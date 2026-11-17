@@ -211,7 +211,7 @@ Due regole:
   mette accanto alla maniglia e prende il fuoco, e la selezione arriva dopo,
   nello stesso gesto. Le voci ritrovano il blocco dalla sua chiave
   (`withRun`), non dalla selezione. Il primo menu della maniglia scende da
-  30 a 26 ms di mediana; restano ~10 ms del primo layout del menu stesso
+  22 a 20 ms di sincrono; restano ~10 ms del primo layout del menu stesso
   (le tre misure di `placeBeside`) e ~10 dell'aggiornamento di CodeMirror per
   la selezione, entrambi solo la prima volta. La guardia è
   `blocks.dom.test.ts` («seleziona la tratta dopo che il menu è al suo posto
@@ -226,21 +226,38 @@ Due regole:
   invece di 3,4. La guardia è `recipe-cost.test.ts`.
 
 Misura con una sonda sull'ispettore remoto di WebKit nell'app vera,
-pc-debian-di-fub, 17 novembre 2026, vault del banco, cinque giri alternati per
-build, carico medio a un minuto fino a 0,93; mediana e massimo in ms:
+pc-debian-di-fub, 17 novembre 2026, vault del banco, app fissata sui core P,
+processore scaldato 300 ms prima di ogni gesto, cinque giri alternati per
+build, carico medio a un minuto fino a 0,99; mediana e massimo in ms:
 
-| Gesto | Prima: sincrono · blocco | Dopo: sincrono · blocco |
+| Gesto | Prima | Dopo |
 |---|---:|---:|
-| Primo menu della maniglia | 30, 38 · 37, 46 | 26, 35 · 32, 42 |
-| Cambio d'accento (30 cambi): fotogramma più lungo | 28–49 | 27–47 |
+| Primo menu della maniglia: sincrono | 22, 23 | 20, 20 |
+| Primo menu della maniglia: fotogramma più lungo | 21, 21 | 18, 19 |
+| Cambio d'accento (30 cambi): fotogramma più lungo | 22,5, 45 | 20, 27 |
+| Primo menu contestuale, primo lanciatore: sincrono | 9 · 18 | 9 · 18 |
 
-«Prima» è `2890f9e8f`. Il cambio d'accento resta dominato dal ricalcolo
-dello stile (sotto): la differenza sta dentro il rumore. Sul 13600KF di questa
-macchina lo stesso gesto costa quasi il doppio quando il thread della WebView
-gira su un core E (CPU 12–19): primo menu contestuale 21–29 ms contro 14,
-primo lanciatore 44–45 contro 24. Senza fissare l'app sui core P (`taskset`)
-ogni gesto ha due mode a circa 10 ms l'una dall'altra, in tutte e due le
-build, e cinque giri non bastano a separare una differenza più piccola.
+«Prima» è `4bf9aa5ec`. Il primo menu della maniglia è più corto in tutti e
+cinque i giri; il cambio d'accento resta dominato dal ricalcolo dello stile
+(sotto), e la ricetta toglie ~2 ms al fotogramma.
+
+Due cose della macchina, non del codice, spostano lo stesso gesto più di
+qualunque correzione qui sopra, e una serie che non le ferma non separa
+differenze di pochi millisecondi:
+
+- **il tipo di core**: sul 13600KF lo stesso gesto costa quasi il doppio
+  quando il thread della WebView gira su un core E (CPU 12–19): primo menu
+  contestuale 21–29 ms contro 14, primo lanciatore 44–45 contro 24. `taskset`
+  sull'app vale anche per `WebKitWebProcess` (lo eredita: `taskset -p`);
+- **il risparmio del processore**: con il governatore `powersave` di
+  `intel_pstate` il core scende di frequenza nelle pause tra un gesto e
+  l'altro, e il primo gesto dopo la pausa paga la risalita. A caratteri già
+  caricati e coda di riscaldamento ferma, il primo menu contestuale costa
+  13–24 ms a processore freddo e 9 ms, sempre, dopo 300 ms di calcolo appena
+  prima del gesto (il secondo 10–14 contro 4). Per questo le misure qui
+  sopra scaldano il processore dentro ogni atto e tolgono quel tratto dai
+  fotogrammi. Per chi usa l'app è la stessa cosa: il primo clic dopo una
+  pausa è più lento su un portatile in risparmio.
 
 Quello che resta non è di chi apre il gesto, o non vale il rischio:
 
