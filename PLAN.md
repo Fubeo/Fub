@@ -906,7 +906,7 @@ Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/panels/format-bar.test.ts
 src/editors/text/profiles/markdown/block-groups.test.ts &&
 FUB_BENCH_PORT=1460 npm run bench:a11y
-Stato: [ ] da fare
+Stato: [~] in corso (coder, base `integra/editor-1`, 2026-11-17)
 
 ## T12 · La mini-barra con Commenta e Colore
 
@@ -1938,7 +1938,7 @@ Fatto quando: test con `MemoryHost`: creare, cambiare tipo, tipo guasto,
 cartella cambiata.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 template properties; cargo nextest run -p fub-host settings
-Stato: [~] in corso (coder, 2026-11-17), solo core: il legame col menu «Nuovo» di PA T43 resta a T33
+Stato: [~] fatto dal coder (dfe3d15d6, 2026-11-17), in coda per `integra/editor-1`
 
 ## T33 · I tipi di nota nell'editor
 

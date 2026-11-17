@@ -1928,3 +1928,11 @@ La più recente in cima: data · piano · decisione · perché.
 ## 2026-11-17 · I task entrano a gruppi
 
 L'utente ha approvato: dal 2026-11-17 i task finiti non hanno più una PR completa ciascuno. Entrano nel ramo `integra/editor-N` (da `main`, senza `PLAN.md`), con una PR in bozza e la CI corta, un merge per task dopo la revisione e `check.sh --rapido`. Due volte al giorno, o a 5–10 task, la PR diventa pronta: CI completa, foto guardate, merge in `main`, ramo nuovo. Una CI completa rossa si risolve sul task colpevole (correzione o revert del suo merge). Le PR aperte prima (#466, #469, #421) chiudono come sono. Supera «PR grafiche una alla volta» per i task del piano.
+
+## 2026-11-17 · Decisioni del pomeriggio
+
+- **T33a** si fa da origin/main anche se PA T43 non c'è ancora: è tutto core. Il legame con il menu «Nuovo» resta a T33.
+- **T33a, elenco dei tipi con i conteggi:** `note_types::counts` è nel core. La porta, vista o comando, la sceglie T33 quando parte.
+- **Link del frontmatter e rinomina**, da T33a e T35a: i link nel frontmatter (`[[Tipi/X]]`, relazioni) non sono archi del grafo dei link. Quindi una rinomina non li aggiorna, e «Collegata da» non ha ancora una porta per il client. T33 e T35 partono con questo limite scritto nella documentazione; il seguito è un task nel kernel, da aprire come issue quando parte T35.
+- **T11 e T18 partono da `origin/integra/editor-1`**, che contiene T84, invece di aspettare main. Entrano nello stesso ramo.
+- **Coda dei controlli a 2 posti**: con 3 il carico arrivava a 118 su 20 thread e i test di tempo scadevano.
