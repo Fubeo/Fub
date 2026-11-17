@@ -183,6 +183,12 @@ function tooltipElement(): HTMLElement {
     element.id = TOOLTIP_ID;
     element.className = "shell-tooltip";
     element.setAttribute("role", "tooltip");
+    // Ciò che si vede è una copia: la descrizione arriva al lettore di schermo
+    // da `aria-describedby`, che legge il nodo anche nascosto perché lo nomina
+    // direttamente. Fuori dall'albero dell'accessibilità il riquadro, appeso
+    // al `body` fuori da ogni landmark, non è contenuto sciolto della pagina
+    // (regola axe `region`) e non si legge due volte esplorando lo schermo.
+    element.setAttribute("aria-hidden", "true");
     element.hidden = true;
     document.body.appendChild(element);
   }
