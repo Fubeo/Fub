@@ -23,15 +23,15 @@ interface Known {
 }
 
 const BY_EXTENSION: Readonly<Record<string, Known>> = {
-  docx: { kind: "word", tag: "WORD" },
-  doc: { kind: "word", tag: "WORD 97" },
-  dot: { kind: "word", tag: "WORD 97" },
+  docx: { kind: "word", tag: "DOCX" },
+  doc: { kind: "word", tag: "DOC 97" },
+  dot: { kind: "word", tag: "DOT 97" },
   rtf: { kind: "word", tag: "RTF" },
   odt: { kind: "odt", tag: "ODT" },
-  xlsx: { kind: "sheet", tag: "EXCEL" },
-  xlsm: { kind: "sheet", tag: "EXCEL" },
-  xltx: { kind: "sheet", tag: "EXCEL" },
-  xltm: { kind: "sheet", tag: "EXCEL" },
+  xlsx: { kind: "sheet", tag: "XLSX" },
+  xlsm: { kind: "sheet", tag: "XLSM" },
+  xltx: { kind: "sheet", tag: "XLTX" },
+  xltm: { kind: "sheet", tag: "XLTM" },
   canvas: { kind: "drawing" },
   svg: { kind: "drawing", tag: "SVG" },
   vectorcraft: { kind: "drawing", tag: "VECTORCRAFT" },
@@ -89,12 +89,12 @@ export function formatKindOf(id: string): FormatKind | null {
   return known(id)?.kind ?? null;
 }
 
-/// «WORD», «ODT», «EXCEL»: `null` per una nota o un file senza specie.
+/// «DOCX», «ODT», «XLSX»: `null` per una nota o un file senza specie.
 export function formatTagOf(id: string): string | null {
   return known(id)?.tag ?? null;
 }
 
-/// Il nome della specie, per il lettore di schermo: «Documento di Word».
+/// Il nome della specie, per il lettore di schermo: «Documento .docx».
 export function formatNameOf(kind: FormatKind): string {
   return t(FORMAT_NAME[kind]);
 }

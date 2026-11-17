@@ -144,7 +144,8 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   prende gli stili Intestazione e Piè di pagina di Word. Vuoti, la sezione
   mostra quelli della sezione prima. Quelli della prima pagina e delle pagine
   pari restano come sono, e uno con immagini, tabelle o aspetti diversi si
-  legge ma si modifica in Word. Mentre si registra non si cambiano;
+  legge ma qui non si può ancora modificare. Mentre si registra non si
+  cambiano;
 - **Sommario** in un `.docx` mette prima del paragrafo del cursore il
   sommario dei titoli fino al terzo livello, o rifà quello già messo da Fub
   con i titoli di adesso. I numeri di pagina li calcola Word aprendo il file.
@@ -286,10 +287,10 @@ Lettura la barra non c'è. F6 vale anche per gli altri fogli, che sono una zona
 sola; la scorciatoia si cambia in Preferenze come le altre.
 
 Il formato si vede prima di aprire: nell'albero, nelle schede e nel
-lanciatore un documento di Word, un OpenDocument, un foglio di calcolo e un
+lanciatore un documento .docx, un OpenDocument, un foglio di calcolo e un
 disegno hanno ciascuno la sua icona, diversa dal foglietto di una nota. Accanto
-al percorso, nella testata del foglio, un'etichetta dice **WORD**, **ODT**,
-**RTF** o **EXCEL**. La specie viene dall'estensione (`ui/format-kind.ts`);
+al percorso, nella testata del foglio, un'etichetta dice **DOCX**, **ODT**,
+**RTF** o **XLSX**. La specie viene dall'estensione (`ui/format-kind.ts`);
 quale formato apre il file lo decide sempre il backend.
 
 **Carta adattata**, nella scheda **Visualizza**, porta il documento di Pagina
@@ -391,7 +392,7 @@ apre.
 ## Esportare una copia
 
 **Esporta una copia** (`rich.export-copy`, dalla palette) scrive un documento
-di videoscrittura in HTML, testo semplice, LaTeX, RTF, OpenDocument o Word XML
+di videoscrittura in HTML, testo semplice, LaTeX, RTF, OpenDocument o XML
 (un `.docx` in un file XML solo, Flat OPC), con gli esportatori di WordCraft.
 Il documento non si tocca: la copia arriva nell'attività e si salva dove si
 vuole. Una copia nello stesso formato del documento (un `.rtf` in RTF, un

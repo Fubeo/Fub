@@ -123,7 +123,7 @@ static NEW_DOCUMENT: crate::new_file::NewFile = crate::new_file::NewFile {
         crate::new_file::Words {
             locale: "it",
             title: "Nuovo documento",
-            desc: "Crea un documento di Word vuoto e lo apre. Senza nome nasce «Documento senza \
+            desc: "Crea un documento .docx vuoto e lo apre. Senza nome nasce «Documento senza \
                    titolo», e se quel nome è preso «Documento senza titolo 1», «2», …",
             untitled: "Documento senza titolo",
             the: "il documento",
@@ -131,13 +131,13 @@ static NEW_DOCUMENT: crate::new_file::NewFile = crate::new_file::NewFile {
             of_the: "del documento",
             a: "un documento",
             a_new: "un documento nuovo",
-            all: "i documenti di Word",
+            all: "i documenti .docx",
             extra: &[],
         },
         crate::new_file::Words {
             locale: "en",
             title: "New document",
-            desc: "Creates an empty Word document and opens it. Without a name it is called \
+            desc: "Creates an empty .docx document and opens it. Without a name it is called \
                    «Untitled document», and if that name is taken «Untitled document 1», «2», …",
             untitled: "Untitled document",
             the: "the document",
@@ -145,7 +145,7 @@ static NEW_DOCUMENT: crate::new_file::NewFile = crate::new_file::NewFile {
             of_the: "the document",
             a: "a document",
             a_new: "a new document",
-            all: "Word documents",
+            all: ".docx documents",
             extra: &[],
         },
     ],

@@ -204,7 +204,7 @@ impl FormatProvider for XlsxProvider {
     fn descriptor(&self) -> FormatDescriptor {
         FormatDescriptor {
             id: FORMAT_ID.to_string(),
-            name: "Excel".to_string(),
+            name: "XLSX".to_string(),
             extensions: EXTENSIONS.iter().map(|e| e.to_string()).collect(),
             source: SourceKind::Bytes,
         }
