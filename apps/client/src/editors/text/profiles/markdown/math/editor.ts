@@ -32,7 +32,9 @@ import { liveStrings } from "../strings";
 import { editOptions, instrument, instrumentHoles, markerElement, markersIn, nearestPoint, verticalPoint } from "./caret";
 import * as rules from "./edit";
 import type { MathState, Outcome, QuickUndo, QuickWrite } from "./edit";
+import { alignEnter } from "./align";
 import { diagnose, explain, type MathFix } from "./errors";
+import { unwrapFormula } from "./paste";
 import { holesOf, mapFormula, placeAt, snap, type Place } from "./points";
 import { commandName, propose, proposalsAddNothing, SYMBOLS, symbolName, type MathSymbol } from "./symbols";
 
@@ -63,6 +65,10 @@ export interface MathEditorOptions {
   /// Una preferenza cambiata dai tre puntini: chi chiama la scrive. Senza, i
   /// tre puntini non ci sono.
   onPreferences?(next: MathPreferences): void;
+  /// «Posto» nei tre puntini (T65): la formula passa da riga a blocco o
+  /// indietro, e chi chiama la riscrive nella nota. Senza, la riga non c'è
+  /// (una formula in un elenco, in una citazione, in una tabella).
+  onPlace?(display: boolean): void;
   /// Una frase da dire a chi scrive (la prima scrittura veloce, una misura
   /// d'aiuto cambiata).
   tell?(message: string): void;
@@ -86,6 +92,8 @@ const CARET_CLASS = "cm-fub-mx-caret";
 let lists = 0;
 /// La prima scrittura veloce si spiega una volta per sessione.
 let quickTold = false;
+/// Il primo Invio che allinea si spiega una volta per sessione.
+let alignTold = false;
 
 /// La virgola decimale all'italiana vale nella lingua italiana.
 const decimalComma = () => resolvedLanguage().toLowerCase().startsWith("it");
@@ -374,7 +382,7 @@ export class MathEditor {
   private reads(tex: string): boolean {
     if (!this.library) return false;
     try {
-      this.library.renderToString(tex, readOptions(this.options.display));
+      this.library.renderToString(tex, readOptions(this.options.display, tex));
       return true;
     } catch {
       return false;
@@ -397,10 +405,10 @@ export class MathEditor {
     try {
       if (this.mode === "visual") {
         const pending = this.pending === null ? null : { from: this.pending, to: this.state.caret };
-        library.render(instrument(tex, pending), staging, editOptions(this.options.display));
+        library.render(instrument(tex, pending), staging, editOptions(this.options.display, tex));
       } else {
         // Nel campo del LaTeX soltanto gli spazi vuoti hanno il loro segno.
-        library.render(instrumentHoles(tex, rules.sourceHoles(tex)), staging, editOptions(this.options.display));
+        library.render(instrumentHoles(tex, rules.sourceHoles(tex)), staging, editOptions(this.options.display, tex));
       }
     } catch {
       // Senza una resa buona il riquadro si toglie finché il LaTeX non si
@@ -483,7 +491,7 @@ export class MathEditor {
     const tex = this.state.tex;
     let failure: unknown = null;
     try {
-      library.renderToString(tex, readOptions(this.options.display));
+      library.renderToString(tex, readOptions(this.options.display, tex));
     } catch (error) {
       failure = error;
     }
@@ -716,6 +724,13 @@ export class MathEditor {
       case "Enter":
         if (event.shiftKey) return;
         handled();
+        // A blocco Invio va a capo e allinea gli uguali; Ctrl Invio o Esc
+        // finiscono (T65).
+        if (this.options.display && this.mode === "source" && collapsed) {
+          this.writeField(alignEnter(here));
+          this.tellAlign();
+          return;
+        }
         this.options.onLeave("enter");
         return;
       case "Escape":
@@ -784,7 +799,7 @@ export class MathEditor {
   private fillOptions(): void {
     const t = liveStrings.t.bind(liveStrings);
     const rows: HTMLElement[] = [];
-    const row = (label: string, buttons: readonly (readonly [string, string, boolean])[], kind: "source" | "help") => {
+    const row = (label: string, buttons: readonly (readonly [string, string, boolean])[], kind: "source" | "help" | "place") => {
       const line = document.createElement("div");
       line.className = "cm-fub-mx-option";
       const name = document.createElement("span");
@@ -812,6 +827,10 @@ export class MathEditor {
     if (source) {
       row(t("live.math.options.help"), MATH_HELP_LEVELS.map((level) => [level, t(`live.math.help.${level}`), this.preferences.help === level] as const), "help");
     }
+    if (this.options.onPlace) {
+      const display = this.options.display;
+      row(t("live.math.options.place"), [["inline", t("live.math.options.inline"), !display], ["block", t("live.math.options.block"), display]], "place");
+    }
     this.settings.replaceChildren(...rows);
   }
 
@@ -820,7 +839,15 @@ export class MathEditor {
   private choose3Dots(target: Element): void {
     const sourceButton = target.closest<HTMLElement>("[data-source]");
     const helpButton = target.closest<HTMLElement>("[data-help]");
+    const placeButton = target.closest<HTMLElement>("[data-place]");
     const t = liveStrings.t.bind(liveStrings);
+    if (placeButton) {
+      const display = placeButton.dataset.place === "block";
+      if (display === this.options.display || !this.options.onPlace) return;
+      this.toggleOptions(false);
+      this.options.onPlace(display);
+      return;
+    }
     if (sourceButton) {
       const source = sourceButton.dataset.source === "on";
       if (source === this.preferences.source) return;
@@ -889,11 +916,23 @@ export class MathEditor {
       if (this.mode !== "visual") this.readField();
     });
     on(this.input, "paste", (event) => {
-      if (this.mode !== "visual") return;
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      // Una formula incollata coi suoi delimitatori entra senza (T65).
+      const unwrapped = unwrapFormula(text);
+      if (this.mode !== "visual") {
+        if (!unwrapped) return;
+        event.preventDefault();
+        this.quickUndo = null;
+        const from = Math.min(this.input.selectionStart, this.input.selectionEnd);
+        const to = Math.max(this.input.selectionStart, this.input.selectionEnd);
+        const tex = this.input.value;
+        this.writeField({ tex: tex.slice(0, from) + unwrapped.tex + tex.slice(to), caret: from + unwrapped.tex.length });
+        return;
+      }
       event.preventDefault();
       this.quickUndo = null;
       this.finishPending();
-      this.apply(rules.insertText(this.state, event.clipboardData?.getData("text/plain") ?? ""));
+      this.apply(rules.insertText(this.state, unwrapped ? unwrapped.tex : text));
     });
     on(this.list, "mousedown", (event) => {
       // Il fuoco resta nel campo: il clic mette il simbolo.
@@ -1058,6 +1097,7 @@ export class MathEditor {
       case "Enter":
         handled();
         if (this.finishPending() !== "none") return;
+        if (this.options.display && this.alignRow()) return;
         this.leave("enter");
         return;
       case "Escape":
@@ -1119,6 +1159,23 @@ export class MathEditor {
           this.type(event.key);
         }
     }
+  }
+
+  /// Invio nella formula a blocco che si tocca: una riga nuova, allineata
+  /// sull'uguale (`align.ts`). `false` se la formula non si leggerebbe più:
+  /// allora Invio esce, come in riga.
+  private alignRow(): boolean {
+    const next = alignEnter(this.state);
+    if (!this.reads(next.tex)) return false;
+    this.commit({ tex: next.tex, caret: snap(mapFormula(next.tex), next.caret) });
+    this.tellAlign();
+    return true;
+  }
+
+  private tellAlign(): void {
+    if (alignTold) return;
+    alignTold = true;
+    this.options.tell?.(liveStrings.t("live.math.told.align"));
   }
 
   private textRole(): boolean {
