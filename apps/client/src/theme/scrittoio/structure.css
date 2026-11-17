@@ -6876,8 +6876,13 @@ textarea.draw-properties-input {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* In Lettura la pagina resta senza strumenti: la colonna, la barra
+   d'allineamento e i gruppi che scrivono se ne vanno, come l'immagine del
+   disegno in Lettura; restano la vista e le pagine. */
 .pdf-surface[data-mode="read"] .draw-group:not([data-group="view"]),
-.pdf-surface[data-mode="read"] .draw-title {
+.pdf-surface[data-mode="read"] .draw-title,
+.pdf-surface[data-mode="read"] .draw-rail,
+.pdf-surface[data-mode="read"] .draw-arrange {
   display: none;
 }
 .pdf-background {
